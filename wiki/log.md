@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-10 (editor: unit-gated conceals for variables and kwargs, #1761)
+
+- **Constant conceals reach lowercase variables and keyword arguments**
+  (#1761, extends #1701): `internal/consthint` now conceals a statement-level
+  lowercase assignment (Python `duration = 5000` → `5s`, PHP
+  `$timeout = 2500;` → `2s500ms`) and keyword-argument literals inside call
+  parentheses (Python `process(duration=24 * 60 * 60)`, PHP named arguments
+  `retry(timeout: 5000)`), several per line. Unlike CONST_CASE — which
+  conceals on the case alone — both new shapes require the name to carry a
+  recognised unit context (the user's `number_hint_units` mapping or a
+  built-in duration/size/radix key word), so `n = 8` and `attempts=3` stay
+  raw; single-letter names never qualify. Python `def` defaults conceal like
+  call-site kwargs; Go stays `const`-only (a `var`/`:=` literal is an initial
+  value, not a constant).
+- **Same safety and channels**: the narrow evaluator is unchanged — any
+  identifier, call, float or string on the value side leaves the line raw —
+  and the kwarg scan is quote-aware with `==`/`::` never read as a separator,
+  so comparisons and quoted `"duration=5"` never fire. The spans reuse the
+  numhint/epochtime captures, so toggles and positional reveal apply as-is.
+  Updated [Editor](/architecture/editor.md).
+
 ## 2026-08-10 (viewer: Parquet backend for the data pane, #1766)
 
 - **Parquet files open in the data pane** (#1766): `.parquet`/`.pqt` by

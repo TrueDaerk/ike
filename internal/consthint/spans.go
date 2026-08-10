@@ -16,11 +16,23 @@ import (
 //
 //   - Python — a CONST_CASE name (`MAX_BYTES = …`), the convention that is all
 //     Python has; an optional annotation (`RETRIES: Final = 3`) is skipped.
-//     Lowercase assignments are left alone, so ordinary locals never conceal.
 //   - Go — the `const` keyword: single-line declarations and the lines of a
 //     `const ( … )` block, with an optional type between name and `=`.
 //   - PHP — `const NAME = …` (with visibility/final modifiers and an optional
 //     type) and `define('NAME', …)`.
+//
+// Two everyday shapes without a constant marker also conceal (#1761), gated by
+// the name instead: a lowercase assignment (Python `duration = 5000`, PHP
+// `$duration = 5000;`) and a keyword argument at a call site (Python
+// `f(timeout_ms=5000)`, PHP named arguments `f(timeout: 5000)`). Both require
+// the name to carry a recognised unit context — the user's number_hint_units
+// mapping or a built-in key word (duration, size, radix families) — so loop
+// counters (`n = 8`, `attempts=3`) stay raw; single-letter names never
+// qualify. Python function definitions conceal their defaults under the same
+// rule: `def f(duration=5000)` is syntactically a kwarg, and the default is a
+// de-facto constant read the same way. Go stays `const`-only — a `var`/`:=`
+// binding is mutable, so its literal is an initial value, not a constant, and
+// idiomatic Go constants already use `const`.
 //
 // The name decides the reading exactly like a config key does (#1627, #1685):
 // the user's number_hint_units mapping first, the built-in key words second,
@@ -34,9 +46,11 @@ import (
 func PythonSpans(lines []string) []lang.Span {
 	var out []lang.Span
 	for li, line := range lines {
-		if s, ok := pythonLine(li, []rune(line)); ok {
+		runes := []rune(line)
+		if s, ok := pythonLine(li, runes); ok {
 			out = append(out, s)
 		}
+		out = append(out, callArgSpans(li, runes, FlavorPython)...)
 	}
 	return out
 }
@@ -78,7 +92,10 @@ func PHPSpans(lines []string) []lang.Span {
 			out = append(out, s)
 		} else if s, ok := phpDefineLine(li, runes); ok {
 			out = append(out, s)
+		} else if s, ok := phpVarLine(li, runes); ok {
+			out = append(out, s)
 		}
+		out = append(out, callArgSpans(li, runes, FlavorPHP)...)
 	}
 	return out
 }
@@ -86,12 +103,13 @@ func PHPSpans(lines []string) []lang.Span {
 // --- Python ------------------------------------------------------------------
 
 // pythonLine reads one `NAME = expr` / `NAME: annotation = expr` line. The
-// name must be CONST_CASE — Python's only constant marker — so ordinary
-// assignments never produce a span.
+// name must be CONST_CASE — Python's only constant marker — or, since #1761,
+// carry a recognised unit context (`duration = 5000`), so ordinary locals
+// without one never produce a span.
 func pythonLine(li int, runes []rune) (lang.Span, bool) {
 	i := skipSpace(runes, 0)
 	name, j := identAt(runes, i)
-	if !pythonConstName(name) {
+	if !pythonConstName(name) && !unitContextName(name) {
 		return lang.Span{}, false
 	}
 	j = skipSpace(runes, j)
@@ -139,6 +157,148 @@ func annotationRune(r rune) bool {
 		return true
 	}
 	return isLetter(r) || isDigit(r)
+}
+
+// --- unit-gated shapes (#1761) ------------------------------------------------
+
+// unitContextName reports whether a name that carries no constant marker still
+// earns a conceal: the user mapped it to a unit (a `none` mapping is a veto,
+// not a pass), or the built-in key heuristics read one off it. Single-letter
+// names never qualify — `n = 8` is a loop bound whatever the mapping says.
+func unitContextName(name string) bool {
+	if len([]rune(name)) < 2 {
+		return false
+	}
+	if u, ok := numhint.FieldUnit(name); ok {
+		return u.Kind != numhint.UnitOff
+	}
+	_, ok := numhint.KeyUnit(name)
+	return ok
+}
+
+// callArgSpans scans one line for keyword-argument literals inside call
+// parentheses: Python `f(name=expr)`, PHP named arguments `f(name: expr)`.
+// The scan is quote-aware — a `"duration=5"` inside a string never fires —
+// and only an identifier directly after `(` or `,` is an argument name, so
+// comparisons (`f(a == 5)`) and PHP `::`/ternary operands never match. Each
+// qualifying kwarg conceals independently under unitContextName plus the
+// evaluator's safety rule.
+func callArgSpans(li int, runes []rune, f Flavor) []lang.Span {
+	var out []lang.Span
+	depth := 0
+	argPos := false // the previous significant rune opened an argument slot
+	for i := 0; i < len(runes); {
+		r := runes[i]
+		switch {
+		case r == '#':
+			return out
+		case f == FlavorPHP && r == '/' && i+1 < len(runes) && (runes[i+1] == '/' || runes[i+1] == '*'):
+			return out
+		case r == '\'' || r == '"':
+			i = skipQuoted(runes, i)
+		case r == '(':
+			depth++
+			argPos = true
+			i++
+		case r == ',':
+			argPos = depth > 0
+			i++
+		case r == ')':
+			if depth > 0 {
+				depth--
+			}
+			argPos = false
+			i++
+		case isSpace(r):
+			i++
+		case argPos && depth > 0 && (isLetter(r) || r == '_'):
+			s, next, ok := kwargAt(li, runes, i, f)
+			if ok {
+				out = append(out, s)
+			}
+			argPos = false
+			i = next
+		default:
+			argPos = false
+			i++
+		}
+	}
+	return out
+}
+
+// kwargAt reads one keyword argument starting at the identifier at rune index
+// i: `name=expr` (Python) or `name: expr` (PHP). A doubled separator (`==`,
+// `::`) is a comparison or a scope operator, never a kwarg. On success the
+// returned index is the end of the (bracket-balanced) value expression; on
+// failure it is just past the identifier, so the caller rescans the value —
+// including any parentheses — itself.
+func kwargAt(li int, runes []rune, i int, f Flavor) (lang.Span, int, bool) {
+	name, j := identAt(runes, i)
+	sep := '='
+	if f == FlavorPHP {
+		sep = ':'
+	}
+	k := skipSpace(runes, j)
+	if k >= len(runes) || runes[k] != sep || (k+1 < len(runes) && runes[k+1] == sep) {
+		return lang.Span{}, j, false
+	}
+	if !unitContextName(name) {
+		return lang.Span{}, j, false
+	}
+	start := skipSpace(runes, k+1)
+	end := start
+	d := 0
+scan:
+	for ; end < len(runes); end++ {
+		switch runes[end] {
+		case '(', '[', '{':
+			d++
+		case ')', ']', '}':
+			if d == 0 {
+				break scan
+			}
+			d--
+		case ',':
+			if d == 0 {
+				break scan
+			}
+		case '\'', '"', '#':
+			// A string value is never literal arithmetic; a comment ends the
+			// expression. Either way the extent stops here — the caller
+			// rescans from the returned index, keeping its quote tracking
+			// intact.
+			break scan
+		case '/':
+			if f == FlavorPHP && end+1 < len(runes) && (runes[end+1] == '/' || runes[end+1] == '*') {
+				break scan
+			}
+		}
+	}
+	e := trimEnd(runes, start, end)
+	if start >= e || d != 0 {
+		return lang.Span{}, j, false
+	}
+	s, ok := hintSpan(li, start, e, string(runes[start:e]), name, f)
+	if !ok {
+		return lang.Span{}, j, false
+	}
+	return s, end, true
+}
+
+// skipQuoted returns the index just past the string literal opening at rune
+// index i, honouring backslash escapes; an unterminated string runs to the
+// line end.
+func skipQuoted(runes []rune, i int) int {
+	q := runes[i]
+	for i++; i < len(runes); i++ {
+		switch runes[i] {
+		case '\\':
+			i++
+		case q:
+			return i + 1
+		}
+	}
+	return len(runes)
 }
 
 // --- Go ----------------------------------------------------------------------
@@ -277,6 +437,33 @@ func phpDefineLine(li int, runes []rune) (lang.Span, bool) {
 		return lang.Span{}, false
 	}
 	end = trimEnd(runes, start, end)
+	if start >= end {
+		return lang.Span{}, false
+	}
+	return hintSpan(li, start, end, string(runes[start:end]), name, FlavorPHP)
+}
+
+// phpVarLine reads one statement-level `$name = expr;` assignment (#1761).
+// PHP has no lowercase constant marker either, so the same gate as Python's
+// lowercase assignments applies: the name must carry a unit context, and the
+// right-hand side must survive the evaluator. `==`/`=>`/compound assignments
+// never match — only a bare `=` directly after the variable does.
+func phpVarLine(li int, runes []rune) (lang.Span, bool) {
+	i := skipSpace(runes, 0)
+	if i >= len(runes) || runes[i] != '$' {
+		return lang.Span{}, false
+	}
+	name, j := identAt(runes, i+1)
+	if !unitContextName(name) {
+		return lang.Span{}, false
+	}
+	j = skipSpace(runes, j)
+	if j >= len(runes) || runes[j] != '=' ||
+		(j+1 < len(runes) && (runes[j+1] == '=' || runes[j+1] == '>')) {
+		return lang.Span{}, false
+	}
+	start := skipSpace(runes, j+1)
+	end := trimEnd(runes, start, phpExprEnd(runes, start))
 	if start >= end {
 		return lang.Span{}, false
 	}

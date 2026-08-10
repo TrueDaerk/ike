@@ -23,7 +23,9 @@
 // It is a leaf package — pure Go over internal/lang's span type plus the
 // numhint formatting and the epochtime decoders — so the language plugins can
 // call it without a dependency cycle. Which line *is* a constant assignment is
-// the per-language half and lives in spans.go.
+// the per-language half and lives in spans.go — since #1761 that half also
+// covers lowercase assignments and call-site keyword arguments whose name
+// carries a recognised unit context.
 package consthint
 
 import "math/big"
