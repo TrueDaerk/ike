@@ -129,7 +129,7 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	if res, ok := m.resolveMotion(s, r, m.pending.EffectiveCount()); ok {
 		m.pending.Count = 0 // the motion consumed the count
 		if res.Kind == motion.Linewise {
-			m.cursor = m.buf.ClampCursor(buffer.Position{Line: res.Pos.Line, Col: m.desiredCol})
+			m.cursor = m.buf.ClampCursor(buffer.Position{Line: res.Pos.Line, Col: m.svVerticalCol(res.Pos.Line)})
 			// moveTo emits for charwise motions; linewise must emit too so
 			// selection listeners track the moving end.
 			m.emit(EventCursorMove)

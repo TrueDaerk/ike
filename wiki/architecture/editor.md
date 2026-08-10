@@ -1340,6 +1340,20 @@ by `editor.csv_rendering` (default on, Settings → Editor):
   field count, the label is the bare `column <n>`. The segment is empty — and
   so hidden — for every non-table buffer, including `editor.csv_rendering`
   off.
+- **Column-true vertical motion** (#1744): `j`/`k` (and every other linewise
+  motion — visual mode, insert-mode arrows, page scroll) keep the caret in the
+  *same field* instead of carrying the raw `desiredCol` over, which lands in a
+  different field as soon as two rows pad their fields differently.
+  `svVerticalCol` translates the remembered column into (field index, offset in
+  field) and maps it back onto the target row: the offset clamps to that row's
+  field length, and a row with fewer fields clamps to its last one. The want
+  (`svWant`) travels with the motion, so the original offset comes back on the
+  next wide row — desiredCol's "across short lines" rule, one level up. It
+  validates itself against `(cursor line, desiredCol)` rather than being reset
+  at each of desiredCol's assignment sites: any horizontal motion writes
+  `desiredCol = cursor.Col` and so drops it. Non-sv buffers, `editor.csv_rendering`
+  off and soft wrap (i.e. `svActive` false) keep the raw column unchanged, and
+  secondary carets keep their own per-caret `desiredCol`.
 - **Quoting**: field splitting (`internal/sv`, shared with the plugin so both
   sides split identically) honors `"…"` regions — a quoted separator is
   literal, `""` escapes a quote. The csv separator is sniffed (`,` vs `;`)

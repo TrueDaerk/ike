@@ -352,8 +352,9 @@ func (m *Model) applyMotionOrOperator(res motion.Result, count int) {
 		m.emit(EventJump)
 	}
 	if res.Kind == motion.Linewise {
-		// Vertical motion keeps the remembered column.
-		m.cursor = m.buf.ClampCursor(buffer.Position{Line: res.Pos.Line, Col: m.desiredCol})
+		// Vertical motion keeps the remembered column — in a table-rendered
+		// csv/tsv the remembered *table* column instead (#1744).
+		m.cursor = m.buf.ClampCursor(buffer.Position{Line: res.Pos.Line, Col: m.svVerticalCol(res.Pos.Line)})
 		m.emit(EventCursorMove)
 	} else {
 		m.moveTo(res.Pos)

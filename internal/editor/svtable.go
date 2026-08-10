@@ -254,6 +254,72 @@ func (m Model) svColumnRange(line int) (start, end int, ok bool) {
 	return f.Start, end, true
 }
 
+// svWant remembers what table column a vertical motion aims at (#1744): the
+// field index and the offset inside that field which the raw desiredCol stood
+// for. Vertical motion in a table-rendered buffer is column-true — the caret
+// stays in field N instead of inheriting the raw buffer column, which lands in
+// a different field as soon as two rows pad their fields differently.
+//
+// The memory validates itself against desiredCol instead of being reset at each
+// of desiredCol's assignment sites: it applies only while the caret still sits
+// on the line it was recorded for and desiredCol still holds the value it
+// explains. Every horizontal motion writes desiredCol = cursor.Col and so drops
+// it, which is exactly desiredCol's own invalidation rule.
+type svWant struct {
+	valid bool
+	line  int // line the caret sat on when the want was recorded
+	col   int // the desiredCol value this want explains
+	field int // zero-based field index the caret wants to stay in
+	off   int // rune offset inside that field, kept unclamped
+}
+
+// svVerticalCol is the buffer column a linewise motion to target must land on:
+// the remembered table column mapped onto target's own fields, clamped to the
+// field's length — and to the last field when target has fewer. For every
+// non-table buffer it returns the raw desiredCol, so ordinary files keep vim's
+// curswant behavior unchanged.
+//
+// It is also called for its side effect: the want travels along to target, so a
+// run of j/k keeps one column even across rows whose field is too short to hold
+// the offset, mirroring how desiredCol survives short lines.
+func (m *Model) svVerticalCol(target int) int {
+	if !m.svActive() || target < 0 || target >= m.buf.LineCount() ||
+		m.cursor.Line < 0 || m.cursor.Line >= m.buf.LineCount() {
+		return m.desiredCol
+	}
+	sep := m.svLayout().sep
+	w := m.svWant
+	if !w.valid || w.line != m.cursor.Line || w.col != m.desiredCol {
+		// Translate the raw remembered column on the current line into
+		// (field, offset). A column on a separator belongs to the field the
+		// separator closes, like sv.IndexAt; one past the line end keeps its
+		// overshoot in off, so a wider row restores it.
+		w = svWant{valid: true, col: m.desiredCol}
+		for i, f := range sv.Fields(m.buf.Line(m.cursor.Line), sep) {
+			w.field, w.off = i, m.desiredCol-f.Start
+			if m.desiredCol <= f.End {
+				break
+			}
+		}
+	}
+	fields := sv.Fields(m.buf.Line(target), sep)
+	idx := w.field
+	if idx >= len(fields) {
+		idx = len(fields) - 1 // Fields always yields at least one
+	}
+	f := fields[idx]
+	col := f.Start + w.off
+	if col > f.End {
+		col = f.End
+	}
+	if col < f.Start {
+		col = f.Start
+	}
+	w.line = target
+	m.svWant = w
+	return col
+}
+
 // SVColumnLabel is the status-line label for the caret's column in a
 // table-rendered buffer (#1659): "column 3: qty" when the first row reads like
 // a header, "column 3" when it does not (or has fewer fields). Empty for every
