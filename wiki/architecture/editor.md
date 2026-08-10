@@ -1262,8 +1262,19 @@ attributes in `styleAt`):
   *narrower* one never over-scrolls. An offset landing inside a stand-in snaps
   past the range — `renderSpan` emits a replacement only at its range start, so
   none of it would render from there. Lines without conceal ranges keep the
-  plain rune-column result. Under soft wrap the segments themselves are still
-  raw-column (`wrapSegs`), so the distortion remains there — see #1756.
+  plain rune-column result.
+- **Conceal-aware soft wrap** (#1756): under soft wrap the same distortion
+  would move to the wrap points — `wrapSegs` used to split on raw rune columns,
+  so a stand-in wider than its source overflowed the visual row and a narrower
+  one broke rows early. On a line carrying conceal ranges `wrapSegs` now hands
+  the `concealPrefix` sums to `viewport.WrapSegmentsDisplay`, which budgets
+  each column's display cells (a stand-in its replacement's width at the range
+  start, hidden columns nothing) instead of one cell per rune. Zero-width
+  columns never start a row, so a break only lands where something renders and
+  never inside a stand-in. Segments stay rune-column starts, so every consumer
+  — `ScrollWrapped`, `wrapVertical` (gj/gk), `wrapRows`, `wrapClickAt`,
+  `DisplayRow` and the per-segment `renderSpan` slicing — follows unchanged.
+  Lines without conceal ranges wrap on raw rune columns exactly as before.
 - **Pipe tables**: detected from the buffer text (a pipe row above a `|---|`
   delimiter row — equivalent to the grammar's `pipe_table`, but it also works
   in `CGO_ENABLED=0` builds), re-rendered with box-drawing characters, cells

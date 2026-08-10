@@ -32,6 +32,32 @@ func WrapSegments(runes []rune, width, tabWidth int) []int {
 	return segs
 }
 
+// WrapSegmentsDisplay is WrapSegments for a line whose columns render at
+// display widths of their own — conceal stand-ins (#1756). prefix holds the
+// line's display-cell prefix sums (entry i is the cell offset of buffer column
+// i; length = rune count + 1), so per-column widths come out as differences: a
+// hidden column contributes 0, a stand-in its replacement's cells once at its
+// range start, a tab tabWidth. Zero-width columns never start a row — they
+// stay glued to the range start whose replacement covers them — so a break
+// only lands where something actually renders, and a stand-in wider than the
+// whole width renders clamped at its row start like an over-wide tab.
+func WrapSegmentsDisplay(prefix []int, width int) []int {
+	if width < 1 {
+		width = 1
+	}
+	segs := []int{0}
+	cells := 0
+	for col := 0; col+1 < len(prefix); col++ {
+		w := prefix[col+1] - prefix[col]
+		if w > 0 && cells+w > width && cells > 0 {
+			segs = append(segs, col)
+			cells = 0
+		}
+		cells += w
+	}
+	return segs
+}
+
 // SegmentIndex returns the index of the segment containing col. A col at or
 // past the line end (the insert-mode end-of-line cursor) maps to the last
 // segment.

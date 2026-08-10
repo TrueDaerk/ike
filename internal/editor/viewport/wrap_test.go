@@ -29,6 +29,46 @@ func TestWrapSegments(t *testing.T) {
 	}
 }
 
+// prefixFor builds display-cell prefix sums from per-column widths — the
+// shape the editor's concealPrefix produces (#1756).
+func prefixFor(widths ...int) []int {
+	prefix := make([]int, len(widths)+1)
+	for i, w := range widths {
+		prefix[i+1] = prefix[i] + w
+	}
+	return prefix
+}
+
+func TestWrapSegmentsDisplay(t *testing.T) {
+	cases := []struct {
+		name   string
+		prefix []int
+		width  int
+		want   []int
+	}{
+		{"empty line is one row", prefixFor(), 10, []int{0}},
+		{"uniform widths match WrapSegments", prefixFor(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1), 5, []int{0, 5, 10}},
+		// A 4-cell stand-in over cols [2,5): width sits at the range start,
+		// hidden columns contribute nothing. Cells: 1,1,4,0,0,1,1,1 — the
+		// stand-in straddles a 5-cell row, so it starts the next one.
+		{"wide stand-in starts next row", prefixFor(1, 1, 4, 0, 0, 1, 1, 1), 5, []int{0, 2, 6}},
+		// A 1-cell stand-in over cols [1,7): 8 raw columns collapse to 4 cells,
+		// so a line the raw wrap would split stays one row.
+		{"narrow stand-in avoids early break", prefixFor(1, 1, 0, 0, 0, 0, 0, 1, 1), 5, []int{0}},
+		// Hidden columns (width 0, e.g. concealed markers with no replacement)
+		// never start a row, even right at the budget edge.
+		{"hidden column never breaks", prefixFor(1, 1, 1, 1, 1, 0, 0, 1), 5, []int{0, 7}},
+		// A stand-in wider than the whole width renders clamped at its row
+		// start, like an over-wide tab.
+		{"over-wide stand-in clamps at row start", prefixFor(8, 0, 0, 1), 5, []int{0, 3}},
+	}
+	for _, c := range cases {
+		if got := WrapSegmentsDisplay(c.prefix, c.width); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: segments=%v want %v", c.name, got, c.want)
+		}
+	}
+}
+
 func TestSegmentIndex(t *testing.T) {
 	segs := []int{0, 10, 20}
 	for col, want := range map[int]int{0: 0, 9: 0, 10: 1, 19: 1, 20: 2, 25: 2, 99: 2} {
