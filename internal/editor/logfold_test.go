@@ -19,6 +19,37 @@ const repeatDoc = `2026-08-06T19:06:13.303770698Z time="2026-08-06T19:06:13Z" le
 2026-08-06T19:07:43.274874796Z time="2026-08-06T19:07:43Z" level=info msg="Session started"
 `
 
+// movingDoc is a paging fetch loop: every line moves its timestamp, its page
+// number and its elapsed time, and the last one says something else (#1758).
+const movingDoc = `2026-08-06T19:06:13Z level=info msg="fetching page 17 of 240" elapsed=1.2s
+2026-08-06T19:06:43Z level=info msg="fetching page 18 of 240" elapsed=980ms
+2026-08-06T19:07:13Z level=info msg="fetching page 19 of 240" elapsed=1.4s
+2026-08-06T19:07:43Z level=info msg="fetch done" status=200
+`
+
+// TestLogRepeatRunFoldsMovingParts: a run whose lines differ in timestamp,
+// page number and elapsed time collapses like a timestamp-only run does, and
+// the line that differs in what it *says* stays out of it.
+func TestLogRepeatRunFoldsMovingParts(t *testing.T) {
+	m := logLoaded(t, movingDoc)
+	m.cursor = buffer.Position{Line: 3}
+
+	for _, l := range []int{1, 2} {
+		if !m.lineHidden(l) {
+			t.Errorf("line %d must fold into the run", l)
+		}
+	}
+	if m.lineHidden(3) {
+		t.Error("a line differing in its message must never fold")
+	}
+	if end, ok := m.logRunAt(0); !ok || end != 2 {
+		t.Errorf("logRunAt(0) = %d, %v; want 2, true", end, ok)
+	}
+	if got := m.View(); !strings.Contains(got, "×3") {
+		t.Errorf("view must mark the run with ×3:\n%s", got)
+	}
+}
+
 // TestLogRepeatRunHidesFollowers: the run folds into its first line — the
 // followers hide, the header does not, and the distinct line stays visible.
 func TestLogRepeatRunHidesFollowers(t *testing.T) {
