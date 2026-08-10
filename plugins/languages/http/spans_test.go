@@ -52,13 +52,91 @@ func TestQuerySpansRequestLine(t *testing.T) {
 	if got := captureAt(spans, 0, col("=")); got != "punctuation" {
 		t.Errorf("capture at '=' = %q, want punctuation", got)
 	}
-	// The path gets its own capture (#1594); the authority keeps the
-	// grammar's url styling (no overlay span).
+	// The path gets its own capture (#1594); the authority keeps the url
+	// string colour through string.special (#1740).
 	if got := captureAt(spans, 0, col("/search")); got != "label" {
 		t.Errorf("path segment = %q, want label", got)
 	}
-	if got := captureAt(spans, 0, col("api.example.com")); got != "" {
-		t.Errorf("authority got capture %q, want none", got)
+	if got := captureAt(spans, 0, col("api.example.com")); got != "string.special" {
+		t.Errorf("authority = %q, want string.special", got)
+	}
+}
+
+// TestTargetPrefixSpans (#1740): the "scheme://authority" prefix reads as
+// three segments — dim scheme, punctuation separator, url-coloured authority
+// — including with a port, and the query/path spans keep their columns.
+func TestTargetPrefixSpans(t *testing.T) {
+	line := "GET https://api.example.com:8080/users?limit=10 HTTP/1.1"
+	spans := querySpans([]string{line})
+	col := func(sub string) int { return strings.Index(line, sub) }
+	for _, tc := range []struct{ sub, want string }{
+		{"https", "comment"},
+		{"://", "punctuation"},
+		{"api.example.com", "string.special"},
+		{":8080", "string.special"},
+		{"/users", "label"},
+		{"?", "punctuation"},
+		{"limit", "property"},
+	} {
+		if got := captureAt(spans, 0, col(tc.sub)); got != tc.want {
+			t.Errorf("capture at %q = %q, want %q", tc.sub, got, tc.want)
+		}
+	}
+	// The separator covers all three of "://" and nothing more.
+	sep := col("://")
+	for c := sep; c < sep+3; c++ {
+		if got := captureAt(spans, 0, c); got != "punctuation" {
+			t.Errorf("separator col %d = %q, want punctuation", c, got)
+		}
+	}
+	if got := captureAt(spans, 0, sep-1); got != "comment" {
+		t.Errorf("last scheme col = %q, want comment", got)
+	}
+	// The trailing " HTTP/1.1" is outside the target and stays unstyled.
+	if got := captureAt(spans, 0, col("HTTP/1.1")); got != "" {
+		t.Errorf("version got capture %q, want none", got)
+	}
+}
+
+// TestTargetPrefixNoScheme (#1740): an origin-form target has no scheme or
+// authority spans — the path capture stays the only one.
+func TestTargetPrefixNoScheme(t *testing.T) {
+	line := "GET /api/users"
+	spans := querySpans([]string{line})
+	for _, capture := range []string{"comment", "string.special"} {
+		for _, s := range spans {
+			if s.Capture == capture {
+				t.Errorf("origin-form target got a %q span: %+v", capture, s)
+			}
+		}
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "/api")); got != "label" {
+		t.Errorf("origin-form path = %q, want label", got)
+	}
+}
+
+// TestTargetPrefixPlaceholder (#1740): a placeholder inside the authority (or
+// standing in for the whole scheme) keeps the grammar's own captures — the
+// prefix spans split around it.
+func TestTargetPrefixPlaceholder(t *testing.T) {
+	line := "GET {{scheme}}://{{host}}.test:{{port}}/p?a=1"
+	spans := querySpans([]string{line})
+	for _, sub := range []string{"{{scheme}}", "{{host}}", "{{port}}"} {
+		start := strings.Index(line, sub)
+		for c := start; c < start+len(sub); c++ {
+			if s, ok := spanAt(spans, 0, c); ok {
+				t.Fatalf("placeholder col %d covered by %+v", c, s)
+			}
+		}
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "://")); got != "punctuation" {
+		t.Errorf("separator = %q, want punctuation", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, ".test")); got != "string.special" {
+		t.Errorf("authority remainder = %q, want string.special", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "/p")); got != "label" {
+		t.Errorf("path = %q, want label", got)
 	}
 }
 
