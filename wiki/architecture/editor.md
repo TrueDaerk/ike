@@ -1249,6 +1249,21 @@ attributes in `styleAt`):
   decoded stand-in even when it decodes to a space (#1594). The same
   positional reveal applies, and `displayClickCol` / `DisplayOffset` account
   for the collapsed width.
+- **Horizontal cursor following** (#1752): `view.Left` stays a raw rune column
+  outside the sv table path, but the window it opens is measured in display
+  cells — and a stand-in rarely has its source's width. `Model.scroll()`
+  therefore hands the offset to `concealScrollFix`, which redoes the follow
+  decision through `concealPrefix` (per-column display-cell prefix sums of the
+  line's active conceal ranges): both the caret and the current offset convert
+  to display cells, and the smallest offset keeping the caret inside the text
+  width wins. Restarting from the pre-`view.Scroll` offset keeps the raw
+  comparison from leaving a scroll of its own behind, so a mask *wider* than
+  the value scrolls when the caret visually reaches the right edge and a
+  *narrower* one never over-scrolls. An offset landing inside a stand-in snaps
+  past the range — `renderSpan` emits a replacement only at its range start, so
+  none of it would render from there. Lines without conceal ranges keep the
+  plain rune-column result. Under soft wrap the segments themselves are still
+  raw-column (`wrapSegs`), so the distortion remains there — see #1756.
 - **Pipe tables**: detected from the buffer text (a pipe row above a `|---|`
   delimiter row — equivalent to the grammar's `pipe_table`, but it also works
   in `CGO_ENABLED=0` builds), re-rendered with box-drawing characters, cells

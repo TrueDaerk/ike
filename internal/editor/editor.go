@@ -1472,10 +1472,56 @@ func (m *Model) scroll() {
 			// a display-cell offset there — keeps it inside the window.
 			col = m.svDisplayCol(m.cursor.Line, col)
 		}
+		left := m.view.Left
 		m.view.Scroll(m.cursor.Line, col, m.buf.LineCount())
+		if !m.svActive() {
+			// Conceal stand-ins render at a width of their own (#1585/#1623),
+			// so a rune column is not a display column: redo the offset
+			// view.Scroll just derived from the raw column (#1752).
+			m.concealScrollFix(left)
+		}
 		m.foldScrollFix()
 	}
 	m.unhideCursor()
+}
+
+// concealScrollFix re-derives the horizontal offset on a cursor line carrying
+// conceal ranges (#1752). view.Left stays a buffer rune column there — that is
+// what renderSpan slices from — but the window it opens is measured in display
+// cells, and a stand-in (secret mask #1623, decoded timestamp #1618, …) rarely
+// has its source's width. Comparing raw columns therefore holds the caret
+// visible while it has already run off the right edge (mask wider than the
+// value) or scrolls too eagerly (mask narrower). Both sides are measured
+// through the conceal expansion instead, so the smallest offset that keeps the
+// caret's cell inside the text width wins. Lines without conceal ranges keep
+// view.Scroll's raw-column result untouched; on the others the offset restarts
+// from prev — what it was before view.Scroll ran — so the raw comparison
+// cannot leave a scroll of its own behind.
+func (m *Model) concealScrollFix(prev int) {
+	prefix := m.concealPrefix(m.cursor.Line)
+	if prefix == nil {
+		return
+	}
+	m.view.Left = prev
+	tw := m.view.TextWidth(m.buf.LineCount())
+	cur := concealDisplayColAt(prefix, m.cursor.Col)
+	if m.view.Left > m.cursor.Col || cur < concealDisplayColAt(prefix, m.view.Left) {
+		m.view.Left = m.cursor.Col
+	}
+	for m.view.Left < m.cursor.Col && cur-concealDisplayColAt(prefix, m.view.Left) > tw-1 {
+		m.view.Left++
+	}
+	if m.view.Left < 0 {
+		m.view.Left = 0
+	}
+	// An offset landing inside a stand-in renders none of it — renderSpan
+	// emits a replacement only at its range start — so snap past the range to
+	// keep the offset and what is drawn in agreement. The caret never sits in
+	// a live range (lineConcealRanges drops those), so the range ends at or
+	// before it and the caret stays visible.
+	if cr, ok := rangeAt(m.lineConcealRanges(m.cursor.Line), m.view.Left); ok && m.view.Left > cr.start {
+		m.view.Left = cr.end
+	}
 }
 
 // moveTo places the cursor at p (clamped to a real character) and remembers the

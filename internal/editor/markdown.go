@@ -258,6 +258,48 @@ func (m *Model) toggleMarkdownRendering() {
 	m.mdRenderSet = true
 }
 
+// concealPrefix returns the display-cell prefix sums of line under its active
+// conceal ranges (#1752): entry i is the cell offset of buffer column i from
+// the line start, with a hidden column contributing nothing, a stand-in range
+// its replacement's cells once at the range start, and a tab tabWidth cells.
+// It returns nil when the line carries no conceal ranges — those lines scroll
+// in raw rune columns, unchanged.
+func (m Model) concealPrefix(line int) []int {
+	conceals := m.lineConcealRanges(line)
+	if len(conceals) == 0 {
+		return nil
+	}
+	runes := []rune(m.buf.Line(line))
+	prefix := make([]int, len(runes)+1)
+	for c, disp := 0, 0; c < len(runes); c++ {
+		switch cr, ok := rangeAt(conceals, c); {
+		case ok:
+			if cr.repl != "" && c == cr.start {
+				disp += lipgloss.Width(cr.repl)
+			}
+		case runes[c] == '\t':
+			disp += m.tabWidth
+		default:
+			disp++
+		}
+		prefix[c+1] = disp
+	}
+	return prefix
+}
+
+// concealDisplayColAt maps a buffer column to its display cell through a
+// prefix built by [Model.concealPrefix]. Columns past the line end map 1:1 —
+// everything there is one-cell padding.
+func concealDisplayColAt(prefix []int, col int) int {
+	if col < 0 {
+		return 0
+	}
+	if col < len(prefix) {
+		return prefix[col]
+	}
+	return prefix[len(prefix)-1] + col - (len(prefix) - 1)
+}
+
 // rangeAt returns the conceal range covering the rune column, if any.
 func rangeAt(ranges []concealRange, col int) (concealRange, bool) {
 	for _, r := range ranges {
