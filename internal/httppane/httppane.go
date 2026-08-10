@@ -691,9 +691,22 @@ func (m *Model) View() string {
 func (m *Model) historyMarker() string {
 	s := fmt.Sprintf("⧗ history %d/%d", m.histIdx+1, len(m.hist))
 	if at := m.hist[m.histIdx].At; !at.IsZero() {
-		s += " (" + at.Local().Format("15:04:05") + ")"
+		s += " (" + formatHistoryTime(at, time.Now()) + ")"
 	}
 	return s
+}
+
+// formatHistoryTime renders at (local) as a bare time when it falls on the
+// same local calendar day as now, or prefixes the date when it doesn't
+// (#1747) — a bare time on an older response reads as "just now".
+func formatHistoryTime(at, now time.Time) string {
+	at = at.Local()
+	now = now.Local()
+	sameDay := at.Year() == now.Year() && at.Month() == now.Month() && at.Day() == now.Day()
+	if sameDay {
+		return at.Format("15:04:05")
+	}
+	return at.Format("2006-01-02 15:04:05")
 }
 
 // footerText renders the key hints plus the history position when older
@@ -719,7 +732,7 @@ func (m *Model) footerText() string {
 	if len(m.hist) > 0 {
 		s = fmt.Sprintf(" ←/→ history %d/%d", m.histIdx+1, len(m.hist))
 		if at := m.hist[m.histIdx].At; !at.IsZero() {
-			s += " (" + at.Local().Format("15:04:05") + ")"
+			s += " (" + formatHistoryTime(at, time.Now()) + ")"
 		}
 		// The keep-scroll toggle (#1493): the anchor marks it active, the
 		// key hint appears once there is history to step through.

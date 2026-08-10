@@ -195,7 +195,7 @@ func TestHistoryBrowsing(t *testing.T) {
 	if !strings.Contains(m.View(), "⧗ history 2/3") {
 		t.Errorf("header marker missing on older entry:\n%s", m.View())
 	}
-	if want := time.Date(2026, 7, 27, 11, 0, 0, 0, time.UTC).Local().Format("15:04:05"); !strings.Contains(m.View(), "⧗ history 2/3 ("+want+")") {
+	if want := formatHistoryTime(time.Date(2026, 7, 27, 11, 0, 0, 0, time.UTC), time.Now()); !strings.Contains(m.View(), "⧗ history 2/3 ("+want+")") {
 		t.Errorf("header marker must carry the timestamp %s:\n%s", want, m.View())
 	}
 	m.handleKey(keyPress("h"))
@@ -217,6 +217,20 @@ func TestHistoryBrowsing(t *testing.T) {
 	m.Set("r", newest)
 	if idx, n := m.HistoryIndex(); idx != 0 || n != 1 {
 		t.Errorf("Set must reset history: %d/%d", idx, n)
+	}
+}
+
+func TestFormatHistoryTime(t *testing.T) {
+	now := time.Date(2026, 8, 10, 15, 4, 5, 0, time.Local)
+
+	sameDay := time.Date(2026, 8, 10, 9, 30, 0, 0, time.Local)
+	if got, want := formatHistoryTime(sameDay, now), "09:30:00"; got != want {
+		t.Errorf("same day: got %q, want %q", got, want)
+	}
+
+	earlierDay := time.Date(2026, 8, 9, 15, 4, 5, 0, time.Local)
+	if got, want := formatHistoryTime(earlierDay, now), "2026-08-09 15:04:05"; got != want {
+		t.Errorf("earlier day: got %q, want %q", got, want)
 	}
 }
 
