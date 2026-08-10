@@ -87,7 +87,7 @@ func (m *Model) openArchivePane(path string) {
 // buffered, binary members are refused rather than rendered as garbage, and
 // re-opening the same entry activates its existing tab.
 func (m *Model) openArchiveEntry(archivePath, entry string) tea.Cmd {
-	data, err := archive.ReadEntry(archivePath, entry, m.archiveLimit())
+	data, err := archive.ReadEntry(archivePath, entry, m.largeFileLimit())
 	switch {
 	case errors.Is(err, archive.ErrTooLarge):
 		m.host.Notify(host.Warn, "archive entry too large to preview: "+entry)
@@ -136,15 +136,20 @@ func (m *Model) openArchiveEntry(archivePath, entry string) tea.Cmd {
 	return ed.Reparse()
 }
 
-// archiveLimit is the byte ceiling for an extracted entry: the large-file
-// threshold (#149), so an archive member is held to the same rule as a file.
-func (m *Model) archiveLimit() int64 {
+// largeFileLimits are the configured large-file thresholds (#149). Content
+// that never touches disk — an extracted archive member (#1762), a
+// decompressed gzip stream (#1763) — is held to the same rule as a file, and
+// for those the byte cap doubles as the memory guard.
+func (m *Model) largeFileLimits() largefile.Limits {
 	var get largefile.Getter
 	if cfg := m.host.Config(); cfg != nil {
 		get = cfg.Get
 	}
-	return largefile.LimitsFrom(get).MaxBytes
+	return largefile.LimitsFrom(get)
 }
+
+// largeFileLimit is the byte ceiling alone, the form most callers want.
+func (m *Model) largeFileLimit() int64 { return m.largeFileLimits().MaxBytes }
 
 // isBinary reports whether data looks like a binary blob — a NUL byte in the
 // leading window, the same cheap test `grep` uses. Text editors have nothing

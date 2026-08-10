@@ -1,5 +1,40 @@
 # Log
 
+## 2026-08-10 (viewer: .gz opens transparently decompressed, read-only, #1763)
+
+- **A plain `.gz` opens as its content, not as compressed bytes** (#1763):
+  `app.log.gz` decompresses into memory and shows in a **read-only** editor
+  buffer — no pane of its own, since a plain gzip holds exactly one file. The
+  buffer's virtual path is `<archive>!<inner>`, so the tab title, the language
+  lookup and the highlighting resolve from the *inner* name: `.log.gz` gets
+  log mode including repeat folding, `.json.gz` gets json. `gzfile.InnerName`
+  strips the `.gz` first and only then falls back to the gzip header's
+  original-name field, which is optional and routinely wrong.
+- **Routing is the exact complement of the archive viewer** (#1762): the
+  `gzip` handler registers **no** extensions — the registry matches
+  `filepath.Ext`, which reads `.tar.gz` as `.gz` — and claims through content
+  instead. A name ending `.tar.gz`/`.tgz`/`.tar.bz2`/`.tbz`/`.tbz2`, or a
+  stream whose first decompressed block holds a tar header, goes to the
+  archive pane; everything else with gzip magic lands here. Exactly one of the
+  two handlers ever answers.
+- **The cap counts decompressed bytes**, never the compressed size, so a gzip
+  bomb costs one limit-sized buffer: `gzfile.Read` reads one byte past
+  `files.large_file_kb` and reports truncation. `files.large_file_lines` caps
+  the line count afterwards. Either cap firing warns and still shows what was
+  read; a corrupt tail keeps the bytes decompressed so far.
+- **Binary content degrades to a metadata notice** — archive name, inner name,
+  compressed/decompressed sizes and ratio — instead of a mojibake buffer. The
+  decompressed size comes from the gzip footer's `ISIZE`, treated as advisory
+  (it is modulo 2^32): nothing is ever allocated from it, and a truncated read
+  shows no ratio rather than a wrong one.
+- **Saving is refused and reload has its own wire**: the buffer goes in through
+  `editor.ShowReadOnly`, so every mutation answers `E45: buffer is read-only`
+  and the virtual path can never become a file. Because that path names content
+  *inside* the archive, the editor's own watcher matching never fires — the
+  root model's `refreshGzipBuffers` re-decompresses every matching tab on a
+  `FileChanged`/`FileCreated` event for the outer `.gz`.
+  New [Gz Viewer](/architecture/gz-viewer.md).
+
 ## 2026-08-10 (viewer: archive pane with read-only entry preview, #1762)
 
 - **Archives open as an entry list, never as a raw text buffer** (#1762): a

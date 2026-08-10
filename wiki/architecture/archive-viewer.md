@@ -35,7 +35,7 @@ sniffs content:
 - gzip or bzip2 magic → decompress **one 512-byte block** and test that for a
   tar header. A 10 GB archive costs the same as a 10 KB one, and a compressed
   stream that holds no tar is not claimed — that is the coordination point
-  with the gz viewer, which keeps `app.log.gz`.
+  with the [gz viewer](./gz-viewer.md), which keeps `app.log.gz`.
 - otherwise → test the leading block directly: the POSIX/GNU `ustar` magic at
   offset 257, or, for magic-less v7 tars, a header checksum that verifies (the
   same test tar itself uses, so random 512-byte prefixes are not claimed).
