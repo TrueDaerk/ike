@@ -19,6 +19,7 @@ import (
 
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/motion"
+	"ike/internal/editor/operator"
 	"ike/internal/highlight"
 )
 
@@ -63,6 +64,48 @@ func (m Model) collapsedRow(line int) bool {
 	}
 	_, ok := m.pemBlockAt(line)
 	return ok
+}
+
+// expandFoldedLines grows the last line of the linewise span a..z so it covers
+// the hidden body of every collapsed fold whose header the span already covers
+// (#1741): a closed fold is one display row, so a linewise operation over that
+// row must act on the whole fold, like vim. Folds nest and may chain, so the
+// scan repeats until nothing grows — a fold revealed by an earlier expansion
+// gets its own body pulled in too. z only ever grows and is bounded by the
+// largest fold end, so the loop terminates.
+func (m Model) expandFoldedLines(a, z int) int {
+	for grew := true; grew; {
+		grew = false
+		for h, e := range m.folded {
+			if h >= a && h <= z && e > z {
+				z, grew = e, true
+			}
+		}
+	}
+	if last := m.buf.LineCount() - 1; z > last {
+		z = last
+	}
+	return z
+}
+
+// expandFoldTarget widens a linewise operator target over the collapsed folds
+// it covers (#1741). Charwise targets pass through untouched: a selection
+// inside one visible line never means "the whole fold". Folds live on the view,
+// not the buffer, so the operator package cannot do this itself — the expansion
+// happens here, before the target is handed over.
+func (m Model) expandFoldTarget(t operator.Target) operator.Target {
+	if !t.Linewise || len(m.folded) == 0 {
+		return t
+	}
+	a, z := t.Range.Start.Line, t.Range.End.Line
+	if z < a {
+		a, z = z, a
+	}
+	end := m.expandFoldedLines(a, z)
+	if end == z {
+		return t
+	}
+	return operator.LineTarget(a, end)
 }
 
 // visibleStep returns the next visible line from line in direction dir (+1
