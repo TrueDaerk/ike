@@ -9,6 +9,7 @@ import (
 
 	"ike/internal/archview"
 	"ike/internal/breakpanel"
+	"ike/internal/dataview"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/editor/register"
@@ -50,6 +51,10 @@ const mergeKeyBase = "merge"
 // archiveKeyBase is the key of the first archive viewer; later ones append
 // ":N" (#1762).
 const archiveKeyBase = "archive"
+
+// dataKeyBase is the key of the first data viewer; later ones append ":N"
+// (#1764).
+const dataKeyBase = "data"
 
 // VCSKey is the stable key of the singleton VCS tool window (Roadmap 0330).
 const VCSKey = "vcs"
@@ -94,6 +99,7 @@ type Registry struct {
 	diffs     int      // count of diff viewers ever allocated, for key minting
 	merges    int      // count of merge views ever allocated, for key minting
 	archives  int      // count of archive viewers ever allocated, for key minting
+	datas     int      // count of data viewers ever allocated, for key minting
 }
 
 // NewRegistry returns an empty registry whose new instances are configured
@@ -427,6 +433,38 @@ func (r *Registry) AddArchiveKey(key, path string) *Instance {
 	return inst
 }
 
+// AddDataView creates a data viewer instance bound to the database file at
+// path, returning the new instance's key ("data", then "data:N") (#1764).
+// The backend opens at construction; a failure surfaces as the pane's own
+// error notice.
+func (r *Registry) AddDataView(path string) string {
+	r.datas++
+	key := dataKeyBase
+	if r.datas > 1 {
+		key = dataKeyBase + ":" + strconv.Itoa(r.datas)
+	}
+	inst := &Instance{key: key, kind: KindData, cfg: r.cfg, pal: r.pal}
+	inst.dv = dataview.New(key, path, r.pal)
+	r.put(inst)
+	return key
+}
+
+// AddDataKey recreates a data viewer under an exact key, used by layout
+// restore. The minting counter advances past the key.
+func (r *Registry) AddDataKey(key, path string) *Instance {
+	inst := &Instance{key: key, kind: KindData, cfg: r.cfg, pal: r.pal}
+	inst.dv = dataview.New(key, path, r.pal)
+	r.put(inst)
+	if len(key) > len(dataKeyBase)+1 && key[:len(dataKeyBase)+1] == dataKeyBase+":" {
+		if v, err := strconv.Atoi(key[len(dataKeyBase)+1:]); err == nil && v > r.datas {
+			r.datas = v
+		}
+	} else if r.datas < 1 {
+		r.datas = 1
+	}
+	return inst
+}
+
 // AddDiff creates a diff viewer instance comparing the files at leftPath and
 // rightPath, returning the new instance's key ("diff", then "diff:N").
 // Contents arrive afterwards via the diff model's SetContents.
@@ -725,6 +763,9 @@ func (r *Registry) Close(key string) {
 	}
 	if inst.Kind() == KindTerminal {
 		inst.term.Close()
+	}
+	if inst.Kind() == KindData {
+		inst.dv.Close() // release the database backend (#1764)
 	}
 	inst.CloseTerminalTabs() // editor panes may host terminal tabs (#573)
 	delete(r.instances, key)

@@ -1,5 +1,36 @@
 # Log
 
+## 2026-08-10 (viewer: SQLite data pane — table sidebar, paged read-only grid, #1764)
+
+- **A SQLite database opens as a table browser, never as a binary buffer**
+  (#1764): `.db`/`.sqlite`/`.sqlite3` by extension plus the `SQLite format 3`
+  magic sniff land in the new `KindData` pane — a sidebar of tables and views
+  with row counts next to a grid of the selected object's rows. A claimed
+  `.db` *without* the magic still opens the pane, whose centered notice then
+  carries the engine's error (encrypted and corrupt files degrade the same
+  way).
+- **The pane is the shared data grid, the engine is a plug**: the pane speaks
+  only `datasrc.Source` — `Tables`, `Page`, `Schema`, `Close` — and holds no
+  SQL. The DuckDB (#1765) and Parquet (#1766) viewers add engines behind
+  `datasrc.Open` without touching the pane. Today's engine is
+  `modernc.org/sqlite`: pure Go, cgo-free cross-compilation kept, the size
+  accepted deliberately.
+- **Read-only by construction**: the database opens with DSN `mode=ro` on a
+  single connection, so a live application database is neither locked nor
+  mutated — a concurrent writer proceeds, and its rows appear on the next
+  page fetch.
+- **Paged, never loaded whole**: 500 rows per fetch via
+  `ORDER BY rowid LIMIT/OFFSET` (stable paging on ordinary tables; views fall
+  back to the bare scan). `j`/`k` cross page edges transparently, `n`/`p`
+  step pages, `g`/`G` jump to the ends, `h`/`l` scroll columns; the status
+  line reads `rows X–Y of N`. `NULL` renders as a faint `∅` — distinct from
+  the empty string — and BLOBs as `<blob N bytes>`.
+- **`s` shows the `CREATE` statement** in a read-only buffer under the
+  virtual path `<db>!<table>.sql` — the archive-entry `!` convention (#1762),
+  so the tab reads `users.sql (app.db)` with SQL highlighting and no way to
+  write back.
+  New [Data Viewer](/architecture/data-viewer.md).
+
 ## 2026-08-10 (viewer: .gz opens transparently decompressed, read-only, #1763)
 
 - **A plain `.gz` opens as its content, not as compressed bytes** (#1763):
