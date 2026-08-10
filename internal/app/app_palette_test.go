@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -93,11 +94,16 @@ func TestPaletteRunCommandMsgRunsCommand(t *testing.T) {
 func TestEscEscOpensPalette(t *testing.T) {
 	m := sized(t, 100, 40)
 	m.cycleFocus() // focus the editor (normal mode, not capturing)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	m.nowFn = func() time.Time { return now }
 	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = out.(Model)
 	if m.palette.IsOpen() {
 		t.Fatal("a single esc should not open the palette")
 	}
+	// Second esc arrives well within escEscTimeout (#1750).
+	now = now.Add(100 * time.Millisecond)
+	m.nowFn = func() time.Time { return now }
 	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = out.(Model)
 	if !m.palette.IsOpen() {
@@ -105,6 +111,36 @@ func TestEscEscOpensPalette(t *testing.T) {
 	}
 	if m.palette.Anchored() {
 		t.Fatal("esc-esc opens the centered palette, not anchored")
+	}
+}
+
+func TestEscEscOutsideTimeoutDoesNotOpenPalette(t *testing.T) {
+	m := sized(t, 100, 40)
+	m.cycleFocus() // focus the editor (normal mode, not capturing)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	m.nowFn = func() time.Time { return now }
+	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = out.(Model)
+	if m.palette.IsOpen() {
+		t.Fatal("a single esc should not open the palette")
+	}
+	// Second esc arrives well after escEscTimeout (#1750): it should be
+	// treated as a fresh first esc, not the second half of a double-tap.
+	now = now.Add(1 * time.Second)
+	m.nowFn = func() time.Time { return now }
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = out.(Model)
+	if m.palette.IsOpen() {
+		t.Fatal("esc-esc beyond the timeout should not open the palette")
+	}
+	// A third esc arriving right after the second should now open it, since
+	// the second esc re-armed the detector.
+	now = now.Add(100 * time.Millisecond)
+	m.nowFn = func() time.Time { return now }
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = out.(Model)
+	if !m.palette.IsOpen() {
+		t.Fatal("esc-esc within the timeout after re-arming should open the palette")
 	}
 }
 

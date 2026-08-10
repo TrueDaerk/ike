@@ -56,7 +56,10 @@ Four entry points, all from a non-capturing context:
   dedicated chord) — `Open` centered for the focused pane's context.
 - **esc-esc** — two consecutive `esc` presses outside a text-capturing editor
   mode open the centered palette (the first esc is still forwarded, so it keeps
-  its normal-mode meaning); any other key resets the pending state.
+  its normal-mode meaning); any other key resets the pending state. The second
+  esc only counts within `escEscTimeout` (350ms, #1750) of the first — a
+  forgotten first esc from long before doesn't arm the toggle on an unrelated
+  later esc; past the window the next esc simply re-arms as a fresh first esc.
 - **`@` in an editor's normal mode** — opens a slimmed, **file-only** palette
   *anchored* over the editor pane via `OpenAnchored(cx, '@', x, y, w)`. The root
   composites it with `overlay.Place` at the pane's interior top-left rather than

@@ -496,9 +496,16 @@ type Model struct {
 	// to a theme.Palette. Chrome renders from its ui slots; panes get it threaded
 	// at construction and on config reloads.
 	themePal *theme.Palette
-	// lastEsc records that the previous key was an esc in a non-capturing context,
-	// so a second esc opens the palette (esc-esc toggle).
-	lastEsc bool
+	// lastEscAt records when the previous key was an esc in a non-capturing
+	// context, so a second esc within escEscTimeout opens the palette
+	// (esc-esc toggle). A zero value means no esc is armed. Time-bounded
+	// (#1750) so a forgotten esc from long ago doesn't arm a palette-open on
+	// an unrelated later esc; the window distinguishes deliberate double-tap
+	// from coincidence.
+	lastEscAt time.Time
+	// nowFn overrides the clock the esc-esc detector reads from; tests only.
+	// Nil means the wall clock.
+	nowFn func() time.Time
 	// The split-tree layout (Roadmap 0036/0037) lives in the workspace (#776):
 	// m.activeWS().Tree. Leaves are instance keys resolved through the panes.
 	// lay caches the rectangles + dividers computed from tree for the current
@@ -573,6 +580,21 @@ type Model struct {
 	// IDE-level chords (in the focused pane's context) to registered command ids;
 	// unbound or inert chords fall through to the existing dispatch.
 	keys *keymap.Resolver
+}
+
+// escEscTimeout bounds the esc-esc palette toggle (#1750): the two presses
+// must land within this window to count as a deliberate double-tap, not a
+// forgotten first esc armed from an unrelated moment earlier.
+const escEscTimeout = 350 * time.Millisecond
+
+// clock returns the injectable "now" source for time-bounded key detectors
+// (e.g. esc-esc), defaulting to the wall clock. Tests set m.nowFn to control
+// it without time.Sleep.
+func (m *Model) clock() time.Time {
+	if m.nowFn != nil {
+		return m.nowFn()
+	}
+	return time.Now()
 }
 
 // editorScroll is a restored viewport framing awaiting the first layout.
@@ -5026,27 +5048,30 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Routed ahead of the esc-esc detector: an esc the editor consumes to
 		// cancel must not arm the double-esc palette (#640).
 		if m.debugPanelEditing() {
-			m.lastEsc = false
+			m.lastEscAt = time.Time{}
 			return m.routeKey(msg)
 		}
 		keys := msg.String()
 		if m.paletteKey != "" && keys == m.paletteKey {
-			m.lastEsc = false
+			m.lastEscAt = time.Time{}
 			m.openPalette()
 			return m, nil
 		}
 		// esc-esc opens the palette from a non-capturing context; the first esc is
-		// still forwarded (clears selection, etc.).
+		// still forwarded (clears selection, etc.). The second esc only counts if
+		// it lands within escEscTimeout of the first (#1750): otherwise a
+		// long-forgotten armed esc would open the palette on an unrelated esc.
 		if keys == "esc" && !m.editorCapturing() {
-			if m.lastEsc {
-				m.lastEsc = false
+			now := m.clock()
+			if !m.lastEscAt.IsZero() && now.Sub(m.lastEscAt) <= escEscTimeout {
+				m.lastEscAt = time.Time{}
 				m.openPalette()
 				return m, nil
 			}
-			m.lastEsc = true
+			m.lastEscAt = now
 			return m.routeKey(msg)
 		}
-		m.lastEsc = false
+		m.lastEscAt = time.Time{}
 		// "@" in an editor's normal mode opens a slimmed, file-only palette floated
 		// over that editor pane.
 		if keys == "@" && m.editorNormalMode() {
