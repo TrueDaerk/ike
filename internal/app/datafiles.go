@@ -27,9 +27,10 @@ func (dataProvider) ID() string { return "data" }
 func (dataProvider) Capabilities() plugin.Capabilities {
 	return plugin.Capabilities{FileHandlers: []plugin.FileHandler{{
 		ID:         "data.view",
-		Extensions: []string{".db", ".sqlite", ".sqlite3"},
-		// The magic sniff catches a SQLite database under any other name.
-		Match: datasrc.IsSQLite,
+		Extensions: []string{".db", ".sqlite", ".sqlite3", ".duckdb", ".ddb"},
+		// The magic sniff catches a SQLite or DuckDB database under any
+		// other name.
+		Match: datasrc.IsDatabase,
 		Open: func(h host.API, path string) tea.Cmd {
 			return h.Dispatch(OpenDataMsg{Path: path})
 		},

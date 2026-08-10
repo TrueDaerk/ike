@@ -1,5 +1,42 @@
 # Log
 
+## 2026-08-10 (viewer: DuckDB backend for the data pane, #1765)
+
+- **DuckDB databases open in the data pane** (#1765): `.duckdb`/`.ddb` by
+  extension plus the `DUCK` magic at offset 8 (the storage header opens with
+  an 8-byte checksum) route into the same `KindData` pane as SQLite —
+  sidebar of tables and views with row counts, paged read-only grid, `s` for
+  the `CREATE` statement. Nothing in the pane changed; the engine plugs into
+  `datasrc.Open`, which now decides by magic first and extension only as the
+  tie-break, so a DuckDB database named `app.db` still reaches the right
+  engine.
+- **The driver decision: the `duckdb` CLI, not the cgo driver.**
+  `github.com/marcboeker/go-duckdb` would require **cgo** and bundle a static
+  libduckdb (~100 MB of prebuilt archives), ending this repo's pure-Go
+  cross-compilation, lengthening every build, and **pinning** the storage
+  format to the linked libduckdb — a database written by a newer DuckDB would
+  fail until IKE is rebuilt. The same reasoning already picked
+  `modernc.org/sqlite` over a cgo driver. Shelling out to
+  `duckdb -readonly -json <file> "SELECT …"` costs nothing at build time, is
+  paid only by users who open a DuckDB file, and follows whatever format the
+  installed CLI understands. One invocation measures ~20 ms.
+- **A missing binary is an actionable state, not a failure**: the engine
+  returns a `datasrc.MissingToolError` and the pane draws a centered dialog
+  naming `duckdb` with the install hints — never a crash or a silent empty
+  grid. The binary is looked up on PATH and then in the usual install
+  directories, since a GUI-launched IKE inherits a minimal PATH (#1614).
+- **Locked databases fail fast**: DuckDB takes an exclusive lock, so a
+  database another process holds open cannot be read even read-only. The CLI
+  reports the lock and the pane shows it; every invocation also runs under a
+  30 s timeout with `stdin` closed, so nothing can hang the pane.
+- **Rendering parity with SQLite**: BLOBs become `<blob N bytes>` in SQL
+  (`octet_length`, so `NULL` stays `NULL`) rather than as an escaped byte
+  string, nested `STRUCT`/`LIST`/`MAP` values keep compact JSON, columns come
+  from `DESCRIBE` so an empty table still renders its header, and the JSON
+  rows are decoded token by token to preserve column order. Row counts for
+  the whole sidebar arrive in a single invocation.
+  Updated [Data Viewer](/architecture/data-viewer.md).
+
 ## 2026-08-10 (viewer: SQLite data pane — table sidebar, paged read-only grid, #1764)
 
 - **A SQLite database opens as a table browser, never as a binary buffer**

@@ -10,6 +10,7 @@
 package dataview
 
 import (
+	"errors"
 	"fmt"
 	"path"
 	"strings"
@@ -326,11 +327,42 @@ func (m *Model) View() string {
 }
 
 // errorView is the whole-pane notice for a database that would not open —
-// encrypted, corrupt, or unreadable.
+// encrypted, corrupt, locked by a writer, or unreadable. A missing engine
+// tool is actionable and gets the dialog instead.
 func (m *Model) errorView(pal *theme.Palette) string {
+	var missing *datasrc.MissingToolError
+	if errors.As(m.err, &missing) {
+		return m.missingToolView(pal, missing)
+	}
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.Foreground).Render(path.Base(m.path))
 	note := lipgloss.NewStyle().Foreground(pal.Error).Render("cannot open database: " + m.err.Error())
 	return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, title+"\n"+note)
+}
+
+// missingToolView is the centered dialog for a backend whose external tool is
+// not installed (the DuckDB engine's `duckdb` CLI, #1765). The state is
+// actionable — the user can install the tool and reopen the file — so it gets
+// a prominent box with the install hints rather than a one-line notice. A
+// pane too small for the box falls back to the plain notice.
+func (m *Model) missingToolView(pal *theme.Palette, e *datasrc.MissingToolError) string {
+	lines := []string{
+		lipgloss.NewStyle().Bold(true).Foreground(pal.Error).Render(e.Tool + " not found"),
+		"",
+		lipgloss.NewStyle().Foreground(pal.Foreground).Render(path.Base(m.path) + " needs it: " + e.Why),
+	}
+	for _, hint := range e.Hints {
+		lines = append(lines, lipgloss.NewStyle().Foreground(pal.Accent).Render("  "+hint))
+	}
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(pal.Border).
+		Padding(0, 2).
+		Render(strings.Join(lines, "\n"))
+	if lipgloss.Width(box) > m.w || lipgloss.Height(box) > m.h {
+		note := lipgloss.NewStyle().Foreground(pal.Error).Render(e.Error())
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, note)
+	}
+	return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, box)
 }
 
 // headerLine names the database and its object count.

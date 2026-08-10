@@ -3,6 +3,7 @@ package app
 import (
 	"database/sql"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -69,6 +70,65 @@ func TestPlainDBExtensionWithoutMagicStillClaimed(t *testing.T) {
 	h, ok := m.reg.ResolveHandler(p, readHead(p))
 	if !ok || h.Owner != "data" {
 		t.Fatalf("a .db file must resolve to the data handler, got %+v ok=%v", h, ok)
+	}
+}
+
+// writeDuckTestDB builds a tiny DuckDB database through the CLI, skipping the
+// test when the binary is not installed — the DuckDB engine (#1765) is a soft
+// dependency.
+func writeDuckTestDB(t *testing.T, name string) string {
+	t.Helper()
+	bin, err := exec.LookPath("duckdb")
+	if err != nil {
+		t.Skip("duckdb CLI not installed")
+	}
+	p := filepath.Join(t.TempDir(), name)
+	out, err := exec.Command(bin, p,
+		`CREATE TABLE notes (id INTEGER, body VARCHAR); INSERT INTO notes VALUES (1, 'hello'), (2, NULL);`).CombinedOutput()
+	if err != nil {
+		t.Fatalf("building the fixture failed: %v\n%s", err, out)
+	}
+	return p
+}
+
+// TestOpenPathRoutesDuckDBToHandler: the DuckDB extensions dispatch the data
+// pane, and so does a DuckDB database carrying a foreign extension — the
+// magic sniff claims it before any engine runs.
+func TestOpenPathRoutesDuckDBToHandler(t *testing.T) {
+	for _, name := range []string{"app.duckdb", "app.ddb", "app.warehouse"} {
+		t.Run(name, func(t *testing.T) {
+			m := newSized()
+			p := writeDuckTestDB(t, name)
+			_, cmd := m.openPath(p, false)
+			found := false
+			for _, msg := range dispatched(cmd) {
+				if open, ok := msg.(OpenDataMsg); ok && open.Path == p {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("openPath on %s must dispatch OpenDataMsg", name)
+			}
+		})
+	}
+}
+
+// TestOpenDuckDataPaneShowsTables: a DuckDB file lands in the same pane, with
+// its tables listed and the first page loaded.
+func TestOpenDuckDataPaneShowsTables(t *testing.T) {
+	m := newSized()
+	p := writeDuckTestDB(t, "app.duckdb")
+	m.openDataPane(p)
+	inst := m.activeWS().Panes.Get(m.activeWS().Panes.Focused())
+	if inst == nil || inst.Kind() != pane.KindData {
+		t.Fatal("a DuckDB file must open in a data pane")
+	}
+	dv := inst.Data()
+	if dv.Err() != nil {
+		t.Fatalf("pane error = %v", dv.Err())
+	}
+	if dv.Tables() != 1 || dv.SelectedTable() != "notes" || dv.PageRows() != 2 {
+		t.Fatalf("tables=%d selected=%q rows=%d", dv.Tables(), dv.SelectedTable(), dv.PageRows())
 	}
 }
 
