@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-10T09:00:00Z
+timestamp: 2026-08-10T12:00:00Z
 ---
 
 # Editor
@@ -1485,10 +1485,11 @@ emits everything through the Go span seam (#1585); the parsing lives in
 - **Repeat collapsing** (#1650, `logfold.go`): a polling service repeats the
   same line for pages, so a run of consecutive identical lines folds into its
   first line plus a `×N` badge (N counts the whole run). "Identical"
-  is `logline.RepeatKey` equality — every timestamp the parser recognizes (the
-  header stamp and the `time`/`ts`/`timestamp`/`datetime`/`date` pair values
-  anywhere on the line) is blanked before comparing, so only the stamps moving
-  still counts as a repeat; blank lines never fold. The runs are computed
+  is `logline.RepeatKey` equality — every *moving part* of a line is blanked to
+  the sentinel `\x00` before comparing (a sentinel, not a cut, so two
+  structurally different lines cannot collide), so lines that differ only in
+  the numbers running along with the repeats still count as one; blank lines
+  never fold. The runs are computed
   whole-buffer, cached per document version and path (`logRunCache`, a pointer
   field like `svTable`), and skipped for large files (#149) whose insight is
   already off. Hidden lines ride the fold machinery: `lineHidden` reports them
@@ -1497,6 +1498,32 @@ emits everything through the Go span seam (#1585); the parsing lives in
   open/close command — it reveals *positionally*, like the conceal layer
   (#1594): while the cursor is anywhere inside the run, every line renders raw
   and the marker disappears; moving out collapses it again.
+- **What counts as a moving part** (#1758, `logline/variable.go`): timestamps
+  were the only one until #1758, so a service that also printed an elapsed time
+  or a page number kept filling the viewport. Blanked are now (a) the header
+  stamp and the `time`/`ts`/`timestamp`/`datetime`/`date` pair values anywhere
+  on the line, (b) duration-shaped values of duration keys (`elapsed`,
+  `duration`, `took`, `latency`, `dt`, `rtt`, the `*_ms` spellings), (c) numeric
+  values of pagination/counter keys (`page`, `offset`, `attempt`, `retry`,
+  `count`, `rows`, `progress`, `seq`, `index`, `batch`, `step`, … — `cursor`
+  also with an opaque token value), and (d) four shapes in the message text:
+  duration tokens (`340ms`, `1.2s`, `2m30s`, `00:00:12`, `3 seconds` — the unit
+  blanks with the number, so `980ms` and `1.2s` still match and no plural `s`
+  separates two lines), a number behind a pagination keyword with its optional
+  `of N` tail (`page 17 of 240`), a ratio (`17/240`) and a percentage (`42%`),
+  plus a count in front of a counting noun (`1500 rows` — here only the number
+  blanks, so `12 files` and `12 rows` stay apart).
+- **Staying conservative** is the whole design constraint: a bare number is
+  never blanked on its own, only one carrying a duration unit, a pagination
+  keyword, a counting noun, a ratio or a percent sign, so `status=500` vs
+  `status=200`, two ports, two ids, `/api/v1/users/42` vs `…/43`, `v1.2.3` and
+  `Foo.java:42` all keep different keys. A digit run glued to a dot or a slash
+  on its left is skipped outright (`1.2.3s`, `/api/v1/240`), a ratio may not
+  continue into a second slash (`01/02/2024`), and a token followed by a letter
+  or digit is no token (`5mb`). The scan is hand-written and digit-anchored
+  rather than a regex sweep — `RepeatKey` runs over every line on every
+  document version, where an alternation this wide costs tens of microseconds
+  per line.
 - **The `×N` badge** (#1734, `logRunMarkerStyle`): the marker draws in theme
   colours rather than `Faint` — a dimmed tag glued to a line end reads as part
   of the line and the "this row stands for N occurrences" fact was easy to miss

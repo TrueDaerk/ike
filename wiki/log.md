@@ -1,5 +1,30 @@
 # Log
 
+## 2026-08-10 (log: repeat runs fold on durations, pages and counters, #1758)
+
+- **A repeat run no longer needs the timestamp to be the only thing moving**
+  (#1758, extends #1650): `logline.RepeatKey` blanks every *moving part* of a
+  line, not just the stamps — duration-shaped values of `elapsed`/`duration`/
+  `took`/`latency`/`dt`/`rtt`/`*_ms`, numeric values of `page`/`offset`/
+  `attempt`/`retry`/`count`/`rows`/`progress`/`seq`/`index`/`batch`/`step`
+  (and an opaque `cursor`), plus four message shapes: duration tokens
+  (`340ms`, `2m30s`, `00:00:12`, `3 seconds`, unit included so `980ms` matches
+  `1.2s`), a number behind a pagination keyword with its optional `of N` tail,
+  a ratio (`17/240`) and a percentage (`42%`), and the count in front of a
+  counting noun (`1500 rows`, number only). A paging fetch loop therefore folds
+  into one row with a `×N` badge instead of hundreds of near-identical lines.
+- **Conservative by construction**: a bare number is never blanked on its own,
+  so `status=200`/`status=500`, ports, ids, `/api/v1/users/42`, `v1.2.3` and
+  `Foo.java:42` keep different keys; a digit run glued to a dot or a slash on
+  its left is skipped, a ratio may not run into a second slash (`01/02/2024`),
+  and a token followed by a letter is none (`5mb`). The scan
+  (`logline/variable.go`) is hand-written and digit-anchored, not a regex
+  sweep — `RepeatKey` runs per line per document version, where a wide
+  alternation measured ~34 µs/line against ~2 µs for the whole rest of the key.
+  `logfold.go` is untouched: it hangs on key equality, so positional reveal,
+  the `×N` badge and raw-mode gating are unchanged.
+  Updated [Editor](/architecture/editor.md).
+
 ## 2026-08-10 (editor: soft wrap breaks on conceal display cells, #1756)
 
 - **Soft wrap now breaks on the display cells of the concealed expansion**
