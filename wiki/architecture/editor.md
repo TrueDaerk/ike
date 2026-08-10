@@ -1951,11 +1951,30 @@ Recognition and evaluation live in `internal/consthint`, a leaf package over
 three language plugins. Each language keys on what marks a constant there:
 
 - **Python** — a CONST_CASE name (`MAX_BYTES`, `_BUFFER_SIZE`), optionally
-  annotated (`RETRIES: Final = 3`); lowercase assignments never conceal.
+  annotated (`RETRIES: Final = 3`).
 - **Go** — the `const` keyword: single-line declarations and the lines of a
   `const ( … )` block, with an optional type between name and `=`.
 - **PHP** — `const NAME = …` (with visibility/`final` modifiers and an
   optional type) and `define('NAME', …)`.
+
+Two shapes without a constant marker also conceal (#1761), gated by the name
+instead of the case: a **lowercase assignment** (Python `duration = 5000`,
+PHP `$duration = 5000;`) and a **keyword argument** inside call parentheses
+(Python `f(timeout_ms=5000)`, PHP named arguments `f(timeout: 5000)`). Both
+fire only when the name carries a recognised unit context — the user's
+`number_hint_units` mapping (a `none` mapping vetoes) or a built-in key word
+(duration, byte-size, radix families) — so loop counters (`n = 8`,
+`attempts=3`) stay raw; single-letter names never qualify. The kwarg scan is
+quote-aware (a `"duration=5"` inside a string never fires), only an
+identifier directly after `(` or `,` is an argument name, and a doubled
+separator (`==`, `::`) is never one, so comparisons don't match; several
+kwargs on one line each conceal independently. Python `def` defaults are
+syntactically kwargs and conceal under the same rule — a default is a
+de-facto constant read the same way. Go stays `const`-only: a `var`/`:=`
+binding is mutable, so its literal is an initial value, not a constant, and
+idiomatic Go constants already use `const`. The evaluator's safety rule is
+unchanged for all shapes — any identifier, call, float or string on the
+value side leaves the line raw.
 
 The **evaluator** (`consthint.Eval`) accepts number literals — decimal, `0x`,
 `0o`, `0b`, digit-separating underscores, the Go/PHP leading-zero octal — and

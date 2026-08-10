@@ -136,6 +136,90 @@ func TestFieldUnitMapping(t *testing.T) {
 	}
 }
 
+// TestPythonLowercaseAssignments: a lowercase assignment conceals when the
+// name carries a recognised unit context (#1761) — `duration = 5000` reads
+// exactly like `DURATION = 5000` — while unit-less locals, loop counters and
+// single-letter names stay raw, and comparisons never match.
+func TestPythonLowercaseAssignments(t *testing.T) {
+	got := PythonSpans([]string{
+		"duration = 5000",
+		"timeout_ms: int = 30 * 1000",
+		"retries = 3",
+		"n = 8",
+		"i = 0",
+		"if duration == 5000:",
+		"duration = compute()",
+		"ratio = 1.5",
+	})
+	checkSpans(t, got, []span{
+		{0, 11, 15, numhint.DurationCapture, "5s"},
+		{1, 18, 27, numhint.DurationCapture, "30s"},
+	})
+}
+
+// TestPythonKwargSpans: a keyword argument whose name carries a unit context
+// conceals its literal-arithmetic value, at call sites and in `def` defaults
+// alike; unit-less names, comparisons inside parens and quoted text never
+// fire, and several kwargs on one line conceal independently (#1761).
+func TestPythonKwargSpans(t *testing.T) {
+	got := PythonSpans([]string{
+		"process(duration=24 * 60 * 60)",
+		"retry(timeout_ms=5000, attempts=3)",
+		"connect(host=server, delay_ms=2500)",
+		"def handle(duration=5000):",
+		"check(duration == 5000)",
+		"print(\"duration=5\")",
+		"wait(duration=jitter())",
+		"schedule(interval_s=15 * 60, backoff_ms=250 * 6)",
+	})
+	checkSpans(t, got, []span{
+		{0, 17, 29, numhint.DurationCapture, "1m26s"},
+		{1, 17, 21, numhint.DurationCapture, "5s"},
+		{2, 30, 34, numhint.DurationCapture, "2s500ms"},
+		{3, 20, 24, numhint.DurationCapture, "5s"},
+		{7, 20, 27, numhint.DurationCapture, "15m"},
+		{7, 40, 47, numhint.DurationCapture, "1s500ms"},
+	})
+}
+
+// TestPHPLowercaseAndNamedArgs: PHP's unit-gated shapes (#1761) — a
+// statement-level `$name = expr;` and named arguments `f(name: expr)` — with
+// the same negatives: unit-less names, comparisons, `::` and identifier
+// right-hand sides stay raw.
+func TestPHPLowercaseAndNamedArgs(t *testing.T) {
+	got := PHPSpans([]string{
+		"$timeout = 2500;",
+		"process(duration: 3600);",
+		"retry(timeout: 5000, attempts: 3);",
+		"$retries = 3;",
+		"if ($duration == 5000) {",
+		"$duration = compute();",
+		"log(Level::TIMEOUT, 5);",
+	})
+	checkSpans(t, got, []span{
+		{0, 11, 15, numhint.DurationCapture, "2s500ms"},
+		{1, 18, 22, numhint.DurationCapture, "3s600ms"},
+		{2, 15, 19, numhint.DurationCapture, "5s"},
+	})
+}
+
+// TestKwargFieldUnitMapping: the user's number_hint_units mapping (#1685)
+// gates and reads kwargs and lowercase names too — a mapped name conceals, a
+// `none` mapping vetoes a name the built-ins would otherwise read.
+func TestKwargFieldUnitMapping(t *testing.T) {
+	numhint.SetFieldUnits([]string{"window=ms", "timeout_ms=none"})
+	t.Cleanup(func() { numhint.SetFieldUnits(nil) })
+	got := PythonSpans([]string{
+		"render(window=40 * 25)",
+		"retry(timeout_ms=5000)",
+		"window = 40 * 25",
+	})
+	checkSpans(t, got, []span{
+		{0, 14, 21, numhint.DurationCapture, "1s"},
+		{2, 9, 16, numhint.DurationCapture, "1s"},
+	})
+}
+
 // TestNoRedundantReplacement: a stand-in identical to the source is noise —
 // an already-underscored literal stays raw (a 1024-multiple still gains its
 // byte reading, which says something the underscores do not).
