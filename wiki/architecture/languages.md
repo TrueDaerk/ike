@@ -41,7 +41,7 @@ type Language struct {
 }
 func Register(l Language)
 func ByID(id string) (Language, bool)
-func ByPath(path string) (Language, bool)   // user association, sniffed path association, exact base name, extension, then template-suffix fallback (#1595)
+func ByPath(path string) (Language, bool)   // user association, sniffed path association, exact base name, extension, then template-suffix (#1595) / rotation-suffix (#1745) fallback
 func ByAssociation(path string) (Language, bool) // user-configured [files.associations] match (#1365)
 func ForShebang(firstLine string) (Language, bool) // interpreter on the #! line (#893)
 func AssociatePath(path, id string)         // record a content-sniffed language for one path
@@ -107,6 +107,19 @@ base name (`Dockerfile.j2`) keeps the last word, chained suffixes strip one
 by one, and a name with no inner extension (`motd.j2`) stays plain text. A
 language claiming a template suffix outright still wins, because the direct
 extension lookup runs first.
+
+### Rotation suffix fallback (#1745)
+
+Same mechanism, for logrotate-style rotated files: a trailing numeric suffix
+(`app.log.1`) or date stamp (`app.log.2026-08-01`, `app.log.20260801`). When
+every direct lookup fails and the extension looks rotated, `ByPath` strips it
+and resolves the remaining name again — `app.log.2026-08-01` → `log`, which
+brings severity spans (`internal/logline`) and log rendering
+(`internal/editor/logrender.go`) along for free. A name with no inner
+extension (`backup.1`, `foo.2026-08-01`) stays plain text, and a language
+claiming such a suffix outright still wins (direct lookup runs first).
+Compressed rotated logs (`app.log.1.gz`) are out of scope — the content is
+binary, so log detection would be misleading.
 
 ### Context sniffers (#897)
 
