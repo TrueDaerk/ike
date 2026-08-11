@@ -364,7 +364,34 @@ func (m Model) displayClickCol(line, from, offset int) int {
 		if cr, ok := rangeAt(conceals, col); ok {
 			if cr.repl != "" && col == cr.start {
 				if cells := lipgloss.Width(cr.repl); offset < cells {
-					return col
+					// Map the click proportionally into the raw value (#1782):
+					// a stand-in generally doesn't correspond rune-for-rune to
+					// the source it replaces, so scale the offset by the ratio
+					// of raw length to replacement width instead of always
+					// landing on the range start.
+					last := cr.end - 1
+					mapped := col
+					switch {
+					case cells <= 1:
+						// One display cell to click on: it stands for the
+						// whole range, so keep the range-start behaviour.
+						mapped = col
+					case offset == cells-1:
+						// The last cell always lands exactly on the last raw
+						// column — the round-based scale below only
+						// approaches it, so pin it explicitly.
+						mapped = last
+					default:
+						rangeLen := cr.end - cr.start
+						mapped = col + (offset*rangeLen+cells/2)/cells
+						if mapped > last {
+							mapped = last
+						}
+					}
+					if mapped < col {
+						mapped = col
+					}
+					return mapped
 				} else {
 					offset -= cells
 				}

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
+
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/mode"
 	"ike/internal/highlight"
@@ -111,6 +113,52 @@ func TestConcealReplaceMultiByte(t *testing.T) {
 		if got := m.displayClickCol(0, 0, tc.offset); got != tc.want {
 			t.Errorf("offset %d → col %d, want %d", tc.offset, got, tc.want)
 		}
+	}
+}
+
+// TestConcealProportionalClickMap (#1782): a stand-in wider than its raw
+// value (like the epoch decode) and one narrower than its raw value (like
+// secret masking) both map clicks proportionally, and a wide-rune stand-in
+// counts display cells rather than runes.
+func TestConcealProportionalClickMap(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		raw        string
+		replace    string
+		start, end int
+		wantFirst  int
+		wantLast   int
+	}{
+		{"long stand-in, short raw", "x1830000000y", "2027-12-28 13:20:00Z", 1, 11, 1, 10},
+		{"short stand-in, long raw", "x" + strings.Repeat("9", 30) + "y", "***", 1, 31, 1, 30},
+		{"wide-rune stand-in", "x12y", "アイ", 1, 3, 1, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, path := mdLoaded(t, tc.raw+"\nplain\n")
+			m.cursor = buffer.Position{Line: 1}
+			spans := []highlight.Span{{Line: 0, StartCol: tc.start, EndCol: tc.end, Capture: "escape", Replace: tc.replace}}
+			mm, _ := m.Update(highlight.SpansMsg{Path: path, Version: m.docVersion, Spans: spans})
+			m = mm
+
+			cells := lipgloss.Width(tc.replace)
+			if got := m.displayClickCol(0, 0, tc.start+0); got != tc.wantFirst {
+				t.Errorf("first cell -> col %d, want %d", got, tc.wantFirst)
+			}
+			if got := m.displayClickCol(0, 0, tc.start+cells-1); got != tc.wantLast {
+				t.Errorf("last cell -> col %d, want %d", got, tc.wantLast)
+			}
+			last := -1
+			for offset := 0; offset < cells; offset++ {
+				got := m.displayClickCol(0, 0, tc.start+offset)
+				if got < tc.start || got > tc.end-1 {
+					t.Fatalf("offset %d -> col %d, want within [%d,%d]", offset, got, tc.start, tc.end-1)
+				}
+				if got < last {
+					t.Errorf("offset %d -> col %d, want >= previous col %d (monotonic)", offset, got, last)
+				}
+				last = got
+			}
+		})
 	}
 }
 
