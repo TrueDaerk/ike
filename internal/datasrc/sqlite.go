@@ -113,6 +113,46 @@ func (s *sqliteSource) Page(table string, offset, limit int64) (Page, error) {
 		}
 	}
 	defer rows.Close()
+	return scanSQLRows(rows, offset, total)
+}
+
+// PageWhere pages the table filtered by the user's clause (#1777). The clause
+// runs inside a subquery — `SELECT * FROM (SELECT * FROM "t" <clause>) LIMIT
+// n OFFSET m` — so the pane's window sits outside whatever the user wrote and
+// a clause of its own `LIMIT` bounds the result instead of fighting the pane.
+// The connection is `mode=ro`, so no clause can write; a clause carrying a
+// second statement is refused before the engine ever sees it.
+func (s *sqliteSource) PageWhere(table, clause string, offset, limit int64) (Page, error) {
+	clause = normalizeClause(clause)
+	if clause == "" {
+		return s.Page(table, offset, limit)
+	}
+	if err := checkClause(clause); err != nil {
+		return Page{}, err
+	}
+	base := `SELECT * FROM ` + quoteIdent(table)
+	var total int64 = -1
+	// A broken clause fails here first; the page query below reports it with
+	// the engine's own message, so the count only decides "?" versus a number.
+	if err := s.db.QueryRow(filteredCount(base, clause)).Scan(&total); err != nil {
+		total = -1
+	}
+	rows, err := s.db.Query(filteredQuery(base, clause, offset, limit))
+	if err != nil {
+		return Page{}, err
+	}
+	defer rows.Close()
+	return scanSQLRows(rows, offset, total)
+}
+
+// FilterPrefix is the filter line's fixed head for this engine.
+func (s *sqliteSource) FilterPrefix(table string) string {
+	return "SELECT * FROM " + quoteIdent(table) + " "
+}
+
+// scanSQLRows turns a result set into a Page, rendering every value to its
+// display cell.
+func scanSQLRows(rows *sql.Rows, offset, total int64) (Page, error) {
 	cols, err := rows.Columns()
 	if err != nil {
 		return Page{}, err

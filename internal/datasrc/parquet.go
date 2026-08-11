@@ -2,6 +2,7 @@ package datasrc
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -68,6 +69,7 @@ func IsParquet(path string, head []byte) bool {
 type parquetSource struct {
 	file *os.File
 	pq   *parquet.File
+	path string // the file itself: the filter path re-reads it through DuckDB
 	name string // sidebar entry: the file's base name
 	cols []parquetColumn
 }
@@ -108,7 +110,7 @@ func OpenParquet(path string) (_ Source, err error) {
 		f.Close()
 		return nil, err
 	}
-	s := &parquetSource{file: f, pq: pq, name: filepath.Base(path)}
+	s := &parquetSource{file: f, pq: pq, path: path, name: filepath.Base(path)}
 	for _, c := range pq.Root().Columns() {
 		first, end := parquetLeafRange(c)
 		if first < 0 {
@@ -219,6 +221,79 @@ func (s *parquetSource) renderRow(row parquet.Row, leaves int) []Cell {
 		cells[i] = parquetCell(assembleValue(c.col, columnLevels{}, byLeaf[c.first:end]))
 	}
 	return cells
+}
+
+// PageWhere pages the file filtered by the user's clause (#1777). parquet-go
+// is a reader, not a query engine, so the clause is run by the **duckdb CLI**
+// over `read_parquet('<file>')` — the one place the Parquet backend takes the
+// soft dependency the plain grid deliberately avoids. Without the binary the
+// filter reports a MissingToolError (the pane shows it in the filter line) and
+// the unfiltered grid keeps working through the pure-Go reader.
+//
+// DuckDB only ever reads the file: `read_parquet` is a scan, the statement is
+// a single SELECT, and a clause carrying a second statement is refused before
+// the CLI sees it.
+func (s *parquetSource) PageWhere(table, clause string, offset, limit int64) (Page, error) {
+	clause = normalizeClause(clause)
+	if clause == "" {
+		return s.Page(table, offset, limit)
+	}
+	if err := checkClause(clause); err != nil {
+		return Page{}, err
+	}
+	bin, err := lookDuckDB()
+	if err != nil {
+		return Page{}, parquetFilterTool(err)
+	}
+	cli := duckCLI{bin: bin}
+	base := s.filterBase()
+	page := Page{Offset: offset, Total: -1}
+	if out, err := cli.queryMem(filteredCount(base, clause)); err == nil {
+		page.Total = duckCount(out)
+	}
+	out, err := cli.queryMem(filteredQuery(base, clause, offset, limit))
+	if err != nil {
+		return Page{}, err
+	}
+	names, rows, err := decodeDuckRows(out)
+	if err != nil {
+		return Page{}, err
+	}
+	page.Columns = names
+	if len(page.Columns) == 0 {
+		// An empty result still owes the grid its header; the reader knows
+		// the columns without asking DuckDB again.
+		for _, c := range s.cols {
+			page.Columns = append(page.Columns, c.col.Name())
+		}
+	}
+	page.Rows = rows
+	return page, nil
+}
+
+// FilterPrefix is the filter line's fixed head: a Parquet file is queried as a
+// table function over its own path, which is what the user's clause attaches
+// to.
+func (s *parquetSource) FilterPrefix(string) string { return s.filterBase() + " " }
+
+// filterBase is the base select the clause is appended to.
+func (s *parquetSource) filterBase() string {
+	return "SELECT * FROM read_parquet(" + quoteString(s.path) + ")"
+}
+
+// parquetFilterTool restates a missing duckdb binary for the filter path: the
+// pane opens Parquet files without any external tool, so the message has to
+// say that only *filtering* needs one.
+func parquetFilterTool(err error) error {
+	var missing *MissingToolError
+	if !errors.As(err, &missing) {
+		return err
+	}
+	return &MissingToolError{
+		Tool:  missing.Tool,
+		Why:   "filtering a parquet table runs the clause through the duckdb command line tool",
+		Hints: missing.Hints,
+	}
 }
 
 // Schema renders the file's schema view: the column table with physical and
