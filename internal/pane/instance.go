@@ -1151,6 +1151,11 @@ func (i *Instance) Init() tea.Cmd {
 		if ed := i.Editor(); ed != nil {
 			return ed.Init()
 		}
+	case KindData:
+		// The data viewer opens its database in the background (#1795); Init
+		// is the one-shot that starts it, whether the pane was just created or
+		// restored with the layout.
+		return i.dv.Init()
 	}
 	return nil
 }

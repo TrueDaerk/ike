@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Data Viewer
-description: "#1764/#1765/#1766/#1777/#1788 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; '/' filters the grid with a SQL clause appended to SELECT * FROM <table>, run inside a subquery so paging keeps working."
+description: "#1764/#1765/#1766/#1777/#1788/#1795 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table>, run inside a subquery so paging keeps working."
 resource: internal/dataview
-tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sql, mouse, paging]
-timestamp: 2026-08-11T18:00:00Z
+tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sql, mouse, paging, async, performance]
+timestamp: 2026-08-11T21:00:00Z
 ---
 
-# Data Viewer (#1764, #1765, #1766, #1777, #1788)
+# Data Viewer (#1764, #1765, #1766, #1777, #1788, #1795)
 
 Opening a SQLite database, a DuckDB database or a Parquet file lands in a pane
 of kind `KindData`: a sidebar listing the tables and views (with row counts),
@@ -20,7 +20,9 @@ Three packages carry it, and only one of them knows SQL:
 - `internal/datasrc` — the backend contract plus the engines. The `Source`
   interface is the whole surface the pane sees: `Tables()`,
   `Page(table, offset, limit)`, `PageWhere(table, clause, offset, limit)`,
-  `FilterPrefix(table)`, `Schema(table)`, `Close()`. The pane holds
+  `Count(table, clause)`, `FilterPrefix(table)`, `Schema(table)`, `Close()`.
+  Nothing but `Count` ever counts rows, and nothing but the pane's background
+  command ever calls it (#1795, below). The pane holds
   **no SQL of its own** — not even under the filter (#1777), where it hands
   the user's clause straight to `PageWhere`. That is the seam SQLite, DuckDB
   and Parquet share.
@@ -68,10 +70,18 @@ accepted over a cgo driver):
 - **Read-only**: the DSN is `file:<path>?mode=ro` on a single connection.
   A concurrent writer is never blocked and never sees a lock from IKE
   (`TestReadOnlyNeverBlocksWriters` proves both directions).
+- **Read connections**: two. One carries the pane's page fetches, the other
+  the background row count (#1795) — with a single connection a `COUNT(*)`
+  over a huge table would queue every page fetch behind it.
 - **Paging**: `SELECT * FROM "t" ORDER BY rowid LIMIT n OFFSET m` — rowid
   gives `LIMIT/OFFSET` a stable order on ordinary tables; views and
   `WITHOUT ROWID` tables fall back to the bare scan. One page is `PageSize`
-  (500) rows; the count query feeds the `rows X–Y of N` status line.
+  (500) rows, and a page fetch runs **exactly one query**: no count (#1795).
+- **Sizes without a scan**: `Tables()` reads `sqlite_stat1` (what the last
+  `ANALYZE` recorded) and falls back to `max(rowid)`, which SQLite answers
+  from the last b-tree page in one seek. Both are estimates and are marked as
+  such; a `NULL` max means an empty table, the one exact case. A view has no
+  cheap size and stays `?` until the background count lands.
 - **Cells**: the backend renders values to display strings. SQL `NULL`
   arrives as a flagged cell (the grid draws `∅`, faint — visibly distinct
   from the empty string); BLOBs render as `<blob N bytes>`.
@@ -100,10 +110,12 @@ SELECT * FROM (SELECT * FROM "users" WHERE status = 'active' ORDER BY id
 ) AS ike_rows LIMIT 500 OFFSET 1000
 ```
 
-That is what makes paging work under a filter: `Page.Total` counts the same
-subquery, so `rows X–Y of N`, `n`/`p` and `G` keep their meaning, and a user's
+That is what makes paging work under a filter: `Count(table, clause)` counts
+the same subquery — in the background, under its own cache key (#1795) — so
+`rows X–Y of N`, `n`/`p` and `G` keep their meaning once it lands, and a user's
 own `LIMIT 100` **bounds** the result instead of fighting the pane — the grid
-then pages through those 100 rows. The clause ends the subquery's line so a
+then pages through those 100 rows. Applying a filter never waits for that
+count; the rows appear first and the total follows. The clause ends the subquery's line so a
 trailing `--` comment cannot comment out the closing parenthesis.
 
 - **SQLite / DuckDB** wrap their own base select (DuckDB keeps its BLOB
@@ -169,11 +181,12 @@ overhead is not a factor — one invocation measures ~20 ms.
   under a 30 s timeout with `stdin` closed, so neither a lock, a prompt nor a
   wedged binary can hang the pane.
 - **Listing**: `information_schema.tables` minus `information_schema` and
-  `pg_catalog`, tables before views. All row counts come back from **one**
-  invocation (`SELECT 'a', (SELECT count(*) FROM "a") UNION ALL …`); a batch
-  that fails — one view over a dropped table takes the whole `UNION` with it —
-  falls back to counting object by object, so the breakage costs only its own
-  `?` in the sidebar.
+  `pg_catalog`, tables before views, joined against `duckdb_tables()` for
+  `estimated_size` — **catalogue metadata, not a scan** (#1795). One
+  invocation lists the database *and* sizes it; a CLI whose catalogue lacks
+  the column falls back to the plain listing (sizes then show `?` until the
+  background count lands). The old eager `UNION ALL … count(*)` over every
+  object is gone: it scanned the whole database on open.
 - **Paging**: `ORDER BY rowid LIMIT n OFFSET m` like SQLite, falling back to
   the plain scan for views (DuckDB exposes `rowid` on base tables only).
 - **Cells**: BLOBs are turned into the grid's placeholder *in SQL* —
@@ -199,7 +212,8 @@ made viewing a Parquet file depend on a tool the user may not have installed.
 
 - **One table**: a Parquet file *is* a table, so the sidebar's list degenerates
   to a single entry named after the file, its row count taken straight from the
-  footer.
+  footer — exact and free, so a Parquet table is never counted in the
+  background (#1795).
 - **Open is footer-only**: `parquet.OpenFile` parses the footer and nothing
   else, so opening a multi-gigabyte file is instant. The library *panics* on
   some malformed schemas rather than returning an error, so `OpenParquet` and
@@ -309,9 +323,49 @@ virtual path `<db>!<table>.sql`, the same `!` convention as an archive entry
 (#1762). The tab titles itself `users.sql (app.db)`, picks up SQL highlighting
 from the `.sql` tail, and can never be written back.
 
+## Opening large databases (#1795)
+
+Opening used to be synchronous *and* eager: `dataview.New` opened the engine
+and listed the database on the UI thread, `Tables()` ran a `COUNT(*)` per
+object, and `Page()` counted again on **every** fetch. A multi-gigabyte
+database therefore froze the whole IDE for as long as it took to scan every
+table in it — and then re-scanned on every keystroke that paged. Three rules
+fix it:
+
+1. **Nothing counts on open.** The listing carries whatever the engine's
+   metadata knows (`Table.Rows` with `Table.Estimated`): SQLite's `ANALYZE`
+   statistics or last rowid, DuckDB's `estimated_size`, Parquet's footer.
+2. **Nothing counts on a fetch.** `Page`/`PageWhere` return `Total: -1`. The
+   pane keeps a per-`(table, filter)` cache; paging reads it, so `n`/`p`,
+   the wheel and a page-edge crossing issue **zero** count queries.
+3. **The exact count is lazy, background and one at a time.**
+   `Model.countCmd` returns a `tea.Cmd` counting only the *loaded* result set,
+   only when its entry is not already settled, and never while another count
+   is in flight. The result lands as a `dataview.ResultMsg`.
+
+**The open itself is a command too.** `New` touches no file; `Model.Init`
+returns the command that opens the engine, lists it and reads the first page,
+and `openDataPane` hands that command to the runtime after the pane is already
+on screen and focused. The pane draws `opening <file>…` in the meantime, and an
+open error lands through the same message and degrades to the usual notice.
+`Model.Init` (via `initDataPanes`) starts the ones the restore paths build.
+
+Results are routed by the **model's own key**, like a preview's render tick, so
+a data viewer living in a tab (#1778) receives them; a result whose pane is
+gone is `Discard`ed, which closes the database handle it carries.
+
+**What the user sees.** An estimate is marked — `~1204` in the sidebar and
+`rows 1–500 of ~1204` in the status line — and loses the `~` when the counted
+number replaces it; an uncountable object (a view over a dropped table) keeps
+its `?`. `G` (last page) needs an **exact** total and stays inert until the
+count lands, since an estimate would land the jump past the end. Paging without
+a trustworthy total falls back to "a full page ⇒ probably more". A count that
+fails leaves the estimate standing and is not retried.
+
 ## Lifecycle
 
 The pane is a content pane like the archive viewer: session persistence
-stores kind `data` plus the file path, and restore re-opens the database (a
-vanished file becomes the pane's own error notice). Closing the pane closes
-the backend connection (`Registry.Close` calls `Data().Close()`).
+stores kind `data` plus the file path, and restore re-opens the database
+through the same background command a fresh pane uses (a vanished file becomes
+the pane's own error notice). Closing the pane closes the backend connection
+(`Registry.Close` calls `Data().Close()`).

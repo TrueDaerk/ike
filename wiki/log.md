@@ -1,5 +1,25 @@
 # Log
 
+## 2026-08-11 (data viewer: instant open, lazy row counts, #1795)
+
+- **Opening a large database no longer blocks the IDE** (#1795): the engine
+  open, the table listing and the first page moved into a background
+  `tea.Cmd` (`dataview.Model.Init`, dispatched by `openDataPane` and by the
+  model's `initDataPanes` for restored panes). The pane is on screen and
+  focused from the first frame, drawing `opening <file>…` until the result
+  arrives as a `dataview.ResultMsg` routed by the model's own key.
+- **Exact row counts became lazy and cached**: `Tables()` no longer runs a
+  `COUNT(*)` per object and `Page()` no longer counts per fetch. Listings
+  carry metadata estimates instead (SQLite `sqlite_stat1` / `max(rowid)`,
+  DuckDB `duckdb_tables().estimated_size`, the Parquet footer), and the new
+  `Source.Count(table, clause)` runs in the background for the loaded table
+  only, once, with the result cached per table and filter — so paging issues
+  no count queries at all.
+- **Estimates are visible as estimates**: `~1204` in the sidebar and status
+  line until the counted number replaces it, `?` for what cannot be counted,
+  and `G` (last page) waits for an exact total rather than jumping on a guess.
+  Updated [Data Viewer](/architecture/data-viewer.md).
+
 ## 2026-08-11 (universal tabs: any pane as a tab in any pane, #1778)
 
 - **Tabs stop being an editor privilege** (#1778): a `pane.Tab` slot carried
