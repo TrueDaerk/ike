@@ -115,6 +115,88 @@ func TestHomeEndKeys(t *testing.T) {
 	}
 }
 
+func TestSmartHomeEndNormalMode(t *testing.T) {
+	m, _ := loaded(t, "    foo bar   \n")
+	m = typeKeys(m, "6l") // land mid-line
+	if m.cursor.Col != 6 {
+		t.Fatalf("setup col=%d want 6", m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyHome))
+	if m.cursor.Col != 4 {
+		t.Fatalf("home 1st press col=%d want 4", m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyHome))
+	if m.cursor.Col != 0 {
+		t.Fatalf("home 2nd press col=%d want 0", m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyHome))
+	if m.cursor.Col != 4 {
+		t.Fatalf("home 3rd press col=%d want 4", m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyEnd))
+	if m.cursor.Col != 11 {
+		t.Fatalf("end 1st press col=%d want 11", m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyEnd))
+	// Normal mode clamps the cursor onto the last rune (RuneLen-1=13).
+	if m.cursor.Col != 13 {
+		t.Fatalf("end 2nd press col=%d want 13", m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyEnd))
+	if m.cursor.Col != 11 {
+		t.Fatalf("end 3rd press col=%d want 11", m.cursor.Col)
+	}
+}
+
+func TestSmartHomeEndInsertMode(t *testing.T) {
+	m, _ := loaded(t, "    foo bar   \n")
+	m = typeKeys(m, "6li") // enter insert mode at col 6
+	if m.cursor.Col != 6 || !m.insert.active {
+		t.Fatalf("setup col=%d insert=%v", m.cursor.Col, m.insert.active)
+	}
+	m = send(m, special(tea.KeyHome))
+	if m.cursor.Col != 4 {
+		t.Fatalf("home 1st press col=%d want 4", m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyHome))
+	if m.cursor.Col != 0 {
+		t.Fatalf("home 2nd press col=%d want 0", m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyEnd))
+	if m.cursor.Col != 11 {
+		t.Fatalf("end 1st press col=%d want 11", m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyEnd))
+	if m.cursor.Col != 14 {
+		t.Fatalf("end 2nd press col=%d want 14 (true RuneLen)", m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyEnd))
+	if m.cursor.Col != 11 {
+		t.Fatalf("end 3rd press col=%d want 11", m.cursor.Col)
+	}
+}
+
+func TestSmartHomeEndBlankLineNoToggle(t *testing.T) {
+	m, _ := loaded(t, "   \nnext\n")
+	m = typeKeys(m, "li") // col 1, insert mode
+	m = send(m, special(tea.KeyHome))
+	if m.cursor.Col != 0 {
+		t.Fatalf("home on blank line col=%d want 0", m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyHome))
+	if m.cursor.Col != 0 {
+		t.Fatalf("repeated home on blank line col=%d want 0", m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyEnd))
+	if m.cursor.Col != 3 {
+		t.Fatalf("end on blank line col=%d want 3", m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyEnd))
+	if m.cursor.Col != 3 {
+		t.Fatalf("repeated end on blank line col=%d want 3", m.cursor.Col)
+	}
+}
+
 func TestGgG(t *testing.T) {
 	m, _ := loaded(t, "a\nb\nc\nd\n")
 	m = typeKeys(m, "G")

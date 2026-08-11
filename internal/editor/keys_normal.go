@@ -388,12 +388,16 @@ func (m *Model) resolveMotion(s string, r rune, count int) (motion.Result, bool)
 			return m.foldVertical(count, -1), true
 		}
 		return motion.Up(m.buf, m.cursor, count), true
-	case "0", "home":
+	case "0":
 		return motion.LineStart(m.buf, m.cursor, count), true
+	case "home":
+		return motion.SmartHome(m.buf, m.cursor, count), true
 	case "^":
 		return motion.FirstNonBlank(m.buf, m.cursor, count), true
-	case "$", "end":
+	case "$":
 		return motion.LineEnd(m.buf, m.cursor, count), true
+	case "end":
+		return motion.SmartEnd(m.buf, m.cursor, count), true
 	case "w":
 		return motion.WordForward(m.buf, m.cursor, count), true
 	case "W":

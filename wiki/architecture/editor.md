@@ -73,7 +73,12 @@ line runs that test (see /architecture/run-configurations.md).
 - **motion** — motions return a target `Position` + a `Kind`
   (exclusive/inclusive/linewise): `h j k l`, `w b e` (+ `W B E`), `ge`/`gE`
   (backward word end, #1193), `0 ^ $`, `gg G`, `{ }`, `f t F T` with `;`/`,`,
-  and `%` bracket match.
+  and `%` bracket match. `SmartHome`/`SmartEnd` (#1781) back the literal
+  `Home`/`End` keys (not the vim `0`/`^`/`$` motions, which keep their own
+  conventions): each toggles between the line's content column — first/last
+  non-blank — and the true column 0/`RuneLen`, deciding the direction from the
+  cursor's own column, so a line with no non-blank runes has no separate
+  content column and never toggles.
 - **textobject** — `iw aw` (and WORD), bracket pairs (`i( a( i{ …`, nesting and
   multi-line aware, plus the `ib`/`iB` aliases), quotes (`i" a"`), paragraphs
   (`ip ap`, linewise), sentences (`is as`) and XML/HTML tags (`it at`, text
@@ -474,7 +479,8 @@ terminal multiplexer.
 
 Insert/Replace edits flow through one open `history.Recorder` so a whole insert
 is a single undo unit; `Esc` commits it and records the `.`-repeat. Arrow keys,
-`Home`/`End` and the word/page keys move the caret mid-insert. Backward kills
+`Home`/`End` and the word/page keys move the caret mid-insert — `Home`/`End`
+use the smart toggle described above, same as normal mode. Backward kills
 work mid-insert too (#246), mirroring the terminal pane's macOS convention:
 `option+backspace` / `ctrl+w` delete the previous word, `ctrl+u` deletes to
 the line start, and `cmd+backspace` is IntelliJ's Delete Line (#955): the
