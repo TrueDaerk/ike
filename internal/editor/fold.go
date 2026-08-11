@@ -14,12 +14,16 @@ package editor
 
 import (
 	"strconv"
+	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/motion"
 	"ike/internal/editor/operator"
+	"ike/internal/editor/register"
 	"ike/internal/highlight"
 )
 
@@ -380,15 +384,151 @@ func (m *Model) foldScrollFix() {
 	}
 }
 
+// foldCopyGlyph is the copy affordance a collapsed fold header carries
+// (#1787): clicking it puts the whole hidden range on the system clipboard, so
+// reading a folded JSON object out of a file never needs an unfold plus a drag.
+const foldCopyGlyph = "⧉"
+
+// foldTag is the "⋯ N lines" placeholder of a collapsed header.
+func foldTag(line, end int) string { return " ⋯ " + strconv.Itoa(end-line) + " lines" }
+
+// annotColumnWidth is the width right-aligned row annotations budget against:
+// the text width, minus the column the overlaid scrollbar claims (#1728).
+func (m Model) annotColumnWidth() int {
+	w := m.view.TextWidth(m.buf.LineCount())
+	if _, _, _, _, ok := m.scrollbarGeometry(); ok {
+		w--
+	}
+	return w
+}
+
+// foldCopyCell reports where the copy affordance of the collapsed fold headed
+// by line is drawn: the offset of its first cell from the text area's left
+// edge, and its width. ok is false when the row has no room for it — a very
+// narrow pane, where the placeholder alone already fills the annotation column.
+//
+// Render and hit test share this one function, so the clickable cell is by
+// construction the cell the glyph occupies.
+func (m Model) foldCopyCell(line, end int) (off, width int, ok bool) {
+	annot := m.annotColumnWidth()
+	gw := lipgloss.Width(foldCopyGlyph)
+	if annot <= 0 || annot-gw-1 <= lipgloss.Width(foldTag(line, end)) {
+		return 0, 0, false
+	}
+	return annot - gw, gw, true
+}
+
 // renderFoldHeader renders the header line of a collapsed fold: the line
 // content with a dimmed placeholder carrying the hidden-line count appended,
-// budgeted so the row stays within the text width.
+// budgeted so the row stays within the text width, plus the copy affordance
+// right-aligned into the annotation column (#1787) — the column the ×N badges
+// and blame hints share, so the markers of a file stay one scannable column and
+// the affordance's hit target is a fixed cell instead of drifting with the
+// header's length.
 func (m Model) renderFoldHeader(line, end, width int, cursorStyle, selStyle lipgloss.Style) string {
-	tag := " ⋯ " + strconv.Itoa(end-line) + " lines"
+	tag := foldTag(line, end)
 	tw := lipgloss.Width(tag)
-	if tw >= width {
-		return m.renderLine(line, width, cursorStyle, selStyle)
+	faint := lipgloss.NewStyle().Faint(true)
+	off, _, ok := m.foldCopyCell(line, end)
+	if !ok {
+		// No room for the affordance: the placeholder alone, as before.
+		if tw >= width {
+			return m.renderLine(line, width, cursorStyle, selStyle)
+		}
+		return m.renderLine(line, width-tw, cursorStyle, selStyle) + faint.Render(tag)
 	}
-	body := m.renderLine(line, width-tw, cursorStyle, selStyle)
-	return body + lipgloss.NewStyle().Faint(true).Render(tag)
+	body := m.renderLine(line, off-tw, cursorStyle, selStyle) + faint.Render(tag)
+	body = ansi.Truncate(body, off, "")
+	if pad := off - ansi.StringWidth(body); pad > 0 {
+		body += strings.Repeat(" ", pad)
+	}
+	return body + lipgloss.NewStyle().Foreground(m.theme().Secondary).Render(foldCopyGlyph)
+}
+
+// FoldCopyHit reports the buffer line whose collapsed-fold copy affordance sits
+// under the content-local cell (x, y) — the mouse target that copies a fold
+// without unfolding it (#1787). Sticky-scroll rows are excluded: they render
+// through renderLine and carry no affordance.
+func (m *Model) FoldCopyHit(x, y int) (int, bool) {
+	if len(m.folded) == 0 || y < 0 {
+		return 0, false
+	}
+	if y < len(m.stickyLines()) {
+		return 0, false
+	}
+	line := m.clickPosition(x, y).Line
+	end, ok := m.foldedAt(line)
+	if !ok {
+		return 0, false
+	}
+	off, gw, ok := m.foldCopyCell(line, end)
+	if !ok {
+		return 0, false
+	}
+	cell := x - m.view.GutterWidth(m.buf.LineCount())
+	return line, cell >= off && cell < off+gw
+}
+
+// CopyFoldAt copies the collapsed fold headed by line — header through end
+// line, raw buffer text — onto the system clipboard (#1787). nil when line
+// heads no collapsed fold.
+func (m *Model) CopyFoldAt(line int) tea.Cmd {
+	end, ok := m.foldedAt(line)
+	if !ok {
+		return nil
+	}
+	return m.copyLineRange(line, end)
+}
+
+// foldCopyRange is the range the "Copy Folded Range" command acts on: the
+// collapsed fold the cursor's line heads, else the innermost fold containing
+// the cursor — open or closed, so the command also serves as "yank this block"
+// without a fold ever being collapsed.
+func (m Model) foldCopyRange() (start, end int, ok bool) {
+	if e, closed := m.foldedAt(m.cursor.Line); closed {
+		return m.cursor.Line, e, true
+	}
+	var best highlight.Fold
+	for _, f := range m.folds {
+		if !f.Contains(m.cursor.Line) {
+			continue
+		}
+		if !ok || f.HeaderLine >= best.HeaderLine {
+			best, ok = f, true
+		}
+	}
+	return best.HeaderLine, best.EndLine, ok
+}
+
+// foldCopy runs the "Copy Folded Range" command (palette, zy): the fold under
+// the cursor goes to the system clipboard whole, hidden lines included.
+func (m *Model) foldCopy() tea.Cmd {
+	start, end, ok := m.foldCopyRange()
+	if !ok {
+		return notice("no fold at the cursor")
+	}
+	return m.copyLineRange(start, end)
+}
+
+// copyLineRange yanks the linewise range start..end into the system-clipboard
+// register `+` and returns the feedback toast. The text is the raw buffer
+// content: conceals and stand-ins are display-only, so what lands on the
+// clipboard is what the file holds — the copy semantics of every other yank.
+func (m *Model) copyLineRange(start, end int) tea.Cmd {
+	if start < 0 {
+		start = 0
+	}
+	if last := m.buf.LineCount() - 1; end > last {
+		end = last
+	}
+	if start > end {
+		return nil
+	}
+	var b strings.Builder
+	for l := start; l <= end; l++ {
+		b.WriteString(m.buf.Line(l))
+		b.WriteByte('\n')
+	}
+	m.regs.Yank('+', register.Entry{Text: b.String(), Linewise: true})
+	return m.clipboardNotice("copied")
 }

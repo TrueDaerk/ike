@@ -138,6 +138,9 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.fold.open", "Open Fold", "fold_open", "zo"),
 			action("editor.fold.closeAll", "Close All Folds", "fold_close_all", "zM"),
 			action("editor.fold.openAll", "Open All Folds", "fold_open_all", "zR"),
+			// Copy the fold under the cursor whole (#1787) — the keyboard
+			// pendant of the collapsed header's ⧉ affordance.
+			action("editor.fold.copy", "Copy Folded Range", "fold_copy", "zy"),
 			// Line-ending / encoding conversion (#66): one command per choice,
 			// theme-picker style — the palette's fuzzy match over
 			// "Line Endings:" / "Encoding:" is the picker. Conversions mark

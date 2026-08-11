@@ -363,6 +363,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.run", "Run HTTP Request", HTTPRunMsg{}),
 			appCommand("http.copyBody", "Copy HTTP Response Body", HTTPCopyBodyMsg{}),
 			appCommand("http.copyHeaders", "Copy HTTP Response Headers", HTTPCopyHeadersMsg{}),
+			appCommand("http.copyFold", "Copy Folded Range (HTTP Response)", HTTPCopyFoldMsg{}),
 			appCommand("http.responseHistory", "Browse HTTP Response History", HTTPResponseHistoryMsg{}),
 			appCommand("http.showResponse", "Show Stored HTTP Response", HTTPShowResponseMsg{}),
 			appCommand("http.cancel", "Cancel Running HTTP Request", HTTPCancelMsg{}),

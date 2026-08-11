@@ -77,6 +77,7 @@ bring their own.
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
 | Cancel Running HTTP Request | `http.cancel` | — | — | everywhere |
 | Copy HTTP Response Body | `http.copyBody` | — | — | everywhere |
+| Copy Folded Range (HTTP Response) | `http.copyFold` | — | — | everywhere |
 | Copy HTTP Response Headers | `http.copyHeaders` | — | — | everywhere |
 | Browse HTTP Response History | `http.responseHistory` | — | — | everywhere |
 | Run HTTP Request | `http.run` | `ctrl+f9` | — | everywhere |
@@ -188,6 +189,7 @@ bring their own.
 | Find in File | `editor.find` | `cmd+f` | `/` | `editor` pane |
 | Close Fold | `editor.fold.close` | — | `zc` | `editor` pane |
 | Close All Folds | `editor.fold.closeAll` | — | `zM` | `editor` pane |
+| Copy Folded Range | `editor.fold.copy` | — | `zy` | `editor` pane |
 | Open Fold | `editor.fold.open` | — | `zo` | `editor` pane |
 | Open All Folds | `editor.fold.openAll` | — | `zR` | `editor` pane |
 | Toggle Fold | `editor.fold.toggle` | — | `za` | `editor` pane |

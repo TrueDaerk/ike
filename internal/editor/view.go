@@ -501,10 +501,7 @@ func (m Model) View() string {
 	// short of the scrollbar: overlayScrollbar claims the pane's rightmost
 	// column, so an annotation padded to the full text width loses its last
 	// cell — "+460ms" reads as "+460m" (#1728).
-	annotWidth := textWidth
-	if _, _, _, _, ok := m.scrollbarGeometry(); ok {
-		annotWidth--
-	}
+	annotWidth := m.annotColumnWidth()
 
 	selStyle := lipgloss.NewStyle().Background(m.theme().SelectionMuted)
 
