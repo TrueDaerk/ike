@@ -91,7 +91,11 @@ func TestIsSQLiteSniff(t *testing.T) {
 	}
 }
 
-func TestTablesListsObjectsWithCounts(t *testing.T) {
+// TestTablesListsObjectsWithEstimates: listing sizes objects from metadata
+// only (#1795) — the last rowid for a table, nothing at all for a view — so a
+// huge database lists instantly. The numbers are marked estimated; the exact
+// ones come from Count.
+func TestTablesListsObjectsWithEstimates(t *testing.T) {
 	src, err := Open(writeFixtureDB(t))
 	if err != nil {
 		t.Fatal(err)
@@ -108,14 +112,82 @@ func TestTablesListsObjectsWithCounts(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("objects = %d, want 3", len(got))
 	}
-	if u := got["users"]; u.Type != "table" || u.Rows != 1200 {
-		t.Fatalf("users = %+v", u)
+	if u := got["users"]; u.Type != "table" || u.Rows != 1200 || !u.Estimated {
+		t.Fatalf("users = %+v, want an estimated 1200", u)
 	}
-	if e := got["empty"]; e.Rows != 0 {
-		t.Fatalf("empty = %+v", e)
+	// An empty table is the one case the rowid probe settles exactly.
+	if e := got["empty"]; e.Rows != 0 || e.Estimated {
+		t.Fatalf("empty = %+v, want an exact 0", e)
 	}
-	if v := got["named"]; !v.IsView() || v.Rows != 1200 {
-		t.Fatalf("named = %+v", v)
+	if v := got["named"]; !v.IsView() || v.Rows != -1 {
+		t.Fatalf("named = %+v, want a view without a metadata size", v)
+	}
+}
+
+// TestTablesUsesAnalyzeStatistics: with ANALYZE run, the listing takes the
+// row count sqlite_stat1 holds rather than probing the last rowid (#1795).
+func TestTablesUsesAnalyzeStatistics(t *testing.T) {
+	p := writeFixtureDB(t)
+	db, err := sql.Open("sqlite", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A deleted row makes the two estimates differ: max(rowid) still says
+	// 1200, the statistics say 1199.
+	if _, err := db.Exec(`DELETE FROM users WHERE id = 1; ANALYZE`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	src, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+	tables, err := src.Tables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tb := range tables {
+		if tb.Name != "users" {
+			continue
+		}
+		if tb.Rows != 1199 || !tb.Estimated {
+			t.Fatalf("users = %+v, want the analysed 1199", tb)
+		}
+		return
+	}
+	t.Fatal("users missing from the listing")
+}
+
+// TestCountIsTheExactNumber: the exact count is its own call — the one full
+// scan, run in the background by the pane (#1795) — and it counts views and
+// filtered results too.
+func TestCountIsTheExactNumber(t *testing.T) {
+	src, err := Open(writeFixtureDB(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+	for _, tc := range []struct {
+		table, clause string
+		want          int64
+	}{
+		{"users", "", 1200},
+		{"empty", "", 0},
+		{"named", "", 1200},
+		{"users", "WHERE id % 3 = 0", 400},
+		{"users", "ORDER BY id DESC LIMIT 10", 10},
+	} {
+		n, err := src.Count(tc.table, tc.clause)
+		if err != nil {
+			t.Fatalf("count %q %q: %v", tc.table, tc.clause, err)
+		}
+		if n != tc.want {
+			t.Errorf("count %q %q = %d, want %d", tc.table, tc.clause, n, tc.want)
+		}
+	}
+	if _, err := src.Count("users", "WHERE nosuchcolumn = 1; DROP TABLE users"); err == nil {
+		t.Fatal("a clause carrying a second statement must be refused")
 	}
 }
 
@@ -129,7 +201,9 @@ func TestPagePagingMath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p0.Rows) != 500 || p0.Offset != 0 || p0.Total != 1200 {
+	// A page never counts (#1795): the total is unknown here and arrives from
+	// Count, in the background.
+	if len(p0.Rows) != 500 || p0.Offset != 0 || p0.Total != -1 {
 		t.Fatalf("page 0 = %d rows at %d of %d", len(p0.Rows), p0.Offset, p0.Total)
 	}
 	if len(p0.Columns) != 4 || p0.Columns[0] != "id" {

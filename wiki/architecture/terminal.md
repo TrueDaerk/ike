@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-07-30T12:00:00Z
+timestamp: 2026-08-11T12:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -53,8 +53,9 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   (SIGWINCH for the child) and the emulator — **debounced** (#804): the first
   resize applies immediately, a rapid burst (divider drag) folds into one
   trailing apply of the final size, so the child redraws once instead of per
-  drag step; `Close` kills the child and releases the PTY, and a shell `exit`
-  sends `ExitedMsg` so the root model closes the pane.
+  drag step; `Close` kills the child and releases the PTY (bounded — the loop
+  joins continue in the background, #1786), and a shell `exit` sends
+  `ExitedMsg` so the root model closes the pane.
 - **VT emulation** via `charmbracelet/x/vt` (`SafeEmulator` — the read loop
   writes while Update/View read): PTY output feeds `Write`, the screen
   renders with `Render()` (ANSI-styled, so 16/256/truecolor pass through),
@@ -122,8 +123,14 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   Scrollback lines keep their full width upstream — only the render clips —
   so scrollback needs no reserve. `gridMu` serializes the feed loop against
   the whole snapshot/scroll/restore sequence (CellAt returns pointers into
-  the live buffer); the grow-side cursor follows the pulled rows via a CUP
-  injected through the emulator's input path.
+  the live buffer — `LineText`/`HistoryLine` take it for the same reason);
+  the grow-side cursor follows the pulled rows via a CUP injected through
+  the emulator's input path. Inside the reflow, `softWrappedLocked` runs
+  under the **caller's** gridMu (#1786): it used to re-take the lock for its
+  reserve match, which self-deadlocked the resize path — with `s.mu` and
+  `gridMu` held forever, freezing the whole IDE — whenever the reserve was
+  wider than the grid (a width change during an alt-screen phase leaves it
+  that way, since only primary-screen width changes reset the reserve).
 - **View render cache** (#803): `Session.View` caches the rendered grid keyed
   by a mutation version (bumped on feed writes, resize, clear); a frame
   re-renders only grids that actually changed (measured ~270µs per 200×60
@@ -141,11 +148,20 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   and replaying it makes the process look alive after SIGINT already landed.
   At most the single chunk the feed loop already took still renders; bytes
   arriving afterwards (the `^C` echo, the prompt) flow normally.
-- **Teardown sequencing** (#748): upstream vt's `Emulator.Close` is not safe
-  concurrently with `Read`/`Write` (plain-bool closed flag), so `teardown`
-  joins the loops in order — read loop (closed PTY errors its read), feed
-  loop (spool drains, exit output kept), then the write loop, woken by a
-  sentinel byte through the host-bound pipe — and closes the emulator last.
+- **Teardown sequencing** (#748, #1786): teardown is split into a bounded
+  `release` — stop the resize timer, kill the child, close the PTY, close the
+  spool; signals only — and a blocking `join`. Upstream vt's `Emulator.Close`
+  is not safe concurrently with `Read`/`Write` (plain-bool closed flag), so
+  `join` collects the loops in order — read loop (closed PTY errors its
+  read), feed loop (spool drains, exit output kept), then the write loop,
+  woken by a sentinel byte through the host-bound pipe — and closes the
+  emulator last. `join` never runs on the update loop (#1786): `Close`
+  performs the release and hands the join to a background goroutine (the
+  UI-initiated close paths — tab close, popup collapse, project switch, quit
+  — all call `Close` from bubbletea's update loop), and the exit path sends
+  `ExitedMsg` right after the release, **before** its join, so a wedged loop
+  can neither withhold the exit (leaving a dead tab rendering — and blocking
+  on — the stuck session) nor stall the caller.
   `go test -race ./internal/terminal/` is clean.
 
 ## Pane citizenship (#96)
@@ -246,7 +262,9 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   (#1427), `cmd+shift+i` toggles input broadcast (#1427), `ctrl+tab` and the
   `editor.tab.next/prev` chords cycle the focused side's tabs, `cmd+w` closes
   the active tab through the busy guard (`termClosePopup` targets the shared
-  prompt), the float resize chords (#774) adjust the box, cmd+c/cmd+v
+  prompt; the guard pins its target by session key, `termCloseSess`, and the
+  confirm re-resolves it — a shell that exited while the prompt was open
+  closes nothing else, #1786), the float resize chords (#774) adjust the box, cmd+c/cmd+v
   copy/paste, and the `terminalGlobalCommands` allowlist stays with the IDE.
   Everything else goes raw to the shell. `terminal.popup` is itself
   allowlisted, so a focused pane terminal can summon the popup.

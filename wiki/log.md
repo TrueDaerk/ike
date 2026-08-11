@@ -28,6 +28,51 @@
   [Floating Shell](/architecture/floating-shell.md) and
   [Workspace](/architecture/workspace.md).
 
+## 2026-08-11 (popup terminal ctrl+d freeze — teardown off the update loop, #1786)
+
+- **Root cause 1 — reflow self-deadlock**: `softWrappedLocked` re-took `gridMu`
+  for its reserve match while the width-reflow path (`logicalLinesLocked`)
+  already held it. Reachable whenever the resize reserve is wider than the
+  grid (a width change during an alt-screen phase narrows the grid without
+  resetting the reserve); the resize path then parked forever holding `s.mu`
+  and `gridMu`, and every later render touching the session (`Title`, `Cwd`,
+  view) froze the whole update loop — no keys, no mouse, no redraw. The lock
+  is now the caller's job; `SoftWrapped` takes it at the public boundary.
+- **Root cause 2 — blocking teardown on the update loop**: `Session.Close`
+  joined the read/feed/write loops synchronously (UI paths: tab close, popup
+  collapse, busy-guard confirm, project switch, quit), and the exit path
+  joined them **before** sending `ExitedMsg` — a wedged loop withheld the
+  exit, leaving the dead tab rendering (and blocking on) the stuck session.
+  Teardown is now split: bounded `release` (kill child, close PTY, close
+  spool) on the caller, blocking `join` on a background goroutine; the exit
+  path notifies right after the release.
+- **Busy-close guard pins its target** (#1786): the confirm re-resolves the
+  session key recorded at prompt time (`termCloseSess`) instead of closing
+  whatever tab/pane is active/focused at confirm time — a guarded shell that
+  exited on its own while the prompt was open no longer gets an unrelated
+  neighbour killed.
+- Data races fixed under `go test -race`: `LineText`/`HistoryLine` copied
+  cells through live-buffer pointers without `gridMu`.
+## 2026-08-11 (data viewer: instant open, lazy row counts, #1795)
+
+- **Opening a large database no longer blocks the IDE** (#1795): the engine
+  open, the table listing and the first page moved into a background
+  `tea.Cmd` (`dataview.Model.Init`, dispatched by `openDataPane` and by the
+  model's `initDataPanes` for restored panes). The pane is on screen and
+  focused from the first frame, drawing `opening <file>…` until the result
+  arrives as a `dataview.ResultMsg` routed by the model's own key.
+- **Exact row counts became lazy and cached**: `Tables()` no longer runs a
+  `COUNT(*)` per object and `Page()` no longer counts per fetch. Listings
+  carry metadata estimates instead (SQLite `sqlite_stat1` / `max(rowid)`,
+  DuckDB `duckdb_tables().estimated_size`, the Parquet footer), and the new
+  `Source.Count(table, clause)` runs in the background for the loaded table
+  only, once, with the result cached per table and filter — so paging issues
+  no count queries at all.
+- **Estimates are visible as estimates**: `~1204` in the sidebar and status
+  line until the counted number replaces it, `?` for what cannot be counted,
+  and `G` (last page) waits for an exact total rather than jumping on a guess.
+  Updated [Data Viewer](/architecture/data-viewer.md).
+
 ## 2026-08-11 (floating stack finalized, #1237)
 
 - Finalized the z-ordered floating stack (#1237): the paste-capture predicate

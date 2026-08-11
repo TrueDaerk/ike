@@ -70,8 +70,9 @@ func TestSQLitePageWhereFiltersAndPages(t *testing.T) {
 		if err != nil {
 			t.Fatalf("filtered page at %d: %v", offset, err)
 		}
-		if page.Total != 400 {
-			t.Fatalf("filtered total = %d, want 400", page.Total)
+		// The filtered total is counted in the background too (#1795).
+		if page.Total != -1 {
+			t.Fatalf("filtered page total = %d, want it uncounted", page.Total)
 		}
 		if page.Offset != offset {
 			t.Fatalf("offset = %d, want %d", page.Offset, offset)
@@ -105,8 +106,10 @@ func TestSQLitePageWhereUserLimitIsPagedNotFought(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if page.Total != 10 {
-		t.Fatalf("total under a user LIMIT = %d, want 10", page.Total)
+	// The user's LIMIT bounds the count as well — which Count reports, the
+	// page itself never counting (#1795).
+	if n, err := src.Count("users", `ORDER BY id DESC LIMIT 10`); err != nil || n != 10 {
+		t.Fatalf("count under a user LIMIT = %d (%v), want 10", n, err)
 	}
 	if len(page.Rows) != 4 || page.Rows[0][0].Text != "1200" {
 		t.Fatalf("first filtered page = %d rows starting at %q", len(page.Rows), page.Rows[0][0].Text)
@@ -213,8 +216,9 @@ func TestDuckPageWhereFiltersAndPages(t *testing.T) {
 		if err != nil {
 			t.Fatalf("filtered page at %d: %v", offset, err)
 		}
-		if page.Total != 400 {
-			t.Fatalf("filtered total = %d, want 400", page.Total)
+		// The filtered total is counted in the background too (#1795).
+		if page.Total != -1 {
+			t.Fatalf("filtered page total = %d, want it uncounted", page.Total)
 		}
 		if len(page.Rows) == 0 {
 			break
@@ -248,12 +252,11 @@ func TestDuckPageWhereRejectsAndErrors(t *testing.T) {
 		t.Fatal("a syntax error must come back as the engine's error")
 	}
 	// The table survived both, and the grid still pages.
-	page, err := src.Page("users", 0, 10)
-	if err != nil {
+	if _, err := src.Page("users", 0, 10); err != nil {
 		t.Fatalf("the source stays usable: %v", err)
 	}
-	if page.Total != 1200 {
-		t.Fatalf("users holds %d rows, want 1200", page.Total)
+	if n, err := src.Count("users", ""); err != nil || n != 1200 {
+		t.Fatalf("users holds %d rows (%v), want 1200", n, err)
 	}
 	if got, want := src.FilterPrefix("users"), `SELECT * FROM "users" `; got != want {
 		t.Fatalf("FilterPrefix = %q, want %q", got, want)
@@ -278,8 +281,12 @@ func TestParquetPageWhereFiltersThroughDuckDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filtered page: %v", err)
 	}
-	if page.Total != 100 {
-		t.Fatalf("filtered total = %d, want 100", page.Total)
+	// The page itself does not count (#1795) — one CLI invocation, not two.
+	if page.Total != -1 {
+		t.Fatalf("filtered page total = %d, want it uncounted", page.Total)
+	}
+	if n, err := src.Count("big.parquet", clause); err != nil || n != 100 {
+		t.Fatalf("filtered count = %d (%v), want 100", n, err)
 	}
 	if len(page.Rows) != 60 || page.Rows[0][0].Text != "500" {
 		t.Fatalf("first filtered page = %d rows starting at %q", len(page.Rows), page.Rows[0][0].Text)

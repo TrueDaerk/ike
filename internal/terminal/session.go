@@ -429,6 +429,12 @@ func (s *Session) writeLoop() {
 }
 
 // waitExit closes the session when the shell process ends and tells the app.
+// ExitedMsg goes out right after the bounded release, BEFORE the loop joins
+// (#1786): the app must always learn of the exit — it closes the tab/pane, so
+// nothing renders (and blocks on) a session whose join is still in flight. A
+// wedged join used to withhold the message, leaving the dead tab active and
+// the next View() blocked on the emulator lock the stuck feed loop held —
+// freezing the whole update loop.
 func (s *Session) waitExit() {
 	_ = s.cmd.Wait()
 	s.mu.Lock()
@@ -437,10 +443,11 @@ func (s *Session) waitExit() {
 	}
 	s.mu.Unlock()
 	if s.closed.CompareAndSwap(false, true) {
-		s.teardown()
+		s.release()
 		if s.send != nil {
 			s.send(ExitedMsg{Key: s.key})
 		}
+		s.join()
 	}
 }
 
@@ -1055,6 +1062,10 @@ func (s *Session) ScrollbackLen() int { return s.em.ScrollbackLen() }
 
 // HistoryLine renders scrollback line y (0 = oldest) with its styles.
 func (s *Session) HistoryLine(y int) string {
+	// gridMu: ScrollbackCellAt returns a pointer into the live buffer, so the
+	// copy must not race a concurrent feed write (#807 — the same rule the
+	// resize snapshot follows).
+	s.gridMu.Lock()
 	w := s.em.Width()
 	line := uv.NewLine(w)
 	for x := 0; x < w; x++ {
@@ -1062,6 +1073,7 @@ func (s *Session) HistoryLine(y int) string {
 			line.Set(x, c)
 		}
 	}
+	s.gridMu.Unlock()
 	return s.gridPal().remap(line.Render())
 }
 
@@ -1069,6 +1081,10 @@ func (s *Session) HistoryLine(y int) string {
 // [scrollback ++ screen] — without styles, right-trimmed. Out-of-range lines
 // are empty.
 func (s *Session) LineText(v int) string {
+	// gridMu: CellAt/ScrollbackCellAt return pointers into the live buffer;
+	// reading their content must not race a concurrent feed write.
+	s.gridMu.Lock()
+	defer s.gridMu.Unlock()
 	sb := s.em.ScrollbackLen()
 	w := s.em.Width()
 	var b strings.Builder
@@ -1112,10 +1128,18 @@ func (s *Session) Width() int { return s.em.Width() }
 func (s *Session) SoftWrapped(v int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.gridMu.Lock()
+	defer s.gridMu.Unlock()
 	return s.softWrappedLocked(v)
 }
 
-// softWrappedLocked is SoftWrapped's body; s.mu held.
+// softWrappedLocked is SoftWrapped's body; s.mu and s.gridMu held. The grid
+// lock is the caller's job (#1786): this used to take gridMu itself for the
+// reserve match, which self-deadlocked — permanently freezing the update loop
+// — when the width-reflow path (logicalLinesLocked, gridMu already held)
+// reached the reserve branch, i.e. whenever the reserve was captured wider
+// than the current grid (a width change during an alt-screen phase leaves it
+// that way, since only primary-screen width changes reset it).
 func (s *Session) softWrappedLocked(v int) bool {
 	sb := s.em.ScrollbackLen()
 	w := s.em.Width()
@@ -1138,10 +1162,7 @@ func (s *Session) softWrappedLocked(v int) bool {
 	// exactly at w) — not a wrap. Rows rewritten since fail the prefix match
 	// and take the plain heuristic.
 	if s.reserveW > w && y < len(s.reserve) && len(s.reserve[y]) > w {
-		s.gridMu.Lock()
-		match := rowPrefixEqual(s.reserve[y], s.screenRowLocked(w, y), w)
-		s.gridMu.Unlock()
-		if match {
+		if rowPrefixEqual(s.reserve[y], s.screenRowLocked(w, y), w) {
 			return false
 		}
 	}
@@ -1353,24 +1374,25 @@ func cellOccupied(c *uv.Cell) bool {
 }
 
 // Close ends the session: the child is terminated and the PTY closed. Safe to
-// call more than once.
+// call more than once. Only the bounded release runs on the caller — the loop
+// joins and the emulator close continue on a background goroutine (#1786), so
+// a wedged loop (a feed pass stuck behind the grid locks, the write-loop
+// sentinel race #748, a large spool backlog) can never block the caller: the
+// UI-initiated close paths (tab close, popup collapse, project switch, quit)
+// all run Close on the bubbletea update loop.
 func (s *Session) Close() {
 	if !s.closed.CompareAndSwap(false, true) {
 		return
 	}
-	s.teardown()
+	s.release()
+	go s.join()
 }
 
-// teardown releases the process, PTY and emulator. The join order matters
-// (#748): the read loop ends when the closed PTY errors its Read, the feed
-// loop once the spool drains (exit output still reaches the emulator), and
-// only then is the write loop stopped — woken by a sentinel byte through the
-// host-bound pipe, since nothing else unblocks its Read. Emulator.Close runs
-// last, once no goroutine is inside the emulator: upstream vt keeps its
-// closed flag as a plain bool, so Close concurrent with Read/Write is a data
-// race. The mutex is released before the joins — the feed loop's title
-// callback takes it.
-func (s *Session) teardown() {
+// release is teardown's bounded half: it stops the resize timer, kills the
+// child, closes the PTY and closes the spool — signals only, no waiting — so
+// it is safe on the update loop. The loops observe these and wind down; join
+// collects them.
+func (s *Session) release() {
 	s.mu.Lock()
 	if s.resizeTimer != nil {
 		s.resizeTimer.Stop() // a pending trailing resize has nothing to apply (#1001)
@@ -1384,6 +1406,18 @@ func (s *Session) teardown() {
 		s.out.close()
 	}
 	s.mu.Unlock()
+}
+
+// join is teardown's blocking half: it collects the loops and closes the
+// emulator, and must never run on the update loop (#1786). The join order
+// matters (#748): the read loop ends when the closed PTY errors its Read, the
+// feed loop once the spool drains (exit output still reaches the emulator),
+// and only then is the write loop stopped — woken by a sentinel byte through
+// the host-bound pipe, since nothing else unblocks its Read. Emulator.Close
+// runs last, once no goroutine is inside the emulator: upstream vt keeps its
+// closed flag as a plain bool, so Close concurrent with Read/Write is a data
+// race.
+func (s *Session) join() {
 	s.ioWG.Wait()
 	s.wlStop.Store(true)
 	// The sentinel write blocks until the write loop reads it; if the loop

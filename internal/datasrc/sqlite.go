@@ -52,9 +52,13 @@ func OpenSQLite(path string) (Source, error) {
 	if err != nil {
 		return nil, err
 	}
-	// One connection total: SQLite is a file, not a server, and a single
-	// read connection keeps the pane's queries trivially consistent.
-	db.SetMaxOpenConns(1)
+	// Two connections: one carries the pane's page fetches, the other the
+	// background row count (#1795) — a COUNT(*) over a ten-million-row table
+	// runs for seconds, and with a single connection every page fetch would
+	// queue behind it and hang the pane it was made asynchronous for. Two is
+	// also the ceiling: the pane runs at most one count at a time, and more
+	// open handles on one file buy nothing.
+	db.SetMaxOpenConns(2)
 	s := &sqliteSource{db: db}
 	if _, err := s.Tables(); err != nil {
 		db.Close()
@@ -83,24 +87,91 @@ func (s *sqliteSource) Tables() ([]Table, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	stats := s.analyzeStats()
 	for i := range out {
-		// A count can fail independently of the listing (a view over a
-		// dropped table); the sidebar then shows "?" rather than an error.
-		var n int64
-		err := s.db.QueryRow(`SELECT COUNT(*) FROM ` + quoteIdent(out[i].Name)).Scan(&n)
-		if err != nil {
-			n = -1
-		}
-		out[i].Rows = n
+		out[i].Rows, out[i].Estimated = s.estimate(out[i], stats)
 	}
 	return out, nil
 }
 
-func (s *sqliteSource) Page(table string, offset, limit int64) (Page, error) {
-	var total int64 = -1
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM ` + quoteIdent(table)).Scan(&total); err != nil {
-		total = -1
+// estimate sizes one object without scanning it (#1795). ANALYZE's statistics
+// come first — they describe the table the last ANALYZE saw — and the last
+// rowid stands in otherwise: SQLite answers max(rowid) from the last b-tree
+// page, so it costs one seek on a table of any size. Both are guesses (stale
+// statistics, deleted rows), hence Estimated; an empty table is the one case
+// the rowid probe settles exactly. A view has no cheap size at all and stays
+// unknown until the background count runs.
+func (s *sqliteSource) estimate(t Table, stats map[string]int64) (int64, bool) {
+	if t.IsView() {
+		return -1, false
 	}
+	if n, ok := stats[t.Name]; ok {
+		return n, true
+	}
+	var last sql.NullInt64
+	if err := s.db.QueryRow(`SELECT max(rowid) FROM ` + quoteIdent(t.Name)).Scan(&last); err != nil {
+		return -1, false // WITHOUT ROWID, or an object that will not read
+	}
+	if !last.Valid {
+		return 0, false // no rows at all: exact, and the pane can say so
+	}
+	return last.Int64, true
+}
+
+// analyzeStats reads the row counts ANALYZE left in sqlite_stat1, keyed by
+// table. Each stat string starts with the table's estimated row count; a
+// database that was never analysed has no such table and gets an empty map.
+func (s *sqliteSource) analyzeStats() map[string]int64 {
+	rows, err := s.db.Query(`SELECT tbl, stat FROM sqlite_stat1`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var tbl string
+		var stat sql.NullString
+		if err := rows.Scan(&tbl, &stat); err != nil {
+			return out
+		}
+		if _, seen := out[tbl]; seen || !stat.Valid {
+			continue
+		}
+		if n := parseInt64(firstField(stat.String)); n >= 0 {
+			out[tbl] = n
+		}
+	}
+	return out
+}
+
+// firstField returns the leading whitespace-delimited field of s.
+func firstField(s string) string {
+	if i := strings.IndexByte(s, ' '); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+// Count is the exact row count — a full table scan, which is why it lives
+// away from the paging path and runs in the background (#1795).
+func (s *sqliteSource) Count(table, clause string) (int64, error) {
+	q := `SELECT COUNT(*) FROM ` + quoteIdent(table)
+	if clause = normalizeClause(clause); clause != "" {
+		if err := checkClause(clause); err != nil {
+			return -1, err
+		}
+		q = filteredCount(`SELECT * FROM `+quoteIdent(table), clause)
+	}
+	var n int64
+	if err := s.db.QueryRow(q).Scan(&n); err != nil {
+		return -1, err
+	}
+	return n, nil
+}
+
+func (s *sqliteSource) Page(table string, offset, limit int64) (Page, error) {
+	// No count here (#1795): the total arrives from Count, in the background.
+	const total = int64(-1)
 	// rowid gives LIMIT/OFFSET a stable order on an ordinary table. Views
 	// and WITHOUT ROWID tables have none — there the bare scan's natural
 	// order has to do.
@@ -131,12 +202,10 @@ func (s *sqliteSource) PageWhere(table, clause string, offset, limit int64) (Pag
 		return Page{}, err
 	}
 	base := `SELECT * FROM ` + quoteIdent(table)
-	var total int64 = -1
-	// A broken clause fails here first; the page query below reports it with
-	// the engine's own message, so the count only decides "?" versus a number.
-	if err := s.db.QueryRow(filteredCount(base, clause)).Scan(&total); err != nil {
-		total = -1
-	}
+	// The filtered total is counted in the background like the unfiltered one
+	// (#1795) — a WHERE over a large table scans it, and typing a filter must
+	// not stall the pane.
+	const total = int64(-1)
 	rows, err := s.db.Query(filteredQuery(base, clause, offset, limit))
 	if err != nil {
 		return Page{}, err

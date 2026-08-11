@@ -110,7 +110,7 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	// The filter line owns the input while it is open (#1777) — its clause is
 	// half-typed text, and loading a table would drop it — so clicks are inert
 	// until enter or esc closes the line.
-	if m.err != nil || m.fEditing {
+	if m.err != nil || m.src == nil || m.fEditing {
 		return nil
 	}
 	if y < 1 || y > m.bodyHeight() {
@@ -118,7 +118,9 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	}
 	if x < m.sidebarWidth() {
 		m.sidebarClick(m.ttop + y - 1)
-		return nil
+		// A double click loaded another table, whose count is the one now
+		// worth running (#1795).
+		return m.countCmd()
 	}
 	m.gridClick(y)
 	return nil

@@ -18,6 +18,37 @@ import (
 	"ike/internal/registry"
 )
 
+// settle runs a command tree to completion against the model, feeding every
+// message back into Update — the test-side stand-in for the bubbletea runtime,
+// which is what the data viewer's background open and row counts (#1795) need.
+func settle(t *testing.T, m Model, cmds ...tea.Cmd) Model {
+	t.Helper()
+	for len(cmds) > 0 {
+		cmd := cmds[0]
+		cmds = cmds[1:]
+		if cmd == nil {
+			continue
+		}
+		switch msg := cmd().(type) {
+		case nil:
+		case tea.BatchMsg:
+			cmds = append(cmds, msg...)
+		default:
+			out, next := m.Update(msg)
+			m = out.(Model)
+			cmds = append(cmds, next)
+		}
+	}
+	return m
+}
+
+// openData opens the data viewer for p and settles the background open, so the
+// test sees the loaded pane the user ends up with.
+func openData(t *testing.T, m Model, p string) Model {
+	t.Helper()
+	return settle(t, m, m.openDataPane(p))
+}
+
 // writeTestDB builds a tiny SQLite database with one populated table.
 func writeTestDB(t *testing.T, name string) string {
 	t.Helper()
@@ -118,7 +149,7 @@ func TestOpenPathRoutesDuckDBToHandler(t *testing.T) {
 func TestOpenDuckDataPaneShowsTables(t *testing.T) {
 	m := newSized()
 	p := writeDuckTestDB(t, "app.duckdb")
-	m.openDataPane(p)
+	m = openData(t, m, p)
 	inst := m.activeWS().Panes.Get(m.activeWS().Panes.Focused())
 	if inst == nil || inst.Kind() != pane.KindData {
 		t.Fatal("a DuckDB file must open in a data pane")
@@ -137,7 +168,7 @@ func TestOpenDuckDataPaneShowsTables(t *testing.T) {
 func TestOpenDataPaneShowsTables(t *testing.T) {
 	m := newSized()
 	p := writeTestDB(t, "app.db")
-	m.openDataPane(p)
+	m = openData(t, m, p)
 	key := m.activeWS().Panes.Focused()
 	inst := m.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindData {
@@ -155,9 +186,40 @@ func TestOpenDataPaneShowsTables(t *testing.T) {
 	}
 	// Re-opening the same database refocuses instead of splitting again.
 	m.setFocus(m.fileEditorKey())
-	m.openDataPane(p)
+	m = openData(t, m, p)
 	if m.activeWS().Panes.Focused() != key {
 		t.Fatal("re-open must refocus the existing pane")
+	}
+}
+
+// TestDataPaneAppearsBeforeTheDatabaseOpens: opening a database costs the IDE
+// no frame (#1795) — the pane is there, focused and drawable, while the engine
+// open runs as a command, and the IDE keeps taking keys meanwhile.
+func TestDataPaneAppearsBeforeTheDatabaseOpens(t *testing.T) {
+	m := newSized()
+	p := writeTestDB(t, "app.db")
+	cmd := m.openDataPane(p)
+	if cmd == nil {
+		t.Fatal("the database must open as a background command")
+	}
+	key := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(key)
+	if inst == nil || inst.Kind() != pane.KindData {
+		t.Fatalf("focused pane = %q", key)
+	}
+	dv := inst.Data()
+	if !dv.Opening() || dv.Tables() != 0 {
+		t.Fatalf("the pane must show up before its database: opening=%v tables=%d", dv.Opening(), dv.Tables())
+	}
+	if !strings.Contains(m.View().Content, "opening") {
+		t.Fatal("the pane must say what it is waiting for")
+	}
+	// Keys still route while the open runs — the IDE is not blocked on it.
+	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m = out.(Model)
+	m = settle(t, m, cmd)
+	if dv.Opening() || dv.Tables() != 1 || dv.PageRows() != 2 {
+		t.Fatalf("after the open: opening=%v tables=%d rows=%d", dv.Opening(), dv.Tables(), dv.PageRows())
 	}
 }
 
@@ -166,7 +228,7 @@ func TestOpenDataPaneShowsTables(t *testing.T) {
 func TestShowTableSchemaOpensReadOnlyBuffer(t *testing.T) {
 	m := newSized()
 	p := writeTestDB(t, "app.db")
-	m.openDataPane(p)
+	m = openData(t, m, p)
 	inst := m.activeWS().Panes.Get(m.activeWS().Panes.Focused())
 	cmd := inst.Data().Update(tea.KeyPressMsg{Code: 's', Text: "s"})
 	if cmd == nil {
@@ -195,7 +257,7 @@ func TestDataPaneRestoresByPath(t *testing.T) {
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = out.(Model)
-	m.openDataPane(p)
+	m = openData(t, m, p)
 	key := m.activeWS().Panes.Focused()
 	if inst := m.activeWS().Panes.Get(key); inst == nil || inst.Kind() != pane.KindData {
 		t.Fatalf("setup: focused = %q", key)
@@ -211,6 +273,9 @@ func TestDataPaneRestoresByPath(t *testing.T) {
 	}
 
 	m2 := NewWith(registry.New(), host.MapConfig{})
+	// The restored pane opens its database in the background like a fresh one
+	// (#1795); the model's Init is what starts it.
+	m2 = settle(t, m2, m2.initDataPanes()...)
 	inst := m2.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindData {
 		t.Fatalf("the data pane did not restore under %q", key)
@@ -235,7 +300,7 @@ func TestDataPaneRestoresByPath(t *testing.T) {
 func TestTabTogglesDataRegion(t *testing.T) {
 	m := newSized()
 	p := writeTestDB(t, "app.db")
-	m.openDataPane(p)
+	m = openData(t, m, p)
 	key := m.activeWS().Panes.Focused()
 	dv := m.activeWS().Panes.Get(key).Data()
 	if dv.InGrid() {
@@ -263,7 +328,7 @@ func TestTabTogglesDataRegion(t *testing.T) {
 func TestDataPaneMouseScrollsAndSelects(t *testing.T) {
 	m := newSized()
 	p := writeTestDB(t, "app.db")
-	m.openDataPane(p)
+	m = openData(t, m, p)
 	key := m.activeWS().Panes.Focused()
 	dv := m.activeWS().Panes.Get(key).Data()
 	r := m.lay.Panes[key]

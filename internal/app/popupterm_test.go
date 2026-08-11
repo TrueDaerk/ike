@@ -358,3 +358,99 @@ func TestPopupPaletteOpensAbove(t *testing.T) {
 		t.Fatal("the popup stays open underneath the palette")
 	}
 }
+
+// TestPopupSplitSecondTabExit guards #1786's repro shape: a split popup whose
+// left side holds a second tab. A left shell's exit closes only its tab —
+// split, right side and focus stay consistent — and a duplicate ExitedMsg for
+// the same session (broadcast can deliver several exits per tick) is a no-op.
+func TestPopupSplitSecondTabExit(t *testing.T) {
+	m := splitTestPopup(t)
+	// Focus the left side (ctrl+left crosses the split, #1427) and open the
+	// second tab there.
+	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl})
+	m = out.(Model)
+	if m.popup.focusRight {
+		t.Fatal("ctrl+left should focus the left side")
+	}
+	out, _ = m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModSuper})
+	m = out.(Model)
+	if m.popup.inst.TabCount() != 2 {
+		t.Fatalf("cmd+t should add a second left tab, got %d", m.popup.inst.TabCount())
+	}
+	rightSess := m.popup.split.ActiveTerminal().SessionKey()
+	exited := m.popup.inst.TabTerminal(1).SessionKey()
+
+	out, _ = m.Update(terminal.ExitedMsg{Key: exited})
+	m = out.(Model)
+	if m.popup.inst.TabCount() != 1 || m.popup.split == nil || !m.popup.open {
+		t.Fatal("a left tab's exit must close only its tab, keeping the split")
+	}
+	if m.popup.split.ActiveTerminal().SessionKey() != rightSess {
+		t.Fatal("the right side must be untouched")
+	}
+
+	// The same exit delivered again resolves to nothing and changes nothing.
+	out, _ = m.Update(terminal.ExitedMsg{Key: exited})
+	m = out.(Model)
+	if m.popup.inst.TabCount() != 1 || m.popup.split == nil || !m.popup.open {
+		t.Fatal("a duplicate ExitedMsg must be a no-op")
+	}
+}
+
+// TestPopupBothSidesExitSameTick: both split sides' shells exit back to back
+// (broadcast ctrl+d, #1427) — the primary's exit promotes the right side, the
+// promoted side's exit drops the popup; no close path may fire twice.
+func TestPopupBothSidesExitSameTick(t *testing.T) {
+	m := splitTestPopup(t)
+	leftSess := m.popup.inst.ActiveTerminal().SessionKey()
+	rightSess := m.popup.split.ActiveTerminal().SessionKey()
+
+	out, _ := m.Update(terminal.ExitedMsg{Key: leftSess})
+	m = out.(Model)
+	if m.popup.split != nil || m.popup.inst == nil {
+		t.Fatal("the primary's exit should promote the right side")
+	}
+	out, _ = m.Update(terminal.ExitedMsg{Key: rightSess})
+	m = out.(Model)
+	if m.popup.inst != nil || m.popup.open {
+		t.Fatal("the promoted side's exit should drop the popup")
+	}
+}
+
+// TestTermGuardStaleTargetPopup guards #1786: the busy-close prompt pins the
+// popup tab it was raised for by session key. When that shell exits on its own
+// while the prompt is open, confirming must close nothing — before the fix it
+// killed whatever tab had become active.
+func TestTermGuardStaleTargetPopup(t *testing.T) {
+	m := openTestPopup(t)
+	out, _ := m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModSuper})
+	m = out.(Model)
+	target := m.popup.inst.TabTerminal(1).SessionKey()
+	survivor := m.popup.inst.TabTerminal(0).SessionKey()
+
+	m.termClosePending = true
+	m.termClosePopup = true
+	m.termCloseSess = target
+	// The guarded shell exits by itself; its tab closes through the exit path.
+	out, _ = m.Update(terminal.ExitedMsg{Key: target})
+	m = out.(Model)
+	out, _ = m.updateTermClosePrompt(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = out.(Model)
+	if m.popup.inst == nil || m.popup.inst.TabCount() != 1 || !m.popup.open {
+		t.Fatal("confirming a stale guard must not close another tab")
+	}
+	if m.popup.inst.ActiveTerminal().SessionKey() != survivor {
+		t.Fatal("the surviving tab must keep its session")
+	}
+
+	// A guard whose target still lives closes exactly that tab, even after
+	// the active index shifted.
+	m.termClosePending = true
+	m.termClosePopup = true
+	m.termCloseSess = survivor
+	out, _ = m.updateTermClosePrompt(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = out.(Model)
+	if m.popup.inst != nil || m.popup.open {
+		t.Fatal("confirming a live guard must close its tab (dropping the last-tab popup)")
+	}
+}
