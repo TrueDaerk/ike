@@ -60,8 +60,9 @@ type Config struct {
 
 // Floating is the stateful shell. It hosts a Content child, owns the box chrome,
 // open/close state, content sizing, scroll-on-overflow, and key-swallow with a
-// configurable dismiss set. v1 is single-level: one floating pane at a time,
-// owned by the root model.
+// configurable dismiss set. The shell itself is single-level and layering-
+// unaware; hosts that need several floating panes over each other layer shells
+// in a Stack (#1237), which owns z-order, input routing, and compositing.
 type Floating struct {
 	cfg     Config
 	dismiss map[string]bool
