@@ -540,6 +540,7 @@ func (m *Model) requestPopupTabClose() {
 	}
 	if term.Busy() {
 		m.termClosePopup = true
+		m.termCloseSess = term.SessionKey()
 		m.openTermClosePrompt()
 		return
 	}

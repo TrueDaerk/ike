@@ -24,13 +24,16 @@ func (m *Model) requestTerminalClose() {
 		return
 	}
 	if term.Busy() {
+		m.termCloseSess = term.SessionKey()
 		m.openTermClosePrompt()
 		return
 	}
 	term.SendEOF()
 }
 
-// openTermClosePrompt shows the busy-terminal close guard.
+// openTermClosePrompt shows the busy-terminal close guard. Callers set
+// termCloseSess (and termClosePopup for the popup arm) first, so the confirm
+// targets the session the guard was raised for (#1786).
 func (m *Model) openTermClosePrompt() {
 	m.termClosePending = true
 	body := "a process is still running in this terminal.\n\n" +
@@ -54,22 +57,46 @@ func (m Model) updateTermClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		m.termClosePending = false
 		m.shell.Close()
+		sess := m.termCloseSess
+		m.termCloseSess = ""
 		if m.termClosePopup {
-			// The guard was raised for the popup terminal's active tab
-			// (#1398), not the focused pane.
+			// The guard was raised for a popup terminal tab (#1398), not the
+			// focused pane. Re-resolve by session key (#1786): the busy shell
+			// may have exited while the prompt was open — its exit already
+			// closed the tab and shifted the active index, and confirming
+			// then must not kill an unrelated shell.
 			m.termClosePopup = false
-			if inst := m.popupFocused(); inst != nil {
-				m.closePopupTab(inst, inst.ActiveTab())
+			if inst, idx, t := m.popupTabForSession(sess); t != nil {
+				m.closePopupTab(inst, idx)
 			}
 			return m, nil
 		}
-		m.closeFocused()
+		// Same staleness guard for the pane arm: the exit path may already
+		// have closed the busy pane and moved focus elsewhere (#1786).
+		if sess == "" || m.focusedTerminalSession() == sess {
+			m.closeFocused()
+		}
 		return m, nil
 	case "esc":
 		m.termClosePending = false
 		m.termClosePopup = false
+		m.termCloseSess = ""
 		m.shell.Close()
 		return m, nil
 	}
 	return m, nil
+}
+
+// focusedTerminalSession is the session key of the focused pane's active
+// terminal, "" when the focused pane holds none.
+func (m Model) focusedTerminalSession() string {
+	inst := m.activeWS().Panes.FocusedInstance()
+	if inst == nil {
+		return ""
+	}
+	term := inst.ActiveTerminal()
+	if term == nil {
+		return ""
+	}
+	return term.SessionKey()
 }

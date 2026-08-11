@@ -434,6 +434,11 @@ type Model struct {
 	// termClosePopup targets the open guard at the popup terminal's active
 	// tab (#1398) instead of the focused pane.
 	termClosePopup bool
+	// termCloseSess pins the guard to the session it was raised for (#1786):
+	// the busy shell can exit on its own while the prompt is open — its exit
+	// closes the tab/pane and shifts what "active"/"focused" points at — so
+	// the confirm re-resolves this key and closes nothing when it is gone.
+	termCloseSess string
 
 	// explorerRatio remembers the hidden explorer's split ratio so
 	// explorer.toggle restores the tree at its prior width (#268); 0 means

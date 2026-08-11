@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-11 (popup terminal ctrl+d freeze — teardown off the update loop, #1786)
+
+- **Root cause 1 — reflow self-deadlock**: `softWrappedLocked` re-took `gridMu`
+  for its reserve match while the width-reflow path (`logicalLinesLocked`)
+  already held it. Reachable whenever the resize reserve is wider than the
+  grid (a width change during an alt-screen phase narrows the grid without
+  resetting the reserve); the resize path then parked forever holding `s.mu`
+  and `gridMu`, and every later render touching the session (`Title`, `Cwd`,
+  view) froze the whole update loop — no keys, no mouse, no redraw. The lock
+  is now the caller's job; `SoftWrapped` takes it at the public boundary.
+- **Root cause 2 — blocking teardown on the update loop**: `Session.Close`
+  joined the read/feed/write loops synchronously (UI paths: tab close, popup
+  collapse, busy-guard confirm, project switch, quit), and the exit path
+  joined them **before** sending `ExitedMsg` — a wedged loop withheld the
+  exit, leaving the dead tab rendering (and blocking on) the stuck session.
+  Teardown is now split: bounded `release` (kill child, close PTY, close
+  spool) on the caller, blocking `join` on a background goroutine; the exit
+  path notifies right after the release.
+- **Busy-close guard pins its target** (#1786): the confirm re-resolves the
+  session key recorded at prompt time (`termCloseSess`) instead of closing
+  whatever tab/pane is active/focused at confirm time — a guarded shell that
+  exited on its own while the prompt was open no longer gets an unrelated
+  neighbour killed.
+- Data races fixed under `go test -race`: `LineText`/`HistoryLine` copied
+  cells through live-buffer pointers without `gridMu`.
+
 ## 2026-08-11 (universal tabs: any pane as a tab in any pane, #1778)
 
 - **Tabs stop being an editor privilege** (#1778): a `pane.Tab` slot carried

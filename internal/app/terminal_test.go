@@ -867,3 +867,26 @@ func TestReservedCmdFOpensScrollbackSearch(t *testing.T) {
 		t.Fatal("cmd+f must open the scrollback search")
 	}
 }
+
+// TestTermGuardStaleTargetPane guards #1786's pane arm: the busy-close prompt
+// pins the terminal it was raised for by session key. When that shell exits on
+// its own while the prompt is open — closing its pane and moving focus —
+// confirming must not close the pane that inherited focus.
+func TestTermGuardStaleTargetPane(t *testing.T) {
+	m, key := openTestTerminal(t)
+	sess := m.activeWS().Panes.Get(key).Terminal().SessionKey()
+
+	m.termClosePending = true
+	m.termCloseSess = sess
+	out, _ := m.Update(terminal.ExitedMsg{Key: sess})
+	m = out.(Model)
+	if m.activeWS().Panes.Has(key) {
+		t.Fatal("the exited terminal's pane should already be closed")
+	}
+	panes := len(m.activeWS().Panes.Keys())
+	out, _ = m.updateTermClosePrompt(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = out.(Model)
+	if got := len(m.activeWS().Panes.Keys()); got != panes {
+		t.Fatalf("confirming a stale guard must not close another pane: %d -> %d", panes, got)
+	}
+}
