@@ -3740,8 +3740,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if prefix == 0 {
 			prefix = palette.OpenPathPrefix
 		}
+		// A descend out of the editor's anchored '@' finder stays anchored
+		// (#1775): re-derive the anchor from the still-focused pane.
+		anchored := m.palette.Anchored()
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLockedWith(palette.Context{ContextID: m.focusContext(), Root: "."}, prefix, msg.Query)
+		cx := palette.Context{ContextID: m.focusContext(), Root: "."}
+		if x, y, w, ok := m.paneAnchor(); anchored && ok {
+			m.palette.OpenAnchoredWith(cx, prefix, msg.Query, x, y, w)
+			return m, nil
+		}
+		m.palette.OpenLockedWith(cx, prefix, msg.Query)
 		return m, nil
 
 	case ShowRecentFilesMsg:
@@ -5615,13 +5623,25 @@ func (m *Model) openPalette() {
 // palette if the pane has no computed rectangle yet.
 func (m *Model) openFilePaletteAnchored() {
 	m.palette.SetSize(m.width, m.height)
-	r, ok := m.lay.Panes[m.activeWS().Panes.Focused()]
+	x, y, w, ok := m.paneAnchor()
 	if !ok {
 		m.openPalette()
 		return
 	}
 	cx := palette.Context{ContextID: m.focusContext(), Root: "."}
-	m.palette.OpenAnchored(cx, '@', r.X+1, r.Y+1, r.W-2)
+	m.palette.OpenAnchored(cx, '@', x, y, w)
+}
+
+// paneAnchor is the anchored palette's placement: the focused pane's top-left
+// interior and its inner width. It reports false while the pane has no
+// computed rectangle yet — shared by the initial open and the anchored
+// re-open a directory descend performs (#1775).
+func (m *Model) paneAnchor() (x, y, w int, ok bool) {
+	r, ok := m.lay.Panes[m.activeWS().Panes.Focused()]
+	if !ok {
+		return 0, 0, 0, false
+	}
+	return r.X + 1, r.Y + 1, r.W - 2, true
 }
 
 // editorNormalMode reports whether the focused pane is an editor in normal mode

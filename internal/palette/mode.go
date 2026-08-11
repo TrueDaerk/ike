@@ -66,6 +66,16 @@ type Completer interface {
 	Complete(query string) string
 }
 
+// ItemCompleter is a second, optional completion seam (#1775): a mode that can
+// extend the query from the *selected row* when Complete has nothing textual
+// to add — the '@' finder adopts the highlighted candidate on tab, the way a
+// shell or the JetBrains file search does. It is only consulted after
+// Completer declined, so path-style completion keeps precedence, and a mode
+// returning false leaves the tab press inert as before.
+type ItemCompleter interface {
+	CompleteItem(query string, sel Item) (string, bool)
+}
+
 // RunCommandMsg is emitted when a command-mode item is activated. The root model
 // resolves the id against the registry and runs it, keeping the palette free of
 // any command store of its own.

@@ -167,9 +167,9 @@ func TestFileModePathQueryTabCompletes(t *testing.T) {
 	}
 }
 
-// TestFileModeFsFallback (#1433): a non-path query with no project match
-// falls back to filesystem prefix candidates anchored at the root, shown by
-// absolute path; a query with project matches never reaches the fallback.
+// TestFileModeFsFallback (#1433, widened by #1775): a non-path query offers
+// filesystem prefix candidates anchored at the root, shown by absolute path —
+// below the project matches, which keep the top of the list.
 func TestFileModeFsFallback(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "zebra.txt"), []byte("x"), 0o644); err != nil {
@@ -198,15 +198,112 @@ func TestFileModeFsFallback(t *testing.T) {
 		t.Fatalf("dir fallback msg=%v", items[0].Msg)
 	}
 
-	// A project match wins outright: no filesystem rows mixed in.
+	// Project matches keep the top of the list; the filesystem row follows
+	// (#1775 — before, a single project match hid the fallback entirely).
 	f2 := fileMode("zebra-project.go")
 	items = f2.Results("zeb", cx)
-	if len(items) != 1 || items[0].Title != "zebra-project.go" {
-		t.Fatalf("project match must suppress the fallback, got %v", items)
+	if len(items) != 2 || items[0].Title != "zebra-project.go" {
+		t.Fatalf("project match must rank first, got %v", items)
+	}
+	if items[1].Title != filepath.Join(root, "zebra.txt") {
+		t.Fatalf("filesystem row must follow the project match, got %v", items)
 	}
 
 	// No match anywhere: empty result, no raw-query row in fuzzy mode.
 	if items = f.Results("nothing-here", cx); len(items) != 0 {
 		t.Fatalf("no-match fallback must stay empty, got %v", items)
+	}
+}
+
+// TestFileModeHomeFallback guards #1775: a plain fuzzy query also offers
+// candidates from the home directory, titled in "~/" notation, so a file like
+// ~/Hierarchie.txt is reachable without typing the "~/" prefix by hand. A
+// project hit for the same query still ranks above it.
+func TestFileModeHomeFallback(t *testing.T) {
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(home, "Hierarchie.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(home, "Hierarchy-dir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f := fileMode("internal/hier/hierarchy.go")
+	f.home = func() string { return home }
+	cx := Context{Root: t.TempDir()}
+
+	items := f.Results("Hierar", cx)
+	if len(items) != 3 || items[0].Title != "internal/hier/hierarchy.go" {
+		t.Fatalf("want project hit first plus two home rows, got %v", items)
+	}
+	file, dir := items[1], items[2]
+	if file.Title != "~"+string(filepath.Separator)+"Hierarchie.txt" {
+		t.Fatalf("home file row title = %q, want ~-notation", file.Title)
+	}
+	if msg, ok := file.Msg.(OpenFileMsg); !ok || msg.Path != filepath.Join(home, "Hierarchie.txt") {
+		t.Fatalf("home file row msg = %v, want the absolute path", file.Msg)
+	}
+	wantDir := "~" + string(filepath.Separator) + "Hierarchy-dir" + string(filepath.Separator)
+	if dir.Title != wantDir {
+		t.Fatalf("home dir row title = %q, want %q", dir.Title, wantDir)
+	}
+	if msg, ok := dir.Msg.(OpenPathDescendMsg); !ok || msg.Query != wantDir || msg.Prefix != '@' {
+		t.Fatalf("home dir row must descend within '@', msg = %v", dir.Msg)
+	}
+
+	// The home anchor is skipped when the query matches nothing there.
+	if got := f.Results("no-such-name", cx); len(got) != 0 {
+		t.Fatalf("unmatched query must stay empty, got %v", got)
+	}
+}
+
+// TestFileModeFallbackDedupes guards #1775: a project file is never listed
+// twice when the root-anchored fallback finds the same path.
+func TestFileModeFallbackDedupes(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "dup.go"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := fileMode("dup.go")
+	items := f.Results("dup", Context{Root: root})
+	if len(items) != 1 || items[0].Title != "dup.go" {
+		t.Fatalf("want the project row only, got %v", items)
+	}
+}
+
+// TestFileModeFallbackCapped guards #1775: the fallback stays a short tail
+// under the project matches instead of flooding the list.
+func TestFileModeFallbackCapped(t *testing.T) {
+	root := t.TempDir()
+	for _, n := range []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"} {
+		if err := os.WriteFile(filepath.Join(root, "cap-"+n+".txt"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f := fileMode()
+	if items := f.Results("cap-", Context{Root: root}); len(items) != maxFsFallback {
+		t.Fatalf("fallback rows = %d, want the %d cap", len(items), maxFsFallback)
+	}
+}
+
+// TestFileModeCompleteItem guards #1775: tab on a fuzzy query adopts the
+// selected candidate — a project hit by its relative path, a directory with
+// its trailing separator so the next tab descends — while a path query
+// declines and keeps its pathcomplete common-prefix completion.
+func TestFileModeCompleteItem(t *testing.T) {
+	f := fileMode("internal/app/app.go")
+	sel := Item{Title: "internal/app/app.go", Msg: OpenFileMsg{Path: "/proj/internal/app/app.go"}}
+	if got, ok := f.CompleteItem("app", sel); !ok || got != "internal/app/app.go" {
+		t.Fatalf("CompleteItem(app) = %q,%v want the selected path", got, ok)
+	}
+	dirSel := Item{Title: "~/dir/", Msg: OpenPathDescendMsg{Query: "~/dir/", Prefix: '@'}}
+	if got, ok := f.CompleteItem("dir", dirSel); !ok || got != "~/dir/" {
+		t.Fatalf("CompleteItem(dir) = %q,%v want the trailing-separator path", got, ok)
+	}
+	if _, ok := f.CompleteItem("~/x", dirSel); ok {
+		t.Fatal("path queries must decline item completion (pathcomplete owns tab)")
+	}
+	cmdSel := Item{Title: "Run Something", Msg: RunCommandMsg{ID: "x"}}
+	if _, ok := f.CompleteItem("run", cmdSel); ok {
+		t.Fatal("a non-file row must not be adopted as a query")
 	}
 }

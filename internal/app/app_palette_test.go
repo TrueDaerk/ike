@@ -157,6 +157,35 @@ func TestAtKeyOpensAnchoredFileFinder(t *testing.T) {
 	}
 }
 
+// TestAnchoredFinderDescendStaysAnchored guards #1775: enter on a directory
+// candidate in the editor's anchored '@' finder re-opens the finder at the
+// pane anchor with the directory as the query, instead of jumping to the
+// centered box.
+func TestAnchoredFinderDescendStaysAnchored(t *testing.T) {
+	m := sized(t, 100, 40)
+	m.cycleFocus() // focus the editor in normal mode
+	out, _ := m.Update(tea.KeyPressMsg{Text: "@", Code: '@'})
+	m = out.(Model)
+	dir := t.TempDir() + string(os.PathSeparator)
+	out, _ = m.Update(palette.OpenPathDescendMsg{Query: dir, Prefix: '@'})
+	m = out.(Model)
+	if !m.palette.IsOpen() || !m.palette.Anchored() {
+		t.Fatalf("descend must re-open anchored: open=%v anchored=%v", m.palette.IsOpen(), m.palette.Anchored())
+	}
+	if got := m.palette.Query(); got != dir {
+		t.Fatalf("descend query = %q, want %q", got, dir)
+	}
+
+	// The centered ';' picker keeps descending centered.
+	m.palette.Close()
+	m.palette.OpenLocked(palette.Context{Root: "."}, palette.OpenPathPrefix)
+	out, _ = m.Update(palette.OpenPathDescendMsg{Query: dir})
+	m = out.(Model)
+	if m.palette.Anchored() {
+		t.Fatal("the ';' picker must stay centered on descend")
+	}
+}
+
 func TestPaletteOpenFileMsgOpensPath(t *testing.T) {
 	m := sized(t, 100, 40)
 	dir := t.TempDir()

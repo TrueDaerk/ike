@@ -149,11 +149,39 @@ a filesystem path — leading `/`, `~/`, `./` or `../` — is served by the shar
 the `;` picker produces. Tab extends a path query (`Completer` seam), enter on
 a directory descends (`OpenPathDescendMsg` with `Prefix: '@'`, so the re-open
 stays in the `@` finder), enter on a file opens it via the normal
-`OpenFileMsg` path. A non-path query with **no project match** falls back to
-filesystem prefix candidates anchored at the root, rendered by **absolute
-path** so out-of-project rows stay visually distinct; project matches always
-rank above filesystem ones — the fallback only exists when there are none.
-`;` stays the explicit path-only picker.
+`OpenFileMsg` path. A non-path query falls back to filesystem prefix
+candidates, rendered by **absolute path** so out-of-project rows stay visually
+distinct; project matches always rank above filesystem ones (#1775 widened
+when that fallback applies — see below). `;` stays the explicit path-only
+picker.
+
+**Reaching out-of-project files by name (#1775).** Requiring *zero* project
+matches made that fallback effectively dead — a subsequence match over the
+relative path nearly always hits something. Every non-empty non-path query now
+appends filesystem candidates **below** the project matches, from two anchors:
+the project root (rows titled by absolute path) and the **home directory**
+(rows keeping the typed `~/` notation), so `~/Hierarchie.txt` is reachable by
+typing `Hierar` instead of the whole path. Paths already listed are skipped
+(`seen`), each anchor is capped at `maxFsFallback` rows so the tail never
+buries the project hits, and the home anchor is injectable (`FileMode.home`)
+so tests stay machine-independent.
+
+**Tab on a fuzzy query (#1775).** Tab resolves through two seams, in order:
+`Completer.Complete` (textual, path queries only) and then — when that has
+nothing to add — `ItemCompleter.CompleteItem`, which adopts the **selected
+row** as the new query body. A project hit completes to its relative path, a
+filesystem hit to its titled path; a directory keeps its trailing separator,
+so the completed query is a path query again and the list immediately shows
+the directory's contents (the next tab descends further). Ordering matters:
+path queries decline `CompleteItem` and keep the shell-like common-prefix
+completion. The `SideMode` column toggle (#778) is handled before either seam,
+so a two-column open still switches focus on tab.
+
+**Anchored descend (#1775).** Enter on a directory row inside the editor's
+anchored `@` finder re-opens it **anchored** again (`OpenAnchoredWith`, with
+the geometry re-derived from the focused pane via `paneAnchor`), instead of
+jumping to the centered box; the `;` picker and every non-anchored open keep
+`OpenLockedWith`.
 
 ## Open-path mode (`file.openPath`, #999)
 

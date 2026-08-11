@@ -75,9 +75,9 @@ type Palette struct {
 	// current query (#819): while set, recompute keeps the user's column
 	// instead of auto-placing the focus; any query edit clears it.
 	sideManual bool
-	maxResults    int
-	accent        string         // config override; "" follows the theme
-	pal           *theme.Palette // active theme (Roadmap 0110); nil = default
+	maxResults int
+	accent     string         // config override; "" follows the theme
+	pal        *theme.Palette // active theme (Roadmap 0110); nil = default
 }
 
 // SetPalette threads the active theme palette in (Roadmap 0110); chrome colors
@@ -184,6 +184,19 @@ func (p *Palette) OpenLockedWith(cx Context, prefix rune, body string) {
 	p.recompute()
 }
 
+// OpenAnchoredWith is OpenAnchored with a pre-seeded query body (#1775): the
+// anchored '@' finder re-opens itself this way when enter descends into a
+// directory candidate, so the descend stays pinned to the editor pane instead
+// of jumping to the centered box.
+func (p *Palette) OpenAnchoredWith(cx Context, prefix rune, body string, x, y, w int) {
+	p.OpenAnchored(cx, prefix, x, y, w)
+	if p.locked == nil {
+		return
+	}
+	p.query = body
+	p.recompute()
+}
+
 // reset clears the per-open transient state and drops any mode-held caches
 // (#1372): every open starts from fresh external state.
 func (p *Palette) reset(cx Context) {
@@ -217,6 +230,10 @@ func (p *Palette) side() SideMode {
 // centered. AnchorPos returns that placement.
 func (p *Palette) Anchored() bool        { return p.anchored }
 func (p *Palette) AnchorPos() (int, int) { return p.anchorX, p.anchorY }
+
+// Query is the current raw query, prefix rune included — what the user typed
+// or a re-open seeded. Read-only introspection.
+func (p *Palette) Query() string { return p.query }
 
 // Close hides the palette without side effects.
 func (p *Palette) Close() { p.open = false }
@@ -350,16 +367,15 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		p.movePage(1)
 		return nil
 	case msg.Code == tea.KeyTab:
-		// Ask the active mode to extend the query (path completion, #542).
+		// Ask the active mode to extend the query (path completion, #542;
+		// completion from the selected row, #1775).
 		m, body := p.mode()
-		if c, ok := m.(Completer); ok {
-			if out := c.Complete(body); out != body {
-				p.query = p.query[:len(p.query)-len(body)] + out
-				p.cur = len([]rune(p.query))
-				p.sideManual = false
-				p.recompute()
-				return p.liveKick()
-			}
+		if out, ok := p.completeBody(m, body); ok {
+			p.query = p.query[:len(p.query)-len(body)] + out
+			p.cur = len([]rune(p.query))
+			p.sideManual = false
+			p.recompute()
+			return p.liveKick()
 		}
 		return nil
 	case msg.Code == 'u' && msg.Mod == tea.ModCtrl:
@@ -380,6 +396,27 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// completeBody resolves what tab should replace the query body with: the
+// mode's textual completion first (Completer, #542), then — only if that had
+// nothing to add — the selected row adopted as the new body (ItemCompleter,
+// #1775). It reports false when neither seam changes the body, leaving tab
+// inert.
+func (p *Palette) completeBody(m Mode, body string) (string, bool) {
+	if c, ok := m.(Completer); ok {
+		if out := c.Complete(body); out != body {
+			return out, true
+		}
+	}
+	if ic, ok := m.(ItemCompleter); ok {
+		if it, have := p.focusedItem(); have {
+			if out, done := ic.CompleteItem(body, it); done && out != body {
+				return out, true
+			}
+		}
+	}
+	return body, false
 }
 
 // auxCmd emits the focused row's Aux msg (#820), keeping the palette open;
