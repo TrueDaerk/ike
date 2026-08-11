@@ -20,6 +20,15 @@
   and `G` (last page) waits for an exact total rather than jumping on a guess.
   Updated [Data Viewer](/architecture/data-viewer.md).
 
+## 2026-08-11 (floating stack finalized, #1237)
+
+- Finalized the z-ordered floating stack (#1237): the paste-capture predicate
+  now asks the stack (`floats.IsOpen()`) instead of only the base shell, so a
+  transient pushed layer captures pastes too; app-level tests pin the layered
+  end-to-end behavior — two panes composited topmost-last, esc and
+  outside-click popping one layer at a time
+  (`/architecture/floating-shell.md`, `/architecture/pane-layout.md`).
+
 ## 2026-08-11 (universal tabs: any pane as a tab in any pane, #1778)
 
 - **Tabs stop being an editor privilege** (#1778): a `pane.Tab` slot carried

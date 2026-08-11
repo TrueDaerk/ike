@@ -197,7 +197,7 @@ func (m Model) overlayCapturesKeyboard() bool {
 	return m.settings.IsOpen() || (m.menuEnabled() && m.menu.IsOpen()) ||
 		m.finder.IsOpen() || m.todo.IsOpen() || m.undoTree.IsOpen() ||
 		m.callhier.IsOpen() || m.typehier.IsOpen() || m.palette.IsOpen() ||
-		m.shell.IsOpen() || m.recoveryOpen() || m.onboardingOpen() ||
+		m.floats.IsOpen() || m.recoveryOpen() || m.onboardingOpen() ||
 		m.conflictOpen() || m.revertPromptOpen() || m.depEditPromptOpen() ||
 		m.switchPromptOpen() || m.closePromptOpen() || m.renameOpen() ||
 		m.lspRenameOpen() || m.explorerCapturing()
