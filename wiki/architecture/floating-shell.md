@@ -175,13 +175,16 @@ host per shell.
 - The **popup terminal** (#1398) deliberately does *not* use this shell: the
   shell's dismiss/filter/scroll key priority is the inverse of a PTY's raw
   pass-through (esc must reach vim inside the popup). It composites its own
-  pane-style box via `overlay.Center` with its own funnel branch — see
-  [Integrated Terminal](/architecture/terminal.md). It does reuse the shared
-  size machinery: `ui.WinSizes` (key `popupterm`), `ResizeZone` and the
-  resize chords — plus a second, user-scoped `WinSizes` store that carries its
-  last chosen size into projects without a delta of their own (#1714, see the
-  terminal doc). `WinSizes.Has`/`Set` exist for that cascade: `Has` separates
-  "never resized here" from a stored zero delta, `Set` mirrors a delta instead
-  of accumulating it.
+  pane-style boxes via `overlay.Place` with its own funnel branch — and its
+  torn-out floating panels (#1793) form their own z-ordered layer following
+  the same #1237 rules (topmost/focused owns input, click focuses and raises,
+  composite bottom-to-top), panel-list flavored rather than `ui.Stack`-hosted
+  — see [Integrated Terminal](/architecture/terminal.md). It does reuse the
+  shared size machinery: `ui.WinSizes` (keys `popupterm`/`popupterm:pos`),
+  `ResizeZone` and the resize chords — plus a second, user-scoped `WinSizes`
+  store that carries its last chosen size and position into projects without
+  a delta of their own (#1714, see the terminal doc). `WinSizes.Has`/`Set`
+  exist for that cascade: `Has` separates "never resized here" from a stored
+  zero delta, `Set` mirrors a delta instead of accumulating it.
 - The plugin "open as modal" contract beyond the minimal additive
   `OpenModalRequest` seam is owned by the plugin roadmaps.

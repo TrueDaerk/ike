@@ -178,9 +178,12 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// arriving in the background are not applied until re-attach).
 	// The popup terminal (#1398) parks too (#1407): its shells keep running in
 	// the background and the whole overlay — tabs, scrollback, open state —
-	// comes back when this project resumes. The fresh model starts with a zero
-	// popup of its own.
-	m.activeWS().Aux = wsExtras{dbg: m.dbg, dbgLaunching: m.dbgLaunching, dbgLaunchGen: m.dbgLaunchGen, dbgTermKey: m.dbgTermKey, popup: m.popup}
+	// comes back when this project resumes. Project-owned floating panels
+	// (#1793) park with it; global ones stay out of Aux and are carried into
+	// the fresh model below. The fresh model starts with a zero popup of its
+	// own.
+	m.activeWS().Aux = wsExtras{dbg: m.dbg, dbgLaunching: m.dbgLaunching, dbgLaunchGen: m.dbgLaunchGen,
+		dbgTermKey: m.dbgTermKey, popup: m.popup, floats: projectFloatTerms(m.floatTerms)}
 	parkedRoot := m.activeWS().Root
 	m.ws.Park()
 	// Arm the background LSP idle shutdown for the workspace just parked
@@ -212,6 +215,19 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// history view can label foreign ones), as does the unseen counter.
 	fresh.history = m.history
 	fresh.notifUnseen = m.notifUnseen
+	// Global floating terminals (#1793) are app state too: they ride across
+	// with their live sessions — process, scrollback, CWD — stacked above
+	// whatever popup layer the incoming project restores. A layer that was
+	// visible stays visible, so the pinned terminal never silently vanishes.
+	if globals := globalFloatTerms(m.floatTerms); len(globals) > 0 {
+		fresh.floatTerms = append(fresh.floatTerms, globals...)
+		for _, f := range globals {
+			f.inst.SetPalette(fresh.pal())
+		}
+		if m.popup.open {
+			fresh.popup.open = true
+		}
+	}
 	// The incoming project's settings layer just applied (0380): surface its
 	// load diagnostics like any reload (#793).
 	fresh.notifyConfigDiags(diags)
@@ -238,7 +254,7 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	if sized.dbg != nil && sized.dbg.coal != nil {
 		sized.dbg.coal.SetParked(false)
 	}
-	for _, inst := range sized.popup.instances() {
+	for _, inst := range sized.popupLayerInstances() {
 		for i := 0; i < inst.TabCount(); i++ {
 			if t := inst.TabTerminal(i); t != nil {
 				t.SetParked(false)

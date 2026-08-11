@@ -23,8 +23,11 @@ state the root model owns into one swappable unit:
   it (LRU order, least-recently-used first) and `Drop` is the M4 eviction
   seam. Parked workspaces stay fully alive — PTY readers, run processes and
   debug bridges never depended on being rendered. `Workspace.Aux` carries
-  app-owned live extras across the park (the debug session state and, since
-  #1407, the popup terminal). Parked terminal sessions run in a cheaper
+  app-owned live extras across the park (the debug session state, the popup
+  terminal since #1407, and the project-owned floating terminal panels since
+  #1793 — panels marked **global** never park: they ride into the fresh model
+  with their sessions and survive every workspace teardown, see the terminal
+  doc). Parked terminal sessions run in a cheaper
   ingest mode (#1522, `Session.SetParked`): output still lands in the grid
   and the (upstream-capped) scrollback, but no `OutputMsg` is sent — each
   one is a full program Update pass for a grid nobody renders — and the

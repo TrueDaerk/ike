@@ -94,9 +94,10 @@ func collectActivity(w *workspace.Workspace) wsActivity {
 		if extras.dbg != nil && extras.dbg.sess != nil {
 			a.running = append(a.running, "debug session")
 		}
-		// A parked workspace carries its popup terminal in Aux (#1407); the
-		// active one's is counted by the caller via addPopup.
-		for _, inst := range extras.popup.instances() {
+		// A parked workspace carries its popup terminal and project-owned
+		// floating panels in Aux (#1407, #1793); the active one's are counted
+		// by the caller via addPopup.
+		for _, inst := range parkedPopupInstances(extras) {
 			a.addPopup(inst)
 		}
 	}
@@ -239,8 +240,10 @@ func (m Model) quitActivity() (dirty, running []string) {
 		}
 		act := collectActivity(w)
 		if m.ws.Active() == w {
-			// The active popup terminal lives on the model, not in Aux (#1407).
-			for _, inst := range m.popup.instances() {
+			// The active popup terminal and every floating panel — global
+			// ones included, they die at quit too — live on the model, not
+			// in Aux (#1407, #1793).
+			for _, inst := range m.popupLayerInstances() {
 				act.addPopup(inst)
 			}
 		}
