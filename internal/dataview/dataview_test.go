@@ -72,6 +72,10 @@ func key(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "tab":
 		return tea.KeyPressMsg{Code: tea.KeyTab}
+	case "pgup":
+		return tea.KeyPressMsg{Code: tea.KeyPgUp}
+	case "pgdown":
+		return tea.KeyPressMsg{Code: tea.KeyPgDown}
 	}
 	return tea.KeyPressMsg{Code: rune(s[0]), Text: s}
 }
@@ -164,6 +168,82 @@ func TestRowStepCrossesPageEdges(t *testing.T) {
 	m.Update(key("j"))
 	if m.PageOffset() != 2*PageSize || m.Cursor() != 0 {
 		t.Fatalf("j at a page bottom must load the next page: offset=%d cursor=%d", m.PageOffset(), m.Cursor())
+	}
+}
+
+// writeSmallDB builds a single table of n rows — a table well under PageSize,
+// where the whole-page fetch has nothing to do and only a screenful jump can
+// move the cursor.
+func writeSmallDB(t *testing.T, n int) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "small.db")
+	db, err := sql.Open("sqlite", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= n; i++ {
+		if _, err := db.Exec(`INSERT INTO items (id, name) VALUES (?, ?)`, i, fmt.Sprintf("item-%d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return p
+}
+
+// TestScreenKeysPageAShortTable: pgup/pgdown blätter a screenful inside the
+// loaded page, so a table shorter than PageSize scrolls — while n/p, which
+// fetch whole DB pages, have nothing to do there (#1788).
+func TestScreenKeysPageAShortTable(t *testing.T) {
+	m := newPane(t, writeSmallDB(t, 40))
+	m.Update(key("enter"))
+	screen := m.gridHeight()
+	if screen < 2 || screen >= 40 {
+		t.Fatalf("test needs a screen smaller than the table: %d", screen)
+	}
+	m.Update(key("pgdown"))
+	if m.Cursor() != screen || m.PageOffset() != 0 {
+		t.Fatalf("pgdown: cursor=%d offset=%d, want cursor=%d", m.Cursor(), m.PageOffset(), screen)
+	}
+	// The next jump runs past the end: it stops on the last row.
+	m.Update(key("pgdown"))
+	m.Update(key("pgdown"))
+	if m.Cursor() != 39 {
+		t.Fatalf("pgdown past the end: cursor = %d", m.Cursor())
+	}
+	m.Update(key("pgup"))
+	if m.Cursor() != 39-screen {
+		t.Fatalf("pgup: cursor = %d, want %d", m.Cursor(), 39-screen)
+	}
+	m.Update(key("pgup"))
+	m.Update(key("pgup"))
+	if m.Cursor() != 0 {
+		t.Fatalf("pgup past the top: cursor = %d", m.Cursor())
+	}
+	// The whole-page keys keep their fetch semantics: there is no second page.
+	m.Update(key("n"))
+	if m.PageOffset() != 0 || m.Cursor() != 0 {
+		t.Fatalf("n on a one-page table: offset=%d cursor=%d", m.PageOffset(), m.Cursor())
+	}
+}
+
+// TestScreenKeysCrossPageEdges: a screenful jump off the loaded page's edge
+// fetches the neighbour page, like j/k do.
+func TestScreenKeysCrossPageEdges(t *testing.T) {
+	m := newPane(t, writeFixtureDB(t))
+	m.Update(key("j"))
+	m.Update(key("enter"))
+	for i := 0; i < 100 && m.PageOffset() == 0; i++ {
+		m.Update(key("pgdown"))
+	}
+	if m.PageOffset() != PageSize || m.Cursor() != 0 {
+		t.Fatalf("pgdown at the page bottom must fetch the next page: offset=%d cursor=%d", m.PageOffset(), m.Cursor())
+	}
+	m.Update(key("pgup"))
+	if m.PageOffset() != 0 || m.Cursor() != PageSize-1 {
+		t.Fatalf("pgup at the page top must fetch the previous page: offset=%d cursor=%d", m.PageOffset(), m.Cursor())
 	}
 }
 

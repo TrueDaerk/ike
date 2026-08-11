@@ -228,3 +228,74 @@ func TestDataPaneRestoresByPath(t *testing.T) {
 		t.Fatal("the data leaf is missing from the restored tree")
 	}
 }
+
+// TestTabTogglesDataRegion: the focused data viewer owns tab (#1788) — it
+// toggles the pane's sidebar/grid regions instead of cycling the IDE's panes,
+// which stays on ctrl+tab and the focus keys.
+func TestTabTogglesDataRegion(t *testing.T) {
+	m := newSized()
+	p := writeTestDB(t, "app.db")
+	m.openDataPane(p)
+	key := m.activeWS().Panes.Focused()
+	dv := m.activeWS().Panes.Get(key).Data()
+	if dv.InGrid() {
+		t.Fatal("setup: a fresh pane starts in the sidebar")
+	}
+	for _, want := range []bool{true, false} {
+		out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+		m = out.(Model)
+		if m.activeWS().Panes.Focused() != key {
+			t.Fatalf("tab moved the pane focus to %q", m.activeWS().Panes.Focused())
+		}
+		if dv.InGrid() != want {
+			t.Fatalf("region after tab: grid=%v, want %v", dv.InGrid(), want)
+		}
+	}
+	// ctrl+tab still cycles the pane focus out of the viewer.
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModCtrl})
+	if m.activeWS().Panes.Focused() == key {
+		t.Fatal("ctrl+tab must still cycle the pane focus")
+	}
+}
+
+// TestDataPaneMouseScrollsAndSelects: the wheel scrolls the focused region and
+// pans the columns, a click selects and takes the region (#1788).
+func TestDataPaneMouseScrollsAndSelects(t *testing.T) {
+	m := newSized()
+	p := writeTestDB(t, "app.db")
+	m.openDataPane(p)
+	key := m.activeWS().Panes.Focused()
+	dv := m.activeWS().Panes.Get(key).Data()
+	r := m.lay.Panes[key]
+	at := func(cx, cy int) tea.Mouse {
+		return tea.Mouse{X: r.X + paneContentX + cx, Y: r.Y + paneContentY + cy, Button: tea.MouseLeft}
+	}
+
+	// A grid click takes the region and the row it points at — content-local
+	// y 1 is the column header, so y 3 is the table's second row.
+	out, _ := m.paneClick(key, mouseEvent{Mouse: at(dv.SidebarWidth()+4, 3), action: mousePress})
+	m = out.(Model)
+	if !dv.InGrid() || dv.Cursor() != 1 {
+		t.Fatalf("grid click: grid=%v cursor=%d", dv.InGrid(), dv.Cursor())
+	}
+	// The horizontal wheel pans the grid's columns.
+	wheel := at(dv.SidebarWidth()+4, 2)
+	wheel.Button = tea.MouseWheelRight
+	out, _ = m.handleMouse(mouseEvent{Mouse: wheel, action: mouseWheel})
+	m = out.(Model)
+	if dv.ColumnOffset() == 0 {
+		t.Fatal("the horizontal wheel must pan the grid's columns")
+	}
+	wheel.Button = tea.MouseWheelLeft
+	out, _ = m.handleMouse(mouseEvent{Mouse: wheel, action: mouseWheel})
+	m = out.(Model)
+	if dv.ColumnOffset() != 0 {
+		t.Fatalf("column offset = %d after wheeling back", dv.ColumnOffset())
+	}
+	// A sidebar click hands the region back.
+	out, _ = m.paneClick(key, mouseEvent{Mouse: at(2, 1), action: mousePress})
+	m = out.(Model)
+	if dv.InGrid() {
+		t.Fatal("a sidebar click must move the region focus to the sidebar")
+	}
+}

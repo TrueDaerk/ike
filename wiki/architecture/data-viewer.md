@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Data Viewer
-description: "#1764/#1765/#1766/#1777 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; '/' filters the grid with a SQL clause appended to SELECT * FROM <table>, run inside a subquery so paging keeps working."
+description: "#1764/#1765/#1766/#1777/#1788 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; '/' filters the grid with a SQL clause appended to SELECT * FROM <table>, run inside a subquery so paging keeps working."
 resource: internal/dataview
-tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sql]
-timestamp: 2026-08-11T12:00:00Z
+tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sql, mouse, paging]
+timestamp: 2026-08-11T18:00:00Z
 ---
 
-# Data Viewer (#1764, #1765, #1766, #1777)
+# Data Viewer (#1764, #1765, #1766, #1777, #1788)
 
 Opening a SQLite database, a DuckDB database or a Parquet file lands in a pane
 of kind `KindData`: a sidebar listing the tables and views (with row counts),
@@ -255,12 +255,53 @@ blob ages in the repo.
 Two regions, `tab` between them; `h` at the grid's left edge also falls back
 to the sidebar. In the sidebar the shared list navigation (#1666) moves,
 `enter`/`l` loads the selection. In the grid `j`/`k` step rows — crossing a
-page edge fetches the neighbour page — `h`/`l` scroll columns, `n`/`p`
-(also pgup/pgdown) step whole pages, `g`/`G` jump to the first/last page, and
-`/` opens the SQL filter (above). The filter line owns the keyboard while it
-is open: the grid's single-letter keys are plain text inside a clause.
-Column widths derive from the loaded page, clamped with an ellipsis like the
-csv grid.
+page edge fetches the neighbour page — `h`/`l` scroll columns, `g`/`G` jump to
+the first/last page, and `/` opens the SQL filter (above). The filter line owns
+the keyboard while it is open: the grid's single-letter keys are plain text
+inside a clause. Column widths derive from the loaded page, clamped with an
+ellipsis like the csv grid.
+
+`tab` reaches the pane because a focused data viewer is an exception to the
+IDE's global tab (#1788), which otherwise cycles the pane focus before any pane
+sees the key — the same shape as an editor keeping its plain keys. Pane focus
+stays on `ctrl+tab` and the focus keys.
+
+### Two page sizes (#1788)
+
+The grid scrolls in two units, and the keys keep them apart:
+
+| Keys | Unit |
+|---|---|
+| `pgup` / `pgdown` | one **screenful** (`bodyHeight` minus the header row) inside the loaded page; only a cursor already on the page's edge crosses into the neighbour page |
+| `n` / `p`, `ctrl+f` / `ctrl+b` | one whole **DB page** (`PageSize` = 500 rows), a backend fetch; the status line's `rows X–Y of N` moves with it |
+
+Mapping the page keys onto the fetch was the original behaviour and read as
+broken: a table under 500 rows has exactly one page, so `pgdown` did nothing at
+all there. The sidebar needs no equivalent — `ui.ListNav` already pages its
+list.
+
+### Mouse (#1788)
+
+The pane exposes `Wheel`, `WheelX` and `Click`, which `internal/app`'s wheel
+and click dispatch routes to for `pane.KindData` like every other pane's
+mouse API. Coordinates are pane-content-local (y 0 the header line, the body
+rows 1 … `bodyHeight`, the sidebar owning `x < sidebarWidth`).
+
+- **Wheel** scrolls whichever region has the focus — the table list, or the
+  grid's rows — dragging that region's cursor along only when it would leave
+  the window. A tick on a grid already parked at the loaded page's edge fetches
+  the neighbour page, so the wheel walks a big table exactly like `j`/`k`.
+- **Horizontal wheel and shift+wheel** pan the grid's columns (`colOff`), the
+  same gesture the diff pane and the editor use.
+- **Click** gives the clicked half the region focus, so pointer and keyboard
+  never disagree about where the cursor is. In the sidebar one click selects
+  the object and a second one within the 400 ms double-click window loads it
+  (like `enter`) — the region stays in the sidebar the pointer is on, unlike
+  `enter`, so double-clicking down the list is one gesture. In the grid a click
+  moves the row cursor; the column-header row only moves the focus.
+- While the **filter line** is open it keeps the input (#1777): clicks are
+  inert until `enter` or `esc` closes it, since loading another table would
+  drop the half-typed clause.
 
 `s` shows the selected object's schema — the `CREATE` statement for SQLite and
 DuckDB, the schema view for Parquet — in a read-only editor tab under the
