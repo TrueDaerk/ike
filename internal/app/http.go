@@ -38,6 +38,10 @@ type HTTPCopyBodyMsg struct{}
 // HTTPCopyHeadersMsg runs http.copyHeaders: status line plus headers.
 type HTTPCopyHeadersMsg struct{}
 
+// HTTPCopyFoldMsg runs http.copyFold: the fold at the top of the response
+// viewer, hidden rows included, to the clipboard (#1787).
+type HTTPCopyFoldMsg struct{}
+
 // HTTPResponseHistoryMsg runs http.responseHistory: focus the viewer and
 // report how many stored responses the current request has (#1267).
 type HTTPResponseHistoryMsg struct{}
@@ -232,6 +236,21 @@ func (m *Model) copyHTTPResponse(headers bool) tea.Cmd {
 	return func() tea.Msg { return httppane.CopyMsg{Text: text, What: what} }
 }
 
+// copyHTTPFold runs http.copyFold (#1787): the response viewer's target fold
+// goes to the clipboard whole, through the same CopyMsg path as "y"/"Y".
+func (m *Model) copyHTTPFold() tea.Cmd {
+	p := m.httpPanel()
+	if p == nil {
+		m.host.Notify(host.Info, "http: no response pane open")
+		return nil
+	}
+	cmd := p.CopyTargetFold()
+	if cmd == nil {
+		m.host.Notify(host.Info, "http: no fold to copy")
+	}
+	return cmd
+}
+
 // httpPaneKeys documents the response viewer's pane-local keys for the help
 // overlay (#1267): they belong to no command in the registry, so the
 // cheatsheet would otherwise never mention that responses can be browsed,
@@ -245,6 +264,8 @@ var httpPaneKeys = []struct{ Key, Title string }{
 	{"g / G", "Top / bottom"},
 	{"/", "Search in the response"},
 	{"n / N", "Next / previous match"},
+	{"za / zc / zo / zM / zR", "Toggle / close / open folds"},
+	{"zy", "Copy the target fold whole (or click its ⧉)"},
 	{"y", "Copy selection (or the whole body)"},
 	{"Y", "Copy status line and headers"},
 	{"x", "Cancel the running request"},

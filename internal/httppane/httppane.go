@@ -344,8 +344,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if m.pendingZ {
 		m.pendingZ = false
-		m.foldKey(msg.String())
-		return nil
+		return m.foldKey(msg.String())
 	}
 	switch msg.String() {
 	case "/":
@@ -801,7 +800,11 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	gutter := lipgloss.NewStyle().Foreground(pal.Secondary).Render(m.foldGutter(i))
 	line := gutter + m.paintRow(i, runes[from:to], from, m.baseStyle(pal, r)) + tail
 	if ph := m.foldPlaceholder(i); ph != "" {
-		line += lipgloss.NewStyle().Faint(true).Render(ph)
+		// A collapsed header also carries the copy affordance (#1787), one
+		// space behind the placeholder — the only copy target on the row, so
+		// clicking anywhere else still toggles or selects.
+		line += lipgloss.NewStyle().Faint(true).Render(ph) +
+			" " + lipgloss.NewStyle().Foreground(pal.Secondary).Render(foldCopyGlyph)
 	}
 	return line
 }

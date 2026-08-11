@@ -810,6 +810,11 @@ func (m Model) resolveAfterZ(s string) (Model, tea.Cmd) {
 		m.foldCloseAll()
 	case "R":
 		m.foldOpenAll()
+	case "y":
+		// zy copies the fold under the cursor whole (#1787).
+		cmd := m.foldCopy()
+		m.pending.Reset()
+		return m, cmd
 	case "z":
 		m.scrollCursorLine(0)
 	case "t":

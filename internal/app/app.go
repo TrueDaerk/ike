@@ -3351,6 +3351,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// http.copyHeaders (palette, #1266): status line plus headers.
 		return m, m.copyHTTPResponse(true)
 
+	case HTTPCopyFoldMsg:
+		// http.copyFold (palette, #1787): the target fold, hidden rows and all.
+		return m, m.copyHTTPFold()
+
 	case httppane.CancelMsg:
 		// "x" in the response pane (#1272): the pane cannot reach the
 		// dispatch context, so the host aborts on its behalf.
@@ -7720,6 +7724,15 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+		// A plain left click on the ⧉ affordance of a collapsed fold header
+		// (#1787) copies the hidden range instead of moving the caret; the
+		// rest of the header row keeps its click meaning.
+		if ed := inst.Editor(); ed != nil && msg.Button == tea.MouseLeft &&
+			msg.Mod&(tea.ModAlt|tea.ModCtrl|tea.ModSuper|tea.ModMeta) == 0 {
+			if line, ok := ed.FoldCopyHit(localX, localY); ok {
+				return m, ed.CopyFoldAt(line)
+			}
+		}
 		// alt+click toggles a secondary caret (#145); cmd+click navigates to
 		// the clicked symbol's definition (#859) — cursor first (the click
 		// emits the cursor move the LSP bridge reads), then the same command
@@ -7820,6 +7833,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 					m.drag = &dragState{kind: dragHTTPScroll, srcPane: key, curX: msg.X, curY: msg.Y}
 				}
 				return m, nil
+			}
+			// The ⧉ affordance of a collapsed fold (#1787) is one cell and
+			// outranks both: it copies the hidden range instead of selecting
+			// or toggling the fold.
+			if row, ok := inst.HTTP().FoldCopyHit(localX, localY); ok {
+				return m, inst.HTTP().CopyFoldAt(row)
 			}
 			inst.HTTP().MousePress(localX, localY)
 			m.drag = &dragState{kind: dragHTTPSelect, srcPane: key, curX: msg.X, curY: msg.Y}

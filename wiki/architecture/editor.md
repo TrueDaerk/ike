@@ -316,6 +316,22 @@ line runs that test (see /architecture/run-configurations.md).
   are inside the contiguous linewise range anyway, and a cursor on their header
   row already reveals them, so what is copied is what is shown. Multi-caret
   `dd`/`cc`/`yy` also stay literal — expanded per-caret spans could overlap.
+  **Copy affordance on a collapsed fold** (#1787): the header row carries a
+  dimmed `⧉` behind the placeholder, right-aligned into the annotation column
+  (the column the `×N` badges and inline blame share, `annotColumnWidth`), so
+  the markers of a file stay one scannable column and the click target is a
+  fixed cell instead of drifting with the header's length. Clicking that one
+  cell copies the header through the fold's end line — raw buffer text,
+  conceals and stand-ins unresolved like every other yank — into the `+`
+  register and toasts `copied N lines`; the fold stays collapsed and the caret
+  does not move. Render and hit test share `foldCopyCell`, so the clickable
+  cell is by construction the cell the glyph is drawn in; every other cell of
+  the header keeps its click meaning (caret, gutter breakpoint), and a pane too
+  narrow for the affordance simply draws the placeholder alone and reports no
+  hit. Open folds carry no glyph. The keyboard pendant is `zy` /
+  `editor.fold.copy` ("Copy Folded Range"): it copies the collapsed fold the
+  caret's line heads, else the **innermost fold containing the caret** whether
+  collapsed or not — so it doubles as "yank this block" without marking it.
 - **search** — `/` `?` with `n`/`N`, literal by default, regex via a `\v`
   prefix; reports per-line match spans and the next match with wrap-around.
   Case handling (#257, #1111): a `\c` query prefix forces case-insensitive

@@ -779,6 +779,12 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.foldCloseAll()
 	case "fold_open_all":
 		m.foldOpenAll()
+	case "fold_copy":
+		// Copy Folded Range (#1787): the fold under the cursor goes to the
+		// clipboard whole, so a collapsed block needs neither unfold nor drag.
+		cmd := m.foldCopy()
+		m.scroll()
+		return m, cmd
 	case "eol_lf":
 		m.setLineEnding(textenc.LF)
 	case "eol_crlf":

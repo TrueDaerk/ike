@@ -2,6 +2,9 @@ package httppane
 
 import (
 	"strconv"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/highlight"
 )
@@ -23,6 +26,12 @@ const (
 	foldOpenGlyph      = "▾"
 	foldCollapsedGlyph = "▸"
 )
+
+// foldCopyGlyph is the copy affordance a collapsed header carries at the end of
+// its row (#1787): clicking it puts the whole hidden range on the clipboard, so
+// pulling one object out of a folded JSON response needs neither an unfold nor
+// a drag. Open folds carry none — their content is already selectable.
+const foldCopyGlyph = "⧉"
 
 // setFolds records the body's foldable ranges, shifted from body-line
 // coordinates into row coordinates, and drops any collapse state (the rows
@@ -278,20 +287,105 @@ func (m *Model) foldPlaceholder(row int) string {
 	return " ⋯ " + strconv.Itoa(end-row) + " lines"
 }
 
+// foldCopyColumn is the pane-local x cell the copy affordance of the collapsed
+// header row occupies, mirroring renderRow's layout: the gutter cell, the
+// horizontal window of the row text, the truncation ellipsis, the "⋯ N lines"
+// placeholder, then one space before the glyph. Render and hit test read the
+// same geometry, so the clickable cell is the cell the glyph is drawn in.
+func (m *Model) foldCopyColumn(row int) (int, bool) {
+	if _, collapsed := m.folded[row]; !collapsed || row < 0 || row >= len(m.rows) {
+		return 0, false
+	}
+	runes := []rune(m.rows[row].text)
+	from := min(m.left, len(runes))
+	to, tail := len(runes), 0
+	if w := m.rowWidth(); to-from > w {
+		to, tail = from+w-1, 1
+	}
+	return 1 + (to - from) + tail + len([]rune(m.foldPlaceholder(row))) + 1, true
+}
+
+// FoldCopyHit reports the row whose copy affordance sits under the pane-local
+// cell (x, y). It runs before the selection press so the glyph is the only
+// copy target: the rest of the header keeps toggling the fold (#1787).
+func (m *Model) FoldCopyHit(x, y int) (int, bool) {
+	if y <= 0 || len(m.folded) == 0 {
+		return 0, false
+	}
+	row := m.rowAt(m.top + y - 1)
+	if row < 0 {
+		return 0, false
+	}
+	cx, ok := m.foldCopyColumn(row)
+	return row, ok && x == cx
+}
+
+// foldRangeText is the raw text of rows start..end, joined by newlines — what
+// the response holds, conceals and stand-ins unresolved, like every other copy
+// path in the viewer.
+func (m *Model) foldRangeText(start, end int) string {
+	if start < 0 {
+		start = 0
+	}
+	if last := len(m.rows) - 1; end > last {
+		end = last
+	}
+	if start > end {
+		return ""
+	}
+	lines := make([]string, 0, end-start+1)
+	for r := start; r <= end; r++ {
+		lines = append(lines, m.rows[r].text)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// CopyFoldAt copies the collapsed fold headed by row — header row through end
+// row, hidden rows included — via the host's clipboard seam (#1787). nil when
+// row heads no collapsed fold.
+func (m *Model) CopyFoldAt(row int) tea.Cmd {
+	end, ok := m.folded[row]
+	if !ok {
+		return nil
+	}
+	return copyCmd(m.foldRangeText(row, end), strconv.Itoa(end-row+1)+" folded lines")
+}
+
+// CopyTargetFold copies the fold the keyboard commands act on (zy, the
+// http.copyFold palette command): the collapsed one if the target is
+// collapsed, otherwise the whole range of the fold at the top of the view.
+func (m *Model) CopyTargetFold() tea.Cmd {
+	row := m.targetFold()
+	if row < 0 {
+		return nil
+	}
+	end, ok := m.folded[row]
+	if !ok {
+		f, found := m.foldAt(row)
+		if !found {
+			return nil
+		}
+		end = f.EndLine
+	}
+	return copyCmd(m.foldRangeText(row, end), strconv.Itoa(end-row+1)+" folded lines")
+}
+
 // foldKey runs the second key of a "z" fold command, the editor's set (#144)
 // minus the cursor-relative ones the viewer cannot express: za toggles, zc
-// collapses, zo opens, zM collapses everything, zR opens everything. Anything
-// else cancels the sequence.
-func (m *Model) foldKey(key string) {
+// collapses, zo opens, zM collapses everything, zR opens everything, zy copies
+// the target fold whole (#1787). Anything else cancels the sequence.
+func (m *Model) foldKey(key string) tea.Cmd {
 	switch key {
 	case "M":
 		m.FoldAll()
 	case "R":
 		m.UnfoldAll()
+	case "y":
+		return m.CopyTargetFold()
 	case "a", "c", "o":
 		row := m.targetFold()
 		if row < 0 {
-			return
+			return nil
 		}
 		switch key {
 		case "a":
@@ -307,4 +401,5 @@ func (m *Model) foldKey(key string) {
 			m.top = d
 		}
 	}
+	return nil
 }

@@ -286,6 +286,20 @@ config file paths, or disable detection entirely.
   that already reaches past a fold is unchanged, and an open fold's header row
   stays an ordinary row. This is the editor's `expandFoldTarget` rule (#144,
   see [editor.md](./editor.md)) in row coordinates.
+  **Copy affordance on a collapsed fold** (#1787): the collapsed header ends in
+  a dimmed `⧉`, one space behind the `⋯ N lines` placeholder. Clicking that one
+  cell copies the header row through the fold's end row — hidden rows included,
+  raw text — through the pane's `CopyMsg` seam, so it shares the confirmation
+  path of `y`/`Y` and reports `copied N folded lines`. The hit test runs before
+  `MousePress`, so the glyph is the only copy target: the gutter marker still
+  toggles and the rest of the header still selects, and nothing is copied by
+  accident on a fold toggle. `foldCopyColumn` computes the cell from the same
+  layout `renderRow` draws (gutter, horizontal window, truncation ellipsis,
+  placeholder), so the two cannot drift; open folds have no column and no glyph.
+  Keyboard pendant: `zy` in the pane and the `http.copyFold` palette command
+  ("Copy Folded Range (HTTP Response)"), both copying the *target* fold's full
+  range — collapsed or open, so a JSON object copies as a valid fragment
+  without ever being folded.
 - **Scrollbar** (#1367, `internal/httppane/scrollbar.go`): the shared
   track/thumb bar (`internal/scrollbar`, the editor's #1022 / explorer's #1036
   visual language) overlays the pane's rightmost column whenever the composed
