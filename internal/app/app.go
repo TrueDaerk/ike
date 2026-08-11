@@ -5189,6 +5189,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.guardedQuit()
 			}
 		case "tab":
+			// A focused data viewer owns tab (#1788): it toggles the pane's
+			// own sidebar/grid regions, the way an editor keeps its plain
+			// keys. Pane focus still cycles with ctrl+tab (the pane switcher)
+			// and the focus keys.
+			if m.dataPaneFocused() {
+				return m.routeKey(msg)
+			}
 			m.cycleFocus()
 			return m, nil
 		case "ctrl+w":
@@ -5743,6 +5750,13 @@ func (m Model) explorerCapturing() bool {
 		return false
 	}
 	return inst.Explorer().Prompting() || inst.Explorer().Searching()
+}
+
+// dataPaneFocused reports whether the focused pane is a data viewer (#1764),
+// which claims tab for its own region toggle before the global focus cycle.
+func (m Model) dataPaneFocused() bool {
+	inst := m.activeWS().Panes.FocusedInstance()
+	return inst != nil && inst.Kind() == pane.KindData
 }
 
 // explorerPromptOpen reports whether the focused explorer has a modal prompt
@@ -6932,6 +6946,24 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Problems().Wheel(lines)
 			}
+		case pane.KindData:
+			// The wheel scrolls the data viewer's focused region (#1788) —
+			// the table list or the grid's rows; the horizontal wheel and
+			// shift+wheel pan the grid's columns, like the diff pane.
+			switch {
+			case msg.Button == tea.MouseWheelLeft:
+				inst.Data().WheelX(-lines)
+			case msg.Button == tea.MouseWheelRight:
+				inst.Data().WheelX(lines)
+			case msg.Button == tea.MouseWheelUp && shift:
+				inst.Data().WheelX(-lines)
+			case msg.Button == tea.MouseWheelDown && shift:
+				inst.Data().WheelX(lines)
+			case msg.Button == tea.MouseWheelUp:
+				inst.Data().Wheel(-lines)
+			case msg.Button == tea.MouseWheelDown:
+				inst.Data().Wheel(lines)
+			}
 		case pane.KindBreakpoints:
 			// The wheel scrolls the breakpoints list (#1377).
 			switch msg.Button {
@@ -7820,6 +7852,13 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// the reference's location, mirroring the Problems panel.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Usages().Click(localX, localY)
+		}
+	case pane.KindData:
+		// Data-viewer clicks (#1788): the clicked half takes the region
+		// focus, a sidebar click selects the object and a double-click loads
+		// it (like enter), a grid click moves the row cursor.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Data().Click(localX, localY)
 		}
 	case pane.KindHTTP:
 		// Response-viewer clicks (#1266): a left press anchors a text

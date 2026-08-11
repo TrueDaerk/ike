@@ -1,5 +1,28 @@
 # Log
 
+## 2026-08-11 (data viewer: mouse, tab, and page keys that page, #1788)
+
+- **The data viewer takes the mouse** (#1788): it was keyboard-only — its
+  `Update` saw key presses and nothing else, and `pane.KindData` appeared in no
+  branch of the app's wheel or click dispatch. It now exposes `Wheel`, `WheelX`
+  and `Click`, routed like every other pane's mouse API. The wheel scrolls the
+  focused region (table list or grid rows), crossing into the neighbour DB page
+  when it is already parked at the loaded page's edge; horizontal wheel and
+  shift+wheel pan the grid's columns. A click gives the clicked half the region
+  focus, selects the sidebar object (a second click within 400 ms loads it,
+  like `enter`) or moves the grid's row cursor. With the filter line open
+  (#1777) clicks are inert, so a half-typed clause survives a stray click.
+- **`tab` reaches the pane**: the pane had a region toggle, but the IDE's
+  global `case "tab": cycleFocus()` fired first, so it never ran. A focused
+  data pane is now an exception to that fallback and gets the key; pane focus
+  stays on `ctrl+tab` and the focus keys.
+- **`pgup`/`pgdown` page a screenful, not a fetch**: they were mapped onto the
+  whole-page fetch (500 rows), which made them a plain no-op on any table
+  shorter than one page. They now move by `bodyHeight` rows inside the loaded
+  page and only cross into the neighbour page from its edge, while `n`/`p` and
+  `ctrl+f`/`ctrl+b` keep the DB-page fetch. Updated
+  [Data Viewer](/architecture/data-viewer.md).
+
 ## 2026-08-11 (viewer panes split the pane you came from, #1779)
 
 - **Data, image and archive viewers no longer split the explorer** (#1779):

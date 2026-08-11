@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -81,6 +82,13 @@ type Model struct {
 	fErr     error
 	hl       highlight.Theme
 
+	// Mouse state (#1788): loading a table by mouse needs a second click on
+	// the same sidebar row within doubleClickWindow; now is swappable in
+	// tests.
+	lastClickRow int
+	lastClickAt  time.Time
+	now          func() time.Time
+
 	w, h    int
 	focused bool
 }
@@ -89,7 +97,7 @@ type Model struct {
 // first page. An open error is kept for View — the pane opens either way and
 // explains itself, so an encrypted or corrupt file degrades to a notice.
 func New(key, p string, pal *theme.Palette) Model {
-	m := Model{key: key, path: p, pal: pal, sel: -1}
+	m := Model{key: key, path: p, pal: pal, sel: -1, lastClickRow: -1, now: time.Now}
 	m.rebuildTheme()
 	m.src, m.err = datasrc.Open(p)
 	if m.err != nil {
@@ -136,6 +144,17 @@ func (m *Model) PageRows() int { return len(m.page.Rows) }
 
 // Cursor reports the grid's row cursor within the page (tests).
 func (m *Model) Cursor() int { return m.rowCur }
+
+// InGrid reports whether the grid half holds the region focus rather than the
+// sidebar (tests).
+func (m *Model) InGrid() bool { return m.region == regionGrid }
+
+// ColumnOffset reports the first visible grid column (tests).
+func (m *Model) ColumnOffset() int { return m.colOff }
+
+// SidebarWidth is the table list's width in cells — the x at which the grid
+// starts, which the mouse routing's tests need.
+func (m *Model) SidebarWidth() int { return m.sidebarWidth() }
 
 // SetSize records the pane interior in cells.
 func (m *Model) SetSize(w, h int) { m.w, m.h = w, h; m.clampScroll() }
@@ -237,7 +256,8 @@ func (m *Model) sidebarKey(msg tea.KeyPressMsg) {
 }
 
 // gridKey navigates the loaded page: j/k rows (crossing a page edge fetches
-// the neighbour page), h/l columns, n/p whole pages, g/G first/last page.
+// the neighbour page), h/l columns, pgup/pgdown a screenful, n/p (ctrl+f /
+// ctrl+b) whole DB pages, g/G first/last page.
 func (m *Model) gridKey(msg tea.KeyPressMsg) {
 	switch msg.String() {
 	case "j", "down":
@@ -256,10 +276,14 @@ func (m *Model) gridKey(msg tea.KeyPressMsg) {
 		if m.colOff < len(m.page.Columns)-1 {
 			m.colOff++
 		}
-	case "n", "pgdown", "ctrl+f":
+	case "n", "ctrl+f":
 		m.pageStep(1)
-	case "p", "pgup", "ctrl+b":
+	case "p", "ctrl+b":
 		m.pageStep(-1)
+	case "pgdown":
+		m.screenStep(1)
+	case "pgup":
+		m.screenStep(-1)
 	case "g", "home":
 		m.fetch(0)
 		m.rowCur = 0
@@ -283,6 +307,42 @@ func (m *Model) rowStep(d int) {
 		m.fetch(m.page.Offset + PageSize)
 		m.rowCur, m.rowTop = 0, 0
 	} else if d < 0 && m.page.Offset > 0 {
+		m.fetch(max64(0, m.page.Offset-PageSize))
+		m.rowCur = len(m.page.Rows) - 1
+	}
+}
+
+// screenStep pages the row cursor by one screenful — what pgup/pgdown mean
+// everywhere else (#1788). It moves *within* the loaded page; a table shorter
+// than PageSize therefore still scrolls, which the whole-page fetch below
+// could not do. Only a cursor already sitting on the page's edge crosses it,
+// fetching the neighbour page like rowStep does.
+func (m *Model) screenStep(d int) {
+	h := m.gridHeight()
+	if d > 0 {
+		if next := m.rowCur + h; next < len(m.page.Rows) {
+			m.rowCur = next
+			return
+		}
+		if m.rowCur < len(m.page.Rows)-1 {
+			m.rowCur = len(m.page.Rows) - 1
+			return
+		}
+		if m.hasNextPage() {
+			m.fetch(m.page.Offset + PageSize)
+			m.rowCur, m.rowTop = 0, 0
+		}
+		return
+	}
+	if next := m.rowCur - h; next >= 0 {
+		m.rowCur = next
+		return
+	}
+	if m.rowCur > 0 {
+		m.rowCur = 0
+		return
+	}
+	if m.page.Offset > 0 {
 		m.fetch(max64(0, m.page.Offset-PageSize))
 		m.rowCur = len(m.page.Rows) - 1
 	}
@@ -625,7 +685,7 @@ func (m *Model) footer(pal *theme.Palette) string {
 			}
 		}
 	}
-	hints := "tab switch · enter open · j/k row · h/l column · n/p page · / filter · s schema"
+	hints := "tab switch · enter open · j/k row · h/l column · pgup/pgdn screen · n/p page · / filter · s schema"
 	line := " " + status
 	if status != "" {
 		line += " · "
@@ -647,18 +707,21 @@ func (m *Model) bodyHeight() int {
 	return h
 }
 
+// gridHeight is how many data rows the grid shows: the body minus the line it
+// spends on the column headers.
+func (m *Model) gridHeight() int {
+	if h := m.bodyHeight() - 1; h >= 1 {
+		return h
+	}
+	return 1
+}
+
 // clampScroll keeps both cursors valid and inside their visible windows.
 func (m *Model) clampScroll() {
 	clamp(&m.tcur, len(m.tables))
 	clamp(&m.rowCur, len(m.page.Rows))
-	h := m.bodyHeight()
-	scrollTo(&m.ttop, m.tcur, h)
-	// The grid spends one body line on the column headers.
-	gh := h - 1
-	if gh < 1 {
-		gh = 1
-	}
-	scrollTo(&m.rowTop, m.rowCur, gh)
+	scrollTo(&m.ttop, m.tcur, m.bodyHeight())
+	scrollTo(&m.rowTop, m.rowCur, m.gridHeight())
 	if m.colOff < 0 {
 		m.colOff = 0
 	}
