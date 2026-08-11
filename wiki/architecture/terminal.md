@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
 timestamp: 2026-07-30T12:00:00Z
@@ -220,15 +220,25 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   (`wsExtras` in `Workspace.Aux`) — tabs, scrollback, running processes and
   open state come back unchanged when the project resumes; the new project
   starts with its own empty popup (nothing renders, no keys are swallowed).
-  Workspace teardown (LRU eviction #780, close-from-list #820,
-  `project.close` #1355) ends the parked popup's sessions, and the busy
+  Project-owned floating panels (#1793) park alongside (`wsExtras.floats`);
+  global ones never do — see the floating-panels section. Workspace teardown
+  (LRU eviction #780, close-from-list #820, `project.close` #1355) ends the
+  parked popup's and panels' sessions (`parkedPopupInstances`), and the busy
   guards count popup activity — a running popup process prompts before
   dying unseen.
 - It is **not a `ui.Floating`** — the shell's dismiss/filter/scroll priority
   is the inverse of a PTY's raw pass-through (esc must reach vim). Instead it
-  renders pane-style chrome (`paneBox` + the regular tab bar) centered via
-  `overlay.Center`, below the exclusive overlays: palette/finder draw on top,
-  the settings modal suppresses it for its lifetime.
+  renders pane-style chrome (`paneBox` + the regular tab bar) placed via
+  `overlay.Place` at its centered-plus-offset rect (#1793), below the
+  exclusive overlays: palette/finder draw on top, the settings modal
+  suppresses it for its lifetime.
+- **Move** (#1793): a left press on the title row outside every tab segment
+  starts a titlebar move drag (`floatMoveDrag`); the border ring stays the
+  resize drag (#933). The box's position is stored as an **offset from
+  center** under the `popupterm:pos` WinSizes key, resolved and persisted
+  through exactly the size delta's #1714 cascade — project store, user-scoped
+  fallback, mirror on release — and re-clamped in `popupTermRect` so the box
+  always stays fully on screen whatever terminal it resumes under.
 - **Keys**: while open, the popup's branch in the funnel sits after the modal
   prompts and before the pane-terminal block. Its reserved set mirrors the
   pane one: the toggle chord (resolved via the live binding table) hides from
@@ -254,13 +264,68 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   to a single box (the right side is promoted when the primary empties) and
   resets broadcast. Every whole-popup walk (theme, quit, teardown, busy
   guards) iterates `popupTerm.instances()` instead of touching `inst` alone.
-- **Mouse**: outside press hides (state retained), the border ring starts a
-  `popupterm` resize drag (centered doubled-delta math), the tab-bar row
-  activates/closes tabs on its side, body presses anchor selections / hit the
-  scrollbar and cmd+click links, the wheel routes like a terminal pane —
-  split, the x offset picks the side box first. Selection and scrollbar drags
-  run through the generic drag machinery via the `popup` sentinel pane key
-  (`termLocal` / `dragTerminal`, resolving the focused side).
+- **Mouse**: a press outside every layer box hides the whole layer (state
+  retained), the border ring starts a `popupterm` resize drag (centered
+  doubled-delta math), the tab-bar row activates/closes tabs on its side —
+  and a segment press arms the tear-out drag (#1793) — body presses anchor
+  selections / hit the scrollbar and cmd+click links, the wheel routes like a
+  terminal pane — split, the x offset picks the side box first. Selection and
+  scrollbar drags run through the generic drag machinery via the `popup`
+  sentinel pane key (`termLocal` / `dragTerminal`, resolving the focused
+  host — a floating panel's rect when one owns the keyboard).
+
+## Floating terminal panels (#1793)
+
+`internal/app/floatterm.go` lets a terminal tab leave the popup box as its own
+**floating panel**: a tab-bar press arms a `dragTab` drag carrying the source
+host (`dragState.srcInst`); engaged (#559 threshold) it previews a panel-sized
+ghost under the pointer, and the release commits without ever touching the
+pane layout:
+
+- **Onto free space** — the tab tears out into a fresh `floatTerm` panel: a
+  detached tab host with the popup's chrome, spawned at the source box's size
+  with the title row under the pointer, hosting the **same live session**
+  (`DetachTerminalTab`, the #708 pattern — no shell restart). A single-tab
+  source re-homes its whole host instead (`DetachTerminalTab` refuses the last
+  tab) and its slot collapses with the #1427 semantics: split sides promote,
+  a fully torn-out box leaves the layer to its panels.
+- **Onto another layer box** — popup side or panel — the tab moves there,
+  session live: the reverse direction. Re-docking a floating panel into the
+  *pane layout* is deliberately out of scope — the layer stays independent of
+  the split tree; the way back into a pane is the existing route (move the
+  tab into the popup box, or keep using it as a panel).
+
+**Z-order and focus** follow the #1237 stack rules, panel-list flavored
+(`floatTerms`, bottom→top; the box is the base layer): the focused panel —
+`floatFocus`, falling back to the topmost when the box is gone — owns the
+keyboard through the same funnel branch (`popupFocused` resolves it), a click
+focuses **and raises** a panel, a box click reclaims the keys, and only the
+keyboard owner renders the focus border. The toggle chord and the
+outside-press dismiss act on the **whole layer** — box and panels show and
+hide as one unit, sessions always retained; panels have no per-panel hidden
+state. Panel chrome repeats the popup's: tab bar, `cmd+t` sibling tabs,
+`cmd+w` through the busy guard, tab cycling, cmd+c/v, scrollback search —
+everything `popupFocused` routes; the resize chords (#774) and the border
+drag (#933, corner-anchored 1:1 math) size the focused panel. Box-only
+affairs (`cmd+d` split, `cmd+shift+i` broadcast, split focus keys) no-op
+while a panel holds the keys.
+
+**Global toggle** (#1793): every panel's title row leads with the ●/○ button.
+`○` (project-owned, the default) keeps #1407 semantics: the panel parks in
+`wsExtras.floats` on a switch, counts in the busy guards, and dies with the
+workspace teardown. A click flips to `●` **global**: the panel now belongs to
+the app — a project switch carries it into the fresh model (the #1514
+notification-history pattern) with its process, scrollback and CWD untouched,
+stacked above whatever layer the incoming project restores (a visible layer
+stays visible), and no workspace teardown/eviction can reap it, because it
+never enters `Aux`. It ends only with an explicit close or app quit (the quit
+path walks `popupLayerInstances`). Toggling back to `○` binds the running
+session to the **current** project — it parks with this workspace from then
+on. Session keys mint from a package-level counter so a carried global
+session can never collide with a fresh model's popup keys. Panel geometry is
+runtime state: sessions never survive an app restart (#1398 rule), so
+positions/sizes of panels aren't persisted — only the popup box's offset and
+delta are (`popupterm`/`popupterm:pos`).
 
 ## Key routing — the reserved set
 

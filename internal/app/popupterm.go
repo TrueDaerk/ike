@@ -23,6 +23,13 @@ import (
 // popupTermSizeKey is the WinSizes delta key for the popup box (#774 store).
 const popupTermSizeKey = "popupterm"
 
+// popupTermPosKey is the WinSizes key holding the popup box's position offset
+// from center (#1793): a titlebar drag moves the box, and the offset persists
+// through the same project-store/user-fallback cascade as the size delta
+// (#1714) — offsets, not absolute cells, so the box re-clamps against the
+// live terminal bounds.
+const popupTermPosKey = "popupterm:pos"
+
 // popupPaneKey is the sentinel pane key the drag machinery uses for gestures
 // anchored inside the popup (termLocal and dragTerminal special-case it).
 const popupPaneKey = "popup"
@@ -48,8 +55,14 @@ type popupTerm struct {
 	focusRight bool           // keyboard owner: false = inst, true = split
 	broadcast  bool           // cmd+shift+i (#1427): input mirrors to both sides
 	open       bool
-	seq        int // key minting counter for "popup:term:N"
 }
+
+// popupSessSeq mints "popup:term:N" session keys. Package-level, not
+// per-model (#1793): a global floating terminal rides across the fresh model
+// a project switch builds, so per-model counters would collide its session
+// key with the new project's popup sessions — and session-key lookups
+// (popupTabForSession, terminalModelForSession) must stay unambiguous.
+var popupSessSeq int
 
 // instances returns the popup's live tab hosts, primary first — one entry
 // while unsplit, two while split (#1427). Callers that must touch every popup
@@ -65,30 +78,41 @@ func (p popupTerm) instances() []*pane.Instance {
 	return out
 }
 
-// togglePopupTerminal shows or hides the popup terminal (terminal.popup). The
-// first show spawns a shell; later shows reveal the retained tabs unchanged.
-// Pane focus is never moved — while the popup is open the key funnel routes to
-// it before any pane, and hiding it simply falls back to the focused pane.
+// togglePopupTerminal shows or hides the popup terminal layer — the popup box
+// plus every floating panel (#1793) — as one unit (terminal.popup). The first
+// show with nothing retained spawns a shell; later shows reveal the retained
+// boxes unchanged (a layer whose box was fully torn out reveals just its
+// panels). Pane focus is never moved — while the layer is open the key funnel
+// routes to it before any pane, and hiding it falls back to the focused pane.
 func (m *Model) togglePopupTerminal() {
 	if m.popup.open {
 		m.popup.open = false
-		for _, inst := range m.popup.instances() {
+		for _, inst := range m.popupLayerInstances() {
 			inst.SetFocused(false)
 		}
 		return
 	}
-	if m.popup.inst == nil {
+	if m.popup.inst == nil && len(m.floatTerms) == 0 {
 		term := m.newPopupShell()
 		m.popup.inst = pane.NewDetachedTerminalHost("popup", term, m.host.Config(), m.pal())
 	}
 	m.popup.open = true
 	m.applyPopupSize()
+	if f := m.floatFocused(); f != nil {
+		m.setFloatFocus(f)
+		return
+	}
 	m.setPopupFocus(m.popup.focusRight)
 }
 
-// popupFocused resolves the split side that owns the keyboard: the right host
-// while it exists and holds focus, the primary otherwise (#1427).
+// popupFocused resolves the popup-layer host that owns the keyboard: the
+// focused floating panel when one holds it (#1793), else the split side —
+// the right host while it exists and holds focus, the primary otherwise
+// (#1427).
 func (m Model) popupFocused() *pane.Instance {
+	if f := m.floatFocused(); f != nil {
+		return f.inst
+	}
 	if m.popup.focusRight && m.popup.split != nil {
 		return m.popup.split
 	}
@@ -107,11 +131,12 @@ func (m *Model) setPopupFocus(right bool) {
 	}
 }
 
-// splitPopupTerminal splits the popup into two side-by-side shells (#1427,
+// splitPopupTerminal splits the popup box into two side-by-side shells (#1427,
 // reserved cmd+d inside the popup — the same chord that splits a terminal
 // pane, #982). Only one split is supported; the fresh right side takes focus.
+// Box-only: while a floating panel owns the keyboard the chord is a no-op.
 func (m *Model) splitPopupTerminal() {
-	if m.popup.inst == nil || m.popup.split != nil {
+	if m.popup.inst == nil || m.popup.split != nil || m.floatFocused() != nil {
 		return
 	}
 	term := m.newPopupShell()
@@ -120,11 +145,13 @@ func (m *Model) splitPopupTerminal() {
 	m.setPopupFocus(true)
 }
 
-// popupInputTerminals returns the shells typed input goes to: both sides'
-// active terminals under broadcast (#1427), otherwise the focused side's only.
+// popupInputTerminals returns the shells typed input goes to: both box sides'
+// active terminals under broadcast (#1427), otherwise the focused host's only
+// — broadcast is a box affair, so a focused floating panel (#1793) always
+// receives alone.
 func (m Model) popupInputTerminals() []*terminal.Model {
 	insts := []*pane.Instance{m.popupFocused()}
-	if m.popup.broadcast && m.popup.split != nil {
+	if m.floatFocused() == nil && m.popup.broadcast && m.popup.split != nil {
 		insts = m.popup.instances()
 	}
 	out := make([]*terminal.Model, 0, len(insts))
@@ -146,8 +173,8 @@ func (m *Model) newPopupShell() terminal.Model {
 	if v, ok := m.host.Config().Get("terminal.shell"); ok {
 		shell = v
 	}
-	m.popup.seq++
-	key := fmt.Sprintf("popup:term:%d", m.popup.seq)
+	popupSessSeq++
+	key := fmt.Sprintf("popup:term:%d", popupSessSeq)
 	return terminal.New(key, terminal.Shell(shell), ".", 80, 24, terminalEnv(), m.host.Send)
 }
 
@@ -224,6 +251,40 @@ func (m *Model) popupTermPersist() {
 	m.winSizesAll.Set(popupTermSizeKey, dw, dh)
 }
 
+// popupTermPos resolves the popup box's position offset from center (#1793)
+// through the same #1714 cascade as the size delta: the project's own offset
+// wins, the user-scoped one is the fallback for a project never moved.
+func (m Model) popupTermPos() (dx, dy int) {
+	if m.winSizes.Has(popupTermPosKey) {
+		return m.winSizes.Get(popupTermPosKey)
+	}
+	return m.winSizesAll.Get(popupTermPosKey)
+}
+
+// popupTermMoveBy applies one titlebar-drag move step to the popup box
+// (#1793), seeding the project store from the user fallback first (the #1714
+// continue-from-what-you-see rule). persist=false is the mid-drag step; the
+// drag's release calls popupTermPersistPos.
+func (m *Model) popupTermMoveBy(ddx, ddy int, persist bool) {
+	if !m.winSizes.Has(popupTermPosKey) {
+		dx, dy := m.winSizesAll.Get(popupTermPosKey)
+		m.winSizes.Set(popupTermPosKey, dx, dy)
+	}
+	m.winSizes.Nudge(popupTermPosKey, ddx, ddy)
+	if persist {
+		m.popupTermPersistPos()
+	}
+}
+
+// popupTermPersistPos writes the popup position offset to the project store
+// and mirrors it into the user-scoped store, like popupTermPersist does for
+// the size delta (#1714).
+func (m *Model) popupTermPersistPos() {
+	m.winSizes.Flush()
+	dx, dy := m.winSizes.Get(popupTermPosKey)
+	m.winSizesAll.Set(popupTermPosKey, dx, dy)
+}
+
 // popupSplitWidths returns the outer widths of the left and right boxes: the
 // full box width (and 0) while unsplit, halves while split (#1427) — the left
 // side takes the floor so both sides sum to the box width exactly.
@@ -239,24 +300,30 @@ func (m Model) popupSplitWidths() (wl, wr int) {
 // applyPopupSize pushes the current box interior into the instance (and every
 // tab's PTY). The popup lives outside the layout tree, so layout() never sizes
 // it — every size-affecting event calls this instead. While split (#1427) each
-// side gets its half's interior.
+// side gets its half's interior; the floating panels (#1793) re-clamp and
+// re-size in the same pass.
 func (m *Model) applyPopupSize() {
-	if m.popup.inst == nil {
-		return
+	if m.popup.inst != nil {
+		_, h := m.popupSize()
+		wl, wr := m.popupSplitWidths()
+		m.popup.inst.SetSize(paneInterior(wl, paneChromeW), paneInterior(h, paneChromeH))
+		if m.popup.split != nil {
+			m.popup.split.SetSize(paneInterior(wr, paneChromeW), paneInterior(h, paneChromeH))
+		}
 	}
-	_, h := m.popupSize()
-	wl, wr := m.popupSplitWidths()
-	m.popup.inst.SetSize(paneInterior(wl, paneChromeW), paneInterior(h, paneChromeH))
-	if m.popup.split != nil {
-		m.popup.split.SetSize(paneInterior(wr, paneChromeW), paneInterior(h, paneChromeH))
-	}
+	m.clampFloatTerms()
+	m.applyFloatTermSizes()
 }
 
-// popupTermRect is the popup box's screen rectangle (centered geometry), for
-// mouse hit testing.
+// popupTermRect is the popup box's screen rectangle: centered geometry plus
+// the persisted move offset (#1793), clamped so the box always stays fully on
+// screen.
 func (m Model) popupTermRect() (x, y, w, h int) {
 	w, h = m.popupSize()
-	return (m.width - w) / 2, (m.height - h) / 2, w, h
+	dx, dy := m.popupTermPos()
+	x = ui.ClampDelta((m.width-w)/2, dx, 0, max(m.width-w, 0))
+	y = ui.ClampDelta((m.height-h)/2, dy, 0, max(m.height-h, 0))
+	return x, y, w, h
 }
 
 // renderPopupTerm renders the popup box: pane-style chrome (rounded border,
@@ -268,11 +335,14 @@ func (m Model) popupTermRect() (x, y, w, h int) {
 func (m Model) renderPopupTerm() string {
 	_, h := m.popupSize()
 	wl, wr := m.popupSplitWidths()
+	// A focused floating panel (#1793) owns the keyboard, so no box side
+	// renders the focus border then.
+	boxFocus := m.floatFocused() == nil
 	if m.popup.split == nil {
-		return m.renderPopupSide(m.popup.inst, wl, h, true)
+		return m.renderPopupSide(m.popup.inst, wl, h, boxFocus)
 	}
-	left := m.renderPopupSide(m.popup.inst, wl, h, !m.popup.focusRight || m.popup.broadcast)
-	right := m.renderPopupSide(m.popup.split, wr, h, m.popup.focusRight || m.popup.broadcast)
+	left := m.renderPopupSide(m.popup.inst, wl, h, boxFocus && (!m.popup.focusRight || m.popup.broadcast))
+	right := m.renderPopupSide(m.popup.split, wr, h, boxFocus && (m.popup.focusRight || m.popup.broadcast))
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
 
@@ -298,11 +368,11 @@ func (m Model) renderPopupSide(inst *pane.Instance, w, h int, focused bool) stri
 	return paneBox(marker+title, inst.View(), w, h, border)
 }
 
-// popupTabForSession resolves a session key to the popup tab hosting it, on
-// either split side (#1427); returns the hosting instance, the tab index and
-// its terminal model, or (nil, -1, nil).
+// popupTabForSession resolves a session key to the popup-layer tab hosting
+// it — either split side (#1427) or a floating panel (#1793); returns the
+// hosting instance, the tab index and its terminal model, or (nil, -1, nil).
 func (m Model) popupTabForSession(sess string) (*pane.Instance, int, *terminal.Model) {
-	for _, inst := range m.popup.instances() {
+	for _, inst := range m.popupLayerInstances() {
 		for i := 0; i < inst.TabCount(); i++ {
 			if t := inst.TabTerminal(i); t != nil && t.SessionKey() == sess {
 				return inst, i, t
@@ -330,20 +400,16 @@ func (m Model) dragTerminal(key string) *terminal.Model {
 	return nil
 }
 
-// popupTermMouse routes a mouse event while the popup terminal is open and no
-// drag is active: outside press hides, border press starts a resize drag, the
-// tab-bar row activates/closes tabs, body presses anchor selections or hit the
+// popupTermMouse routes a mouse event over the popup box while the layer is
+// open and no drag is active (presses outside every layer box and presses on
+// floating panels are settled by popupLayerMouse first): border press starts
+// a resize drag, the title row hosts the tab bar (activate/close/tear-out
+// #1793) and the move drag, body presses anchor selections or hit the
 // scrollbar/links, the wheel pages the scrollback. Motion and release with an
 // active drag never reach this — the generic drag machinery owns them. done
 // reports whether the event was consumed.
 func (m Model) popupTermMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 	px, py, pw, ph := m.popupTermRect()
-	if msg.action == mousePress && !inRect(msg.X, msg.Y, px, py, pw, ph) {
-		// A press outside dismisses (hide, sessions keep running), like the
-		// floating stack's outside-press pop.
-		m.togglePopupTerminal()
-		return m, nil, true
-	}
 	// Resolve the split side under the pointer (#1427): the x offset picks the
 	// box; unsplit, the primary spans the whole popup.
 	wl, wr := m.popupSplitWidths()
@@ -360,31 +426,45 @@ func (m Model) popupTermMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 			m.floatDrag = &floatResizeDrag{kind: "popupterm", sx: zx, sy: zy, lastX: msg.X, lastY: msg.Y}
 			return m, nil, true
 		}
-		// A press claims the keyboard for its split side (#1427), like pane
-		// focus follows clicks.
+		// A press on the box reclaims the keyboard from a floating panel
+		// (#1793) and claims it for its split side (#1427), like pane focus
+		// follows clicks.
+		if m.floatFocus != nil {
+			m.setFloatFocus(nil)
+		}
 		if right != m.popup.focusRight {
 			m.setPopupFocus(right)
 		}
-		// Tab-bar row (#157/#1128): a segment click activates, its ✕ closes —
-		// the active tab through the busy guard, others directly.
-		if msg.Y == py+1 && (inst.TabCount() > 1 || m.tabsAlwaysShow()) {
-			labels := tabLabels(inst)
-			// The broadcast marker (#1427) prefixes the title row, shifting
-			// the bar right by its width — mirror that in the hit test.
-			bx := lx
-			if m.popup.broadcast && m.popup.split != nil {
-				bx -= lipgloss.Width("⇉ ")
-			}
-			if idx, closeHit := tabHit(labels, inst.ActiveTab(), sw-paneChromeW, bx); idx >= 0 {
-				switch {
-				case !closeHit:
-					inst.ActivateTab(idx)
-				case idx == inst.ActiveTab():
-					m.requestPopupTabClose()
-				default:
-					m.closePopupTab(inst, idx)
+		// Title row: tab bar (#157/#1128) — a segment click activates and
+		// arms the tear-out drag (#1793), its ✕ closes (the active tab
+		// through the busy guard, others directly) — or, outside every
+		// segment, the box move drag (#1793).
+		if msg.Y == py+1 {
+			if inst.TabCount() > 1 || m.tabsAlwaysShow() {
+				labels := tabLabels(inst)
+				// The broadcast marker (#1427) prefixes the title row, shifting
+				// the bar right by its width — mirror that in the hit test.
+				bx := lx
+				if m.popup.broadcast && m.popup.split != nil {
+					bx -= lipgloss.Width("⇉ ")
+				}
+				if idx, closeHit := tabHit(labels, inst.ActiveTab(), sw-paneChromeW, bx); idx >= 0 {
+					switch {
+					case !closeHit:
+						inst.ActivateTab(idx)
+						// Engaged, the drag tears the tab out of the box —
+						// into another layer box or its own floating panel.
+						m.drag = &dragState{kind: dragTab, srcPane: popupPaneKey, srcInst: inst, srcTab: idx,
+							curX: msg.X, curY: msg.Y, startX: msg.X, startY: msg.Y}
+					case idx == inst.ActiveTab():
+						m.requestPopupTabClose()
+					default:
+						m.closePopupTab(inst, idx)
+					}
+					return m, nil, true
 				}
 			}
+			m.floatMove = &floatMoveDrag{lastX: msg.X, lastY: msg.Y}
 			return m, nil, true
 		}
 		if term == nil {
@@ -477,8 +557,9 @@ func (m Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 		return true, m, nil
 	case "cmd+shift+i":
 		// Broadcast toggle (#1427): while on, typed input mirrors to both
-		// split sides' active shells. Meaningless unsplit — ignored then.
-		if m.popup.split != nil {
+		// split sides' active shells. Meaningless unsplit or while a floating
+		// panel owns the keyboard (#1793) — ignored then.
+		if m.popup.split != nil && m.floatFocused() == nil {
 			m.popup.broadcast = !m.popup.broadcast
 		}
 		return true, m, nil
@@ -500,16 +581,23 @@ func (m Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 		return false, m, nil
 	}
 	// The spatial focus keys (default ctrl+left/right, #228 overrides apply)
-	// move the keyboard between the split sides (#1427); unsplit they stay
-	// with the shell like every other unreserved key.
-	if m.popup.split != nil {
+	// move the keyboard between the split sides (#1427) while the box owns
+	// it; unsplit (or with a floating panel focused, #1793) they stay with
+	// the shell like every other unreserved key.
+	if m.popup.split != nil && m.floatFocused() == nil {
 		if dir, ok := m.focusKeys[keys]; ok && (dir == DirLeft || dir == DirRight) {
 			m.setPopupFocus(dir == DirRight)
 			return true, m, nil
 		}
 	}
+	// The resize chords (#774) act on the keyboard-owning surface: a focused
+	// floating panel (#1793) resizes in place, the box otherwise.
 	if ddw, ddh, ok := ui.ResizeDelta(keys); ok {
-		m.popupTermResize(ddw, ddh, true)
+		if f := m.floatFocused(); f != nil {
+			m.resizeFloatTerm(f, ddw, ddh)
+		} else {
+			m.popupTermResize(ddw, ddh, true)
+		}
 		return true, m, nil
 	}
 	return false, m, nil
@@ -546,11 +634,12 @@ func (m *Model) requestPopupTabClose() {
 	term.SendEOF()
 }
 
-// closePopupTab closes tab idx on the given split side (session ends).
+// closePopupTab closes tab idx on the given popup-layer host (session ends).
 // Closing a side's last tab collapses the split back to a single box (#1427);
-// closing the last tab of an unsplit popup drops the whole instance and hides
-// the popup — the next toggle starts a fresh shell, mirroring terminal.toggle's
-// create-on-demand arm.
+// a floating panel's last tab closes the panel (#1793); closing the last tab
+// of an unsplit popup drops the whole instance and hides the popup — the next
+// toggle starts a fresh shell, mirroring terminal.toggle's create-on-demand
+// arm.
 func (m *Model) closePopupTab(inst *pane.Instance, idx int) {
 	if inst == nil {
 		return
@@ -559,23 +648,38 @@ func (m *Model) closePopupTab(inst *pane.Instance, idx int) {
 		inst.CloseTab(idx)
 		return
 	}
+	if f := m.floatTermFor(inst); f != nil {
+		inst.CloseTerminalTabs()
+		m.removeFloatTerm(f)
+		return
+	}
 	inst.CloseTerminalTabs()
 	switch {
 	case inst == m.popup.split:
-		// The right side emptied: the primary spans the box again.
+		// The right side emptied: the primary spans the box again. A focused
+		// floating panel keeps the keyboard (the exit may come from any
+		// session, #1793); setFloatFocus settles either way.
 		m.popup.split = nil
 		m.popup.broadcast = false
-		m.setPopupFocus(false)
+		m.popup.focusRight = false
+		m.setFloatFocus(m.floatFocus)
 		m.applyPopupSize()
 	case m.popup.split != nil:
 		// The primary emptied while split: the right side is promoted.
 		m.popup.inst = m.popup.split
 		m.popup.split = nil
 		m.popup.broadcast = false
-		m.setPopupFocus(false)
+		m.popup.focusRight = false
+		m.setFloatFocus(m.floatFocus)
 		m.applyPopupSize()
 	default:
 		m.popup.inst = nil
+		if len(m.floatTerms) > 0 {
+			// Floating panels remain (#1793): the layer stays open and the
+			// topmost panel takes the keyboard.
+			m.setFloatFocus(m.floatTerms[len(m.floatTerms)-1])
+			return
+		}
 		m.popup.open = false
 	}
 }

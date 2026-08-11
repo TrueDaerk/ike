@@ -1,5 +1,33 @@
 # Log
 
+## 2026-08-11 (popup terminal: move, tear-out panels, global toggle, #1793)
+
+- **Movable popup terminal**: a title-row press outside every tab segment
+  starts a titlebar move drag; the box's position persists as an offset from
+  center (`popupterm:pos`) through the same project-store/user-fallback
+  cascade as the size delta (#1714) and re-clamps on screen in
+  `popupTermRect`.
+- **Tab tear-out** (`internal/app/floatterm.go`): a tab-bar press arms a
+  popup-layer `dragTab` drag — released on free space, the tab becomes its
+  own floating panel with the **same live session** (`DetachTerminalTab`,
+  the #708 pattern; a single-tab source re-homes its whole host and its slot
+  collapses with #1427 semantics); released on another layer box, the tab
+  moves there (the reverse direction). Panels follow the #1237 z-rules:
+  click focuses and raises, the focused panel owns the keyboard through the
+  existing funnel (`popupFocused`), toggle and outside-press hide the whole
+  layer as one unit. Re-docking panels into the pane layout is deliberately
+  out of scope.
+- **Global toggle**: the ●/○ title-row button flips a panel between
+  project-owned (#1407 parking in `wsExtras.floats`, dies with the
+  workspace) and **app-owned**: a global panel rides across project switches
+  with process, scrollback and CWD intact, survives workspace
+  teardown/eviction (it never enters `Aux`), and ends only with an explicit
+  close or app quit. Popup session keys now mint from a package-level
+  counter so carried global sessions can't collide with a fresh model's.
+  Updated [Integrated Terminal](/architecture/terminal.md),
+  [Floating Shell](/architecture/floating-shell.md) and
+  [Workspace](/architecture/workspace.md).
+
 ## 2026-08-11 (floating stack finalized, #1237)
 
 - Finalized the z-ordered floating stack (#1237): the paste-capture predicate

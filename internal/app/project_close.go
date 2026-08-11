@@ -34,8 +34,14 @@ func (m Model) handleCloseProject() (tea.Model, tea.Cmd) {
 	}
 	target := bg[len(bg)-1] // most-recently-used parked root
 	act := collectActivity(m.activeWS())
+	// The active popup terminal and project-owned floating panels live on the
+	// model (#1407, #1793) and die with the close; global panels ride to the
+	// resumed project and don't count.
 	for _, inst := range m.popup.instances() {
-		act.addPopup(inst) // the active popup terminal lives on the model (#1407)
+		act.addPopup(inst)
+	}
+	for _, f := range projectFloatTerms(m.floatTerms) {
+		act.addPopup(f.inst)
 	}
 	if act.busy() {
 		m.openProjectClosePrompt(target, act)

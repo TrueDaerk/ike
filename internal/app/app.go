@@ -247,6 +247,12 @@ type Model struct {
 	// popup is the popup terminal (#1398): a floating tab-host terminal
 	// overlay outside the layout tree, toggled by terminal.popup.
 	popup popupTerm
+	// floatTerms are the torn-out floating terminal panels (#1793), z-ordered
+	// bottom to top; floatFocus is the keyboard-owning panel (nil: the popup
+	// box owns the layer's keys). Global panels ride across project switches;
+	// project-owned ones park in wsExtras with the popup box (#1407).
+	floatTerms []*floatTerm
+	floatFocus *floatTerm
 	// conflictKey is the editor pane awaiting a save-conflict answer (Roadmap
 	// 0140, #82) while the shell shows the prompt; "" when no conflict is open.
 	conflictKey string
@@ -477,6 +483,7 @@ type Model struct {
 	winSizes    *ui.WinSizes         // persisted floating-window resize deltas (#774)
 	winSizesAll *ui.WinSizes         // user-scoped last-resize deltas, fallback for fresh projects (#1714)
 	floatDrag   *floatResizeDrag     // live mouse resize of a floating window (#933)
+	floatMove   *floatMoveDrag       // live titlebar move of a floating terminal (#1793)
 	pins        *pinStore            // harpoon-style pinned file slots (#788)
 	toolHide    *toolHideSnapshot    // hide-all-tool-windows snapshot (#791)
 	termShiftAt time.Time            // last bare-shift tap in a terminal (#973)
@@ -632,6 +639,10 @@ type dragState struct {
 	divider layout.Divider
 	srcPane string
 	srcTab  int // dragTab: index of the grabbed tab (#305)
+	// srcInst marks a popup-layer tab drag (#1793): the box the tab is torn
+	// from — a popup split side or a floating panel host. Layout-pane tab
+	// drags leave it nil and resolve srcPane against the registry as before.
+	srcInst *pane.Instance
 	sep     int // dragDebugDiv: which column separator is grabbed (#691)
 	curX    int
 	curY    int
@@ -972,10 +983,13 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		m.dbgLaunchGen = extras.dbgLaunchGen
 		m.dbgTermKey = extras.dbgTermKey
 		// The popup terminal comes back exactly as left (#1407) — tabs,
-		// scrollback, running processes, open state. Its palette re-threads
-		// like the pane registry's below.
+		// scrollback, running processes, open state — and so do the
+		// project-owned floating panels (#1793). Palettes re-thread like the
+		// pane registry's below. Global panels are not in Aux: performSwitch
+		// carries them model-to-model.
 		m.popup = extras.popup
-		for _, inst := range m.popup.instances() {
+		m.floatTerms = extras.floats
+		for _, inst := range m.popupLayerInstances() {
 			inst.SetPalette(themePal)
 		}
 		resumed.Aux = nil
@@ -1017,7 +1031,8 @@ type wsExtras struct {
 	dbgLaunching bool
 	dbgLaunchGen int
 	dbgTermKey   string
-	popup        popupTerm // popup terminal (#1398) is per-project state (#1407)
+	popup        popupTerm    // popup terminal (#1398) is per-project state (#1407)
+	floats       []*floatTerm // project-owned floating terminal panels (#1793); global ones never park
 }
 
 // SetSender wires the program's Send into the host so background workers (the LSP
@@ -1654,9 +1669,11 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 	if m.activeWS().Tree != nil {
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	}
-	for _, inst := range m.popup.instances() {
-		// Popup terminal sessions (#1398) are session state only — end them
-		// tidily instead of leaving the shells to die with the process.
+	for _, inst := range m.popupLayerInstances() {
+		// Popup terminal sessions (#1398) — the box's and every floating
+		// panel's, global ones included (#1793: a global session ends with
+		// the app) — are session state only; end them tidily instead of
+		// leaving the shells to die with the process.
 		inst.CloseTerminalTabs()
 	}
 	m.backupCleanShutdown()
@@ -5055,11 +5072,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.termClosePromptOpen() {
 			return m.updateTermClosePrompt(msg)
 		}
-		// The open popup terminal (#1398) owns the keyboard like a focused
-		// terminal pane: its shell takes every key raw except the reserved
-		// popup set. The overlays and prompts above still win — they can be
-		// opened from inside the popup and must get their keys back.
-		if m.popup.open && m.popup.inst != nil {
+		// The open popup terminal layer (#1398, floating panels #1793) owns
+		// the keyboard like a focused terminal pane: its focused shell takes
+		// every key raw except the reserved popup set. The overlays and
+		// prompts above still win — they can be opened from inside the popup
+		// and must get their keys back.
+		if m.popupLayerOpen() {
 			if handled, tm, cmd := m.popupReservedKey(msg.String()); handled {
 				return tm, cmd
 			}
@@ -5089,7 +5107,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if handled, cmd := m.terminalGlobalChord(msg); handled {
 				return m, cmd
 			}
-			if m.popup.broadcast && m.popup.split != nil {
+			// Broadcast (#1427) is a box affair: a focused floating panel
+			// (#1793) always receives alone.
+			if m.floatFocused() == nil && m.popup.broadcast && m.popup.split != nil {
 				return m, tea.Batch(m.popup.inst.Update(msg), m.popup.split.Update(msg))
 			}
 			return m, m.popupFocused().Update(msg)
@@ -5750,9 +5770,10 @@ func (m Model) editorNormalMode() bool {
 
 // focusContext reports the context id advertised by the focused pane.
 func (m Model) focusContext() string {
-	if m.popup.open && m.popup.inst != nil {
-		// The open popup terminal (#1398) owns the keyboard, so bindings and
-		// the mode indicator resolve under its context, not the pane below.
+	if m.popupLayerOpen() {
+		// The open popup terminal layer (#1398, #1793) owns the keyboard, so
+		// bindings and the mode indicator resolve under its focused host's
+		// context, not the pane below.
 		return m.popupFocused().ContextID()
 	}
 	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil {
@@ -6679,9 +6700,10 @@ func (m *Model) auxZone(target string) layout.Zone {
 // press on the window's border ring grabs an edge (sx or sy set) or corner
 // (both), motion applies pointer deltas as size deltas, release persists.
 type floatResizeDrag struct {
-	kind         string // which float: "settings", "palette", "shell"
-	sx, sy       int    // grow direction of the grabbed edge/corner (−1/0/+1)
-	lastX, lastY int    // last applied pointer cell
+	kind         string     // which float: "settings", "palette", "shell", "popupterm", "floatterm"
+	target       *floatTerm // kind "floatterm" (#1793): the panel being resized
+	sx, sy       int        // grow direction of the grabbed edge/corner (−1/0/+1)
+	lastX, lastY int        // last applied pointer cell
 }
 
 // applyFloatResize applies one resize step to the dragged float. Deltas go
@@ -6725,6 +6747,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		switch msg.action {
 		case mouseMotion:
 			d := m.floatDrag
+			if d.kind == "floatterm" && d.target != nil {
+				// A floating terminal panel (#1793) is corner-anchored, not
+				// centered: the grabbed edge tracks the pointer 1:1.
+				m.applyFloatTermResize(d, msg.X, msg.Y)
+				return m, nil
+			}
 			ddw, ddh := (msg.X-d.lastX)*d.sx*2, (msg.Y-d.lastY)*d.sy*2
 			if ddw != 0 || ddh != 0 {
 				d.lastX, d.lastY = msg.X, msg.Y
@@ -6734,15 +6762,48 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case mouseRelease:
 			kind := m.floatDrag.kind
 			m.floatDrag = nil
-			if kind == "popupterm" {
+			switch kind {
+			case "popupterm":
 				// The popup delta also becomes the user-scoped fallback (#1714).
 				m.popupTermPersist()
-			} else {
+			case "floatterm":
+				// Panel geometry is runtime state (#1793): nothing persists.
+			default:
 				m.winSizes.Flush()
 			}
 			return m, nil
 		case mousePress:
 			m.floatDrag = nil // stray press: drop the drag, fall through
+		}
+	}
+	// An active titlebar move drag (#1793) owns the mouse until release: each
+	// motion step moves the popup box (offset through the winSizes stores,
+	// clamped in popupTermRect) or the grabbed floating panel; the box's
+	// release persists the offset — panel geometry is runtime state.
+	if m.floatMove != nil {
+		switch msg.action {
+		case mouseMotion:
+			d := m.floatMove
+			dx, dy := msg.X-d.lastX, msg.Y-d.lastY
+			if dx != 0 || dy != 0 {
+				d.lastX, d.lastY = msg.X, msg.Y
+				if d.target != nil {
+					d.target.x = ui.ClampDelta(d.target.x, dx, 0, max(m.width-d.target.w, 0))
+					d.target.y = ui.ClampDelta(d.target.y, dy, 0, max(m.height-d.target.h, 0))
+				} else {
+					m.popupTermMoveBy(dx, dy, false)
+				}
+			}
+			return m, nil
+		case mouseRelease:
+			moved := m.floatMove.target == nil
+			m.floatMove = nil
+			if moved {
+				m.popupTermPersistPos()
+			}
+			return m, nil
+		case mousePress:
+			m.floatMove = nil // stray press: drop the drag, fall through
 		}
 	}
 	// The context menu (#1020) is the topmost transient popup: hover follows
@@ -6910,11 +6971,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	// The popup terminal (#1398) hit-tests after the overlays that render
-	// above it. An active drag (selection, scrollbar) skips the branch — the
-	// generic drag machinery below handles motion and release popup-aware.
-	if m.popup.open && m.popup.inst != nil && m.drag == nil {
-		if tm, cmd, done := m.popupTermMouse(msg); done {
+	// The popup terminal layer (#1398, floating panels #1793) hit-tests after
+	// the overlays that render above it. An active drag (selection, scrollbar,
+	// tab tear-out) skips the branch — the generic drag machinery below
+	// handles motion and release popup-aware.
+	if m.popupLayerOpen() && m.drag == nil {
+		if tm, cmd, done := m.popupLayerMouse(msg); done {
 			return tm, cmd
 		}
 	}
@@ -7327,6 +7389,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			// so there is nothing to commit or persist.
 			if !m.drag.engaged() {
 				m.drag = nil
+				return m, nil
+			}
+			if m.drag.kind == dragTab && m.drag.srcInst != nil {
+				// A popup-layer tab drag (#1793) never touches the layout:
+				// it tears the tab out into a floating panel or moves it
+				// into another layer box, session live.
+				d := m.drag
+				m.drag = nil
+				m.commitPopupTabTear(d, msg.X, msg.Y)
 				return m, nil
 			}
 			if m.drag.kind == dragMove {
@@ -8164,11 +8235,15 @@ func explorerContextItems() []menu.Item {
 // coordinates for the given terminal pane key.
 func (m Model) termLocal(key string, msg mouseEvent) (x, y int, ok bool) {
 	if key == popupPaneKey {
-		// The popup terminal (#1398) is not a layout leaf: its content-local
-		// coordinates derive from the centered box rectangle — offset to the
-		// focused split side's box while split (#1427).
-		if !m.popup.open || m.popup.inst == nil {
+		// The popup terminal layer (#1398) is not a layout leaf: content-local
+		// coordinates derive from the focused host's box rectangle — a
+		// floating panel's own rect (#1793), or the popup box offset to the
+		// focused split side while split (#1427).
+		if !m.popupLayerOpen() {
 			return 0, 0, false
+		}
+		if f := m.floatFocused(); f != nil {
+			return msg.X - (f.x + paneContentX), msg.Y - (f.y + paneContentY), true
 		}
 		px, py, _, _ := m.popupTermRect()
 		if m.popup.focusRight && m.popup.split != nil {
@@ -8463,12 +8538,20 @@ func (m Model) render() string {
 		x, y := m.ctxMenu.Pos()
 		base = overlay.Place(base, m.ctxMenu.View(), x, y, m.width, m.height)
 	}
-	if m.popup.open && m.popup.inst != nil && !m.settings.IsOpen() {
-		// The popup terminal (#1398) floats centered above the workspace but
+	if m.popupLayerOpen() && !m.settings.IsOpen() {
+		// The popup terminal layer (#1398) floats above the workspace but
 		// below the exclusive overlays: a palette or the settings panel opened
 		// from inside it must draw on top (settings composites earlier, so it
-		// suppresses the popup for its modal lifetime instead).
-		base = overlay.Center(base, m.renderPopupTerm(), m.width, m.height)
+		// suppresses the popup for its modal lifetime instead). The box draws
+		// at its moved-and-clamped rect (#1793), the floating panels stack
+		// bottom-to-top above it — the topmost is drawn last (#1237).
+		if m.popup.inst != nil {
+			px, py, _, _ := m.popupTermRect()
+			base = overlay.Place(base, m.renderPopupTerm(), px, py, m.width, m.height)
+		}
+		for _, f := range m.floatTerms {
+			base = overlay.Place(base, m.renderFloatTerm(f), f.x, f.y, m.width, m.height)
+		}
 	}
 	result := base
 	switch {
@@ -8621,6 +8704,23 @@ func (m Model) moveGhost() (box string, x, y int, ok bool) {
 	d := m.drag
 	if d == nil || (d.kind != dragMove && d.kind != dragTab) || !d.engaged() {
 		return "", 0, 0, false
+	}
+	if d.kind == dragTab && d.srcInst != nil {
+		// A popup-layer tab drag (#1793) previews the floating panel the
+		// release would spawn: a ghost at the pointer, sized like the source
+		// box, clamped on screen.
+		gw, gh := m.popupSize()
+		if _, _, bw, bh, found := m.popupBoxRectFor(d.srcInst); found {
+			gw, gh = bw, bh
+		}
+		gw, gh = min(gw, m.width), min(gh, m.height)
+		label := "⌨ terminal"
+		if t := d.srcInst.Tab(d.srcTab); t != nil {
+			label = "⌨ " + t.Title()
+		}
+		gx := ui.ClampDelta(d.curX-gw/2, 0, 0, max(m.width-gw, 0))
+		gy := ui.ClampDelta(d.curY, 0, 0, max(m.height-gh, 0))
+		return ghostBox(gw, gh, label, m.pal().Ghost), gx, gy, true
 	}
 	if zone, docks := m.dockZoneAt(d.curX, d.curY); docks {
 		gr := m.dockPreviewRect(zone, m.dockRatio(d.srcPane, zone))

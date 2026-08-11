@@ -1,0 +1,309 @@
+package app
+
+import (
+	"strings"
+	"testing"
+
+	"ike/internal/project"
+	"ike/internal/terminal"
+)
+
+// floatterm_test.go — movable floating terminal panels (#1793): the popup
+// box's titlebar move with persisted position, tab tear-out into panels with
+// the live session, z-order/focus among several panels, and the global
+// toggle's cross-project lifecycle.
+
+// tearOutFirstTab opens a second popup tab and tears the first one out via
+// the full mouse gesture (tab press arms the drag, motion engages, release on
+// free space commits), returning the model and the new panel.
+func tearOutFirstTab(t *testing.T, m Model) (Model, *floatTerm) {
+	t.Helper()
+	m.newPopupTerminalTab()
+	if m.popup.inst.TabCount() != 2 {
+		t.Fatal("test setup: popup should hold two tabs")
+	}
+	sess := m.popup.inst.TabTerminal(0).SessionKey()
+	px, py, _, ph := m.popupTermRect()
+	m = step(m, press(px+paneContentX+1, py+1))
+	if m.drag == nil || m.drag.kind != dragTab || m.drag.srcInst != m.popup.inst {
+		t.Fatal("a tab press must arm the popup tear-out drag")
+	}
+	m = step(m, motion(px+10, py+ph+3))
+	m = step(m, release(px+10, py+ph+3))
+	if len(m.floatTerms) != 1 {
+		t.Fatalf("the release on free space must tear the tab out, got %d panels", len(m.floatTerms))
+	}
+	f := m.floatTerms[0]
+	if got := f.inst.ActiveTerminal().SessionKey(); got != sess {
+		t.Fatalf("the panel must host the dragged live session %q, got %q", sess, got)
+	}
+	t.Cleanup(func() { f.inst.CloseTerminalTabs() })
+	return m, f
+}
+
+func TestPopupMoveDragPersistsPosition(t *testing.T) {
+	m := openTestPopup(t)
+	x0, y0, _, _ := m.popupTermRect()
+	px, py, pw, _ := m.popupTermRect()
+	m = step(m, press(px+pw/2, py+1)) // title row, single tab: the move drag
+	if m.floatMove == nil || m.floatMove.target != nil {
+		t.Fatal("a titlebar press must start the popup box move drag")
+	}
+	m = step(m, motion(px+pw/2+5, py+1+3))
+	m = step(m, release(px+pw/2+5, py+1+3))
+	if m.floatMove != nil {
+		t.Fatal("the release must end the move drag")
+	}
+	x1, y1, _, _ := m.popupTermRect()
+	if x1 != x0+5 || y1 != y0+3 {
+		t.Fatalf("the box must follow the drag: want %d,%d got %d,%d", x0+5, y0+3, x1, y1)
+	}
+	// The offset persists like the size delta (#774/#1714): project store
+	// entry plus the user-scoped mirror.
+	if !m.winSizes.Has(popupTermPosKey) {
+		t.Fatal("the release must persist the position offset in the project store")
+	}
+	if dx, dy := m.winSizes.Get(popupTermPosKey); dx != 5 || dy != 3 {
+		t.Fatalf("persisted offset = %d,%d, want 5,3", dx, dy)
+	}
+	if dx, dy := m.winSizesAll.Get(popupTermPosKey); dx != 5 || dy != 3 {
+		t.Fatalf("user-scoped mirror = %d,%d, want 5,3", dx, dy)
+	}
+}
+
+func TestPopupMoveOffsetClampsToScreen(t *testing.T) {
+	m := openTestPopup(t)
+	m.winSizes.Set(popupTermPosKey, 10_000, 10_000)
+	x, y, w, h := m.popupTermRect()
+	if x+w > m.width || y+h > m.height || x < 0 || y < 0 {
+		t.Fatalf("a huge stored offset must re-clamp on screen, got rect %d,%d %dx%d", x, y, w, h)
+	}
+}
+
+func TestTearOutTabKeepsSessionLiveAndFocusesPanel(t *testing.T) {
+	m := openTestPopup(t)
+	m, f := tearOutFirstTab(t, m)
+	if m.popup.inst.TabCount() != 1 {
+		t.Fatalf("the source box must shed the torn tab, got %d tabs", m.popup.inst.TabCount())
+	}
+	if !f.inst.ActiveTerminal().Running() {
+		t.Fatal("the torn-out session must keep running — no shell restart")
+	}
+	if m.floatFocused() != f || m.popupFocused() != f.inst {
+		t.Fatal("the fresh panel must take the keyboard")
+	}
+	if v := m.render(); !strings.Contains(v, floatGlobalOff) {
+		t.Fatal("the panel must render with the project-owned global toggle (○)")
+	}
+	// The panel's session stays resolvable for output/exit routing.
+	sess := f.inst.ActiveTerminal().SessionKey()
+	if m.terminalModelForSession(sess) == nil {
+		t.Fatal("panel sessions must resolve via terminalModelForSession")
+	}
+}
+
+func TestTearOutLastTabMovesWholeHost(t *testing.T) {
+	m := openTestPopup(t)
+	inst := m.popup.inst
+	sess := inst.ActiveTerminal().SessionKey()
+	m.tearOutPopupTab(inst, 0, 30, 20)
+	if m.popup.inst != nil {
+		t.Fatal("tearing out the box's only tab must collapse the box slot")
+	}
+	if len(m.floatTerms) != 1 || m.floatTerms[0].inst != inst {
+		t.Fatal("the single-tab source must re-home its whole host into the panel")
+	}
+	if got := m.floatTerms[0].inst.ActiveTerminal().SessionKey(); got != sess {
+		t.Fatalf("session must move unchanged, got %q want %q", got, sess)
+	}
+	if !m.popup.open {
+		t.Fatal("the layer must stay open — a panel still shows")
+	}
+	if m.popupFocused() != inst {
+		t.Fatal("the panel keeps the keyboard with the box gone")
+	}
+}
+
+func TestFloatPanelClickRaisesAndFocuses(t *testing.T) {
+	m := openTestPopup(t)
+	m.newPopupTerminalTab()
+	m.newPopupTerminalTab()
+	m.tearOutPopupTab(m.popup.inst, 0, 10, 5)
+	m.tearOutPopupTab(m.popup.inst, 0, 40, 5)
+	if len(m.floatTerms) != 2 {
+		t.Fatalf("test setup: want two panels, got %d", len(m.floatTerms))
+	}
+	lower, upper := m.floatTerms[0], m.floatTerms[1]
+	t.Cleanup(func() { lower.inst.CloseTerminalTabs(); upper.inst.CloseTerminalTabs() })
+	// Separate the panels so the lower one is clickable.
+	lower.x, lower.y, lower.w, lower.h = 0, 2, 46, 12
+	upper.x, upper.y, upper.w, upper.h = 50, 2, 46, 12
+	if m.floatFocused() != upper {
+		t.Fatal("test setup: the last torn-out panel owns the keyboard")
+	}
+	m = step(m, press(lower.x+10, lower.y+5))
+	m = step(m, release(lower.x+10, lower.y+5)) // settle the selection drag the body press armed
+	if m.floatTerms[len(m.floatTerms)-1] != lower {
+		t.Fatal("a click must raise the panel to the top of the z-order")
+	}
+	if m.floatFocused() != lower || m.popupFocused() != lower.inst {
+		t.Fatal("a click must focus the panel")
+	}
+	// A click on the popup box hands the keyboard back to it.
+	px, py, pw, ph := m.popupTermRect()
+	m = step(m, press(px+pw/2, py+ph/2))
+	m = step(m, release(px+pw/2, py+ph/2))
+	if m.floatFocused() != nil || m.popupFocused() != m.popup.inst {
+		t.Fatal("a box click must reclaim the keyboard from the panels")
+	}
+}
+
+func TestToggleHidesAndShowsWholeLayer(t *testing.T) {
+	m := openTestPopup(t)
+	m, f := tearOutFirstTab(t, m)
+	inst := m.popup.inst
+	out, _ := m.Update(TerminalPopupMsg{})
+	m = out.(Model)
+	if m.popup.open {
+		t.Fatal("the toggle must hide the whole layer")
+	}
+	if v := m.render(); strings.Contains(v, "POPUP TERMINAL") || strings.Contains(v, floatGlobalOff) {
+		t.Fatal("a hidden layer must not render box or panels")
+	}
+	out, _ = m.Update(TerminalPopupMsg{})
+	m = out.(Model)
+	if !m.popup.open || m.popup.inst != inst || len(m.floatTerms) != 1 || m.floatTerms[0] != f {
+		t.Fatal("the next toggle must reveal box and panels unchanged")
+	}
+	if m.popup.inst.TabCount() != 1 || f.inst.TabCount() != 1 {
+		t.Fatal("no shells may spawn on reveal — everything was retained")
+	}
+}
+
+func TestPopupResizeChordActsOnFocusedPanel(t *testing.T) {
+	m := openTestPopup(t)
+	m, f := tearOutFirstTab(t, m)
+	w0, h0 := f.w, f.h
+	bw0, bh0 := m.popupSize()
+	handled, out, _ := m.popupReservedKey("shift+super+right")
+	if !handled {
+		t.Fatal("the resize chord must stay reserved with a panel focused")
+	}
+	m = out.(Model)
+	f = m.floatTerms[0]
+	if f.w != w0+4 || f.h != h0 {
+		t.Fatalf("the chord must resize the focused panel: want %dx%d, got %dx%d", w0+4, h0, f.w, f.h)
+	}
+	if bw, bh := m.popupSize(); bw != bw0 || bh != bh0 {
+		t.Fatal("the box size must stay untouched while a panel owns the keyboard")
+	}
+}
+
+func TestExitedSessionClosesPanel(t *testing.T) {
+	m := openTestPopup(t)
+	m, f := tearOutFirstTab(t, m)
+	sess := f.inst.ActiveTerminal().SessionKey()
+	f.inst.CloseTerminalTabs() // end the shell like an exit would
+	out, _ := m.Update(terminal.ExitedMsg{Key: sess})
+	m = out.(Model)
+	if len(m.floatTerms) != 0 {
+		t.Fatal("the session's exit must close its panel")
+	}
+	if !m.popup.open || m.popup.inst == nil {
+		t.Fatal("the box must survive a panel's exit")
+	}
+	if m.popupFocused() != m.popup.inst {
+		t.Fatal("the keyboard must fall back to the box")
+	}
+}
+
+func TestGlobalPanelRidesAcrossProjectSwitch(t *testing.T) {
+	_, b := twoRoots(t)
+	m := openTestPopupWith(t, switchModel(t))
+	m, f := tearOutFirstTab(t, m)
+	// The global toggle sits at the title row's first cells (●/○).
+	m = step(m, press(f.x+paneContentX, f.y+1))
+	f = m.floatTerms[len(m.floatTerms)-1]
+	if !f.global {
+		t.Fatal("a click on the title-row button must mark the panel global")
+	}
+	sess := f.inst.ActiveTerminal().SessionKey()
+
+	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
+	m = out.(Model)
+	// The global panel rode across with its live session; the popup box and
+	// any project panels parked with workspace a.
+	if len(m.floatTerms) != 1 || m.floatTerms[0] != f {
+		t.Fatal("the global panel must ride into the fresh model")
+	}
+	if got := f.inst.ActiveTerminal().SessionKey(); got != sess || !f.inst.ActiveTerminal().Running() {
+		t.Fatal("the global session must keep running unchanged across the switch")
+	}
+	if !m.popup.open {
+		t.Fatal("a layer visible before the switch must stay visible after it")
+	}
+	if v := m.render(); !strings.Contains(v, floatGlobalOn) {
+		t.Fatal("the global panel must render (●) in the new project")
+	}
+	extras := m.ws.Peek(m.ws.Background()[0]).Aux.(wsExtras)
+	if len(extras.floats) != 0 {
+		t.Fatal("a global panel must not park in the workspace's Aux")
+	}
+	if extras.popup.inst == nil {
+		t.Fatal("the popup box itself still parks per project (#1407)")
+	}
+
+	// Switching back re-unites the restored project popup with the global
+	// panel still on top.
+	out, _ = m.Update(project.SwitchProjectMsg{Root: m.ws.Background()[0]})
+	m = out.(Model)
+	if m.popup.inst == nil {
+		t.Fatal("switching back must restore the project's popup box")
+	}
+	if len(m.floatTerms) != 1 || m.floatTerms[0].inst.ActiveTerminal().SessionKey() != sess {
+		t.Fatal("the global panel must still be there after switching back")
+	}
+}
+
+func TestProjectPanelParksAndDiesWithWorkspace(t *testing.T) {
+	_, b := twoRoots(t)
+	m := openTestPopupWith(t, switchModel(t))
+	m, f := tearOutFirstTab(t, m)
+	term := f.inst.ActiveTerminal()
+
+	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
+	m = out.(Model)
+	if len(m.floatTerms) != 0 {
+		t.Fatal("a project-owned panel must not follow into the new project")
+	}
+	root := m.ws.Background()[0]
+	extras := m.ws.Peek(root).Aux.(wsExtras)
+	if len(extras.floats) != 1 || extras.floats[0] != f {
+		t.Fatal("the project panel must park in the workspace's Aux")
+	}
+	if !term.Running() {
+		t.Fatal("parked panel sessions must keep running")
+	}
+	// Tearing the parked workspace down ends the panel's session like the
+	// popup's (#1407) — the global lifecycle rule only spares global panels.
+	teardownWorkspace(m.ws.Drop(root))
+	if term.Running() {
+		t.Fatal("the workspace teardown must end the parked panel session")
+	}
+}
+
+func TestQuitEndsGlobalPanelSession(t *testing.T) {
+	m := openTestPopup(t)
+	m, f := tearOutFirstTab(t, m)
+	m.toggleFloatTermGlobal(f)
+	term := f.inst.ActiveTerminal()
+	if !term.Running() {
+		t.Fatal("test setup: the panel session must be running")
+	}
+	if _, cmd := m.quit(); cmd == nil {
+		t.Fatal("quit must return the exit command")
+	}
+	if term.Running() {
+		t.Fatal("a global session ends with the app — quit must close it")
+	}
+}

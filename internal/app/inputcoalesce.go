@@ -217,10 +217,10 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 		cmd, _ := m.routeOverlayPaste(text)
 		return m, cmd
 	}
-	if m.popup.open && m.popup.inst != nil {
-		// The open popup terminal (#1398) owns the keyboard: bracketed
-		// pastes go to its focused shell — under broadcast (#1427) to both
-		// split sides — never the surfaces underneath.
+	if m.popupLayerOpen() {
+		// The open popup terminal layer (#1398, #1793) owns the keyboard:
+		// bracketed pastes go to its focused shell — under broadcast (#1427)
+		// to both box sides — never the surfaces underneath.
 		for _, term := range m.popupInputTerminals() {
 			term.PasteText(text)
 		}

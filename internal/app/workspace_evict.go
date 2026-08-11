@@ -65,9 +65,10 @@ func workspaceBusy(w *workspace.Workspace) bool {
 		if extras.dbg != nil && extras.dbg.sess != nil {
 			return true
 		}
-		// A parked popup terminal (#1407) with a running session dies with the
-		// workspace — ask first, like pane terminals.
-		for _, inst := range extras.popup.instances() {
+		// A parked popup terminal (#1407) or project-owned floating panel
+		// (#1793) with a running session dies with the workspace — ask first,
+		// like pane terminals. Global panels never park, so they never count.
+		for _, inst := range parkedPopupInstances(extras) {
 			for i := 0; i < inst.TabCount(); i++ {
 				if t := inst.TabTerminal(i); t != nil && t.Running() {
 					return true
@@ -104,7 +105,7 @@ func setWorkspaceTerminalsParked(w *workspace.Workspace, parked bool) {
 		}
 	}
 	if extras, ok := w.Aux.(wsExtras); ok {
-		for _, inst := range extras.popup.instances() {
+		for _, inst := range parkedPopupInstances(extras) {
 			for i := 0; i < inst.TabCount(); i++ {
 				if t := inst.TabTerminal(i); t != nil {
 					t.SetParked(parked)
@@ -112,6 +113,18 @@ func setWorkspaceTerminalsParked(w *workspace.Workspace, parked bool) {
 			}
 		}
 	}
+}
+
+// parkedPopupInstances returns every popup-layer tab host riding in a parked
+// workspace's Aux: the popup box's sides (#1407) plus the project-owned
+// floating panels (#1793). Global panels never enter Aux — they stay with the
+// live model and survive the workspace's whole lifecycle.
+func parkedPopupInstances(extras wsExtras) []*pane.Instance {
+	out := extras.popup.instances()
+	for _, f := range extras.floats {
+		out = append(out, f.inst)
+	}
+	return out
 }
 
 // teardownWorkspace releases a dropped workspace's live resources: every
@@ -141,8 +154,10 @@ func teardownWorkspace(w *workspace.Workspace) {
 			_ = sess.Disconnect()
 			go sess.Close()
 		}
-		for _, inst := range extras.popup.instances() {
-			// Parked popup terminal shells (#1407) end tidily, like the quit path.
+		for _, inst := range parkedPopupInstances(extras) {
+			// Parked popup terminal and floating-panel shells (#1407, #1793)
+			// end tidily, like the quit path. Global panels are not in Aux —
+			// a workspace teardown never reaps them (#1793 lifecycle rule).
 			inst.CloseTerminalTabs()
 		}
 	}
