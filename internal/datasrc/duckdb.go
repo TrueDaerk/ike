@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -154,7 +155,10 @@ type duckSource struct {
 	cli  duckCLI
 	path string
 	// cols caches one table's columns and types; the projection needs the
-	// types and they cannot change under a read-only view of the file.
+	// types and they cannot change under a read-only view of the file. mu
+	// guards it: a background count (#1795) runs while the pane fetches a
+	// page, so the map has two goroutines on it.
+	mu   sync.Mutex
 	cols map[string][]duckColumn
 }
 
@@ -183,17 +187,35 @@ func OpenDuckDB(path string) (Source, error) {
 	return s, nil
 }
 
+// tableListQuery lists the browsable objects with the size DuckDB's own
+// catalogue already knows. Only user schemas: DuckDB's information_schema also
+// lists its own catalogue tables and the pg_catalog compatibility layer. The
+// size comes from duckdb_tables().estimated_size — metadata, not a scan
+// (#1795) — and is NULL for a view, which has no stored size.
+const tableListQuery = `SELECT t.table_name AS name,
+                               CASE WHEN t.table_type = 'VIEW' THEN 'view' ELSE 'table' END AS type,
+                               d.estimated_size AS est
+                        FROM information_schema.tables t
+                        LEFT JOIN duckdb_tables() d
+                               ON d.table_name = t.table_name AND d.schema_name = t.table_schema
+                        WHERE t.table_schema NOT IN ('information_schema', 'pg_catalog')
+                        ORDER BY type, name`
+
+// tableListPlainQuery is the same listing without the size join, for a CLI
+// whose duckdb_tables() has no estimated_size: the sidebar then shows "?"
+// until the background count lands, rather than failing the open.
+const tableListPlainQuery = `SELECT table_name AS name,
+                                    CASE WHEN table_type = 'VIEW' THEN 'view' ELSE 'table' END AS type
+                             FROM information_schema.tables
+                             WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+                             ORDER BY type, name`
+
 func (s *duckSource) Tables() ([]Table, error) {
-	// Only user schemas: DuckDB's information_schema also lists its own
-	// catalogue tables and the pg_catalog compatibility layer.
-	const q = `SELECT table_name AS name,
-	                  CASE WHEN table_type = 'VIEW' THEN 'view' ELSE 'table' END AS type
-	           FROM information_schema.tables
-	           WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
-	           ORDER BY type, name`
-	out, err := s.cli.query(s.path, q)
+	out, err := s.cli.query(s.path, tableListQuery)
 	if err != nil {
-		return nil, err
+		if out, err = s.cli.query(s.path, tableListPlainQuery); err != nil {
+			return nil, err
+		}
 	}
 	_, rows, err := decodeDuckRows(out)
 	if err != nil {
@@ -204,61 +226,37 @@ func (s *duckSource) Tables() ([]Table, error) {
 		if len(r) < 2 {
 			continue
 		}
-		tables = append(tables, Table{Name: r[0].Text, Type: r[1].Text, Rows: -1})
+		t := Table{Name: r[0].Text, Type: r[1].Text, Rows: -1}
+		if len(r) > 2 && !r[2].Null {
+			if n := parseInt64(r[2].Text); n >= 0 {
+				t.Rows, t.Estimated = n, true
+			}
+		}
+		tables = append(tables, t)
 	}
-	s.fillCounts(tables)
 	return tables, nil
 }
 
-// fillCounts asks for every row count in one invocation — a process per table
-// would make a wide catalogue crawl. A batch that fails (a view over a
-// dropped table takes the whole UNION with it) falls back to counting each
-// object on its own, so one broken view costs only its own "?" in the
-// sidebar.
-func (s *duckSource) fillCounts(tables []Table) {
-	if len(tables) == 0 {
-		return
-	}
-	var parts []string
-	for _, t := range tables {
-		parts = append(parts, fmt.Sprintf("SELECT %s AS n, (SELECT count(*) FROM %s) AS c",
-			quoteString(t.Name), quoteIdent(t.Name)))
-	}
-	if out, err := s.cli.query(s.path, strings.Join(parts, " UNION ALL ")); err == nil {
-		if _, rows, err := decodeDuckRows(out); err == nil {
-			counts := map[string]int64{}
-			for _, r := range rows {
-				if len(r) < 2 {
-					continue
-				}
-				counts[r[0].Text] = parseInt64(r[1].Text)
-			}
-			for i := range tables {
-				if n, ok := counts[tables[i].Name]; ok {
-					tables[i].Rows = n
-				}
-			}
-			return
+// Count is the exact row count of one object, optionally filtered — the full
+// scan the catalogue's estimate saves the open (#1795), run in the background
+// by the pane.
+func (s *duckSource) Count(table, clause string) (int64, error) {
+	q := `SELECT count(*) AS c FROM ` + quoteIdent(table)
+	if clause = normalizeClause(clause); clause != "" {
+		if err := checkClause(clause); err != nil {
+			return -1, err
 		}
+		q = filteredCount(`SELECT * FROM `+quoteIdent(table), clause)
 	}
-	for i := range tables {
-		tables[i].Rows = s.count(tables[i].Name)
-	}
-}
-
-// count returns one object's row count, -1 when it cannot be counted.
-func (s *duckSource) count(table string) int64 {
-	return s.countQuery(`SELECT count(*) AS c FROM ` + quoteIdent(table))
-}
-
-// countQuery runs a count statement and reads its single cell, -1 when the
-// query fails (a broken filter clause, a view over a dropped table).
-func (s *duckSource) countQuery(q string) int64 {
 	out, err := s.cli.query(s.path, q)
 	if err != nil {
-		return -1
+		return -1, err
 	}
-	return duckCount(out)
+	n := duckCount(out)
+	if n < 0 {
+		return -1, fmt.Errorf("cannot count %q", table)
+	}
+	return n, nil
 }
 
 // duckCount reads the single cell of a count result, -1 when there is none.
@@ -275,7 +273,7 @@ func (s *duckSource) Page(table string, offset, limit int64) (Page, error) {
 	if err != nil {
 		return Page{}, err
 	}
-	page := Page{Offset: offset, Total: s.count(table)}
+	page := Page{Offset: offset, Total: -1} // the total is Count's job (#1795)
 	for _, c := range cols {
 		page.Columns = append(page.Columns, c.Name)
 	}
@@ -320,7 +318,7 @@ func (s *duckSource) PageWhere(table, clause string, offset, limit int64) (Page,
 		return Page{}, err
 	}
 	base := fmt.Sprintf(`SELECT %s FROM %s`, duckProjection(cols), quoteIdent(table))
-	page := Page{Offset: offset, Total: s.countQuery(filteredCount(base, clause))}
+	page := Page{Offset: offset, Total: -1} // counted in the background (#1795)
 	for _, c := range cols {
 		page.Columns = append(page.Columns, c.Name)
 	}
@@ -366,7 +364,10 @@ func duckProjection(cols []duckColumn) string {
 
 // columns describes one table or view, caching the result.
 func (s *duckSource) columns(table string) ([]duckColumn, error) {
-	if c, ok := s.cols[table]; ok {
+	s.mu.Lock()
+	c, ok := s.cols[table]
+	s.mu.Unlock()
+	if ok {
 		return c, nil
 	}
 	out, err := s.cli.query(s.path, `DESCRIBE `+quoteIdent(table))
@@ -389,7 +390,9 @@ func (s *duckSource) columns(table string) ([]duckColumn, error) {
 		}
 		cols = append(cols, c)
 	}
+	s.mu.Lock()
 	s.cols[table] = cols
+	s.mu.Unlock()
 	return cols, nil
 }
 

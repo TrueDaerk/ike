@@ -145,9 +145,35 @@ func parquetLeafRange(c *parquet.Column) (int, int) {
 }
 
 // Tables lists the file as the single browsable object — a Parquet file holds
-// exactly one table.
+// exactly one table. Its row count is exact and free: the footer stores it, so
+// nothing here estimates and no background count ever runs (#1795).
 func (s *parquetSource) Tables() ([]Table, error) {
 	return []Table{{Name: s.name, Type: "table", Rows: s.pq.NumRows()}}, nil
+}
+
+// Count returns the file's row count from the footer, or — under a filter
+// (#1777) — the count DuckDB reports for the clause, which is the one case
+// that costs a scan and therefore runs in the background (#1795).
+func (s *parquetSource) Count(_, clause string) (int64, error) {
+	if clause = normalizeClause(clause); clause == "" {
+		return s.pq.NumRows(), nil
+	}
+	if err := checkClause(clause); err != nil {
+		return -1, err
+	}
+	bin, err := lookDuckDB()
+	if err != nil {
+		return -1, parquetFilterTool(err)
+	}
+	out, err := duckCLI{bin: bin}.queryMem(filteredCount(s.filterBase(), clause))
+	if err != nil {
+		return -1, err
+	}
+	n := duckCount(out)
+	if n < 0 {
+		return -1, fmt.Errorf("cannot count %s", s.name)
+	}
+	return n, nil
 }
 
 // Page reads up to limit rows starting at offset. The reader seeks to the row
@@ -247,10 +273,9 @@ func (s *parquetSource) PageWhere(table, clause string, offset, limit int64) (Pa
 	}
 	cli := duckCLI{bin: bin}
 	base := s.filterBase()
+	// One invocation, not two: the filtered total is counted in the background
+	// through Count (#1795).
 	page := Page{Offset: offset, Total: -1}
-	if out, err := cli.queryMem(filteredCount(base, clause)); err == nil {
-		page.Total = duckCount(out)
-	}
 	out, err := cli.queryMem(filteredQuery(base, clause, offset, limit))
 	if err != nil {
 		return Page{}, err

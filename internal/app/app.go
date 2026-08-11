@@ -2634,6 +2634,9 @@ func (m Model) Init() tea.Cmd {
 	// the sender (and again after a project switch), so the streamed results
 	// land and the status-line count is live without opening the overlay.
 	m.todo.Rescan()
+	// Every restored data viewer opens its database in the background (#1795),
+	// so a workspace holding a huge database still comes up instantly.
+	cmds = append(cmds, m.initDataPanes()...)
 	// Highlight any files restored from the previous session at startup, before
 	// the user edits them, and announce each to the plugin hooks (#332): the
 	// restore paths (restoreLayout/restoreSession) load editors directly via
@@ -4133,9 +4136,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case OpenDataMsg:
 		// data.view (#1764): a database file opens as a table browser,
-		// never as a raw text buffer.
-		m.openDataPane(msg.Path)
-		return m, nil
+		// never as a raw text buffer. The database itself opens in the
+		// background (#1795).
+		return m, m.openDataPane(msg.Path)
+
+	case dataview.ResultMsg:
+		// A data viewer's background open or row count landed (#1795).
+		return m, m.dataResult(msg)
 
 	case dataview.ShowSchemaMsg:
 		// Schema key in the data pane: the table's DDL, read-only.

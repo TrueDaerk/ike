@@ -89,9 +89,12 @@ mouse reporting via `tea.WithMouseCellMotion` in `cmd/ike`; the root model's
   existing pane set; it never creates or destroys splits. Release commits and
   persists.
 
-One gesture is active at a time. While a floating shell (Roadmap 0035) is open,
-mouse input is ignored — overlays are composited above the tiling and are not
-draggable. Wheel events are ignored by the drag machine.
+One gesture is active at a time. While any layer of the floating stack
+(Roadmap 0035, #1237) is open, the drag machine is inert: mouse input routes to
+the topmost floating pane instead (outside-click close, border resize — see
+[Floating Shell](/architecture/floating-shell.md)); floating panes are
+composited above the tiling and are not draggable. Wheel events are ignored by
+the drag machine.
 
 **Wheel coalescing (#238).** Wheel events do not apply immediately: the root
 model folds them into a pending batch (consecutive events with the same cell,

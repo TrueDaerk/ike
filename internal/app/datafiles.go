@@ -41,25 +41,64 @@ func init() { registry.Register(dataProvider{}) }
 
 // openDataPane opens (or refocuses) the data viewer for path, split off the
 // leaf viewerSplitTarget picks — the pane the user last worked in, never the
-// explorer they opened the file from (#1779).
-func (m *Model) openDataPane(path string) {
+// explorer they opened the file from (#1779). The pane appears at once and
+// returns the command that opens the database behind it (#1795), so a
+// multi-gigabyte file costs the IDE no frame.
+func (m *Model) openDataPane(path string) tea.Cmd {
 	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
 		return c.Kind() == pane.KindData && c.Data().Path() == path
 	}); ok {
 		m.focusContentAt(hostKey, tabIdx) // may live in a tab (#1778)
-		return
+		return nil
 	}
 	target := m.viewerSplitTarget()
 	key := m.activeWS().Panes.AddDataView(path)
 	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneRight)
 	if !ok {
 		m.activeWS().Panes.Close(key)
-		return
+		return nil
 	}
 	m.activeWS().Tree = tree
 	m.layout()
 	m.setFocus(key)
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	inst := m.activeWS().Panes.Get(key)
+	if inst == nil {
+		return nil
+	}
+	return inst.Init()
+}
+
+// dataResult routes one background data-viewer result (#1795) to the pane that
+// asked for it — dedicated or tab-nested (#1778), matched by the model's own
+// key. A result whose pane is gone is discarded, which releases the database
+// handle an open carries.
+func (m *Model) dataResult(msg dataview.ResultMsg) tea.Cmd {
+	_, _, inst, ok := m.findContent(func(c *pane.Instance) bool {
+		return c.Kind() == pane.KindData && c.Data().Key() == msg.Key
+	})
+	if !ok {
+		msg.Discard()
+		return nil
+	}
+	return inst.Update(msg)
+}
+
+// initDataPanes starts the background open of every data viewer that has not
+// begun one — the restore paths (layout, content tabs, a project switch) build
+// their panes without a command of their own, so the model's Init is where
+// they get going (#1795).
+func (m Model) initDataPanes() []tea.Cmd {
+	var cmds []tea.Cmd
+	m.contentInstances(func(_ string, _ int, inst *pane.Instance) bool {
+		if inst.Kind() == pane.KindData {
+			if cmd := inst.Init(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return true
+	})
+	return cmds
 }
 
 // showTableSchema shows one table's DDL in a read-only editor tab (#1764).

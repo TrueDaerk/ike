@@ -73,12 +73,12 @@ func TestParquetFileOpensInTheGrid(t *testing.T) {
 	}
 
 	// Paging walks the file without a full load.
-	m.Update(key("tab")) // sidebar -> grid
-	m.Update(key("n"))
+	feed(t, &m, key("tab")) // sidebar -> grid
+	feed(t, &m, key("n"))
 	if m.PageOffset() != PageSize {
 		t.Fatalf("offset = %d after n, want %d", m.PageOffset(), PageSize)
 	}
-	m.Update(key("n"))
+	feed(t, &m, key("n"))
 	if m.PageOffset() != 2*PageSize || m.PageRows() != 1200-2*PageSize {
 		t.Fatalf("last page = %d rows at %d", m.PageRows(), m.PageOffset())
 	}
@@ -88,13 +88,13 @@ func TestParquetFileOpensInTheGrid(t *testing.T) {
 // metadata — the interesting part of a Parquet file — to the read-only buffer.
 func TestParquetSchemaKeyShowsTheSchemaView(t *testing.T) {
 	m := newPane(t, writeFixtureParquet(t))
-	cmd := m.Update(key("s"))
-	if cmd == nil {
-		t.Fatal("s produced no command")
+	out := feed(t, &m, key("s"))
+	if len(out) != 1 {
+		t.Fatalf("s produced no schema message, got %v", out)
 	}
-	msg, ok := cmd().(ShowSchemaMsg)
+	msg, ok := out[0].(ShowSchemaMsg)
 	if !ok {
-		t.Fatalf("s produced %T, want ShowSchemaMsg", cmd())
+		t.Fatalf("s produced %T, want ShowSchemaMsg", out[0])
 	}
 	for _, want := range []string{"1200 rows", "row groups", "REQUIRED", "OPTIONAL", "message "} {
 		if !strings.Contains(msg.SQL, want) {
