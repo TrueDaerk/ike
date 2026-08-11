@@ -1,5 +1,22 @@
 # Log
 
+## 2026-08-11 (editor: kwarg conceals in multi-line calls, #1773)
+
+- **Keyword-argument conceals no longer stop at the line break** (#1773, fixes
+  #1761): the call scan in `internal/consthint` was line-local — the
+  parenthesis depth restarted at every line, so a formatted call put its
+  arguments out of reach. It now runs as one scanner over the buffer, carrying
+  depth and the argument-slot state across lines, so
+  `RotatingFileHandler(\n  "app.log", maxBytes=10 * 1024 * 1024, …)` draws its
+  `10 MiB` on the continuation line and PHP named arguments do the same.
+- **Carried depth needs carried lexical state**: the scanner tracks Python
+  triple-quoted strings and PHP `/* … */` blocks across lines (their contents
+  conceal nothing) and forgets any open call on what it cannot read to the end
+  of a line — an unterminated one-line string, a heredoc — so a `(` inside a
+  string never fabricates an argument context. A line inside an open call is
+  not a statement, so the lowercase-assignment shapes skip it and each kwarg
+  reports exactly once. Updated [Editor](/architecture/editor.md).
+
 ## 2026-08-10 (editor: unit-gated conceals for variables and kwargs, #1761)
 
 - **Constant conceals reach lowercase variables and keyword arguments**

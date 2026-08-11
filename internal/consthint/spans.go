@@ -40,17 +40,31 @@ import (
 // literalHint the config formats use; everything else runs the expression
 // evaluator, and a right-hand side holding anything beyond literal arithmetic
 // produces nothing.
+//
+// The kwarg scan runs over the whole buffer rather than one line at a time
+// (#1773): a formatted call puts its arguments on continuation lines, so the
+// parenthesis depth and the argument-slot state are carried across the line
+// break by callScan. The lexical states that would make a carried depth lie —
+// a Python triple-quoted string, a PHP block comment or heredoc — are tracked
+// with it, and anything the scanner cannot read to the end of the line
+// conservatively drops back to depth zero instead of guessing.
 
 // PythonSpans produces the constant conceals for a Python buffer, ready to
 // append to the language's lang.Language.Spans output.
 func PythonSpans(lines []string) []lang.Span {
 	var out []lang.Span
+	sc := callScan{f: FlavorPython}
 	for li, line := range lines {
 		runes := []rune(line)
-		if s, ok := pythonLine(li, runes); ok {
-			out = append(out, s)
+		// Inside an open call or an open string a line is not a statement, so
+		// the assignment shapes stay out of it — the kwarg scan owns those
+		// lines and would otherwise double-report `f(\n  duration=5000\n)`.
+		if !sc.open() {
+			if s, ok := pythonLine(li, runes); ok {
+				out = append(out, s)
+			}
 		}
-		out = append(out, callArgSpans(li, runes, FlavorPython)...)
+		out = append(out, sc.line(li, runes)...)
 	}
 	return out
 }
@@ -86,16 +100,19 @@ func GoSpans(lines []string) []lang.Span {
 // `define()` declarations.
 func PHPSpans(lines []string) []lang.Span {
 	var out []lang.Span
+	sc := callScan{f: FlavorPHP}
 	for li, line := range lines {
 		runes := []rune(line)
-		if s, ok := phpConstLine(li, runes); ok {
-			out = append(out, s)
-		} else if s, ok := phpDefineLine(li, runes); ok {
-			out = append(out, s)
-		} else if s, ok := phpVarLine(li, runes); ok {
-			out = append(out, s)
+		if !sc.open() {
+			if s, ok := phpConstLine(li, runes); ok {
+				out = append(out, s)
+			} else if s, ok := phpDefineLine(li, runes); ok {
+				out = append(out, s)
+			} else if s, ok := phpVarLine(li, runes); ok {
+				out = append(out, s)
+			}
 		}
-		out = append(out, callArgSpans(li, runes, FlavorPHP)...)
+		out = append(out, sc.line(li, runes)...)
 	}
 	return out
 }
@@ -176,50 +193,121 @@ func unitContextName(name string) bool {
 	return ok
 }
 
-// callArgSpans scans one line for keyword-argument literals inside call
-// parentheses: Python `f(name=expr)`, PHP named arguments `f(name: expr)`.
-// The scan is quote-aware — a `"duration=5"` inside a string never fires —
-// and only an identifier directly after `(` or `,` is an argument name, so
-// comparisons (`f(a == 5)`) and PHP `::`/ternary operands never match. Each
-// qualifying kwarg conceals independently under unitContextName plus the
-// evaluator's safety rule.
-func callArgSpans(li int, runes []rune, f Flavor) []lang.Span {
+// callScan finds keyword-argument literals inside call parentheses:
+// Python `f(name=expr)`, PHP named arguments `f(name: expr)`. The scan is
+// quote-aware — a `"duration=5"` inside a string never fires — and only an
+// identifier directly after `(` or `,` is an argument name, so comparisons
+// (`f(a == 5)`) and PHP `::`/ternary operands never match. Each qualifying
+// kwarg conceals independently under unitContextName plus the evaluator's
+// safety rule.
+//
+// One scanner runs over the whole buffer (#1773) so a call may span lines:
+// depth and argPos survive the line break, and so do the two multi-line
+// lexical states that a line-local scan could not see — a Python
+// triple-quoted string and a PHP `/* … */` block. Anything the scanner cannot
+// finish reading (an unterminated one-line string, a PHP heredoc) drops the
+// state back to "no open call", the conservative reading: at depth zero
+// nothing conceals.
+type callScan struct {
+	f      Flavor
+	depth  int
+	argPos bool // the previous significant rune opened an argument slot
+	triple rune // quote of an open Python triple-quoted string, 0 when none
+	block  bool // inside an open PHP /* … */ comment
+}
+
+// open reports whether the scanner sits inside a call, a string or a comment
+// that started on an earlier line — in which case the current line is not a
+// statement and the assignment shapes must not read it.
+func (c *callScan) open() bool { return c.depth > 0 || c.triple != 0 || c.block }
+
+// reset drops any open call context. Used when the line ends in something the
+// scanner cannot follow across the break.
+func (c *callScan) reset() {
+	c.depth, c.argPos = 0, false
+}
+
+// line scans one line, continuing whatever state the previous line left.
+func (c *callScan) line(li int, runes []rune) []lang.Span {
 	var out []lang.Span
-	depth := 0
-	argPos := false // the previous significant rune opened an argument slot
-	for i := 0; i < len(runes); {
+	i := 0
+	if c.triple != 0 {
+		end, ok := tripleEnd(runes, 0, c.triple)
+		if !ok {
+			return nil // still inside the string; depth stays as it was
+		}
+		c.triple, i = 0, end
+	}
+	if c.block {
+		end, ok := blockEnd(runes, 0)
+		if !ok {
+			return nil
+		}
+		c.block, i = false, end
+	}
+	for i < len(runes) {
 		r := runes[i]
 		switch {
 		case r == '#':
+			return out // a comment ends the line, leaving the depth intact
+		case c.f == FlavorPHP && r == '/' && i+1 < len(runes) && runes[i+1] == '/':
 			return out
-		case f == FlavorPHP && r == '/' && i+1 < len(runes) && (runes[i+1] == '/' || runes[i+1] == '*'):
+		case c.f == FlavorPHP && r == '/' && i+1 < len(runes) && runes[i+1] == '*':
+			end, ok := blockEnd(runes, i+2)
+			if !ok {
+				c.block = true
+				return out
+			}
+			i = end // the comment closed here; the code after it still counts
+		case c.f == FlavorPHP && r == '<' && i+2 < len(runes) &&
+			runes[i+1] == '<' && runes[i+2] == '<':
+			// A heredoc/nowdoc body is not code and its terminator is not
+			// worth tracking: forget the call context rather than misread it.
+			c.reset()
 			return out
 		case r == '\'' || r == '"':
-			i = skipQuoted(runes, i)
+			if c.f == FlavorPython && i+2 < len(runes) && runes[i+1] == r && runes[i+2] == r {
+				end, ok := tripleEnd(runes, i+3, r)
+				if !ok {
+					c.triple = r
+					return out
+				}
+				i = end
+				break
+			}
+			end, ok := quoteEnd(runes, i)
+			if !ok {
+				// The string runs past the line end (a PHP literal with a
+				// newline in it, a stray quote): everything after it is
+				// unreadable, so no call stays open.
+				c.reset()
+				return out
+			}
+			i = end
 		case r == '(':
-			depth++
-			argPos = true
+			c.depth++
+			c.argPos = true
 			i++
 		case r == ',':
-			argPos = depth > 0
+			c.argPos = c.depth > 0
 			i++
 		case r == ')':
-			if depth > 0 {
-				depth--
+			if c.depth > 0 {
+				c.depth--
 			}
-			argPos = false
+			c.argPos = false
 			i++
 		case isSpace(r):
 			i++
-		case argPos && depth > 0 && (isLetter(r) || r == '_'):
-			s, next, ok := kwargAt(li, runes, i, f)
+		case c.argPos && c.depth > 0 && (isLetter(r) || r == '_'):
+			s, next, ok := kwargAt(li, runes, i, c.f)
 			if ok {
 				out = append(out, s)
 			}
-			argPos = false
+			c.argPos = false
 			i = next
 		default:
-			argPos = false
+			c.argPos = false
 			i++
 		}
 	}
@@ -285,20 +373,46 @@ scan:
 	return s, end, true
 }
 
-// skipQuoted returns the index just past the string literal opening at rune
-// index i, honouring backslash escapes; an unterminated string runs to the
-// line end.
-func skipQuoted(runes []rune, i int) int {
+// quoteEnd returns the index just past the string literal opening at rune
+// index i, honouring backslash escapes. An unterminated string reports false —
+// the scanner cannot tell how far it runs, so it stops trusting the line.
+func quoteEnd(runes []rune, i int) (int, bool) {
 	q := runes[i]
 	for i++; i < len(runes); i++ {
 		switch runes[i] {
 		case '\\':
 			i++
 		case q:
-			return i + 1
+			return i + 1, true
 		}
 	}
-	return len(runes)
+	return len(runes), false
+}
+
+// tripleEnd returns the index just past the closing triple quote of kind q
+// searched from rune index i, and whether this line holds one.
+func tripleEnd(runes []rune, i int, q rune) (int, bool) {
+	for ; i < len(runes); i++ {
+		if runes[i] == '\\' {
+			i++
+			continue
+		}
+		if runes[i] == q && i+2 < len(runes) && runes[i+1] == q && runes[i+2] == q {
+			return i + 3, true
+		}
+	}
+	return len(runes), false
+}
+
+// blockEnd returns the index just past the `*/` searched from rune index i,
+// and whether this line holds one.
+func blockEnd(runes []rune, i int) (int, bool) {
+	for ; i+1 < len(runes); i++ {
+		if runes[i] == '*' && runes[i+1] == '/' {
+			return i + 2, true
+		}
+	}
+	return len(runes), false
 }
 
 // --- Go ----------------------------------------------------------------------
