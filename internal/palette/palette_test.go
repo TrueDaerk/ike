@@ -2,6 +2,7 @@ package palette
 
 import (
 	"charm.land/lipgloss/v2"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -26,9 +27,12 @@ func owned(id, title string, scope plugin.Scope) registry.OwnedCommand {
 
 func runes(s string) tea.KeyPressMsg { return tea.KeyPressMsg{Text: s} }
 
-// fileMode returns an "@" mode backed by a fixed file list (no disk walk).
+// fileMode returns an "@" mode backed by a fixed file list (no disk walk) and
+// with the home-anchored filesystem fallback disabled (#1775), so results stay
+// independent of the machine the test runs on. Tests that exercise the home
+// fallback set the anchor themselves.
 func fileMode(paths ...string) *FileMode {
-	return &FileMode{walk: func(string) []string { return paths }}
+	return &FileMode{walk: func(string) []string { return paths }, home: func() string { return "" }}
 }
 
 func TestPrefixRouting(t *testing.T) {
@@ -406,6 +410,70 @@ func TestTabInertOnNonCompleterMode(t *testing.T) {
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if p.query != ":wri" {
 		t.Fatalf("tab on a non-completer mode must be inert, got %q", p.query)
+	}
+}
+
+// TestTabCompletesFromSelectionInAnchoredFinder guards #1775: in the anchored
+// '@' finder tab adopts the selected fuzzy candidate as the query, so typing a
+// fragment and pressing tab yields the full path — the shell/JetBrains
+// behavior. The completed query still selects the same file.
+func TestTabCompletesFromSelectionInAnchoredFinder(t *testing.T) {
+	f := fileMode("internal/app/app.go", "internal/palette/palette.go")
+	p := New(Config{DefaultPrefix: '@'}, f)
+	p.SetSize(80, 24)
+	p.OpenAnchored(Context{Root: "/proj"}, '@', 2, 3, 40)
+	p.Update(runes("appgo"))
+	if len(p.items) == 0 {
+		t.Fatal("query must produce a candidate to complete from")
+	}
+	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if p.query != "internal/app/app.go" {
+		t.Fatalf("tab must adopt the selected candidate, got %q", p.query)
+	}
+	if p.cur != len([]rune(p.query)) {
+		t.Fatalf("cursor = %d, want end of the completed query", p.cur)
+	}
+	if len(p.items) == 0 || p.items[0].Title != "internal/app/app.go" {
+		t.Fatalf("completed query must still select the file, got %v", p.items)
+	}
+}
+
+// TestTabCompletesFromSelectionDescendsDirectory guards #1775: adopting a
+// directory row keeps its trailing separator, so the completed query is a path
+// query and the list already shows the directory's contents.
+func TestTabCompletesFromSelectionDescendsDirectory(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "outside-dir", "inner"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f := fileMode()
+	p := New(Config{DefaultPrefix: '@'}, f)
+	p.SetSize(80, 24)
+	p.OpenAnchored(Context{Root: root}, '@', 2, 3, 40)
+	p.Update(runes("outside"))
+	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	wantQuery := filepath.Join(root, "outside-dir") + string(filepath.Separator)
+	if p.query != wantQuery {
+		t.Fatalf("tab on a directory row = %q, want %q", p.query, wantQuery)
+	}
+	if len(p.items) != 1 || !strings.HasSuffix(p.items[0].Title, "inner"+string(filepath.Separator)) {
+		t.Fatalf("completed directory query must list its contents, got %v", p.items)
+	}
+}
+
+// TestSideModeTabStillTogglesColumns guards #1775 against a regression of
+// #778: with a left column open tab switches focus, it never completes.
+func TestSideModeTabStillTogglesColumns(t *testing.T) {
+	p := New(Config{DefaultPrefix: '@'}, fileMode("a.go"))
+	p.SetSize(80, 24)
+	p.Open(Context{Root: "/proj"})
+	p.sideItems = []Item{{Title: "left"}}
+	p.Update(runes("a"))
+	p.sideItems = []Item{{Title: "left"}}
+	before := p.query
+	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if !p.sideFocus || p.query != before {
+		t.Fatalf("side-column tab must toggle focus, not complete: focus=%v query=%q", p.sideFocus, p.query)
 	}
 }
 

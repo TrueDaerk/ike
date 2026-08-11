@@ -2,6 +2,7 @@ package palette
 
 import (
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,6 +15,11 @@ import (
 // stalls the palette. The cap is generous; very large repos rely on the query to
 // narrow results rather than on listing everything.
 const maxFiles = 10000
+
+// maxFsFallback caps the filesystem rows appended below the project matches
+// (#1775), per anchor (project root, home). The fallback is a reachability
+// affordance, not a browser — a long list would bury the project hits.
+const maxFsFallback = 8
 
 // FileMode is the "@" mode: a fuzzy file finder over the project tree. It matches
 // the query against each file's path relative to the root (directory segments
@@ -28,6 +34,12 @@ type FileMode struct {
 	// walk lists project-relative file paths under root. Injectable for tests;
 	// defaults to walkProject.
 	walk func(root string) []string
+
+	// home resolves the home directory the second filesystem fallback anchor
+	// is taken from (#1775). Injectable for tests — a test that returns ""
+	// keeps the fallback project-root-only and therefore deterministic.
+	// Defaults to os.UserHomeDir.
+	home func() string
 
 	// usage is the optional per-file selection counter (#1419), keyed by the
 	// same path the emitted OpenFileMsg carries; nil-safe. Among equal fuzzy
@@ -52,15 +64,17 @@ func (f *FileMode) SetUsage(u *Usage) { f.usage = u }
 func (f *FileMode) Prefix() rune { return '@' }
 
 // Placeholder implements Mode.
-func (f *FileMode) Placeholder() string { return "Find a file… (/, ~/ for any path)" }
+func (f *FileMode) Placeholder() string { return "Find a file… (tab completes; /, ~/ any path)" }
 
 // Results implements Mode. With an empty query it lists files in path order;
 // with a query it fuzzy-matches the relative path and ranks by score, then
 // usage count (#1419), then path. A query typed as a filesystem path (#1433:
 // leading /, ~/, ./ or ../) is served by the shared pathcomplete engine
 // instead — the same candidates the ';' picker produces — so '@' also reaches
-// files outside the project; a non-path query with no project match falls
-// back to filesystem candidates shown by absolute path.
+// files outside the project. Below the project matches every non-empty query
+// also offers filesystem candidates for the same text (#1775), so a file like
+// ~/notes.txt is reachable by typing a fragment of its name instead of its
+// whole path.
 func (f *FileMode) Results(query string, cx Context) []Item {
 	if isPathQuery(query) {
 		return pathItems(query, '@')
@@ -95,16 +109,19 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 		return out[i].path < out[j].path
 	})
 	items := make([]Item, len(out))
+	seen := make(map[string]bool, len(out))
 	for i, s := range out {
+		abs := filepath.Join(cx.Root, s.path)
+		seen[expandedAbs(abs)] = true
 		items[i] = Item{
 			Title: s.path,
 			Spans: s.spans,
 			Score: s.score,
-			Msg:   OpenFileMsg{Path: filepath.Join(cx.Root, s.path)},
+			Msg:   OpenFileMsg{Path: abs},
 		}
 	}
-	if len(items) == 0 && strings.TrimSpace(query) != "" {
-		return fsFallbackItems(cx.Root, query)
+	if strings.TrimSpace(query) != "" {
+		items = append(items, f.fsFallbackItems(cx.Root, query, seen)...)
 	}
 	return items
 }
@@ -118,7 +135,9 @@ func isPathQuery(q string) bool {
 }
 
 // Complete implements Completer (#1433): tab extends a path query through the
-// shared engine, exactly like the ';' picker; fuzzy queries stay inert.
+// shared engine, exactly like the ';' picker. A fuzzy query has no textual
+// completion of its own — it is completed from the selected row instead
+// (CompleteItem, #1775).
 func (f *FileMode) Complete(query string) string {
 	if isPathQuery(query) {
 		return pathcomplete.Complete(query).Completed
@@ -126,24 +145,83 @@ func (f *FileMode) Complete(query string) string {
 	return query
 }
 
-// fsFallbackItems (#1433) serves a non-path query that matched nothing in the
-// project walk: the same prefix completion the path queries use, anchored at
-// root, with every hit shown by absolute path so out-of-project results stay
-// visually distinct from the project-relative fuzzy matches. Project matches
-// always rank above these — the fallback only exists when there are none.
-func fsFallbackItems(root, query string) []Item {
-	res := pathcomplete.Complete(filepath.Join(root, query))
-	items := make([]Item, 0, len(res.Candidates))
-	for _, c := range res.Candidates {
-		if strings.HasSuffix(c, string(filepath.Separator)) {
-			abs := expandedAbs(c) + string(filepath.Separator)
-			items = append(items, Item{Title: abs, Msg: OpenPathDescendMsg{Query: abs, Prefix: '@'}})
-			continue
-		}
-		abs := expandedAbs(c)
-		items = append(items, Item{Title: abs, Msg: OpenFileMsg{Path: abs}})
+// CompleteItem implements ItemCompleter (#1775): on a fuzzy query tab adopts
+// the selected candidate as the new query — a project hit by its relative
+// path, a filesystem hit by the path it is titled with. A directory keeps its
+// trailing separator, so the completed query is a path query again and the
+// next tab (or keystroke) descends into it. Path queries decline: their
+// common-prefix completion in Complete is the shell-like behavior users expect
+// there.
+func (f *FileMode) CompleteItem(query string, sel Item) (string, bool) {
+	if isPathQuery(query) {
+		return query, false
+	}
+	switch sel.Msg.(type) {
+	case OpenPathDescendMsg, OpenFileMsg:
+		return sel.Title, true
+	}
+	return query, false
+}
+
+// fsFallbackItems (#1433, widened in #1775) offers filesystem candidates for a
+// non-path query below the project matches: the same prefix completion the
+// path queries use, anchored both at the project root and at the home
+// directory, so out-of-project files are reachable by name fragment instead of
+// full path. Root hits are shown by absolute path so they stay visually
+// distinct from the project-relative fuzzy matches; home hits keep the "~/"
+// notation. seen collects the absolute paths already listed (project matches
+// included) so nothing is offered twice.
+func (f *FileMode) fsFallbackItems(root, query string, seen map[string]bool) []Item {
+	items := fsCandidates(filepath.Join(root, query), "", seen)
+	if home := f.homeDir(); home != "" {
+		items = append(items, fsCandidates(filepath.Join(home, query), home, seen)...)
 	}
 	return items
+}
+
+// fsCandidates turns one pathcomplete input into fallback rows, capped at
+// maxFsFallback and skipping absolute paths already in seen. A non-empty home
+// titles the rows in "~/" notation — shorter, and a valid path query when tab
+// adopts it; otherwise rows are titled by absolute path.
+func fsCandidates(input, home string, seen map[string]bool) []Item {
+	res := pathcomplete.Complete(input)
+	items := make([]Item, 0, len(res.Candidates))
+	for _, c := range res.Candidates {
+		if len(items) >= maxFsFallback {
+			break
+		}
+		isDir := strings.HasSuffix(c, string(filepath.Separator))
+		abs := expandedAbs(c)
+		if seen[abs] {
+			continue
+		}
+		seen[abs] = true
+		title := abs
+		if home != "" {
+			if rel, err := filepath.Rel(home, abs); err == nil && !strings.HasPrefix(rel, "..") {
+				title = "~" + string(filepath.Separator) + rel
+			}
+		}
+		if isDir {
+			title += string(filepath.Separator)
+			items = append(items, Item{Title: title, Msg: OpenPathDescendMsg{Query: title, Prefix: '@'}})
+			continue
+		}
+		items = append(items, Item{Title: title, Msg: OpenFileMsg{Path: abs}})
+	}
+	return items
+}
+
+// homeDir resolves the home anchor of the filesystem fallback; "" disables it.
+func (f *FileMode) homeDir() string {
+	if f.home != nil {
+		return f.home()
+	}
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return h
 }
 
 // Refresh implements Refresher (#1372): it drops the cached walk so the next
