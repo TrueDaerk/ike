@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
+
 	"ike/internal/editor/buffer"
 	"ike/internal/epochtime"
 	"ike/internal/highlight"
@@ -120,6 +122,37 @@ func TestTimestampIndependentOfMarkdownToggle(t *testing.T) {
 	m, _ = m.Update(ActionMsg{Action: "toggle_timestamp_decoding"}) // timestamp decoding off
 	if view := plainView(m); strings.Contains(view, "**bold**") {
 		t.Error("the timestamp toggle must not gate the markdown conceal")
+	}
+}
+
+// TestTimestampProportionalClickMap (#1782): a click inside the epoch
+// stand-in maps proportionally into the raw digits — the first stand-in cell
+// lands on the range start, the last cell on the range's last raw column, and
+// offsets in between land monotonically in-between, not always at the start.
+func TestTimestampProportionalClickMap(t *testing.T) {
+	m := stamped(t)
+	// Raw range is [3,13) — 10 digits; stand-in "2024-08-06 12:00:00Z" is 20
+	// cells. Offset 0 is 'ts ' has been consumed by `from`; displayClickCol
+	// counts offset from the line start here (from=0), so account for "ts ".
+	prefix := lipgloss.Width("ts ")
+	standInCells := lipgloss.Width("2024-08-06 12:00:00Z")
+
+	last := -1
+	for offset := 0; offset < standInCells; offset++ {
+		got := m.displayClickCol(0, 0, prefix+offset)
+		if got < 3 || got > 12 {
+			t.Fatalf("offset %d -> col %d, want within [3,12]", offset, got)
+		}
+		if got < last {
+			t.Errorf("offset %d -> col %d, want >= previous col %d (monotonic)", offset, got, last)
+		}
+		last = got
+	}
+	if got := m.displayClickCol(0, 0, prefix+0); got != 3 {
+		t.Errorf("first stand-in cell -> col %d, want 3 (range start)", got)
+	}
+	if got := m.displayClickCol(0, 0, prefix+standInCells-1); got != 12 {
+		t.Errorf("last stand-in cell -> col %d, want 12 (last raw column)", got)
 	}
 }
 
