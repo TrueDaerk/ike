@@ -48,6 +48,9 @@
 
 ; Identifier naming conventions (heuristics, then the catch-all)
 
+((identifier) @variable.builtin
+ (#match? @variable.builtin "^(self|cls|mcls|metacls)$"))
+
 ((identifier) @constant
  (#match? @constant "^[A-Z][A-Z_]*$"))
 
