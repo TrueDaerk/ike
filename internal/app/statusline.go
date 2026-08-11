@@ -315,9 +315,7 @@ func (m Model) statusLine() string {
 	if d := m.drag; d != nil && (d.kind == dragMove || d.kind == dragTab) && d.engaged() {
 		hint := "MOVE " + m.paneLabel(d.srcPane)
 		if d.kind == dragTab {
-			if ed := m.activeWS().Panes.Get(d.srcPane).TabEditor(d.srcTab); ed != nil && ed.HasFile() {
-				hint = "MOVE " + filepath.Base(ed.Path())
-			}
+			hint = "MOVE " + m.tabDragLabel(d)
 		}
 		if zone, docks := m.dockZoneAt(d.curX, d.curY); docks {
 			hint += " → dock " + dockName(zone)
@@ -337,8 +335,9 @@ func (m Model) statusLine() string {
 
 	// A non-editor focus names itself instead of implying editor input (#381):
 	// mirroring the active editor while a terminal owns the keystrokes made it
-	// hard to tell where input goes.
-	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil &&
+	// hard to tell where input goes. The focus resolves to the pane's body
+	// content, so a viewer hosted as the active tab (#1778) names itself too.
+	if inst := m.focusedContent(); inst != nil &&
 		(inst.Kind() != pane.KindEditor || inst.ActiveTerminal() != nil) {
 		left := " "
 		switch {

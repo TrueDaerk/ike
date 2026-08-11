@@ -40,6 +40,77 @@ type paneIdentity struct {
 	Tools  []string `json:"tools,omitempty"`  // editor panes: tool sessions hosted as tabs (#836), restarted on restore
 	Pinned []int    `json:"pinned,omitempty"` // editor panes: indexes into Tabs of pinned tabs (#1172)
 	Active int      `json:"active,omitempty"`
+	// CTabs holds a tab host's content tabs (#1778) — previews, diffs, data
+	// viewers and the like living in the tab strip — each with the identity
+	// its dedicated-pane persistence would carry plus its position in the
+	// full tab list. Older builds ignore the key and restore file tabs only.
+	CTabs []contentTabIdentity `json:"ctabs,omitempty"`
+	// ActiveCTab is 1 + the index into CTabs of the active tab when a
+	// content tab was active; 0 when a file tab was (Active then indexes
+	// Tabs as before).
+	ActiveCTab int `json:"activeCtab,omitempty"`
+}
+
+// contentTabIdentity is the persisted identity of one content tab (#1778):
+// the same kind/path fields a dedicated viewer pane persists, plus the tab's
+// position and pin.
+type contentTabIdentity struct {
+	Kind   string `json:"kind"`
+	Path   string `json:"path,omitempty"`
+	Path2  string `json:"path2,omitempty"`
+	Rev    string `json:"rev,omitempty"`
+	Rev2   string `json:"rev2,omitempty"`
+	Index  int    `json:"index"`
+	Pinned bool   `json:"pinned,omitempty"`
+}
+
+// contentIdentity is the persisted identity of viewer content — shared by the
+// dedicated-pane branches of saveLayout and the content-tab list (#1778).
+// ok=false for kinds whose content does not persist by itself.
+func contentIdentity(inst *pane.Instance) (paneIdentity, bool) {
+	switch inst.Kind() {
+	case pane.KindMarkdown:
+		// Path names the previewed source file; restore re-reads it (#62).
+		return paneIdentity{Kind: "markdown", Path: inst.Preview().Path()}, true
+	case pane.KindImage:
+		// Path names the previewed image; restore re-decodes it (#1479).
+		return paneIdentity{Kind: "image", Path: inst.Image().Path()}, true
+	case pane.KindArchive:
+		// Path names the listed archive; restore re-reads it (#1762).
+		return paneIdentity{Kind: "archive", Path: inst.Archive().Path()}, true
+	case pane.KindData:
+		// Path names the browsed database; restore re-opens it (#1764).
+		return paneIdentity{Kind: "data", Path: inst.Data().Path()}, true
+	case pane.KindDiff:
+		// Path/Path2 name the compared files; Rev/Rev2 mark revision-
+		// backed sides so restore re-reads blobs instead of files (#508).
+		lr, rr := inst.Diff().Revs()
+		return paneIdentity{Kind: "diff", Path: inst.Diff().LeftPath(), Path2: inst.Diff().RightPath(), Rev: lr, Rev2: rr}, true
+	case pane.KindHTTP:
+		// The viewer restores empty (#1250): responses are session state.
+		return paneIdentity{Kind: "http"}, true
+	}
+	return paneIdentity{}, false
+}
+
+// contentKindFromString maps a persisted content kind back to its pane.Kind
+// (#1778); ok=false for unknown strings (a newer build's kind).
+func contentKindFromString(s string) (pane.Kind, bool) {
+	switch s {
+	case "markdown":
+		return pane.KindMarkdown, true
+	case "image":
+		return pane.KindImage, true
+	case "archive":
+		return pane.KindArchive, true
+	case "data":
+		return pane.KindData, true
+	case "diff":
+		return pane.KindDiff, true
+	case "http":
+		return pane.KindHTTP, true
+	}
+	return 0, false
 }
 
 // persistedLayout is the on-disk layout schema: the encoded split tree plus the
@@ -167,6 +238,18 @@ func isTerminalKey(key string) bool {
 	return key == "terminal" || strings.HasPrefix(key, "terminal:")
 }
 
+// isContentHostKey reports whether key is a well-formed viewer instance key
+// ("preview", "diff:2", …) — an editor identity may live under one when a
+// viewer pane was converted into a tab host (#1778).
+func isContentHostKey(key string) bool {
+	for _, base := range []string{"preview", "image", "diff", "archive", "data", "http"} {
+		if key == base || strings.HasPrefix(key, base+":") {
+			return true
+		}
+	}
+	return false
+}
+
 // saveLayout persists the tree plus the identity table built from the registry.
 // Errors are swallowed: failing to persist layout must never disrupt the session.
 func saveLayout(root layout.Node, reg *pane.Registry) {
@@ -186,23 +269,12 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 		switch inst.Kind() {
 		case pane.KindExplorer:
 			ids[key] = paneIdentity{Kind: "explorer"}
-		case pane.KindMarkdown:
-			// Path names the previewed source file; restore re-reads it (#62).
-			ids[key] = paneIdentity{Kind: "markdown", Path: inst.Preview().Path()}
-		case pane.KindImage:
-			// Path names the previewed image; restore re-decodes it (#1479).
-			ids[key] = paneIdentity{Kind: "image", Path: inst.Image().Path()}
-		case pane.KindArchive:
-			// Path names the listed archive; restore re-reads it (#1762).
-			ids[key] = paneIdentity{Kind: "archive", Path: inst.Archive().Path()}
-		case pane.KindData:
-			// Path names the browsed database; restore re-opens it (#1764).
-			ids[key] = paneIdentity{Kind: "data", Path: inst.Data().Path()}
-		case pane.KindDiff:
-			// Path/Path2 name the compared files; Rev/Rev2 mark revision-
-			// backed sides so restore re-reads blobs instead of files (#508).
-			lr, rr := inst.Diff().Revs()
-			ids[key] = paneIdentity{Kind: "diff", Path: inst.Diff().LeftPath(), Path2: inst.Diff().RightPath(), Rev: lr, Rev2: rr}
+		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindDiff:
+			// Viewer panes persist their per-kind identity — the shared
+			// convention content tabs reuse (#1778).
+			if id, ok := contentIdentity(inst); ok {
+				ids[key] = id
+			}
 		case pane.KindMerge:
 			// A merge view is session state (index stages move on): the slot
 			// restores as an empty editor pane (#1478).
@@ -260,6 +332,23 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 				if tt := inst.TabTerminal(i); tt != nil {
 					if tool := tt.Tool(); tool != "" {
 						id.Tools = append(id.Tools, tool)
+					}
+					continue
+				}
+				if c := inst.TabContent(i); c != nil {
+					// Content tabs (#1778) persist their viewer identity plus
+					// position and pin, so a mixed strip restores mixed.
+					cid, ok := contentIdentity(c)
+					if !ok {
+						continue
+					}
+					id.CTabs = append(id.CTabs, contentTabIdentity{
+						Kind: cid.Kind, Path: cid.Path, Path2: cid.Path2,
+						Rev: cid.Rev, Rev2: cid.Rev2,
+						Index: i, Pinned: inst.TabPinned(i),
+					})
+					if i == inst.ActiveTab() {
+						id.ActiveCTab = len(id.CTabs)
 					}
 					continue
 				}

@@ -105,8 +105,8 @@ preserving ordering against clicks, keys and motion; a stale flush after an
 inline flush is a no-op.
 
 **Center merge zone (#318).** During a move or tab drag a **tab-capable**
-target — an editor pane, or a **terminal/tool pane** (#836) — whose drag
-carries files or a live session shows five zones, resolved by
+target — an editor pane, a **terminal/tool pane** (#836) or a **viewer pane**
+(#1778) — whose drag carries tab content shows five zones, resolved by
 `layout.DropZoneWithCenter`: the outer `CenterBand` (30%) of either axis is
 the four edge zones (split/relocate exactly as before), the interior is
 `ZoneCenter`, which **merges as tab** JetBrains-style. A whole-pane title
@@ -119,15 +119,28 @@ into the target's tab list as a terminal tab — the model is detached via
 `Instance.DetachTerminal` so closing the vacated pane does not end the
 session (`adoptTerminalPane`); edge drops keep the plain relocate.
 
-A **terminal or tool target** converts on the first center drop (#836):
-`Instance.ConvertToTabHost` flips the pane to an editor-kind tab host with
-its running session as the first tab (no restart) — the pane kind describes
-the initial content, not the tab capability (`canHostTabs`/`ensureTabHost`
-in `internal/app`). Two terminals can stack as tabs in one panel this way,
-or a tool and a file. Drags with nothing to merge — an explorer pane or an
-empty editor — keep the four-zone relocate behaviour everywhere, and the
-explorer plus the viewer panes (preview, diff, vcs, debug) stay edge-only
-targets.
+A **terminal, tool or viewer target** converts on the first center drop (#836,
+#1778): `Instance.ConvertToTabHost` flips the pane to an editor-kind tab host
+with its running session or live viewer content as the first tab (no restart,
+no reload) — the pane kind describes the initial content, not the tab
+capability (`canHostTabs`/`ensureTabHost` in `internal/app`). Two terminals can
+stack as tabs in one panel this way, or a tool and a file, or a preview and the
+file it renders. Drags with nothing to merge — an explorer pane or an empty
+editor — keep the four-zone relocate behaviour everywhere.
+
+**Universal tabs (#1778).** Which kinds take part is one predicate,
+`pane.KindTabbable`: editors and terminals natively, plus the viewer kinds
+(markdown preview, image, diff, archive, data viewer, HTTP). The **explorer**
+and the **singleton tool windows** (VCS, Debug, Problems, Structure, Usages,
+Breakpoints) keep their fixed toggle-driven roles and stay edge-only targets,
+as does the merge view, whose conflict workflow is session-bound — their drags
+show edge zones only, never a silent no-op center drop. The **HTTP viewer** is
+a tab *source* but not a tab *host*: it sits on the singleton `http` pane key,
+so a converted host would block the tab from ever splitting back out. A whole
+viewer pane dropped in a center zone hands its live content over
+(`dragCarriesContent` → `adoptContentPane`); the per-drag capability check is
+the kind-agnostic `dragCarriesTab` (files, terminal session or viewer content)
+that replaced the old `dragCarriesFiles`/`dragCarriesTerminal` pair.
 
 **Self-edge spawn (Roadmap 0037).** A title-bar drag dropped on *another* pane
 relocates (above). A drag dropped on the **source pane's own edge** — within an
@@ -159,6 +172,17 @@ the source pane's own — splits the session off as its own terminal pane
 keeps its original session routing key under a fresh pane key, so the shell's
 `ExitedMsg` is resolved through `terminalPaneForSession` rather than by pane
 key alone.
+
+**Content-tab drag (#1778).** A grabbed **content tab** (preview, diff, image,
+archive, data viewer, HTTP response) releases by the same rules
+(`commitContentTabMove`): another tab host's center zone moves the live nested
+instance into that tab list (`DetachContentTab` + `AddContentTab` — no reload,
+the target converting first when needed); every edge zone — a host's, a
+non-host pane's (#317 semantics) or the source pane's own — splits the content
+off as its own viewer pane again (`splitContentTabTo` via
+`Registry.AddContentPaneFrom`). A refused split or re-registration re-adopts
+the tab rather than dropping it, and a pinned tab keeps its pin across the move
+(#1172).
 
 ## Create / close ops (Roadmap 0037)
 

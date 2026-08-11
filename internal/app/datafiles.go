@@ -43,11 +43,11 @@ func init() { registry.Register(dataProvider{}) }
 // leaf viewerSplitTarget picks — the pane the user last worked in, never the
 // explorer they opened the file from (#1779).
 func (m *Model) openDataPane(path string) {
-	for _, key := range m.activeWS().Panes.Keys() {
-		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindData && inst.Data().Path() == path {
-			m.setFocus(key)
-			return
-		}
+	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
+		return c.Kind() == pane.KindData && c.Data().Path() == path
+	}); ok {
+		m.focusContentAt(hostKey, tabIdx) // may live in a tab (#1778)
+		return
 	}
 	target := m.viewerSplitTarget()
 	key := m.activeWS().Panes.AddDataView(path)

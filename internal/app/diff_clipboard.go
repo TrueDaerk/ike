@@ -45,12 +45,11 @@ func (m *Model) compareWithClipboard() {
 // beside the editor.
 func (m *Model) openClipboardDiffPane(rightTitle, rightPath, clip, right string, editable bool) {
 	const leftTitle = "Clipboard"
-	if key, ok := m.diffSlot(); ok {
-		inst := m.activeWS().Panes.Get(key)
+	if inst, hostKey, tabIdx, ok := m.diffSlot(); ok {
 		inst.StopDiffEdit()
 		inst.Diff().Retarget(leftTitle, rightTitle, "", rightPath, "", "", editable)
 		inst.Diff().SetContents(clip, right)
-		m.setFocus(key)
+		m.focusContentAt(hostKey, tabIdx)
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 		return
 	}

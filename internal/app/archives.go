@@ -65,11 +65,11 @@ func archiveEntryPath(archivePath, entry string) string {
 // the leaf viewerSplitTarget picks — the pane the user last worked in, never
 // the explorer they opened the file from (#1779).
 func (m *Model) openArchivePane(path string) {
-	for _, key := range m.activeWS().Panes.Keys() {
-		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindArchive && inst.Archive().Path() == path {
-			m.setFocus(key)
-			return
-		}
+	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
+		return c.Kind() == pane.KindArchive && c.Archive().Path() == path
+	}); ok {
+		m.focusContentAt(hostKey, tabIdx) // may live in a tab (#1778)
+		return
 	}
 	target := m.viewerSplitTarget()
 	key := m.activeWS().Panes.AddArchiveView(path)

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Editor Tabs
-description: The per-pane tab model — each editor pane hosts an ordered tab list (documents and embedded terminals) with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
+description: The per-pane tab model — a tab-hosting pane holds an ordered tab list (documents, embedded terminals and any tabbable viewer content) with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
-tags: [architecture, panes, tabs, editors, terminals, shared-documents, close, pins]
-timestamp: 2026-07-24T12:00:00Z
+tags: [architecture, panes, tabs, editors, terminals, viewers, shared-documents, close, pins]
+timestamp: 2026-08-11T13:00:00Z
 ---
 
 # Editor Tabs
@@ -13,9 +13,11 @@ Roadmap 0190 (#156). An editor pane no longer hosts exactly one document: each
 `pane.Instance` of `KindEditor` holds an **ordered tab list** (`[]*pane.Tab`)
 plus an **active index**, JetBrains-style. The layout tree is untouched — a leaf
 is still one pane; tabs live entirely inside the instance. Since 0350 (#573) a
-tab slot holds **either a document editor or an embedded terminal** (`pane.Tab`
-is a sum type over `*editor.Model` / `*terminal.Model`), so run output and
-shells can live next to the files they belong to.
+tab slot holds **either a document editor or an embedded terminal**, and since
+#1778 **any tabbable pane content** — `pane.Tab` is a sum type over
+`*editor.Model` / `*terminal.Model` / a nested `*pane.Instance` — so run
+output, shells, previews, diffs and data viewers can live next to the files
+they belong to.
 
 ## The tab model (`internal/pane`)
 
@@ -69,6 +71,41 @@ shells can live next to the files they belong to.
   converts it (#836, `Instance.ConvertToTabHost`): its live session becomes
   the first tab, the pane key stays terminal-shaped and restores as an
   editor-identity slot (`AddEditorKey` advances the terminal mint counter).
+
+### Content tabs (#1778)
+
+Tabs are IDE-wide, not an editor privilege: **any tabbable pane content** can
+be a tab slot, and **any tabbable pane** can host tabs.
+
+- `pane.KindTabbable` is the single gate: editors and terminals natively, plus
+  the viewer kinds (markdown preview, image, diff, archive, data viewer, HTTP).
+  The explorer, the singleton tool windows (VCS, Debug, Problems, Structure,
+  Usages, Breakpoints) and the merge view are excluded — their fixed
+  toggle-driven roles and session-bound workflows stay pane-shaped, and their
+  drags keep showing edge zones only.
+- A content tab carries a **nested `pane.Instance`** of the viewer kind, so the
+  per-kind dispatch the pane itself uses is reused verbatim; `Tab.setSize`,
+  `setFocused`, `setPalette`, `configure`, `view`, `update` and `close` route
+  into it exactly like into an editor or terminal. `Tab.Kind()` reports what a
+  slot carries, `Tab.Content()` / `Instance.TabContent(i)` / `ActiveContent()`
+  reach the nested instance.
+- Conversion and detach are symmetric: `ConvertToTabHost` moves a viewer pane's
+  live content into a first tab (`DetachContent`), `AddContentTab` /
+  `DetachContentTab` move it between hosts, and `Registry.AddContentPaneFrom`
+  turns a detached tab back into a dedicated pane. Content never reloads on the
+  way.
+- The bar labels a content tab with a per-kind glyph plus its short title
+  (`Instance.ContentTitle`, basename where there is a path): `◫ ` preview,
+  `▣ ` image, `❒ ` archive, `▤ ` data, `⇄ ` diff, `⇅ ` HTTP — the `⌨ `/`⚙ `
+  convention of terminal and tool tabs. A preview tab of `README.md` is thus
+  told apart from an editor tab of the same file.
+- App-side lookups that used to scan panes now scan **panes and content tabs**
+  through the `internal/app/panecontent.go` helpers (`forEachContent`,
+  `findContent`, `focusContentAt`, `focusedContent`, `bodyContent`), so
+  dedupe-and-focus opens (preview, diff `#509`/`#513`), async routing
+  (`preview.RenderTickMsg`, `diff.EditRequestMsg` — matched by the model's own
+  key, not the pane key), key scoping and mouse routing behave the same whether
+  the viewer is a pane or a tab.
 
 ## Opening routes into the tab list (`internal/app`)
 
@@ -235,7 +272,16 @@ tab list: `tabs` holds every file-backed tab's path in order, `active` indexes
 the active one within that list, `pinned` lists the indexes of pinned tabs
 (#1172); `path` stays the active tab's file so older builds keep working.
 Scratch tabs are not persisted — their unsaved text is the crash-recovery
-side's job (#165).
+side's job (#165). **Content tabs** (#1778) persist in `ctabs`: one entry per
+tab with the same kind/path/rev identity a dedicated viewer pane saves
+(`contentIdentity`, shared by both writers) plus its `index` in the full tab
+list and its pin; `activeCtab` is 1 + the index into `ctabs` when a content tab
+was active (0 = a file tab was, `active` then indexing `tabs` as before).
+Restore rebuilds each content tab through its kind's normal restore path
+(`NewContentPane`, re-reading the previewed source or the diff sides) and moves
+it to its remembered position; a pane that held only content tabs drops its
+scratch placeholder once the content is in. Older builds ignore both keys and
+restore the file tabs only.
 
 Restore (`restoreLayout`) rebuilds each pane's tab list tolerantly: identities
 without `tabs` (pre-#160 files) restore as single-tab panes; files missing on

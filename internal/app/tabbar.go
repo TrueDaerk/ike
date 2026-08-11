@@ -72,6 +72,11 @@ func tabLabels(inst *pane.Instance) []string {
 			} else {
 				name = "⌨ " + t.Title()
 			}
+		} else if t := inst.Tab(i); t != nil && t.Content() != nil {
+			// Content tabs (#1778) label themselves too: a kind glyph plus
+			// the content's short title, so a preview tab of README.md is
+			// told apart from an editor tab of the same file.
+			name = contentTabGlyph(t.Content().Kind()) + t.Title()
 		} else if ed := inst.TabEditor(i); ed != nil && ed.HasFile() {
 			name = baseName(ed.Path())
 		}
@@ -106,6 +111,26 @@ func tabLabels(inst *pane.Instance) []string {
 		labels[i] = label
 	}
 	return labels
+}
+
+// contentTabGlyph is the per-kind marker of a content tab's label (#1778),
+// the ⚙/⌨ convention terminal tabs already use.
+func contentTabGlyph(k pane.Kind) string {
+	switch k {
+	case pane.KindMarkdown:
+		return "◫ "
+	case pane.KindImage:
+		return "▣ "
+	case pane.KindArchive:
+		return "❒ "
+	case pane.KindData:
+		return "▤ "
+	case pane.KindDiff:
+		return "⇄ "
+	case pane.KindHTTP:
+		return "⇅ "
+	}
+	return ""
 }
 
 // renderTabBar lays the labels out in one row of at most width cells: labels

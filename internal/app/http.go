@@ -179,14 +179,29 @@ func (m *Model) runHTTPRequestAtCursor() tea.Cmd {
 }
 
 // httpPanel returns the singleton viewer model, or nil when it is not open
-// as a *visible* layout leaf. The registry entry alone is not enough (#1271):
-// window.hideAllTools removes the leaf but keeps the instance registered, and
-// filling an invisible pane looks like a dispatch that did nothing.
+// under a *visible* layout leaf. The registry entry alone is not enough
+// (#1271): window.hideAllTools removes the leaf but keeps the instance
+// registered, and filling an invisible pane looks like a dispatch that did
+// nothing. The viewer may live as a content tab of a tab host (#1778) — a
+// background tab still fills, like a background JetBrains tab would.
 func (m Model) httpPanel() *httppane.Model {
-	if !m.activeWS().Panes.Has(pane.HTTPKey) || !m.leafVisible(pane.HTTPKey) {
+	hostKey, _, inst, ok := m.findContent(func(c *pane.Instance) bool {
+		return c.Kind() == pane.KindHTTP
+	})
+	if !ok || !m.leafVisible(hostKey) {
 		return nil
 	}
-	return m.activeWS().Panes.Get(pane.HTTPKey).HTTP()
+	return inst.HTTP()
+}
+
+// focusHTTPPanel focuses the HTTP viewer wherever it lives — its own pane or
+// a tab of a host (#1778), activating that tab.
+func (m *Model) focusHTTPPanel() {
+	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
+		return c.Kind() == pane.KindHTTP
+	}); ok {
+		m.focusContentAt(hostKey, tabIdx)
+	}
 }
 
 // leafVisible reports whether key is a leaf of the active layout tree.
@@ -202,6 +217,13 @@ func (m Model) leafVisible(key string) bool {
 // openHTTPPanel splits the active editor (fallback: focused leaf) at the
 // adaptive placement (auxZone, #1588) with the singleton response viewer.
 func (m *Model) openHTTPPanel() {
+	// The viewer may already live as a content tab of a tab host (#1778):
+	// nothing to open then — httpPanel resolves it and the fill lands there.
+	if _, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
+		return c.Kind() == pane.KindHTTP
+	}); ok && tabIdx >= 0 {
+		return
+	}
 	target := m.activeEditorKey()
 	if target == "" {
 		target = m.activeWS().Panes.Focused()
@@ -363,7 +385,7 @@ func (m *Model) showHTTPHistory() {
 		m.host.Notify(host.Info, "http: no response yet — run an .http request first")
 		return
 	}
-	m.setFocus(pane.HTTPKey)
+	m.focusHTTPPanel() // the viewer may live in a tab (#1778)
 	m.layout()
 	idx, n := p.HistoryIndex()
 	if n <= 1 {
@@ -416,7 +438,7 @@ func (m *Model) showStoredHTTPResponse() {
 	}
 	p.Set(key, items[0].Resp)
 	p.SetHistory(items)
-	m.setFocus(pane.HTTPKey)
+	m.focusHTTPPanel() // the viewer may live in a tab (#1778)
 	m.layout()
 	m.host.Notify(host.Info, fmt.Sprintf("http: %d stored response(s) for %s — ←/→ browse", len(items), key))
 }

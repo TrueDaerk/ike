@@ -1,5 +1,32 @@
 # Log
 
+## 2026-08-11 (universal tabs: any pane as a tab in any pane, #1778)
+
+- **Tabs stop being an editor privilege** (#1778): a `pane.Tab` slot carried
+  either a document editor or a terminal, and only editor and terminal panes
+  could host tabs. A slot now also carries a **nested `pane.Instance`** of a
+  viewer kind, so a markdown preview, image, diff, archive, data viewer or HTTP
+  response lives in a tab strip beside the files it belongs to — with the
+  per-kind size/focus/palette/config/view/update/close dispatch reused verbatim
+  from the pane path, and the content never reloading as it moves.
+- **The host and source matrix widens**: one predicate, `pane.KindTabbable`,
+  decides both who can be a tab and who can host one. A center drop converts a
+  viewer pane in place (`ConvertToTabHost`) exactly as it converts a terminal
+  (#836), `dragCarriesTab` replaces the old files-or-terminal pair, and a
+  content tab dragged onto any edge splits back out as its own viewer pane
+  (`AddContentPaneFrom`). **Singletons stay out**: explorer, VCS, Debug,
+  Problems, Structure, Usages, Breakpoints and the merge view keep their
+  toggle-driven roles and show edge zones only; the HTTP viewer is a tab source
+  but not a host (its singleton pane key would trap the tab).
+- **Everything downstream follows the content, not the pane**: dedupe-and-focus
+  opens, async ticks (`RenderTickMsg`, `EditRequestMsg` — now matched by the
+  viewer model's own key), key scoping and mouse routing resolve through the
+  new `panecontent.go` helpers, and the layout store persists content tabs
+  (`ctabs`/`activeCtab`) with the same identity a dedicated viewer pane saves.
+  Tab labels gain per-kind glyphs. Updated
+  [Editor Tabs](/architecture/editor-tabs.md) and
+  [Pane Layout & Drag](/architecture/pane-layout.md).
+
 ## 2026-08-11 (data viewer: mouse, tab, and page keys that page, #1788)
 
 - **The data viewer takes the mouse** (#1788): it was keyboard-only — its

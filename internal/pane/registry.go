@@ -157,17 +157,51 @@ func (r *Registry) AddEditor() string {
 // AddEditorKey recreates an editor instance under an exact key, used by restore
 // to rebuild the saved pane set. The minting counter is advanced past any
 // numeric suffix so future AddEditor calls never collide with a restored key.
-// A terminal-shaped key (a terminal/tool pane converted into a tab host,
-// #836) advances the terminal counter instead.
+// A terminal- or viewer-shaped key (a pane converted into a tab host, #836,
+// #1778) advances that kind's counter instead.
 func (r *Registry) AddEditorKey(key string) *Instance {
 	inst := newInstance(key, KindEditor, r.cfg, r.pal, r.regs)
 	r.put(inst)
-	if len(key) >= len(terminalKeyBase) && key[:len(terminalKeyBase)] == terminalKeyBase {
+	r.advancePastKey(key)
+	return inst
+}
+
+// advancePastKey bumps the counter matching key's base past its numeric
+// suffix, whatever kind the key was minted for.
+func (r *Registry) advancePastKey(key string) {
+	base := key
+	if i := strings.IndexByte(key, ':'); i >= 0 {
+		base = key[:i]
+	}
+	switch base {
+	case terminalKeyBase:
 		r.advancePastTerminal(key)
-	} else {
+	case previewKeyBase:
+		r.advancePastPreview(key)
+	case diffKeyBase:
+		r.advancePastDiff(key)
+	case imageKeyBase:
+		advanceCounter(key, imageKeyBase, &r.images)
+	case archiveKeyBase:
+		advanceCounter(key, archiveKeyBase, &r.archives)
+	case dataKeyBase:
+		advanceCounter(key, dataKeyBase, &r.datas)
+	default:
 		r.advancePast(key)
 	}
-	return inst
+}
+
+// advanceCounter bumps counter past key's numeric suffix relative to base.
+func advanceCounter(key, base string, counter *int) {
+	n := 1
+	if len(key) > len(base)+1 && key[:len(base)+1] == base+":" {
+		if v, err := strconv.Atoi(key[len(base)+1:]); err == nil {
+			n = v
+		}
+	}
+	if n > *counter {
+		*counter = n
+	}
 }
 
 // AddTerminal creates a terminal instance running shell in dir; send is the
@@ -637,6 +671,16 @@ func (r *Registry) AddDiffTitled(leftTitle, rightTitle, rightPath string) string
 // (#508): a non-empty rev labels its side "name @ rev" and marks it for
 // git-blob restore; a revision-backed right side is read-only.
 func (r *Registry) AddDiffRevKey(key, leftPath, rightPath, leftRev, rightRev string) *Instance {
+	inst := r.newDiffRevInstance(key, leftPath, rightPath, leftRev, rightRev)
+	r.put(inst)
+	r.advancePastDiff(key)
+	return inst
+}
+
+// newDiffRevInstance builds a revision-backed diff instance without
+// registering it — shared by AddDiffRevKey and the content-tab restore
+// (#1778).
+func (r *Registry) newDiffRevInstance(key, leftPath, rightPath, leftRev, rightRev string) *Instance {
 	name := filepath.Base(rightPath)
 	leftTitle := name + " @ " + shortRev(leftRev)
 	if leftRev == "" {
@@ -651,8 +695,6 @@ func (r *Registry) AddDiffRevKey(key, leftPath, rightPath, leftRev, rightRev str
 	inst.df.SetRevs(leftRev, rightRev)
 	inst.df.SetEditable(rightRev == "")
 	r.applyDiffConfig(inst)
-	r.put(inst)
-	r.advancePastDiff(key)
 	return inst
 }
 
@@ -742,6 +784,96 @@ func (r *Registry) advancePast(key string) {
 	}
 }
 
+// suffixedKey renders the Nth key of a base: "base" for 1, "base:N" beyond.
+func suffixedKey(base string, n int) string {
+	if n == 1 {
+		return base
+	}
+	return base + ":" + strconv.Itoa(n)
+}
+
+// mintContentKey allocates the next key of a viewer kind (#1778) — the same
+// counters the Add* constructors advance, so tab-detached content re-keys
+// without collisions. The HTTP viewer keeps its singleton key; unknown kinds
+// yield "".
+func (r *Registry) mintContentKey(kind Kind) string {
+	switch kind {
+	case KindMarkdown:
+		r.previews++
+		return suffixedKey(previewKeyBase, r.previews)
+	case KindImage:
+		r.images++
+		return suffixedKey(imageKeyBase, r.images)
+	case KindDiff:
+		r.diffs++
+		return suffixedKey(diffKeyBase, r.diffs)
+	case KindArchive:
+		r.archives++
+		return suffixedKey(archiveKeyBase, r.archives)
+	case KindData:
+		r.datas++
+		return suffixedKey(dataKeyBase, r.datas)
+	case KindHTTP:
+		return HTTPKey
+	}
+	return ""
+}
+
+// NewContentPane builds a fresh viewer instance of kind without registering
+// it (#1778): the tab restore's constructor, mirroring what the Add*Key
+// restore paths build for dedicated panes. path/path2/rev/rev2 follow the
+// paneIdentity conventions (diff panes use all four, the others just path).
+// It returns nil for kinds that cannot live in tabs.
+func (r *Registry) NewContentPane(kind Kind, path, path2, rev, rev2 string) *Instance {
+	key := r.mintContentKey(kind)
+	if key == "" {
+		return nil
+	}
+	inst := &Instance{key: key, kind: kind, cfg: r.cfg, pal: r.pal}
+	switch kind {
+	case KindMarkdown:
+		inst.md = preview.New(key, path, r.pal)
+	case KindImage:
+		inst.iv = imgview.New(key, path, r.pal)
+	case KindArchive:
+		inst.av = archview.New(key, path, r.pal)
+	case KindData:
+		inst.dv = dataview.New(key, path, r.pal)
+	case KindDiff:
+		if rev != "" || rev2 != "" {
+			return r.newDiffRevInstance(key, path, path2, rev, rev2)
+		}
+		inst.df = diff.NewFiles(key, path, path2, r.pal)
+		inst.df.SetEditable(true)
+		r.applyDiffConfig(inst)
+	case KindHTTP:
+		inst.hp = httppane.New(r.pal)
+	default:
+		return nil
+	}
+	return inst
+}
+
+// AddContentPaneFrom registers a live content instance — detached from a tab
+// (#1778) — as its own pane under a freshly minted key of its kind, so a
+// dragged-out viewer tab becomes a dedicated pane again without reloading.
+// The HTTP viewer keeps its singleton key and is refused while that key is
+// taken. It returns the new pane key and success.
+func (r *Registry) AddContentPaneFrom(inst *Instance) (string, bool) {
+	if inst == nil {
+		return "", false
+	}
+	key := r.mintContentKey(inst.kind)
+	if key == "" || r.Has(key) {
+		return "", false
+	}
+	inst.key = key
+	inst.cfg = r.cfg
+	inst.setPalette(r.pal)
+	r.put(inst)
+	return key, true
+}
+
 func (r *Registry) put(inst *Instance) {
 	r.instances[inst.key] = inst
 	r.order = append(r.order, inst.key)
@@ -761,13 +893,10 @@ func (r *Registry) Close(key string) {
 	if !ok {
 		return
 	}
-	if inst.Kind() == KindTerminal {
-		inst.term.Close()
-	}
-	if inst.Kind() == KindData {
-		inst.dv.Close() // release the database backend (#1764)
-	}
-	inst.CloseTerminalTabs() // editor panes may host terminal tabs (#573)
+	// Release the instance's background resources: a terminal's session, a
+	// data viewer's backend (#1764), and — for a tab host — every tab's
+	// content (#573, #1778).
+	inst.releaseContent()
 	delete(r.instances, key)
 	for i, k := range r.order {
 		if k == key {

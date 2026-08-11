@@ -1237,9 +1237,10 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below as the empty singleton viewer (#1250)
 		} else if ids[key].Kind == "breakpoints" {
 			continue // restored below seeded from the persisted store (#1377)
-		} else if !isEditorKey(key) && !isTerminalKey(key) {
-			// A terminal-shaped key may carry an editor identity: a
-			// converted tab host (#836) restores as an editor pane below.
+		} else if !isEditorKey(key) && !isTerminalKey(key) && !isContentHostKey(key) {
+			// A terminal- or viewer-shaped key may carry an editor identity:
+			// a converted tab host (#836, #1778) restores as an editor pane
+			// below.
 			return // unknown leaf kind / malformed key: fall back to default
 		}
 	}
@@ -1478,7 +1479,70 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			inst.CloseTab(0)
 			active = inst.ActiveTab()
 		}
-		inst.ActivateTab(active)
+		// Content tabs (#1778) rebuild from their viewer identities at their
+		// remembered positions — the same per-kind restore the dedicated
+		// panes get. A pane that held only content tabs still starts with
+		// the placeholder scratch tab; it is dropped once the content is in.
+		actPtr := inst.Tab(active)
+		placeholder := wasEmpty && toolTabs == 0 && len(id.CTabs) > 0
+		var ctabPos []int
+		for _, ct := range id.CTabs {
+			kind, ok := contentKindFromString(ct.Kind)
+			if !ok {
+				continue
+			}
+			nested := panes.NewContentPane(kind, ct.Path, ct.Path2, ct.Rev, ct.Rev2)
+			if nested == nil {
+				continue
+			}
+			switch kind {
+			case pane.KindMarkdown:
+				if data, err := os.ReadFile(ct.Path); err == nil {
+					nested.Preview().SetSourceImmediate(string(data))
+				}
+			case pane.KindDiff:
+				if ct.Rev != "" || ct.Rev2 != "" {
+					nested.Diff().SetContents(revContentOrFile(ct.Rev, ct.Path, ct.Path2), revContentOrFile(ct.Rev2, ct.Path2, ct.Path2))
+				} else {
+					nested.Diff().SetContents(readFileOrEmpty(ct.Path), readFileOrEmpty(ct.Path2))
+				}
+			}
+			if !inst.AddContentTab(nested) {
+				continue
+			}
+			pos := ct.Index
+			if placeholder {
+				pos++ // the scratch placeholder still occupies slot 0
+			}
+			if pos < 0 {
+				pos = 0
+			}
+			if pos >= inst.TabCount() {
+				pos = inst.TabCount() - 1
+			}
+			inst.MoveTab(inst.ActiveTab(), pos)
+			inst.SetTabPinned(pos, ct.Pinned)
+			ctabPos = append(ctabPos, pos)
+		}
+		if placeholder && len(ctabPos) > 0 {
+			inst.CloseTab(0)
+			for i := range ctabPos {
+				ctabPos[i]--
+			}
+		}
+		if id.ActiveCTab > 0 && id.ActiveCTab <= len(ctabPos) {
+			inst.ActivateTab(ctabPos[id.ActiveCTab-1])
+		} else {
+			// Content inserts may have shifted the active file/tool tab's
+			// index; re-resolve it by slot identity.
+			for idx := 0; idx < inst.TabCount(); idx++ {
+				if inst.Tab(idx) == actPtr {
+					active = idx
+					break
+				}
+			}
+			inst.ActivateTab(active)
+		}
 	}
 	panes.SetFocused(pane.ExplorerKey)
 	m.activeWS().Panes = panes
@@ -2416,11 +2480,11 @@ func (m *Model) openMarkdownPreview() {
 		return
 	}
 	path := ed.Path()
-	for _, key := range m.activeWS().Panes.Keys() {
-		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindMarkdown && inst.Preview().Path() == path {
-			m.setFocus(key)
-			return
-		}
+	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
+		return c.Kind() == pane.KindMarkdown && c.Preview().Path() == path
+	}); ok {
+		m.focusContentAt(hostKey, tabIdx) // may live in a tab (#1778)
+		return
 	}
 	key := m.activeWS().Panes.AddMarkdownPreview(path)
 	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneRight)
@@ -2443,19 +2507,18 @@ func (m *Model) openMarkdownPreview() {
 func (m *Model) openDiffPane(leftPath, rightPath string) {
 	// The same file pair re-opens by focusing the existing pane with fresh
 	// contents (#509).
-	if key, ok := m.findDiffPane(leftPath, rightPath, "", ""); ok {
-		m.activeWS().Panes.Get(key).Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
-		m.setFocus(key)
+	if inst, hostKey, tabIdx, ok := m.findDiffPane(leftPath, rightPath, "", ""); ok {
+		inst.Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
+		m.focusContentAt(hostKey, tabIdx)
 		return
 	}
 	// Single diff window (#513): retarget the existing pane instead of
 	// splitting another one.
-	if key, ok := m.diffSlot(); ok {
-		inst := m.activeWS().Panes.Get(key)
+	if inst, hostKey, tabIdx, ok := m.diffSlot(); ok {
 		inst.StopDiffEdit()
 		inst.Diff().Retarget(baseName(leftPath), baseName(rightPath), leftPath, rightPath, "", "", true)
 		inst.Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
-		m.setFocus(key)
+		m.focusContentAt(hostKey, tabIdx)
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 		return
 	}
@@ -2468,37 +2531,34 @@ func (m *Model) openDiffPane(leftPath, rightPath string) {
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
-// diffSlot returns the diff pane to reuse in single-window mode (#513): the
-// first open diff pane, unless config diff.windows = "multi" restores the
-// split-per-open behavior.
-func (m Model) diffSlot() (string, bool) {
+// diffSlot returns the diff viewer to reuse in single-window mode (#513):
+// the first open diff — dedicated pane or content tab (#1778) — unless
+// config diff.windows = "multi" restores the split-per-open behavior. The
+// host key and tab index (-1 for a pane) locate it for focusContentAt.
+func (m Model) diffSlot() (*pane.Instance, string, int, bool) {
 	if v, ok := m.host.Config().Get("diff.windows"); ok && v == "multi" {
-		return "", false
+		return nil, "", -1, false
 	}
-	for _, key := range m.activeWS().Panes.Keys() {
-		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindDiff {
-			return key, true
-		}
-	}
-	return "", false
+	hostKey, tabIdx, inst, ok := m.findContent(func(c *pane.Instance) bool {
+		return c.Kind() == pane.KindDiff
+	})
+	return inst, hostKey, tabIdx, ok
 }
 
-// findDiffPane locates an open diff pane matching the identity: the file
+// findDiffPane locates an open diff viewer matching the identity: the file
 // pair plus the per-side revisions ("" = working tree). Re-opening the same
-// diff focuses it instead of splitting a duplicate (#509).
-func (m Model) findDiffPane(leftPath, rightPath, leftRev, rightRev string) (string, bool) {
-	for _, key := range m.activeWS().Panes.Keys() {
-		inst := m.activeWS().Panes.Get(key)
-		if inst == nil || inst.Kind() != pane.KindDiff {
-			continue
+// diff focuses it instead of splitting a duplicate (#509) — wherever it
+// lives, dedicated pane or content tab (#1778).
+func (m Model) findDiffPane(leftPath, rightPath, leftRev, rightRev string) (*pane.Instance, string, int, bool) {
+	hostKey, tabIdx, inst, ok := m.findContent(func(c *pane.Instance) bool {
+		if c.Kind() != pane.KindDiff {
+			return false
 		}
-		d := inst.Diff()
+		d := c.Diff()
 		lr, rr := d.Revs()
-		if d.LeftPath() == leftPath && d.RightPath() == rightPath && lr == leftRev && rr == rightRev {
-			return key, true
-		}
-	}
-	return "", false
+		return d.LeftPath() == leftPath && d.RightPath() == rightPath && lr == leftRev && rr == rightRev
+	})
+	return inst, hostKey, tabIdx, ok
 }
 
 // revContentOrFile resolves one restored diff side (#508): a revision reads
@@ -2541,14 +2601,16 @@ func isMarkdownPath(path string) bool {
 	return false
 }
 
-// previewsForPath returns every markdown preview instance bound to path.
+// previewsForPath returns every markdown preview instance bound to path —
+// dedicated panes and content tabs (#1778) alike.
 func (m Model) previewsForPath(path string) []*pane.Instance {
 	var out []*pane.Instance
-	for _, key := range m.activeWS().Panes.Keys() {
-		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindMarkdown && inst.Preview().Path() == path {
-			out = append(out, inst)
+	m.contentInstances(func(_ string, _ int, c *pane.Instance) bool {
+		if c.Kind() == pane.KindMarkdown && c.Preview().Path() == path {
+			out = append(out, c)
 		}
-	}
+		return true
+	})
 	return out
 }
 
@@ -3546,9 +3608,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.openPathAt(msg.Path, msg.Line-1, 0)
 
 	case preview.RenderTickMsg:
-		// A preview's debounce timer fired: route it to the owning pane, which
-		// renders only when the tick is still the newest one.
-		if inst := m.activeWS().Panes.Get(msg.Key); inst != nil && inst.Kind() == pane.KindMarkdown {
+		// A preview's debounce timer fired: route it to the owning viewer —
+		// dedicated pane or content tab (#1778), matched by the model's own
+		// key so a re-keyed pane still receives it — which renders only when
+		// the tick is still the newest one.
+		if _, _, inst, ok := m.findContent(func(c *pane.Instance) bool {
+			return c.Kind() == pane.KindMarkdown && c.Preview().Key() == msg.Key
+		}); ok {
 			return m, inst.Update(msg)
 		}
 		return m, nil
@@ -3615,9 +3681,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case diff.EditRequestMsg:
 		// 'e' in a diff pane (0340, #496): mount a live editor as the right
 		// column. Revision-only diffs (the log's parent-vs-commit view) stay
-		// read-only with a hint.
-		inst := m.activeWS().Panes.Get(msg.Key)
-		if inst == nil || inst.Kind() != pane.KindDiff || inst.DiffEditor() != nil {
+		// read-only with a hint. The diff may live in a tab (#1778), so it is
+		// matched by the model's own key.
+		_, _, inst, ok := m.findContent(func(c *pane.Instance) bool {
+			return c.Kind() == pane.KindDiff && c.Diff().Key() == msg.Key
+		})
+		if !ok || inst.DiffEditor() != nil {
 			return m, nil
 		}
 		if !inst.Diff().Editable() || msg.Path == "" {
@@ -3646,9 +3715,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case DiffStepMsg:
 		// diff.nextChange / diff.prevChange (F7 / shift+F7, 0340 #495): step
-		// the focused diff pane's hunk; a non-diff focus is a quiet no-op
-		// (the bindings are diff-scoped, so this is belt and braces).
-		if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindDiff {
+		// the focused diff's hunk — dedicated pane or active content tab
+		// (#1778); a non-diff focus is a quiet no-op (the bindings are
+		// diff-scoped, so this is belt and braces).
+		if inst := m.focusedContent(); inst != nil && inst.Kind() == pane.KindDiff {
 			inst.Diff().StepHunk(msg.Delta)
 		}
 		return m, nil
@@ -5737,7 +5807,7 @@ func readHead(path string) []byte {
 // text-capturing mode, in which case global single-letter keys are not stolen.
 // A diff pane counts while its edit-mode editor (#496) captures text (#529).
 func (m Model) editorCapturing() bool {
-	inst := m.activeWS().Panes.FocusedInstance()
+	inst := m.focusedContent() // a diff may live in a tab (#1778)
 	if inst == nil {
 		return false
 	}
@@ -5763,10 +5833,11 @@ func (m Model) explorerCapturing() bool {
 	return inst.Explorer().Prompting() || inst.Explorer().Searching()
 }
 
-// dataPaneFocused reports whether the focused pane is a data viewer (#1764),
-// which claims tab for its own region toggle before the global focus cycle.
+// dataPaneFocused reports whether the focused pane shows a data viewer
+// (#1764) — dedicated pane or active content tab (#1778) — which claims tab
+// for its own region toggle before the global focus cycle.
 func (m Model) dataPaneFocused() bool {
-	inst := m.activeWS().Panes.FocusedInstance()
+	inst := m.focusedContent()
 	return inst != nil && inst.Kind() == pane.KindData
 }
 
@@ -6891,6 +6962,13 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		if inst == nil {
 			return m, nil
 		}
+		if c := inst.ActiveContent(); c != nil {
+			// A tab host's body scrolls like the equivalent dedicated pane
+			// (#1778); the tab-bar row keeps its tab-cycling wheel below.
+			if r, ok := m.lay.Panes[key]; !ok || msg.Y != r.Y+1 {
+				inst = c
+			}
+		}
 		switch inst.Kind() {
 		case pane.KindExplorer:
 			switch {
@@ -7218,14 +7296,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 		case dragHTTPSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindHTTP {
+				if inst := m.bodyContent(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindHTTP {
 					inst.HTTP().MouseDrag(lx, ly)
 				}
 			}
 		case dragHTTPScroll:
 			// The response-viewer thumb follows the pointer (#1367).
 			if _, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindHTTP {
+				if inst := m.bodyContent(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindHTTP {
 					inst.HTTP().ScrollbarDrag(ly)
 				}
 			}
@@ -7268,7 +7346,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			m.drag = nil
 			return m, nil // the editor selection is already in place; nothing to commit
 		case dragHTTPSelect:
-			if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindHTTP {
+			if inst := m.bodyContent(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindHTTP {
 				inst.HTTP().MouseRelease()
 			}
 			m.drag = nil
@@ -7322,20 +7400,25 @@ func (m *Model) commitMove(x, y int) {
 	if target != m.drag.srcPane {
 		r := m.lay.Panes[target]
 		zone := layout.DropZone(r, x, y)
-		if inst := m.activeWS().Panes.Get(target); canHostTabs(inst) && (m.dragCarriesFiles(m.drag) || m.dragCarriesTerminal(m.drag)) {
+		if inst := m.activeWS().Panes.Get(target); canHostTabs(inst) && m.dragCarriesTab(m.drag) {
 			zone = layout.DropZoneWithCenter(r, x, y)
 		}
 		if zone == layout.ZoneCenter {
 			// Center drop on a tab host merges the source pane's files into
 			// the target's tab list instead of relocating the pane (#318); a
 			// terminal pane moves its live session there as a terminal tab
-			// (#708). A terminal/tool target converts into a tab host first
-			// (#836), its running session becoming the first tab.
+			// (#708), a viewer pane its live content as a content tab (#1778).
+			// A terminal/tool or viewer target converts into a tab host first
+			// (#836), its running content becoming the first tab.
 			if !m.ensureTabHost(target) {
 				return
 			}
 			if m.dragCarriesTerminal(m.drag) {
 				m.adoptTerminalPane(m.drag.srcPane, target)
+				return
+			}
+			if m.dragCarriesContent(m.drag) {
+				m.adoptContentPane(m.drag.srcPane, target)
 				return
 			}
 			m.mergePaneTabs(m.drag.srcPane, target)
@@ -7373,6 +7456,10 @@ func (m *Model) commitTabMove(x, y int) {
 	}
 	if tab := inst.Tab(m.drag.srcTab); tab != nil && tab.IsTerminal() {
 		m.commitTerminalTabMove(x, y, inst, r)
+		return
+	}
+	if tab := inst.Tab(m.drag.srcTab); tab != nil && tab.Content() != nil {
+		m.commitContentTabMove(x, y, inst, r)
 		return
 	}
 	ed := inst.TabEditor(m.drag.srcTab)
@@ -7467,6 +7554,86 @@ func (m *Model) commitTerminalTabMove(x, y int, inst *pane.Instance, r layout.Re
 	}
 	tinst.AddTerminalTab(term)
 	m.setFocus(target)
+	m.layout()
+}
+
+// commitContentTabMove applies a content tab's drag release (#1778),
+// mirroring commitTerminalTabMove: another tab host's center zone moves the
+// live content into that pane's tab list (the target converts first when
+// needed, #836); any edge zone — a host's, a non-host pane's (#317
+// semantics) or the source pane's own — splits the content off as its own
+// viewer pane again. The content never reloads; a pinned tab keeps its pin
+// (#1172).
+func (m *Model) commitContentTabMove(x, y int, inst *pane.Instance, r layout.Rect) {
+	src := m.drag.srcPane
+	target, ok := m.lay.PaneAt(x, y)
+	if !ok || (target == src && y < r.Y+layout.TitleBarRows) {
+		return // dropped outside any pane, or a plain click (#304 semantics)
+	}
+	if target == src {
+		if zone, near := edgeZone(r, x, y); near {
+			m.splitContentTabTo(src, zone)
+		}
+		return
+	}
+	tinst := m.activeWS().Panes.Get(target)
+	if tinst == nil {
+		return
+	}
+	if !canHostTabs(tinst) {
+		if zone, near := edgeZone(m.lay.Panes[target], x, y); near {
+			m.splitContentTabTo(target, zone)
+		}
+		return
+	}
+	if zone := layout.DropZoneWithCenter(m.lay.Panes[target], x, y); zone != layout.ZoneCenter {
+		m.splitContentTabTo(target, zone)
+		return
+	}
+	if !m.ensureTabHost(target) {
+		return
+	}
+	srcPinned := inst.TabPinned(m.drag.srcTab)
+	nested, ok := inst.DetachContentTab(m.drag.srcTab)
+	if !ok {
+		return
+	}
+	tinst.AddContentTab(nested)
+	if srcPinned {
+		tinst.SetTabPinned(tinst.ActiveTab(), true)
+	}
+	m.setFocus(target)
+	m.layout()
+}
+
+// splitContentTabTo finishes a content tab's drag by splitting pane target at
+// zone into a fresh viewer pane hosting the dragged tab's live content
+// (#1778). When the split — or the re-registration — is refused the tab is
+// re-adopted, never dropped.
+func (m *Model) splitContentTabTo(target string, zone layout.Zone) {
+	inst := m.activeWS().Panes.Get(m.drag.srcPane)
+	if inst == nil {
+		return
+	}
+	nested, ok := inst.DetachContentTab(m.drag.srcTab)
+	if !ok {
+		return
+	}
+	newKey, ok := m.activeWS().Panes.AddContentPaneFrom(nested)
+	if !ok {
+		inst.AddContentTab(nested)
+		return
+	}
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, newKey, zone)
+	if !ok {
+		if c, detached := m.activeWS().Panes.Get(newKey).DetachContent(); detached {
+			inst.AddContentTab(c)
+		}
+		m.activeWS().Panes.Close(newKey) // content-less after the detach: harmless
+		return
+	}
+	m.activeWS().Tree = tree
+	m.setFocus(newKey)
 	m.layout()
 }
 
@@ -7671,6 +7838,11 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 			return m.breadcrumbClick(key, inst, localX)
 		}
 		return m, nil
+	}
+	if c := inst.ActiveContent(); c != nil {
+		// A tab host's body takes clicks like the equivalent dedicated pane
+		// (#1778): a data-viewer tab pages, an HTTP tab selects, and so on.
+		inst = c
 	}
 	switch inst.Kind() {
 	case pane.KindExplorer:
@@ -8507,22 +8679,25 @@ func (m Model) dropZoneFor(d *dragState, key string, r layout.Rect) (layout.Zone
 	if d.kind == dragTab && !isHost {
 		return edgeZone(r, d.curX, d.curY)
 	}
-	if isHost && (m.dragCarriesFiles(d) || m.dragCarriesTerminal(d)) {
+	if isHost && m.dragCarriesTab(d) {
 		return layout.DropZoneWithCenter(r, d.curX, d.curY), true
 	}
 	return layout.DropZone(r, d.curX, d.curY), true
 }
 
-// canHostTabs reports whether the pane can take a merged tab (#836): an
-// editor pane natively, a terminal/tool pane after conversion. Explorer and
-// the viewer/tool-window kinds stay edge-only targets.
+// canHostTabs reports whether the pane can take a merged tab (#836, #1778):
+// an editor pane natively, every other tabbable kind (terminal/tool, viewer)
+// after in-place conversion. The explorer and the singleton tool windows stay
+// edge-only targets. The HTTP viewer is a tab *source* but not a host: a
+// converted host would sit on the singleton "http" key and block the tab
+// from ever splitting back out (AddContentPaneFrom minting).
 func canHostTabs(inst *pane.Instance) bool {
-	return inst != nil && (inst.Kind() == pane.KindEditor || inst.Kind() == pane.KindTerminal)
+	return inst != nil && pane.KindTabbable(inst.Kind()) && inst.Kind() != pane.KindHTTP
 }
 
 // ensureTabHost makes the target pane tab-hosting in place (#836): editors
-// already are; a terminal/tool pane converts, its live session becoming the
-// first tab. Reports whether the pane can now take tabs.
+// already are; a terminal/tool or viewer pane (#1778) converts, its live
+// content becoming the first tab. Reports whether the pane can now take tabs.
 func (m *Model) ensureTabHost(key string) bool {
 	inst := m.activeWS().Panes.Get(key)
 	if inst == nil {
@@ -8535,7 +8710,7 @@ func (m *Model) ensureTabHost(key string) bool {
 }
 
 // dragCarriesTerminal reports whether the drag moves a whole terminal pane
-// (#708): an editor target then shows the center merge zone that adopts the
+// (#708): a tab-host target then shows the center merge zone that adopts the
 // live session as a terminal tab.
 func (m Model) dragCarriesTerminal(d *dragState) bool {
 	if d.kind != dragMove {
@@ -8543,6 +8718,18 @@ func (m Model) dragCarriesTerminal(d *dragState) bool {
 	}
 	inst := m.activeWS().Panes.Get(d.srcPane)
 	return inst != nil && inst.Kind() == pane.KindTerminal
+}
+
+// dragCarriesContent reports whether the drag moves a whole viewer pane
+// (#1778) — markdown, image, diff, archive, data, HTTP — whose content a
+// tab-host target could adopt as a content tab.
+func (m Model) dragCarriesContent(d *dragState) bool {
+	if d.kind != dragMove {
+		return false
+	}
+	inst := m.activeWS().Panes.Get(d.srcPane)
+	return inst != nil && inst.Kind() != pane.KindEditor && inst.Kind() != pane.KindTerminal &&
+		pane.KindTabbable(inst.Kind())
 }
 
 // dragCarriesFiles reports whether the drag has files an editor target could
@@ -8562,25 +8749,53 @@ func (m Model) dragCarriesFiles(d *dragState) bool {
 			return true
 		}
 	}
+	if inst.TabCount() > 0 && len(inst.Editors()) == 0 {
+		// A tab host holding only terminal/content tabs (#1778) still merges:
+		// every tab moves over, none of them is a file.
+		return true
+	}
 	return false
 }
 
-// mergePaneTabs finishes a whole-pane center drop (#318): every file of the
-// source editor joins the target's tab list (openInTab dedupes onto existing
-// tabs), then the emptied source pane closes.
+// dragCarriesTab is the kind-agnostic "this drag could land as a tab" check
+// (#1778): any tab drag, or a whole-pane move whose source content is
+// tabbable.
+func (m Model) dragCarriesTab(d *dragState) bool {
+	return m.dragCarriesFiles(d) || m.dragCarriesTerminal(d) || m.dragCarriesContent(d)
+}
+
+// mergePaneTabs finishes a whole-pane center drop (#318, #1778): every tab of
+// the source host — documents, terminal sessions, nested content — moves into
+// the target's tab list. A file the target already shows stays behind as a
+// duplicate and closes with the source pane, the dedupe openInTab used to do.
 func (m *Model) mergePaneTabs(src, target string) {
-	inst := m.activeWS().Panes.Get(src)
-	if inst == nil {
+	inst, tinst := m.activeWS().Panes.Get(src), m.activeWS().Panes.Get(target)
+	if inst == nil || tinst == nil {
 		return
 	}
-	for _, ed := range inst.Editors() {
-		if ed.HasFile() {
-			m.openInTab(target, ed.Path())
-		}
-	}
+	tinst.AdoptTabsFrom(inst)
+	m.installEmitter(target) // moved editors emit under the target's key now
 	m.closeKey(src)
 	m.setFocus(target)
 	m.syncExplorerOpen()
+	m.layout()
+}
+
+// adoptContentPane finishes a viewer pane's center drop on a tab host
+// (#1778): the live content moves into the target's tab list as a content
+// tab (no reload), then the vacated pane closes.
+func (m *Model) adoptContentPane(src, target string) {
+	sinst, tinst := m.activeWS().Panes.Get(src), m.activeWS().Panes.Get(target)
+	if sinst == nil || tinst == nil || tinst.Kind() != pane.KindEditor {
+		return
+	}
+	nested, ok := sinst.DetachContent()
+	if !ok {
+		return
+	}
+	tinst.AddContentTab(nested)
+	m.closeKey(src)
+	m.setFocus(target)
 	m.layout()
 }
 
@@ -8606,7 +8821,7 @@ func (m *Model) adoptTerminalPane(src, target string) {
 // basename.
 func (m Model) tabDragLabel(d *dragState) string {
 	if inst := m.activeWS().Panes.Get(d.srcPane); inst != nil {
-		if tab := inst.Tab(d.srcTab); tab != nil && tab.IsTerminal() {
+		if tab := inst.Tab(d.srcTab); tab != nil && (tab.IsTerminal() || tab.Content() != nil) {
 			return tab.Title()
 		}
 		if ed := inst.TabEditor(d.srcTab); ed != nil && ed.HasFile() {
@@ -8785,6 +9000,11 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 					title = "TERMINAL — " + inst.Tab(inst.ActiveTab()).Title()
 				}
 			}
+			if c := inst.ActiveContent(); c != nil {
+				// The active tab hosts viewer content (#1778): title it like
+				// the equivalent dedicated pane.
+				title = contentPaneTitle(c)
+			}
 			// The tab bar takes over the title row once the pane holds
 			// multiple tabs (#157); paneBox draws it like any title.
 			if bar, ok := m.tabBar(inst, r.W-paneChromeW); ok {
@@ -8798,17 +9018,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			} else {
 				title = m.terminalTitle(inst)
 			}
-		case pane.KindMarkdown:
-			title = "PREVIEW " + baseName(inst.Preview().Path())
-		case pane.KindImage:
-			title = "IMAGE " + baseName(inst.Image().Path())
-		case pane.KindArchive:
-			title = "ARCHIVE " + baseName(inst.Archive().Path())
-		case pane.KindData:
-			title = "DATA " + baseName(inst.Data().Path())
-		case pane.KindDiff:
-			l, rr := inst.Diff().Titles()
-			title = "DIFF " + l + " ⇄ " + rr
+		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindDiff:
+			title = contentPaneTitle(inst)
 		case pane.KindVCS:
 			title = "VCS"
 		case pane.KindDebug:
@@ -8822,7 +9033,7 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 		case pane.KindUsages:
 			title = "USAGES"
 		case pane.KindHTTP:
-			title = strings.ToUpper(inst.HTTP().Title())
+			title = contentPaneTitle(inst)
 		}
 	}
 
@@ -8874,6 +9085,28 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 		Border:      [4]uint32{br, bg, bb, ba},
 	}
 	return inst.CachedBox(sig, func() string { return paneBox(title, content, r.W, r.H, border) })
+}
+
+// contentPaneTitle is the title-band label of a viewer instance — the same
+// chrome whether it is a dedicated pane or the active content tab of a tab
+// host (#1778).
+func contentPaneTitle(inst *pane.Instance) string {
+	switch inst.Kind() {
+	case pane.KindMarkdown:
+		return "PREVIEW " + baseName(inst.Preview().Path())
+	case pane.KindImage:
+		return "IMAGE " + baseName(inst.Image().Path())
+	case pane.KindArchive:
+		return "ARCHIVE " + baseName(inst.Archive().Path())
+	case pane.KindData:
+		return "DATA " + baseName(inst.Data().Path())
+	case pane.KindDiff:
+		l, r := inst.Diff().Titles()
+		return "DIFF " + l + " ⇄ " + r
+	case pane.KindHTTP:
+		return strings.ToUpper(inst.HTTP().Title())
+	}
+	return ""
 }
 
 // hashString is a fast non-cryptographic hash (FNV-1a) used to key the pane box
@@ -9037,6 +9270,9 @@ func displayPath(path string) string {
 func (m Model) paneLabel(key string) string {
 	inst := m.activeWS().Panes.Get(key)
 	if inst != nil && inst.Kind() == pane.KindEditor {
+		if c := inst.ActiveContent(); c != nil {
+			return c.ContentTitle() // the active tab shows viewer content (#1778)
+		}
 		return m.editorTitle(inst.Editor())
 	}
 	return strings.ToUpper(strings.SplitN(key, ":", 2)[0])

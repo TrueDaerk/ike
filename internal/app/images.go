@@ -60,11 +60,11 @@ func sniffImage(head []byte) bool {
 // the leaf viewerSplitTarget picks — the pane the user last worked in, never
 // the explorer they opened the file from (#1779).
 func (m *Model) openImagePreview(path string) {
-	for _, key := range m.activeWS().Panes.Keys() {
-		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindImage && inst.Image().Path() == path {
-			m.setFocus(key)
-			return
-		}
+	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
+		return c.Kind() == pane.KindImage && c.Image().Path() == path
+	}); ok {
+		m.focusContentAt(hostKey, tabIdx) // may live in a tab (#1778)
+		return
 	}
 	target := m.viewerSplitTarget()
 	key := m.activeWS().Panes.AddImagePreview(path)
@@ -91,23 +91,23 @@ func (m *Model) imageSyncCmd() tea.Cmd {
 	live := map[int]bool{}
 	var raw []string
 	hasImages := false
-	for _, key := range m.activeWS().Panes.Keys() {
-		inst := m.activeWS().Panes.Get(key)
-		if inst == nil || inst.Kind() != pane.KindImage {
-			continue
+	m.contentInstances(func(_ string, _ int, inst *pane.Instance) bool {
+		if inst.Kind() != pane.KindImage {
+			return true
 		}
 		hasImages = true
 		iv := inst.Image()
 		iv.SetGraphics(supported)
 		if !supported {
-			continue
+			return true
 		}
 		live[iv.ID()] = true
 		if seqs := iv.SyncSeqs(); len(seqs) > 0 {
 			raw = append(raw, seqs...)
 			m.liveImages[iv.ID()] = true
 		}
-	}
+		return true
+	})
 	for id := range m.liveImages {
 		if !live[id] {
 			raw = append(raw, imgview.Delete(id))
@@ -137,19 +137,19 @@ func (m *Model) releaseWorkspaceImages(w *workspace.Workspace) tea.Cmd {
 		return nil
 	}
 	var raw []string
-	for _, key := range w.Panes.Keys() {
-		inst := w.Panes.Get(key)
-		if inst == nil || inst.Kind() != pane.KindImage {
-			continue
+	forEachContent(w.Panes, func(_ string, _ int, inst *pane.Instance) bool {
+		if inst.Kind() != pane.KindImage {
+			return true
 		}
 		iv := inst.Image()
 		if !iv.Transmitted() {
-			continue
+			return true
 		}
 		raw = append(raw, imgview.Delete(iv.ID()))
 		iv.Reset()
 		delete(m.liveImages, iv.ID())
-	}
+		return true
+	})
 	if len(raw) == 0 {
 		return nil
 	}
