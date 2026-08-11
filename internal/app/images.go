@@ -57,7 +57,8 @@ func sniffImage(head []byte) bool {
 }
 
 // openImagePreview opens (or refocuses) the image preview for path, split off
-// the focused leaf like the diff viewer.
+// the leaf viewerSplitTarget picks — the pane the user last worked in, never
+// the explorer they opened the file from (#1779).
 func (m *Model) openImagePreview(path string) {
 	for _, key := range m.activeWS().Panes.Keys() {
 		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindImage && inst.Image().Path() == path {
@@ -65,8 +66,9 @@ func (m *Model) openImagePreview(path string) {
 			return
 		}
 	}
+	target := m.viewerSplitTarget()
 	key := m.activeWS().Panes.AddImagePreview(path)
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, m.activeWS().Panes.Focused(), key, layout.ZoneRight)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneRight)
 	if !ok {
 		m.activeWS().Panes.Close(key)
 		return

@@ -4,7 +4,7 @@ title: Data Viewer
 description: "#1764/#1765/#1766/#1777 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; '/' filters the grid with a SQL clause appended to SELECT * FROM <table>, run inside a subquery so paging keeps working."
 resource: internal/dataview
 tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sql]
-timestamp: 2026-08-11T10:00:00Z
+timestamp: 2026-08-11T12:00:00Z
 ---
 
 # Data Viewer (#1764, #1765, #1766, #1777)
@@ -53,6 +53,11 @@ centered notice — a binary buffer is never the fallback.
 `datasrc.Open(path)` picks the engine, magic first and extension only as the
 tie-break, so neither the pane nor the registry ever names one — a DuckDB
 database called `app.db` still reaches the DuckDB engine.
+
+`openDataPane` splits the leaf `viewerSplitTarget` picks — the pane the user
+last worked in, never the explorer the database was opened from (#1779, see
+[pane layout](./pane-layout.md)) — and refocuses an existing pane already
+bound to the same path instead of duplicating it.
 
 ## The SQLite backend
 

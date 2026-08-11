@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store, plus named user-scoped saved layouts.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-07-27T00:00:00Z
+timestamp: 2026-08-11T12:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -174,6 +174,20 @@ key alone.
   detached and its parent split collapses so the sibling takes its place. Closing
   the **only** leaf returns the tree unchanged with `ok=false`, upholding the
   never-empty invariant.
+
+**Where a viewer lands.** The viewer opens — data (`openDataPane`), image
+(`openImagePreview`), archive (`openArchivePane`) — do not split the *focused*
+leaf, because a file is usually opened from the explorer and splitting there
+pushes the viewer to the far side of the window. `viewerSplitTarget`
+(`internal/app/app.go`) picks the target the way `fileEditorKey` does for a
+file open: the focused pane when it hosts content (editor, terminal, another
+viewer), else `m.recentEditor` — the pane focused before the explorer took
+over — else the first content leaf in walk order. The explorer and the
+singleton tool windows (VCS, Debug, Problems, Structure, Usages, HTTP,
+Breakpoints) never qualify; only when nothing else is left does the focused
+leaf serve as the fallback, so a tool-windows-only workspace still gets its
+pane (#1779). Re-opening a path already shown in a viewer pane just refocuses
+it and splits nothing.
 
 The root model exposes these as binding-agnostic ops (`SplitFocused(zone)`,
 `CloseFocused`, `FocusDir(dir)`, plus tab focus-cycle), so Roadmap 0080 binds

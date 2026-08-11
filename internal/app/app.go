@@ -5792,6 +5792,41 @@ func (m Model) fileEditorKey() string {
 	return ""
 }
 
+// viewerSplitTarget returns the leaf a viewer pane — data (#1764), image
+// (#1479), archive (#1762) — splits off from (#1779). Opening one from the
+// explorer must not split the explorer, so the choice follows fileEditorKey:
+// the focused pane when it hosts content, else the most-recent editor, else
+// the first content leaf in tree order. Content means anything but the
+// explorer and the singleton tool windows, so a viewer opened next to another
+// viewer or a terminal still splits where the user was working. The focused
+// leaf stays the last resort: a workspace made only of tool windows still
+// gets its pane rather than none.
+func (m Model) viewerSplitTarget() string {
+	hostsContent := func(inst *pane.Instance) bool {
+		if inst == nil {
+			return false
+		}
+		switch inst.Kind() {
+		case pane.KindExplorer, pane.KindVCS, pane.KindDebug, pane.KindProblems,
+			pane.KindStructure, pane.KindUsages, pane.KindHTTP, pane.KindBreakpoints:
+			return false
+		}
+		return true
+	}
+	if hostsContent(m.activeWS().Panes.FocusedInstance()) {
+		return m.activeWS().Panes.Focused()
+	}
+	if m.recentEditor != "" && hostsContent(m.activeWS().Panes.Get(m.recentEditor)) {
+		return m.recentEditor
+	}
+	for _, key := range m.leafOrder() {
+		if hostsContent(m.activeWS().Panes.Get(key)) {
+			return key
+		}
+	}
+	return m.activeWS().Panes.Focused()
+}
+
 func (m Model) activeEditorKey() string {
 	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor {
 		return m.activeWS().Panes.Focused()
