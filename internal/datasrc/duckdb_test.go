@@ -76,7 +76,10 @@ func TestIsDuckDBSniff(t *testing.T) {
 	}
 }
 
-func TestDuckTablesListsObjectsWithCounts(t *testing.T) {
+// TestDuckTablesListsObjectsWithEstimates: the listing takes its sizes from
+// DuckDB's catalogue (duckdb_tables().estimated_size) in the single invocation
+// that lists the objects — no count(\*) over the database on open (#1795).
+func TestDuckTablesListsObjectsWithEstimates(t *testing.T) {
 	src, err := Open(writeDuckFixture(t))
 	if err != nil {
 		t.Fatal(err)
@@ -93,14 +96,15 @@ func TestDuckTablesListsObjectsWithCounts(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("objects = %d, want 3 (%+v)", len(got), tables)
 	}
-	if u := got["users"]; u.Type != "table" || u.Rows != 1200 {
-		t.Fatalf("users = %+v", u)
+	if u := got["users"]; u.Type != "table" || u.Rows != 1200 || !u.Estimated {
+		t.Fatalf("users = %+v, want an estimated 1200", u)
 	}
-	if e := got["empty"]; e.Rows != 0 {
-		t.Fatalf("empty = %+v", e)
+	if e := got["empty"]; e.Rows != 0 || !e.Estimated {
+		t.Fatalf("empty = %+v, want an estimated 0", e)
 	}
-	if v := got["named"]; !v.IsView() || v.Rows != 1200 {
-		t.Fatalf("named = %+v", v)
+	// A view has no stored size: "?" until the background count lands.
+	if v := got["named"]; !v.IsView() || v.Rows != -1 {
+		t.Fatalf("named = %+v, want a view without a metadata size", v)
 	}
 	// Tables come out tables-first, then views — the sidebar's order.
 	if tables[len(tables)-1].Name != "named" {
@@ -118,8 +122,12 @@ func TestDuckPagePagingMath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p0.Rows) != 500 || p0.Offset != 0 || p0.Total != 1200 {
+	// A page never counts (#1795); Count is the exact number's own call.
+	if len(p0.Rows) != 500 || p0.Offset != 0 || p0.Total != -1 {
 		t.Fatalf("page 0 = %d rows at %d of %d", len(p0.Rows), p0.Offset, p0.Total)
+	}
+	if n, err := src.Count("users", ""); err != nil || n != 1200 {
+		t.Fatalf("count = %d (%v), want 1200", n, err)
 	}
 	if len(p0.Columns) != 5 || p0.Columns[0] != "id" {
 		t.Fatalf("columns = %v", p0.Columns)
@@ -152,8 +160,11 @@ func TestDuckPageOnView(t *testing.T) {
 	if len(p.Rows) != 10 || len(p.Columns) != 1 || p.Columns[0] != "name" {
 		t.Fatalf("view page = %d rows, columns %v", len(p.Rows), p.Columns)
 	}
-	if p.Total != 1200 {
-		t.Fatalf("view total = %d", p.Total)
+	if p.Total != -1 {
+		t.Fatalf("view page total = %d, want it uncounted", p.Total)
+	}
+	if n, err := src.Count("named", ""); err != nil || n != 1200 {
+		t.Fatalf("view count = %d (%v), want 1200", n, err)
 	}
 }
 
@@ -197,7 +208,7 @@ func TestDuckPageOnEmptyTableKeepsColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p.Rows) != 0 || p.Total != 0 {
+	if len(p.Rows) != 0 || p.Total != -1 {
 		t.Fatalf("empty page = %d rows of %d", len(p.Rows), p.Total)
 	}
 	// No row carries the column names, so DESCRIBE has to supply the header.

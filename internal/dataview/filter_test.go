@@ -13,17 +13,18 @@ import (
 )
 
 // typeInto feeds a whole clause into the open filter line, one key per rune.
-func typeInto(m *Model, s string) {
+func typeInto(t *testing.T, m *Model, s string) {
+	t.Helper()
 	for _, r := range s {
-		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		feed(t, m, tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 }
 
 // openGrid loads `users` and puts the cursor in the grid.
 func openGrid(t *testing.T, m *Model) {
 	t.Helper()
-	m.Update(key("j")) // sidebar: empty -> users
-	m.Update(key("enter"))
+	feed(t, m, key("j")) // sidebar: empty -> users
+	feed(t, m, key("enter"))
 	if m.SelectedTable() != "users" {
 		t.Fatalf("selected = %q, want users", m.SelectedTable())
 	}
@@ -32,11 +33,11 @@ func openGrid(t *testing.T, m *Model) {
 func TestFilterLineShowsPrefixAndClause(t *testing.T) {
 	m := newPane(t, writeFixtureDB(t))
 	openGrid(t, &m)
-	m.Update(key("/"))
+	feed(t, &m, key("/"))
 	if !m.Filtering() {
 		t.Fatal("'/' in the grid must open the filter line")
 	}
-	typeInto(&m, "WHERE id > 1100")
+	typeInto(t, &m, "WHERE id > 1100")
 	if m.FilterInput() != "WHERE id > 1100" {
 		t.Fatalf("input = %q", m.FilterInput())
 	}
@@ -46,7 +47,7 @@ func TestFilterLineShowsPrefixAndClause(t *testing.T) {
 	}
 	// The grid's letter keys are text while the line is open: "n" types, it
 	// does not page.
-	typeInto(&m, "n")
+	typeInto(t, &m, "n")
 	if m.PageOffset() != 0 || !strings.HasSuffix(m.FilterInput(), "n") {
 		t.Fatalf("a letter must type into the line, not page: offset %d input %q", m.PageOffset(), m.FilterInput())
 	}
@@ -56,7 +57,7 @@ func TestFilterLineKeepsThePaneHeight(t *testing.T) {
 	m := newPane(t, writeFixtureDB(t))
 	openGrid(t, &m)
 	closed := strings.Count(m.View(), "\n")
-	m.Update(key("/"))
+	feed(t, &m, key("/"))
 	if open := strings.Count(m.View(), "\n"); open != closed {
 		t.Fatalf("the pane draws %d lines with the filter line open, %d without", open+1, closed+1)
 	}
@@ -69,8 +70,8 @@ func TestFilterLineKeepsThePaneHeight(t *testing.T) {
 func TestFilterClauseIsSQLHighlighted(t *testing.T) {
 	m := newPane(t, writeFixtureDB(t))
 	openGrid(t, &m)
-	m.Update(key("/"))
-	typeInto(&m, "WHERE id > 1100")
+	feed(t, &m, key("/"))
+	typeInto(t, &m, "WHERE id > 1100")
 	keyword := filterLineOf(m.View())
 	if keyword == "" {
 		t.Fatal("no filter line in the view")
@@ -84,8 +85,8 @@ func TestFilterClauseIsSQLHighlighted(t *testing.T) {
 	// differently: that difference *is* the syntax highlighting.
 	m2 := newPane(t, writeFixtureDB(t))
 	openGrid(t, &m2)
-	m2.Update(key("/"))
-	typeInto(&m2, "wheres id > 1100")
+	feed(t, &m2, key("/"))
+	typeInto(t, &m2, "wheres id > 1100")
 	plain := filterLineOf(m2.View())
 	if stripANSI(keyword) == stripANSI(plain) {
 		t.Fatal("the two clauses must differ in text")
@@ -110,9 +111,9 @@ func styleSet(s string) map[string]bool {
 func TestFilterAppliesAndPagesFilteredRows(t *testing.T) {
 	m := newPane(t, writeFixtureDB(t))
 	openGrid(t, &m)
-	m.Update(key("/"))
-	typeInto(&m, "WHERE id > 600 ORDER BY id")
-	m.Update(key("enter"))
+	feed(t, &m, key("/"))
+	typeInto(t, &m, "WHERE id > 600 ORDER BY id")
+	feed(t, &m, key("enter"))
 	if m.Filtering() {
 		t.Fatal("enter must close the filter line")
 	}
@@ -131,11 +132,11 @@ func TestFilterAppliesAndPagesFilteredRows(t *testing.T) {
 	}
 	// Paging stays inside the filtered result: 600 rows, so page two is the
 	// last one and holds the remaining 100.
-	m.Update(key("n"))
+	feed(t, &m, key("n"))
 	if m.PageOffset() != PageSize || m.PageRows() != 100 {
 		t.Fatalf("second filtered page = %d rows at %d", m.PageRows(), m.PageOffset())
 	}
-	m.Update(key("n"))
+	feed(t, &m, key("n"))
 	if m.PageOffset() != PageSize {
 		t.Fatalf("past the end must stay put, offset = %d", m.PageOffset())
 	}
@@ -144,14 +145,14 @@ func TestFilterAppliesAndPagesFilteredRows(t *testing.T) {
 func TestFilterEscRestoresTheWholeTable(t *testing.T) {
 	m := newPane(t, writeFixtureDB(t))
 	openGrid(t, &m)
-	m.Update(key("/"))
-	typeInto(&m, "WHERE id > 1100")
-	m.Update(key("enter"))
+	feed(t, &m, key("/"))
+	typeInto(t, &m, "WHERE id > 1100")
+	feed(t, &m, key("enter"))
 	if m.Filter() == "" {
 		t.Fatal("the filter must be applied")
 	}
-	m.Update(key("/"))
-	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	feed(t, &m, key("/"))
+	feed(t, &m, tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.Filtering() || m.Filter() != "" {
 		t.Fatalf("esc must close the line and drop the filter: editing=%v filter=%q", m.Filtering(), m.Filter())
 	}
@@ -170,15 +171,15 @@ func TestFilterEscRestoresTheWholeTable(t *testing.T) {
 func TestFilterEmptyClauseClearsIt(t *testing.T) {
 	m := newPane(t, writeFixtureDB(t))
 	openGrid(t, &m)
-	m.Update(key("/"))
-	typeInto(&m, "WHERE id > 1100")
-	m.Update(key("enter"))
-	m.Update(key("/"))
+	feed(t, &m, key("/"))
+	typeInto(t, &m, "WHERE id > 1100")
+	feed(t, &m, key("enter"))
+	feed(t, &m, key("/"))
 	// Wipe the seeded clause and apply the empty line.
 	for range m.FilterInput() {
-		m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+		feed(t, &m, tea.KeyPressMsg{Code: tea.KeyBackspace})
 	}
-	m.Update(key("enter"))
+	feed(t, &m, key("enter"))
 	if m.Filtering() || m.Filter() != "" {
 		t.Fatalf("an empty clause must clear the filter: editing=%v filter=%q", m.Filtering(), m.Filter())
 	}
@@ -190,14 +191,14 @@ func TestFilterEmptyClauseClearsIt(t *testing.T) {
 func TestFilterBrokenClauseKeepsTheLastGoodGrid(t *testing.T) {
 	m := newPane(t, writeFixtureDB(t))
 	openGrid(t, &m)
-	m.Update(key("/"))
-	typeInto(&m, "WHERE id > 600 ORDER BY id")
-	m.Update(key("enter"))
+	feed(t, &m, key("/"))
+	typeInto(t, &m, "WHERE id > 600 ORDER BY id")
+	feed(t, &m, key("enter"))
 	before := m.PageRows()
 
-	m.Update(key("/"))
-	typeInto(&m, " AND nope >")
-	m.Update(key("enter"))
+	feed(t, &m, key("/"))
+	typeInto(t, &m, " AND nope >")
+	feed(t, &m, key("enter"))
 	if !m.Filtering() {
 		t.Fatal("a rejected clause keeps the line open")
 	}
@@ -211,7 +212,7 @@ func TestFilterBrokenClauseKeepsTheLastGoodGrid(t *testing.T) {
 		t.Fatalf("the error must be visible, view:\n%s", stripANSI(m.View()))
 	}
 	// Editing the clause drops the stale error, and a valid clause applies.
-	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	feed(t, &m, tea.KeyPressMsg{Code: tea.KeyBackspace})
 	if m.FilterErr() != nil {
 		t.Fatal("editing must clear the error of the text that is gone")
 	}
@@ -220,9 +221,9 @@ func TestFilterBrokenClauseKeepsTheLastGoodGrid(t *testing.T) {
 func TestFilterRejectsSecondStatement(t *testing.T) {
 	m := newPane(t, writeFixtureDB(t))
 	openGrid(t, &m)
-	m.Update(key("/"))
-	typeInto(&m, "WHERE id = 1; DROP TABLE users")
-	m.Update(key("enter"))
+	feed(t, &m, key("/"))
+	typeInto(t, &m, "WHERE id = 1; DROP TABLE users")
+	feed(t, &m, key("enter"))
 	if m.Filter() != "" {
 		t.Fatalf("a multi-statement clause must not apply, filter = %q", m.Filter())
 	}
@@ -230,7 +231,7 @@ func TestFilterRejectsSecondStatement(t *testing.T) {
 		t.Fatalf("error = %v, want the multi-statement refusal", m.FilterErr())
 	}
 	// The table is untouched: the grid still pages all 1200 rows.
-	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	feed(t, &m, tea.KeyPressMsg{Code: tea.KeyEscape})
 	if !strings.Contains(stripANSI(m.View()), "rows 1–500 of 1200") {
 		t.Fatalf("the table must be intact, view:\n%s", stripANSI(m.View()))
 	}
@@ -239,12 +240,12 @@ func TestFilterRejectsSecondStatement(t *testing.T) {
 func TestFilterDroppedWithTheTable(t *testing.T) {
 	m := newPane(t, writeFixtureDB(t))
 	openGrid(t, &m)
-	m.Update(key("/"))
-	typeInto(&m, "WHERE id > 1100")
-	m.Update(key("enter"))
-	m.Update(key("tab")) // back to the sidebar
-	m.Update(key("k"))   // empty
-	m.Update(key("enter"))
+	feed(t, &m, key("/"))
+	typeInto(t, &m, "WHERE id > 1100")
+	feed(t, &m, key("enter"))
+	feed(t, &m, key("tab")) // back to the sidebar
+	feed(t, &m, key("k"))   // empty
+	feed(t, &m, key("enter"))
 	if m.Filter() != "" {
 		t.Fatalf("switching tables must drop the filter, got %q", m.Filter())
 	}

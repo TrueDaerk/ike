@@ -6,9 +6,10 @@ package dataview
 // guess. Enter applies it, esc drops it and returns the whole table.
 //
 // The pane still holds no SQL of its own: it hands the clause to the backend's
-// PageWhere, which wraps it and keeps the read-only contract. Paging, the
-// status line and the last-page jump keep working because the filtered page
-// carries its own Total.
+// PageWhere, which wraps it and keeps the read-only contract. Paging keeps
+// working immediately; the filtered result's size is counted in the background
+// like a table's (#1795), so the status line and the last-page jump pick it up
+// when it lands instead of the apply waiting for a scan.
 
 import (
 	"strings"
@@ -90,6 +91,11 @@ func (m *Model) applyFilter() {
 		return
 	}
 	m.filter, m.page, m.pageErr = clause, page, nil
+	// The filtered result has a size of its own, counted in the background
+	// under its own cache key (#1795) — until it lands the status line says
+	// "?" rather than stalling the apply on a scan.
+	m.recordPageTotal()
+	m.adoptTotal()
 	m.rowCur, m.rowTop, m.colOff = 0, 0, 0
 	m.fEditing, m.fErr = false, nil
 	m.clampScroll()

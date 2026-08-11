@@ -62,6 +62,19 @@ type Model struct {
 	tables []datasrc.Table
 	err    error // open/listing error: the pane renders it as its notice
 
+	// Async open and lazy counts (#1795), all driven from async.go: started
+	// guards the one-shot Init, opening drives the loading notice, closed
+	// tells a landing open result that its pane is gone. totals caches one
+	// row count per table and filter, totalExact says whether the loaded
+	// page's total is a counted number or the engine's estimate, and counting
+	// keeps at most one count in flight.
+	started    bool
+	opening    bool
+	closed     bool
+	totals     map[totalKey]totalVal
+	totalExact bool
+	counting   bool
+
 	region region
 	tcur   int // sidebar cursor
 	ttop   int // sidebar scroll
@@ -93,22 +106,21 @@ type Model struct {
 	focused bool
 }
 
-// New opens the database at p via datasrc.Open and loads the first table's
-// first page. An open error is kept for View — the pane opens either way and
-// explains itself, so an encrypted or corrupt file degrades to a notice.
+// New builds the pane for the database at p. It touches no file: the engine
+// open, the table listing and the first page all run in the background command
+// Init returns (#1795), so a pane over a multi-gigabyte database appears in
+// the same frame as one over an empty file. Until the open lands the pane
+// draws its loading notice; an open error lands the same way and degrades to a
+// notice, so an encrypted or corrupt file explains itself.
 func New(key, p string, pal *theme.Palette) Model {
 	m := Model{key: key, path: p, pal: pal, sel: -1, lastClickRow: -1, now: time.Now}
 	m.rebuildTheme()
-	m.src, m.err = datasrc.Open(p)
-	if m.err != nil {
-		return m
-	}
-	m.tables, m.err = m.src.Tables()
-	if m.err == nil && len(m.tables) > 0 {
-		m.loadTable(0)
-	}
 	return m
 }
+
+// Key returns the model's own key, which async results are routed by — the
+// owning pane may be re-keyed or moved into a tab (#1778).
+func (m *Model) Key() string { return m.key }
 
 // Path returns the database file's path.
 func (m *Model) Path() string { return m.path }
@@ -116,8 +128,11 @@ func (m *Model) Path() string { return m.path }
 // Err returns the open/listing error, if any.
 func (m *Model) Err() error { return m.err }
 
-// Close releases the backend; called when the pane closes.
+// Close releases the backend; called when the pane closes. A still-running
+// open is remembered as closed, so the engine it hands over is released rather
+// than leaked (#1795).
 func (m *Model) Close() {
+	m.closed = true
 	if m.src != nil {
 		m.src.Close()
 		m.src = nil
@@ -193,6 +208,11 @@ func (m *Model) fetch(offset int64) {
 	if m.pageErr != nil {
 		m.page = datasrc.Page{Offset: offset}
 	}
+	// The total never comes from the fetch (#1795): a backend that knows one
+	// for free hands it over, everything else reads the count cache — which is
+	// why walking a table with n/p issues no COUNT(*) at all.
+	m.recordPageTotal()
+	m.adoptTotal()
 	if m.rowCur >= len(m.page.Rows) {
 		m.rowCur = len(m.page.Rows) - 1
 	}
@@ -202,19 +222,30 @@ func (m *Model) fetch(offset int64) {
 	m.clampScroll()
 }
 
-// Update handles one message; only key presses reach it, focus-filtered by
-// the pane layer.
+// Update handles one message: key presses, focus-filtered by the pane layer,
+// and the background results of the open and the row counts (#1795), which the
+// root model routes here by pane key.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
-	if k, ok := msg.(tea.KeyPressMsg); ok {
-		return m.handleKey(k)
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		return m.handleKey(msg)
+	case ResultMsg:
+		return m.applyResult(msg)
 	}
 	return nil
 }
 
+// handleKey runs one key and returns its command, batched with the count the
+// new state may need: switching table or filter makes a different result set
+// the one worth counting, and countCmd is the single place that decides.
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
-	if m.err != nil {
+	if m.err != nil || m.src == nil {
 		return nil
 	}
+	return tea.Batch(m.keyAction(msg), m.countCmd())
+}
+
+func (m *Model) keyAction(msg tea.KeyPressMsg) tea.Cmd {
 	// The filter line owns the keyboard while it is open (#1777): its text is
 	// SQL, so the grid's single-letter keys must not fire mid-clause.
 	if m.fEditing {
@@ -359,9 +390,11 @@ func (m *Model) pageStep(d int) {
 	}
 }
 
-// lastPage jumps to the final page when the backend knows the total.
+// lastPage jumps to the final page. It needs an exact total: an estimate
+// (#1795) would land the jump next to the end — past it on a table with
+// deleted rows — so G stays inert until the background count has landed.
 func (m *Model) lastPage() {
-	if m.page.Total < 0 {
+	if !m.totalExact || m.page.Total < 0 {
 		return
 	}
 	last := (max64(m.page.Total-1, 0) / PageSize) * PageSize
@@ -369,12 +402,13 @@ func (m *Model) lastPage() {
 	m.rowCur = len(m.page.Rows) - 1
 }
 
-// hasNextPage reports whether rows exist past the loaded page.
+// hasNextPage reports whether rows exist past the loaded page. Only a counted
+// total decides it; with an estimate, or none at all, a full page suggests
+// more — which is what keeps paging working before the count lands (#1795).
 func (m *Model) hasNextPage() bool {
-	if m.page.Total >= 0 {
+	if m.totalExact && m.page.Total >= 0 {
 		return m.page.Offset+int64(len(m.page.Rows)) < m.page.Total
 	}
-	// Unknown total: a full page suggests more.
 	return len(m.page.Rows) == PageSize
 }
 
@@ -461,6 +495,9 @@ func (m *Model) missingToolView(pal *theme.Palette, e *datasrc.MissingToolError)
 func (m *Model) headerLine(pal *theme.Palette) string {
 	n := len(m.tables)
 	counts := fmt.Sprintf("%d object%s", n, plural(n))
+	if m.opening {
+		counts = "opening…" // nothing is listed yet (#1795)
+	}
 	title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" " + path.Base(m.path))
 	line := title + lipgloss.NewStyle().Faint(true).Render("   "+counts)
 	return line + m.filterNote(pal, m.w-lipgloss.Width(line))
@@ -503,14 +540,26 @@ func (m *Model) renderSidebar(pal *theme.Palette, height int) string {
 	return b.String()
 }
 
+// countText renders a row count for the sidebar and the status line: a
+// counted number plain, an estimate marked with "~" so a guess never reads as
+// a fact (#1795), and an unknown count as "?".
+func countText(n int64, exact bool) string {
+	switch {
+	case n < 0:
+		return "?"
+	case exact:
+		return fmt.Sprintf("%d", n)
+	default:
+		return fmt.Sprintf("~%d", n)
+	}
+}
+
 // sidebarRow draws one object: marker, name, and right-aligned row count
-// ("?" when counting failed, "view" tag for views).
+// ("?" while the count is unknown, "~n" for an estimate, "view" tag for
+// views).
 func (m *Model) sidebarRow(pal *theme.Palette, i, w int) string {
 	t := m.tables[i]
-	count := "?"
-	if t.Rows >= 0 {
-		count = fmt.Sprintf("%d", t.Rows)
-	}
+	count := countText(t.Rows, !t.Estimated)
 	if t.IsView() {
 		count += " v"
 	}
@@ -553,10 +602,14 @@ func (m *Model) renderGrid(pal *theme.Palette, height int) string {
 	var b strings.Builder
 	if m.pageErr != nil {
 		b.WriteString(sep + lipgloss.NewStyle().Foreground(pal.Error).Render(clipTo(" "+m.pageErr.Error(), w)))
+	} else if m.opening {
+		// The open runs in the background (#1795): the pane is here from the
+		// first frame and says what it is waiting for.
+		b.WriteString(sep + lipgloss.NewStyle().Faint(true).Render(" opening "+path.Base(m.path)+"…"))
 	} else if m.sel < 0 || len(m.page.Columns) == 0 {
 		b.WriteString(sep + lipgloss.NewStyle().Faint(true).Render(" no table selected"))
 	}
-	if m.pageErr != nil || m.sel < 0 || len(m.page.Columns) == 0 {
+	if m.pageErr != nil || m.opening || m.sel < 0 || len(m.page.Columns) == 0 {
 		for k := 1; k < height; k++ {
 			b.WriteString("\n" + sep)
 		}
@@ -665,24 +718,22 @@ func (m *Model) footer(pal *theme.Palette) string {
 			clipTo(" enter apply · esc drop the filter · the clause follows the dimmed prefix", m.w))
 	}
 	status := ""
-	if m.sel >= 0 && m.pageErr == nil {
+	switch {
+	case m.opening:
+		status = "opening…"
+	case m.sel >= 0 && m.pageErr == nil:
 		n := len(m.page.Rows)
 		if n == 0 {
 			status = "empty table"
-			if m.page.Total == 0 {
+			if m.page.Total == 0 && m.totalExact {
 				status = "0 rows"
 			}
 		} else {
 			first := m.page.Offset + 1
 			last := m.page.Offset + int64(n)
-			total := "?"
-			if m.page.Total >= 0 {
-				total = fmt.Sprintf("%d", m.page.Total)
-			}
-			status = fmt.Sprintf("rows %d–%d of %d", first, last, m.page.Total)
-			if m.page.Total < 0 {
-				status = fmt.Sprintf("rows %d–%d of %s", first, last, total)
-			}
+			// The total is the counted number, the engine's estimate ("~1200",
+			// #1795) or "?" — the line never passes a guess off as a count.
+			status = fmt.Sprintf("rows %d–%d of %s", first, last, countText(m.page.Total, m.totalExact))
 		}
 	}
 	hints := "tab switch · enter open · j/k row · h/l column · pgup/pgdn screen · n/p page · / filter · s schema"
