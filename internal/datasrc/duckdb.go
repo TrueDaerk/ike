@@ -103,11 +103,25 @@ func findDuckDB() (string, error) {
 // CLI's JSON output. A non-zero exit carries DuckDB's own message (locked
 // database, unreadable file, storage version mismatch).
 func (c duckCLI) query(dbPath, sql string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), duckTimeout)
-	defer cancel()
 	// -readonly is the CLI spelling of ACCESS_MODE=READ_ONLY: the file is
 	// never written, and DuckDB refuses the open rather than upgrading it.
-	cmd := exec.CommandContext(ctx, c.bin, "-readonly", "-json", dbPath, sql)
+	return c.run([]string{"-readonly", "-json", dbPath, sql})
+}
+
+// queryMem runs one SQL statement without opening a database file, against
+// the CLI's default in-memory database. It is the Parquet filter path
+// (#1777): the file is read through `read_parquet('…')`, which never writes
+// it, and DuckDB refuses `-readonly` on an in-memory database — there is no
+// file for the flag to protect.
+func (c duckCLI) queryMem(sql string) ([]byte, error) {
+	return c.run([]string{"-json", ":memory:", sql})
+}
+
+// run executes one CLI invocation and returns its stdout.
+func (c duckCLI) run(args []string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), duckTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, c.bin, args...)
 	var out, errBuf bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errBuf
 	cmd.Stdin = nil // never wait for input: an interactive prompt would hang
@@ -234,10 +248,21 @@ func (s *duckSource) fillCounts(tables []Table) {
 
 // count returns one object's row count, -1 when it cannot be counted.
 func (s *duckSource) count(table string) int64 {
-	out, err := s.cli.query(s.path, `SELECT count(*) AS c FROM `+quoteIdent(table))
+	return s.countQuery(`SELECT count(*) AS c FROM ` + quoteIdent(table))
+}
+
+// countQuery runs a count statement and reads its single cell, -1 when the
+// query fails (a broken filter clause, a view over a dropped table).
+func (s *duckSource) countQuery(q string) int64 {
+	out, err := s.cli.query(s.path, q)
 	if err != nil {
 		return -1
 	}
+	return duckCount(out)
+}
+
+// duckCount reads the single cell of a count result, -1 when there is none.
+func duckCount(out []byte) int64 {
 	_, rows, err := decodeDuckRows(out)
 	if err != nil || len(rows) == 0 || len(rows[0]) == 0 {
 		return -1
@@ -275,6 +300,48 @@ func (s *duckSource) Page(table string, offset, limit int64) (Page, error) {
 	}
 	page.Rows = rows
 	return page, nil
+}
+
+// PageWhere pages the table filtered by the user's clause (#1777), running it
+// inside a subquery so the pane's LIMIT/OFFSET windows the filtered result.
+// The invocation is the same `-readonly` one every other query uses, so a
+// clause cannot write; a clause carrying a second statement is refused before
+// the CLI — which would happily run a whole script from one argument — sees it.
+func (s *duckSource) PageWhere(table, clause string, offset, limit int64) (Page, error) {
+	clause = normalizeClause(clause)
+	if clause == "" {
+		return s.Page(table, offset, limit)
+	}
+	if err := checkClause(clause); err != nil {
+		return Page{}, err
+	}
+	cols, err := s.columns(table)
+	if err != nil {
+		return Page{}, err
+	}
+	base := fmt.Sprintf(`SELECT %s FROM %s`, duckProjection(cols), quoteIdent(table))
+	page := Page{Offset: offset, Total: s.countQuery(filteredCount(base, clause))}
+	for _, c := range cols {
+		page.Columns = append(page.Columns, c.Name)
+	}
+	out, err := s.cli.query(s.path, filteredQuery(base, clause, offset, limit))
+	if err != nil {
+		return Page{}, err
+	}
+	names, rows, err := decodeDuckRows(out)
+	if err != nil {
+		return Page{}, err
+	}
+	if len(names) > 0 {
+		page.Columns = names
+	}
+	page.Rows = rows
+	return page, nil
+}
+
+// FilterPrefix is the filter line's fixed head for this engine.
+func (s *duckSource) FilterPrefix(table string) string {
+	return "SELECT * FROM " + quoteIdent(table) + " "
 }
 
 // duckProjection renders the select list. BLOB columns are turned into the

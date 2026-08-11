@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-11 (data viewer: filter the grid with '/', #1777)
+
+- **`/` in the data grid filters it with SQL** (#1777): the filter line holds
+  everything that follows `SELECT * FROM <table>` — a `WHERE`, an `ORDER BY`, a
+  `LIMIT` — with that fixed head drawn dimmed in front of the input and the
+  clause SQL-highlighted from the theme's captures. `enter` applies, `esc`
+  drops the filter and brings the whole table back, and an applied filter stays
+  visible in the pane header.
+- **One shape across the engines**: `Source` grew `PageWhere(table, clause,
+  offset, limit)` and `FilterPrefix(table)`, and every backend runs the clause
+  inside a subquery with the pane's `LIMIT/OFFSET` outside it. Paging therefore
+  survives a filter (the count query counts the same subquery, so `rows X–Y of
+  N`, `n`/`p` and `G` keep their meaning) and a user's own `LIMIT 100` bounds
+  the result instead of fighting the pane. Parquet has no query engine, so its
+  filter — and only its filter — shells out to the `duckdb` CLI over
+  `read_parquet('<file>')`; without the binary the filter says so and the
+  unfiltered grid keeps working through the pure-Go reader.
+- **Read-only under free text**: a clause carrying a `;` outside a literal,
+  identifier or comment is refused before any engine sees it
+  (`ErrMultiStatement`), as is an unterminated literal or block comment that
+  would swallow the wrapper's closing parenthesis. The read-only opens
+  (`mode=ro`, `-readonly`) remain the first line. A clause the engine rejects
+  shows the engine's own message under the still-open filter line while the
+  grid keeps its last good page. Updated
+  [Data Viewer](/architecture/data-viewer.md).
+
 ## 2026-08-11 (editor: kwarg conceals in multi-line calls, #1773)
 
 - **Keyword-argument conceals no longer stop at the line break** (#1773, fixes

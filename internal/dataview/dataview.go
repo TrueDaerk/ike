@@ -19,6 +19,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/datasrc"
+	"ike/internal/highlight"
 	"ike/internal/theme"
 	"ike/internal/ui"
 )
@@ -71,6 +72,15 @@ type Model struct {
 	rowTop  int // vertical scroll within the loaded page
 	colOff  int // first visible column (horizontal scroll)
 
+	// Filter state (#1777): filter is the applied clause ("" — unfiltered),
+	// the f* fields the open filter line. hl styles it as SQL.
+	filter   string
+	fEditing bool
+	fInput   string
+	fCur     int
+	fErr     error
+	hl       highlight.Theme
+
 	w, h    int
 	focused bool
 }
@@ -80,6 +90,7 @@ type Model struct {
 // explains itself, so an encrypted or corrupt file degrades to a notice.
 func New(key, p string, pal *theme.Palette) Model {
 	m := Model{key: key, path: p, pal: pal, sel: -1}
+	m.rebuildTheme()
 	m.src, m.err = datasrc.Open(p)
 	if m.err != nil {
 		return m
@@ -133,24 +144,33 @@ func (m *Model) SetSize(w, h int) { m.w, m.h = w, h; m.clampScroll() }
 func (m *Model) SetFocused(f bool) { m.focused = f }
 
 // SetPalette re-threads the theme palette.
-func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
+func (m *Model) SetPalette(p *theme.Palette) { m.pal = p; m.rebuildTheme() }
 
-// loadTable selects table i and fetches its first page.
+// loadTable selects table i and fetches its first page. The filter is dropped
+// with the table it was written for — a clause naming another table's columns
+// would only fail.
 func (m *Model) loadTable(i int) {
 	if i < 0 || i >= len(m.tables) {
 		return
 	}
 	m.sel, m.tcur = i, i
 	m.rowCur, m.rowTop, m.colOff = 0, 0, 0
+	m.filter, m.fInput, m.fCur, m.fErr = "", "", 0, nil
 	m.fetch(0)
 }
 
-// fetch loads one page of the selected table starting at offset.
+// fetch loads one page of the selected table starting at offset — of the
+// filtered result while a filter is applied, so paging keeps its window on
+// what the grid actually shows.
 func (m *Model) fetch(offset int64) {
 	if m.src == nil || m.sel < 0 {
 		return
 	}
-	m.page, m.pageErr = m.src.Page(m.tables[m.sel].Name, offset, PageSize)
+	if m.filter != "" {
+		m.page, m.pageErr = m.src.PageWhere(m.tables[m.sel].Name, m.filter, offset, PageSize)
+	} else {
+		m.page, m.pageErr = m.src.Page(m.tables[m.sel].Name, offset, PageSize)
+	}
 	if m.pageErr != nil {
 		m.page = datasrc.Page{Offset: offset}
 	}
@@ -174,6 +194,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.err != nil {
+		return nil
+	}
+	// The filter line owns the keyboard while it is open (#1777): its text is
+	// SQL, so the grid's single-letter keys must not fire mid-clause.
+	if m.fEditing {
+		m.filterKey(msg)
 		return nil
 	}
 	switch msg.String() {
@@ -239,6 +265,8 @@ func (m *Model) gridKey(msg tea.KeyPressMsg) {
 		m.rowCur = 0
 	case "G", "end":
 		m.lastPage()
+	case "/":
+		m.startFilter()
 	}
 	m.clampScroll()
 }
@@ -322,6 +350,10 @@ func (m *Model) View() string {
 	b.WriteString(m.headerLine(pal))
 	b.WriteString("\n")
 	b.WriteString(m.body(pal))
+	if m.fEditing {
+		b.WriteString(m.filterLine(pal))
+		b.WriteString("\n")
+	}
 	b.WriteString(m.footer(pal))
 	return b.String()
 }
@@ -365,12 +397,13 @@ func (m *Model) missingToolView(pal *theme.Palette, e *datasrc.MissingToolError)
 	return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, box)
 }
 
-// headerLine names the database and its object count.
+// headerLine names the database, its object count and the active filter.
 func (m *Model) headerLine(pal *theme.Palette) string {
 	n := len(m.tables)
 	counts := fmt.Sprintf("%d object%s", n, plural(n))
 	title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" " + path.Base(m.path))
-	return title + lipgloss.NewStyle().Faint(true).Render("   "+counts)
+	line := title + lipgloss.NewStyle().Faint(true).Render("   "+counts)
+	return line + m.filterNote(pal, m.w-lipgloss.Width(line))
 }
 
 // body joins the sidebar and the grid side by side.
@@ -561,8 +594,16 @@ func (m *Model) dataRow(pal *theme.Palette, i int, widths []int, w int) string {
 }
 
 // footer is the status line: cursor position within the table plus the key
-// hints that fit.
+// hints that fit. With the filter line open it belongs to the filter — the
+// engine's rejection of a clause, or the two keys that close the line.
 func (m *Model) footer(pal *theme.Palette) string {
+	if m.fEditing {
+		if m.fErr != nil {
+			return lipgloss.NewStyle().Foreground(pal.Error).Render(clipTo(" "+m.fErr.Error(), m.w))
+		}
+		return lipgloss.NewStyle().Faint(true).Render(
+			clipTo(" enter apply · esc drop the filter · the clause follows the dimmed prefix", m.w))
+	}
 	status := ""
 	if m.sel >= 0 && m.pageErr == nil {
 		n := len(m.page.Rows)
@@ -584,7 +625,7 @@ func (m *Model) footer(pal *theme.Palette) string {
 			}
 		}
 	}
-	hints := "tab switch · enter open · j/k row · h/l column · n/p page · s schema"
+	hints := "tab switch · enter open · j/k row · h/l column · n/p page · / filter · s schema"
 	line := " " + status
 	if status != "" {
 		line += " · "
@@ -593,9 +634,13 @@ func (m *Model) footer(pal *theme.Palette) string {
 	return lipgloss.NewStyle().Faint(true).Render(clipTo(line, m.w))
 }
 
-// bodyHeight is the room between the header and footer lines.
+// bodyHeight is the room between the header and footer lines — one row less
+// while the filter line sits above the footer.
 func (m *Model) bodyHeight() int {
 	h := m.h - 2
+	if m.fEditing {
+		h--
+	}
 	if h < 1 {
 		h = 1
 	}

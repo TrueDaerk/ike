@@ -51,6 +51,24 @@ type Source interface {
 	// Page returns up to limit rows of the named table starting at offset,
 	// in a stable order so consecutive pages never overlap or skip rows.
 	Page(table string, offset, limit int64) (Page, error)
+	// PageWhere is Page over the user's filter clause (#1777): everything
+	// the pane's filter line holds after `SELECT * FROM <table>` — a WHERE,
+	// an ORDER BY, a LIMIT, or any combination. An empty clause behaves
+	// exactly like Page. The clause runs inside a subquery, so offset and
+	// limit still page the *filtered* result, and Page.Total counts it.
+	//
+	// The clause is user text, so implementations must keep the read-only
+	// contract against it: a clause carrying a statement separator is
+	// rejected (ErrMultiStatement) rather than handed to the engine, and the
+	// engine itself stays opened read-only. A clause the engine rejects
+	// comes back as its own error — the pane shows it and keeps the last
+	// good page.
+	PageWhere(table, clause string, offset, limit int64) (Page, error)
+	// FilterPrefix is the fixed query head the filter line shows before the
+	// editable clause, with the table named the way this engine quotes it
+	// (`SELECT * FROM "users" `). It is display text: the pane never builds
+	// SQL of its own from it.
+	FilterPrefix(table string) string
 	// Schema returns the DDL of the named table or view, as the engine
 	// stores it.
 	Schema(table string) (string, error)
