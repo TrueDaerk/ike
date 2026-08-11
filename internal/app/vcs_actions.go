@@ -165,27 +165,26 @@ func (m Model) diffAgainstHead() (tea.Model, tea.Cmd) {
 func (m *Model) openDiffHeadPane(path, head string) {
 	// Re-opening the same diff focuses and refreshes the existing pane
 	// instead of splitting a duplicate (#509).
-	if key, ok := m.findDiffPane("", path, "HEAD", ""); ok {
+	if inst, hostKey, tabIdx, ok := m.findDiffPane("", path, "HEAD", ""); ok {
 		right := readFileOrEmpty(path)
 		if ed := m.editorForPath(path); ed != nil {
 			right = ed.Text()
 		}
-		m.activeWS().Panes.Get(key).Diff().SetContents(head, right)
-		m.setFocus(key)
+		inst.Diff().SetContents(head, right)
+		m.focusContentAt(hostKey, tabIdx)
 		return
 	}
 	// Single diff window (#513): retarget the existing pane.
-	if key, ok := m.diffSlot(); ok {
+	if inst, hostKey, tabIdx, ok := m.diffSlot(); ok {
 		right := readFileOrEmpty(path)
 		if ed := m.editorForPath(path); ed != nil {
 			right = ed.Text()
 		}
 		name := filepath.Base(path)
-		inst := m.activeWS().Panes.Get(key)
 		inst.StopDiffEdit()
 		inst.Diff().Retarget(name+" @ HEAD", name, "", path, "HEAD", "", true)
 		inst.Diff().SetContents(head, right)
-		m.setFocus(key)
+		m.focusContentAt(hostKey, tabIdx)
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 		return
 	}

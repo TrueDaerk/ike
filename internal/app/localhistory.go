@@ -182,12 +182,11 @@ func (m *Model) openLocalHistoryDiffPane(path string, entry localhistory.Entry, 
 	if ed := m.editorForPath(path); ed != nil {
 		right = ed.Text()
 	}
-	if key, ok := m.diffSlot(); ok {
-		inst := m.activeWS().Panes.Get(key)
+	if inst, hostKey, tabIdx, ok := m.diffSlot(); ok {
 		inst.StopDiffEdit()
 		inst.Diff().Retarget(leftTitle, baseName(path), "", path, "", "", true)
 		inst.Diff().SetContents(snapshot, right)
-		m.setFocus(key)
+		m.focusContentAt(hostKey, tabIdx)
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 		return
 	}

@@ -1,6 +1,7 @@
 package pane
 
 import (
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -216,9 +217,15 @@ func (i *Instance) ContextID() string {
 	case KindEditor:
 		// An editor pane whose active tab is a terminal (#573) resolves
 		// under the terminal context, so terminal bindings apply while it
-		// owns the keystrokes.
-		if t := i.activeTab(); t != nil && t.IsTerminal() {
-			return ctxTerminal
+		// owns the keystrokes; a content tab (#1778) resolves under its
+		// nested kind's context the same way.
+		if t := i.activeTab(); t != nil {
+			if t.IsTerminal() {
+				return ctxTerminal
+			}
+			if t.inst != nil {
+				return t.inst.ContextID()
+			}
 		}
 		return ctxEditor
 	case KindTerminal:
@@ -506,23 +513,170 @@ func (i *Instance) AddTerminalTab(term terminal.Model) *terminal.Model {
 	return i.tabs[i.active].Terminal()
 }
 
-// ConvertToTabHost turns a terminal (or tool, #741) pane into an editor-kind
-// instance hosting its live session as the only tab (#836), so a center drop
-// can merge more tabs into it — the pane kind describes the initial content,
-// not the tab capability. The session never restarts. Only valid on terminal
-// instances; reports success.
+// KindTabbable reports whether kind's content can live in a tab slot and, by
+// the same token, whether its pane can convert into a tab host (#1778):
+// editors and terminals natively, plus the viewer kinds. The explorer and the
+// singleton tool windows (VCS, Debug, Problems, Structure, Usages,
+// Breakpoints) keep their fixed toggle-driven roles, and a merge view stays a
+// dedicated pane — its conflict workflow is session-bound.
+func KindTabbable(k Kind) bool {
+	switch k {
+	case KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindHTTP:
+		return true
+	}
+	return false
+}
+
+// ConvertToTabHost turns a terminal (or tool, #741) or viewer (#1778) pane
+// into an editor-kind instance hosting its live content as the only tab
+// (#836), so a center drop can merge more tabs into it — the pane kind
+// describes the initial content, not the tab capability. A terminal session
+// never restarts; viewer content moves without reloading. Reports success;
+// editor panes and non-tabbable kinds refuse.
 func (i *Instance) ConvertToTabHost() bool {
-	if i.kind != KindTerminal {
+	if i.kind == KindTerminal {
+		t := i.term
+		i.term = terminal.Model{}
+		if w, h := t.Size(); w > 0 && h > 0 {
+			i.w, i.h = w, h
+		}
+		i.kind = KindEditor
+		i.AddTerminalTab(t)
+		return true
+	}
+	nested, ok := i.DetachContent()
+	if !ok {
 		return false
 	}
-	t := i.term
-	i.term = terminal.Model{}
-	if w, h := t.Size(); w > 0 && h > 0 {
-		i.w, i.h = w, h
-	}
 	i.kind = KindEditor
-	i.AddTerminalTab(t)
+	i.AddContentTab(nested)
 	return true
+}
+
+// DetachContent hands the viewer pane's live component out as a nested
+// instance carrying the same key (#1778), leaving zero-value models behind so
+// a following registry Close releases nothing that moved — the DetachTerminal
+// pattern for content kinds. Only valid on tabbable viewer instances.
+func (i *Instance) DetachContent() (*Instance, bool) {
+	if i.kind == KindEditor || i.kind == KindTerminal || !KindTabbable(i.kind) {
+		return nil, false
+	}
+	nested := &Instance{key: i.key, kind: i.kind, cfg: i.cfg, pal: i.pal, regs: i.regs, w: i.w, h: i.h}
+	switch i.kind {
+	case KindMarkdown:
+		nested.md, i.md = i.md, preview.Model{}
+	case KindImage:
+		nested.iv, i.iv = i.iv, imgview.Model{}
+	case KindDiff:
+		nested.df, i.df = i.df, diff.Model{}
+		nested.dfEdit, i.dfEdit = i.dfEdit, nil
+	case KindArchive:
+		nested.av, i.av = i.av, archview.Model{}
+	case KindData:
+		nested.dv, i.dv = i.dv, dataview.Model{}
+	case KindHTTP:
+		nested.hp, i.hp = i.hp, httppane.Model{}
+	default:
+		return nil, false
+	}
+	return nested, true
+}
+
+// AddContentTab appends a tab hosting the nested content instance, makes it
+// active (#1778), and reports success. The content inherits the pane's size,
+// config, palette and focus, like a terminal tab. Only valid on editor
+// instances, and only for tabbable viewer content.
+func (i *Instance) AddContentTab(nested *Instance) bool {
+	if i.kind != KindEditor || nested == nil || nested.kind == KindEditor || nested.kind == KindTerminal || !KindTabbable(nested.kind) {
+		return false
+	}
+	nested.setPalette(i.pal)
+	nested.configure(i.cfg)
+	if i.w > 0 && i.h > 0 {
+		nested.SetSize(i.w, i.h)
+	}
+	i.tabs = append(i.tabs, newContentTab(nested))
+	i.activate(len(i.tabs) - 1)
+	return true
+}
+
+// ActiveContent returns the nested content instance of the active tab
+// (#1778): non-nil only for an editor-kind pane whose active tab carries
+// viewer content. The seam mouse/status routing uses to treat the tab's body
+// like the equivalent dedicated pane.
+func (i *Instance) ActiveContent() *Instance {
+	if i.kind != KindEditor {
+		return nil
+	}
+	if t := i.activeTab(); t != nil {
+		return t.inst
+	}
+	return nil
+}
+
+// TabContent returns the nested content instance of tab idx (#1778), nil for
+// editor/terminal tabs or an out-of-range index.
+func (i *Instance) TabContent(idx int) *Instance {
+	if t := i.Tab(idx); t != nil {
+		return t.inst
+	}
+	return nil
+}
+
+// ContentTitle is the short per-kind label of a viewer instance, used as its
+// tab title (#1778) — the basename of what it shows, the diff's right-hand
+// title, the HTTP viewer's request key.
+func (i *Instance) ContentTitle() string {
+	switch i.kind {
+	case KindMarkdown:
+		if p := i.md.Path(); p != "" {
+			return filepath.Base(p)
+		}
+		return "preview"
+	case KindImage:
+		if p := i.iv.Path(); p != "" {
+			return filepath.Base(p)
+		}
+		return "image"
+	case KindArchive:
+		if p := i.av.Path(); p != "" {
+			return filepath.Base(p)
+		}
+		return "archive"
+	case KindData:
+		if p := i.dv.Path(); p != "" {
+			return filepath.Base(p)
+		}
+		return "data"
+	case KindDiff:
+		_, r := i.df.Titles()
+		if r != "" {
+			return r
+		}
+		return "diff"
+	case KindHTTP:
+		if t := i.hp.Title(); t != "" {
+			return t
+		}
+		return "http"
+	}
+	return "pane"
+}
+
+// releaseContent ends the background resources the instance's component holds
+// — a terminal's session, a data viewer's database backend, and every tab's
+// content for a tab host. Zero-value models (after a detach) release nothing.
+func (i *Instance) releaseContent() {
+	switch i.kind {
+	case KindTerminal:
+		i.term.Close()
+	case KindData:
+		i.dv.Close()
+	case KindEditor:
+		for _, t := range i.tabs {
+			t.close()
+		}
+	}
 }
 
 // DetachTerminal hands the live terminal model to the caller and leaves the
@@ -536,6 +690,38 @@ func (i *Instance) DetachTerminal() (terminal.Model, bool) {
 	t := i.term
 	i.term = terminal.Model{}
 	return t, true
+}
+
+// AdoptTabsFrom moves every tab of src — documents, terminal sessions,
+// nested content, pin flags — to the end of i's tab list (#1778), leaving
+// the last moved tab active; the caller closes src right after. A file i
+// already shows stays behind (the dedupe the file-only merge used to get via
+// openInTab) and closes with src. Valid only between editor instances.
+func (i *Instance) AdoptTabsFrom(src *Instance) bool {
+	if i.kind != KindEditor || src == nil || src == i || src.kind != KindEditor {
+		return false
+	}
+	var kept []*Tab
+	moved := false
+	for _, t := range src.tabs {
+		if ed := t.Editor(); ed != nil && ed.HasFile() && i.TabForPath(ed.Path()) >= 0 {
+			kept = append(kept, t)
+			continue
+		}
+		t.setPalette(i.pal)
+		t.configure(i.cfg)
+		if i.w > 0 && i.h > 0 {
+			t.setSize(i.w, i.h)
+		}
+		i.tabs = append(i.tabs, t)
+		moved = true
+	}
+	src.tabs = kept
+	src.active = 0
+	if moved {
+		i.activate(len(i.tabs) - 1)
+	}
+	return true
 }
 
 // CloseTerminalTabs ends every terminal tab's session; the tab slots stay (a
@@ -599,12 +785,13 @@ func (i *Instance) ToggleTabPin(idx int) bool {
 	return i.tabs[idx].pinned
 }
 
-// FileTabCount counts the pane's document tabs — terminal tabs (#573) are
-// exempt from the tab limit (#742).
+// FileTabCount counts the pane's document tabs — terminal tabs (#573) and
+// content tabs (#1778) are exempt from the tab limit (#742), like the
+// eviction below only ever picks document tabs.
 func (i *Instance) FileTabCount() int {
 	n := 0
 	for _, t := range i.tabs {
-		if !t.IsTerminal() {
+		if t.Editor() != nil {
 			n++
 		}
 	}
@@ -676,6 +863,26 @@ func (i *Instance) DetachTerminalTab(idx int) (terminal.Model, bool) {
 	return t, true
 }
 
+// DetachContentTab removes tab idx without releasing its backend and returns
+// the nested content instance (#1778): a dragged viewer tab moves into
+// another pane or splits off as its own pane again. Valid only on editor
+// instances holding more than one tab with content at idx.
+func (i *Instance) DetachContentTab(idx int) (*Instance, bool) {
+	if i.kind != KindEditor || idx < 0 || idx >= len(i.tabs) || len(i.tabs) == 1 || i.tabs[idx].inst == nil {
+		return nil, false
+	}
+	nested := i.tabs[idx].inst
+	i.tabs = append(i.tabs[:idx], i.tabs[idx+1:]...)
+	switch {
+	case i.active > idx:
+		i.active--
+	case i.active == idx && i.active >= len(i.tabs):
+		i.active = len(i.tabs) - 1
+	}
+	i.activate(i.active)
+	return nested, true
+}
+
 // CloseTab removes tab idx. The neighbour that slides into its position becomes
 // active when the active tab itself closes (the last position falls back to its
 // left neighbour). Closing the only tab is refused — the caller closes the pane
@@ -698,13 +905,14 @@ func (i *Instance) CloseTab(idx int) bool {
 
 // SetSize pushes an interior content size into the wrapped component. Editor
 // instances size every tab, so switching tabs never renders through a stale
-// viewport.
+// viewport. Every kind records the size, so content moving between pane and
+// tab slot (#1778) carries its extent along.
 func (i *Instance) SetSize(w, h int) {
+	i.w, i.h = w, h
 	switch i.kind {
 	case KindExplorer:
 		i.exp.SetSize(w, h)
 	case KindEditor:
-		i.w, i.h = w, h
 		for _, t := range i.tabs {
 			t.setSize(w, h)
 		}
@@ -715,11 +923,9 @@ func (i *Instance) SetSize(w, h int) {
 	case KindImage:
 		i.iv.SetSize(w, h)
 	case KindDiff:
-		i.w, i.h = w, h
 		i.df.SetSize(w, h)
 		i.sizeDiffEditor()
 	case KindMerge:
-		i.w, i.h = w, h
 		i.mg.SetSize(w, h)
 	case KindVCS:
 		i.vp.SetSize(w, h)
@@ -798,8 +1004,10 @@ func (i *Instance) View() string {
 		if t == nil {
 			return ""
 		}
-		if t.IsTerminal() {
-			return t.view() // live terminal output — never cached
+		if t.IsTerminal() || t.inst != nil {
+			// Live terminal output and nested viewer content (#1778) — never
+			// cached here; the app-level box cache still applies.
+			return t.view()
 		}
 		// Skip recomputing the editor's View when nothing it renders changed
 		// (#615): a scroll of another pane, or an idle frame, reuses the cached
