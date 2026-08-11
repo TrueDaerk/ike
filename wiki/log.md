@@ -1,5 +1,17 @@
 # Log
 
+## 2026-08-11 (viewer panes split the pane you came from, #1779)
+
+- **Data, image and archive viewers no longer split the explorer** (#1779):
+  opening a `.duckdb`, a `.png` or a `.tar` from the explorer used to split the
+  *focused* leaf — the explorer itself — so the viewer landed on the far left
+  instead of next to the code. The three opens now share
+  `viewerSplitTarget`, which mirrors `fileEditorKey`: focused pane when it
+  hosts content, else `m.recentEditor`, else the first content leaf; the
+  explorer and the singleton tool windows never qualify, and the focused leaf
+  remains the last-resort fallback so a tool-windows-only workspace still gets
+  its pane. The refocus path for an already-open path is unchanged.
+
 ## 2026-08-11 (data viewer: filter the grid with '/', #1777)
 
 - **`/` in the data grid filters it with SQL** (#1777): the filter line holds

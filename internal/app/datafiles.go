@@ -40,7 +40,8 @@ func (dataProvider) Capabilities() plugin.Capabilities {
 func init() { registry.Register(dataProvider{}) }
 
 // openDataPane opens (or refocuses) the data viewer for path, split off the
-// focused leaf like the image preview.
+// leaf viewerSplitTarget picks — the pane the user last worked in, never the
+// explorer they opened the file from (#1779).
 func (m *Model) openDataPane(path string) {
 	for _, key := range m.activeWS().Panes.Keys() {
 		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindData && inst.Data().Path() == path {
@@ -48,8 +49,9 @@ func (m *Model) openDataPane(path string) {
 			return
 		}
 	}
+	target := m.viewerSplitTarget()
 	key := m.activeWS().Panes.AddDataView(path)
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, m.activeWS().Panes.Focused(), key, layout.ZoneRight)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneRight)
 	if !ok {
 		m.activeWS().Panes.Close(key)
 		return
