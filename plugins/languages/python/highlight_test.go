@@ -46,6 +46,59 @@ func TestPythonIdentifierCaptures(t *testing.T) {
 	}
 }
 
+// TestPythonSelfClsCaptures guards #1798: self/cls (and the metaclass
+// spellings mcls/metacls) highlight as variable.builtin at both the
+// parameter and every use site, while similarly-named identifiers that only
+// partially match (selfish, classes) stay plain variables.
+func TestPythonSelfClsCaptures(t *testing.T) {
+	lines := []string{
+		"class Wrapper:",
+		"    def method(self, selfish):",
+		"        return self.value + selfish",
+		"    @classmethod",
+		"    def create(cls, classes):",
+		"        return cls, classes",
+		"class Meta(type):",
+		"    def __new__(mcls, name, bases, ns):",
+		"        return super().__new__(mcls, name, bases, ns)",
+		"    def __call__(metacls, *args):",
+		"        return metacls",
+	}
+	spans := highlight.Highlight("main.py", lines)
+	if len(spans) == 0 {
+		t.Fatal("expected spans for Python source, got none")
+	}
+	ix := highlight.NewIndex(spans)
+	cases := []struct {
+		name string
+		line int
+		word string
+		want string
+	}{
+		{"self param", 1, "self", "variable.builtin"},
+		{"selfish param", 1, "selfish", "variable"},
+		{"self use", 2, "self.value", "variable.builtin"},
+		{"selfish use", 2, "selfish", "variable"},
+		{"cls param", 4, "cls", "variable.builtin"},
+		{"classes param", 4, "classes)", "variable"},
+		{"cls use", 5, "cls,", "variable.builtin"},
+		{"classes use", 5, "classes", "variable"},
+		{"mcls param", 7, "mcls", "variable.builtin"},
+		{"mcls use", 8, "mcls, name", "variable.builtin"},
+		{"metacls param", 9, "metacls", "variable.builtin"},
+		{"metacls use", 10, "metacls", "variable.builtin"},
+	}
+	for _, c := range cases {
+		col := strings.Index(lines[c.line], c.word)
+		if col < 0 {
+			t.Fatalf("%s: %q not in line %d", c.name, c.word, c.line)
+		}
+		if got := ix.CaptureAt(c.line, col); got != c.want {
+			t.Errorf("%s: CaptureAt(%d,%d) = %q, want %q", c.name, c.line, col, got, c.want)
+		}
+	}
+}
+
 // TestPythonDecoratorArguments guards #928: only the @ sigil and the dotted
 // name carry the decorator color; the argument list highlights like a normal
 // call — strings as strings, kwarg names as plain identifiers — for
