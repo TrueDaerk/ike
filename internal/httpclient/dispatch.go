@@ -2,6 +2,10 @@
 // #1247): it substitutes environment placeholders, applies local client
 // configuration (.netrc credentials, .curlrc options) and executes the
 // request, returning a Response the viewer and history layers consume.
+// DispatchStream (#1776) additionally recognizes streaming responses
+// (SSE/NDJSON, see IsStreamContentType) and hands headers and body chunks to
+// callbacks while the connection is open; everything else — and every caller
+// of plain Dispatch — keeps the collect-then-return behavior.
 //
 // Precedence: explicit values in the .http file always win. .netrc
 // credentials apply only when the request carries no Authorization header;
@@ -14,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"ike/internal/httpfile"
@@ -34,6 +40,11 @@ const (
 	// MaxBodyBytes caps how much of a response body is kept (10 MiB is far
 	// beyond what the TUI viewer renders; the rest is dropped with a note).
 	MaxBodyBytes = 10 << 20
+	// StreamIdleTimeout replaces the overall deadline once a response is
+	// recognized as a stream (#1776): a hard 30 s limit would kill every
+	// long-lived SSE/NDJSON connection, so a stream instead ends when the
+	// server sends nothing for this long (or when the user cancels).
+	StreamIdleTimeout = 60 * time.Second
 )
 
 // Response is the captured result of one dispatch.
@@ -72,6 +83,8 @@ type Options struct {
 	// form (#1305). It is the .http file's own directory; empty falls back to
 	// the process working directory.
 	BaseDir string
+	// StreamIdleTimeout overrides StreamIdleTimeout when > 0 (tests).
+	StreamIdleTimeout time.Duration
 }
 
 // requestBody returns the reader for a resolved request's body: the inline
@@ -127,10 +140,18 @@ func loadBodyFile(file string, substitute bool, opts Options, lookup func(string
 	return data, nil
 }
 
-// Dispatch resolves placeholders in req, applies local configuration and
-// executes it. Unresolved placeholders or transport failures return an
-// error; HTTP error statuses are regular responses.
-func Dispatch(ctx context.Context, req *httpfile.Request, opts Options) (*Response, error) {
+// prepared is the executable form of one request — everything Dispatch and
+// DispatchStream share before the wire is touched (#1776).
+type prepared struct {
+	httpReq  *http.Request
+	client   *http.Client
+	warnings []string
+	now      func() time.Time
+}
+
+// prepare resolves placeholders in req, applies local configuration and
+// builds the http.Request plus the configured client.
+func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepared, error) {
 	lookup := opts.Lookup
 	if lookup == nil {
 		lookup = lookupEnv
@@ -183,28 +204,201 @@ func Dispatch(ctx context.Context, req *httpfile.Request, opts Options) (*Respon
 		return nil, err
 	}
 
-	client := buildClient(cfg, opts)
 	now := opts.Now
 	if now == nil {
 		now = time.Now
 	}
-	start := now()
-	httpResp, err := client.Do(httpReq)
+	return &prepared{
+		httpReq:  httpReq,
+		client:   buildClient(cfg, opts),
+		warnings: warnings,
+		now:      now,
+	}, nil
+}
+
+// Dispatch resolves placeholders in req, applies local configuration and
+// executes it. Unresolved placeholders or transport failures return an
+// error; HTTP error statuses are regular responses.
+func Dispatch(ctx context.Context, req *httpfile.Request, opts Options) (*Response, error) {
+	p, err := prepare(ctx, req, opts)
+	if err != nil {
+		return nil, err
+	}
+	start := p.now()
+	httpResp, err := p.client.Do(p.httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("request %s: %v", req.Key(), err)
 	}
 	defer httpResp.Body.Close()
 
 	body, readErr := io.ReadAll(io.LimitReader(httpResp.Body, MaxBodyBytes+1))
-	elapsed := now().Sub(start)
+	elapsed := p.now().Sub(start)
 	if readErr != nil {
 		return nil, fmt.Errorf("request %s: reading response: %v", req.Key(), readErr)
 	}
 	truncated := false
+	warnings := p.warnings
 	if len(body) > MaxBodyBytes {
 		body = body[:MaxBodyBytes]
 		truncated = true
 		warnings = append(warnings, fmt.Sprintf("response body exceeded %d bytes and was truncated", MaxBodyBytes))
+	}
+
+	return &Response{
+		Status:     httpResp.Status,
+		StatusCode: httpResp.StatusCode,
+		Proto:      httpResp.Proto,
+		Headers:    httpResp.Header,
+		Body:       body,
+		Truncated:  truncated,
+		Duration:   elapsed,
+		RequestKey: req.Key(),
+		Warnings:   warnings,
+	}, nil
+}
+
+// IsStreamContentType reports whether a Content-Type header marks a response
+// that arrives incrementally (#1776). The check is deliberately conservative
+// — only media types that *promise* streaming qualify; everything else keeps
+// the collect-then-show behavior, which is the safe fallback.
+func IsStreamContentType(ct string) bool {
+	ct = strings.ToLower(strings.TrimSpace(strings.SplitN(ct, ";", 2)[0]))
+	switch ct {
+	case "text/event-stream", // SSE
+		"application/x-ndjson", "application/ndjson", // newline-delimited JSON
+		"application/json-seq",    // RFC 7464 JSON text sequences
+		"application/stream+json": // Spring's NDJSON precursor
+		return true
+	}
+	return false
+}
+
+// StreamCallbacks receive the incremental parts of a streaming dispatch
+// (#1776). They are only invoked when the response is recognized as a stream
+// (IsStreamContentType) and run on the dispatch goroutine — implementations
+// hand the data off (e.g. into a channel) rather than block.
+type StreamCallbacks struct {
+	// OnHeaders fires once, as soon as the response headers arrive.
+	OnHeaders func(status string, statusCode int, proto string, headers http.Header)
+	// OnChunk fires per received body chunk; the slice is the callback's own.
+	OnChunk func(chunk []byte)
+}
+
+// DispatchStream executes req like Dispatch, but recognizes streaming
+// responses (#1776): when the Content-Type promises incremental data, the
+// headers and every body chunk are handed to cb while the connection stays
+// open, and the overall deadline is swapped for an idle timeout — a fixed
+// 30 s limit would kill exactly the long-lived connections streaming is for.
+// A stream that is canceled (user abort), idles out or breaks mid-flight
+// still returns the partial Response with a warning instead of an error, so
+// what arrived stays visible and reaches the history. Non-streaming
+// responses behave exactly like Dispatch, callbacks never fire.
+func DispatchStream(ctx context.Context, req *httpfile.Request, opts Options, cb StreamCallbacks) (*Response, error) {
+	p, err := prepare(ctx, req, opts)
+	if err != nil {
+		return nil, err
+	}
+	// The client's own Timeout would cover the whole exchange including the
+	// body read; deadlines are managed here instead so a recognized stream
+	// can shed the overall limit once the headers are in.
+	overall := p.client.Timeout
+	p.client.Timeout = 0
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	deadline := time.AfterFunc(overall, cancel)
+	defer deadline.Stop()
+
+	start := p.now()
+	httpResp, err := p.client.Do(p.httpReq.WithContext(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("request %s: %v", req.Key(), err)
+	}
+	defer httpResp.Body.Close()
+	warnings := p.warnings
+
+	if !IsStreamContentType(httpResp.Header.Get("Content-Type")) {
+		// Collect mode — the overall deadline stays armed, the behavior is
+		// Dispatch's to the letter.
+		body, readErr := io.ReadAll(io.LimitReader(httpResp.Body, MaxBodyBytes+1))
+		elapsed := p.now().Sub(start)
+		if readErr != nil {
+			return nil, fmt.Errorf("request %s: reading response: %v", req.Key(), readErr)
+		}
+		truncated := false
+		if len(body) > MaxBodyBytes {
+			body = body[:MaxBodyBytes]
+			truncated = true
+			warnings = append(warnings, fmt.Sprintf("response body exceeded %d bytes and was truncated", MaxBodyBytes))
+		}
+		return &Response{
+			Status:     httpResp.Status,
+			StatusCode: httpResp.StatusCode,
+			Proto:      httpResp.Proto,
+			Headers:    httpResp.Header,
+			Body:       body,
+			Truncated:  truncated,
+			Duration:   elapsed,
+			RequestKey: req.Key(),
+			Warnings:   warnings,
+		}, nil
+	}
+
+	// Stream mode: the headers are the first visible result, the body arrives
+	// chunk by chunk. The overall deadline is disarmed — a healthy stream may
+	// run for minutes — and an idle watchdog takes over: no data for
+	// StreamIdleTimeout ends the stream, keeping what arrived.
+	deadline.Stop()
+	if cb.OnHeaders != nil {
+		cb.OnHeaders(httpResp.Status, httpResp.StatusCode, httpResp.Proto, httpResp.Header)
+	}
+	idle := StreamIdleTimeout
+	if opts.StreamIdleTimeout > 0 {
+		idle = opts.StreamIdleTimeout
+	}
+	var idledOut atomic.Bool
+	watchdog := time.AfterFunc(idle, func() { idledOut.Store(true); cancel() })
+	defer watchdog.Stop()
+
+	var body []byte
+	truncated := false
+	var readErr error
+	buf := make([]byte, 32<<10)
+	for {
+		n, err := httpResp.Body.Read(buf)
+		if n > 0 {
+			watchdog.Reset(idle)
+			keep := n
+			if room := MaxBodyBytes - len(body); keep > room {
+				keep, truncated = room, true
+			}
+			if keep > 0 {
+				body = append(body, buf[:keep]...)
+				if cb.OnChunk != nil {
+					cb.OnChunk(append([]byte(nil), buf[:keep]...))
+				}
+			}
+			if truncated {
+				break
+			}
+		}
+		if err != nil {
+			if err != io.EOF {
+				readErr = err
+			}
+			break
+		}
+	}
+	elapsed := p.now().Sub(start)
+	if truncated {
+		warnings = append(warnings, fmt.Sprintf("response body exceeded %d bytes and was truncated", MaxBodyBytes))
+	}
+	switch {
+	case idledOut.Load():
+		warnings = append(warnings, fmt.Sprintf("stream idle for %s — stopped, showing what arrived", idle))
+	case readErr != nil && errors.Is(readErr, context.Canceled):
+		warnings = append(warnings, "stream canceled — showing what arrived")
+	case readErr != nil:
+		warnings = append(warnings, fmt.Sprintf("stream ended early (%v) — showing what arrived", readErr))
 	}
 
 	return &Response{

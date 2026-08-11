@@ -3316,6 +3316,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fillHTTPPanel(msg)
 		return m, nil
 
+	case HTTPStreamStartMsg:
+		// A streaming response's headers arrived (#1776): show them live and
+		// keep pumping the dispatch's event channel.
+		m.beginHTTPStream(msg)
+		return m, nextHTTPEvent(msg.events)
+
+	case HTTPStreamChunkMsg:
+		// One live chunk of a running stream (#1776).
+		m.appendHTTPStream(msg)
+		return m, nextHTTPEvent(msg.events)
+
 	case httpTickMsg:
 		// Keep the in-flight indicator moving while dispatches run (#1272) —
 		// the statusline segment reads the flight set directly, the inline

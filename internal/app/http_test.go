@@ -945,3 +945,121 @@ func TestHTTPInlineFlightMarkerFollowsEdits(t *testing.T) {
 		t.Errorf("the marker must follow the request line, got %q at line 2", mark)
 	}
 }
+
+// drainHTTPFirstEvent runs a batched dispatch command and returns the first
+// HTTP event it yields: the stream start for a recognized stream (#1776), or
+// the finished response for everything else.
+func drainHTTPFirstEvent(t *testing.T, cmd tea.Cmd) tea.Msg {
+	t.Helper()
+	queue := []tea.Cmd{cmd}
+	for len(queue) > 0 {
+		c := queue[0]
+		queue = queue[1:]
+		if c == nil {
+			continue
+		}
+		switch msg := c().(type) {
+		case HTTPStreamStartMsg, HTTPResponseMsg:
+			return msg
+		case tea.BatchMsg:
+			queue = append(queue, msg...)
+		}
+	}
+	t.Fatal("no HTTP event produced")
+	return nil
+}
+
+// paneShows reports whether any composed row of the viewer contains s.
+func paneShows(m Model, s string) bool {
+	p := m.httpPanel()
+	if p == nil {
+		return false
+	}
+	for i := 0; i < p.Rows(); i++ {
+		if strings.Contains(p.RowText(i), s) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestHTTPStreamRendersIncrementally covers #1776: an SSE response shows its
+// lines in the viewer while the connection is still open, and finalizes into
+// a normal response once it ends.
+func TestHTTPStreamRendersIncrementally(t *testing.T) {
+	gate := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fl := w.(http.Flusher)
+		w.Write([]byte("data: one\n"))
+		fl.Flush()
+		select {
+		case <-gate:
+		case <-r.Context().Done():
+			return
+		}
+		w.Write([]byte("data: two\n"))
+		fl.Flush()
+	}))
+	t.Cleanup(srv.Close)
+
+	m := httpFileApp(t, srv.URL)
+	out, cmd := m.Update(HTTPRunMsg{})
+	m = out.(Model)
+	if cmd == nil {
+		t.Fatal("http.run must dispatch")
+	}
+
+	start, ok := drainHTTPFirstEvent(t, cmd).(HTTPStreamStartMsg)
+	if !ok {
+		t.Fatal("an SSE response must announce a stream start")
+	}
+	out, next := m.Update(start)
+	m = out.(Model)
+	p := m.httpPanel()
+	if p == nil || !p.Streaming() {
+		t.Fatal("the viewer must open in streaming mode")
+	}
+	if !paneShows(m, "text/event-stream") {
+		t.Error("the headers must show before the body ends")
+	}
+
+	// Pump events until the first line renders — the connection is still open
+	// (gate unreleased), so this is the incremental path.
+	for !paneShows(m, "data: one") {
+		msg := next()
+		if _, done := msg.(HTTPResponseMsg); done {
+			t.Fatal("stream finished before the first line rendered")
+		}
+		out, next = m.Update(msg)
+		m = out.(Model)
+	}
+	if !m.httpPanel().Streaming() {
+		t.Fatal("must still be streaming while the connection is open")
+	}
+
+	close(gate)
+	for {
+		msg := next()
+		out, next = m.Update(msg)
+		m = out.(Model)
+		if _, done := msg.(HTTPResponseMsg); done {
+			break
+		}
+	}
+	p = m.httpPanel()
+	if p.Streaming() {
+		t.Error("the finalized viewer must leave streaming mode")
+	}
+	if !paneShows(m, "data: two") {
+		t.Error("the full body must show after the stream ends")
+	}
+	if len(m.httpFlight) != 0 {
+		t.Errorf("the flight must clear: %+v", m.httpFlight)
+	}
+	// History entry present (#1776 acceptance): the partial-into-full response
+	// was appended like any other dispatch.
+	if _, n := p.HistoryIndex(); n != 1 {
+		t.Errorf("history entries: %d, want 1", n)
+	}
+}
