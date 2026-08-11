@@ -859,3 +859,94 @@ func TestSessionCloseLeavesNoGoroutines(t *testing.T) {
 		return runtime.NumGoroutine() <= baseline+2 // allow test-runner jitter
 	})
 }
+
+// wedgeFeedLoop parks the session's feed loop mid-pass (#1786): with gridMu
+// held by the test, a spooled chunk blocks the feed loop right before its
+// emulator write, exactly like a stalled render/lock window would. The
+// returned func releases the wedge; it is safe to call more than once and
+// registered as cleanup so a failing assertion cannot leak the lock.
+func wedgeFeedLoop(t *testing.T, s *Session) (release func()) {
+	t.Helper()
+	var once sync.Once
+	release = func() { once.Do(s.gridMu.Unlock) }
+	t.Cleanup(release)
+	s.gridMu.Lock()
+	// Any chunk in flight now parks the feed loop at gridMu: whether it takes
+	// this one or was already holding prompt output, its next emulator pass
+	// blocks and it can no longer observe the spool close.
+	s.out.put([]byte("wedge"))
+	return release
+}
+
+// TestCloseReturnsWhileFeedLoopWedged guards #1786: Session.Close runs on the
+// bubbletea update loop (tab close, popup collapse, project switch, quit), so
+// it must return even while a loop join cannot finish — the blocking joins
+// belong to a background goroutine, never to the caller.
+func TestCloseReturnsWhileFeedLoopWedged(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	waitFor(t, "idle prompt", func() bool { return !s.Busy() })
+	release := wedgeFeedLoop(t, s)
+
+	done := make(chan struct{})
+	go func() { s.Close(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Close must not block on a wedged feed loop (#1786)")
+	}
+	release() // let the background join finish
+}
+
+// TestExitNotifiesWhileFeedLoopWedged guards the #1786 freeze shape: the
+// shell exits via ctrl+d while the feed loop is stuck mid-pass. ExitedMsg
+// must still reach the app — it closes the tab, so nothing keeps rendering
+// (and blocking on) the wedged session. Before the fix the exit path joined
+// the loops first and the message was withheld forever.
+func TestExitNotifiesWhileFeedLoopWedged(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	waitFor(t, "idle prompt", func() bool { return !s.Busy() })
+	release := wedgeFeedLoop(t, s)
+
+	s.SendKey(vt.KeyPressEvent{Code: 'd', Mod: vt.ModCtrl})
+	waitFor(t, "ExitedMsg despite the wedged feed loop", func() bool {
+		return c.has(func(m tea.Msg) bool { _, ok := m.(ExitedMsg); return ok })
+	})
+	release()
+}
+
+// TestWidthReflowWithWiderReserve guards #1786's freeze root cause: a width
+// reflow while the resize reserve is wider than the grid used to re-take
+// gridMu inside softWrappedLocked — a self-deadlock that parked the resize
+// path forever with s.mu and gridMu held, freezing every later render that
+// touches the session. The wider-reserve state is reached legitimately: a
+// height resize snapshots the wide screen, a width change during an
+// alt-screen phase narrows the grid without resetting the reserve (only
+// primary-screen width changes reflow and reset), and the next
+// primary-screen width change reflows against the stale wider reserve.
+func TestWidthReflowWithWiderReserve(t *testing.T) {
+	c := &collector{}
+	s := NewPipeSession("pipe", 40, 24, c.send)
+	t.Cleanup(s.Close)
+	// Full-width rows, so the soft-wrap heuristic reaches the reserve match.
+	s.FeedBytes([]byte(strings.Repeat("x", 40) + "\r\n" + strings.Repeat("y", 40) + "\r\nz"))
+	waitFor(t, "rows fed", func() bool { return strings.Contains(s.View(), "yyyy") })
+
+	s.Resize(40, 20) // height shrink: snapshots the 40-wide reserve
+	time.Sleep(150 * time.Millisecond)
+	s.FeedBytes([]byte("\x1b[?1049h")) // alt screen on
+	waitFor(t, "alt screen", s.AltScreen)
+	s.Resize(30, 20) // width change on alt: grid narrows, reserve stays 40 wide
+	time.Sleep(150 * time.Millisecond)
+	s.FeedBytes([]byte("\x1b[?1049l")) // back to the primary screen
+	waitFor(t, "primary screen", func() bool { return !s.AltScreen() })
+
+	done := make(chan struct{})
+	go func() { s.Resize(25, 20); close(done) }() // width reflow vs. wider reserve
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("width reflow deadlocked on the wider resize reserve (#1786)")
+	}
+}
