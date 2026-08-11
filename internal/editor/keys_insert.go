@@ -87,17 +87,23 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 	case key.Code == tea.KeyDown && key.Mod&^tea.ModShift == 0:
 		m.insertMove(1, 0)
 	case key.Code == tea.KeyHome:
-		m.cursor = buffer.Position{Line: m.cursor.Line, Col: 0}
-		m.desiredCol = 0
-		m.moveCarets(true, func(pos buffer.Position, _ int) (buffer.Position, int) {
-			return buffer.Position{Line: pos.Line, Col: 0}, 0
-		})
-	case key.Code == tea.KeyEnd:
-		m.cursor = buffer.Position{Line: m.cursor.Line, Col: m.buf.RuneLen(m.cursor.Line)}
+		// Smart Home (JetBrains/VS Code): toggles between the first non-blank
+		// column and true column 0 (#1781). Each caret toggles off its own
+		// position.
+		m.cursor = motion.SmartHome(m.buf, m.cursor, 1).Pos
 		m.desiredCol = m.cursor.Col
 		m.moveCarets(true, func(pos buffer.Position, _ int) (buffer.Position, int) {
-			c := m.buf.RuneLen(pos.Line)
-			return buffer.Position{Line: pos.Line, Col: c}, c
+			p := motion.SmartHome(m.buf, pos, 1).Pos
+			return p, p.Col
+		})
+	case key.Code == tea.KeyEnd:
+		// Smart End: toggles between the column past the last non-blank rune
+		// and the true end of line.
+		m.cursor = motion.SmartEnd(m.buf, m.cursor, 1).Pos
+		m.desiredCol = m.cursor.Col
+		m.moveCarets(true, func(pos buffer.Position, _ int) (buffer.Position, int) {
+			p := motion.SmartEnd(m.buf, pos, 1).Pos
+			return p, p.Col
 		})
 	case key.Text != "" && key.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
 		// Printable input, including a bare space (Text == " ").

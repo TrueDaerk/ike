@@ -41,6 +41,76 @@ func TestFirstNonBlank(t *testing.T) {
 	}
 }
 
+func TestSmartHomeToggle(t *testing.T) {
+	b := buffer.FromString("    foo bar   ")
+	p := pos(0, 6) // mid-line
+	for _, want := range []int{4, 0, 4} {
+		p = SmartHome(b, p, 1).Pos
+		if p.Col != want {
+			t.Fatalf("home -> col %d want %d", p.Col, want)
+		}
+	}
+}
+
+func TestSmartHomeNoLeadingWhitespace(t *testing.T) {
+	b := buffer.FromString("foo bar")
+	p := pos(0, 3)
+	for i := 0; i < 2; i++ {
+		p = SmartHome(b, p, 1).Pos
+		if p.Col != 0 {
+			t.Fatalf("home -> col %d want 0", p.Col)
+		}
+	}
+}
+
+func TestSmartHomeBlankLine(t *testing.T) {
+	b := buffer.FromString("   ")
+	p := pos(0, 2)
+	p = SmartHome(b, p, 1).Pos
+	if p.Col != 0 {
+		t.Fatalf("home on blank line col=%d want 0", p.Col)
+	}
+	p = SmartHome(b, p, 1).Pos
+	if p.Col != 0 {
+		t.Fatalf("repeated home on blank line col=%d want 0", p.Col)
+	}
+}
+
+func TestSmartEndToggle(t *testing.T) {
+	b := buffer.FromString("    foo bar   ")
+	p := pos(0, 6) // mid-line
+	for _, want := range []int{11, 14, 11} {
+		p = SmartEnd(b, p, 1).Pos
+		if p.Col != want {
+			t.Fatalf("end -> col %d want %d", p.Col, want)
+		}
+	}
+}
+
+func TestSmartEndNoTrailingWhitespace(t *testing.T) {
+	b := buffer.FromString("foo bar")
+	p := pos(0, 3)
+	for i := 0; i < 2; i++ {
+		p = SmartEnd(b, p, 1).Pos
+		if p.Col != 7 {
+			t.Fatalf("end -> col %d want 7", p.Col)
+		}
+	}
+}
+
+func TestSmartEndBlankLine(t *testing.T) {
+	b := buffer.FromString("   ")
+	p := pos(0, 1)
+	p = SmartEnd(b, p, 1).Pos
+	if p.Col != 3 {
+		t.Fatalf("end on blank line col=%d want 3", p.Col)
+	}
+	p = SmartEnd(b, p, 1).Pos
+	if p.Col != 3 {
+		t.Fatalf("repeated end on blank line col=%d want 3", p.Col)
+	}
+}
+
 func TestWordForward(t *testing.T) {
 	b := buffer.FromString("foo bar baz")
 	p := pos(0, 0)

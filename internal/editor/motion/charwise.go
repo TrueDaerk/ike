@@ -71,6 +71,56 @@ func LineEnd(b *buffer.Buffer, from buffer.Position, count int) Result {
 	return Result{Pos: buffer.Position{Line: line, Col: col}, Kind: Inclusive}
 }
 
+// SmartHome implements "smart Home" (JetBrains/VS Code): it targets the
+// first non-blank column, or column 0 if the cursor is already there, so
+// repeated presses toggle between the two. A line with no non-blank runes
+// has no separate content column, so it always targets 0. Distinct from the
+// vim "0"/"^" motions, which keep their own conventions.
+func SmartHome(b *buffer.Buffer, from buffer.Position, count int) Result {
+	col := firstNonBlankCol(b, from.Line)
+	if from.Col == col {
+		col = 0
+	}
+	return Result{Pos: buffer.Position{Line: from.Line, Col: col}, Kind: Exclusive}
+}
+
+// SmartEnd implements "smart End": it targets the column just past the last
+// non-blank rune, or the true end of line if the cursor is already there, so
+// repeated presses toggle between the two. A line with no non-blank runes has
+// no separate content column, so it always targets the true end. Distinct
+// from the vim "$" motion, which keeps its own convention.
+func SmartEnd(b *buffer.Buffer, from buffer.Position, count int) Result {
+	col := lastNonBlankCol(b, from.Line)
+	if from.Col == col {
+		col = b.RuneLen(from.Line)
+	}
+	return Result{Pos: buffer.Position{Line: from.Line, Col: col}, Kind: Exclusive}
+}
+
+func firstNonBlankCol(b *buffer.Buffer, line int) int {
+	r := []rune(b.Line(line))
+	col := 0
+	for col < len(r) && (r[col] == ' ' || r[col] == '\t') {
+		col++
+	}
+	if col >= len(r) {
+		return 0
+	}
+	return col
+}
+
+func lastNonBlankCol(b *buffer.Buffer, line int) int {
+	r := []rune(b.Line(line))
+	col := len(r)
+	for col > 0 && (r[col-1] == ' ' || r[col-1] == '\t') {
+		col--
+	}
+	if col == 0 {
+		return b.RuneLen(line)
+	}
+	return col
+}
+
 func max1(n int) int {
 	if n < 1 {
 		return 1
