@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -56,6 +57,34 @@ type HTTPResponseMsg struct {
 	Request string // httpfile request key, labels the viewer
 	Resp    *httpclient.Response
 	Err     error
+}
+
+// HTTPStreamStartMsg announces a recognized streaming response (#1776): the
+// headers arrived, the body will follow chunk by chunk. events is the
+// dispatch's event channel the update loop keeps reading from.
+type HTTPStreamStartMsg struct {
+	Source  string
+	Request string
+	Status  string
+	Proto   string
+	Headers http.Header
+	events  chan tea.Msg
+}
+
+// HTTPStreamChunkMsg carries one received body chunk of a live stream
+// (#1776); the final HTTPResponseMsg still follows and finalizes the viewer.
+type HTTPStreamChunkMsg struct {
+	Source  string
+	Request string
+	Chunk   []byte
+	events  chan tea.Msg
+}
+
+// nextHTTPEvent reads the next event of a streaming dispatch off-loop — the
+// usual bubbletea channel pump: each stream message re-arms it until the
+// final HTTPResponseMsg ends the chain.
+func nextHTTPEvent(events chan tea.Msg) tea.Cmd {
+	return func() tea.Msg { return <-events }
 }
 
 // httpHistoryDir is the project-local response-history location (#1251),
@@ -116,13 +145,35 @@ func (m *Model) runHTTPRequestAtCursor() tea.Cmd {
 		started: time.Now(),
 		cancel:  cancel,
 	})
+	// The dispatch runs on its own goroutine and reports through events: a
+	// non-streaming response yields exactly one HTTPResponseMsg like before,
+	// a recognized stream (#1776) first a start message, then one chunk
+	// message per received piece, then the finalizing HTTPResponseMsg. The
+	// buffered channel gives natural backpressure — a slow UI slows the read,
+	// never drops data.
+	events := make(chan tea.Msg, 32)
 	dispatch := func() tea.Msg {
-		// The .http file's directory anchors relative external-body paths
-		// (#1305): `< ./payload.json` is relative to the request file, not to
-		// wherever IKE was started.
-		resp, err := httpclient.Dispatch(ctx, req, httpclient.Options{BaseDir: filepath.Dir(source)})
-		cancel() // release the context regardless of the outcome
-		return HTTPResponseMsg{Source: source, Request: key, Resp: resp, Err: err}
+		go func() {
+			// The .http file's directory anchors relative external-body paths
+			// (#1305): `< ./payload.json` is relative to the request file, not
+			// to wherever IKE was started.
+			resp, err := httpclient.DispatchStream(ctx, req,
+				httpclient.Options{BaseDir: filepath.Dir(source)},
+				httpclient.StreamCallbacks{
+					OnHeaders: func(status string, _ int, proto string, headers http.Header) {
+						events <- HTTPStreamStartMsg{Source: source, Request: key,
+							Status: status, Proto: proto, Headers: headers, events: events}
+					},
+					OnChunk: func(chunk []byte) {
+						events <- HTTPStreamChunkMsg{Source: source, Request: key,
+							Chunk: chunk, events: events}
+					},
+				})
+			cancel() // release the context regardless of the outcome
+			events <- HTTPResponseMsg{Source: source, Request: key, Resp: resp, Err: err}
+			close(events)
+		}()
+		return <-events
 	}
 	return tea.Batch(dispatch, tick)
 }
@@ -175,6 +226,31 @@ func (m *Model) openHTTPPanel() {
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
+// beginHTTPStream routes a stream start into the viewer (#1776), opening it
+// like fillHTTPPanel does: status and headers show immediately, the body
+// grows via appendHTTPStream. A viewer that cannot open is no failure — the
+// finalizing HTTPResponseMsg still lands and reports.
+func (m *Model) beginHTTPStream(msg HTTPStreamStartMsg) {
+	if m.httpPanel() == nil {
+		m.openHTTPPanel()
+	}
+	p := m.httpPanel()
+	if p == nil {
+		return
+	}
+	p.StartStream(msg.Request, msg.Proto, msg.Status, msg.Headers)
+	m.layout()
+}
+
+// appendHTTPStream feeds one live chunk into the viewer (#1776). A closed or
+// re-purposed viewer (history browsing ends the live view) drops the chunk —
+// the finalizing response carries the whole body anyway.
+func (m *Model) appendHTTPStream(msg HTTPStreamChunkMsg) {
+	if p := m.httpPanel(); p != nil {
+		p.AppendStream(msg.Chunk)
+	}
+}
+
 // fillHTTPPanel routes one dispatch result into the viewer, opening it first
 // when it is not part of the layout — the reuse path: a later dispatch
 // replaces the content of the existing pane.
@@ -188,6 +264,12 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) {
 		}
 		m.host.Notify(host.Error, "http: "+msg.Err.Error())
 		return
+	}
+	if canceled {
+		// A canceled *stream* still returns its partial response (#1776): what
+		// arrived stays visible and reaches the history, the notice says why
+		// the body ends where it does.
+		m.host.Notify(host.Info, "http: "+msg.Request+" canceled — keeping the partial response")
 	}
 	if m.httpPanel() == nil {
 		m.openHTTPPanel()

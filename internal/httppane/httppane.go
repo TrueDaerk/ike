@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"time"
@@ -112,6 +113,14 @@ type Model struct {
 	// content as the current answer. pendingSince drives the elapsed time.
 	pending      string
 	pendingSince time.Time
+
+	// Streaming (#1776): while a recognized stream is live the viewer shows
+	// status, headers and the body lines received so far — plaintext, no
+	// highlight/folds until the finalizing Set. streamTail buffers the
+	// incomplete last line, streamBody counts the appended body lines.
+	streaming  bool
+	streamTail string
+	streamBody int
 }
 
 // New returns an empty viewer; responses arrive via Set.
@@ -199,6 +208,74 @@ func (m *Model) SetHistory(items []HistoryItem) {
 	m.compose(items[0].Resp)
 }
 
+// StartStream switches the viewer to live-stream display (#1776): status
+// line and headers compose immediately, body lines follow via AppendStream
+// while the connection is open. History navigation clears — there is nothing
+// browsable until the finalizing Set/SetHistory restore it.
+func (m *Model) StartStream(request, proto, status string, headers http.Header) {
+	m.loaded = true
+	m.request = request
+	m.hist = nil
+	m.histIdx = 0
+	m.top = 0
+	m.left = 0
+	m.rows = nil
+	m.bodyIx = highlight.Index{}
+	m.folds, m.folded, m.visible = nil, nil, nil
+	m.streaming = true
+	m.streamTail = ""
+	m.streamBody = 0
+
+	m.status = fmt.Sprintf("%s %s", proto, status)
+	m.rows = append(m.rows, row{kind: kindStatus, text: m.status})
+	names := make([]string, 0, len(headers))
+	for n := range headers {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		for _, v := range headers[n] {
+			m.rows = append(m.rows, row{kind: kindHeader, text: n + ": " + v})
+		}
+	}
+	m.rows = append(m.rows, row{kind: kindBlank})
+	m.syncVisible()
+	m.ClearSelection()
+	m.research()
+}
+
+// AppendStream feeds one received chunk into the live view (#1776): complete
+// lines become body rows, the trailing incomplete line stays buffered until
+// its newline arrives. The viewport auto-follows the stream end as long as
+// it *is* at the end — a user who scrolled up keeps their position, log-viewer
+// style; G re-attaches. No-op unless a stream is live (a history browse or a
+// finalizing Set ends the live view).
+func (m *Model) AppendStream(chunk []byte) {
+	if !m.streaming || len(chunk) == 0 {
+		return
+	}
+	follow := m.top >= m.maxTop()
+	m.streamTail += string(chunk)
+	for {
+		nl := strings.IndexByte(m.streamTail, '\n')
+		if nl < 0 {
+			break
+		}
+		line := strings.TrimSuffix(m.streamTail[:nl], "\r")
+		m.streamTail = m.streamTail[nl+1:]
+		m.rows = append(m.rows, row{kind: kindBody, text: line, body: m.streamBody})
+		m.streamBody++
+	}
+	m.syncVisible()
+	if follow {
+		m.top = m.maxTop()
+	}
+	m.research()
+}
+
+// Streaming reports whether a live stream is on show (tests).
+func (m *Model) Streaming() bool { return m.streaming }
+
 // SetPending marks request as in flight since at (#1272). The composed rows
 // stay untouched — the previous response remains readable, it is just no
 // longer presented as the current one.
@@ -218,6 +295,9 @@ func (m *Model) HistoryIndex() (int, int) { return m.histIdx, len(m.hist) }
 // compose rebuilds the display rows for one response.
 func (m *Model) compose(resp *httpclient.Response) {
 	m.loaded = true
+	m.streaming = false
+	m.streamTail = ""
+	m.streamBody = 0
 	m.top = 0
 	m.left = 0
 	m.rows = nil
@@ -647,7 +727,13 @@ func (m *Model) View() string {
 	if m.status != "" {
 		b.WriteString(lipgloss.NewStyle().Faint(true).Render("   " + m.status))
 	}
-	if m.pending != "" {
+	switch {
+	case m.streaming:
+		// A live stream (#1776): the rows below grow while the connection is
+		// open; the marker replaces the generic pending one.
+		b.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render(
+			fmt.Sprintf("   ⟳ streaming… (%s)", runningFor(m.pendingSince))))
+	case m.pending != "":
 		// An in-flight dispatch (#1272): the rows below are the *previous*
 		// response until the new one lands.
 		b.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render(
@@ -728,6 +814,10 @@ func (m *Model) footerText() string {
 	// and the hint used to appear only once a second response existed,
 	// which is exactly when nobody was looking for it.
 	s := ""
+	if m.streaming {
+		// A live stream (#1776): the abort key leads, history is empty anyway.
+		s = " x cancel stream ·"
+	}
 	if len(m.hist) > 0 {
 		s = fmt.Sprintf(" ←/→ history %d/%d", m.histIdx+1, len(m.hist))
 		if at := m.hist[m.histIdx].At; !at.IsZero() {

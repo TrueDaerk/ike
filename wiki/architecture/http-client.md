@@ -148,6 +148,35 @@ capped at 10 MiB with a truncation warning so huge downloads cannot freeze
 the TUI. `Options` lets callers (and tests) override the env lookup, the
 config file paths, or disable detection entirely.
 
+### Streaming responses (#1776)
+
+`httpclient.DispatchStream(ctx, request, options, callbacks)` is the variant
+the app dispatches through: it prepares and sends exactly like `Dispatch`,
+but looks at the response's `Content-Type` before reading the body.
+`IsStreamContentType` recognizes — deliberately conservatively —
+`text/event-stream` (SSE), `application/x-ndjson` / `application/ndjson`,
+`application/json-seq` (RFC 7464) and `application/stream+json`; everything
+else keeps the collect-then-return behavior byte for byte, which is the
+fallback for anything unrecognized.
+
+For a recognized stream:
+
+- **Callbacks**: `OnHeaders` fires once as soon as the headers arrive,
+  `OnChunk` per received body chunk (a private copy each). Both run on the
+  dispatch goroutine, so implementations hand data off instead of blocking.
+- **Timeouts**: the client's overall timeout would kill exactly the
+  long-lived connections streaming is for, so `DispatchStream` manages
+  deadlines itself: the overall deadline (30 s / `max-time`) covers connect
+  and headers, and is disarmed once the response is recognized as a stream.
+  An **idle watchdog** takes over — no data for `StreamIdleTimeout` (60 s,
+  `Options.StreamIdleTimeout` overrides for tests) ends the stream, keeping
+  what arrived.
+- **Partial results are results**: a canceled stream (user abort), an idle
+  timeout or a mid-flight transport break returns the partial `Response`
+  with a warning saying why the body ends there — never an error — so what
+  arrived stays visible and reaches the history. `MaxBodyBytes` still caps
+  the body: the stream stops at 10 MiB with the usual truncation warning.
+
 ## Editor UX (#1250)
 
 - **Syntax highlighting**: the `http` language (`plugins/languages/http`,
@@ -246,6 +275,23 @@ config file paths, or disable detection entirely.
   collapsed to a notice, truncated bodies flagged. Scrolls with j/k/g/G and
   the mouse wheel; the pane persists across restarts as an empty singleton
   slot like the Usages panel.
+- **Live streams** (#1776): a recognized streaming response (SSE/NDJSON, see
+  the dispatch section) renders **incrementally** instead of leaving the pane
+  empty until the connection ends. The dispatch goroutine feeds a buffered
+  event channel the update loop pumps (`HTTPStreamStartMsg` → status line and
+  headers compose immediately, `HTTPStreamChunkMsg` per chunk → the pump
+  re-arms itself, the final `HTTPResponseMsg` ends the chain); a slow UI slows
+  the reads — backpressure, never dropped data. In the pane,
+  `StartStream`/`AppendStream` append complete lines as plaintext body rows
+  and buffer the incomplete last line; the header shows `⟳ streaming… (1.2s)`
+  and the footer leads with `x cancel stream`. The viewport **auto-follows**
+  the stream end while it is at the end — scrolling up detaches, log-viewer
+  style, `G` re-attaches. Highlighting and folds are *not* computed live: the
+  finalizing `Set` recomposes the full response exactly like a normal one, so
+  after stream end folding, search, selection, copy and the history entry
+  behave identically to a collected response. Canceling a running stream
+  (`x`, `http.cancel`) keeps the partial body in the pane and in the history,
+  with a warning row saying why it ends there.
 - **Identifier colors** (#1626): UUIDs and long hex hashes in the **body**
   rows take a color hashed from the identifier itself (`internal/idcolor`,
   drawn from the shared rainbow palette), so the trace id of this response
