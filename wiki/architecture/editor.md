@@ -1970,7 +1970,21 @@ identifier directly after `(` or `,` is an argument name, and a doubled
 separator (`==`, `::`) is never one, so comparisons don't match; several
 kwargs on one line each conceal independently. Python `def` defaults are
 syntactically kwargs and conceal under the same rule — a default is a
-de-facto constant read the same way. Go stays `const`-only: a `var`/`:=`
+de-facto constant read the same way.
+
+The kwarg scan runs over the whole buffer rather than one line at a time
+(#1773), so a **formatted, multi-line call** conceals like a single-line one:
+the parenthesis depth and the argument-slot state are carried across the line
+break, and a `maxBytes=10 * 1024 * 1024` sitting on a continuation line of a
+nested call still draws as `10 MiB`. Carrying the depth means carrying the
+lexical states that would make it lie, so the scanner also tracks Python
+triple-quoted strings and PHP `/* … */` blocks across lines — the lines inside
+them conceal nothing — and drops back to "no open call" on anything it cannot
+read to the end of the line (an unterminated one-line string, a PHP heredoc),
+where depth zero means nothing conceals. A line inside an open call is not a
+statement, so the assignment shapes skip it and each kwarg reports once.
+
+Go stays `const`-only: a `var`/`:=`
 binding is mutable, so its literal is an initial value, not a constant, and
 idiomatic Go constants already use `const`. The evaluator's safety rule is
 unchanged for all shapes — any identifier, call, float or string on the

@@ -182,6 +182,108 @@ func TestPythonKwargSpans(t *testing.T) {
 	})
 }
 
+// TestPythonMultiLineKwargSpans: a kwarg on a continuation line of an open
+// call conceals like one on a single-line call site (#1773) — the formatted,
+// nested shape black produces included. `backupCount=7` has no unit context
+// and stays raw.
+func TestPythonMultiLineKwargSpans(t *testing.T) {
+	got := PythonSpans([]string{
+		"request_logger.addHandler(",
+		"    RotatingFileHandler(",
+		"        \"aiparser_request.log\", maxBytes=10 * 1024 * 1024, backupCount=7",
+		"    )",
+		")",
+	})
+	checkSpans(t, got, []span{
+		{2, 41, 57, numhint.SizeCapture, "10 MiB"},
+	})
+}
+
+// TestPythonMultiLineKwargShapes: one kwarg per continuation line reports
+// once — the lowercase-assignment shape must not claim the line the kwarg scan
+// owns — and a multi-line `def` keeps concealing its defaults.
+func TestPythonMultiLineKwargShapes(t *testing.T) {
+	got := PythonSpans([]string{
+		"retry(",
+		"    timeout_ms=5000,",
+		")",
+		"def handle(",
+		"    duration=5000,",
+		"):",
+	})
+	checkSpans(t, got, []span{
+		{1, 15, 19, numhint.DurationCapture, "5s"},
+		{4, 13, 17, numhint.DurationCapture, "5s"},
+	})
+}
+
+// TestPythonStringParenNoArgContext: a `(` inside a string literal on an
+// earlier line opens no call, so the line after it is not an argument list;
+// a real open call on the same shape does conceal.
+func TestPythonStringParenNoArgContext(t *testing.T) {
+	if got := PythonSpans([]string{
+		"banner = \"wrap(\"",
+		"    timeout_ms=5000, attempts=3",
+	}); len(got) != 0 {
+		t.Errorf("string paren produced %+v, want nothing", got)
+	}
+	got := PythonSpans([]string{
+		"wrap(",
+		"    timeout_ms=5000, attempts=3",
+	})
+	checkSpans(t, got, []span{{1, 15, 19, numhint.DurationCapture, "5s"}})
+}
+
+// TestPythonTripleQuotedNoSpans: a triple-quoted string swallows the lines
+// inside it — a call written in a docstring conceals nothing — and the scan
+// resumes on the line after the closing quotes.
+func TestPythonTripleQuotedNoSpans(t *testing.T) {
+	got := PythonSpans([]string{
+		"DOC = \"\"\"",
+		"retry(",
+		"    timeout_ms=5000,",
+		"\"\"\"",
+		"retry(timeout_ms=5000)",
+	})
+	checkSpans(t, got, []span{{4, 17, 21, numhint.DurationCapture, "5s"}})
+}
+
+// TestPHPMultiLineNamedArgs: PHP named arguments conceal on continuation
+// lines too, nested calls included.
+func TestPHPMultiLineNamedArgs(t *testing.T) {
+	got := PHPSpans([]string{
+		"$client->request(",
+		"    'POST',",
+		"    new Options(",
+		"        timeout: 2 * 1000,",
+		"    ),",
+		");",
+	})
+	checkSpans(t, got, []span{{3, 17, 25, numhint.DurationCapture, "2s"}})
+}
+
+// TestPHPCommentsAndHeredoc: a block comment spanning lines hides them and
+// leaves the depth intact, a comment closed mid-line does not end the code
+// after it, and a heredoc body opens no argument context.
+func TestPHPCommentsAndHeredoc(t *testing.T) {
+	got := PHPSpans([]string{
+		"/* wrap(",
+		"   timeout: 5000",
+		"*/",
+		"foo(/* why */ timeout: 5000);",
+	})
+	checkSpans(t, got, []span{{3, 23, 27, numhint.DurationCapture, "5s"}})
+
+	if got := PHPSpans([]string{
+		"$sql = <<<SQL",
+		"    select foo(",
+		"SQL;",
+		"    timeout: 5000",
+	}); len(got) != 0 {
+		t.Errorf("heredoc produced %+v, want nothing", got)
+	}
+}
+
 // TestPHPLowercaseAndNamedArgs: PHP's unit-gated shapes (#1761) — a
 // statement-level `$name = expr;` and named arguments `f(name: expr)` — with
 // the same negatives: unit-less names, comparisons, `::` and identifier
