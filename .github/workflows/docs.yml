@@ -1,5 +1,8 @@
 # Builds the user documentation site (Epic #1182) and publishes it to GitHub
-# Pages. Pull requests build only; pushes to main deploy.
+# Pages. Pull requests build only; pushes to main deploy via `mkdocs gh-deploy`
+# to the gh-pages branch (#1837) — the same mechanism `make docs-deploy` uses
+# locally. Pages' source must be set to "Deploy from a branch" (gh-pages,
+# /root) for this to take effect; see the Makefile's docs-deploy target.
 name: Documentation
 
 on:
@@ -45,24 +48,30 @@ jobs:
       - name: Build site
         run: mkdocs build --strict
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
   deploy:
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      contents: write
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
-          # The Pages queue occasionally backs up well past the action's
-          # 10-minute default (#1606); a slow deploy beats a red main.
-          timeout: 1800000
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: userdocs/requirements.txt
+
+      - name: Install MkDocs
+        run: pip install -r userdocs/requirements.txt
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # Builds and force-pushes site/ to gh-pages — the branch Pages is
+      # configured to serve from. Same command as `make docs-deploy`.
+      - name: Deploy to gh-pages
+        run: mkdocs gh-deploy --strict

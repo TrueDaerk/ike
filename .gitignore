@@ -12,4 +12,7 @@
 /ike
 /docgen
 /shotgen
+
+# mkdocs build output (make docs-deploy / mkdocs build, gh-pages branch)
+/site
 .issue-work/
