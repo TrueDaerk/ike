@@ -347,6 +347,9 @@ type Model struct {
 	layoutSavePos   int
 	layoutSaveErr   string
 	layoutsPicker   *layoutsMode
+	// httpRequests is the palette mode listing the .http requests that have
+	// stored responses (#1829); the response pane's "r" fills and opens it.
+	httpRequests *httpRequestsMode
 	// layoutSelect is the open pane-selection mini-map preceding the name
 	// prompt (#1568); layoutSaveSel carries its confirmed selection into the
 	// prompt's save (nil = full snapshot).
@@ -808,6 +811,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	recent := &recentFiles{}
 	vcsSt := &vcsState{}                            // shared before the literal: the reverts picker mode reads it
 	layoutsPicker := newLayoutsMode(layoutNames)    // saved window layouts picker (#1175)
+	httpRequests := newHTTPRequestsMode()           // stored HTTP responses picker (#1829)
 	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
 	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
@@ -838,8 +842,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:           help.New(reg, bindings, helpMinCol(cfg)),
 		shell:          ui.New(shellConfig(cfg)),
 		vcs:            vcsSt,
-		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker),
+		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests),
 		layoutsPicker:  layoutsPicker,
+		httpRequests:   httpRequests,
 		refs:           refs,
 		lspStatus:      map[string]string{},
 		symbols:        symbols,
@@ -1898,7 +1903,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -1957,7 +1962,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -3459,6 +3464,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case HTTPCopyFoldMsg:
 		// http.copyFold (palette, #1787): the target fold, hidden rows and all.
 		return m, m.copyHTTPFold()
+
+	case httppane.PickRequestMsg:
+		// "r" in the response pane (#1829): list the .http file's requests
+		// that have stored responses and switch the pane to the chosen one.
+		m.openHTTPRequestPicker()
+		return m, nil
+
+	case ShowStoredHTTPResponseMsg:
+		// A picker row was chosen (#1829): same loading path as
+		// http.showResponse, just named by the picker instead of the cursor.
+		m.loadStoredHTTPResponse(msg.Source, msg.Request)
+		return m, nil
 
 	case httppane.CancelMsg:
 		// "x" in the response pane (#1272): the pane cannot reach the
