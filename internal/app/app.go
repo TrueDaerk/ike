@@ -3799,6 +3799,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case terminal.AutoScrollMsg:
+		// A selection drag rests past a pane edge (#1821): one more scroll
+		// step, the selection following. The terminal drops the tick once the
+		// drag ends or the history runs out, which stops the repeat.
+		if m.drag == nil || m.drag.kind != dragTermSelect {
+			return m, nil
+		}
+		if term := m.dragTerminal(m.drag.srcPane); term != nil {
+			return m, term.AutoScroll(msg)
+		}
+		return m, nil
+
 	case terminal.ExitedMsg:
 		// The shell ended: close its pane like ctrl+w would; when the layout
 		// refuses (last leaf), the pane stays showing [process exited]. A
@@ -7337,7 +7349,10 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case dragTermSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if term := m.dragTerminal(m.drag.srcPane); term != nil {
-					term.MouseDrag(lx, ly)
+					// Dragging past a pane edge auto-scrolls the terminal
+					// (#1821); the returned tick keeps it scrolling while the
+					// pointer rests there.
+					return m, term.MouseDrag(lx, ly)
 				}
 			}
 		case dragEditSelect:

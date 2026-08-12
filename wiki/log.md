@@ -1,5 +1,22 @@
 # Log
 
+## 2026-08-12 (terminal auto-scroll while extending a mouse selection, #1821)
+
+- **A selection drag past the pane edge scrolls the terminal**: `MouseDrag` in
+  `internal/terminal/model.go` reads the pane-local row it already receives as
+  a scroll trigger — above the pane pages one line into the scrollback, below
+  it one line back towards the live view (stopping at offset 0) — and extends
+  the selection to the clamped cell afterwards, so more than a screenful can be
+  marked and copied with the mouse. The anchor logic is untouched: the
+  selection is anchored virtually, only the window moves. To keep scrolling
+  while the pointer rests at the edge, the drag returns a 60 ms `tea.Tick`
+  (`terminal.AutoScrollMsg`, carrying session key and generation) that
+  `internal/app` routes back into the terminal for the active `dragTermSelect`
+  drag; the repeat retires at the ends of the history and on release. Word- and
+  line-wise drags (#951) behave identically, and the mouse-reporting
+  (`WantsMouse`) and scrollbar-drag (#1368) paths are unchanged.
+  Updated [Terminal](/architecture/terminal.md).
+
 ## 2026-08-12 (finer undo granularity in insert mode, #1818)
 
 - **An insert session commits several changes instead of one**:
