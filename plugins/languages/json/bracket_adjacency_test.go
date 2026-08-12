@@ -32,6 +32,7 @@ func TestRainbowBracketAdjacentToHintSpans(t *testing.T) {
 		`{"host":"xn--e1awd7f.example"}`,
 		`{"cidr":"10.0.0.0/8"}`,
 		`{"cron":"*/5 * * * *"}`,
+		`{"password":"xyz"}`, // secret mask (#1813) before the closing quote and }
 	}
 	for _, doc := range cases {
 		lines := []string{doc}
