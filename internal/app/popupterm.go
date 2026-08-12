@@ -131,6 +131,69 @@ func (m *Model) setPopupFocus(right bool) {
 	}
 }
 
+// popupSurface names one keyboard-focusable surface of the popup layer: a
+// floating panel (f != nil) or a side of the popup box (f == nil, right picks
+// the split side).
+type popupSurface struct {
+	f     *floatTerm
+	right bool
+}
+
+// popupSurfaces lists the layer's focusable surfaces in stack order: the box's
+// sides first (it is the base layer), then the floating panels bottom-to-top
+// (#1806).
+func (m Model) popupSurfaces() []popupSurface {
+	var out []popupSurface
+	if m.popup.inst != nil {
+		out = append(out, popupSurface{})
+		if m.popup.split != nil {
+			out = append(out, popupSurface{right: true})
+		}
+	}
+	for _, f := range m.floatTerms {
+		out = append(out, popupSurface{f: f})
+	}
+	return out
+}
+
+// stepPopupFocus moves the keyboard one step (+1 up the stack, -1 down) through
+// popupSurfaces, wrapping around, and reports whether it moved. Landing on a
+// panel focuses *and raises* it (setFloatFocus), so the keyboard owner is the
+// topmost panel after every keyboard switch, exactly as after a click — the
+// #1237 invariant. Because the target panel becomes topmost, repeated steps
+// alternate between the two frontmost surfaces, like an alt-tab. A layer with
+// fewer than two surfaces leaves the key to the shell.
+func (m *Model) stepPopupFocus(step int) bool {
+	surfaces := m.popupSurfaces()
+	if len(surfaces) < 2 {
+		return false
+	}
+	cur := -1
+	focused := m.floatFocused()
+	for i, s := range surfaces {
+		switch {
+		case focused != nil:
+			if s.f == focused {
+				cur = i
+			}
+		case s.f == nil && s.right == m.popup.focusRight:
+			cur = i
+		}
+	}
+	if cur < 0 {
+		return false
+	}
+	n := len(surfaces)
+	next := surfaces[((cur+step)%n+n)%n]
+	if next.f != nil {
+		m.setFloatFocus(next.f)
+		return true
+	}
+	m.setFloatFocus(nil)
+	m.setPopupFocus(next.right)
+	return true
+}
+
 // splitPopupTerminal splits the popup box into two side-by-side shells (#1427,
 // reserved cmd+d inside the popup — the same chord that splits a terminal
 // pane, #982). Only one split is supported; the fresh right side takes focus.
@@ -581,12 +644,15 @@ func (m Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 		return false, m, nil
 	}
 	// The spatial focus keys (default ctrl+left/right, #228 overrides apply)
-	// move the keyboard between the split sides (#1427) while the box owns
-	// it; unsplit (or with a floating panel focused, #1793) they stay with
-	// the shell like every other unreserved key.
-	if m.popup.split != nil && m.floatFocused() == nil {
-		if dir, ok := m.focusKeys[keys]; ok && (dir == DirLeft || dir == DirRight) {
-			m.setPopupFocus(dir == DirRight)
+	// step the keyboard through the layer's surfaces: the box's split sides
+	// (#1427) and every floating panel (#1793/#1806). With a single surface
+	// they stay with the shell like every other unreserved key.
+	if dir, ok := m.focusKeys[keys]; ok && (dir == DirLeft || dir == DirRight) {
+		step := 1
+		if dir == DirLeft {
+			step = -1
+		}
+		if m.stepPopupFocus(step) {
 			return true, m, nil
 		}
 	}

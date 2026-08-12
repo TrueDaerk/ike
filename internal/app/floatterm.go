@@ -14,8 +14,9 @@ import (
 // out of the popup terminal (#1398) re-homes its live session into a panel of
 // its own: a detached tab host with the popup's pane chrome, freely positioned
 // and sized, stacked z-ordered above the popup box (the #1237 layering rules:
-// the topmost/focused panel owns the keyboard, a click focuses and raises,
-// the toggle chord hides and shows the whole layer at once). A panel marked
+// the topmost/focused panel owns the keyboard, every focus change — click or
+// focus chord — raises the panel it lands on (#1806), the toggle chord hides
+// and shows the whole layer at once). A panel marked
 // global (the ●/○ title button) belongs to the app instead of the project:
 // it rides across project switches with its session — process, scrollback,
 // CWD — intact, and only ends with an app quit or an explicit close.
@@ -85,8 +86,15 @@ func (m Model) floatFocused() *floatTerm {
 }
 
 // setFloatFocus moves keyboard ownership within the popup layer: to panel f,
-// or back to the popup box (f == nil, split-side state preserved).
+// or back to the popup box (f == nil, split-side state preserved). Focusing a
+// panel also raises it to the top of the z-order (#1806), so the #1237
+// invariant "the topmost panel owns the keyboard" holds after every focus
+// change — click, chord or programmatic — and the keyboard owner is never
+// covered by a sibling.
 func (m *Model) setFloatFocus(f *floatTerm) {
+	if f != nil {
+		m.raiseFloatTerm(f)
+	}
 	m.floatFocus = f
 	for _, ft := range m.floatTerms {
 		ft.inst.SetFocused(ft == f)
@@ -103,16 +111,16 @@ func (m *Model) setFloatFocus(f *floatTerm) {
 	}
 }
 
-// focusFloatTermPanel focuses panel f and raises it to the top of the z-order
-// (#1237 semantics: a click focuses and lifts the panel above its siblings).
-func (m *Model) focusFloatTermPanel(f *floatTerm) {
+// raiseFloatTerm moves panel f to the top of the z-order (last in floatTerms,
+// drawn last by the compositor). A panel that is already topmost — or not in
+// the list at all — stays put.
+func (m *Model) raiseFloatTerm(f *floatTerm) {
 	for i, ft := range m.floatTerms {
 		if ft == f {
 			m.floatTerms = append(append(m.floatTerms[:i], m.floatTerms[i+1:]...), f)
-			break
+			return
 		}
 	}
-	m.setFloatFocus(f)
 }
 
 // floatTermFor resolves a tab host back to its floating panel, nil when inst
@@ -349,7 +357,7 @@ func (m *Model) commitPopupTabTear(d *dragState, x, y int) {
 		// panel itself.
 		f.x = ui.ClampDelta(x-f.w/2, 0, 0, max(m.width-f.w, 0))
 		f.y = ui.ClampDelta(y, 0, 0, max(m.height-f.h, 0))
-		m.focusFloatTermPanel(f)
+		m.setFloatFocus(f)
 		return
 	}
 	m.tearOutPopupTab(src, d.srcTab, x, y)
@@ -404,7 +412,7 @@ func (m *Model) movePopupTabTo(src *pane.Instance, idx int, tgt *pane.Instance) 
 	}
 	m.applyPopupSize()
 	if f := m.floatTermFor(tgt); f != nil {
-		m.focusFloatTermPanel(f)
+		m.setFloatFocus(f)
 		return
 	}
 	m.setFloatFocus(nil)
@@ -468,7 +476,7 @@ func (m Model) floatTermMouse(f *floatTerm, msg mouseEvent) (tea.Model, tea.Cmd,
 	lx, ly := msg.X-(f.x+paneContentX), msg.Y-(f.y+paneContentY)
 	switch {
 	case msg.action == mousePress && msg.Button == tea.MouseLeft:
-		m.focusFloatTermPanel(f)
+		m.setFloatFocus(f)
 		if zx, zy, ok := ui.ResizeZone(msg.X-f.x, msg.Y-f.y, f.w, f.h); ok {
 			m.floatDrag = &floatResizeDrag{kind: "floatterm", target: f, sx: zx, sy: zy, lastX: msg.X, lastY: msg.Y}
 			return m, nil, true

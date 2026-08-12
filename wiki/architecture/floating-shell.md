@@ -177,8 +177,9 @@ host per shell.
   pass-through (esc must reach vim inside the popup). It composites its own
   pane-style boxes via `overlay.Place` with its own funnel branch — and its
   torn-out floating panels (#1793) form their own z-ordered layer following
-  the same #1237 rules (topmost/focused owns input, click focuses and raises,
-  composite bottom-to-top), panel-list flavored rather than `ui.Stack`-hosted
+  the same #1237 rules (topmost/focused owns input, every focus change —
+  click or focus chord — raises the panel it lands on (#1806), composite
+  bottom-to-top), panel-list flavored rather than `ui.Stack`-hosted
   — see [Integrated Terminal](/architecture/terminal.md). It does reuse the
   shared size machinery: `ui.WinSizes` (keys `popupterm`/`popupterm:pos`),
   `ResizeZone` and the resize chords — plus a second, user-scoped `WinSizes`
