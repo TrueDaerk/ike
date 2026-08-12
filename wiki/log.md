@@ -1,5 +1,20 @@
 # Log
 
+## 2026-08-12 (project picker: relative path input resolves against the projects directory, #1808)
+
+- **Relative path browsing/completion targets `ProjectsDir()`**: the picker's
+  filesystem browsing and `tab` completion (#542) used to resolve relative
+  input against the process working directory, unlike
+  `newproject_prompt.go` / `clone_prompt.go`, which already default to
+  `project.ProjectsDir()`. `internal/pathcomplete` gained `DirsFrom(baseDir,
+  input)` (dirs-only sibling of the existing `CompleteFrom`); the picker now
+  joins any non-absolute, non-`~` query against the configured projects
+  directory before browsing/completing/opening it. Absolute and `~`-prefixed
+  queries are unaffected. Bare queries (no `/`) now also browse — previously
+  only `/…`, `~/…`, `./…`, `../…` triggered filesystem browsing at all; the
+  history fuzzy-search behavior is unchanged, browse items are additive.
+  Updated [Project Switching](/architecture/project-switching.md).
+
 ## 2026-08-12 (floating terminals: focus raises the panel, #1806)
 
 - **Focus implies raise**: `setFloatFocus` now moves the panel it focuses to
