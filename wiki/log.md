@@ -1,5 +1,18 @@
 # Log
 
+## 2026-08-12 ('@' file finder: offer scratch files when the query matches "scratch", #1812)
+
+- **Scratch files reachable without a mode switch**: `FileMode` gained
+  `SetScratchList` (mirroring `ScratchMode`'s own injection over
+  `internal/scratch.List`); the `@` finder now appends scratch-store rows,
+  newest-first and tagged with a `"scratch"` `Detail` chip, whenever the query
+  fuzzy-matches the literal word "scratch" — chosen over matching each
+  scratch's own filename as the simplest rule that leaves unrelated queries
+  untouched. Project matches keep their existing rank; path queries (#1433)
+  and the anchored descend (#1775) are unaffected, both return before the
+  scratch step runs. Updated [Command Palette](/architecture/command-palette.md)
+  and [Scratch Files](/architecture/scratch-files.md).
+
 ## 2026-08-12 (project picker: relative path input resolves against the projects directory, #1808)
 
 - **Relative path browsing/completion targets `ProjectsDir()`**: the picker's
