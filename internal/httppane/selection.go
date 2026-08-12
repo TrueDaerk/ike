@@ -26,6 +26,12 @@ type CopyMsg struct {
 // knows a request is running but not how to stop it.
 type CancelMsg struct{}
 
+// PickRequestMsg asks the host to open the picker of requests with stored
+// responses (#1829): the pane shows one request's history and has no access
+// to the .http file or the history store, so switching to another request's
+// history is the host's job — the pane only offers the key.
+type PickRequestMsg struct{}
+
 // pos is a caret position in the composed view: a row index plus a rune
 // column into that row's text.
 type pos struct {

@@ -525,6 +525,38 @@ func TestHTTPShowResponseOpensViewer(t *testing.T) {
 	}
 }
 
+// TestHTTPShowResponseKeybinding covers the default chord (#1831): resolving
+// ctrl+shift+f9 (the delivered fallback of cmd+shift+enter) in the Editor
+// context on a focused .http file must invoke http.showResponse and open the
+// viewer with the stored history, without dispatching anything.
+func TestHTTPShowResponseKeybinding(t *testing.T) {
+	m := sizedWith(t, registry.Global(), 120, 40)
+	path := filepath.Join(t.TempDir(), "req.http")
+	if err := os.WriteFile(path, []byte("### one\nGET http://localhost/a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store := httphistory.New(httpHistoryDir())
+	store.Append(path, "one", httphistory.FromResponse(sampleResponse("one"), time.Now()))
+
+	out, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	m = out.(Model)
+
+	tm, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyF9, Mod: tea.ModCtrl | tea.ModShift})
+	m = tm.(Model)
+	for _, msg := range cmdMsgs(cmd) {
+		if _, ok := msg.(HTTPResponseMsg); ok {
+			t.Fatal("http.showResponse keybinding must not dispatch")
+		}
+	}
+	m = drainCmd(m, cmd)
+	if !m.activeWS().Panes.Has(pane.HTTPKey) {
+		t.Fatal("the keybinding must open the viewer for stored responses")
+	}
+	if got := m.httpPanel().Request(); got != "one" {
+		t.Errorf("pane request: %q, want one", got)
+	}
+}
+
 // TestHTTPShowResponseWithoutHistoryNotifies: no stored responses means a
 // notice, not a dispatch and not an empty pane (#1492).
 func TestHTTPShowResponseWithoutHistoryNotifies(t *testing.T) {

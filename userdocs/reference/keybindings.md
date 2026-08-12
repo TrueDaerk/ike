@@ -164,6 +164,8 @@ Active when an editor pane has focus.
 | Save | `cmd+s` | `ctrl+s` | `editor.write` |
 | Save | `ctrl+s` | `ctrl+s` | `editor.write` |
 | Show intention actions | `alt+enter` | `alt+enter` | `lsp.codeAction` |
+| Show stored HTTP response | `cmd+shift+enter` | `ctrl+shift+enter` | `http.showResponse` |
+| Show stored HTTP response | `ctrl+shift+f9` | `ctrl+shift+f9` | `http.showResponse` |
 | Type hierarchy | `ctrl+h` | `ctrl+h` | `lsp.typeHierarchy` |
 | Undo | `cmd+z` | `ctrl+z` | `editor.undo` |
 | Undo | `ctrl+z` | `ctrl+z` | `editor.undo` |

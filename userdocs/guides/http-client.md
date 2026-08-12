@@ -206,7 +206,7 @@ highlighted, binary bodies collapsed to a notice.
 | ++shift+left++ / ++shift+right++ | Pan sideways by 8 columns (also shift+wheel) |
 | `0` / `^` | Back to column 0 |
 | `$` | Jump to the right edge |
-| `/` | Search the whole view — status line, headers and body |
+| `/`, ++ctrl+f++ / ++cmd+f++ | Search the whole view — status line, headers and body |
 | `n` / `N` | Next / previous match, wrapping |
 | `y` | Copy the selection, or the whole body when there is none |
 | `Y` | Copy the status line plus headers |
@@ -246,6 +246,20 @@ stored. While an older entry is shown, the pane header also carries a
 response.
 **Browse HTTP Response History** in the palette focuses the viewer and reports
 how many are stored.
+
+### Another request's responses
+
+The viewer shows one request at a time, but the stored responses of the others
+are a keypress away: press ++r++ in the focused pane and pick from the requests
+of the same `.http` file that have stored responses — the list shows the
+request line, how many responses are stored and when the newest arrived.
+Choosing one loads that request's history into the pane, newest first, with
+++left++/++right++ browsing as usual. Requests you never dispatched are not
+listed; a file without any stored response says so instead of opening an empty
+list. The same works from the editor with **Show Stored HTTP Response**
+(`http.showResponse`), which loads the history of the request block under the
+cursor without sending anything — handy right after a restart, before the pane
+shows anything at all.
 
 Text bodies are stored as plain text inside the JSON, so `.ike/http/*.json`
 opens and diffs readably in the editor.

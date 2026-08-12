@@ -163,7 +163,7 @@ func (m *Model) resendHTTPRequest() tea.Cmd {
 		return nil
 	}
 	key := p.Request()
-	return m.dispatchHTTP(m.httpPaneSource, key, snap.Label(),
+	return m.dispatchHTTP(p.Source(), key, snap.Label(),
 		func(ctx context.Context, _, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
 			return httpclient.Resend(ctx, key, snap, httpclient.Options{}, cb)
 		})
@@ -343,7 +343,9 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) {
 		return
 	}
 	p.Set(msg.Request, msg.Resp)
-	m.httpPaneSource = msg.Source // where a re-send's answer is stored (#1832)
+	// The source enables the pane's request picker (#1829) and tells a
+	// re-send (#1832) where to store its answer.
+	p.SetSource(msg.Source)
 	if msg.Source != "" {
 		// Persist under .ike/http/ and hand the stored predecessors to the
 		// viewer for h/l browsing (#1251); best effort like local history.
@@ -401,12 +403,13 @@ func (m *Model) copyHTTPFold() tea.Cmd {
 // searched or copied at all.
 var httpPaneKeys = []struct{ Key, Title string }{
 	{"h / l  ← / →", "Browse older / newer stored response"},
+	{"r", "Switch to another request's stored responses"},
 	{"s", "Keep scroll position while browsing history (per request)"},
 	{"j / k", "Scroll"},
 	{"shift+← / shift+→", "Pan sideways in wide lines"},
 	{"0 / $", "Left edge / right edge"},
 	{"g / G", "Top / bottom"},
-	{"/", "Search in the response"},
+	{"/ · ctrl+f / cmd+f", "Search in the response"},
 	{"n / N", "Next / previous match"},
 	{"za / zc / zo / zM / zR", "Toggle / close / open folds"},
 	{"zy", "Copy the target fold whole (or click its ⧉)"},
@@ -423,14 +426,16 @@ var httpPaneKeys = []struct{ Key, Title string }{
 func (m *Model) showHTTPHistory() {
 	p := m.httpPanel()
 	if p == nil {
-		m.host.Notify(host.Info, "http: no response yet — run an .http request first")
+		// The stored history of a request survives restarts (#1251), so an
+		// empty pane is no dead end — name the way in (#1829).
+		m.host.Notify(host.Info, "http: no response yet — run an .http request, or show a stored one with http.showResponse")
 		return
 	}
 	m.focusHTTPPanel() // the viewer may live in a tab (#1778)
 	m.layout()
 	idx, n := p.HistoryIndex()
 	if n <= 1 {
-		m.host.Notify(host.Info, "http: 1 stored response — ←/→ browse older/newer ones as they arrive")
+		m.host.Notify(host.Info, "http: 1 stored response — ←/→ browse older/newer ones as they arrive · r switch request")
 		return
 	}
 	m.host.Notify(host.Info, fmt.Sprintf("http: showing %d/%d stored responses — ←/→ browse", idx+1, n))
@@ -458,8 +463,15 @@ func (m *Model) showStoredHTTPResponse() {
 		m.host.Notify(host.Info, "http: no request under the cursor")
 		return
 	}
-	key := req.Key()
-	entries := httphistory.New(httpHistoryDir()).List(ed.Path(), key)
+	m.loadStoredHTTPResponse(ed.Path(), req.Key())
+}
+
+// loadStoredHTTPResponse shows the stored responses of one request in the
+// viewer — the shared loading path of http.showResponse (#1492) and the
+// pane-local request picker (#1829), which differ only in how they name the
+// request.
+func (m *Model) loadStoredHTTPResponse(source, key string) {
+	entries := httphistory.New(httpHistoryDir()).List(source, key)
 	if len(entries) == 0 {
 		m.host.Notify(host.Info, "http: no stored responses for "+key+" — dispatch it once with http.run")
 		return
@@ -479,10 +491,10 @@ func (m *Model) showStoredHTTPResponse() {
 	}
 	p.Set(key, items[0].Resp)
 	p.SetHistory(items)
-	m.httpPaneSource = ed.Path() // a re-send from here stores under the same key (#1832)
-	m.focusHTTPPanel()           // the viewer may live in a tab (#1778)
+	p.SetSource(source) // request picker (#1829) and re-send target (#1832)
+	m.focusHTTPPanel()  // the viewer may live in a tab (#1778)
 	m.layout()
-	m.host.Notify(host.Info, fmt.Sprintf("http: %d stored response(s) for %s — ←/→ browse", len(items), key))
+	m.host.Notify(host.Info, fmt.Sprintf("http: %d stored response(s) for %s — ←/→ browse · r switch request", len(items), key))
 }
 
 // paneKeysHelpGroup lists the focused pane's local keys for the cheatsheet

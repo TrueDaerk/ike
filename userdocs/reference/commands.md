@@ -82,7 +82,7 @@ bring their own.
 | Re-send Stored HTTP Request | `http.resend` | — | — | everywhere |
 | Browse HTTP Response History | `http.responseHistory` | — | — | everywhere |
 | Run HTTP Request | `http.run` | `ctrl+f9` | — | everywhere |
-| Show Stored HTTP Response | `http.showResponse` | — | — | everywhere |
+| Show Stored HTTP Response | `http.showResponse` | `ctrl+shift+f9` | — | everywhere |
 | Import JetBrains Keymap XML… | `keymap.importJetBrains` | — | — | everywhere |
 | Markdown Preview | `markdown.preview` | `cmd+alt+m` | — | everywhere |
 | Open Menu Bar | `menu.open` | `f10` | — | everywhere |

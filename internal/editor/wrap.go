@@ -19,8 +19,13 @@ import (
 // concealed expansion (#1756) — a stand-in budgets its replacement's width,
 // hidden columns nothing — via the same prefix sums the unwrapped path scrolls
 // by (#1752). Lines without ranges wrap on raw rune columns, unchanged.
+//
+// The width is the scroll width, not the raw text width: a segment filling the
+// pane's last column would put its final cell — and a caret on it — under the
+// overlaid vertical scrollbar, so wrapped rows break one column earlier while
+// the bar is visible (#1827).
 func (m Model) wrapSegs(line int) []int {
-	tw := m.view.TextWidth(m.buf.LineCount())
+	tw := m.scrollTextWidth()
 	if prefix := m.concealPrefix(line); prefix != nil {
 		return viewport.WrapSegmentsDisplay(prefix, tw)
 	}
