@@ -38,6 +38,9 @@ type PickerMode struct {
 	open func(path string) bool
 	// now overrides the clock for the last-opened badge (#842); tests only.
 	now func() time.Time
+	// projectsDir overrides ProjectsDir(), the base relative path browsing
+	// and completion resolve against (#1808); tests only.
+	projectsDir func() (string, error)
 }
 
 // SetOpen installs the in-memory check (#820); the app injects the workspace
@@ -58,7 +61,19 @@ func NewPickerMode(history func() []Entry) *PickerMode {
 	if history == nil {
 		history = func() []Entry { return History(config.Get()) }
 	}
-	return &PickerMode{history: history}
+	return &PickerMode{history: history, projectsDir: ProjectsDir}
+}
+
+// projectsBase resolves the configured projects directory that relative path
+// input browses and completes against (#1808), falling back to "" — the
+// process working directory, the pre-#1808 behavior — when it cannot be
+// resolved (e.g. the home directory is unknown).
+func (m *PickerMode) projectsBase() string {
+	dir, err := m.projectsDir()
+	if err != nil {
+		return ""
+	}
+	return dir
 }
 
 // Prefix implements palette.Mode.
@@ -118,41 +133,51 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 		items = append(items, it)
 	}
 	if q := strings.TrimSpace(query); q != "" {
-		// A path-shaped query browses the filesystem (#542): matching
-		// directories become selectable items ahead of the raw fallback.
-		if pathish(q) {
-			for _, c := range pathcomplete.Dirs(q).Candidates {
-				items = append(items, palette.Item{
-					Title: "Open " + c,
-					Msg:   PickedMsg{Path: c},
-				})
-			}
+		// Any non-empty query also browses the filesystem (#542, #1808):
+		// matching directories become selectable items ahead of the raw
+		// fallback, ahead of the history fuzzy matches above. Absolute and
+		// ~-prefixed input resolves as typed; anything else — "foo",
+		// "./foo", "foo/bar" — resolves against the configured projects
+		// directory rather than the process working directory.
+		base := m.projectsBase()
+		for _, c := range pathcomplete.DirsFrom(base, q).Candidates {
+			items = append(items, palette.Item{
+				Title: "Open " + c,
+				Msg:   PickedMsg{Path: resolveAgainstBase(base, c)},
+			})
 		}
 		items = append(items, palette.Item{
 			Title: "Open \"" + q + "\"…",
-			Msg:   PickedMsg{Path: q},
+			Msg:   PickedMsg{Path: resolveAgainstBase(base, q)},
 		})
 	}
 	return items
 }
 
-// Complete implements palette.Completer (#542): tab extends a path-shaped
-// query to the longest unambiguous directory prefix; anything else is inert.
+// Complete implements palette.Completer (#542): tab extends the query to the
+// longest unambiguous directory prefix, resolved against the configured
+// projects directory for relative input (#1808); anything unmatched is
+// inert.
 func (m *PickerMode) Complete(query string) string {
 	q := strings.TrimSpace(query)
-	if !pathish(q) {
+	if q == "" {
 		return query
 	}
-	return pathcomplete.Dirs(q).Completed
+	return pathcomplete.DirsFrom(m.projectsBase(), q).Completed
 }
 
-// pathish reports a query meant as a filesystem path rather than a fuzzy
-// history search: absolute, home-relative or explicitly dot-relative.
-func pathish(q string) bool {
-	return strings.HasPrefix(q, string(filepath.Separator)) ||
-		q == "~" || strings.HasPrefix(q, "~"+string(filepath.Separator)) ||
-		strings.HasPrefix(q, "."+string(filepath.Separator)) ||
-		strings.HasPrefix(q, ".."+string(filepath.Separator))
+// resolveAgainstBase turns typed path input — in pathcomplete's own notation,
+// e.g. a leading "~" kept verbatim — into the absolute filesystem path it
+// names: unchanged for absolute or ~-prefixed input, joined against base
+// otherwise (#1808). base "" (the projects directory could not be resolved)
+// falls back to the pre-#1808 behavior of leaving relative input as typed, so
+// it resolves later against the process working directory instead.
+func resolveAgainstBase(base, p string) string {
+	real := pathcomplete.Expand(p)
+	if !filepath.IsAbs(real) {
+		real = filepath.Join(base, real)
+	}
+	return real
 }
 
 // maxDetailWidth caps the rendered path chip: the palette row pins Detail to

@@ -50,13 +50,25 @@ func fixedHistory() []Entry {
 	}
 }
 
-func pickerItems(query string) []palette.Item {
-	m := NewPickerMode(func() []Entry { return fixedHistory() })
+// newPicker builds a PickerMode over history with its projects base pinned
+// to a fresh empty temp dir (#1808), so a query never accidentally resolves
+// against whatever the test machine's real projects directory happens to
+// contain.
+func newPicker(t *testing.T, history func() []Entry) (*PickerMode, string) {
+	t.Helper()
+	base := t.TempDir()
+	m := NewPickerMode(history)
+	m.projectsDir = func() (string, error) { return base, nil }
+	return m, base
+}
+
+func pickerItems(t *testing.T, query string) []palette.Item {
+	m, _ := newPicker(t, fixedHistory)
 	return m.Results(query, palette.Context{})
 }
 
 func TestPickerEmptyQueryListsNewestFirst(t *testing.T) {
-	items := pickerItems("")
+	items := pickerItems(t, "")
 	if len(items) != 3 {
 		t.Fatalf("expected 3 items, got %+v", items)
 	}
@@ -75,7 +87,8 @@ func TestPickerEmptyQueryListsNewestFirst(t *testing.T) {
 }
 
 func TestPickerFuzzyFiltersAndAppendsPathItem(t *testing.T) {
-	items := pickerItems("ik")
+	m, base := newPicker(t, fixedHistory)
+	items := m.Results("ik", palette.Context{})
 	// "ik" matches ike by name (and possibly others by path); the raw-path
 	// affordance is always last.
 	if len(items) < 2 {
@@ -88,13 +101,16 @@ func TestPickerFuzzyFiltersAndAppendsPathItem(t *testing.T) {
 	if last.Title != "Open \"ik\"…" {
 		t.Errorf("last item should be the path affordance, got %q", last.Title)
 	}
-	if msg, ok := last.Msg.(PickedMsg); !ok || msg.Path != "ik" {
-		t.Errorf("path item should carry the raw query, got %#v", last.Msg)
+	// A relative query resolves against the configured projects directory,
+	// not the raw typed text (#1808).
+	want := filepath.Join(base, "ik")
+	if msg, ok := last.Msg.(PickedMsg); !ok || msg.Path != want {
+		t.Errorf("path item should resolve against the projects dir, got %#v, want %q", last.Msg, want)
 	}
 }
 
 func TestPickerMatchesPathWhenNameMisses(t *testing.T) {
-	items := pickerItems("work")
+	items := pickerItems(t, "work")
 	if len(items) != 2 { // intra (path match) + path affordance
 		t.Fatalf("expected path match + affordance, got %+v", items)
 	}
@@ -104,7 +120,7 @@ func TestPickerMatchesPathWhenNameMisses(t *testing.T) {
 }
 
 func TestPickerNoHistoryStillOffersPathEntry(t *testing.T) {
-	m := NewPickerMode(func() []Entry { return nil })
+	m, _ := newPicker(t, func() []Entry { return nil })
 	if items := m.Results("", palette.Context{}); len(items) != 0 {
 		t.Errorf("empty query, empty history should list nothing, got %+v", items)
 	}
@@ -113,7 +129,7 @@ func TestPickerNoHistoryStillOffersPathEntry(t *testing.T) {
 		t.Fatalf("typed path should yield the affordance, got %+v", items)
 	}
 	if msg, ok := items[0].Msg.(PickedMsg); !ok || msg.Path != "/some/dir" {
-		t.Errorf("affordance should carry the typed path, got %#v", items[0].Msg)
+		t.Errorf("absolute query must resolve unchanged, got %#v", items[0].Msg)
 	}
 }
 
@@ -179,11 +195,60 @@ func TestPickerPathQueryListsDirectories(t *testing.T) {
 	}
 }
 
-func TestPickerNonPathQueryHasNoDirCandidates(t *testing.T) {
-	m := NewPickerMode(func() []Entry { return nil })
+func TestPickerRelativeQueryNoMatchOffersOnlyAffordance(t *testing.T) {
+	m, base := newPicker(t, func() []Entry { return nil })
 	items := m.Results("ike", palette.Context{})
 	if len(items) != 1 {
-		t.Fatalf("non-path query must only offer the raw affordance, got %+v", items)
+		t.Fatalf("query with no matching dir must only offer the raw affordance, got %+v", items)
+	}
+	want := filepath.Join(base, "ike")
+	if msg, ok := items[0].Msg.(PickedMsg); !ok || msg.Path != want {
+		t.Fatalf("affordance should resolve against the projects dir, got %#v, want %q", items[0].Msg, want)
+	}
+}
+
+// TestPickerRelativeQueryBrowsesProjectsDir (#1808): a bare or dot-relative
+// query browses the configured projects directory rather than the process
+// working directory — the picker's own equivalent of newproject_prompt.go
+// and clone_prompt.go, which already default there.
+func TestPickerRelativeQueryBrowsesProjectsDir(t *testing.T) {
+	base := pickerTree(t)
+	m, _ := newPicker(t, func() []Entry { return nil })
+	m.projectsDir = func() (string, error) { return base, nil }
+
+	for _, q := range []string{"D", "./D"} {
+		items := m.Results(q, palette.Context{})
+		if len(items) != 3 { // Development + Downloads + affordance
+			t.Fatalf("q=%q: items = %+v, want 2 dir candidates + affordance", q, items)
+		}
+		wantPath := filepath.Join(base, "Development")
+		if msg, ok := items[0].Msg.(PickedMsg); !ok || msg.Path != wantPath {
+			t.Fatalf("q=%q: candidate msg = %#v, want %q", q, items[0].Msg, wantPath)
+		}
+	}
+}
+
+// TestPickerAbsoluteAndHomeQueriesIgnoreProjectsDir (#1808): absolute and
+// ~-prefixed input keeps browsing wherever it points, unaffected by the
+// configured projects directory.
+func TestPickerAbsoluteAndHomeQueriesIgnoreProjectsDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.Mkdir(filepath.Join(home, "elsewhere"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m, base := newPicker(t, func() []Entry { return nil }) // base != home
+
+	items := m.Results("/abs/path", palette.Context{})
+	if msg, ok := items[len(items)-1].Msg.(PickedMsg); !ok || msg.Path != "/abs/path" {
+		t.Fatalf("absolute query must resolve unchanged, got %#v", items[len(items)-1].Msg)
+	}
+
+	items = m.Results("~/elsewhere", palette.Context{})
+	last := items[len(items)-1] // history-fuzzy items, if any, precede the raw affordance
+	want := filepath.Join(home, "elsewhere")
+	if msg, ok := last.Msg.(PickedMsg); !ok || msg.Path != want {
+		t.Fatalf("~ query must resolve against home, not %q, got %#v, want %q", base, last.Msg, want)
 	}
 }
 
@@ -194,8 +259,14 @@ func TestPickerComplete(t *testing.T) {
 	if want := filepath.Join(root, "Development") + string(filepath.Separator); got != want {
 		t.Fatalf("Complete = %q, want %q", got, want)
 	}
-	if got := m.Complete("ike"); got != "ike" {
-		t.Fatalf("non-path query must complete to itself, got %q", got)
+
+	// A relative query completes against the configured projects dir (#1808).
+	m.projectsDir = func() (string, error) { return root, nil }
+	if got := m.Complete("Dev"); got != "Development"+string(filepath.Separator) {
+		t.Fatalf("relative query should complete against the projects dir, got %q", got)
+	}
+	if got := m.Complete("nope"); got != "nope" {
+		t.Fatalf("no match must complete to itself, got %q", got)
 	}
 }
 

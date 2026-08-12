@@ -52,6 +52,12 @@ func CompleteFrom(baseDir, input string) Result { return complete(baseDir, input
 // project picker's flavor.
 func Dirs(input string) Result { return complete("", input, true) }
 
+// DirsFrom completes input like Dirs, but resolves a relative input against
+// baseDir instead of the process working directory — the project picker's
+// flavor when browsing relative to the configured projects directory rather
+// than the current directory (#1808). Absolute and ~ inputs ignore baseDir.
+func DirsFrom(baseDir, input string) Result { return complete(baseDir, input, true) }
+
 // Expand resolves a leading "~" or "~/" against the home directory. It is
 // the single tilde-expansion helper; callers should not keep local copies.
 func Expand(p string) string {
