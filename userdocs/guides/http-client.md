@@ -211,6 +211,7 @@ highlighted, binary bodies collapsed to a notice.
 | `y` | Copy the selection, or the whole body when there is none |
 | `Y` | Copy the status line plus headers |
 | `h` / `l`, ++left++ / ++right++ | Older / newer response for this request |
+| ++ctrl+r++ | Send this response's request again, unchanged |
 | `x` | Cancel the request that is running |
 | `za` / `zc` / `zo` | Toggle / close / open the fold at the top of the view |
 | `zM` / `zR` | Collapse every fold / open them all |
@@ -263,6 +264,29 @@ shows anything at all.
 Text bodies are stored as plain text inside the JSON, so `.ike/http/*.json`
 opens and diffs readably in the editor.
 
+## Sending the same request again
+
+Every stored response also keeps the **request as it was sent** — method,
+final URL, headers and body, after placeholders were substituted and after
+`.netrc`/`.curlrc` had their say. ++ctrl+r++ in the response pane, or a click
+on the `⟳ re-send` button in its header, sends exactly that again: the `.http`
+file is not read, nothing is substituted a second time, so editing the file,
+changing a variable or switching environments in between cannot alter what
+goes out. The answer lands in the pane and in the history like any other
+response. A re-sent streaming endpoint (SSE/NDJSON) opens the stream again and
+renders live, exactly as the first time.
+
+The button only appears when a stored request exists. Responses stored before
+IKE started capturing requests still open and browse normally; re-send simply
+says there is nothing stored for them — run the request from the `.http` file
+once and the entry after that is re-sendable.
+
+!!! note "What lands on disk"
+    The stored request holds the **substituted** values, so a token that
+    reached the server also sits in `.ike/http/`, next to the response bodies
+    that were already kept there. Keep that directory out of version control
+    (and out of backups) if your requests carry secrets.
+
 ## Commands
 
 | Command | Id | Default chord |
@@ -273,6 +297,7 @@ opens and diffs readably in the editor.
 | Copy HTTP Response Headers | `http.copyHeaders` | — |
 | Browse HTTP Response History | `http.responseHistory` | — |
 | Show Stored HTTP Response | `http.showResponse` | — |
+| Re-send Stored HTTP Request | `http.resend` | — |
 
 A scratch file is a quick way to try something without adding a file to the
 repository: **New Scratch File: Http** (`scratch.new.http`).

@@ -62,6 +62,59 @@ type Response struct {
 	RequestKey string
 	// Warnings lists non-fatal issues (e.g. ignored .curlrc options).
 	Warnings []string
+	// Request is the request exactly as it went out (#1832); nil for a
+	// response restored from a history file written before the capture
+	// existed, which is what makes re-send unavailable there.
+	Request *RequestSnapshot
+}
+
+// RequestSnapshot is one request as it was actually sent (#1832): method,
+// final URL, headers and body *after* placeholder substitution and after the
+// local .netrc/.curlrc configuration was applied. Every dispatch captures one,
+// it travels with the Response and is persisted with the history entry, so a
+// stored response can be re-sent verbatim with Resend — no re-parse of the
+// .http file, which may have changed since, and no re-substitution, which may
+// resolve differently now.
+//
+// A Host header override (the request's own `Host:` line, which Go keeps out
+// of Request.Header) is stored under the "Host" key and restored on re-send.
+type RequestSnapshot struct {
+	Method  string      `json:"method"`
+	URL     string      `json:"url"`
+	Headers http.Header `json:"headers,omitempty"`
+	Body    []byte      `json:"body,omitempty"`
+}
+
+// Clone returns a deep copy, so a snapshot handed to the UI (and back into a
+// history file) can never be mutated through a shared header map.
+func (s *RequestSnapshot) Clone() *RequestSnapshot {
+	if s == nil {
+		return nil
+	}
+	c := &RequestSnapshot{Method: s.Method, URL: s.URL, Headers: s.Headers.Clone()}
+	if s.Body != nil {
+		c.Body = append([]byte(nil), s.Body...)
+	}
+	return c
+}
+
+// Label is the short "METHOD /path" form of a snapshot, for the in-flight
+// indicator of a re-send.
+func (s *RequestSnapshot) Label() string {
+	if s == nil {
+		return ""
+	}
+	target := s.URL
+	if u, err := url.Parse(target); err == nil && u.Path != "" {
+		target = u.Path
+		if u.RawQuery != "" {
+			target += "?" + u.RawQuery
+		}
+	}
+	if len(target) > 40 {
+		target = target[:39] + "…"
+	}
+	return s.Method + " " + target
 }
 
 // Options configures a Dispatcher. The zero value uses the process
@@ -87,33 +140,26 @@ type Options struct {
 	StreamIdleTimeout time.Duration
 }
 
-// requestBody returns the reader for a resolved request's body: the inline
+// requestBody returns the bytes of a resolved request's body: the inline
 // text, the contents of an external `< ./file` body (#1305), or — when the
 // Content-Type declares a multipart boundary — the hand-written multipart
 // structure normalised to CRLF with per-part `< file` directives embedded
 // (#1707). Bodies are assembled up front rather than streamed so their length
-// is known (no chunked encoding).
-func requestBody(resolved *httpfile.Request, opts Options, lookup func(string) (string, bool)) (io.Reader, error) {
+// is known (no chunked encoding) and so the snapshot (#1832) can keep exactly
+// what went out.
+func requestBody(resolved *httpfile.Request, opts Options, lookup func(string) (string, bool)) ([]byte, error) {
 	if resolved.BodyFile != "" {
-		data, err := loadBodyFile(resolved.BodyFile, resolved.BodyFileSubstitute, opts, lookup)
-		if err != nil {
-			return nil, err
-		}
-		return bytes.NewReader(data), nil
+		return loadBodyFile(resolved.BodyFile, resolved.BodyFileSubstitute, opts, lookup)
 	}
 	if ct, ok := resolved.Header("Content-Type"); ok {
 		if boundary, ok := httpfile.MultipartBoundary(ct); ok {
-			data, err := httpfile.BuildMultipartBody(resolved.Body, boundary,
+			return httpfile.BuildMultipartBody(resolved.Body, boundary,
 				func(path string, substitute bool) ([]byte, error) {
 					return loadBodyFile(path, substitute, opts, lookup)
 				})
-			if err != nil {
-				return nil, err
-			}
-			return bytes.NewReader(data), nil
 		}
 	}
-	return strings.NewReader(resolved.Body), nil
+	return []byte(resolved.Body), nil
 }
 
 // loadBodyFile reads one body file (#1305): relative paths resolve against
@@ -147,6 +193,9 @@ type prepared struct {
 	client   *http.Client
 	warnings []string
 	now      func() time.Time
+	// snapshot is what goes on the wire (#1832), captured once everything —
+	// substitution, .curlrc, .netrc — has been applied.
+	snapshot *RequestSnapshot
 }
 
 // prepare resolves placeholders in req, applies local configuration and
@@ -183,11 +232,11 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 		warnings = append(warnings, cfg.Warnings...)
 	}
 
-	reqBody, err := requestBody(resolved, opts, lookup)
+	body, err := requestBody(resolved, opts, lookup)
 	if err != nil {
 		return nil, fmt.Errorf("request %s: %v", req.Key(), err)
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, resolved.Method, target.String(), reqBody)
+	httpReq, err := http.NewRequestWithContext(ctx, resolved.Method, target.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("request %s: %v", req.Key(), err)
 	}
@@ -213,6 +262,75 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 		client:   buildClient(cfg, opts),
 		warnings: warnings,
 		now:      now,
+		snapshot: snapshotOf(httpReq, body),
+	}, nil
+}
+
+// snapshotOf captures the fully prepared request (#1832). It runs after every
+// header source has had its say, so what it holds is what the server sees.
+func snapshotOf(httpReq *http.Request, body []byte) *RequestSnapshot {
+	snap := &RequestSnapshot{
+		Method:  httpReq.Method,
+		URL:     httpReq.URL.String(),
+		Headers: httpReq.Header.Clone(),
+	}
+	if snap.Headers == nil {
+		snap.Headers = http.Header{}
+	}
+	if httpReq.Host != "" {
+		// Go keeps a Host override out of Header; the snapshot carries it as an
+		// ordinary header and prepareSnapshot puts it back where it belongs.
+		snap.Headers.Set("Host", httpReq.Host)
+	}
+	if len(body) > 0 {
+		snap.Body = append([]byte(nil), body...)
+	}
+	return snap
+}
+
+// prepareSnapshot builds the executable form of a stored request (#1832). It
+// is deliberately *not* prepare: no placeholder substitution, no .netrc, no
+// .curlrc header mapping — the snapshot already holds the outcome of all of
+// them, and re-running those steps is exactly what "re-send verbatim" rules
+// out. Only the client itself is configured from .curlrc, since proxy, TLS
+// and timeouts are about reaching the host, not about the request's content.
+func prepareSnapshot(ctx context.Context, key string, snap *RequestSnapshot, opts Options) (*prepared, error) {
+	if snap == nil {
+		return nil, fmt.Errorf("request %s: no stored request to re-send", key)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, snap.Method, snap.URL, bytes.NewReader(snap.Body))
+	if err != nil {
+		return nil, fmt.Errorf("request %s: %v", key, err)
+	}
+	for name, values := range snap.Headers {
+		if strings.EqualFold(name, "Host") {
+			if len(values) > 0 {
+				httpReq.Host = values[0]
+			}
+			continue
+		}
+		for _, v := range values {
+			httpReq.Header.Add(name, v)
+		}
+	}
+
+	cfg := &curlConfig{}
+	if !opts.DisableConfig {
+		path := opts.CurlrcPath
+		if path == "" {
+			path = curlrcPath()
+		}
+		cfg = parseCurlrc(path)
+	}
+	now := opts.Now
+	if now == nil {
+		now = time.Now
+	}
+	return &prepared{
+		httpReq:  httpReq,
+		client:   buildClient(cfg, opts),
+		now:      now,
+		snapshot: snap.Clone(),
 	}, nil
 }
 
@@ -224,17 +342,29 @@ func Dispatch(ctx context.Context, req *httpfile.Request, opts Options) (*Respon
 	if err != nil {
 		return nil, err
 	}
+	return p.collect(req.Key())
+}
+
+// collect executes the prepared request and reads the whole body — the
+// non-streaming exchange, shared by Dispatch and by DispatchStream's fallback
+// for a response that turns out not to be a stream.
+func (p *prepared) collect(key string) (*Response, error) {
 	start := p.now()
 	httpResp, err := p.client.Do(p.httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("request %s: %v", req.Key(), err)
+		return nil, fmt.Errorf("request %s: %v", key, err)
 	}
 	defer httpResp.Body.Close()
+	return p.collectBody(key, httpResp, start)
+}
 
+// collectBody reads a started exchange's body to the cap and composes the
+// Response; start is when the exchange began.
+func (p *prepared) collectBody(key string, httpResp *http.Response, start time.Time) (*Response, error) {
 	body, readErr := io.ReadAll(io.LimitReader(httpResp.Body, MaxBodyBytes+1))
 	elapsed := p.now().Sub(start)
 	if readErr != nil {
-		return nil, fmt.Errorf("request %s: reading response: %v", req.Key(), readErr)
+		return nil, fmt.Errorf("request %s: reading response: %v", key, readErr)
 	}
 	truncated := false
 	warnings := p.warnings
@@ -243,7 +373,6 @@ func Dispatch(ctx context.Context, req *httpfile.Request, opts Options) (*Respon
 		truncated = true
 		warnings = append(warnings, fmt.Sprintf("response body exceeded %d bytes and was truncated", MaxBodyBytes))
 	}
-
 	return &Response{
 		Status:     httpResp.Status,
 		StatusCode: httpResp.StatusCode,
@@ -252,8 +381,9 @@ func Dispatch(ctx context.Context, req *httpfile.Request, opts Options) (*Respon
 		Body:       body,
 		Truncated:  truncated,
 		Duration:   elapsed,
-		RequestKey: req.Key(),
+		RequestKey: key,
 		Warnings:   warnings,
+		Request:    p.snapshot,
 	}, nil
 }
 
@@ -298,6 +428,27 @@ func DispatchStream(ctx context.Context, req *httpfile.Request, opts Options, cb
 	if err != nil {
 		return nil, err
 	}
+	return p.run(ctx, req.Key(), opts, cb)
+}
+
+// Resend executes a stored request snapshot again, byte for byte (#1832): the
+// method, URL, headers and body are the ones that produced the response the
+// snapshot came with, not whatever the .http file says now. key labels the
+// request in errors and in the returned Response. Streaming behaves exactly
+// as on the original dispatch — a response that is recognized as a stream
+// re-opens as one, callbacks and all — so a re-sent SSE/NDJSON endpoint is
+// live again rather than excluded.
+func Resend(ctx context.Context, key string, snap *RequestSnapshot, opts Options, cb StreamCallbacks) (*Response, error) {
+	p, err := prepareSnapshot(ctx, key, snap, opts)
+	if err != nil {
+		return nil, err
+	}
+	return p.run(ctx, key, opts, cb)
+}
+
+// run executes a prepared request with stream recognition — the body of
+// DispatchStream, shared with Resend.
+func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamCallbacks) (*Response, error) {
 	// The client's own Timeout would cover the whole exchange including the
 	// body read; deadlines are managed here instead so a recognized stream
 	// can shed the overall limit once the headers are in.
@@ -311,7 +462,7 @@ func DispatchStream(ctx context.Context, req *httpfile.Request, opts Options, cb
 	start := p.now()
 	httpResp, err := p.client.Do(p.httpReq.WithContext(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("request %s: %v", req.Key(), err)
+		return nil, fmt.Errorf("request %s: %v", key, err)
 	}
 	defer httpResp.Body.Close()
 	warnings := p.warnings
@@ -319,28 +470,7 @@ func DispatchStream(ctx context.Context, req *httpfile.Request, opts Options, cb
 	if !IsStreamContentType(httpResp.Header.Get("Content-Type")) {
 		// Collect mode — the overall deadline stays armed, the behavior is
 		// Dispatch's to the letter.
-		body, readErr := io.ReadAll(io.LimitReader(httpResp.Body, MaxBodyBytes+1))
-		elapsed := p.now().Sub(start)
-		if readErr != nil {
-			return nil, fmt.Errorf("request %s: reading response: %v", req.Key(), readErr)
-		}
-		truncated := false
-		if len(body) > MaxBodyBytes {
-			body = body[:MaxBodyBytes]
-			truncated = true
-			warnings = append(warnings, fmt.Sprintf("response body exceeded %d bytes and was truncated", MaxBodyBytes))
-		}
-		return &Response{
-			Status:     httpResp.Status,
-			StatusCode: httpResp.StatusCode,
-			Proto:      httpResp.Proto,
-			Headers:    httpResp.Header,
-			Body:       body,
-			Truncated:  truncated,
-			Duration:   elapsed,
-			RequestKey: req.Key(),
-			Warnings:   warnings,
-		}, nil
+		return p.collectBody(key, httpResp, start)
 	}
 
 	// Stream mode: the headers are the first visible result, the body arrives
@@ -409,8 +539,9 @@ func DispatchStream(ctx context.Context, req *httpfile.Request, opts Options, cb
 		Body:       body,
 		Truncated:  truncated,
 		Duration:   elapsed,
-		RequestKey: req.Key(),
+		RequestKey: key,
 		Warnings:   warnings,
+		Request:    p.snapshot,
 	}, nil
 }
 

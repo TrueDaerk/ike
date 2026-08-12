@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-12 (re-send the exact request of a stored response, #1832)
+
+- **A stored response can be sent again, verbatim**: `httpclient` now captures
+  a `RequestSnapshot` on every dispatch — method, final URL, headers and body
+  *as they went on the wire*, after substitution and after `.netrc`/`.curlrc`
+  (a `Host:` override included, which Go keeps out of the header map) — hands
+  it back on `Response.Request`, and `internal/httphistory` persists it with
+  the entry under `.ike/http/` (`request`, with the readable `bodyText` /
+  base64 `body` split the response body already uses). `httpclient.Resend`
+  sends such a snapshot again without going through `prepare`: no re-parse, no
+  re-substitution, no `.netrc`/`.curlrc` header mapping, so an edited `.http`
+  file, a changed variable or a switched environment cannot alter what is
+  repeated; only the client itself is still built from `.curlrc` (proxy, TLS,
+  timeouts). A re-sent stream re-opens as a stream — SSE/NDJSON (#1776) are
+  not excluded. In the response pane, `ctrl+r` and a clickable `⟳ re-send`
+  label in the header (shown only where a snapshot exists, hit-tested from the
+  same composition it is drawn from, ahead of the selection press like the
+  fold's `⧉`) emit `httppane.ResendMsg`; the app dispatches through the shared
+  `dispatchHTTP` path, so the duplicate guard, the in-flight indicator and the
+  history append are the ones `http.run` uses, and `http.resend` ("Re-send
+  Stored HTTP Request") is the palette pendant. History entries written before
+  the capture load unchanged and only lose re-send, with a notice instead of a
+  silent key. The substituted request lands on disk in clear text, like the
+  response bodies already did — noted in the wiki's security paragraph.
+  Updated [HTTP Client](/architecture/http-client.md).
+
 ## 2026-08-12 (default keybinding for showing stored HTTP responses, #1831)
 
 - **`http.showResponse` gets a default chord**: `cmd+shift+enter` primary with

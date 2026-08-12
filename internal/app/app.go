@@ -3453,6 +3453,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.showStoredHTTPResponse()
 		return m, nil
 
+	case HTTPResendMsg:
+		// http.resend (palette, #1832): the shown response's stored request
+		// goes out again, verbatim.
+		return m, m.resendHTTPRequest()
+
+	case httppane.ResendMsg:
+		// ctrl+r or the header affordance in the response pane (#1832): the
+		// pane holds the snapshot, the host dispatches it.
+		return m, m.resendHTTPRequest()
+
 	case HTTPCopyBodyMsg:
 		// http.copyBody (palette, #1266): the shown body to the clipboard.
 		return m, m.copyHTTPResponse(false)
@@ -8202,6 +8212,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 					m.drag = &dragState{kind: dragHTTPScroll, srcPane: key, curX: msg.X, curY: msg.Y}
 				}
 				return m, nil
+			}
+			// The header's ⟳ re-send affordance (#1832) sits on the title row,
+			// which selection would otherwise claim: clicking it sends the
+			// shown response's stored request again.
+			if inst.HTTP().ResendHit(localX, localY) {
+				return m, m.resendHTTPRequest()
 			}
 			// The ⧉ affordance of a collapsed fold (#1787) is one cell and
 			// outranks both: it copies the hidden range instead of selecting
