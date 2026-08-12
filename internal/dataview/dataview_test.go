@@ -363,6 +363,36 @@ func TestHorizontalScrollMovesColumns(t *testing.T) {
 	}
 }
 
+// TestLeftReturnsToSidebarAfterMovingDown reproduces #1823: once the row
+// cursor has moved off row 0, h/left at the grid's left edge must still fall
+// through to the sidebar, and re-entering the same table must not reset the
+// row cursor or the loaded page.
+func TestLeftReturnsToSidebarAfterMovingDown(t *testing.T) {
+	m := newPane(t, writeFixtureDB(t))
+	feed(t, &m, key("j")) // sidebar: empty -> users
+	feed(t, &m, key("enter"))
+	feed(t, &m, key("j"))
+	feed(t, &m, key("j"))
+	if m.Cursor() == 0 {
+		t.Fatalf("row cursor did not advance")
+	}
+	cursor, offset := m.Cursor(), m.PageOffset()
+
+	feed(t, &m, key("h"))
+	if m.InGrid() {
+		t.Fatalf("h at the left edge with rowCur > 0 must switch to the sidebar")
+	}
+
+	feed(t, &m, key("l"))
+	if !m.InGrid() {
+		t.Fatalf("l from the sidebar must return to the grid")
+	}
+	if m.Cursor() != cursor || m.PageOffset() != offset {
+		t.Fatalf("re-entering the grid changed position: cursor=%d offset=%d, want cursor=%d offset=%d",
+			m.Cursor(), m.PageOffset(), cursor, offset)
+	}
+}
+
 // stripANSI drops SGR sequences so a styled string can be compared by text.
 func stripANSI(s string) string {
 	var b strings.Builder
