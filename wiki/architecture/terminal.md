@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-08-11T12:00:00Z
+timestamp: 2026-08-12T12:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -626,6 +626,24 @@ dragging extends unit-wise (#951): word by word after a double click, whole
 logical lines after a triple click — in both directions, with the originally
 clicked word/line always fully selected; a plain click keeps character-wise
 dragging.
+
+**Auto-scroll past the pane edge** (#1821): the app forwards drag motions with
+pane-local coordinates that may leave the pane, so a drag pulled above the top
+row scrolls one line into the scrollback per step and one below the bottom row
+one line back towards the live view, where it stops at offset 0. The selection
+head then follows the (clamped) cell under the pointer — nothing about the
+anchor logic changes, since the selection is already virtual: only the window
+moves. Resting at the edge keeps scrolling: `MouseDrag` returns a
+`tea.Tick` command (`autoScrollInterval`, 60 ms, one line per tick — constant
+speed) that the app routes back as `terminal.AutoScrollMsg` while a
+`dragTermSelect` drag runs; the terminal replays the last pointer cell for it.
+The repeat retires by itself at the ends of the history and on `MouseRelease` /
+`ClearSelection`, which bump a generation counter the tick carries, so ticks in
+flight from an ended drag (or from another session — the message carries the
+session key) are dropped. Word- and line-wise drags (#951) auto-scroll the same
+way, the granularity untouched. Mouse-reporting children keep the untouched
+`WantsMouse` path (motion goes to the child, no scrolling), and the scrollbar
+drag (#1368) is a different gesture kind (`dragTermScroll`), unaffected.
 
 **Mouse wheel** (#226, `MouseWheel` in `model.go`): the wheel goes to whoever
 asked for it — a child that enabled a DEC mouse-reporting mode

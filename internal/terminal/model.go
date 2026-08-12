@@ -50,6 +50,12 @@ type Model struct {
 	// an existing selection, dragging a drag in progress.
 	selAnchor, selHead vpos
 	selOn, dragging    bool
+	// Auto-scroll while a selection drag leaves the pane (#1821): dragX/dragY
+	// is the last pointer cell, autoDir the running scroll direction
+	// (+1 = into history, -1 = back towards live, 0 = not scrolling) and
+	// autoGen retires the repeat ticks of a drag that has ended.
+	dragX, dragY     int
+	autoDir, autoGen int
 	// Multi-click selection (#936): consecutive presses on the same cell
 	// within multiClickWindow cycle click → word → line → click … After a
 	// double/triple click the drag extends unit-wise (#951): selMode carries
@@ -614,18 +620,57 @@ func isWordRune(r rune) bool {
 }
 
 // MouseDrag extends the selection to (x, y) — or forwards the drag motion to
-// a mouse-reporting child.
-func (m *Model) MouseDrag(x, y int) {
+// a mouse-reporting child. Coordinates are pane-local and may leave the pane:
+// dragging past the top or bottom edge auto-scrolls the view (#1821), and the
+// returned command is the tick that keeps it scrolling while the pointer rests
+// there.
+func (m *Model) MouseDrag(x, y int) tea.Cmd {
 	if m.sess == nil {
-		return
+		return nil
 	}
 	if m.sess.WantsMouse() {
 		m.sess.SendMouse(vt.MouseMotion{X: x, Y: y, Button: vt.MouseLeft})
-		return
+		return nil
 	}
 	if !m.dragging {
-		return
+		return nil
 	}
+	return m.dragTo(x, y)
+}
+
+// autoScrollInterval is one auto-scroll step of an edge-held drag (#1821):
+// constant speed, one line per tick — the usual terminal/editor behaviour.
+const autoScrollInterval = 60 * time.Millisecond
+
+// AutoScrollMsg is the repeat tick of a selection drag resting past a pane
+// edge (#1821). Key routes it to the session it started on, Gen retires the
+// ticks of a drag that has since ended.
+type AutoScrollMsg struct {
+	Key string
+	Gen int
+}
+
+// AutoScroll continues an edge-held drag from the last known pointer cell
+// (#1821): one more scroll step plus the matching selection extension. Stale
+// ticks (wrong session, ended drag, pointer back inside the pane) are dropped
+// and stop the repeat.
+func (m *Model) AutoScroll(msg AutoScrollMsg) tea.Cmd {
+	if m.sess == nil || !m.dragging || m.autoDir == 0 {
+		return nil
+	}
+	if msg.Key != m.SessionKey() || msg.Gen != m.autoGen {
+		return nil
+	}
+	return m.dragTo(m.dragX, m.dragY)
+}
+
+// dragTo applies one drag step at the pane-local cell (x, y): a pointer past
+// an edge scrolls the view one line first (#1821), then the selection extends
+// to the — clamped — cell under it. Because the selection is anchored in
+// virtual coordinates, scrolling alone moves nothing; only the head follows.
+func (m *Model) dragTo(x, y int) tea.Cmd {
+	m.dragX, m.dragY = x, y
+	m.autoDir = m.autoScrollStep(y)
 	v := m.virtualAt(x, y)
 	switch m.selMode {
 	case selWord:
@@ -644,6 +689,35 @@ func (m *Model) MouseDrag(x, y int) {
 		m.selHead = v
 		m.selOn = m.selHead != m.selAnchor
 	}
+	if m.autoDir == 0 {
+		return nil
+	}
+	key, gen := m.SessionKey(), m.autoGen
+	return tea.Tick(autoScrollInterval, func(time.Time) tea.Msg {
+		return AutoScrollMsg{Key: key, Gen: gen}
+	})
+}
+
+// autoScrollStep scrolls one line when the pane-local row y lies outside the
+// pane: above it goes into the scrollback, below it back towards the live view
+// (#1821). It reports the direction actually applied — 0 inside the pane and
+// at the ends of the history, where the repeat tick stops.
+func (m *Model) autoScrollStep(y int) int {
+	dir := 0
+	switch {
+	case y < 0:
+		dir = 1
+	case m.h > 0 && y >= m.h:
+		dir = -1
+	default:
+		return 0
+	}
+	before := m.scroll
+	m.ScrollBy(dir)
+	if m.scroll == before {
+		return 0 // top of the history or the live view: nothing left to scroll
+	}
+	return dir
 }
 
 // extendUnit grows the selection from the multi-click origin unit to cover
@@ -673,13 +747,24 @@ func (m *Model) MouseRelease(x, y int) {
 		return
 	}
 	m.dragging = false
+	m.stopAutoScroll()
 }
 
 // HasSelection reports whether a mouse selection exists.
 func (m Model) HasSelection() bool { return m.selOn }
 
 // ClearSelection drops the selection and any drag in progress.
-func (m *Model) ClearSelection() { m.selOn, m.dragging = false, false }
+func (m *Model) ClearSelection() {
+	m.selOn, m.dragging = false, false
+	m.stopAutoScroll()
+}
+
+// stopAutoScroll ends the auto-scroll repeat (#1821); the generation bump
+// makes every tick already in flight a no-op.
+func (m *Model) stopAutoScroll() {
+	m.autoDir = 0
+	m.autoGen++
+}
 
 // SelectionText extracts the selected text: the span runs from the earlier
 // endpoint (inclusive) to the later one (exclusive), lines right-trimmed —
