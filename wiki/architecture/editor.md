@@ -685,8 +685,17 @@ whose motion events call `ScrollbarDrag` — the viewport follows the pointer
 with the grab point kept under it, clamped at both ends. A press on the track
 above/below the thumb jumps the viewport to the proportional position.
 Right-click (context menu) and left drags on content (selection) are
-untouched; the bar renders only as an overlay, so text width, wrap, and click
-mapping never shift when it appears.
+untouched; the bar renders only as an overlay, so the rendered text width and
+the click mapping never shift when it appears.
+
+Two consumers do reserve the overlaid column, because their content would
+otherwise be unreadable under the bar: right-aligned row annotations budget
+against `annotColumnWidth` (`fold.go`, #1728), and horizontal cursor-following
+plus the soft-wrap break width use `Model.scrollTextWidth()` (#1827) — the text
+width minus one while `scrollbarGeometry()` reports a visible bar. Without it
+the follow logic parks the caret in exactly the column the bar covers, and the
+user cannot tell whether the line continues behind it. `TextWidth` itself stays
+untouched: rendering fills the full width and the bar draws over it.
 
 **Decoration toggles (#1259, `editor/marktoggles.go`).** The `editor.marks.*`
 config switches gate which mark classes decorate the buffer, per source and
@@ -1342,8 +1351,8 @@ attributes in `styleAt`):
   therefore hands the offset to `concealScrollFix`, which redoes the follow
   decision through `concealPrefix` (per-column display-cell prefix sums of the
   line's active conceal ranges): both the caret and the current offset convert
-  to display cells, and the smallest offset keeping the caret inside the text
-  width wins. Restarting from the pre-`view.Scroll` offset keeps the raw
+  to display cells, and the smallest offset keeping the caret inside the scroll
+  width (the text width, less the scrollbar's column — #1827) wins. Restarting from the pre-`view.Scroll` offset keeps the raw
   comparison from leaving a scroll of its own behind, so a mask *wider* than
   the value scrolls when the caret visually reaches the right edge and a
   *narrower* one never over-scrolls. An offset landing inside a stand-in snaps

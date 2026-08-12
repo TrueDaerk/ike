@@ -1480,7 +1480,7 @@ func (m *Model) scroll() {
 			col = m.svDisplayCol(m.cursor.Line, col)
 		}
 		left := m.view.Left
-		m.view.Scroll(m.cursor.Line, col, m.buf.LineCount())
+		m.view.ScrollWidth(m.cursor.Line, col, m.buf.LineCount(), m.scrollTextWidth())
 		if !m.svActive() {
 			// Conceal stand-ins render at a width of their own (#1585/#1623),
 			// so a rune column is not a display column: redo the offset
@@ -1490,6 +1490,21 @@ func (m *Model) scroll() {
 		m.foldScrollFix()
 	}
 	m.unhideCursor()
+}
+
+// scrollTextWidth is the window horizontal cursor-following must keep the
+// caret's display cell inside: the text width, minus the column the overlaid
+// vertical scrollbar claims (#1827). Without the reservation the follow logic
+// happily parks the caret in the pane's rightmost column, where the bar covers
+// it — the same overlay problem right-aligned annotations solve in
+// annotColumnWidth (#1728). Rendering keeps the full TextWidth: content still
+// draws under the bar, only the caret must stay left of it.
+func (m Model) scrollTextWidth() int {
+	w := m.view.TextWidth(m.buf.LineCount())
+	if _, _, _, _, ok := m.scrollbarGeometry(); ok && w > 1 {
+		w--
+	}
+	return w
 }
 
 // concealScrollFix re-derives the horizontal offset on a cursor line carrying
@@ -1510,7 +1525,7 @@ func (m *Model) concealScrollFix(prev int) {
 		return
 	}
 	m.view.Left = prev
-	tw := m.view.TextWidth(m.buf.LineCount())
+	tw := m.scrollTextWidth()
 	cur := concealDisplayColAt(prefix, m.cursor.Col)
 	if m.view.Left > m.cursor.Col || cur < concealDisplayColAt(prefix, m.view.Left) {
 		m.view.Left = m.cursor.Col
