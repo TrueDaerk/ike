@@ -281,7 +281,9 @@ func (m *Model) sidebarKey(msg tea.KeyPressMsg) {
 	}
 	switch msg.String() {
 	case "enter", "l", "right":
-		m.loadTable(m.tcur)
+		if m.tcur != m.sel {
+			m.loadTable(m.tcur)
+		}
 		m.region = regionGrid
 	}
 }
@@ -298,7 +300,7 @@ func (m *Model) gridKey(msg tea.KeyPressMsg) {
 	case "h", "left":
 		if m.colOff > 0 {
 			m.colOff--
-		} else if m.rowCur == 0 {
+		} else {
 			// At the left edge h falls through to the sidebar, the pane's
 			// spatial layout.
 			m.region = regionSidebar
