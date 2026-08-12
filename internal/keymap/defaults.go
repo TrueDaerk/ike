@@ -280,6 +280,12 @@ var jetbrainsRows = []row{
 	// deliver under the Kitty protocol; cmd+enter needs a Cmd-forwarding
 	// terminal).
 	{"ctrl+f9", "http.run", "Run HTTP request", Editor, "HTTP client (0450)"},
+	// http.showResponse default keybinding (#1831): shift sibling of
+	// http.run's chord above, same primary/fallback split, so looking at a
+	// stored response without dispatching is one modifier away from running
+	// the request.
+	{"cmd+shift+enter", "http.showResponse", "Show stored HTTP response", Editor, "HTTP client (0450)"},
+	{"ctrl+shift+f9", "http.showResponse", "Show stored HTTP response", Editor, "HTTP client (0450)"},
 	// Rerun and Stop (#1048, #1374): JetBrains' macOS Rerun (cmd+r) is taken by
 	// editor.replace, so rerun keeps the Windows-scheme F5 position with a cmd
 	// primary on darwin; stop's cmd+f2 is the macOS keymap verbatim. The ctrl
