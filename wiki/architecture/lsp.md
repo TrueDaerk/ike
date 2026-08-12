@@ -196,7 +196,11 @@ subsequence-matches each item's `filterText` (label when absent) via
 `internal/fuzzy`, so CamelCase/snake_case initials (`gCN` → `getClassName`)
 and scattered substrings match; results rank by match score (word-boundary and
 start-anchored matches win), with ties keeping the server's `sortText` order
-(label when absent), which also orders the unfiltered list. Accepting an item replaces the partial identifier before the cursor (the run of letters/digits/`_`, `identifierStart`), not the request anchor — a manual trigger anchors at the cursor, so an anchor-only replace would duplicate the already-typed prefix (#330).
+(label when absent), which also orders the unfiltered list. The popup owns up/down, pgup/pgdn, enter/tab and esc **only while its filtered
+list is non-empty**, i.e. while it actually draws (#1810): a reply landing after
+the typed prefix has moved past it filters down to nothing, and such an
+invisible list must not swallow the arrows — the next key routes to the buffer
+and drops the stale state. Accepting an item replaces the partial identifier before the cursor (the run of letters/digits/`_`, `identifierStart`), not the request anchor — a manual trigger anchors at the cursor, so an anchor-only replace would duplicate the already-typed prefix (#330).
 
 **Snippets (#846).** The client announces `snippetSupport`, so servers send
 items whose insert text is LSP snippet syntax (`insertTextFormat: 2`).

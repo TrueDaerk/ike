@@ -10,10 +10,14 @@ import (
 // updateInsert handles a key in insert or replace mode, applying every edit
 // through the open insert-session recorder so the whole insert is one undo unit.
 func (m *Model) updateInsert(key tea.KeyPressMsg) {
-	// While the completion popup is open it intercepts navigation/accept keys
-	// first; anything else (typing, backspace) falls through to normal insert
-	// handling and then re-filters the list below.
-	if m.comp != nil {
+	// While the completion popup is *showing* it intercepts navigation/accept
+	// keys first; anything else (typing, backspace) falls through to normal
+	// insert handling and then re-filters the list below. A completion state
+	// whose filtered list is empty draws nothing, so it must not swallow the
+	// arrows (#1810): a reply arriving after the prefix has moved on used to
+	// leave such an invisible popup behind, and up/down did nothing until a
+	// left arrow dropped it.
+	if m.CompletionOpen() {
 		if m.completionKey(key) {
 			return
 		}
