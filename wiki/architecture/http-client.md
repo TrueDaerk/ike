@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-10T09:00:00Z
+timestamp: 2026-08-12T00:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -520,14 +520,18 @@ help overlay gains an `http response pane` group listing the pane-local keys
 registry command, so nothing else would document them. `help.SetExtra` takes
 several groups for that.
 
-**Viewing without dispatching** (#1492): `http.showResponse` ("Show Stored
-HTTP Response", palette) loads the stored responses of the request block
-under the cursor into the viewer without sending anything — the way to look
-at what request A answered while the pane still shows request B, or right
-after a restart before any dispatch. It gates like `http.run` (focused
-`.http` file, request under the cursor), opens the pane when needed, shows
-the newest stored entry and hands the full list over for the same `←`/`→`
-browsing; no stored responses yield a notice instead of an empty pane.
+**Viewing without dispatching** (#1492, default chord #1831): `http.showResponse`
+("Show Stored HTTP Response", `cmd+shift+enter` / `ctrl+shift+f9`, palette)
+loads the stored responses of the request block under the cursor into the
+viewer without sending anything — the way to look at what request A answered
+while the pane still shows request B, or right after a restart before any
+dispatch. It gates like `http.run` (focused `.http` file, request under the
+cursor), opens the pane when needed, shows the newest stored entry and hands
+the full list over for the same `←`/`→` browsing; no stored responses yield a
+notice instead of an empty pane. The chords mirror `http.run`'s `cmd+enter` /
+`ctrl+f9` pair with an added Shift; unlike `ctrl+f9`, the shifted `ctrl+shift+f9`
+is CSI-parameter-encoded and exempt from macOS eating plain ctrl+F-keys, so it
+delivers on darwin too (`internal/keymap/reachability.go`).
 
 **On-disk format** (#1267): a text body (valid UTF-8, no NUL) is stored as a
 plain JSON string under `bodyText`, so `.ike/http/*.json` reads and diffs in

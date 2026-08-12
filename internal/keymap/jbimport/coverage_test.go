@@ -17,6 +17,7 @@ var noCounterpart = map[string]string{
 	"explorer.redo":         "project-view redo rides $Redo in JetBrains, already mapped to editor.redo",
 	"file.rename":           "RenameElement covers symbol and file renames, mapped to lsp.rename",
 	"http.run":              "JetBrains HTTP client runs via context Run, no dedicated keymap action",
+	"http.showResponse":     "IKE-only concept (stored response without dispatch), no JetBrains equivalent",
 	"editor.copyDocPath":    "JetBrains copies file references, not a path inside a JSON/YAML document",
 	"markdown.preview":      "no default JetBrains keymap action",
 	"menu.open":             "JetBrains main menu is not a keymap action",

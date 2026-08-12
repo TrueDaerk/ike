@@ -1,5 +1,18 @@
 # Log
 
+## 2026-08-12 (default keybinding for showing stored HTTP responses, #1831)
+
+- **`http.showResponse` gets a default chord**: `cmd+shift+enter` primary with
+  a `ctrl+shift+f9` fallback, editor-scoped like `http.run`'s `cmd+enter` /
+  `ctrl+f9` pair (`internal/keymap/defaults.go`). Looking at a stored response
+  without dispatching (#1492) no longer requires the palette — the shifted
+  sibling of the run chord opens the viewer for the request under the cursor.
+  `ctrl+shift+f9` is CSI-parameter-encoded, so unlike plain `ctrl+f9` it is not
+  eaten by macOS and reaches the program on darwin too. Command gating is
+  unchanged. Regenerated `userdocs/reference` and the keymap status matrix.
+  Updated [Keybindings & Shortcuts](/architecture/keybindings.md),
+  [HTTP Client](/architecture/http-client.md).
+
 ## 2026-08-12 (palette-opened viewers land as a tab in the focused pane, #1825)
 
 - **A database picked in the '@' finder no longer splits the editor**: the
