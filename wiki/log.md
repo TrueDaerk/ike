@@ -1,5 +1,16 @@
 # Log
 
+## 2026-08-12 (make target to deploy the docs site to Pages without Actions, #1837)
+
+- **`make docs-deploy`** builds the MkDocs site strictly and publishes it to `gh-pages` via
+  `mkdocs gh-deploy --strict` (Makefile), failing with a plain error (not a stack trace) if
+  `mkdocs` isn't installed. `.github/workflows/docs.yml`'s `deploy` job now uses the identical
+  command instead of `actions/deploy-pages`, so CI and the local target publish through the same
+  mechanism — either can update the live site, which matters when the Pages queue backs up
+  (#1606) or Actions is unavailable. Required switching the repo's Pages source from "GitHub
+  Actions" to "Deploy from a branch" (`gh-pages` / root); branch deploys are otherwise silently
+  ignored. New [Documentation Site Build & Deploy](/architecture/docs-site.md).
+
 ## 2026-08-12 (re-send the exact request of a stored response, #1832)
 
 - **A stored response can be sent again, verbatim**: `httpclient` now captures

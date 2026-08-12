@@ -8,6 +8,7 @@
 #   make clean
 #   make docs      # regenerate userdocs/reference from the source
 #   make shots     # regenerate the feature screenshots in docs/screenshots
+#   make docs-deploy  # build + publish the docs site to the gh-pages branch
 #   make version   # print the version the next build will carry
 #   make install-desktop  # desktop launcher: Ike.app (macOS) / ike.desktop (Linux)
 #   make icons     # regenerate deploy/icon from the Go source (macOS tools)
@@ -25,7 +26,7 @@ DIRTY   := $(shell git diff --quiet 2>/dev/null || echo true)
 VERPKG  := ike/internal/version
 LDFLAGS := -X $(VERPKG).Commit=$(COMMIT) -X $(VERPKG).Dirty=$(DIRTY)
 
-.PHONY: all build install uninstall clean test docs shots version install-desktop icons
+.PHONY: all build install uninstall clean test docs shots docs-deploy version install-desktop icons
 
 all: build
 
@@ -55,6 +56,22 @@ docs:
 # fonts, so a shot is refreshed deliberately, when the UI it shows changed.
 shots:
 	$(GO) run ./cmd/shotgen
+
+# Build the docs site strictly and force-push it to gh-pages (#1837), the same
+# publish path CI's docs.yml uses on a main push — the local escape hatch when
+# Actions is slow or unavailable (#1606). Needs `mkdocs` + `userdocs/requirements.txt`
+# installed locally (pip install -r userdocs/requirements.txt) and push rights
+# on the repo. One-time repo setup: Settings > Pages > Build and deployment >
+# Source must be "Deploy from a branch" (gh-pages, /root), not "GitHub Actions"
+# — branch deploys are silently ignored otherwise. Two concurrent gh-deploy
+# pushes race on gh-pages; unlike CI's `concurrency: pages` group, that's on
+# you locally.
+docs-deploy:
+	@command -v mkdocs >/dev/null 2>&1 || { \
+		echo "error: mkdocs not found — run: pip install -r userdocs/requirements.txt" >&2; \
+		exit 1; \
+	}
+	mkdocs gh-deploy --strict
 
 # Print what `ike --version` will report for a build from this tree.
 version: build
