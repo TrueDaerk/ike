@@ -55,6 +55,13 @@ type popupTerm struct {
 	focusRight bool           // keyboard owner: false = inst, true = split
 	broadcast  bool           // cmd+shift+i (#1427): input mirrors to both sides
 	open       bool
+	// boxZ is the box's slot in the layer's z-order (#1806): the number of
+	// floating panels (#1793) drawn below it. 0 leaves the box at the bottom,
+	// len(floatTerms) puts it on top — where focusing it moves it, so the box
+	// is never covered while it owns the keyboard. Read through Model.popupBoxZ,
+	// which clamps a slot recorded for another panel set (project parking,
+	// #1407) back into range.
+	boxZ int
 }
 
 // popupSessSeq mints "popup:term:N" session keys. Package-level, not
@@ -120,8 +127,11 @@ func (m Model) popupFocused() *pane.Instance {
 }
 
 // setPopupFocus moves keyboard ownership to one split side (#1427); right is
-// coerced to the primary while no split exists.
+// coerced to the primary while no split exists. Like focusing a panel, this
+// also raises the box to the top of the layer's z-order (#1806), so the
+// keyboard owner is never covered by a torn-out panel.
 func (m *Model) setPopupFocus(right bool) {
+	m.raisePopupBox()
 	m.popup.focusRight = right && m.popup.split != nil
 	if m.popup.inst != nil {
 		m.popup.inst.SetFocused(!m.popup.focusRight)
@@ -139,18 +149,22 @@ type popupSurface struct {
 	right bool
 }
 
-// popupSurfaces lists the layer's focusable surfaces in stack order: the box's
-// sides first (it is the base layer), then the floating panels bottom-to-top
-// (#1806).
+// popupSurfaces lists the layer's focusable surfaces bottom-to-top (#1806):
+// the panels below the box, then the box's sides at its own z-slot, then the
+// panels above it.
 func (m Model) popupSurfaces() []popupSurface {
+	below, above := m.floatTermsSplit()
 	var out []popupSurface
+	for _, f := range below {
+		out = append(out, popupSurface{f: f})
+	}
 	if m.popup.inst != nil {
 		out = append(out, popupSurface{})
 		if m.popup.split != nil {
 			out = append(out, popupSurface{right: true})
 		}
 	}
-	for _, f := range m.floatTerms {
+	for _, f := range above {
 		out = append(out, popupSurface{f: f})
 	}
 	return out
@@ -491,13 +505,10 @@ func (m Model) popupTermMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 		}
 		// A press on the box reclaims the keyboard from a floating panel
 		// (#1793) and claims it for its split side (#1427), like pane focus
-		// follows clicks.
-		if m.floatFocus != nil {
-			m.setFloatFocus(nil)
-		}
-		if right != m.popup.focusRight {
-			m.setPopupFocus(right)
-		}
+		// follows clicks — and raises the box over the panels (#1806), so the
+		// keyboard owner is the surface on top either way.
+		m.setFloatFocus(nil)
+		m.setPopupFocus(right)
 		// Title row: tab bar (#157/#1128) — a segment click activates and
 		// arms the tear-out drag (#1793), its ✕ closes (the active tab
 		// through the busy guard, others directly) — or, outside every

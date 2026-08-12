@@ -65,6 +65,20 @@
   history fuzzy-search behavior is unchanged, browse items are additive.
   Updated [Project Switching](/architecture/project-switching.md).
 
+## 2026-08-12 (floating terminals: the popup box raises with focus too, #1806)
+
+- **The popup box is a z-order surface**, no longer the layer's fixed base:
+  `popupTerm.boxZ` records how many panels are drawn below it and
+  `floatTermsSplit` cuts `floatTerms` at that slot for compositing, hit
+  testing (`popupBoxAt`, now strictly top-down) and focus stepping. Focusing
+  the box — a click on it or a focus-key step onto it — raises it above every
+  panel (`raisePopupBox` from `setPopupFocus`), so a torn-out panel can no
+  longer cover the standard popup terminal while it owns the keyboard.
+  `raiseFloatTerm` and the panel removal move `boxZ` along, so the box keeps
+  its relative slot when a panel below it rises or leaves. Updated
+  [Integrated Terminal](/architecture/terminal.md) and
+  [Floating Shell](/architecture/floating-shell.md).
+
 ## 2026-08-12 (floating terminals: focus raises the panel, #1806)
 
 - **Focus implies raise**: `setFloatFocus` now moves the panel it focuses to

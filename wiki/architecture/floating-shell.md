@@ -176,10 +176,11 @@ host per shell.
   shell's dismiss/filter/scroll key priority is the inverse of a PTY's raw
   pass-through (esc must reach vim inside the popup). It composites its own
   pane-style boxes via `overlay.Place` with its own funnel branch — and its
-  torn-out floating panels (#1793) form their own z-ordered layer following
-  the same #1237 rules (topmost/focused owns input, every focus change —
-  click or focus chord — raises the panel it lands on (#1806), composite
-  bottom-to-top), panel-list flavored rather than `ui.Stack`-hosted
+  torn-out floating panels (#1793) form their own z-ordered layer with it
+  following the same #1237 rules (topmost/focused owns input, every focus
+  change — click or focus chord — raises the surface it lands on, panel or
+  box (#1806), composite bottom-to-top), panel-list flavored rather than
+  `ui.Stack`-hosted
   — see [Integrated Terminal](/architecture/terminal.md). It does reuse the
   shared size machinery: `ui.WinSizes` (keys `popupterm`/`popupterm:pos`),
   `ResizeZone` and the resize chords — plus a second, user-scoped `WinSizes`

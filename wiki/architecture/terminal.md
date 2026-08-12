@@ -314,19 +314,24 @@ pane layout:
   tab into the popup box, or keep using it as a panel).
 
 **Z-order and focus** follow the #1237 stack rules, panel-list flavored
-(`floatTerms`, bottom→top; the box is the base layer): the focused panel —
-`floatFocus`, falling back to the topmost when the box is gone — owns the
-keyboard through the same funnel branch (`popupFocused` resolves it), a box
-click reclaims the keys, and only the keyboard owner renders the focus border.
-Focusing a panel **always raises** it: `setFloatFocus` itself moves the panel
-to the top of `floatTerms` (#1806), so every route into focus — click, focus
-chord, tear-out, tab drop — keeps the #1237 invariant that the topmost panel
-owns the keyboard, and a focused panel can never sit covered by a sibling.
+(`floatTerms`, bottom→top): the focused panel — `floatFocus`, falling back to
+the topmost when the box is gone — owns the keyboard through the same funnel
+branch (`popupFocused` resolves it), a box click reclaims the keys, and only
+the keyboard owner renders the focus border. The **popup box is a surface of
+the same order**, not a fixed base layer: `popupTerm.boxZ` holds its slot —
+the number of panels drawn below it — and `floatTermsSplit` cuts the list at
+it for compositing (`render`), hit testing (`popupBoxAt`, top-down) and focus
+stepping. Focusing **always raises** (#1806): `setFloatFocus` lifts the panel
+to the top of `floatTerms` (`raiseFloatTerm`, moving `boxZ` down with it) and
+`setPopupFocus` lifts the box above every panel (`raisePopupBox`), so every
+route into focus — click, focus chord, tear-out, tab drop — keeps the #1237
+invariant that the topmost surface owns the keyboard, and neither a panel nor
+the box can sit covered while it holds the keys.
 The **focus keys** (default `ctrl+left`/`ctrl+right`, #228 overrides apply)
-step the keyboard through the layer's surfaces in stack order — the box's
-split sides first, then the panels bottom→top, wrapping around
+step the keyboard through the layer's surfaces in stack order — panels below
+the box, the box's split sides at its slot, panels above it, wrapping around
 (`popupSurfaces`/`stepPopupFocus`); with a single surface they stay with the
-shell. Since the panel stepped onto rises, repeated steps alternate between
+shell. Since the surface stepped onto rises, repeated steps alternate between
 the two frontmost surfaces, alt-tab style. The toggle chord and the
 outside-press dismiss act on the **whole layer** — box and panels show and
 hide as one unit, sessions always retained; panels have no per-panel hidden
