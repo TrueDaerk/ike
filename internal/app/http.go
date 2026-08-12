@@ -51,6 +51,10 @@ type HTTPResponseHistoryMsg struct{}
 // the request under the cursor without dispatching it (#1492).
 type HTTPShowResponseMsg struct{}
 
+// HTTPResendMsg runs http.resend: send the shown response's stored request
+// again, exactly as it went out (#1832).
+type HTTPResendMsg struct{}
+
 // HTTPResponseMsg delivers one finished dispatch back into the update loop.
 type HTTPResponseMsg struct {
 	Source  string // .http file the request came from (history keying, #1251)
@@ -129,8 +133,54 @@ func (m *Model) runHTTPRequestAtCursor() tea.Cmd {
 		m.host.Notify(host.Info, "http: no request under the cursor")
 		return nil
 	}
-	key := req.Key()
-	source := ed.Path()
+	return m.dispatchHTTP(ed.Path(), req.Key(), requestLabel(req),
+		func(ctx context.Context, source, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
+			// The .http file's directory anchors relative external-body paths
+			// (#1305): `< ./payload.json` is relative to the request file, not
+			// to wherever IKE was started.
+			return httpclient.DispatchStream(ctx, req,
+				httpclient.Options{BaseDir: filepath.Dir(source)}, cb)
+		})
+}
+
+// resendHTTPRequest runs http.resend (ctrl+r in the pane, its header button,
+// the palette — #1832): the response on show carries the request as it was
+// sent, and that snapshot goes out again unchanged. Nothing is parsed,
+// nothing is substituted, so an edited .http file, a changed variable or a
+// switched environment cannot alter what is repeated. The answer lands in the
+// pane and in the history like any other dispatch, snapshot included.
+func (m *Model) resendHTTPRequest() tea.Cmd {
+	p := m.httpPanel()
+	if p == nil {
+		m.host.Notify(host.Info, "http: no response pane open")
+		return nil
+	}
+	snap := p.CurrentRequest()
+	if snap == nil {
+		// Either a legacy history entry (written before the capture existed)
+		// or a live stream — say which, never fail silently.
+		m.host.Notify(host.Info, "http: this response has no stored request — re-run it from the .http file with http.run")
+		return nil
+	}
+	key := p.Request()
+	return m.dispatchHTTP(m.httpPaneSource, key, snap.Label(),
+		func(ctx context.Context, _, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
+			return httpclient.Resend(ctx, key, snap, httpclient.Options{}, cb)
+		})
+}
+
+// dispatchHTTP runs one exchange off-loop and pumps its events into the
+// update loop — shared by http.run and http.resend. send performs the actual
+// call; everything around it (duplicate guard, in-flight bookkeeping, the
+// event channel) is the same for both.
+//
+// The exchange runs on its own goroutine and reports through events: a
+// non-streaming response yields exactly one HTTPResponseMsg, a recognized
+// stream (#1776) first a start message, then one chunk message per received
+// piece, then the finalizing HTTPResponseMsg. The buffered channel gives
+// natural backpressure — a slow UI slows the read, never drops data.
+func (m *Model) dispatchHTTP(source, key, label string,
+	send func(ctx context.Context, source, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error)) tea.Cmd {
 	flightKey := httpFlightKey(source, key)
 	if _, running := m.httpFlight[flightKey]; running {
 		// Duplicate-dispatch guard (#1272): never fire the same request twice
@@ -140,35 +190,24 @@ func (m *Model) runHTTPRequestAtCursor() tea.Cmd {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	tick := m.startHTTPFlight(flightKey, &httpFlightEntry{
-		label:   requestLabel(req),
+		label:   label,
 		request: key,
 		started: time.Now(),
 		cancel:  cancel,
 	})
-	// The dispatch runs on its own goroutine and reports through events: a
-	// non-streaming response yields exactly one HTTPResponseMsg like before,
-	// a recognized stream (#1776) first a start message, then one chunk
-	// message per received piece, then the finalizing HTTPResponseMsg. The
-	// buffered channel gives natural backpressure — a slow UI slows the read,
-	// never drops data.
 	events := make(chan tea.Msg, 32)
 	dispatch := func() tea.Msg {
 		go func() {
-			// The .http file's directory anchors relative external-body paths
-			// (#1305): `< ./payload.json` is relative to the request file, not
-			// to wherever IKE was started.
-			resp, err := httpclient.DispatchStream(ctx, req,
-				httpclient.Options{BaseDir: filepath.Dir(source)},
-				httpclient.StreamCallbacks{
-					OnHeaders: func(status string, _ int, proto string, headers http.Header) {
-						events <- HTTPStreamStartMsg{Source: source, Request: key,
-							Status: status, Proto: proto, Headers: headers, events: events}
-					},
-					OnChunk: func(chunk []byte) {
-						events <- HTTPStreamChunkMsg{Source: source, Request: key,
-							Chunk: chunk, events: events}
-					},
-				})
+			resp, err := send(ctx, source, key, httpclient.StreamCallbacks{
+				OnHeaders: func(status string, _ int, proto string, headers http.Header) {
+					events <- HTTPStreamStartMsg{Source: source, Request: key,
+						Status: status, Proto: proto, Headers: headers, events: events}
+				},
+				OnChunk: func(chunk []byte) {
+					events <- HTTPStreamChunkMsg{Source: source, Request: key,
+						Chunk: chunk, events: events}
+				},
+			})
 			cancel() // release the context regardless of the outcome
 			events <- HTTPResponseMsg{Source: source, Request: key, Resp: resp, Err: err}
 			close(events)
@@ -304,6 +343,7 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) {
 		return
 	}
 	p.Set(msg.Request, msg.Resp)
+	m.httpPaneSource = msg.Source // where a re-send's answer is stored (#1832)
 	if msg.Source != "" {
 		// Persist under .ike/http/ and hand the stored predecessors to the
 		// viewer for h/l browsing (#1251); best effort like local history.
@@ -372,6 +412,7 @@ var httpPaneKeys = []struct{ Key, Title string }{
 	{"zy", "Copy the target fold whole (or click its ⧉)"},
 	{"y", "Copy selection (or the whole body)"},
 	{"Y", "Copy status line and headers"},
+	{"ctrl+r", "Re-send this response's request unchanged (or click ⟳ re-send)"},
 	{"x", "Cancel the running request"},
 	{"esc", "Clear search and selection"},
 }
@@ -438,7 +479,8 @@ func (m *Model) showStoredHTTPResponse() {
 	}
 	p.Set(key, items[0].Resp)
 	p.SetHistory(items)
-	m.focusHTTPPanel() // the viewer may live in a tab (#1778)
+	m.httpPaneSource = ed.Path() // a re-send from here stores under the same key (#1832)
+	m.focusHTTPPanel()           // the viewer may live in a tab (#1778)
 	m.layout()
 	m.host.Notify(host.Info, fmt.Sprintf("http: %d stored response(s) for %s — ←/→ browse", len(items), key))
 }

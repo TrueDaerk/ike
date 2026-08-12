@@ -79,6 +79,7 @@ bring their own.
 | Copy HTTP Response Body | `http.copyBody` | — | — | everywhere |
 | Copy Folded Range (HTTP Response) | `http.copyFold` | — | — | everywhere |
 | Copy HTTP Response Headers | `http.copyHeaders` | — | — | everywhere |
+| Re-send Stored HTTP Request | `http.resend` | — | — | everywhere |
 | Browse HTTP Response History | `http.responseHistory` | — | — | everywhere |
 | Run HTTP Request | `http.run` | `ctrl+f9` | — | everywhere |
 | Show Stored HTTP Response | `http.showResponse` | — | — | everywhere |

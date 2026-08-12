@@ -186,6 +186,33 @@ type HistoryItem struct {
 	At   time.Time // zero when unknown (the just-dispatched response)
 }
 
+// ResendMsg asks the host to send the shown entry's stored request again
+// (#1832), ctrl+r or a click on the header affordance. The pane holds the
+// snapshot but cannot dispatch, exactly as it cannot cancel (CancelMsg) or
+// reach the clipboard (CopyMsg).
+type ResendMsg struct{}
+
+// resendLabel is the clickable re-send affordance in the pane header (#1832).
+const resendLabel = "⟳ re-send"
+
+// CurrentRequest returns the as-sent request of the entry on show (#1832), or
+// nil when there is none: a live stream, an empty pane, or a history entry
+// stored before the snapshot existed.
+func (m *Model) CurrentRequest() *httpclient.RequestSnapshot {
+	if m.streaming || m.histIdx < 0 || m.histIdx >= len(m.hist) {
+		return nil
+	}
+	resp := m.hist[m.histIdx].Resp
+	if resp == nil {
+		return nil
+	}
+	return resp.Request
+}
+
+// CanResend reports whether the shown entry can be re-sent — the gate for the
+// header affordance (#1832).
+func (m *Model) CanResend() bool { return m.CurrentRequest() != nil }
+
 // Set replaces the viewer content with one dispatch result — the reuse
 // entry point (#1250). History browsing resets to just this response; use
 // SetHistory to hand over the stored predecessors.
@@ -455,6 +482,11 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Cancel the in-flight dispatch (#1272). ctrl+c is taken by copy
 		// (#1266), so the abort key is its own.
 		return func() tea.Msg { return CancelMsg{} }
+	case "ctrl+r":
+		// Re-send the shown entry's stored request (#1832). The message goes
+		// out even without a snapshot — the host says why nothing happened
+		// instead of the key dying silently on a legacy entry.
+		return func() tea.Msg { return ResendMsg{} }
 	case "j", "down":
 		m.Scroll(1)
 	case "k", "up":
@@ -715,35 +747,86 @@ func (m *Model) Title() string {
 	return "HTTP Response: " + m.request
 }
 
-// View renders the title header, the scrolled rows, and the key-hint footer.
-func (m *Model) View() string {
-	pal := m.theme()
-	var b strings.Builder
+// headerSeg is one piece of the pane's header line. resend marks the
+// clickable re-send affordance (#1832) so the hit test can locate its columns
+// from the same composition the renderer draws.
+type headerSeg struct {
+	text   string
+	style  lipgloss.Style
+	resend bool
+}
+
+// headerSegs composes the header line: title, status, the in-flight/stream
+// marker, the history marker (#1473) and the re-send affordance (#1832).
+func (m *Model) headerSegs(pal *theme.Palette) []headerSeg {
 	head := "HTTP Response"
 	if m.request != "" {
 		head += ": " + m.request
 	}
-	b.WriteString(lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" " + head))
+	segs := []headerSeg{{
+		text:  " " + head,
+		style: lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused),
+	}}
 	if m.status != "" {
-		b.WriteString(lipgloss.NewStyle().Faint(true).Render("   " + m.status))
+		segs = append(segs, headerSeg{text: "   " + m.status, style: lipgloss.NewStyle().Faint(true)})
 	}
 	switch {
 	case m.streaming:
 		// A live stream (#1776): the rows below grow while the connection is
 		// open; the marker replaces the generic pending one.
-		b.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render(
-			fmt.Sprintf("   ⟳ streaming… (%s)", runningFor(m.pendingSince))))
+		segs = append(segs, headerSeg{
+			text:  fmt.Sprintf("   ⟳ streaming… (%s)", runningFor(m.pendingSince)),
+			style: lipgloss.NewStyle().Foreground(pal.Warning)})
 	case m.pending != "":
 		// An in-flight dispatch (#1272): the rows below are the *previous*
 		// response until the new one lands.
-		b.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render(
-			fmt.Sprintf("   ⟳ running %s (%s)", m.pending, runningFor(m.pendingSince))))
+		segs = append(segs, headerSeg{
+			text:  fmt.Sprintf("   ⟳ running %s (%s)", m.pending, runningFor(m.pendingSince)),
+			style: lipgloss.NewStyle().Foreground(pal.Warning)})
 	}
 	if m.histIdx > 0 {
 		// An older history entry is on show (#1473): the footer hint alone is
 		// easy to miss while reading the body, so the header carries the
 		// marker where the eye actually rests.
-		b.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render("   " + m.historyMarker()))
+		segs = append(segs, headerSeg{
+			text:  "   " + m.historyMarker(),
+			style: lipgloss.NewStyle().Foreground(pal.Warning)})
+	}
+	if m.CanResend() {
+		// The re-send button (#1832): only where a stored request exists, so
+		// its presence *is* the answer to "can this be sent again?".
+		segs = append(segs,
+			headerSeg{text: "   ", style: lipgloss.NewStyle()},
+			headerSeg{text: resendLabel, resend: true,
+				style: lipgloss.NewStyle().Foreground(pal.Accent).Underline(true)})
+	}
+	return segs
+}
+
+// ResendHit reports whether the pane-local cell (x, y) sits on the header's
+// re-send affordance (#1832). Like the fold's copy glyph (#1787) it is tested
+// before the selection press, so the label is the only re-send target.
+func (m *Model) ResendHit(x, y int) bool {
+	if y != 0 {
+		return false
+	}
+	col := 0
+	for _, s := range m.headerSegs(m.theme()) {
+		w := lipgloss.Width(s.text)
+		if s.resend {
+			return x >= col && x < col+w
+		}
+		col += w
+	}
+	return false
+}
+
+// View renders the title header, the scrolled rows, and the key-hint footer.
+func (m *Model) View() string {
+	pal := m.theme()
+	var b strings.Builder
+	for _, s := range m.headerSegs(pal) {
+		b.WriteString(s.style.Render(s.text))
 	}
 	b.WriteString("\n")
 

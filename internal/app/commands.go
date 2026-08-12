@@ -366,6 +366,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.copyFold", "Copy Folded Range (HTTP Response)", HTTPCopyFoldMsg{}),
 			appCommand("http.responseHistory", "Browse HTTP Response History", HTTPResponseHistoryMsg{}),
 			appCommand("http.showResponse", "Show Stored HTTP Response", HTTPShowResponseMsg{}),
+			appCommand("http.resend", "Re-send Stored HTTP Request", HTTPResendMsg{}),
 			appCommand("http.cancel", "Cancel Running HTTP Request", HTTPCancelMsg{}),
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
 			appCommand("debug.breakpoints", "Breakpoints", BreakpointsToggleMsg{}),

@@ -3,7 +3,10 @@
 // following the internal/localhistory conventions: JSON files, best-effort
 // writes, automatic pruning. Responses are keyed by source file plus request
 // key (the request's ### name or stable index, httpfile.Request.Key), so
-// every request in a multi-request file keeps its own history.
+// every request in a multi-request file keeps its own history. Each entry
+// also carries the request as it was sent (#1832), so a stored response can be
+// re-dispatched verbatim; entries written before that field existed load
+// unchanged and simply have no snapshot.
 package httphistory
 
 import (
@@ -36,6 +39,10 @@ type Entry struct {
 	Truncated  bool          `json:"truncated,omitempty"`
 	Duration   time.Duration `json:"duration"`
 	Warnings   []string      `json:"warnings,omitempty"`
+	// Request is the request as it was sent (#1832), so this very exchange can
+	// be repeated without re-reading the .http file. nil for entries written
+	// before the capture existed — those load fine and only lose re-send.
+	Request *httpclient.RequestSnapshot `json:"-"`
 }
 
 // wireEntry is the on-disk shape of an Entry (#1267). A text body is stored
@@ -54,6 +61,52 @@ type wireEntry struct {
 	Truncated  bool          `json:"truncated,omitempty"`
 	Duration   time.Duration `json:"duration"`
 	Warnings   []string      `json:"warnings,omitempty"`
+	Request    *wireRequest  `json:"request,omitempty"` // as-sent snapshot (#1832)
+}
+
+// wireRequest is the on-disk shape of the as-sent request snapshot (#1832).
+// The body follows the response body's rule — readable "bodyText" for text,
+// base64 "body" for binary — so a JSON payload stays diffable in the editor.
+// A file without the field predates the capture and reads back as no
+// snapshot, which is what disables re-send for that entry.
+type wireRequest struct {
+	Method   string      `json:"method"`
+	URL      string      `json:"url"`
+	Headers  http.Header `json:"headers,omitempty"`
+	BodyText *string     `json:"bodyText,omitempty"`
+	Body     []byte      `json:"body,omitempty"`
+}
+
+// toWire converts a snapshot into its on-disk shape; nil stays nil.
+func toWire(s *httpclient.RequestSnapshot) *wireRequest {
+	if s == nil {
+		return nil
+	}
+	w := &wireRequest{Method: s.Method, URL: s.URL, Headers: s.Headers}
+	switch {
+	case len(s.Body) == 0:
+	case isText(s.Body):
+		text := string(s.Body)
+		w.BodyText = &text
+	default:
+		w.Body = s.Body
+	}
+	return w
+}
+
+// fromWire converts a stored snapshot back; nil (missing field) stays nil.
+func fromWire(w *wireRequest) *httpclient.RequestSnapshot {
+	if w == nil {
+		return nil
+	}
+	s := &httpclient.RequestSnapshot{Method: w.Method, URL: w.URL, Headers: w.Headers}
+	switch {
+	case w.BodyText != nil:
+		s.Body = []byte(*w.BodyText)
+	case len(w.Body) > 0:
+		s.Body = w.Body
+	}
+	return s
 }
 
 // isText reports whether a body can be stored as a JSON string: valid UTF-8
@@ -68,7 +121,7 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 	w := wireEntry{
 		Time: e.Time, Status: e.Status, StatusCode: e.StatusCode, Proto: e.Proto,
 		Headers: e.Headers, Truncated: e.Truncated, Duration: e.Duration,
-		Warnings: e.Warnings,
+		Warnings: e.Warnings, Request: toWire(e.Request),
 	}
 	switch {
 	case len(e.Body) == 0:
@@ -91,7 +144,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	*e = Entry{
 		Time: w.Time, Status: w.Status, StatusCode: w.StatusCode, Proto: w.Proto,
 		Headers: w.Headers, Truncated: w.Truncated, Duration: w.Duration,
-		Warnings: w.Warnings,
+		Warnings: w.Warnings, Request: fromWire(w.Request),
 	}
 	switch {
 	case w.BodyText != nil:
@@ -114,6 +167,7 @@ func (e Entry) Response(requestKey string) *httpclient.Response {
 		Duration:   e.Duration,
 		RequestKey: requestKey,
 		Warnings:   e.Warnings,
+		Request:    e.Request,
 	}
 }
 
@@ -129,6 +183,7 @@ func FromResponse(resp *httpclient.Response, at time.Time) Entry {
 		Truncated:  resp.Truncated,
 		Duration:   resp.Duration,
 		Warnings:   resp.Warnings,
+		Request:    resp.Request,
 	}
 }
 

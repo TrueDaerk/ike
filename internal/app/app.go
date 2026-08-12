@@ -171,6 +171,11 @@ type Model struct {
 	// by source file + request key: the duplicate-dispatch guard, the
 	// statusline indicator and the cancel action all read it.
 	httpFlight map[string]*httpFlightEntry
+	// httpPaneSource is the .http file the response viewer's current content
+	// came from (#1832). The pane knows the request key but not the file, and
+	// re-sending a stored request has to store its answer under the same
+	// history key; "" means the content came from nowhere persistable.
+	httpPaneSource string
 	// closedFileViews collects the file paths whose editor view disappeared
 	// during the current Update pass (tab close, pane close, tab-limit
 	// eviction, drag). The Update wrapper drains it once the whole operation
@@ -3447,6 +3452,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the request under the cursor without dispatching it.
 		m.showStoredHTTPResponse()
 		return m, nil
+
+	case HTTPResendMsg:
+		// http.resend (palette, #1832): the shown response's stored request
+		// goes out again, verbatim.
+		return m, m.resendHTTPRequest()
+
+	case httppane.ResendMsg:
+		// ctrl+r or the header affordance in the response pane (#1832): the
+		// pane holds the snapshot, the host dispatches it.
+		return m, m.resendHTTPRequest()
 
 	case HTTPCopyBodyMsg:
 		// http.copyBody (palette, #1266): the shown body to the clipboard.
@@ -8185,6 +8200,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 					m.drag = &dragState{kind: dragHTTPScroll, srcPane: key, curX: msg.X, curY: msg.Y}
 				}
 				return m, nil
+			}
+			// The header's ⟳ re-send affordance (#1832) sits on the title row,
+			// which selection would otherwise claim: clicking it sends the
+			// shown response's stored request again.
+			if inst.HTTP().ResendHit(localX, localY) {
+				return m, m.resendHTTPRequest()
 			}
 			// The ⧉ affordance of a collapsed fold (#1787) is one cell and
 			// outranks both: it copies the hidden range instead of selecting

@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-10T09:00:00Z
+timestamp: 2026-08-12T12:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -13,7 +13,8 @@ IKE gains a JetBrains-style HTTP client (epic #1247): requests are written as
 plain-text `.http` files, dispatched from the editor, and answered in a
 read-only response viewer with per-request history. This document tracks the
 subsystem: parser (#1248), dispatch (#1249), editor UX (#1250) and response
-history (#1251) — the full epic — are implemented.
+history (#1251) — the full epic — are implemented, and each stored response
+keeps the request that produced it so it can be sent again verbatim (#1832).
 
 ## File format
 
@@ -147,6 +148,27 @@ Defaults: redirects followed (Go's limit of 10), TLS verification on (unless
 capped at 10 MiB with a truncation warning so huge downloads cannot freeze
 the TUI. `Options` lets callers (and tests) override the env lookup, the
 config file paths, or disable detection entirely.
+
+### As-sent request snapshot (#1832)
+
+Every dispatch captures a `RequestSnapshot` — method, final URL, headers and
+body **as they went on the wire**, i.e. after placeholder substitution and
+after `.netrc`/`.curlrc` were applied — and hands it back on the `Response`
+(`Response.Request`). A `Host:` header, which Go keeps out of
+`http.Request.Header`, is stored under the `Host` key so the round trip is
+lossless. Bodies are assembled up front anyway (no chunked encoding), so the
+capture costs one copy of what was already in memory.
+
+`httpclient.Resend(ctx, key, snapshot, options, callbacks)` sends a snapshot
+again, byte for byte. It deliberately does **not** go through `prepare`: no
+parse, no substitution, no `.netrc`, no `.curlrc` header mapping — the
+snapshot already holds the outcome of all of them, and re-running them is
+exactly what "re-send verbatim" rules out. Only the `http.Client` is still
+built from `.curlrc` (proxy, TLS verification, timeouts), since those are
+about *reaching* the host rather than about the request's content. Streaming
+is unchanged: `Resend` shares `DispatchStream`'s execution path, so a re-sent
+SSE/NDJSON endpoint **re-opens the stream** with the same callbacks — streams
+are not excluded from re-send.
 
 ### Streaming responses (#1776)
 
@@ -292,6 +314,25 @@ For a recognized stream:
   behave identically to a collected response. Canceling a running stream
   (`x`, `http.cancel`) keeps the partial body in the pane and in the history,
   with a warning row saying why it ends there.
+- **Re-send** (#1832): while a response with a stored request is shown,
+  `ctrl+r` in the pane sends that exact request again. The pane holds the
+  snapshot but cannot dispatch, so it emits `httppane.ResendMsg` — the seam
+  `CancelMsg` (#1272) and `CopyMsg` (#1266) already use — and the app calls
+  `httpclient.Resend`. The visible pendant is a clickable `⟳ re-send` label in
+  the pane **header**, accent-coloured and underlined, next to the history
+  marker (#1473); it appears only while `CanResend()` holds, so its presence
+  is the answer to "can this be repeated?". Header and hit test come from one
+  composition (`headerSegs` → `ResendHit`), so the clickable columns cannot
+  drift from the drawn ones, and the hit test runs before `MousePress` like
+  the fold's `⧉` (#1787), so the label never starts a text selection. The key
+  reaches the host even without a snapshot: the notice ("no stored request —
+  re-run it from the .http file") beats a key that dies silently on a legacy
+  entry. `http.resend` ("Re-send Stored HTTP Request") is the palette pendant.
+  App side, `Model.httpPaneSource` remembers which `.http` file the shown
+  content came from — the pane knows the request key, not the file — so the
+  re-sent answer is stored under the same history key, and `dispatchHTTP`
+  carries the duplicate guard, in-flight bookkeeping and event pump for
+  `http.run` and `http.resend` alike.
 - **Identifier colors** (#1626): UUIDs and long hex hashes in the **body**
   rows take a color hashed from the identifier itself (`internal/idcolor`,
   drawn from the shared rainbow palette), so the trace id of this response
@@ -516,7 +557,8 @@ leads the footer line, so a narrow pane clips the generic hints, not it; the
 palette carries `http.responseHistory` ("Browse HTTP Response History"),
 which focuses the viewer and reports how many responses are stored; and the
 help overlay gains an `http response pane` group listing the pane-local keys
-(`h/l ←/→`, `s`, `j/k`, `shift+←/→`, `0/$`, `g/G`, `/`, `n/N`, `y`, `Y`, `esc`) — they belong to no
+(`h/l ←/→`, `s`, `j/k`, `shift+←/→`, `0/$`, `g/G`, `/`, `n/N`, `za…`, `zy`, `y`, `Y`,
+`ctrl+r`, `x`, `esc`) — they belong to no
 registry command, so nothing else would document them. `help.SetExtra` takes
 several groups for that.
 
@@ -529,8 +571,26 @@ after a restart before any dispatch. It gates like `http.run` (focused
 the newest stored entry and hands the full list over for the same `←`/`→`
 browsing; no stored responses yield a notice instead of an empty pane.
 
+**Re-sending a stored response** (#1832): each entry additionally carries the
+request that produced it (`Entry.Request`, on disk under `request` with the
+same readable `bodyText` / base64 `body` split as the response body). The
+field is optional on read: an entry written before it existed loads unchanged
+and simply has no snapshot, which is what disables re-send for it — in the
+pane the `⟳ re-send` affordance is absent and `ctrl+r` answers with a notice.
+`ctrl+r` (or the button) re-dispatches the snapshot through
+`httpclient.Resend` and the answer is appended to the same history like any
+dispatch, snapshot included, so re-sends chain.
+
 **On-disk format** (#1267): a text body (valid UTF-8, no NUL) is stored as a
 plain JSON string under `bodyText`, so `.ike/http/*.json` reads and diffs in
 the editor; only a binary body falls back to the base64 `body` field. The
 reader accepts both shapes, so history files written before the split keep
 loading. Files are written indented for the same reason.
+
+**Security**: `.ike/http/` holds response bodies verbatim and, since #1832,
+the *substituted* request as well — an `Authorization: Bearer …` header or a
+password in a body is on disk in clear text, with the same exposure the stored
+response bodies already had (project-local files, mode 0644). Nothing is
+masked: a masked snapshot could not be re-sent, and a masked body would not be
+the response. Projects whose requests carry secrets should keep `.ike/` out of
+version control and backups.
