@@ -290,6 +290,37 @@ func TestSearchFindsMatchesAcrossTheView(t *testing.T) {
 	}
 }
 
+// TestSearchChordAliases checks that ctrl+f and cmd+f open the search prompt
+// exactly like "/" (#1830) — the muscle-memory chord used everywhere else in
+// the app (editor find, terminal scrollback search) for users who reach for
+// it before remembering the pane also takes "/".
+func TestSearchChordAliases(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		key  tea.KeyPressMsg
+	}{
+		{"ctrl+f", tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}},
+		{"cmd+f", tea.KeyPressMsg{Code: 'f', Mod: tea.ModSuper}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := searchViewer(t)
+			m.handleKey(tc.key)
+			if _, open := m.SearchQuery(); !open {
+				t.Fatalf("%s must open the search prompt", tc.name)
+			}
+			for _, r := range "token" {
+				m.handleKey(keyPress(string(r)))
+			}
+			if q, _ := m.SearchQuery(); q != "token" {
+				t.Fatalf("query: %q, want %q", q, "token")
+			}
+			if _, total := m.MatchPosition(); total != 4 {
+				t.Errorf("matches: %d, want 4", total)
+			}
+		})
+	}
+}
+
 func TestSearchSmartcase(t *testing.T) {
 	m := searchViewer(t)
 	typeSearch(m, "Token") // an uppercase rune forces an exact match

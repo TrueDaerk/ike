@@ -206,7 +206,7 @@ highlighted, binary bodies collapsed to a notice.
 | ++shift+left++ / ++shift+right++ | Pan sideways by 8 columns (also shift+wheel) |
 | `0` / `^` | Back to column 0 |
 | `$` | Jump to the right edge |
-| `/` | Search the whole view — status line, headers and body |
+| `/`, ++ctrl+f++ / ++cmd+f++ | Search the whole view — status line, headers and body |
 | `n` / `N` | Next / previous match, wrapping |
 | `y` | Copy the selection, or the whole body when there is none |
 | `Y` | Copy the status line plus headers |

@@ -366,7 +366,7 @@ var httpPaneKeys = []struct{ Key, Title string }{
 	{"shift+← / shift+→", "Pan sideways in wide lines"},
 	{"0 / $", "Left edge / right edge"},
 	{"g / G", "Top / bottom"},
-	{"/", "Search in the response"},
+	{"/ · ctrl+f / cmd+f", "Search in the response"},
 	{"n / N", "Next / previous match"},
 	{"za / zc / zo / zM / zR", "Toggle / close / open folds"},
 	{"zy", "Copy the target fold whole (or click its ⧉)"},
