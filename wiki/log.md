@@ -1,5 +1,15 @@
 # Log
 
+## 2026-08-12 (fix docs deploy CI step failing with non-fast-forward push, #1839)
+
+- **`mkdocs gh-deploy` now runs with `--force`** in both `.github/workflows/docs.yml`'s `deploy`
+  job and `make docs-deploy` (Makefile). Without it, the CI job introduced by #1837 failed every
+  time: `actions/checkout`'s shallow, single-branch checkout never fetches `gh-pages`, so `mkdocs`
+  has no local `origin/gh-pages` ref to rebase its new commit onto, builds a rootless commit
+  instead, and a plain `git push` is rejected as non-fast-forward. `gh-pages` is a disposable build
+  artifact, not a branch anyone develops on, so force-pushing it on every deploy is the intended
+  model. Updated [Documentation Site Build & Deploy](/architecture/docs-site.md).
+
 ## 2026-08-12 (make target to deploy the docs site to Pages without Actions, #1837)
 
 - **`make docs-deploy`** builds the MkDocs site strictly and publishes it to `gh-pages` via

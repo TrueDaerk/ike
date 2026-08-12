@@ -4,7 +4,7 @@ title: Documentation Site Build & Deploy
 description: MkDocs user-docs pipeline — strict PR builds, gh-pages branch deploy from both CI (docs.yml) and the local `make docs-deploy` escape hatch, and the one-time Pages source switch that makes it work (#1837).
 resource: Makefile
 tags: [docs, ci, pages, mkdocs]
-timestamp: 2026-08-12T00:00:00Z
+timestamp: 2026-08-12T01:00:00Z
 ---
 
 # Documentation Site Build & Deploy
@@ -18,13 +18,21 @@ either can update the live site (#1837).
 
 * **CI (`docs.yml`).** A `build` job runs `mkdocs build --strict` on every push and pull request
   touching `userdocs/**`, `docs/screenshots/**`, or `mkdocs.yml` — broken links and warnings fail
-  the job. A `deploy` job, gated to pushes on `main`, runs `mkdocs gh-deploy --strict` with
+  the job. A `deploy` job, gated to pushes on `main`, runs `mkdocs gh-deploy --strict --force` with
   `contents: write` permission, which builds the site again and force-pushes it to `gh-pages`.
 * **Local (`make docs-deploy`).** Requires `mkdocs` on `PATH` (`pip install -r
   userdocs/requirements.txt`); the target fails with a plain error, not a stack trace, if it is
-  missing. Runs the same `mkdocs gh-deploy --strict` — useful when Actions is slow or unavailable
-  and someone wants to publish a docs change straight from a checkout (#1606 is what motivated
-  this: the Pages queue has backed up before).
+  missing. Runs the same `mkdocs gh-deploy --strict --force` — useful when Actions is slow or
+  unavailable and someone wants to publish a docs change straight from a checkout (#1606 is what
+  motivated this: the Pages queue has backed up before).
+
+**`--force` is load-bearing, not optional** (#1839). `mkdocs gh-deploy` normally rebases its new
+commit onto the existing `origin/gh-pages` remote-tracking ref before pushing, but
+`actions/checkout`'s default shallow, single-branch checkout never fetches `gh-pages` — so in CI
+that ref doesn't exist, `mkdocs` builds a fresh root commit with no shared history, and a plain
+push is rejected as non-fast-forward. `gh-pages` is a disposable build artifact, not a branch
+anyone develops on, so force-pushing it every deploy is the right model — both publish paths do
+it consistently.
 
 Two concurrent `gh-deploy` pushes race on `gh-pages`. CI's `docs.yml` keeps a `concurrency: pages`
 group to serialize itself; a local `make docs-deploy` run has no such guard, so avoid deploying at
