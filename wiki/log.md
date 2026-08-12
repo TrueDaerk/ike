@@ -1,5 +1,25 @@
 # Log
 
+## 2026-08-12 (finer undo granularity in insert mode, #1818)
+
+- **An insert session commits several changes instead of one**:
+  `internal/editor/insertundo.go` splits the open `history.Recorder` at the
+  boundaries a user thinks in, so `Cmd+Z` no longer discards everything typed
+  since entering insert mode. A paste mid-insert (`Cmd+V`, bracketed paste) is
+  exactly one change — the running segment commits first, the block gets a
+  recorder of its own, and that closes right after, so characters typed
+  afterwards undo before the block and never with it. Typing splits word-wise:
+  a new segment opens in front of a word run that follows a separator, making a
+  change "one word plus the separators typed after it" (`foo bar baz` → three
+  undos). A segment that holds no word yet never splits, so the auto-close pair,
+  the smart indent after `Enter` and the line `o` opened stay welded to the
+  keystroke that produced them; backspace, the kills, `Tab`/`Shift+Tab` and
+  completion accepts join the running segment. `commitInsert` became "commit
+  the rest"; normal-mode operations (`dd`, `ciw`, `:%s`) keep their one-change
+  semantics, and `history` is untouched — branching (#59), `g-`/`g+`, the byte
+  budget (#1537) and persistent undo (#148) work on the finer steps unchanged.
+  Updated [Editor](/architecture/editor.md).
+
 ## 2026-08-12 (secret masking in JSON files, #1813)
 
 - **JSON values of secret-suspect keys mask**: `plugins/languages/json/mask.go`
