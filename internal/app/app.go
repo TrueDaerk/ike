@@ -1901,6 +1901,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	cmd.SetUsage(usage)
 	file := palette.NewFileMode()
 	file.SetUsage(fileUsage)
+	file.SetScratchList(scratchList)
 	dir := palette.NewDirMode()
 	proj := project.NewPickerMode(nil)
 	mru := palette.NewRecentMode(func() []palette.RecentEntry {

@@ -2297,7 +2297,7 @@ over the standard library); the editor half is `pemsummary.go`.
 
 Values whose key names a credential render as `••••`
 (`secret.value`, `editor.secret_masking` / `view.toggleSecretMasking`) — in a
-`.env` file and, since #1813, in a JSON one. The
+`.env` file, in a Python assignment (#1811) and in a JSON member (#1813). The
 key alone decides — `internal/secret.Suspect` matches `*_SECRET`, `PASSWORD`,
 `*_TOKEN`, `*_KEY`, `CREDENTIALS`, `DSN` and friends, and clears keys that
 only look like one (`PUBLIC_KEY`, `API_KEY_ID`, `TOKEN_URL`, `AUTHOR`) — so
@@ -2319,6 +2319,35 @@ Nothing else changes: the per-family toggle, the conceal file filters (#1704)
 and the positional reveal all apply to a custom-matched key exactly as they do
 to a built-in one.
 
+It is not a decode, but it rides the identical mechanic: the producer
+emits the value as a stand-in span (#1585) and `concealSplit` gives it its own
+channel in `decodes`, gated by `decodeOn` like the escape families. So the
+positional reveal of #1594 applies unchanged — put the caret inside a value
+(or select across the line) and the raw secret is there to read and edit;
+move away and it masks again. The buffer is never altered, and a masked value
+copies, saves and diffs as itself. Masking is on by default; the toggle is
+per view and sticks like the other view toggles.
+
+A credential is just as exposed in source as in a `.env` file, so since #1811
+**Python assignments** mask too (`plugins/languages/python/mask.go`): the
+target names the value exactly as a dotenv key does, so `self.password =
+"hunter2"` or `API_TOKEN = os.environ["T"]` hides its right-hand side, decided
+by the same `secret.Suspect` — the same built-in tables and the same
+`secret_masking_keys` extensions and exemptions, which is what lets a
+configured `*timeout*` mask `self.timeout = 500`. Everything downstream is the
+dotenv behaviour unchanged: one fixed-width mask, the positional reveal, the
+view toggle and the `secret_masking=` conceal file rules. The recognition is
+deliberately shallow — one statement line, an identifier (dotted targets read
+by their last component) with an optional annotation, a bare `=` (never `==`
+or `+=`), and the value to the end of the statement. The value scan is
+quote-aware, so a trailing `#` comment stays readable while a `#` inside the
+value does not cut the mask short and leak its tail; a triple-quoted value
+masks on every line it spans, since hiding only the first line of a pasted
+private key hides nothing, and lines inside an ordinary docstring are prose,
+not assignments. The mask spans are emitted ahead of the other Python span
+families, so a masked value outranks the constant conceal (#1701) that would
+otherwise read it.
+
 **JSON** (#1813) masks by the same rule, one producer down
 (`plugins/languages/json/mask.go`): in a member `"password": "hunter2"` the
 string's **content** carries the mask and the quotes stay visible, so the value
@@ -2333,16 +2362,8 @@ grammar query, so it also holds while the buffer does not parse — which is
 exactly the moment a freshly pasted credential is on screen. The masks are
 emitted ahead of the buffer's other stand-ins (epoch, escape, hint spans), so
 first-covering-wins cannot let a decode render a piece of the secret. ndjson
-shares the producer.
-
-It is not a decode, but it rides the identical mechanic: the producer
-emits the value as a stand-in span (#1585) and `concealSplit` gives it its own
-channel in `decodes`, gated by `decodeOn` like the escape families. So the
-positional reveal of #1594 applies unchanged — put the caret inside a value
-(or select across the line) and the raw secret is there to read and edit;
-move away and it masks again. The buffer is never altered, and a masked value
-copies, saves and diffs as itself. Masking is on by default; the toggle is
-per view and sticks like the other view toggles.
+shares the producer. Other languages are follow-up work; the shared core in
+`internal/secret` is what they will dock onto.
 
 Duplicate keys in the same file are marked in the gutter and underlined
 inline: the dotenv language registers a `lang.Lint` (see

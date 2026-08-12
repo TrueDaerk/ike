@@ -183,6 +183,20 @@ the geometry re-derived from the focused pane via `paneAnchor`), instead of
 jumping to the centered box; the `;` picker and every non-anchored open keep
 `OpenLockedWith`.
 
+**Scratch files inline (#1812).** A query that fuzzy-matches the literal word
+**"scratch"** appends the scratch store's files below the project matches and
+the filesystem fallback — the simplest rule that satisfies "typing scratch
+lists the scratch files" without pulling scratch files into every fuzzy query
+by their own name (a scratch would otherwise have to fuzzy-compete with every
+project file on equal footing). Rows are newest-first, the store's order, like the `~` scratch mode
+(see [Scratch Files](/architecture/scratch-files.md)), tagged with a
+`"scratch"` `Detail` chip so they read as scratch, not project, rows.
+Activation emits the ordinary `OpenFileMsg`. The source is injected
+(`FileMode.SetScratchList`, mirroring `ScratchMode`'s own injection) over
+`internal/scratch.List` — the palette core still owns no store. Path queries
+(#1433) and the anchored descend above are unaffected: both return before this
+step runs.
+
 ## Open-path mode (`file.openPath`, #999)
 
 The "Open File…" picker (`openpath_mode.go`) opens files **outside the

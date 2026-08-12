@@ -46,6 +46,12 @@ type FileMode struct {
 	// scores, more-often-chosen files rank first — match quality still wins.
 	usage *Usage
 
+	// scratchList returns the scratch store's paths newest-first (#1812),
+	// mirroring ScratchMode's injection: the palette core owns no store, the
+	// root model wires internal/scratch.List in. Nil-safe — a finder built
+	// without SetScratchList never offers scratch rows.
+	scratchList func() []string
+
 	cachedRoot string
 	cached     []string
 	haveCache  bool
@@ -59,6 +65,11 @@ func NewFileMode() *FileMode { return &FileMode{walk: walkProject} }
 // Command / Search Everywhere windows bump it (the root model increments on a
 // CountUsage-marked OpenFileMsg).
 func (f *FileMode) SetUsage(u *Usage) { f.usage = u }
+
+// SetScratchList installs the scratch-store source (#1812), so a query that
+// hints at "scratch" can offer scratch files inline without switching to
+// ScratchMode. Mirrors NewScratchMode's injection.
+func (f *FileMode) SetScratchList(list func() []string) { f.scratchList = list }
 
 // Prefix implements Mode.
 func (f *FileMode) Prefix() rune { return '@' }
@@ -120,8 +131,37 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 			Msg:   OpenFileMsg{Path: abs},
 		}
 	}
-	if strings.TrimSpace(query) != "" {
+	if q := strings.TrimSpace(query); q != "" {
+		items = append(items, f.scratchItems(q)...)
 		items = append(items, f.fsFallbackItems(cx.Root, query, seen)...)
+	}
+	return items
+}
+
+// scratchItems offers the scratch store's files inline in the '@' finder
+// (#1812) when the query hints at "scratch" — fuzzy-matched against the
+// literal word "scratch" itself, not against each scratch file's own name.
+// That is the simplest disambiguation that satisfies "typing scratch lists
+// the scratch files" while leaving every query unrelated to that word
+// unaffected, at the cost of not surfacing a scratch file by its own name
+// (e.g. a scratch named "notes.go" needs the '~' mode or the word "scratch"
+// typed). Results are newest-first (the store's order), like ScratchMode,
+// and tagged with a Detail chip so they read as scratch, not project, files.
+func (f *FileMode) scratchItems(query string) []Item {
+	if f.scratchList == nil {
+		return nil
+	}
+	if _, ok := fuzzy.Match(query, "scratch"); !ok {
+		return nil
+	}
+	paths := f.scratchList()
+	items := make([]Item, 0, len(paths))
+	for _, p := range paths {
+		items = append(items, Item{
+			Title:  filepath.Base(p),
+			Detail: "scratch",
+			Msg:    OpenFileMsg{Path: p},
+		})
 	}
 	return items
 }

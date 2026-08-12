@@ -75,3 +75,10 @@ recent-files pattern): file names newest-first from the injected
 `scratch.List`, fuzzy-filtered by the query, enter opens through the standard
 funnel (`OpenFileMsg`). An empty store renders one inert hint row pointing at
 "New Scratch File".
+
+**Reachable from the `@` file finder too (#1812).** A query that fuzzy-matches
+the word "scratch" surfaces the same `scratch.List` rows, newest-first, inline
+in the `@` finder below the project matches — no mode switch needed for the
+common case of typing "scratch" to find a scratch file. See [Command
+Palette](/architecture/command-palette.md) for the file-mode ranking this
+slots into.
