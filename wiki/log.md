@@ -1,5 +1,22 @@
 # Log
 
+## 2026-08-12 (secret masking in JSON files, #1813)
+
+- **JSON values of secret-suspect keys mask**: `plugins/languages/json/mask.go`
+  is a second producer of the `secret.value` stand-in span (#1623) beside the
+  dotenv one, so `"password": "hunter2"` renders as `••••` in `.json`,
+  `.jsonc` and ndjson buffers. Which keys count is decided by
+  `internal/secret.Suspect` alone — built-in tables plus
+  `editor.secret_masking_keys` (#1712) — so nothing about the heuristic is
+  duplicated, and the toggle (`view.toggleSecretMasking`), the conceal file
+  rules (#1704) and the positional reveal (#1594) apply unchanged. The quotes
+  stay visible and only the string's content masks; only the key directly in
+  front of a value counts (nested objects mask by their own keys); non-string
+  and empty values are left alone. Masks are emitted ahead of the epoch,
+  escape and hint spans so first-covering-wins cannot let a decode render part
+  of a credential. Updated [Editor](/architecture/editor.md) and
+  [Languages](/architecture/languages.md).
+
 ## 2026-08-12 (project picker: relative path input resolves against the projects directory, #1808)
 
 - **Relative path browsing/completion targets `ProjectsDir()`**: the picker's

@@ -2295,8 +2295,9 @@ over the standard library); the editor half is `pemsummary.go`.
 
 ## Secret masking (#1623)
 
-Values in a `.env` file whose key names a credential render as `••••`
-(`secret.value`, `editor.secret_masking` / `view.toggleSecretMasking`). The
+Values whose key names a credential render as `••••`
+(`secret.value`, `editor.secret_masking` / `view.toggleSecretMasking`) — in a
+`.env` file and, since #1813, in a JSON one. The
 key alone decides — `internal/secret.Suspect` matches `*_SECRET`, `PASSWORD`,
 `*_TOKEN`, `*_KEY`, `CREDENTIALS`, `DSN` and friends, and clears keys that
 only look like one (`PUBLIC_KEY`, `API_KEY_ID`, `TOKEN_URL`, `AUTHOR`) — so
@@ -2318,7 +2319,23 @@ Nothing else changes: the per-family toggle, the conceal file filters (#1704)
 and the positional reveal all apply to a custom-matched key exactly as they do
 to a built-in one.
 
-It is not a decode, but it rides the identical mechanic: the dotenv producer
+**JSON** (#1813) masks by the same rule, one producer down
+(`plugins/languages/json/mask.go`): in a member `"password": "hunter2"` the
+string's **content** carries the mask and the quotes stay visible, so the value
+still reads as a string. Only the key directly in front of a value counts — a
+nested object masks by its own members' keys, never by the one it hangs under —
+and a value that is not a string (number, boolean, object, array) is left
+alone: the mask stands in for a credential, and a structure has no single span
+to stand in for. A member broken over two lines (`"password":` then the value
+on the next) still masks, and an empty value does not — a mask over nothing
+only reads as a value that is not there. The scan is a string-token walk, not a
+grammar query, so it also holds while the buffer does not parse — which is
+exactly the moment a freshly pasted credential is on screen. The masks are
+emitted ahead of the buffer's other stand-ins (epoch, escape, hint spans), so
+first-covering-wins cannot let a decode render a piece of the secret. ndjson
+shares the producer.
+
+It is not a decode, but it rides the identical mechanic: the producer
 emits the value as a stand-in span (#1585) and `concealSplit` gives it its own
 channel in `decodes`, gated by `decodeOn` like the escape families. So the
 positional reveal of #1594 applies unchanged — put the caret inside a value

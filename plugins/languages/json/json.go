@@ -79,11 +79,16 @@ func init() {
 // readability hints (#1627) — byte sizes, durations, digit grouping, radix.
 // The JSON context keeps keys and digits inside prose strings out of the epoch
 // detection.
+//
+// The values of secret-suspect keys mask (#1813). Their spans come first:
+// overlapping spans resolve first-covering-wins, so the mask must precede any
+// decode that would otherwise render a piece of the credential.
 func jsonSpans(lines []string) []lang.Span {
 	// The number hints step aside where a timestamp already claimed the digits,
 	// and win where the member name names the unit itself (#1685).
 	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.JSONValue))
-	out := append(stamps, escapes.UnicodeSpans(lines)...)
+	out := append(maskSpans(lines), stamps...)
+	out = append(out, escapes.UnicodeSpans(lines)...)
 	out = append(out, cronhint.QuotedSpans(lines)...)
 	// Network literals (#1653): a CIDR prefix or a punycode host in a value.
 	out = append(out, nethint.Spans(lines)...)
