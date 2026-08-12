@@ -148,3 +148,50 @@ func TestPasteDoesNotTrigger(t *testing.T) {
 		t.Fatalf("multi-rune insert must not trigger, got %v", *got)
 	}
 }
+
+// TestStaleEmptyPopupDoesNotSwallowArrows guards #1810: a completion reply
+// that lands after the typed prefix has moved past it filters down to nothing
+// and therefore draws no popup — the arrows must still move the caret instead
+// of being eaten by the invisible list.
+func TestStaleEmptyPopupDoesNotSwallowArrows(t *testing.T) {
+	m, _ := loaded(t, "first\nself.x = 500\nthird\n")
+	m = insertModeAt(m, 1, 12) // end of line, right after typing "500"
+	// The reply answers the trigger from the first digit; by now the prefix
+	// is "500", which matches none of the items.
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 1, Col: 10, Items: []ilsp.CompletionItem{
+		{Label: "self", InsertText: "self"},
+	}})
+	if m.CompletionOpen() {
+		t.Fatal("a list filtered down to nothing must not count as an open popup")
+	}
+
+	m = send(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	if m.cursor.Line != 0 {
+		t.Fatalf("up arrow after typing at line end: cursor = %+v, want line 0", m.cursor)
+	}
+	m = send(m, tea.KeyPressMsg{Code: tea.KeyDown}, tea.KeyPressMsg{Code: tea.KeyDown})
+	if m.cursor.Line != 2 {
+		t.Fatalf("down arrow: cursor = %+v, want line 2", m.cursor)
+	}
+}
+
+// TestOpenPopupStillOwnsArrows keeps the popup's list navigation intact: with
+// matching items showing, up/down move the selection, not the caret.
+func TestOpenPopupStillOwnsArrows(t *testing.T) {
+	m, _ := loaded(t, "first\nfmt.\nthird\n")
+	m = insertModeAt(m, 1, 4)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 1, Col: 4, Items: []ilsp.CompletionItem{
+		{Label: "Println", InsertText: "Println"},
+		{Label: "Printf", InsertText: "Printf"},
+	}})
+	if !m.CompletionOpen() {
+		t.Fatal("completion popup should be open")
+	}
+	m = send(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	if m.cursor.Line != 1 {
+		t.Fatalf("the open popup owns down: cursor = %+v, want line 1", m.cursor)
+	}
+	if m.comp == nil || m.comp.sel != 1 {
+		t.Fatalf("down should move the popup selection, got %+v", m.comp)
+	}
+}
