@@ -60,11 +60,17 @@ func init() {
 	})
 }
 
-// pythonSpans is the lang.Language.Spans hook: the network-literal hints
+// pythonSpans is the lang.Language.Spans hook: the secret masks (#1811) on
+// assignments whose target names a credential, the network-literal hints
 // (#1653) inside string literals, the permission hints (#1656) inside the
 // argument lists of the mode APIs, and the constant conceals (#1701) on
 // CONST_CASE assignments.
+//
+// The masks come first: overlapping spans resolve first-covering-wins, so a
+// masked value must outrank the hint another family would draw over the same
+// columns (`self.timeout = 500` masks rather than reading as a duration).
 func pythonSpans(lines []string) []lang.Span {
-	out := append(nethint.QuotedSpans(lines), permhint.PythonSpans(lines)...)
+	out := append(maskSpans(lines), nethint.QuotedSpans(lines)...)
+	out = append(out, permhint.PythonSpans(lines)...)
 	return append(out, consthint.PythonSpans(lines)...)
 }

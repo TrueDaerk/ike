@@ -2327,6 +2327,27 @@ move away and it masks again. The buffer is never altered, and a masked value
 copies, saves and diffs as itself. Masking is on by default; the toggle is
 per view and sticks like the other view toggles.
 
+A credential is just as exposed in source as in a `.env` file, so since #1811
+**Python assignments** mask too (`plugins/languages/python/mask.go`): the
+target names the value exactly as a dotenv key does, so `self.password =
+"hunter2"` or `API_TOKEN = os.environ["T"]` hides its right-hand side, decided
+by the same `secret.Suspect` — the same built-in tables and the same
+`secret_masking_keys` extensions and exemptions, which is what lets a
+configured `*timeout*` mask `self.timeout = 500`. Everything downstream is the
+dotenv behaviour unchanged: one fixed-width mask, the positional reveal, the
+view toggle and the `secret_masking=` conceal file rules. The recognition is
+deliberately shallow — one statement line, an identifier (dotted targets read
+by their last component) with an optional annotation, a bare `=` (never `==`
+or `+=`), and the value to the end of the statement. The value scan is
+quote-aware, so a trailing `#` comment stays readable while a `#` inside the
+value does not cut the mask short and leak its tail; a triple-quoted value
+masks on every line it spans, since hiding only the first line of a pasted
+private key hides nothing, and lines inside an ordinary docstring are prose,
+not assignments. The mask spans are emitted ahead of the other Python span
+families, so a masked value outranks the constant conceal (#1701) that would
+otherwise read it. Other languages are follow-up work; the shared core in
+`internal/secret` is what they will dock onto.
+
 Duplicate keys in the same file are marked in the gutter and underlined
 inline: the dotenv language registers a `lang.Lint` (see
 `/architecture/languages.md`) that flags every assignment of a key except the
