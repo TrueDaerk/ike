@@ -518,7 +518,7 @@ leads the footer line, so a narrow pane clips the generic hints, not it; the
 palette carries `http.responseHistory` ("Browse HTTP Response History"),
 which focuses the viewer and reports how many responses are stored; and the
 help overlay gains an `http response pane` group listing the pane-local keys
-(`h/l ←/→`, `s`, `j/k`, `shift+←/→`, `0/$`, `g/G`, `/`, `n/N`, `y`, `Y`, `esc`) — they belong to no
+(`h/l ←/→`, `r`, `s`, `j/k`, `shift+←/→`, `0/$`, `g/G`, `/`, `n/N`, `y`, `Y`, `esc`) — they belong to no
 registry command, so nothing else would document them. `help.SetExtra` takes
 several groups for that.
 
@@ -530,6 +530,22 @@ after a restart before any dispatch. It gates like `http.run` (focused
 `.http` file, request under the cursor), opens the pane when needed, shows
 the newest stored entry and hands the full list over for the same `←`/`→`
 browsing; no stored responses yield a notice instead of an empty pane.
+
+**Switching request from the pane** (#1829): the route above required knowing
+the palette command *and* going back to the editor, so the pane offers it
+directly — `r` in the focused viewer opens a palette picker (locked mode,
+prefix `|`, `internal/app/http_picker.go`) listing the requests of the
+associated `.http` file that have stored responses, with the request line and
+the stored count as the row detail and the newest timestamp on the right.
+Choosing a row goes through `loadStoredHTTPResponse`, the same loading path as
+`http.showResponse`. Which file is listed comes from the pane itself
+(`httppane.Model.SetSource`, set on every dispatch and every stored load),
+falling back to the focused `.http` editor while the pane is still empty;
+requests are enumerated from the *open buffer* when the file is open, so
+unsaved request blocks count. Requests without stored responses are left out,
+and a file without any yields a notice instead of an empty picker. The footer
+advertises the action as `r request` once a source file is known, and the
+empty pane names `http.showResponse` as the way in.
 
 **On-disk format** (#1267): a text body (valid UTF-8, no NUL) is stored as a
 plain JSON string under `bodyText`, so `.ike/http/*.json` reads and diffs in

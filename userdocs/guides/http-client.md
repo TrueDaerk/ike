@@ -246,6 +246,20 @@ response.
 **Browse HTTP Response History** in the palette focuses the viewer and reports
 how many are stored.
 
+### Another request's responses
+
+The viewer shows one request at a time, but the stored responses of the others
+are a keypress away: press ++r++ in the focused pane and pick from the requests
+of the same `.http` file that have stored responses — the list shows the
+request line, how many responses are stored and when the newest arrived.
+Choosing one loads that request's history into the pane, newest first, with
+++left++/++right++ browsing as usual. Requests you never dispatched are not
+listed; a file without any stored response says so instead of opening an empty
+list. The same works from the editor with **Show Stored HTTP Response**
+(`http.showResponse`), which loads the history of the request block under the
+cursor without sending anything — handy right after a restart, before the pane
+shows anything at all.
+
 Text bodies are stored as plain text inside the JSON, so `.ike/http/*.json`
 opens and diffs readably in the editor.
 
@@ -258,6 +272,7 @@ opens and diffs readably in the editor.
 | Copy HTTP Response Body | `http.copyBody` | — |
 | Copy HTTP Response Headers | `http.copyHeaders` | — |
 | Browse HTTP Response History | `http.responseHistory` | — |
+| Show Stored HTTP Response | `http.showResponse` | — |
 
 A scratch file is a quick way to try something without adding a file to the
 repository: **New Scratch File: Http** (`scratch.new.http`).

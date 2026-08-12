@@ -61,6 +61,11 @@ type Model struct {
 	status  string
 	loaded  bool
 
+	// source is the .http file the shown request belongs to (#1829): the
+	// pane-local request picker needs it to enumerate the file's other
+	// requests and their stored responses. "" until a response arrives.
+	source string
+
 	// hist is the browsable response history of the current request, newest
 	// first (#1251); histIdx selects the shown entry, 0 = latest.
 	hist    []HistoryItem
@@ -144,6 +149,13 @@ func (m *Model) SetPalette(p *theme.Palette) {
 
 // Request reports which request the shown response belongs to (tests).
 func (m *Model) Request() string { return m.request }
+
+// SetSource records the .http file the shown request comes from (#1829), so
+// the pane-local picker ("r") can list that file's other stored responses.
+func (m *Model) SetSource(path string) { m.source = path }
+
+// Source reports the .http file of the shown request, "" when unknown.
+func (m *Model) Source() string { return m.source }
 
 // Rows reports the composed row count (tests).
 func (m *Model) Rows() int { return len(m.rows) }
@@ -479,6 +491,11 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "l", "right":
 		// Newer stored response.
 		m.showHistory(m.histIdx - 1)
+	case "r":
+		// Switch the pane to another request's stored history (#1829). The
+		// pane knows neither the history store nor the .http file's requests,
+		// so the host opens the picker on its behalf.
+		return func() tea.Msg { return PickRequestMsg{} }
 	case "s":
 		// Keep the scroll position while stepping through history (#1493),
 		// per request; the footer anchor marks the active state.
@@ -836,6 +853,11 @@ func (m *Model) footerText() string {
 		s += " ·"
 	}
 	s += " j/k scroll · shift+←/→ pan · g/G top/bottom · / search · y copy (Y headers)"
+	// Switching to another request's stored history (#1829) is only offered
+	// once the pane knows which .http file the response came from.
+	if m.source != "" {
+		s += " · r request"
+	}
 	// The fold hint only appears when the body actually has ranges (#1330).
 	if len(m.folds) > 0 {
 		s += " · za/zM/zR fold"
@@ -868,7 +890,9 @@ func (m *Model) emptyText() string {
 	if m.loaded {
 		return "(empty response)"
 	}
-	return "(no response yet — run an .http request)"
+	// The stored-response route is the non-obvious one (#1829): without it the
+	// pane looks like it can only ever show what was just dispatched.
+	return "(no response yet — run an .http request, or show a stored one with http.showResponse)"
 }
 
 // renderRow draws one composed line per kind, with the search-match overlay
