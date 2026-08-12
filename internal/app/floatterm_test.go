@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/project"
 	"ike/internal/terminal"
 )
@@ -124,8 +126,11 @@ func TestTearOutLastTabMovesWholeHost(t *testing.T) {
 	}
 }
 
-func TestFloatPanelClickRaisesAndFocuses(t *testing.T) {
-	m := openTestPopup(t)
+// twoFloatPanels tears two tabs out of the popup box into panels placed side
+// by side (so either is clickable), returning the model and the panels in
+// stack order — the second one owns the keyboard.
+func twoFloatPanels(t *testing.T, m Model) (Model, *floatTerm, *floatTerm) {
+	t.Helper()
 	m.newPopupTerminalTab()
 	m.newPopupTerminalTab()
 	m.tearOutPopupTab(m.popup.inst, 0, 10, 5)
@@ -141,6 +146,20 @@ func TestFloatPanelClickRaisesAndFocuses(t *testing.T) {
 	if m.floatFocused() != upper {
 		t.Fatal("test setup: the last torn-out panel owns the keyboard")
 	}
+	return m, lower, upper
+}
+
+// topFloatPanel returns the topmost panel of the z-order — the one the
+// compositor draws last.
+func topFloatPanel(m Model) *floatTerm {
+	if len(m.floatTerms) == 0 {
+		return nil
+	}
+	return m.floatTerms[len(m.floatTerms)-1]
+}
+
+func TestFloatPanelClickRaisesAndFocuses(t *testing.T) {
+	m, lower, _ := twoFloatPanels(t, openTestPopup(t))
 	m = step(m, press(lower.x+10, lower.y+5))
 	m = step(m, release(lower.x+10, lower.y+5)) // settle the selection drag the body press armed
 	if m.floatTerms[len(m.floatTerms)-1] != lower {
@@ -156,6 +175,81 @@ func TestFloatPanelClickRaisesAndFocuses(t *testing.T) {
 	if m.floatFocused() != nil || m.popupFocused() != m.popup.inst {
 		t.Fatal("a box click must reclaim the keyboard from the panels")
 	}
+}
+
+// TestFloatPanelKeyFocusRaises: the spatial focus keys step through the layer
+// (#1806) — the newly focused panel is raised to the top of the z-order, so
+// keyboard owner and topmost panel always agree (#1237).
+func TestFloatPanelKeyFocusRaises(t *testing.T) {
+	m, lower, upper := twoFloatPanels(t, openTestPopup(t))
+	// Down the stack: the second-topmost panel takes the keyboard and rises.
+	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl})
+	m = out.(Model)
+	if m.floatFocused() != lower || m.popupFocused() != lower.inst {
+		t.Fatal("the focus key must move the keyboard to the other panel")
+	}
+	if topFloatPanel(m) != lower {
+		t.Fatal("the keyboard switch must raise the focused panel to the top of the z-order")
+	}
+	// Another step alternates back, raising again — alt-tab style.
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl})
+	m = out.(Model)
+	if m.floatFocused() != upper || topFloatPanel(m) != upper {
+		t.Fatal("the next step must focus and raise the other panel again")
+	}
+	// Up the stack the ring wraps onto the box, which keeps its base layer.
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl})
+	m = out.(Model)
+	if m.floatFocused() != nil || m.popupFocused() != m.popup.inst {
+		t.Fatal("stepping past the topmost panel must hand the keyboard to the box")
+	}
+	// And from the box back onto the bottom panel, which rises with the focus.
+	bottom := m.floatTerms[0]
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl})
+	m = out.(Model)
+	if m.floatFocused() != bottom || topFloatPanel(m) != bottom {
+		t.Fatal("stepping off the box must focus and raise the next panel")
+	}
+}
+
+// TestFloatFocusInvariantAcrossSwitches: mixed click/keyboard switches in any
+// order keep the #1237 invariant — the topmost panel owns the keyboard.
+func TestFloatFocusInvariantAcrossSwitches(t *testing.T) {
+	m, lower, upper := twoFloatPanels(t, openTestPopup(t))
+	check := func(what string) {
+		t.Helper()
+		if f := m.floatFocused(); f != nil && topFloatPanel(m) != f {
+			t.Fatalf("%s: the keyboard-owning panel must be topmost", what)
+		}
+	}
+	click := func(f *floatTerm) {
+		t.Helper()
+		m = step(m, press(f.x+10, f.y+5))
+		m = step(m, release(f.x+10, f.y+5))
+	}
+	key := func(code rune) {
+		t.Helper()
+		out, _ := m.Update(tea.KeyPressMsg{Code: code, Mod: tea.ModCtrl})
+		m = out.(Model)
+	}
+	click(lower)
+	check("click on the lower panel")
+	key(tea.KeyLeft)
+	check("focus key after a click")
+	click(upper)
+	check("click back onto the other panel")
+	key(tea.KeyLeft)
+	key(tea.KeyLeft)
+	check("repeated focus keys")
+	// The box in between must not disturb it either.
+	px, py, pw, ph := m.popupTermRect()
+	m = step(m, press(px+pw/2, py+ph/2))
+	m = step(m, release(px+pw/2, py+ph/2))
+	if m.floatFocused() != nil {
+		t.Fatal("a box click must reclaim the keyboard")
+	}
+	key(tea.KeyRight)
+	check("focus key from the box")
 }
 
 func TestToggleHidesAndShowsWholeLayer(t *testing.T) {

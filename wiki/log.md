@@ -1,5 +1,20 @@
 # Log
 
+## 2026-08-12 (floating terminals: focus raises the panel, #1806)
+
+- **Focus implies raise**: `setFloatFocus` now moves the panel it focuses to
+  the top of `floatTerms` itself, so every route into focus — click, focus
+  chord, tear-out, tab drop — restores the #1237 invariant "the topmost panel
+  owns the keyboard". The old click-only `focusFloatTermPanel` is gone; the
+  raise lives in `raiseFloatTerm`.
+- **Keyboard focus switch across the layer**: the spatial focus keys
+  (`ctrl+left`/`ctrl+right`, #228 overrides apply) step through
+  `popupSurfaces` — the box's split sides, then the panels bottom→top — and
+  wrap; previously they only crossed the #1427 split. A single surface leaves
+  the key to the shell. Updated
+  [Integrated Terminal](/architecture/terminal.md) and
+  [Floating Shell](/architecture/floating-shell.md).
+
 ## 2026-08-11 (popup terminal: move, tear-out panels, global toggle, #1793)
 
 - **Movable popup terminal**: a title-row press outside every tab segment

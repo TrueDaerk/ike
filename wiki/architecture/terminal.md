@@ -316,17 +316,27 @@ pane layout:
 **Z-order and focus** follow the #1237 stack rules, panel-list flavored
 (`floatTerms`, bottom→top; the box is the base layer): the focused panel —
 `floatFocus`, falling back to the topmost when the box is gone — owns the
-keyboard through the same funnel branch (`popupFocused` resolves it), a click
-focuses **and raises** a panel, a box click reclaims the keys, and only the
-keyboard owner renders the focus border. The toggle chord and the
+keyboard through the same funnel branch (`popupFocused` resolves it), a box
+click reclaims the keys, and only the keyboard owner renders the focus border.
+Focusing a panel **always raises** it: `setFloatFocus` itself moves the panel
+to the top of `floatTerms` (#1806), so every route into focus — click, focus
+chord, tear-out, tab drop — keeps the #1237 invariant that the topmost panel
+owns the keyboard, and a focused panel can never sit covered by a sibling.
+The **focus keys** (default `ctrl+left`/`ctrl+right`, #228 overrides apply)
+step the keyboard through the layer's surfaces in stack order — the box's
+split sides first, then the panels bottom→top, wrapping around
+(`popupSurfaces`/`stepPopupFocus`); with a single surface they stay with the
+shell. Since the panel stepped onto rises, repeated steps alternate between
+the two frontmost surfaces, alt-tab style. The toggle chord and the
 outside-press dismiss act on the **whole layer** — box and panels show and
 hide as one unit, sessions always retained; panels have no per-panel hidden
 state. Panel chrome repeats the popup's: tab bar, `cmd+t` sibling tabs,
 `cmd+w` through the busy guard, tab cycling, cmd+c/v, scrollback search —
 everything `popupFocused` routes; the resize chords (#774) and the border
 drag (#933, corner-anchored 1:1 math) size the focused panel. Box-only
-affairs (`cmd+d` split, `cmd+shift+i` broadcast, split focus keys) no-op
-while a panel holds the keys.
+affairs (`cmd+d` split, `cmd+shift+i` broadcast) no-op while a panel holds
+the keys — the focus keys are the exception: they cross the whole layer
+(#1806).
 
 **Global toggle** (#1793): every panel's title row leads with the ●/○ button.
 `○` (project-owned, the default) keeps #1407 semantics: the panel parks in
@@ -359,7 +369,7 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 | `cmd+d` | split right (#982, iTerm-style): a fresh terminal pane opens to the right of the focused terminal's pane and takes focus — the same for dedicated terminal panes and editor-hosted terminal tabs. Outside terminals `cmd+d` keeps its global binding (`editor.duplicateLine`) |
 | `cmd+w` | close the terminal (#986): an idle shell gets an EOF (ctrl+d) — it exits and the regular exit path closes the pane/tab; a **busy** terminal (foreground process group ≠ shell, or a still-running command session — `Session.Busy`) raises a centered guard first: enter closes, esc cancels. `ctrl+w` stays with the shell (delete word); outside terminals `cmd+w` keeps its global binding (`editor.closeTab`) |
 | `cmd+f` | open the scrollback search (#1504) — the muscle-memory entry point to the same inline search `/` starts from scrollback (#1169), working from the live view too (`Model.StartSearch`; esc then returns to the live view). Under an alt-screen or mouse-reporting child the chord stays with the child (vim/lazygit own their find); outside terminals `cmd+f` keeps its global binding (`editor.find`). The popup terminal reserves it too, on the focused split side |
-| `ctrl+arrows` | spatial focus moves out of the terminal (#228) — the same `keymap.bindings.focus_*` overrides apply; a disabled direction stays with the shell |
+| `ctrl+arrows` | spatial focus moves out of the terminal (#228) — the same `keymap.bindings.focus_*` overrides apply; a disabled direction stays with the shell. Inside the popup layer left/right instead step through its surfaces — split sides and floating panels — raising the one they land on (#1806) |
 | `cmd+c` | copy an active mouse selection (#227) — without one the key stays with the shell |
 | `cmd+v` | paste the system clipboard through the bracketed-paste path (#727) — under the Kitty protocol the host delivers cmd+v as a key, so the app performs the paste itself; the debuggee terminal pane (#1370) is an ordinary terminal pane and needs no special casing |
 | global IDE chords | the chords bound to the `terminalGlobalCommands` allowlist dispatch in the IDE instead of the shell (#805, widened in #973): `palette.searchEverywhere` (`cmd+shift+a`), `palette.recentFiles` (`cmd+e`), `project.switch`, `settings.open` (`cmd+,`), `project.goToFile`/`goToClass`, `project.findInPath`/`replaceInPath`, `explorer.toggle` (`cmd+1`), `window.hideAllTools`, `nav.pins` (`cmd+2`) and `nav.pinGoto1..4`, `todo.list` (`cmd+6`), `vcs.panel` (`cmd+9`), `notifications.history`, `editor.tab.next`/`tab.prev` (`ctrl+cmd+right/left`, #997 — switches the focused tab host's tabs; the `ctrl+alt+arrow` secondaries deliberately stay with the shell, `terminalShellChords`, since alt-arrows are common readline navigation), plus a configured `palette.toggle_key` — resolved via the live binding table, so rebinds move along. Single-step chords, and the **double-shift tap** (#973): two bare shift presses within 600ms open Search Everywhere — a bare modifier means nothing to the shell, unlike esc-esc, which deliberately stays with it (vim/lazygit would see side effects) |
