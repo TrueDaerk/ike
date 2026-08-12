@@ -4,7 +4,7 @@ title: Archive Viewer
 description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name."
 resource: internal/archview
 tags: [architecture, archive, tar, viewer, pane, read-only]
-timestamp: 2026-08-11T12:00:00Z
+timestamp: 2026-08-12T12:00:00Z
 ---
 
 # Archive Viewer (#1762)
@@ -42,8 +42,9 @@ sniffs content:
 
 The handler dispatches `OpenArchiveMsg`; `openArchivePane` splits the leaf
 `viewerSplitTarget` picks (see [pane layout](./pane-layout.md)) like the image
-preview, refocusing an existing pane already bound to the same path instead of
-duplicating. Keys mint as `archive`, `archive:2`, …;
+preview — or opens as a content tab in the focused pane when the open came
+from the palette (#1825, see [data viewer](./data-viewer.md)) — refocusing an
+existing pane already bound to the same path instead of duplicating. Keys mint as `archive`, `archive:2`, …;
 persistence records `{Kind: "archive", Path}` and restore re-lists the file (a
 vanished or corrupt file restores as the pane's own error notice).
 

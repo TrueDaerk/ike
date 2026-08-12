@@ -58,13 +58,20 @@ func sniffImage(head []byte) bool {
 
 // openImagePreview opens (or refocuses) the image preview for path, split off
 // the leaf viewerSplitTarget picks — the pane the user last worked in, never
-// the explorer they opened the file from (#1779).
+// the explorer they opened the file from (#1779) — or, when the open came
+// from the palette, as a tab in the focused pane (#1825).
 func (m *Model) openImagePreview(path string) {
+	tabHost := m.takeViewerTabHost()
 	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
 		return c.Kind() == pane.KindImage && c.Image().Path() == path
 	}); ok {
 		m.focusContentAt(hostKey, tabIdx) // may live in a tab (#1778)
 		return
+	}
+	if tabHost != "" {
+		if _, ok := m.openContentTab(tabHost, pane.KindImage, path); ok {
+			return
+		}
 	}
 	target := m.viewerSplitTarget()
 	key := m.activeWS().Panes.AddImagePreview(path)

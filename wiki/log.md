@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-12 (palette-opened viewers land as a tab in the focused pane, #1825)
+
+- **A database picked in the '@' finder no longer splits the editor**: the
+  palette's file open (`openPathFocused`, `internal/app/app.go`) records the
+  focused pane in `m.viewerTabHost` before the file handler runs, and the
+  viewer opens — `openDataPane`, `openImagePreview`, `openArchivePane` —
+  consume it through `takeViewerTabHost`/`openContentTab`
+  (`internal/app/panecontent.go`), nesting the viewer as a content tab (#1778)
+  instead of splitting off `viewerSplitTarget`. The pane converts into a tab
+  host when needed and a lone empty scratch tab gives way to the viewer, so a
+  `.duckdb` picked from an editor lands exactly where a plain file would. The
+  image preview and archive viewer were pulled along: the asymmetry was the
+  open path's, not the data viewer's. Everything else keeps the #1779 split —
+  explorer, `:e`, CLI and plugin opens, and a palette pick made while the
+  explorer or a tool window holds focus (they cannot host tabs). An already
+  open viewer for the path is still only refocused.
+  Updated [Data Viewer](/architecture/data-viewer.md),
+  [Pane Layout & Drag](/architecture/pane-layout.md),
+  [Image Preview](/architecture/image-preview.md),
+  [Archive Viewer](/architecture/archive-viewer.md).
+
 ## 2026-08-12 (terminal auto-scroll while extending a mouse selection, #1821)
 
 - **A selection drag past the pane edge scrolls the terminal**: `MouseDrag` in
