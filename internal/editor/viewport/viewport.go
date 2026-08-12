@@ -56,6 +56,16 @@ func (v *Viewport) TextWidth(lineCount int) int {
 // Scroll adjusts Top and Left so the cursor stays visible, honouring ScrollOff
 // vertically and keeping the cursor column within the text width horizontally.
 func (v *Viewport) Scroll(cursorLine, cursorCol, lineCount int) {
+	v.ScrollWidth(cursorLine, cursorCol, lineCount, v.TextWidth(lineCount))
+}
+
+// ScrollWidth is Scroll against a caller-supplied horizontal window: the width
+// the caret must stay inside, which is narrower than TextWidth when something
+// overlays the text area's right edge — the vertical scrollbar claims the
+// pane's last column, so following the cursor into it would hide the caret
+// behind the bar (#1827). Rendering keeps using the full TextWidth: the bar is
+// an overlay, content still renders under it.
+func (v *Viewport) ScrollWidth(cursorLine, cursorCol, lineCount, textWidth int) {
 	if v.height <= 0 {
 		return
 	}
@@ -77,7 +87,10 @@ func (v *Viewport) Scroll(cursorLine, cursorCol, lineCount int) {
 		v.Top = 0
 	}
 
-	tw := v.TextWidth(lineCount)
+	tw := textWidth
+	if tw < 1 {
+		tw = 1
+	}
 	if cursorCol < v.Left {
 		v.Left = cursorCol
 	}
