@@ -307,3 +307,57 @@ func TestFileModeCompleteItem(t *testing.T) {
 		t.Fatal("a non-file row must not be adopted as a query")
 	}
 }
+
+// TestFileModeScratchQueryListsScratchFiles guards #1812: typing "scratch" in
+// the '@' finder offers the scratch store's files, newest-first like
+// ScratchMode, tagged with a Detail chip, and selectable through the usual
+// OpenFileMsg.
+func TestFileModeScratchQueryListsScratchFiles(t *testing.T) {
+	f := fileMode("app.go")
+	f.SetScratchList(func() []string { return []string{"/scratch/newest.go", "/scratch/older.txt"} })
+
+	items := f.Results("scratch", Context{Root: "/proj"})
+	var got []Item
+	for _, it := range items {
+		if it.Detail == "scratch" {
+			got = append(got, it)
+		}
+	}
+	if len(got) != 2 {
+		t.Fatalf("scratch rows = %d, want 2: %+v", len(got), items)
+	}
+	if got[0].Title != "newest.go" || got[1].Title != "older.txt" {
+		t.Fatalf("scratch rows not newest-first: %+v", got)
+	}
+	if got[0].Msg != (OpenFileMsg{Path: "/scratch/newest.go"}) {
+		t.Fatalf("scratch row Msg = %+v, want OpenFileMsg to the scratch path", got[0].Msg)
+	}
+}
+
+// TestFileModeScratchQueryDoesNotAffectNormalQueries guards #1812's other
+// acceptance criterion: a query unrelated to "scratch" is untouched, and an
+// empty query (which would fuzzy-match anything) does not pull scratch rows
+// in either.
+func TestFileModeScratchQueryDoesNotAffectNormalQueries(t *testing.T) {
+	f := fileMode("app.go")
+	f.SetScratchList(func() []string { return []string{"/scratch/notes.go"} })
+
+	for _, q := range []string{"", "app", "xyz"} {
+		items := f.Results(q, Context{Root: "/proj"})
+		for _, it := range items {
+			if it.Detail == "scratch" {
+				t.Fatalf("query %q must not surface scratch rows, got %+v", q, items)
+			}
+		}
+	}
+}
+
+// TestFileModeScratchQueryNilSourceIsSafe guards the nil-safe default: a
+// FileMode never wired with SetScratchList (e.g. most existing tests) must
+// not panic on a "scratch" query.
+func TestFileModeScratchQueryNilSourceIsSafe(t *testing.T) {
+	f := fileMode("app.go")
+	if items := f.Results("scratch", Context{Root: "/proj"}); len(items) != 0 {
+		t.Fatalf("no scratch source: got %+v, want no rows", items)
+	}
+}
