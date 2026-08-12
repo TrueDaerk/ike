@@ -72,6 +72,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       # Builds and force-pushes site/ to gh-pages — the branch Pages is
-      # configured to serve from. Same command as `make docs-deploy`.
+      # configured to serve from. Same command as `make docs-deploy`. --force
+      # is required: actions/checkout's shallow, single-branch checkout never
+      # fetches gh-pages, so mkdocs has no shared history to rebase onto and a
+      # plain push is rejected as non-fast-forward (#1839).
       - name: Deploy to gh-pages
-        run: mkdocs gh-deploy --strict
+        run: mkdocs gh-deploy --strict --force

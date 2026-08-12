@@ -71,7 +71,7 @@ docs-deploy:
 		echo "error: mkdocs not found — run: pip install -r userdocs/requirements.txt" >&2; \
 		exit 1; \
 	}
-	mkdocs gh-deploy --strict
+	mkdocs gh-deploy --strict --force
 
 # Print what `ike --version` will report for a build from this tree.
 version: build
