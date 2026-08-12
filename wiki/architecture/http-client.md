@@ -354,8 +354,10 @@ For a recognized stream:
   of the track's world. Mouse: `ScrollbarHit` claims the column before the
   selection press; a thumb press starts a `dragHTTPScroll` drag whose motion
   feeds `ScrollbarDrag`, a track press jumps proportionally.
-- **In-pane search** (#1265): `/` opens a search prompt in the pane footer,
-  matching incrementally over the **whole composed view** — status line,
+- **In-pane search** (#1265): `/` (or `ctrl+f`/`cmd+f`, the muscle-memory
+  chord used everywhere else in the app — editor find, terminal scrollback
+  search — #1830) opens a search prompt in the pane footer, matching
+  incrementally over the **whole composed view** — status line,
   headers and formatted body alike — with the editor's smartcase rule (an
   all-lowercase pattern folds case, any uppercase rune makes it exact, via
   `internal/editor/search`). `n`/`N` step to the next/previous match with

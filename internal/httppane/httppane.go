@@ -427,8 +427,11 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.foldKey(msg.String())
 	}
 	switch msg.String() {
-	case "/":
-		// Open the in-pane search prompt (#1265), editor conventions.
+	case "/", "ctrl+f", "cmd+f", "super+f":
+		// Open the in-pane search prompt (#1265), editor conventions. ctrl+f /
+		// cmd+f alias the muscle-memory search chord used everywhere else in
+		// the app — editor find, terminal scrollback search (#1504) — since
+		// plain "/" alone doesn't match user expectations (#1830).
 		m.searching = true
 		m.query = ""
 		m.matches = nil
