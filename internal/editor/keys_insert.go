@@ -33,7 +33,9 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 	case (key.Code == ' ' || key.Code == '@' || key.Code == tea.KeySpace) && key.Mod == tea.ModCtrl:
 		m.emit(EventCompletionTrigger)
 	case key.Code == tea.KeyEnter:
-		m.insertNewline()
+		// A line break is a separator like any other (#1818): it closes no undo
+		// segment by itself, the next word typed does.
+		m.typedInsert("\n", m.insertNewline)
 	// Word/line kills (#246) come before the plain-backspace case, which
 	// matches KeyBackspace regardless of modifiers. alt+backspace mirrors the
 	// terminal pane's macOS convention (#240), ctrl+w is the vim-native twin.
@@ -79,7 +81,7 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 	// the indent insertion gets a say; no match falls through to tabText.
 	case key.Code == tea.KeyTab && m.expandSnippetTrigger():
 	case key.Code == tea.KeyTab:
-		m.insertText(m.tabText())
+		m.typedInsert("\t", func() { m.insertText(m.tabText()) })
 	// Plain (or Shift-modified) arrows move the cursor; Alt/Ctrl chords fall
 	// through to resolveMotion below for word/paragraph navigation.
 	case key.Code == tea.KeyLeft && key.Mod&^tea.ModShift == 0:
@@ -197,18 +199,23 @@ func (m *Model) insertMove(dLine, dCol int) {
 }
 
 // writeRunes inserts text, overwriting in replace mode and triggering a
-// completion event for the typed character.
+// completion event for the typed character. The insert runs through
+// typedInsert, so a word starting after a separator opens a new undo segment
+// (#1818) — auto-close and the typing aids ride inside that segment, their
+// pair/space belonging to the word that produced it.
 func (m *Model) writeRunes(text string) {
 	if m.mode == Replace {
-		m.replaceText(text)
+		m.typedInsert(text, func() { m.replaceText(text) })
 		return
 	}
-	switch {
-	case m.autoClosePairs && m.autoCloseWrite(text):
-	case m.smartSpaceWrite(text): // space after ':' & friends (#1326)
-	default:
-		m.insertText(text)
-	}
+	m.typedInsert(text, func() {
+		switch {
+		case m.autoClosePairs && m.autoCloseWrite(text):
+		case m.smartSpaceWrite(text): // space after ':' & friends (#1326)
+		default:
+			m.insertText(text)
+		}
+	})
 	m.maybeAutoComplete(text)
 }
 
@@ -548,8 +555,13 @@ func (m *Model) insertDedentLine() {
 	m.dirtyFromInsert()
 }
 
-// dirtyFromInsert marks the buffer dirty and emits a change while typing.
+// dirtyFromInsert marks the buffer dirty and emits a change while typing. It
+// also clears the undo segment's typing state (#1818): every edit path passes
+// through here, so a deletion, an accepted completion or a snippet expansion
+// leaves nothing behind that could split the next keystroke mid-word. The
+// typing paths restore the state right after the edit (typedInsert).
 func (m *Model) dirtyFromInsert() {
+	m.insert.last, m.insert.word = 0, false
 	m.dirty = true
 	m.emit(EventChange)
 }

@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-10T13:00:00Z
+timestamp: 2026-08-12T12:00:00Z
 ---
 
 # Editor
@@ -111,11 +111,13 @@ line runs that test (see /architecture/run-configurations.md).
   `%22` → `%2522`) — the raw flavor bytes stay verbatim.
   `Cmd+C/X/V` (keymap commands `editor.copy/cut/paste`) yank / delete the
   visual selection — or the current line without one — through `"+`, and paste
-  from it (mid-insert the paste joins the open insert session's undo unit).
+  from it (mid-insert the paste is its own undo step inside the open insert
+  session, #1818).
   A **bracketed paste** from the terminal (external text) arrives as one
   `tea.PasteMsg`; the app routes it to the focused editor's `PasteText`, which
   inserts the whole block as a single edit and one undo unit — visual mode
-  replaces the selection, mid-insert it splices in, normal mode pastes after the
+  replaces the selection, mid-insert it splices in (again as one undo step of
+  its own), normal mode pastes after the
   cursor like `p` — without touching the yank registers or system clipboard
   (#603). Because this route bypasses the editor `Update` loop's
   `maybeReparse`, `PasteText` returns the reparse command itself when the
@@ -152,7 +154,8 @@ line runs that test (see /architecture/run-configurations.md).
   the indentation of the nearest non-blank line above; blank block lines
   stay empty. The transform runs on the register text before the insert, so
   the paste stays one undo unit. A `Cmd+V` mid-insert re-indents only the
-  continuation lines (the first line splices at the cursor). Single-line
+  continuation lines (the first line splices at the cursor) and lands as one
+  undo step of the insert session. Single-line
   pastes, charwise pastes and terminal bracketed paste (`PasteText`) stay
   verbatim; `editor.smart_paste = false` turns the transform off.
   **Clipboard failures surface (#1255).** Every `"+` write used to be
@@ -201,6 +204,11 @@ line runs that test (see /architecture/run-configurations.md).
   they land exactly on it (vim-style), so `[+]` goes away when you undo back to
   the saved content. A crash-restored buffer marks the checkpoint unreachable —
   no undo depth makes it read as clean.
+  **Insert granularity** (#1818, `insertundo.go`): an insert session commits a
+  *sequence* of changes, not one — see the insert-mode section below. The store
+  is untouched by this: the editor decides where a segment ends, `Recorder` and
+  the tree stay change-based, so branching, `g-`/`g+`, the byte budget and the
+  persisted tree work on the finer steps unchanged.
   **Change list** (#1174, `changelist.go`): a per-document ring (cap 100) of
   the `CursorAfter` of every committed `Change` — derived from the same
   `pushChange` that makes an edit undoable, so undo/redo walks add no
@@ -493,8 +501,8 @@ per caret) and record a `.`-dot; they are also registered as
 reaches them and the keymap layer can rebind them where `Ctrl-a` is taken by a
 terminal multiplexer.
 
-Insert/Replace edits flow through one open `history.Recorder` so a whole insert
-is a single undo unit; `Esc` commits it and records the `.`-repeat. Arrow keys,
+Insert/Replace edits flow through an open `history.Recorder`; `Esc` commits
+what is left in it and records the `.`-repeat. Arrow keys,
 `Home`/`End` and the word/page keys move the caret mid-insert — `Home`/`End`
 use the smart toggle described above, same as normal mode. Backward kills
 work mid-insert too (#246), mirroring the terminal pane's macOS convention:
@@ -502,10 +510,44 @@ work mid-insert too (#246), mirroring the terminal pane's macOS convention:
 the line start, and `cmd+backspace` is IntelliJ's Delete Line (#955): the
 whole current line goes, including the preceding line break (on line 0 the
 following break instead), landing the caret at the end of the previous line —
-all inside the open insert's undo unit. An `undo`/`redo`
+all inside the running undo segment. An `undo`/`redo`
 requested mid-insert (e.g. `Ctrl+Z` while typing) first **commits the open
-insert session**, so it reverts the whole typed run as one unit and behaves
-identically from insert and normal mode.
+insert session**, so it behaves identically from insert and normal mode.
+
+**Undo granularity inside an insert** (#1818, `insertundo.go`). A long insert
+used to commit as *one* change, so a single undo threw away everything typed
+since entering insert mode. The session now closes the running recorder at the
+boundaries a user thinks in and opens a fresh one — `commitInsert` only commits
+the remaining tail, and `breakInsertUndo` is the split (it commits nothing when
+the segment recorded nothing, so no break can produce an empty or duplicated
+change):
+
+- **A pasted block is exactly one change.** `Cmd+V` and bracketed paste
+  mid-insert (`pasteIntoInsert`) close the running segment, splice the block
+  into a recorder of its own and close that one too. One undo removes the
+  block, no more and no less — and characters typed after the paste undo
+  *before* it, even when they never form a whole word.
+- **Typing splits word-wise.** A new segment opens in front of a word run that
+  follows a separator, so a change is "one word plus the separators typed after
+  it": typing `foo bar baz` leaves `foo `, `bar `, `baz`, and three undos peel
+  the words off from the right (the JetBrains typing granularity; vim commits
+  the whole insert, which is what the issue set out to fix). Trailing
+  whitespace rides with the word before it, so undoing `baz` leaves `foo bar `
+  with the caret where the next word would start.
+- **A segment holding no word yet never splits.** The indent after `Enter`, the
+  `(` that auto-closed into `()`, the space `o` opened the line with — leading
+  separators belong to the word that follows them, so no undo tears a pair or
+  an indent off the keystroke that produced it. Backspace and the kills,
+  `Tab`/`Shift+Tab`, completion accepts and snippet expansions join the running
+  segment as well (a correction belongs to the word it corrects) and reset the
+  segment's typing state, so typing on after a correction never splits
+  mid-word.
+
+Normal-mode operations keep their one-change semantics (`dd`, `:%s`, and `ciw`
+together with the word typed into it: the structural edit and the first typed
+word share a segment). Redo mirrors the same boundaries in reverse, and each
+step carries its own `CursorBefore`/`CursorAfter`, so the caret lands where
+that word started / ended.
 
 Smart indentation (Roadmap 0260, `indent.go`): with `editor.auto_indent` on,
 `Enter` in insert mode and `o` compute the new line's indent from the
@@ -525,7 +567,7 @@ borrowing the host's. Mid-insert, plain `Tab` inserts one indent unit at the cur
 and `Shift+Tab` dedents the **whole current line** by one unit (the same
 `dedentCols` unit as `<<` — one leading tab or up to `tab_width` spaces),
 wherever the cursor sits; the cursor follows the removed columns, and the edit
-stays inside the open insert's undo unit. While the completion popup is open a
+stays inside the insert's running undo segment. While the completion popup is open a
 plain `Tab` still accepts the completion; `Shift+Tab` dedents regardless.
 `Enter` with the caret **between a matching bracket pair** (`{|}`, typically
 right after an auto-close) opens a three-line block (#518): the closer moves to
@@ -546,7 +588,8 @@ skipped (that is the closing keystroke), and no pair opens when the rune before
 the caret is a word rune or the same quote — so the apostrophe in `don't` and
 doubled quotes insert alone. Everything applies per caret
 (one fan-out can mix pairing, plain insert, and skip-over) and stays inside the
-open insert's undo unit. The `.`-replay text records only the keystrokes, so a
+insert's running undo segment — the pair is inserted by one keystroke, so one
+undo removes both runes (#1818). The `.`-replay text records only the keystrokes, so a
 fully typed `(x)` run replays exactly; an insert that never types the closer
 replays without it (same approximation as backspace).
 
@@ -561,8 +604,8 @@ from. Suppression is a pure text heuristic on purpose: highlighting is parsed
 off the event loop and lags the keystroke by a frame, so the aid checks quote
 parity and the language's line-comment marker on the line left of the caret
 instead of a (stale) capture. No space is added when a space or tab already
-follows. Like auto-close it decides per caret and rides the open insert's undo
-unit; the `.`-replay records what the primary caret produced.
+follows. Like auto-close it decides per caret and rides the insert's running
+undo segment; the `.`-replay records what the primary caret produced.
 
 **Macros** (#58, `macro.go`): `q{a-z}` records, `q` stops, `@{a-z}` replays,
 `@@` repeats the last replay, and a count multiplies (`5@a`). Recording taps
@@ -760,8 +803,8 @@ buffer order, measuring how much each application grew or shrank the buffer
 caret drifts when an earlier caret's edit moves the text. Backward deletes
 clamp to the previous caret's landing position, and carets that collide merge.
 All per-caret edits go through **one `history.Recorder`**, so the whole
-fan-out is a single undo unit — insert-mode typing joins the open insert
-session recorder, one-shot operations commit via `fanMutate`. Fanned today:
+fan-out is a single undo unit — insert-mode typing joins the insert session's
+running segment recorder (#1818), one-shot operations commit via `fanMutate`. Fanned today:
 insert-mode typing / Enter (per-caret smart indent) / backspace / word- and
 line-kills / Tab / Shift+Tab (one dedent per line), `x`, `r`, operators
 `d c y` with motions and text objects, `dd cc yy` (merged to one caret per

@@ -31,13 +31,18 @@ type OpenUndoTreeMsg struct{}
 // state identified by Seq. Dispatched by the undo-tree overlay.
 type HistoryJumpMsg struct{ Seq int }
 
-// insertSession records an in-progress insert so the whole insert commits as one
-// undo unit and "." can replay it. pre recreates the structural part (the line
-// opened by o/O, or the text deleted by c) when the command is repeated.
+// insertSession records an in-progress insert. It commits as a sequence of
+// changes rather than one (#1818, insertundo.go): rec is the open segment,
+// closed at a paste or word boundary and by commitInsert at the end. typed
+// spans the whole session, so "." replays the insert as a unit regardless of
+// how it was split. pre recreates the structural part (the line opened by o/O,
+// or the text deleted by c) when the command is repeated.
 type insertSession struct {
 	active bool
 	rec    *history.Recorder
 	typed  string // text typed so far, for "." replay
+	last   rune   // last rune typed into the open segment; 0 = none yet
+	word   bool   // the open segment already holds a word rune
 	pre    func(m *Model, rec *history.Recorder) buffer.Position
 }
 
@@ -228,8 +233,9 @@ func (m *Model) startInsertWith(rec *history.Recorder, pre func(*Model, *history
 	m.emit(EventCursorMove)
 }
 
-// commitInsert leaves insert mode, commits the session's recorder as one change,
-// and records the dot replay (structural pre + typed text).
+// commitInsert leaves insert mode, commits what is left in the session's
+// recorder — the segments before it were committed at their paste/word
+// boundaries (#1818) — and records the dot replay (structural pre + typed text).
 func (m *Model) commitInsert() {
 	// Leaving the insert session ends the call-typing context, so the
 	// signature popup goes with it (#315) — otherwise it would trail the
@@ -878,9 +884,9 @@ func (m *Model) clipboardPaste() {
 		return
 	}
 	if m.insert.active {
-		// Smart paste (#1476): continuation lines re-indent to the target;
-		// the splice stays part of the open insert's undo unit.
-		m.insertText(m.smartPasteInsertText(e.Text))
+		// Smart paste (#1476): continuation lines re-indent to the target; the
+		// splice is its own undo step inside the open insert (#1818).
+		m.pasteIntoInsert(m.smartPasteInsertText(e.Text))
 		return
 	}
 	m.paste('+', false, 1, false)
@@ -889,8 +895,9 @@ func (m *Model) clipboardPaste() {
 // PasteText inserts external (bracketed-paste) text as a single block and one
 // undo unit (#603), so a large paste lands at once — not character by character —
 // without disturbing the yank registers or the system clipboard. Visual mode
-// replaces the selection; mid-insert it splices into the open insert; normal
-// mode pastes after the cursor like `p`. The change emits through mutate, so LSP
+// replaces the selection; mid-insert it splices into the open insert as its own
+// undo step (#1818); normal mode pastes after the cursor like `p`. The change
+// emits through mutate, so LSP
 // sync and highlighting see one edit. The returned command is the reparse the
 // paste needs (#1491): this path bypasses the Update loop's maybeReparse, so
 // without it the highlighting would stay stale until the next keystroke.
@@ -933,7 +940,7 @@ func (m *Model) pasteText(text string) {
 		return
 	}
 	if m.insert.active {
-		m.insertText(text)
+		m.pasteIntoInsert(text)
 		return
 	}
 	m.mutate(func(rec *history.Recorder) buffer.Position {
