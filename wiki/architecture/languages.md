@@ -584,7 +584,11 @@ secret-suspect keys (#1623, see `/architecture/editor.md`, secret masking):
 key text alone — `*_SECRET`, `PASSWORD`, `*_TOKEN`, `*_KEY`, `CREDENTIALS`,
 `DSN`, … with `PUBLIC_KEY`, `API_KEY_ID`, `TOKEN_URL` and friends cleared
 again — and the producer emits the value as a stand-in span carrying
-`secret.Mask`. The ini-style config
+`secret.Mask`. Since #1811 the Python producer
+(`plugins/languages/python/mask.go`) docks onto the same core for source-code
+assignments: `self.password = "hunter2"` masks its right-hand side because the
+assignment target names the value the way a dotenv key does, user patterns and
+exemptions included. The ini-style config
 language (`plugins/languages/ini`, #1595) follows the same recipe for `.ini`
 and `.conf`: `[section]` headers, `key = value` pairs and full-line `#`/`;`
 comments as Go-computed spans, with no grammar and no server. The log
