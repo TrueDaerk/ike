@@ -8555,14 +8555,19 @@ func (m Model) render() string {
 		// The popup terminal layer (#1398) floats above the workspace but
 		// below the exclusive overlays: a palette or the settings panel opened
 		// from inside it must draw on top (settings composites earlier, so it
-		// suppresses the popup for its modal lifetime instead). The box draws
-		// at its moved-and-clamped rect (#1793), the floating panels stack
-		// bottom-to-top above it — the topmost is drawn last (#1237).
+		// suppresses the popup for its modal lifetime instead). The layer
+		// draws bottom-to-top so the topmost surface is drawn last (#1237):
+		// the panels below the box, the box at its moved-and-clamped rect
+		// (#1793) in its own z-slot (#1806), then the panels above it.
+		below, above := m.floatTermsSplit()
+		for _, f := range below {
+			base = overlay.Place(base, m.renderFloatTerm(f), f.x, f.y, m.width, m.height)
+		}
 		if m.popup.inst != nil {
 			px, py, _, _ := m.popupTermRect()
 			base = overlay.Place(base, m.renderPopupTerm(), px, py, m.width, m.height)
 		}
-		for _, f := range m.floatTerms {
+		for _, f := range above {
 			base = overlay.Place(base, m.renderFloatTerm(f), f.x, f.y, m.width, m.height)
 		}
 	}

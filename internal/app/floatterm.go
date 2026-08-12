@@ -13,10 +13,10 @@ import (
 // floatterm.go — torn-out floating terminal panels (#1793). Dragging a tab
 // out of the popup terminal (#1398) re-homes its live session into a panel of
 // its own: a detached tab host with the popup's pane chrome, freely positioned
-// and sized, stacked z-ordered above the popup box (the #1237 layering rules:
-// the topmost/focused panel owns the keyboard, every focus change — click or
-// focus chord — raises the panel it lands on (#1806), the toggle chord hides
-// and shows the whole layer at once). A panel marked
+// and sized, z-ordered with the popup box (the #1237 layering rules: the
+// topmost/focused surface owns the keyboard, every focus change — click or
+// focus chord — raises the surface it lands on, panel or box (#1806), the
+// toggle chord hides and shows the whole layer at once). A panel marked
 // global (the ●/○ title button) belongs to the app instead of the project:
 // it rides across project switches with its session — process, scrollback,
 // CWD — intact, and only ends with an app quit or an explicit close.
@@ -86,11 +86,11 @@ func (m Model) floatFocused() *floatTerm {
 }
 
 // setFloatFocus moves keyboard ownership within the popup layer: to panel f,
-// or back to the popup box (f == nil, split-side state preserved). Focusing a
-// panel also raises it to the top of the z-order (#1806), so the #1237
-// invariant "the topmost panel owns the keyboard" holds after every focus
-// change — click, chord or programmatic — and the keyboard owner is never
-// covered by a sibling.
+// or back to the popup box (f == nil, split-side state preserved). Either way
+// the surface focused also rises to the top of the layer's z-order (#1806) —
+// the panel here, the box in setPopupFocus — so the #1237 invariant "the
+// topmost surface owns the keyboard" holds after every focus change (click,
+// chord or programmatic) and the keyboard owner is never covered.
 func (m *Model) setFloatFocus(f *floatTerm) {
 	if f != nil {
 		m.raiseFloatTerm(f)
@@ -112,15 +112,40 @@ func (m *Model) setFloatFocus(f *floatTerm) {
 }
 
 // raiseFloatTerm moves panel f to the top of the z-order (last in floatTerms,
-// drawn last by the compositor). A panel that is already topmost — or not in
+// drawn last by the compositor) — above the popup box too, whose slot shifts
+// down when f came from below it. A panel that is already topmost — or not in
 // the list at all — stays put.
 func (m *Model) raiseFloatTerm(f *floatTerm) {
 	for i, ft := range m.floatTerms {
 		if ft == f {
+			z := m.popupBoxZ()
+			if i < z {
+				z--
+			}
 			m.floatTerms = append(append(m.floatTerms[:i], m.floatTerms[i+1:]...), f)
+			m.popup.boxZ = z
 			return
 		}
 	}
+}
+
+// raisePopupBox moves the popup box to the top of the layer's z-order (#1806),
+// above every floating panel — the box's half of raiseFloatTerm.
+func (m *Model) raisePopupBox() { m.popup.boxZ = len(m.floatTerms) }
+
+// popupBoxZ is the box's z-slot: the number of floating panels drawn below it,
+// clamped so a slot recorded for a different panel set (project parking,
+// #1407) can never index out of the live list.
+func (m Model) popupBoxZ() int {
+	return min(max(m.popup.boxZ, 0), len(m.floatTerms))
+}
+
+// floatTermsSplit cuts the panel z-order at the popup box's slot: the panels
+// drawn below the box and the ones drawn above it, each bottom-to-top.
+// Compositing, hit testing and focus stepping all walk the layer through this.
+func (m Model) floatTermsSplit() (below, above []*floatTerm) {
+	z := m.popupBoxZ()
+	return m.floatTerms[:z], m.floatTerms[z:]
 }
 
 // floatTermFor resolves a tab host back to its floating panel, nil when inst
@@ -139,7 +164,12 @@ func (m Model) floatTermFor(inst *pane.Instance) *floatTerm {
 func (m *Model) removeFloatTermEntry(f *floatTerm) {
 	for i, ft := range m.floatTerms {
 		if ft == f {
+			z := m.popupBoxZ()
+			if i < z {
+				z--
+			}
 			m.floatTerms = append(m.floatTerms[:i], m.floatTerms[i+1:]...)
+			m.popup.boxZ = z
 			break
 		}
 	}
@@ -283,15 +313,33 @@ func (m Model) popupBoxRectFor(inst *pane.Instance) (x, y, w, h int, ok bool) {
 	return 0, 0, 0, 0, false
 }
 
-// popupBoxAt resolves the topmost popup-layer box under a screen cell:
-// floating panels topmost-first, then the popup box's split side.
+// popupBoxAt resolves the topmost popup-layer box under a screen cell, walking
+// the z-order from the top down (#1806): the panels above the box first, then
+// the box's split side, then the panels below it.
 func (m Model) popupBoxAt(x, y int) *pane.Instance {
-	for i := len(m.floatTerms) - 1; i >= 0; i-- {
-		f := m.floatTerms[i]
-		if inRect(x, y, f.x, f.y, f.w, f.h) {
+	below, above := m.floatTermsSplit()
+	if inst := floatTermAt(above, x, y); inst != nil {
+		return inst
+	}
+	if inst := m.popupBoxSideAt(x, y); inst != nil {
+		return inst
+	}
+	return floatTermAt(below, x, y)
+}
+
+// floatTermAt returns the host of the topmost panel of fs covering the cell.
+func floatTermAt(fs []*floatTerm, x, y int) *pane.Instance {
+	for i := len(fs) - 1; i >= 0; i-- {
+		if f := fs[i]; inRect(x, y, f.x, f.y, f.w, f.h) {
 			return f.inst
 		}
 	}
+	return nil
+}
+
+// popupBoxSideAt returns the popup box's split side under the cell, nil when
+// the box is gone or the cell lies outside it.
+func (m Model) popupBoxSideAt(x, y int) *pane.Instance {
 	if m.popup.inst == nil {
 		return nil
 	}
@@ -443,20 +491,18 @@ func (m Model) renderFloatTerm(f *floatTerm) string {
 
 // popupLayerMouse routes a mouse event while the popup layer is open and no
 // drag is active: a press outside every box hides the whole layer (the #1398
-// toggle unit — panels have no per-panel hidden state), floating panels hit-
-// test topmost-first, everything else falls through to the popup box's
-// handler. done reports whether the event was consumed (always — the layer
-// owns the mouse like it owns the keyboard).
+// toggle unit — panels have no per-panel hidden state), otherwise the box the
+// z-order puts on top under the pointer handles it (#1806), and anything over
+// no box at all falls through to the popup box's handler. done reports whether
+// the event was consumed (always — the layer owns the mouse like it owns the
+// keyboard).
 func (m Model) popupLayerMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 	if msg.action == mousePress && !m.popupLayerHit(msg.X, msg.Y) {
 		m.togglePopupTerminal()
 		return m, nil, true
 	}
-	for i := len(m.floatTerms) - 1; i >= 0; i-- {
-		f := m.floatTerms[i]
-		if inRect(msg.X, msg.Y, f.x, f.y, f.w, f.h) {
-			return m.floatTermMouse(f, msg)
-		}
+	if f := m.floatTermFor(m.popupBoxAt(msg.X, msg.Y)); f != nil {
+		return m.floatTermMouse(f, msg)
 	}
 	if m.popup.inst != nil {
 		return m.popupTermMouse(msg)

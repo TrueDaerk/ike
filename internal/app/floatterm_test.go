@@ -252,6 +252,85 @@ func TestFloatFocusInvariantAcrossSwitches(t *testing.T) {
 	check("focus key from the box")
 }
 
+// TestPopupBoxFocusKeyRaisesBox: the popup box is a layer surface of its own
+// (#1806), not a fixed base layer — a keyboard focus switch onto it lifts it
+// over a panel that covered it, and the next step lowers it again under the
+// panel it hands the keyboard to.
+func TestPopupBoxFocusKeyRaisesBox(t *testing.T) {
+	m := openTestPopup(t)
+	m, f := tearOutFirstTab(t, m)
+	px, py, pw, ph := m.popupTermRect()
+	// The panel covers the box completely: while it is on top, none of the
+	// box's chrome reaches the screen.
+	f.x, f.y, f.w, f.h = px-2, py-1, pw+4, ph+2
+	if strings.Contains(m.render(), "POPUP TERMINAL") {
+		t.Fatal("test setup: the covering panel must hide the box's chrome")
+	}
+	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl})
+	m = out.(Model)
+	if m.floatFocused() != nil || m.popupFocused() != m.popup.inst {
+		t.Fatal("the focus key must hand the keyboard to the popup box")
+	}
+	if m.popupBoxZ() != len(m.floatTerms) {
+		t.Fatal("focusing the box must raise it to the top of the layer's z-order")
+	}
+	if !strings.Contains(m.render(), "POPUP TERMINAL") {
+		t.Fatal("the raised box must render above the panel")
+	}
+	if m.popupBoxAt(px+pw/2, py+ph/2) != m.popup.inst {
+		t.Fatal("the raised box must own the mouse where it overlaps the panel")
+	}
+	// Stepping on lands back on the panel, which rises over the box again.
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl})
+	m = out.(Model)
+	if m.floatFocused() != f || m.popupBoxZ() != 0 {
+		t.Fatal("stepping onto the panel must raise it over the box")
+	}
+	if strings.Contains(m.render(), "POPUP TERMINAL") {
+		t.Fatal("the topmost panel must cover the box again")
+	}
+}
+
+// TestPopupBoxClickRaisesBox: the same raise on a mouse focus switch — a click
+// on the box lifts it over the panels, a click back on a panel lifts that one,
+// and the layer's dismiss keeps working after the reordering (#1806).
+func TestPopupBoxClickRaisesBox(t *testing.T) {
+	m := openTestPopup(t)
+	m, f := tearOutFirstTab(t, m)
+	px, py, pw, ph := m.popupTermRect()
+	// The panel covers the box's right half and juts out to the right, so both
+	// surfaces keep a clickable spot of their own.
+	f.x, f.y, f.w, f.h = px+pw/2, py, pw/2+10, ph
+	overlapX, overlapY := px+pw/2+2, py+3
+	if m.popupBoxAt(overlapX, overlapY) != f.inst {
+		t.Fatal("test setup: the fresh panel must be topmost in the overlap")
+	}
+	click := func(x, y int) {
+		t.Helper()
+		m = step(m, press(x, y))
+		m = step(m, release(x, y)) // settle the selection drag the body press armed
+	}
+	click(px+pw/4, py+ph/2) // the box's uncovered left half
+	if m.floatFocused() != nil || m.popupFocused() != m.popup.inst {
+		t.Fatal("a box click must reclaim the keyboard from the panel")
+	}
+	if m.popupBoxZ() != len(m.floatTerms) || m.popupBoxAt(overlapX, overlapY) != m.popup.inst {
+		t.Fatal("a box click must raise the box over the panel")
+	}
+	click(f.x+f.w-3, py+3) // the panel's part outside the box
+	if m.floatFocused() != f || topFloatPanel(m) != f {
+		t.Fatal("a panel click must move the keyboard back to the panel")
+	}
+	if m.popupBoxZ() != 0 || m.popupBoxAt(overlapX, overlapY) != f.inst {
+		t.Fatal("a panel click must raise it over the box again")
+	}
+	// A press outside every surface still dismisses the whole layer.
+	m = step(m, press(1, m.height-2))
+	if m.popup.open {
+		t.Fatal("a press outside the layer must still hide it as one unit")
+	}
+}
+
 func TestToggleHidesAndShowsWholeLayer(t *testing.T) {
 	m := openTestPopup(t)
 	m, f := tearOutFirstTab(t, m)
