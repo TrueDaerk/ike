@@ -84,6 +84,58 @@ func (m Model) focusedContent() *pane.Instance {
 	return inst
 }
 
+// focusedTabHost returns the focused pane's key when that pane can host tabs
+// (#1825): an editor, a terminal or a viewer pane, all of which convert into a
+// tab host on demand. The explorer, the tool windows and the merge view report
+// "", which leaves a viewer open on its #1779 split.
+func (m Model) focusedTabHost() string {
+	if !canHostTabs(m.activeWS().Panes.FocusedInstance()) {
+		return ""
+	}
+	return m.activeWS().Panes.Focused()
+}
+
+// takeViewerTabHost consumes the pending viewer tab request (#1825): it
+// returns the pane key a viewer open should nest into and clears the request,
+// so exactly one open honours it and every later one splits again (#1779). A
+// key whose pane vanished or cannot host tabs yields "".
+func (m *Model) takeViewerTabHost() string {
+	key := m.viewerTabHost
+	m.viewerTabHost = ""
+	if key == "" || !canHostTabs(m.activeWS().Panes.Get(key)) {
+		return ""
+	}
+	return key
+}
+
+// openContentTab opens a fresh viewer of kind for path as a content tab in the
+// pane at key (#1825), reusing the tab nesting of #1778: the pane converts
+// into a tab host when needed, and a lone empty scratch tab gives way to the
+// viewer instead of lingering beside it (the #156 tab policy). It returns the
+// nested instance so the caller can start its background work, and false when
+// the pane refuses — the caller then falls back to its split.
+func (m *Model) openContentTab(key string, kind pane.Kind, path string) (*pane.Instance, bool) {
+	inst := m.activeWS().Panes.Get(key)
+	if inst == nil {
+		return nil, false
+	}
+	scratch := inst.IsEmptyEditor()
+	if !m.ensureTabHost(key) {
+		return nil, false
+	}
+	nested := m.activeWS().Panes.NewContentPane(kind, path, "", "", "")
+	if nested == nil || !inst.AddContentTab(nested) {
+		return nil, false
+	}
+	if scratch {
+		inst.CloseTab(0)
+	}
+	m.setFocus(key)
+	m.layout()
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	return nested, true
+}
+
 // bodyContent resolves key's pane to the instance owning its body: the
 // active content tab's nested instance of a tab host, else the pane's own
 // instance — so mouse routing treats a content tab like the equivalent

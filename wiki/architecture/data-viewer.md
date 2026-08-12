@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Data Viewer
-description: "#1764/#1765/#1766/#1777/#1788/#1795 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table>, run inside a subquery so paging keeps working."
+description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table>, run inside a subquery so paging keeps working."
 resource: internal/dataview
 tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sql, mouse, paging, async, performance]
-timestamp: 2026-08-11T21:00:00Z
+timestamp: 2026-08-12T12:00:00Z
 ---
 
 # Data Viewer (#1764, #1765, #1766, #1777, #1788, #1795)
@@ -56,10 +56,26 @@ centered notice — a binary buffer is never the fallback.
 tie-break, so neither the pane nor the registry ever names one — a DuckDB
 database called `app.db` still reaches the DuckDB engine.
 
-`openDataPane` splits the leaf `viewerSplitTarget` picks — the pane the user
-last worked in, never the explorer the database was opened from (#1779, see
-[pane layout](./pane-layout.md)) — and refocuses an existing pane already
-bound to the same path instead of duplicating it.
+`openDataPane` refocuses an existing viewer already bound to the same path
+(pane or tab) instead of duplicating it; otherwise **where it lands depends on
+the open path**:
+
+- **From the palette** — the '@' finder, Search Everywhere, go-to-file, recent
+  files (#1825) — the viewer opens as a *content tab in the focused pane*
+  (#1778 tab nesting), exactly where a plain file picked the same way lands.
+  The palette open path (`openPathFocused`) records the focused pane in
+  `m.viewerTabHost`, and the viewer open consumes it via `takeViewerTabHost`
+  and `openContentTab`: the pane converts into a tab host when needed, and a
+  lone empty scratch tab gives way to the viewer (the #156 tab policy).
+- **Everywhere else** — explorer, `:e`, CLI, plugin opens — the viewer splits
+  the leaf `viewerSplitTarget` picks: the pane the user last worked in, never
+  the explorer the database was opened from (#1779, see
+  [pane layout](./pane-layout.md)).
+
+A focused pane that cannot host tabs (the explorer, a tool window) falls back
+to the split, so a palette pick made from the explorer still lands beside the
+working pane. The image preview (#1479) and archive viewer (#1762) share this
+seam verbatim — the asymmetry was never data-specific.
 
 ## The SQLite backend
 

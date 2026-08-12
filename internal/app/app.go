@@ -161,6 +161,12 @@ type Model struct {
 	// recentEditor is the key of the most-recently-focused editor, used as the
 	// Replace open-target when the explorer (not an editor) holds focus.
 	recentEditor string
+	// viewerTabHost names the pane a handler-dispatched viewer open should land
+	// in as a content tab (#1825) instead of splitting off viewerSplitTarget
+	// (#1779). Set by the palette open path right before the file handler's
+	// command is queued and consumed by the first viewer open that follows
+	// (takeViewerTabHost); "" restores the split behaviour.
+	viewerTabHost string
 	// httpFlight tracks the .http requests currently in flight (#1272), keyed
 	// by source file + request key: the duplicate-dispatch guard, the
 	// statusline indicator and the cancel action all read it.
@@ -4266,7 +4272,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openDiffPane(left, msg.Path)
 			return m, nil
 		}
-		return m.openPath(msg.Path, false)
+		// A palette pick opens where the user is working: a file lands in the
+		// focused pane's tab list, and so does a viewer file — the '@' finder
+		// on a .duckdb opens the data viewer as a tab in the focused pane
+		// rather than splitting one off beside it (#1825).
+		return m.openPathFocused(msg.Path)
 
 	case host.OpenModalRequest:
 		m.shell.SetContent(ui.ModelContent{Heading: msg.Title, Body: msg.View})
@@ -5341,8 +5351,28 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 // tab list (#156) — activating an existing tab, appending a new one, or filling
 // a scratch tab — and NewPane splits off a fresh editor and loads there
 // (unless the active editor is empty, which is reused in place, #641).
-// EventFileOpened hooks fire either way.
+// EventFileOpened hooks fire either way. A viewer file (data, image, archive)
+// splits off viewerSplitTarget (#1779); openPathFocused is the variant that
+// nests it as a tab instead.
 func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
+	m.viewerTabHost = "" // no pending tab request: viewers split (#1779)
+	return m.openPathWith(path, newPane)
+}
+
+// openPathFocused opens path like openPath, except that a file claimed by a
+// viewer file handler opens as a content tab in the focused pane (#1825) —
+// the palette's open target, matching where a plain file lands. It falls back
+// to the #1779 split when the focused pane cannot host tabs (the explorer, a
+// tool window), so opening from a tool window still lands beside the pane the
+// user last worked in.
+func (m Model) openPathFocused(path string) (tea.Model, tea.Cmd) {
+	m.viewerTabHost = m.focusedTabHost()
+	return m.openPathWith(path, false)
+}
+
+// openPathWith is the shared body of openPath / openPathFocused; the caller
+// has already decided the viewer open target in m.viewerTabHost.
+func (m Model) openPathWith(path string, newPane bool) (tea.Model, tea.Cmd) {
 	// Every open source spells paths differently (explorer: absolute, palette
 	// modes: root-relative) — canonicalize first so the same file always
 	// lands on its existing tab instead of a duplicate buffer (#272).
@@ -5356,6 +5386,7 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 	if h, ok := m.reg.ResolveHandler(path, readHead(path)); ok {
 		cmds = append(cmds, h.Open(m.host, path))
 	} else {
+		m.viewerTabHost = "" // no handler, so no viewer open to honour it (#1825)
 		key := m.fileEditorKey()
 		// A file already open in ANY editor pane focuses that pane's tab
 		// instead of opening a duplicate in the current pane (#930) — the

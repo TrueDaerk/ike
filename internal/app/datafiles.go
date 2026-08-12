@@ -41,15 +41,22 @@ func init() { registry.Register(dataProvider{}) }
 
 // openDataPane opens (or refocuses) the data viewer for path, split off the
 // leaf viewerSplitTarget picks — the pane the user last worked in, never the
-// explorer they opened the file from (#1779). The pane appears at once and
-// returns the command that opens the database behind it (#1795), so a
+// explorer they opened the file from (#1779) — or, when the open came from
+// the palette, as a tab in the focused pane (#1825). The pane appears at once
+// and returns the command that opens the database behind it (#1795), so a
 // multi-gigabyte file costs the IDE no frame.
 func (m *Model) openDataPane(path string) tea.Cmd {
+	tabHost := m.takeViewerTabHost()
 	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
 		return c.Kind() == pane.KindData && c.Data().Path() == path
 	}); ok {
 		m.focusContentAt(hostKey, tabIdx) // may live in a tab (#1778)
 		return nil
+	}
+	if tabHost != "" {
+		if nested, ok := m.openContentTab(tabHost, pane.KindData, path); ok {
+			return nested.Init()
+		}
 	}
 	target := m.viewerSplitTarget()
 	key := m.activeWS().Panes.AddDataView(path)
