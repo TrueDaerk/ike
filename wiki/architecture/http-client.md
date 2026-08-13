@@ -408,7 +408,14 @@ For a recognized stream:
   underline (the editor's convention). The footer shows the position
   (`/token  3/17 · n/N next/prev · esc clear`) or `no matches`. The search
   survives history browsing and new responses: matches recompute on every
-  re-compose.
+  re-compose. The prompt is a full single-line editor via the shared
+  `ui.EditKey`/`ui.CursorView` widget (#763, #1845), the same one behind the
+  finder, palette and settings text fields: left/right move a rendered block
+  cursor, `alt+left/right` (or `ctrl+left/right`) jump words,
+  `home`/`end`/`super+left/right` jump to the line start/end, `alt+backspace`
+  deletes the previous word, `alt+delete` the next, `super+backspace` kills to
+  the line start. Every edit re-runs the search and rescrolls to the current
+  match.
 - **Selection & copy** (#1266): a left-button drag selects text across the
   composed view, with the terminal pane's gestures (#227, #951) — double
   click selects a word (hyphens and dots included, so ids and tokens select

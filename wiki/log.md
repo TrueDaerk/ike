@@ -1,5 +1,18 @@
 # Log
 
+## 2026-08-13 (http response pane search prompt gains a cursor and macOS editing chords, #1845)
+
+- **The HTTP response pane's `/`/`cmd+f` search prompt is a full single-line
+  editor now**, via the shared `ui.EditKey`/`ui.CursorView` widget (#763)
+  instead of its previous append-only handling: left/right move a rendered
+  block cursor, `alt+left/right` (`ctrl+left/right`) jump words,
+  `home`/`end`/`super+left/right` jump to the line start/end,
+  `alt+backspace`/`alt+delete` delete the previous/next word, and
+  `super+backspace` kills to the line start — the same chords the finder,
+  palette and settings text fields already support. Esc/enter/`n`/`N` keep
+  their existing meaning; every edit still re-runs the search and rescrolls to
+  the current match. Updated [HTTP Client](/architecture/http-client.md).
+
 ## 2026-08-12 (fix docs deploy CI step failing with non-fast-forward push, #1839)
 
 - **`mkdocs gh-deploy` now runs with `--force`** in both `.github/workflows/docs.yml`'s `deploy`
