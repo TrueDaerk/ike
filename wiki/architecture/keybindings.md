@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-08-12T00:00:00Z
+timestamp: 2026-08-13T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -502,6 +502,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `editor.redo` | `cmd+shift+z` | fragile | `vim ctrl+r` | live via vim ctrl+r |
 | `editor.replace` | `cmd+r` | fragile | `palette` | live via palette |
 | `editor.saveAll` | `cmd+shift+s` | fragile | `palette` | live via palette |
+| `editor.selectAll` | `cmd+a` | fragile | `vim ggVG` | live via vim ggVG |
 | `editor.splitViewDown` | `cmd+alt+shift+down` | fragile | `palette` | live via palette |
 | `editor.splitViewRight` | `cmd+alt+shift+right` | fragile | `palette` | live via palette |
 | `editor.tab.moveLeft` | `ctrl+shift+pgup` | delivered | `—` | live |

@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-12T12:00:00Z
+timestamp: 2026-08-13T00:00:00Z
 ---
 
 # Editor
@@ -469,6 +469,10 @@ this way is GUI-style (vim's `keymodel=stopsel`, #326): releasing Shift and
 pressing an unshifted navigation key (arrows, `Home`/`End`, word/paragraph and
 page keys) drops the selection and just moves the caret, while vim motions and
 selections entered with `v`/`V`/`Ctrl+V` keep extending as in vim.
+`editor.selectAll` (`Cmd+A`, JetBrains "Select All", #1861) selects the whole
+buffer as a linewise visual selection — the `ggVG` equivalent — so the usual
+follow-ups (`y`/`d`/typing, or Copy from a read-only buffer) act on it; an
+empty buffer has nothing to select and is left in its current mode.
 
 Surround operations (#1475, `surround.go`, vim-surround style):
 `ys{motion}{pair}` wraps a motion or text object (`ysiw)`, `yse"`), `yss`

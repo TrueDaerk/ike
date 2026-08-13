@@ -202,6 +202,7 @@ bring their own.
 | Redo | `editor.redo` | `cmd+shift+z` | `ctrl+r` | `editor` pane |
 | Redo (Chronological) | `editor.redoChrono` | — | `g+` | `editor` pane |
 | Replace in File | `editor.replace` | `cmd+r` | `:s` | `editor` pane |
+| Select All | `editor.selectAll` | `cmd+a` | `ggVG` | `editor` pane |
 | Toggle Value Under Caret | `editor.toggleValue` | — | `g!` | `editor` pane |
 | Undo | `editor.undo` | `cmd+z` | `u` | `editor` pane |
 | Undo (Chronological) | `editor.undoChrono` | — | `g-` | `editor` pane |
