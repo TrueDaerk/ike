@@ -36,9 +36,11 @@ internal/palette/
   command_mode.go          ":" mode — snapshot registry, fuzzy-filter, context-first ranking
   file_mode.go             "@" mode — fuzzy file finder over the project tree (cached walk)
   recent_mode.go           locked recent-files mode — injected MRU list, active file excluded
-  search_mode.go           locked search-everywhere mode — composes command + file modes, per-kind cap
+  search_mode.go           locked search-everywhere mode — composes command + class + file + symbol modes, per-kind cap
   context.go               Context captured at open (focused pane context id + project root + active file)
 internal/app/              root model hosts the palette, toggles it, forwards keys, renders on top
+  symbols.go               "$" live workspace-symbol mode — cache, kind badges, project/exact ranking tiers
+  classes.go               "/" class category — kind-filtered views (symbolView) onto that one cache (#1849)
 ```
 
 The root model (`internal/app`) holds a `*palette.Palette`. While open it forwards
@@ -288,12 +290,13 @@ JetBrains' Search Everywhere, palette-style (`search_mode.go`). Locked-only like
 the recent-files mode (`palette.searchEverywhere` opens it via `OpenLocked`);
 `shift shift` resolves through the ordinary multi-step chord engine, so it works
 off macOS too (it needs key-up reporting, hence the palette as the universal
-escape). One query is ranked across **commands and files** by *composing* the
-already-built `CommandMode` and `FileMode` — no duplicated ranking. Each
+escape). One query is ranked across **commands, classes, files and symbols** by
+*composing* the already-built `CommandMode`, `FileMode` and the two kind views
+of the live symbol mode — no duplicated ranking. Each
 source's top rows (per-kind cap, `searchAllPerKind`) interleave by **banded**
 fuzzy score with an explicit source-priority tier (#1421): scores are quantised
 to `searchAllScoreBand` (one word-boundary bonus), and within a band the
-earlier source wins — command > file > symbol — so comparably-matched results
+earlier source wins — command > class > file > symbol — so comparably-matched results
 group by kind while a clearly stronger match (a full band apart) still outranks
 a higher-priority source. Each source's own inner ranking (fuzzy score, #773
 usage boost, MRU order) is preserved by the stable sort. Every row is retitled
@@ -309,10 +312,27 @@ reserved seat (#295): a **live source** — `palette.LiveMode`, re-queried
 per settled keystroke through the debounce plumbing (`live.go`), its cached
 rows composed and capped like any other source.
 
+**Classes are their own category (#1849).** JetBrains treats a class name as a
+first-class hit, so `internal/app/classes.go` seats one next to the commands:
+a `symbolView` is a **kind-filtered window onto the one symbol cache** — not a
+second `workspace/symbol` source, so a keystroke still costs one request. Two
+views exist: the class category (`/`, the class-like kinds `class`, `struct`,
+`interface`, `enum` — Go has no classes, structs and interfaces are the
+equivalent) and the search-everywhere symbol seat (`$`, everything else), so no
+symbol is listed twice in the composed list. The class seat sits at tier 2
+(command > class > file > symbol) and has its own `searchAllPerKind` budget, so
+a matching class can no longer be crowded out by a swarm of functions; the
+shared tier ranking (#377) still puts an exactly-matched project class above
+every stdlib/dependency hit. Every symbol row — in both views and in the
+standalone `$` mode, which keeps all kinds — carries its **kind as a dim badge**
+("class", "struct", "func", …) after the title, so a class is tellable from a
+function at a glance.
+
 **Prefix scoping (#1417).** Search everywhere is locked, so the palette core
 never strips a prefix here — but a query whose **leading rune is one composed
 source's own prefix** scopes the list to that source alone: `:` restricts it to
-commands, `@` to files, `$` to workspace symbols, matching on the remaining
+commands, `/` to classes, `@` to files, `$` to the remaining workspace symbols,
+matching on the remaining
 body. The scoped source keeps its own ranking and is **not** per-kind capped
 (the cap only exists to stop one source drowning the others), rows still carry
 the kind glyph, and a live source scoped this way receives the stripped body —

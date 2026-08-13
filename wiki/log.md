@@ -14,6 +14,19 @@
   focus/routing gap was found, and a regression test now pins it. Updated
   [Archive Viewer](/architecture/archive-viewer.md).
 
+## 2026-08-13 (csv: alignment padding clips at the right pane edge, #1847)
+
+- **A conceal stand-in straddling the right edge of a rendered span now emits
+  the prefix that fits** (`clipCells`, `internal/editor/view.go`) instead of
+  being dropped whole. In a table-rendered csv (#1589) the dropped padding
+  freed its cells for the following column, so a field shorter than its column
+  collected the next one's text right at the pane edge — `Schweiz+49…` where
+  `Schweiz` plus padding was due, `landtelefon` in the header — while the
+  column's widest field simply clipped. The clip is the same yield a tab
+  straddling the edge takes, holds at every horizontal offset (#1724 keeps the
+  left edge), and covers decoded stand-ins (#1585) too. Updated
+  [Editor](/architecture/editor.md).
+
 ## 2026-08-13 (http response pane search prompt gains a cursor and macOS editing chords, #1845)
 
 - **The HTTP response pane's `/`/`cmd+f` search prompt is a full single-line

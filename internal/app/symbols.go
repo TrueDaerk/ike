@@ -38,10 +38,12 @@ const (
 	symbolNonProjectMalus = 1 << 16
 )
 
-// symbolItem is one cached workspace/symbol row plus whether its location is
-// inside the project root — the ranking tier of Results.
+// symbolItem is one cached workspace/symbol row plus the server's SymbolKind
+// (what the class view filters on, #1849) and whether its location is inside
+// the project root — the ranking tier of Results.
 type symbolItem struct {
 	item    palette.Item
+	kind    int
 	project bool
 }
 
@@ -94,8 +96,12 @@ func (s *symbolMode) SetHits(query string, hits []ilsp.SymbolHit) {
 			item: palette.Item{
 				Title:  h.Name,
 				Detail: detail,
-				Msg:    ilsp.DefinitionMsg{Path: h.Ref.Path, Line: h.Ref.Line, Col: h.Ref.Col},
+				// The kind badge tells a class from a function at a
+				// glance (#1849); unknown kinds render no badge.
+				Badge: ilsp.SymbolKindLabel(h.Kind),
+				Msg:   ilsp.DefinitionMsg{Path: h.Ref.Path, Line: h.Ref.Line, Col: h.Ref.Col},
 			},
+			kind:    h.Kind,
 			project: insideProject(h.Ref.Path),
 		})
 	}
@@ -119,6 +125,11 @@ func insideProject(path string) bool {
 // Prefix implements palette.Mode.
 func (s *symbolMode) Prefix() rune { return symbolsPrefix }
 
+// Refresh implements palette.Refresher: a fresh palette open forgets which
+// query was last sent, so re-typing the same query re-queries the workspace
+// instead of serving the previous open's cache (the QueryChanged guard).
+func (s *symbolMode) Refresh() { s.lastSent = "" }
+
 // Placeholder implements palette.Mode.
 func (s *symbolMode) Placeholder() string { return "Go to symbol — type to search the workspace…" }
 
@@ -129,8 +140,18 @@ func (s *symbolMode) Placeholder() string { return "Go to symbol — type to sea
 // fuzzy score is tier-adjusted (#377): an exact name match earns a bonus and
 // any symbol outside the project root sinks below every project one.
 func (s *symbolMode) Results(query string, cx palette.Context) []palette.Item {
+	return s.results(query, nil)
+}
+
+// results ranks the cached rows, optionally restricted to the kinds keep
+// accepts — the seam the class view (#1849) and the class-free symbol seat of
+// search everywhere share, so both read one cache and one ranking.
+func (s *symbolMode) results(query string, keep func(kind int) bool) []palette.Item {
 	var out []palette.Item
 	for _, si := range s.items {
+		if keep != nil && !keep(si.kind) {
+			continue
+		}
 		it := si.item
 		if m, ok := fuzzy.Match(query, it.Title); ok {
 			it.Spans = m.Positions
@@ -155,9 +176,12 @@ func (s *symbolMode) Results(query string, cx palette.Context) []palette.Item {
 
 // QueryChanged implements palette.LiveMode: a settled query re-queries the
 // workspace through the bridge continuation. Without one (no LSP plugin, or
-// goToClass never primed) the mode stays a static cache.
+// goToClass never primed) the mode stays a static cache. A query already sent
+// is not sent again: search everywhere composes several views of this one
+// cache (#1849) and each forwards QueryChanged, but one workspace/symbol
+// round trip per keystroke is enough — whichever view asks first sends it.
 func (s *symbolMode) QueryChanged(query string, cx palette.Context) tea.Cmd {
-	if s.request == nil || query == "" {
+	if s.request == nil || query == "" || query == s.lastSent {
 		return nil
 	}
 	s.lastSent = query
