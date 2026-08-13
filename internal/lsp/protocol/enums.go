@@ -57,13 +57,36 @@ const (
 
 // SymbolKind: the kind of a DocumentSymbol / SymbolInformation node. This is a
 // DIFFERENT numbering than CompletionItemKind above (SymbolKind Class is 5,
-// CompletionItemKind Class is 7) — never mix the two blocks. Only the kinds the
-// inheritance features filter on are modelled (#1449).
+// CompletionItemKind Class is 7) — never mix the two blocks. The inheritance
+// features filter on a few of these (#1449); the palette's class category
+// (#1849) labels every kind, so the full spec set is modelled.
 const (
-	SymKindClass     = 5
-	SymKindMethod    = 6
-	SymKindInterface = 11
-	SymKindStruct    = 23
+	SymKindFile          = 1
+	SymKindModule        = 2
+	SymKindNamespace     = 3
+	SymKindPackage       = 4
+	SymKindClass         = 5
+	SymKindMethod        = 6
+	SymKindProperty      = 7
+	SymKindField         = 8
+	SymKindConstructor   = 9
+	SymKindEnum          = 10
+	SymKindInterface     = 11
+	SymKindFunction      = 12
+	SymKindVariable      = 13
+	SymKindConstant      = 14
+	SymKindString        = 15
+	SymKindNumber        = 16
+	SymKindBoolean       = 17
+	SymKindArray         = 18
+	SymKindObject        = 19
+	SymKindKey           = 20
+	SymKindNull          = 21
+	SymKindEnumMember    = 22
+	SymKindStruct        = 23
+	SymKindEvent         = 24
+	SymKindOperator      = 25
+	SymKindTypeParameter = 26
 )
 
 // Position encodings a client may negotiate.
