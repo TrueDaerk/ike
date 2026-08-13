@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store, plus named user-scoped saved layouts.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-08-12T12:00:00Z
+timestamp: 2026-08-13T12:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -222,6 +222,14 @@ the palette lands. `openPathFocused` records that pane in `m.viewerTabHost`
 and the viewer open consumes it (`takeViewerTabHost` / `openContentTab`,
 `internal/app/panecontent.go`); a focused pane that cannot host tabs — the
 explorer, a tool window — falls back to `viewerSplitTarget`.
+
+The **explorer's default open** (enter, `l`, double-click) skips it too, but
+targets the editor rather than the focused pane: `openPathInEditor` records
+what `fileEditorKey` resolves, so *every* file the explorer opens — plain or
+viewer-handled — becomes a tab in the last-focused editor pane and never a
+split beside it (#1851). With no editor pane left, one is spawned to host the
+tab. Only the explorer's explicit **open in split** (`o`, `OpenFileMsg{NewPane:
+true}`) still goes through `viewerSplitTarget`.
 
 The root model exposes these as binding-agnostic ops (`SplitFocused(zone)`,
 `CloseFocused`, `FocusDir(dir)`, plus tab focus-cycle), so Roadmap 0080 binds

@@ -163,7 +163,8 @@ type Model struct {
 	recentEditor string
 	// viewerTabHost names the pane a handler-dispatched viewer open should land
 	// in as a content tab (#1825) instead of splitting off viewerSplitTarget
-	// (#1779). Set by the palette open path right before the file handler's
+	// (#1779). Set by the palette (focused pane) and the explorer's default
+	// open (the last-focused editor, #1851) right before the file handler's
 	// command is queued and consumed by the first viewer open that follows
 	// (takeViewerTabHost); "" restores the split behaviour.
 	viewerTabHost string
@@ -2890,7 +2891,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePaste(msg.Content)
 
 	case explorer.OpenFileMsg:
-		return m.openPath(msg.Path, msg.NewPane)
+		// The explorer's default open (enter / l / double-click) always lands in
+		// the last-focused editor pane — a plain file as an editor tab, a viewer
+		// file as a content tab beside it (#1851). Only the explicit "open in
+		// split" action (o) still splits.
+		if msg.NewPane {
+			return m.openPath(msg.Path, true)
+		}
+		return m.openPathInEditor(msg.Path)
 
 	case OpenFindInPathMsg:
 		// project.findInPath (cmd+shift+f / palette): the find-in-path overlay
@@ -5379,8 +5387,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 // a scratch tab — and NewPane splits off a fresh editor and loads there
 // (unless the active editor is empty, which is reused in place, #641).
 // EventFileOpened hooks fire either way. A viewer file (data, image, archive)
-// splits off viewerSplitTarget (#1779); openPathFocused is the variant that
-// nests it as a tab instead.
+// splits off viewerSplitTarget (#1779); openPathFocused and openPathInEditor
+// are the variants that nest it as a tab instead.
 func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 	m.viewerTabHost = "" // no pending tab request: viewers split (#1779)
 	return m.openPathWith(path, newPane)
@@ -5394,6 +5402,20 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 // user last worked in.
 func (m Model) openPathFocused(path string) (tea.Model, tea.Cmd) {
 	m.viewerTabHost = m.focusedTabHost()
+	return m.openPathWith(path, false)
+}
+
+// openPathInEditor opens path like openPath, except that a file claimed by a
+// viewer file handler opens as a content tab in the very pane a plain file
+// would land in — the editor fileEditorKey resolves (#1851). It is the
+// explorer's default open: whatever the file's kind, it becomes a tab in the
+// last-focused editor rather than a split beside it. With no editor pane to
+// host the tab, one is spawned first, matching the plain-file fallback.
+func (m Model) openPathInEditor(path string) (tea.Model, tea.Cmd) {
+	m.viewerTabHost = m.fileEditorKey()
+	if m.viewerTabHost == "" {
+		m.viewerTabHost = m.spawnEditor()
+	}
 	return m.openPathWith(path, false)
 }
 

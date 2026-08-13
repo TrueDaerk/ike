@@ -39,10 +39,11 @@ func (dataProvider) Capabilities() plugin.Capabilities {
 
 func init() { registry.Register(dataProvider{}) }
 
-// openDataPane opens (or refocuses) the data viewer for path, split off the
-// leaf viewerSplitTarget picks — the pane the user last worked in, never the
-// explorer they opened the file from (#1779) — or, when the open came from
-// the palette, as a tab in the focused pane (#1825). The pane appears at once
+// openDataPane opens (or refocuses) the data viewer for path as a tab in the
+// pane the open asked for — the focused pane for the palette (#1825), the
+// last-focused editor for the explorer's default open (#1851) — and otherwise
+// split off the leaf viewerSplitTarget picks, the pane the user last worked in
+// (#1779), which is what an explicit split open still does. The pane appears at once
 // and returns the command that opens the database behind it (#1795), so a
 // multi-gigabyte file costs the IDE no frame.
 func (m *Model) openDataPane(path string) tea.Cmd {
