@@ -163,7 +163,8 @@ type Model struct {
 	recentEditor string
 	// viewerTabHost names the pane a handler-dispatched viewer open should land
 	// in as a content tab (#1825) instead of splitting off viewerSplitTarget
-	// (#1779). Set by the palette open path right before the file handler's
+	// (#1779). Set by the palette (focused pane) and the explorer's default
+	// open (the last-focused editor, #1851) right before the file handler's
 	// command is queued and consumed by the first viewer open that follows
 	// (takeViewerTabHost); "" restores the split behaviour.
 	viewerTabHost string
@@ -1958,11 +1959,17 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	})
 	scr := palette.NewScratchMode(scratchList)
 	scrNew := scratchNewMode{}
-	all := palette.NewSearchAllMode(cmd, file, symbols)
+	// Classes are their own search-everywhere category (#1849), ranked right
+	// after the commands: a class is what users most often search for by name,
+	// and its own per-kind cap keeps it out of the workspace-symbol crowd. Both
+	// views read the one symbol cache; the symbol seat drops the class-like
+	// kinds so no symbol is listed twice.
+	classes := newClassMode(symbols)
+	all := palette.NewSearchAllMode(cmd, classes, file, newNonClassSymbolMode(symbols))
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -2890,7 +2897,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePaste(msg.Content)
 
 	case explorer.OpenFileMsg:
-		return m.openPath(msg.Path, msg.NewPane)
+		// The explorer's default open (enter / l / double-click) always lands in
+		// the last-focused editor pane — a plain file as an editor tab, a viewer
+		// file as a content tab beside it (#1851). Only the explicit "open in
+		// split" action (o) still splits.
+		if msg.NewPane {
+			return m.openPath(msg.Path, true)
+		}
+		return m.openPathInEditor(msg.Path)
 
 	case OpenFindInPathMsg:
 		// project.findInPath (cmd+shift+f / palette): the find-in-path overlay
@@ -5380,8 +5394,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 // a scratch tab — and NewPane splits off a fresh editor and loads there
 // (unless the active editor is empty, which is reused in place, #641).
 // EventFileOpened hooks fire either way. A viewer file (data, image, archive)
-// splits off viewerSplitTarget (#1779); openPathFocused is the variant that
-// nests it as a tab instead.
+// splits off viewerSplitTarget (#1779); openPathFocused and openPathInEditor
+// are the variants that nest it as a tab instead.
 func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 	m.viewerTabHost = "" // no pending tab request: viewers split (#1779)
 	return m.openPathWith(path, newPane)
@@ -5395,6 +5409,20 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 // user last worked in.
 func (m Model) openPathFocused(path string) (tea.Model, tea.Cmd) {
 	m.viewerTabHost = m.focusedTabHost()
+	return m.openPathWith(path, false)
+}
+
+// openPathInEditor opens path like openPath, except that a file claimed by a
+// viewer file handler opens as a content tab in the very pane a plain file
+// would land in — the editor fileEditorKey resolves (#1851). It is the
+// explorer's default open: whatever the file's kind, it becomes a tab in the
+// last-focused editor rather than a split beside it. With no editor pane to
+// host the tab, one is spawned first, matching the plain-file fallback.
+func (m Model) openPathInEditor(path string) (tea.Model, tea.Cmd) {
+	m.viewerTabHost = m.fileEditorKey()
+	if m.viewerTabHost == "" {
+		m.viewerTabHost = m.spawnEditor()
+	}
 	return m.openPathWith(path, false)
 }
 
@@ -7199,6 +7227,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case msg.Button == tea.MouseWheelDown:
 				inst.Data().Wheel(lines)
 			}
+		case pane.KindArchive:
+			// The wheel scrolls the archive entry list (#1852); the cursor is
+			// dragged along so it stays inside the visible window.
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Archive().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Archive().Wheel(lines)
+			}
 		case pane.KindBreakpoints:
 			// The wheel scrolls the breakpoints list (#1377).
 			switch msg.Button {
@@ -8193,6 +8230,13 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// the reference's location, mirroring the Problems panel.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Usages().Click(localX, localY)
+		}
+	case pane.KindArchive:
+		// Archive-pane clicks (#1852): a click selects the row, a press on a
+		// directory's fold glyph toggles it, and a double-click activates —
+		// opening a file read-only, exactly like enter.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Archive().Click(localX, localY)
 		}
 	case pane.KindData:
 		// Data-viewer clicks (#1788): the clicked half takes the region

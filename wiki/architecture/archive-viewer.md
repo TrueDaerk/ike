@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Archive Viewer
-description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name."
+description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name."
 resource: internal/archview
-tags: [architecture, archive, tar, viewer, pane, read-only]
-timestamp: 2026-08-12T12:00:00Z
+tags: [architecture, archive, tar, viewer, pane, read-only, mouse]
+timestamp: 2026-08-13T12:00:00Z
 ---
 
 # Archive Viewer (#1762)
@@ -40,12 +40,13 @@ sniffs content:
   offset 257, or, for magic-less v7 tars, a header checksum that verifies (the
   same test tar itself uses, so random 512-byte prefixes are not claimed).
 
-The handler dispatches `OpenArchiveMsg`; `openArchivePane` splits the leaf
+The handler dispatches `OpenArchiveMsg`; `openArchivePane` opens as a content
+tab in the pane the open asked for — the focused pane for a palette pick
+(#1825), the last-focused editor for the explorer's default open (#1851, see
+[data viewer](./data-viewer.md)) — and otherwise splits the leaf
 `viewerSplitTarget` picks (see [pane layout](./pane-layout.md)) like the image
-preview — or opens as a content tab in the focused pane when the open came
-from the palette (#1825, see [data viewer](./data-viewer.md)) — refocusing an
-existing pane already bound to the same path instead of duplicating. Keys mint as `archive`, `archive:2`, …;
-persistence records `{Kind: "archive", Path}` and restore re-lists the file (a
+preview, refocusing an existing pane already bound to the same path instead of
+duplicating. Keys mint as `archive`, `archive:2`, …; persistence records `{Kind: "archive", Path}` and restore re-lists the file (a
 vanished or corrupt file restores as the pane's own error notice).
 
 ## The entry list
@@ -68,6 +69,31 @@ step and wrap, page keys clamp, `g`/`G` jump to the ends. On top of that:
 | `h` / `left` | collapse an expanded directory, else jump to the parent |
 
 The pane advertises the `archive` context id, so bindings can scope to it.
+
+### Mouse (#1852)
+
+The pane takes mouse input the way the explorer tree does; the root model
+translates the absolute cell into pane-content-local coordinates and calls
+`Wheel` / `Click` (`internal/archview/mouse.go`) — the archive model itself
+never sees a `tea.MouseMsg`, so `Update` stays key-only.
+
+| Gesture | Effect |
+| --- | --- |
+| wheel up/down | scroll the entry list; clamps at both ends |
+| left click on a row | select it |
+| left click on a directory's fold glyph | toggle the fold |
+| double click | activate: file → open read-only, directory → toggle the fold |
+
+Row hit-testing reads the same `top` offset the renderer scrolls by, so a
+click lands on the row the user sees: content-local `y` 0 is the header line
+and the rows start at `y` 1. The fold glyph occupies two cells at
+`1 + 2·depth`, matching `renderRow`'s indentation. Wheel scrolling moves the
+window and drags the cursor along, keeping the selection inside it —
+`clampScroll`'s invariant for the keyboard.
+
+Double-click activation shares `activate()` with `enter`, so both emit the same
+`OpenEntryMsg` and reach the same read-only preview below; the window is the
+400 ms the explorer uses.
 
 ## Read-only entry preview
 

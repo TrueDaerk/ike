@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Data Viewer
-description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table>, run inside a subquery so paging keeps working."
+description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825/#1851 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table>, run inside a subquery so paging keeps working."
 resource: internal/dataview
 tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sql, mouse, paging, async, performance]
-timestamp: 2026-08-12T12:00:00Z
+timestamp: 2026-08-13T12:00:00Z
 ---
 
 # Data Viewer (#1764, #1765, #1766, #1777, #1788, #1795)
@@ -67,15 +67,21 @@ the open path**:
   `m.viewerTabHost`, and the viewer open consumes it via `takeViewerTabHost`
   and `openContentTab`: the pane converts into a tab host when needed, and a
   lone empty scratch tab gives way to the viewer (the #156 tab policy).
-- **Everywhere else** — explorer, `:e`, CLI, plugin opens — the viewer splits
-  the leaf `viewerSplitTarget` picks: the pane the user last worked in, never
-  the explorer the database was opened from (#1779, see
-  [pane layout](./pane-layout.md)).
+- **From the explorer's default open** — enter, `l`, double-click (#1851) — the
+  viewer opens as a content tab in the pane a *plain* file would land in: the
+  editor `fileEditorKey` resolves (focused editor, else `m.recentEditor`, else
+  the first editor leaf). `openPathInEditor` records it in `m.viewerTabHost`
+  the same way; with no editor pane left it spawns one first, so the viewer
+  never lands on the explorer.
+- **Everywhere else** — the explorer's explicit split open (`o`), `:e`, CLI,
+  plugin opens — the viewer splits the leaf `viewerSplitTarget` picks: the pane
+  the user last worked in, never the explorer the database was opened from
+  (#1779, see [pane layout](./pane-layout.md)).
 
-A focused pane that cannot host tabs (the explorer, a tool window) falls back
-to the split, so a palette pick made from the explorer still lands beside the
-working pane. The image preview (#1479) and archive viewer (#1762) share this
-seam verbatim — the asymmetry was never data-specific.
+A recorded pane that cannot host tabs (a tool window that took focus in the
+meantime) falls back to the split. The image preview (#1479) and archive
+viewer (#1762) share this seam verbatim — the asymmetry was never
+data-specific.
 
 ## The SQLite backend
 

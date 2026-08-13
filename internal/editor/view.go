@@ -954,7 +954,17 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 						// only its tail is on screen.
 						repl = string([]rune(repl)[padSkip:])
 					}
-					if w := lipgloss.Width(repl); disp+w <= width {
+					if w := lipgloss.Width(repl); w > 0 {
+						if disp+w > width {
+							// The stand-in straddles the right edge (#1847):
+							// render the prefix that fits, exactly like a tab
+							// clipping there. Dropping it whole would let the
+							// text after the range slide left into the cells
+							// the alignment padding owns — the next *sv column
+							// glued onto a short field.
+							repl = clipCells(repl, width-disp)
+							w = lipgloss.Width(repl)
+						}
 						st, _ := m.styleAt(line, col)
 						switch {
 						case cr.standIn:
@@ -1182,6 +1192,32 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 			disp++
 		}
 	}
+	return b.String()
+}
+
+// clipCells cuts s to at most w display cells (#1847): the hard cut a run of
+// buffer cells would take at the right edge, without truncate's ellipsis — a
+// conceal stand-in is layout, and marking it as shortened would misplace the
+// cells that follow it. A wide rune straddling the edge yields to spaces, the
+// same yield the cell loop gives a clipped tab.
+func clipCells(s string, w int) string {
+	if w <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= w {
+		return s
+	}
+	var b strings.Builder
+	used := 0
+	for _, r := range s {
+		rw := lipgloss.Width(string(r))
+		if used+rw > w {
+			break
+		}
+		b.WriteRune(r)
+		used += rw
+	}
+	b.WriteString(strings.Repeat(" ", w-used))
 	return b.String()
 }
 
