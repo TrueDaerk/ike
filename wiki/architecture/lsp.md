@@ -463,6 +463,15 @@ palette. No provider → warn toast; zero hits render as the palette's empty
 list. The request continuation still arrives via `SymbolPromptMsg.Apply`
 (the phase-1 message), so the manager stays unreachable from the app.
 
+Each hit carries the server's **`SymbolKind`** (`ilsp.SymbolHit.Kind`, the full
+spec set is modelled as `protocol.SymKind*`): rows render it as a short badge
+("class", "struct", "func", …, `SymbolKindLabel`; unknown kinds get none), and
+`ilsp.ClassLike` — class, struct, interface, enum — is the filter behind the
+palette's [class category](./command-palette.md) (#1849). The kind-filtered
+views share this one cache and its ranking; a query is sent at most once per
+settled keystroke no matter how many views forward it, and a palette re-open
+(`Refresh`) forgets the last sent query so re-typing it re-queries.
+
 **Formatting (#7, reshaped by 0470/#1401).** The reformat commands live in
 the [formatter registry](./format.md) now: `lsp.format` / `lsp.formatRange`
 (ids kept, titles "Reformat File" / "Reformat Selection", owned by
