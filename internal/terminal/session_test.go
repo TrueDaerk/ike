@@ -441,6 +441,65 @@ func TestMotionKeysDriveTheShell(t *testing.T) {
 	})
 }
 
+// TestModifiedCursorSeq: modifier+cursor chords encode the xterm way, plain
+// and ike-claimed presses stay off that path (#1841).
+func TestModifiedCursorSeq(t *testing.T) {
+	cases := []struct {
+		name string
+		in   tea.KeyPressMsg
+		want string
+	}{
+		{"shift+up", tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModShift}, "\x1b[1;2A"},
+		{"shift+down", tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift}, "\x1b[1;2B"},
+		{"shift+right", tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModShift}, "\x1b[1;2C"},
+		{"shift+left", tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModShift}, "\x1b[1;2D"},
+		{"ctrl+left", tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl}, "\x1b[1;5D"},
+		{"ctrl+shift+left", tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl | tea.ModShift}, "\x1b[1;6D"},
+		{"alt+up", tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModAlt}, "\x1b[1;3A"},
+		{"shift+home", tea.KeyPressMsg{Code: tea.KeyHome, Mod: tea.ModShift}, "\x1b[1;2H"},
+		{"shift+end", tea.KeyPressMsg{Code: tea.KeyEnd, Mod: tea.ModShift}, "\x1b[1;2F"},
+		{"caps lock is no modifier", tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModShift | tea.ModCapsLock}, "\x1b[1;2A"},
+	}
+	for _, c := range cases {
+		got, ok := modifiedCursorSeq(c.in)
+		if !ok || got != c.want {
+			t.Fatalf("%s: got %q ok=%v, want %q", c.name, got, ok, c.want)
+		}
+	}
+	for _, in := range []tea.KeyPressMsg{
+		{Code: tea.KeyUp},                         // plain arrow keeps the emulator path
+		{Code: tea.KeyLeft, Mod: tea.ModCapsLock}, // lock modifiers alone are not a chord
+		{Code: tea.KeyLeft, Mod: tea.ModSuper},    // cmd: not xterm-encodable
+		{Code: tea.KeyPgUp, Mod: tea.ModShift},    // not a cursor key
+		{Code: 'a', Mod: tea.ModShift},            // plain text
+	} {
+		if seq, ok := modifiedCursorSeq(in); ok {
+			t.Fatalf("%#v should not encode, got %q", in, seq)
+		}
+	}
+}
+
+// TestShiftArrowsReachTheChild: the encoded chord actually lands in the PTY —
+// `cat -v` prints it back as ^[[1;2A (#1841).
+func TestShiftArrowsReachTheChild(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	m := Model{sess: s, h: 24}
+
+	type press = tea.KeyPressMsg
+	for _, r := range "cat -v" {
+		m.Update(press{Code: r, Text: string(r)})
+	}
+	m.Update(press{Code: tea.KeyEnter})
+	m.Update(press{Code: tea.KeyUp, Mod: tea.ModShift})
+	m.Update(press{Code: tea.KeyLeft, Mod: tea.ModShift})
+	waitFor(t, "shift+arrows echoed by cat -v", func() bool {
+		v := plainView(s)
+		return strings.Contains(v, "^[[1;2A") && strings.Contains(v, "^[[1;2D")
+	})
+	m.Update(press{Code: 'd', Mod: tea.ModCtrl}) // end cat
+}
+
 // TestShiftedTextKeepsSpecialKeys: shift on non-text keys stays a modified
 // event — shift+pgup must still page the scrollback, not type anything.
 func TestShiftedTextKeepsSpecialKeys(t *testing.T) {

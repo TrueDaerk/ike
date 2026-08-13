@@ -866,6 +866,15 @@ func (s *Session) Paste(text string) {
 	}
 }
 
+// SendSeq writes an already-encoded input sequence to the child verbatim,
+// for chords the emulator's key encoder cannot express (modifier+cursor
+// keys, #1841). Bypasses the key path on purpose: the bytes are the message.
+func (s *Session) SendSeq(seq string) {
+	if !s.closed.Load() {
+		s.em.SendText(seq)
+	}
+}
+
 // SendText types text as individual key presses, deliberately bypassing the
 // bracketed-paste path: shells may render a pasted region highlighted (zsh's
 // default zle_highlight does), which is wrong for programmatic insertions
