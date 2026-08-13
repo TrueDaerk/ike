@@ -26,6 +26,7 @@ import (
 	"ike/internal/httpclient"
 	"ike/internal/idcolor"
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // rowKind classifies one display row for styling.
@@ -97,9 +98,11 @@ type Model struct {
 	// In-pane search (#1265) over the whole composed view — status line,
 	// headers and formatted body alike. searching marks the open "/" prompt,
 	// query is the live pattern, matches every hit in row order and cur the
-	// selected one (n/N step through them).
+	// selected one (n/N step through them). qcur is the rune cursor within
+	// query while the prompt is open (#1845), edited via ui.EditKey.
 	searching bool
 	query     string
+	qcur      int
 	matches   []search.Span
 	cur       int
 
@@ -473,6 +476,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// plain "/" alone doesn't match user expectations (#1830).
 		m.searching = true
 		m.query = ""
+		m.qcur = 0
 		m.matches = nil
 		m.cur = 0
 	case "n":
@@ -587,23 +591,23 @@ func (m *Model) research() {
 	}
 }
 
-// searchKey handles one key while the "/" prompt is open.
+// searchKey handles one key while the "/" prompt is open. esc/enter are
+// consumed here first; everything else — cursor motion, word ops, deletion,
+// insertion — delegates to ui.EditKey (#763/#1845), matching the terminal
+// scrollback search field.
 func (m *Model) searchKey(msg tea.KeyPressMsg) {
 	switch msg.String() {
 	case "esc":
 		m.clearSearch()
+		return
 	case "enter":
 		m.searching = false
 		m.scrollToMatch()
-	case "backspace":
-		if r := []rune(m.query); len(r) > 0 {
-			m.query = string(r[:len(r)-1])
-		}
-		m.research()
-		m.scrollToMatch()
-	default:
-		if t := msg.Text; t != "" {
-			m.query += t
+		return
+	}
+	if q, cur, handled, changed := ui.EditKey(msg, m.query, m.qcur); handled {
+		m.query, m.qcur = q, cur
+		if changed {
 			m.research()
 			m.scrollToMatch()
 		}
@@ -614,6 +618,7 @@ func (m *Model) searchKey(msg tea.KeyPressMsg) {
 func (m *Model) clearSearch() {
 	m.searching = false
 	m.query = ""
+	m.qcur = 0
 	m.matches = nil
 	m.cur = 0
 }
@@ -903,7 +908,7 @@ func (m *Model) footerText() string {
 	// The open "/" prompt owns the footer line: the pattern being typed plus
 	// the live match count (#1265).
 	if m.searching {
-		s := " /" + m.query + "▏"
+		s := " /" + ui.CursorView(m.query, m.qcur)
 		if m.query != "" {
 			s += "  " + m.matchCount()
 		}

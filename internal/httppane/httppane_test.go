@@ -475,6 +475,111 @@ func TestSearchPromptSwallowsNavigationKeys(t *testing.T) {
 	}
 }
 
+// TestSearchCursorMotion covers left/right/home/end/word motions on the
+// prompt (#1845), matching ui.EditKey's contract used by the terminal
+// scrollback search field.
+func TestSearchCursorMotion(t *testing.T) {
+	m := searchViewer(t)
+	typeSearch(m, "token abc")
+	if m.qcur != len([]rune("token abc")) {
+		t.Fatalf("cursor after typing: %d, want end", m.qcur)
+	}
+	m.handleKey(keyPress("left"))
+	m.handleKey(keyPress("left"))
+	if want := len([]rune("token abc")) - 2; m.qcur != want {
+		t.Fatalf("cursor after two lefts: %d, want %d", m.qcur, want)
+	}
+	m.handleKey(keyPress("right"))
+	if want := len([]rune("token abc")) - 1; m.qcur != want {
+		t.Fatalf("cursor after right: %d, want %d", m.qcur, want)
+	}
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyHome})
+	if m.qcur != 0 {
+		t.Fatalf("home must move the cursor to 0, got %d", m.qcur)
+	}
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnd})
+	if m.qcur != len([]rune("token abc")) {
+		t.Fatalf("end must move the cursor to the query length, got %d", m.qcur)
+	}
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt})
+	if want := len([]rune("token ")); m.qcur != want {
+		t.Fatalf("alt+left must jump to the start of 'abc', got %d want %d", m.qcur, want)
+	}
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModSuper})
+	if m.qcur != 0 {
+		t.Fatalf("super+left must jump to the query start, got %d", m.qcur)
+	}
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModSuper})
+	if m.qcur != len([]rune("token abc")) {
+		t.Fatalf("super+right must jump to the query end, got %d", m.qcur)
+	}
+}
+
+// TestSearchWordDeletion covers opt+backspace/opt+delete word deletion and
+// plain backspace/delete at the cursor (#1845).
+func TestSearchWordDeletion(t *testing.T) {
+	m := searchViewer(t)
+	typeSearch(m, "token abc")
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt})
+	if q, _ := m.SearchQuery(); q != "token " {
+		t.Fatalf("alt+backspace must delete the last word, got %q", q)
+	}
+	if m.qcur != len([]rune("token ")) {
+		t.Fatalf("cursor after alt+backspace: %d, want %d", m.qcur, len([]rune("token ")))
+	}
+
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyHome})
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModAlt})
+	if q, _ := m.SearchQuery(); q != " " {
+		t.Fatalf("alt+delete at the start must delete the next word, got %q", q)
+	}
+
+	// Plain backspace/delete edit at the cursor position, not the end.
+	m.clearSearch()
+	typeSearch(m, "abcdef")
+	for i := 0; i < 3; i++ {
+		m.handleKey(keyPress("left"))
+	}
+	m.handleKey(keyPress("backspace"))
+	if q, _ := m.SearchQuery(); q != "abdef" {
+		t.Fatalf("backspace at cursor: %q, want %q", q, "abdef")
+	}
+	m.handleKey(keyPress("delete"))
+	if q, _ := m.SearchQuery(); q != "abef" {
+		t.Fatalf("delete at cursor: %q, want %q", q, "abef")
+	}
+}
+
+// TestSearchKillToStart covers cmd+backspace killing from the cursor to the
+// line start (#1845).
+func TestSearchKillToStart(t *testing.T) {
+	m := searchViewer(t)
+	typeSearch(m, "token abc")
+	for i := 0; i < 3; i++ {
+		m.handleKey(keyPress("left"))
+	}
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModSuper})
+	if q, _ := m.SearchQuery(); q != "abc" {
+		t.Fatalf("super+backspace must kill to the line start, got %q", q)
+	}
+	if m.qcur != 0 {
+		t.Fatalf("cursor after kill-to-start: %d, want 0", m.qcur)
+	}
+}
+
+// TestSearchPromptRendersCursor guards the visible block cursor via
+// ui.CursorView (#1845), consistent with the terminal scrollback search.
+func TestSearchPromptRendersCursor(t *testing.T) {
+	m := searchViewer(t)
+	typeSearch(m, "token")
+	withCursor := m.View()
+	m.handleKey(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt})
+	moved := m.View()
+	if withCursor == moved {
+		t.Error("moving the cursor must change the rendered prompt")
+	}
+}
+
 // TestPendingMarkerShownInHeader covers the pane side of #1272: while a
 // dispatch runs the header says so, and the previous response stays readable.
 func TestPendingMarkerShownInHeader(t *testing.T) {
