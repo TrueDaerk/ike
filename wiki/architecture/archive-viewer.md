@@ -109,6 +109,17 @@ and unlocks on confirmation: here there is nothing to unlock into, so:
 - `Load` and `NewFile` clear the flag: reusing the view for a real file
   unlocks it.
 
+Highlighting is the one thing a read-only buffer cannot arrange for itself
+(#1853). `ShowReadOnly` clears the span index and advances the document
+version, and the ordinary trigger — an edit bumping that version — can never
+fire here. So **every caller of `ShowReadOnly` owns the parse**: it returns
+`ed.Reparse()` (or batches it) into the command it hands back. That holds for
+the entry open, the gz open, the schema view and the gz watcher refresh alike.
+The parse resolves against the virtual path like any other, and its
+`highlight.SpansMsg` routes back by that exact string. Tree-sitter is the
+whole story: no LSP `didOpen` is ever fired for a virtual path, because no
+server could open the document it names.
+
 The chrome marks it: the pane title reads `main.go (src.tar) [RO]` and the tab
 label carries the same `[RO]` suffix.
 

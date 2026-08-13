@@ -4750,8 +4750,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Kind == watch.FileChanged || msg.Kind == watch.FileCreated {
 			// A gz preview's buffer path names content *inside* the archive
 			// (#1763), so the editor's own reload never matches the file that
-			// changed: re-decompress it here.
-			m.refreshGzipBuffers(msg.Path)
+			// changed: re-decompress it here. The command it returns re-runs
+			// the parse the fresh content needs (#1853).
+			hookCmds = append(hookCmds, m.refreshGzipBuffers(msg.Path))
 		}
 		return m, tea.Batch(append(hookCmds, m.routeToEditor(msg.Path, msg), vcsCmd)...)
 
