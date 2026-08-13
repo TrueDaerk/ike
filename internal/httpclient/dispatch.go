@@ -249,7 +249,7 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 	}
 
 	applyCurlConfig(httpReq, resolved, cfg)
-	if err := applyNetrc(httpReq, resolved, opts); err != nil {
+	if err := applyNetrc(httpReq, cfg, opts); err != nil {
 		return nil, err
 	}
 
@@ -572,12 +572,17 @@ func applyCurlConfig(httpReq *http.Request, resolved *httpfile.Request, cfg *cur
 }
 
 // applyNetrc adds basic-auth credentials from .netrc when the request (and
-// .curlrc) set no Authorization header.
-func applyNetrc(httpReq *http.Request, resolved *httpfile.Request, opts Options) error {
+// .curlrc) set no Authorization header. opts.NetrcPath takes precedence over
+// a "netrc-file" path from .curlrc, which in turn takes precedence over the
+// default $NETRC / $HOME/.netrc lookup.
+func applyNetrc(httpReq *http.Request, cfg *curlConfig, opts Options) error {
 	if opts.DisableConfig || httpReq.Header.Get("Authorization") != "" {
 		return nil
 	}
 	path := opts.NetrcPath
+	if path == "" {
+		path = cfg.NetrcFile
+	}
 	if path == "" {
 		path = netrcPath()
 	}

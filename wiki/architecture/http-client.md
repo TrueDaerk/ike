@@ -140,8 +140,14 @@ hard failure, and **explicit values in the `.http` file always win**:
   `$XDG_CONFIG_HOME/curlrc`, else `$HOME/.curlrc`): supported options map
   onto the request — `header` (only when the request doesn't set that header
   itself), `user-agent`, `referer`, `user` (basic auth), `proxy`,
-  `insecure`, `location`, `max-time`, `connect-timeout`. Unsupported options
-  are collected as response warnings, never errors.
+  `insecure`, `location`, `max-time`, `connect-timeout`. `netrc`/`-n` and
+  `netrc-optional` are accepted silently (never warned about): ike already
+  applies `.netrc` credentials on every dispatch whenever no `Authorization`
+  header is set, so both options merely describe ike's default rather than
+  requesting anything new (#1843). `netrc-file <path>` is honored as the
+  `.netrc` lookup path, overriding `$NETRC`/`$HOME/.netrc` but yielding to an
+  explicit `Options.NetrcPath`. Other unsupported options are collected as
+  response warnings, never errors.
 
 Defaults: redirects followed (Go's limit of 10), TLS verification on (unless
 `insecure`), 30 s overall timeout (`max-time` overrides), response bodies

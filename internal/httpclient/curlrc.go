@@ -21,6 +21,7 @@ type curlConfig struct {
 	FollowRedirect *bool // -L / --location
 	MaxTime        time.Duration
 	ConnectTimeout time.Duration
+	NetrcFile      string // path from "netrc-file <path>"; "" keeps the default lookup
 
 	Warnings []string // unsupported options that were ignored
 }
@@ -116,6 +117,14 @@ func (c *curlConfig) apply(name, value string) {
 		if d, err := parseCurlSeconds(value); err == nil {
 			c.ConnectTimeout = d
 		}
+	case "n", "netrc", "netrc-optional":
+		// ike already applies .netrc credentials whenever no Authorization
+		// header is set (applyNetrc in dispatch.go), unconditionally and
+		// without failing the request if no entry matches — that is exactly
+		// what "netrc" and the more lenient "netrc-optional" ask for, so
+		// both are silently honored rather than warned about.
+	case "netrc-file":
+		c.NetrcFile = value
 	default:
 		c.Warnings = append(c.Warnings, fmt.Sprintf("unsupported .curlrc option %q ignored", name))
 	}
