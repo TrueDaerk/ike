@@ -71,8 +71,12 @@ time.
 | ++shift+f8++ | Step out |
 | ++ctrl+f2++ | Stop the session |
 
+![A breakpoint on the cursor line, marked with a dot in the gutter, confirmed by a notification and counted in the status line](../screenshots/features/breakpoint-gutter.png)
+
 Breakpoints can also be set by **clicking in the gutter**. They are stored per
-project in `.ike/breakpoints.json` and survive restarts.
+project in `.ike/breakpoints.json` and survive restarts — the count in the
+status line tells you how many are armed. The screenshot uses the
+`monokai-pro` theme.
 
 ### The debug window
 

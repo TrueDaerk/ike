@@ -38,6 +38,24 @@ The window is made of **panes**: the file tree, editor panes with tabs, and
 tool windows along the edges. Any pane can be split, moved and resized, and
 the arrangement is remembered per project.
 
+![The IKE window after opening a project: the menu bar on top, the file tree on the left, an editor pane on the right, the status line at the bottom](../screenshots/features/window-overview.png)
+
+Four things to locate in that window, because the rest of this documentation
+names them:
+
+| In the shot | What it is |
+|---|---|
+| The top row, `File Edit View …` | The **menu bar** — ++f10++ opens it |
+| `EXPLORER` on the left | The **file tree** — ++cmd+1++ focuses it |
+| The bordered region on the right | An **editor pane**; its top line is the **tab bar** |
+| The bottom row, `NORMAL  main.go …` | The **status line** — mode, file, encoding, branch, cursor position |
+
+The highlighted border marks the **focused** pane. Focus decides which
+keybindings are live and where a newly opened file lands.
+
+Screenshots in this documentation use the `monokai-pro` theme; yours will
+follow whatever theme you pick.
+
 | Keys | What it does |
 |---|---|
 | ++cmd+1++ | Toggle the file tree / move focus to it |
@@ -58,6 +76,11 @@ bar to move it somewhere else.
 | ++shift++ twice | Search everywhere: type `@` for files, `:` for commands |
 | ++cmd+o++ | Go to symbol — needs a language server |
 
+Each of those opens the same overlay in a different mode. Tapping ++shift++
+twice and typing nothing lists what you had open last:
+
+![Search everywhere with an empty query, listing the recently opened files first](../screenshots/features/palette-everywhere.png)
+
 Files open as tabs in the focused editor pane. The same buffer can be visible
 in several panes at once; edits show up in all of them.
 
@@ -65,7 +88,12 @@ in several panes at once; edits show up in all of them.
 
 The editor is modal, like vim. If you type and nothing appears, you are in
 normal mode — press ++i++ to insert, ++esc++ to return. The mode is shown at
-the left of the status bar.
+the left of the status bar, and the cursor takes the mode's colour:
+
+![The status line in insert mode, showing a green INSERT badge at the far left](../screenshots/features/mode-insert.png)
+
+The chords below all assume an **editor pane has focus** — with the file tree
+focused, the same keys do explorer things.
 
 | Keys | What it does |
 |---|---|
@@ -84,6 +112,8 @@ vim key next to each command where one exists.
 ++cmd+comma++ opens the settings panel — a searchable list of every option, with
 its description, written back to `~/.ike/settings.toml` as you change it.
 Changes apply live; nothing needs a restart.
+
+![The settings panel: pages on the left, the selected page's keys in the middle, the highlighted key's description on the right](../screenshots/features/settings-panel.png)
 
 You can equally edit the file by hand:
 

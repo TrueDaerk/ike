@@ -16,9 +16,18 @@ a view onto it:
 **The palette** ranks commands by name and context. It knows what is focused,
 so the commands that apply where you are rank first.
 
+![The palette in command mode: the query `:spl`, matching commands ranked below it, each with its chord on the right](../screenshots/features/palette-commands.png)
+
+Read a row left to right: the prefix glyph says where the entry came from, the
+title is what the palette matched, and the right-hand column is the chord that
+runs the same command without the palette. All screenshots on this page use
+the `monokai-pro` theme.
+
 **The menu bar** (++f10++) groups a curated subset — File, Edit, View,
 Navigate, Tools, Help — for when you want to browse rather than recall. An
 entry whose command is not registered in this build simply is not shown.
+
+![The menu bar with the File menu open](../screenshots/features/menu-bar.png)
 
 **The keymap** binds chords to command IDs. Rebinding is editing that mapping;
 see [Customising IKE](../guides/customising.md).
@@ -38,6 +47,10 @@ character** you type into it:
 | `:` | Commands |
 | `@` | Files in the project, by fuzzy name |
 
+The whole flow is three steps: **++shift++ twice → type `@re` → ++enter++**.
+
+![The palette in file mode after typing `@re`: the matching project files, path and all](../screenshots/features/palette-files.png)
+
 Some modes have their own chord and open locked into that mode — you cannot
 prefix your way out of them:
 
@@ -53,6 +66,8 @@ about which. It runs a single query across commands and files, interleaves them
 by match score, and marks each row with its source's prefix glyph so you can
 see what you are about to open. With an empty query it lists your recent files
 first, then all commands — so it doubles as "what was I just working on".
+
+![Search everywhere with an empty query: recent files marked `%` on top, commands marked `:` below](../screenshots/features/palette-everywhere.png)
 
 The palette itself executes nothing. It ranks, you pick, and the choice is
 dispatched to whatever owns that action.
@@ -75,6 +90,9 @@ Three ways to find something you cannot remember:
 - **++f1++** — the cheatsheet, showing the live bindings for your build. It
   opens on a curated **Essentials** view of the couple of dozen commands worth
   knowing first; ++tab++ switches to the complete list.
+
+    ![The F1 cheatsheet on its Essentials view, grouped by topic](../screenshots/features/cheatsheet.png)
+
 - **The palette** — type what you think it is called. Fuzzy matching means
   `nsf` finds "New Scratch File".
 - **The [commands reference](../reference/commands.md)** — generated from this

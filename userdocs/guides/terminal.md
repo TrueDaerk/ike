@@ -15,6 +15,12 @@ IKE.
 A terminal can be a pane of its own or a tab inside an editor pane, so a pane
 can hold a mix of files and shells.
 
+![A terminal pane below the editor, its title bar naming the shell and the working directory, with a command and its output](../screenshots/features/terminal-pane.png)
+
+The screenshot uses the `monokai-pro` theme. The pane's title bar names the
+shell and the directory it runs in, and gains a further segment when the
+project has a toolchain to activate — a virtualenv interpreter, say.
+
 ## Keys go to the shell
 
 While a terminal has focus **every key goes to it raw**. That is the point:

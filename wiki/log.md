@@ -1,5 +1,27 @@
 # Log
 
+## 2026-08-13 (userdocs: eighteen interface screenshots and a visual pass, #1857)
+
+- **The user docs showed the file the editor renders, never the IDE around it.** The rendering and
+  conceal guides had shots since #1634/#1698, but getting-started, the concept pages and half the
+  guides described panes, the palette, the modes and the tool windows in prose alone. Eighteen new
+  generated shots close that (`cmd/shotgen`): the window with its four regions, a split, a tab bar,
+  the palette in command / file / everything mode, the F1 cheatsheet, the menu bar, the settings
+  panel, insert and visual mode, both searches, recent files, the terminal pane, a scratch file, a
+  breakpoint in the gutter, and the VCS tool window — all `monokai-pro`, all embedded with an alt
+  text that says what to look at. The home page hero is now one of them rather than a theme shot.
+- **A scenario scripts one ordered step list** instead of `commands` then `keys`: both orders are
+  needed (find-in-file types *into* a prompt, the breakpoint shot moves the caret *before* running
+  the command), so steps are `cmd:<id>` / `type:<runes>` / `key:<name>` and run in the order
+  written. `opens` adds background tabs, which is what the tab-bar and recent-files shots need.
+  The terminal shot spawns `/bin/sh` with `VIRTUAL_ENV` cleared, so it carries no trace of whoever
+  rendered it.
+- **Mermaid renders now** (`mkdocs.yml` superfences custom fence): the split tree, the settings
+  layers and the language-server flow are diagrams rather than paragraphs. Pages gained the
+  focus/mode precondition where a chord depends on it, the mode table on the modal-editor page, and
+  the getting-started index links the desktop launcher it had been leaving out. Updated
+  [Documentation Screenshots](/architecture/screenshots.md).
+
 ## 2026-08-13 (archive viewer: mouse wheel, click select, double-click open, #1852)
 
 - **The archive pane takes the mouse now** (`internal/archview/mouse.go`): the wheel scrolls the
