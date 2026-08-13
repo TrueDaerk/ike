@@ -21,11 +21,32 @@ The second one bites more often than the first.
 
 ## Terminals that work
 
-Ghostty, kitty, WezTerm, foot, Alacritty, and iTerm2 3.5+. On Windows, WezTerm
-is the reliable choice; Windows Terminal does not implement the protocol.
+| Terminal | Platform | Where its own shortcuts are cleared |
+|---|---|---|
+| [Ghostty](https://ghostty.org/) | macOS, Linux | `keybind = clear` |
+| kitty | macOS, Linux | `clear_all_shortcuts yes` |
+| WezTerm | macOS, Linux, Windows | `disable_default_key_bindings = true` |
+| foot | Linux | Its `[key-bindings]` section |
+| Alacritty | macOS, Linux, Windows | Its keyboard-bindings config |
+| iTerm2 3.5+ | macOS | Its Keys preferences |
+
+On Windows, WezTerm is the reliable choice; Windows Terminal does not
+implement the protocol.
 
 Inside `tmux` some chords are lost regardless — `ctrl+tab` in particular is
 consumed by tmux and never forwarded.
+
+When a chord does nothing, this is the order to work through:
+
+```mermaid
+graph TD
+    A["a chord does nothing"] --> B{"does keyprobe<br/>report it delivered?"}
+    B -->|"no"| C["the terminal ate it —<br/>clear its keybindings"]
+    C --> D{"delivered now?"}
+    D -->|"no"| E["unfixable chord:<br/>rebind it, or use the palette"]
+    D -->|"yes"| F["done"]
+    B -->|"yes"| G["it reached IKE —<br/>check the keymap page for a conflict"]
+```
 
 ## Freeing up the chords
 

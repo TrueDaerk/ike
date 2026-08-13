@@ -1,7 +1,8 @@
 # Getting around
 
 Ten ways to reach a line of code, each good at something different. This page
-is a map of which one to reach for.
+is a map of which one to reach for. All screenshots use the `monokai-pro`
+theme.
 
 ## By name, when you know what you want
 
@@ -15,10 +16,12 @@ is a map of which one to reach for.
 These are the fastest path when you can name the thing. Fuzzy matching means
 initials work: `iaa` finds `internal/app/app.go`.
 
+![The recent-files palette, most recently visited first, each row with the time it was last open](../screenshots/features/recent-files.png)
+
 ## By browsing
 
-++cmd+1++ toggles the file tree and moves focus to it. Inside, the keys are
-vim-shaped:
+++cmd+1++ toggles the file tree and moves focus to it. Inside, the keys below
+apply **while the tree has focus** — they are vim-shaped:
 
 | Keys | What it does |
 |---|---|
@@ -29,6 +32,8 @@ vim-shaped:
 | `o` | Open in a split |
 | `gg` / `G` | Top / bottom |
 | ++cmd+n++ | New file |
+
+![The file tree with every directory expanded, the open file underlined, and the selected row highlighted](../screenshots/features/window-overview.png)
 
 **Explorer: Speed Search** filters the tree by typing, and
 **Explorer: Toggle Hidden Files** shows dotfiles. ++alt+f1++ reveals the file
@@ -85,7 +90,7 @@ test and a config — where Go to file is more typing than the job deserves.
 
 ## By structure
 
-++cmd+3++ opens the Structure pane: the symbol tree of the focused buffer,
+++cmd+3++ opens the Structure tool window: the symbol tree of the focused buffer,
 from the language server. It follows your cursor, so it doubles as "where am
 I in this file", and ++enter++ on a node jumps to it.
 

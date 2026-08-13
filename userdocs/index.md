@@ -7,7 +7,11 @@ terminal — a file explorer, resizable panes with tabs, a command palette,
 LSP-powered code intelligence, Tree-sitter highlighting, an integrated
 terminal, an HTTP client for `.http` files, themes, and a plugin system.
 
-![IKE with the tokyo-night theme](screenshots/tokyo-night.png)
+![The IKE window: the file tree on the left, an editor pane with its tab bar on the right, the status line along the bottom](screenshots/features/window-overview.png)
+
+Screenshots throughout this site use the `monokai-pro` theme; twenty-eight
+themes ship, and [Customising IKE](guides/customising.md#themes) shows how to
+switch.
 
 ## Why it exists
 

@@ -11,7 +11,10 @@ timestamp: 2026-08-07T12:00:00Z
 
 The user documentation embeds screenshots of features (#1634): syntax highlighting, the
 Markdown/CSV/log rendering layers with their raw counterpart, the diff viewer, the HTTP client,
-and one shot per conceal family (#1698). They are **generated**, not captured: `make shots` drives
+one shot per conceal family (#1698), and the interface surfaces the concept and guide pages
+describe — the window itself, the palette in each of its modes, the cheatsheet, the menu bar, the
+settings panel, the editor modes, both searches, the terminal and the VCS window (#1857). They are
+**generated**, not captured: `make shots` drives
 the real root model headlessly and paints the frame it renders into a PNG. A shot is therefore
 always a frame the current code produced, and refreshing the set after a UI change costs one
 command.
@@ -20,8 +23,8 @@ command.
 
 * **`cmd/shotgen`** — the driver. It unpacks an embedded demo project (`fixtures/`) into a temp
   directory, points `$IKE_CONFIG_DIR` and `$HOME` at throwaway paths, and runs one scripted
-  scenario per shot: window size, optional `window.hideAllTools`, an `explorer.OpenFileMsg`, then
-  palette commands and key presses. The frame comes from `Model.View().Content`.
+  scenario per shot: window size, optional `window.hideAllTools`, an `explorer.OpenFileMsg` per
+  file the scenario opens, then its ordered steps. The frame comes from `Model.View().Content`.
 * **`internal/shotpng`** — the painter. It replays the frame's ANSI through the VT emulator the
   integrated terminal uses (`charmbracelet/x/vt`), which flattens escapes into a grid of styled
   cells, then draws each cell: background rectangle, glyph, underline/strikethrough.
@@ -60,12 +63,19 @@ command.
 * **The output directory is resolved before the chdir** (#1698). Scenarios run inside the temp
   project, so a relative `-out` resolved afterwards wrote the PNGs into the fixture tree the run
   then deleted.
+* **Steps are one ordered list** (#1857). A scenario used to hold `commands` and `keys` in separate
+  fields, which fixed the order: commands, then keys. Both directions occur — find-in-file opens a
+  prompt and types into it, the breakpoint shot moves the caret and then runs the command — so a
+  scenario now scripts `cmd:<id>`, `type:<runes>` and `key:<name>` steps in the order they run.
+* **A shot must not carry the machine that rendered it** (#1857). The terminal shot spawns
+  `/bin/sh` rather than `$SHELL` and the driver clears `VIRTUAL_ENV`: a themed prompt with a
+  username in it, or a virtualenv path in the pane title, is machine state rather than a feature.
 
 ## Adding a shot
 
 Append a `shot` to the table in `cmd/shotgen/main.go` (name, description, fixture file, frame size,
-optional commands/keys), run `make shots`, and embed the PNG in the matching page under
-`userdocs/`. `go run ./cmd/shotgen -list` prints the set; `-only <name>` regenerates one.
+optional steps), run `make shots`, and embed the PNG in the matching page under `userdocs/`.
+`go run ./cmd/shotgen -list` prints the set; `-only <name>` regenerates one.
 
 Related: [Themes](/architecture/themes.md), [Syntax Highlighting](/architecture/highlighting.md),
 [Integrated Terminal](/architecture/terminal.md) (the VT emulator), [Diff Viewer](/architecture/diff-viewer.md).

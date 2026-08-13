@@ -15,6 +15,11 @@ explains the selected setting *and* holds its editor.
 categories │ settings           ◉ ‹› ▸ ⌨ ≡ ✎ │ description + editor
 ```
 
+![The settings panel with the Editor page selected: the category rail on the left, the page's keys with their value markers in the middle, the description and editor on the right](../screenshots/features/settings-panel.png)
+
+The screenshot uses the `monokai-pro` theme — which is itself one row on the
+Appearance page.
+
 ++tab++ walks the three columns, ++up++/++down++ (or `j`/`k`) move inside one,
 ++enter++ activates. On a narrow terminal the detail column becomes a band
 under the list rather than disappearing. `?` opens the full key list.
@@ -107,6 +112,11 @@ elsewhere.
 
 ## Keybindings
 
+Before rebinding anything, ++f1++ shows what is bound today in *your* build —
+the same data the Keymap page edits:
+
+![The F1 cheatsheet, listing the essential commands with their live chords](../screenshots/features/cheatsheet.png)
+
 The **Keymap** settings page lists the **effective** bindings as
 `chord · command`, on the same grid as every other page.
 
@@ -192,6 +202,8 @@ One setting recolours everything — syntax, file tree, chrome:
 [theme]
 name = "tokyo-night"
 ```
+
+![IKE with the monokai-pro theme — the one every screenshot in this documentation uses](../screenshots/monokai-pro.png)
 
 Twenty-eight themes ship with IKE: `default`, `tokyo-night`, `nord`, `gruvbox`,
 `gruvbox-light`, `rose-pine`, `rose-pine-dawn`, `catppuccin-mocha`,

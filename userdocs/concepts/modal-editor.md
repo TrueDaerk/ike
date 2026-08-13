@@ -26,10 +26,24 @@ under the cursor and stays put (`3rx` overwrites three).
 
 The active mode is always shown at the left of the status bar, as a coloured
 badge — and the cursor itself takes the same colour, so you can tell the mode
-without looking away from what you are typing: the theme's accent for normal,
-green for insert, yellow for visual, red for replace and blue while you are on
-the `:` command line. When in doubt, press ++esc++ — from anywhere it lands you
-in normal mode.
+without looking away from what you are typing:
+
+| Mode | Badge | Enter it with | Leave it with |
+|---|---|---|---|
+| Normal | the theme's accent | ++esc++, from anywhere | — |
+| Insert | green | ++i++ `a` `o` `O` `I` `A` | ++esc++ |
+| Visual | yellow | `v` `V` ++ctrl+v++ | ++esc++ |
+| Replace | red | `R` | ++esc++ |
+| Command line | blue | `:` `/` `?` | ++esc++ or ++enter++ |
+
+The same window, two modes apart — the badge and the cursor colour are the
+difference (`monokai-pro` theme, as on every screenshot in this documentation):
+
+![Insert mode: a green INSERT badge at the left of the status line](../screenshots/features/mode-insert.png)
+
+![Visual mode: a yellow VISUAL badge, and the selection highlighted in the buffer](../screenshots/features/mode-visual.png)
+
+When in doubt, press ++esc++ — from anywhere it lands you in normal mode.
 
 ## The grammar
 

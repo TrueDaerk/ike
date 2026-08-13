@@ -32,8 +32,11 @@ restarting, offering your recent-projects history. Unsaved changes are guarded
 
 ## The three settings layers
 
-```
-built-in defaults  <  ~/.ike/settings.toml  <  <project>/.ike/settings.toml
+```mermaid
+graph LR
+    D["built-in defaults<br/><i>in the binary</i>"] --> U["~/.ike/settings.toml<br/><i>your preferences</i>"]
+    U --> P["&lt;project&gt;/.ike/settings.toml<br/><i>this codebase</i>"]
+    P --> R["effective value"]
 ```
 
 Later layers win, key by key. Your personal preferences live in the user

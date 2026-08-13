@@ -8,6 +8,16 @@ That has one practical consequence: everything on this page depends on a
 server being available for the language you are editing. When there is none,
 the features go quiet rather than breaking.
 
+```mermaid
+graph LR
+    O["you open a file"] --> Q{"server for<br/>this language?"}
+    Q -->|"ready"| F["diagnostics, completion,<br/>hover, definition, rename"]
+    Q -->|"missing"| I["install recipe runs<br/>in the background"]
+    I -->|"succeeds"| R["file re-opens<br/>against the server"]
+    I -->|"fails"| S["notification + debug.log;<br/>no retry until you ask"]
+    Q -->|"none exists"| N["highlighting only —<br/>the features stay silent"]
+```
+
 ## Which server for which language
 
 | Language | Server | Installed with |
@@ -78,8 +88,16 @@ Completion appears as you type; ++enter++ accepts, ++esc++ dismisses.
 and **LSP: Find Usages (Panel)** puts the results in a tool window rather than
 a popup.
 
-Diagnostics are shown three ways at once: underlined in the text, as marks in
-the scrollbar, and collected in the Problems window.
+Every chord in that table needs an **editor pane focused**, except ++cmd+o++
+and ++cmd+8++, which work from anywhere.
+
+Diagnostics are shown three ways at once:
+
+| Where | What you see |
+|---|---|
+| In the text | The offending range underlined, in the severity's colour |
+| In the scrollbar | A mark per diagnostic, so off-screen ones are still visible |
+| In the Problems window (++cmd+8++) | Every diagnostic in the project, grouped by file, errors first |
 
 Too strict? `lsp.diagnostics_severity` remaps what a rule counts as: each
 entry names a diagnostic rule and the severity you want — for example
