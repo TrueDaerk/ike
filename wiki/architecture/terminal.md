@@ -170,7 +170,13 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
 (`AddTerminal`, keys `terminal`, `terminal:2`, …; `Close` ends the session).
 The pane title shows **shell + origin dir** (`TERMINAL — zsh · goproj`; the
 dir compacts once it differs from the working directory). The cursor cell
-reverse-videos while focused (`model.go` splices it ANSI-aware). While a
+reverse-videos while focused (`model.go` splices it ANSI-aware) **unless the
+child hid the hardware cursor** via DECTCEM (`CSI ?25l`, #1858): full-screen
+TUIs paint their own cursor into the grid, so a second overlaid block would
+double it. The emulator's `CursorVisibility` callback mirrors the mode into
+the session (`Session.CursorHidden`), and `CSI ?25h` — which a TUI emits on
+exit, as does a shell redrawing its prompt — restores the overlay.
+While a
 terminal (or the explorer) holds focus, the **status line names that pane
 kind** — `TERMINAL │ zsh · goproj` (plus `[exited]` for a dead shell) or
 `EXPLORER` — instead of mirroring the active editor's mode/file/cursor, so

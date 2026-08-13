@@ -971,7 +971,8 @@ func toVTKeys(k tea.KeyPressMsg) []vt.KeyPressEvent {
 	}}
 }
 
-// View renders the grid, with the cursor cell reversed while focused; a
+// View renders the grid, with the cursor cell reversed while focused and the
+// child has not hidden the hardware cursor (#1858); a
 // scrolled view windows over [scrollback ++ screen] instead. A dead or failed
 // session renders its state. The scrollback scrollbar (#1368) overlays the
 // rightmost column on top of whatever the base view rendered.
@@ -1010,6 +1011,11 @@ func (m Model) baseView() string {
 	}
 	if !m.focused {
 		return view
+	}
+	// A child that hid the hardware cursor (DECTCEM, #1858) paints its own
+	// into the grid — overlaying ours on top would show a second one.
+	if m.sess.CursorHidden() {
+		return m.completionView(view)
 	}
 	cx, cy := m.sess.CursorPosition()
 	return m.completionView(overlayCursor(view, cx, cy))
