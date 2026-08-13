@@ -1,5 +1,27 @@
 # Log
 
+## 2026-08-13 (explorer opens every file as a tab in the last-focused editor, #1851)
+
+- **Opening a `.duckdb`, `.png` or `.tar.gz` from the explorer no longer splits
+  a pane beside the editor**: the explorer's default open (enter / `l` /
+  double-click, `explorer.OpenFileMsg` without `NewPane`) now routes through
+  `openPathInEditor` (`internal/app/app.go`), which records the pane
+  `fileEditorKey` resolves — the focused editor, else `m.recentEditor`, else
+  the first editor leaf — in `m.viewerTabHost` before the file handler runs.
+  The viewer opens (`openDataPane`, `openImagePreview`, `openArchivePane`)
+  consume it through the #1825 seam (`takeViewerTabHost`/`openContentTab`) and
+  nest as a content tab (#1778), so *every* file the explorer opens lands in
+  the same pane, whatever its kind. With no editor pane left, one is spawned
+  first, matching the plain-file fallback. The explicit **open in split** (`o`,
+  `OpenFileMsg{NewPane: true}`) still splits off `viewerSplitTarget` (#1779),
+  as do `:e`, CLI and plugin opens; an already open viewer for the path is
+  still only refocused.
+  Updated [Explorer](/architecture/explorer.md),
+  [Pane Layout & Drag](/architecture/pane-layout.md),
+  [Data Viewer](/architecture/data-viewer.md),
+  [Image Preview](/architecture/image-preview.md),
+  [Archive Viewer](/architecture/archive-viewer.md).
+
 ## 2026-08-13 (csv: alignment padding clips at the right pane edge, #1847)
 
 - **A conceal stand-in straddling the right edge of a rendered span now emits

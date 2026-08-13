@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-08-13T12:00:00Z
 ---
 
 # File Explorer
@@ -133,7 +133,11 @@ extensions and filenames the language plugins register; a drift test in
 
 - `j` / `k` / arrows — move the cursor over visible rows.
 - `enter` — toggle a directory (expand/collapse) in place, or open a file
-  (emits `OpenFileMsg{Path}`).
+  (emits `OpenFileMsg{Path}`). The file lands as a **tab in the last-focused
+  editor pane**, whatever its kind: a plain file as an editor tab, a data,
+  image or archive file as a viewer content tab — never a split beside the
+  editor (#1851, see [pane layout](./pane-layout.md)). `o` (`OpenFileMsg{…,
+  NewPane: true}`) is the explicit split open.
 - `l` / `right` — expand a collapsed directory, step into the first child of an
   expanded one, or open a file.
 - `h` / `left` — collapse an expanded directory, otherwise jump to the parent

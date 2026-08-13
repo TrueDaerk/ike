@@ -4,7 +4,7 @@ title: Image Preview
 description: "#1479 — image files render in a preview pane via the Kitty graphics protocol (Unicode placeholders): capability probe with metadata fallback, per-pass transmit/delete reconcile, decode of PNG/JPEG/GIF/WebP, layout persistence."
 resource: internal/imgview
 tags: [architecture, image, preview, pane, kitty, graphics]
-timestamp: 2026-08-12T12:00:00Z
+timestamp: 2026-08-13T12:00:00Z
 ---
 
 # Image Preview (#1479)
@@ -20,11 +20,13 @@ The compile-in `images` plugin (`internal/app/images.go`) claims the files
 via a `FileHandler` — extensions plus a magic-byte sniff on the `readHead`
 buffer — so `openPath` routes an explorer/editor open to the preview instead
 of failing UTF-8 decode into an error toast. The handler dispatches
-`OpenImageMsg`; `openImagePreview` splits the leaf `viewerSplitTarget` picks
-(see [pane layout](./pane-layout.md)) — or opens as a content tab in the
-focused pane when the open came from the palette (#1825, see
-[data viewer](./data-viewer.md)) — refocusing an existing pane already
-bound to the same path instead of duplicating. Keys mint as `image`, `image:2`, …; persistence records
+`OpenImageMsg`; `openImagePreview` opens as a content tab in the pane the open
+asked for — the focused pane for a palette pick (#1825), the last-focused
+editor for the explorer's default open (#1851, see
+[data viewer](./data-viewer.md)) — and otherwise splits the leaf
+`viewerSplitTarget` picks (see [pane layout](./pane-layout.md)), refocusing an
+existing pane already bound to the same path instead of duplicating. Keys mint
+as `image`, `image:2`, …; persistence records
 `{Kind: "image", Path}` and restore re-decodes the file (a vanished file
 restores as the pane's decode-error fallback).
 

@@ -156,33 +156,9 @@ func TestPaletteOpenViewerFromExplorerStillSplits(t *testing.T) {
 	}
 }
 
-// TestExplorerOpenViewerStillSplits (#1779 unchanged): an open driven from the
-// explorer's file tree keeps splitting a viewer pane beside the working pane,
-// whatever the palette path does.
-func TestExplorerOpenViewerStillSplits(t *testing.T) {
-	m := newSized()
-	editorKey := m.fileEditorKey()
-	m.setFocus(editorKey)
-	p := writeTestDB(t, "app.db")
-
-	out, cmd := m.Update(explorer.OpenFileMsg{Path: p})
-	m = settle(t, out.(Model), cmd)
-
-	key := m.activeWS().Panes.Focused()
-	if key == editorKey {
-		t.Fatal("the explorer open must create its own data pane")
-	}
-	if !layout.Panes(m.activeWS().Tree)[key] {
-		t.Fatalf("data pane %q missing from the tree", key)
-	}
-	if inst := m.activeWS().Panes.Get(editorKey); inst.ActiveContent() != nil {
-		t.Fatal("the editor pane must not have gained a viewer tab")
-	}
-}
-
-// TestPaletteTabRequestDoesNotLeak (#1825): the pending tab request belongs to
-// the one palette open that set it — a following explorer open splits.
-func TestPaletteTabRequestDoesNotLeak(t *testing.T) {
+// TestTabRequestDoesNotLeak (#1825): the pending tab request belongs to the one
+// open that set it — a following explicit split open still splits.
+func TestTabRequestDoesNotLeak(t *testing.T) {
 	m := newSized()
 	editorKey := m.fileEditorKey()
 	m.setFocus(editorKey)
@@ -193,9 +169,13 @@ func TestPaletteTabRequestDoesNotLeak(t *testing.T) {
 		t.Fatalf("viewerTabHost = %q after a plain file open, want it cleared", m.viewerTabHost)
 	}
 
-	out, cmd := m.Update(explorer.OpenFileMsg{Path: writeTestDB(t, "app.db")})
+	out, cmd := m.Update(explorer.OpenFileMsg{Path: writeTestDB(t, "app.db"), NewPane: true})
 	m = settle(t, out.(Model), cmd)
+	key := m.activeWS().Panes.Focused()
+	if key == editorKey || !layout.Panes(m.activeWS().Tree)[key] {
+		t.Fatalf("split open landed on %q, want a fresh viewer leaf", key)
+	}
 	if inst := m.activeWS().Panes.Get(editorKey); inst.ActiveContent() != nil {
-		t.Fatal("the explorer open must split, not reuse a stale tab request")
+		t.Fatal("the split open must not reuse a stale tab request")
 	}
 }
