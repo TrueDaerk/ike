@@ -1,5 +1,19 @@
 # Log
 
+## 2026-08-13 (archive viewer: mouse wheel, click select, double-click open, #1852)
+
+- **The archive pane takes the mouse now** (`internal/archview/mouse.go`): the wheel scrolls the
+  entry list and clamps at both ends, a left click selects the row under the pointer, a click on
+  a directory's two-cell fold glyph toggles it, and a double-click activates — a file opens
+  read-only through the same `activate()`/`OpenEntryMsg` path as `enter`, a directory folds. Row
+  hit-testing reads the renderer's own `top` offset (content-local `y` 0 is the header, rows start
+  at `y` 1) and the glyph zone shifts with the row's depth. Routing follows the existing pane
+  precedent: the root model translates the cell and calls `Wheel`/`Click`, so `archview.Update`
+  stays key-only. The keyboard path was verified end-to-end while in there — j/k, page keys and
+  `enter`-open all work with the pane focused, as dedicated pane and as content tab; no
+  focus/routing gap was found, and a regression test now pins it. Updated
+  [Archive Viewer](/architecture/archive-viewer.md).
+
 ## 2026-08-13 (http response pane search prompt gains a cursor and macOS editing chords, #1845)
 
 - **The HTTP response pane's `/`/`cmd+f` search prompt is a full single-line

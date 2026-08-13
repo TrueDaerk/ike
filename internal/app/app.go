@@ -7198,6 +7198,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case msg.Button == tea.MouseWheelDown:
 				inst.Data().Wheel(lines)
 			}
+		case pane.KindArchive:
+			// The wheel scrolls the archive entry list (#1852); the cursor is
+			// dragged along so it stays inside the visible window.
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Archive().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Archive().Wheel(lines)
+			}
 		case pane.KindBreakpoints:
 			// The wheel scrolls the breakpoints list (#1377).
 			switch msg.Button {
@@ -8192,6 +8201,13 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// the reference's location, mirroring the Problems panel.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Usages().Click(localX, localY)
+		}
+	case pane.KindArchive:
+		// Archive-pane clicks (#1852): a click selects the row, a press on a
+		// directory's fold glyph toggles it, and a double-click activates —
+		// opening a file read-only, exactly like enter.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Archive().Click(localX, localY)
 		}
 	case pane.KindData:
 		// Data-viewer clicks (#1788): the clicked half takes the region
