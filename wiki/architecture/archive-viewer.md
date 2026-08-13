@@ -1,9 +1,9 @@
 ---
 type: concept
 title: Archive Viewer
-description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name."
+description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name."
 resource: internal/archview
-tags: [architecture, archive, tar, viewer, pane, read-only]
+tags: [architecture, archive, tar, viewer, pane, read-only, mouse]
 timestamp: 2026-08-13T12:00:00Z
 ---
 
@@ -69,6 +69,31 @@ step and wrap, page keys clamp, `g`/`G` jump to the ends. On top of that:
 | `h` / `left` | collapse an expanded directory, else jump to the parent |
 
 The pane advertises the `archive` context id, so bindings can scope to it.
+
+### Mouse (#1852)
+
+The pane takes mouse input the way the explorer tree does; the root model
+translates the absolute cell into pane-content-local coordinates and calls
+`Wheel` / `Click` (`internal/archview/mouse.go`) — the archive model itself
+never sees a `tea.MouseMsg`, so `Update` stays key-only.
+
+| Gesture | Effect |
+| --- | --- |
+| wheel up/down | scroll the entry list; clamps at both ends |
+| left click on a row | select it |
+| left click on a directory's fold glyph | toggle the fold |
+| double click | activate: file → open read-only, directory → toggle the fold |
+
+Row hit-testing reads the same `top` offset the renderer scrolls by, so a
+click lands on the row the user sees: content-local `y` 0 is the header line
+and the rows start at `y` 1. The fold glyph occupies two cells at
+`1 + 2·depth`, matching `renderRow`'s indentation. Wheel scrolling moves the
+window and drags the cursor along, keeping the selection inside it —
+`clampScroll`'s invariant for the keyboard.
+
+Double-click activation shares `activate()` with `enter`, so both emit the same
+`OpenEntryMsg` and reach the same read-only preview below; the window is the
+400 ms the explorer uses.
 
 ## Read-only entry preview
 

@@ -69,13 +69,20 @@ type Model struct {
 
 	w, h    int
 	focused bool
+
+	// Double-click detection (#1852) mirrors the explorer: activating a row
+	// with the mouse needs a second click on it within doubleClickWindow;
+	// now is injectable so tests control the clock.
+	lastClickRow int
+	lastClickAt  time.Time
+	now          func() time.Time
 }
 
 // New opens the archive at path and builds its entry tree. A listing error is
 // kept for View — the pane opens either way and explains itself, so a
 // truncated or corrupt archive degrades to a notice instead of a crash.
 func New(key, p string, pal *theme.Palette) Model {
-	m := Model{key: key, path: p, pal: pal, collapsed: map[string]bool{}}
+	m := Model{key: key, path: p, pal: pal, collapsed: map[string]bool{}, lastClickRow: -1, now: time.Now}
 	m.listing, m.err = archive.List(p)
 	m.build()
 	return m
@@ -98,6 +105,9 @@ func (m *Model) Rows() int { return len(m.rows) }
 
 // Cursor reports the selected row index (tests).
 func (m *Model) Cursor() int { return m.cursor }
+
+// Top reports the first visible row index (tests).
+func (m *Model) Top() int { return m.top }
 
 // RowName returns the full entry path of row i, "" when out of range (tests).
 func (m *Model) RowName(i int) string {
@@ -212,7 +222,8 @@ func sortedChildren(n *node) []*node {
 }
 
 // Update handles one message; only key presses reach it, focus-filtered by
-// the pane layer.
+// the pane layer. Mouse input arrives through Wheel and Click instead (#1852),
+// which the root model calls with pane-content-local coordinates.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if k, ok := msg.(tea.KeyPressMsg); ok {
 		return m.handleKey(k)
