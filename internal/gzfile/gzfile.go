@@ -101,15 +101,29 @@ func hasTarSuffix(path string) bool {
 // first — app.log.gz is a log whatever the header says — and the gzip
 // header's optional original-name field is the fallback for a name that
 // carries no `.gz` suffix. A name yielding neither keeps its own base name.
+//
+// The one case where the header beats the stripped name is when stripping
+// leaves no extension behind: dump.gz says nothing about its content, so a
+// header naming dump.sql is the only thing that can give the buffer a
+// language (#1853). A header without an extension of its own never wins —
+// it would trade one anonymous name for another.
 func InnerName(path, header string) string {
 	base := filepath.Base(path)
+	header = strings.TrimSpace(filepath.Base(strings.ReplaceAll(header, "\\", "/")))
+	if header == "." || header == "/" {
+		header = ""
+	}
+	stripped := ""
 	if ext := filepath.Ext(base); strings.EqualFold(ext, ".gz") || strings.EqualFold(ext, ".gzip") {
-		if stripped := strings.TrimSuffix(base, ext); stripped != "" {
+		stripped = strings.TrimSuffix(base, ext)
+	}
+	if stripped != "" {
+		if filepath.Ext(stripped) != "" || header == "" || filepath.Ext(header) == "" {
 			return stripped
 		}
+		return header
 	}
-	if header = strings.TrimSpace(filepath.Base(strings.ReplaceAll(header, "\\", "/"))); header != "" &&
-		header != "." && header != "/" {
+	if header != "" {
 		return header
 	}
 	return base

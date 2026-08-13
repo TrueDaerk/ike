@@ -68,6 +68,14 @@ func (m *Model) parseCmd() tea.Cmd {
 	}
 }
 
+// SyntaxCapture returns the Tree-sitter capture cached for the rune at
+// (line, col), "" when the position carries none. It reads the index
+// renderLine styles from, so it answers "did this buffer's parse land" without
+// going through the rendered output — where a cursor cell or a line number
+// looks like styling too. Read-only virtual-path buffers (#1853) schedule
+// their parse by hand, which is exactly what this makes assertable.
+func (m Model) SyntaxCapture(line, col int) string { return m.hlIndex.CaptureAt(line, col) }
+
 // styleAt returns the syntax style for the rune at (line, col) and whether one
 // applies. Called from renderLine's default branch; cursor and selection styles
 // still win on overlap.
