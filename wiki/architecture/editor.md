@@ -1444,6 +1444,14 @@ by `editor.csv_rendering` (default on, Settings → Editor):
   cursor-follow scroll path), `displayClickCol` / `DisplayOffset` fold the
   offset through the expansion, and `ScrollXBy` clamps against the expanded
   row width.
+- **Right pane edge** (#1847): a stand-in wider than the cells left in the
+  span renders its fitting prefix (`clipCells` in the cell loop) instead of
+  being skipped — clipped exactly like a tab straddling the edge. Skipping it
+  left the padding's cells free for the *next* column, which then rendered
+  glued onto the short field (`Schweiz+49…`, `landtelefon`) while the widest
+  field of the same column merely clipped; only fields shorter than their
+  column were affected, because only those carry padding beyond the gap. The
+  clip applies to every stand-in, decoded ones (#1585) included.
 - **Caret column** (#1659): the field the caret sits in (`sv.IndexAt`) is
   tinted over the whole visible height — `svColumnRange` gives each rendered
   line the rune range it contributes, the field plus the separator closing it

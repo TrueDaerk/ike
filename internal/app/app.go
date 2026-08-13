@@ -1959,11 +1959,17 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	})
 	scr := palette.NewScratchMode(scratchList)
 	scrNew := scratchNewMode{}
-	all := palette.NewSearchAllMode(cmd, file, symbols)
+	// Classes are their own search-everywhere category (#1849), ranked right
+	// after the commands: a class is what users most often search for by name,
+	// and its own per-kind cap keeps it out of the workspace-symbol crowd. Both
+	// views read the one symbol cache; the symbol seat drops the class-like
+	// kinds so no symbol is listed twice.
+	classes := newClassMode(symbols)
+	all := palette.NewSearchAllMode(cmd, classes, file, newNonClassSymbolMode(symbols))
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.

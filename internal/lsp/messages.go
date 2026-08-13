@@ -322,12 +322,63 @@ type SymbolPromptMsg struct {
 }
 
 // SymbolHit is one workspace/symbol result: the symbol's name (what the
-// palette row leads with, #295) plus its location as an editor-coordinate
-// Reference (the preview doubles as the declaration line).
+// palette row leads with, #295), the server's protocol.SymbolKind and its
+// location as an editor-coordinate Reference (the preview doubles as the
+// declaration line). Kind is what makes the palette's class category (#1849)
+// possible — 0 when the server sent none.
 type SymbolHit struct {
 	Name string
+	Kind int
 	Ref  Reference
 }
+
+// ClassLike reports whether kind names a class-like symbol — the kinds the
+// palette's class category searches (#1849). Go has no classes, so structs and
+// interfaces are the equivalent; enums join them as the other named type shape
+// servers report for enum-carrying languages.
+func ClassLike(kind int) bool {
+	switch kind {
+	case protocol.SymKindClass, protocol.SymKindStruct, protocol.SymKindInterface, protocol.SymKindEnum:
+		return true
+	}
+	return false
+}
+
+// symbolKindLabels maps a protocol.SymbolKind to the short lowercase label the
+// palette renders as a row badge (#1849), so a class is tellable from a
+// function at a glance. Index 0 is the "server sent no kind" hole.
+var symbolKindLabels = map[int]string{
+	protocol.SymKindFile:          "file",
+	protocol.SymKindModule:        "module",
+	protocol.SymKindNamespace:     "namespace",
+	protocol.SymKindPackage:       "package",
+	protocol.SymKindClass:         "class",
+	protocol.SymKindMethod:        "method",
+	protocol.SymKindProperty:      "property",
+	protocol.SymKindField:         "field",
+	protocol.SymKindConstructor:   "ctor",
+	protocol.SymKindEnum:          "enum",
+	protocol.SymKindInterface:     "interface",
+	protocol.SymKindFunction:      "func",
+	protocol.SymKindVariable:      "var",
+	protocol.SymKindConstant:      "const",
+	protocol.SymKindString:        "string",
+	protocol.SymKindNumber:        "number",
+	protocol.SymKindBoolean:       "bool",
+	protocol.SymKindArray:         "array",
+	protocol.SymKindObject:        "object",
+	protocol.SymKindKey:           "key",
+	protocol.SymKindNull:          "null",
+	protocol.SymKindEnumMember:    "enum member",
+	protocol.SymKindStruct:        "struct",
+	protocol.SymKindEvent:         "event",
+	protocol.SymKindOperator:      "operator",
+	protocol.SymKindTypeParameter: "type param",
+}
+
+// SymbolKindLabel returns the short label for a protocol.SymbolKind, or "" for
+// an unknown or missing kind (the row then simply carries no badge).
+func SymbolKindLabel(kind int) string { return symbolKindLabels[kind] }
 
 // SymbolResultsMsg delivers the workspace/symbol hits, converted to editor
 // coordinates like ReferencesMsg. NoProvider reports that no running server

@@ -402,3 +402,91 @@ func TestSVClickMappingAtHorizontalOffset(t *testing.T) {
 		}
 	}
 }
+
+// clipDoc pairs a table-rendered document with the aligned rows it produces at
+// full width: column 0 is 11 cells wide ("Oesterreich") plus the 2-cell gap, so
+// column 1 starts at display cell 13 on every row — and the short fields carry
+// 6 and 9 cells of alignment padding respectively.
+const clipDoc = "land,telefon\nOesterreich,+49123\nSchweiz,+49999\n"
+
+var clipAligned = []string{
+	"land         telefon",
+	"Oesterreich  +49123",
+	"Schweiz      +49999",
+}
+
+// TestSVPaddingClipsAtRightEdge (#1847): alignment padding straddling the right
+// pane edge renders the prefix that fits instead of being dropped. Dropping it
+// pulled the next column onto the short field ("Schweiz+49", "landtelefon")
+// while the widest field of the same column merely clipped.
+func TestSVPaddingClipsAtRightEdge(t *testing.T) {
+	for width := 4; width <= 18; width++ {
+		m := csvLoaded(t, clipDoc)
+		m.SetSize(width, 6)
+		m.cursor = buffer.Position{Line: 1} // on a field, so nothing is revealed
+
+		rows := strings.Split(plainView(m), "\n")
+		for i, full := range clipAligned {
+			want := full
+			if len(want) > width {
+				want = want[:width]
+			}
+			if rows[i] != want {
+				t.Errorf("width %d row %d: %q, want %q", width, i, rows[i], want)
+			}
+		}
+	}
+}
+
+// TestSVPaddingClipsAtRightEdgeScrolled (#1847): the same holds at every
+// horizontal offset — the window slices the aligned row at both edges, so a
+// padding run cut by the left edge (#1724) and one cut by the right edge agree
+// on where the next column starts.
+func TestSVPaddingClipsAtRightEdgeScrolled(t *testing.T) {
+	for left := 1; left <= 8; left++ {
+		for width := 4; width <= 10; width++ {
+			m := csvLoaded(t, clipDoc)
+			m.SetSize(width, 6)
+			m.cursor = buffer.Position{Line: 1}
+			m.SetScroll(0, left)
+
+			rows := strings.Split(plainView(m), "\n")
+			for i, full := range clipAligned {
+				want := ""
+				if left < len(full) {
+					want = full[left:]
+				}
+				if len(want) > width {
+					want = want[:width]
+				}
+				if rows[i] != want {
+					t.Errorf("left %d width %d row %d: %q, want %q", left, width, i, rows[i], want)
+				}
+			}
+		}
+	}
+}
+
+// TestClipCells (#1847): the hard cut a stand-in takes at the right edge — no
+// ellipsis, and a wide rune that would straddle the edge yields to spaces so
+// the cut is exactly w cells wide.
+func TestClipCells(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		w    int
+		want string
+	}{
+		{"      ", 0, ""},
+		{"      ", -1, ""},
+		{"      ", 3, "   "},
+		{"      ", 9, "      "},
+		{"abcdef", 3, "abc"},
+		{"日本語", 4, "日本"},
+		{"日本語", 5, "日本 "}, // the third rune would straddle: a space instead
+		{"日本語", 6, "日本語"},
+	} {
+		if got := clipCells(tc.in, tc.w); got != tc.want {
+			t.Errorf("clipCells(%q, %d) = %q, want %q", tc.in, tc.w, got, tc.want)
+		}
+	}
+}

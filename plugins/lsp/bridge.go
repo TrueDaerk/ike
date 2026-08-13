@@ -808,7 +808,8 @@ func (b *bridge) workspaceSymbols(h host.API, query string) tea.Cmd {
 		refs := locationsToRefs(mgr, path, locs)
 		hits := make([]ilsp.SymbolHit, len(refs))
 		for i, ref := range refs {
-			hits[i] = ilsp.SymbolHit{Name: syms[i].Name, Ref: ref}
+			// Kind rides along (#1849): the palette's class category filters on it.
+			hits[i] = ilsp.SymbolHit{Name: syms[i].Name, Kind: syms[i].Kind, Ref: ref}
 		}
 		h.Send(ilsp.SymbolResultsMsg{Query: query, Hits: hits})
 	}()
