@@ -56,10 +56,11 @@ func sniffImage(head []byte) bool {
 	return false
 }
 
-// openImagePreview opens (or refocuses) the image preview for path, split off
-// the leaf viewerSplitTarget picks — the pane the user last worked in, never
-// the explorer they opened the file from (#1779) — or, when the open came
-// from the palette, as a tab in the focused pane (#1825).
+// openImagePreview opens (or refocuses) the image preview for path as a tab in
+// the pane the open asked for — the focused pane for the palette (#1825), the
+// last-focused editor for the explorer's default open (#1851) — and otherwise
+// split off the leaf viewerSplitTarget picks, the pane the user last worked in
+// (#1779), which is what an explicit split open still does.
 func (m *Model) openImagePreview(path string) {
 	tabHost := m.takeViewerTabHost()
 	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {

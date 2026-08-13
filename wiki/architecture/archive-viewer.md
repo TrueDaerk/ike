@@ -40,12 +40,13 @@ sniffs content:
   offset 257, or, for magic-less v7 tars, a header checksum that verifies (the
   same test tar itself uses, so random 512-byte prefixes are not claimed).
 
-The handler dispatches `OpenArchiveMsg`; `openArchivePane` splits the leaf
+The handler dispatches `OpenArchiveMsg`; `openArchivePane` opens as a content
+tab in the pane the open asked for — the focused pane for a palette pick
+(#1825), the last-focused editor for the explorer's default open (#1851, see
+[data viewer](./data-viewer.md)) — and otherwise splits the leaf
 `viewerSplitTarget` picks (see [pane layout](./pane-layout.md)) like the image
-preview — or opens as a content tab in the focused pane when the open came
-from the palette (#1825, see [data viewer](./data-viewer.md)) — refocusing an
-existing pane already bound to the same path instead of duplicating. Keys mint as `archive`, `archive:2`, …;
-persistence records `{Kind: "archive", Path}` and restore re-lists the file (a
+preview, refocusing an existing pane already bound to the same path instead of
+duplicating. Keys mint as `archive`, `archive:2`, …; persistence records `{Kind: "archive", Path}` and restore re-lists the file (a
 vanished or corrupt file restores as the pane's own error notice).
 
 ## The entry list
