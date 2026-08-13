@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 	"unicode"
-	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 
 	"ike/internal/overlay"
@@ -1246,52 +1246,16 @@ func overlayCursor(view string, x, y int) string {
 
 var cursorStyle = lipgloss.NewStyle().Reverse(true)
 
-// reverseSpan reverse-videos the visible cells [from, to) of an ANSI-styled
-// line, padding past the rendered content so a selection reads full-width.
-func reverseSpan(line string, from, to int) string {
+// forEachGlyph walks an ANSI-styled line grapheme-cluster-aware, invoking
+// visit once per visible glyph with its starting grid cell and cell width
+// (2 for wide glyphs such as emoji, 0 for combining marks that couldn't
+// attach to a preceding cluster). Escape sequences are copied verbatim.
+// It returns the rendered result and the total number of cells the line
+// occupies, so callers can pad past the rendered content.
+func forEachGlyph(line string, visit func(cluster string, col, width int) string) (string, int) {
 	var b strings.Builder
-	visible := 0
+	col := 0
 	inEsc := false
-	for i := 0; i < len(line); {
-		if !inEsc && line[i] == 0x1b {
-			inEsc = true
-			b.WriteByte(line[i])
-			i++
-			continue
-		}
-		if inEsc {
-			b.WriteByte(line[i])
-			if line[i] >= 0x40 && line[i] <= 0x7e && line[i] != '[' {
-				inEsc = false
-			}
-			i++
-			continue
-		}
-		r, size := utf8.DecodeRuneInString(line[i:])
-		if visible >= from && visible < to {
-			b.WriteString(cursorStyle.Render(string(r)))
-		} else {
-			b.WriteString(line[i : i+size])
-		}
-		visible++
-		i += size
-	}
-	if visible < to {
-		if pad := from - visible; pad > 0 {
-			b.WriteString(strings.Repeat(" ", pad))
-			visible = from
-		}
-		b.WriteString(cursorStyle.Render(strings.Repeat(" ", to-visible)))
-	}
-	return b.String()
-}
-
-// reverseCell restyles the visible cell at column col of an ANSI-styled line.
-func reverseCell(line string, col int) string {
-	var b strings.Builder
-	visible := 0
-	inEsc := false
-	done := false
 	for i := 0; i < len(line); {
 		if !inEsc && line[i] == 0x1b {
 			inEsc = true
@@ -1309,22 +1273,59 @@ func reverseCell(line string, col int) string {
 			i++
 			continue
 		}
-		r, size := utf8.DecodeRuneInString(line[i:])
-		if visible == col && !done {
-			b.WriteString(cursorStyle.Render(string(r)))
+		cluster, w := ansi.FirstGraphemeCluster(line[i:], ansi.GraphemeWidth)
+		b.WriteString(visit(cluster, col, w))
+		col += w
+		i += len(cluster)
+	}
+	return b.String(), col
+}
+
+// reverseSpan reverse-videos the cells [from, to) of an ANSI-styled line,
+// padding past the rendered content so a selection reads full-width. A glyph
+// that only partially overlaps the range (e.g. a wide emoji straddling the
+// boundary) is reversed as a whole unit.
+func reverseSpan(line string, from, to int) string {
+	out, visible := forEachGlyph(line, func(cluster string, col, w int) string {
+		if col+w > from && col < to {
+			return cursorStyle.Render(cluster)
+		}
+		return cluster
+	})
+	if visible >= to {
+		return out
+	}
+	var b strings.Builder
+	b.WriteString(out)
+	if pad := from - visible; pad > 0 {
+		b.WriteString(strings.Repeat(" ", pad))
+		visible = from
+	}
+	b.WriteString(cursorStyle.Render(strings.Repeat(" ", to-visible)))
+	return b.String()
+}
+
+// reverseCell restyles the cell at column col of an ANSI-styled line. A
+// cursor sitting on top of a wide glyph reverses the whole glyph, not just
+// its left half.
+func reverseCell(line string, col int) string {
+	done := false
+	out, visible := forEachGlyph(line, func(cluster string, c, w int) string {
+		if !done && col >= c && col < c+w {
 			done = true
-		} else {
-			b.WriteString(line[i : i+size])
+			return cursorStyle.Render(cluster)
 		}
-		visible++
-		i += size
+		return cluster
+	})
+	if done {
+		return out
 	}
-	if !done {
-		// Cursor past the rendered content: pad with spaces up to the column.
-		if pad := col - visible; pad > 0 {
-			b.WriteString(strings.Repeat(" ", pad))
-		}
-		b.WriteString(cursorStyle.Render(" "))
+	// Cursor past the rendered content: pad with spaces up to the column.
+	var b strings.Builder
+	b.WriteString(out)
+	if pad := col - visible; pad > 0 {
+		b.WriteString(strings.Repeat(" ", pad))
 	}
+	b.WriteString(cursorStyle.Render(" "))
 	return b.String()
 }
