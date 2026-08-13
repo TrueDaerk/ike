@@ -13,6 +13,19 @@
   their existing meaning; every edit still re-runs the search and rescrolls to
   the current match. Updated [HTTP Client](/architecture/http-client.md).
 
+## 2026-08-13 (terminal: shift+arrow keys reach the child PTY, #1841)
+
+- **Modifier+cursor chords are encoded by the pane itself** (`modifiedCursorSeq` in
+  `internal/terminal/model.go`, written verbatim through the new `Session.SendSeq`): the vt
+  emulator's key encoder matches unmodified cursor keys only and silently emits *nothing* for
+  `shift+up` & co., so those presses never reached the child at all. Chords ike does not claim
+  now go out xterm-style — `CSI 1 ; <mod> <final>`, `<mod>` = 1 + shift 1 + alt 2 + ctrl 4 +
+  meta 8 — so `shift+up` prints `^[[1;2A` under `cat -v`. Plain arrows keep the emulator path
+  (application cursor-key mode included); the reserved set, `shift+pgup`/`pgdn` paging and the
+  macOS natural-editing translations (#225, #240) are unchanged, and `cmd` chords stay off the
+  new path (super is not xterm-encodable). Updated
+  [Terminal](/architecture/terminal.md).
+
 ## 2026-08-12 (fix docs deploy CI step failing with non-fast-forward push, #1839)
 
 - **`mkdocs gh-deploy` now runs with `--force`** in both `.github/workflows/docs.yml`'s `deploy`

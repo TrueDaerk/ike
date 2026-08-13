@@ -410,6 +410,11 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		m.sess.SendKey(ev)
 		return nil
 	}
+	if seq, ok := modifiedCursorSeq(msg); ok {
+		m.completionTyped(msg.String(), "")
+		m.sess.SendSeq(seq)
+		return nil
+	}
 	for _, ev := range toVTKeys(msg) {
 		m.sess.SendKey(ev)
 	}
@@ -444,6 +449,50 @@ func motionKey(k tea.KeyPressMsg) (vt.KeyPressEvent, bool) {
 		return vt.KeyPressEvent{Code: 'u', Mod: vt.ModCtrl}, true
 	}
 	return vt.KeyPressEvent{}, false
+}
+
+// modifiedCursorSeq encodes a modifier+cursor-key chord (arrows, home, end)
+// the xterm way: CSI 1 ; <mod> <final>, with <mod> = 1 + the modifier bits
+// (shift 1, alt 2, ctrl 4, meta 8) — shift+up is ESC [ 1;2 A (#1841). The
+// emulator's key encoder only knows unmodified cursor keys and silently drops
+// anything else, so these chords never reached the child at all. Application
+// cursor-key mode (DECCKM) has no modified form; xterm sends CSI here too.
+// Chords ike claims itself (focus moves, shift+pgup/pgdn paging, the
+// natural-editing translations in motionKey) are handled before this point.
+func modifiedCursorSeq(k tea.KeyPressMsg) (string, bool) {
+	var final byte
+	switch k.Code {
+	case tea.KeyUp:
+		final = 'A'
+	case tea.KeyDown:
+		final = 'B'
+	case tea.KeyRight:
+		final = 'C'
+	case tea.KeyLeft:
+		final = 'D'
+	case tea.KeyHome:
+		final = 'H'
+	case tea.KeyEnd:
+		final = 'F'
+	default:
+		return "", false
+	}
+	// Lock/typing modifiers say nothing about a cursor key; anything outside
+	// the xterm-encodable set (super, hyper) stays on the old path.
+	mod := k.Mod &^ (tea.ModCapsLock | tea.ModNumLock)
+	if mod == 0 || mod&^(tea.ModShift|tea.ModAlt|tea.ModCtrl|tea.ModMeta) != 0 {
+		return "", false
+	}
+	param := 1
+	for _, m := range []struct {
+		bit    tea.KeyMod
+		weight int
+	}{{tea.ModShift, 1}, {tea.ModAlt, 2}, {tea.ModCtrl, 4}, {tea.ModMeta, 8}} {
+		if mod&m.bit != 0 {
+			param += m.weight
+		}
+	}
+	return "\x1b[1;" + strconv.Itoa(param) + string(final), true
 }
 
 // pageSize is one paging step: half the grid, at least one line.

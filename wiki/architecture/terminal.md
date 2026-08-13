@@ -671,6 +671,18 @@ emacs-mode defaults — `option+left`/`right` → `ESC b`/`ESC f` (word jump),
 PTY has no selection). Cmd delivery is terminal-dependent (the 0081
 reality-probe caveat).
 
+**Modified cursor keys** (#1841, `modifiedCursorSeq` in `model.go`): the vt
+key encoder only knows *unmodified* cursor keys and silently drops anything
+else, so `shift+arrow` used to reach the child as nothing at all. Chords that
+survive ike's own claims — everything left after the reserved set, scrollback
+paging and `motionKey` — are encoded by the pane itself the xterm way and
+written to the PTY verbatim (`Session.SendSeq`): `CSI 1 ; <mod> <final>` with
+`<final>` `A`/`B`/`C`/`D` for the arrows, `H`/`F` for home/end, and
+`<mod>` = 1 + shift 1 + alt 2 + ctrl 4 + meta 8 — `shift+up` is `ESC [1;2A`.
+Application cursor-key mode has no modified form (xterm sends CSI here too),
+so DECCKM only affects the plain arrows. `cmd`-carrying chords stay off this
+path — super is not xterm-encodable.
+
 ## Commands (#97)
 
 - **`terminal.toggle`** (default `alt+f12`, fragile like every alt+F-key):

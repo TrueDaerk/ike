@@ -324,6 +324,9 @@ func TestCurlrcParsing(t *testing.T) {
 		"location",
 		"-H \"X-A: 1\"",
 		"header X-B: 2",
+		"netrc",
+		"netrc-optional",
+		"netrc-file /tmp/custom.netrc",
 	}, "\n"))
 	cfg := parseCurlrc(p)
 	if !cfg.Insecure {
@@ -350,8 +353,65 @@ func TestCurlrcParsing(t *testing.T) {
 	if len(cfg.Headers) != 2 || cfg.Headers[0] != "X-A: 1" || cfg.Headers[1] != "X-B: 2" {
 		t.Errorf("headers: %v", cfg.Headers)
 	}
+	if cfg.NetrcFile != "/tmp/custom.netrc" {
+		t.Errorf("netrc-file: %q", cfg.NetrcFile)
+	}
+	// netrc, netrc-optional: ike always applies .netrc credentials, so both
+	// options describe ike's default behavior and warn about nothing (#1843).
 	if len(cfg.Warnings) != 0 {
 		t.Errorf("warnings: %v", cfg.Warnings)
+	}
+}
+
+// TestDispatchCurlrcNetrcNoWarning guards #1843: a .curlrc "netrc" (or "-n")
+// option must not warn, since ike applies .netrc credentials unconditionally
+// already — the option merely asks for ike's default behavior.
+func TestDispatchCurlrcNetrcNoWarning(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.Header.Get("Authorization")))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	curlrc := writeFile(t, dir, "curlrc", "netrc\n")
+	netrc := writeFile(t, dir, "netrc", "machine 127.0.0.1 login u1 password p1\n")
+
+	req := parseOne(t, "GET "+srv.URL+"/\n")
+	resp, err := Dispatch(context.Background(), req, Options{CurlrcPath: curlrc, NetrcPath: netrc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Warnings) != 0 {
+		t.Errorf("netrc option must not warn: %v", resp.Warnings)
+	}
+	if resp.Body == nil || string(resp.Body) == "" {
+		t.Error("want basic-auth credentials applied from .netrc")
+	}
+}
+
+// TestDispatchCurlrcNetrcFile guards #1843: a "netrc-file <path>" option is
+// honored as the .netrc lookup path when Options.NetrcPath leaves the
+// default lookup in place.
+func TestDispatchCurlrcNetrcFile(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.Header.Get("Authorization")))
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	netrc := writeFile(t, dir, "custom-netrc", "machine 127.0.0.1 login u2 password p2\n")
+	curlrc := writeFile(t, dir, "curlrc", "netrc-file "+netrc+"\n")
+
+	req := parseOne(t, "GET "+srv.URL+"/\n")
+	resp, err := Dispatch(context.Background(), req, Options{CurlrcPath: curlrc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Warnings) != 0 {
+		t.Errorf("netrc-file option must not warn: %v", resp.Warnings)
+	}
+	if string(resp.Body) == "" {
+		t.Error("want basic-auth credentials applied from netrc-file path")
 	}
 }
 
