@@ -120,7 +120,8 @@ func (m Model) vcsMarksCmd(ed *editor.Model) tea.Cmd {
 	}
 	snap, path := m.vcs.snap, ed.Path()
 	switch snap.Status(path) {
-	case vcs.StatusModified, vcs.StatusConflicted, vcs.StatusRenamed:
+	case vcs.StatusModified, vcs.StatusConflicted, vcs.StatusRenamed,
+		vcs.StatusPartiallyStaged:
 		return vcs.RefreshMarks(snap.Root, path, ed.Text())
 	default:
 		return func() tea.Msg { return vcs.MarksMsg{Path: path} }

@@ -1863,17 +1863,32 @@ func (m Model) nodeStyle(n *node) lipgloss.Style {
 // times per row.
 type rowVCS struct {
 	status  vcs.FileStatus
+	code    string // porcelain badge for files ("A", "M", "AM"), #1868
 	ignored bool
 }
 
 // resolveVCS resolves a row's VCS facts in one pass; ignored is only probed
-// when no real status owns the row (an ignored path never carries one).
+// when no real status owns the row (an ignored path never carries one), the
+// porcelain code only for statused files (directories have no X/Y pair).
 func (m Model) resolveVCS(n *node) rowVCS {
 	rv := rowVCS{status: m.nodeVCSStatus(n)}
-	if rv.status == vcs.StatusNone {
+	switch {
+	case rv.status == vcs.StatusNone:
 		rv.ignored = m.nodeIgnored(n)
+	case !n.isDir:
+		rv.code = m.vcsSnap.Code(n.path)
 	}
 	return rv
+}
+
+// letter is the row's VCS badge at the right edge: the file's porcelain code
+// when the snapshot carries one — two cells for partially staged files
+// (#1868) — else the single-letter status badge.
+func (rv rowVCS) letter() string {
+	if rv.code != "" {
+		return rv.code
+	}
+	return statusLetter(rv.status)
 }
 
 // rowStyleSet holds one frame's loop-invariant style building blocks
@@ -1946,11 +1961,13 @@ func (m Model) suffixTintVCS(n *node, rv rowVCS) color.Color {
 	return m.colors.suffixColor(n, m.colorGlobs, m.colorVals)
 }
 
-// statusLetter is the one-cell non-colour VCS cue rendered at the row's right
-// edge (#1051): redundancy for ANSI256 terminals and colour-blind users.
+// statusLetter is the non-colour VCS cue rendered at the row's right edge
+// (#1051): redundancy for ANSI256 terminals and colour-blind users. It is the
+// status-only fallback — files with porcelain detail render rowVCS.letter,
+// which can be two cells wide (#1868).
 func statusLetter(st vcs.FileStatus) string {
 	switch st {
-	case vcs.StatusModified:
+	case vcs.StatusModified, vcs.StatusPartiallyStaged:
 		return "M"
 	case vcs.StatusRenamed:
 		return "R"
@@ -2068,15 +2085,18 @@ func (m Model) View() string {
 			if visW < 0 {
 				visW = 0
 			}
-			// A VCS-statused row carries a one-cell status letter at the
-			// right edge (#1051): a non-colour cue that survives ANSI256
-			// quantisation and colour blindness.
-			if letter := statusLetter(rv.status); letter != "" && textW >= 2 {
-				if visW >= textW {
-					vis = ansi.Cut(vis, 0, textW-1)
-					visW = textW - 1
+			// A VCS-statused row carries its status code at the right edge
+			// (#1051): a non-colour cue that survives ANSI256 quantisation
+			// and colour blindness. Partially staged files spend two cells
+			// on it ("AM"/"MM", #1868); the reserved width follows the code.
+			letter := rv.letter()
+			lw := len(letter) // the codes are ASCII, one cell each
+			if letter != "" && textW >= lw+1 {
+				if visW >= textW-lw+1 {
+					vis = ansi.Cut(vis, 0, textW-lw)
+					visW = textW - lw
 				}
-				if pad := textW - 1 - visW; pad > 0 {
+				if pad := textW - lw - visW; pad > 0 {
 					vis += style.Render(strings.Repeat(" ", pad))
 				}
 				ls := style.Bold(false)

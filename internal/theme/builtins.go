@@ -99,10 +99,10 @@ func defaultTheme() Theme {
 			DiffAdded:       "#1e311e",
 			DiffRemoved:     "#432323",
 			DiffChanged:     "#2e2e0e",
-			VCSModified:     "#8d8dff", // vcs status foregrounds (Roadmap 0320)
-			VCSAdded:        "#5fd75f",
-			VCSUntracked:    "#9f9f00",
-			VCSDeleted:      "#868686",
+			VCSModified:     "#aac4e3", // vcs status foregrounds (Roadmap 0320)
+			VCSAdded:        "#71c57c",
+			VCSUntracked:    "#c880d5",
+			VCSDeleted:      "#a0807c",
 			VCSConflicted:   "#ff6464",
 		},
 		Captures: map[string]string{
@@ -186,10 +186,10 @@ func tokyoNight() Theme {
 			DiffAdded:       "#2d352f",
 			DiffRemoved:     "#432c39",
 			DiffChanged:     "#383130",
-			VCSModified:     "#7aa2f7",
-			VCSAdded:        "#9ece6a",
-			VCSUntracked:    "#e0af68",
-			VCSDeleted:      "#727ca7",
+			VCSModified:     "#95b6dc",
+			VCSAdded:        "#72c67e",
+			VCSUntracked:    "#c476d2",
+			VCSDeleted:      "#a77772",
 			VCSConflicted:   "#f7768e",
 		},
 		Captures: map[string]string{
@@ -273,10 +273,10 @@ func nord() Theme {
 			DiffAdded:       "#40494b",
 			DiffRemoved:     "#4a4551",
 			DiffChanged:     "#464749",
-			VCSModified:     "#97b2cc",
-			VCSAdded:        "#a3be8c",
-			VCSUntracked:    "#ebcb8b",
-			VCSDeleted:      "#909bb0",
+			VCSModified:     "#9bb3ce",
+			VCSAdded:        "#8cbe93",
+			VCSUntracked:    "#d59edf",
+			VCSDeleted:      "#b29692",
 			VCSConflicted:   "#d9a1a6",
 		},
 		Captures: map[string]string{
@@ -360,10 +360,10 @@ func gruvbox() Theme {
 			DiffAdded:       "#3d3e27",
 			DiffRemoved:     "#4e3734",
 			DiffChanged:     "#443c29",
-			VCSModified:     "#8aaa9e",
-			VCSAdded:        "#b8bb26",
-			VCSUntracked:    "#fabd2f",
-			VCSDeleted:      "#988d87",
+			VCSModified:     "#8ea7c5",
+			VCSAdded:        "#53b961",
+			VCSUntracked:    "#ce8dd9",
+			VCSDeleted:      "#a88a87",
 			VCSConflicted:   "#fc7d6e",
 		},
 		Captures: gruvboxCaptures(false),
@@ -427,10 +427,10 @@ func gruvboxLight() Theme {
 			DiffAdded:       "#dcd49f",
 			DiffRemoved:     "#efcba7",
 			DiffChanged:     "#e0d1a1",
-			VCSModified:     "#36676a",
-			VCSAdded:        "#646311",
-			VCSUntracked:    "#7c5813",
-			VCSDeleted:      "#876f3c",
+			VCSModified:     "#364e6a",
+			VCSAdded:        "#225328",
+			VCSUntracked:    "#61246b",
+			VCSDeleted:      "#7f4a44",
 			VCSConflicted:   "#ba211a",
 		},
 		Captures: gruvboxCaptures(true),
@@ -545,10 +545,10 @@ func rosePine() Theme {
 			DiffAdded:       "#2b313d",
 			DiffRemoved:     "#42283a",
 			DiffChanged:     "#372e2f",
-			VCSModified:     "#4097bb",
-			VCSAdded:        "#9ccfd8",
-			VCSUntracked:    "#f6c177",
-			VCSDeleted:      "#7b7699",
+			VCSModified:     "#6393c9",
+			VCSAdded:        "#9dd7a5",
+			VCSUntracked:    "#d092db",
+			VCSDeleted:      "#9b7874",
 			VCSConflicted:   "#eb6f92",
 		},
 		Captures: map[string]string{
@@ -632,10 +632,10 @@ func rosePineDawn() Theme {
 			DiffAdded:       "#d1d6d3",
 			DiffRemoved:     "#e6d0d0",
 			DiffChanged:     "#e4d3bc",
-			VCSModified:     "#286983",
-			VCSAdded:        "#416f77",
-			VCSUntracked:    "#945c0f",
-			VCSDeleted:      "#887673",
+			VCSModified:     "#2b5380",
+			VCSAdded:        "#3f7346",
+			VCSUntracked:    "#6e297a",
+			VCSDeleted:      "#926d69",
 			VCSConflicted:   "#a34e66",
 		},
 		Captures: map[string]string{
@@ -719,10 +719,10 @@ func catppuccinMocha() Theme {
 			DiffAdded:       "#2f373c",
 			DiffRemoved:     "#413042",
 			DiffChanged:     "#37343d",
-			VCSModified:     "#89dceb",
-			VCSAdded:        "#a6e3a1",
-			VCSUntracked:    "#f9e2af",
-			VCSDeleted:      "#8386a0",
+			VCSModified:     "#97b8dc",
+			VCSAdded:        "#a8dcaf",
+			VCSUntracked:    "#e3beea",
+			VCSDeleted:      "#a38380",
 			VCSConflicted:   "#f38ba8",
 		},
 		Captures: map[string]string{
@@ -810,10 +810,10 @@ func kanagawa() Theme {
 			DiffAdded:       "#313732",
 			DiffRemoved:     "#4f2c34",
 			DiffChanged:     "#42332b",
-			VCSModified:     "#7fb4ca",
-			VCSAdded:        "#98bb6c",
-			VCSUntracked:    "#ff9e3b",
-			VCSDeleted:      "#7d7d9b",
+			VCSModified:     "#7fa2ca",
+			VCSAdded:        "#6cbb77",
+			VCSUntracked:    "#c477d2",
+			VCSDeleted:      "#9e7d7a",
 			VCSConflicted:   "#ff5d62",
 		},
 		Captures: map[string]string{
@@ -900,10 +900,10 @@ func oneDark() Theme {
 			DiffAdded:       "#38423e",
 			DiffRemoved:     "#4b3c43",
 			DiffChanged:     "#41403d",
-			VCSModified:     "#61afef",
-			VCSAdded:        "#98c379",
-			VCSUntracked:    "#e5c07b",
-			VCSDeleted:      "#778197",
+			VCSModified:     "#7da5d3",
+			VCSAdded:        "#79c383",
+			VCSUntracked:    "#cc89d8",
+			VCSDeleted:      "#9d7b77",
 			VCSConflicted:   "#e88388",
 		},
 		Captures: map[string]string{
@@ -992,10 +992,10 @@ func solarizedDark() Theme {
 			DiffAdded:       "#1d432a",
 			DiffRemoved:     "#333b43",
 			DiffChanged:     "#28412f",
-			VCSModified:     "#4b9fda",
-			VCSAdded:        "#8ea300",
-			VCSUntracked:    "#bb9316",
-			VCSDeleted:      "#6e8992",
+			VCSModified:     "#729ed0",
+			VCSAdded:        "#48af55",
+			VCSUntracked:    "#c881d5",
+			VCSDeleted:      "#a1817d",
 			VCSConflicted:   "#e87674",
 		},
 		Captures: solarizedCaptures(false),
@@ -1062,10 +1062,10 @@ func solarizedLight() Theme {
 			DiffAdded:       "#dcdab1",
 			DiffRemoved:     "#f2cfbf",
 			DiffChanged:     "#e2d6b1",
-			VCSModified:     "#1e6da5",
-			VCSAdded:        "#5f6e00",
-			VCSUntracked:    "#846400",
-			VCSDeleted:      "#6c7c7c",
+			VCSModified:     "#315e92",
+			VCSAdded:        "#204e26",
+			VCSUntracked:    "#592163",
+			VCSDeleted:      "#876561",
 			VCSConflicted:   "#c52d2a",
 		},
 		Captures: solarizedCaptures(true),
@@ -1189,10 +1189,10 @@ func dracula() Theme {
 			DiffAdded:       "#2c433e",
 			DiffRemoved:     "#57333c",
 			DiffChanged:     "#3c3f3f",
-			VCSModified:     "#bd93f9",
-			VCSAdded:        "#50fa7b",
-			VCSUntracked:    "#f1fa8c",
-			VCSDeleted:      "#797e9a",
+			VCSModified:     "#a9c4e3",
+			VCSAdded:        "#7fcb89",
+			VCSUntracked:    "#d8a5e1",
+			VCSDeleted:      "#9c7a77",
 			VCSConflicted:   "#ff5555",
 		},
 		Captures: map[string]string{
@@ -1276,10 +1276,10 @@ func catppuccinLatte() Theme {
 			DiffAdded:       "#c5d7c6",
 			DiffRemoved:     "#e4cbd4",
 			DiffChanged:     "#d8d1c7",
-			VCSModified:     "#025f83",
-			VCSAdded:        "#28641b",
-			VCSUntracked:    "#7c4f10",
-			VCSDeleted:      "#61687f",
+			VCSModified:     "#214064",
+			VCSAdded:        "#255a2c",
+			VCSUntracked:    "#5e2369",
+			VCSDeleted:      "#7e5f5c",
 			VCSConflicted:   "#b10d30",
 		},
 		Captures: map[string]string{
@@ -1367,10 +1367,10 @@ func darcula() Theme {
 			DiffAdded:       "#294436", // diff added line
 			DiffRemoved:     "#3d3f3f", // diff deleted #484a4a pulled toward Surface (overlay cap)
 			DiffChanged:     "#2b4155", // diff changed #385570 pulled toward Surface (overlay cap)
-			VCSModified:     "#8aaeca", // VCS modified blue #6897bb lightened for AA on Panel
-			VCSAdded:        "#86b57b", // VCS added green #629755 lightened for AA on Panel
-			VCSUntracked:    "#bbb529",
-			VCSDeleted:      "#959595", // comment gray #808080 lightened for 3.5:1 over overlays
+			VCSModified:     "#94afce", // VCS modified blue #6897bb lightened for AA on Panel
+			VCSAdded:        "#82b989", // VCS added green #629755 lightened for AA on Panel
+			VCSUntracked:    "#d298dd",
+			VCSDeleted:      "#ae928f", // comment gray #808080 lightened for 3.5:1 over overlays
 			VCSConflicted:   "#dd9795", // error red #bc3f3c lightened for AA on Panel
 		},
 		Captures: map[string]string{
@@ -1458,10 +1458,10 @@ func intellijLight() Theme {
 			DiffAdded:       "#d4f0d4",
 			DiffRemoved:     "#f5d8d8",
 			DiffChanged:     "#f0ecd7",
-			VCSModified:     "#0032a0", // VCS modified blue
-			VCSAdded:        "#067d17",
-			VCSUntracked:    "#806e0b", // metadata gold darkened for AA on Panel
-			VCSDeleted:      "#616161",
+			VCSModified:     "#284d78", // VCS modified blue
+			VCSAdded:        "#265d2d",
+			VCSUntracked:    "#5e2368", // metadata gold darkened for AA on Panel
+			VCSDeleted:      "#715551",
 			VCSConflicted:   "#a90f21",
 		},
 		Captures: map[string]string{
@@ -1549,10 +1549,10 @@ func everforestDark() Theme {
 			DiffAdded:       "#3d4a42", // bg_green, pulled toward Surface from #425047 (overlay cap)
 			DiffRemoved:     "#514045", // bg_red
 			DiffChanged:     "#354a55", // bg_blue, pulled toward Surface from #3a515d (overlay cap)
-			VCSModified:     "#7fbbb3",
-			VCSAdded:        "#a7c080",
-			VCSUntracked:    "#dbbc7f",
-			VCSDeleted:      "#89968d", // grey1, lightened for contrast from #859289
+			VCSModified:     "#95adc8",
+			VCSAdded:        "#80c089",
+			VCSUntracked:    "#d195dc",
+			VCSDeleted:      "#ac908d", // grey1, lightened for contrast from #859289
 			VCSConflicted:   "#e98f91", // lightened for contrast from #e67e80
 		},
 		Captures: map[string]string{
@@ -1640,10 +1640,10 @@ func everforestLight() Theme {
 			DiffAdded:       "#e5efda", // bg_green tint
 			DiffRemoved:     "#fbe3da", // bg_red
 			DiffChanged:     "#faedcd", // bg_yellow
-			VCSModified:     "#2c7096", // darkened for contrast from #3a94c5
-			VCSAdded:        "#627001", // darkened for contrast from #8da101
-			VCSUntracked:    "#896300", // darkened for contrast from #dfa000
-			VCSDeleted:      "#727f6f", // grey1, darkened for contrast from #939f91
+			VCSModified:     "#315e92", // darkened for contrast from #3a94c5
+			VCSAdded:        "#215027", // darkened for contrast from #8da101
+			VCSUntracked:    "#5c2267", // darkened for contrast from #dfa000
+			VCSDeleted:      "#8a6864", // grey1, darkened for contrast from #939f91
 			VCSConflicted:   "#d50c09", // darkened for contrast from #f85552
 		},
 		Captures: map[string]string{
@@ -1731,10 +1731,10 @@ func ayuDark() Theme {
 			DiffAdded:       "#142117",
 			DiffRemoved:     "#241317",
 			DiffChanged:     "#1f1c10",
-			VCSModified:     "#73b8ff",
-			VCSAdded:        "#7fd962",
-			VCSUntracked:    "#e6b450",
-			VCSDeleted:      "#646c77", // lightened for contrast from #636b76
+			VCSModified:     "#96b7dc",
+			VCSAdded:        "#75c67f",
+			VCSUntracked:    "#be69cd",
+			VCSDeleted:      "#886763", // lightened for contrast from #636b76
 			VCSConflicted:   "#f26d78",
 		},
 		Captures: map[string]string{
@@ -1822,10 +1822,10 @@ func ayuMirage() Theme {
 			DiffAdded:       "#26362a",
 			DiffRemoved:     "#3b2a30",
 			DiffChanged:     "#35322a",
-			VCSModified:     "#80bfff",
-			VCSAdded:        "#87d96c",
-			VCSUntracked:    "#ffcc66",
-			VCSDeleted:      "#707a8c",
+			VCSModified:     "#a0bddf",
+			VCSAdded:        "#7cc986",
+			VCSUntracked:    "#cd8cd9",
+			VCSDeleted:      "#97736f",
 			VCSConflicted:   "#f27983",
 		},
 		Captures: map[string]string{
@@ -1913,10 +1913,10 @@ func ayuLight() Theme {
 			DiffAdded:       "#e0f0d4",
 			DiffRemoved:     "#fbe0e0",
 			DiffChanged:     "#faeed6",
-			VCSModified:     "#306fae", // darkened for contrast from #478acc
-			VCSAdded:        "#437729", // darkened for contrast from #6cbf43
-			VCSUntracked:    "#975f0b", // darkened for contrast from #f2ae49
-			VCSDeleted:      "#757e87", // darkened for contrast from #8a9199
+			VCSModified:     "#386ba7", // darkened for contrast from #478acc
+			VCSAdded:        "#2e7237", // darkened for contrast from #6cbf43
+			VCSUntracked:    "#6d297a", // darkened for contrast from #f2ae49
+			VCSDeleted:      "#926e6a", // darkened for contrast from #8a9199
 			VCSConflicted:   "#d90019", // darkened for contrast from #ff7383
 		},
 		Captures: map[string]string{
@@ -2004,10 +2004,10 @@ func githubDark() Theme {
 			DiffAdded:       "#122117", // solid form of the diff green alpha
 			DiffRemoved:     "#25171c",
 			DiffChanged:     "#221d10",
-			VCSModified:     "#58a6ff",
-			VCSAdded:        "#3fb950",
-			VCSUntracked:    "#d29922",
-			VCSDeleted:      "#8b949e",
+			VCSModified:     "#82a9d5",
+			VCSAdded:        "#48b056",
+			VCSUntracked:    "#ba61ca",
+			VCSDeleted:      "#a68783",
 			VCSConflicted:   "#f85149",
 		},
 		Captures: map[string]string{
@@ -2095,10 +2095,10 @@ func githubLight() Theme {
 			DiffAdded:       "#d8f3dc",
 			DiffRemoved:     "#ffd7d5",
 			DiffChanged:     "#fff3c2",
-			VCSModified:     "#0969da",
-			VCSAdded:        "#1a7f37",
-			VCSUntracked:    "#9a6700",
-			VCSDeleted:      "#6e7781",
+			VCSModified:     "#396eaa",
+			VCSAdded:        "#2c6d35",
+			VCSUntracked:    "#682773",
+			VCSDeleted:      "#8b6864",
 			VCSConflicted:   "#cf222e",
 		},
 		Captures: map[string]string{
@@ -2188,10 +2188,10 @@ func oxocarbon() Theme {
 			DiffAdded:       "#16281c",
 			DiffRemoved:     "#2d1a24",
 			DiffChanged:     "#252031",
-			VCSModified:     "#78a9ff",
-			VCSAdded:        "#42be65",
-			VCSUntracked:    "#ff7eb6", // no yellow in the palette
-			VCSDeleted:      "#8d8d8d",
+			VCSModified:     "#9ab9dd",
+			VCSAdded:        "#4bb559",
+			VCSUntracked:    "#d59edf", // no yellow in the palette
+			VCSDeleted:      "#9f7e7b",
 			VCSConflicted:   "#ee5396",
 		},
 		Captures: map[string]string{
@@ -2279,10 +2279,10 @@ func monokaiPro() Theme {
 			DiffAdded:       "#37402f",
 			DiffRemoved:     "#452d36",
 			DiffChanged:     "#403a2b",
-			VCSModified:     "#78dce8",
-			VCSAdded:        "#a9dc76",
-			VCSUntracked:    "#ffd866",
-			VCSDeleted:      "#939293",
+			VCSModified:     "#89add8",
+			VCSAdded:        "#85cd8f",
+			VCSUntracked:    "#cd8cd9",
+			VCSDeleted:      "#a48581",
 			VCSConflicted:   "#ff6188",
 		},
 		Captures: map[string]string{
@@ -2371,10 +2371,10 @@ func zenburn() Theme {
 			DiffAdded:       "#3f4f3f",
 			DiffRemoved:     "#4f3f3f",
 			DiffChanged:     "#4f4f3f",
-			VCSModified:     "#9dc4f4", // lightened for contrast from #94bff3
-			VCSAdded:        "#a7caa7", // green+2, lightened for contrast from #9fc59f
-			VCSUntracked:    "#f0dfaf",
-			VCSDeleted:      "#abab9e", // lightened for contrast from #989888
+			VCSModified:     "#adc7e4", // lightened for contrast from #94bff3
+			VCSAdded:        "#a9ccad", // green+2, lightened for contrast from #9fc59f
+			VCSUntracked:    "#e0b8e7",
+			VCSDeleted:      "#bfa9a7", // lightened for contrast from #989888
 			VCSConflicted:   "#deb8b8", // lightened for contrast from #cc9393
 		},
 		Captures: map[string]string{
@@ -2471,10 +2471,10 @@ func highContrastDark() Theme {
 			DiffAdded:       "#001a00",
 			DiffRemoved:     "#1a0000",
 			DiffChanged:     "#1a1a00",
-			VCSModified:     "#8ab4ff",
-			VCSAdded:        "#69f0ae",
-			VCSUntracked:    "#ffd54f",
-			VCSDeleted:      "#c0c0c0", // no dim class
+			VCSModified:     "#a7c3e2",
+			VCSAdded:        "#8acf93",
+			VCSUntracked:    "#ca84d6",
+			VCSDeleted:      "#cab8b6", // no dim class
 			VCSConflicted:   "#ff8a80",
 		},
 		Captures: map[string]string{
@@ -2562,10 +2562,10 @@ func highContrastLight() Theme {
 			DiffAdded:       "#e0ffe0",
 			DiffRemoved:     "#ffe8e8",
 			DiffChanged:     "#fffbd6",
-			VCSModified:     "#123a8a",
-			VCSAdded:        "#00591c",
-			VCSUntracked:    "#6b4a00",
-			VCSDeleted:      "#4d4d4d", // no dim class
+			VCSModified:     "#274b75",
+			VCSAdded:        "#1a3f1f",
+			VCSUntracked:    "#481b50",
+			VCSDeleted:      "#594341", // no dim class
 			VCSConflicted:   "#96000e",
 		},
 		Captures: map[string]string{

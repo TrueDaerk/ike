@@ -212,14 +212,19 @@ func NewPalette(t Theme) *Palette {
 	p.DiffAdded = slotOrMix(t.UI.DiffAdded, p.Success, p.Surface, 0.22)
 	p.DiffRemoved = slotOrMix(t.UI.DiffRemoved, p.Error, p.Surface, 0.22)
 	p.DiffChanged = slotOrMix(t.UI.DiffChanged, p.Warning, p.Surface, 0.42)
-	// VCS status foregrounds (Roadmap 0320) default to the theme's own
-	// semantic hues, JetBrains-style: modified→info blue, added→success green,
-	// untracked→warning, conflicted→error, deleted→the dim border tone.
+	// VCS status foregrounds (Roadmap 0320) follow the git workflow (#1868):
+	// modified→info blue, added→success green, conflicted→error red. The two
+	// remaining roles have no semantic slot of their own, so sparse themes
+	// derive them from the ones they do have: untracked takes the hue halfway
+	// between error and info — a violet that no other status occupies, so
+	// "not in git yet" never reads like a warning or an open file — and
+	// deleted a red muted halfway toward the dim border tone.
 	p.VCSModified = slot(t.UI.VCSModified, firstNonEmpty(t.UI.Info, def.UI.Info))
 	p.VCSAdded = slot(t.UI.VCSAdded, firstNonEmpty(t.UI.Success, def.UI.Success))
-	p.VCSUntracked = slot(t.UI.VCSUntracked, firstNonEmpty(t.UI.Warning, def.UI.Warning))
-	p.VCSDeleted = slot(t.UI.VCSDeleted, firstNonEmpty(t.UI.Border, def.UI.Border))
 	p.VCSConflicted = slot(t.UI.VCSConflicted, firstNonEmpty(t.UI.Error, def.UI.Error))
+	p.VCSUntracked = slotOrMix(t.UI.VCSUntracked, p.VCSConflicted, p.VCSModified, 0.5)
+	p.VCSDeleted = slotOrMix(t.UI.VCSDeleted,
+		p.VCSConflicted, Resolve(firstNonEmpty(t.UI.Border, def.UI.Border)), 0.5)
 	// The terminal palette resolves last: entries the theme omits derive from
 	// the semantic slots filled in above (#1363).
 	p.resolveTerminal(t.Terminal)

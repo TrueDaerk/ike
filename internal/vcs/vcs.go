@@ -32,12 +32,19 @@ const (
 	StatusRenamed
 	StatusUntracked
 	StatusConflicted
+	// StatusPartiallyStaged is a file with an index version plus further
+	// worktree edits on top (#1868, porcelain "AM"/"MM"/"RM"): the staged
+	// content is not what the worktree holds. It reads as a modified file —
+	// there is unstaged work — but carries its own two-letter code.
+	StatusPartiallyStaged
 )
 
 // String returns the single-letter JetBrains-style badge for the status.
+// Partially staged files fold onto the worktree half of their pair ("M");
+// the exact pair is FileEntry.Code / Snapshot.Code.
 func (s FileStatus) String() string {
 	switch s {
-	case StatusModified:
+	case StatusModified, StatusPartiallyStaged:
 		return "M"
 	case StatusAdded:
 		return "A"
@@ -81,6 +88,11 @@ type Snapshot struct {
 	// filled from the single-threaded update/render loop.
 	resolvedRoot string
 	rootResolved bool
+	// codes maps repo-relative paths to their display code (#1868): the
+	// porcelain letters the explorer and the changes list render — "U",
+	// "A", "M", "AM", "MM". Empty for synthetic snapshots, whose consumers
+	// fall back to FileStatus.String.
+	codes map[string]string
 	// ignored is the set of repo-relative paths git ignores (#1045).
 	// Directory entries keep porcelain's trailing slash; git collapses a
 	// fully-ignored subtree to one such entry, so membership for deeper
@@ -102,12 +114,76 @@ func (e FileEntry) Staged() bool { return e.X != '.' && e.X != '?' && e.X != 0 }
 // PartiallyStaged reports staged changes with further worktree edits on top.
 func (e FileEntry) PartiallyStaged() bool { return e.Staged() && e.Y != '.' }
 
+// Code is the entry's display badge (#1868): "U" for untracked, "C" for a
+// conflict, otherwise the porcelain letters that are not "." — "A" (staged),
+// "M" (worktree-only), "AM"/"MM" (staged, then edited again). Entries without
+// X/Y detail (synthetic snapshots) fall back to the status badge.
+func (e FileEntry) Code() string {
+	switch e.Status {
+	case StatusUntracked:
+		return "U"
+	case StatusConflicted:
+		return "C"
+	}
+	if c := statusCode(e.X, e.Y); c != "" {
+		return c
+	}
+	return e.Status.String()
+}
+
+// statusCode folds the porcelain X/Y pair into its visible letters: unset and
+// unchanged ("." / 0) halves drop out, and a copy ("C") reads as a rename so
+// the letter "C" keeps meaning "conflict".
+func statusCode(x, y byte) string {
+	out := make([]byte, 0, 2)
+	for _, l := range [2]byte{x, y} {
+		switch l {
+		case '.', 0, '?':
+		case 'C':
+			out = append(out, 'R')
+		default:
+			out = append(out, l)
+		}
+	}
+	return string(out)
+}
+
+// Code reports the display badge for path (absolute or repo-relative), or ""
+// when the snapshot carries no letters for it — a clean file, a directory, or
+// a synthetic snapshot.
+func (s *Snapshot) Code(path string) string {
+	if s == nil || len(s.codes) == 0 {
+		return ""
+	}
+	rel, ok := s.relPath(path)
+	if !ok {
+		return ""
+	}
+	return s.codes[rel]
+}
+
 // NewSnapshot builds a snapshot from explicit per-file statuses (repo-relative
 // slash paths), propagating dirty directories — for tests and synthetic states.
 func NewSnapshot(root string, files map[string]FileStatus) *Snapshot {
 	s := &Snapshot{Root: root, Files: map[string]FileStatus{}, dirs: map[string]FileStatus{}}
 	for p, st := range files {
 		s.add(p, st)
+	}
+	return s
+}
+
+// NewSnapshotFromEntries builds a snapshot from porcelain-style entries —
+// status plus index/worktree letters — so synthetic states carry the display
+// codes (#1868) a parsed snapshot has, not just the folded statuses.
+func NewSnapshotFromEntries(root string, entries ...FileEntry) *Snapshot {
+	s := &Snapshot{
+		Root:  root,
+		Files: map[string]FileStatus{},
+		dirs:  map[string]FileStatus{},
+		codes: map[string]string{},
+	}
+	for _, e := range entries {
+		s.addEntry(e.Path, e.Status, string([]byte{e.X, e.Y}))
 	}
 	return s
 }

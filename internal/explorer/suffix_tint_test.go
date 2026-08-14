@@ -73,13 +73,16 @@ func TestFilenameTint(t *testing.T) {
 // TestStatusLetterMapping guards #1051: the one-cell non-colour cue.
 func TestStatusLetterMapping(t *testing.T) {
 	want := map[vcs.FileStatus]string{
-		vcs.StatusModified:   "M",
-		vcs.StatusRenamed:    "R",
-		vcs.StatusAdded:      "A",
-		vcs.StatusUntracked:  "U",
-		vcs.StatusDeleted:    "D",
-		vcs.StatusConflicted: "C",
-		vcs.StatusNone:       "",
+		vcs.StatusModified: "M",
+		// Without porcelain detail a half-staged file falls back to the
+		// worktree half of its pair (#1868); rowVCS.letter renders "AM".
+		vcs.StatusPartiallyStaged: "M",
+		vcs.StatusRenamed:         "R",
+		vcs.StatusAdded:           "A",
+		vcs.StatusUntracked:       "U",
+		vcs.StatusDeleted:         "D",
+		vcs.StatusConflicted:      "C",
+		vcs.StatusNone:            "",
 	}
 	for st, w := range want {
 		if got := statusLetter(st); got != w {
@@ -102,6 +105,54 @@ func TestStatusLetterRenderedAtRightEdge(t *testing.T) {
 	plain := stripANSI(first)
 	if !strings.HasSuffix(strings.TrimRight(plain, " "), "U") {
 		t.Fatalf("status letter must sit at the right edge, row = %q", plain)
+	}
+}
+
+// TestPartiallyStagedCodeRenderedAtRightEdge guards #1868: a file staged and
+// then edited again ends in its two-cell "AM" code, and the name it belongs
+// to still fits beside it.
+func TestPartiallyStagedCodeRenderedAtRightEdge(t *testing.T) {
+	row := func(width int) string {
+		m := New(".")
+		m.rows = []*node{{name: "main.go", path: "main.go"}}
+		m.width, m.height = width, 4
+		m.invalidateWidth() // the fixture bypasses the rebuild that measures rows
+		m.SetVCS(vcs.NewSnapshotFromEntries(".", vcs.FileEntry{
+			Path: "main.go", Status: vcs.StatusPartiallyStaged, X: 'A', Y: 'M',
+		}))
+		return stripANSI(strings.Split(m.View(), "\n")[0])
+	}
+	wide := row(20)
+	if !strings.HasSuffix(strings.TrimRight(wide, " "), "AM") {
+		t.Fatalf("partially staged row must end in AM, row = %q", wide)
+	}
+	if !strings.Contains(wide, "main.go") {
+		t.Fatalf("the two-cell code must not eat the name, row = %q", wide)
+	}
+	// The code takes exactly its own cells from the name, never more than the
+	// pane holds: at 10 columns two name cells go, at 2 there is no room left
+	// for it at all and the row falls back to the clipping ellipsis.
+	if got := row(10); got != "  main.gAM" {
+		t.Errorf("clipped row = %q want %q", got, "  main.gAM")
+	}
+	if got := row(2); strings.Contains(got, "A") || len([]rune(got)) != 2 {
+		t.Errorf("row too narrow for the code = %q", got)
+	}
+}
+
+// TestStatusCodeFallsBackToStatusLetter guards #1868: snapshots without
+// porcelain detail (synthetic states) keep the single-letter cue.
+func TestStatusCodeFallsBackToStatusLetter(t *testing.T) {
+	m := New(".")
+	m.SetVCS(vcs.NewSnapshot(".", map[string]vcs.FileStatus{"main.go": vcs.StatusModified}))
+	rv := m.resolveVCS(&node{name: "main.go", path: "main.go"})
+	if got := rv.letter(); got != "M" {
+		t.Fatalf("letter = %q want M", got)
+	}
+	// Directories have no X/Y pair: their dominant status decides.
+	dir := m.resolveVCS(&node{name: "sub", path: "sub", isDir: true})
+	if got := dir.letter(); got != "" {
+		t.Fatalf("clean dir letter = %q want empty", got)
 	}
 }
 

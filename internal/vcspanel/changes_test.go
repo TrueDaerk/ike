@@ -30,8 +30,10 @@ func TestChangesRowsFromSnapshot(t *testing.T) {
 	if len(m.chRows) != 2 || m.chRows[0].Path != "a.go" || m.chRows[1].Path != "b.go" {
 		t.Fatalf("rows = %+v", m.chRows)
 	}
+	// The badge column is two cells wide so partially staged codes align
+	// with the single-letter ones (#1868).
 	v := ansi.Strip(m.View())
-	for _, want := range []string{"M a.go", "A b.go", "enter diff"} {
+	for _, want := range []string{"M  a.go", "A  b.go", "enter diff"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("view missing %q:\n%s", want, v)
 		}
@@ -45,6 +47,22 @@ func TestChangesRowsFromSnapshot(t *testing.T) {
 	))
 	if m.chRows[m.chCursor].Path != "b.go" {
 		t.Fatalf("cursor drifted to %q", m.chRows[m.chCursor].Path)
+	}
+}
+
+// TestChangesShowsPartiallyStagedCode guards #1868: a file staged and then
+// edited again keeps both porcelain letters in the list.
+func TestChangesShowsPartiallyStagedCode(t *testing.T) {
+	m := New(nil)
+	m.SetSize(90, 14)
+	m.SetVCS(snapWith(
+		vcs.FileEntry{Path: "a.go", Status: vcs.StatusPartiallyStaged, X: 'A', Y: 'M'},
+	))
+	if got := m.chRows[0].Code; got != "AM" {
+		t.Fatalf("code = %q want %q", got, "AM")
+	}
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "AM a.go") {
+		t.Fatalf("view missing the AM badge:\n%s", v)
 	}
 }
 
