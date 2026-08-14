@@ -152,6 +152,14 @@ var maxWatchDirs = 4096
 // is also the project-switch (Roadmap 0090) restart path.
 func (s *Service) Start(root string) error {
 	s.Stop()
+	// Normalize the root before anything registers (#1886): fsnotify reports
+	// event paths exactly as watched, so a relative root ("." at startup)
+	// yields relative event paths — and the .git/.ike classification below
+	// matches on absolute markers. With relative paths every `git status`
+	// echo (index.lock churn) fell through to the generic branch as a
+	// FileRemoved + DirChanged, re-arming the VCS refresh that caused it: a
+	// self-sustaining loop that pinned an idle session's CPU.
+	root = absPath(root)
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err
@@ -282,9 +290,12 @@ func (s *Service) loop(w *fsnotify.Watcher) {
 	}
 }
 
-// ingest maps one raw fsnotify event onto the debounce state.
+// ingest maps one raw fsnotify event onto the debounce state. The path is
+// normalized up front (#1886): the .git/.ike classification matches on
+// absolute markers, and misclassifying repository metadata as project files
+// feeds the VCS refresh loop described on Start.
 func (s *Service) ingest(ev fsnotify.Event) {
-	path := ev.Name
+	path := absPath(ev.Name)
 	if gitDir, ok := underGitDir(path); ok {
 		s.ingestGit(ev, path, gitDir)
 		return
@@ -340,6 +351,28 @@ func (s *Service) ingest(ev fsnotify.Event) {
 // directly under a watched git dir (a fresh repo growing .git/logs) is added
 // to the watch so the reflog is covered from the first commit on.
 func (s *Service) ingestGit(ev fsnotify.Event, path, gitDir string) {
+	if !ev.Has(fsnotify.Create) && !ev.Has(fsnotify.Remove) &&
+		!ev.Has(fsnotify.Rename) && !ev.Has(fsnotify.Write) {
+		// Attribute-only churn (#1886): every `git status` — IKE's own VCS
+		// refresh included — bumps the index's atime, which kqueue reports
+		// as NOTE_ATTRIB (Chmod). No repository state changed, but mapping
+		// it to GitChanged re-armed the very refresh that caused it: a
+		// self-sustaining status loop that pinned an idle session's CPU on
+		// every macOS project with a real .git directory. Real changes
+		// always carry a Write/Create/Remove/Rename on an interior file
+		// (index, HEAD, packed-refs, logs/HEAD), so attribute echoes are
+		// safe to drop.
+		return
+	}
+	if path == gitDir {
+		// The git dir's own event: kqueue can report entry churn inside a
+		// watched directory as a Write on the directory itself — index.lock
+		// coming and going on every status run. The interior files carry
+		// every real change, so the directory-self echo is dropped too;
+		// classified as a generic FileChanged it would re-trigger the
+		// refresh loop above through the app's VCS invalidation (#1886).
+		return
+	}
 	base := filepath.Base(path)
 	if strings.HasSuffix(base, ".lock") || strings.HasPrefix(base, "tmp_") {
 		return
@@ -374,15 +407,17 @@ func (s *Service) inConfigDir(path string) bool {
 	return filepath.Dir(path) == filepath.Join(s.rootDir(), ".ike")
 }
 
-// underGitDir reports whether path lies inside a .git directory and returns
-// that directory.
+// underGitDir reports whether path lies inside a .git directory — or is one
+// itself (#1886) — and returns that directory.
 func underGitDir(path string) (string, bool) {
 	marker := string(filepath.Separator) + ".git" + string(filepath.Separator)
-	idx := strings.Index(path, marker)
-	if idx < 0 {
-		return "", false
+	if idx := strings.Index(path, marker); idx >= 0 {
+		return path[:idx+len(marker)-1], true
 	}
-	return path[:idx+len(marker)-1], true
+	if filepath.Base(path) == ".git" {
+		return path, true
+	}
+	return "", false
 }
 
 // note records one coalesced event and (re)arms the debounce flush. It is the

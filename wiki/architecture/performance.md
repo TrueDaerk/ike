@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often) and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/diag
 tags: [architecture, performance, pprof, idle, diagnostics]
-timestamp: 2026-07-24T09:00:00Z
+timestamp: 2026-08-14T18:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -45,6 +45,22 @@ so with many panes each unnecessary wake is expensive. The standing rules:
 - **Caches stay bounded**: the editor line cache clears past `lineCacheCap`
   (4096) and on every render-epoch bump; terminal render caches key by
   mutation version, not history.
+- **The watcher never reports its own consequences** (#1886): IKE's VCS
+  refresh runs `git status`, and every status run echoes back through the
+  `.git` watch — an atime bump on `index` (kqueue `NOTE_ATTRIB`/Chmod),
+  `index.lock` create/remove churn, sometimes a Write on the `.git`
+  directory itself. Treating any of those as a change re-arms the refresh
+  that caused it: a self-sustaining ~2.5 Hz status+repaint loop that pinned
+  idle sessions at high CPU on every project with a real `.git` directory.
+  Three guards in `internal/watch`: the service normalizes its root to an
+  absolute path on `Start` (fsnotify reports event paths exactly as watched,
+  and main starts the watcher on `"."` — with relative paths the `.git`
+  classification never matched at all, the actual live-app failure);
+  `ingestGit` drops attribute-only events (no repository state fits in an
+  atime); and it drops the git dir's own directory-self events (interior
+  files — `index`, `HEAD`, `packed-refs`, `logs/HEAD` — carry every real
+  change). Regression tests: `TestGitStatusEchoesStaySilent`,
+  `TestRelativeRootClassifiesGitDir`.
 
 ## Diagnostics hooks (`internal/diag`, #1001)
 
@@ -120,7 +136,13 @@ letter) through up to five separate `Snapshot.relPath` calls per row per frame
 — each an allocating `filepath.Rel`, and on symlinked roots (macOS `/tmp`) a
 double `EvalSymlinks` syscall pair per call. `View` now resolves a `rowVCS`
 struct once per row and threads it through style/tint/letter; the Snapshot
-caches its `EvalSymlinks`-resolved root after the first fallback miss.
+caches its `EvalSymlinks`-resolved root after the first fallback miss. The
+per-path half of that fallback is memoized too (#1886): on a symlinked root
+every row still paid one full `EvalSymlinks` walk per frame — the dominant
+render cost on medium projects — so `relPath` now resolves only the parent
+directory, cached per directory on the snapshot. Keeping the base unresolved
+also matches git's view: a tracked symlink is reported as the entry itself,
+never as its target.
 
 ## Editor scrollbar overlay (#1097)
 
