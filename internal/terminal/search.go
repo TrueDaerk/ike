@@ -40,6 +40,7 @@ import (
 // upward from, and the current match's virtual line (-1 while none).
 type termSearch struct {
 	query      string
+	pos        int // rune cursor position within query (#1882)
 	prevScroll int // scroll offset when the search opened; esc returns here
 	anchor     int // bottom-most visible virtual line at activation
 	cur        int // virtual line of the current match, -1 without one
@@ -85,7 +86,10 @@ func (m *Model) startSearch() {
 }
 
 // searchKey feeds one key to the open search. Every key is consumed while the
-// field is open; only enter/esc close it.
+// field is open — own chords (match navigation, accept/cancel) take priority
+// and are handled first; anything left over goes to ui.EditKey for cursor
+// movement, word motions and deletion (#1882), which never falls through to
+// the shell either way (searchKey's caller discards the result regardless).
 func (m *Model) searchKey(msg tea.KeyPressMsg) {
 	s := m.search
 	switch {
@@ -94,20 +98,22 @@ func (m *Model) searchKey(msg tea.KeyPressMsg) {
 		// output may have grown the scrollback meanwhile).
 		m.search = nil
 		m.scroll = clamp(s.prevScroll, 0, m.sess.ScrollbackLen())
+		return
 	case msg.Code == tea.KeyEnter:
 		m.search = nil // accept: the view stays on the match
-	case msg.Code == tea.KeyBackspace:
-		if r := []rune(s.query); len(r) > 0 {
-			s.query = string(r[:len(r)-1])
-		}
-		m.searchJump()
+		return
 	case msg.String() == "ctrl+n" || msg.Code == tea.KeyDown:
 		m.searchStep(1)
+		return
 	case msg.String() == "ctrl+p" || msg.Code == tea.KeyUp:
 		m.searchStep(-1)
-	case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
-		s.query += msg.Text
-		m.searchJump()
+		return
+	}
+	if out, ncur, handled, changed := ui.EditKey(msg, s.query, s.pos); handled {
+		s.query, s.pos = out, ncur
+		if changed {
+			m.searchJump()
+		}
 	}
 }
 
@@ -231,7 +237,7 @@ func (m Model) searchHighlight(rows []string, firstVirtual int) {
 // and a dim `3/17` counter (or `no matches` in the Error colour).
 func (m Model) searchLine() string {
 	s := m.search
-	line := "/" + ui.CursorView(s.query, len([]rune(s.query)))
+	line := "/" + ui.CursorView(s.query, s.pos)
 	counter := ""
 	if s.query != "" {
 		matches := m.searchMatches()
