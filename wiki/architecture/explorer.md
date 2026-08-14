@@ -441,14 +441,29 @@ the whole name.
 `View` overlays the box via `overlay.Place(out, m.promptBox(), bx, by,
 m.width, m.height)` — the explorer's **own** `m.width`/`m.height` (its pane
 content area), not the full terminal, since `out` here is the explorer's own
-rendered tree. So the box is centered within the pane, not the screen. The box
+rendered tree. So the box is placed within the pane, not the screen. The box
 always fits and always renders (#373): `promptBox` truncates the title to the
 pane width (ellipsis) and horizontally windows the input row so the cursor cell
 stays visible for long prefilled names; `Place` clips a box taller than the
 pane instead of dropping it, so an active prompt can never capture keys
-invisibly. Mouse clicks must land in the same content-local space `MouseClick`
-uses: `promptBoxOrigin()` recomputes that centering math (origin clamped at 0)
-with the model's own dimensions, and `PromptMouseClick(x, y)` maps a
+invisibly.
+
+**Delete and rename anchor their box to the affected row** (#1884) instead of
+the pane centre, so the dialog stays visually attached to the entry it acts on.
+`prompt.anchor` holds the affected entry's **path** — not a row index, since a
+watcher rescan can renumber the rows while the prompt is open; a multi-select
+delete anchors to the cursor row inside the range. `promptAnchorRow()` resolves
+that path against the current `rows` and the live scroll offset, so the anchor
+is the *visible* row. `promptBoxOrigin()` then opens the box directly **below**
+that row, flips it **above** when the bottom edge is too close, and clamps the
+result into the pane — the box is never partially off-screen. Horizontal
+placement stays centered. Prompts without an anchor (new file/folder, the error
+notice) keep the centered placement, as does an anchor whose row scrolled out
+of view or vanished.
+
+Mouse clicks must land in the same content-local space `MouseClick`
+uses: `promptBoxOrigin()` is the single source of that placement math
+(origin clamped at 0) with the model's own dimensions, and `PromptMouseClick(x, y)` maps a
 content-local click on the input row to a `pos`, adding the input window's
 scroll offset. The app computes those content-local coordinates itself
 (pane rect + `paneContentX`/`paneContentY`, same as a normal pane click) and

@@ -1,5 +1,18 @@
 # Log
 
+## 2026-08-14 (explorer: delete/rename popup opens next to the affected row, #1884)
+
+- **The delete confirmation and the rename prompt no longer open in the pane centre**: the
+  `prompt` struct carries an `anchor` path (`internal/explorer/fileops.go`) — the entry the
+  operation acts on, the cursor row for a multi-select delete. `promptAnchorRow()` resolves
+  that path against the current rows and the live scroll offset, so the box attaches to the
+  entry's *visible* row, surviving a watcher rescan that renumbers rows while the prompt is
+  open.
+- **`promptBoxOrigin()` places an anchored box below the row**, flips it above when the pane's
+  bottom edge is too close, and clamps the result into the pane, so it never renders partially
+  off-screen. Horizontal centring is unchanged, as is the centred placement for unanchored
+  prompts (new file/folder, the error notice) and for an anchor whose row is no longer visible.
+  Updated [Explorer](/architecture/explorer.md).
 ## 2026-08-14 (dataview: the filter line prefills through WHERE, #1885)
 
 - **`/` in the grid now asks for a condition, not a clause** (`internal/dataview/filter.go`):
