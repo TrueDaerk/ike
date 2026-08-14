@@ -7,7 +7,7 @@ Component-level concepts for the IKE codebase.
 * [Editor](/architecture/editor.md) - vim-like modal editor: buffer, motions, operators, text objects, registers, undo/redo, search, viewport (Roadmap 0060)
 * [Plugin Extension Contract](/architecture/plugins.md) - compile-in registry, extension points, host API
 * [Configuration System](/architecture/config.md) - typed TOML config, defaults < user < project merge, validation, extension hook, host integration (Roadmap 0040)
-* [HTTP Client (.http files)](/architecture/http-client.md) - plain-text .http request files: RFC 9112 blocks with ### separation, env placeholders, dispatch + response viewer + history (Roadmap 0450)
+* [HTTP Client (.http files)](/architecture/http-client.md) - plain-text .http request files: RFC 9112 blocks with ### separation, env and user-defined variables, dispatch + response viewer + history (Roadmap 0450)
 * [Help Overlay](/architecture/help-overlay.md) - command & shortcut cheat sheet, responsive columns, vertical scroll
 * [Welcome Tour](/architecture/welcome-tour.md) - passive paged first-orientation walkthrough in the floating shell
 * [Notifications](/architecture/notifications.md) - toast notifications: severities, expiry, stacking, Esc dismissal

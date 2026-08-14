@@ -86,9 +86,11 @@ func formatHTTP(src, indent string) (string, error) {
 
 // formatBlock normalizes one request block (the lines between separators).
 func formatBlock(lines []string, indent string) []string {
-	// Leading blanks and comments stay verbatim.
+	// Leading blanks, comments and variable definitions (#1867) stay verbatim
+	// — the parser reads them before the request line, and their spelling is
+	// the author's business.
 	i := 0
-	for i < len(lines) && (strings.TrimSpace(lines[i]) == "" || isCommentLine(lines[i])) {
+	for i < len(lines) && (strings.TrimSpace(lines[i]) == "" || isCommentLine(lines[i]) || isVarDefLine(lines[i])) {
 		i++
 	}
 	out := append([]string{}, lines[:i]...)
@@ -272,8 +274,16 @@ func formatHeaderLine(line string) string {
 // formatter's semantic no-change guard.
 func requestsEqual(a, b string) bool {
 	fa, fb := httpfile.Parse(a), httpfile.Parse(b)
-	if len(fa.Requests) != len(fb.Requests) || len(fa.Errors) != len(fb.Errors) {
+	if len(fa.Requests) != len(fb.Requests) || len(fa.Errors) != len(fb.Errors) ||
+		len(fa.Vars) != len(fb.Vars) {
 		return false
+	}
+	for i, va := range fa.Vars {
+		// Variable definitions (#1867) feed every placeholder in the file, so
+		// a reformat that moved or changed one would change what is sent.
+		if vb := fb.Vars[i]; va.Name != vb.Name || va.Value != vb.Value {
+			return false
+		}
 	}
 	for i, ra := range fa.Requests {
 		rb := fb.Requests[i]
