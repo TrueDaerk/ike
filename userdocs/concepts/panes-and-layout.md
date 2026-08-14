@@ -4,6 +4,24 @@ IKE's window is a **split tree**. There is no fixed sidebar-plus-editor
 arrangement: every region is a pane, every pane can be split, and any pane can
 end up anywhere.
 
+![The IKE window: the file tree on the left, an editor pane with its tab bar on the right, the status line along the bottom](../screenshots/features/window-overview.png)
+
+All screenshots on this page use the `monokai-pro` theme.
+
+Read that window as a tree — a vertical split whose left child is the explorer
+and whose right child is the editor:
+
+```mermaid
+graph TD
+    R["window (split, vertical)"] --> E["explorer pane"]
+    R --> M["split (horizontal)"]
+    M --> T["editor pane<br/>tabs: main.go, README.md"]
+    M --> B["terminal pane"]
+```
+
+Nothing about that shape is fixed. The explorer can sit on the right, the
+terminal can be a tab inside the editor pane, and any leaf can be split again.
+
 ## The pieces
 
 **Pane** — one rectangle holding one thing: the file tree, an editor, or a tool
@@ -16,10 +34,21 @@ you can drag. Splitting a split is how you get arbitrary arrangements.
 **Tab** — editor panes hold an ordered list of tabs. Terminals live in tabs
 too, so a pane can hold a mix of files and shells.
 
-**Focus** — exactly one pane has it. It decides which keybindings are active
-(the [keybinding reference](../reference/keybindings.md) is grouped by
-context), which pane a newly opened file lands in, and what most commands act
-on.
+**Focus** — exactly one pane has it, and its border is drawn in the accent
+colour. It decides which keybindings are active (the
+[keybinding reference](../reference/keybindings.md) is grouped by context),
+which pane a newly opened file lands in, and what most commands act on.
+
+These four words mean the same thing on every page of this documentation, as
+do the two that name what fills a pane:
+
+| Word | What it names |
+|---|---|
+| **Tool window** | A built-in pane IKE opens for you: the explorer, Structure, Problems, the TODO index, the VCS window, the debug window |
+| **Tool pane** | A pane running a TUI program you configured under `[[tools.custom]]` — `lazygit`, `htop` |
+
+Overlays — the palette, the settings panel, the cheatsheet — are neither: see
+[What is *not* a pane](#what-is-not-a-pane).
 
 ## Splitting and moving
 
@@ -30,6 +59,13 @@ on.
 | ++ctrl+tab++ | Cycle pane focus (++ctrl++ + arrows moves directionally) |
 | ++cmd+shift+f12++ | Hide all tool windows |
 | ++shift+f12++ | Restore the default layout |
+
+Every one of those acts on the **focused** pane, whichever type it is.
+**Split View Right** (++cmd+alt+shift+right++) is the editor-specific variant:
+with an editor pane focused it puts the same buffer in a second pane next to
+the first.
+
+![The same file open in two editor panes after Split View Right; the focused pane is the one with the highlighted border](../screenshots/features/layout-split.png)
 
 With the mouse: drag a divider to resize, drag a pane's title bar to move the
 pane somewhere else, right-click a title bar for the pane's context menu. A
@@ -45,6 +81,8 @@ title bar just focuses.
 Tabs belong to a pane, not to the window. Opening a file routes it into the
 **focused** pane's tab list, so where your focus is decides where the file
 lands.
+
+![Four files open as tabs in one editor pane; the active tab is the highlighted one](../screenshots/features/layout-tabs.png)
 
 | Keys | What it does |
 |---|---|

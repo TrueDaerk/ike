@@ -7,8 +7,11 @@ name. This page covers the first three; file and symbol lookup lives in
 
 ## In the current file
 
-++cmd+f++ opens the search line, or `/` for forwards and `?` for backwards if
-your fingers already know vim.
+With an **editor pane focused**, ++cmd+f++ opens the search line — or `/` for
+forwards and `?` for backwards if your fingers already know vim. All
+screenshots on this page use the `monokai-pro` theme.
+
+![Find in File: the query on the bottom line with a match counter, every match highlighted in the buffer, the current one in the cursor colour](../screenshots/features/find-in-file.png)
 
 | Keys | What it does |
 |---|---|
@@ -45,8 +48,10 @@ dialect, and an empty pattern (`:s//new/`) reuses your last search.
 
 ## Across the project
 
-++cmd+shift+f++ opens find-in-path. It searches as you type and streams
-results in, grouped by file with per-file match counts.
+++cmd+shift+f++ opens find-in-path, from any pane. It searches as you type and
+streams results in, grouped by file with per-file match counts.
+
+![Find in Path: the query and its three toggles, results grouped under each file with the match count in brackets, the total at the bottom](../screenshots/features/find-in-path.png)
 
 | Keys | What it does |
 |---|---|

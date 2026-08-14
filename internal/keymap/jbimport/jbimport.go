@@ -100,6 +100,7 @@ var actionMap = map[string]string{
 	"PasteMultiple": "editor.pasteFromHistory",
 	"$Undo":         "editor.undo",
 	"$Redo":         "editor.redo",
+	"$SelectAll":    "editor.selectAll",
 
 	// Editing.
 	"EditorDuplicate":       "editor.duplicateLine",

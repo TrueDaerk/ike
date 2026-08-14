@@ -14,6 +14,17 @@ skip and regret.
 4. **[Command line](command-line.md)** — open files at a line, in tabs, or
    from a pipe.
 
+Optional, once the four are done:
+
+- **[Desktop launcher](desktop-launcher.md)** — install IKE as a Dock or
+  app-grid entry that opens its own Ghostty window, with the terminal setup
+  already done for you.
+
+Here is what step 3 ends with — the window this documentation talks about,
+in the `monokai-pro` theme every screenshot uses:
+
+![The IKE window: menu bar, file tree, an editor pane with its tab bar, and the status line](../screenshots/features/window-overview.png)
+
 ## The five-minute version
 
 If you would rather try it before reading:

@@ -16,6 +16,10 @@ type. Or skip the prompt and run the language's own command from the palette:
 **New Scratch File: Python**, **New Scratch File: SQL**, **New Scratch File:
 Plain Text**.
 
+![A Go scratch file open as a second tab next to a project file, highlighted like any other Go buffer, its path in the status line pointing outside the project](../screenshots/features/scratch-file.png)
+
+The screenshot uses the `monokai-pro` theme.
+
 The language decides the file extension, and everything language-aware follows
 from that — syntax highlighting, the language server, comment toggling, smart
 indentation, and the language's file template (a PHP scratch opens with

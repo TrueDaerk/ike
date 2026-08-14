@@ -127,6 +127,27 @@ func TestInnerNamePrefersTheStrippedExtension(t *testing.T) {
 	}
 }
 
+// TestInnerNameFallsBackToTheHeaderWithoutAStrippedExtension (#1853): stripping
+// dump.gz leaves "dump", which names no language at all — so a header that
+// does carry an extension is the better answer. A header without one is not:
+// it would trade one anonymous name for another.
+func TestInnerNameFallsBackToTheHeaderWithoutAStrippedExtension(t *testing.T) {
+	cases := []struct{ path, header, want string }{
+		{"dump.gz", "payload.sql", "payload.sql"},
+		{"dump.gz", "/var/backups/payload.sql", "payload.sql"},
+		{"backup.gzip", "schema.json", "schema.json"},
+		{"dump.gz", "payload", "dump"},      // the header names no language either
+		{"dump.gz", "", "dump"},             // no header at all
+		{"dump.gz", "  ", "dump"},           // blank header
+		{"app.log.gz", "x.json", "app.log"}, // the file name still wins when it says something
+	}
+	for _, c := range cases {
+		if got := InnerName(c.path, c.header); got != c.want {
+			t.Errorf("InnerName(%q, %q) = %q, want %q", c.path, c.header, got, c.want)
+		}
+	}
+}
+
 // TestReadDecompresses covers the happy path plus the metadata the notice
 // needs.
 func TestReadDecompresses(t *testing.T) {

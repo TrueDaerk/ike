@@ -55,6 +55,9 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.redoChrono", "Redo (Chronological)", "redo_chrono", "g+"),
 			action("editor.copy", "Copy", "copy", "y"),
 			action("editor.cut", "Cut", "cut", "d"),
+			// Select All (#1861): a linewise visual selection over the whole
+			// buffer, equivalent to the vim "ggVG" sequence.
+			action("editor.selectAll", "Select All", "select_all", "ggVG"),
 			action("editor.paste", "Paste", "paste", "p"),
 			action("editor.lineStart", "Move to Line Start", "line_start", "0"),
 			action("editor.lineEnd", "Move to Line End", "line_end", "$"),

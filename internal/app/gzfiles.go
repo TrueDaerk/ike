@@ -129,9 +129,15 @@ func (m *Model) showGzipBuffer(path, inner, text, notice string) tea.Cmd {
 // inside the archive, so the editor's reload never fires for it — the root
 // model re-installs the content instead. Nothing is dirty to lose: the buffer
 // is read-only.
-func (m *Model) refreshGzipBuffers(path string) {
+//
+// The returned command re-runs the parse for every refreshed buffer.
+// ShowReadOnly drops the cached spans and advances the document version, and a
+// read-only buffer can never schedule a parse of its own the way an edit does
+// — so without this the preview silently loses its highlighting the first time
+// the file changes on disk (#1853).
+func (m *Model) refreshGzipBuffers(path string) tea.Cmd {
 	if !gzfile.IsPlain(path, readHead(path)) {
-		return
+		return nil
 	}
 	prefix := path + entrySep
 	var stale []*editor.Model
@@ -148,16 +154,21 @@ func (m *Model) refreshGzipBuffers(path string) {
 		}
 	}
 	if len(stale) == 0 {
-		return
+		return nil
 	}
 	c, err := gzfile.Read(path, m.largeFileLimit())
 	if err != nil {
-		return // a half-written file: keep showing the previous content
+		return nil // a half-written file: keep showing the previous content
 	}
 	text, _ := m.gzipBufferText(c, path)
+	var cmds []tea.Cmd
 	for _, ed := range stale {
 		ed.ShowReadOnly(archiveEntryPath(path, c.Name), text)
+		if cmd := ed.Reparse(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
+	return tea.Batch(cmds...)
 }
 
 // gzipMetadata renders the notice shown instead of content that cannot be
