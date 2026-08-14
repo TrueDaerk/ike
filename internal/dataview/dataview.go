@@ -717,7 +717,7 @@ func (m *Model) footer(pal *theme.Palette) string {
 			return lipgloss.NewStyle().Foreground(pal.Error).Render(clipTo(" "+m.fErr.Error(), m.w))
 		}
 		return lipgloss.NewStyle().Faint(true).Render(
-			clipTo(" enter apply · esc drop the filter · the clause follows the dimmed prefix", m.w))
+			clipTo(" enter apply · esc drop the filter · type the condition, it follows the dimmed prefix", m.w))
 	}
 	status := ""
 	switch {
