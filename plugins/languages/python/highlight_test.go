@@ -157,6 +157,55 @@ func TestPythonDecoratorArguments(t *testing.T) {
 	}
 }
 
+// TestPythonFStringSubscriptInterpolation guards #1869: every part of an
+// f-string that mixes plain variables with a string-keyed subscript gets its
+// own scope — container as variable, brackets as punctuation.bracket, the key
+// as string, the braces as punctuation.special and the literal separators as
+// string. The assignment target is deliberately not called `key`: that name is
+// suspect for secret masking (#1623), which replaces the whole value with a
+// mask span and would say nothing about the highlighting.
+func TestPythonFStringSubscriptInterpolation(t *testing.T) {
+	highlight.SetRainbow(false)
+	defer highlight.SetRainbow(true)
+	lines := []string{
+		`ident = f"{uid}|{kw['type']}|{dt}"`,
+	}
+	spans := highlight.Highlight("main.py", lines)
+	if len(spans) == 0 {
+		t.Fatal("expected spans for Python source, got none")
+	}
+	ix := highlight.NewIndex(spans)
+	cases := []struct {
+		name string
+		col  int
+		want string
+	}{
+		{"prefix f", 8, "string"},
+		{"opening quote", 9, "string"},
+		{"first open brace", 10, "punctuation.special"},
+		{"first variable", 11, "variable"},
+		{"first close brace", 14, "punctuation.special"},
+		{"literal pipe", 15, "string"},
+		{"second open brace", 16, "punctuation.special"},
+		{"subscript container", 17, "variable"},
+		{"subscript open bracket", 19, "punctuation.bracket"},
+		{"subscript key quote", 20, "string"},
+		{"subscript key text", 21, "string"},
+		{"subscript close bracket", 26, "punctuation.bracket"},
+		{"second close brace", 27, "punctuation.special"},
+		{"second literal pipe", 28, "string"},
+		{"third open brace", 29, "punctuation.special"},
+		{"third variable", 30, "variable"},
+		{"third close brace", 32, "punctuation.special"},
+		{"closing quote", 33, "string"},
+	}
+	for _, c := range cases {
+		if got := ix.CaptureAt(0, c.col); got != c.want {
+			t.Errorf("%s: CaptureAt(0,%d) = %q, want %q", c.name, c.col, got, c.want)
+		}
+	}
+}
+
 // TestPythonFStringInterpolation guards #1466: the expression inside an
 // f-string interpolation highlights as code (the old whole-node (string)
 // capture started before the interpolation and won the first-covering

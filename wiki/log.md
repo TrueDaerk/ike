@@ -1,5 +1,18 @@
 # Log
 
+## 2026-08-14 (highlight: interpolation scopes in Python f-strings and PHP strings, #1869)
+
+- **`f"{kw['type']}"` now separates into four colors**: Python's query gained the standard
+  bracket list (`plugins/languages/python/queries/python.scm`), so a subscript inside an
+  interpolation shows its container as `variable`, its `[` `]` as `punctuation.bracket` and the
+  key as `string`, with the f-string braces still `punctuation.special` — the interpolation
+  pattern precedes the bracket list, and rainbow brackets keep overriding it when enabled.
+  PHP already covered all three forms (`{$uid}`, `$type`, the deprecated `${dt}`) after #1466;
+  both reference snippets are now pinned token by token in
+  `plugins/languages/{python,php}/highlight_test.go`. Note that a Python assignment named `key`
+  renders masked rather than highlighted — secret masking (#1623) claims the value first.
+  Updated [Highlighting](/architecture/highlighting.md).
+
 ## 2026-08-13 (archive viewer: mouse wheel, click select, double-click open, #1852)
 
 - **The archive pane takes the mouse now** (`internal/archview/mouse.go`): the wheel scrolls the
