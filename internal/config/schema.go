@@ -85,7 +85,14 @@ type Tools struct {
 // intent, not state — moving the tool never rewrites it, so close + reopen
 // returns to the configured edge. Multiple opts the tool into concurrent
 // instances (#835): a "tool.<name>.new" command spawns additional panes;
-// false (default) keeps the strict single-instance toggle.
+// false (default) keeps the strict single-instance toggle. Global marks the
+// tool as one process-wide instance shared across every workspace (#1890):
+// opening it in another project re-attaches the same running session instead
+// of spawning a second one, and switching or closing projects never ends it —
+// only closing the pane or quitting IKE does. Global and Multiple are
+// mutually exclusive; a config declaring both gets a diagnostic and Multiple
+// is ignored. A global tool's Cwd resolves once, against the project where it
+// first spawns.
 type ToolEntry struct {
 	Name      string   `toml:"name"`
 	Command   string   `toml:"command"`
@@ -93,6 +100,7 @@ type ToolEntry struct {
 	Cwd       string   `toml:"cwd"`
 	Placement string   `toml:"placement"`
 	Multiple  bool     `toml:"multiple"`
+	Global    bool     `toml:"global"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen

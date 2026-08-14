@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Custom TUI Tool Panes
-description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, and IKE_THEME_* env for theme following."
+description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), global process-wide instances shared across workspaces (#1890), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, and IKE_THEME_* env for theme following."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
 timestamp: 2026-08-14T00:00:00Z
@@ -23,6 +23,8 @@ command = "lazygit"     # program to exec
 args = []               # optional arguments
 cwd = ""                # working directory; empty = project root
 placement = ""          # home position: left/right/top/bottom; empty = adaptive
+multiple = false        # concurrent instances via tool.<slug>.new (#835)
+global = false          # one process-wide instance shared across workspaces (#1890)
 ```
 
 `placement` is the tool's **configured home position** (#1889, JetBrains-style
@@ -140,6 +142,47 @@ single-instance tool degrades to the plain toggle. Layout persistence
 saves each instance as its own `{kind: "tool"}` slot; restore restarts one
 process per slot. The `multiple` field is editable in the Settings → Tools
 form (validated `true`/`false`, listed with a `· multi` marker).
+
+### Global instances (#1890)
+
+`global = true` marks the tool as **one instance for the whole IKE process**,
+shared across every workspace — an SQL client or an embedded agent session
+keeps its connections, scrollback and state while projects come and go.
+Implemented in `internal/app/tools_global.go`:
+
+- **Owner** — the live session's owner is the **workspace manager**
+  (`workspace.Manager`, which survives model rebuilds), never a workspace's
+  pane registry. While attached, the pane lives in the active workspace like
+  any tool pane; on every project switch `detachGlobalTools` (called by
+  `performSwitch` right after the chdir succeeds) removes the pane from the
+  departing workspace's tree and registry **without ending the session** and
+  parks the terminal model on the manager (`ParkGlobalTool`), flagged parked
+  (#1522) so an unrendered session stops requesting repaints.
+- **Re-attach** — `tool.<name>` in any workspace first toggles a locally
+  attached instance; otherwise it takes the parked session
+  (`TakeGlobalTool`) and splices it in as a dedicated pane
+  (`attachGlobalTool`) at the home position or adaptive placement. Global
+  tools never tab-host into a dock occupant — a dedicated pane detaches
+  wholesale on the next switch. Only with no live session anywhere does the
+  command spawn a fresh process.
+- **Lifecycle** — parked workspaces never contain a global tool, so workspace
+  switch, project close (#1355), close-from-list (#820) and LRU eviction
+  (#780) cannot end it; it also gates none of those guards. It ends only when
+  its pane is closed explicitly (ctrl+w on the exit dialog), when its process
+  exits while detached (the `ExitedMsg` reaps the stashed session), or at
+  quit — `Model.quit` closes parked global sessions alongside the active
+  registry's terminals, so no process outlives IKE.
+- **Cwd** — resolves once, at first spawn, against the project active then;
+  the shared session keeps its working directory across projects.
+- **Persistence** — the workspace currently hosting the pane records it in
+  its `.ike/layout.json` as usual. On restore, a saved global tool slot first
+  re-attaches a live parked session (`Registry.AdoptToolKey`) — the revisit
+  of an evicted workspace — and only spawns a fresh process when none is
+  parked (the restart case).
+
+`global` and `multiple` are **mutually exclusive**: a config declaring both
+gets a `tools.custom.multiple` diagnostic and `multiple` is ignored
+(`internal/config/validate.go`).
 
 ## Pane behavior
 

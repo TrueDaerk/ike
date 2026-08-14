@@ -1375,8 +1375,18 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 		if id := ids[key]; id.Kind == "tool" {
 			// A tool pane restores by restarting its configured program
 			// (#741); a tool no longer configured degrades to a fresh shell
-			// in the saved position rather than breaking the layout.
+			// in the saved position rather than breaking the layout. A global
+			// tool (#1890) with a live session parked on the manager
+			// re-attaches that session in the saved slot instead of spawning
+			// a duplicate process.
 			if entry, ok := toolEntry(id.Tool); ok {
+				if entry.Global && m.ws != nil {
+					if term, taken := m.ws.TakeGlobalTool(entry.Name); taken {
+						term.SetParked(false)
+						panes.AdoptToolKey(key, term)
+						continue
+					}
+				}
 				dir := entry.Cwd
 				if dir == "" {
 					dir = "."
@@ -1530,12 +1540,9 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			if !ok {
 				continue
 			}
-			dir := entry.Cwd
-			if dir == "" {
-				dir = "."
-			}
-			argv := append([]string{entry.Command}, entry.Args...)
-			inst.AddTerminalTab(panes.NewToolSession(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send))
+			// A parked live global instance re-attaches instead of
+			// spawning a duplicate (#1890); restoredToolSession decides.
+			inst.AddTerminalTab(m.restoredToolSession(panes, entry))
 			toolTabs++
 		}
 		if wasEmpty && toolTabs > 0 {
@@ -1754,6 +1761,10 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 	for _, root := range m.ws.Background() {
 		teardownWorkspace(m.ws.Peek(root))
 	}
+	// Detached global tool sessions (#1890) belong to no workspace registry —
+	// end them here so no tool process outlives IKE; an attached one closed
+	// with the active workspace's terminals above.
+	m.closeParkedGlobalTools()
 	// Language servers shut down through the spec's handshake via the quit
 	// hooks (#1546). Their cmds run synchronously here — blocking the Update
 	// goroutine is fine while quitting, and it guarantees the process does
@@ -3911,6 +3922,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A popup terminal shell ended (#1398): its tab closes; the last
 			// tab drops the whole popup, and the next toggle spawns fresh.
 			m.closePopupTab(inst, idx)
+			return m, nil
+		}
+		// A global tool that exited while detached (#1890) has no pane; the
+		// dead session leaves the manager stash instead.
+		if m.reapGlobalTool(msg.Key) {
 			return m, nil
 		}
 		key := m.terminalPaneForSession(msg.Key)

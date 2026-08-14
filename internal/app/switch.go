@@ -158,6 +158,14 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 		return m, func() tea.Msg { return project.SwitchFailedMsg{Path: root, Err: err} }
 	}
 	invalidateCwd() // the render hot path caches the working directory (#608)
+	// Global tool sessions (#1890) detach from the departing workspace and
+	// park on the manager: the parked workspace never holds them, so eviction
+	// and project close cannot end them, and the next tool.<name> anywhere
+	// re-attaches the same live session. After the chdir on purpose — a failed
+	// switch must leave the workspace untouched; the departing layout.json
+	// (saved above) may still list the tool, which the restore path resolves
+	// by re-attaching the parked session instead of spawning a duplicate.
+	m.detachGlobalTools()
 	m.watcher.Stop()
 	// Stop the old root's scans (#1549): a running find-in-path keeps its
 	// goroutine and rg child walking the old tree, sending results into the

@@ -712,12 +712,9 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 				if !ok {
 					continue // tool no longer configured: restores as nothing
 				}
-				dir := entry.Cwd
-				if dir == "" {
-					dir = "."
-				}
-				argv := append([]string{entry.Command}, entry.Args...)
-				inst.AddTerminalTab(reg.NewToolSession(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send))
+				// A parked live global instance re-attaches instead of
+				// spawning a duplicate (#1890); restoredToolSession decides.
+				inst.AddTerminalTab(m.restoredToolSession(reg, entry))
 				spawned++
 			}
 			if spawned > 0 {

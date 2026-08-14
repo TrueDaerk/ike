@@ -45,7 +45,9 @@ func toolCommands() []plugin.Command {
 			"Tool: "+t.Name,
 			ToolOpenMsg{Name: t.Name},
 		))
-		if t.Multiple {
+		// Validation drops multiple on global entries (#1890); the extra
+		// check keeps a hand-set config from minting a .new command anyway.
+		if t.Multiple && !t.Global {
 			cmds = append(cmds, appCommand(
 				"tool."+toolSlug(t.Name)+".new",
 				"Tool: "+t.Name+" (New Instance)",
@@ -148,12 +150,22 @@ func (m *Model) openTool(name string, fresh bool) {
 	if !ok {
 		return
 	}
-	if fresh && !entry.Multiple {
+	// A global tool (#1890) is strictly single-instance; validation already
+	// rejects global+multiple, this catches a stale binding.
+	if fresh && (!entry.Multiple || entry.Global) {
 		fresh = false
 	}
 	if !fresh {
 		if locs := m.toolLocations(name); len(locs) > 0 {
 			m.toggleTool(name, locs)
+			return
+		}
+	}
+	// A global tool not in this workspace may be running detached (#1890):
+	// re-attach the live session instead of spawning a second process.
+	if entry.Global {
+		if term, ok := m.ws.TakeGlobalTool(entry.Name); ok {
+			m.attachGlobalTool(entry, term)
 			return
 		}
 	}
@@ -254,7 +266,9 @@ func (m *Model) openToolAtHome(entry config.ToolEntry, zone layout.Zone) {
 	argv := append([]string{entry.Command}, entry.Args...)
 	ws.ReturnFocus = ws.Panes.Focused()
 	occupant := m.dockOccupant(zone)
-	if occupant != "" && canHostTabs(ws.Panes.Get(occupant)) && m.ensureTabHost(occupant) {
+	// A global tool (#1890) never tab-hosts: it stays a dedicated pane so the
+	// next project switch can detach the whole session.
+	if occupant != "" && !entry.Global && canHostTabs(ws.Panes.Get(occupant)) && m.ensureTabHost(occupant) {
 		term := ws.Panes.NewToolSession(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send)
 		ws.Panes.Get(occupant).AddTerminalTab(term)
 		m.setFocus(occupant)

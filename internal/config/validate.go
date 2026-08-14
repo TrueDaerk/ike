@@ -184,6 +184,14 @@ func validate(c *Config) []Diagnostic {
 			c.Tools.Custom[i].Placement = ""
 		}
 	}
+	// A global tool (#1890) is one shared instance for the whole process —
+	// concurrent instances (multiple, #835) contradict that; global wins.
+	for i := range c.Tools.Custom {
+		if c.Tools.Custom[i].Global && c.Tools.Custom[i].Multiple {
+			diags = append(diags, Diagnostic{Field: "tools.custom.multiple", Message: fmt.Sprintf("tool %q: global and multiple are mutually exclusive, ignoring multiple", c.Tools.Custom[i].Name)})
+			c.Tools.Custom[i].Multiple = false
+		}
+	}
 
 	if !logLevels[c.LSP.LogLevel] {
 		diags = append(diags, Diagnostic{Field: "lsp.log_level", Message: fmt.Sprintf("unknown log_level %q, using \"warn\"", c.LSP.LogLevel)})
