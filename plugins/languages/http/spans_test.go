@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"ike/internal/highlight"
 	"ike/internal/jwt"
 	"ike/internal/lang"
 	"ike/internal/nethint"
@@ -115,18 +116,22 @@ func TestTargetPrefixNoScheme(t *testing.T) {
 	}
 }
 
-// TestTargetPrefixPlaceholder (#1740): a placeholder inside the authority (or
-// standing in for the whole scheme) keeps the grammar's own captures — the
-// prefix spans split around it.
+// TestTargetPrefixPlaceholder (#1740, #1880): a placeholder inside the
+// authority (or standing in for the whole scheme) gets its own punctuation +
+// @variable styling — the prefix spans split around it.
 func TestTargetPrefixPlaceholder(t *testing.T) {
 	line := "GET {{scheme}}://{{host}}.test:{{port}}/p?a=1"
 	spans := querySpans([]string{line})
 	for _, sub := range []string{"{{scheme}}", "{{host}}", "{{port}}"} {
 		start := strings.Index(line, sub)
-		for c := start; c < start+len(sub); c++ {
-			if s, ok := spanAt(spans, 0, c); ok {
-				t.Fatalf("placeholder col %d covered by %+v", c, s)
-			}
+		if got := captureAt(spans, 0, start); got != "punctuation" {
+			t.Errorf("%s opening brace = %q, want punctuation", sub, got)
+		}
+		if got := captureAt(spans, 0, start+2); got != "variable" {
+			t.Errorf("%s name = %q, want variable", sub, got)
+		}
+		if got := captureAt(spans, 0, start+len(sub)-1); got != "punctuation" {
+			t.Errorf("%s closing brace = %q, want punctuation", sub, got)
 		}
 	}
 	if got := captureAt(spans, 0, strings.Index(line, "://")); got != "punctuation" {
@@ -219,17 +224,24 @@ func TestQuerySpansPercentInvalid(t *testing.T) {
 	}
 }
 
-// TestQuerySpansPlaceholdersSkipped: {{…}} and ${…} regions keep the
-// grammar's own captures — no overlay span may cover them.
+// TestQuerySpansPlaceholdersSkipped: a "{{…}}" query value gets its own
+// punctuation + @variable styling (#1880) instead of the query pass's own
+// key/value captures; "${…}" is a different placeholder form (out of scope
+// for #1880) and keeps getting no overlay span at all.
 func TestQuerySpansPlaceholdersSkipped(t *testing.T) {
 	line := "GET https://x.test/p?a={{host}}&b=${NAME}&c=1"
 	spans := querySpans([]string{line})
-	for _, sub := range []string{"{{host}}", "${NAME}"} {
-		start := strings.Index(line, sub)
-		for col := start; col < start+len(sub); col++ {
-			if s, ok := spanAt(spans, 0, col); ok {
-				t.Fatalf("placeholder col %d covered by %+v", col, s)
-			}
+	hostStart := strings.Index(line, "{{host}}")
+	if got := captureAt(spans, 0, hostStart); got != "punctuation" {
+		t.Errorf("{{host}} opening brace = %q, want punctuation", got)
+	}
+	if got := captureAt(spans, 0, hostStart+2); got != "variable" {
+		t.Errorf("{{host}} name = %q, want variable", got)
+	}
+	envStart := strings.Index(line, "${NAME}")
+	for col := envStart; col < envStart+len("${NAME}"); col++ {
+		if s, ok := spanAt(spans, 0, col); ok {
+			t.Fatalf("${…} placeholder col %d covered by %+v", col, s)
 		}
 	}
 	if got := captureAt(spans, 0, strings.Index(line, "c=")); got != "property" {
@@ -474,6 +486,78 @@ func TestFieldUnitPrecedence(t *testing.T) {
 	for _, s := range querySpans(lines) {
 		if s.Replace != "" {
 			t.Errorf("field mapped to none still concealed: %+v", s)
+		}
+	}
+}
+
+// TestVariableDefinitionValueSpan (#1880): an "@name = value" definition's
+// value gets its own capture, distinct from the name the grammar already
+// styles as @variable.
+func TestVariableDefinitionValueSpan(t *testing.T) {
+	lines := []string{"@token = abc123", "@empty =", "not.a.def = x"}
+	spans := querySpans(lines)
+	if got := captureAt(spans, 0, strings.Index(lines[0], "abc123")); got != "string" {
+		t.Errorf("definition value = %q, want string", got)
+	}
+	for _, s := range spans {
+		if s.Line == 1 {
+			t.Errorf("empty-value definition got span %+v", s)
+		}
+		if s.Line == 2 {
+			t.Errorf("non-definition line got span %+v", s)
+		}
+	}
+}
+
+// TestVariableDefinitionValuePlaceholder (#1880): a definition whose value is
+// itself a placeholder ("@api = {{host}}/api") keeps the placeholder's own
+// punctuation + @variable styling rather than reading as one flat value.
+func TestVariableDefinitionValuePlaceholder(t *testing.T) {
+	line := "@api = {{host}}/api"
+	spans := querySpans([]string{line})
+	start := strings.Index(line, "{{host}}")
+	if got := captureAt(spans, 0, start); got != "punctuation" {
+		t.Errorf("{{host}} opening brace = %q, want punctuation", got)
+	}
+	if got := captureAt(spans, 0, start+2); got != "variable" {
+		t.Errorf("{{host}} name = %q, want variable", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "/api")); got != "string" {
+		t.Errorf("trailing value text = %q, want string", got)
+	}
+}
+
+// TestPlaceholderSpansEverywhere (#1880): a "{{name}}" placeholder gets the
+// same punctuation + @variable styling wherever it appears — URL, header
+// value and (via the merged highlight.Highlight pipeline, so the embedded
+// JSON body region overlay is exercised too) request body.
+func TestPlaceholderSpansEverywhere(t *testing.T) {
+	lines := []string{
+		"POST https://api.test/things/{{token}} HTTP/1.1",
+		"Authorization: Bearer {{token}}",
+		"Content-Type: application/json",
+		"",
+		`{"id": "{{token}}"}`,
+	}
+	spans := highlight.Highlight("req.http", lines)
+	ix := highlight.NewIndex(spans)
+	for _, tc := range []struct {
+		line int
+		sub  string
+	}{
+		{0, "{{token}}"},
+		{1, "{{token}}"},
+		{4, "{{token}}"},
+	} {
+		start := strings.Index(lines[tc.line], tc.sub)
+		if got := ix.CaptureAt(tc.line, start); got != "punctuation" {
+			t.Errorf("line %d opening brace = %q, want punctuation", tc.line, got)
+		}
+		if got := ix.CaptureAt(tc.line, start+2); got != "variable" {
+			t.Errorf("line %d name = %q, want variable", tc.line, got)
+		}
+		if got := ix.CaptureAt(tc.line, start+len(tc.sub)-1); got != "punctuation" {
+			t.Errorf("line %d closing brace = %q, want punctuation", tc.line, got)
 		}
 	}
 }
