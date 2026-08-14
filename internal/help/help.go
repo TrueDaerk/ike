@@ -260,7 +260,8 @@ func (h *Help) renderEntry(e Entry, colW int) string {
 	return e.Title + strings.Repeat(" ", gap) + keyStyle.Render(e.Shortcut)
 }
 
-// groupTitle is the human-facing heading for a scope label.
+// groupTitle is the human-facing heading for a scope label — the full
+// per-pane context set since #1794.
 func groupTitle(label string) string {
 	switch label {
 	case "global":
@@ -269,6 +270,32 @@ func groupTitle(label string) string {
 		return "Editor"
 	case "explorer":
 		return "Explorer"
+	case "palette":
+		return "Palette"
+	case "diff":
+		return "Diff"
+	case "terminal":
+		return "Terminal"
+	case "preview":
+		return "Preview"
+	case "vcs":
+		return "VCS"
+	case "debug":
+		return "Debug"
+	case "problems":
+		return "Problems"
+	case "structure":
+		return "Structure"
+	case "usages":
+		return "Usages"
+	case "http":
+		return "HTTP"
+	case "breakpoints":
+		return "Breakpoints"
+	case "archive":
+		return "Archive"
+	case "data":
+		return "Data"
 	default:
 		return label
 	}

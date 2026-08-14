@@ -159,14 +159,16 @@ func TestGlobalQualifierTouchesOnlyTheGlobalContext(t *testing.T) {
 
 // TestQualifiedOverrideOnUnknownContextIsADiagnostic: a context that is not a
 // pane scope parses as part of the chord and is reported, never applied.
+// ("terminal" stopped being an example of that when #1794 made every pane
+// context bindable.)
 func TestQualifiedOverrideOnUnknownContextIsADiagnostic(t *testing.T) {
-	table := BuildTable(nil, map[string]string{"terminal.ctrl+g": "some.cmd"}, "linux")
+	table := BuildTable(nil, map[string]string{"sidebar.ctrl+g": "some.cmd"}, "linux")
 	if len(table.Bindings()) != 0 {
 		t.Fatalf("bindings = %+v, want none", table.Bindings())
 	}
 	found := false
 	for _, d := range table.Diagnostics() {
-		if contains(d, "terminal.ctrl+g") {
+		if contains(d, "sidebar.ctrl+g") {
 			found = true
 		}
 	}

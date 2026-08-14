@@ -232,8 +232,10 @@ var jetbrainsRows = []row{
 	{"cmd+alt+m", "markdown.preview", "Markdown preview", Editor, "Markdown preview (#62)"},
 	// TODO index (#61): cmd+6 is JetBrains' TODO tool-window chord.
 	{"cmd+6", "todo.list", "TODO index", Global, "TODO index (#61)"},
-	{"cmd+alt+shift+right", "editor.splitViewRight", "Split view right", Global, "Split view (#147)"},
-	{"cmd+alt+shift+down", "editor.splitViewDown", "Split view down", Global, "Split view (#147)"},
+	// Editor-scoped since the #1794 context audit: splitting the focused
+	// editor's view is meaningless in every other pane.
+	{"cmd+alt+shift+right", "editor.splitViewRight", "Split view right", Editor, "Split view (#147)"},
+	{"cmd+alt+shift+down", "editor.splitViewDown", "Split view down", Editor, "Split view (#147)"},
 	{"f1", "palette.keymapHelp", "Help / cheatsheet", Global, "Keymap (08)"},
 	// JetBrains terminal toggle. Alt+F-key delivery depends on the terminal,
 	// hence fragile; inside a focused terminal the reserved-set handler picks
@@ -245,6 +247,17 @@ var jetbrainsRows = []row{
 	// focused pane terminals) the reserved-set handlers intercept it before
 	// raw pass-through.
 	{"cmd+alt+t", "terminal.popup", "Popup terminal", Global, "Terminal (#1398)"},
+	// Per-context ctrl+t (#1794), the showcase of one chord doing the
+	// pane-appropriate thing per context: a new terminal tab with a terminal
+	// focused, a new empty editor tab with an editor focused. Disjoint
+	// contexts, so neither row conflicts with nor shadows the other; in every
+	// other pane the chord stays unbound. The terminal row is deliberately
+	// carved out of the shell forwarding (readline's rarely-used
+	// transpose-chars loses to the tab chord — iTerm and JetBrains both spend
+	// this position on new-tab); `keymap.bindings."terminal.ctrl+t" = ""`
+	// hands it back to the shell.
+	{"ctrl+t", "terminal.newTab", "New terminal tab", Terminal, "Terminal (#1794)"},
+	{"ctrl+t", "editor.tab.new", "New empty editor tab", Editor, "Editor tabs (#1794)"},
 	// New terminal session and notification history: single chords since the
 	// leader layer retired (#711); JetBrains has no defaults for either.
 	{"cmd+alt+shift+t", "terminal.new", "New terminal", Global, "Terminal (0170)"},
@@ -309,7 +322,9 @@ var jetbrainsRows = []row{
 	// commands where one exists and is conflict-free on both platforms.
 	// cmd+f12 is JetBrains' File Structure popup (macOS keymap verbatim);
 	// the cmd+3 Structure tool window stays the persistent counterpart.
-	{"cmd+f12", "lsp.documentSymbols", "File structure", Global, "LSP (#1153)"},
+	// Editor-scoped since the #1794 audit: the popup lists the focused
+	// document's symbols, like its cmd+y/cmd+alt+f7 siblings.
+	{"cmd+f12", "lsp.documentSymbols", "File structure", Editor, "LSP (#1153)"},
 	// cmd+y is JetBrains' Quick Definition on the macOS keymap.
 	{"cmd+y", "lsp.peekDefinition", "Peek definition", Editor, "LSP (#1154)"},
 	// cmd+alt+f7 is JetBrains' Show Usages; the persistent panel variant of
@@ -318,8 +333,10 @@ var jetbrainsRows = []row{
 	// JetBrains' run-context-configuration chord from the Windows scheme
 	// (ctrl+shift+f10); the macOS ctrl+shift+r would collide with
 	// project.replaceInPath's cmd+shift+r once folded onto Ctrl off macOS.
-	// Modified F-keys deliver everywhere (CSI parameter encoding).
-	{"ctrl+shift+f10", "run.testAtCursor", "Run test at cursor", Global, "Run (#1150)"},
+	// Modified F-keys deliver everywhere (CSI parameter encoding). Editor-
+	// scoped since the #1794 audit: the command runs the test at the caret,
+	// which only exists with an editor focused.
+	{"ctrl+shift+f10", "run.testAtCursor", "Run test at cursor", Editor, "Run (#1150)"},
 	// cmd+f3 is JetBrains' Show Bookmarks on the macOS keymap.
 	{"cmd+f3", "nav.bookmarks", "Bookmarks", Global, "Marks (#1151)"},
 }

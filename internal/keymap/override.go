@@ -16,17 +16,34 @@ import (
 // "global" is spelled out so a user can bind explicitly at the least specific
 // level instead of relying on the bare form's replace-every-context semantics.
 var contextNames = map[string]Context{
-	"global":   Global,
-	"editor":   Editor,
-	"explorer": Explorer,
-	"palette":  Palette,
-	"diff":     Diff,
+	"global":      Global,
+	"editor":      Editor,
+	"explorer":    Explorer,
+	"palette":     Palette,
+	"diff":        Diff,
+	"terminal":    Terminal,
+	"preview":     Preview,
+	"vcs":         VCS,
+	"debug":       Debug,
+	"problems":    Problems,
+	"structure":   Structure,
+	"usages":      Usages,
+	"http":        HTTP,
+	"breakpoints": Breakpoints,
+	"archive":     Archive,
+	"data":        Data,
 }
 
 // ContextNames returns the config spellings a binding key may be qualified
-// with, in a stable order (documentation, settings UI, diagnostics).
+// with, in a stable order (documentation, settings UI, diagnostics): the
+// original five first (config-format stability), the #1794 pane contexts
+// alphabetically after.
 func ContextNames() []string {
-	return []string{"global", "editor", "explorer", "palette", "diff"}
+	return []string{
+		"global", "editor", "explorer", "palette", "diff",
+		"archive", "breakpoints", "data", "debug", "http",
+		"preview", "problems", "structure", "terminal", "usages", "vcs",
+	}
 }
 
 // ParseContextName resolves a config context spelling ("editor") to its

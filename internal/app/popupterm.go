@@ -591,7 +591,7 @@ func (m Model) popupChordCommand(keys string) string {
 	if err != nil {
 		return ""
 	}
-	if b, found := table.Lookup(keymap.Chord{Steps: []keymap.Key{k}}, keymap.Context("terminal")); found {
+	if b, found := table.Lookup(keymap.Chord{Steps: []keymap.Key{k}}, keymap.Terminal); found {
 		return b.Command
 	}
 	return ""
@@ -616,6 +616,11 @@ func (m Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 			return true, m, nil
 		case "editor.tab.prev":
 			m.cyclePopupTab(-1)
+			return true, m, nil
+		case "terminal.newTab":
+			// The terminal-context ctrl+t (#1794) acts on the popup while it
+			// owns the keyboard: a sibling popup tab, like the reserved cmd+t.
+			m.newPopupTerminalTab()
 			return true, m, nil
 		}
 	}

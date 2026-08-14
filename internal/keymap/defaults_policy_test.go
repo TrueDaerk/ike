@@ -137,8 +137,8 @@ func TestRetiredDefaults(t *testing.T) {
 		{[]string{"cmd+alt+t"}, Global, "terminal.popup"},
 		{[]string{"cmd+alt+shift+t"}, Global, "terminal.new"},
 		{[]string{"cmd+alt+n"}, Global, "notifications.history"},
-		{[]string{"cmd+alt+shift+right"}, Global, "editor.splitViewRight"},
-		{[]string{"cmd+alt+shift+down"}, Global, "editor.splitViewDown"},
+		{[]string{"cmd+alt+shift+right"}, Editor, "editor.splitViewRight"},
+		{[]string{"cmd+alt+shift+down"}, Editor, "editor.splitViewDown"},
 		{[]string{"cmd+k", "z"}, Global, "pane.maximize"},
 		{[]string{"cmd+k", "down"}, Global, "pane.splitDown"},
 	}
@@ -169,10 +169,10 @@ func TestAuditDefaultChords(t *testing.T) {
 		ctx   Context
 		cmd   string
 	}{
-		{"cmd+f12", Global, "lsp.documentSymbols"},
+		{"cmd+f12", Editor, "lsp.documentSymbols"},
 		{"cmd+y", Editor, "lsp.peekDefinition"},
 		{"cmd+alt+f7", Editor, "lsp.referencesPanel"},
-		{"ctrl+shift+f10", Global, "run.testAtCursor"},
+		{"ctrl+shift+f10", Editor, "run.testAtCursor"},
 		{"cmd+f3", Global, "nav.bookmarks"},
 	}
 	for _, goos := range []string{"darwin", "linux"} {

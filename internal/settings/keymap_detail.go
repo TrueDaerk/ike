@@ -145,7 +145,8 @@ func (k *KeymapPage) renderDetail(w, h int) string {
 	bound := k.bindingsFor(b.Command)
 	lines = append(lines, clip.Render(dim.Render(" bindings · "+strconv.Itoa(len(bound)))))
 	for _, bb := range bound {
-		row := " " + pad(bb.Chord.String(), 18) + pad(keymap.ContextName(bb.Context), 9) + "@" + bb.Layer.String()
+		// 12 fits the longest context spelling ("breakpoints", #1794) untrimmed.
+		row := " " + pad(bb.Chord.String(), 18) + pad(keymap.ContextName(bb.Context), 12) + "@" + bb.Layer.String()
 		style := lipgloss.NewStyle().Foreground(pal.Foreground)
 		if bb.Layer != keymap.LayerDefault {
 			style = lipgloss.NewStyle().Foreground(pal.Info)
