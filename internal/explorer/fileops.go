@@ -43,6 +43,12 @@ const (
 // printable key replaces the whole range, Backspace/Delete remove it, and any
 // other key drops the selection and edits normally. Outside rename both stay
 // zero and the prompt behaves as a plain input line.
+//
+// anchor is the path of the entry the prompt acts on (#1884): delete and
+// rename open their box next to that entry's row instead of in the pane's
+// centre, so the dialog stays visually attached to the file it affects. It is
+// stored as a path, not a row index, because a watcher rescan can renumber the
+// rows while the prompt is open; an empty anchor (create, notice) centres.
 type prompt struct {
 	kind     promptKind
 	title    string
@@ -50,6 +56,7 @@ type prompt struct {
 	pos      int
 	selStart int
 	selEnd   int
+	anchor   string
 	accept   func(m *Model, input string) tea.Cmd
 }
 
@@ -295,6 +302,9 @@ func (m *Model) promptDelete() {
 		m.prompt = &prompt{
 			kind:  promptConfirm,
 			title: fmt.Sprintf("Delete %d %s?", len(targets), noun),
+			// The cursor row is inside the selected range, so it is the
+			// anchor for the whole batch (#1884).
+			anchor: m.cursorPath(),
 			accept: func(mm *Model, _ string) tea.Cmd {
 				return mm.deleteEntries(targets)
 			},
@@ -311,12 +321,22 @@ func (m *Model) promptDelete() {
 	}
 	path, isDir := n.path, n.isDir
 	m.prompt = &prompt{
-		kind:  promptConfirm,
-		title: fmt.Sprintf("Delete %s %q?", what, n.name),
+		kind:   promptConfirm,
+		title:  fmt.Sprintf("Delete %s %q?", what, n.name),
+		anchor: path,
 		accept: func(mm *Model, _ string) tea.Cmd {
 			return mm.deleteEntry(path, isDir)
 		},
 	}
+}
+
+// cursorPath is the path of the row under the cursor, or "" when there are no
+// rows — the anchor source for prompts that act on the selection (#1884).
+func (m Model) cursorPath() string {
+	if m.cursor < 0 || m.cursor >= len(m.rows) {
+		return ""
+	}
+	return m.rows[m.cursor].path
 }
 
 // deleteEntry moves path into the session trash, records the delete for undo,
@@ -459,6 +479,7 @@ func (m *Model) promptRename() {
 		input:  n.name,
 		pos:    sel,
 		selEnd: sel,
+		anchor: path,
 		accept: func(mm *Model, name string) tea.Cmd {
 			return mm.renameEntry(path, name, isDir)
 		},
@@ -778,6 +799,11 @@ func (m Model) promptBox() string {
 // itself to the pane width and a too-tall box is clipped by Place rather than
 // dropped, so the origin is clamped at 0 and ok is false only when there is no
 // box at all: an active prompt is always rendered (#373).
+//
+// An anchored prompt (delete/rename, #1884) keeps the horizontal centring but
+// takes its row from the anchored entry's visible row: directly below it, or
+// above it when the box would overflow the pane's bottom edge. Every result is
+// clamped into the pane, so the box never renders partially off-screen.
 func (m Model) promptBoxOrigin() (x, y, w, h int, ok bool) {
 	box := m.promptBox()
 	if box == "" {
@@ -790,7 +816,44 @@ func (m Model) promptBoxOrigin() (x, y, w, h int, ok bool) {
 			w = lw
 		}
 	}
-	return max(0, (m.width-w)/2), max(0, (m.height-h)/2), w, h, true
+	x = max(0, (m.width-w)/2)
+	y = max(0, (m.height-h)/2)
+	if row, has := m.promptAnchorRow(); has {
+		y = row + 1 // directly below the anchored row
+		if y+h > m.height {
+			y = row - h // …or above it, when the bottom edge is too close
+		}
+		y = clamp(y, 0, maxz(m.height-h))
+	}
+	return x, y, w, h, true
+}
+
+// promptAnchorRow returns the content-local row of the entry the open prompt
+// acts on (#1884). It resolves the anchor path against the current rows and
+// the live scroll offset, so the row is the one actually on screen; ok is
+// false when there is no anchor or the entry scrolled out of view (a rescan
+// can drop or move it), in which case the box falls back to centring.
+func (m Model) promptAnchorRow() (row int, ok bool) {
+	if m.prompt == nil || m.prompt.anchor == "" {
+		return 0, false
+	}
+	idx := -1
+	for i, n := range m.rows {
+		if n.path == m.prompt.anchor {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return 0, false
+	}
+	_, textH, _, _, _ := m.viewport()
+	offY := clamp(m.offset, 0, maxz(len(m.rows)-textH))
+	row = idx - offY
+	if row < 0 || row >= textH {
+		return 0, false
+	}
+	return row, true
 }
 
 // PromptMouseClick moves the text cursor of an open promptInput to the column
