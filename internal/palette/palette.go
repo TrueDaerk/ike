@@ -8,6 +8,7 @@
 package palette
 
 import (
+	"fmt"
 	"image/color"
 	"strings"
 
@@ -114,7 +115,11 @@ func New(cfg Config, modes ...Mode) *Palette {
 		p.maxResults = defaultMaxResults
 	}
 	for _, m := range modes {
-		p.byPrefix[m.Prefix()] = m
+		prefix := m.Prefix()
+		if existing, ok := p.byPrefix[prefix]; ok {
+			panic(fmt.Sprintf("palette.New: prefix %q registered by both %T and %T", prefix, existing, m))
+		}
+		p.byPrefix[prefix] = m
 	}
 	if len(modes) > 0 {
 		p.def = modes[0]

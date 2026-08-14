@@ -434,7 +434,10 @@ discoverability, the project-switch command's appearance) is owned by roadmaps
 - **Registry is the source of truth.** Command mode holds only a per-open
   snapshot; no parallel command store.
 - **Modes are pluggable by prefix.** The core is prefix-agnostic; a new mode is
-  one more registered `Mode`.
+  one more registered `Mode`. Each prefix rune must be unique: `New` panics if
+  two modes register the same one, rather than letting the later one silently
+  shadow the earlier one in `byPrefix` (#1878 — a second mode reusing recent-files'
+  `%` made cmd+e open the wrong picker with nothing catching it).
 - **Presentation + routing only.** The palette dispatches `tea.Msg`s and executes
   nothing; owners (editor, explorer, projects) handle them.
 - **Dismissable and non-destructive.** `esc` closes with no side effects;

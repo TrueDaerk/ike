@@ -22,8 +22,9 @@ import (
 
 // httpEnvPrefix selects the environment picker inside the palette; it is only
 // opened locked, so the rune has no user-facing prefix story ('@' is the file
-// finder, '|' the stored-requests picker).
-const httpEnvPrefix = '%'
+// finder, '|' the stored-requests picker). '%' collides with
+// palette.RecentPrefix (#1878), so this mode uses '?' instead.
+const httpEnvPrefix = '?'
 
 // SelectHTTPEnvMsg records the chosen environment for one directory — the
 // picker's activation message. An empty Name clears the selection.

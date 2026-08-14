@@ -62,6 +62,22 @@ func TestPrefixRouting(t *testing.T) {
 	}
 }
 
+// TestNewPanicsOnDuplicatePrefix guards against a mode silently overriding
+// another's registration in byPrefix (#1878): '%' collided between
+// RecentMode and the app's http-env mode, so cmd+e opened the wrong picker
+// with no test catching it. New must now fail loudly instead.
+func TestNewPanicsOnDuplicatePrefix(t *testing.T) {
+	cmd := NewCommandMode(fakeSource{}, nil, false)
+	dup := stubMode{prefix: ':'}
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("New did not panic on duplicate prefix")
+		}
+	}()
+	New(Config{}, cmd, dup)
+}
+
 func TestCommandContextRanking(t *testing.T) {
 	src := fakeSource{cmds: []registry.OwnedCommand{
 		owned("z.global", "Global Thing", plugin.GlobalScope()),
