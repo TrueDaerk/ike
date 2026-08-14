@@ -90,3 +90,88 @@ func TestDockNoops(t *testing.T) {
 		t.Fatalf("invalid zone mutated the tree: %v", got)
 	}
 }
+
+// TestDockNewEdges guards #1889: DockNew attaches a brand-new leaf full-span
+// against the named edge, like Dock but without removing anything first.
+func TestDockNewEdges(t *testing.T) {
+	cases := []struct {
+		zone   Zone
+		orient Orient
+		first  bool // docked leaf is child A
+	}{
+		{ZoneTop, Vertical, true},
+		{ZoneBottom, Vertical, false},
+		{ZoneLeft, Horizontal, true},
+		{ZoneRight, Horizontal, false},
+	}
+	for _, c := range cases {
+		out := DockNew(three(), "tool", c.zone, 0.3)
+		s, ok := out.(*Split)
+		if !ok || s.Orient != c.orient {
+			t.Fatalf("zone %v: root = %#v, want %v split", c.zone, out, c.orient)
+		}
+		docked := s.B
+		if c.first {
+			docked = s.A
+		}
+		if l, ok := docked.(*Leaf); !ok || l.Pane != "tool" {
+			t.Fatalf("zone %v: docked child = %#v, want tool leaf", c.zone, docked)
+		}
+		if got := leaves(out); len(got) != 4 || !got["tool"] {
+			t.Fatalf("zone %v: pane set = %v, want the three plus tool", c.zone, got)
+		}
+		lay := Compute(out, Rect{X: 0, Y: 0, W: 100, H: 40})
+		r := lay.Panes["tool"]
+		if c.orient == Vertical && r.W != 100 {
+			t.Fatalf("zone %v: docked width = %d, want full 100", c.zone, r.W)
+		}
+		if c.orient == Horizontal && r.H != 40 {
+			t.Fatalf("zone %v: docked height = %d, want full 40", c.zone, r.H)
+		}
+	}
+}
+
+// TestDockNewRejects: an empty pane id or a non-edge zone returns the tree
+// unchanged.
+func TestDockNewRejects(t *testing.T) {
+	tree := three()
+	if out := DockNew(tree, "", ZoneBottom, 0.3); out != tree {
+		t.Fatal("empty pane id must be a no-op")
+	}
+	if out := DockNew(tree, "tool", ZoneCenter, 0.3); out != tree {
+		t.Fatal("ZoneCenter must be a no-op")
+	}
+}
+
+// TestEdgeLeaf guards #1889's occupancy probe: only a lone leaf pinned
+// against the workspace edge counts as occupying that dock slot.
+func TestEdgeLeaf(t *testing.T) {
+	tree := three() // explorer | (editor / terminal)
+	if got := EdgeLeaf(tree, ZoneLeft); got != "explorer" {
+		t.Fatalf("left occupant = %q, want explorer", got)
+	}
+	// The right edge is the editor/terminal column, not a lone leaf.
+	if got := EdgeLeaf(tree, ZoneRight); got != "" {
+		t.Fatalf("right occupant = %q, want none (subdivided edge)", got)
+	}
+	// Top/bottom edges are shared by both columns of the horizontal root.
+	if got := EdgeLeaf(tree, ZoneBottom); got != "" {
+		t.Fatalf("bottom occupant = %q, want none (shared edge)", got)
+	}
+	// A bare-leaf root occupies nothing — one pane just fills the workspace.
+	if got := EdgeLeaf(&Leaf{"editor"}, ZoneBottom); got != "" {
+		t.Fatalf("bare leaf occupant = %q, want none", got)
+	}
+	// A docked strip is found through nested same-orientation splits.
+	docked := DockNew(three(), "tool", ZoneBottom, 0.3)
+	if got := EdgeLeaf(docked, ZoneBottom); got != "tool" {
+		t.Fatalf("bottom occupant after dock = %q, want tool", got)
+	}
+	stacked := DockNew(docked, "deeper", ZoneBottom, 0.3)
+	if got := EdgeLeaf(stacked, ZoneBottom); got != "deeper" {
+		t.Fatalf("nested bottom occupant = %q, want deeper", got)
+	}
+	if got := EdgeLeaf(docked, ZoneTop); got != "" {
+		t.Fatalf("top occupant = %q, want none", got)
+	}
+}

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Custom TUI Tool Panes
-description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, and IKE_THEME_* env for theme following."
+description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, and IKE_THEME_* env for theme following."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-08-14T00:00:00Z
 ---
 
 # Custom TUI Tool Panes (#741)
@@ -22,10 +22,18 @@ name = "lazygit"        # display name; command id becomes tool.lazygit
 command = "lazygit"     # program to exec
 args = []               # optional arguments
 cwd = ""                # working directory; empty = project root
+placement = ""          # home position: left/right/top/bottom; empty = adaptive
 ```
 
-A `placement` key is still decoded but deprecated and ignored (#1588): the
-split direction adapts to the host pane's shape (`Model.auxZone`, below).
+`placement` is the tool's **configured home position** (#1889, JetBrains-style
+docking): one of `left`, `right`, `top`, `bottom` names the workspace edge the
+tool docks against when it opens; empty (the default) keeps the adaptive
+`auxZone` heuristic (#1588: the split direction adapts to the host pane's
+shape, below). Any other value — including pre-#1588 legacy values, when the
+key briefly meant a split direction — degrades to the adaptive default with a
+config diagnostic. Because placement lives in the user config (intent), not in
+`.ike/layout.json` (state), normal layout saves never clobber it. See **Home
+positions** below for the open semantics.
 
 Defined in `internal/config/schema.go` (`Tools`/`ToolEntry`). Entries missing
 `name` or `command` are skipped.
@@ -40,7 +48,8 @@ user-defined `[[tools.custom]]` list overrides the default wholesale.
 
 Editable from the UI via **Settings → Tools** (#755,
 `internal/settings/tools_page.go`): `a` adds, enter edits, `d` deletes; the
-form validates name/command presence and duplicate names.
+form validates name/command presence, duplicate names, and the placement
+values (#1889).
 Writes go through the write-back layer at user scope (the whole list, the
 `project.history` pattern) and reload through the normal pipeline, so the
 `tool.<name>` commands re-shape live.
@@ -82,11 +91,38 @@ set live. The id is `tool.<slug>` (lower-case, non-alphanumerics collapse to
 dashes: "My Tool" → `tool.my-tool`); like any command it is bindable and
 palette-reachable.
 
-Invoking mirrors `terminal.toggle`: no pane → spawn split off the active
-editor at the adaptive placement (`Model.auxZone`, #1588 — below by default,
-to the right when the host is wider than 120 cells and wider than tall); pane
-exists unfocused → focus it (remembering where focus was); focused → return
-focus.
+Invoking mirrors `terminal.toggle`: no pane → spawn at the configured home
+position (#1889, below) or, without one, split off the active editor at the
+adaptive placement (`Model.auxZone`, #1588 — below by default, to the right
+when the host is wider than 120 cells and wider than tall); pane exists
+unfocused → focus it (remembering where focus was); focused → return focus.
+
+## Home positions (#1889)
+
+A tool with a `placement` opens at its home dock slot instead of the adaptive
+split (`Model.openToolAtHome`, `internal/app/tools.go`):
+
+- **Free slot** — the tool docks **full-span** against the configured edge
+  (`layout.DockNew`, the create counterpart of the #811 `layout.Dock`),
+  taking `toolDockShare` (0.3) of the workspace along the dock axis.
+- **Occupied slot** — `Model.dockOccupant` probes the edge via
+  `layout.EdgeLeaf` (the lone leaf pinned against the workspace edge through
+  same-orientation splits; a subdivided or shared edge counts as free). When
+  the occupant can host tabs (a terminal/tool pane converts via
+  `ConvertToTabHost`, #836), the tool joins its tab list as a **focused tab**
+  (`Registry.NewToolSession` + `AddTerminalTab`) instead of forcing another
+  split. An editor showing documents at the edge is main content, not a dock
+  occupant — the tool docks beside it.
+- **Non-tabbable occupant** (explorer, singleton tool windows) — the tool
+  stacks into the same dock via a perpendicular split: side docks stack
+  vertically (occupant above), top/bottom strips split side by side.
+
+Placement is **intent, not state**: the `Move`/`Dock` drag mechanics stay
+untouched and never rewrite it, so a moved tool returns to its configured home
+on the next close + reopen. Where the tool currently *is* keeps persisting
+through `.ike/layout.json` as before — a restored session resumes the moved
+position; the home only applies to fresh opens. Tools without a placement
+keep the pre-#1889 behavior exactly.
 
 ### Instances (#835)
 

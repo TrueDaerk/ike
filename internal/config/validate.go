@@ -173,6 +173,18 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "run.placement", Message: fmt.Sprintf("unknown placement %q, using \"in_pane\"", c.Run.Placement)})
 		c.Run.Placement = "in_pane"
 	}
+	// [[tools.custom]] placement (#1889) names the tool's home dock edge;
+	// anything else (including pre-#1588 legacy values) degrades to the
+	// adaptive auxZone heuristic with a warning.
+	for i := range c.Tools.Custom {
+		switch c.Tools.Custom[i].Placement {
+		case "", "left", "right", "top", "bottom":
+		default:
+			diags = append(diags, Diagnostic{Field: "tools.custom.placement", Message: fmt.Sprintf("unknown placement %q for tool %q, using the adaptive default", c.Tools.Custom[i].Placement, c.Tools.Custom[i].Name)})
+			c.Tools.Custom[i].Placement = ""
+		}
+	}
+
 	if !logLevels[c.LSP.LogLevel] {
 		diags = append(diags, Diagnostic{Field: "lsp.log_level", Message: fmt.Sprintf("unknown log_level %q, using \"warn\"", c.LSP.LogLevel)})
 		c.LSP.LogLevel = "warn"
