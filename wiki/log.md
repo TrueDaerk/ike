@@ -1,5 +1,24 @@
 # Log
 
+## 2026-08-14 (http client: user-defined variables, #1867)
+
+- **`.http` files define their own variables now** (`internal/httpfile`): `@name = value` lines
+  before a request line are parsed into `File.Vars` (they are no longer "invalid request lines"),
+  and the new `{{name}}` placeholder resolves from them. A sibling `http-client.env.json` —
+  with `http-client.private.env.json` overriding it per variable — contributes a whole named
+  environment (`httpfile.LoadEnvironments`); a missing file is silent, a malformed one aborts the
+  dispatch naming it. `httpfile.Vars` is the chain the three sources form: in-file definition >
+  selected environment > process environment, with definitions expanding nested placeholders and
+  refusing to loop. `${NAME}` and `{{$env NAME}}` are deliberately untouched — they mean the
+  process environment and no user variable shadows them — and an unresolved `{{name}}` still fails
+  the request naming the variable.
+- **Choosing the environment**: `http.selectEnvironment` ("Select HTTP Environment") lists the
+  environments of the focused file's directory in the palette, badges the active one and offers a
+  clear row; the choice persists per directory in `.ike/httpenv.json`. A single environment is used
+  without asking, and while a choice is pending the unresolved-placeholder error names the
+  environments and the command. Completion and the reformatter learned that a definition line is
+  not a request line. Updated [HTTP Client](/architecture/http-client.md).
+
 ## 2026-08-14 (highlight: interpolation scopes in Python f-strings and PHP strings, #1869)
 
 - **`f"{kw['type']}"` now separates into four colors**: Python's query gained the standard

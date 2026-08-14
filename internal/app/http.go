@@ -55,6 +55,10 @@ type HTTPShowResponseMsg struct{}
 // again, exactly as it went out (#1832).
 type HTTPResendMsg struct{}
 
+// HTTPSelectEnvMsg runs http.selectEnvironment: pick the http-client.env.json
+// environment the file's {{name}} placeholders resolve against (#1867).
+type HTTPSelectEnvMsg struct{}
+
 // HTTPResponseMsg delivers one finished dispatch back into the update loop.
 type HTTPResponseMsg struct {
 	Source  string // .http file the request came from (history keying, #1251)
@@ -133,13 +137,27 @@ func (m *Model) runHTTPRequestAtCursor() tea.Cmd {
 		m.host.Notify(host.Info, "http: no request under the cursor")
 		return nil
 	}
+	// User-defined variables (#1867): the file's own @name=value definitions
+	// plus the selected http-client.env.json environment. A broken
+	// environment file aborts before anything is sent.
+	vars, envHint, err := m.httpVars(ed.Path(), f)
+	if err != nil {
+		m.host.Notify(host.Error, "http: "+err.Error())
+		return nil
+	}
 	return m.dispatchHTTP(ed.Path(), req.Key(), requestLabel(req),
 		func(ctx context.Context, source, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
 			// The .http file's directory anchors relative external-body paths
 			// (#1305): `< ./payload.json` is relative to the request file, not
 			// to wherever IKE was started.
-			return httpclient.DispatchStream(ctx, req,
-				httpclient.Options{BaseDir: filepath.Dir(source)}, cb)
+			resp, err := httpclient.DispatchStream(ctx, req,
+				httpclient.Options{BaseDir: filepath.Dir(source), Vars: vars}, cb)
+			if err != nil && envHint != "" && strings.Contains(err.Error(), "unresolved placeholders") {
+				// The likely cause is the unmade choice, so name it where the
+				// failure is read instead of leaving the variable a mystery.
+				err = fmt.Errorf("%v — %s", err, envHint)
+			}
+			return resp, err
 		})
 }
 

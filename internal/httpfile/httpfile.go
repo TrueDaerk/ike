@@ -8,8 +8,10 @@
 //
 // Parsing is tolerant per block: a malformed block yields a ParseError with
 // its line number while the remaining blocks still parse. Placeholders
-// ({{$env NAME}} and ${NAME}) are kept verbatim by the parser and resolved
-// separately at dispatch time via Request.Resolve / Substitute.
+// ({{$env NAME}}, ${NAME} and the user-defined {{name}}, #1867) are kept
+// verbatim by the parser and resolved separately at dispatch time via
+// Request.Resolve / Request.ResolveVars / Substitute. In-file variable
+// definitions (`@name=value`, #1867) are collected into File.Vars.
 package httpfile
 
 import (
@@ -99,10 +101,36 @@ func (e *ParseError) Error() string {
 	return fmt.Sprintf("line %d: %s", e.Line, e.Msg)
 }
 
+// Variable is one in-file variable definition — an `@name=value` line
+// (#1867), the JetBrains/VS-Code REST-client spelling. Values keep their
+// placeholders verbatim; they are substituted at dispatch time like any
+// other text, so a definition may refer to another variable.
+type Variable struct {
+	Name  string
+	Value string
+	Line  int // 1-based
+}
+
 // File is the parse result of one .http file.
 type File struct {
 	Requests []*Request
 	Errors   []*ParseError
+	// Vars holds the file's `@name=value` definitions in file order (#1867).
+	Vars []Variable
+}
+
+// VarMap collapses the file's definitions into the name→value map the
+// resolution chain takes: a name defined twice takes its last value, the way
+// a re-assignment reads.
+func (f *File) VarMap() map[string]string {
+	if len(f.Vars) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(f.Vars))
+	for _, v := range f.Vars {
+		out[v.Name] = v.Value
+	}
+	return out
 }
 
 // tokenRE matches an RFC 9110 token (methods, header names).
@@ -151,13 +179,41 @@ func isComment(line string) bool {
 	return strings.HasPrefix(t, "#") || strings.HasPrefix(t, "//")
 }
 
+// varDefRE matches an in-file variable definition (#1867): `@name = value`,
+// with whitespace around the `=` and around the value stripped. The value may
+// be empty (`@token=`) and may itself hold placeholders.
+var varDefRE = regexp.MustCompile(`^[ \t]*@([A-Za-z_][A-Za-z0-9_.-]*)[ \t]*=[ \t]*(.*?)[ \t]*$`)
+
+// VarDefinition recognises an `@name=value` line outside a body and returns
+// its parts (#1867). Exposed for the .http reformatter, which must leave the
+// lines the parser reads as definitions alone.
+func VarDefinition(line string) (name, value string, ok bool) {
+	m := varDefRE.FindStringSubmatch(line)
+	if m == nil {
+		return "", "", false
+	}
+	return m[1], m[2], true
+}
+
 // parseBlock parses lines[start:end] as one request block and appends the
 // result (or an error) to f. sep is the line index of the block's "###"
 // separator (-1 when the block opens the file). Blocks holding only
-// blanks/comments are skipped silently.
+// blanks/comments (or only variable definitions) are skipped silently.
 func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	i := start
-	for i < end && (strings.TrimSpace(lines[i]) == "" || isComment(lines[i])) {
+	for i < end {
+		if strings.TrimSpace(lines[i]) == "" || isComment(lines[i]) {
+			i++
+			continue
+		}
+		// Variable definitions (#1867) may precede the request line — a block
+		// of nothing but definitions is the file header the JetBrains
+		// convention puts them in.
+		nm, value, ok := VarDefinition(lines[i])
+		if !ok {
+			break
+		}
+		f.Vars = append(f.Vars, Variable{Name: nm, Value: value, Line: i + 1})
 		i++
 	}
 	if i == end {
@@ -330,20 +386,38 @@ func (f *File) RequestAt(line int) (*Request, bool) {
 	return nil, false
 }
 
-// placeholderRE matches both supported placeholder forms:
-// {{$env NAME}} and ${NAME}.
-var placeholderRE = regexp.MustCompile(`\{\{\s*\$env\s+([A-Za-z_][A-Za-z0-9_]*)\s*\}\}|\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+// placeholderRE matches the three supported placeholder forms:
+// {{$env NAME}} and ${NAME} — resolved from the process environment — and the
+// user-defined {{name}} (#1867), resolved from the variable chain.
+var placeholderRE = regexp.MustCompile(`\{\{\s*\$env\s+([A-Za-z_][A-Za-z0-9_]*)\s*\}\}|\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\{\{\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*\}\}`)
 
-// Substitute replaces every placeholder in s using lookup. When any
-// placeholder has no value, it returns s unchanged together with an error
-// naming all unresolved variables.
+// Substitute replaces every placeholder in s using lookup for all three
+// forms. When any placeholder has no value, it returns s unchanged together
+// with an error naming all unresolved variables.
 func Substitute(s string, lookup func(string) (string, bool)) (string, error) {
+	return SubstituteVars(s, &Vars{Lookup: lookup})
+}
+
+// SubstituteVars is Substitute with the full variable chain (#1867):
+// {{$env NAME}} and ${NAME} keep resolving from the process environment
+// alone, while {{name}} walks in-file definitions → environment file →
+// process environment.
+func SubstituteVars(s string, v *Vars) (string, error) {
+	return substitute(s, v.EnvValue, func(name string) (string, bool) { return v.value(name, nil) })
+}
+
+// substitute is the shared replacement pass: env resolves the {{$env NAME}}
+// and ${NAME} forms, user the {{name}} form.
+func substitute(s string, env, user func(string) (string, bool)) (string, error) {
 	missing := map[string]bool{}
 	out := placeholderRE.ReplaceAllStringFunc(s, func(m string) string {
 		groups := placeholderRE.FindStringSubmatch(m)
-		nm := groups[1]
+		lookup, nm := env, groups[1]
 		if nm == "" {
 			nm = groups[2]
+		}
+		if nm == "" {
+			lookup, nm = user, groups[3]
 		}
 		if v, ok := lookup(nm); ok {
 			return v
@@ -367,11 +441,16 @@ func Substitute(s string, lookup func(string) (string, bool)) (string, error) {
 // Any unresolved placeholder fails the whole request so a broken request is
 // never dispatched.
 func (r *Request) Resolve(lookup func(string) (string, bool)) (*Request, error) {
+	return r.ResolveVars(&Vars{Lookup: lookup})
+}
+
+// ResolveVars is Resolve with the full variable chain (#1867).
+func (r *Request) ResolveVars(vars *Vars) (*Request, error) {
 	out := *r
 	out.Headers = make([]Header, len(r.Headers))
 	var errs []string
 	sub := func(s string) string {
-		v, err := Substitute(s, lookup)
+		v, err := SubstituteVars(s, vars)
 		if err != nil {
 			errs = append(errs, err.Error())
 			return s

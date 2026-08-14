@@ -351,6 +351,11 @@ type Model struct {
 	// httpRequests is the palette mode listing the .http requests that have
 	// stored responses (#1829); the response pane's "r" fills and opens it.
 	httpRequests *httpRequestsMode
+	// httpEnvs is the palette mode listing the environments of an
+	// http-client.env.json (#1867); httpEnv persists the chosen one per
+	// directory.
+	httpEnvs *httpEnvMode
+	httpEnv  *httpEnvStore
 	// layoutSelect is the open pane-selection mini-map preceding the name
 	// prompt (#1568); layoutSaveSel carries its confirmed selection into the
 	// prompt's save (nil = full snapshot).
@@ -813,6 +818,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	vcsSt := &vcsState{}                            // shared before the literal: the reverts picker mode reads it
 	layoutsPicker := newLayoutsMode(layoutNames)    // saved window layouts picker (#1175)
 	httpRequests := newHTTPRequestsMode()           // stored HTTP responses picker (#1829)
+	httpEnvs := newHTTPEnvMode()                    // http-client.env.json picker (#1867)
 	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
 	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
@@ -843,9 +849,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:           help.New(reg, bindings, helpMinCol(cfg)),
 		shell:          ui.New(shellConfig(cfg)),
 		vcs:            vcsSt,
-		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests),
+		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEnvs),
 		layoutsPicker:  layoutsPicker,
 		httpRequests:   httpRequests,
+		httpEnvs:       httpEnvs,
+		httpEnv:        loadHTTPEnv(), // selected HTTP environments (#1867)
 		refs:           refs,
 		lspStatus:      map[string]string{},
 		symbols:        symbols,
@@ -1904,7 +1912,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEnvs *httpEnvMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -1969,7 +1977,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEnvs)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -3493,6 +3501,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// "r" in the response pane (#1829): list the .http file's requests
 		// that have stored responses and switch the pane to the chosen one.
 		m.openHTTPRequestPicker()
+		return m, nil
+
+	case HTTPSelectEnvMsg:
+		// http.selectEnvironment (palette, #1867): choose which
+		// http-client.env.json environment the file's {{name}} placeholders
+		// resolve against.
+		m.openHTTPEnvPicker()
+		return m, nil
+
+	case SelectHTTPEnvMsg:
+		// A row of that picker was chosen (#1867): persist it for the .http
+		// file's directory; the next dispatch resolves against it.
+		m.selectHTTPEnv(msg)
 		return m, nil
 
 	case ShowStoredHTTPResponseMsg:
