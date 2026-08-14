@@ -903,3 +903,43 @@ func TestKeymapRowsAndTableAreMemoized(t *testing.T) {
 		t.Fatal("a config reload must rebuild the table")
 	}
 }
+
+// TestShadowMarkersAndDetail (#1875): a user binding scoped to one pane that
+// hides a global default of a different command is flagged on both rows at the
+// chord, and the detail column names the direction and the resolution.
+func TestShadowMarkersAndDetail(t *testing.T) {
+	k, opts := keymapPage(t)
+	// f1 is the global cheatsheet chord (GOOS-independent, unlike cmd+e);
+	// scoping another command onto it in the editor shadows it there.
+	apply(t, config.WriteAndReload(opts, config.UserScope, "keymap.bindings.editor.f1", "http.selectEnvironment"))
+	if len(k.table().Shadows()) == 0 {
+		t.Fatal("precondition: expected a shadow in the effective table")
+	}
+	k.filter = "f1" // keep both rows inside the rendered window
+	v := k.View(120, 80)
+	// Both halves carry the gutter marker at the chord: the shadowing editor
+	// row and the shadowed global one.
+	if n := strings.Count(v, "⊘f1 "); n < 2 {
+		t.Fatalf("both f1 rows must carry the shadow marker, found %d:\n%s", n, v)
+	}
+	// Select the winning editor row: the detail column says what it hides.
+	for i, b := range k.rows() {
+		if b.Command == "http.selectEnvironment" {
+			k.sel = i
+		}
+	}
+	v = k.View(120, 80)
+	if !strings.Contains(v, "hides palette.keymapHelp") {
+		t.Fatalf("detail must name the hidden command:\n%s", v)
+	}
+	// Select the hidden global row: the detail says who hides it where.
+	for i, b := range k.rows() {
+		if b.Command == "palette.keymapHelp" && b.Context == keymap.Global {
+			k.sel = i
+		}
+	}
+	v = k.View(120, 80)
+	if !strings.Contains(v, "hidden by http.selectEnvironment") {
+		t.Fatalf("detail must name the shadowing command:\n%s", v)
+	}
+}

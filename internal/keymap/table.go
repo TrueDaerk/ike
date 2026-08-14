@@ -11,6 +11,7 @@ import (
 type BindingTable struct {
 	bindings    []Binding
 	conflicts   []Conflict
+	shadows     []Shadow
 	diagnostics []string
 }
 
@@ -96,7 +97,14 @@ func BuildTable(defaults []Binding, overrides map[string]string, goos string) *B
 	for _, c := range conflicts {
 		diags = append(diags, c.String())
 	}
-	return &BindingTable{bindings: kept, conflicts: conflicts, diagnostics: diags}
+	// Cross-context shadowing (#1875): a pane-scoped binding hiding a Global
+	// one with a different command is kept — layering is a feature — but never
+	// silently.
+	shadows := detectShadows(kept)
+	for _, s := range shadows {
+		diags = append(diags, s.String())
+	}
+	return &BindingTable{bindings: kept, conflicts: conflicts, shadows: shadows, diagnostics: diags}
 }
 
 // Bindings returns the effective bindings (post conflict resolution).
@@ -104,6 +112,11 @@ func (t *BindingTable) Bindings() []Binding { return t.bindings }
 
 // Conflicts returns the detected build-time conflicts.
 func (t *BindingTable) Conflicts() []Conflict { return t.conflicts }
+
+// Shadows returns the detected cross-context shadows (#1875): pane-scoped
+// bindings hiding a Global binding of a different command on the same chord,
+// minus the allowlisted intentional default layerings.
+func (t *BindingTable) Shadows() []Shadow { return t.shadows }
 
 // Diagnostics returns non-fatal messages (ignored overrides, conflicts).
 func (t *BindingTable) Diagnostics() []string { return t.diagnostics }

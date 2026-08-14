@@ -24,6 +24,41 @@ func TestNoSameContextConflicts(t *testing.T) {
 	}
 }
 
+// TestDefaultShadowsAreIntentional (#1875): the default table produces no
+// cross-context shadow beyond the allowlisted intentional layerings, and every
+// allowlist entry still corresponds to a real default pair — a stale entry
+// would silence a future accidental shadow.
+func TestDefaultShadowsAreIntentional(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		for _, s := range table.Shadows() {
+			t.Errorf("%s: unintentional default shadow: %s", goos, s)
+		}
+	}
+	// Every allowlist entry must match an actual default winner/hidden pair on
+	// at least one platform (the Cmd→Ctrl fold creates linux-only pairs),
+	// checked with a raw, unfiltered scan.
+	used := map[string]bool{}
+	for _, goos := range []string{"darwin", "linux"} {
+		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		for _, w := range table.Bindings() {
+			if w.Context == Global {
+				continue
+			}
+			for _, h := range table.Bindings() {
+				if h.Context == Global && h.Chord.String() == w.Chord.String() && h.Command != w.Command {
+					used[shadowKey(w.Chord.String(), w.Command, h.Command)] = true
+				}
+			}
+		}
+	}
+	for k, note := range intentionalDefaultShadows {
+		if !used[k] {
+			t.Errorf("stale intentionalDefaultShadows entry (%s): %q", note, k)
+		}
+	}
+}
+
 // TestFragileFlagsDeriveFromReachability: the hand-maintained flags are gone;
 // every default row's Fragile mirrors the ground-truth classification.
 func TestFragileFlagsDeriveFromReachability(t *testing.T) {

@@ -57,6 +57,43 @@ resolves against the **active** focus context, preferring the most specific matc
 a pane-scoped binding shadows a `Global` one for the same chord while that pane is
 focused.
 
+### Cross-context shadow detection (#1875)
+
+That layering is a feature — but it must never happen wordlessly. `shadow.go`
+scans the effective (post-conflict) table for a pane-scoped binding and a
+`Global` binding sharing a chord while naming **different** commands: a
+`Shadow` records the winner (pane-scoped, wins while its pane has focus) and
+the hidden binding (unreachable there, still winning everywhere else). The
+motivating case: a user override `editor.cmd+e = http.selectEnvironment`
+silently swallowed the global default `cmd+e` → `palette.recentFiles` in every
+editor.
+
+- **Same command = no shadow** — the dual-chord/fallback pattern
+  (`editor.write` on both `cmd+s` and `ctrl+s`, `editor.undo` bound per pane)
+  stays quiet, as do two pane-scoped bindings in different panes
+  (`separableContexts`, the "keep both" shape).
+- **Intentional default layering is allowlisted** — `intentionalDefaultShadows`
+  names the deliberate pairs of the shipped set (`shift+f6`: `lsp.rename` over
+  `file.rename`; `f7`: `diff.nextChange` over `debug.stepInto`; the linux
+  Cmd-fold landing tab cycling's `ctrl+cmd+arrow` under the editor's
+  `ctrl+arrow` line start/end). The allowlist only applies when **both** sides
+  are `LayerDefault`; a user or project binding shadowing anything is always
+  reported. `TestDefaultShadowsAreIntentional` keeps the list exact on both
+  platforms: every default shadow must be listed, every entry must still
+  correspond to a real pair.
+- **Surfacing** — `BuildTable` appends each shadow to the table's diagnostics
+  (`Shadows()` exposes the structured list). The root model toasts every
+  binding-table diagnostic as a warning notification (`notifyKeymapDiags`, at
+  startup and on every config reload, deduped per session); the diagnostic
+  names which command wins where and the qualified key to unbind. The settings
+  keymap page marks both halves with a `⊘` gutter marker at the chord, and its
+  detail column spells out the direction (`⊘ hides … while editor is focused` /
+  `⊘ hidden by …`) plus the resolution.
+
+The contexts carry no file-type scope, so a binding meant for one language
+(`.http` files) necessarily hits every editor — language-scoped bindings
+(`editor[http].cmd+e`) are #1876.
+
 ## Platform normalisation
 
 `platform.go` folds the logical `Meta` modifier once at table-build time: on macOS

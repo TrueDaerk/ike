@@ -530,7 +530,14 @@ func (k *KeymapPage) renderRow(b keymapRow, selected bool, w int) string {
 	if w < 44 {
 		chordW = 14
 	}
-	label := " " + pad(chord, chordW) + title
+	// Cross-context shadow marker (#1875): both halves of a pane-vs-global
+	// overlap are flagged in the gutter at the chord — the leftmost column, so
+	// a clipped title can never hide it; the detail column names the direction.
+	gutter := " "
+	if shadowing, shadowedBy := k.shadowInfo(b); len(shadowing)+len(shadowedBy) > 0 {
+		gutter = "⊘"
+	}
+	label := gutter + pad(chord, chordW) + title
 	if reason, blocked := keymap.BlockedReason(b.Command); blocked || (k.registered != nil && !k.registered(b.Command)) {
 		hint := reason
 		if hint == "" {

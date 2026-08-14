@@ -695,6 +695,7 @@ func New() Model {
 	terminal.SetDefaultScrollbackLines(cfg.Terminal.ScrollbackLines)
 	m := NewWith(registry.Global(), host.FromConfig(cfg))
 	m.notifyConfigDiags(append(diags, associationDiags()...))
+	m.notifyKeymapDiags()
 	return m
 }
 
@@ -733,6 +734,28 @@ func (m *Model) notifyConfigDiags(diags []config.Diagnostic) {
 		}
 		m.cfgDiagSeen[text] = true
 		m.host.Notify(host.Warn, text)
+	}
+}
+
+// notifyKeymapDiags surfaces the binding table's build diagnostics — conflicts,
+// cross-context shadows (#1875), unparseable override keys — as warning
+// notifications, deduped per session like the config diagnostics above. The
+// table used to compute these and nobody read them; a user binding silently
+// swallowing a default (editor.cmd+e over the global recent-files chord) is
+// exactly what must not pass without a word.
+func (m *Model) notifyKeymapDiags() {
+	if m.bindings == nil || m.bindings.Table() == nil {
+		return
+	}
+	if m.cfgDiagSeen == nil {
+		m.cfgDiagSeen = map[string]bool{}
+	}
+	for _, d := range m.bindings.Table().Diagnostics() {
+		if m.cfgDiagSeen[d] {
+			continue
+		}
+		m.cfgDiagSeen[d] = true
+		m.host.Notify(host.Warn, d)
 	}
 }
 
@@ -4267,6 +4290,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reloadConfig(msg.Config)
 		diags := append(msg.Diags, associationDiags()...)
 		m.notifyConfigDiags(diags)
+		m.notifyKeymapDiags() // the reload above rebuilt the binding table
 		m.settings.NoteReloadDiags(diags) // inline in the panel too (#891)
 		m.palette.Refresh()
 		// Diagnostic ignore (#1259) and severity remap (#1503) rules apply
