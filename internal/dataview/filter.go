@@ -5,6 +5,13 @@ package dataview
 // head is shown dimmed in front of it, so what the clause completes is never a
 // guess. Enter applies it, esc drops it and returns the whole table.
 //
+// The head carries the `WHERE` too (#1885): a filter is almost always a
+// condition on the current table, so typing one is what the line is for and
+// `WHERE ` is not worth retyping. The keyword stays available — a line that
+// opens with a clause keyword of its own (`ORDER BY id DESC LIMIT 10`, or an
+// explicit `WHERE`) is passed to the backend untouched and the dimmed `WHERE `
+// disappears from the head, so the query shown is always the query run.
+//
 // The pane still holds no SQL of its own: it hands the clause to the backend's
 // PageWhere, which wraps it and keeps the read-only contract. Paging keeps
 // working immediately; the filtered result's size is counted in the background
@@ -42,7 +49,7 @@ func (m *Model) startFilter() {
 		return
 	}
 	m.fEditing = true
-	m.fInput = m.filter
+	m.fInput = conditionOf(m.filter)
 	m.fCur = len([]rune(m.fInput))
 	m.fErr = nil
 	m.clampScroll()
@@ -79,12 +86,12 @@ func (m *Model) applyFilter() {
 	if m.src == nil || m.sel < 0 {
 		return
 	}
-	clause := strings.TrimSpace(m.fInput)
-	if clause == "" {
+	if strings.TrimSpace(m.fInput) == "" {
 		m.fEditing, m.fErr = false, nil
 		m.clearFilter()
 		return
 	}
+	clause := clauseOf(m.fInput)
 	page, err := m.src.PageWhere(m.tables[m.sel].Name, clause, 0, PageSize)
 	if err != nil {
 		m.fErr = err
@@ -112,14 +119,73 @@ func (m *Model) clearFilter() {
 	m.fetch(0)
 }
 
+// clauseKeywords open a clause of their own: a line starting with one of them
+// completes the `SELECT * FROM <table>` head by itself and gets no `WHERE`.
+var clauseKeywords = []string{"where", "order by", "group by", "having", "limit", "offset", "window", "union", "except", "intersect"}
+
+// impliedWhere reports whether the typed text is a bare condition — the usual
+// case — and so needs the implicit `WHERE` in front of it (#1885).
+func impliedWhere(input string) bool {
+	s := strings.ToLower(strings.TrimSpace(input))
+	if s == "" {
+		return false
+	}
+	// `order  by` is one keyword however it is spaced, so compare on words.
+	words := strings.Join(strings.Fields(s), " ")
+	for _, kw := range clauseKeywords {
+		if words == kw || strings.HasPrefix(words, kw+" ") {
+			return false
+		}
+	}
+	return true
+}
+
+// clauseOf is the clause the backend runs for the typed text: the condition
+// with its implicit `WHERE`, or the text itself when it opens a clause.
+func clauseOf(input string) string {
+	s := strings.TrimSpace(input)
+	if impliedWhere(s) {
+		return "WHERE " + s
+	}
+	return s
+}
+
+// conditionOf is clauseOf's inverse for seeding the line: an applied clause is
+// shown the way it was typed, without the `WHERE` the head now carries.
+func conditionOf(clause string) string {
+	s := strings.TrimSpace(clause)
+	rest, ok := cutFold(s, "where")
+	if !ok || !impliedWhere(rest) {
+		return s
+	}
+	return rest
+}
+
+// cutFold strips a leading keyword plus its separating space, case-insensitive.
+func cutFold(s, kw string) (string, bool) {
+	if len(s) <= len(kw) || !strings.EqualFold(s[:len(kw)], kw) {
+		return s, false
+	}
+	rest := s[len(kw):]
+	if trimmed := strings.TrimLeft(rest, " \t"); trimmed != rest {
+		return trimmed, true
+	}
+	return s, false
+}
+
 // filterPrefix is the fixed query head the line shows before the clause. It
 // comes from the backend, so the table is quoted the way its engine quotes it
-// (and a Parquet file names its `read_parquet(…)` call instead).
+// (and a Parquet file names its `read_parquet(…)` call instead) — plus the
+// implicit `WHERE ` whenever the typed text is a bare condition (#1885).
 func (m *Model) filterPrefix() string {
-	if m.src == nil || m.sel < 0 {
-		return "SELECT * FROM "
+	base := "SELECT * FROM "
+	if m.src != nil && m.sel >= 0 {
+		base = m.src.FilterPrefix(m.tables[m.sel].Name)
 	}
-	return m.src.FilterPrefix(m.tables[m.sel].Name)
+	if m.fInput == "" || impliedWhere(m.fInput) {
+		return base + "WHERE "
+	}
+	return base
 }
 
 // filterLine renders the open field: the dimmed prefix, then the clause

@@ -1,5 +1,19 @@
 # Log
 
+## 2026-08-14 (dataview: the filter line prefills through WHERE, #1885)
+
+- **`/` in the grid now asks for a condition, not a clause** (`internal/dataview/filter.go`):
+  the dimmed head shown in front of the input is `SELECT * FROM <table> WHERE `, and
+  `clauseOf` puts that `WHERE` in front of the typed text before it reaches
+  `PageWhere`. Typing `id = 5` runs `SELECT * FROM "users" WHERE id = 5`.
+- **Text that opens a clause of its own is passed through untouched**: `impliedWhere`
+  matches the leading words against `WHERE`/`ORDER BY`/`GROUP BY`/`HAVING`/`LIMIT`/
+  `OFFSET`/`WINDOW`/`UNION`/`EXCEPT`/`INTERSECT` word-wise (so a column named `orders`
+  is still a condition), and the head then drops its `WHERE ` — the query shown stays
+  the query run. `conditionOf` is the inverse, so reopening the line seeds the condition
+  as it was typed. An empty line still clears the filter, and the backends are unchanged.
+  Updated [Data Viewer](/architecture/data-viewer.md).
+
 ## 2026-08-14 (clone dialog: paste and the ghost-text name field, #1873)
 
 - **Cmd+V and bracketed paste now reach the clone dialog** (and the new-project, save-as,
