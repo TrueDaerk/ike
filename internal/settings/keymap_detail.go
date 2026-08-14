@@ -87,6 +87,29 @@ func (k *KeymapPage) suggestChords(want int) []string {
 	return out
 }
 
+// shadowInfo classifies the selected row against the table's detected
+// cross-context shadows (#1875): the shadows this binding wins (it hides a
+// global binding in its pane) and the shadows it loses (a pane-scoped binding
+// hides it there).
+func (k *KeymapPage) shadowInfo(b keymapRow) (shadowing, shadowedBy []keymap.Shadow) {
+	if b.unbound || b.nobind || b.Chord.Len() == 0 {
+		return nil, nil
+	}
+	cs := b.Chord.String()
+	for _, s := range k.table().Shadows() {
+		if s.Chord != cs {
+			continue
+		}
+		if s.Winner.Command == b.Command && s.Winner.Context == b.Context {
+			shadowing = append(shadowing, s)
+		}
+		if s.Hidden.Command == b.Command && s.Hidden.Context == b.Context {
+			shadowedBy = append(shadowedBy, s)
+		}
+	}
+	return shadowing, shadowedBy
+}
+
 // renderDetail renders the detail column for the selected command: what it is,
 // every chord bound to it with context and layer, its conflict state, and the
 // keys that act on it.
@@ -153,6 +176,20 @@ func (k *KeymapPage) renderDetail(w, h int) string {
 		lines = append(lines, clip.Render(dim.Render("   "+pad(b.Command, 22)+keymap.ContextName(b.Context))))
 		for _, o := range others {
 			lines = append(lines, clip.Render(dim.Render("   "+pad(o.Command, 22)+keymap.ContextName(o.Context)+" @"+o.Layer.String())))
+		}
+		// Shadow direction and resolution (#1875): a pane-vs-global overlap is
+		// kept but never wordless — say which command wins where and how to
+		// untangle it.
+		shadowing, shadowedBy := k.shadowInfo(b)
+		for _, s := range shadowing {
+			lines = append(lines, clip.Render(warn.Render(" ⊘ hides "+s.Hidden.Command+" (global) while "+
+				keymap.ContextName(s.Winner.Context)+" is focused")))
+			lines = append(lines, clip.Render(dim.Render("   "+s.Hidden.Command+" still wins elsewhere · rebind one, or u to unbind")))
+		}
+		for _, s := range shadowedBy {
+			lines = append(lines, clip.Render(warn.Render(" ⊘ hidden by "+s.Winner.Command+" ("+
+				keymap.ContextName(s.Winner.Context)+" @"+s.Winner.Layer.String()+") while that pane is focused")))
+			lines = append(lines, clip.Render(dim.Render("   this binding still wins elsewhere · rebind one, or u to unbind")))
 		}
 		if free := k.suggestChords(2); len(free) > 0 && !separated {
 			lines = append(lines, clip.Render(dim.Render(" free: "+strings.Join(free, " · "))))
