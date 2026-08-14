@@ -32,6 +32,7 @@ func parseStatus(out []byte) *Snapshot {
 	snap := &Snapshot{
 		Files: map[string]FileStatus{},
 		dirs:  map[string]FileStatus{},
+		codes: map[string]string{},
 	}
 	oid := ""
 	tokens := bytes.Split(out, []byte{0})
@@ -100,6 +101,10 @@ func (s *Snapshot) addEntry(p string, st FileStatus, xy string) {
 		e.X, e.Y = xy[0], xy[1]
 	}
 	s.Entries = append(s.Entries, e)
+	if s.codes == nil {
+		s.codes = map[string]string{}
+	}
+	s.codes[p] = e.Code()
 	s.add(p, st)
 }
 
@@ -125,12 +130,15 @@ func (s *Snapshot) add(p string, st FileStatus) {
 }
 
 // statusRank orders statuses for directory propagation: the strongest signal
-// wins — conflicts over content changes over additions over untracked.
+// wins — conflicts over content changes over half-staged work over additions
+// over untracked.
 func statusRank(st FileStatus) int {
 	switch st {
 	case StatusConflicted:
-		return 5
+		return 6
 	case StatusModified, StatusRenamed, StatusDeleted:
+		return 5
+	case StatusPartiallyStaged:
 		return 4
 	case StatusAdded:
 		return 3
@@ -143,8 +151,14 @@ func statusRank(st FileStatus) int {
 }
 
 // statusFromXY folds the two-letter staged/unstaged pair into one badge.
-// Any A dominates (new file), then D, then R; everything else is a change.
+// Both halves changed means partially staged (#1868, "AM"/"MM"): there is a
+// staged version plus later worktree edits, and the row must not read as a
+// plain addition. Otherwise the single changed half decides: A (new file),
+// then D, then R; everything else is a change.
 func statusFromXY(xy string) FileStatus {
+	if len(xy) == 2 && xy[0] != '.' && xy[1] != '.' {
+		return StatusPartiallyStaged
+	}
 	switch {
 	case strings.ContainsAny(xy, "A"):
 		return StatusAdded

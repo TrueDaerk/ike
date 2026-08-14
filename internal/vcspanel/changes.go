@@ -1,6 +1,7 @@
 package vcspanel
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -20,10 +21,13 @@ import (
 // OpenDiffMsg asks the root model to open the file's diff against HEAD.
 type OpenDiffMsg struct{ Path string } // repo-relative
 
-// Row is one changed file in the list.
+// Row is one changed file in the list. Code is the porcelain badge from the
+// entry ("A", "M", "AM"…, #1868); it tells a fully staged file from one that
+// was edited again after staging.
 type Row struct {
 	Path   string
 	Status vcs.FileStatus
+	Code   string
 }
 
 // rebuildChanges re-derives the rows from the snapshot, keeping the cursor
@@ -36,7 +40,7 @@ func (m *Model) rebuildChanges() {
 	m.chRows = nil
 	if m.snap != nil {
 		for _, e := range m.snap.Entries {
-			m.chRows = append(m.chRows, Row{Path: e.Path, Status: e.Status})
+			m.chRows = append(m.chRows, Row{Path: e.Path, Status: e.Status, Code: e.Code()})
 		}
 		sort.Slice(m.chRows, func(i, j int) bool { return m.chRows[i].Path < m.chRows[j].Path })
 	}
@@ -95,11 +99,12 @@ func (m *Model) renderChangeRows(pal *theme.Palette, height int) string {
 		i := m.chTop + k
 		if i < len(m.chRows) {
 			r := m.chRows[i]
-			badge := r.Status.String()
+			badge := r.Code
 			if badge == "" {
-				badge = " "
+				badge = r.Status.String()
 			}
-			line := " " + badge + " " + r.Path
+			// Two badge cells so "AM" rows keep the column aligned (#1868).
+			line := " " + fmt.Sprintf("%-2s", badge) + " " + r.Path
 			style := base
 			if c := vcs.StatusColor(pal, r.Status); c != nil {
 				style = style.Foreground(c)

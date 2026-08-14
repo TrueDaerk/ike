@@ -14,7 +14,9 @@ func StatusColor(p *theme.Palette, st FileStatus) color.Color {
 		return nil
 	}
 	switch st {
-	case StatusModified, StatusRenamed:
+	// A partially staged file still holds unstaged work, so it takes the
+	// modified hue (#1868); its "AM"/"MM" code carries the staged half.
+	case StatusModified, StatusRenamed, StatusPartiallyStaged:
 		return p.VCSModified
 	case StatusAdded:
 		return p.VCSAdded

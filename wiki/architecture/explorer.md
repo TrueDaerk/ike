@@ -276,10 +276,15 @@ padding, and title row) before calling the explorer:
 ## Git status colouring
 
 Epic 0320 layers git status over the per-filetype colours: entries render in
-the new theme VCS slots — modified, added, untracked, conflicted — and a
-directory containing changes tints with the modified colour so pending work is
-visible on collapsed subtrees. The app threads each vcs status snapshot into
-the tree via `SetVCS`; outside a git repository nothing changes. See
+the theme VCS slots and a directory containing changes tints with its
+subtree's dominant status, so pending work is visible on collapsed subtrees.
+The palette follows the git workflow (#1868): **green** added/staged, **blue**
+modified — including a file that was staged and then edited again — **violet**
+untracked, **muted red** deleted, **red** conflicted. All five are muted tones
+tuned per theme, mutually distinguishable and distinct from the plain
+foreground, so an untracked file never reads like an open (underlined) one.
+The app threads each vcs status snapshot into the tree via `SetVCS`; outside a
+git repository nothing changes. See
 [VCS / Git Integration](/architecture/vcs.md).
 
 **Gitignored entries** render dimmed (#1045, JetBrains-style): the snapshot's
@@ -305,9 +310,15 @@ error text.
 
 A row's **base** style is the plain foreground (#1051, suffix-tint model): the
 colour channel belongs to the **VCS status** — a changed file reads entirely in
-its status hue, JetBrains-style — directories take their subtree's dominant status (#1053), so an untracked-only folder reads untracked, not modified — and carries a one-cell status letter
-(`M`/`R`/`A`/`U`/`D`/`C`) at the row's right edge as a non-colour cue for
-ANSI256 terminals and colour-blind users. On **clean files** only the extension
+its status hue, JetBrains-style — directories take their subtree's dominant status (#1053), so an untracked-only folder reads untracked, not modified — and carries its status code
+at the row's right edge as a non-colour cue for ANSI256 terminals and
+colour-blind users. Files use the porcelain letters from the snapshot
+(`Snapshot.Code`, #1868): `U` untracked, `A` staged, `M` modified in the
+worktree, and the two-cell `AM`/`MM`/`RM` for a file that was staged and then
+edited again — the code reserves as many cells at the right edge as it is
+wide, and drops to the clipping ellipsis when the pane is too narrow for it.
+Directories and synthetic snapshots without X/Y detail fall back to the
+one-letter badge (`M`/`R`/`A`/`U`/`D`/`C`). On **clean files** only the extension
 suffix takes the filetype colour (`colors.suffixColor`, resolved from the
 `[explorer.colors]` ext/glob/filename keys; the legacy `dir`/`default` keys are accepted
 but no longer paint rows — directories stay uncoloured, caret + `/` carry the
