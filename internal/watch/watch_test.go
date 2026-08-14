@@ -204,6 +204,78 @@ func TestIngestGitMapsEvents(t *testing.T) {
 	}
 }
 
+// TestGitStatusEchoesStaySilent guards #1886: every `git status` run — IKE's
+// own VCS refresh included — bumps .git/index's atime (kqueue NOTE_ATTRIB →
+// Chmod) and can echo entry churn as a Write on the .git directory itself.
+// Mapped to GitChanged those echoes re-armed the very refresh that caused
+// them, a self-sustaining status loop pinning an idle session's CPU. Neither
+// may produce an EventMsg, while real interior changes still surface.
+func TestGitStatusEchoesStaySilent(t *testing.T) {
+	s, c := service()
+	git := filepath.Join(string(filepath.Separator)+"repo", ".git")
+	// The full echo set of one `git status` run on macOS: index atime bump,
+	// lock churn, directory-self write.
+	s.ingest(fsnotify.Event{Name: filepath.Join(git, "index"), Op: fsnotify.Chmod})
+	s.ingest(fsnotify.Event{Name: filepath.Join(git, "index.lock"), Op: fsnotify.Create})
+	s.ingest(fsnotify.Event{Name: filepath.Join(git, "index.lock"), Op: fsnotify.Remove})
+	s.ingest(fsnotify.Event{Name: git, Op: fsnotify.Write})
+	s.ingest(fsnotify.Event{Name: git, Op: fsnotify.Chmod})
+	time.Sleep(50 * time.Millisecond) // past the 10ms test debounce
+	if n := c.count(); n != 0 {
+		t.Fatalf("git status echoes must stay silent, got %d events: %v", n, c.msgs)
+	}
+	// Interior content events still surface: the loop guards must not mute
+	// real repository changes (a staged file rewriting the index).
+	s.ingest(fsnotify.Event{Name: filepath.Join(git, "index"), Op: fsnotify.Create})
+	got := c.wait(t, 1)
+	if len(got) != 1 || got[0].Kind != GitChanged || got[0].Path != git {
+		t.Fatalf("want one GitChanged for %s, got %v", git, got)
+	}
+}
+
+// TestRelativeRootClassifiesGitDir guards the live-app half of #1886: main
+// starts the watcher on "." — and fsnotify reports event paths exactly as
+// watched, so with a relative root the ".git" classification (which matches
+// on absolute markers) never applied. Every `git status` echo then surfaced
+// as a generic FileRemoved + DirChanged, re-arming the VCS refresh that
+// caused it. A relative root must classify .git events exactly like an
+// absolute one: lock churn silent, real changes as GitChanged.
+func TestRelativeRootClassifiesGitDir(t *testing.T) {
+	dir := t.TempDir()
+	git := filepath.Join(dir, ".git")
+	if err := os.MkdirAll(git, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	s, c := service()
+	if err := s.Start("."); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stop()
+
+	// The status-run echo: lock file coming and going must stay silent.
+	if err := os.WriteFile(filepath.Join(git, "index.lock"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(git, "index.lock")); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if n := c.count(); n != 0 {
+		t.Fatalf("lock churn under a relative root must stay silent, got %v", c.msgs)
+	}
+
+	// A real metadata change still surfaces, with the absolute git dir path.
+	if err := os.WriteFile(filepath.Join(git, "index"), []byte("idx"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := c.wait(t, 1)
+	want := absPath(git)
+	if len(got) != 1 || got[0].Kind != GitChanged || got[0].Path != want {
+		t.Fatalf("want one GitChanged for %s, got %v", want, got)
+	}
+}
+
 func TestSkipWatchDir(t *testing.T) {
 	skip := []string{".git", ".venv", ".tox", ".mypy_cache", ".idea", "node_modules", "__pycache__", "site-packages", "vendor"}
 	for _, n := range skip {

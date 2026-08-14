@@ -88,6 +88,12 @@ type Snapshot struct {
 	// filled from the single-threaded update/render loop.
 	resolvedRoot string
 	rootResolved bool
+	// resolvedDirs memoizes EvalSymlinks per parent directory for the same
+	// fallback (#1886): relPath runs per explorer row per frame, and on a
+	// symlinked project root every row missed the fast Rel and paid a full
+	// per-path EvalSymlinks walk — the dominant render cost on medium
+	// projects. Same single-threaded-loop discipline as resolvedRoot.
+	resolvedDirs map[string]string
 	// codes maps repo-relative paths to their display code (#1868): the
 	// porcelain letters the explorer and the changes list render — "U",
 	// "A", "M", "AM", "MM". Empty for synthetic snapshots, whose consumers
@@ -280,11 +286,29 @@ func (s *Snapshot) relPath(path string) (string, bool) {
 			if s.resolvedRoot == "" {
 				return "", false
 			}
-			p, err := filepath.EvalSymlinks(path)
-			if err != nil {
+			// Resolve only the directory part, memoized per directory
+			// (#1886): rows in the same directory share one EvalSymlinks
+			// walk instead of paying a per-row syscall storm every frame.
+			// Keeping the base unresolved also matches git's view — a
+			// tracked symlink is reported as the entry itself, never as
+			// its target.
+			dir, base := filepath.Split(path)
+			dir = filepath.Clean(dir)
+			resolved, hit := s.resolvedDirs[dir]
+			if !hit {
+				resolved = ""
+				if r, err := filepath.EvalSymlinks(dir); err == nil {
+					resolved = r
+				}
+				if s.resolvedDirs == nil {
+					s.resolvedDirs = map[string]string{}
+				}
+				s.resolvedDirs[dir] = resolved
+			}
+			if resolved == "" {
 				return "", false
 			}
-			if rel, ok = relInside(s.resolvedRoot, p); !ok {
+			if rel, ok = relInside(s.resolvedRoot, filepath.Join(resolved, base)); !ok {
 				return "", false
 			}
 		}
