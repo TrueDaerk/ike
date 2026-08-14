@@ -22,9 +22,15 @@ import (
 //
 // Covered: the request line's target, folded query continuation lines
 // (#1269) and application/x-www-form-urlencoded request bodies (the same
-// key=value&… structure). Placeholder regions ({{…}} and ${…}) are skipped —
-// the grammar styles those more specifically, and concealing inside them
-// would hide the placeholder's own syntax.
+// key=value&… structure), plus — since #1880 — every "{{name}}" placeholder
+// and "@name = value" definition in the buffer. The grammar only builds a
+// `variable` node for a placeholder in some contexts (a header's value gets
+// one, but the request target stays one opaque url node and an embedded
+// JSON/XML/HTML body is re-highlighted as a plain string literal by the
+// region overlay), so a Go-computed span is the one path that reaches every
+// site consistently; percent/query overlays elsewhere in this file still
+// skip placeholder ranges (via placeholderRanges) so they never fight the
+// placeholder's own capture for the same cells.
 //
 // The value conceals (#1684) ride on the same structure. Everything the
 // producer already recognises as a *value* — a query parameter, a folded
@@ -37,17 +43,26 @@ import (
 // querySpans is the lang.Language.Spans hook (#1585).
 func querySpans(lines []string) []lang.Span {
 	f := httpfile.Parse(strings.Join(lines, "\n"))
+	// Placeholders (#1880) are claimed first, so they win over everything
+	// else this producer computes for the same cells — a "{{host}}" sitting
+	// inside a variable definition's value, say.
+	out := placeholderSpans(lines)
 	// JWTs (#1619) are scanned over the whole buffer, not per request region:
 	// they show up in an Authorization header, in a body, in a @token variable
 	// and in a pasted response block alike. Detection is structural — three
 	// base64url segments whose first two decode to JSON — so scanning
 	// everything cannot mis-dim ordinary text.
-	out := jwt.Spans(lines)
+	out = append(out, jwt.Spans(lines)...)
 	// Network literals (#1653): a punycode authority in a request target and
 	// a CIDR prefix in a header or body value. Scanned over the whole buffer
 	// for the same reason JWTs are — a host shows up in a target, an
 	// X-Forwarded-For header and a body alike.
 	out = append(out, nethint.Spans(lines)...)
+	// Variable definitions (#1867, #1880): the grammar's own query captures
+	// an "@name" as @variable but has no capture for its value — appended
+	// after the JWT/network passes so a JWT-shaped definition value keeps
+	// its own dimmed signature instead of reading as one flat string.
+	out = append(out, variableDefinitionSpans(lines)...)
 	// The value ranges collected along the way, for the number hints below
 	// (#1684). Every entry is a stretch of a line that holds values rather
 	// than structure: a query string, a header value, an inline body line.
@@ -161,6 +176,72 @@ func querySpans(lines []string) []lang.Span {
 	out = append(out, numhint.Allowed(stamps, hints)...)
 	taken := standIns(out)
 	return append(out, numhint.Except(numhint.HintSpans(hints), taken)...)
+}
+
+// placeholderSpans finds every "{{name}}" placeholder in the buffer and
+// styles it as punctuation braces around a @variable name (#1880), matching
+// the styling `(variable name: (_) @variable)` gives a placeholder the
+// grammar does reach. Scanned over the whole buffer, not per request region
+// — a placeholder shows up in a request target, a header value and a body
+// alike, and the request target and an embedded JSON/XML/HTML body are ones
+// the grammar itself cannot reach into (see the package doc above querySpans).
+func placeholderSpans(lines []string) []lang.Span {
+	var out []lang.Span
+	for i, line := range lines {
+		runes := []rune(line)
+		for j := 0; j+1 < len(runes); j++ {
+			if runes[j] != '{' || runes[j+1] != '{' {
+				continue
+			}
+			end := -1
+			for k := j + 2; k+1 < len(runes); k++ {
+				if runes[k] == '}' && runes[k+1] == '}' {
+					end = k
+					break
+				}
+			}
+			if end < 0 {
+				continue
+			}
+			out = append(out,
+				lang.Span{Line: i, StartCol: j, EndCol: j + 2, Capture: "punctuation"},
+				lang.Span{Line: i, StartCol: j + 2, EndCol: end, Capture: "variable"},
+				lang.Span{Line: i, StartCol: end, EndCol: end + 2, Capture: "punctuation"},
+			)
+			j = end + 1
+		}
+	}
+	return out
+}
+
+// variableDefinitionSpans styles the value of an in-file "@name = value"
+// definition (#1867, #1880): the grammar's query captures the name as
+// @variable and the "=" as @operator but has no capture for the value at
+// all, so it renders unstyled. httpfile.VarDefinition already recognises the
+// line and trims the value; this locates that same substring in the source
+// line to style it distinctly from its name.
+func variableDefinitionSpans(lines []string) []lang.Span {
+	var out []lang.Span
+	for i, line := range lines {
+		_, value, ok := httpfile.VarDefinition(line)
+		if !ok || value == "" {
+			continue
+		}
+		eq := strings.IndexByte(line, '=')
+		if eq < 0 {
+			continue
+		}
+		rest := line[eq+1:]
+		idx := strings.Index(rest, value)
+		if idx < 0 {
+			continue
+		}
+		startByte := eq + 1 + idx
+		startCol := utf8.RuneCountInString(line[:startByte])
+		endCol := startCol + utf8.RuneCountInString(value)
+		out = append(out, lang.Span{Line: i, StartCol: startCol, EndCol: endCol, Capture: "string"})
+	}
+	return out
 }
 
 // valueRange is the rune-column stretch [From, To) of line Line that holds

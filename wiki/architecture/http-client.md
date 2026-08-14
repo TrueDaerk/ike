@@ -305,8 +305,9 @@ For a recognized stream:
   conceal as their decoded character (multi-byte encodings like `%C3%A4` →
   `ä` span all their triples), background-tinted as stand-ins; only while
   the caret sits inside a sequence — or a selection crosses it — does that
-  spot show the raw encoding, styled as `escape`. Placeholder regions are
-  skipped so their own captures survive.
+  spot show the raw encoding, styled as `escape`. `{{…}}` placeholder regions
+  are left to their own overlay (#1880, below) rather than the query pass's
+  key/value captures.
 - **Target prefix segments** (#1740, `spans.go`): the same producer splits an
   absolute-form target's `scheme://authority` prefix into three subtly
   distinct segments — the scheme dims to the `comment` colour, `://` takes
@@ -314,9 +315,23 @@ For a recognized stream:
   authority (host and port) keeps the url colour through `string.special`,
   which falls back to `string` in every built-in theme. Origin-form targets
   (`/api/users`) have no prefix and stay unchanged; placeholders inside the
-  prefix keep the grammar's captures, and the punycode/homograph stand-ins of
-  `internal/nethint` (#1653) win over the authority span, since the prefix
-  spans are emitted last.
+  prefix keep their own overlay's captures (#1880), and the punycode/homograph
+  stand-ins of `internal/nethint` (#1653) win over the authority span, since
+  the prefix spans are emitted last.
+- **Placeholder and definition highlighting** (#1880, `spans.go`): the
+  grammar only builds a `variable` node for a `{{name}}` placeholder in some
+  contexts — a header value gets one, but the request target stays one
+  opaque url node and an embedded JSON/XML/HTML body (#1303, see
+  `regions.go`) is re-highlighted as a plain string literal — so a
+  Go-computed span reaches every placeholder site consistently instead:
+  every `{{name}}` in the buffer gets `punctuation` braces around a
+  `variable` name, in the target, headers and bodies alike. It is emitted
+  before every other producer in this file, so it always wins where another
+  overlay would otherwise cover the same cells. An in-file `@name = value`
+  definition (#1867) already gets `@name` styled as `variable` and `=` as
+  `operator` from the grammar's own query; the same producer adds the
+  missing `string` capture for `value` (a placeholder inside the value, e.g.
+  `@api = {{host}}/api`, keeps its own placeholder styling instead).
 - **Value conceals** (#1618, #1627, #1684): the same producer collects every
   stretch it already recognises as a *value* — a query string, a folded
   query continuation line, a header value, an inline request body line — and
