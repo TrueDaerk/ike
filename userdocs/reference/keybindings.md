@@ -219,32 +219,5 @@ context; the bare form applies wherever the chord is bound:
 The keymap settings page offers this as **keep both, resolve by context** when a
 captured chord collides with a command in another pane.
 
-## Precedence & shadowing
-
-A pane-qualified binding is more specific than a `global` one: while its pane
-has focus it wins the chord, everywhere else the `global` binding still runs.
-When the two name **different** commands, the more specific binding *shadows*
-the global one — e.g. `"editor.cmd+e" = "http.selectEnvironment"` makes
-`cmd+e` open the environment picker in every editor, hiding the default
-`cmd+e` → Recent files there (Recent files still opens with the explorer or
-another pane focused).
-
-Such an overlap is kept — it can be exactly what you want — but it is never
-silent:
-
-- On startup and after every config change, a warning notification names the
-  chord, both commands, which one wins where, and the qualified key to unbind
-  (e.g. `editor.cmd+e`).
-- The settings keymap page marks both bindings with `⊘` at the chord; the
-  detail column says `hides …` on the winning binding and `hidden by …` on the
-  hidden one, plus how to resolve it (rebind one command or unbind).
-- Binding the **same** command in several contexts, or two different pane
-  contexts (`editor` vs `explorer`), overlaps nothing and stays quiet.
-
-The pane contexts carry no file-type scope: an `editor.*` binding applies in
-every editor, regardless of the file's language. Restricting a binding to one
-file type (e.g. only `.http` files) is planned as language-scoped contexts —
-see issue #1876.
-
 The [Commands reference](commands.md) lists every command ID, including the
 ones with no default chord.
