@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-08-07T18:00:00Z
+timestamp: 2026-08-14T00:00:00Z
 ---
 
 # Command Palette
@@ -348,7 +348,11 @@ returns the command the resulting edit schedules (the live-mode debounce kick).
 It is one of several implementations of the same seam: `finder.Paste` (the
 focused query / replacement / include / exclude field), `settings.Paste` (the
 inline value editor, else the entry filter), `explorer.Paste` (a name prompt
-or the speed-search query), and the app's own rename prompts.
+or the speed-search query), and the app's own rename, clone-dialog,
+new-project, save-as, save-layout and JetBrains-import prompts (the last
+group added in #1873, alongside the clone dialog's rename/palette
+predecessors — every shell prompt with a text field now takes a paste, not
+just the ones fixed at #1273's original cut).
 
 The root model routes to them through **`internal/app/overlaypaste.go`**,
 whose `routeOverlayPaste` mirrors the guard chain of the `KeyPressMsg` handler

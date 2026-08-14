@@ -194,6 +194,19 @@ func (m Model) updateLayoutSavePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	return m, nil
 }
 
+// pasteLayoutSavePrompt inserts a paste into the layout-name input at its
+// cursor (#1873).
+func (m *Model) pasteLayoutSavePrompt(text string) bool {
+	out, pos, changed := ui.PasteText(m.layoutSaveInput, m.layoutSavePos, text)
+	if !changed {
+		return false
+	}
+	m.layoutSaveInput, m.layoutSavePos = out, pos
+	m.layoutSaveErr = "" // a new name re-arms the overwrite guard
+	m.renderLayoutSavePrompt()
+	return true
+}
+
 // deleteLayout removes name from the store (clearing the default marker when
 // it pointed there) and refreshes the open picker in place.
 func (m *Model) deleteLayout(name string) {

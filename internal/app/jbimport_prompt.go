@@ -135,6 +135,18 @@ func (m Model) updateJBImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// pasteJBImportPrompt inserts a paste into the path input at its cursor
+// (#1873).
+func (m *Model) pasteJBImportPrompt(text string) bool {
+	out, pos, changed := ui.PasteText(m.jbImportInput, m.jbImportPos, text)
+	if !changed {
+		return false
+	}
+	m.jbImportInput, m.jbImportPos = out, pos
+	m.renderJBImportPrompt(nil)
+	return true
+}
+
 // expandHome resolves a leading "~" to the user's home directory.
 func expandHome(path string) string {
 	if path == "~" || strings.HasPrefix(path, "~"+string(os.PathSeparator)) {

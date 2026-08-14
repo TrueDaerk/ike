@@ -1,5 +1,20 @@
 # Log
 
+## 2026-08-14 (clone dialog: paste and the ghost-text name field, #1873)
+
+- **Cmd+V and bracketed paste now reach the clone dialog** (and the new-project, save-as,
+  save-layout and JetBrains-import prompts): `overlayCapturesKeyboard` and
+  `routeOverlayPaste` (`internal/app/overlaypaste.go`, #1273) gained a case for each,
+  delegating to a `paste*Prompt` helper alongside each prompt's `updateFoo`/`EditKey` path.
+  A paste into the clone dialog's URL field re-derives the directory name exactly like typing
+  does.
+- **The derived directory name no longer looks like simultaneous typing**: while it merely
+  follows the URL (`!cloneNameEdited`), `renderClonePrompt` renders it dimmed
+  (`cloneGhostStyle`, faint) instead of as live text — hand-editing the field (by key or
+  paste) switches it back to a normal rendering. The name-follows-URL behavior itself,
+  including the edited-stop, is unchanged. Updated [Project Switching](/architecture/project-switching.md)
+  and [Command Palette](/architecture/command-palette.md) (paste routing section).
+
 ## 2026-08-14 (http client: user-defined variables, #1867)
 
 - **`.http` files define their own variables now** (`internal/httpfile`): `@name = value` lines

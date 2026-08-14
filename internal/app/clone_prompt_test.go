@@ -64,6 +64,102 @@ func TestClonePromptDerivesNameFromURL(t *testing.T) {
 	}
 }
 
+// TestClonePromptPasteIntoURLField guards #1873: a bracketed paste into the
+// focused URL field inserts at the cursor and re-derives the name exactly
+// like typing does.
+func TestClonePromptPasteIntoURLField(t *testing.T) {
+	base := newSized()
+	cloneProjectsDir(t)
+	m := openClone(t, base)
+
+	tm, _ := m.Update(tea.PasteMsg{Content: "https://github.com/TrueDaerk/ike.git"})
+	m = tm.(Model)
+
+	if m.cloneURL != "https://github.com/TrueDaerk/ike.git" {
+		t.Fatalf("cloneURL = %q, want the pasted text", m.cloneURL)
+	}
+	if m.cloneName != "ike" {
+		t.Fatalf("a paste into the URL field must re-derive the name, got %q", m.cloneName)
+	}
+}
+
+// TestClonePromptPasteIntoNameField: a paste into the name field lands at the
+// cursor and stops the URL-follows derivation, same as typing there.
+func TestClonePromptPasteIntoNameField(t *testing.T) {
+	base := newSized()
+	cloneProjectsDir(t)
+	m := openClone(t, base)
+	m = typeInto(m, "https://github.com/TrueDaerk/ike.git")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+
+	tm, _ := m.Update(tea.PasteMsg{Content: "-fork"})
+	m = tm.(Model)
+
+	if m.cloneName != "ike-fork" {
+		t.Fatalf("cloneName = %q, want %q", m.cloneName, "ike-fork")
+	}
+	if !m.cloneNameEdited {
+		t.Fatal("a paste into the name field must mark it hand-edited")
+	}
+
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	m = typeInto(m, "x")
+	if m.cloneName != "ike-fork" {
+		t.Fatalf("a hand-edited name (via paste) must not follow the URL again, got %q", m.cloneName)
+	}
+}
+
+// TestClonePromptCmdVPastesFromClipboard: Cmd+V (no bracketed-paste terminal
+// support) routes the system clipboard into the focused field the same way
+// (#1273 pattern, #1873).
+func TestClonePromptCmdVPastesFromClipboard(t *testing.T) {
+	restore := clipboardRead
+	clipboardRead = func() string { return "https://example.com/org/repo.git" }
+	t.Cleanup(func() { clipboardRead = restore })
+
+	base := newSized()
+	cloneProjectsDir(t)
+	m := openClone(t, base)
+
+	tm, _ := m.Update(tea.KeyPressMsg{Code: 'v', Mod: tea.ModSuper})
+	m = tm.(Model)
+
+	if m.cloneURL != "https://example.com/org/repo.git" {
+		t.Fatalf("cmd+v did not paste into the URL field, got %q", m.cloneURL)
+	}
+}
+
+// TestCloneNameGhostUntilEdited guards #1873: the derived name renders
+// dimmed (ghost text) while it merely follows the URL, so typing the URL no
+// longer looks like writing into both fields at once. Once hand-edited, the
+// field renders like any other real input.
+func TestCloneNameGhostUntilEdited(t *testing.T) {
+	base := newSized()
+	cloneProjectsDir(t)
+	m := openClone(t, base)
+
+	m = typeInto(m, "https://github.com/TrueDaerk/ike.git")
+	if m.cloneName != "ike" {
+		t.Fatalf("derived name = %q, want %q", m.cloneName, "ike")
+	}
+	ghost := cloneGhostStyle.Render("ike")
+	if !strings.Contains(m.View().Content, ghost) {
+		t.Fatalf("derived name must render as dimmed ghost text while unedited:\n%s", m.View().Content)
+	}
+
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	m = typeInto(m, "-fork")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab}) // back to the URL field; the name unfocuses
+
+	view := m.View().Content
+	if strings.Contains(view, cloneGhostStyle.Render("ike-fork")) {
+		t.Fatal("a hand-edited name must no longer render as ghost text")
+	}
+	if !strings.Contains(plainView(m), "ike-fork") {
+		t.Fatalf("hand-edited name must still render, got:\n%s", plainView(m))
+	}
+}
+
 // TestClonePromptRejectsBadInput keeps validation failures in the dialog.
 func TestClonePromptRejectsBadInput(t *testing.T) {
 	base := newSized()

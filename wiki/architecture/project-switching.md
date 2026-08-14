@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-08-09T00:00:00Z
+timestamp: 2026-08-14T00:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -78,6 +78,13 @@ open the result.
   (`vcs.CloneName`: last segment, `.git` stripped, ssh/https/file forms) until
   it is typed by hand; `tab` switches fields, `enter` clones, `esc` closes.
   The dialog shows the resolved target (`<project directory>/<name>`).
+  Bracketed paste and Cmd+V insert into the focused field at its cursor
+  (`overlayCapturesKeyboard`/`routeOverlayPaste`, #1273 pattern) — a paste
+  into the URL field re-derives the name like typing does. While the name
+  merely follows the URL it renders dimmed (`cloneGhostStyle`, faint) rather
+  than as live text, so typing the URL no longer reads as writing into both
+  fields at once (#1873); the save-as, new-project, save-layout and
+  JetBrains-import prompts take the same paste routing.
 - **Target rules** (`project.CloneTarget`): the name must be a single path
   segment, the project directory is created on demand (`EnsureDirectory`), and
   an existing target is refused — no clone lands inside an unrelated checkout.
