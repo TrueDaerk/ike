@@ -19,6 +19,19 @@
   environments and the command. Completion and the reformatter learned that a definition line is
   not a request line. Updated [HTTP Client](/architecture/http-client.md).
 
+## 2026-08-14 (highlight: interpolation scopes in Python f-strings and PHP strings, #1869)
+
+- **`f"{kw['type']}"` now separates into four colors**: Python's query gained the standard
+  bracket list (`plugins/languages/python/queries/python.scm`), so a subscript inside an
+  interpolation shows its container as `variable`, its `[` `]` as `punctuation.bracket` and the
+  key as `string`, with the f-string braces still `punctuation.special` — the interpolation
+  pattern precedes the bracket list, and rainbow brackets keep overriding it when enabled.
+  PHP already covered all three forms (`{$uid}`, `$type`, the deprecated `${dt}`) after #1466;
+  both reference snippets are now pinned token by token in
+  `plugins/languages/{python,php}/highlight_test.go`. Note that a Python assignment named `key`
+  renders masked rather than highlighted — secret masking (#1623) claims the value first.
+  Updated [Highlighting](/architecture/highlighting.md).
+
 ## 2026-08-13 (userdocs: eighteen interface screenshots and a visual pass, #1857)
 
 - **The user docs showed the file the editor renders, never the IDE around it.** The rendering and

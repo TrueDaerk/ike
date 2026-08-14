@@ -58,7 +58,10 @@ monochrome, #928; same class of bug: markdown's `fenced_code_block`, CSS's
 `integer_value`+`unit`, and whole-string captures over interpolating strings —
 Python f-strings and PHP encapsed strings/heredocs capture their
 delimiter/content parts so `{…}` expressions highlight as code, with the
-braces, format spec and conversion as `punctuation.special`, #1466). `Highlight(path, lines)` looks the language up via `lang.ByPath`, type-asserts
+braces, format spec and conversion as `punctuation.special`, #1466; PHP's
+`${x}` sigil and braces likewise, and Python captures subscript brackets as
+`punctuation.bracket` so `f"{kw['type']}"` separates container, brackets and
+key, #1869). `Highlight(path, lines)` looks the language up via `lang.ByPath`, type-asserts
 its grammar, and parses — the engine knows no specific language.
 
 `HighlightScoped(path, lines)` is the same single parse returning the spans
