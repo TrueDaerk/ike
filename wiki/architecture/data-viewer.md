@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Data Viewer
-description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825/#1851 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table>, run inside a subquery so paging keeps working."
+description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825/#1851/#1885 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table> (the head prefills through WHERE, so only the condition is typed), run inside a subquery so paging keeps working."
 resource: internal/dataview
 tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sql, mouse, paging, async, performance]
 timestamp: 2026-08-13T12:00:00Z
@@ -110,12 +110,21 @@ accepted over a cgo driver):
 - **Identifiers**: table names come from `sqlite_master` but are still quoted
   as identifiers, so a hostile name cannot escape its position.
 
-## The filter (#1777)
+## The filter (#1777, #1885)
 
 `/` in the grid opens a one-line field holding everything that follows
 `SELECT * FROM <table>` — a `WHERE`, an `ORDER BY`, a `LIMIT`, or all three.
 The fixed head is drawn **dimmed in front of the input**, so what the clause
-completes is never a guess, and the clause itself is **SQL-highlighted** from
+completes is never a guess, and it carries the **`WHERE ` too** (#1885): a
+filter is nearly always a condition on the current table, so `/` prefills down
+to `SELECT * FROM <table> WHERE ` and the user types only `id = 5`. The
+keyword is not lost — text that **opens a clause of its own** (`WHERE`,
+`ORDER BY`, `GROUP BY`, `HAVING`, `LIMIT`, `OFFSET`, `WINDOW`, `UNION`,
+`EXCEPT`, `INTERSECT`, matched word-wise so a column named `orders` is a
+condition) runs untouched and the dimmed `WHERE ` disappears from the head, so
+the query shown is always the query run. Reopening the line seeds the
+condition **as it was typed**, without the implicit keyword; an empty line
+still clears the filter. The clause is **SQL-highlighted** from
 the theme's captures (`highlight.HighlightFenced("sql", …)` over the whole
 statement — `WHERE x = 1` alone is not one, and the grammar only reads the
 clause with its head attached; the prefix's columns are then skipped).

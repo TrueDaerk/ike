@@ -53,6 +53,90 @@ func TestFilterLineShowsPrefixAndClause(t *testing.T) {
 	}
 }
 
+// TestFilterConditionGetsTheImplicitWhere covers #1885: `/` prefills the head
+// down to `WHERE `, so a bare condition is a whole query.
+func TestFilterConditionGetsTheImplicitWhere(t *testing.T) {
+	m := newPane(t, writeFixtureDB(t))
+	openGrid(t, &m)
+	feed(t, &m, key("/"))
+	view := stripANSI(m.View())
+	if !strings.Contains(view, `SELECT * FROM "users" WHERE `) {
+		t.Fatalf("the empty line must already show the WHERE head, view:\n%s", view)
+	}
+	typeInto(t, &m, "id > 600 ORDER BY id")
+	if !strings.Contains(stripANSI(m.View()), `SELECT * FROM "users" WHERE id > 600 ORDER BY id`) {
+		t.Fatalf("the condition must render behind the WHERE head, view:\n%s", stripANSI(m.View()))
+	}
+	feed(t, &m, key("enter"))
+	if m.Filter() != "WHERE id > 600 ORDER BY id" {
+		t.Fatalf("applied filter = %q, want the WHERE-prefixed clause", m.Filter())
+	}
+	if m.PageRows() != PageSize || m.PageOffset() != 0 {
+		t.Fatalf("filtered page = %d rows at %d", m.PageRows(), m.PageOffset())
+	}
+	// Reopening seeds the condition as typed, not the clause with its WHERE.
+	feed(t, &m, key("/"))
+	if m.FilterInput() != "id > 600 ORDER BY id" {
+		t.Fatalf("seeded input = %q, want the bare condition", m.FilterInput())
+	}
+}
+
+// TestFilterKeywordClauseKeepsItsOwnHead covers #1885: a line that opens a
+// clause itself runs as typed and loses the implicit WHERE from the head.
+func TestFilterKeywordClauseKeepsItsOwnHead(t *testing.T) {
+	m := newPane(t, writeFixtureDB(t))
+	openGrid(t, &m)
+	feed(t, &m, key("/"))
+	typeInto(t, &m, "ORDER BY id DESC LIMIT 10")
+	view := stripANSI(m.View())
+	if strings.Contains(view, "WHERE") {
+		t.Fatalf("a clause of its own must not get the implicit WHERE, view:\n%s", view)
+	}
+	feed(t, &m, key("enter"))
+	if m.Filter() != "ORDER BY id DESC LIMIT 10" {
+		t.Fatalf("applied filter = %q, want the clause as typed", m.Filter())
+	}
+	// An explicit WHERE is passed through too, and seeds back unchanged in the
+	// condition slot.
+	feed(t, &m, key("/"))
+	for range m.FilterInput() {
+		feed(t, &m, tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	typeInto(t, &m, "where id > 1100")
+	feed(t, &m, key("enter"))
+	if m.Filter() != "where id > 1100" {
+		t.Fatalf("applied filter = %q, want the explicit WHERE untouched", m.Filter())
+	}
+	feed(t, &m, key("/"))
+	if m.FilterInput() != "id > 1100" {
+		t.Fatalf("seeded input = %q, want the condition without the WHERE", m.FilterInput())
+	}
+}
+
+func TestClauseAndConditionRoundTrip(t *testing.T) {
+	for _, tc := range []struct{ input, clause, seed string }{
+		{"id = 5", "WHERE id = 5", "id = 5"},
+		{"  name LIKE 'foo%'  ", "WHERE name LIKE 'foo%'", "name LIKE 'foo%'"},
+		{"WHERE id = 5", "WHERE id = 5", "id = 5"},
+		{"where id = 5", "where id = 5", "id = 5"},
+		{"ORDER BY id", "ORDER BY id", "ORDER BY id"},
+		{"order   by id", "order   by id", "order   by id"},
+		{"LIMIT 10", "LIMIT 10", "LIMIT 10"},
+		{"whereabouts = 1", "WHERE whereabouts = 1", "whereabouts = 1"},
+		{"orders = 1", "WHERE orders = 1", "orders = 1"},
+	} {
+		if got := clauseOf(tc.input); got != tc.clause {
+			t.Errorf("clauseOf(%q) = %q, want %q", tc.input, got, tc.clause)
+		}
+		if got := conditionOf(clauseOf(tc.input)); got != tc.seed {
+			t.Errorf("conditionOf(clauseOf(%q)) = %q, want %q", tc.input, got, tc.seed)
+		}
+	}
+	if got := conditionOf(""); got != "" {
+		t.Errorf("conditionOf(%q) = %q, want empty", "", got)
+	}
+}
+
 func TestFilterLineKeepsThePaneHeight(t *testing.T) {
 	m := newPane(t, writeFixtureDB(t))
 	openGrid(t, &m)
