@@ -41,10 +41,18 @@ the `vcs.commit`/`vcs.updateProject`/`vcs.branches` commands were removed.
 
 `vcs.Load` parses `git status --porcelain=v2 --branch -z` into a `Snapshot`:
 branch (+ ahead/behind, detached short hash), per-file `FileStatus`
-(modified/added/deleted/renamed/untracked/conflicted), dirty-directory
-propagation for the tree tint, and per-file index/worktree letters
-(`FileEntry.X/Y`). Path lookups accept absolute or repo-relative paths and
-survive macOS `/private` symlinked roots.
+(modified/added/deleted/renamed/untracked/conflicted/partially-staged),
+dirty-directory propagation for the tree tint, and per-file index/worktree
+letters (`FileEntry.X/Y`). Path lookups accept absolute or repo-relative paths
+and survive macOS `/private` symlinked roots.
+
+**Both porcelain halves changed** — `AM`, `MM`, `RM` — is its own status
+(`StatusPartiallyStaged`, #1868): a staged version exists and the worktree
+moved on top of it, so the row must not read as a plain addition. It colours
+like a modification (there is unstaged work) and carries a two-letter display
+code. `FileEntry.Code` / `Snapshot.Code` derive that code — `U` untracked, `C`
+conflicted, otherwise the porcelain letters that are not `.` — and rank it
+between modified and added for directory propagation (`statusRank`, #1053).
 
 **Refresh lifecycle** (`internal/app/vcs_state.go`): the initial load rides
 `StartWatcher` (main.go-only, so tests stay free of the developer repo's
@@ -61,8 +69,12 @@ enabled blame maps.
 ## Surfaces
 
 - **Explorer coloring** — entries take their status hue from the theme slots
-  `VCSModified/Added/Untracked/Deleted/Conflicted` (semantic-hue fallbacks
-  for sparse themes); dirty directories tint modified.
+  `VCSModified/Added/Untracked/Deleted/Conflicted`, a workflow palette (#1868):
+  blue modified, green added, violet untracked, muted red deleted, red
+  conflicted. Sparse themes derive them from their own semantic hues —
+  info/success/error, with untracked halfway between error and info and
+  deleted halfway from error toward the border tone. Directories tint with
+  their subtree's dominant status.
 - **Status line** — right-side `⎇ branch ↑n ↓m` segment, 24-char clip,
   hidden outside repos.
 - **Gutter diff markers** (`internal/vcs/marks.go`) — buffer vs HEAD blob via
@@ -122,7 +134,9 @@ persistent tool window (`internal/vcspanel`, pane kind `KindVCS`, singleton
 key `vcs`): an adaptive split of the active editor (`auxZone`, #1588 —
 below, or right of a wide landscape host) with terminal-style
 focus-return semantics. It is a **read-only changes list** re-derived from
-every snapshot: status badge + path per row, VCS-colored via the shared
+every snapshot: status badge + path per row — the same porcelain code the
+explorer shows, in a two-cell column so `AM` rows stay aligned (#1868) —
+VCS-colored via the shared
 status recipe (#1052), `j`/`k`/wheel/click navigation with the muted
 unfocused cursor (#1034), and `enter`/double-click opens the file's
 diff-vs-HEAD — or, on a conflicted row, the three-way merge view (#1478). No staging checkboxes, no commit message, no Log tab — that

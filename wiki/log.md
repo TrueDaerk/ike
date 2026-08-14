@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-14 (explorer: distinct VCS status codes and a workflow palette, #1868)
+
+- **A partially staged file is its own status now** (`internal/vcs`): `statusFromXY` no longer
+  folds `AM`/`MM`/`RM` onto the staged half — both porcelain letters changed means
+  `StatusPartiallyStaged`, which colours like a modification (there *is* unstaged work) and
+  carries a two-letter display code. `FileEntry.Code`/`Snapshot.Code` derive that code from the
+  X/Y pair the snapshot already held (`U` untracked, `C` conflicted, otherwise the non-`.`
+  letters, a copy reading as `R` so `C` keeps meaning conflict), and `statusRank` places the new
+  state between modified and added so directory tinting (#1053) keeps working.
+- **The explorer's status cue grew a second cell** (`internal/explorer/explorer.go`): rows render
+  `rowVCS.letter` — the file's porcelain code when the snapshot has one, else the one-letter
+  badge — and the right-edge reservation follows the code's width instead of the hardcoded
+  single column, so `U`/`A`/`M`/`AM` are all readable and a pane too narrow for the code still
+  falls back to the clipping ellipsis. The VCS panel's changes list shows the same code in a
+  two-cell column.
+- **The VCS palette follows the git workflow** (`internal/theme/builtins.go`): every built-in's
+  four status slots were re-tuned to muted role hues — blue modified, green added, **violet
+  untracked**, muted red deleted — each theme keeping its own saturation/lightness feel and
+  every value re-solved against that theme's backgrounds and overlays, so the contrast audit
+  (baseline and the AAA high-contrast tier) still passes. Untracked no longer borrows the
+  warning hue, which is what made it blur into open (underlined) files. Sparse themes derive the
+  two roles without a semantic slot of their own: untracked halfway between error and info,
+  deleted halfway from error toward the border tone. A new test pins that the five VCS slots and
+  the plain foreground stay perceptually apart in every built-in. Updated
+  [Explorer](/architecture/explorer.md) and [VCS / Git Integration](/architecture/vcs.md).
+
 ## 2026-08-13 (archive viewer: mouse wheel, click select, double-click open, #1852)
 
 - **The archive pane takes the mouse now** (`internal/archview/mouse.go`): the wheel scrolls the

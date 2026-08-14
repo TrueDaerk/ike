@@ -319,3 +319,92 @@ func TestRelPathCachesResolvedRoot(t *testing.T) {
 		t.Fatalf("cached query = %v", got)
 	}
 }
+
+// TestParseStatusPartiallyStaged guards #1868: both porcelain halves changed
+// means "staged, then edited again" — its own status, its own two-letter code
+// — while a single changed half keeps folding onto one letter.
+func TestParseStatusPartiallyStaged(t *testing.T) {
+	s := parseStatus(z(
+		"# branch.head main",
+		"1 AM N... 000000 100644 100644 0000 aaaa fresh.go",
+		"1 MM N... 100644 100644 100644 aaaa bbbb both.go",
+		"1 A. N... 000000 100644 100644 0000 cccc staged.go",
+		"1 .M N... 100644 100644 100644 dddd eeee worktree.go",
+		"1 M. N... 100644 100644 100644 ffff ffff indexonly.go",
+		"2 RM N... 100644 100644 100644 aaaa bbbb R100 new/name.go",
+		"old/name.go",
+		"? untracked.txt",
+	))
+	wantStatus := map[string]FileStatus{
+		"fresh.go":      StatusPartiallyStaged,
+		"both.go":       StatusPartiallyStaged,
+		"new/name.go":   StatusPartiallyStaged,
+		"staged.go":     StatusAdded,
+		"worktree.go":   StatusModified,
+		"indexonly.go":  StatusModified,
+		"untracked.txt": StatusUntracked,
+	}
+	for p, st := range wantStatus {
+		if got := s.Files[p]; got != st {
+			t.Errorf("Files[%q] = %v, want %v", p, got, st)
+		}
+	}
+	wantCode := map[string]string{
+		"fresh.go":      "AM",
+		"both.go":       "MM",
+		"new/name.go":   "RM",
+		"staged.go":     "A",
+		"worktree.go":   "M",
+		"indexonly.go":  "M",
+		"untracked.txt": "U",
+	}
+	for p, code := range wantCode {
+		if got := s.Code(p); got != code {
+			t.Errorf("Code(%q) = %q, want %q", p, got, code)
+		}
+	}
+	if got := s.Code("clean.go"); got != "" {
+		t.Errorf("clean file code = %q, want empty", got)
+	}
+}
+
+// TestEntryCode covers the badge derivation on its own, including the
+// conflict and copy cases the porcelain letters would otherwise collide on.
+func TestEntryCode(t *testing.T) {
+	cases := []struct {
+		e    FileEntry
+		want string
+	}{
+		{FileEntry{Status: StatusPartiallyStaged, X: 'A', Y: 'M'}, "AM"},
+		{FileEntry{Status: StatusAdded, X: 'A', Y: '.'}, "A"},
+		{FileEntry{Status: StatusModified, X: '.', Y: 'M'}, "M"},
+		{FileEntry{Status: StatusDeleted, X: 'D', Y: '.'}, "D"},
+		{FileEntry{Status: StatusUntracked, X: '?', Y: '?'}, "U"},
+		{FileEntry{Status: StatusConflicted, X: 'U', Y: 'U'}, "C"},
+		{FileEntry{Status: StatusRenamed, X: 'C', Y: '.'}, "R"}, // copy reads as rename
+		{FileEntry{Status: StatusModified}, "M"},                // synthetic entry, no X/Y
+	}
+	for _, c := range cases {
+		if got := c.e.Code(); got != c.want {
+			t.Errorf("FileEntry{%q,%q}.Code() = %q, want %q", c.e.X, c.e.Y, got, c.want)
+		}
+	}
+}
+
+// TestPartiallyStagedDirRank guards #1053 against #1868's new state: a
+// half-staged file still outranks a plain addition in the directory tint,
+// and a real worktree modification still wins over it.
+func TestPartiallyStagedDirRank(t *testing.T) {
+	s := NewSnapshot("/repo", map[string]FileStatus{
+		"half/a.go":  StatusPartiallyStaged,
+		"half/b.go":  StatusAdded,
+		"mixed/a.go": StatusPartiallyStaged,
+		"mixed/b.go": StatusModified,
+	})
+	if got := s.DirStatus("half"); got != StatusPartiallyStaged {
+		t.Errorf("DirStatus(half) = %v want partially staged", got)
+	}
+	if got := s.DirStatus("mixed"); got != StatusModified {
+		t.Errorf("DirStatus(mixed) = %v want modified", got)
+	}
+}
