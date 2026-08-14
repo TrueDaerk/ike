@@ -10,7 +10,9 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/editor"
 	"ike/internal/explorer"
+	"ike/internal/project"
 )
 
 // openedFile returns a sized app with one file open in an editor.
@@ -75,6 +77,83 @@ func TestPasteReachesRenamePrompt(t *testing.T) {
 
 	if m.renameInput != before+"-copy" {
 		t.Fatalf("rename input = %q, want %q", m.renameInput, before+"-copy")
+	}
+}
+
+// TestPasteReachesSaveAsPrompt: the untitled-buffer save-as path (#730) is a
+// floating-shell input too, and shares the #1273 gap the clone dialog had
+// (#1873).
+func TestPasteReachesSaveAsPrompt(t *testing.T) {
+	m := newSized()
+	m = dirtyUntitled(t, m)
+	tm, cmd := m.Update(editor.ActionMsg{Action: "write"})
+	m = drainCmd(tm.(Model), cmd)
+	if !m.saveAsOpen() {
+		t.Fatal("write on an untitled buffer must open the save-as prompt")
+	}
+
+	tm, _ = m.Update(tea.PasteMsg{Content: "new.txt"})
+	m = tm.(Model)
+
+	if m.saveAsInput != "new.txt" {
+		t.Fatalf("saveAsInput = %q, want the pasted text", m.saveAsInput)
+	}
+}
+
+// TestPasteReachesNewProjectNameStep: the new-project wizard's name step
+// (#1718) takes a paste at its cursor (#1873).
+func TestPasteReachesNewProjectNameStep(t *testing.T) {
+	m := newSized()
+	cloneProjectsDir(t)
+	tm, cmd := m.Update(project.OpenNewProjectMsg{})
+	m = drainCmd(tm.(Model), cmd)
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter}) // Plain: straight to the name step
+	if m.newProj.step != newProjStepName {
+		t.Fatalf("step = %d, want name", m.newProj.step)
+	}
+
+	tm, _ = m.Update(tea.PasteMsg{Content: "pasted-proj"})
+	m = tm.(Model)
+
+	if m.newProj.name != "pasted-proj" {
+		t.Fatalf("newProj.name = %q, want the pasted text", m.newProj.name)
+	}
+}
+
+// TestPasteReachesLayoutSavePrompt: the save-layout name prompt (#1175)
+// takes a paste at its cursor (#1873).
+func TestPasteReachesLayoutSavePrompt(t *testing.T) {
+	m := sized(t, 100, 40)
+	m = step(m, SaveLayoutPromptMsg{})
+	m = step(m, tea.KeyPressMsg{Code: tea.KeyEnter}) // keep-all-panes selection
+	if !m.layoutSavePromptOpen() {
+		t.Fatal("prompt must be open")
+	}
+
+	tm, _ := m.Update(tea.PasteMsg{Content: "dev"})
+	m = tm.(Model)
+
+	if m.layoutSaveInput != "dev" {
+		t.Fatalf("layoutSaveInput = %q, want the pasted text", m.layoutSaveInput)
+	}
+}
+
+// TestPasteReachesJBImportPrompt: the JetBrains keymap import prompt (#677)
+// takes a paste at its cursor (#1873).
+func TestPasteReachesJBImportPrompt(t *testing.T) {
+	m, _ := openedFile(t, "abc\n")
+	tm, _ := m.Update(ImportJetBrainsKeymapMsg{})
+	m = tm.(Model)
+	if !m.jbImportPromptOpen() {
+		t.Fatal("ImportJetBrainsKeymapMsg must open the import prompt")
+	}
+	before := m.jbImportInput
+
+	tm, _ = m.Update(tea.PasteMsg{Content: "keymap.xml"})
+	m = tm.(Model)
+
+	if m.jbImportInput != before+"keymap.xml" {
+		t.Fatalf("jbImportInput = %q, want %q", m.jbImportInput, before+"keymap.xml")
 	}
 }
 

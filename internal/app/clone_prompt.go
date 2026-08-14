@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/host"
 	"ike/internal/project"
@@ -71,6 +72,13 @@ func (m Model) cloneTargetHint() string {
 	return project.CompactPath(filepath.Join(dir, name))
 }
 
+// cloneGhostStyle dims the directory name while it merely follows the URL
+// (#1873): rendered like the focused URL field's live edit, the derived name
+// used to read as typing into both fields at once. Faint marks it as a
+// preview instead — the field itself gains real (undimmed) content only once
+// cloneNameEdited is set, by hand or via startClone's fallback.
+var cloneGhostStyle = lipgloss.NewStyle().Faint(true)
+
 // renderClonePrompt (re)fills the shell for the current state; called on open
 // and after every accepted key.
 func (m *Model) renderClonePrompt() {
@@ -80,27 +88,35 @@ func (m *Model) renderClonePrompt() {
 	if avail < 20 {
 		avail = 20
 	}
-	field := func(idx int, label, value string, pos int) string {
-		marker := "  "
-		if m.cloneField == idx && !m.cloneRunning {
-			marker = "> "
-			return marker + label + ": " + windowedInput(value, pos, avail)
-		}
-		return marker + label + ": " + windowedInput(value, len([]rune(value)), avail)
-	}
 	url := m.cloneURL
 	name := m.cloneName
 	pos, npos := m.cloneURLPos, m.cloneNamePos
 	target := m.cloneTargetHint()
 	running := m.cloneRunning
 	errMsg := m.cloneErr
+	edited := m.cloneNameEdited
+	urlRow := func() string {
+		if m.cloneField == cloneFieldURL && !running {
+			return "> Repository URL : " + windowedInput(url, pos, avail)
+		}
+		return "  Repository URL : " + windowedInput(url, len([]rune(url)), avail)
+	}
+	nameRow := func() string {
+		if m.cloneField == cloneFieldName && !running {
+			return "> Directory name : " + windowedInput(name, npos, avail)
+		}
+		if !edited {
+			return "  Directory name : " + cloneGhostStyle.Render(windowedPlain(name, avail))
+		}
+		return "  Directory name : " + windowedInput(name, len([]rune(name)), avail)
+	}
 	m.shell.SetContent(ui.ModelContent{
 		Heading: "Clone Repository",
 		Body: func() string {
 			b := &strings.Builder{}
-			b.WriteString(field(cloneFieldURL, "Repository URL ", url, pos))
+			b.WriteString(urlRow())
 			b.WriteString("\n")
-			b.WriteString(field(cloneFieldName, "Directory name ", name, npos))
+			b.WriteString(nameRow())
 			b.WriteString("\n\nClones into " + target)
 			switch {
 			case running:
@@ -119,12 +135,40 @@ func (m *Model) renderClonePrompt() {
 // field) clipped to width runes, scrolled so the cursor stays visible; a
 // clipped side is marked with "…".
 func windowedInput(value string, pos, width int) string {
+	w, wpos, clipL, clipR := windowRunes(value, pos, width)
+	out := ui.CursorView(string(w), wpos)
+	if clipL {
+		out = "…" + out
+	}
+	if clipR {
+		out += "…"
+	}
+	return out
+}
+
+// windowedPlain renders value clipped to width runes with no cursor mark —
+// for a field that is not focused, e.g. the clone dialog's ghost name (#1873).
+func windowedPlain(value string, width int) string {
+	w, _, clipL, clipR := windowRunes(value, len([]rune(value)), width)
+	out := string(w)
+	if clipL {
+		out = "…" + out
+	}
+	if clipR {
+		out += "…"
+	}
+	return out
+}
+
+// windowRunes clips value to width runes around pos, scrolled so pos stays
+// visible, and reports whether either side was clipped.
+func windowRunes(value string, pos, width int) (window []rune, wpos int, clipL, clipR bool) {
 	r := []rune(value)
 	if pos > len(r) {
 		pos = len(r)
 	}
 	if len(r) <= width {
-		return ui.CursorView(value, pos)
+		return r, pos, false, false
 	}
 	start := pos - width + 1
 	if start < 0 {
@@ -134,14 +178,7 @@ func windowedInput(value string, pos, width int) string {
 	if end > len(r) {
 		end, start = len(r), len(r)-width
 	}
-	out := ui.CursorView(string(r[start:end]), pos-start)
-	if start > 0 {
-		out = "…" + out
-	}
-	if end < len(r) {
-		out += "…"
-	}
-	return out
+	return r[start:end], pos - start, start > 0, end < len(r)
 }
 
 // updateClonePrompt consumes every key while the dialog is open: tab switches
@@ -189,6 +226,37 @@ func (m Model) updateClonePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// pasteClonePrompt inserts a paste into the focused field at its cursor
+// (#1873). A paste into the URL field re-derives the name exactly like
+// typing there does; a paste into the name field marks it hand-edited, same
+// as EditKey.
+func (m *Model) pasteClonePrompt(text string) bool {
+	if m.cloneRunning {
+		return false
+	}
+	switch m.cloneField {
+	case cloneFieldURL:
+		out, pos, changed := ui.PasteText(m.cloneURL, m.cloneURLPos, text)
+		if !changed {
+			return false
+		}
+		m.cloneURL, m.cloneURLPos = out, pos
+		if !m.cloneNameEdited {
+			m.cloneName = vcs.CloneName(m.cloneURL)
+			m.cloneNamePos = len([]rune(m.cloneName))
+		}
+	case cloneFieldName:
+		out, pos, changed := ui.PasteText(m.cloneName, m.cloneNamePos, text)
+		if !changed {
+			return false
+		}
+		m.cloneName, m.cloneNamePos = out, pos
+		m.cloneNameEdited = true
+	}
+	m.renderClonePrompt()
+	return true
 }
 
 // startClone validates the two fields and launches the clone. Validation

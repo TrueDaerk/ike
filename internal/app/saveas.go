@@ -113,6 +113,17 @@ func (m Model) updateSaveAsPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// pasteSaveAsPrompt inserts a paste into the path input at its cursor (#1873).
+func (m *Model) pasteSaveAsPrompt(text string) bool {
+	out, pos, changed := ui.PasteText(m.saveAsInput, m.saveAsPos, text)
+	if !changed {
+		return false
+	}
+	m.saveAsInput, m.saveAsPos = out, pos
+	m.renderSaveAsPrompt()
+	return true
+}
+
 // bindUntitled writes the untitled buffer in pane key to path and turns the
 // tab into a regular file tab: the save goes through editor.SaveTo (EventSave,
 // undo checkpoint), then the openPath wiring runs — watcher tracking, MRU,

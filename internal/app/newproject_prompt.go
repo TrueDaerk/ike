@@ -231,6 +231,22 @@ func (m Model) updateNewProjectPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	return m, nil
 }
 
+// pasteNewProjectPrompt inserts a paste into the name step's input at its
+// cursor (#1873); the other steps have no text input to paste into.
+func (m *Model) pasteNewProjectPrompt(text string) bool {
+	s := m.newProj
+	if s == nil || s.step != newProjStepName || s.running {
+		return false
+	}
+	out, pos, changed := ui.PasteText(s.name, s.namePos, text)
+	if !changed {
+		return false
+	}
+	s.name, s.namePos = out, pos
+	m.renderNewProjectPrompt()
+	return true
+}
+
 // advanceNewProject moves past a list step.
 func (m Model) advanceNewProject() (tea.Model, tea.Cmd) {
 	s := m.newProj

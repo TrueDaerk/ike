@@ -13,7 +13,9 @@ import (
 // block: bracketed paste reached no overlay at all, so nothing could be pasted
 // into search-everywhere, the find-in-path query, a rename prompt or any other
 // floating input. Cmd+V was equally dead — it maps to editor.paste, which no
-// overlay handles.
+// overlay handles. The clone dialog, new-project wizard, save-as, save-layout
+// and JetBrains-import prompts share the same gap and are routed the same way
+// (#1873).
 //
 // The fix is one router, ordered exactly like the KeyPressMsg guard chain in
 // Update, so the surface that owns the keyboard is the surface that receives
@@ -45,6 +47,16 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		return nil, false // decision prompts, no text input
 	case m.renameOpen():
 		return nil, m.pasteRenamePrompt(text)
+	case m.clonePromptOpen():
+		return nil, m.pasteClonePrompt(text)
+	case m.newProjectPromptOpen():
+		return nil, m.pasteNewProjectPrompt(text)
+	case m.saveAsOpen():
+		return nil, m.pasteSaveAsPrompt(text)
+	case m.layoutSavePromptOpen():
+		return nil, m.pasteLayoutSavePrompt(text)
+	case m.jbImportPromptOpen():
+		return nil, m.pasteJBImportPrompt(text)
 	case m.lspRenameOpen():
 		return nil, m.pasteLSPRenamePrompt(text)
 	case m.explorerCapturing():
