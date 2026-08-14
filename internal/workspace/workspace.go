@@ -6,11 +6,13 @@
 package workspace
 
 import (
+	"sort"
 	"time"
 
 	"ike/internal/editor/register"
 	"ike/internal/layout"
 	"ike/internal/pane"
+	"ike/internal/terminal"
 )
 
 // Workspace is one project's live UI state. The root model reaches panes and
@@ -58,6 +60,13 @@ type Manager struct {
 	// but carries the manager — model-owned state would reset the registers
 	// on every switch.
 	regs *register.Store
+	// globalTools holds the detached global tool sessions (#1890), keyed by
+	// tool name: a tool marked global in the config runs as one process-wide
+	// instance, and while it is not attached to the active workspace's layout
+	// its live terminal session parks here. The manager owns it because it
+	// survives model rebuilds and never belongs to any workspace registry —
+	// which is exactly what keeps switch, close and eviction from ending it.
+	globalTools map[string]terminal.Model
 }
 
 // NewManager builds a manager with the given active workspace.
@@ -81,6 +90,45 @@ func (m *Manager) SetRegisters(s *register.Store) {
 	if s != nil {
 		m.regs = s
 	}
+}
+
+// ParkGlobalTool stashes a global tool's live terminal session under its tool
+// name (#1890) — detached from any workspace, it keeps running until taken
+// back or closed at quit.
+func (m *Manager) ParkGlobalTool(name string, t terminal.Model) {
+	if m.globalTools == nil {
+		m.globalTools = map[string]terminal.Model{}
+	}
+	m.globalTools[name] = t
+}
+
+// TakeGlobalTool removes and returns the parked global tool session for name;
+// ok=false when none is parked (the tool is attached somewhere or was never
+// opened).
+func (m *Manager) TakeGlobalTool(name string) (terminal.Model, bool) {
+	t, ok := m.globalTools[name]
+	if ok {
+		delete(m.globalTools, name)
+	}
+	return t, ok
+}
+
+// PeekGlobalTool returns the parked global tool session for name without
+// removing it; ok=false when none is parked.
+func (m *Manager) PeekGlobalTool(name string) (terminal.Model, bool) {
+	t, ok := m.globalTools[name]
+	return t, ok
+}
+
+// GlobalToolNames lists the currently parked global tools, sorted for stable
+// iteration — the quit path closes each one so no process outlives IKE.
+func (m *Manager) GlobalToolNames() []string {
+	names := make([]string, 0, len(m.globalTools))
+	for name := range m.globalTools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // Active returns the current workspace (never nil for a managed model).

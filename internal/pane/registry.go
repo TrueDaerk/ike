@@ -273,6 +273,19 @@ func (r *Registry) AddToolKey(key, name string, argv []string, dir string, env [
 	return inst
 }
 
+// AdoptToolKey registers an already-running tool session as a pane under an
+// exact key (#1890): layout restore re-attaches a live global tool instance in
+// its saved slot instead of spawning a second process. The minting counter
+// advances past the key; the session keeps its original routing key.
+func (r *Registry) AdoptToolKey(key string, t terminal.Model) *Instance {
+	inst := &Instance{key: key, kind: KindTerminal, cfg: r.cfg, pal: r.pal}
+	inst.term = t
+	inst.term.SetPalette(r.pal)
+	r.put(inst)
+	r.advancePastTerminal(key)
+	return inst
+}
+
 // NewToolSession builds a tool-marked command session without a pane (#836):
 // a freshly minted key running argv, ready to host as an editor tab — layout
 // restore restarts tab-hosted tools this way.

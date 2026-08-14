@@ -84,6 +84,20 @@ fields with a `*pane.Registry` plus a `recentEditor` key:
   `FileHandler` still gets first refusal regardless of target, and
   `EventFileOpened` hooks fire either way.
 
+## Terminal & tool sessions
+
+Terminal-kind instances wrap a `terminal.Model` whose **session routing key**
+usually equals the pane key but can diverge: `AddTerminalPaneFrom` wraps an
+already-running session under a freshly minted pane key (a tab dragged out,
+#707 — also how a **global tool** re-attaches in another workspace, #1890),
+and `AdoptToolKey` registers a live tool session under an exact saved key
+(layout restore re-attaching a parked global instance instead of spawning a
+duplicate, #1890). `Instance.DetachTerminal` / `DetachTerminalTab` extract
+the live session without ending it; a `Close` on the emptied instance is then
+harmless. A registry only ever owns sessions attached to its own workspace —
+a detached global tool session parks on the `workspace.Manager` instead (see
+[Custom TUI Tool Panes › Global instances](./tool-panes.md)).
+
 ## Persistence
 
 Editor identity (which file each editor holds) rides the layout store's per-leaf

@@ -29,3 +29,34 @@ func TestValidateToolPlacement(t *testing.T) {
 		t.Fatalf("want 1 placement diagnostic, got %d (%v)", bad, diags)
 	}
 }
+
+// [[tools.custom]] global vs multiple (#1890): the two flags are mutually
+// exclusive — a config declaring both keeps global, drops multiple and gets
+// one diagnostic; entries with only one of the flags pass untouched.
+func TestValidateToolGlobalMultipleExclusive(t *testing.T) {
+	c := defaults()
+	c.Tools.Custom = []ToolEntry{
+		{Name: "a", Command: "a", Global: true, Multiple: true},
+		{Name: "b", Command: "b", Global: true},
+		{Name: "c", Command: "c", Multiple: true},
+	}
+	diags := validate(c)
+	if !c.Tools.Custom[0].Global || c.Tools.Custom[0].Multiple {
+		t.Fatalf("global+multiple entry must keep global and drop multiple, got %+v", c.Tools.Custom[0])
+	}
+	if !c.Tools.Custom[1].Global || c.Tools.Custom[1].Multiple {
+		t.Fatalf("global-only entry must pass untouched, got %+v", c.Tools.Custom[1])
+	}
+	if c.Tools.Custom[2].Global || !c.Tools.Custom[2].Multiple {
+		t.Fatalf("multiple-only entry must pass untouched, got %+v", c.Tools.Custom[2])
+	}
+	bad := 0
+	for _, d := range diags {
+		if d.Field == "tools.custom.multiple" {
+			bad++
+		}
+	}
+	if bad != 1 {
+		t.Fatalf("want 1 multiple diagnostic, got %d (%v)", bad, diags)
+	}
+}

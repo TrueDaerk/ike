@@ -55,6 +55,13 @@ func collectActivity(w *workspace.Workspace) wsActivity {
 	addTerm := func(tool, label string, isCmd bool) {
 		switch {
 		case tool != "":
+			if _, global := globalToolEntry(tool); global {
+				// A global tool (#1890) is never killed by closing a
+				// workspace — it detaches to the manager — and the quit path
+				// ends it tidily like a global floating panel (#1793), so it
+				// gates no guard.
+				return
+			}
 			a.running = append(a.running, "tool "+tool)
 		case isCmd:
 			if label == "" {
