@@ -190,7 +190,7 @@ file has to repeat what is already exported.
 
 **Choosing the environment**: `http.selectEnvironment` ("Select HTTP
 Environment", palette) lists the environments of the focused `.http` file's
-directory in the palette (locked mode, prefix `%`, `internal/app/http_env.go`)
+directory in the palette (locked mode, prefix `?`, `internal/app/http_env.go`)
 with the active one badged, plus a row that clears the selection again. The
 choice is stored **per directory** — that is where the environment file lives
 — in `.ike/httpenv.json` (`IKE_CONFIG_DIR` seam like every other state file),

@@ -146,6 +146,38 @@ func TestHTTPEnvPickerSelectsEnvironment(t *testing.T) {
 	}
 }
 
+// TestRecentFilesSurvivesHTTPEnvPrefix guards #1878: httpEnvPrefix used to
+// collide with palette.RecentPrefix ('%'), so once the env picker had been
+// opened once, cmd+e (palette.recentFiles) silently opened the HTTP
+// environment picker instead of Recent Files.
+func TestRecentFilesSurvivesHTTPEnvPrefix(t *testing.T) {
+	m := httpApp(t)
+	path := httpVarFile(t, "GET {{host}}\n", map[string]string{
+		httpfile.EnvFileName: `{"dev": {"host": "https://dev.invalid"}, "prod": {"host": "https://example.invalid"}}`,
+	})
+	out, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	m = out.(Model)
+
+	// Open and close the env picker once, so its mode is live and its
+	// prefix is registered — the state that used to shadow the recent-files
+	// prefix in palette.byPrefix.
+	out, _ = m.Update(HTTPSelectEnvMsg{})
+	m = out.(Model)
+	if !m.palette.IsOpen() {
+		t.Fatal("http.selectEnvironment must open the picker")
+	}
+	m.palette.Close()
+
+	out, _ = m.Update(ShowRecentFilesMsg{})
+	m = out.(Model)
+	if !m.palette.IsOpen() {
+		t.Fatal("palette.recentFiles must open the palette")
+	}
+	if !strings.Contains(m.palette.View(), "Recent files…") {
+		t.Errorf("cmd+e must open Recent Files, not the HTTP env picker: %s", m.palette.View())
+	}
+}
+
 // TestHTTPEnvPickerClearsSelection: the "(no environment)" row appears only
 // once something is selected, and picking it drops the selection again.
 func TestHTTPEnvPickerClearsSelection(t *testing.T) {
