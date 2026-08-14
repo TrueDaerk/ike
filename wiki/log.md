@@ -1,5 +1,19 @@
 # Log
 
+## 2026-08-14 (layout: configurable home positions for tool windows, #1889)
+
+- **`[[tools.custom]].placement` returned as the tool's home dock edge**
+  (`left`/`right`/`top`/`bottom`; empty keeps the #1588 adaptive heuristic):
+  opening docks the tool full-span against that workspace edge
+  (`layout.DockNew`); an occupied slot (`Model.dockOccupant` via
+  `layout.EdgeLeaf`) adds the tool as a focused tab in the pane there instead
+  of splitting; a non-tabbable occupant (explorer, singleton panels) shares
+  the dock via a perpendicular split. Placement is intent, not state — the
+  `Move`/`Dock` drag mechanics never rewrite it, so close + reopen returns
+  the tool home. Editable in Settings → Tools; invalid values degrade with a
+  config diagnostic. Updated [Tool Panes](/architecture/tool-panes.md) and
+  [Pane Layout & Drag](/architecture/pane-layout.md).
+
 ## 2026-08-14 (dataview: the filter line prefills through WHERE, #1885)
 
 - **`/` in the grid now asks for a condition, not a clause** (`internal/dataview/filter.go`):

@@ -86,6 +86,8 @@ func TestToolsPageAddAllFields(t *testing.T) {
 	f.Update(key("tab"))
 	typeText(f, "./data")
 	f.Update(key("tab"))
+	typeText(f, "bottom")
+	f.Update(key("tab"))
 	typeText(f, "true")
 	apply(t, f.Update(key("enter")))
 	got := config.Get().Tools.Custom
@@ -94,7 +96,7 @@ func TestToolsPageAddAllFields(t *testing.T) {
 	}
 	e := got[0]
 	if e.Command != "sqlit" || len(e.Args) != 2 || e.Args[0] != "--db" ||
-		e.Cwd != "./data" || !e.Multiple {
+		e.Cwd != "./data" || e.Placement != "bottom" || !e.Multiple {
 		t.Fatalf("entry = %+v", e)
 	}
 }
@@ -108,7 +110,7 @@ func TestToolsPageMultipleField(t *testing.T) {
 	typeText(f, "claude")
 	f.Update(key("tab"))
 	typeText(f, "claude")
-	for i := 0; i < 3; i++ { // args, cwd → multiple
+	for i := 0; i < 4; i++ { // args, cwd, placement → multiple
 		f.Update(key("tab"))
 	}
 	typeText(f, "maybe")
@@ -128,8 +130,48 @@ func TestToolsPageMultipleField(t *testing.T) {
 	// Edit seeds "true" back into the form.
 	p.sel = 0
 	p.Update(key("enter"))
-	if f2 := form(t, h); f2.form[4] != "true" {
+	if f2 := form(t, h); f2.form[5] != "true" {
 		t.Fatalf("edit must seed multiple, form=%v", f2.form)
+	}
+}
+
+// TestToolsPagePlacementField (#1889): the placement field sets the tool's
+// home dock edge, rejects non-edge values, and round-trips through edit.
+func TestToolsPagePlacementField(t *testing.T) {
+	p, h := toolsPage(t)
+	p.Update(key("a"))
+	f := form(t, h)
+	typeText(f, "lazygit")
+	f.Update(key("tab"))
+	typeText(f, "lazygit")
+	for i := 0; i < 3; i++ { // args, cwd → placement
+		f.Update(key("tab"))
+	}
+	typeText(f, "center")
+	f.Update(key("enter"))
+	if h.top() == nil || !strings.Contains(f.note, "placement") {
+		t.Fatalf("invalid placement must fail validation, note=%q", f.note)
+	}
+	for range "center" {
+		f.Update(key("backspace"))
+	}
+	typeText(f, "bottom")
+	apply(t, f.Update(key("enter")))
+	got := config.Get().Tools.Custom
+	if len(got) != 1 || got[0].Placement != "bottom" {
+		t.Fatalf("entries = %+v, want Placement=bottom", got)
+	}
+	// Edit seeds the placement back into the form — a save without touching
+	// it must not clobber the configured home.
+	p.sel = 0
+	p.Update(key("enter"))
+	f2 := form(t, h)
+	if f2.form[4] != "bottom" {
+		t.Fatalf("edit must seed placement, form=%v", f2.form)
+	}
+	apply(t, f2.Update(key("enter")))
+	if got := config.Get().Tools.Custom; len(got) != 1 || got[0].Placement != "bottom" {
+		t.Fatalf("unchanged save must keep placement, entries = %+v", got)
 	}
 }
 

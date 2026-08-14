@@ -39,6 +39,29 @@ func Dock(root Node, src string, zone Zone, ratio float64) Node {
 	if !ok || leaf == nil || pruned == nil {
 		return root
 	}
+	return attachEdge(pruned, leaf, zone, ratio)
+}
+
+// DockNew attaches a brand-new leaf against the tree's outer edge — the
+// create counterpart of Dock (#1889): a tool pane opening at its configured
+// home position docks full-span without existing anywhere in the tree first.
+// ratio is the new leaf's share along the dock axis, clamped like Dock's. An
+// empty pane id or a non-edge zone returns root unchanged.
+func DockNew(root Node, newPane string, zone Zone, ratio float64) Node {
+	if newPane == "" {
+		return root
+	}
+	switch zone {
+	case ZoneTop, ZoneBottom, ZoneLeft, ZoneRight:
+	default:
+		return root
+	}
+	return attachEdge(root, &Leaf{Pane: newPane}, zone, ratio)
+}
+
+// attachEdge splits at the root to pin leaf against the zone's edge, leaf
+// taking ratio (clamped to [0.1, 0.9]) of the workspace along the dock axis.
+func attachEdge(root Node, leaf *Leaf, zone Zone, ratio float64) Node {
 	if ratio < 0.1 {
 		ratio = 0.1
 	}
@@ -47,13 +70,41 @@ func Dock(root Node, src string, zone Zone, ratio float64) Node {
 	}
 	switch zone {
 	case ZoneTop:
-		return &Split{Orient: Vertical, Ratio: ratio, A: leaf, B: pruned}
+		return &Split{Orient: Vertical, Ratio: ratio, A: leaf, B: root}
 	case ZoneBottom:
-		return &Split{Orient: Vertical, Ratio: 1 - ratio, A: pruned, B: leaf}
+		return &Split{Orient: Vertical, Ratio: 1 - ratio, A: root, B: leaf}
 	case ZoneLeft:
-		return &Split{Orient: Horizontal, Ratio: ratio, A: leaf, B: pruned}
-	default: // ZoneRight (validated above)
-		return &Split{Orient: Horizontal, Ratio: 1 - ratio, A: pruned, B: leaf}
+		return &Split{Orient: Horizontal, Ratio: ratio, A: leaf, B: root}
+	default: // ZoneRight (both callers validate the zone)
+		return &Split{Orient: Horizontal, Ratio: 1 - ratio, A: root, B: leaf}
+	}
+}
+
+// EdgeLeaf returns the pane id occupying the dock slot at the tree's outer
+// edge named by zone (#1889): starting at the root, splits oriented along the
+// dock axis are followed toward that edge until a lone leaf is pinned against
+// it. A bare-leaf root (one pane fills the workspace), a root split of the
+// other orientation (the edge is shared by several columns/rows), or a
+// subdivided edge strip yields "" — the slot then counts as free.
+func EdgeLeaf(root Node, zone Zone) string {
+	orient := Horizontal
+	if zone == ZoneTop || zone == ZoneBottom {
+		orient = Vertical
+	}
+	first := zone == ZoneTop || zone == ZoneLeft
+	for {
+		s, ok := root.(*Split)
+		if !ok || s.Orient != orient {
+			return ""
+		}
+		side := s.B
+		if first {
+			side = s.A
+		}
+		if leaf, ok := side.(*Leaf); ok {
+			return leaf.Pane
+		}
+		root = side
 	}
 }
 

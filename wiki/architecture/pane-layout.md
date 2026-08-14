@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store, plus named user-scoped saved layouts.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-08-13T12:00:00Z
+timestamp: 2026-08-14T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -83,6 +83,13 @@ mouse reporting via `tea.WithMouseCellMotion` in `cmd/ike`; the root model's
   `dock <edge> (full …)` status hint. One cell inside the strip, the normal
   pane-relative zones (including self-edge spawn) apply unchanged; corners
   prefer top/bottom. Tab drags never dock — they carry a document, not a pane.
+  The same edge slots double as configured **home positions** for tool panes
+  (#1889): `layout.DockNew` is `Dock`'s create counterpart, attaching a
+  brand-new leaf full-span against an edge, and `layout.EdgeLeaf` probes
+  which lone leaf currently occupies an edge slot (following splits of the
+  dock orientation toward that edge; a shared or subdivided edge counts as
+  free). See [Tool Panes](/architecture/tool-panes.md) for the open
+  semantics.
 - **Release** during a move resolves the drop target and `DropZone`
   (left/right/top/bottom of the target pane), then `layout.Move` re-parents the
   dragged leaf — swapping order or re-orienting the split. v1 only relocates the

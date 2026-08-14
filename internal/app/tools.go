@@ -137,8 +137,9 @@ func (m Model) toolLocations(name string) []toolLoc {
 }
 
 // openTool is the tool.<name> state machine (#741), mirroring
-// terminal.toggle: no instance → spawn one at the adaptive placement
-// (auxZone, #1588); instance exists but is not focused → focus it; focused →
+// terminal.toggle: no instance → spawn one at the configured home position
+// (placement, #1889) or, without one, at the adaptive placement (auxZone,
+// #1588); instance exists but is not focused → focus it; focused →
 // return focus to the remembered pane. fresh (tool.<name>.new, #835) skips the toggle and
 // spawns another instance — only honored for entries with multiple = true,
 // so a stale binding cannot break a single-instance tool.
@@ -163,6 +164,10 @@ func (m *Model) openTool(name string, fresh bool) {
 	if target == "" || m.activeWS().Tree == nil {
 		return
 	}
+	if zone, ok := toolHomeZone(entry.Placement); ok {
+		m.openToolAtHome(entry, zone)
+		return
+	}
 	zone := m.auxZone(target)
 	dir := entry.Cwd
 	if dir == "" {
@@ -181,6 +186,105 @@ func (m *Model) openTool(name string, fresh bool) {
 	m.rememberTool(name, key)
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+}
+
+// toolHomeZone maps a [[tools.custom]] placement value (#1889) to the dock
+// zone of the tool's home position; ok=false (empty or unknown value) keeps
+// the adaptive auxZone heuristic.
+func toolHomeZone(placement string) (layout.Zone, bool) {
+	switch placement {
+	case "left":
+		return layout.ZoneLeft, true
+	case "right":
+		return layout.ZoneRight, true
+	case "top":
+		return layout.ZoneTop, true
+	case "bottom":
+		return layout.ZoneBottom, true
+	}
+	return 0, false
+}
+
+// toolDockShare is the workspace share a tool docked at its home edge takes
+// along the dock axis — the tool-window-strip proportion of #811's dock cap.
+const toolDockShare = 0.3
+
+// dockOccupant resolves the pane occupying the home dock slot at zone's
+// workspace edge, "" when the slot counts as free. The leaf pinned at the
+// edge only occupies the slot when it is a tool window itself (isToolKind:
+// explorer, terminals/tools, the singleton panels) or a tab host already
+// carrying a terminal/tool tab — an editor showing documents there is main
+// content, not a dock, and a fresh open docks beside it instead of tabbing
+// into it.
+func (m *Model) dockOccupant(zone layout.Zone) string {
+	key := layout.EdgeLeaf(m.activeWS().Tree, zone)
+	if key == "" {
+		return ""
+	}
+	inst := m.activeWS().Panes.Get(key)
+	if inst == nil {
+		return ""
+	}
+	if isToolKind(inst.Kind()) {
+		return key
+	}
+	if inst.Kind() == pane.KindEditor {
+		for i := 0; i < inst.TabCount(); i++ {
+			if inst.TabTerminal(i) != nil {
+				return key
+			}
+		}
+	}
+	return ""
+}
+
+// openToolAtHome spawns the tool at its configured home position (#1889), the
+// dock slot on the workspace edge named by placement. A free slot docks a new
+// pane full-span at that edge; a slot occupied by a tab-capable pane adds the
+// tool as a focused tab there instead of forcing another split; any other
+// occupant (explorer, singleton tool windows) shares the dock via a
+// perpendicular split. The placement is intent, never state: moving the tool
+// afterwards does not rewrite it, so close + reopen returns here.
+func (m *Model) openToolAtHome(entry config.ToolEntry, zone layout.Zone) {
+	ws := m.activeWS()
+	dir := entry.Cwd
+	if dir == "" {
+		dir = "."
+	}
+	argv := append([]string{entry.Command}, entry.Args...)
+	ws.ReturnFocus = ws.Panes.Focused()
+	occupant := m.dockOccupant(zone)
+	if occupant != "" && canHostTabs(ws.Panes.Get(occupant)) && m.ensureTabHost(occupant) {
+		term := ws.Panes.NewToolSession(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send)
+		ws.Panes.Get(occupant).AddTerminalTab(term)
+		m.setFocus(occupant)
+		m.rememberTool(entry.Name, occupant)
+		m.layout()
+		saveLayout(ws.Tree, ws.Panes)
+		return
+	}
+	key := ws.Panes.AddTool(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send)
+	if occupant != "" {
+		// A non-tabbable occupant keeps its pane; the tool stacks into the
+		// same dock: side docks split vertically (occupant above, tool
+		// below), top/bottom strips split side by side.
+		share := layout.ZoneBottom
+		if zone == layout.ZoneTop || zone == layout.ZoneBottom {
+			share = layout.ZoneRight
+		}
+		tree, ok := layout.SplitLeaf(ws.Tree, occupant, key, share)
+		if !ok {
+			ws.Panes.Close(key)
+			return
+		}
+		ws.Tree = tree
+	} else {
+		ws.Tree = layout.DockNew(ws.Tree, key, zone, toolDockShare)
+	}
+	m.setFocus(key)
+	m.rememberTool(entry.Name, key)
+	m.layout()
+	saveLayout(ws.Tree, ws.Panes)
 }
 
 // toggleTool applies the focus/return cycle on an existing instance,

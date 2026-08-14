@@ -21,11 +21,11 @@ import (
 // pipeline, so the tool.<name> palette commands re-shape live.
 
 // toolFieldCount is the number of form fields: name, command, args, cwd,
-// multiple (#835). Placement was retired in #1588 — the split direction now
-// adapts to the host pane's shape.
-const toolFieldCount = 5
+// placement, multiple (#835). Placement returned in #1889 as the tool's home
+// dock edge (left/right/top/bottom, empty = adaptive #1588 heuristic).
+const toolFieldCount = 6
 
-var toolFieldNames = [toolFieldCount]string{"name", "command", "args", "cwd", "multiple"}
+var toolFieldNames = [toolFieldCount]string{"name", "command", "args", "cwd", "placement", "multiple"}
 
 // ToolsPage implements PageModel. The add/edit form runs as a SubPanel
 // (#883, tools_form.go) pushed through host.
@@ -210,6 +210,9 @@ func (t *ToolsPage) writeEntries(entries []config.ToolEntry) tea.Cmd {
 		}
 		if e.Cwd != "" {
 			m["cwd"] = e.Cwd
+		}
+		if e.Placement != "" {
+			m["placement"] = e.Placement
 		}
 		if e.Multiple {
 			m["multiple"] = true
