@@ -9,6 +9,51 @@ import (
 	"ike/internal/highlight"
 )
 
+// TestPHPAllInterpolationForms guards #1869: one string mixing all three
+// interpolation forms — complex `{$uid}`, simple `$type` and the deprecated
+// (PHP 8.2) but still parsed `${dt}` — separates token by token, with the
+// interpolation syntax as punctuation.special, the names as variables and the
+// literal separators as string.
+func TestPHPAllInterpolationForms(t *testing.T) {
+	highlight.SetRainbow(false)
+	defer highlight.SetRainbow(true)
+	lines := []string{
+		`<?php`,
+		`$key = "{$uid}|$type|${dt}";`,
+	}
+	spans := highlight.Highlight("main.php", lines)
+	if len(spans) == 0 {
+		t.Fatal("expected spans for PHP source, got none")
+	}
+	ix := highlight.NewIndex(spans)
+	cases := []struct {
+		name string
+		col  int
+		want string
+	}{
+		{"assignment target", 0, "variable"},
+		{"opening quote", 7, "string"},
+		{"complex open brace", 8, "punctuation.special"},
+		{"complex variable sigil", 9, "variable"},
+		{"complex variable name", 10, "variable"},
+		{"complex close brace", 13, "punctuation.special"},
+		{"literal pipe", 14, "string"},
+		{"simple variable sigil", 15, "variable"},
+		{"simple variable name", 16, "variable"},
+		{"second literal pipe", 20, "string"},
+		{"dollar-brace sigil", 21, "punctuation.special"},
+		{"dollar-brace open", 22, "punctuation.special"},
+		{"dollar-brace name", 23, "variable"},
+		{"dollar-brace close", 25, "punctuation.special"},
+		{"closing quote", 26, "string"},
+	}
+	for _, c := range cases {
+		if got := ix.CaptureAt(1, c.col); got != c.want {
+			t.Errorf("%s: CaptureAt(1,%d) = %q, want %q", c.name, c.col, got, c.want)
+		}
+	}
+}
+
 // TestPHPStringInterpolation guards #1466: interpolated expressions inside
 // double-quoted strings and heredocs highlight as code (the old whole-node
 // (encapsed_string) / (heredoc_body) captures started before any
