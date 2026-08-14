@@ -30,6 +30,8 @@ var noCounterpart = map[string]string{
 	"pane.splitUp":          "JetBrains has only the two editor splits, mapped to editor.splitView*",
 	"run.testAtCursor":      "RunClass is context-sensitive in JetBrains, mapped to run.file",
 	"terminal.new":          "JetBrains new terminal tab has no default keymap action",
+	"terminal.newTab":       "JetBrains new terminal tab has no default keymap action",
+	"editor.tab.new":        "JetBrains opens editors by navigation only; no new-empty-tab action",
 	"terminal.popup":        "no JetBrains equivalent",
 	"nav.pinGoto1":          "pins are an IKE concept; GotoBookmark* toggles mnemonic bookmarks instead",
 	"nav.pinGoto2":          "pins are an IKE concept; GotoBookmark* toggles mnemonic bookmarks instead",

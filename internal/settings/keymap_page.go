@@ -524,11 +524,17 @@ func (k *KeymapPage) renderRow(b keymapRow, selected bool, w int) string {
 		chord, title = b.rangeLabel()
 		title += " ▸ " + strconv.Itoa(b.rangeCount)
 	}
-	// Context, layer and provenance moved to the detail column (#1298); the
-	// table is the chord and what it runs.
+	// Layer and provenance live in the detail column (#1298); the table is
+	// the chord, what it runs, and — since the context set covers every pane
+	// (#1794) — the pane scope a chord is confined to, so per-context pairs
+	// (ctrl+t in terminal vs editor) read apart at a glance. Global rows stay
+	// untagged: the scope tag marks the exception, not the rule.
 	chordW := 18
 	if w < 44 {
 		chordW = 14
+	}
+	if !b.nobind && b.Context != keymap.Global {
+		title += " [" + keymap.ContextName(b.Context) + "]"
 	}
 	// Cross-context shadow marker (#1875): both halves of a pane-vs-global
 	// overlap are flagged in the gutter at the chord — the leftmost column, so

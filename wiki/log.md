@@ -1,5 +1,30 @@
 # Log
 
+## 2026-08-14 (keymap: context-based bindings — per-pane contexts, same chord per context, #1794)
+
+- **Every focusable pane kind has a keymap context now** (`internal/keymap/context.go`):
+  `terminal`, `preview` (markdown preview + image viewer share the advertised id), `vcs`,
+  `debug`, `problems`, `structure`, `usages`, `http`, `breakpoints`, `archive` and `data`
+  join `editor`/`explorer`/`palette`/`diff`. All spellings qualify user overrides
+  (`keymap.bindings.<context>.<chord>`, #1312); old override files load unchanged.
+- **One chord, one command per context**: the shipped example is `ctrl+t` — a new terminal
+  tab (`terminal.newTab`, sibling-tab semantics like the reserved `cmd+t`) with a terminal
+  focused, a new empty editor tab (the new `editor.tab.new` command) with an editor focused,
+  unbound elsewhere. Disjoint contexts are conflict-free by construction; pane-over-Global
+  layering stays a surfaced shadow diagnostic (#1875), never an error.
+- **Terminal-context bindings resolve before PTY forwarding** (`terminalContextChord`):
+  only `terminal`-scoped bindings intercept, unmodified keys and the shell essentials
+  (`ctrl+c/d/z`) always forward, and `ctrl+t` is deliberately carved out of the shell
+  forwarding (unbind `terminal.ctrl+t` to restore readline's transpose-chars). In the popup
+  terminal the same binding opens a sibling popup tab.
+- **Global default audit**: `lsp.documentSymbols` (`cmd+f12`), `run.testAtCursor`
+  (`ctrl+shift+f10`) and `editor.splitViewRight`/`Down` re-scoped to `editor`; true app
+  commands and the `editor.tab.*` family stay Global (tab hosts advertise their active
+  tab's context, #997). Settings keymap rows tag pane-scoped bindings with their context;
+  the `?` cheatsheet titles all context groups.
+  Updated [Keybindings & Shortcuts](/architecture/keybindings.md) (contexts, terminal
+  section, regenerated status matrix).
+
 ## 2026-08-14 (layout: configurable home positions for tool windows, #1889)
 
 - **`[[tools.custom]].placement` returned as the tool's home dock edge**

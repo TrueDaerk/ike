@@ -2154,16 +2154,21 @@ func displayDir(dir string) string {
 //	cmd+t       new sibling terminal tab in the focused pane (#729)
 //
 // The spatial focus moves (default ctrl+arrows, keymap.bindings.focus_*),
-// cmd+c over an active mouse selection, cmd+v (system-clipboard paste), and
-// the global navigation allowlist (terminalGlobalCommands + the configured
-// palette.toggle_key, #805) are reserved in the caller (#228, #227, #727).
-// Everything else, including tab, ctrl+c, esc and the F-keys, belongs
-// to the shell. shift+pgup/pgdn page the scrollback inside the pane itself.
+// cmd+c over an active mouse selection, cmd+v (system-clipboard paste), the
+// global navigation allowlist (terminalGlobalCommands + the configured
+// palette.toggle_key, #805), and terminal-context bindings (#1794 —
+// terminalContextChord: ctrl+t → new terminal tab and any user
+// keymap.bindings.terminal.* chord) are reserved in the caller
+// (#228, #227, #727). Everything else, including tab, ctrl+c, esc and the
+// F-keys, belongs to the shell. shift+pgup/pgdn page the scrollback inside
+// the pane itself.
 func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 	// Canonicalize the chord (#981): bubbletea encodes the Command key as
 	// super+/meta+ tokens, which ParseKey folds onto the logical cmd form the
 	// cases below use. Deliberately NOT platform-folded to ctrl — inside a
-	// terminal ctrl+t/ctrl+d belong to the shell on every platform.
+	// terminal ctrl+d belongs to the shell on every platform (and ctrl+t is a
+	// terminal-context *binding*, not this hardcoded set, so it stays
+	// rebindable, #1794).
 	if k, err := keymap.ParseKey(keys); err == nil {
 		keys = k.String()
 	}
@@ -2349,6 +2354,52 @@ func (m *Model) terminalGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	return false, nil
 }
 
+// terminalShellEssential are chords a terminal-context binding may never take
+// from the shell (#1794): the POSIX interrupt/EOF/suspend strokes every CLI
+// leans on. They forward to the PTY even when a terminal-scoped binding names
+// them; everything else a terminal-context binding claims is intercepted.
+var terminalShellEssential = map[string]bool{
+	"ctrl+c": true,
+	"ctrl+d": true,
+	"ctrl+z": true,
+}
+
+// terminalContextChord resolves a single-step chord against the live binding
+// table looking for a terminal-scoped binding (#1794): per-context defaults
+// (ctrl+t → terminal.newTab) and user overrides under
+// keymap.bindings.terminal.* run BEFORE the raw PTY forwarding, so the same
+// chord can do IDE work in a terminal and something else elsewhere. Guard
+// rails keep the shell usable: only bindings explicitly scoped to the
+// terminal context are eligible (Global chords stay with the shell unless
+// allowlisted in terminalGlobalCommands), unmodified keys are never
+// intercepted (they are typing), and terminalShellEssential /
+// terminalShellChords always forward. Taking ctrl+t from the shell
+// (readline's transpose-chars) is the documented trade — unbinding
+// `keymap.bindings."terminal.ctrl+t"` restores the forwarding.
+func (m *Model) terminalContextChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+	k, ok := keymap.FromKeyMsg(msg)
+	if !ok || k.Mods == 0 {
+		return false, nil
+	}
+	table := m.bindings.Table()
+	if table == nil {
+		return false, nil
+	}
+	chord := keymap.Chord{Steps: []keymap.Key{k}}
+	cs := chord.String()
+	if terminalShellEssential[cs] || terminalShellChords[cs] {
+		return false, nil
+	}
+	b, found := table.Lookup(chord, keymap.Terminal)
+	if !found || b.Context != keymap.Terminal {
+		return false, nil
+	}
+	if c, okc := m.reg.Command(b.Command); okc {
+		return true, m.dispatchCommand(b.Command, c)
+	}
+	return false, nil
+}
+
 // newTerminalSibling opens a terminal tab next to the focused one (#729,
 // iTerm's cmd+t): a terminal tab hosted by an editor pane gets a sibling tab
 // in the same pane (#573); a dedicated single-session terminal pane converts
@@ -2374,6 +2425,35 @@ func (m *Model) newTerminalSibling() {
 	tkey := m.activeWS().Panes.MintTerminalKey()
 	term := terminal.New(tkey, terminal.Shell(shell), ".", 80, 24, terminalEnv(), m.host.Send)
 	inst.AddTerminalTab(term)
+	m.setFocus(key)
+	m.layout()
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+}
+
+// newEditorTab appends a fresh empty editor tab to the focused editor pane
+// (#1794, the editor half of the per-context ctrl+t pair), falling back to
+// the active editor pane, else spawning one. A truly empty active tab (no
+// file, no text — the shared predicate, #641) is reused instead of stacking
+// blank tabs.
+func (m *Model) newEditorTab() {
+	key := ""
+	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor {
+		key = inst.Key()
+	}
+	if key == "" {
+		key = m.activeEditorKey()
+	}
+	if key == "" {
+		key = m.spawnEditor()
+	}
+	inst := m.activeWS().Panes.Get(key)
+	if inst == nil {
+		return
+	}
+	if ed := inst.Editor(); ed == nil || !ed.IsEmpty() {
+		inst.AddTab()
+		m.installEmitter(key)
+	}
 	m.setFocus(key)
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
@@ -3434,9 +3514,25 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case TerminalNewTabMsg:
-		// terminal.newTab (palette / menu, #573): open a shell in a new tab
-		// of the active editor pane, next to the file tabs.
-		m.openTerminalTab()
+		// terminal.newTab (palette / menu, #573; terminal-context ctrl+t,
+		// #1794): with the popup terminal open the new tab joins the popup;
+		// with a terminal focused the new session opens as its sibling tab
+		// (iTerm's cmd+t, #729); otherwise a shell tab joins the active
+		// editor pane, next to the file tabs.
+		switch {
+		case m.popupLayerOpen():
+			m.newPopupTerminalTab()
+		case m.focusContext() == string(keymap.Terminal):
+			m.newTerminalSibling()
+		default:
+			m.openTerminalTab()
+		}
+		return m, nil
+
+	case NewEditorTabMsg:
+		// editor.tab.new (editor-context ctrl+t, #1794): a fresh empty
+		// editor tab in the focused (else the active) editor pane.
+		m.newEditorTab()
 		return m, nil
 
 	case RunFileMsg:
@@ -5285,8 +5381,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			// Global navigation chords (palette, project switch) stay with the
-			// IDE (#805); everything else belongs to the shell.
+			// IDE (#805), and terminal-context bindings (ctrl+t → new terminal
+			// tab, #1794) resolve before PTY forwarding; everything else
+			// belongs to the shell.
 			if handled, cmd := m.terminalGlobalChord(msg); handled {
+				return m, cmd
+			}
+			if handled, cmd := m.terminalContextChord(msg); handled {
 				return m, cmd
 			}
 			return m.routeKey(msg)

@@ -38,6 +38,11 @@ type TabReopenMsg struct{}
 // editor.tab.closeOthers (tab context menu / palette).
 type TabCloseOthersMsg struct{}
 
+// NewEditorTabMsg appends a fresh empty editor tab to the focused (else the
+// active) editor pane and focuses it (#1794, the editor half of the
+// per-context ctrl+t pair). Dispatched by editor.tab.new.
+type NewEditorTabMsg struct{}
+
 // TabTogglePinMsg flips the active tab's pin (#1172): a pinned tab is exempt
 // from the tab-limit LRU eviction and from Close Others; manual closes stay
 // allowed. Dispatched by editor.tab.togglePin (tab context menu / palette).
@@ -307,6 +312,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 		appCommand("editor.tab.prev", "Previous Tab", TabStepMsg{Delta: -1}),
 		appCommand("editor.tab.moveLeft", "Move Tab Left", TabMoveMsg{Delta: -1}),
 		appCommand("editor.tab.moveRight", "Move Tab Right", TabMoveMsg{Delta: 1}),
+		appCommand("editor.tab.new", "New Empty Editor Tab", NewEditorTabMsg{}),
 		appCommand("editor.tab.reopenClosed", "Reopen Closed Tab", TabReopenMsg{}),
 		appCommand("editor.tab.closeOthers", "Close Other Tabs", TabCloseOthersMsg{}),
 		appCommand("editor.tab.togglePin", "Pin/Unpin Tab", TabTogglePinMsg{}),

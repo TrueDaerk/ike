@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Keybindings & Shortcuts
-description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
+description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
-tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-08-13T00:00:00Z
+tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
+timestamp: 2026-08-14T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -51,11 +51,20 @@ than as a typo.
 
 ## Context & precedence
 
-`Context` (`context.go`) values equal the context ids panes advertise (`editor`,
-`explorer`, `palette`); the zero value `Global` matches everywhere. A chord
-resolves against the **active** focus context, preferring the most specific match:
-a pane-scoped binding shadows a `Global` one for the same chord while that pane is
-focused.
+`Context` (`context.go`) values equal the context ids panes advertise
+(`internal/pane`'s `ContextID`); the zero value `Global` matches everywhere.
+Since #1794 **every focusable pane kind has a context**: `editor`, `explorer`,
+`palette`, `diff`, `terminal`, `preview` (markdown preview and image viewer
+share the advertised `preview` id), `vcs`, `debug`, `problems`, `structure`,
+`usages`, `http`, `breakpoints`, `archive` and `data`. A chord resolves
+against the **active** focus context, preferring the most specific match: a
+pane-scoped binding shadows a `Global` one for the same chord while that pane
+is focused. The specificity order has exactly two levels — `Global` below
+every pane context, pane contexts mutually disjoint — so one chord may carry
+a different command **per context** without any conflict: the shipped example
+is `ctrl+t`, a new terminal tab (`terminal.newTab`) in the `terminal` context
+and a new empty editor tab (`editor.tab.new`) in the `editor` context, unbound
+everywhere else.
 
 ### Cross-context shadow detection (#1875)
 
@@ -118,11 +127,16 @@ diagnostics too.
 - a **bare chord** — `"ctrl+s"` — which applies **wherever the chord is bound**:
   a rebind replaces the command in every context, an unbind drops them all; or
 - a **context-qualified chord** — `"editor.ctrl+s"` — which touches that one
-  context only. The qualifier is one of `global`, `editor`, `explorer`,
-  `palette`, `diff` (`ParseContextName`); anything else is not a qualifier and
-  is parsed as part of the chord, so dotted chords (`cmd+.`) keep working.
-  `global.<chord>` is therefore narrower than the bare form: it binds in the
-  `Global` context and leaves pane-scoped bindings of the same chord alone.
+  context only. The qualifier is any context spelling from `ContextNames()`:
+  `global`, `editor`, `explorer`, `palette`, `diff`, and since #1794 the full
+  pane set — `archive`, `breakpoints`, `data`, `debug`, `http`, `preview`,
+  `problems`, `structure`, `terminal`, `usages`, `vcs` (`ParseContextName`);
+  anything else is not a qualifier and is parsed as part of the chord, so
+  dotted chords (`cmd+.`) keep working. `global.<chord>` is therefore narrower
+  than the bare form: it binds in the `Global` context and leaves pane-scoped
+  bindings of the same chord alone. Old override files predate the wider set
+  unchanged — a bare chord still applies wherever the chord is bound, and the
+  original five qualifiers kept their meaning.
 
 Qualified keys are applied **after** bare ones (both in sorted order), so the
 narrower statement wins regardless of Go's map iteration order. Because
@@ -186,6 +200,29 @@ former Roadmap 0085, spec in git history, for the v1→v2 key-model change:
   pending with the popup open (#1482). A mouse click while a chord is pending
   resets the resolver and closes the popup; the click then acts normally.
 
+## Terminal-context bindings (#1794)
+
+A focused live terminal forwards keys raw to the PTY, so terminal-scoped
+bindings resolve **before** the forwarding, in the root model's terminal
+branch (`terminalContextChord` in `internal/app`), after the hardcoded
+reserved set (`ctrl+tab`, `alt+f12`, `cmd+t/d/w/f`), the spatial focus moves
+and the `terminalGlobalCommands` allowlist. Guard rails keep the shell
+usable:
+
+- only bindings **explicitly scoped** to the `terminal` context are eligible;
+  a `Global` chord never intercepts unless allowlisted,
+- unmodified keys are never intercepted (they are typing),
+- `terminalShellEssential` (`ctrl+c`, `ctrl+d`, `ctrl+z` — interrupt, EOF,
+  suspend) and the `terminalShellChords` readline arrows always forward, even
+  when a terminal-scoped binding names them.
+
+The design trade, documented here deliberately: **`ctrl+t` no longer reaches
+the shell** — readline's rarely-used transpose-chars loses the position to
+the new-terminal-tab chord (iTerm and JetBrains both spend this key on
+new-tab). `keymap.bindings."terminal.ctrl+t" = ""` restores the forwarding.
+Inside the popup terminal the same binding acts on the popup's tab strip
+(`popupReservedKey` maps `terminal.newTab` onto a sibling popup tab).
+
 ## Terminal limits & fallback
 
 Many modifier combos (`Cmd+T`, `Ctrl+Tab`, `Cmd+1`) are intercepted by the
@@ -209,7 +246,22 @@ visible in the settings keymap page (per-row ⚠) and the reachability matrix.
 
 The JetBrains-flavoured defaults live in `defaults.go` as data (chord, command id,
 title, context, owner, fragile). `help.go` groups the effective bindings by
-context (Global first) for the `palette.keymapHelp` cheatsheet.
+context (Global first) for the `palette.keymapHelp` cheatsheet, and the
+settings keymap page tags every pane-scoped row with its context
+(`[editor]`, `[terminal]`, …).
+
+The #1794 context audit walked every `Global` row and re-scoped the ones that
+only make sense in one pane: `lsp.documentSymbols` (`cmd+f12`),
+`run.testAtCursor` (`ctrl+shift+f10`) and the split-view pair
+(`editor.splitViewRight`/`Down`) are `editor`-scoped now, and the new
+per-context `ctrl+t` pair ships `terminal`/`editor`-scoped. Deliberately
+**kept Global**: the real app commands (palette, project, pane/window
+management, run/debug session control, settings, menu), the `editor.tab.*`
+family — a tab host whose active tab is a terminal or content viewer
+advertises that tab's context, so tab switching scoped to `editor` would die
+exactly where it is needed (#997) — and the deliberate cross-context chords
+(`explorer.newFile` with an editor focused, #374; `file.rename` under
+`shift+f6`'s editor shadow).
 
 Actions whose JetBrains chord uses `Cmd` — undeliverable in macOS terminals —
 additionally get an everywhere-deliverable `Ctrl` chord: undo (`ctrl+z`), redo
@@ -544,6 +596,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `editor.splitViewRight` | `cmd+alt+shift+right` | fragile | `palette` | live via palette |
 | `editor.tab.moveLeft` | `ctrl+shift+pgup` | delivered | `—` | live |
 | `editor.tab.moveRight` | `ctrl+shift+pgdown` | delivered | `—` | live |
+| `editor.tab.new` | `ctrl+t` | delivered | `—` | live |
 | `editor.tab.next` | `cmd+ctrl+right` | fragile | `palette` | live via palette |
 | `editor.tab.prev` | `cmd+ctrl+left` | fragile | `palette` | live via palette |
 | `editor.tab.reopenClosed` | `alt+shift+t` | fragile | `palette` | live via palette |
@@ -620,6 +673,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `settings.open` | `cmd+,` | fragile | `palette` | live via palette |
 | `structure.toggle` | `cmd+3` | fragile | `palette` | live via palette |
 | `terminal.new` | `cmd+alt+shift+t` | fragile | `palette` | live via palette |
+| `terminal.newTab` | `ctrl+t` | delivered | `—` | live |
 | `terminal.popup` | `cmd+alt+t` | fragile | `palette` | live via palette |
 | `terminal.toggle` | `alt+f12` | fragile | `palette` | live via palette |
 | `todo.list` | `cmd+6` | fragile | `palette` | live via palette |
