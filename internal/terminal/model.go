@@ -14,6 +14,7 @@ import (
 
 	"ike/internal/overlay"
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // Model is the pane-facing terminal: it owns a Session and adapts pane
@@ -938,8 +939,18 @@ func wheelChildBudget(delta int) (lines, events int) {
 	return lines, events
 }
 
-// PasteText forwards pasted text through the bracketed-paste path.
+// PasteText routes a pasted block to the open scrollback search's query
+// (#1882) when one is up, otherwise forwards it through the bracketed-paste
+// path to the shell.
 func (m *Model) PasteText(text string) {
+	if m.search != nil {
+		out, ncur, changed := ui.PasteText(m.search.query, m.search.pos, text)
+		if changed {
+			m.search.query, m.search.pos = out, ncur
+			m.searchJump()
+		}
+		return
+	}
 	if m.sess != nil {
 		m.occupied = true
 		m.sess.Paste(text)

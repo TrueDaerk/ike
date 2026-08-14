@@ -243,3 +243,106 @@ func TestStartSearchIdempotentAndGuarded(t *testing.T) {
 		t.Fatal("StartSearch must report false under an alt-screen child")
 	}
 }
+
+// TestSearchCursorNavigation guards the shared-helper adoption (#1882):
+// left/right/home/end move the cursor, typing and backspace act at the
+// cursor position rather than always appending/trimming at the end.
+func TestSearchCursorNavigation(t *testing.T) {
+	m := searchModel(t)
+	press(m, '/', "/")
+	typeQuery(m, "abc")
+	if m.search.pos != 3 {
+		t.Fatalf("pos after typing = %d, want 3", m.search.pos)
+	}
+	press(m, tea.KeyLeft, "")
+	press(m, tea.KeyLeft, "")
+	if m.search.pos != 1 {
+		t.Fatalf("pos after two lefts = %d, want 1", m.search.pos)
+	}
+	press(m, 'x', "x")
+	if m.search.query != "axbc" {
+		t.Fatalf("insert at cursor = %q, want axbc", m.search.query)
+	}
+	press(m, tea.KeyHome, "")
+	if m.search.pos != 0 {
+		t.Fatalf("home must move to 0, got %d", m.search.pos)
+	}
+	press(m, tea.KeyEnd, "")
+	if m.search.pos != 4 {
+		t.Fatalf("end must move to len, got %d", m.search.pos)
+	}
+	press(m, tea.KeyBackspace, "")
+	if m.search.query != "axb" {
+		t.Fatalf("backspace at end = %q, want axb", m.search.query)
+	}
+}
+
+// TestSearchWordMotionsAndDelete guards alt+left/alt+right word motions and
+// ctrl+w/alt+backspace word deletion, passed through to ui.EditKey (#1882).
+func TestSearchWordMotionsAndDelete(t *testing.T) {
+	m := searchModel(t)
+	press(m, '/', "/")
+	typeQuery(m, "foo bar")
+	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt})
+	if m.search.pos != 4 {
+		t.Fatalf("alt+left must land at the start of the last word, pos = %d, want 4", m.search.pos)
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt})
+	if m.search.pos != 0 {
+		t.Fatalf("alt+left again must land at the start, pos = %d, want 0", m.search.pos)
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModAlt})
+	if m.search.pos != 3 {
+		t.Fatalf("alt+right must land after the first word, pos = %d, want 3", m.search.pos)
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
+	m.Update(tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl})
+	if m.search.query != "foo " {
+		t.Fatalf("ctrl+w must delete the trailing word, got %q", m.search.query)
+	}
+}
+
+// TestSearchPasteGoesToQuery guards the paste routing fix (#1882): a
+// bracketed paste while the search is open must land in the query, not the
+// shell underneath.
+func TestSearchPasteGoesToQuery(t *testing.T) {
+	m := searchModel(t)
+	press(m, '/', "/")
+	m.PasteText("37")
+	if m.occupied {
+		t.Fatal("paste while the search is open must not reach the shell")
+	}
+	if m.search.query != "37" {
+		t.Fatalf("paste must land in the search query, got %q", m.search.query)
+	}
+	want := findRow(m.sess, "37")
+	if m.search.cur != want {
+		t.Fatalf("paste must trigger the match jump, cur = %d, want %d", m.search.cur, want)
+	}
+}
+
+// TestSearchPasteAtCursor guards that a paste inserts at the cursor position,
+// not always at the end.
+func TestSearchPasteAtCursor(t *testing.T) {
+	m := searchModel(t)
+	press(m, '/', "/")
+	typeQuery(m, "27")
+	press(m, tea.KeyLeft, "")
+	m.PasteText("x")
+	if m.search.query != "2x7" {
+		t.Fatalf("paste at cursor = %q, want 2x7", m.search.query)
+	}
+	if m.search.pos != 2 {
+		t.Fatalf("cursor after paste = %d, want 2", m.search.pos)
+	}
+}
+
+// TestSearchPasteFallsThroughToShellWhenClosed guards that paste routing
+// stays untouched once the search is closed — it must reach the shell again.
+func TestSearchPasteFallsThroughToShellWhenClosed(t *testing.T) {
+	m := searchModel(t)
+	m.PasteText("hi")
+	if !m.occupied {
+		t.Fatal("paste without an open search must reach the shell")
+	}
+}
