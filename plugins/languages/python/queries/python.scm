@@ -95,6 +95,20 @@
 (type_conversion) @punctuation.special
 (format_specifier) @punctuation.special
 
+; Brackets (#1869): without them a subscript inside an interpolation —
+; f"{kw['type']}" — leaves its [ ] uncoloured while the container reads as a
+; variable and the key as a string, so the three parts do not separate. Listed
+; after the interpolation pattern above, which claims the f-string braces
+; first; rainbow brackets still override this when enabled.
+[
+  "("
+  ")"
+  "["
+  "]"
+  "{"
+  "}"
+] @punctuation.bracket
+
 [
   "-"
   "-="

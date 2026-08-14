@@ -163,6 +163,7 @@ Active when an editor pane has focus.
 | Run HTTP request | `ctrl+f9` | `ctrl+f9` | `http.run` |
 | Save | `cmd+s` | `ctrl+s` | `editor.write` |
 | Save | `ctrl+s` | `ctrl+s` | `editor.write` |
+| Select All | `cmd+a` | `ctrl+a` | `editor.selectAll` |
 | Show intention actions | `alt+enter` | `alt+enter` | `lsp.codeAction` |
 | Show stored HTTP response | `cmd+shift+enter` | `ctrl+shift+enter` | `http.showResponse` |
 | Show stored HTTP response | `ctrl+shift+f9` | `ctrl+shift+f9` | `http.showResponse` |

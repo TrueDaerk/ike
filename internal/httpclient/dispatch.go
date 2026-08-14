@@ -120,8 +120,15 @@ func (s *RequestSnapshot) Label() string {
 // Options configures a Dispatcher. The zero value uses the process
 // environment and the real user configuration files.
 type Options struct {
-	// Lookup resolves placeholder variables; defaults to os.LookupEnv.
+	// Lookup resolves ${NAME} / {{$env NAME}} placeholders and closes the
+	// user-variable chain; defaults to os.LookupEnv.
 	Lookup func(string) (string, bool)
+	// Vars carries the user-defined variables of the request (#1867): the
+	// .http file's own `@name=value` definitions and the selected
+	// http-client.env.json environment. Its Lookup field is filled from
+	// Options.Lookup, so a caller only sets the two maps. nil means "no user
+	// variables" — every `{{name}}` then falls through to the environment.
+	Vars *httpfile.Vars
 	// NetrcPath overrides the .netrc location ("" = $NETRC / $HOME/.netrc).
 	NetrcPath string
 	// CurlrcPath overrides the .curlrc location ("" = curl's lookup order).
@@ -147,15 +154,15 @@ type Options struct {
 // (#1707). Bodies are assembled up front rather than streamed so their length
 // is known (no chunked encoding) and so the snapshot (#1832) can keep exactly
 // what went out.
-func requestBody(resolved *httpfile.Request, opts Options, lookup func(string) (string, bool)) ([]byte, error) {
+func requestBody(resolved *httpfile.Request, opts Options, vars *httpfile.Vars) ([]byte, error) {
 	if resolved.BodyFile != "" {
-		return loadBodyFile(resolved.BodyFile, resolved.BodyFileSubstitute, opts, lookup)
+		return loadBodyFile(resolved.BodyFile, resolved.BodyFileSubstitute, opts, vars)
 	}
 	if ct, ok := resolved.Header("Content-Type"); ok {
 		if boundary, ok := httpfile.MultipartBoundary(ct); ok {
 			return httpfile.BuildMultipartBody(resolved.Body, boundary,
 				func(path string, substitute bool) ([]byte, error) {
-					return loadBodyFile(path, substitute, opts, lookup)
+					return loadBodyFile(path, substitute, opts, vars)
 				})
 		}
 	}
@@ -167,7 +174,7 @@ func requestBody(resolved *httpfile.Request, opts Options, lookup func(string) (
 // directory — and a leading ~ expands. substitute (the `<@` spelling)
 // replaces the file's own placeholders; the plain `<` form returns the bytes
 // untouched, so binary content survives verbatim.
-func loadBodyFile(file string, substitute bool, opts Options, lookup func(string) (string, bool)) ([]byte, error) {
+func loadBodyFile(file string, substitute bool, opts Options, vars *httpfile.Vars) ([]byte, error) {
 	path := pathcomplete.Expand(file)
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(opts.BaseDir, path)
@@ -177,7 +184,7 @@ func loadBodyFile(file string, substitute bool, opts Options, lookup func(string
 		return nil, fmt.Errorf("body file %s: %v", file, err)
 	}
 	if substitute {
-		text, err := httpfile.Substitute(string(data), lookup)
+		text, err := httpfile.SubstituteVars(string(data), vars)
 		if err != nil {
 			return nil, fmt.Errorf("body file %s: %v", file, err)
 		}
@@ -201,11 +208,8 @@ type prepared struct {
 // prepare resolves placeholders in req, applies local configuration and
 // builds the http.Request plus the configured client.
 func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepared, error) {
-	lookup := opts.Lookup
-	if lookup == nil {
-		lookup = lookupEnv
-	}
-	resolved, err := req.Resolve(lookup)
+	vars := variables(opts)
+	resolved, err := req.ResolveVars(vars)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +236,7 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 		warnings = append(warnings, cfg.Warnings...)
 	}
 
-	body, err := requestBody(resolved, opts, lookup)
+	body, err := requestBody(resolved, opts, vars)
 	if err != nil {
 		return nil, fmt.Errorf("request %s: %v", req.Key(), err)
 	}

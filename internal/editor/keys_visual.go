@@ -24,6 +24,22 @@ func (m *Model) enterVisual(md mode.Mode) {
 	m.emit(EventCursorMove)
 }
 
+// selectAll selects the whole buffer as a linewise visual selection,
+// equivalent to "ggVG" (cmd+a, JetBrains "Select All" mirror, #1861). An
+// empty buffer has nothing to select and is left in its current mode.
+func (m *Model) selectAll() {
+	if m.buf.LineCount() == 1 && m.buf.Line(0) == "" {
+		return
+	}
+	m.collapseCarets()
+	first := motion.First(m.buf, m.cursor, 0)
+	m.cursor = m.buf.ClampCursor(buffer.Position{Line: first.Pos.Line, Col: m.svVerticalCol(first.Pos.Line)})
+	m.enterVisual(mode.VisualLine)
+	last := motion.Last(m.buf, m.cursor, 0)
+	m.cursor = m.buf.ClampCursor(buffer.Position{Line: last.Pos.Line, Col: m.svVerticalCol(last.Pos.Line)})
+	m.emit(EventCursorMove)
+}
+
 // updateVisual handles keys while a selection is active. Motions extend the
 // selection; d/c/y act on it; v/V/ctrl+v toggle or switch the visual variant.
 func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-12T12:00:00Z
+timestamp: 2026-08-14T12:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -93,6 +93,22 @@ Authorization: Bearer {{$env TOKEN}}
   directive never fires); all part handling lives at dispatch.
 - **Comments:** lines starting with `#` or `//` outside a body. Inside a
   body nothing is stripped.
+- **Variable definitions** (#1867): `@name = value` lines before a request
+  line define a variable the file's `{{name}}` placeholders resolve from —
+  see [placeholders and variables](#placeholders-and-variables):
+
+  ```
+  @host = https://example.com
+
+  ### thing
+  GET {{host}}/my/path
+  ```
+
+  They are not request lines, so neither the completion source nor the
+  reformatter treats them as one: a definition completes nothing, the
+  request line below it still completes methods, and definitions pass
+  through a reformat byte-verbatim (their spelling is the author's
+  business). The reformatter's no-change guard compares them too.
 
 ## Parser (`internal/httpfile`)
 
@@ -106,21 +122,87 @@ skipped silently.
 
 Each request is addressable by `Request.Key()` — its `###` name when present,
 otherwise its stable zero-based index — which the response-history milestone
-(#1251) will use to key stored responses.
+(#1251) will use to key stored responses. `File.Vars` carries the file's
+`@name=value` definitions in file order (#1867), `File.VarMap()` collapses
+them into the name→value map the resolution chain takes.
 
-## Placeholders
+## Placeholders and variables
 
-Two placeholder forms are recognized, resolved from the process environment
-at dispatch time, never at parse time:
+Three placeholder forms are recognized, all resolved at dispatch time, never
+at parse time:
 
-- `${NAME}`
-- `{{$env NAME}}` (whitespace-tolerant)
+- `${NAME}` — the process environment
+- `{{$env NAME}}` (whitespace-tolerant) — the process environment
+- `{{name}}` (#1867) — a **user-defined variable**
+
+The first two mean "the process environment" and keep saying so: a
+same-named user variable never shadows them.
 
 `Request.Resolve(lookup)` returns a substituted copy of the request (target,
 header values, body); the original stays untouched so the buffer's text is
 never rewritten. Any unresolved variable aborts resolution with an error
-naming all missing variables — a broken request is never dispatched.
-`httpfile.Substitute` exposes the same substitution for single strings.
+naming all missing variables — a broken request is never dispatched, and that
+holds for `{{name}}` exactly as for the older forms.
+`httpfile.Substitute` exposes the same substitution for single strings;
+`Request.ResolveVars` / `httpfile.SubstituteVars` are the variants taking the
+full chain below (`Resolve`/`Substitute` are them with a single lookup).
+
+### User-defined variables (#1867)
+
+Two sources, the JetBrains / VS Code REST Client convention:
+
+- **In-file definitions**: `@name = value` lines *before* a request line —
+  the file header the convention puts them in, or right above the request.
+  Whitespace around `=` and around the value is stripped, the value may be
+  empty, and a name defined twice reads as a re-assignment (the last
+  definition wins). The definitions of the whole file are one set: they are
+  collected into `File.Vars` in file order, and any request may use any of
+  them. A value may itself hold placeholders (`@api = {{host}}/api`), which
+  are expanded in turn; a cycle leaves the variable unresolved rather than
+  recursing.
+- **Environment files** next to the `.http` file: `http-client.env.json`
+  holds named environments, each a flat object of variables, and
+  `http-client.private.env.json` holds the secrets that must not be
+  committed. Same-named values of the private file **override** the public
+  ones, per environment, and the private file may add environments of its
+  own. JSON scalars become strings in their written spelling (`3`, `1.50`,
+  `true`); a missing file is not an error, but a file that exists and does
+  not parse aborts the dispatch naming it — a JSON typo must not become a
+  request sent with unresolved variables.
+
+  ```json
+  {
+    "dev":  { "host": "https://dev.example.com" },
+    "prod": { "host": "https://example.com" }
+  }
+  ```
+
+**Precedence** for `{{name}}`, highest first (`httpfile.Vars`):
+
+1. the `.http` file's own `@name=value` definitions
+2. the selected environment (private file merged over the public one)
+3. the process environment
+
+The in-file definition wins because it sits in front of the author, right
+above the request; an environment is the shared default it overrides. Falling
+through to the process environment last means `{{HOME}}` works and no `.http`
+file has to repeat what is already exported.
+
+**Choosing the environment**: `http.selectEnvironment` ("Select HTTP
+Environment", palette) lists the environments of the focused `.http` file's
+directory in the palette (locked mode, prefix `%`, `internal/app/http_env.go`)
+with the active one badged, plus a row that clears the selection again. The
+choice is stored **per directory** — that is where the environment file lives
+— in `.ike/httpenv.json` (`IKE_CONFIG_DIR` seam like every other state file),
+so `dev` stays chosen across restarts. A file naming exactly one environment
+needs no choice: it is simply used. While several exist and none is chosen,
+`{{name}}` falls straight through to the process environment, and the
+resulting unresolved-placeholder error names the available environments and
+the command — the unmade choice is the likely cause, so it is said where the
+failure is read.
+
+Re-send (#1832) is unaffected by all of this: it repeats the stored snapshot
+verbatim, so a switched environment cannot change what is repeated.
 
 ## Dispatch (`internal/httpclient`)
 
@@ -152,8 +234,10 @@ hard failure, and **explicit values in the `.http` file always win**:
 Defaults: redirects followed (Go's limit of 10), TLS verification on (unless
 `insecure`), 30 s overall timeout (`max-time` overrides), response bodies
 capped at 10 MiB with a truncation warning so huge downloads cannot freeze
-the TUI. `Options` lets callers (and tests) override the env lookup, the
-config file paths, or disable detection entirely.
+the TUI. `Options` lets callers (and tests) override the env lookup, pass the
+user-variable chain (`Options.Vars`, #1867 — the caller's value is copied, so
+one `Options` can serve several dispatches), override the config file paths,
+or disable detection entirely.
 
 ### As-sent request snapshot (#1832)
 

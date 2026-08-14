@@ -10,6 +10,7 @@ import (
 	"ike/internal/complete"
 	"ike/internal/fuzzy"
 	"ike/internal/host"
+	"ike/internal/httpfile"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 	"ike/internal/pathcomplete"
@@ -124,7 +125,7 @@ func classify(lines []string, at int, before string) ctxKind {
 	if at < 0 || at >= len(lines) {
 		return ctxNone
 	}
-	if isCommentLine(lines[at]) || isSeparator(lines[at]) {
+	if isCommentLine(lines[at]) || isSeparator(lines[at]) || isVarDefLine(lines[at]) {
 		return ctxNone
 	}
 	// Walk up to the block start, remembering whether a blank line (the body
@@ -141,7 +142,9 @@ func classify(lines []string, at int, before string) ctxKind {
 			sawBlank = true
 			continue
 		}
-		if isCommentLine(l) || isFoldedQueryLine(l) {
+		if isCommentLine(l) || isFoldedQueryLine(l) || isVarDefLine(l) {
+			// Variable definitions (#1867) precede the request line without
+			// being one, exactly like comments.
 			continue
 		}
 		requestLine = i
@@ -183,6 +186,13 @@ func isSeparator(line string) bool { return strings.HasPrefix(line, "###") }
 func isCommentLine(line string) bool {
 	t := strings.TrimSpace(line)
 	return strings.HasPrefix(t, "#") || strings.HasPrefix(t, "//")
+}
+
+// isVarDefLine reports an in-file variable definition (#1867): an
+// `@name=value` line the parser reads instead of a request line.
+func isVarDefLine(line string) bool {
+	_, _, ok := httpfile.VarDefinition(line)
+	return ok
 }
 
 // isFoldedQueryLine reports the JetBrains query continuation form (#1269).

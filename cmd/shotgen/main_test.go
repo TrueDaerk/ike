@@ -59,8 +59,10 @@ func TestShotFixturesExist(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, s := range shots {
-		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(s.open))); err != nil {
-			t.Errorf("%s opens %q, which no fixture provides: %v", s.name, s.open, err)
+		for _, open := range append(append([]string{}, s.opens...), s.open) {
+			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(open))); err != nil {
+				t.Errorf("%s opens %q, which no fixture provides: %v", s.name, open, err)
+			}
 		}
 	}
 }
@@ -139,13 +141,26 @@ func TestShotNamesAreUniqueAndComplete(t *testing.T) {
 	}
 }
 
-// TestKeyMsgSpecs guards the tiny key-spec parser the scenarios use.
-func TestKeyMsgSpecs(t *testing.T) {
-	if got := keyMsg("j"); got.Code != 'j' || got.Text != "j" {
-		t.Errorf("keyMsg(\"j\") = %+v", got)
-	}
-	if got := keyMsg("down"); got.Code != namedKeys["down"] || got.Text != "" {
-		t.Errorf("keyMsg(\"down\") = %+v", got)
+// TestShotStepsAreWellFormed guards the step scripts: a mistyped kind or an
+// unknown key name would otherwise be found only by staring at the rendered
+// PNG, where a step that did nothing looks like a feature that does nothing.
+func TestShotStepsAreWellFormed(t *testing.T) {
+	for _, s := range shots {
+		for _, step := range s.steps {
+			kind, arg, ok := strings.Cut(step, ":")
+			switch {
+			case !ok:
+				t.Errorf("%s: step %q is not kind:argument", s.name, step)
+			case arg == "":
+				t.Errorf("%s: step %q has an empty argument", s.name, step)
+			case kind == "key":
+				if _, known := namedKeys[arg]; !known {
+					t.Errorf("%s: step %q names no known key", s.name, step)
+				}
+			case kind != "cmd" && kind != "type":
+				t.Errorf("%s: step %q has an unknown kind %q", s.name, step, kind)
+			}
+		}
 	}
 }
 

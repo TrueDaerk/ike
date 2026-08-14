@@ -625,6 +625,8 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		cmd := m.clipboardCut()
 		m.scroll()
 		return m, cmd
+	case "select_all":
+		m.selectAll()
 	case "paste":
 		m.clipboardPaste()
 	case "line_start":

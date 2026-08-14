@@ -26,6 +26,60 @@
   the plain foreground stay perceptually apart in every built-in. Updated
   [Explorer](/architecture/explorer.md) and [VCS / Git Integration](/architecture/vcs.md).
 
+## 2026-08-14 (http client: user-defined variables, #1867)
+
+- **`.http` files define their own variables now** (`internal/httpfile`): `@name = value` lines
+  before a request line are parsed into `File.Vars` (they are no longer "invalid request lines"),
+  and the new `{{name}}` placeholder resolves from them. A sibling `http-client.env.json` —
+  with `http-client.private.env.json` overriding it per variable — contributes a whole named
+  environment (`httpfile.LoadEnvironments`); a missing file is silent, a malformed one aborts the
+  dispatch naming it. `httpfile.Vars` is the chain the three sources form: in-file definition >
+  selected environment > process environment, with definitions expanding nested placeholders and
+  refusing to loop. `${NAME}` and `{{$env NAME}}` are deliberately untouched — they mean the
+  process environment and no user variable shadows them — and an unresolved `{{name}}` still fails
+  the request naming the variable.
+- **Choosing the environment**: `http.selectEnvironment` ("Select HTTP Environment") lists the
+  environments of the focused file's directory in the palette, badges the active one and offers a
+  clear row; the choice persists per directory in `.ike/httpenv.json`. A single environment is used
+  without asking, and while a choice is pending the unresolved-placeholder error names the
+  environments and the command. Completion and the reformatter learned that a definition line is
+  not a request line. Updated [HTTP Client](/architecture/http-client.md).
+
+## 2026-08-14 (highlight: interpolation scopes in Python f-strings and PHP strings, #1869)
+
+- **`f"{kw['type']}"` now separates into four colors**: Python's query gained the standard
+  bracket list (`plugins/languages/python/queries/python.scm`), so a subscript inside an
+  interpolation shows its container as `variable`, its `[` `]` as `punctuation.bracket` and the
+  key as `string`, with the f-string braces still `punctuation.special` — the interpolation
+  pattern precedes the bracket list, and rainbow brackets keep overriding it when enabled.
+  PHP already covered all three forms (`{$uid}`, `$type`, the deprecated `${dt}`) after #1466;
+  both reference snippets are now pinned token by token in
+  `plugins/languages/{python,php}/highlight_test.go`. Note that a Python assignment named `key`
+  renders masked rather than highlighted — secret masking (#1623) claims the value first.
+  Updated [Highlighting](/architecture/highlighting.md).
+
+## 2026-08-13 (userdocs: eighteen interface screenshots and a visual pass, #1857)
+
+- **The user docs showed the file the editor renders, never the IDE around it.** The rendering and
+  conceal guides had shots since #1634/#1698, but getting-started, the concept pages and half the
+  guides described panes, the palette, the modes and the tool windows in prose alone. Eighteen new
+  generated shots close that (`cmd/shotgen`): the window with its four regions, a split, a tab bar,
+  the palette in command / file / everything mode, the F1 cheatsheet, the menu bar, the settings
+  panel, insert and visual mode, both searches, recent files, the terminal pane, a scratch file, a
+  breakpoint in the gutter, and the VCS tool window — all `monokai-pro`, all embedded with an alt
+  text that says what to look at. The home page hero is now one of them rather than a theme shot.
+- **A scenario scripts one ordered step list** instead of `commands` then `keys`: both orders are
+  needed (find-in-file types *into* a prompt, the breakpoint shot moves the caret *before* running
+  the command), so steps are `cmd:<id>` / `type:<runes>` / `key:<name>` and run in the order
+  written. `opens` adds background tabs, which is what the tab-bar and recent-files shots need.
+  The terminal shot spawns `/bin/sh` with `VIRTUAL_ENV` cleared, so it carries no trace of whoever
+  rendered it.
+- **Mermaid renders now** (`mkdocs.yml` superfences custom fence): the split tree, the settings
+  layers and the language-server flow are diagrams rather than paragraphs. Pages gained the
+  focus/mode precondition where a chord depends on it, the mode table on the modal-editor page, and
+  the getting-started index links the desktop launcher it had been leaving out. Updated
+  [Documentation Screenshots](/architecture/screenshots.md).
+
 ## 2026-08-13 (archive viewer: mouse wheel, click select, double-click open, #1852)
 
 - **The archive pane takes the mouse now** (`internal/archview/mouse.go`): the wheel scrolls the
