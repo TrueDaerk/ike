@@ -63,6 +63,12 @@ resolve from `app.log` with no special casing — `.log.gz` gets log mode,
 The header field comes second on purpose: it is optional and routinely records
 whatever the compressing tool happened to be looking at.
 
+The one case where it wins anyway (#1853): stripping left **no extension**.
+`dump.gz` reduces to `dump`, which names no language at all, so a header
+naming `dump.sql` is the only thing that can give the buffer one. A header
+carrying no extension of its own never wins — it would trade one anonymous
+name for another.
+
 ## Caps: the decompression bomb guard
 
 The ceiling is counted in **decompressed bytes**, never compressed size — a
@@ -127,6 +133,13 @@ Nothing can be lost — the buffer is read-only, so it is never dirty. A read
 that fails mid-write keeps the previous content. Opening a `.gz` also
 `Track`s the **outer** file with the watcher, so the poll fallback compares
 the thing that exists on disk.
+
+The refresh returns the **reparse command** for every buffer it re-installed,
+and the root model batches it into the event's own commands. `ShowReadOnly`
+drops the cached spans and advances the document version, and a read-only
+buffer can never schedule a parse the way an edit does — so without that
+command the preview would go plain the first time the file changed and stay
+plain for the rest of the session (#1853).
 
 ## Boundaries
 

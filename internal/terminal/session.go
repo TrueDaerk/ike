@@ -103,6 +103,11 @@ type Session struct {
 	// mouseModes holds the DEC mouse-reporting modes the child currently has
 	// enabled (?9/?1000/…); non-empty means wheel events belong to the child.
 	mouseModes map[ansi.Mode]struct{}
+	// cursorHidden mirrors DECTCEM (#1858): a full-screen TUI hides the
+	// hardware cursor and paints its own, so the pane must not overlay a
+	// second one. Written from the emulator's CursorVisibility callback on
+	// the feed loop, read on every render — hence atomic.
+	cursorHidden atomic.Bool
 
 	notifyPending atomic.Bool
 	// parked marks a session whose workspace sits in the background set
@@ -197,8 +202,9 @@ func NewPipeSession(key string, w, h int, send func(tea.Msg)) *Session {
 	// Mouse-mode tracking mirrors the PTY path: fed output flipping a DEC
 	// mouse mode gates the scrollback scrollbar (#1368) here too.
 	s.em.SetCallbacks(vt.Callbacks{
-		EnableMode:  func(mode ansi.Mode) { s.trackMouseMode(mode, true) },
-		DisableMode: func(mode ansi.Mode) { s.trackMouseMode(mode, false) },
+		EnableMode:       func(mode ansi.Mode) { s.trackMouseMode(mode, true) },
+		DisableMode:      func(mode ansi.Mode) { s.trackMouseMode(mode, false) },
+		CursorVisibility: func(visible bool) { s.cursorHidden.Store(!visible) },
 	})
 	s.out = newSpool()
 	s.ioWG.Add(1)
@@ -333,6 +339,9 @@ func startSession(key string, argv []string, isCommand bool, dir string, w, h in
 		},
 		EnableMode:  func(mode ansi.Mode) { s.trackMouseMode(mode, true) },
 		DisableMode: func(mode ansi.Mode) { s.trackMouseMode(mode, false) },
+		// DECTCEM (#1858): a child hiding the hardware cursor paints its own,
+		// so the pane's cursor overlay steps aside until it is shown again.
+		CursorVisibility: func(visible bool) { s.cursorHidden.Store(!visible) },
 		// OSC 7 (#770): shells with prompt integration report their cwd on
 		// every prompt; completion and the pane chrome follow a `cd` through
 		// Cwd() instead of sticking to the start directory.
@@ -929,6 +938,13 @@ func (s *Session) CursorPosition() (x, y int) {
 	pos := s.em.CursorPosition()
 	return pos.X, pos.Y
 }
+
+// CursorHidden reports whether the child has hidden the hardware cursor via
+// DECTCEM (`CSI ?25l`) — #1858. Full-screen TUIs do that and draw their own
+// cursor into the grid, so the pane must skip its reverse-video overlay while
+// this holds; `CSI ?25h` — which a TUI emits on exit, as does the shell when
+// it redraws its prompt — brings it back.
+func (s *Session) CursorHidden() bool { return s.cursorHidden.Load() }
 
 // Running reports whether the shell is still alive.
 func (s *Session) Running() bool { return !s.closed.Load() }

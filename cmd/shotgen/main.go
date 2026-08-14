@@ -79,6 +79,10 @@ type shot struct {
 	// It is passed relative on purpose: the status line shows the path it was
 	// opened with, and a temp directory in the shot helps nobody.
 	open string
+	// opens are fixture paths opened before `open`, in order. They end up as
+	// background tabs and in the recent-files history — which is what the tab
+	// bar and the recent-files palette need to have anything to show.
+	opens []string
 	// git runs the scenario in the Git copy of the demo project — committed
 	// once, then edited — so VCS features have something to show.
 	git bool
@@ -90,10 +94,13 @@ type shot struct {
 	// hideTools drops the tool windows, so the editor fills the frame — the
 	// equivalent of cropping to the pane, done by the app itself.
 	hideTools bool
-	// commands run after the file is open, in order.
-	commands []string
-	// keys are typed after the commands: single runes, or "down"/"esc"/…
-	keys []string
+	// steps drive the model once the files are open, in order. One step is
+	// `cmd:<command id>`, `type:<runes>` (each rune as its own key press, so
+	// `type:2j` is the vim input it reads as), or `key:<name>` for the named
+	// keys in namedKeys. The order is explicit because both directions occur:
+	// find-in-file opens a prompt and then types into it, while the breakpoint
+	// shot moves the caret and then runs the command.
+	steps []string
 	// trimRows cuts empty rows off the bottom of the rendered frame, keeping
 	// a pane-sized shot free of dead space.
 	trimRows int
@@ -120,7 +127,7 @@ var shots = []shot{
 		name: "markdown-raw",
 		desc: "A Markdown file with rendering off — the raw source",
 		open: "README.md", cols: 100, rows: 26, hideTools: true,
-		commands: []string{"view.toggleMarkdownRendering"},
+		steps: []string{"cmd:view.toggleMarkdownRendering"},
 	},
 	{
 		name: "markdown-rendered",
@@ -128,14 +135,14 @@ var shots = []shot{
 		open: "README.md", cols: 100, rows: 26, hideTools: true,
 		// Park the caret on a blank line: anywhere else it would reveal the
 		// raw markers of the span it sits in, which is the next shot's point.
-		keys: []string{"4", "j"},
+		steps: []string{"type:4j"},
 	},
 	{
 		name: "markdown-reveal",
 		desc: "Markdown conceal reveals the raw markers of the span the caret is in",
 		open: "README.md", cols: 100, rows: 26, hideTools: true,
 		// Line 3, inside the "**order events**" span.
-		keys: []string{"2", "j", "2", "5", "l"},
+		steps: []string{"type:2j25l"},
 	},
 	{
 		name: "csv-raw",
@@ -154,7 +161,7 @@ var shots = []shot{
 		name: "log-raw",
 		desc: "A log file with log rendering off — including the raw ANSI escape bytes",
 		open: "logs/service.log", cols: 118, rows: 20, hideTools: true,
-		commands: []string{"view.toggleLogRendering"},
+		steps:    []string{"cmd:view.toggleLogRendering"},
 		trimRows: 4,
 	},
 	{
@@ -167,7 +174,7 @@ var shots = []shot{
 		name: "log-escape-reveal",
 		desc: "The caret on the ANSI line reveals the escape bytes that are concealed everywhere else",
 		open: "logs/service.log", cols: 118, rows: 20, hideTools: true,
-		keys:     []string{"9", "j"},
+		steps:    []string{"type:9j"},
 		trimRows: 4,
 	},
 	{
@@ -182,7 +189,7 @@ var shots = []shot{
 		name: "conceal-timestamps-raw",
 		desc: "Epoch timestamps with decoding off — the numbers as they stand in the file",
 		open: "config/events.json", cols: 92, rows: 21, hideTools: true,
-		commands: []string{"view.toggleTimestampDecoding"},
+		steps: []string{"cmd:view.toggleTimestampDecoding"},
 	},
 	{
 		name: "conceal-timestamps",
@@ -194,23 +201,20 @@ var shots = []shot{
 		desc: "The caret inside a stand-in shows the raw digits; the rest of the file stays decoded",
 		open: "config/events.json", cols: 92, rows: 21, hideTools: true,
 		// Line 3, column 18 — inside the "started_at" epoch.
-		keys: []string{"2", "j", "1", "8", "l"},
+		steps: []string{"type:2j18l"},
 	},
 	{
 		name: "conceal-reveal-adjacent",
 		desc: "The caret directly after a value stand-in reveals it too (#1686)",
 		open: "config/events.json", cols: 92, rows: 21, hideTools: true,
 		// Line 3, column 26 — the comma right behind the epoch.
-		keys: []string{"2", "j", "2", "6", "l"},
+		steps: []string{"type:2j26l"},
 	},
 	{
 		name: "conceal-numbers-raw",
 		desc: "Config numbers with all four number-readability families off",
 		open: "config/limits.toml", cols: 92, rows: 26, hideTools: true,
-		commands: []string{
-			"view.toggleByteSizeHints", "view.toggleDurationHints",
-			"view.toggleDigitGrouping", "view.toggleRadixHints",
-		},
+		steps: []string{"cmd:view.toggleByteSizeHints", "cmd:view.toggleDurationHints", "cmd:view.toggleDigitGrouping", "cmd:view.toggleRadixHints"},
 	},
 	{
 		name: "conceal-numbers",
@@ -234,7 +238,7 @@ var shots = []shot{
 		name: "conceal-escapes-raw",
 		desc: "JSON \\uXXXX escapes with Unicode escape decoding off",
 		open: "config/labels.json", cols: 92, rows: 16, hideTools: true,
-		commands: []string{"view.toggleUnicodeEscapeDecoding"},
+		steps: []string{"cmd:view.toggleUnicodeEscapeDecoding"},
 	},
 	{
 		name: "conceal-escapes-unicode",
@@ -275,7 +279,7 @@ var shots = []shot{
 		name: "conceal-pem-reveal",
 		desc: "The cursor inside the block brings the whole certificate back, base64 included",
 		open: "certs/server.pem", cols: 92, rows: 27, hideTools: true,
-		keys: []string{"j"},
+		steps: []string{"type:j"},
 	},
 	{
 		name: "conceal-colors",
@@ -292,11 +296,127 @@ var shots = []shot{
 		desc: "CIDR prefixes with their range and size, punycode hosts decoded, a homograph flagged",
 		open: "config/network.yaml", cols: 110, rows: 15, hideTools: true,
 	},
+	// The interface shots (#1857): the surfaces the getting-started, concepts
+	// and guide pages describe in prose — the window itself, the palette, the
+	// overlays and the tool windows.
+	{
+		name: "window-overview",
+		desc: "The whole window: file tree, editor pane with its tab bar, status line",
+		open: "main.go", cols: 124, rows: 34,
+		steps: []string{"cmd:explorer.expandAll"},
+	},
+	{
+		name: "layout-split",
+		desc: "One buffer in two editor panes after Split View Right",
+		open: "main.go", cols: 150, rows: 30, hideTools: true,
+		steps: []string{"cmd:editor.splitViewRight"},
+	},
+	{
+		name: "layout-tabs",
+		desc: "Four files open as tabs in one editor pane",
+		open: "dashboard.ts", cols: 110, rows: 22, hideTools: true,
+		opens: []string{"main.go", "pipeline.py", "README.md"},
+	},
+	{
+		name: "palette-commands",
+		desc: "The palette in command mode: the `:` prefix, a fuzzy query, ranked commands",
+		open: "main.go", cols: 110, rows: 30, hideTools: true,
+		steps: []string{"cmd:palette.searchEverywhere", "type::spl"},
+	},
+	{
+		name: "palette-files",
+		desc: "The same palette in file mode after typing the `@` prefix",
+		open: "main.go", cols: 110, rows: 30, hideTools: true,
+		steps: []string{"cmd:palette.searchEverywhere", "type:@re"},
+	},
+	{
+		name: "palette-everywhere",
+		desc: "Search everywhere with an empty query: recent files first, then commands",
+		open: "main.go", cols: 110, rows: 30, hideTools: true,
+		opens: []string{"README.md", "pipeline.py"},
+		steps: []string{"cmd:palette.searchEverywhere"},
+	},
+	{
+		name: "cheatsheet",
+		desc: "The F1 cheatsheet on its Essentials view",
+		open: "main.go", cols: 110, rows: 32, hideTools: true,
+		steps: []string{"cmd:palette.keymapHelp"},
+	},
+	{
+		name: "menu-bar",
+		desc: "The F10 menu bar with the File menu open",
+		open: "main.go", cols: 110, rows: 22, hideTools: true,
+		steps: []string{"cmd:menu.open"},
+	},
+	{
+		name: "settings-panel",
+		desc: "The settings panel: pages on the left, the Editor page and its detail column",
+		open: "main.go", cols: 110, rows: 30, hideTools: true,
+		steps: []string{"cmd:settings.open"},
+	},
+	{
+		name: "mode-insert",
+		desc: "Insert mode: the mode indicator at the left of the status line",
+		open: "main.go", cols: 100, rows: 20, hideTools: true,
+		steps: []string{"type:i"},
+	},
+	{
+		name: "mode-visual",
+		desc: "Visual mode with a selection spanning three lines",
+		open: "main.go", cols: 100, rows: 20, hideTools: true,
+		steps: []string{"type:12jv2je"},
+	},
+	{
+		name: "find-in-file",
+		desc: "Find in File: the query prompt with every match highlighted",
+		open: "main.go", cols: 110, rows: 26, hideTools: true,
+		steps: []string{"cmd:editor.find", "type:cart"},
+	},
+	{
+		name: "find-in-path",
+		desc: "Find in Path: project-wide matches grouped by file",
+		open: "main.go", cols: 118, rows: 30, hideTools: true,
+		steps: []string{"cmd:project.findInPath", "type:order"},
+	},
+	{
+		name: "recent-files",
+		desc: "The recent-files palette, most recently visited first",
+		open: "main.go", cols: 110, rows: 26, hideTools: true,
+		opens: []string{"README.md", "data/revenue.csv", "pipeline.py"},
+		steps: []string{"cmd:palette.recentFiles"},
+	},
+	{
+		name: "terminal-pane",
+		desc: "The integrated terminal in a tool pane below the editor, after one command",
+		open: "main.go", cols: 110, rows: 26,
+		// /bin/sh rather than $SHELL: the shot must not carry whoever ran it —
+		// a themed prompt with a username in it is machine state, not a feature.
+		settings: map[string]string{"terminal.shell": `"/bin/sh"`},
+		steps:    []string{"cmd:window.hideAllTools", "cmd:terminal.toggle", "type:ls", "key:enter"},
+	},
+	{
+		name: "scratch-file",
+		desc: "A new Go scratch file, opened as its own tab next to the project file",
+		open: "main.go", cols: 110, rows: 14, hideTools: true,
+		steps: []string{"cmd:scratch.new.go", "type:ovar taxRate = 0.19", "key:esc"},
+	},
+	{
+		name: "breakpoint-gutter",
+		desc: "A breakpoint set on the line under the caret, marked in the gutter",
+		open: "main.go", cols: 110, rows: 24, hideTools: true,
+		steps: []string{"type:27j", "cmd:debug.toggleBreakpoint"},
+	},
 	{
 		name: "diff-viewer",
 		desc: "The side-by-side diff of a working-copy file against HEAD",
 		open: "main.go", cols: 146, rows: 30, hideTools: true, git: true,
-		commands: []string{"vcs.diff"},
+		steps: []string{"cmd:vcs.diff"},
+	},
+	{
+		name: "vcs-panel",
+		desc: "The VCS tool window listing the working-copy changes",
+		open: "main.go", cols: 124, rows: 30, git: true,
+		steps: []string{"cmd:window.hideAllTools", "cmd:vcs.panel"},
 	},
 	{
 		name: "vcs-gutter",
@@ -382,6 +502,9 @@ func run(out, only, fontPath, fontName string, size float64) error {
 	}
 	os.Setenv("HOME", home)
 	os.Setenv("USERPROFILE", home)
+	// The terminal shot inherits this process's environment, and a virtualenv
+	// active in the shell that ran shotgen would be drawn into its title bar.
+	os.Unsetenv("VIRTUAL_ENV")
 
 	wanted := map[string]bool{}
 	for _, n := range strings.Split(only, ",") {
@@ -455,14 +578,33 @@ func capture(s shot, work string, fonts *shotpng.Fonts) (*image.RGBA, error) {
 	if s.hideTools {
 		m = pump(m, m.RunCommand("window.hideAllTools"), inbox)
 	}
-	tm, cmd = m.Update(explorer.OpenFileMsg{Path: s.open})
-	m = pump(tm.(app.Model), cmd, inbox)
-	for _, id := range s.commands {
-		m = pump(m, m.RunCommand(id), inbox)
-	}
-	for _, k := range s.keys {
-		tm, cmd = m.Update(keyMsg(k))
+	for _, path := range append(append([]string{}, s.opens...), s.open) {
+		tm, cmd = m.Update(explorer.OpenFileMsg{Path: path})
 		m = pump(tm.(app.Model), cmd, inbox)
+	}
+	for _, step := range s.steps {
+		kind, arg, ok := strings.Cut(step, ":")
+		if !ok {
+			return nil, fmt.Errorf("step %q is not kind:argument", step)
+		}
+		switch kind {
+		case "cmd":
+			m = pump(m, m.RunCommand(arg), inbox)
+		case "type":
+			for _, r := range arg {
+				tm, cmd = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+				m = pump(tm.(app.Model), cmd, inbox)
+			}
+		case "key":
+			code, known := namedKeys[arg]
+			if !known {
+				return nil, fmt.Errorf("step %q names no known key", step)
+			}
+			tm, cmd = m.Update(tea.KeyPressMsg{Code: code})
+			m = pump(tm.(app.Model), cmd, inbox)
+		default:
+			return nil, fmt.Errorf("step %q has an unknown kind %q", step, kind)
+		}
 	}
 
 	view := m.View()
@@ -581,20 +723,10 @@ func runCmd(c tea.Cmd) (tea.Msg, bool) {
 	}
 }
 
-// namedKeys maps the key names a scenario may use to their key codes.
+// namedKeys maps the key names a `key:` step may use to their key codes.
 var namedKeys = map[string]rune{
 	"down": tea.KeyDown, "up": tea.KeyUp, "left": tea.KeyLeft, "right": tea.KeyRight,
 	"enter": tea.KeyEnter, "esc": tea.KeyEscape, "tab": tea.KeyTab, "space": tea.KeySpace,
-}
-
-// keyMsg builds a key press from a scenario's spec: a named key, or a single
-// character typed as-is.
-func keyMsg(spec string) tea.KeyPressMsg {
-	if code, ok := namedKeys[spec]; ok {
-		return tea.KeyPressMsg{Code: code}
-	}
-	r := []rune(spec)[0]
-	return tea.KeyPressMsg{Code: r, Text: string(r)}
 }
 
 // writeSettings materialises the scenario's config: the fixed theme, the

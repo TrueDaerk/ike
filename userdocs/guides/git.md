@@ -28,6 +28,8 @@ commits ahead, commits behind. It disappears outside a repository.
 **In the gutter**, added and changed lines recolour their line number, and a
 removal marks the line below it. Diagnostics win the cell when both apply.
 
+All screenshots on this page use the `monokai-pro` theme.
+
 ![Modified files marked in the tree, changed lines in the gutter, the branch in the status line](../screenshots/features/vcs-gutter.png)
 
 Everything is recomputed as the repository changes. Git runs asynchronously,
@@ -81,6 +83,8 @@ versions of a line always stay on the same row. The horizontal wheel (or
 badge and path per row, coloured the same way the explorer is. `j`/`k`, the
 wheel or a click move through it; ++enter++ or a double-click opens that
 file's diff against HEAD.
+
+![The VCS tool window beside the editor, listing the modified file with its status badge and the current branch](../screenshots/features/vcs-panel.png)
 
 It is read-only on purpose: no staging checkboxes, no commit message field, no
 log tab. That is the lazygit pane's job.

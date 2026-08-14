@@ -76,6 +76,9 @@ var jetbrainsRows = []row{
 	{"cmd+alt+shift+c", "editor.copyDocPath", "Copy JSON/YAML path", Editor, "Editor (#1660)"},
 	{"cmd+x", "editor.cut", "Cut", Editor, "Editor (06)"},
 	{"cmd+v", "editor.paste", "Paste", Editor, "Editor (06)"},
+	// Select All (#1861), JetBrains chord verbatim: selects the whole buffer
+	// as a linewise visual selection (the "ggVG" equivalent).
+	{"cmd+a", "editor.selectAll", "Select All", Editor, "Editor (06)"},
 	// Undo gets both chords (#1117): cmd+z matches JetBrains/macOS muscle
 	// memory where the terminal delivers Cmd (Kitty keyboard protocol —
 	// Ghostty, kitty, WezTerm …), ctrl+z is the everywhere-deliverable
