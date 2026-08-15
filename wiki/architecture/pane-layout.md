@@ -412,6 +412,23 @@ named, user-scoped snapshots of the split tree.
   names in its identity, and a fresh editor slot restarts them as tabs on
   apply (the startup restore of `id.Tools` already did the same). Plain
   terminal tabs stay session-local either way.
+- **Slot templates (#1899):** with a `[tools.layout]` template active
+  (#1897), the **current slot config is authoritative** for slotted tools.
+  Apply prunes every snapshot leaf the template claims — dedicated tool
+  leaves, pure tool tab hosts, singleton panels with a slot assignment
+  (`pruneSlottedLeaves`, `internal/app/layouts_slots.go`) — runs the
+  ordinary apply on the rest, then re-opens the pruned occupants **through
+  the slot engine** (`applySlots`): template positions and proportions,
+  tools sharing a slot restored as tabs. Live slotted panes are held out of
+  the queues and grafts and survive the apply **in their slots** (they never
+  count as leftovers for the flexible region); singleton panels absent from
+  a full layout still hide as before. The kind-only tool name is the join
+  point to the `assign` map, so a snapshot saved under a different config
+  resolves to "current slot config wins": a tool slotted *now* lands in its
+  slot wherever the snapshot put it, a tool slotted only *at save time*
+  applies as an ordinary leaf at its snapshot position. `restoreLayout` and
+  layouts without slotted tools behave identically; without a template
+  nothing changes.
 - **New projects:** `restoreLayout` falls back to materializing the designated
   default layout when the project has no persisted `layout.json`; the built-in
   `layout.Default` pair stays the last resort. A project that saves its own
