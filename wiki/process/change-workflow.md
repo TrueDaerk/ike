@@ -25,3 +25,16 @@ Every change — feature, fix, docs — goes through the same loop. No direct co
 
 Definition of done and epic bookkeeping (ticking the task list, closing milestones) are in
 [GitHub Issue Workflow](/process/issues.md).
+
+## New settings ship with UI support
+
+Every new configuration setting must also be **configurable in the Settings UI, in the same
+change** that introduces it — a setting reachable only by hand-editing the config file is
+considered incomplete. Concretely: extend the matching settings page/form
+(`internal/settings/`), validate the input there, persist it through the write-back layer,
+surface it in any list rendering, and cover it with tests.
+
+Where the config validator has to be lenient (downgrading a bad combination to a diagnostic,
+because a config file on disk must still load), the form is free to be **strict** and reject
+the input outright with a clear message — that is the preferred behavior, since the user is
+editing interactively and can fix it immediately.

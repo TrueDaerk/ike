@@ -184,6 +184,11 @@ Implemented in `internal/app/tools_global.go`:
 gets a `tools.custom.multiple` diagnostic and `multiple` is ignored
 (`internal/config/validate.go`).
 
+The `global` field is editable in the Settings → Tools form (#1895, validated
+`true`/`false`, listed with a `· global` marker). There the mutual exclusion
+is a **hard rejection** rather than a silent drop: saving an entry with both
+flags set fails with `global and multiple are mutually exclusive`.
+
 ## Pane behavior
 
 The pane reuses the terminal machinery (`Registry.AddTool` wraps a command
