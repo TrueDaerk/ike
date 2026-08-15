@@ -155,6 +155,60 @@ func TestApplyLayoutSlotTabsRoundTrip(t *testing.T) {
 	}
 }
 
+// TestApplyLayoutGlobalSlotTab: a global tool sharing a slot as a tab (#1901)
+// round-trips a named layout: a live re-apply keeps the single host with both
+// tabs, and an apply while the global session is parked (the switch seam)
+// re-attaches it as the missing tab instead of spawning a duplicate.
+func TestApplyLayoutGlobalSlotTab(t *testing.T) {
+	global := sleepTool("tg")
+	global.Global = true
+	issueLayout(t,
+		[]string{"T=ta", "T=tg"},
+		sleepTool("ta"), global)
+	m := sized(t, 100, 40)
+	m = step(m, ToolOpenMsg{Name: "ta"})
+	hostKey := m.toolPane("ta").Key()
+	m = step(m, ToolOpenMsg{Name: "tg"})
+	host := m.activeWS().Panes.Get(hostKey)
+	if host == nil || host.TabCount() != 2 {
+		t.Fatalf("precondition: the global tool must tab into the T slot, got %#v", host)
+	}
+	sess := host.TabTerminal(host.ActiveTab()).SessionKey()
+	snap, ok := snapshotLayout(m.activeWS().Tree, m.activeWS().Panes)
+	if !ok {
+		t.Fatal("snapshot failed")
+	}
+	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"dev": snap}})
+
+	// Live re-apply: one host, two tabs, no duplicate global instance.
+	m = step(m, ApplyLayoutMsg{Name: "dev"})
+	if got := m.activeWS().Panes.Get(hostKey).TabCount(); got != 2 {
+		t.Fatalf("host tab count after live apply = %d, want 2", got)
+	}
+	if locs := m.toolLocations("tg"); len(locs) != 1 {
+		t.Fatalf("global tool locations after live apply = %+v, want exactly one", locs)
+	}
+
+	// Park the global session (the switch seam), then apply: the parked live
+	// session re-attaches as the missing tab with the same session key.
+	m.detachGlobalTools()
+	if _, ok := m.ws.PeekGlobalTool("tg"); !ok {
+		t.Fatal("detach must park the tab-hosted global session")
+	}
+	m = step(m, ApplyLayoutMsg{Name: "dev"})
+	defer closeLeafTerminals(m)
+	locs := m.toolLocations("tg")
+	if len(locs) != 1 || locs[0].tab < 0 {
+		t.Fatalf("global tool must re-attach as a slot tab, locations %+v", locs)
+	}
+	if got := m.activeWS().Panes.Get(locs[0].key).TabTerminal(locs[0].tab).SessionKey(); got != sess {
+		t.Fatalf("re-attached session = %q, want the parked one %q", got, sess)
+	}
+	if _, ok := m.ws.PeekGlobalTool("tg"); ok {
+		t.Fatal("the re-attached session must leave the manager stash")
+	}
+}
+
 // TestApplyLayoutSlottedNowButNotAtSave pins the mismatch rule: a snapshot
 // saved without any template restores its tool through the slot engine once
 // the tool is assigned — the snapshot position is only a hint for
