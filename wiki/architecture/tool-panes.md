@@ -251,6 +251,18 @@ ratio a cell fraction — so slots materialize through the ordinary
   their key; tab hosts carrying only tool sessions). `.ike/layout.json`
   round-trips a slotted arrangement verbatim with no new persisted state,
   and a re-attached global tool lands in its slot (`attachGlobalTool`).
+- **Saved window layouts cooperate (#1899)** — applying a saved layout
+  (#1175) or the default (`window.restoreLayout`) while a template is active
+  keeps the slot config **authoritative**: slotted leaves are pruned from
+  the snapshot and re-materialize through the slot engine
+  (`internal/app/layouts_slots.go`), tabs-per-slot included, and live
+  slotted panes survive the apply in their slots instead of grafting into
+  the layout's flexible region. Snapshot identities are kind-only, so the
+  tool name joins against the *current* `assign` map — a mismatch between
+  save-time and apply-time config resolves to "current slot config wins",
+  the snapshot position remaining a hint for non-slotted panes only. After
+  any apply the derived residency matches the tree by construction, so
+  open/close/collapse/expand keep working exactly as specified here.
 
 Built-in tool windows honor their assignment through the shared
 `insertToolPane` tail of every panel opener; the explorer participates as a

@@ -1,5 +1,18 @@
 # Log
 
+## 2026-08-15 (layout: slot templates cooperate with saved window layouts, #1899)
+
+- **Applying a saved layout keeps the slot config authoritative** for slotted tools
+  (`internal/app/layouts_slots.go`): snapshot leaves the active `[tools.layout]` template
+  claims are pruned before the ordinary apply and re-open through the slot engine —
+  template positions/proportions, tools sharing a slot restored as tabs. Live slotted
+  panes are held out of the #1577 grafts and survive the apply in their slots; singleton
+  panels absent from a full layout still hide (#791). Kind-only tool names join against
+  the *current* `assign` map, so save-time/apply-time config mismatches resolve to
+  "current slot config wins". `window.restoreLayout` behaves identically; without a
+  template, apply is exactly #1175/#1568/#1577. Docs: `architecture/pane-layout.md`,
+  `architecture/tool-panes.md`.
+
 ## 2026-08-14 (keymap: context-based bindings — per-pane contexts, same chord per context, #1794)
 
 - **Every focusable pane kind has a keymap context now** (`internal/keymap/context.go`):

@@ -322,6 +322,7 @@ type applyState struct {
 	tools   map[string][]string // tool pane keys by tool name
 	used    map[string]bool     // resolved singleton keys (duplicate guard)
 	slots   []string            // resolved leaf keys in walk order
+	skip    map[string]bool     // live slotted panes held out of queues and grafts (#1899)
 }
 
 // applyLayoutByName re-shapes the ACTIVE workspace to the named saved layout
@@ -378,15 +379,35 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 			hasFlex = true
 		}
 	}
+	// With a slot template active the slot config is authoritative (#1899):
+	// slotted snapshot leaves are pruned here and re-open through the slot
+	// engine after the ordinary apply, and live slotted panes are held out of
+	// the queues and grafts to survive in their slots. Singleton panels
+	// absent from a full layout keep the #791 hide semantics instead.
+	tpl := slotTemplate()
+	var slotOpens []slotOpen
+	var slotLive []slotResident
+	if tpl != nil {
+		tree, slotOpens = pruneSlottedLeaves(tree, ids, tpl)
+		for _, r := range m.liveSlotted(tpl) {
+			if r.panel && !hasFlex {
+				continue
+			}
+			slotLive = append(slotLive, r)
+		}
+	}
 	// Unconsumed live panes graft — in their current relative arrangement —
 	// into the flexible region (explicit placeholder or implicit host slot,
 	// #1577), so the clone of the pre-apply tree is that arrangement's source
 	// of truth.
 	liveClone := layout.Clone(ws.Tree)
-	st := &applyState{tools: map[string][]string{}, used: map[string]bool{}}
+	st := &applyState{tools: map[string][]string{}, used: map[string]bool{}, skip: map[string]bool{}}
+	for _, r := range slotLive {
+		st.skip[r.key] = true
+	}
 	for _, key := range reg.Keys() {
 		inst := reg.Get(key)
-		if inst == nil {
+		if inst == nil || st.skip[key] {
 			continue
 		}
 		switch inst.Kind() {
@@ -420,6 +441,11 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 	m.toolHide = nil
 	m.zoomed = ""
 	ws.Tree = newTree
+	if tpl != nil {
+		// Slotted occupants re-materialize through the slot engine: live
+		// slotted panes first, then the snapshot's pruned slot opens (#1899).
+		m.applySlots(tpl, slotLive, slotOpens, st)
+	}
 	if key := firstEditorKey(st.slots); key != "" {
 		m.setFocus(key)
 	} else if len(st.slots) > 0 {
@@ -450,7 +476,9 @@ func (m *Model) graftFlex(newTree, liveClone layout.Node, st *applyState) layout
 	}
 	sub := liveClone
 	for _, key := range layout.Leaves(liveClone) {
-		if consumed[key] || reg.Get(key) == nil {
+		// Slotted panes (st.skip) never count as leftovers (#1899): they
+		// re-materialize in their template slots after the apply instead.
+		if consumed[key] || st.skip[key] || reg.Get(key) == nil {
 			if p, ok := layout.Close(sub, key); ok {
 				sub = p
 			}
@@ -458,7 +486,7 @@ func (m *Model) graftFlex(newTree, liveClone layout.Node, st *applyState) layout
 	}
 	var leftovers []string
 	for _, key := range layout.Leaves(sub) {
-		if !consumed[key] && reg.Get(key) != nil {
+		if !consumed[key] && !st.skip[key] && reg.Get(key) != nil {
 			leftovers = append(leftovers, key)
 		}
 	}
@@ -513,6 +541,9 @@ func (m *Model) graftImplicit(newTree, liveClone layout.Node, st *applyState) la
 		consumed[key] = true
 	}
 	graftable := func(key string) bool {
+		if st.skip[key] {
+			return false // slotted panes re-materialize in their slots (#1899)
+		}
 		inst := reg.Get(key)
 		if inst == nil {
 			return false
