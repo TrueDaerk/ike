@@ -22,6 +22,10 @@ It supports windowing, tabs, panes and resizing / moving any pane to another loc
 - **Language:** write all code, comments, doc strings, descriptions, and commit messages in **English**,
   unless explicitly asked otherwise. (Conversational replies may be in the user's language.)
 - **Testing & coverage:** new code should ship with tests.
+- **Settings need UI:** every new setting must also be configurable in the **Settings UI**
+  (`internal/settings/`) in the *same* change — never config-file-only. Validate it in the form
+  (rejecting bad input with a clear message), persist it, show it in any list rendering, and test
+  it (see [wiki/process/change-workflow.md](wiki/process/change-workflow.md)).
 - **Keep the wiki current:** when a change alters behavior the wiki documents, update the matching
   concept doc in the same change (see [wiki/process/wiki-format.md](wiki/process/wiki-format.md)
   for the OKF format rules).

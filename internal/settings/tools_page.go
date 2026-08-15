@@ -21,11 +21,12 @@ import (
 // pipeline, so the tool.<name> palette commands re-shape live.
 
 // toolFieldCount is the number of form fields: name, command, args, cwd,
-// placement, multiple (#835). Placement returned in #1889 as the tool's home
-// dock edge (left/right/top/bottom, empty = adaptive #1588 heuristic).
-const toolFieldCount = 6
+// placement, multiple (#835), global (#1890, exposed in #1895). Placement
+// returned in #1889 as the tool's home dock edge (left/right/top/bottom,
+// empty = adaptive #1588 heuristic).
+const toolFieldCount = 7
 
-var toolFieldNames = [toolFieldCount]string{"name", "command", "args", "cwd", "placement", "multiple"}
+var toolFieldNames = [toolFieldCount]string{"name", "command", "args", "cwd", "placement", "multiple", "global"}
 
 // ToolsPage implements PageModel. The add/edit form runs as a SubPanel
 // (#883, tools_form.go) pushed through host.
@@ -217,6 +218,9 @@ func (t *ToolsPage) writeEntries(entries []config.ToolEntry) tea.Cmd {
 		if e.Multiple {
 			m["multiple"] = true
 		}
+		if e.Global {
+			m["global"] = true
+		}
 		raw[i] = m
 	}
 	return func() tea.Msg {
@@ -251,6 +255,9 @@ func (t *ToolsPage) View(w, h int) string {
 		line := " " + pad(e.Name, 18) + pad(e.Command+argSuffix(e.Args), 34)
 		if e.Multiple {
 			line += " · multi"
+		}
+		if e.Global {
+			line += " · global"
 		}
 		style := lipgloss.NewStyle()
 		if i == t.sel {
