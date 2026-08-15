@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	"ike/internal/concealfilter"
+	"ike/internal/layout"
 	"ike/internal/theme"
 )
 
@@ -191,6 +192,44 @@ func validate(c *Config) []Diagnostic {
 			diags = append(diags, Diagnostic{Field: "tools.custom.multiple", Message: fmt.Sprintf("tool %q: global and multiple are mutually exclusive, ignoring multiple", c.Tools.Custom[i].Name)})
 			c.Tools.Custom[i].Multiple = false
 		}
+	}
+
+	// The slot template (#1897) is validated structurally by the layout
+	// engine (rectangular slots, editor region present, sliceable
+	// arrangement); a broken template disables slot placement wholesale
+	// rather than guessing at intent. Assignments are then normalized to
+	// "SLOT=tool" with a known slot and at most one slot per tool; offenders
+	// are dropped with a warning. Tool names are not checked here — an
+	// assignment for a tool that does not exist is simply inert.
+	if len(c.Tools.Layout.Template) > 0 {
+		tpl, err := layout.ParseTemplate(c.Tools.Layout.Template)
+		if err != nil {
+			diags = append(diags, Diagnostic{Field: "tools.layout.template", Message: fmt.Sprintf("%v; slot placement disabled", err)})
+			c.Tools.Layout.Template = nil
+		} else {
+			assigned := map[string]bool{}
+			kept := c.Tools.Layout.Assign[:0]
+			for _, a := range c.Tools.Layout.Assign {
+				slot, tool, cut := strings.Cut(a, "=")
+				slot, tool = strings.TrimSpace(slot), strings.TrimSpace(tool)
+				switch {
+				case !cut || slot == "" || tool == "":
+					diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("entry %q is not \"SLOT=tool\", dropping it", a)})
+				case slot == layout.EditorSlot:
+					diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("slot %q is the editor region, dropping the assignment of %q", slot, tool)})
+				case !tpl.HasSlot(slot):
+					diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("unknown slot %q (template defines %s), dropping the assignment of %q", slot, strings.Join(tpl.SlotNames(), " "), tool)})
+				case assigned[tool]:
+					diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("tool %q is already assigned to a slot, dropping the duplicate", tool)})
+				default:
+					assigned[tool] = true
+					kept = append(kept, slot+"="+tool)
+				}
+			}
+			c.Tools.Layout.Assign = kept
+		}
+	} else if len(c.Tools.Layout.Assign) > 0 {
+		diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: "assignments have no effect without tools.layout.template"})
 	}
 
 	if !logLevels[c.LSP.LogLevel] {

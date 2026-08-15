@@ -62,12 +62,10 @@ func (m *Model) openStructurePanel() {
 		return
 	}
 	key := m.activeWS().Panes.AddStructure()
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneRight)
-	if !ok {
+	if !m.insertToolPane(key, target, layout.ZoneRight) {
 		m.activeWS().Panes.Close(key)
 		return
 	}
-	m.activeWS().Tree = tree
 	m.structReqPath = "" // a fresh open always refreshes
 	m.setFocus(key)
 	m.layout()

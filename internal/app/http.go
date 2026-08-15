@@ -290,8 +290,7 @@ func (m *Model) openHTTPPanel() {
 	}
 	existed := m.activeWS().Panes.Has(pane.HTTPKey)
 	key := m.activeWS().Panes.AddHTTP()
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
-	if !ok {
+	if !m.insertToolPane(key, target, m.auxZone(target)) {
 		if !existed {
 			// Only a freshly created instance is discarded — a hidden one
 			// (hideAllTools) keeps its registration for the restore (#1271).
@@ -299,7 +298,6 @@ func (m *Model) openHTTPPanel() {
 		}
 		return
 	}
-	m.activeWS().Tree = tree
 	m.setFocus(key)
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)

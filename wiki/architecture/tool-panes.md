@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Custom TUI Tool Panes
-description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), global process-wide instances shared across workspaces (#1890), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, and IKE_THEME_* env for theme following."
+description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning tools to exact layout positions (#1897), global process-wide instances shared across workspaces (#1890), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, and IKE_THEME_* env for theme following."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
-timestamp: 2026-08-14T00:00:00Z
+timestamp: 2026-08-15T00:00:00Z
 ---
 
 # Custom TUI Tool Panes (#741)
@@ -102,7 +102,9 @@ unfocused → focus it (remembering where focus was); focused → return focus.
 ## Home positions (#1889)
 
 A tool with a `placement` opens at its home dock slot instead of the adaptive
-split (`Model.openToolAtHome`, `internal/app/tools.go`):
+split (`Model.openToolAtHome`, `internal/app/tools.go`). A slot assignment
+(**Slot templates**, below) takes precedence over the placement — the edge
+docking only applies to tools without a slot:
 
 - **Free slot** — the tool docks **full-span** against the configured edge
   (`layout.DockNew`, the create counterpart of the #811 `layout.Dock`),
@@ -183,6 +185,74 @@ Implemented in `internal/app/tools_global.go`:
 `global` and `multiple` are **mutually exclusive**: a config declaring both
 gets a `tools.custom.multiple` diagnostic and `multiple` is ignored
 (`internal/config/validate.go`).
+
+## Slot templates (#1897)
+
+Where #1889's `placement` names an edge and leaves the geometry to dock
+heuristics, a **slot template** pins tools to **exact positions**: the user
+declares a named layout once (in the spirit of CSS `grid-template-areas` /
+i3 layouts) and every assigned tool always opens at its slot, with
+predictable proportions — including how two tools share a region when both
+are open.
+
+```toml
+[tools.layout]
+template = ["XEEH", "XEEH", "TTZZ"]
+assign   = ["X=explorer", "T=lazygit", "Z=problems", "H=structure"]
+```
+
+`template` is an ASCII grid, one string per row: every cell names a slot by
+a single rune, the cells of one rune must form a **solid rectangle**, `E` is
+the reserved **editor region**, and the arrangement must decompose into
+straight full-width/full-height cuts (a slicing layout — a pinwheel of four
+slots around a center cannot be expressed as a split tree and is rejected
+with a `tools.layout.template` diagnostic, which disables slot placement
+wholesale). Row/column counts set the proportions: above, `X` takes a
+quarter of the width over the top two thirds, the `T`/`Z` strip the bottom
+third. `assign` maps tools onto slots as `SLOT=tool` entries; the tool is a
+`[[tools.custom]]` name **or a built-in tool-window id** (`explorer`, `vcs`,
+`debug`, `problems`, `structure`, `usages`, `http`, `breakpoints`). Each
+tool takes at most one slot; unknown slots, the editor region and duplicates
+are dropped with diagnostics (`internal/config/validate.go`). Both keys are
+editable via **Settings → Tool Layout** (schema `List` entries, per the
+#1895 policy).
+
+The engine (`internal/layout/slots.go`) parses the grid into a **slot tree**
+— a binary split tree over slot names, derived by guillotine cuts, every
+ratio a cell fraction — so slots materialize through the ordinary
+`Split`/`Leaf` machinery:
+
+- **Open** (`Model.openToolAtSlot` / `insertToolPane`,
+  `internal/app/tool_slots.go`) — a free slot **rebuilds the outer slot
+  structure deterministically** (`materializeSlot`): the currently slotted
+  panes peel off the live tree (`layout.RemoveLeaves`), the remaining editor
+  region — its own splits untouched — is grafted into the template's `E`
+  position, and every resident lands at its slot's template position
+  (`Template.BuildTree`). No `dockOccupant`/`auxZone` heuristics apply.
+- **Collapse / expand** — slots of closed tools are pruned from the built
+  tree, their space absorbed by the surviving sibling region; with the
+  template above, opening `T` alone spans the full bottom strip, opening `Z`
+  splits the strip into the defined `TT`/`ZZ` halves. Closing needs no slot
+  code at all: the ordinary leaf-close collapse hands the space back, and
+  the next open re-materializes the defined arrangement.
+- **Several tools per slot → tabs** — a slot already held by a tab-capable
+  pane adds the next assigned tool as a **focused tab**
+  (`ConvertToTabHost`/`AddTerminalTab`, #836) instead of splitting. A
+  non-tabbable holder (a singleton panel; or the opening tool is global
+  #1890 and must keep a dedicated pane) subdivides the slot along its longer
+  template axis — deterministic from the template alone.
+- **Residency is derived, never stored** — a slot's occupant is recognized
+  by what the pane hosts (a tool assigned to the slot; singleton panels by
+  their key; tab hosts carrying only tool sessions). `.ike/layout.json`
+  round-trips a slotted arrangement verbatim with no new persisted state,
+  and a re-attached global tool lands in its slot (`attachGlobalTool`).
+
+Built-in tool windows honor their assignment through the shared
+`insertToolPane` tail of every panel opener; the explorer participates as a
+resident (materializing any slot snaps it to its column), its initial
+position still coming from the default/persisted layout. Tools and panels
+**without** an assignment — and everything when `template` is empty — keep
+the #1889 home-position / adaptive behavior exactly.
 
 ## Pane behavior
 

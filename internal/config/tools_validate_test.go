@@ -60,3 +60,59 @@ func TestValidateToolGlobalMultipleExclusive(t *testing.T) {
 		t.Fatalf("want 1 multiple diagnostic, got %d (%v)", bad, diags)
 	}
 }
+
+// tools.layout (#1897): a well-formed template passes with its assignments
+// normalized; malformed assignment entries, unknown slots, the editor
+// region and duplicate tool assignments are dropped with diagnostics.
+func TestValidateToolLayout(t *testing.T) {
+	c := defaults()
+	c.Tools.Layout = ToolLayout{
+		Template: []string{"XEEH", "XEEH", "TTZZ"},
+		Assign: []string{
+			"X=explorer",
+			" T = lazygit ", // whitespace normalizes
+			"E=vcs",         // editor region — dropped
+			"Q=htop",        // unknown slot — dropped
+			"Z=lazygit",     // duplicate tool — dropped
+			"broken",        // not SLOT=tool — dropped
+		},
+	}
+	diags := validate(c)
+	want := []string{"X=explorer", "T=lazygit"}
+	if len(c.Tools.Layout.Assign) != len(want) {
+		t.Fatalf("assign = %v, want %v", c.Tools.Layout.Assign, want)
+	}
+	for i := range want {
+		if c.Tools.Layout.Assign[i] != want[i] {
+			t.Fatalf("assign = %v, want %v", c.Tools.Layout.Assign, want)
+		}
+	}
+	bad := 0
+	for _, d := range diags {
+		if d.Field == "tools.layout.assign" {
+			bad++
+		}
+	}
+	if bad != 4 {
+		t.Fatalf("want 4 assign diagnostics, got %d (%v)", bad, diags)
+	}
+}
+
+// A template the layout engine rejects disables slot placement wholesale.
+func TestValidateToolLayoutBadTemplate(t *testing.T) {
+	c := defaults()
+	c.Tools.Layout = ToolLayout{Template: []string{"XX", "XE"}, Assign: []string{"X=explorer"}}
+	diags := validate(c)
+	if len(c.Tools.Layout.Template) != 0 {
+		t.Fatalf("broken template must clear, got %v", c.Tools.Layout.Template)
+	}
+	found := false
+	for _, d := range diags {
+		if d.Field == "tools.layout.template" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("want a template diagnostic, got %v", diags)
+	}
+}

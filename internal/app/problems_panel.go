@@ -1,7 +1,6 @@
 package app
 
 import (
-	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/problems"
 )
@@ -59,12 +58,10 @@ func (m *Model) openProblemsPanel() {
 		return
 	}
 	key := m.activeWS().Panes.AddProblems()
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
-	if !ok {
+	if !m.insertToolPane(key, target, m.auxZone(target)) {
 		m.activeWS().Panes.Close(key)
 		return
 	}
-	m.activeWS().Tree = tree
 	p := m.activeWS().Panes.Get(key).Problems()
 	p.SetDisplayPath(displayPath)
 	p.SetStore(m.probStore)

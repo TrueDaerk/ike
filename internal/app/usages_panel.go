@@ -1,7 +1,6 @@
 package app
 
 import (
-	"ike/internal/layout"
 	ilsp "ike/internal/lsp"
 	"ike/internal/pane"
 	"ike/internal/usages"
@@ -59,12 +58,10 @@ func (m *Model) openUsagesPanel() {
 		return
 	}
 	key := m.activeWS().Panes.AddUsages()
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
-	if !ok {
+	if !m.insertToolPane(key, target, m.auxZone(target)) {
 		m.activeWS().Panes.Close(key)
 		return
 	}
-	m.activeWS().Tree = tree
 	m.activeWS().Panes.Get(key).Usages().SetDisplayPath(displayPath)
 	m.setFocus(key)
 	m.layout()

@@ -263,6 +263,9 @@ func (c *Config) Flat() map[string]string {
 
 	put("run.placement", c.Run.Placement)
 
+	put("tools.layout.template", strings.Join(c.Tools.Layout.Template, ","))
+	put("tools.layout.assign", strings.Join(c.Tools.Layout.Assign, ","))
+
 	put("debug.php.port", c.Debug.PHP.Port)
 	put("debug.php.hostname", c.Debug.PHP.Hostname)
 

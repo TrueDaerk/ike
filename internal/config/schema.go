@@ -70,9 +70,30 @@ type SnippetEntry struct {
 
 // Tools holds the custom TUI tool panes (#741): [[tools.custom]] entries, each
 // exposed as a palette command "tool.<name>" that opens a pane running the
-// configured program directly (lazygit, htop, k9s, …).
+// configured program directly (lazygit, htop, k9s, …), plus the optional slot
+// template pinning tools to exact layout positions (#1897).
 type Tools struct {
 	Custom []ToolEntry `toml:"custom"`
+	Layout ToolLayout  `toml:"layout"`
+}
+
+// ToolLayout is the named-slot template for tool placement (#1897). Template
+// is an ASCII grid, one string per row (like CSS grid-template-areas): every
+// cell names a slot by a single rune, each slot's cells must form a solid
+// rectangle, "E" is the reserved editor region, and the arrangement must
+// decompose into straight full-width/full-height cuts. Row/column counts set
+// the proportions ({"XEEH","XEEH","TTZZ"} gives X a quarter of the width over
+// two thirds of the height). Assign maps tools onto slots as "SLOT=tool"
+// entries — the tool is a [[tools.custom]] name or a built-in tool-window id
+// (explorer, vcs, debug, problems, structure, usages, http, breakpoints). An
+// assigned tool always opens at its slot's exact position; slots of closed
+// tools collapse, their space absorbed by the surviving neighbors. Several
+// tools may share one slot: the first to open materializes the pane, later
+// ones join it as tabs. Tools without an assignment keep the #1889 placement
+// / adaptive behavior. An empty Template disables slot placement entirely.
+type ToolLayout struct {
+	Template []string `toml:"template"`
+	Assign   []string `toml:"assign"`
 }
 
 // ToolEntry is one configured TUI tool. Name is the display/command suffix

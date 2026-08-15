@@ -2,7 +2,6 @@ package app
 
 import (
 	"ike/internal/host"
-	"ike/internal/layout"
 	"ike/internal/pane"
 )
 
@@ -54,12 +53,10 @@ func (m *Model) openVCSPanel() {
 		return
 	}
 	key := m.activeWS().Panes.AddVCS()
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
-	if !ok {
+	if !m.insertToolPane(key, target, m.auxZone(target)) {
 		m.activeWS().Panes.Close(key)
 		return
 	}
-	m.activeWS().Tree = tree
 	m.activeWS().Panes.Get(key).VCS().SetVCS(m.vcs.snap)
 	m.setFocus(key)
 	m.layout()
