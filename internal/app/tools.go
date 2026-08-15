@@ -155,6 +155,11 @@ func (m *Model) openTool(name string, fresh bool) {
 	if fresh && (!entry.Multiple || entry.Global) {
 		fresh = false
 	}
+	// tool.<name> is an explicit (re)open: forget a recorded close (#1903) so
+	// the tool restores and follows switches again.
+	if entry.Global && m.ws != nil {
+		m.ws.ClearGlobalToolClosed(entry.Name)
+	}
 	if !fresh {
 		if locs := m.toolLocations(name); len(locs) > 0 {
 			m.toggleTool(name, locs)

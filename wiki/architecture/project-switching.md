@@ -238,6 +238,19 @@ subsystem (it must not import editor/explorer), the root model routes:
    `SwitchedMsg` toasts; the recorded write triggers a config reload so the
    picker's in-memory history is already current.
 
+**Global tool panes follow the switch (#1890, #1903).** A `[[tools.custom]]`
+tool marked `global = true` detaches from the departing workspace right after
+the chdir (`detachGlobalTools`) — its one process-wide session parks on the
+workspace manager — and at the end of `performSwitch`, after the rebuild,
+`attachOpenGlobalTools` splices it into the incoming workspace through the
+normal open path (slot rule with tab-join, home placement, adaptive split)
+without moving focus, so the pane is visible in every project view while the
+tool is open. A restore that already re-attached the session from the saved
+layout wins; explicitly closing the pane in any project ends the tool
+everywhere (no resurrection from stale layouts), and a session whose process
+exited while parked arrives showing the #810 exited overlay with
+Restart/Close. Details: [tool-panes](tool-panes.md).
+
 **Buffer reconciliation on resume (#1515).** While a workspace is parked its
 watcher is stopped, so external edits in that window (a coding agent's
 atomic-rename saves, git operations) never arrive as events. `performSwitch`

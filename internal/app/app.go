@@ -1336,10 +1336,18 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 	// The debuggee terminal pane (#1370) never resurrects — its content is
 	// session state, and restoring a shell in its place would be misleading.
 	// Its leaf is pruned; the next debug session recreates the pane beside
-	// the panel.
+	// the panel. A global tool leaf whose tool was explicitly closed in
+	// another project prunes the same way (#1903): the manager, not this
+	// stale layout entry, decides whether the tool is open.
 	prunedTerm := map[string]bool{}
 	for _, key := range leaves {
-		if ids[key].Kind == "debugTerm" {
+		drop := ids[key].Kind == "debugTerm"
+		if !drop && ids[key].Kind == "tool" {
+			if entry, ok := toolEntry(ids[key].Tool); ok && m.staleGlobalTool(entry) {
+				drop = true
+			}
+		}
+		if drop {
 			if pruned, ok := layout.Close(tree, key); ok {
 				tree = pruned
 				prunedTerm[key] = true
@@ -1371,6 +1379,16 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			}
 			panes.AddTerminalKey(key, terminal.Shell(shell), dir, terminalEnv(), m.host.Send)
 			continue
+		}
+		if id := ids[key]; id.Kind == "tool" {
+			if prunedTerm[key] {
+				continue // stale global tool leaf pruned above (#1903)
+			}
+			if entry, ok := toolEntry(id.Tool); ok && m.staleGlobalTool(entry) {
+				// The sole leaf cannot be pruned; restore an empty editor so
+				// the layout stays consistent (the debugTerm precedent).
+				ids[key] = paneIdentity{Kind: "editor"}
+			}
 		}
 		if id := ids[key]; id.Kind == "tool" {
 			// A tool pane restores by restarting its configured program
@@ -1537,7 +1555,9 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 		toolTabs := 0
 		for _, tool := range id.Tools {
 			entry, ok := toolEntry(tool)
-			if !ok {
+			if !ok || m.staleGlobalTool(entry) {
+				// Unconfigured restores as nothing; so does a global tool
+				// explicitly closed elsewhere since the save (#1903).
 				continue
 			}
 			// A parked live global instance re-attaches instead of
@@ -4021,8 +4041,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// A global tool that exited while detached (#1890) has no pane; the
-		// dead session leaves the manager stash instead.
-		if m.reapGlobalTool(msg.Key) {
+		// dead session stays parked with its exit status (#1903), so the next
+		// switch-in materializes the #810 exited overlay instead of the tool
+		// silently vanishing.
+		if m.parkedGlobalToolExited(msg.Key) {
 			return m, nil
 		}
 		key := m.terminalPaneForSession(msg.Key)
@@ -6458,6 +6480,11 @@ func (m *Model) closeKey(key string) bool {
 	if !ok {
 		return false // last leaf: never empty the workspace
 	}
+	// A global tool session still hosted here ends with the pane — an
+	// explicit close ends the tool everywhere (#1890), and the recorded close
+	// keeps stale layout entries in other projects from resurrecting it on
+	// the next switch (#1903).
+	m.noteGlobalToolCloses(inst)
 	for _, ed := range inst.Editors() {
 		m.rememberClosedTab(ed)
 		ed.PersistUndo() // undo survives the close (#148); no-op while dirty
@@ -6492,7 +6519,9 @@ func (m *Model) closeTab(inst *pane.Instance, idx int) {
 		}
 	}
 	// A terminal tab (#573) has no document bookkeeping; CloseTab ends its
-	// session.
+	// session. A global tool tab closing here is an explicit close-everywhere
+	// (#1903): record it so no stale layout resurrects the tool.
+	m.noteGlobalToolTabClose(inst.TabTerminal(idx))
 	inst.CloseTab(idx)
 	m.syncExplorerOpen()
 	if next := inst.Editor(); next != nil && next.HasFile() && inst.Key() == m.activeWS().Panes.Focused() {

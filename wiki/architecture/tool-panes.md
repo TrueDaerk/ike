@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Custom TUI Tool Panes
-description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning tools to exact layout positions (#1897), global process-wide instances shared across workspaces (#1890), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, and IKE_THEME_* env for theme following."
+description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning tools to exact layout positions (#1897), global process-wide instances shared across workspaces (#1890) whose panes follow project switches (#1903), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, and IKE_THEME_* env for theme following."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
 timestamp: 2026-08-15T00:00:00Z
@@ -164,8 +164,19 @@ Implemented in `internal/app/tools_global.go`:
   or a #708 center drop) detaches **as a tab**, the host keeping its other
   tabs — a host carrying nothing but global tool sessions detaches whole,
   its leaf leaving the tree like a dedicated pane's.
-- **Re-attach** — `tool.<name>` in any workspace first toggles a locally
-  attached instance; otherwise it takes the parked session
+- **Follows the switch (#1903)** — the pane is visible in **every project
+  view** while the tool is open: at the end of `performSwitch`, after the
+  rebuild, `attachOpenGlobalTools` splices every session still parked into
+  the incoming workspace through the normal open path — the slot rule
+  (#1897, tab-join when the slot pane is occupied, #1901), else the home
+  placement (#1889), else the adaptive split — **without moving focus**.
+  This covers both a resumed parked workspace and a first-visit build from
+  `layout.json`; a restore that already re-attached the session from the
+  saved layout leaves nothing parked, so no duplicate can arise (first one
+  wins). A tool the incoming project's config does not declare global stays
+  parked.
+- **Re-attach on demand** — `tool.<name>` in any workspace first toggles a
+  locally attached instance; otherwise it takes the parked session
   (`TakeGlobalTool`) and splices it in (`attachGlobalTool`): a slot
   assignment pins it, an occupied tab-capable slot pane taking the live
   session as a **focused tab** (#1901, the same tab-in-slot rule as a fresh
@@ -176,10 +187,20 @@ Implemented in `internal/app/tools_global.go`:
 - **Lifecycle** — parked workspaces never contain a global tool, so workspace
   switch, project close (#1355), close-from-list (#820) and LRU eviction
   (#780) cannot end it; it also gates none of those guards. It ends only when
-  its pane is closed explicitly (ctrl+w on the exit dialog), when its process
-  exits while detached (the `ExitedMsg` reaps the stashed session), or at
-  quit — `Model.quit` closes parked global sessions alongside the active
-  registry's terminals, so no process outlives IKE.
+  its pane is closed explicitly (ctrl+w / the exit dialog's ✕) — which ends
+  it **everywhere**: the close is recorded on the manager
+  (`MarkGlobalToolClosed`), so another project's stale `layout.json` entry
+  restores as nothing instead of resurrecting the tool; any explicit reopen
+  (`tool.<name>`, a layout apply) clears the record — or at quit —
+  `Model.quit` closes parked global sessions alongside the active registry's
+  terminals, so no process outlives IKE.
+- **Exit while parked (#1903)** — a process that ends while the session is
+  detached is *not* reaped: the dead session stays stashed with its exit
+  status, and the next switch-in (or `tool.<name>`) materializes the pane in
+  its usual position showing the standard `<name> exited (code N)` overlay
+  (#810) with the `Restart`/`Close` footer actions — `Restart` reruns the
+  command in place as a still-global session, `Close` removes the pane
+  everywhere like any explicit close.
 - **Cwd** — resolves once, at first spawn, against the project active then;
   the shared session keeps its working directory across projects.
 - **Persistence** — the workspace currently hosting the session records it
@@ -188,7 +209,11 @@ Implemented in `internal/app/tools_global.go`:
   like any slotted tool tab). On restore, either shape first re-attaches a
   live parked session (`Registry.AdoptToolKey` for panes,
   `restoredToolSession` for tabs) — the revisit of an evicted workspace —
-  and only spawns a fresh process when none is parked (the restart case).
+  and only spawns a fresh process when none is parked (the restart case) —
+  unless the tool was explicitly closed since the layout was saved (#1903):
+  a stale entry then prunes (dedicated leaf) or restores as nothing (tab),
+  because the manager, not the per-project `layout.json`, is the authority
+  on whether a global tool is open.
 
 `global` and `multiple` are **mutually exclusive**: a config declaring both
 gets a `tools.custom.multiple` diagnostic and `multiple` is ignored
