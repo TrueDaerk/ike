@@ -36,7 +36,6 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Close project | `ctrl+shift+w` | `ctrl+shift+w` | `project.close` |
 | Continue (debug) | `f9` | `f9` | `debug.continue` |
 | Debug file | `shift+f9` | `shift+f9` | `debug.start` |
-| File structure | `cmd+f12` | `ctrl+f12` | `lsp.documentSymbols` |
 | Find in path | `cmd+shift+f` | `ctrl+shift+f` | `project.findInPath` |
 | Go to file | `cmd+shift+o` | `ctrl+shift+o` | `project.goToFile` |
 | Go to pinned file 1 | `ctrl+shift+1` | `ctrl+shift+1` | `nav.pinGoto1` |
@@ -88,7 +87,6 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Reveal open file in explorer | `alt+f1` | `alt+f1` | `explorer.reveal` |
 | Revert file | `cmd+alt+z` | `ctrl+alt+z` | `vcs.revertFile` |
 | Run file | `shift+f10` | `shift+f10` | `run.file` |
-| Run test at cursor | `ctrl+shift+f10` | `ctrl+shift+f10` | `run.testAtCursor` |
 | Save all | `cmd+shift+s` | `ctrl+shift+s` | `editor.saveAll` |
 | Search everywhere | `cmd+shift+a` | `ctrl+shift+a` | `palette.searchEverywhere` |
 | Search everywhere (double-shift) | `shift shift` ⚠️ | `shift shift` ⚠️ | `palette.searchEverywhere` |
@@ -97,8 +95,6 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Split left | `cmd+k left` | `ctrl+k left` | `pane.splitLeft` |
 | Split right | `cmd+k right` | `ctrl+k right` | `pane.splitRight` |
 | Split up | `cmd+k up` | `ctrl+k up` | `pane.splitUp` |
-| Split view down | `cmd+alt+shift+down` | `ctrl+alt+shift+down` | `editor.splitViewDown` |
-| Split view right | `cmd+alt+shift+right` | `ctrl+alt+shift+right` | `editor.splitViewRight` |
 | Step into | `f7` | `f7` | `debug.stepInto` |
 | Step out | `shift+f8` | `shift+f8` | `debug.stepOut` |
 | Step over | `f8` | `f8` | `debug.stepOver` |
@@ -135,6 +131,7 @@ Active when an editor pane has focus.
 | Diagnostic under caret | `cmd+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
 | Diagnostic under caret | `ctrl+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
 | Duplicate line(s) | `cmd+d` | `ctrl+d` | `editor.duplicateLine` |
+| File structure | `cmd+f12` | `ctrl+f12` | `lsp.documentSymbols` |
 | Find in file | `cmd+f` | `ctrl+f` | `editor.find` |
 | Find usages | `alt+f7` | `alt+f7` | `lsp.references` |
 | Find usages (panel) | `cmd+alt+f7` | `ctrl+alt+f7` | `lsp.referencesPanel` |
@@ -146,6 +143,7 @@ Active when an editor pane has focus.
 | Move to line end | `cmd+right` | `ctrl+right` | `editor.lineEnd` |
 | Move to line start | `cmd+left` | `ctrl+left` | `editor.lineStart` |
 | Move to line start | `home` | `home` | `editor.lineStart` |
+| New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
 | Next diagnostic | `f2` | `f2` | `lsp.nextDiagnostic` |
 | Parameter info | `cmd+p` | `ctrl+p` | `lsp.parameterInfo` |
 | Parameter info | `ctrl+p` | `ctrl+p` | `lsp.parameterInfo` |
@@ -161,12 +159,15 @@ Active when an editor pane has focus.
 | Replace in file | `cmd+r` | `ctrl+r` | `editor.replace` |
 | Run HTTP request | `cmd+enter` | `ctrl+enter` | `http.run` |
 | Run HTTP request | `ctrl+f9` | `ctrl+f9` | `http.run` |
+| Run test at cursor | `ctrl+shift+f10` | `ctrl+shift+f10` | `run.testAtCursor` |
 | Save | `cmd+s` | `ctrl+s` | `editor.write` |
 | Save | `ctrl+s` | `ctrl+s` | `editor.write` |
 | Select All | `cmd+a` | `ctrl+a` | `editor.selectAll` |
 | Show intention actions | `alt+enter` | `alt+enter` | `lsp.codeAction` |
 | Show stored HTTP response | `cmd+shift+enter` | `ctrl+shift+enter` | `http.showResponse` |
 | Show stored HTTP response | `ctrl+shift+f9` | `ctrl+shift+f9` | `http.showResponse` |
+| Split view down | `cmd+alt+shift+down` | `ctrl+alt+shift+down` | `editor.splitViewDown` |
+| Split view right | `cmd+alt+shift+right` | `ctrl+alt+shift+right` | `editor.splitViewRight` |
 | Type hierarchy | `ctrl+h` | `ctrl+h` | `lsp.typeHierarchy` |
 | Undo | `cmd+z` | `ctrl+z` | `editor.undo` |
 | Undo | `ctrl+z` | `ctrl+z` | `editor.undo` |

@@ -52,6 +52,7 @@ bring their own.
 | Close Other Tabs | `editor.tab.closeOthers` | — | — | everywhere |
 | Move Tab Left | `editor.tab.moveLeft` | `ctrl+shift+pgup` | — | everywhere |
 | Move Tab Right | `editor.tab.moveRight` | `ctrl+shift+pgdown` | — | everywhere |
+| New Empty Editor Tab | `editor.tab.new` | `ctrl+t` | — | everywhere |
 | Next Tab | `editor.tab.next` | `cmd+ctrl+right` | — | everywhere |
 | Previous Tab | `editor.tab.prev` | `cmd+ctrl+left` | — | everywhere |
 | Reopen Closed Tab | `editor.tab.reopenClosed` | `cmd+shift+t` | — | everywhere |
@@ -148,7 +149,7 @@ bring their own.
 | Structure | `structure.toggle` | `cmd+3` | — | everywhere |
 | Clear Terminal | `terminal.clear` | — | — | everywhere |
 | New Terminal | `terminal.new` | `cmd+alt+shift+t` | — | everywhere |
-| New Terminal Tab | `terminal.newTab` | — | — | everywhere |
+| New Terminal Tab | `terminal.newTab` | `ctrl+t` | — | everywhere |
 | Popup Terminal | `terminal.popup` | `cmd+alt+t` | — | everywhere |
 | Toggle Terminal | `terminal.toggle` | `alt+f12` | — | everywhere |
 | TODO Index | `todo.list` | `cmd+6` | — | everywhere |
