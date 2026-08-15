@@ -141,7 +141,14 @@ func (m *Model) attachGlobalTool(entry config.ToolEntry, term terminal.Model) {
 	term.SetParked(false)
 	ws.ReturnFocus = ws.Panes.Focused()
 	key := ws.Panes.AddTerminalPaneFrom(term)
-	if zone, ok := toolHomeZone(entry.Placement); ok {
+	if tpl, slot := slotTemplate(), toolSlot(entry.Name); tpl != nil && slot != "" && tpl.HasSlot(slot) {
+		// A re-attached global tool lands in its slot (#1897). It never
+		// tab-hosts, so an occupied slot subdivides (placePaneInSlot).
+		if !m.placePaneInSlot(tpl, slot, key) {
+			m.reparkGlobalToolPane(entry.Name, key)
+			return
+		}
+	} else if zone, ok := toolHomeZone(entry.Placement); ok {
 		if occupant := m.dockOccupant(zone); occupant != "" {
 			// A dock occupant shares the edge via a perpendicular split,
 			// like openToolAtHome's non-tabbable branch.

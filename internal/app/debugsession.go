@@ -777,12 +777,10 @@ func (m *Model) openDebugPanel() {
 		return
 	}
 	key := m.activeWS().Panes.AddDebug()
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
-	if !ok {
+	if !m.insertToolPane(key, target, m.auxZone(target)) {
 		m.activeWS().Panes.Close(key)
 		return
 	}
-	m.activeWS().Tree = tree
 	m.attachDebugPanel(m.activeWS().Panes.Get(key).Debug())
 	m.ensureDebugTerminal()
 	m.layout()

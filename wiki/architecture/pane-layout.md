@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Pane Layout & Drag
-description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store, plus named user-scoped saved layouts.
+description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store, named user-scoped saved layouts, and slot templates (#1897) deriving tool-window positions from an ASCII grid.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-08-14T00:00:00Z
+timestamp: 2026-08-15T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -39,6 +39,16 @@ no I/O, so it is fully unit-testable.
   right/bottom border plus B's left/top border, #761). `Split.Children(rect)` is
   the shared seam that both `Compute` and the renderer use, so geometry and
   drawing never diverge.
+- **Slot templates** (`slots.go`, #1897): `ParseTemplate` turns an ASCII grid
+  of named slot rectangles (with a reserved `E` editor region) into a slot
+  tree by guillotine-cut decomposition, every ratio a cell fraction; templates
+  that cannot be sliced (pinwheels) are rejected. `Template.BuildTree` prunes
+  the slot tree to the currently open slots — a closed slot's space is
+  absorbed by its surviving sibling — substitutes resident pane ids for slot
+  leaves and grafts the live editor subtree at `E`; `RemoveLeaves` is the
+  set-generalized `Close` the host uses to peel slotted panes off first. The
+  host-side semantics live in
+  [Custom TUI Tool Panes → Slot templates](./tool-panes.md).
 
 ## Mouse drag model
 

@@ -176,6 +176,14 @@ func (m *Model) openTool(name string, fresh bool) {
 	if target == "" || m.activeWS().Tree == nil {
 		return
 	}
+	// A slot assignment (#1897) beats the #1889 home position: the tool pins
+	// to its exact template position instead of the edge-dock heuristics.
+	if tpl := slotTemplate(); tpl != nil {
+		if slot := toolSlot(entry.Name); slot != "" && tpl.HasSlot(slot) {
+			m.openToolAtSlot(entry, tpl, slot)
+			return
+		}
+	}
 	if zone, ok := toolHomeZone(entry.Placement); ok {
 		m.openToolAtHome(entry, zone)
 		return
