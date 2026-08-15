@@ -33,11 +33,14 @@ func newToolForm(page *ToolsPage, host SubPanelHost, idx int) *toolForm {
 	f := &toolForm{page: page, host: host, idx: idx}
 	if idx >= 0 {
 		e := page.entries()[idx]
-		multiple := ""
+		multiple, global := "", ""
 		if e.Multiple {
 			multiple = "true"
 		}
-		f.form = [toolFieldCount]string{e.Name, e.Command, strings.Join(e.Args, " "), e.Cwd, e.Placement, multiple}
+		if e.Global {
+			global = "true"
+		}
+		f.form = [toolFieldCount]string{e.Name, e.Command, strings.Join(e.Args, " "), e.Cwd, e.Placement, multiple, global}
 	}
 	return f
 }
@@ -134,6 +137,7 @@ func (f *toolForm) save() tea.Cmd {
 		Cwd:       strings.TrimSpace(f.form[3]),
 		Placement: strings.TrimSpace(f.form[4]),
 		Multiple:  f.form[5] == "true",
+		Global:    f.form[6] == "true",
 	}
 	entries := append([]config.ToolEntry(nil), f.page.entries()...)
 	if f.idx >= 0 && f.idx < len(entries) {
@@ -164,6 +168,17 @@ func (f *toolForm) validate() string {
 	case "", "true", "false":
 	default:
 		return "multiple must be true or false"
+	}
+	switch f.form[6] {
+	case "", "true", "false":
+	default:
+		return "global must be true or false"
+	}
+	// #1890: one process-wide instance and concurrent instances contradict
+	// each other; reject here instead of silently dropping multiple like the
+	// config validator has to (internal/config/validate.go).
+	if f.form[5] == "true" && f.form[6] == "true" {
+		return "global and multiple are mutually exclusive"
 	}
 	for i, e := range f.page.entries() {
 		if i != f.idx && e.Name == name {

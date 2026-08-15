@@ -135,6 +135,51 @@ func TestToolsPageMultipleField(t *testing.T) {
 	}
 }
 
+// TestToolsPageGlobalField (#1895): the global field (#1890) validates as a
+// boolean, persists, round-trips through edit, is mutually exclusive with
+// multiple, and shows a list marker.
+func TestToolsPageGlobalField(t *testing.T) {
+	p, h := toolsPage(t)
+	p.Update(key("a"))
+	f := form(t, h)
+	typeText(f, "claude")
+	f.Update(key("tab"))
+	typeText(f, "claude")
+	for i := 0; i < 5; i++ { // args, cwd, placement, multiple → global
+		f.Update(key("tab"))
+	}
+	typeText(f, "maybe")
+	f.Update(key("enter"))
+	if h.top() == nil || !strings.Contains(f.note, "global must be true or false") {
+		t.Fatalf("invalid global must fail validation, note=%q", f.note)
+	}
+	for range "maybe" {
+		f.Update(key("backspace"))
+	}
+	typeText(f, "true")
+	// global + multiple is rejected, not silently ignored.
+	f.form[5] = "true"
+	f.Update(key("enter"))
+	if h.top() == nil || !strings.Contains(f.note, "mutually exclusive") {
+		t.Fatalf("global+multiple must be rejected, note=%q", f.note)
+	}
+	f.form[5] = ""
+	apply(t, f.Update(key("enter")))
+	got := config.Get().Tools.Custom
+	if len(got) != 1 || !got[0].Global || got[0].Multiple {
+		t.Fatalf("entries = %+v, want Global=true", got)
+	}
+	if view := p.View(80, 12); !strings.Contains(view, "· global") {
+		t.Fatalf("list must mark global tools, view=%q", view)
+	}
+	// Edit seeds "true" back into the form.
+	p.sel = 0
+	p.Update(key("enter"))
+	if f2 := form(t, h); f2.form[6] != "true" {
+		t.Fatalf("edit must seed global, form=%v", f2.form)
+	}
+}
+
 // TestToolsPagePlacementField (#1889): the placement field sets the tool's
 // home dock edge, rejects non-edge values, and round-trips through edit.
 func TestToolsPagePlacementField(t *testing.T) {
