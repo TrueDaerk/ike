@@ -219,17 +219,17 @@ func (m *Model) openPanelAtSlot(tpl *layout.Template, o slotOpen, st *applyState
 
 // restoreToolAtSlot restarts a snapshot's slotted tool through the slot open
 // path (#1897): a resident that can host tabs takes it as a tab — tools
-// sharing a slot restore as tabs — anything else gets a dedicated pane at
-// the template position. A parked live global instance re-attaches instead
-// of spawning a duplicate (#1890); a tool no longer configured restores as
-// nothing, its slot simply staying collapsed.
+// sharing a slot restore as tabs, global tools included (#1901) — anything
+// else gets a dedicated pane at the template position. A parked live global
+// instance re-attaches instead of spawning a duplicate (#1890); a tool no
+// longer configured restores as nothing, its slot simply staying collapsed.
 func (m *Model) restoreToolAtSlot(tpl *layout.Template, o slotOpen) {
 	entry, ok := toolEntry(o.tool)
 	if !ok {
 		return
 	}
 	reg := m.activeWS().Panes
-	if resident := m.slotResidents()[o.slot]; resident != "" && !entry.Global &&
+	if resident := m.slotResidents()[o.slot]; resident != "" &&
 		canHostTabs(reg.Get(resident)) && m.ensureTabHost(resident) {
 		reg.Get(resident).AddTerminalTab(m.restoredToolSession(reg, entry))
 		return

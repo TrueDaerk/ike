@@ -147,6 +147,47 @@ func TestSlotSharedSlotAddsTab(t *testing.T) {
 	}
 }
 
+// TestSlotGlobalToolJoinsAsTab reproduces the #1901 scenario on the
+// normative template: with claude in T and lazygit holding Z, opening the
+// *global* sql tool assigned to Z joins the lazygit pane as the focused tab
+// exactly like a non-global tool would — no subdividing split.
+func TestSlotGlobalToolJoinsAsTab(t *testing.T) {
+	global := sleepTool("sql")
+	global.Global = true
+	issueLayout(t,
+		[]string{"X=explorer", "T=claude", "Z=lazygit", "Z=sql"},
+		sleepTool("claude"), sleepTool("lazygit"), global)
+	m := sized(t, 100, 40)
+	m = step(m, ToolOpenMsg{Name: "claude"})
+	m = step(m, ToolOpenMsg{Name: "lazygit"})
+	hostKey := m.toolPane("lazygit").Key()
+	leavesBefore := len(layout.Leaves(m.activeWS().Tree))
+
+	m = step(m, ToolOpenMsg{Name: "sql"})
+	t.Cleanup(func() {
+		closeToolInstances(m, "claude")
+		closeToolInstances(m, "lazygit")
+		closeToolInstances(m, "sql")
+	})
+	if n := len(layout.Leaves(m.activeWS().Tree)); n != leavesBefore {
+		t.Fatalf("leaves = %d, want %d (a global tool must tab into the occupied slot, not split it)", n, leavesBefore)
+	}
+	locs := m.toolLocations("sql")
+	if len(locs) != 1 || locs[0].key != hostKey || locs[0].tab < 0 {
+		t.Fatalf("sql locations = %+v, want a tab in %q", locs, hostKey)
+	}
+	if m.activeWS().Panes.Focused() != hostKey {
+		t.Fatalf("slot pane must take focus, focused %q", m.activeWS().Panes.Focused())
+	}
+	hostInst := m.activeWS().Panes.Get(hostKey)
+	if tt := hostInst.TabTerminal(hostInst.ActiveTab()); tt == nil || tt.Tool() != "sql" {
+		t.Fatal("the global tool's tab must be active")
+	}
+	if got := m.slotResidents()["Z"]; got != hostKey {
+		t.Fatalf("slot Z resident = %q, want the tab host %q", got, hostKey)
+	}
+}
+
 // TestSlotBuiltinPanel: a built-in tool window assigned to a slot opens at
 // the slot's exact position instead of its hardcoded adaptive split.
 func TestSlotBuiltinPanel(t *testing.T) {

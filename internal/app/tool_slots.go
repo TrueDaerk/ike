@@ -156,8 +156,8 @@ func slotShareZone(tpl *layout.Template, slot string) layout.Zone {
 // placePaneInSlot inserts the already-registered pane key into slot: a free
 // slot materializes at its template position, an occupied one subdivides
 // deterministically along its longer template axis (tab-joining an occupied
-// slot is the caller's business — singleton panels and global tools never
-// tab). The tree is unchanged on failure.
+// slot is the caller's business — singleton panels never tab). The tree is
+// unchanged on failure.
 func (m *Model) placePaneInSlot(tpl *layout.Template, slot, key string) bool {
 	ws := m.activeWS()
 	if resident := m.slotResidents()[slot]; resident != "" {
@@ -195,9 +195,10 @@ func (m *Model) insertToolPane(key, target string, zone layout.Zone) bool {
 // openToolAtSlot spawns a [[tools.custom]] tool pinned to its assigned slot
 // (#1897): a free slot materializes at the template position; a slot held
 // by a tab-capable pane adds the tool as a focused tab — several tools
-// sharing one slot become tabs (#836) — and a non-tabbable holder (a
-// singleton panel, or the tool is global #1890 and must keep a dedicated
-// pane) subdivides the slot along its longer template axis instead.
+// sharing one slot become tabs (#836), global tools included (#1901: the
+// workspace switch extracts a hosted global session tab-wise) — and a
+// non-tabbable holder (a singleton panel) subdivides the slot along its
+// longer template axis instead.
 func (m *Model) openToolAtSlot(entry config.ToolEntry, tpl *layout.Template, slot string) {
 	ws := m.activeWS()
 	dir := entry.Cwd
@@ -206,7 +207,7 @@ func (m *Model) openToolAtSlot(entry config.ToolEntry, tpl *layout.Template, slo
 	}
 	argv := append([]string{entry.Command}, entry.Args...)
 	ws.ReturnFocus = ws.Panes.Focused()
-	if resident := m.slotResidents()[slot]; resident != "" && !entry.Global &&
+	if resident := m.slotResidents()[slot]; resident != "" &&
 		canHostTabs(ws.Panes.Get(resident)) && m.ensureTabHost(resident) {
 		term := ws.Panes.NewToolSession(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send)
 		ws.Panes.Get(resident).AddTerminalTab(term)

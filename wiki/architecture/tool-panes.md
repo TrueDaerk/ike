@@ -156,17 +156,23 @@ Implemented in `internal/app/tools_global.go`:
   (`workspace.Manager`, which survives model rebuilds), never a workspace's
   pane registry. While attached, the pane lives in the active workspace like
   any tool pane; on every project switch `detachGlobalTools` (called by
-  `performSwitch` right after the chdir succeeds) removes the pane from the
-  departing workspace's tree and registry **without ending the session** and
-  parks the terminal model on the manager (`ParkGlobalTool`), flagged parked
-  (#1522) so an unrendered session stops requesting repaints.
+  `performSwitch` right after the chdir succeeds) removes the session from
+  the departing workspace **without ending it** and parks the terminal model
+  on the manager (`ParkGlobalTool`), flagged parked (#1522) so an unrendered
+  session stops requesting repaints. A dedicated pane leaves the tree and
+  the registry whole; a session hosted as a tab (#1901: a shared slot pane,
+  or a #708 center drop) detaches **as a tab**, the host keeping its other
+  tabs — a host carrying nothing but global tool sessions detaches whole,
+  its leaf leaving the tree like a dedicated pane's.
 - **Re-attach** — `tool.<name>` in any workspace first toggles a locally
   attached instance; otherwise it takes the parked session
-  (`TakeGlobalTool`) and splices it in as a dedicated pane
-  (`attachGlobalTool`) at the home position or adaptive placement. Global
-  tools never tab-host into a dock occupant — a dedicated pane detaches
-  wholesale on the next switch. Only with no live session anywhere does the
-  command spawn a fresh process.
+  (`TakeGlobalTool`) and splices it in (`attachGlobalTool`): a slot
+  assignment pins it, an occupied tab-capable slot pane taking the live
+  session as a **focused tab** (#1901, the same tab-in-slot rule as a fresh
+  open); otherwise a dedicated pane at the home position or adaptive
+  placement — outside its slot a global tool never tab-hosts into a dock
+  occupant, so the next switch can detach it wholesale. Only with no live
+  session anywhere does the command spawn a fresh process.
 - **Lifecycle** — parked workspaces never contain a global tool, so workspace
   switch, project close (#1355), close-from-list (#820) and LRU eviction
   (#780) cannot end it; it also gates none of those guards. It ends only when
@@ -176,11 +182,13 @@ Implemented in `internal/app/tools_global.go`:
   registry's terminals, so no process outlives IKE.
 - **Cwd** — resolves once, at first spawn, against the project active then;
   the shared session keeps its working directory across projects.
-- **Persistence** — the workspace currently hosting the pane records it in
-  its `.ike/layout.json` as usual. On restore, a saved global tool slot first
-  re-attaches a live parked session (`Registry.AdoptToolKey`) — the revisit
-  of an evicted workspace — and only spawns a fresh process when none is
-  parked (the restart case).
+- **Persistence** — the workspace currently hosting the session records it
+  in its `.ike/layout.json` as usual: a dedicated pane as its `tool` leaf, a
+  tab-hosted session in the host's editor identity `tools` list (kind-only,
+  like any slotted tool tab). On restore, either shape first re-attaches a
+  live parked session (`Registry.AdoptToolKey` for panes,
+  `restoredToolSession` for tabs) — the revisit of an evicted workspace —
+  and only spawns a fresh process when none is parked (the restart case).
 
 `global` and `multiple` are **mutually exclusive**: a config declaring both
 gets a `tools.custom.multiple` diagnostic and `multiple` is ignored
@@ -242,15 +250,17 @@ ratio a cell fraction — so slots materialize through the ordinary
   the next open re-materializes the defined arrangement.
 - **Several tools per slot → tabs** — a slot already held by a tab-capable
   pane adds the next assigned tool as a **focused tab**
-  (`ConvertToTabHost`/`AddTerminalTab`, #836) instead of splitting. A
-  non-tabbable holder (a singleton panel; or the opening tool is global
-  #1890 and must keep a dedicated pane) subdivides the slot along its longer
-  template axis — deterministic from the template alone.
+  (`ConvertToTabHost`/`AddTerminalTab`, #836) instead of splitting —
+  **global tools included** (#1901: the workspace switch extracts a hosted
+  global session tab-wise, see the #1890 section). A non-tabbable holder (a
+  singleton panel) subdivides the slot along its longer template axis —
+  deterministic from the template alone.
 - **Residency is derived, never stored** — a slot's occupant is recognized
   by what the pane hosts (a tool assigned to the slot; singleton panels by
   their key; tab hosts carrying only tool sessions). `.ike/layout.json`
   round-trips a slotted arrangement verbatim with no new persisted state,
-  and a re-attached global tool lands in its slot (`attachGlobalTool`).
+  and a re-attached global tool lands in its slot (`attachGlobalTool`),
+  tab-joining an occupied one (#1901).
 - **Saved window layouts cooperate (#1899)** — applying a saved layout
   (#1175) or the default (`window.restoreLayout`) while a template is active
   keeps the slot config **authoritative**: slotted leaves are pruned from
