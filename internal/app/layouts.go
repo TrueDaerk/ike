@@ -717,6 +717,11 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		// Restart the configured tool in the slot (#741); a tool no longer
 		// configured degrades to a fresh shell rather than breaking the apply.
 		if entry, ok := toolEntry(id.Tool); ok {
+			if entry.Global && m.ws != nil {
+				// Applying a layout is an explicit reopen (#1903); a parked
+				// live session would have been adopted via st.tools instead.
+				m.ws.ClearGlobalToolClosed(entry.Name)
+			}
 			dir := entry.Cwd
 			if dir == "" {
 				dir = "."

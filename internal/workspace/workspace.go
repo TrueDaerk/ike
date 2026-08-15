@@ -67,6 +67,13 @@ type Manager struct {
 	// survives model rebuilds and never belongs to any workspace registry —
 	// which is exactly what keeps switch, close and eviction from ending it.
 	globalTools map[string]terminal.Model
+	// closedGlobalTools records global tools explicitly closed and not
+	// reopened since (#1903): a per-project layout.json saved while the tool
+	// was open still lists it, and without this record a later switch into
+	// that project would resurrect the closed tool from the stale entry. The
+	// manager — stash plus this set — is the authority on whether a global
+	// tool is open, never the per-project layouts.
+	closedGlobalTools map[string]bool
 }
 
 // NewManager builds a manager with the given active workspace.
@@ -118,6 +125,28 @@ func (m *Manager) TakeGlobalTool(name string) (terminal.Model, bool) {
 func (m *Manager) PeekGlobalTool(name string) (terminal.Model, bool) {
 	t, ok := m.globalTools[name]
 	return t, ok
+}
+
+// MarkGlobalToolClosed records that the named global tool was explicitly
+// closed (#1903): the session is gone on purpose, and stale layout entries in
+// other projects must not resurrect it on the next switch.
+func (m *Manager) MarkGlobalToolClosed(name string) {
+	if m.closedGlobalTools == nil {
+		m.closedGlobalTools = map[string]bool{}
+	}
+	m.closedGlobalTools[name] = true
+}
+
+// ClearGlobalToolClosed forgets a recorded explicit close — every path that
+// opens the tool again calls it, so the reopened tool restores normally.
+func (m *Manager) ClearGlobalToolClosed(name string) {
+	delete(m.closedGlobalTools, name)
+}
+
+// GlobalToolClosed reports whether the named global tool was explicitly
+// closed and not reopened since (#1903).
+func (m *Manager) GlobalToolClosed(name string) bool {
+	return m.closedGlobalTools[name]
 }
 
 // GlobalToolNames lists the currently parked global tools, sorted for stable

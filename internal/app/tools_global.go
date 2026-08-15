@@ -13,12 +13,17 @@ import (
 // every workspace. The live session's owner is the workspace manager, not any
 // workspace registry — on a project switch the session detaches from the
 // departing workspace's layout (detachGlobalTools) and parks on the manager,
-// and opening the tool anywhere re-attaches the same running session
-// (attachGlobalTool). Workspace teardown paths (switch, project close, LRU
-// eviction) therefore never see a global tool; only closing its pane or
-// quitting IKE ends the process. A global tool's Cwd resolves once, at first
-// spawn, against the project active then — the session keeps its working
-// directory across projects, which is the point of sharing it.
+// and the switch-in re-attaches the same running session automatically
+// (attachOpenGlobalTools, #1903) — the pane follows the user across projects;
+// tool.<name> re-attaches it too (attachGlobalTool). Workspace teardown paths
+// (switch, project close, LRU eviction) therefore never see a global tool;
+// only closing its pane or quitting IKE ends the process, and an explicit
+// close is recorded on the manager so stale layout entries in other projects
+// cannot resurrect the tool. A session that exits while parked stays stashed
+// with its exit status and materializes as the #810 exited overlay on the
+// next switch-in. A global tool's Cwd resolves once, at first spawn, against
+// the project active then — the session keeps its working directory across
+// projects, which is the point of sharing it.
 
 // globalToolEntry resolves a tool name to its config entry only when the entry
 // is marked global; ok=false for non-global and unconfigured names.
@@ -205,6 +210,13 @@ func (m *Model) parkGlobalTool(name string, term terminal.Model) {
 // tab-hosts, so the next switch can detach it wholesale. A failed splice puts
 // the session back on the manager instead of dropping it.
 func (m *Model) attachGlobalTool(entry config.ToolEntry, term terminal.Model) {
+	m.attachGlobalToolIn(entry, term, true)
+}
+
+// attachGlobalToolIn is attachGlobalTool with the focus move optional: the
+// tool.<name> re-attach focuses the arriving pane like a fresh open, while
+// the switch-in auto-attach (#1903) leaves focus where the switch put it.
+func (m *Model) attachGlobalToolIn(entry config.ToolEntry, term terminal.Model, focus bool) {
 	ws := m.activeWS()
 	target := m.activeEditorKey()
 	if target == "" {
@@ -220,9 +232,13 @@ func (m *Model) attachGlobalTool(entry config.ToolEntry, term terminal.Model) {
 		if resident := m.slotResidents()[slot]; resident != "" &&
 			canHostTabs(ws.Panes.Get(resident)) && m.ensureTabHost(resident) {
 			term.SetParked(false)
-			ws.ReturnFocus = ws.Panes.Focused()
+			if focus {
+				ws.ReturnFocus = ws.Panes.Focused()
+			}
 			ws.Panes.Get(resident).AddTerminalTab(term)
-			m.setFocus(resident)
+			if focus {
+				m.setFocus(resident)
+			}
 			m.rememberTool(entry.Name, resident)
 			m.layout()
 			saveLayout(ws.Tree, ws.Panes)
@@ -230,7 +246,9 @@ func (m *Model) attachGlobalTool(entry config.ToolEntry, term terminal.Model) {
 		}
 	}
 	term.SetParked(false)
-	ws.ReturnFocus = ws.Panes.Focused()
+	if focus {
+		ws.ReturnFocus = ws.Panes.Focused()
+	}
 	key := ws.Panes.AddTerminalPaneFrom(term)
 	if slotted {
 		// A free slot materializes at the template position; a non-tabbable
@@ -264,10 +282,84 @@ func (m *Model) attachGlobalTool(entry config.ToolEntry, term terminal.Model) {
 		}
 		ws.Tree = tree
 	}
-	m.setFocus(key)
+	if focus {
+		m.setFocus(key)
+	}
 	m.rememberTool(entry.Name, key)
 	m.layout()
 	saveLayout(ws.Tree, ws.Panes)
+}
+
+// attachOpenGlobalTools splices every still-parked global tool session into
+// the just-activated workspace (#1903): an open global tool is visible in
+// every project view instead of sticking to the project it was last opened
+// in. performSwitch runs it after the rebuild — a restore that already
+// re-attached the session from the saved layout left nothing parked, so no
+// duplicate can arise; the resumed-workspace case never holds one (it was
+// detached at park time). A session whose process exited while parked
+// attaches too and renders the #810 exited overlay. A tool the incoming
+// project's config does not declare global stays parked, and focus stays
+// where the switch put it.
+func (m *Model) attachOpenGlobalTools() {
+	if m.ws == nil || m.activeWS() == nil {
+		return
+	}
+	for _, name := range m.ws.GlobalToolNames() {
+		entry, ok := globalToolEntry(name)
+		if !ok {
+			continue // not configured (as global) under this project's config
+		}
+		if len(m.toolLocations(name)) > 0 {
+			continue // an instance is already attached; first one wins
+		}
+		if term, taken := m.ws.TakeGlobalTool(name); taken {
+			m.attachGlobalToolIn(entry, term, false)
+		}
+	}
+}
+
+// staleGlobalTool reports a global tool a saved layout lists that must not
+// restore (#1903): no session is parked and the tool was explicitly closed
+// in some project since the layout was saved. The manager — stash plus
+// closed set — is the authority on whether a global tool is open, never a
+// per-project layout.json.
+func (m *Model) staleGlobalTool(entry config.ToolEntry) bool {
+	if !entry.Global || m.ws == nil {
+		return false
+	}
+	if _, parked := m.ws.PeekGlobalTool(entry.Name); parked {
+		return false
+	}
+	return m.ws.GlobalToolClosed(entry.Name)
+}
+
+// noteGlobalToolCloses records the explicit close of every global tool
+// session inst still hosts (#1903): a close in one project ends the tool
+// everywhere, so stale layout entries elsewhere must not resurrect it on the
+// next switch. Move/drag paths detach the session before closing the vacated
+// pane, so a relocation never counts as a close.
+func (m *Model) noteGlobalToolCloses(inst *pane.Instance) {
+	if inst == nil {
+		return
+	}
+	switch inst.Kind() {
+	case pane.KindTerminal:
+		m.noteGlobalToolTabClose(inst.Terminal())
+	case pane.KindEditor:
+		for i := 0; i < inst.TabCount(); i++ {
+			m.noteGlobalToolTabClose(inst.TabTerminal(i))
+		}
+	}
+}
+
+// noteGlobalToolTabClose is noteGlobalToolCloses for one hosted terminal.
+func (m *Model) noteGlobalToolTabClose(t *terminal.Model) {
+	if t == nil || m.ws == nil {
+		return
+	}
+	if entry, ok := globalToolEntry(t.Tool()); ok {
+		m.ws.MarkGlobalToolClosed(entry.Name)
+	}
 }
 
 // reparkGlobalToolPane undoes a failed attach: the freshly added pane's
@@ -281,21 +373,18 @@ func (m *Model) reparkGlobalToolPane(name, key string) {
 	m.activeWS().Panes.Close(key)
 }
 
-// reapGlobalTool ends the parked global tool whose process exited while
-// detached: its ExitedMsg resolves to no pane, so without this the stash
-// would offer a dead session on the next open. Reports whether sess was a
-// parked global tool's session.
-func (m *Model) reapGlobalTool(sess string) bool {
+// parkedGlobalToolExited reports whether sess is a parked global tool's
+// session. The dead session deliberately stays in the stash — exit status
+// and grid intact (#1903) — so the next switch-in (attachOpenGlobalTools) or
+// tool.<name> materializes the pane with the standard #810 exited overlay,
+// where Restart reruns the command in place as the same global session. (The
+// pre-#1903 reap closed the stashed session silently and the tool vanished
+// without a dialog.)
+func (m *Model) parkedGlobalToolExited(sess string) bool {
 	for _, name := range m.ws.GlobalToolNames() {
-		term, ok := m.ws.TakeGlobalTool(name)
-		if !ok {
-			continue
-		}
-		if term.SessionKey() == sess {
-			term.Close()
+		if term, ok := m.ws.PeekGlobalTool(name); ok && term.SessionKey() == sess {
 			return true
 		}
-		m.ws.ParkGlobalTool(name, term) // not this one; put it back
 	}
 	return false
 }
@@ -321,6 +410,8 @@ func (m *Model) restoredToolSession(reg *pane.Registry, entry config.ToolEntry) 
 			term.SetParked(false)
 			return term
 		}
+		// Spawning fresh reopens the tool: forget a recorded close (#1903).
+		m.ws.ClearGlobalToolClosed(entry.Name)
 	}
 	dir := entry.Cwd
 	if dir == "" {

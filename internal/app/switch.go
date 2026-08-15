@@ -269,6 +269,13 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
+	// An open global tool follows the switch (#1903): any session still
+	// parked after the rebuild — the target's layout restore did not
+	// re-attach it — splices into the workspace through the normal open path
+	// (slot rule with tab-join, home placement, adaptive split) without
+	// moving focus. A session that exited while parked arrives showing the
+	// #810 exited overlay with its Restart/Close actions.
+	sized.attachOpenGlobalTools()
 	// Same catch-up for the explorer tree (#1520): the auto-refresh poll would
 	// get there eventually (and not at all with explorer.auto_refresh off), so
 	// re-stat the loaded tree once right now. A first visit's explorer is
