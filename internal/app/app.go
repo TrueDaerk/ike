@@ -1552,8 +1552,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 		// longer configured restores as nothing. A pane that held only
 		// tool tabs drops its placeholder empty editor tab again.
 		wasEmpty := inst.IsEmptyEditor()
-		toolTabs := 0
-		for _, tool := range id.Tools {
+		toolTabs, activeTool := 0, -1
+		for n, tool := range id.Tools {
 			entry, ok := toolEntry(tool)
 			if !ok || m.staleGlobalTool(entry) {
 				// Unconfigured restores as nothing; so does a global tool
@@ -1564,10 +1564,22 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// spawning a duplicate (#1890); restoredToolSession decides.
 			inst.AddTerminalTab(m.restoredToolSession(panes, entry))
 			toolTabs++
+			if id.ActiveTool == n+1 {
+				activeTool = inst.ActiveTab()
+			}
 		}
 		if wasEmpty && toolTabs > 0 {
 			inst.CloseTab(0)
 			active = inst.ActiveTab()
+			if activeTool > 0 {
+				activeTool-- // the dropped placeholder shifted every tool tab
+			}
+		}
+		if activeTool >= 0 {
+			// The tool tab selected when the layout was saved wins (#1906);
+			// a tool that no longer restores leaves active as it was — the
+			// last restored tab — instead of pointing at nothing.
+			active = activeTool
 		}
 		// Content tabs (#1778) rebuild from their viewer identities at their
 		// remembered positions — the same per-kind restore the dedicated
