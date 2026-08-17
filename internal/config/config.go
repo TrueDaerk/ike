@@ -262,6 +262,8 @@ func (c *Config) Flat() map[string]string {
 	put("backup.debounce_ms", c.Backup.DebounceMs)
 	put("backup.max_age_days", c.Backup.MaxAgeDays)
 
+	put("history.timeline_source", c.History.TimelineSource)
+
 	put("ui.menu_bar", c.UI.MenuBar)
 	put("ui.popup_max_width", c.UI.PopupMaxWidth)
 

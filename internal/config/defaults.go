@@ -218,6 +218,12 @@ func defaults() *Config {
 			DebounceMs: 2000,
 			MaxAgeDays: 7,
 		},
+		History: History{
+			// The Timeline shows both histories by default (#1916) — the
+			// whole point is having one list for committed and uncommitted
+			// changes.
+			TimelineSource: "both",
+		},
 		Terminal: Terminal{
 			Autosuggest:     true,
 			ScrollbackLines: 10000,

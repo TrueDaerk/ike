@@ -532,6 +532,9 @@ type Model struct {
 	lhPath      string               // file the open picker lists
 	lhEntries   []localhistory.Entry // its snapshots, newest-first
 
+	tl       timelineState // per-file Timeline data (#1916)
+	tlPicker bool          // the Timeline owns the modal shell
+
 	histResult vcs.RangeLogMsg // range-history picker data (#1430)
 	histLabel  string          // human range label ("lines 4–9")
 	histSel    int             // selected commit row
@@ -4857,6 +4860,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// file.localHistory (#1023): list the focused file's snapshots.
 		m.openLocalHistoryPicker()
 		return m, nil
+	case TimelineMsg:
+		// file.timeline (#1916): snapshots and commits on one axis; the git
+		// half loads incrementally behind the already-shown snapshots. The
+		// command is taken into a local first — openTimeline mutates m, and
+		// the order of a return statement's operands is unspecified.
+		cmd := m.openTimeline()
+		return m, cmd
+	case vcs.FileLogMsg:
+		m.timelineFileLog(msg)
+		return m, nil
+	case timelineDiffMsg:
+		m.openTimelineDiff(msg)
+		return m, nil
+	case timelineRestoreMsg:
+		cmd := m.applyTimelineRestore(msg)
+		return m, cmd
 	case localHistorySnapshotMsg:
 		// A buffer save: record the written bytes into the snapshot store —
 		// and fire the plugin hook (#1161): EventBufferSaved was never
@@ -5494,6 +5513,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The local-history picker (#1023) owns the keyboard the same way.
 		if m.localHistoryOpen() {
 			return m.updateLocalHistoryPicker(msg)
+		}
+		// The per-file Timeline (#1916) owns the keyboard the same way.
+		if m.timelineOpen() {
+			return m.updateTimeline(msg)
 		}
 		// The range-history picker (#1430) owns the keyboard the same way.
 		if m.historyPickerOpen() {

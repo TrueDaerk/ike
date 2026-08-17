@@ -186,6 +186,12 @@ secrets — are documented together, with screenshots, in
 | Snapshot debounce | `backup.debounce_ms` | integer (100–60000) | `2000` | user | Milliseconds a dirty buffer must stay quiet before it is snapshotted |
 | Snapshot max age | `backup.max_age_days` | integer (1–365) | `7` | user | Days before leftover snapshots are pruned at startup (after the restore prompt) |
 
+### Timeline
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Timeline source filter | `history.timeline_source` | enum: `both`, `local`, `git` | `both` | user | Which histories the Timeline shows when it opens: both local-history snapshots and git commits, snapshots only, or commits only. The view's f key cycles the filter for the open list without changing this default |
+
 ### Terminal
 
 | Setting | Key | Type | Default | Scope | Description |
