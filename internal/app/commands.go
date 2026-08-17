@@ -190,6 +190,15 @@ type RunSelectMsg struct{}
 // RunRerunMsg reruns the last-used run configuration (#576).
 type RunRerunMsg struct{}
 
+// TaskSelectMsg opens the Run Task picker (#1915): the Makefile targets,
+// package.json scripts and justfile recipes discovered in the project root;
+// picking one runs it as an ephemeral run configuration.
+type TaskSelectMsg struct{}
+
+// TaskPromoteMsg opens the task picker in promote mode (#1915): the picked
+// task is stored as a normal run configuration instead of run.
+type TaskPromoteMsg struct{}
+
 // RunTestAtCursorMsg runs the test function at or nearest above the focused
 // editor's cursor (#1150); RunTestsInFileMsg runs every test in the active
 // test file's scope (Go: its package). Both register with run.rerun's
@@ -377,6 +386,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("run.testAtCursor", "Run Test at Cursor", RunTestAtCursorMsg{}),
 			appCommand("run.testsInFile", "Run Tests in File", RunTestsInFileMsg{}),
 			appCommand("run.select", "Run/Debug Configurations…", RunSelectMsg{}),
+			appCommand("run.task", "Run Task…", TaskSelectMsg{}),
+			appCommand("run.taskPromote", "Promote Task to Run Configuration…", TaskPromoteMsg{}),
 			appCommand("http.run", "Run HTTP Request", HTTPRunMsg{}),
 			appCommand("http.copyBody", "Copy HTTP Response Body", HTTPCopyBodyMsg{}),
 			appCommand("http.copyHeaders", "Copy HTTP Response Headers", HTTPCopyHeadersMsg{}),

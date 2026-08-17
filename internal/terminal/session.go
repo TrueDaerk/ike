@@ -131,6 +131,13 @@ type Session struct {
 	// read on every render and replaced when the theme changes.
 	grid *gridPalette
 
+	// tap, when set, receives every output chunk the feed loop replays
+	// (#1915): the problem-matcher tee for run sessions. It runs on the feed
+	// goroutine — off the render loop — and gets spool-owned chunks it may
+	// read but must not retain. Guarded by tapMu (SetTap races the feed).
+	tapMu sync.Mutex
+	tap   func([]byte)
+
 	// out decouples the PTY read loop from the emulator feed (#734): PTY
 	// output is spooled immediately so the kernel TTY queue stays drained
 	// even while the emulator or render loop stalls (lock/sleep/resume);
@@ -217,6 +224,16 @@ func NewPipeSession(key string, w, h int, send func(tea.Msg)) *Session {
 // IsPipe reports whether the session is process-less (#1370): fed through
 // FeedBytes rather than a PTY.
 func (s *Session) IsPipe() bool { return s.ptmx == nil && s.cmd == nil }
+
+// SetTap installs (or, with nil, removes) the output tee (#1915): fn runs on
+// the feed goroutine for every replayed chunk, so it must stay cheap and must
+// not retain the slice. Install it right after the session starts — chunks
+// replayed before that are not delivered retroactively.
+func (s *Session) SetTap(fn func([]byte)) {
+	s.tapMu.Lock()
+	s.tap = fn
+	s.tapMu.Unlock()
+}
 
 // FeedBytes spools raw bytes into the emulator — the pipe session's input
 // seam (#1370). A no-op on PTY-backed or finished sessions.
@@ -394,12 +411,23 @@ func (s *Session) feedLoop() {
 		if !ok {
 			return
 		}
+		s.tapMu.Lock()
+		tap := s.tap
+		s.tapMu.Unlock()
+		if tap != nil {
+			tap(chunk)
+		}
 		var extra [][]byte
 		if s.parked.Load() {
 			// Parked (#1522): nobody watches, so interactivity doesn't
 			// matter — fold the whole available backlog into one emulator
 			// pass (one lock, one version tick) instead of waking per chunk.
 			extra = s.out.drain(parkedBatchMax - len(chunk))
+		}
+		if tap != nil {
+			for _, c := range extra {
+				tap(c)
+			}
 		}
 		s.gridMu.Lock()
 		_, _ = s.em.Write(chunk)

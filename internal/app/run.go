@@ -134,12 +134,21 @@ func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created
 		m.host.Notify(host.Error, "run: "+cfg.Lang+" contributes no run command")
 		return nil
 	}
-	store.Touch(cfg.Name)
-	if err := run.Save(store); err != nil {
-		m.host.Notify(host.Warn, "run: config not saved: "+err.Error())
+	// Only a stored configuration becomes the rerun target (#1915): an
+	// ephemeral task run must not point last_used at a name the store cannot
+	// resolve.
+	if store.ByName(cfg.Name) != nil {
+		store.Touch(cfg.Name)
+		if err := run.Save(store); err != nil {
+			m.host.Notify(host.Warn, "run: config not saved: "+err.Error())
+		}
 	}
 	env := terminal.MergeEnv(terminalEnv(), cfg.EnvSlice())
 	dir := cfg.Dir(root)
+
+	// The problem-matcher tee (#1915) is built before the launch so the run's
+	// previous findings clear even when no matcher resolves.
+	tap := m.taskOutputTap(root, cfg)
 
 	// The Run tool owns run output (#1905): an open one takes the new command
 	// in place, otherwise it opens at its placement. No other terminal is ever
@@ -147,6 +156,14 @@ func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created
 	if !m.startInRunTool(cfg, argv, dir, env) && !m.openRunTool(cfg, argv, dir, env) {
 		m.host.Notify(host.Error, "run: no pane to place the run tool")
 		return nil
+	}
+	// The tap installs onto the fresh session right after the spawn — the
+	// child has not produced output yet, so the tee sees the run's whole
+	// stream.
+	if tap != nil {
+		if term := m.runToolTerminal(); term != nil {
+			term.SetOutputTap(tap)
+		}
 	}
 	m.notifyRun(cfg, created, argv)
 	return nil

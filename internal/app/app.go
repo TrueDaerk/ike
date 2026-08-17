@@ -360,6 +360,9 @@ type Model struct {
 	// runConfigs is the palette mode listing run/debug configurations
 	// (#1914); run.select fills and opens it.
 	runConfigs *runConfigsMode
+	// tasks is the palette mode listing discovered build-tool tasks (#1915);
+	// run.task / run.taskPromote fill and open it.
+	tasks *tasksMode
 	// watchExprs are the debugger watch expressions (#1914): in memory,
 	// surviving debug sessions; re-evaluated on every stop.
 	watchExprs []string
@@ -859,6 +862,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	httpRequests := newHTTPRequestsMode()           // stored HTTP responses picker (#1829)
 	httpEnvs := newHTTPEnvMode()                    // http-client.env.json picker (#1867)
 	runConfigs := newRunConfigsMode()               // run/debug configurations picker (#1914)
+	tasksPicker := newTasksMode()                   // discovered-tasks picker (#1915)
 	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
 	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
@@ -889,11 +893,12 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:           help.New(reg, bindings, helpMinCol(cfg)),
 		shell:          ui.New(shellConfig(cfg)),
 		vcs:            vcsSt,
-		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEnvs, runConfigs),
+		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEnvs, runConfigs, tasksPicker),
 		layoutsPicker:  layoutsPicker,
 		httpRequests:   httpRequests,
 		httpEnvs:       httpEnvs,
 		runConfigs:     runConfigs,
+		tasks:          tasksPicker,
 		httpEnv:        loadHTTPEnv(), // selected HTTP environments (#1867)
 		refs:           refs,
 		lspStatus:      map[string]string{},
@@ -2068,7 +2073,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -2133,7 +2138,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEnvs, runConfigs)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEnvs, runConfigs, tasks)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -3826,6 +3831,27 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RunConfigPickedMsg:
 		// A picker row was activated (#1914): run or debug the configuration.
 		return m, m.runPickedConfig(msg)
+
+	case TaskSelectMsg:
+		// run.task (Run menu / palette, #1915): the Run Task picker.
+		m.openTaskPicker(false)
+		return m, nil
+
+	case TaskPromoteMsg:
+		// run.taskPromote (#1915): store a task as a run configuration.
+		m.openTaskPicker(true)
+		return m, nil
+
+	case TaskPickedMsg:
+		// A task row was activated (#1915): run it or promote it.
+		return m, m.runPickedTask(msg)
+
+	case TaskProblemsMsg:
+		// A task run's matchers found problems (#1915): the source replaces
+		// wholesale, so the panel always mirrors the run's current output.
+		m.probStore.SetTaskSource(msg.Source, msg.ByPath)
+		m.refreshProblemsPanel()
+		return m, nil
 
 	case DebugStopMsg:
 		m.stopDebugSession(true)

@@ -1,5 +1,28 @@
 # Log
 
+## 2026-08-17 (tasks: task discovery + problem matchers, #1915)
+
+- **Build-task discovery** (`internal/lang/tasks.go`, `plugins/tasks`): a
+  `lang.TaskProvider` seam in the language registry, with built-in providers for
+  Makefile targets, package.json scripts and justfile recipes. **`run.task`** lists
+  them in a locked palette mode (prefix `)`) and runs a picked task as an ephemeral
+  run configuration; **`run.taskPromote`** stores it in `.ike/runconfigs.json`
+  instead — a promoted task is a completely normal configuration afterwards.
+- **`run.Config` grew `Argv`/`Matchers`** — a literal command line short-circuits
+  `run.Argv` past the language synthesis, and matcher names select output parsing.
+  `launchRun` only moves `last_used` for stored configurations now.
+- **Problem matchers** (`internal/matcher`): named single-line regex matchers
+  (built-ins `go`, `generic`, `tsc`) plus a `python` traceback state machine, run by
+  a streaming `Engine` (chunk → line assembly, ANSI strip, whole-run dedup). Custom
+  matchers via `[[tasks.matcher]]` (name/pattern/group indexes), validated with the
+  compiler's message; broken or duplicate entries dropped with a diagnostic.
+- **The run terminal is teed, not re-run** (`terminal.Session.SetTap`,
+  `internal/app/taskproblems.go`): the feed loop hands chunks to the collector off
+  the render loop; findings land per run source in `problems.Store.SetTaskSource`
+  (a third channel next to server diagnostics and lint notes), cleared at every
+  launch so a re-run replaces its problems. Rows navigate like LSP diagnostics;
+  unmatched output stays untouched in the terminal.
+
 ## 2026-08-17 (tests: Test Results tool window with re-run-failed, #1911)
 
 - **Test runs get a structured result tree** (`internal/testresults`): a singleton

@@ -28,6 +28,7 @@ import (
 	// its per-open "example saw open" hook is pure noise in the real IDE.
 	_ "ike/plugins/format"
 	_ "ike/plugins/lsp"
+	_ "ike/plugins/tasks"
 
 	// Language plugins register their grammar + LSP server + toolchain in the
 	// lang registry. Adding a language to IKE = adding a package here.

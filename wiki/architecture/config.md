@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-07-28T18:00:00Z
+timestamp: 2026-08-17T18:00:00Z
 ---
 
 # Configuration System
@@ -134,6 +134,15 @@ Sections and their default-bearing slots (`schema.go`):
   live in code (`internal/snippets`) and are shadowed per trigger+language,
   never wiped. Consumed via the typed struct (like `tools.custom`, not
   `Flat()`); see [editor](./editor.md) and [completion](./completion.md).
+- `[[tasks.matcher]]` — custom problem matchers (#1915): array-of-tables
+  entries with `name`, `pattern` (a Go regex) and 1-based capture-group
+  indexes `file`/`line`/`message` (required) plus `col`/`severity` and a
+  `default_severity` word (optional). Validation compiles each entry through
+  `matcher.Compile` and drops broken or duplicate ones with the compiler's
+  message as the diagnostic. Conventionally project-scoped (`DefaultScope`
+  routes the `tasks.` prefix to the project file); consumed via the typed
+  struct by the run-output tee — see
+  [Tasks & Problem Matchers](./tasks.md).
 
 ## Extension hook
 

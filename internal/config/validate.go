@@ -8,6 +8,7 @@ import (
 
 	"ike/internal/concealfilter"
 	"ike/internal/layout"
+	"ike/internal/matcher"
 	"ike/internal/theme"
 )
 
@@ -274,6 +275,28 @@ func validate(c *Config) []Diagnostic {
 			}
 		}
 		c.Snippets = kept
+	}
+
+	// [[tasks.matcher]] entries (#1915) must name a compilable single-line
+	// matcher: the pattern compiles, file/line/message groups exist, group
+	// indexes stay inside the pattern. A broken or duplicate entry is dropped
+	// with the compiler's own message so the fix is obvious.
+	if c.Tasks.Matchers != nil {
+		kept := c.Tasks.Matchers[:0]
+		seen := map[string]bool{}
+		for _, e := range c.Tasks.Matchers {
+			if _, err := matcher.Compile(e.Name, e.Pattern, e.File, e.Line, e.Col, e.Severity, e.Message, e.DefaultSeverity); err != nil {
+				diags = append(diags, Diagnostic{Field: "tasks.matcher", Message: fmt.Sprintf("%v — dropping the entry", err)})
+				continue
+			}
+			if seen[e.Name] {
+				diags = append(diags, Diagnostic{Field: "tasks.matcher", Message: fmt.Sprintf("duplicate matcher name %q — dropping the later entry", e.Name)})
+				continue
+			}
+			seen[e.Name] = true
+			kept = append(kept, e)
+		}
+		c.Tasks.Matchers = kept
 	}
 
 	// project.history is a bounded list: trim to max_history, newest kept.

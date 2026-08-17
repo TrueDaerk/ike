@@ -143,6 +143,15 @@ func (m *Model) FeedText(text string) {
 	m.sess.FeedBytes([]byte(text))
 }
 
+// SetOutputTap tees the session's raw output through fn (#1915): the
+// problem-matcher seam for run sessions. fn runs on the session's feed
+// goroutine; nil removes the tap. A no-op without a live session.
+func (m *Model) SetOutputTap(fn func([]byte)) {
+	if m.sess != nil {
+		m.sess.SetTap(fn)
+	}
+}
+
 // FinishPipe ends a pipe session with the debuggee's exit status (#1370); the
 // pane then renders the usual dead view with the output still reviewable.
 func (m *Model) FinishPipe(exitCode int, hasCode bool) {
