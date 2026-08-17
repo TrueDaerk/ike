@@ -725,3 +725,44 @@ func HoverText(h *protocol.Hover) string {
 	}
 	return ""
 }
+
+// CodeLens is one code lens in editor coordinates (#1912): a virtual command
+// anchor above/at a symbol. Title is the human label ("run test", "3
+// references"); Command and Arguments are the server command executed via
+// workspace/executeCommand. An unresolved lens (codeLens/resolve pending) has
+// an empty Command and carries the server's opaque Data for the resolve call.
+type CodeLens struct {
+	Line      int // 0-based buffer line the lens is anchored to
+	Title     string
+	Command   string
+	Arguments []json.RawMessage
+	Data      json.RawMessage
+}
+
+// CodeLensesMsg replaces the code-lens set for one document (#1912); an empty
+// set clears the lenses.
+type CodeLensesMsg struct {
+	Path   string
+	Lenses []CodeLens
+}
+
+// FoldingRangesMsg replaces the server-provided folding ranges for one
+// document (#1912). The editor merges them with the Tree-sitter folds (server
+// ranges win on conflict); an empty set falls back to Tree-sitter folding
+// alone.
+type FoldingRangesMsg struct {
+	Path  string
+	Folds []highlight.Fold
+}
+
+// SelectionRangesMsg delivers the syntactic selection ladder for one request
+// position (#1912): Ranges is ordered innermost first, each range containing
+// the previous one. Line/Col anchor the request so a reply that raced a
+// cursor move is recognisably stale. An empty ladder tells the editor to use
+// its Tree-sitter fallback.
+type SelectionRangesMsg struct {
+	Path   string
+	Line   int
+	Col    int
+	Ranges []buffer.Range
+}
