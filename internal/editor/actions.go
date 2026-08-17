@@ -777,6 +777,22 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 			dir = -1
 		}
 		m.caretCloneVertical(dir)
+	case "selection_extend":
+		// Syntax-aware extend selection (#1912, selrange.go): the returned
+		// command is the LSP selection-range request or its Tree-sitter
+		// fallback; repeats grow the ladder synchronously.
+		if m.insert.active {
+			m.commitInsert()
+		}
+		cmd := m.extendSelection()
+		m.scroll()
+		return m, cmd
+	case "selection_shrink":
+		// The matching shrink walks the applied ladder back down (#1912).
+		if m.insert.active {
+			m.commitInsert()
+		}
+		m.shrinkSelection()
 	case "fold_toggle":
 		m.foldToggle()
 	case "fold_close":

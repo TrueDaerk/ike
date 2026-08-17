@@ -79,6 +79,8 @@ var reachableAlternatives = map[string]string{
 	"editor.caret.addAll":      "palette",
 	"editor.caret.addAbove":    "palette",
 	"editor.caret.addBelow":    "palette",
+	"editor.selection.extend":  "palette",
+	"editor.selection.shrink":  "palette",
 	"palette.keymapHelp":       "f1",
 	"palette.searchEverywhere": "palette (esc esc)",
 	"palette.recentFiles":      "palette",

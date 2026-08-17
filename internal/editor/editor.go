@@ -447,6 +447,18 @@ type Model struct {
 	folds     []highlight.Fold
 	folded    map[int]int
 	foldLines int
+	// lspFolds are the server-provided folding ranges (#1912), replaced by
+	// each FoldingRangesMsg and merged over folds by foldRanges (lspfold.go);
+	// LSP ranges win on a shared header and may carry a Kind. lspFolding is
+	// the lsp.folding config gate. Server folds go stale between edits until
+	// the next reply, so the merge clamps them to the buffer.
+	lspFolds   []highlight.Fold
+	lspFolding bool
+	// selRange is the extend/shrink-selection ladder state (#1912,
+	// selrange.go): the innermost-first range ladder of the last request plus
+	// the applied depth; nil while idle. Pointer state like hover, shared
+	// across the Model's value copies.
+	selRange *selRangeState
 	// semIndex is the LSP semantic-token overlay (#9), layered over hlIndex
 	// in styleAt; kept until the next result replaces it (stale positions may
 	// briefly lag an edit, like every semantic-token client).
@@ -551,7 +563,11 @@ type Model struct {
 	trimTrailing       bool
 	insertFinalNewline bool
 	showInlayHints     bool
-	stickyScroll       bool
+	// semanticTokens gates the LSP semantic-token overlay (#9) in styleAt
+	// (#1912); the cached semIndex stays, so flipping the toggle back resumes
+	// instantly — the same rendering-only gate the inlay hints use.
+	semanticTokens bool
+	stickyScroll   bool
 	stickyDepth        int
 	smartPaste         bool
 
@@ -616,6 +632,8 @@ func New() Model {
 		insertFinalNewline: true,
 		spaceAfterPunct:    true,
 		showInlayHints:     false,
+		semanticTokens:     true,
+		lspFolding:         true,
 		stickyScroll:       true,
 		stickyDepth:        4,
 		smartPaste:         true,
@@ -739,6 +757,8 @@ func (m *Model) applyConfig() {
 	m.spaceAfterPunct = boolOr(m.cfg, "editor.typing.space_after_punctuation", m.spaceAfterPunct)
 	m.trimTrailing = boolOr(m.cfg, "editor.trim_trailing_whitespace", m.trimTrailing)
 	m.showInlayHints = boolOr(m.cfg, "lsp.inlay_hints", m.showInlayHints)
+	m.semanticTokens = boolOr(m.cfg, "lsp.semantic_tokens", m.semanticTokens)
+	m.lspFolding = boolOr(m.cfg, "lsp.folding", m.lspFolding)
 	m.insertFinalNewline = boolOr(m.cfg, "editor.insert_final_newline", m.insertFinalNewline)
 	m.view.LineNumbers = boolOr(m.cfg, "editor.line_numbers", m.view.LineNumbers)
 	m.view.RelativeNumbers = boolOr(m.cfg, "editor.relative_line_numbers", m.view.RelativeNumbers)
@@ -1333,6 +1353,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.semIndex = highlight.NewIndex(msg.Spans)
 		}
 		return m, nil
+	case ilsp.FoldingRangesMsg:
+		// Server folding ranges (#1912): stored next to the Tree-sitter folds
+		// and merged by foldRanges (lspfold.go); reconcile re-anchors this
+		// view's collapsed set against the new merged set.
+		if msg.Path == m.path {
+			m.lspFolds = msg.Folds
+			m.reconcileFolds()
+		}
+		return m, nil
+	case ilsp.SelectionRangesMsg:
+		// Extend-selection ladder (#1912, selrange.go). The returned command
+		// is the Tree-sitter fallback when the server ladder came back empty.
+		return m, m.handleSelectionRanges(msg)
 	case ilsp.DocumentHighlightsMsg:
 		if msg.Path == m.path {
 			m.applyDocumentHighlights(msg)

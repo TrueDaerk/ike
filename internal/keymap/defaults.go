@@ -228,6 +228,11 @@ var jetbrainsRows = []row{
 	// broad despite the fragile alt class; the palette stays the fallback.
 	{"alt+shift+up", "editor.caret.addAbove", "Clone caret above", Editor, "Multi-caret (#1481)"},
 	{"alt+shift+down", "editor.caret.addBelow", "Clone caret below", Editor, "Multi-caret (#1481)"},
+	// Syntax-aware extend/shrink selection (#1912), the JetBrains alt+up /
+	// alt+down pair: grow the selection to the enclosing syntax node, shrink
+	// back down the same ladder.
+	{"alt+up", "editor.selection.extend", "Extend selection", Editor, "Selection (#1912)"},
+	{"alt+down", "editor.selection.shrink", "Shrink selection", Editor, "Selection (#1912)"},
 	// Rendered markdown preview (#62): single chord since #711 (was cmd+k m).
 	{"cmd+alt+m", "markdown.preview", "Markdown preview", Editor, "Markdown preview (#62)"},
 	// TODO index (#61): cmd+6 is JetBrains' TODO tool-window chord.

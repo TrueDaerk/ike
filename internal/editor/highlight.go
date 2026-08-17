@@ -81,8 +81,13 @@ func (m Model) SyntaxCapture(line, col int) string { return m.hlIndex.CaptureAt(
 // still win on overlap.
 func (m Model) styleAt(line, col int) (lipgloss.Style, bool) {
 	// Precedence (#9): Tree-sitter base < semantic overlay; the diagnostic
-	// underline is applied on top by renderLine either way.
-	capture := m.semIndex.CaptureAt(line, col)
+	// underline is applied on top by renderLine either way. The
+	// lsp.semantic_tokens gate (#1912) hides the overlay without dropping the
+	// cached spans — rendering-only, like the inlay-hint toggle.
+	capture := ""
+	if m.semanticTokens {
+		capture = m.semIndex.CaptureAt(line, col)
+	}
 	if capture == "" {
 		capture = m.hlIndex.CaptureAt(line, col)
 	}

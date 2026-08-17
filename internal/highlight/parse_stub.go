@@ -15,3 +15,8 @@ func parse(g lang.Grammar, lines []string) []Span { return nil }
 func parseScoped(g lang.Grammar, scopeKinds, foldKinds []string, lines []string) ([]Span, []Scope, []Fold) {
 	return nil, nil, nil
 }
+
+// SelectionRangesAt is the matching no-op fallback for the Tree-sitter
+// extend-selection ladder (#1912); without CGo there is no tree to walk, and
+// the editor falls through to its word/line/buffer ladder.
+func SelectionRangesAt(path string, lines []string, line, col int) []NodeRange { return nil }
