@@ -1,5 +1,17 @@
 # Log
 
+## 2026-08-17 (editor: sticky-scroll separator and large-file gate, #1910)
+
+- **Sticky scroll grew its finishing touches** (`internal/editor/sticky.go`):
+  the last pinned header row fills its right padding with a faint dashed rule,
+  the subtle separator between the pinned headers and the scrolling body, and
+  `stickyLines` now gates explicitly on `InsightOff` so large-file mode can
+  never pin headers from stale scope data. The core feature (pinning, click
+  remap, cursor unhide, `editor.sticky_scroll`/`sticky_scroll_depth` settings)
+  shipped with #168; #1910 closed the remaining gaps and added a Python
+  scope-fixture test (`plugins/languages/python/scopes_test.go`) beside the Go
+  one.
+
 ## 2026-08-17 (tests: Test Results tool window with re-run-failed, #1911)
 
 - **Test runs get a structured result tree** (`internal/testresults`): a singleton

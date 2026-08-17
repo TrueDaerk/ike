@@ -89,6 +89,31 @@ func TestStickyLinesDisabled(t *testing.T) {
 	}
 }
 
+func TestStickyDisabledInLargeFile(t *testing.T) {
+	// Large-file mode (#1910): even with scope data present (e.g. stale after
+	// a same-path reload crossed the size limit), nothing pins.
+	m := stickyModel(t)
+	m.view.Top = 10
+	m.largeFile = true
+	if got := m.stickyLines(); got != nil {
+		t.Errorf("large-file mode should yield no sticky rows, got %v", got)
+	}
+}
+
+func TestStickySeparatorOnLastPinnedRow(t *testing.T) {
+	// The last pinned row fills its right padding with a faint dashed rule
+	// (#1910); the rows above it stay plain.
+	m := stickyModel(t)
+	m.view.Top = 10
+	rows := strings.Split(m.View(), "\n")
+	if !strings.Contains(rows[1], "╌") {
+		t.Errorf("last sticky row should carry the separator rule, got %q", rows[1])
+	}
+	if strings.Contains(rows[0], "╌") || strings.Contains(rows[2], "╌") {
+		t.Errorf("only the last sticky row carries the rule, got %q / %q", rows[0], rows[2])
+	}
+}
+
 func TestStickyViewPinsHeaders(t *testing.T) {
 	m := stickyModel(t)
 	m.view.Top = 10
