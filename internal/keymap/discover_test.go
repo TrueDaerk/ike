@@ -88,6 +88,109 @@ func TestContinuationsForHeldPrefix(t *testing.T) {
 	}
 }
 
+// whichKeyTable is a hand-built table exercising the which-key data (#1909):
+// a three-step sequence for narrowing plus per-context continuations of the
+// same prefix.
+func whichKeyTable(t *testing.T) *BindingTable {
+	t.Helper()
+	bindings := []Binding{
+		{Chord: MustParseChord("cmd+k g"), Command: "wk.group", Title: "Group", Context: Global},
+		{Chord: MustParseChord("cmd+k g s"), Command: "wk.groupSave", Title: "Group save", Context: Global},
+		{Chord: MustParseChord("cmd+k g b"), Command: "wk.groupBackup", Title: "Group backup", Context: Global},
+		{Chord: MustParseChord("cmd+k e"), Command: "wk.editorOnly", Title: "Editor only", Context: Editor},
+		{Chord: MustParseChord("cmd+k x"), Command: "wk.explorerOnly", Title: "Explorer only", Context: Explorer},
+	}
+	return BuildTable(bindings, nil, "darwin")
+}
+
+func contKeys(conts []Continuation) []string {
+	out := make([]string, len(conts))
+	for i, c := range conts {
+		out[i] = c.Key
+	}
+	return out
+}
+
+func TestContinuationsFilterByContext(t *testing.T) {
+	table := whichKeyTable(t)
+	got := strings.Join(contKeys(table.Continuations(MustParseChord("cmd+k"), Editor)), ",")
+	if !strings.Contains(got, "e") || strings.Contains(got, "x") {
+		t.Fatalf("editor context should offer e and not x, got %q", got)
+	}
+	got = strings.Join(contKeys(table.Continuations(MustParseChord("cmd+k"), Explorer)), ",")
+	if !strings.Contains(got, "x") || strings.Contains(got, "e") {
+		t.Fatalf("explorer context should offer x and not e, got %q", got)
+	}
+	// The Global sequence stays offered in every context.
+	for _, ctx := range []Context{Global, Editor, Explorer} {
+		if !strings.Contains(strings.Join(contKeys(table.Continuations(MustParseChord("cmd+k"), ctx)), ","), "g") {
+			t.Fatalf("global continuation g missing in context %v", ctx)
+		}
+	}
+}
+
+func TestContinuationsNarrowWithThePrefix(t *testing.T) {
+	table := whichKeyTable(t)
+	// One step deeper the popup lists the third step only, and each row names
+	// the command that completing it runs.
+	conts := table.Continuations(MustParseChord("cmd+k g"), Global)
+	if got := strings.Join(contKeys(conts), ","); got != "b,s" {
+		t.Fatalf("cmd+k g continuations = %q", got)
+	}
+	byKey := map[string]Continuation{}
+	for _, c := range conts {
+		byKey[c.Key] = c
+	}
+	if byKey["s"].Command != "wk.groupSave" || byKey["s"].Title != "Group save" {
+		t.Fatalf("s continuation = %+v", byKey["s"])
+	}
+	// The complete chord offers nothing more.
+	if got := table.Continuations(MustParseChord("cmd+k g s"), Global); len(got) != 0 {
+		t.Fatalf("a complete chord offers nothing, got %v", got)
+	}
+	// An empty prefix is not a pending sequence.
+	if got := table.Continuations(Chord{}, Global); got != nil {
+		t.Fatalf("empty prefix = %v", got)
+	}
+}
+
+func TestContinuationsDeduplicateByKey(t *testing.T) {
+	// Two commands behind the same next step collapse into one row: the popup
+	// names the key once.
+	table := BuildTable([]Binding{
+		{Chord: MustParseChord("cmd+k g s"), Command: "wk.a", Title: "A", Context: Global},
+		{Chord: MustParseChord("cmd+k g s t"), Command: "wk.b", Title: "B", Context: Global},
+	}, nil, "darwin")
+	if got := contKeys(table.Continuations(MustParseChord("cmd+k g"), Global)); len(got) != 1 || got[0] != "s" {
+		t.Fatalf("continuations = %v", got)
+	}
+}
+
+func TestResolverContinues(t *testing.T) {
+	r := NewResolver(whichKeyTable(t))
+	if r.Continues(key(t, "esc"), Global) {
+		t.Fatal("an idle resolver continues nothing")
+	}
+	r.Feed(key(t, "cmd+k"), Global)
+	if !r.Continues(key(t, "g"), Global) {
+		t.Fatal("g extends cmd+k toward the three-step chord")
+	}
+	if r.Continues(key(t, "esc"), Global) {
+		t.Fatal("esc matches no continuation — it cancels the sequence")
+	}
+	// Context-scoped continuations are only offered in their context.
+	if r.Continues(key(t, "x"), Editor) {
+		t.Fatal("the explorer-scoped step must not continue in the editor")
+	}
+	if !r.Continues(key(t, "x"), Explorer) {
+		t.Fatal("the explorer-scoped step continues in the explorer")
+	}
+	// Continues never mutates the held sequence.
+	if prefix, _ := r.PendingContinuations(Global); prefix != "cmd+k" {
+		t.Fatalf("pending prefix changed to %q", prefix)
+	}
+}
+
 func TestResolverPendingContinuations(t *testing.T) {
 	r := NewResolver(BuildTable(Defaults(PresetJetBrains), nil, "darwin"))
 	if prefix, conts := r.PendingContinuations(Global); prefix != "" || conts != nil {

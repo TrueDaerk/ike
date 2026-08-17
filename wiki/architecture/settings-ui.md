@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-08-07T18:00:00Z
+timestamp: 2026-08-17T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -195,6 +195,10 @@ any entry whose key the typed schema does not expose (no dead keys).
 - **Command Palette** (#1663) — result rows, default mode and the off-context
   ranking (`palette.max_results`, `palette.default_mode`,
   `palette.off_context`).
+- **Keymap Hints** (#1909) — the which-key popup: `keymap.which_key` on/off and
+  `keymap.which_key_delay_ms`, the pending time before it opens (see
+  [keybindings](./keybindings.md)). The bindings themselves stay on the custom
+  **Keymap** page.
 - **Files & Session** — restore last project, project directory, recent-project
   and background-workspace caps plus the background LSP timeout (#1663),
   `files.watch`, `files.auto_reload` (clean|never, #81),

@@ -527,9 +527,14 @@ type Explorer struct {
 // parses the keys; this map only carries them, and the nested TOML spelling
 // ([keymap.bindings.editor]) is flattened into it before decoding (see
 // flattenSlotMaps).
+// WhichKey gates the which-key hint popup for a held chord prefix (#1909) and
+// WhichKeyDelayMs is how long the prefix must stay pending before the popup
+// appears — a sequence completed faster than that never flashes one.
 type Keymap struct {
-	Preset   string            `toml:"preset"`
-	Bindings map[string]string `toml:"bindings"`
+	Preset          string            `toml:"preset"`
+	Bindings        map[string]string `toml:"bindings"`
+	WhichKey        bool              `toml:"which_key"`
+	WhichKeyDelayMs int               `toml:"which_key_delay_ms"`
 }
 
 // LSP holds language-server settings. Servers is a per-language slot filled by
