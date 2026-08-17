@@ -374,6 +374,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("diff.files", "Diff Two Files…", DiffFilesMsg{}),
 			appCommand("diff.compareWithClipboard", "Compare with Clipboard", CompareClipboardMsg{}),
 			appCommand("file.localHistory", "Show Local History", LocalHistoryMsg{}),
+			appCommand("file.timeline", "Show Timeline", TimelineMsg{}),
 			appCommand("file.copyPath", "Copy Path", CopyPathMsg{Kind: copyAbs}),
 			appCommand("file.copyRelPath", "Copy Relative Path", CopyPathMsg{Kind: copyRel}),
 			appCommand("file.copyReference", "Copy Reference", CopyPathMsg{Kind: copyRef}),

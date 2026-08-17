@@ -76,6 +76,7 @@ bring their own.
 | Open in Browser | `file.openInBrowser` | — | — | everywhere |
 | Open File… | `file.openPath` | — | — | everywhere |
 | Rename File | `file.rename` | `shift+f6` | — | everywhere |
+| Show Timeline | `file.timeline` | — | — | everywhere |
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
 | Cancel Running HTTP Request | `http.cancel` | — | — | everywhere |
 | Copy HTTP Response Body | `http.copyBody` | — | — | everywhere |

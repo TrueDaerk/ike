@@ -40,6 +40,12 @@ const (
 type Entry struct {
 	Time time.Time `json:"ts"`
 	Hash string    `json:"hash"`
+	// Label is an optional name for the snapshot ("before refactor"), read
+	// back and rendered by the Timeline view (#1916) where present. Saves
+	// record no label — naming a snapshot is still part of the umbrella idea
+	// #35 — but the field round-trips through the index, so a labelled entry
+	// keeps its name across prunes.
+	Label string `json:"label,omitempty"`
 }
 
 // index is the on-disk metadata schema: per-file entry lists, oldest-first.

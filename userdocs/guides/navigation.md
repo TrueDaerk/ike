@@ -143,6 +143,15 @@ snapshot costs you a ++cmd+z++.
 It is per project and independent of Git: it covers the window between commits
 where `git diff` has nothing to say yet.
 
+**Show Timeline** puts both halves on one list: the file's snapshots *and* the
+commits that touched it, newest first. ++enter++ diffs the selected entry
+against what is in the buffer, ++m++ marks an entry and ++d++ diffs it against
+the selected one — a snapshot against a commit works too. ++r++ restores a
+snapshot, ++y++ copies a commit hash, ++f++ switches between showing both
+sources, snapshots only or commits only, and ++shift+l++ loads older commits
+for long histories. Which sources it starts with is the *Timeline source
+filter* setting.
+
 ## Which one to use
 
 | You know… | Use |

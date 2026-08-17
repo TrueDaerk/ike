@@ -139,7 +139,7 @@ func (m Model) updateLocalHistoryPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 		if !ok {
 			return m, nil
 		}
-		m.openLocalHistoryDiffPane(path, entry, text)
+		m.openLocalHistoryDiffPane(path, entry.Time, text)
 		return m, nil
 	case "r":
 		path, entry := m.lhPath, m.lhEntries[m.lhSel]
@@ -148,7 +148,7 @@ func (m Model) updateLocalHistoryPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 		if !ok {
 			return m, nil
 		}
-		return m, m.restoreLocalHistory(path, entry, text)
+		return m, m.restoreLocalHistory(path, entry.Time, text)
 	}
 	return m, nil
 }
@@ -162,39 +162,59 @@ func (m *Model) localHistoryText(entry localhistory.Entry) (string, bool) {
 		m.host.Notify(host.Warn, "local history snapshot unreadable (pruned?)")
 		return "", false
 	}
-	text, _, err := textenc.Decode(data, textenc.UTF8)
+	text, err := normalizeBufferText(data)
 	if err != nil {
 		m.host.Notify(host.Warn, "local history snapshot undecodable: "+err.Error())
 		return "", false
 	}
-	text = strings.ReplaceAll(text, "\r\n", "\n")
-	text = strings.ReplaceAll(text, "\r", "\n")
-	return strings.TrimSuffix(text, "\n"), true
+	return text, true
 }
 
-// openLocalHistoryDiffPane shows snapshot (left) against the live buffer
-// (right) in the reusable diff pane, following the openDiffHeadPane shape:
-// reuse the single diff slot when one exists, otherwise split a titled pane
-// beside the editor.
-func (m *Model) openLocalHistoryDiffPane(path string, entry localhistory.Entry, snapshot string) {
-	leftTitle := baseName(path) + " @ " + project.RelTime(entry.Time, time.Now())
+// normalizeBufferText decodes raw file bytes (a snapshot blob, a git blob) and
+// folds them into the buffer's native form: UTF-8, LF line endings, no final
+// newline — the save path re-applies the file's stored EOL/encoding flavor.
+func normalizeBufferText(data []byte) (string, error) {
+	text, _, err := textenc.Decode(data, textenc.UTF8)
+	if err != nil {
+		return "", err
+	}
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	return strings.TrimSuffix(text, "\n"), nil
+}
+
+// openLocalHistoryDiffPane shows the snapshot taken at (left) against the live
+// buffer (right) in the reusable diff pane.
+func (m *Model) openLocalHistoryDiffPane(path string, at time.Time, snapshot string) {
 	right := readFileOrEmpty(path)
 	if ed := m.editorForPath(path); ed != nil {
 		right = ed.Text()
 	}
+	name := baseName(path)
+	m.openDiffTexts(path, name+" @ "+project.RelTime(at, time.Now()), name, snapshot, right, true)
+}
+
+// openDiffTexts shows two already-resolved texts in the reusable diff pane,
+// following the openDiffHeadPane shape: reuse the single diff slot when one
+// exists, otherwise split a titled pane beside the editor. path backs the
+// right column (language for highlighting, and the write target while the
+// right side is the working tree — editable).
+func (m *Model) openDiffTexts(path, leftTitle, rightTitle, left, right string, editable bool) {
 	if inst, hostKey, tabIdx, ok := m.diffSlot(); ok {
 		inst.StopDiffEdit()
-		inst.Diff().Retarget(leftTitle, baseName(path), "", path, "", "", true)
-		inst.Diff().SetContents(snapshot, right)
+		inst.Diff().Retarget(leftTitle, rightTitle, "", path, "", "", editable)
+		inst.Diff().SetContents(left, right)
 		m.focusContentAt(hostKey, tabIdx)
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 		return
 	}
-	key := m.activeWS().Panes.AddDiffTitled(leftTitle, baseName(path), path)
+	key := m.activeWS().Panes.AddDiffTitled(leftTitle, rightTitle, path)
 	if !m.placeDiffLeaf(key) {
 		return
 	}
-	m.activeWS().Panes.Get(key).Diff().SetContents(snapshot, right)
+	inst := m.activeWS().Panes.Get(key)
+	inst.Diff().SetEditable(editable)
+	inst.Diff().SetContents(left, right)
 	m.setFocus(key)
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
@@ -203,7 +223,7 @@ func (m *Model) openLocalHistoryDiffPane(path string, entry localhistory.Entry, 
 // through the normal edit path — one history change, so a single undo brings
 // the pre-restore content back and the buffer marks dirty. The file on disk
 // is untouched until the user saves.
-func (m *Model) restoreLocalHistory(path string, entry localhistory.Entry, snapshot string) tea.Cmd {
+func (m *Model) restoreLocalHistory(path string, at time.Time, snapshot string) tea.Cmd {
 	ed := m.editorForPath(path)
 	if ed == nil {
 		m.host.Notify(host.Warn, "no open buffer for "+baseName(path))
@@ -221,7 +241,7 @@ func (m *Model) restoreLocalHistory(path string, entry localhistory.Entry, snaps
 		Text: snapshot,
 	}})
 	m.host.Notify(host.Info, fmt.Sprintf("restored %s from %s — undo reverts, save writes it",
-		baseName(path), project.RelTime(entry.Time, time.Now())))
+		baseName(path), project.RelTime(at, time.Now())))
 	// The restore bypassed the editor's Update loop; drop its stale
 	// highlight/conceal caches and reparse the new content (#1683).
 	return ed.ReparseEdits()
