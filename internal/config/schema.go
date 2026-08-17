@@ -497,10 +497,16 @@ type Editor struct {
 	// clickable per segment. On by default (the JetBrains default); the row
 	// only appears while symbol data exists for the file, so files without a
 	// documentSymbol provider spend no editor row on it.
-	Breadcrumbs bool   `toml:"breadcrumbs"`
-	Tabs        Tabs   `toml:"tabs"`
-	Marks       Marks  `toml:"marks"`
-	Typing      Typing `toml:"typing"`
+	Breadcrumbs bool `toml:"breadcrumbs"`
+	// PostfixCompletion offers the JetBrains-style postfix templates after a
+	// dot (#1913): `err.nil` completes to `if err == nil { … }`, `xs.range` to
+	// a range loop. Off removes the whole source from the popup; the templates
+	// themselves are the language's (lang.Language.Postfix), so a language
+	// without any is unaffected either way.
+	PostfixCompletion bool   `toml:"postfix_completion"`
+	Tabs              Tabs   `toml:"tabs"`
+	Marks             Marks  `toml:"marks"`
+	Typing            Typing `toml:"typing"`
 }
 
 // Typing holds the while-you-type assistance switches (#1326) — edits the

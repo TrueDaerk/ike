@@ -31,6 +31,7 @@ import (
 	"ike/internal/complete"
 	"ike/internal/complete/emmet"
 	"ike/internal/complete/mru"
+	"ike/internal/complete/postfix"
 	"ike/internal/complete/symbols"
 	"ike/internal/complete/words"
 	"ike/internal/config"
@@ -819,6 +820,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// Live templates (#1152): user [[snippets]] + built-ins as popup items,
 	// language-scoped per buffer. Reads config.Get() live, so reloads apply.
 	engine.Register(snippets.NewSource())
+	// Postfix completion (#1913): the only local source that answers after a
+	// "." — `err.nil` rewrites the expression before the dot. The enabled
+	// closure reads config.Get() per query, so the settings toggle applies on
+	// a config reload without re-wiring.
+	engine.Register(postfix.New(func() bool { return config.Get().Editor.PostfixCompletion }))
 	h.SetEditorEmitter("complete", engine)
 	var resumed *workspace.Workspace
 	if mgr != nil {

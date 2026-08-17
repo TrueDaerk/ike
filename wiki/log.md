@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-17 (completion: postfix templates — `expr.if`, `err.nil`, `.for`, #1913)
+
+- **Postfix completion** (`internal/complete/postfix`): the JetBrains habit of
+  writing the expression first and the construct after it. Typing `.` now
+  dispatches the new source (the `complete.TriggerSource` extension — a
+  punctuation trigger reaches only the sources claiming it), which offers the
+  buffer language's templates alongside the server's members, marked
+  `postfix <preview>` and ranked at `lsp.PriorityPostfix` = 20 so an exact LSP
+  member always wins. Accepting rewrites the whole `<expr>.<template>` span:
+  the item carries `CompletionItem.ReplacePrefix` and the editor widens the
+  accept range leftwards over it, then runs the ordinary snippet tabstop
+  session and the live-template re-indent.
+- **Expression detection** is Tree-sitter first
+  (`highlight.ExpressionEndingAt`): the widest node ending exactly at the dot
+  whose kind the language declares in `lang.Language.PostfixExprNodes`. The
+  buffer is broken mid-typing, but error recovery parks the dot in a trailing
+  `ERROR` node and leaves the expression intact — so `foo(bar).if` wraps the
+  whole call while `x := foo(bar).if` wraps only the call. A bracket-aware
+  token scan is the fallback without cgo or a grammar.
+- **Templates are the language's** (`lang.Language.Postfix`, `EXPR`
+  placeholder): Go ships `if`/`nil`/`err`/`for`/`range`/`ret`/`var`/`print`
+  (the `err` guard restricted to error-ish expressions), Python
+  `if`/`for`/`ret`/`print`/`not`/`len`. Plugins contribute their own.
+- **Settings:** `editor.postfix_completion` (default `true`) on Settings →
+  Typing Assistance.
+
 ## 2026-08-17 (lsp: code lens, folding ranges, semantic-token refinements, selection ranges, willRenameFiles, #1912)
 
 - **Five missing protocol features wired end to end.** Code lenses

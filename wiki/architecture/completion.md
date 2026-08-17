@@ -3,8 +3,8 @@ type: concept
 title: Completion Engine
 description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection.
 resource: internal/complete
-tags: [architecture, completion, autocomplete, lsp, sources]
-timestamp: 2026-07-27T20:30:00Z
+tags: [architecture, completion, autocomplete, lsp, sources, postfix]
+timestamp: 2026-08-17T21:00:00Z
 ---
 
 # Completion Engine
@@ -46,10 +46,20 @@ type Source interface {
 The `Engine` dispatches every registered source concurrently per completion
 trigger, each on its own goroutine under a shared context: the engine timeout
 (default 2s) bounds a dispatch, and a **new trigger cancels the previous
-dispatch**, so late results are dropped rather than delivered stale. Only
-identifier runes and manual requests dispatch the local sources — punctuation
-trigger characters (`.`, `->`, `$`) are the LSP bridge's business; a local
-index has nothing position-specific to say after a `.`.
+dispatch**, so late results are dropped rather than delivered stale. Identifier
+runes and manual requests dispatch every local source — punctuation trigger
+characters (`.`, `->`, `$`) are the LSP bridge's business; a local index has
+nothing position-specific to say after a `.`.
+
+**Trigger characters (#1913).** A source that *does* have something to say after
+a punctuation character declares it:
+
+```go
+type TriggerSource interface{ TriggerChar(ch string) bool }
+```
+
+Such a character dispatches **only the claiming sources**, so the postfix source
+answers a `.` while the word index still stays out of it.
 
 **Exclusive sources (#1302).** A language source that fully owns completion for
 its own files implements the optional extension
@@ -172,10 +182,63 @@ and re-indents the body to the cursor's line before expansion — the same
 shape the insert-mode Tab trigger produces (see
 [editor](./editor.md)).
 
+## Postfix completion (#1913)
+
+`internal/complete/postfix` (name `lsp.SourcePostfix` = `postfix`, priority
+`lsp.PriorityPostfix` = 20 — below every member the server offers on the same
+dot) is the JetBrains habit of writing the expression first and the construct
+after it: `err.nil` completes to `if err == nil { | }`, `foo(bar).if` wraps the
+whole call, `xs.range` writes a range loop. It is the one local source that
+implements `TriggerSource`, so typing the `.` opens the popup even where no
+language server answers; typing further narrows it through the ordinary
+client-side filter.
+
+**It does not insert at the cursor.** The item carries
+`CompletionItem.ReplacePrefix` — the `<expr>.` text — and the editor's accept
+path widens the replacement span leftwards over it, so the whole
+`<expr>.<template>` is rewritten. The widening only fires when the buffer really
+carries that text immediately before the identifier start; otherwise the item
+degrades to a plain insert (a secondary caret elsewhere, an edit since the
+request). Bodies are LSP snippet syntax, so `$1`/`$0` run the usual tabstop
+session (#846), and the source name is recognised for the same **re-indent to
+the cursor's line** live templates get — a literal tab in a body becomes the
+buffer's indent unit (tab width, spaces, EditorConfig) and continuation lines
+inherit the current line's indentation.
+
+**Expression detection** is Tree-sitter first: `highlight.ExpressionEndingAt`
+parses the buffer and takes the **widest node ending exactly at the dot** whose
+kind the language declares in `lang.Language.PostfixExprNodes`. The buffer is
+syntactically broken while typing (`err.` is not a Go statement), but error
+recovery parks the dot and the partial trigger word in a trailing `ERROR` node
+and leaves the expression itself intact — that is exactly the case the tests
+pin. The kind filter is what keeps "widest" honest: `x := foo(bar).` also has a
+`short_var_declaration` ending at the dot, and only the expression kinds exclude
+it. The declared kinds are the member-access chain plus literals, deliberately
+*not* binary/unary expressions: on `a + b.if` the widest node would be the whole
+sum; `(a + b).if` says so explicitly through `parenthesized_expression`.
+Without a tree (no cgo, no grammar, no usable node) a bracket-aware token scan
+walks left over identifier runes, chained dots and balanced bracket groups —
+narrower than the tree answer rather than wrong.
+
+**Templates are the language's.** `lang.Language.Postfix` is a list of
+`lang.PostfixTemplate{Trigger, Body, Detail, ErrorLike}` where `EXPR`
+(`lang.ExprPlaceholder`) marks the detected expression; a plugin contributes its
+set exactly like `ScopeNodes`/`FoldNodes`, and a language registering none makes
+the feature inert for its files. `ErrorLike` restricts a template to expressions
+that read as an error value (`err`, `myErr`, `read_error`, `f().err`) — Go's
+`.err` guard. Go ships `if`, `nil`, `err`, `for`, `range`, `ret`, `var`,
+`print`; Python ships `if`, `for`, `ret`, `print`, `not`, `len`. Items are
+snippet items marked `postfix <preview>` in the popup detail.
+
+The source can be switched off with **`editor.postfix_completion`** (Settings →
+Typing Assistance); the flag is read per query, so a config reload applies with
+no re-wiring.
+
 ## Adding a source
 
 Implement `Source`, register it on the app's engine (`completeEngine` in
 `internal/app`) at build time. A source that owns a language's files
 end-to-end should also implement `ExclusiveSource` (see above), or the generic
-indexes will merge their identifiers into its popup. All Phase-2 sources have
+indexes will merge their identifiers into its popup; one that needs a
+punctuation trigger implements `TriggerSource`. All Phase-2 sources have
 landed.

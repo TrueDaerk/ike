@@ -216,8 +216,9 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "editor.tabs.always_show", Type: Bool, Title: "Always show tab bar", Description: "Render the pane's tab bar even with a single tab", Scope: config.UserScope},
 			{Key: "editor.tabs.limit", Type: Int, Title: "Tab limit", Description: "Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables)", Scope: config.UserScope},
 		}},
-		{Title: "Typing Assistance", Description: "What the editor writes for you while you type. Each aid is one switch; which characters it applies to is the language's convention (#1326), not a setting.", Entries: []Entry{
+		{Title: "Typing Assistance", Description: "What the editor writes for you while you type. Each aid is one switch; which characters (and which templates) it applies to is the language's convention, not a setting.", Entries: []Entry{
 			{Key: "editor.typing.space_after_punctuation", Type: Bool, Title: "Space after punctuation", Description: "Insert the conventional space after punctuation the language declares — \":\" in JSON, so \"key\": is completed as you type. Suppressed inside strings and comments", Scope: config.UserScope},
+			{Key: "editor.postfix_completion", Type: Bool, Title: "Postfix completion", Description: "Offer the JetBrains-style postfix templates in the completion popup after a dot: \"err.nil\" completes to \"if err == nil { … }\", \"foo(bar).if\" wraps the whole call, \"xs.range\" writes a range loop. Accepting one replaces the whole expr.template span and places the caret inside. The templates are the language's (Go and Python ship one set each); languages without any are unaffected, and the items always rank below the language server's members on the same dot", Scope: config.UserScope},
 		}},
 		{Title: "Diagnostics", Description: "Which problem markers decorate the editor — per source and severity. The Problems window always lists everything, regardless of these switches.", Entries: []Entry{
 			// Per-source, per-severity decoration toggles (#1259): each switch

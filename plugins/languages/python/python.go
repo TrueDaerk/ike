@@ -47,6 +47,10 @@ func init() {
 		Spans:       pythonSpans,
 		LineComment: "#",
 		IndentAfter: []string{":", "(", "[", "{"},
+		// Postfix completion (#1913): `xs.for`, `flag.not`, `items.len`.
+		// See postfix.go.
+		Postfix:          postfixTemplates,
+		PostfixExprNodes: postfixExprNodes,
 		// Sticky-scroll scopes (#168).
 		ScopeNodes: []string{"function_definition", "class_definition"},
 		// Foldable regions (#144): definitions, compound statements,
