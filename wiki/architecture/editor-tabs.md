@@ -277,6 +277,11 @@ tab with the same kind/path/rev identity a dedicated viewer pane saves
 (`contentIdentity`, shared by both writers) plus its `index` in the full tab
 list and its pin; `activeCtab` is 1 + the index into `ctabs` when a content tab
 was active (0 = a file tab was, `active` then indexing `tabs` as before).
+**Tool tabs** (#836) follow the same convention: `activeTool` is 1 + the index
+into `tools` when a tool tab was active (#1906), so the tab a user selected is
+per-project state instead of being decided by restore order; a tool that no
+longer restores (unconfigured, or closed everywhere since the save) leaves the
+last restored tab active rather than a dangling index.
 Restore rebuilds each content tab through its kind's normal restore path
 (`NewContentPane`, re-reading the previewed source or the diff sides) and moves
 it to its remembered position; a pane that held only content tabs drops its

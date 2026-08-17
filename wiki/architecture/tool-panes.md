@@ -214,6 +214,14 @@ Implemented in `internal/app/tools_global.go`:
   a stale entry then prunes (dedicated leaf) or restores as nothing (tab),
   because the manager, not the per-project `layout.json`, is the authority
   on whether a global tool is open.
+- **Selected tab is per project (#1906)** — a host's active tool tab is
+  workspace state, not the tool's: `layout.json` records it as `activeTool`
+  (1 + the index into `tools`, the convention `active`/`activeCtab` use) and
+  the restore re-selects it, falling back to the last restored tab when that
+  tool no longer restores. Across a switch the workspace additionally
+  remembers the tool by name (`Workspace.ActiveTools`) so the switch-in
+  re-attach cannot hand it the departing project's selection — see
+  [project-switching](project-switching.md).
 
 `global` and `multiple` are **mutually exclusive**: a config declaring both
 gets a `tools.custom.multiple` diagnostic and `multiple` is ignored

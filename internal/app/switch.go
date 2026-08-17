@@ -275,7 +275,13 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// (slot rule with tab-join, home placement, adaptive split) without
 	// moving focus. A session that exited while parked arrives showing the
 	// #810 exited overlay with its Restart/Close actions.
+	// The attach appends its tabs and activates each one, which would hand
+	// this project the tab selection of the project just left (#1906): the
+	// pre-attach selection is snapshotted here and re-applied right after,
+	// preferring the global tool tab this project itself had active.
+	preAttach := sized.snapshotActiveTabs()
 	sized.attachOpenGlobalTools()
+	sized.restoreActiveToolTabs(preAttach)
 	// Same catch-up for the explorer tree (#1520): the auto-refresh poll would
 	// get there eventually (and not at all with explorer.auto_refresh off), so
 	// re-stat the loaded tree once right now. A first visit's explorer is

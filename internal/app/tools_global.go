@@ -53,6 +53,7 @@ func (m *Model) detachGlobalTools() {
 	if ws == nil || ws.Panes == nil {
 		return
 	}
+	m.rememberActiveToolTabs()
 	for _, key := range ws.Panes.Keys() {
 		inst := ws.Panes.Get(key)
 		if inst == nil {
@@ -315,6 +316,93 @@ func (m *Model) attachOpenGlobalTools() {
 		if term, taken := m.ws.TakeGlobalTool(name); taken {
 			m.attachGlobalToolIn(entry, term, false)
 		}
+	}
+}
+
+// rememberActiveToolTabs records every global tool that is its host pane's
+// active tab right now (#1906), so the switch back into this project can
+// re-select it once the detached sessions re-attach. The record is replaced
+// wholesale: a pane that has since moved to a file, a content tab or a
+// project-local tool simply contributes nothing, and its plain tab index
+// survives the detach on its own.
+func (m *Model) rememberActiveToolTabs() {
+	ws := m.activeWS()
+	ws.ActiveTools = nil
+	for _, key := range ws.Panes.Keys() {
+		inst := ws.Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		if t := inst.TabTerminal(inst.ActiveTab()); t != nil {
+			if entry, ok := globalToolEntry(t.Tool()); ok {
+				ws.ActiveTools = append(ws.ActiveTools, entry.Name)
+			}
+		}
+	}
+}
+
+// snapshotActiveTabs records every pane's active tab index — the "before"
+// half of the switch-in restore (#1906), taken right before the global tool
+// attach appends (and activates) its tabs. Terminal panes are in it at index
+// 0: an arriving tool converts them into tab hosts (#1901), and their own
+// session must stay the selected tab.
+func (m *Model) snapshotActiveTabs() map[string]int {
+	ws := m.activeWS()
+	if ws == nil || ws.Panes == nil {
+		return nil
+	}
+	out := map[string]int{}
+	for _, key := range ws.Panes.Keys() {
+		switch inst := ws.Panes.Get(key); {
+		case inst == nil:
+		case inst.Kind() == pane.KindEditor:
+			out[key] = inst.ActiveTab()
+		case inst.Kind() == pane.KindTerminal:
+			out[key] = 0
+		}
+	}
+	return out
+}
+
+// restoreActiveToolTabs re-selects each pane's per-project active tab after
+// the switch-in global tool attach (#1906): first every pane goes back to the
+// index it held before the attach appended its tabs, then the global tools
+// this project itself had active reclaim their tab wherever it landed. A
+// remembered tool that did not come back (closed everywhere, or no longer
+// configured global here) contributes nothing, so the pre-attach index stands
+// and no pane is ever left pointing at a tab that is gone.
+func (m *Model) restoreActiveToolTabs(pre map[string]int) {
+	ws := m.activeWS()
+	if ws == nil || ws.Panes == nil {
+		return
+	}
+	changed := false
+	for key, idx := range pre {
+		inst := ws.Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor || idx >= inst.TabCount() {
+			continue
+		}
+		if idx != inst.ActiveTab() && inst.ActivateTab(idx) {
+			changed = true
+		}
+	}
+	for _, name := range ws.ActiveTools {
+		locs := m.toolLocations(name)
+		if len(locs) != 1 || locs[0].tab < 0 {
+			continue // gone, or dedicated: nothing to select
+		}
+		inst := ws.Panes.Get(locs[0].key)
+		if inst == nil || locs[0].tab == inst.ActiveTab() {
+			continue
+		}
+		if inst.ActivateTab(locs[0].tab) {
+			changed = true
+		}
+	}
+	if changed {
+		// attachGlobalToolIn saved the layout with the arriving tool tab
+		// active; persist the corrected selection over it.
+		saveLayout(ws.Tree, ws.Panes)
 	}
 }
 
