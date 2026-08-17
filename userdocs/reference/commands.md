@@ -210,6 +210,8 @@ bring their own.
 | Redo (Chronological) | `editor.redoChrono` | — | `g+` | `editor` pane |
 | Replace in File | `editor.replace` | `cmd+r` | `:s` | `editor` pane |
 | Select All | `editor.selectAll` | `cmd+a` | `ggVG` | `editor` pane |
+| Extend Selection | `editor.selection.extend` | `alt+up` | — | `editor` pane |
+| Shrink Selection | `editor.selection.shrink` | `alt+down` | — | `editor` pane |
 | Toggle Value Under Caret | `editor.toggleValue` | — | `g!` | `editor` pane |
 | Undo | `editor.undo` | `cmd+z` | `u` | `editor` pane |
 | Undo (Chronological) | `editor.undoChrono` | — | `g-` | `editor` pane |
@@ -296,6 +298,7 @@ bring their own.
 |---|---|---|---|---|
 | LSP: Call Hierarchy | `lsp.callHierarchy` | `ctrl+alt+h` | — | `editor` pane |
 | LSP: Show Intention Actions | `lsp.codeAction` | `alt+enter` | — | `editor` pane |
+| LSP: Run Code Lens | `lsp.codeLens` | — | — | `editor` pane |
 | LSP: Go to Definition | `lsp.definition` | `f4` | — | `editor` pane |
 | LSP: Diagnostic Under Caret | `lsp.diagnosticInfo` | `cmd+f1` | — | `editor` pane |
 | LSP: Document Symbols | `lsp.documentSymbols` | `cmd+f12` | — | everywhere |

@@ -473,6 +473,10 @@ type Model struct {
 	// for rendering. Stale positions may briefly lag an edit like semIndex.
 	inlayHints  []ilsp.InlayHint
 	hintsByLine map[int][]ilsp.InlayHint
+	// lensesByLine are the LSP code lenses (#1912) indexed per anchor line,
+	// rendered as one trailing virtual-text annotation via lineLensHint and
+	// executed through the lsp.codeLens command.
+	lensesByLine map[int][]ilsp.CodeLens
 	hlTheme     highlight.Theme
 	pal         *theme.Palette // active theme (Roadmap 0110); nil = default
 
@@ -563,6 +567,9 @@ type Model struct {
 	trimTrailing       bool
 	insertFinalNewline bool
 	showInlayHints     bool
+	// showCodeLens gates the code-lens annotations (#1912); rendering-only,
+	// like the inlay-hint toggle.
+	showCodeLens bool
 	// semanticTokens gates the LSP semantic-token overlay (#9) in styleAt
 	// (#1912); the cached semIndex stays, so flipping the toggle back resumes
 	// instantly — the same rendering-only gate the inlay hints use.
@@ -632,6 +639,7 @@ func New() Model {
 		insertFinalNewline: true,
 		spaceAfterPunct:    true,
 		showInlayHints:     false,
+		showCodeLens:       true,
 		semanticTokens:     true,
 		lspFolding:         true,
 		stickyScroll:       true,
@@ -757,6 +765,7 @@ func (m *Model) applyConfig() {
 	m.spaceAfterPunct = boolOr(m.cfg, "editor.typing.space_after_punctuation", m.spaceAfterPunct)
 	m.trimTrailing = boolOr(m.cfg, "editor.trim_trailing_whitespace", m.trimTrailing)
 	m.showInlayHints = boolOr(m.cfg, "lsp.inlay_hints", m.showInlayHints)
+	m.showCodeLens = boolOr(m.cfg, "lsp.code_lens", m.showCodeLens)
 	m.semanticTokens = boolOr(m.cfg, "lsp.semantic_tokens", m.semanticTokens)
 	m.lspFolding = boolOr(m.cfg, "lsp.folding", m.lspFolding)
 	m.insertFinalNewline = boolOr(m.cfg, "editor.insert_final_newline", m.insertFinalNewline)
@@ -942,6 +951,7 @@ func (m *Model) Load(path string) error {
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
+	m.lensesByLine = nil
 	m.applyConfig() // pick the .editorconfig overrides up before the next Update
 	m.scroll()
 	return nil
@@ -997,6 +1007,7 @@ func (m *Model) NewFile(path string) {
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
+	m.lensesByLine = nil
 	m.applyConfig() // pick the .editorconfig overrides up before the next Update
 	m.scroll()
 }
@@ -1032,6 +1043,7 @@ func (m *Model) RestoreText(text string) {
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
+	m.lensesByLine = nil
 	m.scroll()
 }
 
@@ -1087,6 +1099,7 @@ func (m *Model) SetPath(path string) tea.Cmd {
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
+	m.lensesByLine = nil
 	m.emit(EventChange)
 	return m.parseCmd()
 }
@@ -1374,6 +1387,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case ilsp.InlayHintsMsg:
 		if msg.Path == m.path {
 			m.setInlayHints(msg.Hints)
+		}
+		return m, nil
+	case ilsp.CodeLensesMsg:
+		// Code lenses (#1912): indexed per line, rendered as trailing
+		// virtual text next to the inlay hints (lineLensHint).
+		if msg.Path == m.path {
+			m.setCodeLenses(msg.Lenses)
 		}
 		return m, nil
 	case ilsp.InheritanceMarksMsg:

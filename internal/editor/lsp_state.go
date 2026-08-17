@@ -1547,6 +1547,48 @@ func hintText(h ilsp.InlayHint) string {
 	return text
 }
 
+// --- code lenses (#1912) ---
+
+// setCodeLenses replaces the code-lens set and rebuilds the per-line index
+// renderLine reads. Lenses arrive sorted by line from the manager.
+func (m *Model) setCodeLenses(lenses []ilsp.CodeLens) {
+	if len(lenses) == 0 {
+		m.lensesByLine = nil
+		return
+	}
+	m.lensesByLine = make(map[int][]ilsp.CodeLens)
+	for _, l := range lenses {
+		m.lensesByLine[l.Line] = append(m.lensesByLine[l.Line], l)
+	}
+}
+
+// lensCol is the pseudo-column anchoring a code-lens annotation: past any
+// real content, so the render loop's end-of-line flush emits it after the
+// last buffer cell.
+const lensCol = 1 << 30
+
+// lineLensHint folds a line's code lenses into one trailing virtual-text
+// annotation ("run test · 3 references") riding the inlay-hint machinery
+// (#1912): same dimmed-italic styling, same end-of-line flush, no new render
+// path. ok is false when the line has no lenses or the lsp.code_lens toggle
+// is off (cached lenses survive a toggle round-trip, they just stop
+// rendering; the lsp.codeLens command executes them either way).
+func (m Model) lineLensHint(line int) (ilsp.InlayHint, bool) {
+	if !m.showCodeLens || len(m.lensesByLine[line]) == 0 {
+		return ilsp.InlayHint{}, false
+	}
+	titles := make([]string, 0, len(m.lensesByLine[line]))
+	for _, l := range m.lensesByLine[line] {
+		if l.Title != "" {
+			titles = append(titles, l.Title)
+		}
+	}
+	if len(titles) == 0 {
+		return ilsp.InlayHint{}, false
+	}
+	return ilsp.InlayHint{Line: line, Col: lensCol, Label: "  " + strings.Join(titles, " · ")}, true
+}
+
 // gitMarkColor maps a gutter diff marker (Roadmap 0320, #464) to the theme's
 // vcs status slots: added green, changed blue, deleted the dim border tone.
 func (m Model) gitMarkColor(mk vcs.LineMark) color.Color {

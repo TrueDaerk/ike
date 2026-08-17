@@ -128,6 +128,11 @@ secrets — are documented together, with screenshots, in
 | Completion while typing | `lsp.completion_auto` | boolean | `true` | user | Open the completion popup on identifier characters; server trigger characters (".") and the manual ctrl+space request work either way |
 | Signature help while typing | `lsp.signature_auto` | boolean | `true` | user | Open the signature-help popup on the server's trigger characters ("(", ","); the manual Parameter Info command works either way |
 | Inlay hints | `lsp.inlay_hints` | boolean | `false` | user | Show inline parameter-name and type hints from the server; off by default — parameter info is available on demand instead |
+| Code lenses | `lsp.code_lens` | boolean | `true` | user | Show server code lenses ("run test", reference counts) as annotations on the anchored line; the LSP: Run Code Lens command executes them |
+| Server folding ranges | `lsp.folding` | boolean | `true` | user | Fold along the server's folding ranges (import blocks, comments, regions) where available; Tree-sitter folding remains the fallback either way |
+| Semantic highlighting | `lsp.semantic_tokens` | boolean | `true` | user | Refine Tree-sitter syntax colors with server semantic tokens (parameters vs locals, constants vs mutable variables) |
+| Server selection ranges | `lsp.selection_range` | boolean | `true` | user | Base Extend/Shrink Selection on the server's syntactic ranges; Tree-sitter ranges are used when off or unsupported |
+| Refactor on file rename | `lsp.will_rename` | boolean | `true` | user | Ask language servers for refactoring edits (updated import paths) before a rename or move in the explorer and apply them |
 | Server log level | `lsp.log_level` | enum: `error`, `warn`, `info`, `debug` | `warn` | user | Verbosity of the language-server log the LSP: Show Server Log command opens |
 
 ### Appearance
