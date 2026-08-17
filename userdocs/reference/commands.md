@@ -36,6 +36,7 @@ bring their own.
 | Step Out | `debug.stepOut` | `shift+f8` | — | everywhere |
 | Step Over | `debug.stepOver` | `f8` | — | everywhere |
 | Stop Debug Session | `debug.stop` | `cmd+f2` | — | everywhere |
+| Debug Test at Cursor | `debug.testAtCursor` | — | — | everywhere |
 | Toggle Breakpoint | `debug.toggleBreakpoint` | `cmd+f8` | — | everywhere |
 | Write Heap Dump | `diag.heapDump` | — | — | everywhere |
 | Memory Statistics | `diag.memoryStats` | — | — | everywhere |
@@ -118,6 +119,7 @@ bring their own.
 | New Python Environment… | `python.newEnvironment` | — | — | everywhere |
 | Run File | `run.file` | `shift+f10` | — | everywhere |
 | Rerun Last | `run.rerun` | `cmd+f5` | — | everywhere |
+| Run/Debug Configurations… | `run.select` | — | — | everywhere |
 | Run Test at Cursor | `run.testAtCursor` | `ctrl+shift+f10` | — | everywhere |
 | Run Tests in File | `run.testsInFile` | — | — | everywhere |
 | Open Scratch File… | `scratch.list` | — | — | everywhere |

@@ -13,9 +13,15 @@ type Source struct {
 }
 
 // SourceBreakpoint is one requested breakpoint (setBreakpoints). Lines are
-// 1-based on the wire.
+// 1-based on the wire. Condition, HitCondition and LogMessage (#1914) are
+// optional refinements; the session strips the ones the adapter's initialize
+// response did not advertise, so an old adapter never sees fields it would
+// misread.
 type SourceBreakpoint struct {
-	Line int `json:"line"`
+	Line         int    `json:"line"`
+	Condition    string `json:"condition,omitempty"`
+	HitCondition string `json:"hitCondition,omitempty"`
+	LogMessage   string `json:"logMessage,omitempty"`
 }
 
 // Breakpoint is the adapter's verdict on a requested breakpoint.
@@ -50,6 +56,15 @@ type Scope struct {
 type Variable struct {
 	Name               string `json:"name"`
 	Value              string `json:"value"`
+	Type               string `json:"type,omitempty"`
+	VariablesReference int    `json:"variablesReference"`
+}
+
+// EvaluateResult is the answer to an evaluate request (#1914, watches). A
+// non-zero VariablesReference marks a structured value expandable through
+// Variables, valid only for the current paused state like every reference.
+type EvaluateResult struct {
+	Result             string `json:"result"`
 	Type               string `json:"type,omitempty"`
 	VariablesReference int    `json:"variablesReference"`
 }

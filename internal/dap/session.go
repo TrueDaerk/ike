@@ -22,7 +22,10 @@ type Session struct {
 
 // capabilities is the subset of the initialize response IKE reads.
 type capabilities struct {
-	SupportsSetVariable bool `json:"supportsSetVariable"`
+	SupportsSetVariable               bool `json:"supportsSetVariable"`
+	SupportsConditionalBreakpoints    bool `json:"supportsConditionalBreakpoints"`
+	SupportsHitConditionalBreakpoints bool `json:"supportsHitConditionalBreakpoints"`
+	SupportsLogPoints                 bool `json:"supportsLogPoints"`
 }
 
 // Start spawns the adapter described by spec and connects. Events (stopped,
@@ -76,6 +79,22 @@ func (s *Session) Initialize() error {
 // SupportsSetVariable reports whether the adapter accepts setVariable requests.
 func (s *Session) SupportsSetVariable() bool { return s.caps.SupportsSetVariable }
 
+// SupportsConditionalBreakpoints reports whether the adapter evaluates
+// breakpoint conditions (#1914). Without it, conditions are stripped before
+// setBreakpoints and the breakpoint stops unconditionally.
+func (s *Session) SupportsConditionalBreakpoints() bool {
+	return s.caps.SupportsConditionalBreakpoints
+}
+
+// SupportsHitConditionalBreakpoints reports hit-count support (#1914).
+func (s *Session) SupportsHitConditionalBreakpoints() bool {
+	return s.caps.SupportsHitConditionalBreakpoints
+}
+
+// SupportsLogPoints reports logpoint support (#1914). Without it, log
+// messages are stripped and the breakpoint behaves as a plain stop.
+func (s *Session) SupportsLogPoints() bool { return s.caps.SupportsLogPoints }
+
 // OnRunInTerminal registers the handler for the adapter's runInTerminal reverse
 // request (#625). fn runs on the read-loop goroutine and MUST hand off (it may
 // not block); it replies asynchronously with RespondRunInTerminal or
@@ -125,12 +144,26 @@ func (s *Session) LaunchAsync(args map[string]any) <-chan error {
 	return done
 }
 
-// SetBreakpoints replaces path's breakpoints. lines are IKE's 0-based buffer
-// lines; the wire speaks 1-based.
-func (s *Session) SetBreakpoints(path string, lines []int) ([]Breakpoint, error) {
-	bps := make([]SourceBreakpoint, len(lines))
-	for i, l := range lines {
-		bps[i] = SourceBreakpoint{Line: l + 1}
+// SetBreakpoints replaces path's breakpoints. Lines in reqs are IKE's 0-based
+// buffer lines; the wire speaks 1-based. Condition/hit-count/log-message
+// fields the adapter did not advertise in its capabilities are stripped here
+// (#1914) — the breakpoint itself is always sent, so an unsupported
+// refinement degrades to a plain stop instead of a silently missing
+// breakpoint.
+func (s *Session) SetBreakpoints(path string, reqs []SourceBreakpoint) ([]Breakpoint, error) {
+	bps := make([]SourceBreakpoint, len(reqs))
+	for i, r := range reqs {
+		r.Line++
+		if !s.caps.SupportsConditionalBreakpoints {
+			r.Condition = ""
+		}
+		if !s.caps.SupportsHitConditionalBreakpoints {
+			r.HitCondition = ""
+		}
+		if !s.caps.SupportsLogPoints {
+			r.LogMessage = ""
+		}
+		bps[i] = r
 	}
 	body, err := s.conn.Call("setBreakpoints", map[string]any{
 		"source":      Source{Path: path},
@@ -260,6 +293,29 @@ func (s *Session) SetVariable(ref int, name, value string) (Variable, error) {
 		return Variable{}, err
 	}
 	return Variable{Name: name, Value: resp.Value, Type: resp.Type, VariablesReference: resp.VariablesReference}, nil
+}
+
+// Evaluate evaluates expr in the context of frameID (0 = the adapter's
+// default frame) and returns the rendered result (#1914, watches). context is
+// the DAP evaluate context hint ("watch", "repl", "hover"); adapters may use
+// it to pick side-effect rules.
+func (s *Session) Evaluate(expr string, frameID int, context string) (EvaluateResult, error) {
+	args := map[string]any{"expression": expr}
+	if frameID != 0 {
+		args["frameId"] = frameID
+	}
+	if context != "" {
+		args["context"] = context
+	}
+	body, err := s.conn.Call("evaluate", args)
+	if err != nil {
+		return EvaluateResult{}, err
+	}
+	var resp EvaluateResult
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return EvaluateResult{}, err
+	}
+	return resp, nil
 }
 
 // Disconnect asks the adapter to end the session (terminating the debuggee).

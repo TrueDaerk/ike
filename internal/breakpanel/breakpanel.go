@@ -52,6 +52,7 @@ type row struct {
 	line    int
 	enabled bool
 	preview string
+	meta    debug.Meta // condition / hit count / log message (#1914)
 }
 
 // Model is the tool window state. Value type with pointer-receiver mutators,
@@ -76,6 +77,15 @@ type Model struct {
 	lastClickRow int
 	lastClickAt  time.Time
 	now          func() time.Time
+
+	// Inline refinement editing (#1914): editField names the condition/hit/
+	// log field being typed for the breakpoint editPath:editLine.
+	editing   bool
+	editField metaField
+	editPath  string
+	editLine  int
+	editBuf   []rune
+	editCur   int
 }
 
 // New returns an empty panel; the store arrives via SetStore.
@@ -116,6 +126,9 @@ func (m *Model) Cursor() int { return m.cursor }
 // breakpoint (path + line) where possible. The root model calls it after
 // every store mutation — gutter toggles included — so the list stays live.
 func (m *Model) Refresh() {
+	// The rows the editor anchored to are being replaced (#640's rule): an
+	// open refinement editor cancels rather than committing stale state.
+	m.cancelEdit()
 	keepPath, keepLine, keepHeader := "", -1, false
 	if m.cursor >= 0 && m.cursor < len(m.rows) {
 		r := m.rows[m.cursor]
@@ -126,7 +139,7 @@ func (m *Model) Refresh() {
 		for _, path := range sortedKeys(m.store.All()) {
 			m.rows = append(m.rows, row{header: true, path: path})
 			for _, l := range m.store.Lines(path) {
-				r := row{path: path, line: l, enabled: m.store.Enabled(path, l)}
+				r := row{path: path, line: l, enabled: m.store.Enabled(path, l), meta: m.store.MetaAt(path, l)}
 				if m.preview != nil {
 					r.preview = m.preview(path, l)
 				}
@@ -164,6 +177,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	if m.editing {
+		return m.editKey(msg)
+	}
 	// Shared list semantics (#1666): steps wrap, page jumps clamp.
 	if ui.ListNav(msg.String(), &m.cursor, len(m.rows), m.bodyHeight(), ui.NavFull) {
 		m.clampScroll()
@@ -177,6 +193,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			msg := ToggleEnabledMsg{Path: r.path, Line: r.line}
 			return func() tea.Msg { return msg }
 		}
+	case "c":
+		m.startMetaEdit(fieldCondition)
+	case "n":
+		m.startMetaEdit(fieldHit)
+	case "l":
+		m.startMetaEdit(fieldLog)
 	case "d", "delete", "backspace":
 		if r, ok := m.selected(); ok {
 			msg := RemoveMsg{Path: r.path, Line: r.line}
@@ -264,27 +286,51 @@ func (m *Model) renderRows(pal *theme.Palette, height int) string {
 }
 
 // renderRow draws one line: file headers accented, breakpoints glyph-tagged —
-// ● enabled in the error tone (matching the gutter), ○ disabled faint.
+// ● enabled in the error tone (matching the gutter), ○ disabled faint. A
+// logpoint renders ◆ in the warning tone (#1914) — it logs instead of
+// stopping — and refinements trail the preview as `if …` / `hit …` / `log …`.
 func (m *Model) renderRow(pal *theme.Palette, base, header lipgloss.Style, i int) string {
 	r := m.rows[i]
+	if m.editing && i == m.cursor && !r.header && r.path == m.editPath && r.line == m.editLine {
+		return m.renderEditRow(pal, r)
+	}
 	var line string
 	style := base
 	if r.header {
 		line = " " + m.shorten(r.path)
 		style = header
 	} else {
+		logpoint := r.meta.LogMessage != ""
 		glyph := "●"
+		if logpoint {
+			glyph = "◆"
+		}
 		if !r.enabled {
 			glyph = "○"
+			if logpoint {
+				glyph = "◇"
+			}
 		}
 		line = "   " + glyph + " " + strconv.Itoa(r.line+1)
 		if r.preview != "" {
 			line += "  " + r.preview
 		}
-		if r.enabled {
-			style = style.Foreground(pal.Error)
-		} else {
+		if r.meta.Condition != "" {
+			line += "  if " + r.meta.Condition
+		}
+		if r.meta.HitCondition != "" {
+			line += "  hit " + r.meta.HitCondition
+		}
+		if logpoint {
+			line += "  log \"" + r.meta.LogMessage + "\""
+		}
+		switch {
+		case !r.enabled:
 			style = style.Faint(true)
+		case logpoint:
+			style = style.Foreground(pal.Warning)
+		default:
+			style = style.Foreground(pal.Error)
 		}
 	}
 	if i == m.cursor {
@@ -297,9 +343,39 @@ func (m *Model) renderRow(pal *theme.Palette, base, header lipgloss.Style, i int
 	return style.Render(m.clip(line))
 }
 
-// footer shows the key hints.
+// renderEditRow draws the inline refinement editor on the selected row (#1914):
+// the field keyword, the typed value and a cursor, windowed to the width.
+func (m *Model) renderEditRow(pal *theme.Palette, r row) string {
+	prefix := "   " + strconv.Itoa(r.line+1) + " " + m.editField.label() + ": "
+	line := append([]rune(prefix), m.editBuf...)
+	ci := len([]rune(prefix)) + m.editCur
+	if ci == len(line) {
+		line = append(line, ' ') // the cursor sits past the buffer end
+	}
+	if w := m.width; w > 0 && len(line) > w {
+		start := ci - w + 1
+		if start < 0 {
+			start = 0
+		}
+		if start > len(line)-w {
+			start = len(line) - w
+		}
+		line = line[start : start+w]
+		ci -= start
+	}
+	style := lipgloss.NewStyle().Foreground(pal.Accent)
+	cursor := lipgloss.NewStyle().Reverse(true).Render(string(line[ci]))
+	return style.Render(string(line[:ci])) + cursor + style.Render(string(line[ci+1:]))
+}
+
+// footer shows the key hints; while the refinement editor is open it explains
+// that editor instead.
 func (m *Model) footer(pal *theme.Palette) string {
-	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter jump · space enable/disable · d delete · D delete all · j/k move"))
+	hints := " enter jump · space enable/disable · c condition · n hit count · l log message · d delete · D delete all"
+	if m.editing {
+		hints = " enter apply (empty clears) · esc cancel"
+	}
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(hints))
 }
 
 // shorten renders a store key through the injected shortener.

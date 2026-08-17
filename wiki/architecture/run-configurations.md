@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Run Configurations
-description: Work stream 0350 — named, persisted run/debug configurations synthesized into command lines through the language registry; per-project store in .ike/runconfigs.json; output in the dedicated Run tool pane (#1905).
+description: Work stream 0350 — named, persisted run/debug configurations synthesized into command lines through the language registry; per-project store in .ike/runconfigs.json; output in the dedicated Run tool pane (#1905); run.select picker merging .vscode/launch.json imports (#1914).
 resource: internal/run
-tags: [architecture, run, debug, toolchain, languages]
-timestamp: 2026-08-17T00:00:00Z
+tags: [architecture, run, debug, toolchain, languages, vscode]
+timestamp: 2026-08-17T12:00:00Z
 ---
 
 # Run Configurations (0350)
@@ -171,6 +171,28 @@ Wiring:
   which also registers it with **run.rerun's last-used memory**, so rerun
   repeats the exact test.
 
+## The picker and launch.json (#1914)
+
+**`run.select`** (Run menu, palette) opens the run-configuration picker: a
+palette-locked mode (`internal/app/run_picker.go`, the stored-HTTP-requests
+pattern) listing every stored configuration plus, when `run.vscode_launch` is
+on (default), the compatible entries of the project's `.vscode/launch.json`.
+
+`internal/vscodelaunch` is the leaf parser: JSONC-tolerant (comments,
+trailing commas), it maps `launch`-request entries of types `go` /
+`python` / `debugpy` / `php` onto `run.Config{Kind: KindDebug}` —
+`${workspaceFolder}`/`${workspaceRoot}` expanded; entries with other
+variables, attach requests, unknown types, or programs outside the root are
+skipped silently (launch.json is someone else's file; a partial import beats
+an error). Go's `"mode": "test"` maps to a test-scope config.
+
+Merging happens at open time and nothing is written back — the store stays
+authoritative and wins name collisions; imported rows name their source in
+the detail column. Picking a run-kind row rides the ordinary `launchRun`
+funnel; a debug-kind row (all launch.json imports, and the picker is how a
+stored debug config is launched by name) goes through `startDebugConfig`,
+the same guard funnel as `debug.start`.
+
 ## Breakpoints (#577)
 
 `internal/debug` holds the per-project breakpoint store: line breakpoints
@@ -208,8 +230,9 @@ spawn through `internal/lsp/transport` exactly like language servers.
 Languages contribute adapters via `lang.DebugAdapterProvider`
 (`DebugAdapter` argv + `DebugLaunchArgs`): Python uses debugpy
 (`<interpreter> -m debugpy.adapter`; module or program launch form matching
-the run config). Go's `dlv dap` only speaks DAP over a socket, so it waits
-for a socket transport.
+the run config). Go's `dlv dap` only speaks DAP over a socket, so it rides
+the in-process connect seam instead (#1914) — see
+[Debugger](/architecture/debugger.md) § "Go: delve over a socket".
 
 ## Consumers
 

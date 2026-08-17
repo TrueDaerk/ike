@@ -154,7 +154,7 @@ func TestFullSessionFlow(t *testing.T) {
 		}
 		engine.ack(name, tid, `id="9"`)
 	}()
-	bps, err := s.SetBreakpoints("/proj/test.php", []int{4})
+	bps, err := s.SetBreakpoints("/proj/test.php", []dap.SourceBreakpoint{{Line: 4}})
 	if err != nil {
 		t.Fatalf("setBreakpoints: %v", err)
 	}

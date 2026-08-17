@@ -177,6 +177,16 @@ type (
 	DebugContinueMsg struct{}
 )
 
+// DebugTestAtCursorMsg debugs the test at or nearest above the cursor
+// (#1914): run.testAtCursor's selection rules with a debug launch (delve's
+// test mode for Go).
+type DebugTestAtCursorMsg struct{}
+
+// RunSelectMsg opens the run-configuration picker (#1914): every stored
+// configuration plus the matching .vscode/launch.json entries; picking one
+// runs it (debug-kind entries start a debug session).
+type RunSelectMsg struct{}
+
 // RunRerunMsg reruns the last-used run configuration (#576).
 type RunRerunMsg struct{}
 
@@ -366,6 +376,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("run.rerun", "Rerun Last", RunRerunMsg{}),
 			appCommand("run.testAtCursor", "Run Test at Cursor", RunTestAtCursorMsg{}),
 			appCommand("run.testsInFile", "Run Tests in File", RunTestsInFileMsg{}),
+			appCommand("run.select", "Run/Debug Configurations…", RunSelectMsg{}),
 			appCommand("http.run", "Run HTTP Request", HTTPRunMsg{}),
 			appCommand("http.copyBody", "Copy HTTP Response Body", HTTPCopyBodyMsg{}),
 			appCommand("http.copyHeaders", "Copy HTTP Response Headers", HTTPCopyHeadersMsg{}),
@@ -378,6 +389,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
 			appCommand("debug.breakpoints", "Breakpoints", BreakpointsToggleMsg{}),
 			appCommand("debug.start", "Debug File", DebugStartMsg{}),
+			appCommand("debug.testAtCursor", "Debug Test at Cursor", DebugTestAtCursorMsg{}),
 			appCommand("debug.listen", "Listen for PHP Debug Connections", DebugListenMsg{}),
 			appCommand("debug.stop", "Stop Debug Session", DebugStopMsg{}),
 			appCommand("debug.stepOver", "Step Over", DebugStepOverMsg{}),

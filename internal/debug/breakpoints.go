@@ -20,11 +20,36 @@ import (
 type Breakpoints struct {
 	files    map[string][]int
 	disabled map[string]map[int]bool
+	meta     map[string]map[int]Meta
+}
+
+// Meta are the optional refinements of one breakpoint (#1914): a condition
+// expression, a hit-count condition and a log message. A breakpoint with a
+// log message is a logpoint — it logs instead of stopping. The zero Meta is
+// a plain breakpoint.
+type Meta struct {
+	Condition    string `json:"condition,omitempty"`
+	HitCondition string `json:"hit_condition,omitempty"`
+	LogMessage   string `json:"log_message,omitempty"`
+}
+
+// IsZero reports whether m carries no refinement.
+func (m Meta) IsZero() bool { return m == Meta{} }
+
+// Spec is one enabled breakpoint with its refinements — the shape the debug
+// adapters receive (#1914). Line is 0-based like the rest of the store.
+type Spec struct {
+	Line int
+	Meta
 }
 
 // NewBreakpoints returns an empty store.
 func NewBreakpoints() *Breakpoints {
-	return &Breakpoints{files: map[string][]int{}, disabled: map[string]map[int]bool{}}
+	return &Breakpoints{
+		files:    map[string][]int{},
+		disabled: map[string]map[int]bool{},
+		meta:     map[string]map[int]Meta{},
+	}
 }
 
 // File returns the path of the persisted store.
@@ -39,8 +64,16 @@ func File() string {
 // subset. Files written before #1377 hold the bare files map; Load falls back
 // to that layout, so old stores upgrade silently on the next Save.
 type persisted struct {
-	Files    map[string][]int `json:"files"`
-	Disabled map[string][]int `json:"disabled,omitempty"`
+	Files    map[string][]int           `json:"files"`
+	Disabled map[string][]int           `json:"disabled,omitempty"`
+	Meta     map[string][]persistedMeta `json:"meta,omitempty"`
+}
+
+// persistedMeta is one line's refinements on disk (#1914); the embedded Meta
+// flattens into the same object as the line.
+type persistedMeta struct {
+	Line int `json:"line"`
+	Meta
 }
 
 // Load reads the persisted set; missing or malformed files load empty —
@@ -70,6 +103,11 @@ func Load() *Breakpoints {
 			b.SetEnabled(path, l, false)
 		}
 	}
+	for path, entries := range p.Meta {
+		for _, e := range entries {
+			b.SetMeta(path, e.Line, e.Meta)
+		}
+	}
 	return b
 }
 
@@ -89,6 +127,20 @@ func (b *Breakpoints) Save() error {
 		}
 		sort.Ints(out)
 		p.Disabled[path] = out
+	}
+	for path, byLine := range b.meta {
+		if len(byLine) == 0 {
+			continue
+		}
+		if p.Meta == nil {
+			p.Meta = map[string][]persistedMeta{}
+		}
+		out := make([]persistedMeta, 0, len(byLine))
+		for l, m := range byLine {
+			out = append(out, persistedMeta{Line: l, Meta: m})
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].Line < out[j].Line })
+		p.Meta[path] = out
 	}
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
@@ -155,7 +207,43 @@ func (b *Breakpoints) RemoveAll() int {
 	n := b.Count()
 	b.files = map[string][]int{}
 	b.disabled = map[string]map[int]bool{}
+	b.meta = map[string]map[int]Meta{}
 	return n
+}
+
+// SetMeta attaches refinements to path:line (#1914); a zero Meta removes the
+// entry, a line without a breakpoint is ignored.
+func (b *Breakpoints) SetMeta(path string, line int, m Meta) {
+	if !b.Has(path, line) {
+		return
+	}
+	if m.IsZero() {
+		delete(b.meta[path], line)
+		if len(b.meta[path]) == 0 {
+			delete(b.meta, path)
+		}
+		return
+	}
+	if b.meta[path] == nil {
+		b.meta[path] = map[int]Meta{}
+	}
+	b.meta[path][line] = m
+}
+
+// MetaAt returns path:line's refinements (zero for a plain breakpoint).
+func (b *Breakpoints) MetaAt(path string, line int) Meta {
+	return b.meta[path][line]
+}
+
+// EnabledSpecs returns path's enabled breakpoints with their refinements,
+// sorted ascending by line — the set a debug adapter receives (#1914).
+func (b *Breakpoints) EnabledSpecs(path string) []Spec {
+	lines := b.EnabledLines(path)
+	out := make([]Spec, len(lines))
+	for i, l := range lines {
+		out[i] = Spec{Line: l, Meta: b.meta[path][l]}
+	}
+	return out
 }
 
 // SetEnabled marks path:line enabled or disabled (#1377); a line without a
@@ -238,8 +326,10 @@ func (b *Breakpoints) AdjustEdit(path string, cursorAfter, delta int) {
 	next := make([]int, 0, len(lines))
 	seen := map[int]bool{}
 	var disabled map[int]bool
+	var meta map[int]Meta
 	for _, l := range lines {
 		wasDisabled := b.disabled[path][l]
+		wasMeta := b.meta[path][l]
 		if l >= threshold {
 			l += delta
 			if l < cursorAfter {
@@ -251,12 +341,19 @@ func (b *Breakpoints) AdjustEdit(path string, cursorAfter, delta int) {
 		}
 		seen[l] = true
 		next = append(next, l)
-		// The disabled flag travels with its shifted line (#1377).
+		// The disabled flag travels with its shifted line (#1377), as do the
+		// refinements (#1914).
 		if wasDisabled {
 			if disabled == nil {
 				disabled = map[int]bool{}
 			}
 			disabled[l] = true
+		}
+		if !wasMeta.IsZero() {
+			if meta == nil {
+				meta = map[int]Meta{}
+			}
+			meta[l] = wasMeta
 		}
 	}
 	sort.Ints(next)
@@ -265,6 +362,11 @@ func (b *Breakpoints) AdjustEdit(path string, cursorAfter, delta int) {
 		delete(b.disabled, path)
 	} else {
 		b.disabled[path] = disabled
+	}
+	if meta == nil {
+		delete(b.meta, path)
+	} else {
+		b.meta[path] = meta
 	}
 }
 
@@ -281,6 +383,10 @@ func (b *Breakpoints) clear(path string, line int) {
 	delete(b.disabled[path], line)
 	if len(b.disabled[path]) == 0 {
 		delete(b.disabled, path)
+	}
+	delete(b.meta[path], line)
+	if len(b.meta[path]) == 0 {
+		delete(b.meta, path)
 	}
 	lines := b.files[path]
 	for i, l := range lines {

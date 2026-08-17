@@ -52,6 +52,8 @@ type debugState struct {
 	paused     bool
 	frames     []dap.StackFrame
 	pausedPath string // file carrying the paused-line marker
+	curFrameID int    // frame watches evaluate against (#1914): top of the stop, or the selected frame
+	inlinePath string // file carrying the inline variable values (#1914)
 
 	// pendingOut buffers debuggee output that arrived before the tool window
 	// opened (output can precede the first stop); openDebugPanel flushes it into
@@ -245,6 +247,15 @@ func (m *Model) startDebug() {
 		m.host.Notify(host.Info, "debug: no run command for this file type")
 		return
 	}
+	store.Touch(cfg.Name)
+	_ = run.Save(store)
+	m.startDebugConfig(root, *cfg)
+}
+
+// startDebugConfig runs the shared launch guards and starts cfg under its
+// language's debug adapter — the funnel for debug.start, debug.testAtCursor
+// and debug-kind picks from the run-configuration picker (#1914).
+func (m *Model) startDebugConfig(root string, cfg run.Config) {
 	if !lang.SupportsDebug(cfg.Lang) {
 		m.host.Notify(host.Info, "debug: "+cfg.Lang+" has no debug adapter yet")
 		return
@@ -253,10 +264,42 @@ func (m *Model) startDebug() {
 		m.host.Notify(host.Info, "debug: a session is already running")
 		return
 	}
+	m.dbgLaunching = true
+	m.launchOrInstall(root, cfg, false)
+}
+
+// debugTestAtCursor is the debug.testAtCursor handler (#1914): the test
+// declared at or nearest above the cursor launches under the debugger — the
+// run.testAtCursor selection rules with a debug launch (delve mode "test").
+// The synthesized configuration is the same one run.testAtCursor upserts, so
+// repeats fold into one config either way.
+func (m *Model) debugTestAtCursor() {
+	ed := m.activeEditor()
+	if ed == nil || !ed.HasFile() {
+		m.host.Notify(host.Info, "debug: focus a file tab first")
+		return
+	}
+	if !lang.HasTests(ed.Path()) {
+		m.host.Notify(host.Info, "debug: no test runner for this file")
+		return
+	}
+	line, _ := ed.CursorPos()
+	t, ok := ed.NearestTestAt(line)
+	if !ok {
+		m.host.Notify(host.Info, "debug: no test at or above the cursor")
+		return
+	}
+	root := projectRoot()
+	cfg, ok := run.TestConfig(root, ed.Path(), &t)
+	if !ok {
+		m.host.Notify(host.Info, "debug: no test runner for this file")
+		return
+	}
+	store := run.Load()
+	store.Upsert(cfg)
 	store.Touch(cfg.Name)
 	_ = run.Save(store)
-	m.dbgLaunching = true
-	m.launchOrInstall(root, *cfg, false)
+	m.startDebugConfig(root, cfg)
 }
 
 // listenCfgName names the synthetic listen configuration (#823); the toggle
@@ -373,7 +416,10 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	if absFile != "" && !filepath.IsAbs(absFile) {
 		absFile = filepath.Join(root, absFile)
 	}
-	spec := lang.RunSpec{File: absFile, Module: cfg.Module, Args: cfg.Args, Listen: cfg.Listen}
+	spec := lang.RunSpec{
+		File: absFile, Module: cfg.Module, Args: cfg.Args, Listen: cfg.Listen,
+		Tests: cfg.Tests, TestName: cfg.TestName, TestKind: cfg.TestKind,
+	}
 	launchArgs, ok := lang.DebugLaunchArgs(cfg.Lang, root, spec, cfg.Dir(root), cfg.Env)
 	if !ok {
 		m.host.Notify(host.Error, "debug: no launch template for "+cfg.Lang)
@@ -487,19 +533,20 @@ func (m *Model) handleDebugEvent(evSess *dap.Session, ev dap.Event) {
 	switch ev.Name {
 	case "initialized":
 		// Configuration phase: push every stored enabled breakpoint (#1377
-		// keeps disabled ones out of the adapter), then finish.
-		files := map[string][]int{}
+		// keeps disabled ones out of the adapter; #1914 refinements ride
+		// along), then finish.
+		files := map[string][]dap.SourceBreakpoint{}
 		for file := range m.bpts.All() {
-			files[file] = m.bpts.EnabledLines(file)
+			files[file] = dapBreakpoints(m.bpts.EnabledSpecs(file))
 		}
 		root := dbg.root
 		go func() {
-			for file, lines := range files {
+			for file, bps := range files {
 				abs := file
 				if !filepath.IsAbs(abs) {
 					abs = filepath.Join(root, abs)
 				}
-				if _, err := sess.SetBreakpoints(abs, lines); err != nil {
+				if _, err := sess.SetBreakpoints(abs, bps); err != nil {
 					send(debugErrMsg{err: err})
 				}
 			}
@@ -673,6 +720,7 @@ func (m *Model) applyDebugStop(msg debugStoppedMsg) *dap.StackFrame {
 	if len(msg.frames) == 0 {
 		return nil
 	}
+	dbg.curFrameID = msg.frames[0].ID
 	top := msg.frames[0]
 	if top.Source.Path == "" {
 		return nil
@@ -691,8 +739,11 @@ func (m *Model) markPausedLine(path string, line int) {
 	}
 }
 
-// clearPausedMarker removes the marker from the file that carried it.
+// clearPausedMarker removes the marker from the file that carried it; the
+// inline variable values disappear with it (#1914) — they describe the
+// paused state.
 func (m *Model) clearPausedMarker() {
+	m.clearInlineValues()
 	if m.dbg == nil || m.dbg.pausedPath == "" {
 		return
 	}
@@ -748,11 +799,22 @@ func (m Model) debugPanel() *debugpanel.Model {
 	return m.activeWS().Panes.Get(pane.DebugKey).Debug()
 }
 
-// debugPanelEditing reports whether the focused pane is the debug panel with an
-// open inline value editor, so the app routes every key straight to it (#627).
+// debugPanelEditing reports whether the focused pane is the debug panel with
+// an open inline value/watch editor — or the breakpoints panel with an open
+// refinement editor (#1914) — so the app routes every key straight to it
+// (#627).
 func (m Model) debugPanelEditing() bool {
 	inst := m.activeWS().Panes.FocusedInstance()
-	return inst != nil && inst.Kind() == pane.KindDebug && inst.Debug().Editing()
+	if inst == nil {
+		return false
+	}
+	switch inst.Kind() {
+	case pane.KindDebug:
+		return inst.Debug().Editing()
+	case pane.KindBreakpoints:
+		return inst.Breakpoints().Editing()
+	}
+	return false
 }
 
 // openDebugPanel opens the debug pane pair (#1370): the frames/variables
@@ -798,6 +860,9 @@ func (m *Model) attachDebugPanel(p *debugpanel.Model) {
 	}
 	p.SetEditable(m.dbg.sess.SupportsSetVariable())
 	m.dbg.panelOpened = true
+	// A freshly opened (or restored) panel shows the watch expressions right
+	// away (#1914); the stop that opened it evaluates them next.
+	m.pushWatches()
 }
 
 // debugTermInstance returns the debuggee terminal pane's instance (#1370),
@@ -957,8 +1022,9 @@ func (m *Model) flushDebugOutput() {
 }
 
 // fetchScopes loads a frame's scopes plus the first scope's variables and
-// feeds the panel via messages.
-func (m *Model) fetchScopes(frameID int) {
+// feeds the panel via messages. path is the frame's source file: the first
+// scope's variables double as the inline values there (#1914).
+func (m *Model) fetchScopes(frameID int, path string) {
 	dbg := m.dbg
 	if dbg == nil {
 		return
@@ -975,6 +1041,9 @@ func (m *Model) fetchScopes(frameID int) {
 		if len(scopes) > 0 && scopes[0].VariablesReference > 0 {
 			if vars, err := sess.Variables(scopes[0].VariablesReference); err == nil {
 				send(debugVarsMsg{ref: scopes[0].VariablesReference, vars: vars})
+				if path != "" {
+					send(debugLocalsMsg{sess: sess, path: path, vars: vars})
+				}
 			}
 		}
 	}()

@@ -629,6 +629,10 @@ func (m Model) View() string {
 			// The span delta of a log selection (#1736) outranks both: it
 			// answers a question the user just asked, on the row they move.
 			row = spanned
+		} else if dbg, ok := m.debugValueAnnotate(row, i, annotWidth); ok {
+			// Inline debugger values (#1914): the stopped frame's locals are
+			// the state the user is inspecting right now.
+			row = dbg
 		} else if flight, ok := m.httpFlightAnnotate(row, i, annotWidth); ok {
 			// A request dispatched from this file is still running (#1746):
 			// live state outranks blame, which is not going anywhere.

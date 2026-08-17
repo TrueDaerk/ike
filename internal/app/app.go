@@ -357,6 +357,12 @@ type Model struct {
 	// directory.
 	httpEnvs *httpEnvMode
 	httpEnv  *httpEnvStore
+	// runConfigs is the palette mode listing run/debug configurations
+	// (#1914); run.select fills and opens it.
+	runConfigs *runConfigsMode
+	// watchExprs are the debugger watch expressions (#1914): in memory,
+	// surviving debug sessions; re-evaluated on every stop.
+	watchExprs []string
 	// layoutSelect is the open pane-selection mini-map preceding the name
 	// prompt (#1568); layoutSaveSel carries its confirmed selection into the
 	// prompt's save (nil = full snapshot).
@@ -852,6 +858,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	layoutsPicker := newLayoutsMode(layoutNames)    // saved window layouts picker (#1175)
 	httpRequests := newHTTPRequestsMode()           // stored HTTP responses picker (#1829)
 	httpEnvs := newHTTPEnvMode()                    // http-client.env.json picker (#1867)
+	runConfigs := newRunConfigsMode()               // run/debug configurations picker (#1914)
 	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
 	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
@@ -882,10 +889,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:           help.New(reg, bindings, helpMinCol(cfg)),
 		shell:          ui.New(shellConfig(cfg)),
 		vcs:            vcsSt,
-		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEnvs),
+		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEnvs, runConfigs),
 		layoutsPicker:  layoutsPicker,
 		httpRequests:   httpRequests,
 		httpEnvs:       httpEnvs,
+		runConfigs:     runConfigs,
 		httpEnv:        loadHTTPEnv(), // selected HTTP environments (#1867)
 		refs:           refs,
 		lspStatus:      map[string]string{},
@@ -2060,7 +2068,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEnvs *httpEnvMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -2125,7 +2133,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEnvs)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEnvs, runConfigs)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -3805,6 +3813,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.startDebug()
 		return m, nil
 
+	case DebugTestAtCursorMsg:
+		// debug.testAtCursor (Run menu / palette, #1914).
+		m.debugTestAtCursor()
+		return m, nil
+
+	case RunSelectMsg:
+		// run.select (Run menu / palette, #1914): the run-configuration picker.
+		m.openRunConfigPicker()
+		return m, nil
+
+	case RunConfigPickedMsg:
+		// A picker row was activated (#1914): run or debug the configuration.
+		return m, m.runPickedConfig(msg)
+
 	case DebugStopMsg:
 		m.stopDebugSession(true)
 		return m, nil
@@ -3861,7 +3883,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if p := mm.debugPanel(); p != nil {
 				p.SetFrames(msg.frames)
 			}
-			mm.fetchScopes(top.ID)
+			mm.fetchScopes(top.ID, top.Source.Path)
+			mm.refreshWatches()
 			return mm, cmd
 		}
 		return m, nil
@@ -3880,8 +3903,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case debugpanel.SelectFrameMsg:
 		// A frame was activated in the tool window: show that frame's state
-		// — navigate the editor to its location and re-scope the variables.
-		m.fetchScopes(msg.Frame.ID)
+		// — navigate the editor to its location and re-scope the variables;
+		// watches and inline values follow the selected frame (#1914).
+		if m.dbg != nil {
+			m.dbg.curFrameID = msg.Frame.ID
+		}
+		m.fetchScopes(msg.Frame.ID, msg.Frame.Source.Path)
+		m.refreshWatches()
 		if msg.Frame.Source.Path != "" {
 			col := msg.Frame.Column - 1
 			if col < 0 {
@@ -3893,6 +3921,25 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case debugpanel.ExpandVarMsg:
 		m.fetchVariables(msg.Ref)
+		return m, nil
+
+	case debugpanel.AddWatchMsg, debugpanel.EditWatchMsg, debugpanel.RemoveWatchMsg:
+		// A watch mutation from the panel (#1914): the model owns the list.
+		m.handleWatchMsg(msg)
+		return m, nil
+
+	case debugWatchesMsg:
+		// Evaluated watch results; a stale session's are dropped (#1523).
+		if m.dbg != nil && msg.sess == m.dbg.sess {
+			if p := m.debugPanel(); p != nil {
+				p.SetWatches(msg.results)
+			}
+		}
+		return m, nil
+
+	case debugLocalsMsg:
+		// The selected frame's Locals render as inline values (#1914).
+		m.applyInlineValues(msg)
 		return m, nil
 
 	case debugpanel.SetVarMsg:
@@ -4539,7 +4586,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reloadConfig(msg.Config)
 		diags := append(msg.Diags, associationDiags()...)
 		m.notifyConfigDiags(diags)
-		m.notifyKeymapDiags() // the reload above rebuilt the binding table
+		m.notifyKeymapDiags()             // the reload above rebuilt the binding table
 		m.settings.NoteReloadDiags(diags) // inline in the panel too (#891)
 		m.palette.Refresh()
 		// Diagnostic ignore (#1259) and severity remap (#1503) rules apply

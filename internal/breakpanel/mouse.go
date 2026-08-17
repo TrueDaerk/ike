@@ -45,6 +45,9 @@ func (m *Model) Wheel(delta int) {
 // a click on a breakpoint row's glyph cell flips its enabled state — and a
 // second click on the selected row within doubleClickWindow jumps to it.
 func (m *Model) Click(x, y int) tea.Cmd {
+	// A click while the refinement editor is open cancels the edit first and
+	// then selects normally (the debug panel's #639 rule).
+	m.cancelEdit()
 	i := m.top + (y - 1)
 	if y < 1 || y > m.bodyHeight() || i < 0 || i >= len(m.rows) {
 		return nil

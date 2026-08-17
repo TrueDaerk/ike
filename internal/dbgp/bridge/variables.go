@@ -241,6 +241,36 @@ func (b *bridge) handleSetVariable(req envelope) {
 	})
 }
 
+// handleEvaluate answers a watch/repl evaluation (#1914) through DBGp eval.
+// Results render flat (no variablesReference): eval properties carry no
+// stable fullname to page children through, so a structured result shows as
+// its aggregate rendering. Only valid while paused — DBGp processes no
+// commands mid-run, so a running debuggee fails the request cleanly.
+func (b *bridge) handleEvaluate(req envelope) {
+	var args struct {
+		Expression string `json:"expression"`
+	}
+	if err := json.Unmarshal(req.Arguments, &args); err != nil || args.Expression == "" {
+		b.fail(req, "invalid evaluate arguments")
+		return
+	}
+	dc := b.conn()
+	if dc == nil {
+		b.fail(req, "no debug session")
+		return
+	}
+	p, err := dc.Eval(args.Expression)
+	if err != nil {
+		b.fail(req, err.Error())
+		return
+	}
+	b.respond(req, map[string]any{
+		"result":             renderValue(*p),
+		"type":               renderType(*p),
+		"variablesReference": 0,
+	})
+}
+
 // renderValue renders one property the way the debug panel shows values:
 // strings quoted, aggregates as counts/class names, scalars raw.
 func renderValue(p dbgp.Property) string {

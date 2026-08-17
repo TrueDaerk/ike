@@ -295,6 +295,8 @@ func (b *bridge) handleRequest(req envelope) {
 		b.handleVariables(req)
 	case "setVariable":
 		b.handleSetVariable(req)
+	case "evaluate":
+		b.handleEvaluate(req)
 	case "disconnect":
 		b.respond(req, map[string]any{})
 		b.shutdown()

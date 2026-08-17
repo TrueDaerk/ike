@@ -127,9 +127,11 @@ type ToolEntry struct {
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen
-// mode's settings (#823).
+// mode's settings (#823). InlineValues renders the paused frame's local
+// variable values as line-end annotations while stopped (#1914).
 type Debug struct {
-	PHP DebugPHP `toml:"php"`
+	InlineValues bool     `toml:"inline_values"`
+	PHP          DebugPHP `toml:"php"`
 }
 
 // DebugPHP configures "listen for PHP debug connections" (#823). Port is the
@@ -158,9 +160,12 @@ type DebugPathMap struct {
 // "top" dock the Run tool pane at that workspace edge, "in_pane" keeps the
 // run output as a terminal tab in the focused editor pane. The pre-#1905
 // "new_terminal" migrates to "bottom". A [tools.layout] slot assigned to
-// "run" overrides the placement, like for any other tool.
+// "run" overrides the placement, like for any other tool. VSCodeLaunch
+// merges compatible .vscode/launch.json entries into the run-configuration
+// picker (#1914).
 type Run struct {
-	Placement string `toml:"placement"`
+	Placement    string `toml:"placement"`
+	VSCodeLaunch bool   `toml:"vscode_launch"`
 }
 
 // Tests holds Test Results tool-window behaviour (#1911). ResultsWindow

@@ -20,6 +20,14 @@ type RunSpec struct {
 	// "listen for Xdebug connections from php-fpm"). File/Module/Args are
 	// empty then.
 	Listen bool
+	// Tests marks a test-scope launch (#1150/#1914): the target is the
+	// file's test scope rather than a program. TestName selects one test
+	// (empty = the whole file's scope), TestKind its template kind (Go:
+	// "benchmark"/"fuzz"; empty = a plain test). Debug adapters use these to
+	// phrase a test-mode launch (delve's mode "test").
+	Tests    bool
+	TestName string
+	TestKind string
 }
 
 // RunCommandProvider is an optional Toolchain extension: it turns a RunSpec

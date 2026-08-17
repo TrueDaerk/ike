@@ -264,12 +264,14 @@ func (c *Config) Flat() map[string]string {
 	put("terminal.scrollback_lines", c.Terminal.ScrollbackLines)
 
 	put("run.placement", c.Run.Placement)
+	put("run.vscode_launch", c.Run.VSCodeLaunch)
 	put("tests.results_window", c.Tests.ResultsWindow)
 	put("tests.auto_open", c.Tests.AutoOpen)
 
 	put("tools.layout.template", strings.Join(c.Tools.Layout.Template, ","))
 	put("tools.layout.assign", strings.Join(c.Tools.Layout.Assign, ","))
 
+	put("debug.inline_values", c.Debug.InlineValues)
 	put("debug.php.port", c.Debug.PHP.Port)
 	put("debug.php.hostname", c.Debug.PHP.Hostname)
 
