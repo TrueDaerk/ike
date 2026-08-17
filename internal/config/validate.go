@@ -53,6 +53,8 @@ var (
 	severities  = map[string]bool{"info": true, "warn": true, "error": true}
 	// whitespaceModes are the editor.show_whitespace values (#64).
 	whitespaceModes = map[string]bool{"none": true, "trailing": true, "all": true}
+	// timelineSources are the history.timeline_source values (#1916).
+	timelineSources = map[string]bool{"both": true, "local": true, "git": true}
 )
 
 // whichKeyMaxDelayMs caps keymap.which_key_delay_ms (#1909); the settings
@@ -177,6 +179,11 @@ func validate(c *Config) []Diagnostic {
 	if !saveModes[c.Editor.AutoSave] {
 		diags = append(diags, Diagnostic{Field: "editor.auto_save", Message: fmt.Sprintf("unknown mode %q, using \"focus\"", c.Editor.AutoSave)})
 		c.Editor.AutoSave = "focus"
+	}
+	// history.timeline_source (#1916) is the Timeline's default source filter.
+	if !timelineSources[c.History.TimelineSource] {
+		diags = append(diags, Diagnostic{Field: "history.timeline_source", Message: fmt.Sprintf("unknown source %q, using \"both\"", c.History.TimelineSource)})
+		c.History.TimelineSource = "both"
 	}
 	if !reloadModes[c.Files.AutoReload] {
 		diags = append(diags, Diagnostic{Field: "files.auto_reload", Message: fmt.Sprintf("unknown mode %q, using \"clean\"", c.Files.AutoReload)})

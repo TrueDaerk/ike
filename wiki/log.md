@@ -1,5 +1,25 @@
 # Log
 
+## 2026-08-17 (per-file Timeline: local history + git log on one axis, #1916)
+
+- **`file.timeline` ("Show Timeline")** merges the focused file's local-history
+  snapshots and the commits that touched it into one chronological modal list,
+  each row typed by source. `enter` diffs an entry against the live buffer,
+  `m`/`d` diff two entries against each other (across sources), `r` restores a
+  snapshot through the existing undoable restore path, `y` copies a commit
+  hash, `f` cycles the source filter, `L` loads older commits.
+- **New pieces:** `internal/timeline` holds the pure merge/order/filter layer
+  (snapshot ranks after a commit at an equal timestamp; stable within a
+  source), `vcs.FileLogCmd` the async `git log --follow --name-only` window
+  with rename-aware per-commit paths — its paging is cut in-process because
+  git's `--skip` and `--follow` do not compose. The local-history diff/restore
+  helpers were generalized (`openDiffTexts`, `normalizeBufferText`) instead of
+  copied.
+- **Settings:** `history.timeline_source` (`both` / `local` / `git`, default
+  `both`) on the new Settings → Timeline page is the filter the view opens
+  with; `localhistory.Entry` gained an optional persisted `label` the Timeline
+  renders where present.
+
 ## 2026-08-17 (lsp: code lens, folding ranges, semantic-token refinements, selection ranges, willRenameFiles, #1912)
 
 - **Five missing protocol features wired end to end.** Code lenses

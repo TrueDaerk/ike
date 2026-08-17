@@ -19,6 +19,7 @@ type Config struct {
 	Files         Files         `toml:"files"`
 	UI            UI            `toml:"ui"`
 	Backup        Backup        `toml:"backup"`
+	History       History       `toml:"history"`
 	// Lang holds per-language settings as a free-form slot (Roadmap 0160,
 	// mirrors LSP.Servers): [lang.python] interpreter = "/path/to/python".
 	// The toolchain settings page writes it; lang.Interpreter resolution and
@@ -255,6 +256,14 @@ type Backup struct {
 	Enable     bool `toml:"enable"`
 	DebounceMs int  `toml:"debounce_ms"`
 	MaxAgeDays int  `toml:"max_age_days"`
+}
+
+// History holds per-file Timeline behaviour (#1916). TimelineSource is the
+// default source filter the Timeline view opens with: "both" (local-history
+// snapshots and git commits), "local" or "git"; the view's filter key cycles
+// it for the open list without writing the setting.
+type History struct {
+	TimelineSource string `toml:"timeline_source"`
 }
 
 // Files holds external-file-change behaviour (Roadmap 0140). Watch enables the
