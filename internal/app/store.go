@@ -290,9 +290,13 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			// A tool pane (#741) persists its tool name instead and restarts
 			// the configured program on restore. The debuggee terminal
 			// (#1370) is pure session state: its identity is recorded so the
-			// restore can drop the leaf instead of spawning a shell there.
+			// restore can drop the leaf instead of spawning a shell there —
+			// and so is the Run tool (#1905): a program must not re-run
+			// itself at startup just because its output was on screen.
 			if inst.IsDebugTerm() {
 				ids[key] = paneIdentity{Kind: "debugTerm"}
+			} else if inst.Terminal().Tool() == runToolName {
+				ids[key] = paneIdentity{Kind: "runTool"}
 			} else if tool := inst.Terminal().Tool(); tool != "" {
 				ids[key] = paneIdentity{Kind: "tool", Tool: tool}
 			} else {
@@ -332,10 +336,11 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			// processes never resurrect, so only file-backed tabs persist.
 			// Tool sessions hosted as tabs (#836) are the exception — like
 			// dedicated tool panes they remember their name and restart the
-			// configured program on restore.
+			// configured program on restore. The Run tool (#1905) is session
+			// state either way and restores as nothing.
 			for i := 0; i < inst.TabCount(); i++ {
 				if tt := inst.TabTerminal(i); tt != nil {
-					if tool := tt.Tool(); tool != "" {
+					if tool := tt.Tool(); tool != "" && tool != runToolName {
 						if i == inst.ActiveTab() {
 							// The selected tool tab is per-project state
 							// (#1906): the same convention Active/ActiveCTab

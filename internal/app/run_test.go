@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -10,9 +11,11 @@ import (
 	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/lang"
+	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/registry"
 	"ike/internal/run"
+	"ike/internal/terminal"
 )
 
 // runFakeToolchain contributes a fast-exiting run command for .rfake files.
@@ -71,24 +74,74 @@ func TestRunFileInPane(t *testing.T) {
 	}
 }
 
-// TestRunFileNewTerminal verifies the new_terminal placement: a bottom
-// terminal pane running the command.
-func TestRunFileNewTerminal(t *testing.T) {
-	m := runModel(t, "new_terminal")
+// TestRunFileBottomDock verifies the default placement (#1905): the Run tool
+// opens as a dedicated pane docked at the bottom workspace edge.
+func TestRunFileBottomDock(t *testing.T) {
+	m := runModel(t, "bottom")
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
 	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil || inst.Kind() != pane.KindTerminal {
-		t.Fatal("focus must land on the new terminal pane")
+		t.Fatal("focus must land on the Run tool pane")
 	}
 	if !inst.Terminal().IsCommand() {
 		t.Fatal("the pane must run a command session")
 	}
+	if inst.Terminal().Tool() != runToolName {
+		t.Fatalf("tool marker = %q, want %q", inst.Terminal().Tool(), runToolName)
+	}
+	if inst.Terminal().Label() != "prog.rfake" {
+		t.Fatalf("Run tool label = %q, want the config name", inst.Terminal().Label())
+	}
+	if got := toolPaneTitle(inst.Terminal()); got != "⚙ RUN — prog.rfake" {
+		t.Fatalf("Run tool chrome = %q, want the tool plus the configuration", got)
+	}
+	if got := layout.EdgeLeaf(m.activeWS().Tree, layout.ZoneBottom); got != inst.Key() {
+		t.Fatalf("bottom edge leaf = %q, want the Run tool pane %q", got, inst.Key())
+	}
 }
 
-// TestRunReusesFinishedTerminal verifies the take-over: a second run replaces
-// the first run's (unoccupied) terminal instead of opening another.
-func TestRunReusesFinishedTerminal(t *testing.T) {
+// TestRunFileLegacyNewTerminalPlacement covers the migration (#1905): a config
+// still saying new_terminal keeps placing runs at the bottom edge.
+func TestRunFileLegacyNewTerminalPlacement(t *testing.T) {
+	m := runModel(t, "new_terminal")
+	tm, _ := m.Update(RunFileMsg{})
+	m = tm.(Model)
+	inst := m.activeWS().Panes.FocusedInstance()
+	if inst == nil || inst.Kind() != pane.KindTerminal || inst.Terminal().Tool() != runToolName {
+		t.Fatal("new_terminal must open the Run tool as a dedicated pane")
+	}
+	if got := layout.EdgeLeaf(m.activeWS().Tree, layout.ZoneBottom); got != inst.Key() {
+		t.Fatalf("bottom edge leaf = %q, want the Run tool pane %q", got, inst.Key())
+	}
+}
+
+// TestRunReusesRunTool verifies the rerun semantics (#1905): the second run
+// replaces the Run tool's session in place — same pane, no second one.
+func TestRunReusesRunTool(t *testing.T) {
+	m := runModel(t, "bottom")
+	tm, _ := m.Update(RunFileMsg{})
+	m = tm.(Model)
+	first := m.activeWS().Panes.FocusedInstance().Key()
+	panes := m.activeWS().Panes.Len()
+
+	tm, _ = m.Update(RunFileMsg{})
+	m = tm.(Model)
+	if got := m.activeWS().Panes.Len(); got != panes {
+		t.Fatalf("panes after rerun = %d, want %d (the Run tool is reused)", got, panes)
+	}
+	locs := m.toolLocations(runToolName)
+	if len(locs) != 1 || locs[0].key != first {
+		t.Fatalf("rerun must reuse the one Run tool pane %q, got %+v", first, locs)
+	}
+	if !m.activeWS().Panes.Get(first).Terminal().IsCommand() {
+		t.Fatal("the reused Run tool must host the new command session")
+	}
+}
+
+// TestRunReusesRunToolTab is TestRunReusesRunTool for the in_pane placement:
+// the rerun lands in the existing Run tab, not in a second one.
+func TestRunReusesRunToolTab(t *testing.T) {
 	m := runModel(t, "in_pane")
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
@@ -96,7 +149,117 @@ func TestRunReusesFinishedTerminal(t *testing.T) {
 	m = tm.(Model)
 	inst := m.activeWS().Panes.FocusedInstance()
 	if inst.TabCount() != 2 {
-		t.Fatalf("tabs = %d after rerun, want 2 (terminal reused)", inst.TabCount())
+		t.Fatalf("tabs = %d after rerun, want 2 (the Run tab is reused)", inst.TabCount())
+	}
+	if term := inst.ActiveTerminal(); term == nil || term.Tool() != runToolName {
+		t.Fatal("the run tab must carry the Run tool identity")
+	}
+}
+
+// TestRunNeverHijacksOpenPanes is the #1905 regression guard: with a tool pane
+// and a plain terminal pane open, a run leaves both alone and opens its own
+// Run tool instead of dropping its output into one of them.
+func TestRunNeverHijacksOpenPanes(t *testing.T) {
+	withTools(t, sleepTool("watcher"))
+	m := runModel(t, "bottom")
+	tm, _ := m.Update(ToolOpenMsg{Name: "watcher"})
+	m = tm.(Model)
+	tool := m.toolPane("watcher")
+	if tool == nil {
+		t.Fatal("the tool pane must open")
+	}
+	t.Cleanup(func() { tool.Terminal().Close() })
+	tm, _ = m.Update(TerminalNewMsg{})
+	m = tm.(Model)
+	shell := m.activeWS().Panes.FocusedInstance()
+	if shell == nil || shell.Kind() != pane.KindTerminal || shell.Terminal().Tool() != "" {
+		t.Fatal("terminal.new must open a plain terminal pane")
+	}
+	t.Cleanup(func() { shell.Terminal().Close() })
+	shellSess := shell.Terminal().SessionKey()
+
+	tm, _ = m.Update(RunFileMsg{})
+	m = tm.(Model)
+
+	locs := m.toolLocations(runToolName)
+	if len(locs) != 1 {
+		t.Fatalf("the run must open exactly one Run tool, got %+v", locs)
+	}
+	if runKey := locs[0].key; runKey == tool.Key() || runKey == shell.Key() {
+		t.Fatalf("the run hijacked an open pane (%q)", runKey)
+	}
+	if tool.Terminal().Tool() != "watcher" || tool.TabCount() != 0 {
+		t.Fatal("the tool pane must keep its own session and gain no run tab")
+	}
+	if shell.Terminal().Tool() != "" || shell.Terminal().IsCommand() {
+		t.Fatal("the plain terminal must stay a plain shell")
+	}
+	if shell.Terminal().SessionKey() != shellSess {
+		t.Fatal("the plain terminal's session must be untouched")
+	}
+}
+
+// TestRunToolExitOverlayAndClose covers the tool-pane lifecycle (#810) for the
+// Run tool: the pane survives the program's exit showing the restart/close
+// dialog, and closes like any pane.
+func TestRunToolExitOverlayAndClose(t *testing.T) {
+	m := runModel(t, "bottom")
+	tm, _ := m.Update(RunFileMsg{})
+	m = tm.(Model)
+	inst := m.activeWS().Panes.FocusedInstance()
+	key := inst.Key()
+	t.Cleanup(func() { inst.Terminal().Close() })
+	inst.Terminal().Close()
+	tm, _ = m.Update(terminal.ExitedMsg{Key: inst.Terminal().SessionKey()})
+	m = tm.(Model)
+	if !m.activeWS().Panes.Has(key) {
+		t.Fatal("the Run tool pane must stay open when the program exits")
+	}
+	view := inst.Terminal().View()
+	if !strings.Contains(view, "run exited") {
+		t.Fatalf("the exit dialog must name the Run tool, view: %q", view)
+	}
+	if !strings.Contains(view, "[ Restart (r) ]") || !strings.Contains(view, "[ Close (ctrl+w) ]") {
+		t.Fatalf("the exit dialog must offer restart/close, view: %q", view)
+	}
+	if !m.closeKey(key) || m.activeWS().Panes.Has(key) {
+		t.Fatal("the Run tool pane must close like any tool pane")
+	}
+}
+
+// TestRunToolIsSessionState guards the persistence rule (#1905): the Run
+// tool's pane is recorded as session state, so a restart drops its leaf
+// instead of re-running the program.
+func TestRunToolIsSessionState(t *testing.T) {
+	m := runModel(t, "bottom")
+	tm, _ := m.Update(RunFileMsg{})
+	m = tm.(Model)
+	inst := m.activeWS().Panes.FocusedInstance()
+	t.Cleanup(func() { inst.Terminal().Close() })
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	_, ids, ok := loadLayout()
+	if !ok {
+		t.Fatal("the layout must persist")
+	}
+	if got := ids[inst.Key()].Kind; got != "runTool" {
+		t.Fatalf("Run tool identity = %q, want runTool", got)
+	}
+}
+
+// TestRunToolFollowsSlotAssignment verifies the Run tool participates in slot
+// placement (#1897) like every other tool: the assignment beats run.placement.
+func TestRunToolFollowsSlotAssignment(t *testing.T) {
+	withToolLayout(t, []string{"EEZ", "EEZ"}, []string{"Z=run"})
+	m := runModel(t, "in_pane")
+	tm, _ := m.Update(RunFileMsg{})
+	m = tm.(Model)
+	inst := m.activeWS().Panes.FocusedInstance()
+	if inst == nil || inst.Kind() != pane.KindTerminal || inst.Terminal().Tool() != runToolName {
+		t.Fatal("an assigned slot must open the Run tool as its own pane")
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+	if got := layout.EdgeLeaf(m.activeWS().Tree, layout.ZoneRight); got != inst.Key() {
+		t.Fatalf("right-edge slot leaf = %q, want the Run tool pane %q", got, inst.Key())
 	}
 }
 

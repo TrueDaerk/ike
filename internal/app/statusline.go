@@ -343,7 +343,7 @@ func (m Model) statusLine() string {
 		switch {
 		case inst.ActiveTerminal() != nil && inst.ActiveTerminal().Tool() != "":
 			// A tool pane (#741) names its tool, not the shell machinery.
-			left += "⚙ " + strings.ToUpper(inst.ActiveTerminal().Tool())
+			left += toolPaneTitle(inst.ActiveTerminal())
 		case inst.ActiveTerminal() != nil:
 			// A terminal pane, or an editor pane whose active tab hosts a
 			// terminal (#573) — either way the keystrokes go to a shell.

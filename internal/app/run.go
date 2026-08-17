@@ -5,17 +5,32 @@ import (
 
 	"ike/internal/host"
 	"ike/internal/lang"
-	"ike/internal/layout"
 	"ike/internal/run"
 	"ike/internal/terminal"
 )
 
 // run.go wires run configurations end to end (0350, #576): run.file executes
 // the active file through its language's run command in an integrated
-// terminal; run.rerun repeats the last configuration. Placement: a reusable
-// (never-typed-in or finished) terminal is taken over first; otherwise the
-// run.placement setting decides between a terminal tab in the editor pane
-// (in_pane) and a fresh bottom terminal pane (new_terminal).
+// terminal; run.rerun repeats the last configuration.
+//
+// Output goes to the **Run tool** (#1905), a dedicated tool pane like the
+// [[tools.custom]] ones: the first run opens it, every later run replaces its
+// session in place. Runs never take over an arbitrary terminal any more — the
+// pre-#1905 "first reusable terminal" scan dropped run output into whatever
+// terminal pane or tool tab happened to exist. The run.placement setting names
+// the Run tool's home position (bottom/left/right/top, or in_pane for a tab in
+// the editor pane); a slot assignment (#1897) overrides it like for any tool.
+
+// runToolName is the Run tool's identity (#1905) — the name its sessions carry
+// (terminal.Model.SetTool), the id a [tools.layout] slot assignment addresses,
+// and what the #810 exited overlay titles the pane with. Reserved: a
+// [[tools.custom]] entry of the same name would be indistinguishable from it.
+const runToolName = "run"
+
+// runInPane is the run.placement value that keeps run output as a terminal tab
+// in the focused editor pane instead of docking the Run tool at a workspace
+// edge; every other value names a home position (toolHomeZone).
+const runInPane = "in_pane"
 
 // runCurrentFile is the run.file handler: it ensures a configuration for the
 // active file (creating and persisting the default on first run) and launches it.
@@ -118,61 +133,95 @@ func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created
 	env := terminal.MergeEnv(terminalEnv(), cfg.EnvSlice())
 	dir := cfg.Dir(root)
 
-	// A reusable terminal (never typed into, or its process ended) is taken
-	// over in place — pane or tab (#574).
-	if inst, tab, term := m.activeWS().Panes.ReusableRunTerminal(); term != nil {
-		key := term.SessionKey()
-		if key == "" {
-			key = m.activeWS().Panes.MintTerminalKey()
-		}
-		term.StartCommand(key, argv, dir, env)
-		term.SetLabel(cfg.Name)
-		if tab >= 0 {
-			inst.ActivateTab(tab)
-		}
-		m.setFocus(inst.Key())
-		m.notifyRun(cfg, created, argv)
+	// The Run tool owns run output (#1905): an open one takes the new command
+	// in place, otherwise it opens at its placement. No other terminal is ever
+	// touched — a plain terminal the user opened stays theirs.
+	if !m.startInRunTool(cfg, argv, dir, env) && !m.openRunTool(cfg, argv, dir, env) {
+		m.host.Notify(host.Error, "run: no pane to place the run tool")
 		return
 	}
-
-	placement := "in_pane"
-	if v, ok := m.host.Config().Get("run.placement"); ok && v != "" {
-		placement = v
-	}
-	if placement == "in_pane" {
-		if target := m.activeEditorKey(); target != "" {
-			inst := m.activeWS().Panes.Get(target)
-			key := m.activeWS().Panes.MintTerminalKey()
-			term := terminal.NewCommand(key, argv, dir, 80, 24, env, m.host.Send)
-			term.SetLabel(cfg.Name)
-			inst.AddTerminalTab(term)
-			m.setFocus(target)
-			saveLayout(m.activeWS().Tree, m.activeWS().Panes)
-			m.notifyRun(cfg, created, argv)
-			return
-		}
-	}
-	// new_terminal placement — and the in_pane fallback when no editor pane
-	// exists: a bottom-split terminal pane, like terminal.new.
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
-	if target == "" || m.activeWS().Tree == nil {
-		m.host.Notify(host.Error, "run: no pane to place the terminal")
-		return
-	}
-	key := m.activeWS().Panes.AddCommandTerminal(argv, cfg.Name, dir, env, m.host.Send)
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
-	if !ok {
-		m.activeWS().Panes.Close(key)
-		return
-	}
-	m.activeWS().Tree = tree
-	m.setFocus(key)
-	m.layout()
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	m.notifyRun(cfg, created, argv)
+}
+
+// startInRunTool restarts an already open Run tool with the new command,
+// wherever it lives — dedicated pane or hosted tab (#1905). The session is
+// replaced in place, ending a still-running program: the Run tool is the run's
+// one home, so a rerun reuses it instead of piling up panes. Reports whether a
+// Run tool was there to take the command.
+func (m *Model) startInRunTool(cfg *run.Config, argv []string, dir string, env []string) bool {
+	locs := m.toolLocations(runToolName)
+	if len(locs) == 0 {
+		return false
+	}
+	loc := locs[0]
+	inst := m.activeWS().Panes.Get(loc.key)
+	if inst == nil {
+		return false
+	}
+	term := inst.Terminal()
+	if loc.tab >= 0 {
+		term = inst.TabTerminal(loc.tab)
+	}
+	if term == nil {
+		return false
+	}
+	key := term.SessionKey()
+	if key == "" {
+		key = m.activeWS().Panes.MintTerminalKey()
+	}
+	term.StartCommand(key, argv, dir, env)
+	term.SetLabel(cfg.Name)
+	if loc.tab >= 0 {
+		inst.ActivateTab(loc.tab)
+	}
+	m.setFocus(loc.key)
+	m.rememberTool(runToolName, loc.key)
+	return true
+}
+
+// openRunTool opens the Run tool for cfg's command: the in_pane placement adds
+// it as a terminal tab in the focused editor pane, every other value goes
+// through the shared tool placement (slot assignment > home position >
+// adaptive split). Reports whether the tool materialized.
+func (m *Model) openRunTool(cfg *run.Config, argv []string, dir string, env []string) bool {
+	sp := toolSpawn{
+		name:     runToolName,
+		label:    cfg.Name, // chrome names the pane/tab after the configuration
+		argv:     argv,
+		dir:      dir,
+		env:      env,
+		dockTabs: true,
+	}
+	placement := m.runPlacement()
+	// A slot assignment (#1897) pins the Run tool like any other tool — it
+	// wins over in_pane exactly as it wins over a home position.
+	if _, slot := assignedSlot(runToolName); placement == runInPane && slot == "" {
+		if target := m.activeEditorKey(); target != "" {
+			m.activeWS().Panes.Get(target).AddTerminalTab(m.newToolTab(sp))
+			m.activeWS().ReturnFocus = m.activeWS().Panes.Focused()
+			m.setFocus(target)
+			m.rememberTool(runToolName, target)
+			m.layout()
+			saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+			return true
+		}
+		placement = "" // no editor pane: fall back to the adaptive split
+	}
+	return m.placeTool(sp, placement)
+}
+
+// runPlacement reads the Run tool's home position (#1905). The pre-#1905
+// new_terminal value — a bottom-split terminal pane — lives on as an alias for
+// the bottom dock, so an old config keeps placing runs where it did.
+func (m Model) runPlacement() string {
+	v, ok := m.host.Config().Get("run.placement")
+	if !ok || v == "" {
+		return "bottom"
+	}
+	if v == "new_terminal" {
+		return "bottom"
+	}
+	return v
 }
 
 // notifyRun surfaces what was launched; the first run also says the default

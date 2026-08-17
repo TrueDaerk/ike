@@ -54,6 +54,13 @@ func collectActivity(w *workspace.Workspace) wsActivity {
 	}
 	addTerm := func(tool, label string, isCmd bool) {
 		switch {
+		case tool == runToolName:
+			// The Run tool (#1905) is a tool pane, but what runs in it is the
+			// user's program: name the configuration, like any run did before.
+			if label == "" {
+				label = "command"
+			}
+			a.running = append(a.running, "run "+label)
 		case tool != "":
 			if _, global := globalToolEntry(tool); global {
 				// A global tool (#1890) is never killed by closing a

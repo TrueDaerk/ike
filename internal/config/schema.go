@@ -151,9 +151,12 @@ type DebugPathMap struct {
 	Local  string `toml:"local"`
 }
 
-// Run holds run-configuration behaviour (0350, #576). Placement decides where
-// a run without a reusable terminal opens: "in_pane" (a terminal tab in the
-// focused editor pane) or "new_terminal" (a bottom-split terminal pane).
+// Run holds run-configuration behaviour (0350, #576). Placement is the Run
+// tool's home position (#1905): "bottom" (the default), "left", "right" or
+// "top" dock the Run tool pane at that workspace edge, "in_pane" keeps the
+// run output as a terminal tab in the focused editor pane. The pre-#1905
+// "new_terminal" migrates to "bottom". A [tools.layout] slot assigned to
+// "run" overrides the placement, like for any other tool.
 type Run struct {
 	Placement string `toml:"placement"`
 }

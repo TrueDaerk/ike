@@ -170,9 +170,18 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "files.auto_reload", Message: fmt.Sprintf("unknown mode %q, using \"clean\"", c.Files.AutoReload)})
 		c.Files.AutoReload = "clean"
 	}
-	if c.Run.Placement != "in_pane" && c.Run.Placement != "new_terminal" {
-		diags = append(diags, Diagnostic{Field: "run.placement", Message: fmt.Sprintf("unknown placement %q, using \"in_pane\"", c.Run.Placement)})
-		c.Run.Placement = "in_pane"
+	// run.placement (#1905) names the Run tool's home position — the same
+	// edges [[tools.custom]] placement uses, plus in_pane for a tab in the
+	// editor pane. The pre-#1905 "new_terminal" (a bottom-split terminal pane)
+	// migrates to the bottom dock, which is where it always put the output.
+	if c.Run.Placement == "new_terminal" {
+		c.Run.Placement = "bottom"
+	}
+	switch c.Run.Placement {
+	case "in_pane", "left", "right", "top", "bottom":
+	default:
+		diags = append(diags, Diagnostic{Field: "run.placement", Message: fmt.Sprintf("unknown placement %q, using \"bottom\"", c.Run.Placement)})
+		c.Run.Placement = "bottom"
 	}
 	// [[tools.custom]] placement (#1889) names the tool's home dock edge;
 	// anything else (including pre-#1588 legacy values) degrades to the

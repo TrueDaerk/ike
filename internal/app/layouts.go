@@ -714,6 +714,12 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 			st.tools[id.Tool] = q[1:]
 			return key, true
 		}
+		if id.Tool == runToolName {
+			// The Run tool (#1905) is session state: with no live one to
+			// re-slot, the snapshot's slot restores as an empty editor —
+			// re-running the program behind the user's back is not an option.
+			return reg.AddEditor(), true
+		}
 		// Restart the configured tool in the slot (#741); a tool no longer
 		// configured degrades to a fresh shell rather than breaking the apply.
 		if entry, ok := toolEntry(id.Tool); ok {

@@ -17,16 +17,28 @@ command.
 A run is a **terminal command session**, not a captured log: real stdin, real
 exit code, in a terminal pane. Programs that prompt for input work.
 
-IKE reuses a terminal you have not typed into (or one whose command finished)
-rather than opening a new one each time. When there is nothing reusable,
-`run.placement` decides:
+Output goes to the **Run tool** — a pane of its own, like the tool panes you
+configure yourself. The first run opens it; every later run reuses it, taking
+over its session (a program still running there is replaced). Terminals *you*
+opened are never touched, and nothing but runs ever lands in the Run tool.
 
-| Value | Where the run opens |
+`run.placement` says where it opens:
+
+| Value | Where the Run tool opens |
 |---|---|
-| `in_pane` (default) | A terminal tab in the focused editor pane |
-| `new_terminal` | A new terminal pane, split off the editor (below, or to the right of a wide landscape pane) |
+| `bottom` (default) | Docked along the bottom edge of the workspace |
+| `left`, `right`, `top` | Docked along that edge instead |
+| `in_pane` | As a terminal tab in the focused editor pane |
 
-The pane stays open when the command exits — the output is the point.
+Assigning `run` a slot in a [tool layout template](../reference/settings.md)
+(`assign = ["Z=run"]`) overrides the setting, exactly like for any other tool.
+Configs still saying `new_terminal` keep working — it now means `bottom`.
+
+The pane stays open when the command exits — the output is the point — and
+shows the usual `Restart` / `Close` actions: `r` runs the same command again in
+place, `ctrl+w` closes the pane. The Run tool is not restored on the next
+start: a finished program's output is session state, and nothing re-runs behind
+your back.
 
 The terminal gets the project's toolchain environment plus the configuration's
 own overrides, so the interpreter that runs your code is the one IKE shows

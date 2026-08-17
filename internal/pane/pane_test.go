@@ -110,17 +110,14 @@ func TestKeysInsertionOrder(t *testing.T) {
 	}
 }
 
-// TestDebugTerminalNeverReusedForRuns (#1370): the debuggee terminal pane is
-// excluded from run take-over even though nobody typed into it.
-func TestDebugTerminalNeverReusedForRuns(t *testing.T) {
+// TestDebugTerminalMarking (#1370): the debuggee terminal pane is marked as
+// such, so persistence treats it as session state rather than as a terminal.
+func TestDebugTerminalMarking(t *testing.T) {
 	r := newReg()
 	key := r.AddDebugTerminalFrom(terminal.NewPipe(r.MintTerminalKey(), 40, 6, nil))
 	inst := r.Get(key)
 	if inst == nil || !inst.IsDebugTerm() {
 		t.Fatal("AddDebugTerminalFrom must mark the instance as the debug terminal")
-	}
-	if got, _, _ := r.ReusableRunTerminal(); got != nil {
-		t.Fatal("a run must never take over the debuggee terminal pane")
 	}
 	r.Close(key)
 }

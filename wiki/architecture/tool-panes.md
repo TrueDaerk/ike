@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Custom TUI Tool Panes
-description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning tools to exact layout positions (#1897), global process-wide instances shared across workspaces (#1890) whose panes follow project switches (#1903), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, and IKE_THEME_* env for theme following."
+description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning tools to exact layout positions (#1897), global process-wide instances shared across workspaces (#1890) whose panes follow project switches (#1903), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, and the built-in Run tool that owns run output (#1905)."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
-timestamp: 2026-08-15T00:00:00Z
+timestamp: 2026-08-17T00:00:00Z
 ---
 
 # Custom TUI Tool Panes (#741)
@@ -232,6 +232,37 @@ The `global` field is editable in the Settings → Tools form (#1895, validated
 is a **hard rejection** rather than a silent drop: saving an entry with both
 flags set fails with `global and multiple are mutually exclusive`.
 
+## The built-in Run tool (#1905)
+
+The run output pane is a tool too — a **built-in** one, per project, whose
+command comes from a run configuration instead of `[[tools.custom]]`. Its
+identity is the reserved tool name **`run`** (`runToolName`,
+`internal/app/run.go`), so everything on this page applies to it: tool chrome
+(`⚙ RUN`), the exited overlay with `Restart`/`Close` (#810), `ctrl+w` close,
+the slot rule (`assign = ["Z=run"]`), the home positions and the adaptive
+split. A `[[tools.custom]]` entry named `run` would be indistinguishable from
+it and must not be configured.
+
+What differs from a configured tool:
+
+- **Opened by running, not by a command** — there is no `tool.run` palette
+  entry: `run.file` / `run.rerun` open the Run tool and, once it is open,
+  start every later command **in its session in place**, wherever it lives
+  (dedicated pane or hosted tab). Before #1905 runs instead took over the
+  first *reusable* terminal — any pane or tab nobody had typed into — which
+  is how run output ended up inside an unrelated open tool pane. That scan
+  (`Registry.ReusableRunTerminal`) is gone: user terminals are never grabbed
+  for run output, and the Run tool is never used for anything else.
+- **Home position from `run.placement`** — instead of the entry's `placement`
+  field, the setting names the edge (`bottom` default, `left`, `right`,
+  `top`) or `in_pane` for a terminal tab in the focused editor pane. A slot
+  assignment still wins.
+- **Not restored** — the output of a finished program is session state: the
+  pane persists as `{kind: "runTool"}` and its leaf is pruned on restore
+  rather than re-running the program, like the debuggee terminal (#1370).
+
+Details in [Run Configurations](/architecture/run-configurations.md).
+
 ## Slot templates (#1897)
 
 Where #1889's `placement` names an edge and leaves the geometry to dock
@@ -257,7 +288,7 @@ wholesale). Row/column counts set the proportions: above, `X` takes a
 quarter of the width over the top two thirds, the `T`/`Z` strip the bottom
 third. `assign` maps tools onto slots as `SLOT=tool` entries; the tool is a
 `[[tools.custom]]` name **or a built-in tool-window id** (`explorer`, `vcs`,
-`debug`, `problems`, `structure`, `usages`, `http`, `breakpoints`). Each
+`debug`, `problems`, `structure`, `usages`, `http`, `breakpoints`, `run`). Each
 tool takes at most one slot; unknown slots, the editor region and duplicates
 are dropped with diagnostics (`internal/config/validate.go`). Both keys are
 editable via **Settings → Tool Layout** (schema `List` entries, per the
