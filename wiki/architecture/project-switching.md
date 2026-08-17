@@ -251,6 +251,20 @@ everywhere (no resurrection from stale layouts), and a session whose process
 exited while parked arrives showing the #810 exited overlay with
 Restart/Close. Details: [tool-panes](tool-panes.md).
 
+**The active tab stays per project (#1906).** The attach appends its tabs and
+activates each one, which would otherwise hand every project the tab selection
+of the project just left. `performSwitch` therefore snapshots every pane's
+active tab index right before `attachOpenGlobalTools` and re-applies it right
+after (`snapshotActiveTabs` / `restoreActiveToolTabs`); on top of that, each
+workspace remembers in `ActiveTools` which global tools were its host pane's
+active tab when it was last left — recorded by `detachGlobalTools`, keyed by
+tool name because a host carrying nothing but global tools closes with the
+detach — and those reclaim their tab wherever it landed. A remembered tool
+that did not come back (closed everywhere, or no longer global here)
+contributes nothing, so the pre-attach index stands and no pane is ever left
+pointing at a tab that is gone. The corrected selection is persisted over the
+attach's own `saveLayout`.
+
 **Buffer reconciliation on resume (#1515).** While a workspace is parked its
 watcher is stopped, so external edits in that window (a coding agent's
 atomic-rename saves, git operations) never arrive as events. `performSwitch`

@@ -49,6 +49,11 @@ type paneIdentity struct {
 	// content tab was active; 0 when a file tab was (Active then indexes
 	// Tabs as before).
 	ActiveCTab int `json:"activeCtab,omitempty"`
+	// ActiveTool is 1 + the index into Tools of the active tab when a tool
+	// tab was active; 0 otherwise (#1906). Without it a restored pane always
+	// came back on the last restored tool tab, so the tab a user selected in
+	// one project was lost on the next switch into it.
+	ActiveTool int `json:"activeTool,omitempty"`
 }
 
 // contentTabIdentity is the persisted identity of one content tab (#1778):
@@ -336,6 +341,12 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			for i := 0; i < inst.TabCount(); i++ {
 				if tt := inst.TabTerminal(i); tt != nil {
 					if tool := tt.Tool(); tool != "" && tool != runToolName {
+						if i == inst.ActiveTab() {
+							// The selected tool tab is per-project state
+							// (#1906): the same convention Active/ActiveCTab
+							// use, 1-based so 0 keeps meaning "not a tool tab".
+							id.ActiveTool = len(id.Tools) + 1
+						}
 						id.Tools = append(id.Tools, tool)
 					}
 					continue

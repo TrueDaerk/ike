@@ -33,6 +33,14 @@ type Workspace struct {
 	// live (#777) — the debug session state, notably. The workspace package
 	// never inspects it.
 	Aux any
+	// ActiveTools names the global tools that were their host pane's active
+	// tab when this workspace was last left (#1906). The sessions detach on
+	// switch-away and re-attach appended — and hence activated — on
+	// switch-in, which would otherwise hand every project the tab selection
+	// of the project switched away from. Tool names rather than pane keys:
+	// a host holding nothing but global tools closes with the detach, so its
+	// key does not survive the round trip.
+	ActiveTools []string
 	// ParkedAt is when this workspace last entered the background set (set
 	// by Park, zero while active). The background LSP idle shutdown (#1521)
 	// compares it at timer expiry: a workspace resumed and re-parked since
