@@ -371,12 +371,12 @@ type CompletionList struct {
 }
 
 type CompletionItem struct {
-	Label            string    `json:"label"`
-	Kind             int       `json:"kind,omitempty"`
-	Detail           string    `json:"detail,omitempty"`
-	Documentation    any       `json:"documentation,omitempty"`
-	InsertText       string    `json:"insertText,omitempty"`
-	TextEdit         *TextEdit `json:"textEdit,omitempty"`
+	Label               string     `json:"label"`
+	Kind                int        `json:"kind,omitempty"`
+	Detail              string     `json:"detail,omitempty"`
+	Documentation       any        `json:"documentation,omitempty"`
+	InsertText          string     `json:"insertText,omitempty"`
+	TextEdit            *TextEdit  `json:"textEdit,omitempty"`
 	SortText            string     `json:"sortText,omitempty"`
 	FilterText          string     `json:"filterText,omitempty"`
 	InsertTextFormat    int        `json:"insertTextFormat,omitempty"`

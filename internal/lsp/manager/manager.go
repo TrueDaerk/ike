@@ -156,8 +156,8 @@ func New(resolve func(lang string) (lsp.ServerSpec, bool), connect Connector, cb
 		restarts: make(map[string]int),
 
 		companionsHinted: make(map[string]bool),
-		frags:    make(map[string]map[int]*fragmentDoc),
-		fragGen:  make(map[string]int),
+		frags:            make(map[string]map[int]*fragmentDoc),
+		fragGen:          make(map[string]int),
 
 		hostDiags: make(map[string][]protocol.Diagnostic),
 		published: make(map[string]map[string]bool),

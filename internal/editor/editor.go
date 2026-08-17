@@ -477,8 +477,8 @@ type Model struct {
 	// rendered as one trailing virtual-text annotation via lineLensHint and
 	// executed through the lsp.codeLens command.
 	lensesByLine map[int][]ilsp.CodeLens
-	hlTheme     highlight.Theme
-	pal         *theme.Palette // active theme (Roadmap 0110); nil = default
+	hlTheme      highlight.Theme
+	pal          *theme.Palette // active theme (Roadmap 0110); nil = default
 
 	// LSP UI state (Roadmap 0100): diagnostics indexed by line, the autocomplete
 	// popup, and the hover popup. See lsp_state.go.
@@ -575,8 +575,8 @@ type Model struct {
 	// instantly — the same rendering-only gate the inlay hints use.
 	semanticTokens bool
 	stickyScroll   bool
-	stickyDepth        int
-	smartPaste         bool
+	stickyDepth    int
+	smartPaste     bool
 
 	// View options (#64). softWrap/wsMode/indentGuides follow the [editor]
 	// config until their palette toggle flips them; the *Set flags mark a

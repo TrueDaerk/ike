@@ -621,8 +621,8 @@ type LSP struct {
 	// moves and applies the returned refactoring edits (import paths etc.,
 	// #1912). The FS operation itself never depends on the server answering.
 	WillRename bool                      `toml:"will_rename"`
-	LogLevel       string                    `toml:"log_level"`
-	Servers        map[string]map[string]any `toml:"servers"`
+	LogLevel   string                    `toml:"log_level"`
+	Servers    map[string]map[string]any `toml:"servers"`
 	// DiagnosticsIgnore suppresses matching diagnostics everywhere they surface
 	// (#1259): editor decorations AND the Problems window — an ignored
 	// diagnostic is dropped before any consumer sees it. Each rule is a string
