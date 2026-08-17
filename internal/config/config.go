@@ -188,6 +188,8 @@ func (c *Config) Flat() map[string]string {
 	}
 
 	put("keymap.preset", c.Keymap.Preset)
+	put("keymap.which_key", c.Keymap.WhichKey)
+	put("keymap.which_key_delay_ms", c.Keymap.WhichKeyDelayMs)
 	for k, v := range c.Keymap.Bindings {
 		put("keymap.bindings."+k, v)
 	}

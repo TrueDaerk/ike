@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-08-14T00:00:00Z
+timestamp: 2026-08-17T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -171,8 +171,11 @@ multi-step state. Each `Feed(key, context)` returns:
   recovered on `Timeout`. A bare prefix without an exact binding **survives**
   the timeout (#1482): `Timeout` keeps the pending chord and reports Pending,
   so the which-key popup stays open until a continuation key, a non-matching
-  key (Feed restarts from it), or an explicit `Reset` (mouse click) ends the
-  sequence.
+  key (Feed restarts from it), an `esc` (#1909) or an explicit `Reset` (mouse
+  click) ends the sequence. `Continues(key, ctx)` answers, without touching
+  the held state, whether a key would carry the sequence forward — the
+  which-key layer uses it to tell a cancelling `esc` from one a binding
+  claims.
 - **Resolved** — a binding matched; `Command` carries the id.
 - **NoMatch** — nothing; the caller lets the key fall through. An aborted prefix
   restarts the sequence from the new key rather than stranding it.
@@ -194,11 +197,16 @@ former Roadmap 0085, spec in git history, for the v1→v2 key-model change:
 - A **Resolved** id that names a registered command runs it via `host.API`; an
   inert id falls through — unless the blocked ledger documents it, in which
   case the chord is consumed with an explanatory toast (#267). **Pending**
-  swallows the key, surfaces the which-key popup (bordered, bottom-centered
-  above the status line) and schedules a `keymapTimeoutMsg`; on timeout the
-  held chord resolves as an exact binding, or — as a bare prefix — stays
-  pending with the popup open (#1482). A mouse click while a chord is pending
-  resets the resolver and closes the popup; the click then acts normally.
+  swallows the key, schedules a `keymapTimeoutMsg` and — unless the popup is
+  already up or the delay is 0 — a `whichKeyDelayMsg` that surfaces the
+  which-key popup (bordered, bottom-centered above the status line) once the
+  configured delay has passed (#1909). The delay message carries the
+  pending-sequence generation (`whichKeyGen`, bumped by every pend and every
+  clear), so a timer whose sequence has since resolved or been cancelled is
+  dropped instead of flashing a stale popup. On timeout the held chord
+  resolves as an exact binding, or — as a bare prefix — stays pending with
+  the popup open (#1482). A mouse click while a chord is pending resets the
+  resolver and closes the popup; the click then acts normally.
 
 ## Terminal-context bindings (#1794)
 
@@ -542,7 +550,19 @@ equivalents, palette reach via esc-esc).
   pops a bottom-centered panel listing the available continuations — letter
   mnemonics first, digits next — built live from the resolver's pending
   state (`Resolver.PendingContinuations` / `BindingTable.Continuations`).
-  It clears on resolve, timeout or abort.
+  Only bindings whose context matches the focused pane are listed, and each
+  row carries the binding's cheatsheet title, so labels stay consistent with
+  the help sheet.
+  The panel opens after `keymap.which_key_delay_ms` (default 300ms, #1909)
+  of pending time — a sequence typed at speed never flashes one — and
+  `keymap.which_key = false` switches it off entirely; both are edited on the
+  settings panel's **Keymap Hints** page. Once open it follows every further
+  step immediately, narrowing to the deeper prefix's continuations without
+  waiting again. It clears on resolve, on a non-matching key, on a mouse
+  click, and on `esc` — which, while a sequence is pending, cancels the
+  sequence and is **consumed** (`Resolver.Continues` first checks that no
+  binding claims it), so abandoning a chord never doubles as an `esc` for the
+  focused pane.
 - **Live, honest labels** (`keymap.LiveBindings`): the cheatsheet and the
   palette's shortcut column read the *effective* table through a stable
   holder that follows every keymap reload. Labelling is honest by rule:

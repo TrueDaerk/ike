@@ -355,6 +355,32 @@ func TestBackupClampAndOverride(t *testing.T) {
 	}
 }
 
+func TestWhichKeyDefaultsAndClamp(t *testing.T) {
+	c, _ := Load(Options{})
+	if !c.Keymap.WhichKey || c.Keymap.WhichKeyDelayMs != 300 {
+		t.Errorf("which-key defaults wrong: %+v", c.Keymap)
+	}
+	proj := writeProject(t, "[keymap]\nwhich_key = false\nwhich_key_delay_ms = -1\n")
+	c, diags := Load(Options{ProjectRoot: proj})
+	if c.Keymap.WhichKey {
+		t.Errorf("which_key = false should stick")
+	}
+	if c.Keymap.WhichKeyDelayMs != 0 {
+		t.Errorf("a negative delay should clamp to 0, got %d", c.Keymap.WhichKeyDelayMs)
+	}
+	if len(diags) != 1 {
+		t.Errorf("expected one clamp diagnostic, got %v", diags)
+	}
+	proj = writeProject(t, "[keymap]\nwhich_key_delay_ms = 99999\n")
+	c, diags = Load(Options{ProjectRoot: proj})
+	if c.Keymap.WhichKeyDelayMs != whichKeyMaxDelayMs {
+		t.Errorf("an oversized delay should clamp to %d, got %d", whichKeyMaxDelayMs, c.Keymap.WhichKeyDelayMs)
+	}
+	if len(diags) != 1 {
+		t.Errorf("expected one clamp diagnostic, got %v", diags)
+	}
+}
+
 func TestPluginsSectionFlatAndDecode(t *testing.T) {
 	proj := writeProject(t, "[plugins.example]\nenabled = false\n")
 	c, _ := Load(Options{ProjectRoot: proj})

@@ -265,6 +265,10 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "palette.default_mode", Type: Enum, Title: "Default mode", Description: "Prefix assumed when the query starts with no mode rune: \":\" ranks it as a command, \"@\" as a file name", Scope: config.UserScope, Options: []string{":", "@"}},
 			{Key: "palette.off_context", Type: Enum, Title: "Off-context commands", Description: "How command mode treats commands scoped to a pane other than the focused one: rank them last, or hide them", Scope: config.UserScope, Options: []string{"rank", "hide"}},
 		}},
+		{Title: "Keymap Hints", Description: "The which-key popup: while a multi-step chord waits for its next key, a small panel above the status line lists every continuation valid in the focused pane. The bindings themselves are edited on the Keymap page.", Entries: []Entry{
+			{Key: "keymap.which_key", Type: Bool, Title: "Which-key hints", Description: "Show the continuation popup while a chord prefix is pending (cmd+k …); off leaves multi-step sequences unannounced", Scope: config.UserScope},
+			{Key: "keymap.which_key_delay_ms", Type: Int, Title: "Which-key delay", Description: "Milliseconds a chord prefix must stay pending before the popup opens; a sequence finished faster never flashes one. 0 shows it immediately", Scope: config.UserScope, Min: 0, Max: 5000},
+		}},
 		{Title: "Files & Session", Description: "Opening, watching and restoring files: which project comes back on start, how external changes are handled and when a file counts as too large for language features.", Entries: []Entry{
 			{Key: "project.restore_last", Type: Bool, Title: "Restore last project", Description: "Reopen the previous project's workspace on start", Scope: config.UserScope},
 			{Key: "project.directory", Type: Path, Dirs: true, Title: "Project directory", Description: "Default parent for projects IKE creates itself (clone repository); a leading ~ is expanded and the directory is created on first use", Scope: config.UserScope},

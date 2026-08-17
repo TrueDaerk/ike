@@ -566,6 +566,9 @@ type Model struct {
 	// whichKey holds the which-key hint rows while a chord prefix is pending
 	// (0081/40); nil hides the overlay.
 	whichKey []string
+	// whichKeyGen counts pending-sequence changes (#1909): a delay timer only
+	// opens the popup while its generation is still current.
+	whichKeyGen int
 	// refs is the palette mode listing the latest find-references results
 	// (lsp.references, #5); the ReferencesMsg handler fills it and opens the
 	// palette locked to it.
@@ -1916,24 +1919,74 @@ func focusKeys(cfg host.Config) map[string]Direction {
 // resolver timeout, so the root model can resolve or discard it.
 type keymapTimeoutMsg struct{}
 
+// whichKeyDelayMsg fires when a held prefix has pended for the configured
+// which-key delay (#1909). gen is the pending-sequence generation the timer was
+// armed for: a stale timer — the sequence resolved, was cancelled or restarted
+// meanwhile — carries an older generation and is dropped, so a chord completed
+// before the delay never flashes a popup.
+type whichKeyDelayMsg struct{ gen int }
+
+// showWhichKey fills the hint rows from the resolver's held prefix. Called once
+// per pending-prefix change (delay expiry, or a narrowing key while the popup
+// is already up), never per render.
+func (m *Model) showWhichKey() {
+	prefix, conts := m.keys.PendingContinuations(keymap.Context(m.focusContext()))
+	if prefix == "" {
+		m.whichKey = nil
+		return
+	}
+	m.whichKey = append([]string{prefix + " —"}, keymap.FormatContinuations(conts, 12)...)
+}
+
+// clearWhichKey hides the popup and invalidates any armed delay timer, so a
+// sequence that ended (resolved, cancelled, clicked away) stays silent.
+func (m *Model) clearWhichKey() {
+	m.whichKey = nil
+	m.whichKeyGen++
+}
+
 // resolveKeymap feeds one key to the keybinding resolver in the focused context.
 // It returns (cmd, true) when the key is consumed by the keymap layer — either a
 // resolved command to run or a partial chord to wait on — and (nil, false) when
 // the key should fall through to the existing dispatch (no match, or an inert
 // binding whose command id is not registered).
 func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
+	// Esc abandons a sequence in progress (#1909): the pending chord and its
+	// which-key popup go away and the key is consumed, so cancelling a chord
+	// never doubles as an esc for the focused pane (leaving insert mode,
+	// closing a popup). Unmodified esc only — cmd+k esc could be bound.
+	if m.keys.Pending() && k.Base == "esc" && k.Mods == 0 {
+		if !m.keys.Continues(k, keymap.Context(m.focusContext())) {
+			m.keys.Reset()
+			m.clearWhichKey()
+			return nil, true
+		}
+	}
 	res := m.keys.Feed(k, keymap.Context(m.focusContext()))
 	switch res.Status {
 	case keymap.Pending:
-		// Hold the partial chord, surface the which-key hints (0081/40) and
-		// arm the timeout; swallow the key meanwhile.
-		prefix, conts := m.keys.PendingContinuations(keymap.Context(m.focusContext()))
-		m.whichKey = append([]string{prefix + " —"}, keymap.FormatContinuations(conts, 12)...)
-		return tea.Tick(keymap.TimeoutDuration, func(time.Time) tea.Msg {
+		// Hold the partial chord and arm the resolver timeout; swallow the key
+		// meanwhile. The which-key hints (0081/40) wait for the configured
+		// delay (#1909) so a sequence typed at speed never flashes a popup —
+		// but once the popup is up, a narrowing key updates it at once.
+		m.whichKeyGen++
+		cmds := []tea.Cmd{tea.Tick(keymap.TimeoutDuration, func(time.Time) tea.Msg {
 			return keymapTimeoutMsg{}
-		}), true
+		})}
+		switch on, delay := whichKeyConfig(); {
+		case !on:
+			m.whichKey = nil
+		case len(m.whichKey) > 0 || delay <= 0:
+			m.showWhichKey()
+		default:
+			gen := m.whichKeyGen
+			cmds = append(cmds, tea.Tick(delay, func(time.Time) tea.Msg {
+				return whichKeyDelayMsg{gen: gen}
+			}))
+		}
+		return tea.Batch(cmds...), true
 	case keymap.Resolved:
-		m.whichKey = nil
+		m.clearWhichKey()
 		if c, ok := m.reg.Command(res.Command); ok {
 			return m.dispatchCommand(res.Command, c), true
 		}
@@ -1946,9 +1999,19 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 			return nil, true
 		}
 	default:
-		m.whichKey = nil
+		m.clearWhichKey()
 	}
 	return nil, false
+}
+
+// whichKeyConfig reads the which-key switch and delay (#1909) off the live
+// config, so a settings edit applies to the next pending prefix.
+func whichKeyConfig() (bool, time.Duration) {
+	c := config.Get()
+	if c == nil {
+		return true, 300 * time.Millisecond
+	}
+	return c.Keymap.WhichKey, time.Duration(c.Keymap.WhichKeyDelayMs) * time.Millisecond
 }
 
 // buildKeymap constructs the keybinding resolver from config: the preset
@@ -3007,7 +3070,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the surviving which-key popup closes and the click acts normally.
 		if m.keys.Pending() {
 			m.keys.Reset()
-			m.whichKey = nil
+			m.clearWhichKey()
 		}
 		// The dedicated back/forward buttons (#816) resolve through the
 		// keymap as synthetic chords — rebindable like keys, default
@@ -5165,14 +5228,23 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// key, or a mouse click ends it.
 		switch res := m.keys.Timeout(keymap.Context(m.focusContext())); res.Status {
 		case keymap.Resolved:
-			m.whichKey = nil
+			m.clearWhichKey()
 			if c, ok := m.reg.Command(res.Command); ok {
 				return m, m.dispatchCommand(res.Command, c)
 			}
 		case keymap.Pending:
 			return m, nil // popup stays; no timer re-arm needed
 		default:
-			m.whichKey = nil
+			m.clearWhichKey()
+		}
+		return m, nil
+
+	case whichKeyDelayMsg:
+		// The which-key delay elapsed (#1909): open the popup if the very
+		// sequence the timer was armed for is still pending.
+		on, _ := whichKeyConfig()
+		if on && msg.gen == m.whichKeyGen && m.keys.Pending() {
+			m.showWhichKey()
 		}
 		return m, nil
 

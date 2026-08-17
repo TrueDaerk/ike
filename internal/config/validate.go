@@ -54,6 +54,10 @@ var (
 	whitespaceModes = map[string]bool{"none": true, "trailing": true, "all": true}
 )
 
+// whichKeyMaxDelayMs caps keymap.which_key_delay_ms (#1909); the settings
+// form uses the same bound.
+const whichKeyMaxDelayMs = 5000
+
 // validate clamps c in place against the baseline rules and returns one
 // diagnostic per correction. Extension validators run after the built-in checks.
 func validate(c *Config) []Diagnostic {
@@ -158,6 +162,13 @@ func validate(c *Config) []Diagnostic {
 	clampMin("backup.max_age_days", &c.Backup.MaxAgeDays, 1)
 	clampMin("notifications.timeout_seconds", &c.Notifications.TimeoutSeconds, 1)
 	clampMin("terminal.scrollback_lines", &c.Terminal.ScrollbackLines, 100)
+	// which-key delay (#1909): 0 shows the popup as soon as the prefix pends;
+	// beyond the 5s cap the hint would arrive long after the user gave up.
+	clampMin("keymap.which_key_delay_ms", &c.Keymap.WhichKeyDelayMs, 0)
+	if c.Keymap.WhichKeyDelayMs > whichKeyMaxDelayMs {
+		diags = append(diags, Diagnostic{Field: "keymap.which_key_delay_ms", Message: fmt.Sprintf("%d above maximum %d, using %d", c.Keymap.WhichKeyDelayMs, whichKeyMaxDelayMs, whichKeyMaxDelayMs)})
+		c.Keymap.WhichKeyDelayMs = whichKeyMaxDelayMs
+	}
 	if !severities[c.Notifications.MinSeverity] {
 		diags = append(diags, Diagnostic{Field: "notifications.min_severity", Message: fmt.Sprintf("unknown severity %q, using \"info\"", c.Notifications.MinSeverity)})
 		c.Notifications.MinSeverity = "info"

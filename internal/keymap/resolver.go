@@ -47,6 +47,23 @@ func (r *Resolver) Pending() bool { return r.pending.Len() > 0 }
 // Reset discards any partial chord state.
 func (r *Resolver) Reset() { r.pending = Chord{} }
 
+// Continues reports whether key would carry the held sequence forward — by
+// completing a binding or by extending it toward a longer chord. It answers
+// without touching the resolver's state, so the which-key layer can tell a key
+// that cancels the sequence (#1909) from one a binding claims.
+func (r *Resolver) Continues(key Key, active Context) bool {
+	if r.pending.Len() == 0 {
+		return false
+	}
+	key = NormalizeKey(key, GOOS)
+	cand := Chord{Steps: append(append([]Key{}, r.pending.Steps...), key)}
+	if r.table.IsPrefix(cand, active) {
+		return true
+	}
+	_, ok := r.table.Lookup(cand, active)
+	return ok
+}
+
 // Feed advances the resolver with one key in the active context. A key that
 // neither completes nor extends a chord while partial state is held restarts the
 // sequence from that key alone, so an aborted prefix never strands a fresh chord.

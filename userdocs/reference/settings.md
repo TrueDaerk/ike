@@ -150,6 +150,13 @@ secrets — are documented together, with screenshots, in
 | Default mode | `palette.default_mode` | enum: `:`, `@` | `:` | user | Prefix assumed when the query starts with no mode rune: ":" ranks it as a command, "@" as a file name |
 | Off-context commands | `palette.off_context` | enum: `rank`, `hide` | `rank` | user | How command mode treats commands scoped to a pane other than the focused one: rank them last, or hide them |
 
+### Keymap Hints
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Which-key hints | `keymap.which_key` | boolean | `true` | user | Show the continuation popup while a chord prefix is pending (cmd+k …); off leaves multi-step sequences unannounced |
+| Which-key delay | `keymap.which_key_delay_ms` | integer (0–5000) | `300` | user | Milliseconds a chord prefix must stay pending before the popup opens; a sequence finished faster never flashes one. 0 shows it immediately |
+
 ### Files & Session
 
 | Setting | Key | Type | Default | Scope | Description |

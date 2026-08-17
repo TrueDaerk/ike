@@ -137,8 +137,10 @@ func defaults() *Config {
 			Colors:     map[string]string{},
 		},
 		Keymap: Keymap{
-			Preset:   "jetbrains",
-			Bindings: map[string]string{},
+			Preset:          "jetbrains",
+			Bindings:        map[string]string{},
+			WhichKey:        true,
+			WhichKeyDelayMs: 300,
 		},
 		LSP: LSP{
 			Enabled:        true,
