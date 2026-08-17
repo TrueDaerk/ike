@@ -1,5 +1,12 @@
 package editor
 
+import (
+	"strings"
+
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+)
+
 // sticky.go implements sticky scroll (#168): the header lines of the
 // declarations enclosing the first visible line are pinned as the top rows of
 // the pane, JetBrains/VSCode-style. The scopes come from the same Tree-sitter
@@ -26,6 +33,12 @@ func (m Model) stickyLines() []int {
 	// machinery (rendering, click remap, unhideCursor).
 	if m.svActive() && m.view.Height() > 1 && m.buf.LineCount() > 0 {
 		return []int{0}
+	}
+	// Large-file mode ships no Tree-sitter parse, so scopes stay empty — but
+	// gate explicitly (#1910) so headers can never pin from stale scope data,
+	// e.g. after a same-path reload that crossed the size limit.
+	if m.InsightOff() {
+		return nil
 	}
 	if len(m.scopes) == 0 {
 		return nil
@@ -67,6 +80,23 @@ func (m Model) enclosingHeaders(line, max int) []int {
 		out = out[len(out)-max:]
 	}
 	return out
+}
+
+// stickySeparate fills the right padding of the last pinned row with a faint
+// dashed rule (#1910), the subtle separator marking where the headers end and
+// the scrolling body begins. A row whose content already reaches the text
+// width renders unchanged — the rule is a hint, not a reserved column.
+func (m Model) stickySeparate(row string, textWidth int) string {
+	w := ansi.StringWidth(strings.TrimRight(ansi.Strip(row), " "))
+	if w+2 >= textWidth {
+		return row
+	}
+	body := ansi.Truncate(row, w+1, "")
+	if pad := w + 1 - ansi.StringWidth(body); pad > 0 {
+		body += strings.Repeat(" ", pad)
+	}
+	rule := strings.Repeat("╌", textWidth-w-1)
+	return body + lipgloss.NewStyle().Faint(true).Render(rule)
 }
 
 // stickyCount is len(stickyLines) without building the row content; used by

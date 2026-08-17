@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-13T00:00:00Z
+timestamp: 2026-08-17T00:00:00Z
 ---
 
 # Editor
@@ -290,7 +290,11 @@ line runs that test (see /architecture/run-configurations.md).
   pin for the current `view.Top` (a fixed point, since pinned rows cover
   content and move the reference line down; capped by `sticky_scroll_depth`,
   innermost win), scrolling keeps the cursor from hiding behind the pinned
-  rows, and a mouse click on a pinned row jumps to its declaration.
+  rows, and a mouse click on a pinned row jumps to its declaration. The last
+  pinned row fills its right padding with a faint dashed rule (#1910), the
+  separator between the headers and the scrolling body. Large-file mode pins
+  nothing (#1910): `stickyLines` gates on `InsightOff`, so headers can never
+  pin from stale scope data even though the parse itself is already skipped.
   **Code folding** (#144) collapses the body of a function, block, import
   list or multi-line comment behind its header line: the foldable ranges come
   from the same parse (`SpansMsg.Folds`, node kinds per language via

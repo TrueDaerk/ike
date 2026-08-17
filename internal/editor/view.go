@@ -510,9 +510,13 @@ func (m Model) View() string {
 	// rows of the pane; the buffer lines they cover are skipped, so the first
 	// content row is the line right below the innermost pinned scope header.
 	sticky := m.stickyLines()
-	for _, line := range sticky {
+	for si, line := range sticky {
 		gutter := gutterStyle.Render(m.view.Gutter(line, m.cursor.Line, lineCount))
 		body := m.renderLine(line, textWidth, cursorStyle, selStyle)
+		if si == len(sticky)-1 {
+			// The last pinned row carries the subtle separator (#1910).
+			body = m.stickySeparate(body, textWidth)
+		}
 		out = append(out, gutter+body)
 	}
 	// Body rows: fill the remaining height, skipping lines hidden inside
