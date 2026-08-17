@@ -120,6 +120,14 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().codeAction(h) },
 			},
 			{
+				// Picks and executes a code lens on the cursor line (or any
+				// lens in the file when the line has none, #1912).
+				ID:    "lsp.codeLens",
+				Title: "LSP: Run Code Lens",
+				Scope: plugin.PaneScope("editor"),
+				Run:   func(h host.API) tea.Cmd { return shared().codeLensPick(h) },
+			},
+			{
 				ID:    "lsp.rename",
 				Title: "LSP: Rename Symbol",
 				Scope: plugin.PaneScope("editor"),
