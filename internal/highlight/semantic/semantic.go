@@ -99,9 +99,22 @@ func captureFor(tokenType string, mods map[string]bool) string {
 		return "operator"
 	case "function", "method", "macro":
 		return "function"
-	case "namespace", "type", "class", "enum", "interface", "struct", "typeParameter":
+	case "namespace":
+		// Dotted refinement (#1912): resolves to the "type" colour through the
+		// theme's prefix walk unless a theme/user override names the leaf.
+		return "type.namespace"
+	case "type", "class", "enum", "interface", "struct", "typeParameter":
 		return "type"
-	case "parameter", "variable", "event":
+	case "parameter":
+		// Parameters get their own leaf so a theme can tell them from locals
+		// (#1912); unthemed they inherit the "variable" colour via the prefix
+		// walk. Modifier refinements below stay ahead of the parameter split
+		// so readonly parameters still read as constants.
+		if mods["readonly"] {
+			return "constant"
+		}
+		return "variable.parameter"
+	case "variable", "event":
 		if mods["readonly"] {
 			return "constant"
 		}

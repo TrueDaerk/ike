@@ -46,6 +46,28 @@ func TestDecodeModifiersRefineCaptures(t *testing.T) {
 	}
 }
 
+func TestCaptureForRefinements(t *testing.T) {
+	// Dotted leaves (#1912) let a theme tell parameters from locals and
+	// namespaces from other types; unthemed they resolve through the prefix
+	// walk to the head capture's colour.
+	cases := []struct {
+		tokenType string
+		mods      map[string]bool
+		want      string
+	}{
+		{"parameter", nil, "variable.parameter"},
+		{"parameter", map[string]bool{"readonly": true}, "constant"},
+		{"namespace", nil, "type.namespace"},
+		{"variable", nil, "variable"},
+		{"variable", map[string]bool{"readonly": true}, "constant"},
+	}
+	for _, c := range cases {
+		if got := captureFor(c.tokenType, c.mods); got != c.want {
+			t.Errorf("captureFor(%q, %v) = %q, want %q", c.tokenType, c.mods, got, c.want)
+		}
+	}
+}
+
 func TestDecodeDropsUnknownAndOutOfRange(t *testing.T) {
 	lines := []string{"x"}
 	data := []uint32{

@@ -4953,6 +4953,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, reparse
 
+	case ilsp.WillRenameDoneMsg:
+		// The willRenameFiles round trip for an explorer rename/move finished
+		// (#1912): hand the message to the explorer, which performs the
+		// deferred FS operation.
+		exp := m.explorer()
+		var cmd tea.Cmd
+		*exp, cmd = exp.Update(msg)
+		return m, cmd
+
 	case ilsp.SaveChainDoneMsg:
 		// Format/organize-imports on save finished (#1148): every view that
 		// parked a manual save behind the chain performs its write now.

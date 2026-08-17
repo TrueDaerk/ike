@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/lsp"
 	"ike/internal/overlay"
 	"ike/internal/scrollbar"
 	"ike/internal/theme"
@@ -681,6 +682,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.moveEntry(msg.Path, msg.TargetDir, info.IsDir())
+	case lsp.WillRenameDoneMsg:
+		// The willRenameFiles round trip finished (#1912): any server
+		// refactoring edits were applied, perform the deferred FS rename.
+		return m, m.commitRelocate(msg.Old, msg.New, msg.IsDir)
 	case UndoMsg:
 		return m, m.undo()
 	case RedoMsg:
