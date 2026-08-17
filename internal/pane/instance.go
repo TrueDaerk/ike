@@ -24,6 +24,7 @@ import (
 	"ike/internal/problems"
 	"ike/internal/structpanel"
 	"ike/internal/terminal"
+	"ike/internal/testresults"
 	"ike/internal/theme"
 	"ike/internal/usages"
 	"ike/internal/vcspanel"
@@ -90,6 +91,10 @@ const (
 	// bound to one database file, listing its tables and views next to a
 	// paged read-only grid of the selected one's rows.
 	KindData
+	// KindTests is the Test Results tool window (#1911): a singleton
+	// bottom-split panel with the last captured test run's result tree and
+	// detail pane, under key "tests".
+	KindTests
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -109,6 +114,7 @@ const (
 	ctxBreak    = "breakpoints"
 	ctxArchive  = "archive"
 	ctxData     = "data"
+	ctxTests    = "tests"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -136,6 +142,7 @@ type Instance struct {
 	mg   merge.Model
 	av   archview.Model
 	dv   dataview.Model
+	tr   testresults.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
@@ -256,6 +263,8 @@ func (i *Instance) ContextID() string {
 		return ctxArchive
 	case KindData:
 		return ctxData
+	case KindTests:
+		return ctxTests
 	}
 	return ctxEditor
 }
@@ -299,6 +308,10 @@ func (i *Instance) Archive() *archview.Model { return &i.av }
 // Data returns the underlying data viewer model (#1764). It is only valid
 // for a data instance; callers gate on Kind first.
 func (i *Instance) Data() *dataview.Model { return &i.dv }
+
+// Tests returns the underlying Test Results tool-window model (#1911). It is
+// only valid for a tests instance; callers gate on Kind first.
+func (i *Instance) Tests() *testresults.Model { return &i.tr }
 
 // Diff returns the underlying diff viewer model. It is only valid for a diff
 // instance; callers gate on Kind first.
@@ -945,6 +958,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.av.SetSize(w, h)
 	case KindData:
 		i.dv.SetSize(w, h)
+	case KindTests:
+		i.tr.SetSize(w, h)
 	}
 }
 
@@ -991,6 +1006,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.av.SetFocused(f)
 	case KindData:
 		i.dv.SetFocused(f)
+	case KindTests:
+		i.tr.SetFocused(f)
 	}
 }
 
@@ -1052,6 +1069,8 @@ func (i *Instance) View() string {
 		return i.av.View()
 	case KindData:
 		return i.dv.View()
+	case KindTests:
+		return i.tr.View()
 	}
 	return ""
 }
@@ -1106,6 +1125,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.av.Update(msg)
 	case KindData:
 		cmd = i.dv.Update(msg)
+	case KindTests:
+		cmd = i.tr.Update(msg)
 	}
 	return cmd
 }
@@ -1243,6 +1264,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.av.SetPalette(p)
 	case KindData:
 		i.dv.SetPalette(p)
+	case KindTests:
+		i.tr.SetPalette(p)
 	}
 }
 

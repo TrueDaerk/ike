@@ -3,6 +3,8 @@ package app
 import (
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/host"
 	"ike/internal/lang"
 	"ike/internal/run"
@@ -34,97 +36,103 @@ const runInPane = "in_pane"
 
 // runCurrentFile is the run.file handler: it ensures a configuration for the
 // active file (creating and persisting the default on first run) and launches it.
-func (m *Model) runCurrentFile() {
+func (m *Model) runCurrentFile() tea.Cmd {
 	path := m.activeFilePath()
 	if path == "" {
 		m.host.Notify(host.Info, "run: focus a file tab first")
-		return
+		return nil
 	}
 	root := projectRoot()
 	store := run.Load()
 	cfg, created, ok := store.EnsureFor(root, path)
 	if !ok {
 		m.host.Notify(host.Info, "run: no run command for this file type")
-		return
+		return nil
 	}
-	m.launchRun(root, store, cfg, created)
+	return m.launchRun(root, store, cfg, created)
 }
 
 // runTestAtCursor is the run.testAtCursor handler (#1150): it resolves the
 // test declared at or nearest above the focused editor's cursor and runs
 // exactly that test in the run-terminal placement, registering the synthesized
 // configuration with run.rerun's last-used memory.
-func (m *Model) runTestAtCursor() {
+func (m *Model) runTestAtCursor() tea.Cmd {
 	ed := m.activeEditor()
 	if ed == nil || !ed.HasFile() {
 		m.host.Notify(host.Info, "run: focus a file tab first")
-		return
+		return nil
 	}
 	if !lang.HasTests(ed.Path()) {
 		m.host.Notify(host.Info, "run: no test runner for this file")
-		return
+		return nil
 	}
 	line, _ := ed.CursorPos()
 	t, ok := ed.NearestTestAt(line)
 	if !ok {
 		m.host.Notify(host.Info, "run: no test at or above the cursor")
-		return
+		return nil
 	}
-	m.runTest(ed.Path(), &t)
+	return m.runTest(ed.Path(), &t)
 }
 
 // runTestsInFile is the run.testsInFile handler (#1150): it runs every test
 // in the active test file's scope (Go: plain `go test` in the file's package
 // directory).
-func (m *Model) runTestsInFile() {
+func (m *Model) runTestsInFile() tea.Cmd {
 	ed := m.activeEditor()
 	if ed == nil || !ed.HasFile() {
 		m.host.Notify(host.Info, "run: focus a file tab first")
-		return
+		return nil
 	}
 	if !lang.HasTests(ed.Path()) {
 		m.host.Notify(host.Info, "run: no test runner for this file")
-		return
+		return nil
 	}
-	m.runTest(ed.Path(), nil)
+	return m.runTest(ed.Path(), nil)
 }
 
 // runTest synthesizes and launches the test-scope configuration for path —
 // one test when t is non-nil, the whole file scope otherwise. Upsert keeps
 // re-runs of the same test as one named configuration; launchRun touches the
 // store, so run.rerun repeats the test.
-func (m *Model) runTest(path string, t *lang.TestMatch) {
+func (m *Model) runTest(path string, t *lang.TestMatch) tea.Cmd {
 	root := projectRoot()
 	cfg, ok := run.TestConfig(root, path, t)
 	if !ok {
 		m.host.Notify(host.Info, "run: no test runner for this file")
-		return
+		return nil
 	}
 	store := run.Load()
 	created := store.ByName(cfg.Name) == nil
-	m.launchRun(root, store, store.Upsert(cfg), created)
+	return m.launchRun(root, store, store.Upsert(cfg), created)
 }
 
 // rerunLast is the run.rerun handler: it launches the last-used configuration.
-func (m *Model) rerunLast() {
+func (m *Model) rerunLast() tea.Cmd {
 	root := projectRoot()
 	store := run.Load()
 	cfg := store.Last()
 	if cfg == nil {
 		m.host.Notify(host.Info, "run: nothing to rerun yet")
-		return
+		return nil
 	}
-	m.launchRun(root, store, cfg, false)
+	return m.launchRun(root, store, cfg, false)
 }
 
 // launchRun synthesizes cfg's command line and streams it into a terminal
 // per the placement rules. The store is persisted with the updated last-used
 // marker; a failed save warns but never blocks the run.
-func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created bool) {
+func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created bool) tea.Cmd {
+	// A test-scope run with an output parser goes to the Test Results tool
+	// window (#1911) instead of the run terminal; tests.results_window off,
+	// or a language without a parser, keeps the raw path below.
+	if cmd, ok := m.launchTestRun(root, store, cfg, created); ok {
+		return cmd
+	}
 	argv, ok := run.Argv(root, *cfg, m.explicitInterpreter(cfg.Lang))
 	if !ok {
 		m.host.Notify(host.Error, "run: "+cfg.Lang+" contributes no run command")
-		return
+		return nil
 	}
 	store.Touch(cfg.Name)
 	if err := run.Save(store); err != nil {
@@ -138,9 +146,10 @@ func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created
 	// touched — a plain terminal the user opened stays theirs.
 	if !m.startInRunTool(cfg, argv, dir, env) && !m.openRunTool(cfg, argv, dir, env) {
 		m.host.Notify(host.Error, "run: no pane to place the run tool")
-		return
+		return nil
 	}
 	m.notifyRun(cfg, created, argv)
+	return nil
 }
 
 // startInRunTool restarts an already open Run tool with the new command,

@@ -242,6 +242,34 @@ func Argv(root string, cfg Config, explicit string) ([]string, bool) {
 	return lang.RunArgv(cfg.Lang, root, spec, explicit)
 }
 
+// StructuredArgv synthesizes the machine-readable command line for a
+// test-scope configuration (#1911): the ordinary test argv plus the
+// language's StructuredArgs, for a run whose captured output feeds the Test
+// Results tool window. ok=false for non-test configurations and for
+// languages without an output parser — the caller falls back to Argv and the
+// raw run terminal.
+func StructuredArgv(root string, cfg Config, explicit string) ([]string, bool) {
+	if !cfg.Tests {
+		return nil, false
+	}
+	file := absTo(root, cfg.File)
+	var t *lang.TestMatch
+	if cfg.TestName != "" {
+		t = &lang.TestMatch{Name: cfg.TestName, Kind: cfg.TestKind}
+	}
+	return lang.TestStructuredArgv(root, file, t, explicit)
+}
+
+// FailedArgv synthesizes the command line re-running exactly the tests named
+// by ids (their parser-assigned RerunIDs) in cfg's scope (#1911) — the
+// re-run-failed and re-run-single-test actions of the Test Results tool.
+func FailedArgv(root string, cfg Config, ids []string, explicit string) ([]string, bool) {
+	if !cfg.Tests {
+		return nil, false
+	}
+	return lang.TestFailedArgv(root, absTo(root, cfg.File), ids, explicit)
+}
+
 // Dir resolves cfg's working directory against root ("" = root).
 func (c Config) Dir(root string) string {
 	if c.Cwd == "" {

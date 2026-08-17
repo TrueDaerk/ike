@@ -288,7 +288,8 @@ wholesale). Row/column counts set the proportions: above, `X` takes a
 quarter of the width over the top two thirds, the `T`/`Z` strip the bottom
 third. `assign` maps tools onto slots as `SLOT=tool` entries; the tool is a
 `[[tools.custom]]` name **or a built-in tool-window id** (`explorer`, `vcs`,
-`debug`, `problems`, `structure`, `usages`, `http`, `breakpoints`, `run`). Each
+`debug`, `problems`, `structure`, `usages`, `http`, `breakpoints`, `run`,
+`tests`). Each
 tool takes at most one slot; unknown slots, the editor region and duplicates
 are dropped with diagnostics (`internal/config/validate.go`). Both keys are
 editable via **Settings → Tool Layout** (schema `List` entries, per the

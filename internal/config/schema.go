@@ -37,6 +37,8 @@ type Config struct {
 	Todo Todo `toml:"todo"`
 	// Run holds run-configuration behaviour (0350, #576).
 	Run Run `toml:"run"`
+	// Tests holds Test Results tool-window behaviour (#1911).
+	Tests Tests `toml:"tests"`
 	// Debug holds debugger behaviour (0360, #823).
 	Debug Debug `toml:"debug"`
 	// Tools holds user-defined TUI tool panes (#741).
@@ -159,6 +161,16 @@ type DebugPathMap struct {
 // "run" overrides the placement, like for any other tool.
 type Run struct {
 	Placement string `toml:"placement"`
+}
+
+// Tests holds Test Results tool-window behaviour (#1911). ResultsWindow
+// routes test runs whose language declares an output parser (`go test
+// -json`, pytest) into the structured Test Results pane; off keeps every
+// test run in the raw Run tool terminal (#1905). AutoOpen opens the pane
+// when a captured test run starts; off, it only fills an already open pane.
+type Tests struct {
+	ResultsWindow bool `toml:"results_window"`
+	AutoOpen      bool `toml:"auto_open"`
 }
 
 // Todo holds the comment-tag index settings (#61). Patterns is the list of tag

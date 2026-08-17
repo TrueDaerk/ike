@@ -65,6 +65,7 @@ func Defaults() []Menu {
 		}},
 		{Title: "Tools", Items: []Item{
 			{Title: "Problems", Command: "problems.toggle"},
+			{Title: "Test Results", Command: "tests.toggle"},
 			{Title: "Terminal", Command: "terminal.toggle"},
 			{Title: "Popup Terminal", Command: "terminal.popup"},
 			{Title: "New Terminal", Command: "terminal.new"},

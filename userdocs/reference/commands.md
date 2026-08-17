@@ -152,6 +152,7 @@ bring their own.
 | New Terminal Tab | `terminal.newTab` | `ctrl+t` | — | everywhere |
 | Popup Terminal | `terminal.popup` | `cmd+alt+t` | — | everywhere |
 | Toggle Terminal | `terminal.toggle` | `alt+f12` | — | everywhere |
+| Test Results | `tests.toggle` | — | — | everywhere |
 | TODO Index | `todo.list` | `cmd+6` | — | everywhere |
 | Set Up Tool Panes | `tools.setup` | — | — | everywhere |
 | Usages | `usages.toggle` | — | — | everywhere |

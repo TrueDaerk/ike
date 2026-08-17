@@ -140,6 +140,13 @@ Registered specs:
 | Language | Detection | Commands |
 |---|---|---|
 | Go | `^func (Test\|Benchmark\|Fuzz)X(` in `_test.go` files (bare `Test` counts, `Testify` and `TestMain` do not) | `go test -run '^TestX$'`; benchmarks `go test -bench '^BenchmarkX$' -run '^$'`; file scope plain `go test` — all with cwd = the file's directory (its package) |
+| Python | `def test*(` (async too) in `test_*.py` / `*_test.py` files (#1911) | single test `python -m pytest FILE -k NAME`; file scope `python -m pytest FILE` — the resolved project interpreter, so the venv's pytest runs |
+
+A test-scope run whose language also declares an **output parser**
+(`TestSpec.ParseOutput` — Go's `go test -json`, pytest's `-v`) is captured
+and lands in the **Test Results tool window** instead of the Run tool; see
+[Test Results Tool Window](/architecture/test-results.md). The
+`tests.results_window` setting turns the capture off entirely.
 
 Wiring:
 

@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-17 (tests: Test Results tool window with re-run-failed, #1911)
+
+- **Test runs get a structured result tree** (`internal/testresults`): a singleton
+  bottom-split pane (`pane.KindTests`, key `tests`, `tests.toggle`) showing group →
+  test → subtest with pass/fail/skip glyphs, durations and a summary line, next to a
+  detail column with the selected test's buffered output (`o` flips to the raw
+  stream). `enter` jumps to the parsed failure location or, for passing tests, the
+  scanned source declaration; `r`/`f`/`t` re-run all / failed only / one test.
+- **`lang.TestSpec` grew a structured-output seam** (`internal/lang/test.go`):
+  `StructuredArgs` (machine-readable flags), `ParseOutput` (captured output →
+  `lang.TestResult`s) and `FailedArgv`/`NamesJoin` (re-run a named set). Go parses
+  the `go test -json` event stream (`plugins/languages/go/testoutput.go`); Python
+  gained a full pytest `TestSpec` plus a `-v --tb=short` parser
+  (`plugins/languages/python/testoutput.go`). Languages without a parser keep the
+  raw Run tool path (#1905) untouched.
+- **Captured runs bypass the PTY** (`internal/app/testrun.go`): a parser-backed
+  test-scope configuration runs off-loop via `exec.Command` with combined output,
+  fills the pane on completion (stale completions dropped by sequence), and still
+  registers with `run.rerun`'s last-used memory. Re-runs resolve RerunIDs through
+  `run.FailedArgv`.
+- **Settings → Tests**: `tests.results_window` (off = raw Run tool for every test
+  run) and `tests.auto_open`, both end-to-end in the Settings UI. The pane is a
+  `[tools.layout]` assign target (`tests`) and a `window.hideAllTools` member.
+  Docs: `architecture/test-results.md` (new), `architecture/run-configurations.md`,
+  `architecture/tool-panes.md`; `userdocs/reference` regenerated.
+
 ## 2026-08-17 (run: the run terminal is its own tool, #1905)
 
 - **Run output has a dedicated tool pane** (`internal/app/run.go`): the reserved tool

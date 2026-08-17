@@ -385,6 +385,8 @@ func (m Model) statusLine() string {
 			left += "DEBUG"
 		case inst.Kind() == pane.KindProblems:
 			left += "PROBLEMS"
+		case inst.Kind() == pane.KindTests:
+			left += "TESTS"
 		case inst.Kind() == pane.KindBreakpoints:
 			left += "BREAKPOINTS"
 		case inst.Kind() == pane.KindHTTP:

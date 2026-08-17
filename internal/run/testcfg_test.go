@@ -18,6 +18,11 @@ func init() {
 			Kinds:       map[string][]string{"Test": {"{interpreter}", "test", "-run", "^{name}$"}},
 			FileArgv:    []string{"{interpreter}", "test"},
 			Tool:        "rtool",
+			// Structured seam (#1911), the Go plugin's shape.
+			StructuredArgs: []string{"-json"},
+			ParseOutput:    func(string) []lang.TestResult { return nil },
+			FailedArgv:     []string{"{interpreter}", "test", "-run", "^({names})$"},
+			NamesJoin:      "|",
 		},
 	})
 }
@@ -81,6 +86,35 @@ func TestArgvTestBranch(t *testing.T) {
 	argv, ok = Argv(root, fileCfg, "")
 	if !ok || !reflect.DeepEqual(argv, []string{"rtool", "test"}) {
 		t.Fatalf("file-scope argv = %v, ok=%v", argv, ok)
+	}
+}
+
+// TestStructuredAndFailedArgv pins the #1911 wrappers: StructuredArgv is the
+// test argv plus the language's StructuredArgs, FailedArgv re-runs a named
+// set; both refuse non-test configurations.
+func TestStructuredAndFailedArgv(t *testing.T) {
+	root := "/proj"
+	file := filepath.Join(root, "pkg", "a_test.rt")
+	cfg, _ := TestConfig(root, file, &lang.TestMatch{Name: "TestX", Kind: "Test"})
+	argv, ok := StructuredArgv(root, cfg, "")
+	if !ok || !reflect.DeepEqual(argv, []string{"rtool", "test", "-run", "^TestX$", "-json"}) {
+		t.Fatalf("structured argv = %v, ok=%v", argv, ok)
+	}
+	fileCfg, _ := TestConfig(root, file, nil)
+	argv, ok = StructuredArgv(root, fileCfg, "")
+	if !ok || !reflect.DeepEqual(argv, []string{"rtool", "test", "-json"}) {
+		t.Fatalf("file-scope structured argv = %v, ok=%v", argv, ok)
+	}
+	argv, ok = FailedArgv(root, fileCfg, []string{"TestA", "TestB"}, "")
+	if !ok || !reflect.DeepEqual(argv, []string{"rtool", "test", "-run", "^(TestA|TestB)$", "-json"}) {
+		t.Fatalf("failed argv = %v, ok=%v", argv, ok)
+	}
+	plain := Config{Kind: KindRun, Lang: "runtst", File: "pkg/a.rt"}
+	if _, ok := StructuredArgv(root, plain, ""); ok {
+		t.Fatal("a non-test config must not synthesize a structured argv")
+	}
+	if _, ok := FailedArgv(root, plain, []string{"TestA"}, ""); ok {
+		t.Fatal("a non-test config must not synthesize a failed argv")
 	}
 }
 
