@@ -48,47 +48,13 @@ func TestStartCommandSessionEmptyArgv(t *testing.T) {
 	}
 }
 
-// TestModelOccupiedTracking verifies the reuse predicate (#574): fresh
-// terminals are unoccupied; a forwarded key or paste occupies them; the
-// scrollback paging keys do not.
-func TestModelOccupiedTracking(t *testing.T) {
-	c := &collector{}
-	m := New("terminal", "/bin/sh", t.TempDir(), 80, 24, nil, c.send)
-	t.Cleanup(m.Close)
-	if m.Occupied() {
-		t.Fatal("a fresh terminal must be unoccupied")
-	}
-	m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp, Mod: tea.ModShift})
-	if m.Occupied() {
-		t.Fatal("scrollback paging must not occupy the terminal")
-	}
-	m.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
-	if !m.Occupied() {
-		t.Fatal("a forwarded key must occupy the terminal")
-	}
-}
-
-// TestModelPasteOccupies verifies pasted text counts as input too.
-func TestModelPasteOccupies(t *testing.T) {
-	c := &collector{}
-	m := New("terminal", "/bin/sh", t.TempDir(), 80, 24, nil, c.send)
-	t.Cleanup(m.Close)
-	m.PasteText("ls\n")
-	if !m.Occupied() {
-		t.Fatal("a paste must occupy the terminal")
-	}
-}
-
-// TestModelStartCommandReplacesSession verifies the reuse path: StartCommand
-// takes over the model with a fresh command session and resets occupancy.
+// TestModelStartCommandReplacesSession verifies the in-place launch path
+// (#1905): StartCommand takes the model over with a fresh command session.
 func TestModelStartCommandReplacesSession(t *testing.T) {
 	c := &collector{}
 	m := New("terminal", "/bin/sh", t.TempDir(), 80, 24, nil, c.send)
 	t.Cleanup(m.Close)
 	m.StartCommand("terminal", []string{"/bin/sh", "-c", "echo took-over"}, t.TempDir(), nil)
-	if m.Occupied() {
-		t.Fatal("a replaced session starts unoccupied")
-	}
 	if !m.IsCommand() {
 		t.Fatal("the replacement must be a command session")
 	}

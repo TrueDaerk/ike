@@ -1290,6 +1290,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below as the empty singleton panel (#580)
 		} else if ids[key].Kind == "debugTerm" {
 			continue // dropped below: the debuggee terminal is session state (#1370)
+		} else if ids[key].Kind == "runTool" {
+			continue // dropped below: the Run tool's output is session state (#1905)
 		} else if ids[key].Kind == "problems" {
 			continue // restored below as the empty singleton panel (#1024; fix #1157)
 		} else if ids[key].Kind == "structure" {
@@ -1336,12 +1338,14 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 	// The debuggee terminal pane (#1370) never resurrects — its content is
 	// session state, and restoring a shell in its place would be misleading.
 	// Its leaf is pruned; the next debug session recreates the pane beside
-	// the panel. A global tool leaf whose tool was explicitly closed in
-	// another project prunes the same way (#1903): the manager, not this
-	// stale layout entry, decides whether the tool is open.
+	// the panel. The Run tool (#1905) prunes the same way: the next run
+	// reopens it at its placement, and no program re-runs at startup. A
+	// global tool leaf whose tool was explicitly closed in another project
+	// prunes too (#1903): the manager, not this stale layout entry, decides
+	// whether the tool is open.
 	prunedTerm := map[string]bool{}
 	for _, key := range leaves {
-		drop := ids[key].Kind == "debugTerm"
+		drop := ids[key].Kind == "debugTerm" || ids[key].Kind == "runTool"
 		if !drop && ids[key].Kind == "tool" {
 			if entry, ok := toolEntry(ids[key].Tool); ok && m.staleGlobalTool(entry) {
 				drop = true
@@ -1358,9 +1362,9 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 		if key == pane.ExplorerKey {
 			continue
 		}
-		if id := ids[key]; id.Kind == "debugTerm" {
+		if id := ids[key]; id.Kind == "debugTerm" || id.Kind == "runTool" {
 			if prunedTerm[key] {
-				continue // leaf pruned above (#1370)
+				continue // leaf pruned above (#1370, #1905)
 			}
 			// The sole leaf cannot be pruned; restore an empty editor so the
 			// layout stays consistent.
@@ -9428,7 +9432,7 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 				// terminal pane, from the tab's own label. A tool session
 				// (#741) keeps its tool chrome (#836).
 				if term.Tool() != "" {
-					title = "⚙ " + strings.ToUpper(term.Tool())
+					title = toolPaneTitle(term)
 				} else {
 					title = "TERMINAL — " + inst.Tab(inst.ActiveTab()).Title()
 				}
@@ -9446,8 +9450,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 		case pane.KindTerminal:
 			// A tool pane (#741) is chromed as the tool, not as a terminal:
 			// no shell, no directory, no OSC title, no interpreter mappings.
-			if tool := inst.Terminal().Tool(); tool != "" {
-				title = "⚙ " + strings.ToUpper(tool)
+			if inst.Terminal().Tool() != "" {
+				title = toolPaneTitle(inst.Terminal())
 			} else {
 				title = m.terminalTitle(inst)
 			}

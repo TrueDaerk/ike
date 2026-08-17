@@ -242,19 +242,6 @@ func (r *Registry) AddDebugTerminalFrom(term terminal.Model) string {
 	return key
 }
 
-// AddCommandTerminal creates a terminal pane running argv as a command
-// session (0350, #576): the new-terminal placement of a run. label names the
-// pane/tab after the run configuration.
-func (r *Registry) AddCommandTerminal(argv []string, label, dir string, env []string, send func(tea.Msg)) string {
-	key := r.MintTerminalKey()
-	inst := &Instance{key: key, kind: KindTerminal, cfg: r.cfg, pal: r.pal}
-	inst.term = terminal.NewCommand(key, argv, dir, 80, 24, env, send)
-	inst.term.SetPalette(r.pal)
-	inst.term.SetLabel(label)
-	r.put(inst)
-	return key
-}
-
 // AddTool creates a terminal pane running argv as a custom TUI tool session
 // (#741): a command session marked with the tool name, so chrome, persistence
 // and exit handling treat it as a tool pane rather than a terminal.
@@ -357,40 +344,6 @@ func (r *Registry) AdoptTerminal(inst *Instance) (tookOver bool) {
 	r.put(inst)
 	r.advancePastTerminal(inst.Key())
 	return false
-}
-
-// ReusableRunTerminal returns the first terminal a run may take over (0350,
-// #574): one the user never sent input to — a terminal pane or an
-// editor-hosted terminal tab (#573) — in insertion order. It returns the
-// owning instance, the tab index (-1 for a terminal pane) and the model; nil
-// when every terminal is occupied or none exists.
-func (r *Registry) ReusableRunTerminal() (*Instance, int, *terminal.Model) {
-	for _, key := range r.order {
-		inst := r.instances[key]
-		switch inst.Kind() {
-		case KindTerminal:
-			if inst.debugTerm {
-				continue // the debuggee terminal (#1370) is never a run target
-			}
-			if reusableTerminal(&inst.term) {
-				return inst, -1, &inst.term
-			}
-		case KindEditor:
-			for i, t := range inst.tabs {
-				if term := t.Terminal(); term != nil && reusableTerminal(term) {
-					return inst, i, term
-				}
-			}
-		}
-	}
-	return nil, -1, nil
-}
-
-// reusableTerminal is the take-over predicate: never typed into, or its
-// process already ended (a finished run's terminal is fair game again, like
-// the JetBrains run tool window reusing its tab).
-func reusableTerminal(t *terminal.Model) bool {
-	return !t.Occupied() || !t.Running()
 }
 
 // AddMarkdownPreview creates a markdown preview instance bound to the source

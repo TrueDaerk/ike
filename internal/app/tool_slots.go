@@ -38,9 +38,9 @@ func slotTemplate() *layout.Template {
 }
 
 // toolSlot resolves the slot assigned to a tool id — a [[tools.custom]]
-// name or a built-in tool-window pane key (explorer, vcs, debug, problems,
-// structure, usages, http, breakpoints) — "" when unassigned. Assignments
-// were normalized to "SLOT=tool" by validation.
+// name, a built-in tool-window pane key (explorer, vcs, debug, problems,
+// structure, usages, http, breakpoints) or the Run tool (run, #1905) — ""
+// when unassigned. Assignments were normalized to "SLOT=tool" by validation.
 func toolSlot(tool string) string {
 	c := config.Get()
 	if c == nil {
@@ -52,6 +52,22 @@ func toolSlot(tool string) string {
 		}
 	}
 	return ""
+}
+
+// assignedSlot resolves the template slot a tool actually opens at: its
+// assignment, but only while a template defining that slot is active. It
+// returns the template alongside the slot name, "" when slot placement does
+// not apply to the tool.
+func assignedSlot(tool string) (*layout.Template, string) {
+	tpl := slotTemplate()
+	if tpl == nil {
+		return nil, ""
+	}
+	slot := toolSlot(tool)
+	if slot == "" || !tpl.HasSlot(slot) {
+		return nil, ""
+	}
+	return tpl, slot
 }
 
 // slotResidents maps each slot to the pane currently occupying it in the
@@ -192,38 +208,31 @@ func (m *Model) insertToolPane(key, target string, zone layout.Zone) bool {
 	return true
 }
 
-// openToolAtSlot spawns a [[tools.custom]] tool pinned to its assigned slot
-// (#1897): a free slot materializes at the template position; a slot held
-// by a tab-capable pane adds the tool as a focused tab — several tools
-// sharing one slot become tabs (#836), global tools included (#1901: the
-// workspace switch extracts a hosted global session tab-wise) — and a
-// non-tabbable holder (a singleton panel) subdivides the slot along its
-// longer template axis instead.
-func (m *Model) openToolAtSlot(entry config.ToolEntry, tpl *layout.Template, slot string) {
+// openToolAtSlot spawns a tool pinned to its assigned slot (#1897): a free
+// slot materializes at the template position; a slot held by a tab-capable
+// pane adds the tool as a focused tab — several tools sharing one slot become
+// tabs (#836), global tools included (#1901: the workspace switch extracts a
+// hosted global session tab-wise) — and a non-tabbable holder (a singleton
+// panel) subdivides the slot along its longer template axis instead.
+func (m *Model) openToolAtSlot(sp toolSpawn, tpl *layout.Template, slot string) bool {
 	ws := m.activeWS()
-	dir := entry.Cwd
-	if dir == "" {
-		dir = "."
-	}
-	argv := append([]string{entry.Command}, entry.Args...)
-	ws.ReturnFocus = ws.Panes.Focused()
 	if resident := m.slotResidents()[slot]; resident != "" &&
 		canHostTabs(ws.Panes.Get(resident)) && m.ensureTabHost(resident) {
-		term := ws.Panes.NewToolSession(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send)
-		ws.Panes.Get(resident).AddTerminalTab(term)
+		ws.Panes.Get(resident).AddTerminalTab(m.newToolTab(sp))
 		m.setFocus(resident)
-		m.rememberTool(entry.Name, resident)
+		m.rememberTool(sp.name, resident)
 		m.layout()
 		saveLayout(ws.Tree, ws.Panes)
-		return
+		return true
 	}
-	key := ws.Panes.AddTool(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send)
+	key := m.addToolPane(sp)
 	if !m.placePaneInSlot(tpl, slot, key) {
 		ws.Panes.Close(key)
-		return
+		return false
 	}
 	m.setFocus(key)
-	m.rememberTool(entry.Name, key)
+	m.rememberTool(sp.name, key)
 	m.layout()
 	saveLayout(ws.Tree, ws.Panes)
+	return true
 }

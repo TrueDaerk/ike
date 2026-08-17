@@ -220,7 +220,7 @@ func defaults() *Config {
 			Patterns: []string{"TODO", "FIXME", "HACK", "XXX"},
 		},
 		Run: Run{
-			Placement: "in_pane",
+			Placement: "bottom", // the Run tool docks at the bottom edge (#1905)
 		},
 		Debug: Debug{
 			PHP: DebugPHP{

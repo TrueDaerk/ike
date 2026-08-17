@@ -34,7 +34,7 @@ type Model struct {
 	// rerun the command with the same injection.
 	env []string
 	// occupied marks that the user sent input (keys or a paste) to the
-	// session — an occupied terminal is never reused for a run (#574).
+	// session — the routing marker key handling and paste share.
 	occupied bool
 	// label is a caller-set display name (the run configuration's name,
 	// #576); it wins over the OSC title in tab labels.
@@ -152,8 +152,8 @@ func (m *Model) FinishPipe(exitCode int, hasCode bool) {
 }
 
 // StartCommand replaces the model's session with a fresh command session
-// (#574): the reuse path when a run takes over an unoccupied terminal. Any
-// previous session ends; scroll, selection and the occupied flag reset.
+// (#574): the Run tool (#1905) launching the next configuration in place. Any
+// previous session ends; scroll, selection and the input marker reset.
 func (m *Model) StartCommand(key string, argv []string, dir string, extraEnv []string) {
 	if m.sess != nil {
 		m.sess.Close()
@@ -193,10 +193,6 @@ func (m *Model) SetScrollbackLines(n int) {
 		m.sess.SetScrollbackSize(n)
 	}
 }
-
-// Occupied reports whether the user has sent any input to the session; a run
-// never takes over an occupied terminal (#574).
-func (m Model) Occupied() bool { return m.occupied }
 
 // SetLabel names the terminal for chrome (tab labels, pane titles): run
 // terminals carry their configuration's name (#576).
@@ -398,6 +394,7 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	}
+	m.occupied = true // input reached the session
 	m.scroll = 0
 	// The completion popup (#740) intercepts its own keys (navigation,
 	// accept, dismiss, ctrl+space) before the raw route.
@@ -405,7 +402,6 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	m.ClearSelection()
-	m.occupied = true // input reached the session: never reuse it for a run (#574)
 	if ev, ok := motionKey(msg); ok {
 		m.completionTyped(msg.String(), "")
 		m.sess.SendKey(ev)

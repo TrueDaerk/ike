@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Run Configurations
-description: Work stream 0350 — named, persisted run/debug configurations synthesized into command lines through the language registry; per-project store in .ike/runconfigs.json.
+description: Work stream 0350 — named, persisted run/debug configurations synthesized into command lines through the language registry; per-project store in .ike/runconfigs.json; output in the dedicated Run tool pane (#1905).
 resource: internal/run
 tags: [architecture, run, debug, toolchain, languages]
-timestamp: 2026-07-27T00:00:00Z
+timestamp: 2026-08-17T00:00:00Z
 ---
 
 # Run Configurations (0350)
@@ -77,12 +77,49 @@ Registered providers:
   stdin, exit code shown on completion — with the toolchain shim env plus the
   config's env overlay, in the config's cwd; the terminal is labelled with
   the config name.
-- **Placement**: a reusable terminal (never typed into, or finished) is taken
-  over in place first (`ReusableRunTerminal` + `StartCommand`). Otherwise the
-  `run.placement` setting (settings page "Run", default `in_pane`) decides:
-  `in_pane` opens a terminal tab in the focused editor pane (#573),
-  `new_terminal` a bottom-split terminal pane. A command session's pane stays
-  open on exit — the output is the point of the run.
+- **The Run tool** (#1905) is where the output goes: a dedicated tool pane
+  (`tool` identity `run`, per project) exactly like a `[[tools.custom]]` one —
+  see [Custom TUI Tool Panes](/architecture/tool-panes.md). Before #1905 a run
+  took over the *first reusable terminal* (`ReusableRunTerminal`: any terminal
+  never typed into or already finished), which dropped run output into an
+  unrelated terminal pane or, worse, into an open tool pane's tab list. Runs
+  now target their own tool identity only; a terminal the user opened is never
+  touched, and the Run tool is never used for anything but runs.
+
+### The Run tool (#1905)
+
+`internal/app/run.go` places run output through the shared tool-pane machinery
+(`Model.placeTool`, `internal/app/tools.go`), so the Run tool behaves like
+every other tool window:
+
+- **One instance, reused** — `startInRunTool` finds the open Run tool wherever
+  it lives (dedicated pane or hosted tab, `toolLocations("run")`) and starts
+  the new command **in place** (`StartCommand`), relabelling the pane after the
+  configuration and focusing it. A still-running program is replaced: the Run
+  tool is the run's one home, so runs never pile up panes. Only with no Run
+  tool open does `openRunTool` create one.
+- **Placement** — `run.placement` (settings page "Run", default `bottom`) names
+  the Run tool's **home position**: `bottom`/`left`/`right`/`top` dock the pane
+  at that workspace edge with the ordinary `#1889` dock rules (a tab-capable
+  dock occupant takes the session as a focused tab), `in_pane` keeps the
+  pre-#1905 shape — a terminal tab in the focused editor pane (#573), falling
+  back to the adaptive split when no editor pane exists. A `[tools.layout]`
+  slot assigned to `run` (#1897) overrides the setting, exactly as it does for
+  a configured tool. The removed `new_terminal` value lives on as an alias for
+  `bottom` — where it always put the output — and migrates silently
+  (`internal/config/validate.go`).
+- **Lifecycle** — the pane closes with `ctrl+w` like any pane, and the
+  program's exit leaves it open with the standard #810 overlay
+  (`run exited (code N)` plus `Restart`/`Close`); `Restart` reruns the same
+  command line in place.
+- **Session state, never restored** — `saveLayout` records the pane as
+  `{kind: "runTool"}` and the restore **prunes that leaf** (the debuggee
+  terminal's precedent, #1370): a program must not re-run itself at startup
+  just because its output was on screen. A saved *window* layout (#1175) that
+  captured the Run tool re-slots a live one and otherwise restores an empty
+  editor there.
+- **Reserved name** — the tool identity is `run`; a `[[tools.custom]]` entry of
+  that name would be indistinguishable from the Run tool.
 
 ## Test runner (#1150)
 

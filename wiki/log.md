@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-17 (run: the run terminal is its own tool, #1905)
+
+- **Run output has a dedicated tool pane** (`internal/app/run.go`): the reserved tool
+  identity `run`, placed through the shared tool machinery (`Model.placeTool`) like a
+  `[[tools.custom]]` pane — slot assignment (#1897) > home position (#1889) > adaptive
+  split, tool chrome, `ctrl+w` close and the #810 exited overlay with `Restart`/`Close`.
+  An open Run tool takes every later run **in place** (`startInRunTool`, dedicated pane
+  or hosted tab); only the first run creates it.
+- **No more terminal hijacking**: `Registry.ReusableRunTerminal` — the "first terminal
+  nobody typed into" scan that dropped run output into an unrelated terminal pane or an
+  open tool pane's tab list — is gone. Plain terminals are never grabbed for runs, and
+  the Run tool is never used for anything else.
+- **`run.placement` now names the Run tool's home position**: `bottom` (the new default),
+  `left`, `right`, `top`, or `in_pane` for a terminal tab in the editor pane; the old
+  `new_terminal` migrates silently to `bottom` (`internal/config/validate.go`). Settings →
+  Run carries the new option set.
+- **The Run tool is session state**: it persists as `{kind: "runTool"}` and its leaf is
+  pruned on restore (the #1370 debuggee-terminal precedent) — no program re-runs itself
+  at startup. Docs: `architecture/run-configurations.md`, `architecture/tool-panes.md`,
+  `userdocs/guides/run-and-debug.md`.
+
 ## 2026-08-15 (layout: slot templates cooperate with saved window layouts, #1899)
 
 - **Applying a saved layout keeps the slot config authoritative** for slotted tools

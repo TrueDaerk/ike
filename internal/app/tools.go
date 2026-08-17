@@ -8,6 +8,7 @@ import (
 	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/plugin"
+	"ike/internal/terminal"
 	"ike/internal/theme"
 )
 
@@ -138,6 +139,109 @@ func (m Model) toolLocations(name string) []toolLoc {
 	return out
 }
 
+// toolPaneTitle chromes a tool session (#741): ⚙ NAME, no shell machinery.
+// The Run tool (#1905) appends the running configuration — which program is
+// running is exactly what its pane is there to show.
+func toolPaneTitle(t *terminal.Model) string {
+	title := "⚙ " + strings.ToUpper(t.Tool())
+	if t.Tool() == runToolName && t.Label() != "" {
+		title += " — " + t.Label()
+	}
+	return title
+}
+
+// toolSpawn describes one tool session about to be placed: the identity the
+// pane carries plus the process behind it. It is the seam the placement code
+// works on, so the built-in Run tool (#1905) — whose command comes from a run
+// configuration, not from [[tools.custom]] — reaches the same slot / home /
+// adaptive rules as a configured tool.
+type toolSpawn struct {
+	name     string   // tool identity (terminal.Model.SetTool)
+	label    string   // chrome label; "" keeps the tool name
+	argv     []string // program and arguments
+	dir      string   // working directory
+	env      []string // environment overlay
+	dockTabs bool     // may join a tab-capable dock occupant (#1889)
+}
+
+// customToolSpawn describes the session of a [[tools.custom]] entry.
+func (m *Model) customToolSpawn(entry config.ToolEntry) toolSpawn {
+	dir := entry.Cwd
+	if dir == "" {
+		dir = "."
+	}
+	return toolSpawn{
+		name: entry.Name,
+		argv: append([]string{entry.Command}, entry.Args...),
+		dir:  dir,
+		env:  toolSpawnEnv(m.pal()),
+		// A global tool (#1890) never tab-hosts into a dock occupant: it stays
+		// a dedicated pane so the next project switch can detach it wholesale.
+		dockTabs: !entry.Global,
+	}
+}
+
+// addToolPane spawns sp as a dedicated tool pane and returns its key.
+func (m *Model) addToolPane(sp toolSpawn) string {
+	key := m.activeWS().Panes.AddTool(sp.name, sp.argv, sp.dir, sp.env, m.host.Send)
+	if sp.label != "" {
+		m.activeWS().Panes.Get(key).Terminal().SetLabel(sp.label)
+	}
+	return key
+}
+
+// newToolTab spawns sp as a pane-less session, ready to host as a tab (#836).
+func (m *Model) newToolTab(sp toolSpawn) terminal.Model {
+	t := m.activeWS().Panes.NewToolSession(sp.name, sp.argv, sp.dir, sp.env, m.host.Send)
+	if sp.label != "" {
+		t.SetLabel(sp.label)
+	}
+	return t
+}
+
+// placeTool spawns sp at its place and focuses it, in the precedence every
+// tool pane follows: a slot assignment (#1897) pins it to the template
+// position, else the home position named by placement (#1889), else the
+// adaptive split off the active editor (#1588). Reports whether a pane
+// materialized; nothing is spawned when it does not.
+func (m *Model) placeTool(sp toolSpawn, placement string) bool {
+	ws := m.activeWS()
+	target := m.activeEditorKey()
+	if target == "" {
+		target = ws.Panes.Focused()
+	}
+	if target == "" || ws.Tree == nil {
+		return false
+	}
+	ws.ReturnFocus = ws.Panes.Focused()
+	if tpl, slot := assignedSlot(sp.name); slot != "" {
+		return m.openToolAtSlot(sp, tpl, slot)
+	}
+	if zone, ok := toolHomeZone(placement); ok {
+		return m.openToolAtHome(sp, zone)
+	}
+	return m.openToolAdaptive(sp, target)
+}
+
+// openToolAdaptive spawns sp as a dedicated pane split off target at the
+// adaptive placement (auxZone, #1588) — the fallback for a tool with neither
+// a slot assignment nor a home position.
+func (m *Model) openToolAdaptive(sp toolSpawn, target string) bool {
+	ws := m.activeWS()
+	key := m.addToolPane(sp)
+	tree, ok := layout.SplitLeaf(ws.Tree, target, key, m.auxZone(target))
+	if !ok {
+		ws.Panes.Close(key)
+		return false
+	}
+	ws.Tree = tree
+	m.setFocus(key)
+	m.rememberTool(sp.name, key)
+	m.layout()
+	saveLayout(ws.Tree, ws.Panes)
+	return true
+}
+
 // openTool is the tool.<name> state machine (#741), mirroring
 // terminal.toggle: no instance → spawn one at the configured home position
 // (placement, #1889) or, without one, at the adaptive placement (auxZone,
@@ -174,43 +278,9 @@ func (m *Model) openTool(name string, fresh bool) {
 			return
 		}
 	}
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
-	if target == "" || m.activeWS().Tree == nil {
-		return
-	}
-	// A slot assignment (#1897) beats the #1889 home position: the tool pins
-	// to its exact template position instead of the edge-dock heuristics.
-	if tpl := slotTemplate(); tpl != nil {
-		if slot := toolSlot(entry.Name); slot != "" && tpl.HasSlot(slot) {
-			m.openToolAtSlot(entry, tpl, slot)
-			return
-		}
-	}
-	if zone, ok := toolHomeZone(entry.Placement); ok {
-		m.openToolAtHome(entry, zone)
-		return
-	}
-	zone := m.auxZone(target)
-	dir := entry.Cwd
-	if dir == "" {
-		dir = "."
-	}
-	argv := append([]string{entry.Command}, entry.Args...)
-	m.activeWS().ReturnFocus = m.activeWS().Panes.Focused()
-	key := m.activeWS().Panes.AddTool(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send)
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, zone)
-	if !ok {
-		m.activeWS().Panes.Close(key)
-		return
-	}
-	m.activeWS().Tree = tree
-	m.setFocus(key)
-	m.rememberTool(name, key)
-	m.layout()
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	// A slot assignment (#1897) beats the #1889 home position, which beats the
+	// adaptive split — placeTool owns that precedence for every tool.
+	m.placeTool(m.customToolSpawn(entry), entry.Placement)
 }
 
 // toolHomeZone maps a [[tools.custom]] placement value (#1889) to the dock
@@ -270,27 +340,20 @@ func (m *Model) dockOccupant(zone layout.Zone) string {
 // occupant (explorer, singleton tool windows) shares the dock via a
 // perpendicular split. The placement is intent, never state: moving the tool
 // afterwards does not rewrite it, so close + reopen returns here.
-func (m *Model) openToolAtHome(entry config.ToolEntry, zone layout.Zone) {
+func (m *Model) openToolAtHome(sp toolSpawn, zone layout.Zone) bool {
 	ws := m.activeWS()
-	dir := entry.Cwd
-	if dir == "" {
-		dir = "."
-	}
-	argv := append([]string{entry.Command}, entry.Args...)
-	ws.ReturnFocus = ws.Panes.Focused()
 	occupant := m.dockOccupant(zone)
 	// A global tool (#1890) never tab-hosts: it stays a dedicated pane so the
 	// next project switch can detach the whole session.
-	if occupant != "" && !entry.Global && canHostTabs(ws.Panes.Get(occupant)) && m.ensureTabHost(occupant) {
-		term := ws.Panes.NewToolSession(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send)
-		ws.Panes.Get(occupant).AddTerminalTab(term)
+	if occupant != "" && sp.dockTabs && canHostTabs(ws.Panes.Get(occupant)) && m.ensureTabHost(occupant) {
+		ws.Panes.Get(occupant).AddTerminalTab(m.newToolTab(sp))
 		m.setFocus(occupant)
-		m.rememberTool(entry.Name, occupant)
+		m.rememberTool(sp.name, occupant)
 		m.layout()
 		saveLayout(ws.Tree, ws.Panes)
-		return
+		return true
 	}
-	key := ws.Panes.AddTool(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send)
+	key := m.addToolPane(sp)
 	if occupant != "" {
 		// A non-tabbable occupant keeps its pane; the tool stacks into the
 		// same dock: side docks split vertically (occupant above, tool
@@ -302,16 +365,17 @@ func (m *Model) openToolAtHome(entry config.ToolEntry, zone layout.Zone) {
 		tree, ok := layout.SplitLeaf(ws.Tree, occupant, key, share)
 		if !ok {
 			ws.Panes.Close(key)
-			return
+			return false
 		}
 		ws.Tree = tree
 	} else {
 		ws.Tree = layout.DockNew(ws.Tree, key, zone, toolDockShare)
 	}
 	m.setFocus(key)
-	m.rememberTool(entry.Name, key)
+	m.rememberTool(sp.name, key)
 	m.layout()
 	saveLayout(ws.Tree, ws.Panes)
+	return true
 }
 
 // toggleTool applies the focus/return cycle on an existing instance,
