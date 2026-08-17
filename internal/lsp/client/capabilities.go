@@ -43,6 +43,14 @@ type Capabilities struct {
 	DocumentSymbol     bool
 	Implementation     bool
 	TypeHierarchy      bool
+	CodeLens           bool
+	CodeLensResolve    bool
+	FoldingRange       bool
+	SelectionRange     bool
+	// WillRename gates workspace/willRenameFiles (#1912); WillRenameFilters
+	// are the server's file-operation filters (empty means "every file").
+	WillRename        bool
+	WillRenameFilters []protocol.FileOperationFilter
 }
 
 // OffersCodeActionKind reports whether the server declared kind — or one of
@@ -115,6 +123,25 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 		}
 	}
 	caps.ExecuteCommand = truthyProvider(sc.ExecuteCommandProvider)
+	caps.CodeLens = truthyProvider(sc.CodeLensProvider)
+	if caps.CodeLens {
+		// A CodeLensOptions object may promise codeLens/resolve (#1912); a
+		// bare `true` provider resolves nothing.
+		var opts struct {
+			ResolveProvider bool `json:"resolveProvider"`
+		}
+		if json.Unmarshal(sc.CodeLensProvider, &opts) == nil {
+			caps.CodeLensResolve = opts.ResolveProvider
+		}
+	}
+	caps.FoldingRange = truthyProvider(sc.FoldingRangeProvider)
+	caps.SelectionRange = truthyProvider(sc.SelectionRangeProvider)
+	if ws := sc.Workspace; ws != nil && ws.FileOperations != nil && ws.FileOperations.WillRename != nil {
+		// The registration's presence is the announcement (#1912): a server
+		// registering with zero filters still wants every willRenameFiles.
+		caps.WillRename = true
+		caps.WillRenameFilters = ws.FileOperations.WillRename.Filters
+	}
 	if sc.SignatureHelpProvider != nil {
 		caps.SignatureHelp = true
 		caps.SignatureTriggers = append(sc.SignatureHelpProvider.TriggerCharacters, sc.SignatureHelpProvider.RetriggerCharacters...)
