@@ -112,6 +112,10 @@ var actionMap = map[string]string{
 	"SelectAllOccurrences":  "editor.caret.addAll",
 	"EditorCloneCaretAbove": "editor.caret.addAbove",
 	"EditorCloneCaretBelow": "editor.caret.addBelow",
+	// JetBrains' Extend/Shrink Selection (#1912): the historical action ids
+	// predate syntax-aware selection, hence the "word" names.
+	"EditorSelectWord":   "editor.selection.extend",
+	"EditorUnSelectWord": "editor.selection.shrink",
 
 	// Find & replace.
 	"Find":          "editor.find",

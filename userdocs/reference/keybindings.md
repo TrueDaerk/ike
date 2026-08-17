@@ -131,6 +131,7 @@ Active when an editor pane has focus.
 | Diagnostic under caret | `cmd+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
 | Diagnostic under caret | `ctrl+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
 | Duplicate line(s) | `cmd+d` | `ctrl+d` | `editor.duplicateLine` |
+| Extend selection | `alt+up` | `alt+up` | `editor.selection.extend` |
 | File structure | `cmd+f12` | `ctrl+f12` | `lsp.documentSymbols` |
 | Find in file | `cmd+f` | `ctrl+f` | `editor.find` |
 | Find usages | `alt+f7` | `alt+f7` | `lsp.references` |
@@ -166,6 +167,7 @@ Active when an editor pane has focus.
 | Show intention actions | `alt+enter` | `alt+enter` | `lsp.codeAction` |
 | Show stored HTTP response | `cmd+shift+enter` | `ctrl+shift+enter` | `http.showResponse` |
 | Show stored HTTP response | `ctrl+shift+f9` | `ctrl+shift+f9` | `http.showResponse` |
+| Shrink selection | `alt+down` | `alt+down` | `editor.selection.shrink` |
 | Split view down | `cmd+alt+shift+down` | `ctrl+alt+shift+down` | `editor.splitViewDown` |
 | Split view right | `cmd+alt+shift+right` | `ctrl+alt+shift+right` | `editor.splitViewRight` |
 | Type hierarchy | `ctrl+h` | `ctrl+h` | `lsp.typeHierarchy` |

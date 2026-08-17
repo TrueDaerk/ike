@@ -147,6 +147,11 @@ func defaults() *Config {
 			InlayHints:     false,
 			SignatureAuto:  true,
 			CompletionAuto: true,
+			CodeLens:       true,
+			Folding:        true,
+			SemanticTokens: true,
+			SelectionRange: true,
+			WillRename:     true,
 			LogLevel:       "warn",
 			Servers:        map[string]map[string]any{},
 			// Default ignore rules (#1260): intelephense's P1006 TypeError

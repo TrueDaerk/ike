@@ -152,6 +152,63 @@ func appendSpans(out *[]Span, conv colMapper, capture string, start, end ts.Poin
 	}
 }
 
+// SelectionRangesAt returns the syntactic selection ladder at (line, col) —
+// both editor rune coordinates — for the Tree-sitter extend-selection fallback
+// (#1912): the extents of the smallest node containing the position and of
+// every ancestor up to the root, innermost first, zero-width and duplicate
+// extents dropped. nil when the path has no grammar or the position is outside
+// the parsed text. Like parseScoped it parses fresh from a line snapshot and
+// closes parser and tree before returning; it runs inside a tea.Cmd, never on
+// the event loop.
+func SelectionRangesAt(path string, lines []string, line, col int) []NodeRange {
+	l, ok := lang.ByPath(path)
+	if !ok || l.Grammar == nil {
+		return nil
+	}
+	gi, ok := l.Grammar.(*grammarImpl)
+	if !ok {
+		return nil
+	}
+	if line < 0 || line >= len(lines) {
+		return nil
+	}
+
+	src := []byte(strings.Join(lines, "\n"))
+	parser := ts.NewParser()
+	defer parser.Close()
+	if err := parser.SetLanguage(gi.lang); err != nil {
+		return nil
+	}
+	tree := parser.Parse(src, nil)
+	if tree == nil {
+		return nil
+	}
+	defer tree.Close()
+
+	conv := newColMapper(lines)
+	pt := ts.Point{Row: uint(line), Column: uint(conv.byteCol(line, col))}
+	node := tree.RootNode().NamedDescendantForPointRange(pt, pt)
+
+	var out []NodeRange
+	for ; node != nil; node = node.Parent() {
+		start, end := node.StartPosition(), node.EndPosition()
+		r := NodeRange{
+			StartLine: int(start.Row),
+			StartCol:  conv.runeCol(int(start.Row), int(start.Column)),
+			EndLine:   int(end.Row),
+			EndCol:    conv.runeCol(int(end.Row), int(end.Column)),
+		}
+		if r.StartLine == r.EndLine && r.StartCol >= r.EndCol {
+			continue // zero-width node: nothing to select
+		}
+		if n := len(out); n > 0 && out[n-1] == r {
+			continue // parent with the identical extent: one ladder step
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
 // colMapper converts byte offsets to rune columns per line. ASCII-only lines
 // (the common case) take a fast path where byte == rune column.
 type colMapper struct{ lines []string }
@@ -163,6 +220,29 @@ func (c colMapper) lineBytes(line int) int {
 		return 0
 	}
 	return len(c.lines[line])
+}
+
+// byteCol is runeCol's inverse: it maps a rune column within line to a byte
+// offset, clamping a column past the end to the line's byte length.
+func (c colMapper) byteCol(line, runeOff int) int {
+	if line < 0 || line >= len(c.lines) || runeOff <= 0 {
+		return 0
+	}
+	s := c.lines[line]
+	if isASCII(s) {
+		if runeOff > len(s) {
+			return len(s)
+		}
+		return runeOff
+	}
+	n := 0
+	for i := range s { // ranging a string yields the byte index of each rune start
+		if n == runeOff {
+			return i
+		}
+		n++
+	}
+	return len(s)
 }
 
 func (c colMapper) runeCol(line, byteOff int) int {

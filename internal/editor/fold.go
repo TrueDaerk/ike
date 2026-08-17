@@ -3,10 +3,11 @@ package editor
 // fold.go implements code folding (#144): collapsing the body of a function,
 // block, or import list behind its header line. The foldable ranges come from
 // the same Tree-sitter parse that produces the highlight spans
-// (highlight.HighlightScoped, kinds from the language's FoldNodes); this file
-// owns the per-view set of collapsed folds and everything that treats a
-// collapsed fold as one display row — vertical motions, scrolling, mouse
-// mapping — plus the vim fold commands (za zc zo zM zR).
+// (highlight.HighlightScoped, kinds from the language's FoldNodes), merged
+// with any server-provided folding ranges via foldRanges (#1912, lspfold.go);
+// this file owns the per-view set of collapsed folds and everything that
+// treats a collapsed fold as one display row — vertical motions, scrolling,
+// mouse mapping — plus the vim fold commands (za zc zo zM zR).
 //
 // Folding is a view concern: with shared documents (#142) each pane folds
 // independently, so `folded` lives on the Model like the cursor and is reset
@@ -147,7 +148,7 @@ func (m Model) foldVertical(count, dir int) motion.Result {
 func (m Model) innermostOpenFold(line int) (highlight.Fold, bool) {
 	var best highlight.Fold
 	found := false
-	for _, f := range m.folds {
+	for _, f := range m.foldRanges() {
 		if !f.Contains(line) {
 			continue
 		}
@@ -212,13 +213,14 @@ func (m *Model) foldOpenAtCursor() {
 // fold on a header line wins; the cursor snaps out of hidden bodies onto the
 // nearest enclosing header.
 func (m *Model) foldCloseAll() {
-	if len(m.folds) == 0 {
+	folds := m.foldRanges()
+	if len(folds) == 0 {
 		return
 	}
 	if m.folded == nil {
-		m.folded = make(map[int]int, len(m.folds))
+		m.folded = make(map[int]int, len(folds))
 	}
-	for _, f := range m.folds {
+	for _, f := range folds {
 		if _, ok := m.folded[f.HeaderLine]; !ok {
 			m.folded[f.HeaderLine] = f.EndLine
 		}
@@ -307,8 +309,9 @@ func (m *Model) reconcileFolds() {
 	if len(m.folded) == 0 {
 		return
 	}
-	valid := make(map[int]int, len(m.folds))
-	for _, f := range m.folds {
+	folds := m.foldRanges()
+	valid := make(map[int]int, len(folds))
+	for _, f := range folds {
 		if _, ok := valid[f.HeaderLine]; !ok {
 			valid[f.HeaderLine] = f.EndLine
 		}
@@ -326,6 +329,7 @@ func (m *Model) reconcileFolds() {
 // the load/share paths that reset the highlight caches.
 func (m *Model) resetFolds() {
 	m.folds = nil
+	m.lspFolds = nil // server ranges belong to the previous document (#1912)
 	m.folded = nil
 	m.foldLines = m.buf.LineCount()
 }
@@ -489,7 +493,7 @@ func (m Model) foldCopyRange() (start, end int, ok bool) {
 		return m.cursor.Line, e, true
 	}
 	var best highlight.Fold
-	for _, f := range m.folds {
+	for _, f := range m.foldRanges() {
 		if !f.Contains(m.cursor.Line) {
 			continue
 		}

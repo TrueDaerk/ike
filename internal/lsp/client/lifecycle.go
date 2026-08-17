@@ -91,6 +91,16 @@ func clientCapabilities() protocol.ClientCapabilities {
 			// workspace/didChangeWatchedFiles for external create/change/
 			// delete — Intelephense re-indexes new files only through it.
 			DidChangeWatchedFiles: &protocol.DidChangeWatchedFilesCaps{DynamicRegistration: true},
+			// Refresh support (#1912): servers whose state changed outside an
+			// edit (build finished, config reloaded) may invalidate all code
+			// lenses / semantic tokens / inlay hints with one request instead
+			// of waiting for the next didChange.
+			CodeLens:       &protocol.RefreshSupportCaps{RefreshSupport: true},
+			SemanticTokens: &protocol.RefreshSupportCaps{RefreshSupport: true},
+			InlayHint:      &protocol.RefreshSupportCaps{RefreshSupport: true},
+			// File operations (#1912): willRename lets servers rewrite
+			// imports/references before the editor performs an FS rename.
+			FileOperations: &protocol.FileOperationsClientCaps{WillRename: true},
 		},
 		TextDocument: &protocol.TextDocumentClientCaps{
 			Synchronization: &protocol.SyncClientCaps{DidSave: true},
@@ -108,6 +118,11 @@ func clientCapabilities() protocol.ClientCapabilities {
 			CallHierarchy:   &protocol.ReferencesClientCaps{},
 			InlayHint:       &protocol.ReferencesClientCaps{},
 			DocumentSymbol:  &protocol.DocumentSymbolClientCaps{HierarchicalDocumentSymbolSupport: true},
+			CodeLens:        &protocol.ReferencesClientCaps{},
+			// lineFoldingOnly (#1912): IKE folds whole lines, so servers can
+			// skip the character-precise fold endpoints.
+			FoldingRange:   &protocol.FoldingRangeClientCaps{LineFoldingOnly: true},
+			SelectionRange: &protocol.ReferencesClientCaps{},
 			// #1060: vtsls gates push diagnostics on this capability — with
 			// it absent it never sends textDocument/publishDiagnostics.
 			PublishDiagnostics: &protocol.PublishDiagnosticsClientCaps{RelatedInformation: true},

@@ -81,9 +81,11 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.hlIndex = src.hlIndex
 	m.semIndex = src.semIndex
 	m.hlVersion = src.hlVersion
-	// Fold ranges are document-derived and travel with the share; the
-	// collapsed set is per-view state (#144) and starts empty.
+	// Fold ranges are document-derived and travel with the share — the
+	// server-provided set (#1912) included; the collapsed set is per-view
+	// state (#144) and starts empty.
 	m.folds = src.folds
+	m.lspFolds = src.lspFolds
 	m.folded = nil
 	m.foldLines = m.buf.LineCount()
 	m.occurrences = nil

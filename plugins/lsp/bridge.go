@@ -56,6 +56,18 @@ type bridge struct {
 	// hintInFlight/hintPending coalesce inlay-hint requests the same way (#171).
 	hintInFlight map[string]bool
 	hintPending  map[string]bool
+	// lensInFlight/lensPending coalesce code-lens requests the same way;
+	// lensCache keeps the latest reply per path so the lsp.codeLens picker
+	// executes exactly what the annotations show (#1912).
+	lensInFlight map[string]bool
+	lensPending  map[string]bool
+	lensCache    map[string][]ilsp.CodeLens
+	// foldInFlight/foldPending coalesce folding-range requests (#1912).
+	foldInFlight map[string]bool
+	foldPending  map[string]bool
+	// openDocs tracks the paths didOpen reached, so a workspace/*/refresh
+	// request knows which documents to re-request decorations for (#1912).
+	openDocs map[string]bool
 	// inheritTimer debounces the gutter inheritance-mark batch per path;
 	// inheritInFlight/inheritPending coalesce the running batches (#1453).
 	inheritTimer    map[string]*time.Timer
@@ -134,6 +146,7 @@ func (b *bridge) ensure(h host.API) {
 		Diagnostics: b.onDiagnostics,
 		Status:      b.onStatus,
 		ApplyEdit:   b.onApplyEdit,
+		Refresh:     b.onRefresh,
 	})
 	// Embedded fragments (0300): tree-sitter injections feed the manager's
 	// virtual documents; a no-cgo build detects nothing and this stays inert.
@@ -142,6 +155,10 @@ func (b *bridge) ensure(h host.API) {
 	// Format/organize-imports on save (#1148): manual editor saves consult
 	// this provider before writing (savechain.go).
 	ilsp.SetSaveChain(b.saveChainCmd)
+	// Extend/shrink selection consults the server's syntactic ladder (#1912).
+	ilsp.SetSelectionRanges(b.selectionRangesCmd)
+	// Explorer renames/moves ask for refactoring edits first (#1912).
+	ilsp.SetWillRename(b.willRenameCmd)
 }
 
 // Emit implements host.EditorEmitter: it routes editor lifecycle events to the
@@ -260,11 +277,20 @@ func (b *bridge) fileOpened(h host.API, path string) {
 			b.autoInstall(l.ServerLang(), path)
 			return
 		}
-		// Initial semantic overlay (#9), inlay hints (#171) and gutter
-		// inheritance marks (#1453) for the fresh document.
+		b.mu.Lock()
+		if b.openDocs == nil {
+			b.openDocs = map[string]bool{}
+		}
+		b.openDocs[path] = true
+		b.mu.Unlock()
+		// Initial semantic overlay (#9), inlay hints (#171), gutter
+		// inheritance marks (#1453), code lenses and server folding ranges
+		// (#1912) for the fresh document.
 		b.requestSemanticTokens(path)
 		b.requestInlayHints(path)
 		b.requestInheritanceMarks(path)
+		b.requestCodeLenses(path)
+		b.requestFoldingRanges(path)
 	}()
 }
 
@@ -333,6 +359,12 @@ func (b *bridge) fileClosed(path string) {
 	delete(b.semPending, path)
 	delete(b.hintInFlight, path)
 	delete(b.hintPending, path)
+	delete(b.lensInFlight, path)
+	delete(b.lensPending, path)
+	delete(b.lensCache, path)
+	delete(b.foldInFlight, path)
+	delete(b.foldPending, path)
+	delete(b.openDocs, path)
 	delete(b.inheritInFlight, path)
 	delete(b.inheritPending, path)
 	if t := b.inheritTimer[path]; t != nil {
@@ -1219,10 +1251,11 @@ func isTriggerChar(ch string, triggers []string) bool {
 // requestSemanticTokens refreshes the semantic overlay for path, coalescing
 // concurrent requests: at most one runs; changes during a run mark a pending
 // re-request that fires when it lands. Missing capability yields no spans and
-// no traffic beyond the gate check.
+// no traffic beyond the gate check; the lsp.semantic_tokens toggle off skips
+// the traffic entirely (the editor also stops rendering cached spans, #1912).
 func (b *bridge) requestSemanticTokens(path string) {
 	mgr := b.manager()
-	if mgr == nil {
+	if mgr == nil || !b.semanticTokensEnabled() {
 		return
 	}
 	b.mu.Lock()
@@ -1376,6 +1409,8 @@ func (b *bridge) flushChange(path string) {
 	b.maybeSignatureHelp(ev)
 	b.requestSemanticTokens(ev.Path)
 	b.requestInlayHints(ev.Path)
+	b.requestCodeLenses(ev.Path)
+	b.requestFoldingRanges(ev.Path)
 	b.scheduleInheritanceMarks(ev.Path)
 	b.scheduleDocumentHighlight(ev.Path)
 }

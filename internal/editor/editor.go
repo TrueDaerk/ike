@@ -447,6 +447,18 @@ type Model struct {
 	folds     []highlight.Fold
 	folded    map[int]int
 	foldLines int
+	// lspFolds are the server-provided folding ranges (#1912), replaced by
+	// each FoldingRangesMsg and merged over folds by foldRanges (lspfold.go);
+	// LSP ranges win on a shared header and may carry a Kind. lspFolding is
+	// the lsp.folding config gate. Server folds go stale between edits until
+	// the next reply, so the merge clamps them to the buffer.
+	lspFolds   []highlight.Fold
+	lspFolding bool
+	// selRange is the extend/shrink-selection ladder state (#1912,
+	// selrange.go): the innermost-first range ladder of the last request plus
+	// the applied depth; nil while idle. Pointer state like hover, shared
+	// across the Model's value copies.
+	selRange *selRangeState
 	// semIndex is the LSP semantic-token overlay (#9), layered over hlIndex
 	// in styleAt; kept until the next result replaces it (stale positions may
 	// briefly lag an edit, like every semantic-token client).
@@ -461,8 +473,12 @@ type Model struct {
 	// for rendering. Stale positions may briefly lag an edit like semIndex.
 	inlayHints  []ilsp.InlayHint
 	hintsByLine map[int][]ilsp.InlayHint
-	hlTheme     highlight.Theme
-	pal         *theme.Palette // active theme (Roadmap 0110); nil = default
+	// lensesByLine are the LSP code lenses (#1912) indexed per anchor line,
+	// rendered as one trailing virtual-text annotation via lineLensHint and
+	// executed through the lsp.codeLens command.
+	lensesByLine map[int][]ilsp.CodeLens
+	hlTheme      highlight.Theme
+	pal          *theme.Palette // active theme (Roadmap 0110); nil = default
 
 	// LSP UI state (Roadmap 0100): diagnostics indexed by line, the autocomplete
 	// popup, and the hover popup. See lsp_state.go.
@@ -551,9 +567,16 @@ type Model struct {
 	trimTrailing       bool
 	insertFinalNewline bool
 	showInlayHints     bool
-	stickyScroll       bool
-	stickyDepth        int
-	smartPaste         bool
+	// showCodeLens gates the code-lens annotations (#1912); rendering-only,
+	// like the inlay-hint toggle.
+	showCodeLens bool
+	// semanticTokens gates the LSP semantic-token overlay (#9) in styleAt
+	// (#1912); the cached semIndex stays, so flipping the toggle back resumes
+	// instantly — the same rendering-only gate the inlay hints use.
+	semanticTokens bool
+	stickyScroll   bool
+	stickyDepth    int
+	smartPaste     bool
 
 	// View options (#64). softWrap/wsMode/indentGuides follow the [editor]
 	// config until their palette toggle flips them; the *Set flags mark a
@@ -616,6 +639,9 @@ func New() Model {
 		insertFinalNewline: true,
 		spaceAfterPunct:    true,
 		showInlayHints:     false,
+		showCodeLens:       true,
+		semanticTokens:     true,
+		lspFolding:         true,
 		stickyScroll:       true,
 		stickyDepth:        4,
 		smartPaste:         true,
@@ -739,6 +765,9 @@ func (m *Model) applyConfig() {
 	m.spaceAfterPunct = boolOr(m.cfg, "editor.typing.space_after_punctuation", m.spaceAfterPunct)
 	m.trimTrailing = boolOr(m.cfg, "editor.trim_trailing_whitespace", m.trimTrailing)
 	m.showInlayHints = boolOr(m.cfg, "lsp.inlay_hints", m.showInlayHints)
+	m.showCodeLens = boolOr(m.cfg, "lsp.code_lens", m.showCodeLens)
+	m.semanticTokens = boolOr(m.cfg, "lsp.semantic_tokens", m.semanticTokens)
+	m.lspFolding = boolOr(m.cfg, "lsp.folding", m.lspFolding)
 	m.insertFinalNewline = boolOr(m.cfg, "editor.insert_final_newline", m.insertFinalNewline)
 	m.view.LineNumbers = boolOr(m.cfg, "editor.line_numbers", m.view.LineNumbers)
 	m.view.RelativeNumbers = boolOr(m.cfg, "editor.relative_line_numbers", m.view.RelativeNumbers)
@@ -922,6 +951,7 @@ func (m *Model) Load(path string) error {
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
+	m.lensesByLine = nil
 	m.applyConfig() // pick the .editorconfig overrides up before the next Update
 	m.scroll()
 	return nil
@@ -977,6 +1007,7 @@ func (m *Model) NewFile(path string) {
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
+	m.lensesByLine = nil
 	m.applyConfig() // pick the .editorconfig overrides up before the next Update
 	m.scroll()
 }
@@ -1012,6 +1043,7 @@ func (m *Model) RestoreText(text string) {
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
+	m.lensesByLine = nil
 	m.scroll()
 }
 
@@ -1067,6 +1099,7 @@ func (m *Model) SetPath(path string) tea.Cmd {
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
+	m.lensesByLine = nil
 	m.emit(EventChange)
 	return m.parseCmd()
 }
@@ -1333,6 +1366,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.semIndex = highlight.NewIndex(msg.Spans)
 		}
 		return m, nil
+	case ilsp.FoldingRangesMsg:
+		// Server folding ranges (#1912): stored next to the Tree-sitter folds
+		// and merged by foldRanges (lspfold.go); reconcile re-anchors this
+		// view's collapsed set against the new merged set.
+		if msg.Path == m.path {
+			m.lspFolds = msg.Folds
+			m.reconcileFolds()
+		}
+		return m, nil
+	case ilsp.SelectionRangesMsg:
+		// Extend-selection ladder (#1912, selrange.go). The returned command
+		// is the Tree-sitter fallback when the server ladder came back empty.
+		return m, m.handleSelectionRanges(msg)
 	case ilsp.DocumentHighlightsMsg:
 		if msg.Path == m.path {
 			m.applyDocumentHighlights(msg)
@@ -1341,6 +1387,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case ilsp.InlayHintsMsg:
 		if msg.Path == m.path {
 			m.setInlayHints(msg.Hints)
+		}
+		return m, nil
+	case ilsp.CodeLensesMsg:
+		// Code lenses (#1912): indexed per line, rendered as trailing
+		// virtual text next to the inlay hints (lineLensHint).
+		if msg.Path == m.path {
+			m.setCodeLenses(msg.Lenses)
 		}
 		return m, nil
 	case ilsp.InheritanceMarksMsg:

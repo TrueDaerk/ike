@@ -29,3 +29,28 @@ func TestClientCapabilitiesAdvertisePublishDiagnostics(t *testing.T) {
 		t.Fatalf("workspace.didChangeWatchedFiles missing:\n%s", s)
 	}
 }
+
+// TestClientCapabilitiesAdvertise1912Features guards the #1912 adverts: the
+// textDocument entries (codeLens, foldingRange with lineFoldingOnly,
+// selectionRange), the workspace refreshSupport trio and the fileOperations
+// willRename gate — servers withhold each feature without its advert.
+func TestClientCapabilitiesAdvertise1912Features(t *testing.T) {
+	raw, err := json.Marshal(clientCapabilities())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(raw)
+	for _, want := range []string{
+		`"codeLens":{}`, // textDocument advert (the workspace one carries refreshSupport)
+		`"foldingRange":{"lineFoldingOnly":true}`,
+		`"selectionRange":{}`,
+		`"codeLens":{"refreshSupport":true}`,
+		`"semanticTokens":{"refreshSupport":true}`,
+		`"inlayHint":{"refreshSupport":true}`,
+		`"fileOperations":{"willRename":true}`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("initialize capabilities missing %s:\n%s", want, s)
+		}
+	}
+}

@@ -1,19 +1,20 @@
 ---
 type: concept
 title: LSP & Language Intelligence
-description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
+description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-08-07T16:00:00Z
+timestamp: 2026-08-17T12:00:00Z
 ---
 
 # LSP & Language Intelligence
 
 Roadmap 0100. IKE speaks the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
 to get real language intelligence: diagnostics, autocomplete, hover, and
-go-to-definition. The first increment ships **Go (gopls)**, **PHP (intelephense)**
-and **Python (pyright)**; references / rename / formatting / code actions /
-signature help / semantic-token highlighting are deferred to a later increment.
+go-to-definition. The first increment shipped **Go (gopls)**, **PHP (intelephense)**
+and **Python (pyright)**; later increments added references, rename, formatting,
+code actions, signature help, semantic tokens, and (#1912) code lenses, server
+folding ranges, selection ranges and `workspace/willRenameFiles`.
 
 Everything async respects the bubbletea event loop: no LSP I/O ever blocks
 `Update`. Server traffic runs on goroutines and results re-enter the program as
@@ -624,20 +625,72 @@ all hint kinds off, so the Go plugin's baseline settings enable parameter
 names and inferred types (user `[lsp.servers.go] settings` still override).
 Errors stay silent — a passive decoration.
 
-**Semantic tokens (#9).** `internal/highlight/semantic` decodes the packed
-relative 5-tuples against the server's legend into the same `highlight.Span`
-shape Tree-sitter produces, mapping LSP token types (refined by modifiers:
-readonly → constant, defaultLibrary → variable.builtin) onto the capture
-names the theme system already resolves — no colours defined in LSP code.
-The manager keeps per-document result state and uses
-`semanticTokens/full/delta` when the server offers it (a delta answer may
-also be a fresh full result); the bridge refreshes after open and every
-change, coalescing via an in-flight/pending pair. The editor layers the
-overlay over the Tree-sitter base in `styleAt` — base < semantic <
-diagnostic underline, which `renderLine` applies on top either way — and
-keeps the last result until the next one lands. Optional by construction:
-no `semanticTokensProvider` (gopls needs `semanticTokens = true` under
-`[lsp.servers.go.settings]`) simply means Tree-sitter-only rendering.
+**Semantic tokens (#9, refined by #1912).** `internal/highlight/semantic`
+decodes the packed relative 5-tuples against the server's legend into the
+same `highlight.Span` shape Tree-sitter produces, mapping LSP token types
+(refined by modifiers: readonly → constant, defaultLibrary →
+variable.builtin) onto the capture names the theme system already resolves —
+no colours defined in LSP code. Parameters map to the dotted leaf
+`variable.parameter` and namespaces to `type.namespace` (#1912): unthemed
+they inherit the head capture's colour through the theme's prefix walk, and a
+`theme.captures.variable.parameter` override colours parameters apart from
+locals without touching any builtin theme. The manager keeps per-document
+result state and uses `semanticTokens/full/delta` when the server offers it
+(a delta answer may also be a fresh full result; a server's
+`workspace/semanticTokens/refresh` clears the delta state and re-requests
+every open document); the bridge refreshes after open and every change,
+coalescing via an in-flight/pending pair. The editor layers the overlay over
+the Tree-sitter base in `styleAt` — base < semantic < diagnostic underline,
+which `renderLine` applies on top either way — and keeps the last result
+until the next one lands. Optional by construction: no
+`semanticTokensProvider` (gopls needs `semanticTokens = true` under
+`[lsp.servers.go.settings]`) simply means Tree-sitter-only rendering; the
+`lsp.semantic_tokens` toggle (default `true`, Settings → Language Support)
+gates traffic and rendering while keeping cached spans.
+
+**Code lenses (#1912).** `textDocument/codeLens` results ("run test",
+"references" — whatever the server offers) arrive document-wide after open
+and every change, coalesced per path like the other decorations, and render
+as dimmed virtual annotations at the end of the anchored line (`CodeLens`
+theme behavior mirrors inlay hints). `lsp.codeLens` ("LSP: Run Code Lens")
+lists the cursor line's lenses — or the whole file's when the line has none —
+through the code-action picker and executes the choice: unresolved lenses
+(no command yet) go through `codeLens/resolve` first, then
+`workspace/executeCommand` runs the command, whose edits come back as
+`workspace/applyEdit`. A server-initiated `workspace/codeLens/refresh`
+re-requests every open document (gopls does this when test files change).
+Toggle: `lsp.code_lens` (default `true`).
+
+**Server folding ranges (#1912).** `textDocument/foldingRange` feeds the
+editor's existing fold engine as a second provider: the bridge requests
+ranges after open and every change, the manager converts them to the
+`highlight.Fold` shape (kinds — `imports`/`comment`/`region` — preserved),
+and the editor merges them with its Tree-sitter folds, server ranges winning
+on the same header line. Everything downstream (za/zc/zo/zM/zR, fold-aware
+motions, the copy affordance) works off the merged set; no server support or
+`lsp.folding = false` (default `true`) means pure Tree-sitter folding, the
+unchanged fallback.
+
+**Selection ranges (#1912).** `editor.selection.extend` / `.shrink` grow and
+shrink the visual selection through syntactic ranges. The editor asks the
+bridge (seam: `internal/lsp/selectionrange.go`, mirroring the save chain) for
+the server's `textDocument/selectionRange` ladder at the cursor; no provider,
+`lsp.selection_range = false`, or an empty answer falls back to a
+Tree-sitter ancestor walk (`internal/highlight`), and as a last resort a
+word → line → buffer ladder, so the commands always work. Shrink steps back
+down the same ladder and finally restores the original cursor.
+
+**willRenameFiles (#1912).** Renaming or moving a file/folder in the
+explorer first runs `workspace/willRenameFiles` (seam:
+`internal/lsp/willrename.go`): the explorer defers the FS operation, the
+bridge asks every running server whose file-operation filters match, applies
+the returned WorkspaceEdit through the shared `dispatchWorkspaceEdits`
+plumbing (open buffers as one undo unit, closed files on disk), and reports
+back with a `WillRenameDoneMsg`; only then does the explorer perform the
+`os.Rename` — still recorded on its undo stack. The round trip is time-boxed
+(2s), so a dead server delays a rename but can never lose it; undo/redo of
+the FS op bypass the servers (the text edits are undone in the editors).
+Toggle: `lsp.will_rename` (default `true`).
 
 **Embedded fragments — virtual documents (0300, #412–#416).** SQL inside a
 Python string gets real completion, hover, definition and references from an
@@ -781,8 +834,10 @@ parameter/type hints, default `false`, #523), `signature_auto` (automatic
 signature popup on trigger characters, default `true`; the manual
 `lsp.parameterInfo` command works regardless), `completion_auto` (as-you-type
 completion popup on identifier characters, default `true`, #527; server
-trigger characters and `ctrl+space` work regardless), and a per-language
-`servers` table.
+trigger characters and `ctrl+space` work regardless), the #1912 per-feature
+toggles `code_lens`, `folding`, `semantic_tokens`, `selection_range` and
+`will_rename` (all default `true`, all on Settings → Language Support), and a
+per-language `servers` table.
 Defaults ship for `go`, `php`, `python`; a user overrides any field in their
 `settings.toml`. `[lsp.servers.<id>] enabled = false` switches one language's
 server off while the subsystem stays on (#130; honored by `resolveSpec`). The

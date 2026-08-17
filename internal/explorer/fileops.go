@@ -19,6 +19,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/lang"
+	"ike/internal/lsp"
 	"ike/internal/ui"
 )
 
@@ -500,6 +501,12 @@ func (m *Model) moveEntry(path, targetDir string, isDir bool) tea.Cmd {
 // relocateEntry is the shared core of rename and move: one os.Rename from path
 // to newPath, recorded on the undo stack, with both affected directories
 // re-scanned and a FileMovedMsg so open editors re-point instead of closing.
+// When the LSP bridge registered a willRenameFiles provider (#1912) the FS
+// operation is deferred behind the server round trip — the returned command
+// applies any refactoring edits and reports back with a WillRenameDoneMsg,
+// whose handler calls commitRelocate. The provider is time-boxed, so a dead
+// server delays the rename but can never lose it; undo/redo bypass the
+// provider and rename back directly.
 func (m *Model) relocateEntry(path, newPath string, isDir bool) tea.Cmd {
 	if newPath == path {
 		return nil
@@ -508,6 +515,21 @@ func (m *Model) relocateEntry(path, newPath string, isDir bool) tea.Cmd {
 		m.fail(fmt.Errorf("cannot move a folder into itself"))
 		return nil
 	}
+	if _, err := os.Lstat(newPath); err == nil {
+		m.fail(fmt.Errorf("already exists: %s", filepath.Base(newPath)))
+		return nil
+	}
+	if cmd := lsp.StartWillRename(lsp.WillRenameRequest{Old: path, New: newPath, IsDir: isDir}); cmd != nil {
+		return cmd
+	}
+	return m.commitRelocate(path, newPath, isDir)
+}
+
+// commitRelocate performs the (possibly deferred) FS rename and records it on
+// the undo stack. The existing-target guard re-runs because the FS may have
+// changed during a willRenameFiles round trip; a plain os.Rename would
+// silently overwrite the target instead of failing.
+func (m *Model) commitRelocate(path, newPath string, isDir bool) tea.Cmd {
 	if _, err := os.Lstat(newPath); err == nil {
 		m.fail(fmt.Errorf("already exists: %s", filepath.Base(newPath)))
 		return nil

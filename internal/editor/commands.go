@@ -134,6 +134,11 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// JWT decoding (#1619): the caret's token opens as decoded header
 			// and payload JSON in the hover popup.
 			action("editor.decodeJWT", "Decode JWT at Caret", "decode_jwt", ""),
+			// Syntax-aware extend/shrink selection (#1912): JetBrains'
+			// Expand/Shrink Selection over the LSP selection-range ladder,
+			// with a Tree-sitter fallback (selrange.go).
+			action("editor.selection.extend", "Extend Selection", "selection_extend", ""),
+			action("editor.selection.shrink", "Shrink Selection", "selection_shrink", ""),
 			// Code folding (#144): the vim z-commands, reachable from the
 			// palette and rebindable through the keymap layer.
 			action("editor.fold.toggle", "Toggle Fold", "fold_toggle", "za"),

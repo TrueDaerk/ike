@@ -60,6 +60,11 @@ type Callbacks struct {
 	// per-file editor coordinates. The manager answers applied=true whenever
 	// the callback is installed.
 	ApplyEdit func(files []FileEdits)
+	// Refresh reports a server-initiated workspace/<kind>/refresh (#1912):
+	// kind is "codeLens", "semanticTokens" or "inlayHint" and asks the host to
+	// re-request that decoration for its visible documents — the server's
+	// previous answers are all invalid (build finished, config changed).
+	Refresh func(kind string)
 }
 
 // Manager coordinates servers and open documents.
@@ -151,8 +156,8 @@ func New(resolve func(lang string) (lsp.ServerSpec, bool), connect Connector, cb
 		restarts: make(map[string]int),
 
 		companionsHinted: make(map[string]bool),
-		frags:    make(map[string]map[int]*fragmentDoc),
-		fragGen:  make(map[string]int),
+		frags:            make(map[string]map[int]*fragmentDoc),
+		fragGen:          make(map[string]int),
 
 		hostDiags: make(map[string][]protocol.Diagnostic),
 		published: make(map[string]map[string]bool),
@@ -1436,6 +1441,24 @@ func (m *Manager) onRequest(srvKey string, id jsonrpc.ID, method string, params 
 			}
 			_ = srv.cl.Respond(id, protocol.ApplyWorkspaceEditResult{Applied: applied}, nil)
 		}()
+	case "workspace/codeLens/refresh", "workspace/semanticTokens/refresh", "workspace/inlayHint/refresh":
+		// The server invalidated every previous result of one decoration
+		// (#1912): answer promptly, then ask the host to re-pull. For semantic
+		// tokens the per-document delta caches are dropped first, so the next
+		// request is a full one against the server's new state instead of a
+		// delta against a result id the server no longer honours.
+		kind := strings.TrimSuffix(strings.TrimPrefix(method, "workspace/"), "/refresh")
+		if kind == "semanticTokens" {
+			m.mu.Lock()
+			for _, doc := range m.docs {
+				doc.semData, doc.semResultID = nil, ""
+			}
+			m.mu.Unlock()
+		}
+		_ = srv.cl.Respond(id, nil, nil)
+		if m.cb.Refresh != nil {
+			go m.cb.Refresh(kind)
+		}
 	default:
 		_ = srv.cl.Respond(id, nil, nil)
 	}

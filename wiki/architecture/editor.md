@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-17T00:00:00Z
+timestamp: 2026-08-17T12:00:00Z
 ---
 
 # Editor
@@ -298,7 +298,11 @@ line runs that test (see /architecture/run-configurations.md).
   **Code folding** (#144) collapses the body of a function, block, import
   list or multi-line comment behind its header line: the foldable ranges come
   from the same parse (`SpansMsg.Folds`, node kinds per language via
-  `lang.Language.FoldNodes`, falling back to `ScopeNodes`), and `fold.go`
+  `lang.Language.FoldNodes`, falling back to `ScopeNodes`), merged (#1912)
+  with the server's `textDocument/foldingRange` answer when one arrives
+  (`FoldingRangesMsg` → `lspFolds`; server ranges win on the same header
+  line, carry the LSP kind — imports/comment/region — and the
+  `lsp.folding` toggle turns the merge off), and `fold.go`
   owns the per-view collapsed set (`folded`, header line → end line — views
   of a shared document fold independently, like the cursor). A collapsed
   fold renders as one row — the header plus a dimmed `⋯ N lines` placeholder

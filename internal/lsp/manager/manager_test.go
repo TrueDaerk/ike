@@ -52,6 +52,23 @@ type fakeOpts struct {
 	noImplementation bool
 	// noTypeHierarchy withholds the typeHierarchyProvider capability (#1450).
 	noTypeHierarchy bool
+	// noCodeLens withholds the codeLensProvider capability, so the manager's
+	// gate is observable (#1912).
+	noCodeLens bool
+	// noFoldingRange withholds the foldingRangeProvider capability (#1912).
+	noFoldingRange bool
+	// noSelectionRange withholds the selectionRangeProvider capability (#1912).
+	noSelectionRange bool
+	// willRenameFilters, when non-nil, makes the fake advertise
+	// workspace.fileOperations.willRename with these filters (#1912); nil
+	// withholds the whole registration.
+	willRenameFilters []protocol.FileOperationFilter
+	// willRenames receives every workspace/willRenameFiles request (#1912).
+	willRenames chan protocol.RenameFilesParams
+	// refreshOnSave lists server→client request methods (e.g.
+	// "workspace/codeLens/refresh") the fake fires when it sees didSave, so a
+	// test can trigger a refresh at a chosen moment (#1912).
+	refreshOnSave []string
 	// watched receives every workspace/didChangeWatchedFiles notification
 	// (#1144).
 	watched chan protocol.DidChangeWatchedFilesParams
@@ -119,6 +136,44 @@ func typeHierarchyCap(opts fakeOpts) json.RawMessage {
 	return json.RawMessage(`true`)
 }
 
+// codeLensCap is the initialize capability the fake advertises unless the
+// options withhold it; the options object promises codeLens/resolve (#1912).
+func codeLensCap(opts fakeOpts) json.RawMessage {
+	if opts.noCodeLens {
+		return nil
+	}
+	return json.RawMessage(`{"resolveProvider":true}`)
+}
+
+// foldingRangeCap is the initialize capability the fake advertises unless the
+// options withhold it (#1912).
+func foldingRangeCap(opts fakeOpts) json.RawMessage {
+	if opts.noFoldingRange {
+		return nil
+	}
+	return json.RawMessage(`true`)
+}
+
+// selectionRangeCap is the initialize capability the fake advertises unless
+// the options withhold it (#1912).
+func selectionRangeCap(opts fakeOpts) json.RawMessage {
+	if opts.noSelectionRange {
+		return nil
+	}
+	return json.RawMessage(`true`)
+}
+
+// workspaceCaps is the workspace server capability: a willRename registration
+// carrying the configured filters, or nothing at all (#1912).
+func workspaceCaps(opts fakeOpts) *protocol.WorkspaceServerCaps {
+	if opts.willRenameFilters == nil {
+		return nil
+	}
+	return &protocol.WorkspaceServerCaps{FileOperations: &protocol.FileOperationsServerCaps{
+		WillRename: &protocol.FileOperationRegistrationOptions{Filters: opts.willRenameFilters},
+	}}
+}
+
 // fakeConnectorOpts is fakeConnector with the server behaviour tuned.
 func fakeConnectorOpts(opts fakeOpts) Connector {
 	return func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), func() string, error) {
@@ -174,6 +229,11 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 				DocumentSymbolProvider: json.RawMessage(`true`),
 				ImplementationProvider: implementationCap(opts),
 				TypeHierarchyProvider:  typeHierarchyCap(opts),
+
+				CodeLensProvider:       codeLensCap(opts),
+				FoldingRangeProvider:   foldingRangeCap(opts),
+				SelectionRangeProvider: selectionRangeCap(opts),
+				Workspace:              workspaceCaps(opts),
 			}}
 			respond(out, msg.ID, result)
 		case msg.Method == "textDocument/definition":
@@ -382,6 +442,67 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 					End:   protocol.Position{Line: 0, Character: 6},
 				},
 			})
+		case msg.Method == "textDocument/codeLens":
+			// Two lenses deliberately out of document order (#1912): a
+			// resolved one on line 2 and an unresolved one on line 0 carrying
+			// only the opaque data token — the manager's sort and the
+			// nil-command flattening are both observable.
+			respond(out, msg.ID, json.RawMessage(`[
+				{"range":{"start":{"line":2,"character":0},"end":{"line":2,"character":1}},"command":{"title":"run test","command":"test.run"}},
+				{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":0}},"data":"tok"}
+			]`))
+		case msg.Method == "codeLens/resolve":
+			// Fill the command in, echoing the round-tripped data into the
+			// title so the test can assert it survived verbatim (#1912).
+			var lens protocol.CodeLens
+			_ = json.Unmarshal(msg.Params, &lens)
+			lens.Command = &protocol.Command{Title: "resolved-" + string(lens.Data), Command: "lens.show"}
+			respond(out, msg.ID, lens)
+		case msg.Method == "textDocument/foldingRange":
+			// Out of order, with a duplicate header line (the smaller range
+			// must lose), a degenerate range and one past the document end
+			// (clamped) — the manager's normalisation is observable (#1912).
+			respond(out, msg.ID, json.RawMessage(`[
+				{"startLine":5,"endLine":4},
+				{"startLine":2,"endLine":3},
+				{"startLine":0,"endLine":99,"kind":"imports"},
+				{"startLine":0,"endLine":1},
+				{"startLine":1,"endLine":1}
+			]`))
+		case msg.Method == "textDocument/selectionRange":
+			// One ladder in UTF-16 units: the innermost word, an empty rung
+			// (dropped), the word again (a consecutive duplicate, dropped),
+			// then the whole line (#1912).
+			respond(out, msg.ID, json.RawMessage(`[
+				{"range":{"start":{"line":0,"character":3},"end":{"line":0,"character":7}},
+				 "parent":{"range":{"start":{"line":0,"character":3},"end":{"line":0,"character":3}},
+				  "parent":{"range":{"start":{"line":0,"character":3},"end":{"line":0,"character":7}},
+				   "parent":{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":12}}}}}}
+			]`))
+		case msg.Method == "workspace/willRenameFiles":
+			// One edit in the to-be-renamed file: replace its first 3 units
+			// (#1912).
+			var p protocol.RenameFilesParams
+			_ = json.Unmarshal(msg.Params, &p)
+			if opts.willRenames != nil {
+				opts.willRenames <- p
+			}
+			if len(p.Files) == 0 {
+				respond(out, msg.ID, nil)
+				break
+			}
+			respond(out, msg.ID, protocol.WorkspaceEdit{Changes: map[string][]protocol.TextEdit{
+				p.Files[0].OldURI: {{
+					Range:   protocol.Range{Start: protocol.Position{Line: 0, Character: 0}, End: protocol.Position{Line: 0, Character: 3}},
+					NewText: "moved",
+				}},
+			}})
+		case msg.Method == "textDocument/didSave":
+			// Fire the configured workspace/*/refresh requests (#1912): the
+			// save is the test's trigger for a server-side invalidation.
+			for i, method := range opts.refreshOnSave {
+				_ = writeFrame(out, []byte(fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":%q}`, 8800+i, method)))
+			}
 		case msg.Method == "textDocument/didChange":
 			if opts.didChanges != nil {
 				var p protocol.DidChangeTextDocumentParams

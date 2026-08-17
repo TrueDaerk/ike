@@ -9,9 +9,12 @@ package highlight
 // Fold is one foldable region: a multi-line node whose body lines
 // [HeaderLine+1, EndLine] can be collapsed behind the header line. Lines are
 // 0-based buffer lines; the fold covers [HeaderLine, EndLine] inclusive.
+// Kind is the optional LSP folding-range kind ("imports", "comment",
+// "region", #1912); Tree-sitter folds leave it empty.
 type Fold struct {
 	HeaderLine int
 	EndLine    int
+	Kind       string
 }
 
 // HiddenLines is the number of buffer lines a collapsed fold hides — the

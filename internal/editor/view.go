@@ -857,8 +857,13 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 
 	// Inlay hints (#171): virtual text injected before the cell it anchors at,
 	// dimmed and italic so it never reads as buffer content. Hints scrolled off
-	// the left edge are skipped up front.
+	// the left edge are skipped up front. Code lenses (#1912) ride the same
+	// machinery as one synthetic trailing hint per line, emitted by the
+	// end-of-line flush after the last buffer cell.
 	hints := m.lineInlayHints(line)
+	if lens, ok := m.lineLensHint(line); ok {
+		hints = append(append([]ilsp.InlayHint(nil), hints...), lens)
+	}
 	hi := 0
 	for hi < len(hints) && hints[hi].Col < left {
 		hi++

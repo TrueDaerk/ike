@@ -1,5 +1,25 @@
 # Log
 
+## 2026-08-17 (lsp: code lens, folding ranges, semantic-token refinements, selection ranges, willRenameFiles, #1912)
+
+- **Five missing protocol features wired end to end.** Code lenses
+  (`textDocument/codeLens` + resolve) render as dimmed end-of-line
+  annotations and execute through the code-action picker (`lsp.codeLens`,
+  "LSP: Run Code Lens") via `workspace/executeCommand`;
+  `workspace/codeLens/refresh` re-requests every open document. Server
+  folding ranges merge into the editor's fold engine (kinds preserved,
+  Tree-sitter stays the fallback). Semantic tokens gained the
+  `variable.parameter` / `type.namespace` dotted captures so themes can
+  colour parameters apart from locals, plus a
+  `workspace/semanticTokens/refresh` handler. `editor.selection.extend` /
+  `.shrink` walk the server's `selectionRange` ladder with a Tree-sitter
+  ancestor-walk fallback. Explorer renames/moves run
+  `workspace/willRenameFiles` first and apply the returned WorkspaceEdit
+  before the FS operation (still undoable; 2s time-box).
+- **Settings:** five new `[lsp]` toggles — `code_lens`, `folding`,
+  `semantic_tokens`, `selection_range`, `will_rename` (all default `true`) —
+  on Settings → Language Support.
+
 ## 2026-08-17 (editor: sticky-scroll separator and large-file gate, #1910)
 
 - **Sticky scroll grew its finishing touches** (`internal/editor/sticky.go`):

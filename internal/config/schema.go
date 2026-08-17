@@ -600,9 +600,29 @@ type LSP struct {
 	// CompletionAuto gates the automatic completion popup while typing
 	// identifier characters (#527). Server trigger characters ("." etc.) and
 	// the manual ctrl+space request work regardless.
-	CompletionAuto bool                      `toml:"completion_auto"`
-	LogLevel       string                    `toml:"log_level"`
-	Servers        map[string]map[string]any `toml:"servers"`
+	CompletionAuto bool `toml:"completion_auto"`
+	// CodeLens toggles server code lenses ("run test", reference counts)
+	// rendered as virtual annotations on the anchored line and executable via
+	// the lsp.codeLens command (#1912).
+	CodeLens bool `toml:"code_lens"`
+	// Folding toggles server-provided folding ranges (#1912). When off (or
+	// the server lacks the capability) the editor's Tree-sitter folds are
+	// used alone; when on, server ranges are merged in and win on conflicts.
+	Folding bool `toml:"folding"`
+	// SemanticTokens toggles the server semantic-token overlay refining the
+	// Tree-sitter highlight (#9, #1912): parameters vs locals, readonly vs
+	// mutable. Rendering and traffic are both gated; cached data is kept.
+	SemanticTokens bool `toml:"semantic_tokens"`
+	// SelectionRange makes extend/shrink selection prefer the server's
+	// textDocument/selectionRange ladder (#1912); when off (or unsupported)
+	// the commands fall back to Tree-sitter syntax ranges.
+	SelectionRange bool `toml:"selection_range"`
+	// WillRename sends workspace/willRenameFiles before explorer renames and
+	// moves and applies the returned refactoring edits (import paths etc.,
+	// #1912). The FS operation itself never depends on the server answering.
+	WillRename bool                      `toml:"will_rename"`
+	LogLevel   string                    `toml:"log_level"`
+	Servers    map[string]map[string]any `toml:"servers"`
 	// DiagnosticsIgnore suppresses matching diagnostics everywhere they surface
 	// (#1259): editor decorations AND the Problems window — an ignored
 	// diagnostic is dropped before any consumer sees it. Each rule is a string

@@ -83,6 +83,27 @@ type WorkspaceClientCaps struct {
 	// the file globs it wants workspace/didChangeWatchedFiles for (#1144):
 	// without it Intelephense never re-indexes externally created files.
 	DidChangeWatchedFiles *DidChangeWatchedFilesCaps `json:"didChangeWatchedFiles,omitempty"`
+	// CodeLens/SemanticTokens/InlayHint carry refreshSupport (#1912): the
+	// server may invalidate all previous results of that feature with one
+	// workspace/<feature>/refresh request instead of waiting for edits.
+	CodeLens       *RefreshSupportCaps `json:"codeLens,omitempty"`
+	SemanticTokens *RefreshSupportCaps `json:"semanticTokens,omitempty"`
+	InlayHint      *RefreshSupportCaps `json:"inlayHint,omitempty"`
+	// FileOperations announces interest in the workspace file-operation
+	// requests (#1912); willRename gates workspace/willRenameFiles.
+	FileOperations *FileOperationsClientCaps `json:"fileOperations,omitempty"`
+}
+
+// RefreshSupportCaps is the shared workspace capability shape announcing that
+// the client honours a server-initiated workspace/<feature>/refresh (#1912).
+type RefreshSupportCaps struct {
+	RefreshSupport bool `json:"refreshSupport,omitempty"`
+}
+
+// FileOperationsClientCaps announces workspace file-operation support (#1912).
+// WillRename invites workspace/willRenameFiles before an editor-driven rename.
+type FileOperationsClientCaps struct {
+	WillRename bool `json:"willRename,omitempty"`
 }
 
 // DidChangeWatchedFilesCaps announces workspace/didChangeWatchedFiles support
@@ -118,6 +139,9 @@ type TextDocumentClientCaps struct {
 	CallHierarchy   *ReferencesClientCaps     `json:"callHierarchy,omitempty"`
 	InlayHint       *ReferencesClientCaps     `json:"inlayHint,omitempty"`
 	DocumentSymbol  *DocumentSymbolClientCaps `json:"documentSymbol,omitempty"`
+	CodeLens        *ReferencesClientCaps     `json:"codeLens,omitempty"`
+	FoldingRange    *FoldingRangeClientCaps   `json:"foldingRange,omitempty"`
+	SelectionRange  *ReferencesClientCaps     `json:"selectionRange,omitempty"`
 	// PublishDiagnostics must be advertised for servers that gate their push
 	// diagnostics on it (#1060): vtsls sends none at all without the entry.
 	PublishDiagnostics *PublishDiagnosticsClientCaps `json:"publishDiagnostics,omitempty"`
@@ -135,6 +159,13 @@ type PublishDiagnosticsClientCaps struct {
 // instead of the flat SymbolInformation[] fallback.
 type DocumentSymbolClientCaps struct {
 	HierarchicalDocumentSymbolSupport bool `json:"hierarchicalDocumentSymbolSupport,omitempty"`
+}
+
+// FoldingRangeClientCaps announces foldingRange support (#1912);
+// lineFoldingOnly tells servers the client folds whole lines and character
+// offsets within the start/end lines would be ignored.
+type FoldingRangeClientCaps struct {
+	LineFoldingOnly bool `json:"lineFoldingOnly,omitempty"`
 }
 
 // SemanticTokensClientCaps announces semantic-token support: which request
@@ -217,6 +248,25 @@ type ServerCapabilities struct {
 	DocumentSymbolProvider          json.RawMessage        `json:"documentSymbolProvider,omitempty"`
 	ImplementationProvider          json.RawMessage        `json:"implementationProvider,omitempty"`
 	TypeHierarchyProvider           json.RawMessage        `json:"typeHierarchyProvider,omitempty"`
+
+	CodeLensProvider       json.RawMessage `json:"codeLensProvider,omitempty"`
+	FoldingRangeProvider   json.RawMessage `json:"foldingRangeProvider,omitempty"`
+	SelectionRangeProvider json.RawMessage `json:"selectionRangeProvider,omitempty"`
+
+	// Workspace carries the workspace-level server capabilities; only the
+	// file-operation registrations are modelled (#1912).
+	Workspace *WorkspaceServerCaps `json:"workspace,omitempty"`
+}
+
+// WorkspaceServerCaps is the workspace member of ServerCapabilities (#1912).
+type WorkspaceServerCaps struct {
+	FileOperations *FileOperationsServerCaps `json:"fileOperations,omitempty"`
+}
+
+// FileOperationsServerCaps declares which file operations the server wants to
+// hear about; a non-nil WillRename registration gates workspace/willRenameFiles.
+type FileOperationsServerCaps struct {
+	WillRename *FileOperationRegistrationOptions `json:"willRename,omitempty"`
 }
 
 // DocumentSymbolParams is the textDocument/documentSymbol request (#1025):
@@ -321,12 +371,12 @@ type CompletionList struct {
 }
 
 type CompletionItem struct {
-	Label            string    `json:"label"`
-	Kind             int       `json:"kind,omitempty"`
-	Detail           string    `json:"detail,omitempty"`
-	Documentation    any       `json:"documentation,omitempty"`
-	InsertText       string    `json:"insertText,omitempty"`
-	TextEdit         *TextEdit `json:"textEdit,omitempty"`
+	Label               string     `json:"label"`
+	Kind                int        `json:"kind,omitempty"`
+	Detail              string     `json:"detail,omitempty"`
+	Documentation       any        `json:"documentation,omitempty"`
+	InsertText          string     `json:"insertText,omitempty"`
+	TextEdit            *TextEdit  `json:"textEdit,omitempty"`
 	SortText            string     `json:"sortText,omitempty"`
 	FilterText          string     `json:"filterText,omitempty"`
 	InsertTextFormat    int        `json:"insertTextFormat,omitempty"`
@@ -640,6 +690,108 @@ func (l *InlayHintLabel) UnmarshalJSON(data []byte) error {
 	}
 	*l = InlayHintLabel(b.String())
 	return nil
+}
+
+// --- code lens (#1912) ---
+
+// CodeLensParams is the textDocument/codeLens request: every lens of one
+// document.
+type CodeLensParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+// CodeLens is one lens: a command anchored to a range. Servers may ship the
+// lens unresolved (Command nil) with an opaque Data token; codeLens/resolve
+// must round-trip the whole lens — range and data verbatim — to fill the
+// command in.
+type CodeLens struct {
+	Range   Range           `json:"range"`
+	Command *Command        `json:"command,omitempty"`
+	Data    json.RawMessage `json:"data,omitempty"`
+}
+
+// --- folding range (#1912) ---
+
+// FoldingRangeParams is the textDocument/foldingRange request: every foldable
+// region of one document.
+type FoldingRangeParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+// Folding-range kinds (LSP): the well-known values of FoldingRange.Kind.
+const (
+	FoldingRangeComment = "comment"
+	FoldingRangeImports = "imports"
+	FoldingRangeRegion  = "region"
+)
+
+// FoldingRange is one foldable region, in lines (the character offsets are
+// optional refinements a lineFoldingOnly client ignores). Kind is a
+// FoldingRange* value or a server-specific string; CollapsedText is the
+// optional placeholder for the collapsed region.
+type FoldingRange struct {
+	StartLine      int    `json:"startLine"`
+	StartCharacter *int   `json:"startCharacter,omitempty"`
+	EndLine        int    `json:"endLine"`
+	EndCharacter   *int   `json:"endCharacter,omitempty"`
+	Kind           string `json:"kind,omitempty"`
+	CollapsedText  string `json:"collapsedText,omitempty"`
+}
+
+// --- selection range (#1912) ---
+
+// SelectionRangeParams is the textDocument/selectionRange request: the
+// syntactic expansion ladder at each given position.
+type SelectionRangeParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Positions    []Position             `json:"positions"`
+}
+
+// SelectionRange is one rung of the ladder: a range plus its (strictly
+// containing) parent — the result is a linked list from innermost outwards.
+type SelectionRange struct {
+	Range  Range           `json:"range"`
+	Parent *SelectionRange `json:"parent,omitempty"`
+}
+
+// --- file operations (#1912) ---
+
+// RenameFilesParams is the workspace/willRenameFiles request: the file/folder
+// renames the editor is about to perform.
+type RenameFilesParams struct {
+	Files []FileRename `json:"files"`
+}
+
+// FileRename is one pending rename, both sides as URIs.
+type FileRename struct {
+	OldURI string `json:"oldUri"`
+	NewURI string `json:"newUri"`
+}
+
+// FileOperationRegistrationOptions scope a server's file-operation interest to
+// the files matching at least one filter.
+type FileOperationRegistrationOptions struct {
+	Filters []FileOperationFilter `json:"filters"`
+}
+
+// FileOperationFilter is one filter: a URI scheme (usually "file", "" for any)
+// plus the glob the path must match.
+type FileOperationFilter struct {
+	Scheme  string               `json:"scheme,omitempty"`
+	Pattern FileOperationPattern `json:"pattern"`
+}
+
+// FileOperationPattern is the glob of a filter. Matches restricts it to "file"
+// or "folder" operations ("" for both); Options carries pattern flags.
+type FileOperationPattern struct {
+	Glob    string                       `json:"glob"`
+	Matches string                       `json:"matches,omitempty"`
+	Options *FileOperationPatternOptions `json:"options,omitempty"`
+}
+
+// FileOperationPatternOptions tunes a pattern; only ignoreCase is defined.
+type FileOperationPatternOptions struct {
+	IgnoreCase bool `json:"ignoreCase,omitempty"`
 }
 
 // --- call hierarchy ---

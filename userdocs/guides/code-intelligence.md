@@ -88,6 +88,25 @@ Completion appears as you type; ++enter++ accepts, ++esc++ dismisses.
 and **LSP: Find Usages (Panel)** puts the results in a tool window rather than
 a popup.
 
+A few more things arrive on their own once a server runs:
+
+- **Code lenses** — dimmed annotations like *run test* at the end of the
+  line they belong to. **LSP: Run Code Lens** (palette) executes the lens on
+  the cursor line. Toggle: *Settings → Language Support → Code lenses*.
+- **Server folding** — `za`/`zc`/`zo` and friends fold along the server's
+  ranges (import blocks, comments, regions) where available; syntax-tree
+  folding covers the rest.
+- **Semantic highlighting** — the server refines syntax colours, e.g.
+  parameters vs locals or constants vs mutable variables, in themes that
+  colour them differently (`theme.captures.variable.parameter = "…"`).
+- **Extend/Shrink Selection** — grow the selection outward through
+  syntactic units (identifier → expression → statement → block …) and back
+  in again; works without a server too, via the syntax tree.
+- **Rename refactoring on file moves** — renaming or moving a file or
+  folder in the explorer lets the server update whatever refers to it
+  (import paths, package references) before the file actually moves. The
+  move stays undoable.
+
 Every chord in that table needs an **editor pane focused**, except ++cmd+o++
 and ++cmd+8++, which work from anywhere.
 
