@@ -73,6 +73,10 @@ func init() {
 			"import_declaration", "const_declaration", "var_declaration",
 			"literal_value", "comment",
 		},
+		// Postfix completion (#1913): `err.nil`, `foo(bar).if`, `xs.range`.
+		// See postfix.go.
+		Postfix:          postfixTemplates,
+		PostfixExprNodes: postfixExprNodes,
 		// New .go files start with their package clause, named after the
 		// directory (#170). Override via `[lang.go] template`.
 		Template: "package ${PACKAGE}\n",

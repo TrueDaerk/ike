@@ -81,12 +81,20 @@ type CompletionMsg struct {
 // local indexes; a duplicate insert text keeps the higher-priority item.
 const (
 	SourceLSP = "lsp"
+	// SourcePostfix tags the postfix-completion batches (#1913). The editor's
+	// accept path recognises it to re-indent the multi-line expansion to the
+	// cursor's line, exactly as it does for live templates.
+	SourcePostfix = "postfix"
 
 	PriorityLSP      = 100
 	PrioritySymbols  = 50
 	PrioritySnippets = 40
 	PriorityEmmet    = 30
-	PriorityWords    = 10
+	// PriorityPostfix keeps postfix templates below every member the server
+	// offers on the same dot (#1913): `err.` lists gopls' Error() first, the
+	// `if`/`nil` transformations after it.
+	PriorityPostfix = 20
+	PriorityWords   = 10
 )
 
 // CompletionItem is the editor-facing completion entry. SortText and
@@ -109,6 +117,13 @@ type CompletionItem struct {
 	// Source names the completion source that produced the item (#851);
 	// resolve requests only make sense for SourceLSP items.
 	Source string
+	// ReplacePrefix widens the accept's replacement span leftwards past the
+	// typed word (#1913): the postfix source puts the `<expr>.` text here, so
+	// accepting `err.nil` replaces the whole `err.nil` with the expansion
+	// instead of only the `nil`. The editor widens only when the buffer really
+	// carries this text immediately before the identifier start; otherwise the
+	// item inserts like any other. Single line only.
+	ReplacePrefix string
 	// LocalityTier ranks how near the item's origin is (#854): 0 = current
 	// file (and everything a server answers), 1 = another open buffer,
 	// 2 = the project scan. Nearer boosts the popup ranking.

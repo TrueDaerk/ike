@@ -663,11 +663,13 @@ func (m *Model) completionAccept() {
 	insertText := item.InsertText
 	var stops []int
 	if item.IsSnippet {
-		// A live-template item (#1152) re-indents to the cursor's line before
-		// expansion, matching the Tab-trigger path; LSP snippet bodies are
-		// left exactly as the server sent them. Multi-caret accepts skip the
-		// re-indent — indentation would differ per caret.
-		if item.Source == snippets.SourceName && !m.hasCarets() {
+		// A live-template item (#1152) — and a postfix expansion (#1913),
+		// whose block bodies are written with the same literal tabs —
+		// re-indents to the cursor's line before expansion, matching the
+		// Tab-trigger path; LSP snippet bodies are left exactly as the server
+		// sent them. Multi-caret accepts skip the re-indent — indentation
+		// would differ per caret.
+		if (item.Source == snippets.SourceName || item.Source == ilsp.SourcePostfix) && !m.hasCarets() {
 			insertText = m.reindentSnippetBody(insertText)
 		}
 		if text, offs, err := snippet.Expand(insertText); err == nil {
@@ -692,7 +694,15 @@ func (m *Model) completionAccept() {
 	// prefix, duplicating it (e.g. "xyz.__" + "__dict__" → "xyz.____dict__", #330).
 	m.fanApply(func(pos, _ buffer.Position) buffer.Position {
 		start := m.identifierStart(pos)
-		start = m.extendPrefixMatch(start, pos, insertText)
+		// A postfix item (#1913) rewrites `<expr>.<template>`, so the span
+		// also covers the expression and the dot before the typed word. When
+		// the buffer does not carry that text (a secondary caret elsewhere,
+		// an edit since the request) the item degrades to a plain insert.
+		if wider, ok := m.replacePrefixStart(start, item.ReplacePrefix); ok {
+			start = wider
+		} else {
+			start = m.extendPrefixMatch(start, pos, insertText)
+		}
 		return m.insert.rec.Apply(buffer.Edit{Range: buffer.Range{Start: start, End: pos}, Text: insertText})
 	})
 	m.dirtyFromInsert()
@@ -807,6 +817,26 @@ func (m Model) extendPrefixMatch(start, cursor buffer.Position, insertText strin
 		}
 	}
 	return buffer.Position{Line: start.Line, Col: best}
+}
+
+// replacePrefixStart widens start leftwards over an item's ReplacePrefix
+// (#1913) — the `<expr>.` a postfix template rewrites together with the typed
+// word. It only fires when the buffer really carries that text immediately
+// before start on the same line: an empty prefix, a caret somewhere else or an
+// edit since the request all leave the ordinary identifier span in place.
+func (m Model) replacePrefixStart(start buffer.Position, prefix string) (buffer.Position, bool) {
+	if prefix == "" {
+		return start, false
+	}
+	p := []rune(prefix)
+	runes := []rune(m.buf.Line(start.Line))
+	if start.Col < len(p) || start.Col > len(runes) {
+		return start, false
+	}
+	if string(runes[start.Col-len(p):start.Col]) != prefix {
+		return start, false
+	}
+	return buffer.Position{Line: start.Line, Col: start.Col - len(p)}, true
 }
 
 // extendAnchorMatch widens the popup anchor leftwards beyond the identifier

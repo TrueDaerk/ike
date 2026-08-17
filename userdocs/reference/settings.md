@@ -91,6 +91,7 @@ secrets — are documented together, with screenshots, in
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Space after punctuation | `editor.typing.space_after_punctuation` | boolean | `true` | user | Insert the conventional space after punctuation the language declares — ":" in JSON, so "key": is completed as you type. Suppressed inside strings and comments |
+| Postfix completion | `editor.postfix_completion` | boolean | `true` | user | Offer the JetBrains-style postfix templates in the completion popup after a dot: "err.nil" completes to "if err == nil { … }", "foo(bar).if" wraps the whole call, "xs.range" writes a range loop. Accepting one replaces the whole expr.template span and places the caret inside. The templates are the language's (Go and Python ship one set each); languages without any are unaffected, and the items always rank below the language server's members on the same dot |
 
 ### Diagnostics
 

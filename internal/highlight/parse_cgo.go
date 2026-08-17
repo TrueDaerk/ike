@@ -209,6 +209,90 @@ func SelectionRangesAt(path string, lines []string, line, col int) []NodeRange {
 	return out
 }
 
+// ExpressionEndingAt returns the extent of the widest syntax node whose kind is
+// in kinds and which ends exactly at (line, col) — both editor rune coordinates
+// — in a fresh parse of lines. It is the postfix-completion expression finder
+// (#1913): with the caret just after a `.`, the node ending at that dot is the
+// expression the template rewrites.
+//
+// The buffer is syntactically broken while the user types (`err.` is not a Go
+// statement), but Tree-sitter's error recovery still parses everything up to
+// the dot — the dot and the partial template word land in a trailing ERROR node
+// — so the expression node itself is intact. The kind filter is what keeps the
+// widest node honest: `x := foo(bar).` also has a short_var_declaration ending
+// at the dot, and only the caller's expression kinds exclude it.
+//
+// Only nodes starting on line are considered: the accept path rewrites a
+// single-line span. ok=false when the path has no grammar, the position is
+// outside the parsed text, or no node qualifies.
+func ExpressionEndingAt(path string, lines []string, line, col int, kinds []string) (NodeRange, bool) {
+	if len(kinds) == 0 || line < 0 || line >= len(lines) {
+		return NodeRange{}, false
+	}
+	l, ok := lang.ByPath(path)
+	if !ok || l.Grammar == nil {
+		return NodeRange{}, false
+	}
+	gi, ok := l.Grammar.(*grammarImpl)
+	if !ok {
+		return NodeRange{}, false
+	}
+	want := make(map[string]bool, len(kinds))
+	for _, k := range kinds {
+		want[k] = true
+	}
+
+	src := []byte(strings.Join(lines, "\n"))
+	parser := ts.NewParser()
+	defer parser.Close()
+	if err := parser.SetLanguage(gi.lang); err != nil {
+		return NodeRange{}, false
+	}
+	tree := parser.Parse(src, nil)
+	if tree == nil {
+		return NodeRange{}, false
+	}
+	defer tree.Close()
+
+	conv := newColMapper(lines)
+	// Byte offset of the position in the joined source: every preceding line
+	// plus its "\n", then the rune→byte column conversion within the line.
+	target := 0
+	for i := 0; i < line; i++ {
+		target += len(lines[i]) + 1
+	}
+	target += conv.byteCol(line, col)
+
+	best, found := NodeRange{}, false
+	var walk func(n *ts.Node)
+	walk = func(n *ts.Node) {
+		if int(n.StartByte()) > target {
+			return // the whole subtree lies after the dot
+		}
+		if int(n.EndByte()) == target && want[n.Kind()] {
+			start, end := n.StartPosition(), n.EndPosition()
+			if int(start.Row) == line {
+				r := NodeRange{
+					StartLine: line,
+					StartCol:  conv.runeCol(line, int(start.Column)),
+					EndLine:   int(end.Row),
+					EndCol:    conv.runeCol(int(end.Row), int(end.Column)),
+				}
+				// Widest wins: `foo(bar).if` wraps the whole call, not its
+				// argument list.
+				if !found || r.StartCol < best.StartCol {
+					best, found = r, true
+				}
+			}
+		}
+		for i := uint(0); i < n.ChildCount(); i++ {
+			walk(n.Child(i))
+		}
+	}
+	walk(tree.RootNode())
+	return best, found
+}
+
 // colMapper converts byte offsets to rune columns per line. ASCII-only lines
 // (the common case) take a fast path where byte == rune column.
 type colMapper struct{ lines []string }

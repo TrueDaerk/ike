@@ -20,3 +20,10 @@ func parseScoped(g lang.Grammar, scopeKinds, foldKinds []string, lines []string)
 // extend-selection ladder (#1912); without CGo there is no tree to walk, and
 // the editor falls through to its word/line/buffer ladder.
 func SelectionRangesAt(path string, lines []string, line, col int) []NodeRange { return nil }
+
+// ExpressionEndingAt is the matching no-op fallback for the postfix-completion
+// expression finder (#1913); without CGo there is no tree, and the postfix
+// source falls back to its token heuristic.
+func ExpressionEndingAt(path string, lines []string, line, col int, kinds []string) (NodeRange, bool) {
+	return NodeRange{}, false
+}

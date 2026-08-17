@@ -36,6 +36,8 @@ type Language struct {
     IndentAfter  []string   // block-opening line suffixes (0260): ":" / "{" …
     SpaceAfter   []rune     // punctuation typed with a following space (#1326): ':' in JSON
     ScopeNodes   []string   // sticky-scroll scope node kinds (#168); empty = inert
+    Postfix          []PostfixTemplate // postfix-completion templates (#1913); empty = inert
+    PostfixExprNodes []string          // Tree-sitter kinds that count as the expression before the dot
     Template     string     // initial content for new files (#170); "" = start empty
     Test         *TestSpec  // test detection + run templates (#1150); nil = no test runner
 }
@@ -77,6 +79,15 @@ functions, methods, func literals and type declarations; Python declares
 function and class definitions; PHP declares functions, methods, anonymous
 functions, class/interface/trait/enum declarations and namespaces. An empty
 list leaves sticky scroll inert for the language.
+
+`Postfix` carries the language's **postfix-completion templates** (#1913) —
+`{Trigger, Body, Detail, ErrorLike}`, with `EXPR` (`lang.ExprPlaceholder`)
+marking the detected expression inside an LSP-snippet body — and
+`PostfixExprNodes` the Tree-sitter node kinds that count as the expression
+before the dot. Go declares `if`/`nil`/`err`/`for`/`range`/`ret`/`var`/`print`,
+Python `if`/`for`/`ret`/`print`/`not`/`len`; a language declaring none leaves
+the feature inert for its files. `PostfixFor(path)` resolves both for a buffer.
+See [completion](./completion.md).
 
 ### User file associations (#1365)
 

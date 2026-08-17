@@ -113,6 +113,7 @@ func defaults() *Config {
 			RainbowBrackets:        true,
 			SearchIgnoreCase:       false,
 			Breadcrumbs:            true,
+			PostfixCompletion:      true,
 			Tabs:                   Tabs{AlwaysShow: false, Limit: 5},
 			Typing:                 Typing{SpaceAfterPunctuation: true},
 			Marks: Marks{

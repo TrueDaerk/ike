@@ -97,6 +97,16 @@ func (e *Engine) Register(s Source) {
 	e.sources = append(e.sources, s)
 }
 
+// TriggerSource is an optional Source extension (#1913): a source that has
+// something position-specific to say after a punctuation character the engine
+// otherwise reserves for the LSP bridge declares it here. Postfix completion is
+// the case — `err.` must offer its `if`/`nil` transformations right after the
+// dot — and only the declaring sources are dispatched for such a character, so
+// a "." keeps not producing a word-index echo.
+type TriggerSource interface {
+	TriggerChar(ch string) bool
+}
+
 // EventObserver is an optional Source extension (#852): a source that also
 // wants the editor lifecycle events (buffer changes for an index, saves, …)
 // implements it and the engine forwards every event. Observe runs on the UI
@@ -128,11 +138,12 @@ func (e *Engine) NotifyFileChanged(path string) {
 }
 
 // Emit implements host.EditorEmitter: every event forwards to observing
-// sources, completion triggers additionally dispatch the sources. Only
-// identifier-ish characters and manual requests fire — server trigger
-// characters ("." "->" "$") are the LSP bridge's business; a local index has
-// nothing position-specific to say after a "." — and it must not block
-// (dispatch spawns goroutines).
+// sources, completion triggers additionally dispatch the sources. Identifier-ish
+// characters and manual requests dispatch everything — server trigger characters
+// ("." "->" "$") are the LSP bridge's business; a local index has nothing
+// position-specific to say after a "." — and a punctuation character reaches
+// only the sources claiming it through TriggerSource (#1913). Emit must not
+// block (dispatch spawns goroutines).
 func (e *Engine) Emit(ev host.EditorEvent) {
 	e.mu.Lock()
 	sources := make([]Source, len(e.sources))
@@ -147,9 +158,27 @@ func (e *Engine) Emit(ev host.EditorEvent) {
 		return
 	}
 	if !localTrigger(ev.Char) {
-		return
+		// A punctuation trigger reaches only the sources claiming it (#1913),
+		// and never past an exclusive claim on the path (#1302) — a source
+		// owning the buffer keeps owning it after a ".".
+		sources = charTriggered(ev.Char, exclusiveFor(ev.Path, sources))
+		if len(sources) == 0 {
+			return
+		}
 	}
-	e.dispatch(Request{Path: ev.Path, Line: ev.Line, Col: ev.Col, Char: ev.Char})
+	e.dispatch(Request{Path: ev.Path, Line: ev.Line, Col: ev.Col, Char: ev.Char}, sources)
+}
+
+// charTriggered narrows sources to the ones claiming ch as their own trigger
+// character (#1913).
+func charTriggered(ch string, sources []Source) []Source {
+	var claimed []Source
+	for _, s := range sources {
+		if t, ok := s.(TriggerSource); ok && t.TriggerChar(ch) {
+			claimed = append(claimed, s)
+		}
+	}
+	return claimed
 }
 
 // localTrigger reports whether a typed character warrants querying the local
@@ -163,7 +192,8 @@ func localTrigger(ch string) bool {
 }
 
 // exclusiveFor narrows sources to the ones claiming path exclusively (#1302).
-// With no claim the full set runs, which is the normal case.
+// With no claim the full set runs, which is the normal case. Applying it twice
+// is a no-op, so Emit may pre-filter before the trigger-character narrowing.
 func exclusiveFor(path string, sources []Source) []Source {
 	var claimed []Source
 	for _, s := range sources {
@@ -177,19 +207,17 @@ func exclusiveFor(path string, sources []Source) []Source {
 	return claimed
 }
 
-// dispatch cancels the previous dispatch and runs every source concurrently,
-// sending each result as a tagged batch (an empty batch clears the source's
-// contribution from a merged popup). Results landing after the context died
-// (timeout or a newer trigger) are dropped.
-func (e *Engine) dispatch(req Request) {
+// dispatch cancels the previous dispatch and runs the given sources
+// concurrently, sending each result as a tagged batch (an empty batch clears
+// the source's contribution from a merged popup). Results landing after the
+// context died (timeout or a newer trigger) are dropped.
+func (e *Engine) dispatch(req Request, sources []Source) {
 	e.mu.Lock()
 	if e.cancel != nil {
 		e.cancel()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), e.Timeout)
 	e.cancel = cancel
-	sources := make([]Source, len(e.sources))
-	copy(sources, e.sources)
 	e.mu.Unlock()
 	sources = exclusiveFor(req.Path, sources)
 	for _, s := range sources {

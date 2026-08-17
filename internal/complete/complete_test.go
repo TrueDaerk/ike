@@ -134,6 +134,55 @@ func TestNonIdentTriggersSkipLocalSources(t *testing.T) {
 	collect(t, ch, 1)
 }
 
+// dotFake claims the dot as its own trigger character (#1913).
+type dotFake struct{ fakeSource }
+
+func (dotFake) TriggerChar(ch string) bool { return ch == "." }
+
+// TestTriggerCharDispatchesOnlyClaimingSources guards #1913: a dot reaches the
+// postfix-style sources that ask for it and nothing else, so the word index
+// still has nothing to say after a member access.
+func TestTriggerCharDispatchesOnlyClaimingSources(t *testing.T) {
+	e, ch := newTestEngine()
+	e.Register(fakeSource{name: "words", prio: ilsp.PriorityWords})
+	e.Register(dotFake{fakeSource{name: "postfix", prio: ilsp.PriorityPostfix}})
+
+	e.Emit(trigger("."))
+	got := collect(t, ch, 1)
+	if got[0].Source != "postfix" {
+		t.Fatalf("batch source = %q, want postfix", got[0].Source)
+	}
+	select {
+	case m := <-ch:
+		t.Fatalf("a dot must not dispatch %q", m.Source)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// An unclaimed punctuation character still dispatches nothing at all.
+	e.Emit(trigger(","))
+	select {
+	case m := <-ch:
+		t.Fatalf("an unclaimed punctuation trigger must dispatch nothing, got %q", m.Source)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// An exclusive claim on the path (#1302) still wins: the dot reaches the
+	// owning source or nobody, never the trigger-claiming outsider.
+	e.Register(exclusiveFake{fakeSource{name: "http", prio: ilsp.PriorityEmmet}})
+	e.Emit(host.EditorEvent{Kind: host.EditorCompletionTrigger, Path: "/r.http", Line: 1, Col: 2, Char: "."})
+	select {
+	case m := <-ch:
+		t.Fatalf("a claimed buffer must not dispatch %q on a dot", m.Source)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// Identifier characters keep dispatching every source, claiming or not.
+	e.Emit(trigger("a"))
+	if len(collect(t, ch, 2)) != 2 {
+		t.Fatal("an identifier trigger must dispatch every source")
+	}
+}
+
 // exclusiveFake claims every path ending in .http.
 type exclusiveFake struct{ fakeSource }
 

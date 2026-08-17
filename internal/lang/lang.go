@@ -97,6 +97,22 @@ type Language struct {
 	// means the language has no code folding.
 	FoldNodes []string
 
+	// Postfix lists the postfix-completion templates of this language (#1913):
+	// `expr.if`, `err.nil`, `expr.for` and friends, which rewrite the
+	// expression before the dot instead of inserting at the cursor. Empty —
+	// the default — means the feature is inert for the language. See
+	// postfix.go.
+	Postfix []PostfixTemplate
+
+	// PostfixExprNodes lists the Tree-sitter node kinds that count as a
+	// postfix-able expression (#1913), e.g. "call_expression" for Go or
+	// "call" for Python. The postfix source takes the widest node of one of
+	// these kinds ending exactly at the dot, which is what makes
+	// `foo(bar).if` wrap the whole call while `x := foo(bar).if` wraps only
+	// the call and not the assignment. Empty means the source falls back to
+	// its token heuristic even where a grammar exists.
+	PostfixExprNodes []string
+
 	// Template is the initial content seeded into newly created files of this
 	// language (#170), with ${FILENAME}/${NAME}/${DIR}/${PACKAGE}/${DATE}/${YEAR}
 	// substituted — see TemplateFor. Empty means new files start empty. Users
