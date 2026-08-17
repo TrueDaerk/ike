@@ -99,6 +99,13 @@ func init() {
 			FileArgv: []string{"{interpreter}", "test"},
 			Tool:     "go",
 			Exclude:  []string{"TestMain"},
+			// Structured output (#1911): -json turns the run into a test2json
+			// event stream the Test Results tool parses; re-run-failed anchors
+			// the failed top-level test names in one -run alternation.
+			StructuredArgs: []string{"-json"},
+			ParseOutput:    parseTestJSON,
+			FailedArgv:     []string{"{interpreter}", "test", "-run", "^({names})$"},
+			NamesJoin:      "|",
 		},
 	})
 

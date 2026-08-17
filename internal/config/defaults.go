@@ -222,6 +222,10 @@ func defaults() *Config {
 		Run: Run{
 			Placement: "bottom", // the Run tool docks at the bottom edge (#1905)
 		},
+		Tests: Tests{
+			ResultsWindow: true, // parsed test runs open the Test Results tool (#1911)
+			AutoOpen:      true,
+		},
 		Debug: Debug{
 			PHP: DebugPHP{
 				Port: 9003, // Xdebug's default DBGp port

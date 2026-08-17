@@ -42,6 +42,61 @@ type TestSpec struct {
 	// Exclude lists detected names that are never runnable tests (Go's
 	// TestMain).
 	Exclude []string
+
+	// Structured-output support (#1911) — all three optional; a language
+	// without them keeps the raw run-terminal path.
+	//
+	// StructuredArgs are appended to a synthesized test argv when the run's
+	// output is captured and parsed for the Test Results tool window (Go:
+	// "-json"; pytest: "-v"). They must not change *which* tests run, only
+	// the output format.
+	StructuredArgs []string
+	// ParseOutput parses a captured run's combined stdout+stderr into
+	// structured results. Nil means the language has no parser and test runs
+	// stay raw terminal output.
+	ParseOutput func(output string) []TestResult
+	// FailedArgv is the argv template re-running a named set of tests by
+	// their RerunIDs. Besides {interpreter} and {file} it must contain the
+	// placeholder {names}: with NamesJoin set it expands to the ids joined by
+	// it (Go: "-run" "^({names})$" with "|"; pytest: "-k" "{names}" with
+	// " or "); with NamesJoin empty, a whole-element "{names}" expands to one
+	// argv element per id.
+	FailedArgv []string
+	// NamesJoin joins RerunIDs substituted into {names}; "" selects the
+	// element-per-id expansion.
+	NamesJoin string
+}
+
+// TestStatus is one parsed test's outcome.
+type TestStatus string
+
+const (
+	TestPass TestStatus = "pass"
+	TestFail TestStatus = "fail"
+	TestSkip TestStatus = "skip"
+)
+
+// TestResult is one parsed test outcome of a captured run (#1911).
+type TestResult struct {
+	// Group is the tree's top grouping node: the Go package path, the pytest
+	// file path — whatever the language's natural container is.
+	Group string
+	// Name is the test's display name; "/"-separated segments nest as
+	// subtests in the result tree ("TestFoo/sub").
+	Name string
+	// Status is the outcome; parsers only emit finished tests.
+	Status TestStatus
+	// Elapsed is the test's duration in seconds (0 when unknown).
+	Elapsed float64
+	// Output is the test's buffered own output, shown in the detail pane.
+	Output string
+	// File/Line locate the failure (1-based line; both zero when unknown).
+	// File may be relative to the run's working directory.
+	File string
+	Line int
+	// RerunID is the token FailedArgv re-runs this test by: the Go top-level
+	// test function name, the pytest test name for a -k expression.
+	RerunID string
 }
 
 // TestMatch is one detected test function.
@@ -146,7 +201,7 @@ func TestArgv(root, path string, t TestMatch, explicit string) ([]string, bool) 
 	if !found || len(tpl) == 0 {
 		return nil, false
 	}
-	return expandTestArgv(tpl, t.Name, testTool(l.ID, root, spec, explicit)), true
+	return expandTestArgv(tpl, t.Name, testTool(l.ID, root, spec, explicit), filepath.Base(path)), true
 }
 
 // TestFileArgv synthesizes the argv running every test in path's scope (the
@@ -156,7 +211,63 @@ func TestFileArgv(root, path, explicit string) ([]string, bool) {
 	if !ok || len(spec.FileArgv) == 0 {
 		return nil, false
 	}
-	return expandTestArgv(spec.FileArgv, "", testTool(l.ID, root, spec, explicit)), true
+	return expandTestArgv(spec.FileArgv, "", testTool(l.ID, root, spec, explicit), filepath.Base(path)), true
+}
+
+// TestStructuredArgv is TestArgv/TestFileArgv (t nil = file scope) plus the
+// language's StructuredArgs, for a run whose output is captured and parsed
+// into the Test Results tool (#1911). ok=false when the base argv does not
+// synthesize or the language declares no parser.
+func TestStructuredArgv(root, path string, t *TestMatch, explicit string) ([]string, bool) {
+	_, spec, specOK := testSpecFor(path)
+	if !specOK || spec.ParseOutput == nil {
+		return nil, false
+	}
+	var argv []string
+	var ok bool
+	if t == nil {
+		argv, ok = TestFileArgv(root, path, explicit)
+	} else {
+		argv, ok = TestArgv(root, path, *t, explicit)
+	}
+	if !ok {
+		return nil, false
+	}
+	return append(argv, spec.StructuredArgs...), true
+}
+
+// TestFailedArgv synthesizes the argv re-running exactly the tests named by
+// ids (their RerunIDs) in path's scope, StructuredArgs included — the
+// re-run-failed / re-run-single seam of the Test Results tool (#1911).
+func TestFailedArgv(root, path string, ids []string, explicit string) ([]string, bool) {
+	l, spec, ok := testSpecFor(path)
+	if !ok || len(spec.FailedArgv) == 0 || len(ids) == 0 {
+		return nil, false
+	}
+	tool := testTool(l.ID, root, spec, explicit)
+	file := filepath.Base(path)
+	var out []string
+	for _, a := range spec.FailedArgv {
+		if a == "{names}" && spec.NamesJoin == "" {
+			out = append(out, ids...)
+			continue
+		}
+		a = strings.ReplaceAll(a, "{names}", strings.Join(ids, spec.NamesJoin))
+		a = strings.ReplaceAll(a, "{interpreter}", tool)
+		a = strings.ReplaceAll(a, "{file}", file)
+		out = append(out, a)
+	}
+	return append(out, spec.StructuredArgs...), true
+}
+
+// TestParser returns the language's test-output parser, or ok=false when the
+// language declares none (raw output fallback).
+func TestParser(langID string) (func(output string) []TestResult, bool) {
+	l, ok := ByID(langID)
+	if !ok || l.Test == nil || l.Test.ParseOutput == nil {
+		return nil, false
+	}
+	return l.Test.ParseOutput, true
 }
 
 // HasTests reports whether path's language declares test detection and path
@@ -176,12 +287,15 @@ func testTool(langID, root string, spec *TestSpec, explicit string) string {
 	return spec.Tool
 }
 
-// expandTestArgv substitutes the placeholders into a fresh slice.
-func expandTestArgv(tpl []string, name, tool string) []string {
+// expandTestArgv substitutes the placeholders into a fresh slice. file is the
+// test file's base name for {file} (#1911, pytest targets the file — the argv
+// runs with cwd = the file's directory, so the base name resolves).
+func expandTestArgv(tpl []string, name, tool, file string) []string {
 	out := make([]string, len(tpl))
 	for i, a := range tpl {
 		a = strings.ReplaceAll(a, "{interpreter}", tool)
 		a = strings.ReplaceAll(a, "{name}", name)
+		a = strings.ReplaceAll(a, "{file}", file)
 		out[i] = a
 	}
 	return out

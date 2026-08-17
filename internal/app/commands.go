@@ -420,6 +420,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("problems.toggle", "Problems", ProblemsToggleMsg{}),
 			appCommand("structure.toggle", "Structure", StructureToggleMsg{}),
 			appCommand("usages.toggle", "Usages", UsagesToggleMsg{}),
+			appCommand("tests.toggle", "Test Results", TestsToggleMsg{}),
 			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
 			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),
 		), append(append(scratchCommands(), toolCommands()...), memoryCommands()...)...),

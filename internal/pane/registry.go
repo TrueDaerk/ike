@@ -21,6 +21,7 @@ import (
 	"ike/internal/problems"
 	"ike/internal/structpanel"
 	"ike/internal/terminal"
+	"ike/internal/testresults"
 	"ike/internal/theme"
 	"ike/internal/usages"
 	"ike/internal/vcspanel"
@@ -76,6 +77,9 @@ const HTTPKey = "http"
 
 // BreakpointsKey is the stable key of the singleton Breakpoints tool window (#1377).
 const BreakpointsKey = "breakpoints"
+
+// TestsKey is the stable key of the singleton Test Results tool window (#1911).
+const TestsKey = "tests"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -573,6 +577,18 @@ func (r *Registry) AddUsages() string {
 	inst.up = usages.New(r.pal)
 	r.put(inst)
 	return UsagesKey
+}
+
+// AddTests creates the singleton Test Results tool window under TestsKey
+// (#1911) and returns its key; a second call returns the existing key.
+func (r *Registry) AddTests() string {
+	if _, ok := r.instances[TestsKey]; ok {
+		return TestsKey
+	}
+	inst := &Instance{key: TestsKey, kind: KindTests, cfg: r.cfg, pal: r.pal}
+	inst.tr = testresults.New(r.pal)
+	r.put(inst)
+	return TestsKey
 }
 
 // AddBreakpoints creates the singleton Breakpoints tool window under

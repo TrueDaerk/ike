@@ -57,6 +57,26 @@ func init() {
 			"try_statement", "match_statement", "dictionary", "list",
 			"set", "tuple", "string",
 		},
+		// Test runner (#1911): pytest, following the Go seam (#1150). The
+		// interpreter is the resolved project python, so `-m pytest` uses the
+		// venv's pytest. A single test runs by -k name match (reaches class
+		// methods, which a file::name node id would miss); the file scope
+		// targets the file itself. -v makes the output one PASSED/FAILED line
+		// per test for ParseOutput, --tb=short keeps failure locations one
+		// `file.py:line:` line per frame.
+		Test: &lang.TestSpec{
+			FilePattern: `^(test_.*|.*_test)\.py$`,
+			Pattern:     `^\s*(?:async\s+)?def\s+(?P<name>test[A-Za-z0-9_]*)\s*\(`,
+			Kinds: map[string][]string{
+				"": {"{interpreter}", "-m", "pytest", "{file}", "-k", "{name}"},
+			},
+			FileArgv:       []string{"{interpreter}", "-m", "pytest", "{file}"},
+			Tool:           "python3",
+			StructuredArgs: []string{"-v", "--tb=short"},
+			ParseOutput:    parsePytest,
+			FailedArgv:     []string{"{interpreter}", "-m", "pytest", "{file}", "-k", "{names}"},
+			NamesJoin:      " or ",
+		},
 	})
 }
 

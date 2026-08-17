@@ -36,6 +36,7 @@ const (
 	Breakpoints Context = "breakpoints"
 	Archive     Context = "archive"
 	Data        Context = "data"
+	Tests       Context = "tests"
 )
 
 // Matches reports whether a binding in context c is active for the focused pane

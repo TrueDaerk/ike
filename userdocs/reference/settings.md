@@ -187,12 +187,19 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Run placement | `run.placement` | enum: `bottom`, `left`, `right`, `top`, `in_pane` | `bottom` | user | Home position of the Run tool pane: docked at the bottom, left, right or top workspace edge, or in_pane for a terminal tab in the focused editor pane. A [tools.layout] slot assigned to "run" overrides it; the legacy value new_terminal reads as bottom |
 
+### Tests
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Structured test results | `tests.results_window` | boolean | `true` | user | Parse test runs into the Test Results tool window (result tree, re-run failed, jump to failure) when the language declares an output parser; off keeps every test run in the raw Run tool terminal |
+| Open on test run | `tests.auto_open` | boolean | `true` | user | Open the Test Results tool window when a captured test run starts; off only updates an already open pane |
+
 ### Tool Layout
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Slot template rows | `tools.layout.template` | list | *(empty)* | user | Grid rows, one entry per row ("XEEH, XEEH, TTZZ"): every cell names a slot by a single letter, E is the editor region, each slot's cells must form a solid rectangle, and row/column counts set the proportions. Empty disables slot placement; a template that cannot be split into straight cuts is rejected with a config diagnostic |
-| Slot assignments | `tools.layout.assign` | list | *(empty)* | user | SLOT=tool entries pinning tools to template slots ("X=explorer, T=lazygit"): the tool is a custom tool's name or a built-in tool-window id (explorer, vcs, debug, problems, structure, usages, http, breakpoints, run). Several tools may share a slot — the first open materializes the pane, later ones join it as tabs; each tool takes at most one slot |
+| Slot assignments | `tools.layout.assign` | list | *(empty)* | user | SLOT=tool entries pinning tools to template slots ("X=explorer, T=lazygit"): the tool is a custom tool's name or a built-in tool-window id (explorer, vcs, debug, problems, structure, usages, http, breakpoints, run, tests). Several tools may share a slot — the first open materializes the pane, later ones join it as tabs; each tool takes at most one slot |
 
 ### Debug
 

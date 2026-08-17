@@ -74,6 +74,7 @@ import (
 	"ike/internal/snippets"
 	"ike/internal/structpanel"
 	"ike/internal/terminal"
+	"ike/internal/testresults"
 	"ike/internal/textenc"
 	"ike/internal/theme"
 	"ike/internal/todoindex"
@@ -395,6 +396,12 @@ type Model struct {
 	// breakpointsReturnFocus is the same dance for the Breakpoints tool
 	// window (#1377).
 	breakpointsReturnFocus string
+	// testsReturnFocus is the same dance for the Test Results tool window
+	// (#1911); lastTestRun remembers the last captured test run for the
+	// re-run actions and testRunSeq drops a stale run's completion.
+	testsReturnFocus string
+	lastTestRun      *testRunState
+	testRunSeq       int
 	// rawDiags caches each path's last published, unfiltered diagnostic set;
 	// diagIgnore/diagIgnoreRaw are the compiled lsp.diagnostics_ignore rules
 	// and their source strings (#1259). Publishes filter through the rules
@@ -1294,6 +1301,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // dropped below: the Run tool's output is session state (#1905)
 		} else if ids[key].Kind == "problems" {
 			continue // restored below as the empty singleton panel (#1024; fix #1157)
+		} else if ids[key].Kind == "tests" {
+			continue // restored below as the empty singleton panel (#1911)
 		} else if ids[key].Kind == "structure" {
 			continue // restored below as the empty singleton panel (#1025)
 		} else if ids[key].Kind == "usages" {
@@ -1450,6 +1459,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// find-references results are session state; the next
 			// lsp.referencesPanel run re-fills it.
 			panes.Get(panes.AddUsages()).Usages().SetDisplayPath(displayPath)
+			continue
+		}
+		if id := ids[key]; id.Kind == "tests" {
+			// The Test Results panel restores empty in its saved slot
+			// (#1911): the next captured test run re-fills it.
+			panes.AddTests()
 			continue
 		}
 		if id := ids[key]; id.Kind == "http" {
@@ -2310,6 +2325,7 @@ var terminalGlobalCommands = map[string]bool{
 	"todo.list":             true,
 	"vcs.panel":             true,
 	"problems.toggle":       true,
+	"tests.toggle":          true,
 	"structure.toggle":      true,
 	"notifications.history": true,
 	// #997: tab switching stays reachable from a focused terminal/tool pane
@@ -3124,6 +3140,25 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the diagnostic (already 0-based, like definition targets).
 		return m.openPathAt(msg.Path, msg.Line, msg.Col)
 
+	case testresults.OpenLocationMsg:
+		// A Test Results activation (#1911): jump to the failure location
+		// (already 0-based, resolved against the run's directory).
+		return m.openPathAt(msg.Path, msg.Line, 0)
+
+	case testresults.LocateTestMsg:
+		// A passed test has no failure location: scan the run's test files
+		// for the declaration, like the gutter markers do.
+		return m.locateTest(msg.RerunID)
+
+	case testresults.RerunMsg:
+		// The panel's re-run actions (#1911): all, failed only, or one test.
+		return m, m.rerunTests(msg)
+
+	case TestRunDoneMsg:
+		// A captured test run finished off-loop: parse and fill the pane.
+		m.finishTestRun(msg)
+		return m, nil
+
 	case editor.OpenUndoTreeMsg:
 		// editor.undoTree (palette): the undo-tree overlay (#59) over the
 		// focused editor's change tree.
@@ -3574,24 +3609,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RunFileMsg:
 		// run.file (shift+f10 / Run menu / palette, #576): run the active
 		// file through its run configuration.
-		m.runCurrentFile()
-		return m, nil
+		return m, m.runCurrentFile()
 
 	case RunRerunMsg:
 		// run.rerun (Run menu / palette, #576): repeat the last run.
-		m.rerunLast()
-		return m, nil
+		return m, m.rerunLast()
 
 	case RunTestAtCursorMsg:
 		// run.testAtCursor (Run menu / palette / editor context menu /
 		// ctrl-or-cmd+click on the gutter run marker, #1150).
-		m.runTestAtCursor()
-		return m, nil
+		return m, m.runTestAtCursor()
 
 	case RunTestsInFileMsg:
 		// run.testsInFile (Run menu / palette, #1150): the file's package tests.
-		m.runTestsInFile()
-		return m, nil
+		return m, m.runTestsInFile()
 
 	case HTTPRunMsg:
 		// http.run (Run menu / palette / cmd+enter, #1250): dispatch the
@@ -3901,6 +3932,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ProblemsToggleMsg:
 		// problems.toggle (#1024): same state machine for the Problems pane.
 		m.toggleProblemsPanel()
+		return m, nil
+
+	case TestsToggleMsg:
+		// tests.toggle (#1911): same state machine for the Test Results pane.
+		m.toggleTestsPanel()
 		return m, nil
 
 	case BreakpointsToggleMsg:
@@ -6241,7 +6277,8 @@ func (m Model) viewerSplitTarget() string {
 		}
 		switch inst.Kind() {
 		case pane.KindExplorer, pane.KindVCS, pane.KindDebug, pane.KindProblems,
-			pane.KindStructure, pane.KindUsages, pane.KindHTTP, pane.KindBreakpoints:
+			pane.KindStructure, pane.KindUsages, pane.KindHTTP, pane.KindBreakpoints,
+			pane.KindTests:
 			return false
 		}
 		return true
@@ -7416,6 +7453,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Problems().Wheel(lines)
 			}
+		case pane.KindTests:
+			// The wheel scrolls the Test Results tree or detail (#1911).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Tests().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Tests().Wheel(lines)
+			}
 		case pane.KindData:
 			// The wheel scrolls the data viewer's focused region (#1788) —
 			// the table list or the grid's rows; the horizontal wheel and
@@ -8333,8 +8378,7 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 			if line, ok := ed.GutterHit(localX, localY); ok {
 				if msg.Mod&(tea.ModCtrl|tea.ModSuper|tea.ModMeta) != 0 {
 					if t, isTest := ed.TestMarkAt(line); isTest {
-						m.runTest(ed.Path(), &t)
-						return m, nil
+						return m, m.runTest(ed.Path(), &t)
 					}
 				}
 				m.toggleBreakpoint(ed.Path(), line)
@@ -8419,6 +8463,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// the row opens the diagnostic's location, mirroring the VCS panel.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Problems().Click(localX, localY)
+		}
+	case pane.KindTests:
+		// Test-tree clicks (#1911): a click selects (a detail-column click
+		// moves the scroll focus), a double-click jumps to the test.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Tests().Click(localX, localY)
 		}
 	case pane.KindBreakpoints:
 		// Breakpoints-list clicks (#1377): a click selects, the glyph cell
@@ -9475,6 +9525,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title = "DEBUG"
 		case pane.KindProblems:
 			title = "PROBLEMS"
+		case pane.KindTests:
+			title = "TESTS"
 		case pane.KindBreakpoints:
 			title = "BREAKPOINTS"
 		case pane.KindStructure:
