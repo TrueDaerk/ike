@@ -522,10 +522,15 @@ type Model struct {
 	// keyed by 0-based request line and holding the indicator text the app
 	// refreshes on every flight tick; nil while nothing runs.
 	httpFlight map[int]string
-	comp       *completionState
-	compMRU    *mru.Store // recently accepted completions (#854); nil-safe
-	snippet    *snippetSession
-	hover      *hoverState
+	// debugVals holds the debugger's inline local-variable values (#1914):
+	// the app-pushed locals plus the per-line annotation map computed from
+	// them, cached per document version (pointer, shared across value copies
+	// like testCache; lazily allocated on the first push). See debugvalues.go.
+	debugVals *debugValueStore
+	comp      *completionState
+	compMRU   *mru.Store // recently accepted completions (#854); nil-safe
+	snippet   *snippetSession
+	hover     *hoverState
 	// mouseHover is the pending mouse-idle hover position (#1129): set when
 	// the app fires the idle hover, matched against the LSP reply's position
 	// so a stale answer never opens a popup at a cell the pointer has left.

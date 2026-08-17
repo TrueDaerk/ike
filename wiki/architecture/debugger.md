@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Debugger
-description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; frames/variables panel plus a real debuggee terminal pane; Python via debugpy, PHP via the in-process Xdebug/DBGp bridge.
+description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit (with conditions, hit counts and logpoints), paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; frames/variables panel with watch expressions, inline variable values in the editor, a real debuggee terminal pane; Python via debugpy, Go via delve (dlv dap over a socket), PHP via the in-process Xdebug/DBGp bridge.
 resource: internal/app/debugsession.go
-tags: [architecture, debug, dap, dbgp, xdebug, run, breakpoints]
-timestamp: 2026-07-29T12:00:00Z
+tags: [architecture, debug, dap, dbgp, xdebug, delve, run, breakpoints, watches]
+timestamp: 2026-08-17T12:00:00Z
 ---
 
 # Debugger (0350)
@@ -12,6 +12,101 @@ timestamp: 2026-07-29T12:00:00Z
 Epic #572. `internal/app/debugsession.go` orchestrates one live DAP session
 (#579) on top of the DAP client (`internal/dap`, #578), the run
 configurations (#575/#576) and the breakpoint store (#577).
+
+## Go: delve over a socket (#1914)
+
+`dlv dap` speaks DAP only over a socket — there is no stdio mode — so the Go
+plugin rides the **in-process connect seam** (`lang.DebugAdapterInProcess`,
+the PHP bridge's path) instead of the argv spawn:
+`plugins/languages/go/debug.go`'s `DebugAdapterConnect` spawns
+`dlv dap --listen=127.0.0.1:0` (cwd = project root), scans stdout for the
+`DAP server listening at:` banner (10 s bound, stderr tail in the error),
+dials the port and returns a connection whose `Close` also kills and reaps
+the dlv process. Past construction the session is one code path with every
+other adapter.
+
+- **Resolution beyond PATH**: dlv is located with `transport.Resolve` —
+  `go install` drops it into `GOBIN`/`GOPATH/bin`, which a GUI-launched IKE
+  typically misses. The #589 installer seam preflights it:
+  `DebugAdapterMissing` = unresolvable, candidates
+  `go install github.com/go-delve/delve/cmd/dlv@latest` then
+  `brew install delve`.
+- **Launch args**: mode `debug` with the file as program; a test-scope
+  configuration (#1150) launches mode `test` with the file's package
+  directory as program and the selection as `-test.run '^X$'`
+  (benchmarks `-test.bench` + `-test.run '^$'`) — that is
+  **debug.testAtCursor** (Run menu / palette): run.testAtCursor's selection
+  rules, upserting the same test configuration, launched through
+  `startDebugConfig`. `lang.RunSpec` carries `Tests`/`TestName`/`TestKind`
+  for this. `console: "integratedTerminal"` puts the debuggee into the
+  debuggee terminal pane via runInTerminal (#625/#1370), so interactive and
+  TUI programs get a real tty.
+- A real-delve end-to-end test (`debug_e2e_test.go`) exercises conditional
+  breakpoints, logpoints, evaluate and stepping; it self-skips without dlv.
+
+## Breakpoint refinements: conditions, hit counts, logpoints (#1914)
+
+The store (#577) attaches an optional `debug.Meta{Condition, HitCondition,
+LogMessage}` per breakpoint (`SetMeta`/`MetaAt`; `EnabledSpecs` is what
+adapters receive). Persistence adds a backward-compatible `"meta"` field to
+`.ike/breakpoints.json`; `AdjustEdit` shifts refinements with their line like
+the disabled flag, and removing a breakpoint drops them.
+
+On the wire, `dap.SourceBreakpoint` carries `condition`/`hitCondition`/
+`logMessage`, and **`Session.SetBreakpoints` strips fields the adapter did
+not advertise** (`supportsConditionalBreakpoints`,
+`supportsHitConditionalBreakpoints`, `supportsLogPoints` from the initialize
+response) — the breakpoint itself is always sent, so an unsupported
+refinement degrades to a plain stop instead of a silently missing breakpoint.
+The DBGp bridge advertises none of the three: PHP breakpoints stop
+unconditionally; delve and debugpy support all three.
+
+The Breakpoints window (#1377) edits and shows them: `c` condition · `n` hit
+count · `l` log message open an inline one-line editor on the row (enter
+applies — an emptied field clears — esc cancels; the commit is a
+`SetMetaMsg` the root model applies, persists and syncs to a live session
+like every other mutation). Rows render `if …` / `hit …` / `log "…"`
+suffixes; a logpoint's glyph is `◆` in the warning tone (`◇` disabled) — it
+logs instead of stopping.
+
+## Watch expressions (#1914)
+
+`dap.Session.Evaluate(expr, frameID, "watch")` is the request; the DBGp
+bridge answers `evaluate` through DBGp `eval` (flat results — eval properties
+carry no stable fullname to page children through), so PHP watches work too.
+
+The expression list lives on the root model (`watchExprs` — in memory,
+surviving debug sessions). On every stop, and on frame selection, the app
+re-evaluates all of them against the current frame
+(`evaluateWatches` next to `fetchScopes`; results ride one
+`debugWatchesMsg`, session-guarded per #1523) and pushes
+`debugpanel.SetWatches`. A failed expression carries its error in place of a
+value.
+
+The panel renders a **Watches** section leading the variables tree (a
+synthetic root; `SetScopes` does not clobber it): `a` adds (an inline editor
+on a placeholder row — allowed while running, evaluated on the next stop),
+`e` on a watch row edits the expression (`e` on a variable row still edits
+its value), `d` removes, and enter on a structured result expands it through
+the ordinary `ExpandVarMsg`/`SetChildren` round trip. Committing an emptied
+expression removes the watch.
+
+## Inline variable values (#1914)
+
+While stopped, the selected frame's Locals render as line-end annotations in
+that frame's file — `x = 42, y = 7` after the code, blame-style (` ▏ `
+prefix, InlayHint tone, italic + faint, only when the line has room; code is
+never truncated). `editor.SetDebugLocals` computes a line → text map in one
+O(lines) scan (whole-word identifier matching, recomputed at most once per
+document version — the testmarks discipline) and the annotation branch sits
+in the view chain after log spans.
+
+The push rides the existing Locals fetch: `fetchScopes` additionally sends
+`debugLocalsMsg{sess, path, vars}`, and the app fans it out to every editor
+view of the file — following the selected frame, so activating another frame
+moves the values there. `clearPausedMarker` clears them (continue, steps,
+stop, session end): inline values describe a paused state and never outlive
+it. Gated by `debug.inline_values` (Settings › Debug, default on).
 
 ## PHP: in-process Xdebug/DBGp bridge (0360, epic #697)
 

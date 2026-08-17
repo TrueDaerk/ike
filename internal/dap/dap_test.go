@@ -25,6 +25,16 @@ type fakeAdapter struct {
 
 	emitReverse []envelope                 // reverse requests to send on configurationDone
 	revResp     map[string]json.RawMessage // client responses to them (whole frame), by command
+
+	caps     map[string]any     // initialize response override (nil = default)
+	lastBPs  []SourceBreakpoint // arguments of the last setBreakpoints request
+	lastEval json.RawMessage    // arguments of the last evaluate request
+}
+
+func (f *fakeAdapter) lastBreakpoints() []SourceBreakpoint {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]SourceBreakpoint(nil), f.lastBPs...)
 }
 
 // pipes builds the duplex streams: the client side implements io.ReadWriteCloser.
@@ -101,7 +111,13 @@ func (f *fakeAdapter) serve() {
 		f.mu.Unlock()
 		switch req.Command {
 		case "initialize":
-			f.respond(req, map[string]any{"supportsConfigurationDoneRequest": true, "supportsSetVariable": true})
+			f.mu.Lock()
+			caps := f.caps
+			f.mu.Unlock()
+			if caps == nil {
+				caps = map[string]any{"supportsConfigurationDoneRequest": true, "supportsSetVariable": true}
+			}
+			f.respond(req, caps)
 			f.event("initialized", map[string]any{})
 		case "setVariable":
 			var args struct {
@@ -116,6 +132,9 @@ func (f *fakeAdapter) serve() {
 				Breakpoints []SourceBreakpoint `json:"breakpoints"`
 			}
 			_ = json.Unmarshal(req.Arguments, &args)
+			f.mu.Lock()
+			f.lastBPs = append([]SourceBreakpoint(nil), args.Breakpoints...)
+			f.mu.Unlock()
 			out := make([]Breakpoint, len(args.Breakpoints))
 			for i, b := range args.Breakpoints {
 				out[i] = Breakpoint{Verified: true, Line: b.Line}
@@ -141,6 +160,11 @@ func (f *fakeAdapter) serve() {
 			f.respond(req, map[string]any{"scopes": []Scope{{Name: "Locals", VariablesReference: 100}}})
 		case "variables":
 			f.respond(req, map[string]any{"variables": []Variable{{Name: "x", Value: "42", Type: "int"}}})
+		case "evaluate":
+			f.mu.Lock()
+			f.lastEval = append(json.RawMessage(nil), req.Arguments...)
+			f.mu.Unlock()
+			f.respond(req, map[string]any{"result": "42", "type": "int", "variablesReference": 0})
 		case "next", "stepIn", "stepOut", "continue":
 			f.respond(req, map[string]any{})
 			f.event("stopped", StoppedEvent{Reason: "step", ThreadID: 1})
@@ -202,7 +226,7 @@ func TestSessionLifecycle(t *testing.T) {
 		return false
 	})
 	launched := s.LaunchAsync(map[string]any{"program": "/p/a.py"})
-	bps, err := s.SetBreakpoints("/p/a.py", []int{6}) // 0-based in
+	bps, err := s.SetBreakpoints("/p/a.py", []SourceBreakpoint{{Line: 6}}) // 0-based in
 	if err != nil {
 		t.Fatal(err)
 	}

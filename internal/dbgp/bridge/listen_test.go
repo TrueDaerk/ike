@@ -77,7 +77,7 @@ func TestListenMultiAccept(t *testing.T) {
 	s, events := listenClient(t, map[string]any{"request": "launch", "mode": "listen", "port": port})
 
 	// Breakpoints land before any connection: cached, optimistically verified.
-	bps, err := s.SetBreakpoints("/proj/test.php", []int{4})
+	bps, err := s.SetBreakpoints("/proj/test.php", []dap.SourceBreakpoint{{Line: 4}})
 	if err != nil || len(bps) != 1 || !bps[0].Verified {
 		t.Fatalf("setBreakpoints while idle: %v %+v", err, bps)
 	}
@@ -189,7 +189,7 @@ func TestListenPathMappings(t *testing.T) {
 		"request": "launch", "mode": "listen", "port": port,
 		"pathMappings": []map[string]string{{"server": "/var/www/html", "local": "/proj/src"}},
 	})
-	if _, err := s.SetBreakpoints("/proj/src/index.php", []int{9}); err != nil {
+	if _, err := s.SetBreakpoints("/proj/src/index.php", []dap.SourceBreakpoint{{Line: 9}}); err != nil {
 		t.Fatalf("setBreakpoints: %v", err)
 	}
 	if err := s.ConfigurationDone(); err != nil {

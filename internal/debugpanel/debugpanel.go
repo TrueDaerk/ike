@@ -52,6 +52,10 @@ type varNode struct {
 	loaded    bool
 	children  []*varNode
 	parentRef int // the variablesReference this node lives under (0 for scope roots)
+	// isWatch marks a watch-expression row (#1914): v.Name is the expression,
+	// watchIdx its index in the app's list (-1 for the pending add row).
+	isWatch  bool
+	watchIdx int
 }
 
 // Model is the panel component (value type, pointer receivers — the pane
@@ -65,10 +69,12 @@ type Model struct {
 	frameSel int
 	frameTop int // first visible frame row (wheel/keyboard scroll)
 
-	// The variables tree: roots are the selected frame's scopes.
-	roots  []*varNode
-	varSel int
-	varTop int // first visible variable row
+	// The variables tree: roots are the selected frame's scopes, led by the
+	// watches section when expressions exist (#1914).
+	roots     []*varNode
+	watchRoot *varNode
+	varSel    int
+	varTop    int // first visible variable row
 
 	col     column
 	running bool // true between steps (no paused data to show)
@@ -102,6 +108,10 @@ type Model struct {
 	editName string
 	editBuf  []rune
 	editCur  int
+	// editWatch marks the open editor as a watch-expression edit (#1914):
+	// editWatchIdx targets the app's list (-1 = the pending add row).
+	editWatch    bool
+	editWatchIdx int
 }
 
 // New returns an empty panel.
@@ -135,13 +145,20 @@ func (m Model) Editable() bool { return m.canEdit }
 // every key to the panel instead of the global keymap.
 func (m Model) Editing() bool { return m.editing }
 
-// cancelEdit closes the inline editor without committing.
+// cancelEdit closes the inline editor without committing; a pending add-watch
+// placeholder row leaves with it (#1914).
 func (m *Model) cancelEdit() {
+	wasWatchAdd := m.editing && m.editWatch && m.editWatchIdx < 0
 	m.editing = false
 	m.editBuf = nil
 	m.editCur = 0
 	m.editName = ""
 	m.editRef = 0
+	m.editWatch = false
+	m.editWatchIdx = 0
+	if wasWatchAdd {
+		m.dropWatchPlaceholder()
+	}
 }
 
 // SetFrames replaces the stack (a fresh stop) and resets the selection; the
@@ -179,6 +196,7 @@ func (m *Model) SetFinished(exitCode int, hasCode bool) {
 	m.running = false
 	m.frames = nil
 	m.roots = nil
+	m.watchRoot = nil // values are stale; the app re-pushes the expressions
 	m.frameSel, m.varSel = 0, 0
 	m.frameTop, m.varTop = 0, 0
 	m.cancelEdit()
@@ -197,6 +215,7 @@ func (m *Model) ResetSession() {
 	m.running = false
 	m.frames = nil
 	m.roots = nil
+	m.watchRoot = nil
 	m.frameSel, m.varSel = 0, 0
 	m.frameTop, m.varTop = 0, 0
 	m.cancelEdit()
@@ -244,6 +263,11 @@ func (m *Model) SetChildren(ref int, vars []dap.Variable) {
 		}
 	}
 	fill(m.roots)
+	if m.watchRoot != nil {
+		// A structured watch result expands like any variable (#1914); the
+		// section root itself never matches (it has no reference).
+		fill(m.watchRoot.children)
+	}
 }
 
 // SelectedFrame returns the highlighted frame (zero value when none).
@@ -254,7 +278,8 @@ func (m Model) SelectedFrame() (dap.StackFrame, bool) {
 	return m.frames[m.frameSel], true
 }
 
-// flat renders the tree as visible rows in order.
+// flat renders the tree as visible rows in order: the watches section leads
+// (#1914), the selected frame's scopes follow.
 func (m Model) flat() []*varNode {
 	var out []*varNode
 	var walk func(nodes []*varNode)
@@ -265,6 +290,9 @@ func (m Model) flat() []*varNode {
 				walk(n.children)
 			}
 		}
+	}
+	if m.watchRoot != nil {
+		walk([]*varNode{m.watchRoot})
 	}
 	walk(m.roots)
 	return out
@@ -295,6 +323,20 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if m.col > colFrames {
 			m.col--
 		}
+	case "a":
+		// Add a watch expression (#1914); allowed while running — it
+		// evaluates on the next stop.
+		if m.col == colVars && !m.finished {
+			m.startWatchAdd()
+		}
+	case "d", "delete", "backspace":
+		// Remove the selected watch row (#1914); other rows ignore the key.
+		if m.col == colVars {
+			if n, ok := m.selectedVar(); ok && n.isWatch && n.watchIdx >= 0 {
+				idx := n.watchIdx
+				return func() tea.Msg { return RemoveWatchMsg{Index: idx} }
+			}
+		}
 	case "e":
 		m.startEdit()
 	case "enter", " ":
@@ -303,17 +345,33 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// startEdit opens the inline value editor on the selected variable, when the
-// adapter supports setVariable and the row is an editable child (not a scope).
-func (m *Model) startEdit() {
-	if !m.canEdit || m.col != colVars || m.running {
-		return
-	}
+// selectedVar returns the variables column's selected row.
+func (m Model) selectedVar() (*varNode, bool) {
 	rows := m.flat()
 	if m.varSel < 0 || m.varSel >= len(rows) {
+		return nil, false
+	}
+	return rows[m.varSel], true
+}
+
+// startEdit opens the inline editor on the selected row: a watch row edits
+// its expression (#1914, no capability needed), a variable row edits its
+// value when the adapter supports setVariable.
+func (m *Model) startEdit() {
+	if m.col != colVars {
 		return
 	}
-	n := rows[m.varSel]
+	n, ok := m.selectedVar()
+	if !ok {
+		return
+	}
+	if n.isWatch && n.watchIdx >= 0 {
+		m.startWatchEdit(n)
+		return
+	}
+	if !m.canEdit || m.running {
+		return
+	}
 	if n.parentRef == 0 { // a scope root has no settable value
 		return
 	}
@@ -329,6 +387,11 @@ func (m *Model) startEdit() {
 func (m *Model) editKey(k tea.KeyPressMsg) tea.Cmd {
 	switch k.Code {
 	case tea.KeyEnter:
+		if m.editWatch {
+			idx, expr := m.editWatchIdx, strings.TrimSpace(string(m.editBuf))
+			m.cancelEdit()
+			return m.commitWatch(idx, expr)
+		}
 		ref, name, val := m.editRef, m.editName, string(m.editBuf)
 		m.cancelEdit()
 		return func() tea.Msg { return SetVarMsg{Ref: ref, Name: name, Value: val} }
@@ -427,7 +490,13 @@ func (m *Model) activate() tea.Cmd {
 	}
 	n := rows[m.varSel]
 	if n.v.VariablesReference == 0 {
-		return nil // a leaf value has nothing to expand
+		// The watches section root toggles locally (#1914); a leaf value has
+		// nothing to expand.
+		if len(n.children) > 0 {
+			n.expanded = !n.expanded
+			m.clampVarSel()
+		}
+		return nil
 	}
 	if n.expanded {
 		n.expanded = false
@@ -608,7 +677,7 @@ func (m Model) renderVars(w int) []string {
 		}
 		n := rows[i]
 		marker := "  "
-		if n.v.VariablesReference != 0 {
+		if n.v.VariablesReference != 0 || len(n.children) > 0 {
 			marker = "▸ "
 			if n.expanded {
 				marker = "▾ "
@@ -619,6 +688,11 @@ func (m Model) renderVars(w int) []string {
 		// cursor so a long value cannot overflow into the next column (#640).
 		if m.editing && i == m.varSel {
 			prefix := " " + strings.Repeat("  ", n.depth) + marker + n.v.Name + " = "
+			if m.editWatch {
+				// A watch edit types the expression itself (#1914) — no
+				// name/value split to prefix.
+				prefix = " " + strings.Repeat("  ", n.depth) + marker
+			}
 			line := append([]rune(prefix), m.editBuf...)
 			ci := len([]rune(prefix)) + m.editCur
 			if ci == len(line) {

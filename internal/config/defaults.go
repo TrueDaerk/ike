@@ -222,13 +222,15 @@ func defaults() *Config {
 			Patterns: []string{"TODO", "FIXME", "HACK", "XXX"},
 		},
 		Run: Run{
-			Placement: "bottom", // the Run tool docks at the bottom edge (#1905)
+			Placement:    "bottom", // the Run tool docks at the bottom edge (#1905)
+			VSCodeLaunch: true,     // .vscode/launch.json entries join the picker (#1914)
 		},
 		Tests: Tests{
 			ResultsWindow: true, // parsed test runs open the Test Results tool (#1911)
 			AutoOpen:      true,
 		},
 		Debug: Debug{
+			InlineValues: true, // paused locals annotate their lines (#1914)
 			PHP: DebugPHP{
 				Port: 9003, // Xdebug's default DBGp port
 			},

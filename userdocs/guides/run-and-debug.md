@@ -12,6 +12,14 @@ carry a command line, a working directory and environment overrides. The
 language registry is what knows how to turn "this Go file" into an actual
 command.
 
+**Run/Debug Configurations…** (`run.select` in the palette or the Run menu)
+lists every stored configuration in a picker. Projects that carry a VS Code
+`.vscode/launch.json` see their compatible `launch` entries (Go, Python, PHP)
+merged into the same list, marked with their source — picking one starts a
+debug session. Nothing is written back to `launch.json`, and a stored
+configuration wins a name collision. The `run.vscode_launch` setting turns
+the import off.
+
 ### Where the output goes
 
 A run is a **terminal command session**, not a captured log: real stdin, real
@@ -71,7 +79,10 @@ spaces or quotes in it needs no escaping.
 ## Debugging
 
 ++shift+f9++ starts a debug session for the current file. One session at a
-time.
+time. Python debugs through debugpy, Go through delve (`dlv dap`), PHP
+through the built-in Xdebug bridge. **Debug Test at Cursor** debugs the test
+at or nearest above the cursor the same way **Run Test at Cursor** runs it —
+for Go that is delve's test mode, so breakpoints inside the test hit.
 
 | Keys | What it does |
 |---|---|
@@ -90,6 +101,38 @@ project in `.ike/breakpoints.json` and survive restarts — the count in the
 status line tells you how many are armed. The screenshot uses the
 `monokai-pro` theme.
 
+### Conditions, hit counts and logpoints
+
+The Breakpoints window (++cmd+shift+f8++) edits more than the on/off state:
+on a breakpoint row, `c` sets a **condition** (the breakpoint only stops when
+the expression is true), `n` a **hit count**, and `l` a **log message** —
+which turns the breakpoint into a **logpoint**: instead of stopping, it logs
+the message (with `{expression}` interpolation) to the debug output every
+time the line executes. Logpoints render as `◆` in the list; emptying a field
+clears it. All three ride the session live — editing while paused re-arms the
+breakpoints immediately.
+
+What an adapter cannot do is stripped rather than mis-sent: PHP's DBGp bridge
+has no logpoint semantics, so there the breakpoint stops normally; delve and
+debugpy support all three.
+
+### Watches
+
+The debug window's variables tree starts with a **Watches** section: in the
+variables column, `a` adds an expression, `e` edits one, `d` removes it.
+Every watch re-evaluates on each stop and when you select another frame; a
+structured result expands like any variable, and a failing expression shows
+its error in place of a value. Watches live in memory for the IDE session and
+survive debug restarts.
+
+### Inline variable values
+
+While the debugger is stopped, lines that mention a local variable show its
+current value at the line end, dimmed and italic — the paused file reads like
+a live table. The values follow the frame you select in the debug window and
+disappear the moment the program resumes. `debug.inline_values` in
+**Settings › Debug** turns them off.
+
 ### The debug window
 
 It opens on the first stop, without stealing focus from the paused line — you
@@ -107,6 +150,11 @@ IKE checks before it spawns anything and, if it is missing, installs it —
 trying `pip`, then `uv pip`, then both again with `--break-system-packages`
 for externally managed interpreters like a Homebrew Python. You get a
 notification, not a failure.
+
+Go works the same way with **delve**: a missing `dlv` is installed via
+`go install github.com/go-delve/delve/cmd/dlv@latest` (Homebrew as the
+fallback), and IKE finds it in `GOBIN`/`GOPATH/bin` even when that directory
+is not on your `PATH`.
 
 ### PHP and Xdebug
 

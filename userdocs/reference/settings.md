@@ -193,6 +193,7 @@ secrets — are documented together, with screenshots, in
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Run placement | `run.placement` | enum: `bottom`, `left`, `right`, `top`, `in_pane` | `bottom` | user | Home position of the Run tool pane: docked at the bottom, left, right or top workspace edge, or in_pane for a terminal tab in the focused editor pane. A [tools.layout] slot assigned to "run" overrides it; the legacy value new_terminal reads as bottom |
+| Import launch.json | `run.vscode_launch` | boolean | `true` | user | Merge compatible .vscode/launch.json launch configurations into the run-configuration picker (run.select); the .ike/runconfigs.json store wins name collisions and nothing is written back |
 
 ### Tests
 
@@ -212,6 +213,7 @@ secrets — are documented together, with screenshots, in
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
+| Inline variable values | `debug.inline_values` | boolean | `true` | user | While the debugger is stopped, show the paused frame's local variable values at the end of the lines that mention them; they disappear on resume |
 | PHP listen port | `debug.php.port` | integer (1–65535) | `9003` | user | DBGp port debug.listen binds for incoming Xdebug connections (Xdebug's default is 9003) |
 | PHP hostname filter | `debug.php.hostname` | string | *(empty)* | project | Only accept listen-mode debug sessions whose request HTTP_HOST matches (port suffix ignored); empty accepts all — per project |
 

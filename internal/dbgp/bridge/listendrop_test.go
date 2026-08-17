@@ -47,7 +47,7 @@ func waitDrop(t *testing.T, events chan dap.Event, reason string) dropBody {
 func TestListenBusyConnectionIsAnnounced(t *testing.T) {
 	port := freePort(t)
 	s, events := listenClient(t, map[string]any{"request": "launch", "mode": "listen", "port": port})
-	if _, err := s.SetBreakpoints("/proj/test.php", []int{4}); err != nil {
+	if _, err := s.SetBreakpoints("/proj/test.php", []dap.SourceBreakpoint{{Line: 4}}); err != nil {
 		t.Fatalf("setBreakpoints: %v", err)
 	}
 	if err := s.ConfigurationDone(); err != nil {

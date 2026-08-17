@@ -64,7 +64,7 @@ echo $greeting, " ", $count, "\n";
 	waitRealEvent(t, events, "initialized")
 
 	// Break on `$count = count($numbers);` (0-based line 3 → wire line 4).
-	bps, err := s.SetBreakpoints(script, []int{3})
+	bps, err := s.SetBreakpoints(script, []dap.SourceBreakpoint{{Line: 3}})
 	if err != nil || len(bps) != 1 || !bps[0].Verified {
 		t.Fatalf("setBreakpoints: %v %+v", err, bps)
 	}

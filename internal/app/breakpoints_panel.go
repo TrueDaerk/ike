@@ -7,6 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/breakpanel"
+	"ike/internal/dap"
+	"ike/internal/debug"
 	"ike/internal/host"
 	"ike/internal/pane"
 )
@@ -130,6 +132,14 @@ func (m Model) handleBreakpanelMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		m.refreshBreakpointsPanel()
 		return m, m.syncSessionBreakpoints(m.bpAbsPath(msg.Path)), true
+	case breakpanel.SetMetaMsg:
+		// Condition / hit count / log message edited in the panel (#1914):
+		// store, persist, refresh and push to a live session like every other
+		// breakpoint mutation.
+		m.bpts.SetMeta(msg.Path, msg.Line, msg.Meta)
+		m.saveBreakpoints()
+		m.refreshBreakpointsPanel()
+		return m, m.syncSessionBreakpoints(m.bpAbsPath(msg.Path)), true
 	case breakpanel.RemoveAllMsg:
 		paths := make([]string, 0, len(m.bpts.All()))
 		for p := range m.bpts.All() {
@@ -165,13 +175,28 @@ func (m *Model) syncSessionBreakpoints(abs string) tea.Cmd {
 	if dbg == nil {
 		return nil
 	}
-	lines := m.bpts.EnabledLines(bpKey(abs))
+	bps := dapBreakpoints(m.bpts.EnabledSpecs(bpKey(abs)))
 	send := m.host.Send
 	sess := dbg.sess
 	go func() {
-		if _, err := sess.SetBreakpoints(abs, lines); err != nil {
+		if _, err := sess.SetBreakpoints(abs, bps); err != nil {
 			send(debugErrMsg{err: err})
 		}
 	}()
 	return nil
+}
+
+// dapBreakpoints maps the store's enabled breakpoints onto the wire shape,
+// carrying the #1914 refinements (condition, hit count, log message).
+func dapBreakpoints(specs []debug.Spec) []dap.SourceBreakpoint {
+	out := make([]dap.SourceBreakpoint, len(specs))
+	for i, sp := range specs {
+		out[i] = dap.SourceBreakpoint{
+			Line:         sp.Line,
+			Condition:    sp.Condition,
+			HitCondition: sp.HitCondition,
+			LogMessage:   sp.LogMessage,
+		}
+	}
+	return out
 }
