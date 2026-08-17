@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Problems Tool Window
-description: Singleton bottom-split pane aggregating LSP diagnostics project-wide — grouped by file, errors first, enter/double-click jumps to the location, 'f' toggles current-file vs project scope; consumes the publishDiagnostics flow plus the Go-computed lint notes (#1024, part of #33; notes #1654).
+description: Singleton bottom-split pane aggregating LSP diagnostics project-wide — grouped by file, errors first, enter/double-click jumps to the location, 'f' toggles current-file vs project scope; consumes the publishDiagnostics flow plus the Go-computed lint notes and per-run task-matcher findings (#1024, part of #33; notes #1654; tasks #1915).
 resource: internal/problems/problems.go
-tags: [architecture, lsp, diagnostics, tool-window, pane]
-timestamp: 2026-07-27T12:00:00Z
+tags: [architecture, lsp, diagnostics, tool-window, pane, tasks]
+timestamp: 2026-08-17T18:00:00Z
 ---
 
 # Problems Tool Window (#1024)
@@ -37,6 +37,15 @@ and stored per path through `Store.SetNotes`. The two channels replace
 independently — a server publish never clobbers the lint findings, nor the
 reverse — and `Get`/`Paths`/`Len` merge them, so the pane lists both. No LSP
 traffic is involved in that channel at all.
+
+A third channel holds task-run findings (#1915): problem matchers parse a
+run's terminal output (see [Tasks & Problem Matchers](/architecture/tasks.md))
+into diagnostics stored per run source through `Store.SetTaskSource(source,
+byPath)` — keyed by the run configuration's name, replaced wholesale per
+publish and cleared at every launch (`ClearTaskSource`), so a re-run
+replaces its previous problems instead of duplicating them and never touches
+another run's or the LSP's findings. `Get` appends task findings after the
+server and lint sets; rows navigate like any diagnostic.
 
 Both LSP consumers sit behind the app's diagnostic ignore filter (#1259,
 `internal/app/diag_ignore.go`): a diagnostic matching an

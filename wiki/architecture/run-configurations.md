@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Run Configurations
-description: Work stream 0350 — named, persisted run/debug configurations synthesized into command lines through the language registry; per-project store in .ike/runconfigs.json; output in the dedicated Run tool pane (#1905); run.select picker merging .vscode/launch.json imports (#1914).
+description: Work stream 0350 — named, persisted run/debug configurations synthesized into command lines through the language registry; per-project store in .ike/runconfigs.json; output in the dedicated Run tool pane (#1905); run.select picker merging .vscode/launch.json imports (#1914); literal-argv task configurations, the Run Task picker and problem matchers (#1915).
 resource: internal/run
-tags: [architecture, run, debug, toolchain, languages, vscode]
-timestamp: 2026-08-17T12:00:00Z
+tags: [architecture, run, debug, toolchain, languages, vscode, tasks]
+timestamp: 2026-08-17T18:00:00Z
 ---
 
 # Run Configurations (0350)
@@ -29,6 +29,8 @@ type Config struct {
     Cwd    string            // project-relative working dir; "" = root
     Tests  bool              // test-scope config (#1150): argv via the TestSpec seam
     TestName, TestKind string // one test function; empty name = whole file scope
+    Argv     []string        // literal command line (#1915, task configs): skips synthesis
+    Matchers []string        // problem matchers over the run's output (#1915)
 }
 ```
 
@@ -42,8 +44,13 @@ type Config struct {
   env, cwd = project root, the language's module form when the file lies in
   a package, name = base name (relative path on collision).
 - **Launch**: `run.Argv(root, cfg, explicitInterpreter)` resolves the argv
-  through the language seam below; `Config.Dir(root)` and
-  `Config.EnvSlice()` feed the terminal spawn.
+  through the language seam below — unless the configuration carries a
+  literal `Argv` (#1915, task configurations), which is returned as-is;
+  `Config.Dir(root)` and `Config.EnvSlice()` feed the terminal spawn.
+- **Tasks**: `run.TaskConfig(lang.Task)` renders a discovered build-tool
+  target (Makefile/npm/just, #1915) as a configuration named
+  `"source: name"` with the literal argv and the task's default problem
+  matchers — see [Tasks & Problem Matchers](/architecture/tasks.md).
 
 ## The language seam (`internal/lang/run.go`)
 
@@ -192,6 +199,13 @@ the detail column. Picking a run-kind row rides the ordinary `launchRun`
 funnel; a debug-kind row (all launch.json imports, and the picker is how a
 stored debug config is launched by name) goes through `startDebugConfig`,
 the same guard funnel as `debug.start`.
+
+Two sibling commands ride the same locked-palette pattern (#1915):
+**`run.task`** lists the build-tool targets the task providers discover
+(Makefile targets, package.json scripts, justfile recipes) and runs a picked
+one as an ephemeral configuration; **`run.taskPromote`** stores the picked
+task as a normal configuration instead. Details in
+[Tasks & Problem Matchers](/architecture/tasks.md).
 
 ## Breakpoints (#577)
 

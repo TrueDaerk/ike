@@ -41,11 +41,20 @@ type Store struct {
 	// own map because the two flows replace independently: a server publish
 	// must not clobber the lint findings, nor the reverse.
 	noteByPath map[string][]ilsp.Diagnostic
+	// taskBySource holds problem-matcher findings from task runs (#1915),
+	// keyed by the run's source (the configuration name) then path. Each
+	// source replaces wholesale on re-run, so a fixed build drops its stale
+	// entries without touching another task's — or the LSP's — findings.
+	taskBySource map[string]map[string][]ilsp.Diagnostic
 }
 
 // NewStore returns an empty store.
 func NewStore() *Store {
-	return &Store{byPath: map[string][]ilsp.Diagnostic{}, noteByPath: map[string][]ilsp.Diagnostic{}}
+	return &Store{
+		byPath:       map[string][]ilsp.Diagnostic{},
+		noteByPath:   map[string][]ilsp.Diagnostic{},
+		taskBySource: map[string]map[string][]ilsp.Diagnostic{},
+	}
 }
 
 // Drop removes path's entry — and, for a directory, every entry beneath it
@@ -53,6 +62,7 @@ func NewStore() *Store {
 func (s *Store) Drop(path string, isDir bool) {
 	delete(s.byPath, path)
 	delete(s.noteByPath, path)
+	s.dropTaskPath(path)
 	if !isDir {
 		return
 	}
@@ -65,6 +75,27 @@ func (s *Store) Drop(path string, isDir bool) {
 	for p := range s.noteByPath {
 		if strings.HasPrefix(p, prefix) {
 			delete(s.noteByPath, p)
+		}
+	}
+	for src, byPath := range s.taskBySource {
+		for p := range byPath {
+			if strings.HasPrefix(p, prefix) {
+				delete(byPath, p)
+			}
+		}
+		if len(byPath) == 0 {
+			delete(s.taskBySource, src)
+		}
+	}
+}
+
+// dropTaskPath removes path from every task source (the non-directory half
+// of Drop's task cleanup).
+func (s *Store) dropTaskPath(path string) {
+	for src, byPath := range s.taskBySource {
+		delete(byPath, path)
+		if len(byPath) == 0 {
+			delete(s.taskBySource, src)
 		}
 	}
 }
@@ -89,30 +120,80 @@ func (s *Store) SetNotes(path string, diags []ilsp.Diagnostic) {
 	s.noteByPath[path] = diags
 }
 
+// SetTaskSource replaces one task source's findings wholesale (#1915):
+// byPath maps absolute paths to the run's matched problems. An empty (or
+// nil) map clears the source — the re-run-with-a-clean-slate seam.
+func (s *Store) SetTaskSource(source string, byPath map[string][]ilsp.Diagnostic) {
+	kept := map[string][]ilsp.Diagnostic{}
+	for p, ds := range byPath {
+		if len(ds) > 0 {
+			kept[p] = ds
+		}
+	}
+	if len(kept) == 0 {
+		delete(s.taskBySource, source)
+		return
+	}
+	s.taskBySource[source] = kept
+}
+
+// ClearTaskSource drops one task source's findings (#1915) — a fresh run
+// clears its predecessor's problems before any new output is parsed.
+func (s *Store) ClearTaskSource(source string) { delete(s.taskBySource, source) }
+
+// taskGet collects path's task-run findings across every source, sorted by
+// source name so the order is stable.
+func (s *Store) taskGet(path string) []ilsp.Diagnostic {
+	if len(s.taskBySource) == 0 {
+		return nil
+	}
+	srcs := make([]string, 0, len(s.taskBySource))
+	for src := range s.taskBySource {
+		srcs = append(srcs, src)
+	}
+	sort.Strings(srcs)
+	var out []ilsp.Diagnostic
+	for _, src := range srcs {
+		out = append(out, s.taskBySource[src][path]...)
+	}
+	return out
+}
+
 // Get returns path's current findings (nil when clean): the server's set
-// first, then the lint findings.
+// first, then the lint findings, then task-run findings (#1915).
 func (s *Store) Get(path string) []ilsp.Diagnostic {
 	ds := s.byPath[path]
 	ns := s.noteByPath[path]
-	if len(ns) == 0 {
+	ts := s.taskGet(path)
+	if len(ns) == 0 && len(ts) == 0 {
 		return ds
 	}
-	if len(ds) == 0 {
+	if len(ds) == 0 && len(ts) == 0 {
 		return ns
 	}
-	out := make([]ilsp.Diagnostic, 0, len(ds)+len(ns))
-	return append(append(out, ds...), ns...)
+	out := make([]ilsp.Diagnostic, 0, len(ds)+len(ns)+len(ts))
+	return append(append(append(out, ds...), ns...), ts...)
 }
 
 // Paths returns every path holding findings, sorted lexicographically.
 func (s *Store) Paths() []string {
+	seen := map[string]bool{}
 	out := make([]string, 0, len(s.byPath))
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
 	for p := range s.byPath {
-		out = append(out, p)
+		add(p)
 	}
 	for p := range s.noteByPath {
-		if _, dup := s.byPath[p]; !dup {
-			out = append(out, p)
+		add(p)
+	}
+	for _, byPath := range s.taskBySource {
+		for p := range byPath {
+			add(p)
 		}
 	}
 	sort.Strings(out)
@@ -120,15 +201,7 @@ func (s *Store) Paths() []string {
 }
 
 // Len reports how many files currently hold findings.
-func (s *Store) Len() int {
-	n := len(s.byPath)
-	for p := range s.noteByPath {
-		if _, dup := s.byPath[p]; !dup {
-			n++
-		}
-	}
-	return n
-}
+func (s *Store) Len() int { return len(s.Paths()) }
 
 // row is one rendered line: a file header or one diagnostic under it.
 type row struct {

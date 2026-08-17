@@ -37,6 +37,10 @@ type Config struct {
 	Todo Todo `toml:"todo"`
 	// Run holds run-configuration behaviour (0350, #576).
 	Run Run `toml:"run"`
+	// Tasks holds task-discovery and problem-matcher settings (#1915):
+	// [[tasks.matcher]] entries define custom problem matchers a run
+	// configuration can reference by name, next to the built-in ones.
+	Tasks Tasks `toml:"tasks"`
 	// Tests holds Test Results tool-window behaviour (#1911).
 	Tests Tests `toml:"tests"`
 	// Debug holds debugger behaviour (0360, #823).
@@ -166,6 +170,32 @@ type DebugPathMap struct {
 type Run struct {
 	Placement    string `toml:"placement"`
 	VSCodeLaunch bool   `toml:"vscode_launch"`
+}
+
+// Tasks holds task-discovery settings (#1915): the [[tasks.matcher]] custom
+// problem matchers. Conventionally project-scoped — a matcher describes a
+// project's build output.
+type Tasks struct {
+	Matchers []MatcherEntry `toml:"matcher"`
+}
+
+// MatcherEntry is one custom problem matcher ([[tasks.matcher]], #1915): a
+// single-line regex whose capture groups, indexed 1-based by File/Line/Col/
+// Severity/Message, pull a problem's fields out of a matching output line.
+// File, Line and Message are required; Col and Severity are optional (0 =
+// absent). A Severity group captures a word (error/warning/info/hint); lines
+// without one fall back to DefaultSeverity ("" = error). Validation compiles
+// the pattern and checks every group index, dropping a broken entry with a
+// clear diagnostic instead of failing the load.
+type MatcherEntry struct {
+	Name            string `toml:"name"`
+	Pattern         string `toml:"pattern"`
+	File            int    `toml:"file"`
+	Line            int    `toml:"line"`
+	Col             int    `toml:"col"`
+	Severity        int    `toml:"severity"`
+	Message         int    `toml:"message"`
+	DefaultSeverity string `toml:"default_severity"`
 }
 
 // Tests holds Test Results tool-window behaviour (#1911). ResultsWindow
