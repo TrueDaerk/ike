@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-08-09T00:00:00Z
+timestamp: 2026-08-17T18:00:00Z
 ---
 
 # Language Registry
@@ -367,6 +367,18 @@ PATH shims, debug launch and LSP injection. Discovery
 (`internal/settings/toolchain_discover.go`) resolves shim candidates before
 listing too (including the hardcoded pyenv shim entry) and dedupes identical
 resolutions, so the picker shows versioned paths.
+
+## Task discovery (#1915)
+
+The registry also hosts the build-task seam (`internal/lang/tasks.go`):
+`lang.TaskProvider` (`Source() string; Tasks(root) []Task`) enumerates a
+tool's runnable targets at the project root, registered via
+`lang.RegisterTaskProvider` from a plugin's `init()` (last-writer-wins per
+source) and aggregated by `lang.Tasks(root)` for the Run Task picker. The
+built-in providers — Makefile targets, package.json scripts, justfile
+recipes — live in `plugins/tasks`. A `lang.Task` carries the literal argv
+plus default problem-matcher names; see
+[Tasks & Problem Matchers](/architecture/tasks.md).
 
 ## File templates (#170)
 

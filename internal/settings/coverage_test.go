@@ -31,6 +31,7 @@ var pagedKeys = map[string]string{
 	"tools.custom":            "Tools page (tools_page.go)",
 	"debug.php.path_mappings": "PHP Debug Mappings page (debugmap_page.go)",
 	"snippets":                "live templates, edited as TOML (#1152)",
+	"tasks.matcher":           "custom problem matchers, edited as TOML like snippets; validation reports broken entries (#1915)",
 }
 
 // internalKeys are the keys intentionally kept out of the UI: state IKE writes

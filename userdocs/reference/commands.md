@@ -120,6 +120,8 @@ bring their own.
 | Run File | `run.file` | `shift+f10` | — | everywhere |
 | Rerun Last | `run.rerun` | `cmd+f5` | — | everywhere |
 | Run/Debug Configurations… | `run.select` | — | — | everywhere |
+| Run Task… | `run.task` | — | — | everywhere |
+| Promote Task to Run Configuration… | `run.taskPromote` | — | — | everywhere |
 | Run Test at Cursor | `run.testAtCursor` | `ctrl+shift+f10` | — | everywhere |
 | Run Tests in File | `run.testsInFile` | — | — | everywhere |
 | Open Scratch File… | `scratch.list` | — | — | everywhere |

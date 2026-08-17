@@ -50,6 +50,14 @@ type Config struct {
 	Tests    bool   `json:"tests,omitempty"`
 	TestName string `json:"test_name,omitempty"`
 	TestKind string `json:"test_kind,omitempty"`
+	// Argv is a literal command line (#1915): a task configuration (make
+	// target, npm script) runs exactly this, bypassing the language
+	// synthesis. Lang/File/Module are empty then.
+	Argv []string `json:"argv,omitempty"`
+	// Matchers names the problem matchers (internal/matcher) applied to the
+	// run's output (#1915): matched lines become entries in the Problems
+	// tool window under this configuration's name.
+	Matchers []string `json:"matchers,omitempty"`
 }
 
 // Store is the persisted set of configurations plus the last-used name (the
@@ -200,6 +208,20 @@ func TestConfig(root, file string, t *lang.TestMatch) (Config, bool) {
 	return cfg, true
 }
 
+// TaskConfig renders a discovered task (#1915) as a run configuration: the
+// task's literal argv, its directory as the cwd and its default problem
+// matchers, named "source: target" so re-promotions of the same task fold
+// into one stored entry (Upsert).
+func TaskConfig(t lang.Task) Config {
+	return Config{
+		Name:     t.Label(),
+		Kind:     KindRun,
+		Argv:     append([]string(nil), t.Argv...),
+		Cwd:      t.Dir,
+		Matchers: append([]string(nil), t.Matchers...),
+	}
+}
+
 // EnsureFor returns the store's configuration for the absolute file,
 // creating and persisting the default one on first run (created=true then).
 // A failed persist still returns the in-memory configuration — the run must
@@ -227,6 +249,11 @@ func (s *Store) EnsureFor(root, file string) (cfg *Config, created bool, ok bool
 // the language ("" when none). ok=false when the language contributes no run
 // command.
 func Argv(root string, cfg Config, explicit string) ([]string, bool) {
+	// A literal command line (#1915, task configurations) is the argv — no
+	// language seam involved.
+	if len(cfg.Argv) > 0 {
+		return append([]string(nil), cfg.Argv...), true
+	}
 	if cfg.Tests {
 		file := absTo(root, cfg.File)
 		if cfg.TestName == "" {

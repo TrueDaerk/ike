@@ -37,6 +37,7 @@ import (
 
 	_ "ike/plugins/format"
 	_ "ike/plugins/lsp"
+	_ "ike/plugins/tasks"
 
 	_ "ike/plugins/languages/ansible"
 	_ "ike/plugins/languages/csv"

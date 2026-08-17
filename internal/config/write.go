@@ -42,6 +42,7 @@ func DefaultScope(key string) Scope {
 		key == "lsp.diagnostics_severity",
 		strings.HasPrefix(key, "lang."),
 		strings.HasPrefix(key, "format."),
+		strings.HasPrefix(key, "tasks."),
 		strings.HasPrefix(key, "toolchain."):
 		return ProjectScope
 	}
