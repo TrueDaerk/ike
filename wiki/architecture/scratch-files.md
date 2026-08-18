@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Scratch Files
-description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette, surviving restarts as ordinary files.
+description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette, listed and deleted in the Scratch Files tool window, surviving restarts as ordinary files.
 resource: internal/scratch
-tags: [architecture, scratch, palette, languages]
-timestamp: 2026-07-11T13:15:00Z
+tags: [architecture, scratch, palette, languages, tool-window, pane]
+timestamp: 2026-08-18T14:00:00Z
 ---
 
 # Scratch Files
@@ -26,6 +26,8 @@ scratch paths itself:
 func Dir() (string, error)        // $IKE_CONFIG_DIR/scratches, else ~/.ike/scratches
 func Create(ext string) (string, error) // next free scratch-N.<ext>, seeded with the language template
 func List() ([]string, error)     // existing scratches, newest-first (mod time)
+func Entries() ([]Entry, error)   // the same order, with each file's mod time
+func Delete(path string) error    // remove one scratch; refuses anything outside the dir
 ```
 
 `Dir` mirrors `config.Discover`'s user-layer override, so a sandboxed IKE
@@ -35,6 +37,14 @@ through the winning handle, so the content belongs to the allocation that won
 the race and a PHP scratch is runnable as created; the extension is
 dot-optional, empty means `txt`. A missing directory lists as empty, not as an
 error.
+
+`Delete` (#1932) is the removal half, and it is deliberately narrow: the path
+must name a file lying **directly** in the scratch dir. A nested path, a
+directory, a traversal through `..` or anything outside is refused with an
+error rather than deleted — the panel below can therefore pass whatever it has
+selected without the app re-deriving the guard rail. `Entries` is `List` with
+the mod times kept, so the panel's rows need no second stat pass and nothing
+outside this package reads the scratch directory.
 
 ## Creating (#351, #1223)
 
@@ -82,3 +92,49 @@ in the `@` finder below the project matches — no mode switch needed for the
 common case of typing "scratch" to find a scratch file. See [Command
 Palette](/architecture/command-palette.md) for the file-mode ranking this
 slots into.
+
+## Scratch Files tool window (#1932)
+
+The panel that makes scratches manageable without a terminal: the scratch dir
+lies outside the project root, so the [explorer](./explorer.md) cannot reach
+it — before this, an old scratch could only be deleted by leaving the IDE.
+
+`scratch.panel` ("Scratch Files", palette + View menu) toggles a slim
+singleton pane (`internal/scratchpanel`, `pane.KindScratch`, key `"scratch"`,
+context id `"scratch"`) wired by `internal/app/scratch_panel.go` with the
+`vcs.panel` state machine (open → focus → return focus). Unlike the adaptive
+tool windows (#1588) it always docks **below** the active editor: the list is
+a wide few-rows strip, never a column.
+
+Rows are the store's files newest-first — name, language (the [language
+registry](./languages.md)'s id, falling back to the bare extension) and
+relative mod time. Navigation is the shared
+[list semantics](./list-navigation.md); `enter` and a double click open the
+scratch through the standard open funnel — the same focused tab `scratch.list`
+produces — and `r` re-reads the store. The list is also refreshed by the app
+whenever a scratch is created or deleted, so it never needs a restart.
+
+**Delete asks first.** `d` (or `delete`/`backspace`) arms a confirmation the
+footer spells out (`Delete scratch-3.py? [y]es [n]o`); `y`/`enter` performs
+it, *any* other key — and losing focus, and a click — cancels. The delete goes
+out as `scratchpanel.DeleteMsg`, so the app can do what the panel must not:
+`scratch.Delete` removes the file, `closeEditorsForPath` closes its tabs
+across every pane (the explorer's delete path), the
+[Problems](./problems.md) store drops its findings, and the list refreshes. A
+path the store refuses only warns — nothing is closed.
+
+**Resizing is not special.** The panel is an ordinary leaf of the
+[split tree](./pane-layout.md), so the line above it is the usual draggable
+pane edge and the dragged height persists in `layout.json` like any other
+split ratio.
+
+Two settings (Settings → Tools → *Scratch Files*) shape it:
+
+| key | default | meaning |
+| --- | --- | --- |
+| `scratch.panel` | `false` | open the panel on start; hidden by default, so users who don't want it lose no editor rows |
+| `scratch.panel_height` | `8` | rows the panel opens at, border and title row included (8 ≈ four scratches plus the hint line); 5–60 |
+
+`scratch.panel` is a one-shot at startup, not a live mirror of the pane:
+toggling the panel away afterwards sticks for the session, and a panel left
+open at quit comes back through the layout either way.

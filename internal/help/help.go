@@ -288,6 +288,8 @@ func groupTitle(label string) string {
 		return "Structure"
 	case "dom":
 		return "DOM Inspector"
+	case "scratch":
+		return "Scratch Files"
 	case "usages":
 		return "Usages"
 	case "http":
