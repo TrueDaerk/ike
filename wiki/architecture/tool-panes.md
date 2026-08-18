@@ -60,14 +60,21 @@ Writes go through the write-back layer at user scope (the whole list, the
 
 `internal/toolcatalog` holds a curated list of common TUIs — lazygit,
 lazydocker, sqlit (Maxteabag/sqlit, binary from the `sqlit-tui` Python
-package), k9s, htop, btop — each with the `[[tools.custom]]` entry it maps
+package), lazysql (TrueDaerk/lazysql, a lazygit-style client for MySQL,
+MariaDB, PostgreSQL, SQLite and DuckDB servers — sqlit stays for local file
+databases), k9s, htop, btop — each with the `[[tools.custom]]` entry it maps
 to, an optional requirement gate (`Requires`: lazydocker needs `docker`, k9s
 needs `kubectl` on PATH to be offered) and ordered install recipes (plain
 argvs like the LSP recipes: brew, `go install`, pipx/uv). `InstallArgv` picks
 the first recipe whose installer is on PATH; `Install` runs it and
 re-verifies the binary resolves afterwards (exit 0 without the binary on
 PATH is a failure, the LSP #370 semantics), reporting a
-`toolcatalog.InstallResultMsg` that the app toasts.
+`toolcatalog.InstallResultMsg` that the app toasts. lazysql ships no install
+recipe (#1925): it has no brew formula, and `go install` doesn't work
+because its module name doesn't match the GitHub path — only a release
+binary download or `git clone` + `make install`, neither a single argv. Its
+entry is still offered and its binary check still works; the install dialog
+falls back to the "no supported installer found" path instead of a button.
 
 Two surfaces draw from the catalog:
 

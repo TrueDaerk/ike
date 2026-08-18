@@ -68,6 +68,19 @@ var catalog = []Entry{
 		},
 	},
 	{
+		// No install recipe fits the plain-argv model: lazysql ships no brew
+		// formula, and `go install github.com/TrueDaerk/lazysql@latest` does
+		// not work because the module is named "lazysql", not the GitHub
+		// path (the proxy cannot resolve it). Installing means downloading a
+		// release binary or `git clone` + `make install`, neither of which
+		// is a single argv — so this entry is offered install-gated: the
+		// binary check still works, but the dialog falls back to its
+		// "no supported installer found" path instead of an install button.
+		Name:        "lazysql",
+		Command:     "lazysql",
+		Description: "SQL database client TUI (MySQL, MariaDB, PostgreSQL, SQLite, DuckDB)",
+	},
+	{
 		Name:        "k9s",
 		Command:     "k9s",
 		Description: "Kubernetes cluster TUI",

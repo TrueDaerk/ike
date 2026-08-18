@@ -29,10 +29,11 @@ type TestSpec struct {
 	// `kind` selects the argv template in Kinds.
 	Pattern string
 	// Kinds maps a captured kind ("" when Pattern has no `kind` group) to the
-	// argv template running exactly one test. Elements may contain the
-	// placeholders {interpreter} (the resolved toolchain binary, Tool as
-	// fallback) and {name} (the test's name, verbatim — Pattern-captured
-	// names are identifiers, safe inside a `-run ^…$` anchor).
+	// argv template running exactly one test. A whole element "{interpreter}"
+	// expands to the resolved toolchain binary (Runner's command prefix, Tool
+	// as fallback); {name} substitutes anywhere in an element (the test's
+	// name, verbatim — Pattern-captured names are identifiers, safe inside a
+	// `-run ^…$` anchor).
 	Kinds map[string][]string
 	// FileArgv is the argv template running every test in the file's scope
 	// (Go: the package — the argv runs with cwd = the file's directory).
@@ -65,6 +66,20 @@ type TestSpec struct {
 	// NamesJoin joins RerunIDs substituted into {names}; "" selects the
 	// element-per-id expansion.
 	NamesJoin string
+
+	// Project-rooted runs (#1926) — both optional.
+	//
+	// RunAtRoot runs the language's tests with cwd = the project root
+	// instead of the test file's directory, and expands {file} to the file's
+	// root-relative path rather than its base name. PHPUnit needs it: the
+	// composer autoloader and phpunit.xml live at the root, and a run
+	// started from tests/ would find neither.
+	RunAtRoot bool
+	// Runner, when non-nil, resolves a whole-element "{interpreter}" to the
+	// command prefix running root's test tool — the project-local binary
+	// (PHP: vendor/bin/phpunit) rather than the language interpreter the
+	// toolchain detection yields. An empty return falls back to Tool.
+	Runner func(root string) []string
 }
 
 // TestStatus is one parsed test's outcome.
@@ -201,7 +216,7 @@ func TestArgv(root, path string, t TestMatch, explicit string) ([]string, bool) 
 	if !found || len(tpl) == 0 {
 		return nil, false
 	}
-	return expandTestArgv(tpl, t.Name, testTool(l.ID, root, spec, explicit), filepath.Base(path)), true
+	return expandTestArgv(tpl, t.Name, testCommand(l.ID, root, spec, explicit), testFileArg(spec, root, path)), true
 }
 
 // TestFileArgv synthesizes the argv running every test in path's scope (the
@@ -211,7 +226,7 @@ func TestFileArgv(root, path, explicit string) ([]string, bool) {
 	if !ok || len(spec.FileArgv) == 0 {
 		return nil, false
 	}
-	return expandTestArgv(spec.FileArgv, "", testTool(l.ID, root, spec, explicit), filepath.Base(path)), true
+	return expandTestArgv(spec.FileArgv, "", testCommand(l.ID, root, spec, explicit), testFileArg(spec, root, path)), true
 }
 
 // TestStructuredArgv is TestArgv/TestFileArgv (t nil = file scope) plus the
@@ -244,16 +259,19 @@ func TestFailedArgv(root, path string, ids []string, explicit string) ([]string,
 	if !ok || len(spec.FailedArgv) == 0 || len(ids) == 0 {
 		return nil, false
 	}
-	tool := testTool(l.ID, root, spec, explicit)
-	file := filepath.Base(path)
+	cmd := testCommand(l.ID, root, spec, explicit)
+	file := testFileArg(spec, root, path)
 	var out []string
 	for _, a := range spec.FailedArgv {
 		if a == "{names}" && spec.NamesJoin == "" {
 			out = append(out, ids...)
 			continue
 		}
+		if a == "{interpreter}" {
+			out = append(out, cmd...)
+			continue
+		}
 		a = strings.ReplaceAll(a, "{names}", strings.Join(ids, spec.NamesJoin))
-		a = strings.ReplaceAll(a, "{interpreter}", tool)
 		a = strings.ReplaceAll(a, "{file}", file)
 		out = append(out, a)
 	}
@@ -268,6 +286,15 @@ func TestParser(langID string) (func(output string) []TestResult, bool) {
 		return nil, false
 	}
 	return l.Test.ParseOutput, true
+}
+
+// TestRunsAtRoot reports whether path's language runs its tests with cwd =
+// the project root rather than the test file's directory (#1926) — the flag
+// run.TestConfig reads when it picks a test configuration's working
+// directory.
+func TestRunsAtRoot(path string) bool {
+	_, spec, ok := testSpecFor(path)
+	return ok && spec.RunAtRoot
 }
 
 // HasTests reports whether path's language declares test detection and path
@@ -287,16 +314,49 @@ func testTool(langID, root string, spec *TestSpec, explicit string) string {
 	return spec.Tool
 }
 
-// expandTestArgv substitutes the placeholders into a fresh slice. file is the
-// test file's base name for {file} (#1911, pytest targets the file — the argv
-// runs with cwd = the file's directory, so the base name resolves).
-func expandTestArgv(tpl []string, name, tool, file string) []string {
-	out := make([]string, len(tpl))
-	for i, a := range tpl {
-		a = strings.ReplaceAll(a, "{interpreter}", tool)
+// testCommand resolves what a whole "{interpreter}" element expands to: the
+// spec's Runner for root (#1926, PHP's vendor/bin/phpunit) when it yields
+// one, the toolchain-resolved interpreter otherwise. Never empty — Tool is
+// the last fallback.
+func testCommand(langID, root string, spec *TestSpec, explicit string) []string {
+	if spec.Runner != nil {
+		if cmd := spec.Runner(root); len(cmd) > 0 {
+			return cmd
+		}
+		if spec.Tool != "" {
+			return []string{spec.Tool}
+		}
+	}
+	return []string{testTool(langID, root, spec, explicit)}
+}
+
+// testFileArg is the {file} substitution: the file's path relative to root
+// for a RunAtRoot language (#1926, the argv runs at the project root), its
+// base name otherwise (#1911, pytest runs with cwd = the file's directory).
+func testFileArg(spec *TestSpec, root, path string) string {
+	if !spec.RunAtRoot {
+		return filepath.Base(path)
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return path
+	}
+	return filepath.ToSlash(rel)
+}
+
+// expandTestArgv substitutes the placeholders into a fresh slice. cmd expands
+// the whole "{interpreter}" element — a runner may be a multi-element prefix
+// — and file is the {file} substitution testFileArg resolved.
+func expandTestArgv(tpl []string, name string, cmd []string, file string) []string {
+	out := make([]string, 0, len(tpl))
+	for _, a := range tpl {
+		if a == "{interpreter}" {
+			out = append(out, cmd...)
+			continue
+		}
 		a = strings.ReplaceAll(a, "{name}", name)
 		a = strings.ReplaceAll(a, "{file}", file)
-		out[i] = a
+		out = append(out, a)
 	}
 	return out
 }
