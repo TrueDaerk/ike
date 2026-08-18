@@ -210,6 +210,9 @@ func (m *Model) followMovedFile(msg explorer.FileMovedMsg) tea.Cmd {
 			m.watcher.Track(np)
 		}
 	}
+	// Project bookmarks (#55) follow the file: re-key the store so a rename
+	// or move never leaves them dangling on the old path.
+	m.renameBookmarks(msg.Old, msg.New)
 	if key := m.activeEditorKey(); key != "" {
 		if ed := m.activeWS().Panes.Get(key).Editor(); ed != nil && ed.HasFile() {
 			m.explorer().SetActive(ed.Path())

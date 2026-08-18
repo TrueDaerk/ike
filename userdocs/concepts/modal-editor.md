@@ -132,7 +132,8 @@ replay, and counts work (`5@a`).
 Marks remember positions: `ma` sets mark `a`, `` `a `` jumps back to it, `'a`
 to its line. Uppercase marks (`mA`) are global — jumping to one opens its file
 if you are somewhere else. Bookmarks are the same idea with a UI in front of
-them.
+them: ++f11++ flags the current line for the whole project, optionally with a
+mnemonic digit and a note.
 
 `.` repeats the last change. It is the highest-leverage key in the editor and
 the reason the grammar is worth learning: make an edit once, move, press `.`.

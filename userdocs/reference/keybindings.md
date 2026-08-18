@@ -145,12 +145,14 @@ Active when an editor pane has focus.
 | Move to line start | `cmd+left` | `ctrl+left` | `editor.lineStart` |
 | Move to line start | `home` | `home` | `editor.lineStart` |
 | New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
+| Next bookmark | `shift+f11` | `shift+f11` | `bookmark.next` |
 | Next diagnostic | `f2` | `f2` | `lsp.nextDiagnostic` |
 | Parameter info | `cmd+p` | `ctrl+p` | `lsp.parameterInfo` |
 | Parameter info | `ctrl+p` | `ctrl+p` | `lsp.parameterInfo` |
 | Paste | `cmd+v` | `ctrl+v` | `editor.paste` |
 | Paste from history | `cmd+shift+v` | `ctrl+shift+v` | `editor.pasteFromHistory` |
 | Peek definition | `cmd+y` | `ctrl+y` | `lsp.peekDefinition` |
+| Previous bookmark | `ctrl+shift+f11` | `ctrl+shift+f11` | `bookmark.previous` |
 | Previous diagnostic | `shift+f2` | `shift+f2` | `lsp.prevDiagnostic` |
 | Quick documentation | `ctrl+q` | `ctrl+q` | `lsp.hover` |
 | Redo | `cmd+shift+z` | `ctrl+shift+z` | `editor.redo` |
@@ -170,6 +172,8 @@ Active when an editor pane has focus.
 | Shrink selection | `alt+down` | `alt+down` | `editor.selection.shrink` |
 | Split view down | `cmd+alt+shift+down` | `ctrl+alt+shift+down` | `editor.splitViewDown` |
 | Split view right | `cmd+alt+shift+right` | `ctrl+alt+shift+right` | `editor.splitViewRight` |
+| Toggle bookmark | `f11` | `f11` | `bookmark.toggle` |
+| Toggle bookmark with mnemonic | `alt+f3` | `alt+f3` | `bookmark.toggleMnemonic` |
 | Type hierarchy | `ctrl+h` | `ctrl+h` | `lsp.typeHierarchy` |
 | Undo | `cmd+z` | `ctrl+z` | `editor.undo` |
 | Undo | `ctrl+z` | `ctrl+z` | `editor.undo` |

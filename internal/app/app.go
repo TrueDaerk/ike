@@ -25,6 +25,7 @@ import (
 
 	"ike/internal/archview"
 	"ike/internal/backup"
+	"ike/internal/bookmarks"
 	"ike/internal/breakpanel"
 	"ike/internal/callhier"
 	"ike/internal/clipboard"
@@ -611,6 +612,11 @@ type Model struct {
 	// the m{A-Z} marks, injected into every editor like bpts.
 	bookmarks *bookmarksMode
 	gmarks    *marks.Store
+	// bmarks is the project bookmark store (#55): JetBrains-style line
+	// bookmarks with an optional mnemonic and note, persisted per project
+	// like bpts. bmPrompt is the open mnemonic/note prompt, nil when none.
+	bmarks   *bookmarks.Store
+	bmPrompt *bookmarkPrompt
 	// qhist is the persistent query-history store (#1171): named recall
 	// buckets for the editor's search/ex lines and find-in-path, shared by
 	// every editor and the finder overlay.
@@ -874,7 +880,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	actions := &actionsMode{}
 	symbols := &symbolMode{}
 	pasteHist := &pasteHistMode{}
-	bookmarks := &bookmarksMode{}
+	bookmarksPicker := &bookmarksMode{}
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
 	vcsSt := &vcsState{}                            // shared before the literal: the reverts picker mode reads it
@@ -913,7 +919,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:           help.New(reg, bindings, helpMinCol(cfg)),
 		shell:          ui.New(shellConfig(cfg)),
 		vcs:            vcsSt,
-		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEnvs, runConfigs, tasksPicker),
+		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEnvs, runConfigs, tasksPicker),
 		layoutsPicker:  layoutsPicker,
 		httpRequests:   httpRequests,
 		httpEnvs:       httpEnvs,
@@ -925,8 +931,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		symbols:        symbols,
 		actions:        actions,
 		pasteHist:      pasteHist,
-		bookmarks:      bookmarks,
+		bookmarks:      bookmarksPicker,
 		gmarks:         &marks.Store{},
+		bmarks:         bookmarks.Load(), // project bookmarks (#55)
 		qhist:          &histories.Store{},
 		regs:           regs,
 		paletteKey:     paletteToggleKey(cfg),
@@ -1249,12 +1256,14 @@ func (m *Model) installEmitter(key string) {
 	if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
 		source, disabled, adjust := breakpointHooks(m.bpts)
 		mkSet, mkLines, mkAdjust := markHooks(m.gmarks)
+		bmSigns, bmAdjust := bookmarkHooks(m.bmarks)
 		for _, ed := range inst.Editors() {
 			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key})
 			ed.SetBreakpointSource(source)
 			ed.SetBreakpointDisabledSource(disabled)
 			ed.SetBreakpointAdjuster(adjust)
 			ed.SetMarkHooks(mkSet, mkLines, mkAdjust)
+			ed.SetBookmarkHooks(bmSigns, bmAdjust)
 			ed.SetHistories(m.qhist) // search/ex query recall (#1171)
 			ed.SetCompletionMRU(m.compMRU)
 			ed.SetRegisters(m.regs) // app-wide registers (#1540); idempotent
@@ -3230,6 +3239,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The save is also the persistence point for edit-shifted breakpoints
 		// (#577) — cheap, and the on-disk lines match the saved file.
 		_ = m.bpts.Save()
+		_ = m.bmarks.Save() // edit-shifted bookmarks persist the same way (#55)
 		// The Structure pane re-requests the saved buffer's symbols (#1025);
 		// the Update wrapper's sync issues the actual request. A cached
 		// breadcrumbs tree (#1153) forces the refresh the same way, so the
@@ -4406,14 +4416,40 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ShowBookmarksMsg:
 		// nav.bookmarks (palette, #1151): the focused editor's local marks
 		// plus the persistent global marks, locked to the bookmarks mode.
-		m.bookmarks.Set(m.focusedEditor(), m.gmarks)
+		m.bookmarks.Set(m.focusedEditor(), m.gmarks, m.bmarks)
 		if len(m.bookmarks.items) == 0 {
-			m.host.Notify(host.Info, "no bookmarks yet — set one with m + a letter (A-Z survives restarts)")
+			m.host.Notify(host.Info, "no bookmarks yet — toggle one with Toggle Bookmark, or set a vim mark with m + a letter (A-Z survives restarts)")
 			return m, nil
 		}
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, bookmarksPrefix)
 		return m, nil
+
+	case BookmarkToggleMsg:
+		// bookmark.toggle (#55): flip the anonymous bookmark on the focused
+		// editor's cursor line, persisting immediately.
+		m.toggleBookmarkAtCursor()
+		return m, nil
+
+	case BookmarkMnemonicMsg:
+		// bookmark.toggleMnemonic / bookmark.jumpMnemonic (#55): the digit
+		// prompt, assigning or jumping.
+		kind := bmPromptMnemonic
+		if msg.Jump {
+			kind = bmPromptJump
+		}
+		m.startBookmarkPrompt(kind)
+		return m, nil
+
+	case BookmarkNoteMsg:
+		// bookmark.annotate (#55): the note prompt on the cursor line.
+		m.startBookmarkPrompt(bmPromptNote)
+		return m, nil
+
+	case BookmarkStepMsg:
+		// bookmark.next / bookmark.previous (#55): step through the project's
+		// bookmarks in (path, line) order, wrapping at both ends.
+		return m.stepBookmark(msg.Delta)
 
 	case BookmarkJumpMsg:
 		// A picker row was chosen: local marks jump within the focused
@@ -4430,14 +4466,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case BookmarkRemoveMsg:
 		// The aux action (#1151, the #842/#1113 prune pattern): drop the
 		// mark, keep the palette open, re-list without the entry.
-		if msg.Local {
+		switch {
+		case msg.Local:
 			if ed := m.focusedEditor(); ed != nil {
 				ed.RemoveLocalMark(msg.Letter)
 			}
-		} else {
+		case msg.Project:
+			m.bmarks.Remove(msg.Path, msg.Line)
+			m.saveBookmarks()
+		default:
 			m.gmarks.Remove(msg.Letter)
 		}
-		m.bookmarks.Set(m.focusedEditor(), m.gmarks)
+		m.bookmarks.Set(m.focusedEditor(), m.gmarks, m.bmarks)
 		m.palette.Refresh()
 		return m, nil
 
@@ -5745,6 +5785,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the same way: hjkl/arrows move, space toggles, enter continues.
 		if m.layoutSelectOpen() {
 			return m.updateLayoutSelect(msg)
+		}
+		// The bookmark mnemonic/note prompts (#55) mirror it: a digit or a
+		// typed note, enter/esc.
+		if m.bookmarkPromptOpen() {
+			return m.updateBookmarkPrompt(msg)
 		}
 		// The save-layout name prompt (#1175) mirrors it.
 		if m.layoutSavePromptOpen() {
