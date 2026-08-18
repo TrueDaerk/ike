@@ -79,14 +79,25 @@ func IsPlain(path string, head []byte) bool {
 	if !IsGzip(head) {
 		return false
 	}
-	if hasTarSuffix(path) {
+	if HasTarSuffix(path) {
 		return false
 	}
 	return !archive.IsArchive(path, head)
 }
 
-// hasTarSuffix reports whether path's name declares a compressed tar.
-func hasTarSuffix(path string) bool {
+// IsNestedArchive reports whether a decompressed gzip stream named name is
+// itself an archive: the compound name says so, or its first block holds a
+// tar header. IKE has no nested archive view, so the archive pane says so
+// plainly instead of opening tar blocks as text (#1948).
+func IsNestedArchive(name string, data []byte) bool {
+	return HasTarSuffix(name) || archive.LooksLikeTar(data)
+}
+
+// HasTarSuffix reports whether path's name declares a compressed tar
+// (.tar.gz, .tgz, …). The archive viewer asks it of its own members too: a
+// nested inner.tar.gz is named an archive whatever its payload turns out to
+// be (#1948).
+func HasTarSuffix(path string) bool {
 	name := strings.ToLower(filepath.Base(path))
 	for _, s := range tarSuffixes {
 		if strings.HasSuffix(name, s) {
@@ -149,15 +160,34 @@ func Read(path string, limit int64) (Content, error) {
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return c, err
 	}
+	return c, c.fill(f, path, limit)
+}
 
-	zr, err := gzip.NewReader(f)
+// ReadBytes decompresses an in-memory gzip stream that never was a file of
+// its own — an archive member extracted by the archive viewer (#1948). name
+// is the member's path inside the archive and plays the role the file name
+// plays in Read: it decides the inner name, and with it the language. Caps
+// and footer metadata work exactly as they do there, so a gzip bomb packed
+// inside a tar is bounded by the same single buffer.
+func ReadBytes(name string, data []byte, limit int64) (Content, error) {
+	c := Content{Name: InnerName(name, ""), Compressed: int64(len(data))}
+	c.Original, c.OriginalOK = footerSize(bytes.NewReader(data), c.Compressed)
+	return c, c.fill(bytes.NewReader(data), name, limit)
+}
+
+// fill decompresses r into c, resolving the inner name against the stream's
+// header and honouring the decompressed-byte cap. It is the body Read and
+// ReadBytes share: the only difference between a .gz on disk and a .gz inside
+// a tar is where the bytes come from.
+func (c *Content) fill(r io.Reader, name string, limit int64) error {
+	zr, err := gzip.NewReader(r)
 	if err != nil {
-		return c, fmt.Errorf("read gzip: %w", err)
+		return fmt.Errorf("read gzip: %w", err)
 	}
 	defer zr.Close()
 	// The header name only matters when the file name gave nothing away;
 	// InnerName decides which of the two wins.
-	c.Name = InnerName(path, zr.Name)
+	c.Name = InnerName(name, zr.Name)
 
 	var src io.Reader = zr
 	if limit > 0 {
@@ -170,7 +200,7 @@ func Read(path string, limit int64) (Content, error) {
 		// A truncated or corrupt tail still yields the bytes decompressed so
 		// far: a partially written log is worth reading.
 		if len(data) == 0 {
-			return c, fmt.Errorf("read gzip: %w", err)
+			return fmt.Errorf("read gzip: %w", err)
 		}
 		c.Truncated = true
 	}
@@ -178,7 +208,7 @@ func Read(path string, limit int64) (Content, error) {
 		data, c.Truncated = data[:limit], true
 	}
 	c.Data = data
-	return c, nil
+	return nil
 }
 
 // footerSize reads the gzip footer's ISIZE field — the decompressed length

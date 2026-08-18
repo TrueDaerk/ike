@@ -270,3 +270,102 @@ func TestRatioWithoutFooter(t *testing.T) {
 		t.Fatalf("Ratio = %v, want 0 for a zero-byte archive", got)
 	}
 }
+
+// gzipBytes gzips body in memory, stamping header into the original-name
+// field when it is non-empty.
+func gzipBytes(t *testing.T, body []byte, header string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	zw.Name = header
+	if _, err := zw.Write(body); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// TestReadBytesMatchesRead: an in-memory gzip stream — an archive member
+// (#1948) — decompresses exactly like the same bytes on disk, caps included.
+func TestReadBytesMatchesRead(t *testing.T) {
+	body := []byte("2026-08-10 boot ok\n")
+	data := gzipBytes(t, body, "")
+	c, err := ReadBytes("logs/app.log.gz", data, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(c.Data) != string(body) {
+		t.Fatalf("data = %q, want %q", c.Data, body)
+	}
+	if c.Name != "app.log" {
+		t.Fatalf("name = %q, want app.log", c.Name)
+	}
+	if c.Compressed != int64(len(data)) {
+		t.Fatalf("compressed = %d, want %d", c.Compressed, len(data))
+	}
+	if !c.OriginalOK || c.Original != int64(len(body)) {
+		t.Fatalf("footer size = %d/%v, want %d", c.Original, c.OriginalOK, len(body))
+	}
+	if c.Truncated {
+		t.Fatal("a complete read is not truncated")
+	}
+}
+
+// TestReadBytesCaps is the bomb guard for a member: the cap counts
+// decompressed bytes, so a kilobyte inside a tar cannot become a megabyte in
+// the buffer.
+func TestReadBytesCaps(t *testing.T) {
+	data := gzipBytes(t, bytes.Repeat([]byte("a"), 1<<20), "")
+	c, err := ReadBytes("big.txt.gz", data, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Data) != 1024 || !c.Truncated {
+		t.Fatalf("read %d bytes, truncated=%v; want 1024/true", len(c.Data), c.Truncated)
+	}
+}
+
+// TestReadBytesUsesTheHeaderName: a member whose name says nothing still gets
+// its language from the gzip header, exactly as a file does (#1853).
+func TestReadBytesUsesTheHeaderName(t *testing.T) {
+	c, err := ReadBytes("dump.gz", gzipBytes(t, []byte("select 1;\n"), "dump.sql"), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Name != "dump.sql" {
+		t.Fatalf("name = %q, want dump.sql", c.Name)
+	}
+}
+
+// TestReadBytesRejectsNonGzip: bytes that are not a gzip stream are an error,
+// never a silent empty buffer.
+func TestReadBytesRejectsNonGzip(t *testing.T) {
+	if _, err := ReadBytes("a.gz", []byte("not gzip at all"), 0); err == nil {
+		t.Fatal("non-gzip bytes must fail")
+	}
+}
+
+// TestIsNestedArchive: the archive viewer's question about a gzip member —
+// the compound name or a tar header in the payload both answer yes.
+func TestIsNestedArchive(t *testing.T) {
+	tarBlock := make([]byte, 512)
+	copy(tarBlock[257:], []byte("ustar\x0000"))
+	cases := []struct {
+		name string
+		data []byte
+		want bool
+	}{
+		{"inner.tar.gz", []byte("2026 log line\n"), true},
+		{"inner.tgz", nil, true},
+		{"inner.gz", tarBlock, true},
+		{"app.log.gz", []byte("2026 log line\n"), false},
+		{"app.log.gz", nil, false},
+	}
+	for _, c := range cases {
+		if got := IsNestedArchive(c.name, c.data); got != c.want {
+			t.Errorf("IsNestedArchive(%q, %d bytes) = %v, want %v", c.name, len(c.data), got, c.want)
+		}
+	}
+}
