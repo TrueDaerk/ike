@@ -67,6 +67,7 @@ bring their own.
 | Go to Tab 8 | `editor.tab.select8` | `alt+8` | — | everywhere |
 | Go to Tab 9 | `editor.tab.select9` | `alt+9` | — | everywhere |
 | Pin/Unpin Tab | `editor.tab.togglePin` | — | — | everywhere |
+| ES: Run Query Buffer | `es.run` | — | — | `editor` pane |
 | Focus Explorer / Editor | `explorer.toggle` | `cmd+1` | — | everywhere |
 | Copy Path | `file.copyPath` | — | — | everywhere |
 | Copy Reference | `file.copyReference` | — | — | everywhere |

@@ -48,6 +48,8 @@ type Config struct {
 	Debug Debug `toml:"debug"`
 	// Tools holds user-defined TUI tool panes (#741).
 	Tools Tools `toml:"tools"`
+	// Elasticsearch holds the ES console's cluster endpoints (#1927).
+	Elasticsearch Elasticsearch `toml:"elasticsearch"`
 	// Snippets holds user live templates (#1152): [[snippets]] entries the
 	// editor expands on Tab after the trigger word and offers in the
 	// completion popup. Like every TOML list it replaces across layers — a
@@ -129,6 +131,30 @@ type ToolEntry struct {
 	Placement string   `toml:"placement"`
 	Multiple  bool     `toml:"multiple"`
 	Global    bool     `toml:"global"`
+}
+
+// Elasticsearch holds the Elasticsearch console configuration (#1927):
+// [[elasticsearch.endpoints]] entries, each exposed as a palette command
+// "es.console.<name>" that opens a read-only console pane against that
+// cluster. Like every TOML list the endpoint list replaces across layers — a
+// project-scope [[elasticsearch.endpoints]] table hides the user-scope one.
+type Elasticsearch struct {
+	Endpoints []ESEndpoint `toml:"endpoints"`
+}
+
+// ESEndpoint is one configured Elasticsearch cluster. Name is the display and
+// command suffix ("prod" → command id "es.console.prod") and must be unique;
+// URL is the cluster's base URL (http or https, host required). Auth is
+// optional and one of two schemes: Username/Password become basic auth, or
+// APIKey becomes an "Authorization: ApiKey …" header — configuring both is
+// downgraded to basic auth with a diagnostic. The console only ever reads
+// (search, mapping, cat APIs), so a read-only API key is enough.
+type ESEndpoint struct {
+	Name     string `toml:"name"`
+	URL      string `toml:"url"`
+	Username string `toml:"username"`
+	Password string `toml:"password"`
+	APIKey   string `toml:"api_key"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen

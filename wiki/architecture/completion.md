@@ -4,7 +4,7 @@ title: Completion Engine
 description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection.
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources, postfix]
-timestamp: 2026-08-17T21:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # Completion Engine
@@ -74,6 +74,9 @@ offered `Content-Type` next to `contentYOff` and every other identifier the
 buffer-word and project-scan tiers had seen, and a request body offered nothing
 but buffer words. No source claims anything by default, so every other language
 keeps the full merged popup; the LSP bridge is not a `Source` and is unaffected.
+The ES console's query buffers (#1927) use the same claim: `esq.CompletionSource`
+owns `*.es.json` outright and offers Query-DSL keys plus the index mapping's
+field names (see [Elasticsearch Console](/architecture/elasticsearch-console.md)).
 
 ## Editor-side merge (`internal/editor/lsp_state.go`)
 

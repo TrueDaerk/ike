@@ -36,6 +36,7 @@ const (
 	Breakpoints Context = "breakpoints"
 	Archive     Context = "archive"
 	Data        Context = "data"
+	ES          Context = "es"
 	Tests       Context = "tests"
 )
 

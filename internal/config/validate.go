@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"unicode"
@@ -11,6 +12,28 @@ import (
 	"ike/internal/matcher"
 	"ike/internal/theme"
 )
+
+// ESURLError explains why raw cannot serve as an Elasticsearch endpoint base
+// URL, or returns "" when it can. It is shared between the lenient config
+// validator (which drops the entry with the message as a diagnostic) and the
+// strict settings form (which rejects the input outright with the same
+// message).
+func ESURLError(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return "url is required"
+	}
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "url does not parse: " + err.Error()
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "url must start with http:// or https://"
+	}
+	if u.Host == "" {
+		return "url has no host"
+	}
+	return ""
+}
 
 // identWord reports whether s consists only of identifier runes (letters,
 // digits, underscore) — the shape a snippet trigger must have (#1152).
@@ -220,6 +243,36 @@ func validate(c *Config) []Diagnostic {
 			diags = append(diags, Diagnostic{Field: "tools.custom.multiple", Message: fmt.Sprintf("tool %q: global and multiple are mutually exclusive, ignoring multiple", c.Tools.Custom[i].Name)})
 			c.Tools.Custom[i].Multiple = false
 		}
+	}
+
+	// [[elasticsearch.endpoints]] entries (#1927) need a unique non-empty name
+	// and a parseable http(s) URL with a host — an entry the console could
+	// never connect with is dropped with a warning. Both auth schemes at once
+	// degrade to basic auth (the settings form rejects the combination
+	// outright; a config file on disk must still load).
+	if c.Elasticsearch.Endpoints != nil {
+		kept := c.Elasticsearch.Endpoints[:0]
+		seen := map[string]bool{}
+		for _, e := range c.Elasticsearch.Endpoints {
+			switch {
+			case e.Name == "":
+				diags = append(diags, Diagnostic{Field: "elasticsearch.endpoints", Message: fmt.Sprintf("endpoint %q has no name, dropping the entry", e.URL)})
+				continue
+			case seen[e.Name]:
+				diags = append(diags, Diagnostic{Field: "elasticsearch.endpoints", Message: fmt.Sprintf("duplicate endpoint name %q, dropping the later entry", e.Name)})
+				continue
+			case ESURLError(e.URL) != "":
+				diags = append(diags, Diagnostic{Field: "elasticsearch.endpoints", Message: fmt.Sprintf("endpoint %q: %s, dropping the entry", e.Name, ESURLError(e.URL))})
+				continue
+			}
+			if e.APIKey != "" && (e.Username != "" || e.Password != "") {
+				diags = append(diags, Diagnostic{Field: "elasticsearch.endpoints", Message: fmt.Sprintf("endpoint %q: basic auth and api_key are mutually exclusive, ignoring api_key", e.Name)})
+				e.APIKey = ""
+			}
+			seen[e.Name] = true
+			kept = append(kept, e)
+		}
+		c.Elasticsearch.Endpoints = kept
 	}
 
 	// The slot template (#1897) is validated structurally by the layout

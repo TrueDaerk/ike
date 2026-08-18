@@ -41,6 +41,8 @@ import (
 	"ike/internal/diff"
 	"ike/internal/editor"
 	"ike/internal/editor/register"
+	"ike/internal/espane"
+	"ike/internal/esq"
 	"ike/internal/explorer"
 	"ike/internal/finder"
 	"ike/internal/format"
@@ -828,6 +830,10 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// closure reads config.Get() per query, so the settings toggle applies on
 	// a config reload without re-wiring.
 	engine.Register(postfix.New(func() bool { return config.Get().Editor.PostfixCompletion }))
+	// The ES console's query buffers (#1927): Query-DSL keys plus the index
+	// mapping's field names, exclusive to <index>.es.json files so buffer-word
+	// noise never mixes in.
+	engine.Register(esq.NewCompletionSource())
 	h.SetEditorEmitter("complete", engine)
 	var resumed *workspace.Workspace
 	if mgr != nil {
@@ -1552,6 +1558,13 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// A data viewer restores by re-opening the database (#1764); a
 			// vanished file restores as the pane's own error notice.
 			panes.AddDataKey(key, id.Path)
+			continue
+		}
+		if id := ids[key]; id.Kind == "es" {
+			// An ES console restores by reconnecting to its endpoint (#1927);
+			// a dead or unconfigured endpoint restores as the pane's own
+			// error notice.
+			panes.AddESKey(key, id.Path)
 			continue
 		}
 		inst := panes.AddEditorKey(key)
@@ -2932,6 +2945,8 @@ func (m Model) Init() tea.Cmd {
 	// Every restored data viewer opens its database in the background (#1795),
 	// so a workspace holding a huge database still comes up instantly.
 	cmds = append(cmds, m.initDataPanes()...)
+	// Restored ES consoles reconnect to their clusters the same way (#1927).
+	cmds = append(cmds, m.initESPanes()...)
 	// Highlight any files restored from the previous session at startup, before
 	// the user edits them, and announce each to the plugin hooks (#332): the
 	// restore paths (restoreLayout/restoreSession) load editors directly via
@@ -4599,6 +4614,28 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dataview.ShowSchemaMsg:
 		// Schema key in the data pane: the table's DDL, read-only.
 		return m, m.showTableSchema(msg)
+
+	case OpenESConsoleMsg:
+		// es.console.<name> (#1927): the cluster console. The connect runs in
+		// the background, like a data viewer's open.
+		return m, m.openESPane(msg.Endpoint)
+
+	case espane.ResultMsg:
+		// A console's background connect, page or mapping landed (#1927).
+		return m, m.esResult(msg)
+
+	case espane.ShowJSONMsg:
+		// Mapping/hit/aggregations key in the console: the document, read-only.
+		return m, m.showESJSON(msg)
+
+	case espane.OpenQueryMsg:
+		// Query key in the console: the index's query buffer, a real file.
+		return m.openESQuery(msg)
+
+	case ESRunMsg:
+		// es.run in a query buffer: the buffer text becomes the index's
+		// active query and the console fetches its first page on it.
+		return m, m.runESQuery()
 
 	case uv.KittyGraphicsEvent:
 		m.handleKittyGraphics(msg)
@@ -6386,11 +6423,12 @@ func (m Model) explorerCapturing() bool {
 }
 
 // dataPaneFocused reports whether the focused pane shows a data viewer
-// (#1764) — dedicated pane or active content tab (#1778) — which claims tab
-// for its own region toggle before the global focus cycle.
+// (#1764) or an ES console (#1927) — dedicated pane or active content tab
+// (#1778) — which claims tab for its own region toggle before the global
+// focus cycle.
 func (m Model) dataPaneFocused() bool {
 	inst := m.focusedContent()
-	return inst != nil && inst.Kind() == pane.KindData
+	return inst != nil && (inst.Kind() == pane.KindData || inst.Kind() == pane.KindES)
 }
 
 // explorerPromptOpen reports whether the focused explorer has a modal prompt
@@ -9700,7 +9738,7 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			} else {
 				title = m.terminalTitle(inst)
 			}
-		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindDiff:
+		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindES, pane.KindDiff:
 			title = contentPaneTitle(inst)
 		case pane.KindVCS:
 			title = "VCS"
@@ -9784,6 +9822,8 @@ func contentPaneTitle(inst *pane.Instance) string {
 		return "ARCHIVE " + baseName(inst.Archive().Path())
 	case pane.KindData:
 		return "DATA " + baseName(inst.Data().Path())
+	case pane.KindES:
+		return "ES " + inst.ES().Endpoint()
 	case pane.KindDiff:
 		l, r := inst.Diff().Titles()
 		return "DIFF " + l + " ⇄ " + r
