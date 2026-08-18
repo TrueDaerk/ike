@@ -272,6 +272,10 @@ type Terminal struct {
 	Shell           string `toml:"shell"`
 	Autosuggest     bool   `toml:"autosuggest"`
 	ScrollbackLines int    `toml:"scrollback_lines"`
+	// SSHHosts are extra aliases the SSH host picker (#1938) offers beyond
+	// the ones ~/.ssh/config declares — machines reachable by name that no
+	// ssh config entry mentions.
+	SSHHosts []string `toml:"ssh_hosts"`
 }
 
 // UI holds chrome toggles (Roadmap 0160). MenuBar shows the top menu row.

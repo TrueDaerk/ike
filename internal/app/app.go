@@ -388,6 +388,9 @@ type Model struct {
 	// tasks is the palette mode listing discovered build-tool tasks (#1915);
 	// run.task / run.taskPromote fill and open it.
 	tasks *tasksMode
+	// ssh is the palette mode listing the ssh_config host aliases (#1938);
+	// terminal.ssh fills and opens it.
+	ssh *sshMode
 	// watchExprs are the debugger watch expressions (#1914): in memory,
 	// surviving debug sessions; re-evaluated on every stop.
 	watchExprs []string
@@ -908,6 +911,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	httpEnvs := newHTTPEnvMode()                    // http-client.env.json picker (#1867)
 	runConfigs := newRunConfigsMode()               // run/debug configurations picker (#1914)
 	tasksPicker := newTasksMode()                   // discovered-tasks picker (#1915)
+	sshPicker := newSSHMode()                       // ssh_config host picker (#1938)
 	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
 	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
@@ -938,12 +942,13 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:           help.New(reg, bindings, helpMinCol(cfg)),
 		shell:          ui.New(shellConfig(cfg)),
 		vcs:            vcsSt,
-		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEnvs, runConfigs, tasksPicker),
+		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEnvs, runConfigs, tasksPicker, sshPicker),
 		layoutsPicker:  layoutsPicker,
 		httpRequests:   httpRequests,
 		httpEnvs:       httpEnvs,
 		runConfigs:     runConfigs,
 		tasks:          tasksPicker,
+		ssh:            sshPicker,
 		httpEnv:        loadHTTPEnv(), // selected HTTP environments (#1867)
 		refs:           refs,
 		lspStatus:      map[string]string{},
@@ -2136,7 +2141,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, ssh *sshMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -2201,7 +2206,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEnvs, runConfigs, tasks)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEnvs, runConfigs, tasks, ssh)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -3918,6 +3923,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TaskPromoteMsg:
 		// run.taskPromote (#1915): store a task as a run configuration.
 		m.openTaskPicker(true)
+		return m, nil
+
+	case SSHPickerMsg:
+		// terminal.ssh (palette / Terminal menu, #1938): the ssh_config host
+		// picker.
+		m.openSSHPicker()
+		return m, nil
+
+	case SSHHostPickedMsg:
+		// A host row was activated (#1938): a terminal running `ssh <host>`.
+		m.openSSHTerminal(msg.Host)
 		return m, nil
 
 	case TaskPickedMsg:

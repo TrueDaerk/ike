@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-18 (SSH host profiles: picker from ~/.ssh/config, #1938)
+
+- **New package** `internal/sshconf`: a minimal OpenSSH client-config reader —
+  `Host` aliases in file order, `Include` followed (glob, `~`, paths relative
+  to the including file, cycle- and depth-guarded), wildcard/negated patterns
+  skipped, `HostName`/`User`/`Port` kept for the picker's detail line only.
+  ssh's matching logic is deliberately not re-implemented; the alias goes to
+  the user's own ssh.
+- **App** (`internal/app/ssh_picker.go`): `terminal.ssh` ("SSH Host…", palette
+  and the Tools menu) opens a locked fuzzy palette mode over the parsed hosts;
+  picking one spawns the command session `ssh <alias>` labelled `ssh: <alias>`
+  — as a tab of the active editor pane, else as a fresh split. Missing or
+  unreadable config degrades to an empty picker whose placeholder is the hint.
+  Exit follows command-session semantics: the pane stays on `[process exited
+  with code N]`, so a refused connection stays readable.
+- **Setting**: `terminal.ssh_hosts` (list, Settings UI) adds hosts no ssh
+  config declares; entries carrying whitespace are rejected with a config
+  diagnostic. New `## SSH host profiles` section in
+  `/architecture/terminal.md`; docgen regenerated for the new command and
+  setting.
+
 ## 2026-08-18 (label-jump motion: easymotion/leap-style navigation, #787)
 
 - **Editor** (`internal/editor/labeljump.go`): `gs` in normal mode (or
