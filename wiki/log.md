@@ -49,7 +49,6 @@
 - **Re-runs** go through one anchored filter:
   `--filter '/::(testA|testB)( |$)/'` — the trailing `( |$)` keeps a test's
   data sets in and same-prefix siblings out.
->>>>>>> origin/main
 
 ## 2026-08-17 (completion: postfix templates — `expr.if`, `err.nil`, `.for`, #1913)
 
