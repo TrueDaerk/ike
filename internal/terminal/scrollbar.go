@@ -33,7 +33,9 @@ func (m Model) scrollbarGeometry() (track, total, thumbStart, thumbLen int, ok b
 	if sb <= 0 {
 		return 0, 0, 0, 0, false
 	}
-	if m.scroll == 0 && (m.sess.WantsMouse() || m.sess.AltScreen()) {
+	// A finished session has no child UI to protect (#1951): its scrollbar
+	// shows even when the exited program left the alt screen behind.
+	if m.scroll == 0 && !m.dead() && (m.sess.WantsMouse() || m.sess.AltScreen()) {
 		return 0, 0, 0, 0, false
 	}
 	track = m.h

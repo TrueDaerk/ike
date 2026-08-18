@@ -152,6 +152,10 @@ type Session struct {
 	ioWG   sync.WaitGroup
 	wlWG   sync.WaitGroup
 	wlStop atomic.Bool
+	// emClosed makes the emulator's retirement idempotent: it outlives the
+	// child (#1951) and is closed by whichever teardown path gets there
+	// first — the pane's Close, before or after the exit.
+	emClosed atomic.Bool
 }
 
 // Shell resolves the shell to spawn: the config override first, $SHELL next,
@@ -484,7 +488,7 @@ func (s *Session) waitExit() {
 		if s.send != nil {
 			s.send(ExitedMsg{Key: s.key})
 		}
-		s.join()
+		s.join() // the emulator stays open for the exited pane (#1951)
 	}
 }
 
@@ -534,8 +538,11 @@ const resizeQuiet = 100 * time.Millisecond
 
 // Resize propagates a pane size change to the PTY (SIGWINCH for the child)
 // and the emulator, debounced per resizeQuiet. Same-size calls are no-ops.
+// A finished session still resizes (#1951): its output stays on screen behind
+// the exit dialog, and dragging the pane divider must reflow it like a live
+// one — only the (closed) PTY is left out.
 func (s *Session) Resize(w, h int) {
-	if w < 2 || h < 2 || s.closed.Load() {
+	if w < 2 || h < 2 {
 		return
 	}
 	s.mu.Lock()
@@ -577,7 +584,7 @@ func (s *Session) applyResizeLocked(w, h int) {
 		lines, tail := s.logicalLinesLocked(oldW, oldH)
 		s.w, s.h = w, h
 		s.lastResize = time.Now()
-		if s.ptmx != nil {
+		if s.ptmx != nil && !s.closed.Load() {
 			_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
 		}
 		s.em.Resize(w, h)
@@ -600,7 +607,7 @@ func (s *Session) applyResizeLocked(w, h int) {
 	}
 	s.w, s.h = w, h
 	s.lastResize = time.Now()
-	if s.ptmx != nil {
+	if s.ptmx != nil && !s.closed.Load() {
 		_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
 	}
 	s.em.Resize(w, h)
@@ -825,9 +832,6 @@ func rowPrefixEqual(a, b uv.Line, n int) bool {
 
 // flushResize applies the last size a debounced burst settled on.
 func (s *Session) flushResize() {
-	if s.closed.Load() {
-		return
-	}
 	s.mu.Lock()
 	s.resizePending = false
 	changed := s.pendW != s.w || s.pendH != s.h
@@ -835,9 +839,19 @@ func (s *Session) flushResize() {
 		s.applyResizeLocked(s.pendW, s.pendH)
 	}
 	s.mu.Unlock()
-	if changed {
-		s.notify() // repaint at the settled size
+	if !changed {
+		return
 	}
+	if s.closed.Load() {
+		// notify() stays silent for a finished session, but its dead view
+		// still owes a repaint at the settled size (#1951). Off this
+		// goroutine: send blocks until the update loop receives.
+		if s.send != nil {
+			go s.send(OutputMsg{Key: s.key})
+		}
+		return
+	}
+	s.notify() // repaint at the settled size
 }
 
 // SendKey encodes one key press for the child, honouring the emulator's
@@ -1435,10 +1449,17 @@ func cellOccupied(c *uv.Cell) bool {
 // all run Close on the bubbletea update loop.
 func (s *Session) Close() {
 	if !s.closed.CompareAndSwap(false, true) {
+		// The child already exited on its own: the loops are collected, but
+		// the emulator stayed open so the exited pane could keep reflowing
+		// (#1951). Closing the pane retires it for good.
+		go s.closeEmulator()
 		return
 	}
 	s.release()
-	go s.join()
+	go func() {
+		s.join()
+		s.closeEmulator()
+	}()
 }
 
 // release is teardown's bounded half: it stops the resize timer, kills the
@@ -1448,8 +1469,12 @@ func (s *Session) Close() {
 func (s *Session) release() {
 	s.mu.Lock()
 	if s.resizeTimer != nil {
-		s.resizeTimer.Stop() // a pending trailing resize has nothing to apply (#1001)
+		s.resizeTimer.Stop() // the armed trailing apply dies with the child (#1001)
 		s.resizeTimer = nil
+		// Clearing the flag matters after the exit (#1951): resizes of the
+		// dead pane still reflow, and a pending flag with no timer behind it
+		// would swallow every one of them.
+		s.resizePending = false
 	}
 	if s.cmd != nil && s.cmd.Process != nil {
 		_ = s.cmd.Process.Kill()
@@ -1461,21 +1486,35 @@ func (s *Session) release() {
 	s.mu.Unlock()
 }
 
-// join is teardown's blocking half: it collects the loops and closes the
-// emulator, and must never run on the update loop (#1786). The join order
-// matters (#748): the read loop ends when the closed PTY errors its Read, the
-// feed loop once the spool drains (exit output still reaches the emulator),
-// and only then is the write loop stopped — woken by a sentinel byte through
-// the host-bound pipe, since nothing else unblocks its Read. Emulator.Close
-// runs last, once no goroutine is inside the emulator: upstream vt keeps its
-// closed flag as a plain bool, so Close concurrent with Read/Write is a data
-// race.
+// join is teardown's blocking half: it collects the loops, and must never run
+// on the update loop (#1786). The join order matters (#748): the read loop
+// ends when the closed PTY errors its Read, the feed loop once the spool
+// drains (exit output still reaches the emulator), and only then is the write
+// loop stopped — woken by a sentinel byte through the host-bound pipe, since
+// nothing else unblocks its Read.
 func (s *Session) join() {
 	s.ioWG.Wait()
 	s.wlStop.Store(true)
-	// The sentinel write blocks until the write loop reads it; if the loop
-	// already exited, Close's pipe error below releases the goroutine.
+	// The sentinel write blocks until the write loop reads it; a loop that
+	// already exited leaves it parked until closeEmulator errors the pipe.
 	go func() { _, _ = s.em.InputPipe().Write([]byte{0}) }()
 	s.wlWG.Wait()
-	_ = s.em.Close()
+}
+
+// closeEmulator retires the emulator, once no goroutine is inside it:
+// upstream vt keeps its closed flag as a plain bool, so Close concurrent with
+// Read/Write is a data race (#748) — hence the waits, which are idempotent
+// (nothing adds to the groups after startup).
+//
+// It belongs to the pane's teardown, not to the child's exit (#1951): the
+// exited pane still renders its output, and a width reflow replays the whole
+// history through the emulator's Write — which a closed emulator silently
+// drops. So a session whose child ended keeps its grid alive and writable
+// until the pane itself goes away.
+func (s *Session) closeEmulator() {
+	s.ioWG.Wait()
+	s.wlWG.Wait()
+	if s.emClosed.CompareAndSwap(false, true) {
+		_ = s.em.Close()
+	}
 }

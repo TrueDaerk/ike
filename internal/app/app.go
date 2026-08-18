@@ -2305,6 +2305,25 @@ func (m Model) terminalFocused() bool {
 	return t != nil && t.Running()
 }
 
+// focusedDeadTerminal returns the focused pane's terminal when its session
+// has finished (#1951) — the exited-run view terminalFocused() deliberately
+// excludes, since no key may reach a child that is gone. nil whenever the
+// focused pane hosts no terminal or the session still runs.
+func (m Model) focusedDeadTerminal() *terminal.Model {
+	inst := m.activeWS().Panes.FocusedInstance()
+	if inst == nil {
+		return nil
+	}
+	if inst.Kind() != pane.KindTerminal && inst.Kind() != pane.KindEditor {
+		return nil
+	}
+	t := inst.ActiveTerminal()
+	if t == nil || t.Running() {
+		return nil
+	}
+	return t
+}
+
 // terminalTitle renders the pane title: shell name plus the session's origin
 // directory — the marker that keeps a terminal attributable after a project
 // switch carried it along (#96).
@@ -5820,6 +5839,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(m.popup.inst.Update(msg), m.popup.split.Update(msg))
 			}
 			return m, m.popupFocused().Update(msg)
+		}
+		// A focused terminal whose run has finished (#1951) is a read-only
+		// view of the output: the copy chord copies the mouse selection, the
+		// same way the live terminal does below. Everything else keeps its
+		// route — r restarts and ctrl+w closes as before.
+		if term := m.focusedDeadTerminal(); term != nil && term.HasSelection() {
+			if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta && k.Base == "c" {
+				m.copyTerminalSelection(term)
+				return m, nil
+			}
 		}
 		// A focused terminal takes every key raw (vim/htop must see them all)
 		// except the reserved set below; scrollback paging keys are handled by

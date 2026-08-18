@@ -275,6 +275,9 @@ func (m *Model) SetSize(w, h int) {
 	m.w, m.h = w, h
 	if m.sess != nil {
 		m.sess.Resize(m.gridW(), h)
+		// A width reflow rewrites the history, so the paging offset can end
+		// up past its end (#1951); ScrollBy(0) re-clamps it.
+		m.ScrollBy(0)
 	}
 }
 
@@ -296,6 +299,14 @@ func (m Model) Size() (w, h int) { return m.w, m.h }
 
 // Running reports whether the shell is alive.
 func (m Model) Running() bool { return m.sess != nil && m.sess.Running() }
+
+// dead reports whether the session has finished — the state the exit dialog
+// renders over (#810), including a pipe session whose debuggee ended (#1370).
+// There is no child left to route input to, so keys, clicks and the wheel
+// serve the pane's own read-only view of the output instead (#1951).
+func (m Model) dead() bool {
+	return m.sess == nil || !m.sess.Running() || m.sess.PipeDone()
+}
 
 // SetParked forwards the parked flag (#1522) to the live session; a no-op for
 // a failed spawn.
@@ -394,13 +405,13 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		m.ScrollBy(-m.pageSize())
 		return nil
 	}
-	// A finished tool pane (#810) stays open showing its last output; r
+	// A finished session (#810) stays open showing its last output as a
+	// read-only view (#1951): the scroll keys page the whole scrollback, r
 	// reruns the configured command in place. Everything else is inert —
-	// there is no child to type into (ctrl+w closes the pane app-side).
-	if m.tool != "" && !m.sess.Running() {
-		if msg.String() == "r" {
-			m.Restart()
-		}
+	// there is no child to type into (ctrl+w closes the pane app-side), and
+	// in particular nothing snaps the view back to live.
+	if m.dead() {
+		m.deadKey(msg.String())
 		return nil
 	}
 	m.occupied = true // input reached the session
@@ -426,6 +437,30 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	m.completionTyped(msg.String(), msg.Text)
 	return nil
+}
+
+// deadKey handles one key of the finished session's read-only view (#1951):
+// the live terminal's paging chords (shift+pgup/pgdn are handled ahead of it,
+// shared with the live view) plus the plain arrow/page/edge moves a pane with
+// no child can afford, and r as the dialog's restart action (#810). Keys
+// outside the set are ignored — the view keeps its scroll position.
+func (m *Model) deadKey(key string) {
+	switch key {
+	case "r":
+		m.Restart()
+	case "pgup":
+		m.ScrollBy(m.pageSize())
+	case "pgdown":
+		m.ScrollBy(-m.pageSize())
+	case "up":
+		m.ScrollBy(1)
+	case "down":
+		m.ScrollBy(-1)
+	case "home":
+		m.ScrollBy(m.ScrollbackLen())
+	case "end":
+		m.scroll = 0
+	}
 }
 
 // motionKey translates the macOS-conventional editing chords into the
@@ -548,7 +583,7 @@ func (m *Model) MousePress(x, y int) {
 		return
 	}
 	m.ClearSelection()
-	if m.sess.WantsMouse() {
+	if !m.dead() && m.sess.WantsMouse() {
 		m.sess.SendMouse(vt.MouseClick{X: x, Y: y, Button: vt.MouseLeft})
 		m.clickStreak = 0
 		return
@@ -683,7 +718,7 @@ func (m *Model) MouseDrag(x, y int) tea.Cmd {
 	if m.sess == nil {
 		return nil
 	}
-	if m.sess.WantsMouse() {
+	if !m.dead() && m.sess.WantsMouse() {
 		m.sess.SendMouse(vt.MouseMotion{X: x, Y: y, Button: vt.MouseLeft})
 		return nil
 	}
@@ -797,7 +832,7 @@ func (m *Model) MouseRelease(x, y int) {
 	if m.sess == nil {
 		return
 	}
-	if m.sess.WantsMouse() {
+	if !m.dead() && m.sess.WantsMouse() {
 		m.sess.SendMouse(vt.MouseRelease{X: x, Y: y, Button: vt.MouseLeft})
 		return
 	}
@@ -906,6 +941,11 @@ func (m *Model) MouseWheel(x, y, delta int) {
 	up := delta > 0
 	lines, events := wheelChildBudget(delta)
 	switch {
+	// A finished session keeps the wheel for its own scrollback (#1951):
+	// forwarding it to the child that exited in mouse-reporting or
+	// alt-screen mode would scroll nothing at all.
+	case m.dead():
+		m.ScrollBy(delta)
 	case m.sess.WantsMouse():
 		m.scroll = 0
 		btn := vt.MouseWheelDown
@@ -1002,7 +1042,15 @@ func (m Model) baseView() string {
 		return "terminal failed: " + m.err
 	}
 	if m.scroll > 0 {
-		return m.scrolledView()
+		view := m.scrolledView()
+		// A finished session keeps its exit dialog while the output is paged
+		// (#1951): same centered geometry, so the click mapping stays valid.
+		// Too small for the box, the scroll marker keeps the footer row; an
+		// open scrollback search (#1169) gets the grid to itself.
+		if g, ok := m.deadDialogGeom(); ok && m.search == nil {
+			view = overlay.Place(view, m.renderDeadDialog(g), g.x, g.y, m.w, m.h)
+		}
+		return view
 	}
 	view := m.sess.View()
 	if m.selOn {
@@ -1153,6 +1201,12 @@ func (m Model) DeadActionHit(x, y int) string {
 	if m.sess == nil || m.sess.Running() || m.tool == "" {
 		return ""
 	}
+	// Only what is actually on screen can be clicked: an open scrollback
+	// search (#1169) owns the grid, and the footer line exists at the live
+	// view alone (#1951).
+	if m.search != nil {
+		return ""
+	}
 	if g, ok := m.deadDialogGeom(); ok {
 		if y != g.btnRow {
 			return ""
@@ -1164,6 +1218,9 @@ func (m Model) DeadActionHit(x, y int) string {
 			return "close"
 		}
 		return ""
+	}
+	if m.scroll > 0 {
+		return "" // paged view: no footer line rendered (#1951)
 	}
 	row := len(strings.Split(m.sess.View(), "\n"))
 	if m.h > 0 && row >= m.h {
