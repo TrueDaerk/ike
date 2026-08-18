@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"ike/internal/bookmarks"
 	"ike/internal/editor"
 	"ike/internal/fuzzy"
 	"ike/internal/marks"
@@ -14,10 +15,11 @@ import (
 )
 
 // bookmarks.go implements the bookmarks picker (#1151, nav.bookmarks): a
-// palette mode listing the focused editor's local vim marks (m{a-z}) and the
-// persistent global marks (m{A-Z}). Enter jumps — global rows through the
-// standard open funnel, so the navigation history records — and shift+delete
-// (or the row's "✕" zone) removes the mark, the #842/#1113 prune pattern.
+// palette mode listing the focused editor's local vim marks (m{a-z}), the
+// persistent global marks (m{A-Z}) and the project's line bookmarks (#55,
+// bookmarks_store.go). Enter jumps — rows with a path through the standard
+// open funnel, so the navigation history records — and shift+delete (or the
+// row's "✕" zone) removes the entry, the #842/#1113 prune pattern.
 
 // bookmarksPrefix selects the bookmarks mode. Only ever opened locked, so
 // the rune has no user-facing prefix story.
@@ -38,10 +40,13 @@ type BookmarkJumpMsg struct {
 }
 
 // BookmarkRemoveMsg is the aux action of a bookmarks row: remove the mark
-// without closing the palette.
+// (or the project bookmark, #55) without closing the palette.
 type BookmarkRemoveMsg struct {
-	Local  bool
-	Letter rune
+	Local   bool
+	Letter  rune
+	Project bool
+	Path    string // store key of a project bookmark
+	Line    int
 }
 
 // bookmarksMode is a palette Mode over the mark snapshot taken when the
@@ -51,8 +56,9 @@ type bookmarksMode struct {
 }
 
 // Set replaces the mode's rows: the focused editor's local marks (ed may be
-// nil) followed by the global store's, letters sorted within each group.
-func (b *bookmarksMode) Set(ed *editor.Model, store *marks.Store) {
+// nil), the global store's, and the project's bookmarks (#55) — marks
+// letter-sorted, bookmarks by path and line.
+func (b *bookmarksMode) Set(ed *editor.Model, store *marks.Store, bmarks *bookmarks.Store) {
 	b.items = nil
 	if ed != nil {
 		for _, lm := range ed.LocalMarks() {
@@ -75,6 +81,40 @@ func (b *bookmarksMode) Set(ed *editor.Model, store *marks.Store) {
 		}
 	}
 	sort.SliceStable(b.items, func(i, j int) bool { return b.items[i].Title < b.items[j].Title })
+	if bmarks != nil {
+		for _, bm := range bmarks.All() {
+			path := bookmarkPath(bm.Path)
+			b.items = append(b.items, palette.Item{
+				Title:  bookmarkTitle(bm, path),
+				Detail: bookmarkDetail(bm, ed, path),
+				Msg:    BookmarkJumpMsg{Path: path, Line: bm.Line},
+				Aux:    BookmarkRemoveMsg{Project: true, Path: bm.Path, Line: bm.Line},
+			})
+		}
+	}
+}
+
+// bookmarkTitle renders a project bookmark's row label: "⚑3  path:12", the
+// mnemonic digit beside the flag when the bookmark carries one.
+func bookmarkTitle(bm bookmarks.Bookmark, path string) string {
+	t := "⚑"
+	if !bm.Anonymous() {
+		t += string(bm.Mnemonic)
+	}
+	return t + "  " + displayPath(path) + ":" + strconv.Itoa(bm.Line+1)
+}
+
+// bookmarkDetail is the row's chip: the note when the bookmark is annotated,
+// otherwise the bookmarked line — read from the open editor when the file is
+// the focused one, from disk otherwise.
+func bookmarkDetail(bm bookmarks.Bookmark, ed *editor.Model, path string) string {
+	if bm.Note != "" {
+		return markPreview(bm.Note)
+	}
+	if ed != nil && ed.HasFile() && canonicalPath(ed.Path()) == canonicalPath(path) {
+		return markPreview(ed.LineText(bm.Line))
+	}
+	return markPreview(fileLine(path, bm.Line))
 }
 
 // markTitle renders the row label: "'a  path:12" (1-based line). A pathless

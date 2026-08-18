@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-08-17T00:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -327,7 +327,12 @@ the `cmd+3` Structure tool window stays the persistent counterpart),
 popup), `run.testAtCursor` (`ctrl+shift+f10`, the Windows-scheme
 run-context-configuration chord; the macOS `ctrl+shift+r` would collide with
 `project.replaceInPath` once Cmd folds onto Ctrl off macOS) and
-`nav.bookmarks` (`cmd+f3`, Show Bookmarks). Everything else stays palette-only
+`nav.bookmarks` (`cmd+f3`, Show Bookmarks). The project bookmarks (#55) took
+the JetBrains *Windows* chords, since the macOS Toggle Bookmark chord (`f3`)
+is `search.nextMatch` here: `bookmark.toggle` (`f11`), `bookmark.next`
+(`shift+f11`), `bookmark.previous` (`ctrl+shift+f11`), plus the macOS
+mnemonic chord `alt+f3` for `bookmark.toggleMnemonic`; all editor-scoped,
+since they act on the caret's line. Everything else stays palette-only
 deliberately: enumerated variants (`scratch.new.*`, `themes.select.*`,
 `file.setEncoding.*`/`file.setLineEndings.*`), pane-local commands the pane
 already keys (`explorer.*` speed keys, terminal pass-through), commands with a
@@ -582,6 +587,10 @@ Generated from `keymap.StatusMatrix` against the shipped plugin set (run
 regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | command | primary | reachability | fallback | status |
 |---|---|---|---|---|
+| `bookmark.next` | `shift+f11` | delivered | `—` | live |
+| `bookmark.previous` | `ctrl+shift+f11` | delivered | `—` | live |
+| `bookmark.toggle` | `f11` | delivered | `—` | live |
+| `bookmark.toggleMnemonic` | `alt+f3` | fragile | `palette / Navigate menu` | live via palette / Navigate menu |
 | `debug.breakpoints` | `cmd+shift+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.continue` | `f9` | delivered | `—` | live |
 | `debug.start` | `shift+f9` | delivered | `—` | live |
@@ -612,6 +621,8 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `editor.replace` | `cmd+r` | fragile | `palette` | live via palette |
 | `editor.saveAll` | `cmd+shift+s` | fragile | `palette` | live via palette |
 | `editor.selectAll` | `cmd+a` | fragile | `vim ggVG` | live via vim ggVG |
+| `editor.selection.extend` | `alt+up` | fragile | `palette` | live via palette |
+| `editor.selection.shrink` | `alt+down` | fragile | `palette` | live via palette |
 | `editor.splitViewDown` | `cmd+alt+shift+down` | fragile | `palette` | live via palette |
 | `editor.splitViewRight` | `cmd+alt+shift+right` | fragile | `palette` | live via palette |
 | `editor.tab.moveLeft` | `ctrl+shift+pgup` | delivered | `—` | live |

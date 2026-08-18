@@ -32,7 +32,7 @@ func TestBookmarksModeListsLocalAndGlobal(t *testing.T) {
 	m.gmarks.Set('B', b, 0, 3)
 
 	mode := &bookmarksMode{}
-	mode.Set(ed, m.gmarks)
+	mode.Set(ed, m.gmarks, nil)
 	items := mode.Results("", palette.Context{})
 	if len(items) != 2 {
 		t.Fatalf("want 2 rows, got %d: %+v", len(items), items)

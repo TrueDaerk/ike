@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-17T12:00:00Z
+timestamp: 2026-08-18T12:00:00Z
 ---
 
 # Editor
@@ -52,8 +52,8 @@ in the success tone on every detected test declaration (`testmarks.go` —
 detection via the language registry's `lang.TestSpec` regex seam, cached per
 document version in a per-view pointer store like the line cache, so the scan
 runs at most once per edit, never per frame). Sign precedence: debugger paused
-`▶` > breakpoint `●` > bookmark `⚑` (#1151, accent tone — vim marks, see
-"Vim marks & bookmarks") > test `▶` > inheritance `↑`/`↓` (#1453, info tone —
+`▶` > breakpoint `●` > bookmark `⚑` or its mnemonic digit (#1151/#55, accent
+tone — vim marks and project bookmarks, see "Vim marks & bookmarks") > test `▶` > inheritance `↑`/`↓` (#1453, info tone —
 LSP-pushed arrows on symbols that implement/override a super declaration or
 have implementations; `inheritmarks.go`, per-line map like `gitMarks`, gated by
 the `editor.marks.inheritance` toggle which also stops the probe traffic) >
@@ -770,11 +770,49 @@ site), and every jump additionally clamps into the buffer, so residual drift
 never lands outside the text. External edits to a global mark's file are not
 tracked — the jump clamps.
 
-The **bookmarks picker** (`nav.bookmarks`, palette-only — vim keys are the
-interface, no default chord) lists the focused editor's local marks plus all
-globals as `'x  path:line  preview` rows; enter jumps (globals through the
-open funnel), shift+delete or the `✕` zone removes the mark (the #842/#1113
-prune pattern). See `internal/app/bookmarks.go`.
+The **bookmarks picker** (`nav.bookmarks`, `cmd+f3`) lists the focused
+editor's local marks plus all globals as `'x  path:line  preview` rows and
+the project's line bookmarks (see below) as `⚑[digit]  path:line` rows; enter
+jumps (everything with a path through the open funnel), shift+delete or the
+`✕` zone removes the entry (the #842/#1113 prune pattern). See
+`internal/app/bookmarks.go`.
+
+## Project bookmarks (#55)
+
+Beside the vim marks sits the JetBrains flavour: **line bookmarks** owned by
+the project rather than by a view. `internal/bookmarks` is the store — keyed
+by path (project-relative, the breakpoint store's `bpKey`) plus 0-based line,
+each bookmark carrying an optional **mnemonic** digit (`0`-`9`, unique across
+the project) and a free-text **note**. It persists in `.ike/bookmarks.json`
+(`IKE_CONFIG_DIR` override), saved on every change and on each buffer save;
+a missing or malformed file loads empty, never a startup error.
+
+Commands (`internal/app/bookmarks_store.go`), all on the focused editor's
+cursor line:
+
+| Command | Chord | Effect |
+| --- | --- | --- |
+| `bookmark.toggle` | `f11` | set/clear an anonymous bookmark |
+| `bookmark.toggleMnemonic` | `alt+f3` | digit prompt: assign `0`-`9`; the digit already on the line removes the bookmark |
+| `bookmark.jumpMnemonic` | palette | digit prompt: jump to the bookmark carrying that digit |
+| `bookmark.annotate` | palette | note prompt, prefilled with the current annotation; an empty note clears it |
+| `bookmark.next` / `bookmark.previous` | `shift+f11` / `ctrl+shift+f11` | step through all bookmarks in (path, line) order, wrapping |
+
+The prompts run in the floating shell, the save-layout prompt's shape
+(#1175): the mnemonic flavours consume a single digit (any other key is
+ignored, esc cancels), the note flavour is a line editor with enter/esc. Both
+mnemonic prompts list the assigned digits with their file, line and note.
+
+The gutter renders a bookmark's **mnemonic digit** where it has one and the
+same `⚑` as a vim mark where it does not (`bookmarkSigns`, injected via
+`SetBookmarkHooks`) — the digit outranks the flag on a line that carries
+both. Bookmarks shift with edits through the same delta scheme as marks and
+breakpoints (two bookmarks squeezed onto one line merge, the lower source
+line keeping the slot) and follow renames/moves: `followMovedFile` re-keys
+the store, directories included.
+
+Still open from the idea issue: a bookmarks tool-window pane and toggling by
+clicking the gutter (pairs with #30).
 
 ## Git hunk navigation (#1170)
 

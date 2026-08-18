@@ -514,6 +514,11 @@ type Model struct {
 	gmSet     func(r rune, path string, line, col int)
 	gmLines   func(path string) []int
 	gmAdjust  func(path string, cursorAfter, delta int)
+	// Project bookmarks (#55) reach the editor the same way: bmSigns reports
+	// a file's gutter glyphs by line (mnemonic digit or the anonymous flag),
+	// bmAdjust shifts the store after an edit. Nil means no bookmarks.
+	bmSigns  func(path string) map[int]string
+	bmAdjust func(path string, cursorAfter, delta int)
 	// bpSource reports the current breakpoint lines for a file (0350, #577):
 	// injected by the app so the gutter always renders the live store without
 	// per-view push bookkeeping. Nil means no breakpoints feature. bpAdjust

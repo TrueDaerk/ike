@@ -151,6 +151,12 @@ var reachableAlternatives = map[string]string{
 	"lsp.peekDefinition":  "palette",
 	"lsp.referencesPanel": "palette",
 	"nav.bookmarks":       "palette",
+	// Bookmarks (#55): alt+f3 needs a modifier the terminal may swallow;
+	// f11/shift+f11/alt+f11 deliver, so only the mnemonic flavour and the
+	// palette-only commands need an escape route.
+	"bookmark.toggleMnemonic": "palette / Navigate menu",
+	"bookmark.jumpMnemonic":   "palette",
+	"bookmark.annotate":       "palette / Navigate menu",
 	// #1374: on darwin plain ctrl+F-keys are macOS system shortcuts (never
 	// delivered) and the cmd+F primaries need the Kitty protocol, so these
 	// commands have no delivered chord there; off macOS the ctrl forms
