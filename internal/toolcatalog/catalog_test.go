@@ -35,6 +35,14 @@ func find(t *testing.T, entries []Entry, name string) Entry {
 	return Entry{}
 }
 
+// noRecipeEntries lists catalog names that intentionally ship no install
+// recipe because no single argv fits (release binary download or
+// git-clone-and-build only). These fall back to the "no supported installer
+// found" path instead of an install button.
+var noRecipeEntries = map[string]bool{
+	"lazysql": true,
+}
+
 func TestCatalogEntriesAreWellFormed(t *testing.T) {
 	seen := map[string]bool{}
 	for _, e := range All() {
@@ -45,7 +53,7 @@ func TestCatalogEntriesAreWellFormed(t *testing.T) {
 			t.Errorf("duplicate catalog name %q", e.Name)
 		}
 		seen[e.Name] = true
-		if len(e.Recipes) == 0 {
+		if len(e.Recipes) == 0 && !noRecipeEntries[e.Name] {
 			t.Errorf("entry %s has no install recipe", e.Name)
 		}
 		for _, r := range e.Recipes {
@@ -54,10 +62,22 @@ func TestCatalogEntriesAreWellFormed(t *testing.T) {
 			}
 		}
 	}
-	for _, want := range []string{"lazygit", "lazydocker", "sqlit"} {
+	for _, want := range []string{"lazygit", "lazydocker", "sqlit", "lazysql"} {
 		if !seen[want] {
 			t.Errorf("catalog is missing %s", want)
 		}
+	}
+}
+
+func TestLazysqlHasNoInstallRecipe(t *testing.T) {
+	e := find(t, All(), "lazysql")
+	stubLookPath(t) // nothing on PATH
+	if _, ok := e.InstallArgv(); ok {
+		t.Error("lazysql should have no install recipe available")
+	}
+	msg := Install(e)().(InstallResultMsg)
+	if msg.Err == nil || !strings.Contains(msg.Err.Error(), "no supported installer") {
+		t.Errorf("want no-installer failure, got %v", msg.Err)
 	}
 }
 
