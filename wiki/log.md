@@ -1,5 +1,35 @@
 # Log
 
+## 2026-08-18 (OpenAPI 3.x import for the HTTP client, #1939)
+
+- **HTTP client** (`internal/openapi/`, `internal/app/openapi_import.go`):
+  `http.importOpenAPI` ("Import OpenAPI Spec…") scaffolds a `.http` file from
+  a local OpenAPI 3.x document (JSON or YAML) instead of hand-writing every
+  request block. The new `internal/openapi` package reads the document as
+  plain maps rather than through a validating model — that tolerance is the
+  point: an unresolvable/external `$ref`, an exotic parameter location, a
+  security scheme with no request-file spelling or a media type with no
+  generator is *skipped and named*, while every other operation is still
+  generated. Only "not OpenAPI 3.x at all" fails the import; a **Swagger 2.0**
+  document is rejected with "convert the document to OpenAPI 3.x first".
+- Output lands **next to the spec** (`petstore.yaml` → `petstore.http`) and
+  opens in the editor, because the client resolves `http-client.env.json` from
+  the request file's own directory — an unplaced buffer would resolve nothing.
+  Blocks group by tag → path → method, named after the `operationId`, with the
+  summary as a comment. Everything variable is a `{{name}}` placeholder
+  (#1867): origin, parameters and credentials alike; required query parameters
+  are live folded `? key = value` lines (#1269), optional ones commented below
+  them. `http-client.env.json` seeds the host and parameter values,
+  `http-client.private.env.json` the credentials with empty values — both only
+  when absent, with the summary naming what a kept environment still lacks.
+- Generation is deterministic (sorted paths, properties, media types and
+  schemes; sorted JSON keys), so re-importing a spec diffs cleanly. An
+  existing `.http` file is only overwritten when it carries the generated
+  header marker; a hand-written one of the same name stops the import.
+- Adds `gopkg.in/yaml.v3` — the only new dependency; a validating OpenAPI
+  library would reject wholesale exactly the documents this command has to
+  generate *something* from.
+
 ## 2026-08-18 (exited run pane: copy, resize reflow and scrollback, #1951)
 
 - **Terminal** (`internal/terminal/model.go`, `session.go`, `scrollbar.go`):

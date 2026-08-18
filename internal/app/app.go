@@ -407,6 +407,11 @@ type Model struct {
 	jbImportOpen  bool
 	jbImportInput string
 	jbImportPos   int
+	// oapiImportOpen marks the OpenAPI import prompt (#1939) while the shell
+	// shows it; oapiImportInput/oapiImportPos are the typed path and cursor.
+	oapiImportOpen  bool
+	oapiImportInput string
+	oapiImportPos   int
 	// lspRename is the open symbol-rename prompt (Roadmap 0100, #6); nil when
 	// no rename is in flight.
 	lspRename *lspRenameState
@@ -3450,6 +3455,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The finished import: toast the summary and apply the config reload.
 		return m, m.finishJBImport(msg)
 
+	case ImportOpenAPIMsg:
+		// http.importOpenAPI (palette, #1939): prompt for an OpenAPI 3.x
+		// document, then generate the .http file beside it.
+		m.startOpenAPIImport()
+		return m, nil
+
+	case openAPIImportDoneMsg:
+		// The finished import: toast the summary and open the generated file.
+		return m.finishOpenAPIImport(msg)
+
 	case palette.MoveTargetMsg:
 		return m, m.finishMoveFile(msg.Dir)
 
@@ -5941,6 +5956,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// path completion.
 		if m.jbImportPromptOpen() {
 			return m.updateJBImportPrompt(msg)
+		}
+		// The OpenAPI import prompt (#1939) mirrors it exactly.
+		if m.openAPIImportPromptOpen() {
+			return m.updateOpenAPIImportPrompt(msg)
 		}
 		// The symbol-rename prompt (0100, #6) mirrors it.
 		if m.lspRenameOpen() {

@@ -425,6 +425,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.showResponse", "Show Stored HTTP Response", HTTPShowResponseMsg{}),
 			appCommand("http.resend", "Re-send Stored HTTP Request", HTTPResendMsg{}),
 			appCommand("http.selectEnvironment", "Select HTTP Environment", HTTPSelectEnvMsg{}),
+			appCommand("http.importOpenAPI", "Import OpenAPI Spec…", ImportOpenAPIMsg{}),
 			appCommand("http.cancel", "Cancel Running HTTP Request", HTTPCancelMsg{}),
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
 			appCommand("debug.breakpoints", "Breakpoints", BreakpointsToggleMsg{}),

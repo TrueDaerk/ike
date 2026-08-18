@@ -1,0 +1,172 @@
+openapi: 3.1.0
+info:
+  title: Edge cases
+  version: "2"
+paths:
+  /form:
+    post:
+      operationId: submitForm
+      summary: Form encoded body
+      tags: [misc]
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [agree, name]
+              properties:
+                name:
+                  type: string
+                agree:
+                  type: boolean
+      responses:
+        '200':
+          description: ok
+  /tree:
+    get:
+      operationId: getTree
+      summary: Recursive schema
+      tags: [misc]
+      security:
+        - basicAuth: []
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+  /search:
+    get:
+      operationId: search
+      summary: Query key auth, cookie parameter
+      tags: [misc]
+      security:
+        - queryKey: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: session
+          in: cookie
+          required: true
+          schema:
+            type: string
+        - name: trace
+          in: matrix
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ok
+  /external:
+    post:
+      operationId: external
+      summary: Body behind an external reference
+      tags: [misc]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: 'other.yaml#/components/schemas/Thing'
+      responses:
+        '200':
+          description: ok
+  /xml:
+    post:
+      operationId: xmlPost
+      summary: Media type with no generator
+      tags: [misc]
+      requestBody:
+        content:
+          application/xml:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: ok
+  /compose:
+    post:
+      operationId: compose
+      summary: allOf composition
+      tags: [misc]
+      security:
+        - oidc: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Base'
+                - type: object
+                  required: [extra]
+                  properties:
+                    extra:
+                      type: string
+      responses:
+        '200':
+          description: ok
+  /either:
+    post:
+      operationId: either
+      summary: oneOf takes the first branch
+      tags: [misc]
+      security:
+        - unknownScheme: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/Base'
+                - type: string
+      responses:
+        '200':
+          description: ok
+  /dup/a:
+    get:
+      operationId: duplicate
+      tags: [misc]
+      responses:
+        '200':
+          description: ok
+  /dup/b:
+    get:
+      operationId: duplicate
+      tags: [misc]
+      responses:
+        '200':
+          description: ok
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    queryKey:
+      type: apiKey
+      in: query
+      name: api_key
+    oidc:
+      type: openIdConnect
+      openIdConnectUrl: https://example.com/.well-known/openid-configuration
+    weird:
+      type: mutualTLS
+  schemas:
+    Base:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: integer
+    Node:
+      type: object
+      required: [children, id]
+      properties:
+        id:
+          type: string
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/Node'

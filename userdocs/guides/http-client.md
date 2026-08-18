@@ -121,6 +121,58 @@ than as text:
 
 ![An .http file in the editor](../screenshots/features/http-file.png)
 
+## Starting from an OpenAPI spec
+
+A new service usually ships an OpenAPI document long before anyone writes a
+request file for it. **Import OpenAPI Spec…** (`http.importOpenAPI`) asks for
+a local OpenAPI 3.x document — JSON or YAML, ++tab++ completes paths — and
+writes the request file for you.
+
+The result lands **next to the spec**, named after it (`petstore.yaml` →
+`petstore.http`), and opens in the editor. Next to it you get a
+`http-client.env.json` with the host and every parameter value, and a
+`http-client.private.env.json` with the credentials left empty for you to fill
+in. Fill those in, pick an environment with **Select HTTP Environment**, and
+the blocks run as they are.
+
+```http
+### showPetById
+# Info for a specific pet
+GET {{host}}/pets/{{petId}}
+    ? status = {{status}}
+#   & limit = {{limit}}
+Accept: application/json
+Authorization: Bearer {{bearerAuth}}
+```
+
+What you get:
+
+- One block per operation, grouped by tag, named after the `operationId`,
+  with the summary as a comment above it.
+- Everything variable as a `{{placeholder}}` — the host, path and query
+  parameters, headers, credentials. Change a value once, every block follows.
+- Required query parameters live, optional ones as commented `#   & key = …`
+  lines you uncomment when you need them.
+- A JSON body carrying the schema's required fields, with the spec's own
+  examples where it provides them.
+- Bearer, basic and apiKey security as **variables**, never as literals — a
+  generated file holds no secret, and only the private environment file (the
+  one you keep out of version control) has a slot for one.
+
+Existing environment files are never overwritten; if one is already there, the
+notification names the variables you still have to add.
+
+Anything the importer cannot express — an external `$ref`, an exotic media
+type, a security scheme with no header spelling — is **skipped and named**: it
+appears as a `# not generated: …` comment at the top of the file and in the
+import notification. The rest is still generated. Only a document that is not
+OpenAPI 3.x at all is refused, and a Swagger 2.0 file is told to convert
+first.
+
+Re-running the import regenerates the same file byte for byte, so updating a
+spec produces a clean diff. A `.http` file the importer did **not** write is
+never overwritten — it stops with an error instead.
+
 ## Running one
 
 Put the cursor anywhere in a request block and press ++cmd+enter++
@@ -293,6 +345,8 @@ once and the entry after that is re-sendable.
 |---|---|---|
 | Run HTTP Request | `http.run` | ++cmd+enter++, ++ctrl+f9++ |
 | Cancel Running HTTP Request | `http.cancel` | — |
+| Import OpenAPI Spec… | `http.importOpenAPI` | — |
+| Select HTTP Environment | `http.selectEnvironment` | — |
 | Copy HTTP Response Body | `http.copyBody` | — |
 | Copy HTTP Response Headers | `http.copyHeaders` | — |
 | Browse HTTP Response History | `http.responseHistory` | — |
