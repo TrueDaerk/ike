@@ -302,6 +302,12 @@ type Model struct {
 	backupTickArmed bool
 	backupIv        time.Duration
 
+	// Follow mode (#1928, follow.go): one demand-armed tick drives the
+	// watcher's poll fallback while at least one editor view follows its
+	// file; it self-stops (no re-arm) once none does, so an idle session
+	// never pays for it.
+	followTickArmed bool
+
 	// Idle autosave (#731): same debouncer shape as backup, but the tick
 	// saves the quiet dirty buffers instead of snapshotting them.
 	autosaveIdleDeb       *backup.Debouncer
@@ -5322,7 +5328,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Kind: fileChangeKind(msg.Kind),
 		})
 		if msg.Kind == watch.FileRemoved {
-			if ed := m.editorForPath(msg.Path); ed != nil && !ed.Dirty() {
+			if ed := m.editorForPath(msg.Path); ed != nil && ed.Following() {
+				// A followed file disappeared (#1928): rotation in progress,
+				// not a close — keep the pane, re-stamp the poll tracker so
+				// the replacement file is picked up (Poll dropped the entry
+				// when it reported the removal), and let the editor mark the
+				// pending rotation.
+				if m.watcher != nil {
+					m.watcher.Track(msg.Path)
+				}
+			} else if ed != nil && !ed.Dirty() {
 				// Externally deleted, nothing unsaved: same as the
 				// explorer's delete flow — close the pane (#83). A dirty
 				// buffer instead stays open, marked stale by the editor.
@@ -5508,6 +5523,23 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.guardedCloseFocused()
 		}
 		return m, nil
+
+	case editor.FollowMsg:
+		// A view entered follow mode (#1928): refresh the poll stamp for its
+		// file (so the first poll compares against right now) and arm the
+		// follow tick. Leaving needs nothing — the tick self-stops.
+		if msg.On && m.watcher != nil {
+			m.watcher.Track(msg.Path)
+		}
+		if msg.On {
+			return m, m.armFollowTick()
+		}
+		return m, nil
+
+	case followTickMsg:
+		// The follow poll deadline elapsed (#1928): poll the tracked files
+		// and re-arm while a view still follows.
+		return m, m.followTick()
 
 	case backupTickMsg:
 		// A debounce deadline elapsed: snapshot the quiet dirty buffers and

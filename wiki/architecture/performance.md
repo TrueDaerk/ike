@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often) and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/diag
 tags: [architecture, performance, pprof, idle, diagnostics]
-timestamp: 2026-08-14T18:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -20,8 +20,9 @@ A bubbletea message wakes Update **and** a full View composite of every pane —
 so with many panes each unnecessary wake is expensive. The standing rules:
 
 - **No unconditional repeating ticks.** Debounce-style timers (autosave idle,
-  backup, VCS refresh, keymap chord timeout) arm on demand and re-arm only
-  while work is pending (`arm*Tick` + `*TickArmed` flags in `internal/app`).
+  backup, VCS refresh, keymap chord timeout, the follow-mode poll #1928) arm
+  on demand and re-arm only while work is pending (`arm*Tick` + `*TickArmed`
+  flags in `internal/app`).
 - **The explorer auto-refresh poll loops off-loop** (#1001): the 2s directory
   mtime comparison runs inside its own Cmd goroutine and only returns a
   `pollMsg` when something actually changed — or after `pollIdleRounds` (30)

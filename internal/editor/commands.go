@@ -93,6 +93,9 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// Log rich rendering (#1621): per-view toggle over the
 			// editor.log_rendering config default.
 			action("view.toggleLogRendering", "Toggle Log Rendering", "toggle_log_rendering", ""),
+			// Follow mode (#1928): tail -f for the open file — streams
+			// appended content, read-only, viewport stuck to the end.
+			action("view.toggleFollow", "Toggle Follow (Tail -f)", "toggle_follow", ""),
 			// Inline epoch-timestamp decoding (#1618): per-view toggle over
 			// the editor.timestamp_decoding config default.
 			action("view.toggleTimestampDecoding", "Toggle Timestamp Decoding", "toggle_timestamp_decoding", ""),

@@ -174,6 +174,7 @@ Active when an editor pane has focus.
 | Split view right | `cmd+alt+shift+right` | `ctrl+alt+shift+right` | `editor.splitViewRight` |
 | Toggle bookmark | `f11` | `f11` | `bookmark.toggle` |
 | Toggle bookmark with mnemonic | `alt+f3` | `alt+f3` | `bookmark.toggleMnemonic` |
+| Toggle follow (tail -f) | `alt+shift+f` | `alt+shift+f` | `view.toggleFollow` |
 | Type hierarchy | `ctrl+h` | `ctrl+h` | `lsp.typeHierarchy` |
 | Undo | `cmd+z` | `ctrl+z` | `editor.undo` |
 | Undo | `ctrl+z` | `ctrl+z` | `editor.undo` |

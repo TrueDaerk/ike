@@ -136,6 +136,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.markdown_rendering", c.Editor.MarkdownRendering)
 	put("editor.csv_rendering", c.Editor.CSVRendering)
 	put("editor.log_rendering", c.Editor.LogRendering)
+	put("editor.follow_poll_ms", c.Editor.FollowPollMs)
 	put("editor.timestamp_decoding", c.Editor.TimestampDecoding)
 	put("editor.unicode_escape_decoding", c.Editor.UnicodeEscapeDecoding)
 	put("editor.entity_decoding", c.Editor.EntityDecoding)

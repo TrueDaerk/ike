@@ -255,6 +255,7 @@ bring their own.
 | Toggle Digit Grouping | `view.toggleDigitGrouping` | — | — | `editor` pane |
 | Toggle Duration Hints | `view.toggleDurationHints` | — | — | `editor` pane |
 | Toggle Entity Decoding | `view.toggleEntityDecoding` | — | — | `editor` pane |
+| Toggle Follow (Tail -f) | `view.toggleFollow` | `alt+shift+f` | — | `editor` pane |
 | Toggle IDN Hints | `view.toggleIDNHints` | — | — | `editor` pane |
 | Toggle Identifier Colors | `view.toggleIdentifierColors` | — | — | `editor` pane |
 | Toggle Indent Guides | `view.toggleIndentGuides` | — | — | `editor` pane |

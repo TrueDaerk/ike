@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-18 (follow mode: tail -f for log buffers, #1928)
+
+- **Editor** (`internal/editor/follow.go`): `view.toggleFollow` (palette,
+  `alt+shift+f`) streams appended file content into the buffer, read-only,
+  with cursor and viewport stuck to the end. Appends are incremental
+  (`followOffset` anchors the consumed bytes; unterminated lines continue in
+  place, split CRLF/UTF-8 tails are held back), pause re-derives after any
+  user movement (keys/actions via the `Update` wrapper, wheel and scrollbar
+  directly) from "cursor on the last line and visible", and the status line
+  shows `FOLLOW` / `FOLLOW (paused)`. Truncation and rotation (remove +
+  create, or a shrunken file) reload wholesale with a toast; the repeat-run
+  cache extends incrementally over appended lines (`extendLogRuns`).
+- **App** (`internal/app/follow.go`): one demand-armed tick drives the watch
+  service's poll fallback while at least one view follows — armed by the
+  editor's `FollowMsg`, self-stopping otherwise, so idle sessions pay
+  nothing. A followed file's external delete no longer closes the pane (it
+  is a rotation in progress); the poll stamp is refreshed instead.
+- **Setting**: `editor.follow_poll_ms` (default 500, clamped 100–10000) with
+  a Settings-UI entry; docgen regenerated for the new command, binding and
+  setting. New concept doc `/architecture/follow-mode.md`.
+
 ## 2026-08-18 (jq playground: live query line over JSON buffers and HTTP responses, #1936)
 
 - **Evaluation core** (`internal/jqplay`): `Parse` decodes a buffer as a JSON

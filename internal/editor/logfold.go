@@ -40,6 +40,14 @@ type logRunState struct {
 	// line; end maps a header line onto the run's last line.
 	head map[int]int
 	end  map[int]int
+	// Follow-mode append hint (#1928): appendFrom is the first line whose
+	// content is new (or changed, for a continued tail line) since the last
+	// recompute — 0 means no incremental extension is possible — and
+	// appendVersion the document version those appends produced. When the
+	// version moved exactly to appendVersion, logRuns extends the cached runs
+	// from appendFrom instead of rescanning the whole buffer.
+	appendFrom    int
+	appendVersion int
 }
 
 // logInsight reports whether the whole-buffer log analyses apply right now:
@@ -66,8 +74,16 @@ func (m Model) logRuns() *logRunState {
 	if st.valid && st.version == m.docVersion && st.path == m.path {
 		return st
 	}
+	if st.valid && st.path == m.path && st.appendFrom > 0 &&
+		st.appendVersion == m.docVersion {
+		// Only follow-mode appends happened since the cached scan (#1928):
+		// extend the runs over the new tail instead of rescanning everything.
+		m.extendLogRuns(st)
+		return st
+	}
 	st.valid, st.version, st.path = true, m.docVersion, m.path
 	st.head, st.end = nil, nil
+	st.appendFrom, st.appendVersion = 0, 0
 	lc := m.buf.LineCount()
 	prevKey := ""
 	prevOK := false
@@ -94,6 +110,84 @@ func (m Model) logRuns() *logRunState {
 		prevKey, prevOK = key, true
 	}
 	return st
+}
+
+// noteLogAppend registers a follow-mode append (#1928) with the run cache so
+// logRuns can extend the cached runs incrementally: prevCount is the line
+// count before the append, merged whether the previous last line's content
+// changed (an unterminated line was continued, so it must be rescanned too).
+// Called after the append's EventChange, so m.docVersion is the appended
+// version.
+func (m *Model) noteLogAppend(prevCount int, merged bool) {
+	st := m.logRunCache
+	if st == nil || !st.valid || st.path != m.path {
+		return
+	}
+	from := prevCount
+	if merged {
+		from--
+	}
+	if st.appendFrom == 0 || from < st.appendFrom {
+		st.appendFrom = from
+	}
+	st.appendVersion = m.docVersion
+}
+
+// extendLogRuns continues the cached repeat runs over the lines follow mode
+// appended (#1928): only the tail from st.appendFrom on is rescanned, seeded
+// with the run state of the line above it, so an append costs the new lines —
+// not the whole buffer.
+func (m Model) extendLogRuns(st *logRunState) {
+	start := st.appendFrom
+	lc := m.buf.LineCount()
+	for i := start; i < lc; i++ {
+		delete(st.head, i)
+	}
+	// A run reaching into the rescanned tail keeps only its part above it;
+	// the loop below re-extends it line by line if the tail still matches.
+	for h, e := range st.end {
+		if e < start {
+			continue
+		}
+		if start-1 > h {
+			st.end[h] = start - 1
+		} else {
+			delete(st.end, h)
+		}
+	}
+	prevKey, prevOK, header := "", false, -1
+	if start > 0 {
+		prev := m.buf.Line(start - 1)
+		if !blankLine(prev) {
+			prevKey, prevOK = logline.RepeatKey(prev), true
+			if h, ok := st.head[start-1]; ok {
+				header = h
+			}
+		}
+	}
+	for i := start; i < lc; i++ {
+		text := m.buf.Line(i)
+		if blankLine(text) {
+			prevOK, header = false, -1
+			continue
+		}
+		key := logline.RepeatKey(text)
+		if prevOK && key == prevKey {
+			if header < 0 {
+				header = i - 1
+			}
+			if st.head == nil {
+				st.head, st.end = make(map[int]int), make(map[int]int)
+			}
+			st.head[i] = header
+			st.end[header] = i
+		} else {
+			header = -1
+		}
+		prevKey, prevOK = key, true
+	}
+	st.version = m.docVersion
+	st.appendFrom, st.appendVersion = 0, 0
 }
 
 // blankLine reports whether a line carries nothing but whitespace.

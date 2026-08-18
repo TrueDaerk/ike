@@ -28,6 +28,12 @@ func (m Model) handleExternalChange(msg watch.EventMsg) (Model, tea.Cmd) {
 	if !m.HasFile() || !samePath(m.path, msg.Path) {
 		return m, nil
 	}
+	if m.follow {
+		// Follow mode (#1928): appends stream in incrementally, shrinkage
+		// and re-creation reload; the dirty/stale machinery below never
+		// applies to a read-only tail.
+		return m.followHandleEvent(msg)
+	}
 	if msg.Kind == watch.FileRemoved {
 		// Externally deleted while dirty (the root model closes clean editors
 		// before routing here): the buffer is the only copy left — keep it,
@@ -111,6 +117,13 @@ func (m Model) reloadFromDisk() (Model, tea.Cmd) {
 	if err != nil {
 		return m, nil // e.g. changed then removed within one debounce window
 	}
+	return m.reloadFrom(data)
+}
+
+// reloadFrom is reloadFromDisk over already-read content — follow mode
+// (#1928) reads the file once and needs the raw byte length to anchor its
+// append offset, so the read and the swap are separate steps.
+func (m Model) reloadFrom(data []byte) (Model, tea.Cmd) {
 	text, info, err := textenc.Decode(data, m.fallbackEncoding())
 	if err != nil {
 		// The rewritten file is no longer decodable (#66): keep the buffer as

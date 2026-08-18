@@ -401,6 +401,11 @@ type Editor struct {
 	// dimmed timestamps, rainbow thread/logger names and ANSI escapes drawn
 	// as their styles with the escape bytes concealed.
 	LogRendering bool `toml:"log_rendering"`
+	// FollowPollMs is the poll interval in milliseconds of editor follow mode
+	// (#1928): while a view follows its file (view.toggleFollow), the app
+	// polls the tracked open files this often as the fallback for
+	// filesystems where fsnotify under-reports. Clamped to [100, 10000].
+	FollowPollMs int `toml:"follow_poll_ms"`
 	// TimestampDecoding renders numeric Unix epoch timestamps (seconds and
 	// milliseconds) as their UTC form (#1618) in JSON values, log lines and
 	// .http request bodies; the raw number reappears under the caret.

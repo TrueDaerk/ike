@@ -414,6 +414,7 @@ func (m Model) displayClickCol(line, from, offset int) int {
 // without moving the cursor, clamped to the buffer — a mouse-wheel scroll,
 // independent of mode. Vertical only; see ScrollXBy for horizontal.
 func (m *Model) ScrollBy(delta int) {
+	defer m.refreshFollowPause() // a wheel scroll pauses/resumes follow (#1928)
 	if m.hasFolds() {
 		// A collapsed fold scrolls past as a single row (#144).
 		top, dir := m.view.Top, 1
