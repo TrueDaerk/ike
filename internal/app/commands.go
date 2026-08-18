@@ -5,10 +5,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/config"
 	"ike/internal/host"
 	"ike/internal/layout"
 	"ike/internal/plugin"
 	"ike/internal/registry"
+	"ike/internal/settings"
 )
 
 // CloseTabMsg asks the root model to close the focused editor pane's active
@@ -341,6 +343,12 @@ func (appCommands) Capabilities() plugin.Capabilities {
 		cmds = append(cmds, appCommand("editor.tab.select"+n, "Go to Tab "+n, TabSelectMsg{Index: i - 1}))
 	}
 	return plugin.Capabilities{
+		// The [[elasticsearch.endpoints]] list editor (#1927): registered as a
+		// plugin settings page — not appended in app.go like the Tools page —
+		// so docgen's settings reference documents it too.
+		SettingsPages: []settings.Page{
+			{Title: "Elasticsearch", Custom: settings.NewESPage(config.Discover("."))},
+		},
 		Commands: append(append(cmds,
 			appCommand("palette.keymapHelp", "Keymap Cheatsheet", ShowKeymapHelpMsg{}),
 			appCommand("help.welcomeTour", "Welcome Tour", ShowWelcomeTourMsg{}),
@@ -447,7 +455,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("tests.toggle", "Test Results", TestsToggleMsg{}),
 			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
 			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),
-		), append(append(scratchCommands(), toolCommands()...), memoryCommands()...)...),
+		), append(append(append(scratchCommands(), toolCommands()...), memoryCommands()...), esCommands()...)...),
 	}
 }
 

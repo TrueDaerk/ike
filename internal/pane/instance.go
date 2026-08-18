@@ -15,6 +15,7 @@ import (
 	"ike/internal/diff"
 	"ike/internal/editor"
 	"ike/internal/editor/register"
+	"ike/internal/espane"
 	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/httppane"
@@ -91,6 +92,10 @@ const (
 	// bound to one database file, listing its tables and views next to a
 	// paged read-only grid of the selected one's rows.
 	KindData
+	// KindES is an Elasticsearch console pane (#1927); any number may exist,
+	// each bound to one configured cluster endpoint by name, listing its
+	// indices next to a paged read-only grid of search hits.
+	KindES
 	// KindTests is the Test Results tool window (#1911): a singleton
 	// bottom-split panel with the last captured test run's result tree and
 	// detail pane, under key "tests".
@@ -114,6 +119,7 @@ const (
 	ctxBreak    = "breakpoints"
 	ctxArchive  = "archive"
 	ctxData     = "data"
+	ctxES       = "es"
 	ctxTests    = "tests"
 )
 
@@ -142,6 +148,7 @@ type Instance struct {
 	mg   merge.Model
 	av   archview.Model
 	dv   dataview.Model
+	es   espane.Model
 	tr   testresults.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
@@ -263,6 +270,8 @@ func (i *Instance) ContextID() string {
 		return ctxArchive
 	case KindData:
 		return ctxData
+	case KindES:
+		return ctxES
 	case KindTests:
 		return ctxTests
 	}
@@ -308,6 +317,10 @@ func (i *Instance) Archive() *archview.Model { return &i.av }
 // Data returns the underlying data viewer model (#1764). It is only valid
 // for a data instance; callers gate on Kind first.
 func (i *Instance) Data() *dataview.Model { return &i.dv }
+
+// ES returns the underlying Elasticsearch console model (#1927). It is only
+// valid for an es instance; callers gate on Kind first.
+func (i *Instance) ES() *espane.Model { return &i.es }
 
 // Tests returns the underlying Test Results tool-window model (#1911). It is
 // only valid for a tests instance; callers gate on Kind first.
@@ -534,7 +547,7 @@ func (i *Instance) AddTerminalTab(term terminal.Model) *terminal.Model {
 // dedicated pane — its conflict workflow is session-bound.
 func KindTabbable(k Kind) bool {
 	switch k {
-	case KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindHTTP:
+	case KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindES, KindHTTP:
 		return true
 	}
 	return false
@@ -587,6 +600,8 @@ func (i *Instance) DetachContent() (*Instance, bool) {
 		nested.av, i.av = i.av, archview.Model{}
 	case KindData:
 		nested.dv, i.dv = i.dv, dataview.Model{}
+	case KindES:
+		nested.es, i.es = i.es, espane.Model{}
 	case KindHTTP:
 		nested.hp, i.hp = i.hp, httppane.Model{}
 	default:
@@ -661,6 +676,11 @@ func (i *Instance) ContentTitle() string {
 			return filepath.Base(p)
 		}
 		return "data"
+	case KindES:
+		if ep := i.es.Endpoint(); ep != "" {
+			return ep
+		}
+		return "es"
 	case KindDiff:
 		_, r := i.df.Titles()
 		if r != "" {
@@ -685,6 +705,8 @@ func (i *Instance) releaseContent() {
 		i.term.Close()
 	case KindData:
 		i.dv.Close()
+	case KindES:
+		i.es.Close()
 	case KindEditor:
 		for _, t := range i.tabs {
 			t.close()
@@ -958,6 +980,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.av.SetSize(w, h)
 	case KindData:
 		i.dv.SetSize(w, h)
+	case KindES:
+		i.es.SetSize(w, h)
 	case KindTests:
 		i.tr.SetSize(w, h)
 	}
@@ -1006,6 +1030,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.av.SetFocused(f)
 	case KindData:
 		i.dv.SetFocused(f)
+	case KindES:
+		i.es.SetFocused(f)
 	case KindTests:
 		i.tr.SetFocused(f)
 	}
@@ -1069,6 +1095,8 @@ func (i *Instance) View() string {
 		return i.av.View()
 	case KindData:
 		return i.dv.View()
+	case KindES:
+		return i.es.View()
 	case KindTests:
 		return i.tr.View()
 	}
@@ -1125,6 +1153,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.av.Update(msg)
 	case KindData:
 		cmd = i.dv.Update(msg)
+	case KindES:
+		cmd = i.es.Update(msg)
 	case KindTests:
 		cmd = i.tr.Update(msg)
 	}
@@ -1177,6 +1207,9 @@ func (i *Instance) Init() tea.Cmd {
 		// is the one-shot that starts it, whether the pane was just created or
 		// restored with the layout.
 		return i.dv.Init()
+	case KindES:
+		// The ES console connects in the background the same way (#1927).
+		return i.es.Init()
 	}
 	return nil
 }
@@ -1264,6 +1297,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.av.SetPalette(p)
 	case KindData:
 		i.dv.SetPalette(p)
+	case KindES:
+		i.es.SetPalette(p)
 	case KindTests:
 		i.tr.SetPalette(p)
 	}

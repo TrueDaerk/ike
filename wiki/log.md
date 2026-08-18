@@ -1,5 +1,33 @@
 # Log
 
+## 2026-08-18 (Elasticsearch console: index sidebar, Query-DSL buffers, hit grid, #1927)
+
+- **ES console pane** (`internal/espane`, backend `internal/esq`, wiring
+  `internal/app/es.go`): one read-only console per configured cluster —
+  index/alias sidebar with `_cat` doc counts, paged hit grid (`_id`, `_score`,
+  sorted `_source` columns; nested values as compact JSON cells, `v` for the
+  full document read-only), `from`/`size` paging with `track_total_hits`
+  forced so totals are exact, aggregations under `a`. The data viewer's
+  layout and keys, but with **every** cluster request asynchronous — the
+  #1795 background-open discipline applied to each page fetch, sequence-
+  stamped so stale flights drop. Palette command `es.console.<name>` per
+  endpoint; pane persisted by endpoint name and reconnected on restore; `r`
+  retries a dead endpoint.
+- **Query buffers as real files**: `q` opens
+  `<state>/es/<endpoint>/<index>.es.json` (seeded match-all), `es.run` makes
+  the buffer the index's active query. `esq.CompletionSource` claims the
+  files exclusively and offers Query-DSL keys plus the mapping's flattened
+  fields (dotted paths, multi-fields, type badges), accepting dotted names
+  via ReplacePrefix (#1913); the pane primes the field cache when an index
+  loads. The datasrc.Source reuse hint was evaluated and rejected — dataview
+  pages synchronously in Update, which would stall the UI on network I/O
+  (documented in the concept doc).
+- **Settings:** `[[elasticsearch.endpoints]]` (name, url, basic auth or API
+  key) on Settings → Elasticsearch — add/edit/delete with strict form
+  validation (shared `config.ESURLError`), `s` toggling the user/project
+  write scope; the config validator drops unusable entries with diagnostics.
+  Docgen documents the page and `es.run`.
+
 ## 2026-08-17 (completion: postfix templates — `expr.if`, `err.nil`, `.for`, #1913)
 
 - **Postfix completion** (`internal/complete/postfix`): the JetBrains habit of

@@ -248,6 +248,35 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Catalog URL | `marketplace.catalog_url` | string | *(empty)* | user | HTTPS location of the marketplace index.json; empty falls back to the built-in default, which may itself be empty — then the marketplace stays disabled |
 
+### Elasticsearch
+
+The **Elasticsearch** page manages the ES console's cluster endpoints
+(#1927), persisted as the `[[elasticsearch.endpoints]]` table array:
+
+| Key | Action |
+| --- | --- |
+| `a` | add an endpoint: `name`, `url`, optional `username`/`password` (basic auth) or `api key` |
+| `enter` | edit the selected endpoint |
+| `d` | delete the selected endpoint (confirms) |
+| `s` | the layer writes land in: user ↔ project |
+
+The form rejects a URL without an http(s) scheme and host, duplicate names,
+and mixing basic auth with an API key. Each configured endpoint appears in
+the command palette as `ES Console: <name>`, opening a read-only console —
+index sidebar, paged hit grid, per-index Query-DSL buffers with
+mapping-aware completion. The same entries can be written by hand:
+
+```toml
+[[elasticsearch.endpoints]]
+name = "prod"
+url = "https://es.example.com:9200"
+api_key = "..."        # or username/password for basic auth
+```
+
+Like every TOML list the endpoint list replaces across layers: a
+project-scope `[[elasticsearch.endpoints]]` table hides the user-scope one.
+
+
 ### Formatters
 
 The **Formatters** page lists each language's reformat command, the config

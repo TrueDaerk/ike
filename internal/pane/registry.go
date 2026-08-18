@@ -13,6 +13,7 @@ import (
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/editor/register"
+	"ike/internal/espane"
 	"ike/internal/host"
 	"ike/internal/httppane"
 	"ike/internal/imgview"
@@ -56,6 +57,11 @@ const archiveKeyBase = "archive"
 // dataKeyBase is the key of the first data viewer; later ones append ":N"
 // (#1764).
 const dataKeyBase = "data"
+
+// esKeyBase prefixes Elasticsearch console keys (#1927): one console per
+// configured endpoint, keyed "es:<endpoint>" — the endpoint name is the
+// identity, so no counter is minted.
+const esKeyBase = "es"
 
 // VCSKey is the stable key of the singleton VCS tool window (Roadmap 0330).
 const VCSKey = "vcs"
@@ -469,6 +475,29 @@ func (r *Registry) AddDataKey(key, path string) *Instance {
 	return inst
 }
 
+// AddES creates (or returns) the Elasticsearch console instance for the named
+// endpoint, keyed "es:<endpoint>" (#1927) — one console per cluster, so
+// opening it twice refocuses rather than duplicates. The cluster connect
+// happens in the pane's background Init, never here.
+func (r *Registry) AddES(endpoint string) string {
+	key := esKeyBase + ":" + endpoint
+	if _, ok := r.instances[key]; ok {
+		return key
+	}
+	inst := &Instance{key: key, kind: KindES, cfg: r.cfg, pal: r.pal}
+	inst.es = espane.New(key, endpoint, r.pal)
+	r.put(inst)
+	return key
+}
+
+// AddESKey recreates a console under an exact key, used by layout restore.
+func (r *Registry) AddESKey(key, endpoint string) *Instance {
+	inst := &Instance{key: key, kind: KindES, cfg: r.cfg, pal: r.pal}
+	inst.es = espane.New(key, endpoint, r.pal)
+	r.put(inst)
+	return inst
+}
+
 // AddDiff creates a diff viewer instance comparing the files at leftPath and
 // rightPath, returning the new instance's key ("diff", then "diff:N").
 // Contents arrive afterwards via the diff model's SetContents.
@@ -807,6 +836,14 @@ func (r *Registry) mintContentKey(kind Kind) string {
 // paneIdentity conventions (diff panes use all four, the others just path).
 // It returns nil for kinds that cannot live in tabs.
 func (r *Registry) NewContentPane(kind Kind, path, path2, rev, rev2 string) *Instance {
+	if kind == KindES {
+		// The console's identity is its endpoint name (carried as path), like
+		// the HTTP viewer's singleton key — no counter to mint (#1927).
+		key := esKeyBase + ":" + path
+		inst := &Instance{key: key, kind: KindES, cfg: r.cfg, pal: r.pal}
+		inst.es = espane.New(key, path, r.pal)
+		return inst
+	}
 	key := r.mintContentKey(kind)
 	if key == "" {
 		return nil
@@ -846,6 +883,11 @@ func (r *Registry) AddContentPaneFrom(inst *Instance) (string, bool) {
 		return "", false
 	}
 	key := r.mintContentKey(inst.kind)
+	if inst.kind == KindES {
+		// Per-endpoint identity, like the HTTP singleton: refused while a
+		// dedicated console for that cluster already exists (#1927).
+		key = esKeyBase + ":" + inst.ES().Endpoint()
+	}
 	if key == "" || r.Has(key) {
 		return "", false
 	}

@@ -86,6 +86,10 @@ func contentIdentity(inst *pane.Instance) (paneIdentity, bool) {
 	case pane.KindData:
 		// Path names the browsed database; restore re-opens it (#1764).
 		return paneIdentity{Kind: "data", Path: inst.Data().Path()}, true
+	case pane.KindES:
+		// Path names the configured endpoint; restore reconnects to the
+		// cluster in the background (#1927).
+		return paneIdentity{Kind: "es", Path: inst.ES().Endpoint()}, true
 	case pane.KindDiff:
 		// Path/Path2 name the compared files; Rev/Rev2 mark revision-
 		// backed sides so restore re-reads blobs instead of files (#508).
@@ -110,6 +114,8 @@ func contentKindFromString(s string) (pane.Kind, bool) {
 		return pane.KindArchive, true
 	case "data":
 		return pane.KindData, true
+	case "es":
+		return pane.KindES, true
 	case "diff":
 		return pane.KindDiff, true
 	case "http":
@@ -247,7 +253,7 @@ func isTerminalKey(key string) bool {
 // ("preview", "diff:2", …) — an editor identity may live under one when a
 // viewer pane was converted into a tab host (#1778).
 func isContentHostKey(key string) bool {
-	for _, base := range []string{"preview", "image", "diff", "archive", "data", "http"} {
+	for _, base := range []string{"preview", "image", "diff", "archive", "data", "es", "http"} {
 		if key == base || strings.HasPrefix(key, base+":") {
 			return true
 		}
@@ -274,7 +280,7 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 		switch inst.Kind() {
 		case pane.KindExplorer:
 			ids[key] = paneIdentity{Kind: "explorer"}
-		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindDiff:
+		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindES, pane.KindDiff:
 			// Viewer panes persist their per-kind identity — the shared
 			// convention content tabs reuse (#1778).
 			if id, ok := contentIdentity(inst); ok {

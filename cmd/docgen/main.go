@@ -92,6 +92,31 @@ func main() {
 // the [format.<languageID>] overrides behind the Formatters page). Keyed by
 // the page title; pages not listed keep the generic interactive-editor note.
 var customPageProse = map[string]string{
+	"Elasticsearch": "The **Elasticsearch** page manages the ES console's cluster endpoints\n" +
+		"(#1927), persisted as the `[[elasticsearch.endpoints]]` table array:\n" +
+		"\n" +
+		"| Key | Action |\n" +
+		"| --- | --- |\n" +
+		"| `a` | add an endpoint: `name`, `url`, optional `username`/`password` (basic auth) or `api key` |\n" +
+		"| `enter` | edit the selected endpoint |\n" +
+		"| `d` | delete the selected endpoint (confirms) |\n" +
+		"| `s` | the layer writes land in: user ↔ project |\n" +
+		"\n" +
+		"The form rejects a URL without an http(s) scheme and host, duplicate names,\n" +
+		"and mixing basic auth with an API key. Each configured endpoint appears in\n" +
+		"the command palette as `ES Console: <name>`, opening a read-only console —\n" +
+		"index sidebar, paged hit grid, per-index Query-DSL buffers with\n" +
+		"mapping-aware completion. The same entries can be written by hand:\n" +
+		"\n" +
+		"```toml\n" +
+		"[[elasticsearch.endpoints]]\n" +
+		"name = \"prod\"\n" +
+		"url = \"https://es.example.com:9200\"\n" +
+		"api_key = \"...\"        # or username/password for basic auth\n" +
+		"```\n" +
+		"\n" +
+		"Like every TOML list the endpoint list replaces across layers: a\n" +
+		"project-scope `[[elasticsearch.endpoints]]` table hides the user-scope one.\n",
 	"Formatters": "The **Formatters** page lists each language's reformat command, the config\n" +
 		"layer supplying it and whether the binary is installed — and it edits them:\n" +
 		"\n" +

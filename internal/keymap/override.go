@@ -32,6 +32,7 @@ var contextNames = map[string]Context{
 	"breakpoints": Breakpoints,
 	"archive":     Archive,
 	"data":        Data,
+	"es":          ES,
 	"tests":       Tests,
 }
 
@@ -42,7 +43,7 @@ var contextNames = map[string]Context{
 func ContextNames() []string {
 	return []string{
 		"global", "editor", "explorer", "palette", "diff",
-		"archive", "breakpoints", "data", "debug", "http",
+		"archive", "breakpoints", "data", "debug", "es", "http",
 		"preview", "problems", "structure", "terminal", "tests", "usages", "vcs",
 	}
 }
