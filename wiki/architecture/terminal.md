@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
 timestamp: 2026-08-12T12:00:00Z
@@ -711,8 +711,9 @@ path — super is not xterm-encodable.
   screen and scrollback via the canonical `CSI 2J` + `CSI 3J` pair (2J alone
   pushes the visible lines *into* the scrollback — the xterm behaviour) and
   asks the shell to repaint its prompt with the ctrl+l convention.
-- The Tools menu carries "Terminal" (toggle) and "New Terminal"; all three
-  commands are palette-reachable.
+- **`terminal.ssh`** opens the SSH host picker (see below).
+- The Tools menu carries "Terminal" (toggle), "New Terminal", "New Terminal
+  Tab" and "SSH Host…"; all commands are palette-reachable.
 - **Titles**: the shell's OSC 0/2 reports (the running command) append to
   the pane title — `TERMINAL — zsh · goproj · npm run build`. Inside OSC
   strings the raw byte `0x9C` (8-bit C1 ST) is kept as payload
@@ -721,6 +722,44 @@ path — super is not xterm-encodable.
   titles), and dispatching on it would split the rune and print the rest of
   the title into the grid as ghost text. Only BEL and `ESC \` terminate,
   matching xterm/Ghostty.
+
+## SSH host profiles (#1938)
+
+`terminal.ssh` ("SSH Host…", palette and the Tools menu) opens a fuzzy host
+picker and connects a terminal to the pick — remote work without typing
+`ssh <host>` into a fresh shell every time.
+
+- **Host list** (`internal/sshconf`): the `Host` aliases of `~/.ssh/config`,
+  in file order, plus the files it pulls in via `Include` (glob-expanded, `~`
+  and paths relative to the including file resolved, cycles and >8 levels of
+  nesting cut off). Wildcard and negated patterns (`Host *`, `web-?`,
+  `!secret`) name no connectable machine and are skipped; a `Host` line with
+  several aliases contributes all of them, a repeated alias keeps its first
+  block. `HostName`/`User`/`Port` are read for the picker's detail column
+  only (`ci@build01.example.com:2222`) — matching (`Match` blocks, per-host
+  options, jump hosts, identities) stays ssh's job, IKE never re-implements
+  it. Parsing is a keyword scan: comments stripped, `Key=value` and
+  `Key value` both accepted, quotes trimmed.
+- **Extra hosts**: `terminal.ssh_hosts` (Settings UI, comma-separated) lists
+  aliases no ssh config declares. They are appended after the parsed ones;
+  an alias both sources know stays the ssh-config entry, which carries the
+  detail line. An alias reaches ssh as one argument, so an entry containing
+  whitespace is rejected while typing in the Settings form and dropped with a
+  config diagnostic when it comes from the file.
+- **Degrading**: a missing, unreadable or wildcard-only config is not an
+  error. The picker opens empty and its placeholder is the hint — *"No SSH
+  hosts — add them to ~/.ssh/config or the terminal.ssh_hosts setting"*.
+- **The connected terminal** (`internal/app/ssh_picker.go`): the pick spawns
+  the **command session** `ssh <alias>` (no wrapping shell, the alias
+  verbatim so nothing from the config is duplicated onto the command line),
+  labelled `ssh: <alias>` — the label is what the tab and pane title show, so
+  several remote terminals stay distinguishable. Placement follows
+  `terminal.newTab`: a tab of the active editor pane when there is one,
+  otherwise a fresh split at the adaptive zone like `terminal.new`.
+- **Exit**: ordinary command-session semantics (#576) — ssh ending leaves the
+  pane open on `[process exited with code N]`, so a refused connection's
+  error stays readable; the pane closes with `ctrl+w` like any other. Layout
+  restore re-spawns it as a plain shell, as it does for every terminal.
 
 ## Toolchain environment activation (#98, #652)
 
