@@ -88,6 +88,7 @@ bring their own.
 | Run HTTP Request | `http.run` | `ctrl+f9` | — | everywhere |
 | Select HTTP Environment | `http.selectEnvironment` | — | — | everywhere |
 | Show Stored HTTP Response | `http.showResponse` | `ctrl+shift+f9` | — | everywhere |
+| GitHub Issues | `issues.toggle` | — | — | everywhere |
 | Import JetBrains Keymap XML… | `keymap.importJetBrains` | — | — | everywhere |
 | Markdown Preview | `markdown.preview` | `cmd+alt+m` | — | everywhere |
 | Open Menu Bar | `menu.open` | `f10` | — | everywhere |

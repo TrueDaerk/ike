@@ -53,6 +53,8 @@ func singletonSlotKey(kind string) string {
 		return pane.ProblemsKey
 	case "tests":
 		return pane.TestsKey
+	case "issues":
+		return pane.IssuesKey
 	case "structure":
 		return pane.StructureKey
 	case "usages":

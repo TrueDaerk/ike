@@ -294,6 +294,8 @@ func groupTitle(label string) string {
 		return "Breakpoints"
 	case "tests":
 		return "Test Results"
+	case "issues":
+		return "GitHub Issues"
 	case "archive":
 		return "Archive"
 	case "data":

@@ -45,7 +45,9 @@ import (
 	"ike/internal/esq"
 	"ike/internal/explorer"
 	"ike/internal/finder"
+	"ike/internal/forge"
 	"ike/internal/format"
+	"ike/internal/ghissues"
 	"ike/internal/help"
 	"ike/internal/highlight"
 	"ike/internal/histories"
@@ -412,8 +414,11 @@ type Model struct {
 	// (#1911); lastTestRun remembers the last captured test run for the
 	// re-run actions and testRunSeq drops a stale run's completion.
 	testsReturnFocus string
-	lastTestRun      *testRunState
-	testRunSeq       int
+	// issuesReturnFocus is the same dance for the GitHub Issues tool window
+	// (#1934).
+	issuesReturnFocus string
+	lastTestRun       *testRunState
+	testRunSeq        int
 	// rawDiags caches each path's last published, unfiltered diagnostic set;
 	// diagIgnore/diagIgnoreRaw are the compiled lsp.diagnostics_ignore rules
 	// and their source strings (#1259). Publishes filter through the rules
@@ -1334,6 +1339,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below as the empty singleton panel (#1024; fix #1157)
 		} else if ids[key].Kind == "tests" {
 			continue // restored below as the empty singleton panel (#1911)
+		} else if ids[key].Kind == "issues" {
+			continue // restored below as the empty singleton panel (#1934)
 		} else if ids[key].Kind == "structure" {
 			continue // restored below as the empty singleton panel (#1025)
 		} else if ids[key].Kind == "usages" {
@@ -1496,6 +1503,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// The Test Results panel restores empty in its saved slot
 			// (#1911): the next captured test run re-fills it.
 			panes.AddTests()
+			continue
+		}
+		if id := ids[key]; id.Kind == "issues" {
+			// The GitHub Issues panel restores empty in its saved slot
+			// (#1934) with its refresh armed; 'r' re-fetches the listing.
+			panes.Get(panes.AddIssues()).Issues().SetRefresh(forge.RefreshCmd("."))
 			continue
 		}
 		if id := ids[key]; id.Kind == "http" {
@@ -2424,6 +2437,7 @@ var terminalGlobalCommands = map[string]bool{
 	"vcs.panel":             true,
 	"problems.toggle":       true,
 	"tests.toggle":          true,
+	"issues.toggle":         true,
 	"structure.toggle":      true,
 	"notifications.history": true,
 	// #997: tab switching stays reachable from a focused terminal/tool pane
@@ -4098,6 +4112,28 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// tests.toggle (#1911): same state machine for the Test Results pane.
 		m.toggleTestsPanel()
 		return m, nil
+
+	case IssuesToggleMsg:
+		// issues.toggle (#1934): same state machine for the GitHub Issues
+		// pane; opening returns the first fetch command.
+		return m, m.toggleIssuesPanel()
+
+	case forge.IssuesMsg:
+		// A finished issue/PR fetch (#1934) lands in the pane.
+		m.fillIssuesPanel(msg)
+		return m, nil
+
+	case ghissues.StartWorkRequestMsg:
+		// The pane's 's' action (#1934): branch issue/<n>-<slug> off an
+		// up-to-date default branch.
+		return m, forge.StartWorkCmd(".", msg.Number, msg.Title)
+
+	case forge.StartWorkDoneMsg:
+		return m, m.finishStartWork(msg)
+
+	case ghissues.OpenURLMsg:
+		// The pane's 'o' action (#1934): the issue page in the browser.
+		return m, m.openIssueURL(msg.URL)
 
 	case BreakpointsToggleMsg:
 		// debug.breakpoints (#1377): same state machine for the Breakpoints
@@ -6499,7 +6535,7 @@ func (m Model) viewerSplitTarget() string {
 		switch inst.Kind() {
 		case pane.KindExplorer, pane.KindVCS, pane.KindDebug, pane.KindProblems,
 			pane.KindStructure, pane.KindUsages, pane.KindHTTP, pane.KindBreakpoints,
-			pane.KindTests:
+			pane.KindTests, pane.KindIssues:
 			return false
 		}
 		return true
@@ -7682,6 +7718,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Tests().Wheel(lines)
 			}
+		case pane.KindIssues:
+			// The wheel scrolls the issue list or detail view (#1934).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Issues().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Issues().Wheel(lines)
+			}
 		case pane.KindData:
 			// The wheel scrolls the data viewer's focused region (#1788) —
 			// the table list or the grid's rows; the horizontal wheel and
@@ -8690,6 +8734,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// moves the scroll focus), a double-click jumps to the test.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Tests().Click(localX, localY)
+		}
+	case pane.KindIssues:
+		// Issue-list clicks (#1934): a click selects, a double-click opens
+		// the issue's detail view.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Issues().Click(localX, localY)
 		}
 	case pane.KindBreakpoints:
 		// Breakpoints-list clicks (#1377): a click selects, the glyph cell
@@ -9748,6 +9798,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title = "PROBLEMS"
 		case pane.KindTests:
 			title = "TESTS"
+		case pane.KindIssues:
+			title = "ISSUES"
 		case pane.KindBreakpoints:
 			title = "BREAKPOINTS"
 		case pane.KindStructure:

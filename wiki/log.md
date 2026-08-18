@@ -1,5 +1,25 @@
 # Log
 
+## 2026-08-18 (GitHub Issues tool window: list/filter, detail, start work, PR state, #1934)
+
+- **Forge layer** (`internal/forge`): gh-CLI binding in the internal/vcs
+  mold — `RefreshCmd` fetches open issues + PRs via `gh … --json` with
+  setup/error separation (no gh, no GitHub remote → explanatory state;
+  offline → transient error), `PRForIssue` joins PRs by the
+  `issue/<n>-…` head-branch convention with a folded CI CheckState,
+  `BranchName` derives the 50-char capped slug, `StartWorkCmd` branches
+  `issue/<number>-<slug>` off a fetched default branch (dirty worktree
+  refused with a clear message, fetch failure degrades to the local
+  default with a warning). Every subprocess is deadline-bounded.
+- **Issues pane** (`internal/ghissues`, wiring
+  `internal/app/issues_panel.go`): singleton tool window (`issues.toggle`,
+  Tools menu, context/slot key `issues`) listing number, title, colored
+  label chips, assignees and linked-PR state; `/` fuzzy filter (live,
+  score-ranked), `l` label-filter cycle, enter/double-click opens the
+  glamour-rendered detail view, `s` starts work (toast + VCS refresh),
+  `o` opens the issue in the browser, `r` re-fetches. Persisted as
+  `{kind: "issues"}`, restored empty with refresh armed.
+
 ## 2026-08-18 (Elasticsearch console: index sidebar, Query-DSL buffers, hit grid, #1927)
 
 - **ES console pane** (`internal/espane`, backend `internal/esq`, wiring

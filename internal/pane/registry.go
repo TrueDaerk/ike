@@ -14,6 +14,7 @@ import (
 	"ike/internal/diff"
 	"ike/internal/editor/register"
 	"ike/internal/espane"
+	"ike/internal/ghissues"
 	"ike/internal/host"
 	"ike/internal/httppane"
 	"ike/internal/imgview"
@@ -86,6 +87,9 @@ const BreakpointsKey = "breakpoints"
 
 // TestsKey is the stable key of the singleton Test Results tool window (#1911).
 const TestsKey = "tests"
+
+// IssuesKey is the stable key of the singleton GitHub Issues tool window (#1934).
+const IssuesKey = "issues"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -618,6 +622,18 @@ func (r *Registry) AddTests() string {
 	inst.tr = testresults.New(r.pal)
 	r.put(inst)
 	return TestsKey
+}
+
+// AddIssues creates the singleton GitHub Issues tool window under IssuesKey
+// (#1934) and returns its key; a second call returns the existing key.
+func (r *Registry) AddIssues() string {
+	if _, ok := r.instances[IssuesKey]; ok {
+		return IssuesKey
+	}
+	inst := &Instance{key: IssuesKey, kind: KindIssues, cfg: r.cfg, pal: r.pal}
+	inst.gi = ghissues.New(r.pal)
+	r.put(inst)
+	return IssuesKey
 }
 
 // AddBreakpoints creates the singleton Breakpoints tool window under
