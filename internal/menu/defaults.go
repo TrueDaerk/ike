@@ -81,6 +81,7 @@ func Defaults() []Menu {
 			{Title: "Popup Terminal", Command: "terminal.popup"},
 			{Title: "New Terminal", Command: "terminal.new"},
 			{Title: "New Terminal Tab", Command: "terminal.newTab"},
+			{Title: "Regex Tester…", Command: "tools.regexTester"},
 			{Title: "Restart Language Servers", Command: "lsp.restart"},
 			{Title: "Plugins", Command: "tools.plugins"},
 		}},
