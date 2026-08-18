@@ -104,9 +104,15 @@ func findDuckDB() (string, error) {
 // CLI's JSON output. A non-zero exit carries DuckDB's own message (locked
 // database, unreadable file, storage version mismatch).
 func (c duckCLI) query(dbPath, sql string) ([]byte, error) {
+	return c.queryCtx(context.Background(), dbPath, sql)
+}
+
+// queryCtx is query under a caller's context: cancelling it kills the
+// process, which is how the pane cancels a column profile (#1940) mid-scan.
+func (c duckCLI) queryCtx(ctx context.Context, dbPath, sql string) ([]byte, error) {
 	// -readonly is the CLI spelling of ACCESS_MODE=READ_ONLY: the file is
 	// never written, and DuckDB refuses the open rather than upgrading it.
-	return c.run([]string{"-readonly", "-json", dbPath, sql})
+	return c.runCtx(ctx, []string{"-readonly", "-json", dbPath, sql})
 }
 
 // queryMem runs one SQL statement without opening a database file, against
@@ -115,18 +121,33 @@ func (c duckCLI) query(dbPath, sql string) ([]byte, error) {
 // it, and DuckDB refuses `-readonly` on an in-memory database — there is no
 // file for the flag to protect.
 func (c duckCLI) queryMem(sql string) ([]byte, error) {
-	return c.run([]string{"-json", ":memory:", sql})
+	return c.queryMemCtx(context.Background(), sql)
+}
+
+// queryMemCtx is queryMem under a caller's context, for the cancelable
+// Parquet profile (#1940).
+func (c duckCLI) queryMemCtx(ctx context.Context, sql string) ([]byte, error) {
+	return c.runCtx(ctx, []string{"-json", ":memory:", sql})
 }
 
 // run executes one CLI invocation and returns its stdout.
 func (c duckCLI) run(args []string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), duckTimeout)
+	return c.runCtx(context.Background(), args)
+}
+
+// runCtx executes one CLI invocation under parent, bounded by duckTimeout on
+// top of whatever deadline the caller brought.
+func (c duckCLI) runCtx(parent context.Context, args []string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(parent, duckTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, c.bin, args...)
 	var out, errBuf bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errBuf
 	cmd.Stdin = nil // never wait for input: an interactive prompt would hang
 	err := cmd.Run()
+	if parent.Err() != nil {
+		return nil, parent.Err() // the caller cancelled: not a duckdb failure
+	}
 	if ctx.Err() == context.DeadlineExceeded {
 		return nil, fmt.Errorf("duckdb timed out after %s", duckTimeout)
 	}
@@ -567,4 +588,53 @@ func parseInt64(s string) int64 {
 // quoteString quotes a value as a SQL string literal.
 func quoteString(s string) string {
 	return `'` + strings.ReplaceAll(s, `'`, `''`) + `'`
+}
+
+// Profile aggregates one column (#1940) with two CLI invocations: the row of
+// scalars and the frequency ranking, both over the same subquery the grid's
+// filter builds. The SQL is type-agnostic (TRY_CAST decides what is a
+// number), so no DESCRIBE round trip is needed and a column of any DuckDB
+// type profiles. ctx cancels the invocation with the process.
+func (s *duckSource) Profile(ctx context.Context, table, column, clause string) (Profile, error) {
+	clause = normalizeClause(clause)
+	if clause != "" {
+		if err := checkClause(clause); err != nil {
+			return Profile{}, err
+		}
+	}
+	base := `SELECT * FROM ` + quoteIdent(table)
+	return duckProfile(ctx, func(sql string) ([]byte, error) {
+		return s.cli.queryCtx(ctx, s.path, sql)
+	}, base, table, column, clause)
+}
+
+// duckProfile runs the two profile statements through one invoker and folds
+// the JSON back into a Profile. The DuckDB backend passes its read-only
+// database invocation, the Parquet filter path its in-memory one — the SQL
+// and the decoding are the same on both.
+func duckProfile(ctx context.Context, run func(string) ([]byte, error), base, table, column, clause string) (Profile, error) {
+	out, err := run(profileScalarSQL(base, clause, column, duckProfileDialect))
+	if err != nil {
+		return Profile{}, err
+	}
+	_, rows, err := decodeDuckRows(out)
+	if err != nil {
+		return Profile{}, err
+	}
+	if len(rows) == 0 {
+		return Profile{}, fmt.Errorf("cannot profile %q", column)
+	}
+	sc := profileScalarsFromCells(rows[0])
+	if err := ctx.Err(); err != nil {
+		return Profile{}, err
+	}
+	out, err = run(profileTopSQL(base, clause, column, duckProfileDialect))
+	if err != nil {
+		return Profile{}, err
+	}
+	_, topRows, err := decodeDuckRows(out)
+	if err != nil {
+		return Profile{}, err
+	}
+	return sc.build(table, column, clause, topValuesFromCells(topRows)), nil
 }

@@ -91,6 +91,11 @@ type Source interface {
 	// the result. An object that cannot be counted (a view over a dropped
 	// table) reports the engine's error.
 	Count(table, clause string) (int64, error)
+	// Profiler is the column profile (#1940): the cheap aggregates of one
+	// column, under the same filter clause the grid shows. Like Count it is
+	// a scan on every engine, so the pane runs it off the UI thread and
+	// cancels it through the context when the popup closes.
+	Profiler
 	// Schema returns the DDL of the named table or view, as the engine
 	// stores it.
 	Schema(table string) (string, error)

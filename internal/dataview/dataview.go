@@ -95,6 +95,12 @@ type Model struct {
 	fErr     error
 	hl       highlight.Theme
 
+	// Column profile (#1940): prof is the open popup (nil — closed), profSeq
+	// stamps each profile so a result landing after its popup closed, or
+	// after another column was asked for, is dropped.
+	prof    *profileState
+	profSeq int
+
 	// Mouse state (#1788): loading a table by mouse needs a second click on
 	// the same sidebar row within doubleClickWindow; now is swappable in
 	// tests.
@@ -133,6 +139,7 @@ func (m *Model) Err() error { return m.err }
 // than leaked (#1795).
 func (m *Model) Close() {
 	m.closed = true
+	m.closeProfile() // a running profile must not outlive its pane (#1940)
 	if m.src != nil {
 		m.src.Close()
 		m.src = nil
@@ -231,6 +238,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.handleKey(msg)
 	case ResultMsg:
 		return m.applyResult(msg)
+	case ProfileMsg:
+		// data.columnProfile from the palette (#1940): the same action P runs.
+		return m.startProfile()
 	}
 	return nil
 }
@@ -252,6 +262,11 @@ func (m *Model) keyAction(msg tea.KeyPressMsg) tea.Cmd {
 		m.filterKey(msg)
 		return nil
 	}
+	// The profile popup owns it likewise (#1940): paging a grid the popup
+	// covers would be blind navigation.
+	if m.prof != nil {
+		return m.profileKey(msg)
+	}
 	switch msg.String() {
 	case "tab":
 		if m.region == regionSidebar {
@@ -267,8 +282,7 @@ func (m *Model) keyAction(msg tea.KeyPressMsg) tea.Cmd {
 		m.sidebarKey(msg)
 		return nil
 	}
-	m.gridKey(msg)
-	return nil
+	return m.gridKey(msg)
 }
 
 // sidebarKey navigates the table list; enter/l loads the selection and moves
@@ -290,8 +304,9 @@ func (m *Model) sidebarKey(msg tea.KeyPressMsg) {
 
 // gridKey navigates the loaded page: j/k rows (crossing a page edge fetches
 // the neighbour page), h/l columns, pgup/pgdown a screenful, n/p (ctrl+f /
-// ctrl+b) whole DB pages, g/G first/last page.
-func (m *Model) gridKey(msg tea.KeyPressMsg) {
+// ctrl+b) whole DB pages, g/G first/last page, P the column profile — the one
+// grid key with a command behind it (#1940).
+func (m *Model) gridKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "j", "down":
 		m.rowStep(1)
@@ -324,8 +339,13 @@ func (m *Model) gridKey(msg tea.KeyPressMsg) {
 		m.lastPage()
 	case "/":
 		m.startFilter()
+	case "P":
+		cmd := m.startProfile()
+		m.clampScroll()
+		return cmd
 	}
 	m.clampScroll()
+	return nil
 }
 
 // rowStep moves the row cursor, fetching the adjacent page when the cursor
@@ -451,6 +471,11 @@ func (m *Model) View() string {
 		b.WriteString("\n")
 	}
 	b.WriteString(m.footer(pal))
+	// The column profile floats over the pane's own body (#1940), so the grid
+	// behind it keeps its geometry and comes back untouched on esc.
+	if m.prof != nil {
+		return m.compositeProfile(b.String(), pal)
+	}
 	return b.String()
 }
 
@@ -738,7 +763,11 @@ func (m *Model) footer(pal *theme.Palette) string {
 			status = fmt.Sprintf("rows %d–%d of %s", first, last, countText(m.page.Total, m.totalExact))
 		}
 	}
-	hints := "tab switch · enter open · j/k row · h/l column · pgup/pgdn screen · n/p page · / filter · s schema"
+	if m.prof != nil {
+		return lipgloss.NewStyle().Faint(true).Render(
+			clipTo(" column profile · esc closes · y copies", m.w))
+	}
+	hints := "tab switch · j/k row · h/l column · pgup/pgdn screen · n/p page · / filter · P profile · s schema"
 	line := " " + status
 	if status != "" {
 		line += " · "

@@ -2,6 +2,7 @@ package datasrc
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"fmt"
 	"io"
@@ -52,13 +53,13 @@ func OpenSQLite(path string) (Source, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Two connections: one carries the pane's page fetches, the other the
-	// background row count (#1795) — a COUNT(*) over a ten-million-row table
-	// runs for seconds, and with a single connection every page fetch would
-	// queue behind it and hang the pane it was made asynchronous for. Two is
-	// also the ceiling: the pane runs at most one count at a time, and more
-	// open handles on one file buy nothing.
-	db.SetMaxOpenConns(2)
+	// Three connections, one per concurrent job the pane runs: the page
+	// fetches, the background row count (#1795), and the column profile
+	// (#1940). A COUNT(*) or a profile over a ten-million-row table runs for
+	// seconds, and sharing one connection would queue every page fetch behind
+	// it and hang the pane both were made asynchronous for. Three is also the
+	// ceiling: the pane runs at most one count and one profile at a time.
+	db.SetMaxOpenConns(3)
 	s := &sqliteSource{db: db}
 	if _, err := s.Tables(); err != nil {
 		db.Close()
@@ -280,4 +281,79 @@ func renderValue(v any) Cell {
 	default:
 		return Cell{Text: fmt.Sprint(x)}
 	}
+}
+
+// Profile aggregates one column (#1940). Everything is SQL: one row of
+// scalars and one GROUP BY ranking the most frequent values, both over the
+// same subquery the grid's filter builds, so a profile under a filter
+// describes exactly the rows the grid shows. Both statements run on the
+// read-only handle under ctx, which is how the pane cancels a profile of a
+// huge table when the popup closes.
+func (s *sqliteSource) Profile(ctx context.Context, table, column, clause string) (Profile, error) {
+	clause = normalizeClause(clause)
+	if clause != "" {
+		if err := checkClause(clause); err != nil {
+			return Profile{}, err
+		}
+	}
+	base := `SELECT * FROM ` + quoteIdent(table)
+	row := s.db.QueryRowContext(ctx, profileScalarSQL(base, clause, column, sqliteProfileDialect))
+	sc, err := scanProfileRow(row)
+	if err != nil {
+		return Profile{}, err
+	}
+	rows, err := s.db.QueryContext(ctx, profileTopSQL(base, clause, column, sqliteProfileDialect))
+	if err != nil {
+		return Profile{}, err
+	}
+	defer rows.Close()
+	top, err := scanTopRows(rows)
+	if err != nil {
+		return Profile{}, err
+	}
+	return sc.build(table, column, clause, top), nil
+}
+
+// scanProfileRow reads the one-row scalar result of profileScalarSQL from a
+// database/sql row. Every aggregate but count(*) is NULL over an empty
+// result set, hence the nullable scan targets.
+func scanProfileRow(row *sql.Row) (profileScalars, error) {
+	var (
+		s                                profileScalars
+		nonNull, empties, distinct, nums sql.NullInt64
+		minV, maxV                       any
+		mean                             sql.NullFloat64
+		minLen, maxLen                   sql.NullInt64
+	)
+	if err := row.Scan(&s.rows, &nonNull, &empties, &distinct, &minV, &maxV,
+		&nums, &mean, &minLen, &maxLen); err != nil {
+		return profileScalars{}, err
+	}
+	s.nonNull, s.empties, s.distinct, s.nums = nonNull.Int64, empties.Int64, distinct.Int64, nums.Int64
+	s.min, s.max = renderValue(minV), renderValue(maxV)
+	s.mean, s.hasMean = mean.Float64, mean.Valid
+	s.minLen, s.maxLen = minLen.Int64, maxLen.Int64
+	s.hasLen = minLen.Valid && maxLen.Valid
+	return s, nil
+}
+
+// scanTopRows reads the frequency ranking of profileTopSQL.
+func scanTopRows(rows *sql.Rows) ([]TopValue, error) {
+	var top []TopValue
+	for rows.Next() {
+		var (
+			v      any
+			isNull int64
+			n      int64
+		)
+		if err := rows.Scan(&v, &isNull, &n); err != nil {
+			return nil, err
+		}
+		cell := renderValue(v)
+		if isNull == 1 {
+			cell = Cell{Null: true}
+		}
+		top = append(top, TopValue{Value: cell, Count: n})
+	}
+	return top, rows.Err()
 }

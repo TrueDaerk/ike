@@ -320,6 +320,42 @@ func (m *Model) svVerticalCol(target int) int {
 	return col
 }
 
+// SVProfileTarget describes what a column profile (#1940) of the caret's
+// column would cover in a table-rendered buffer: which field it is, what it
+// is called, how the buffer separates fields, and the raw lines to scan. It
+// is the whole seam — the profiling itself belongs to internal/datasrc, which
+// scans these lines the same way it scans a Parquet column.
+//
+// ok is false for every buffer the table rendering does not apply to, which
+// is what keeps the profile command out of an ordinary file.
+type SVProfileTarget struct {
+	// Index is the zero-based field the caret sits in, Name its header name
+	// or "column N" when the first row is not a header. Header says whether
+	// the first line is one, so the scan can skip it.
+	Index  int
+	Name   string
+	Sep    rune
+	Lines  []string
+	Header bool
+}
+
+// SVProfileTarget returns the caret's column as a profiling target.
+func (m Model) SVProfileTarget() (SVProfileTarget, bool) {
+	idx, ok := m.svCursorColumn()
+	if !ok {
+		return SVProfileTarget{}, false
+	}
+	t := SVProfileTarget{Index: idx, Sep: m.svLayout().sep, Lines: m.buf.Lines()}
+	t.Name = "column " + strconv.Itoa(idx+1)
+	if names, ok := sv.Header(m.buf.Line(0), t.Sep); ok {
+		t.Header = true
+		if idx < len(names) {
+			t.Name = names[idx]
+		}
+	}
+	return t, true
+}
+
 // SVColumnLabel is the status-line label for the caret's column in a
 // table-rendered buffer (#1659): "column 3: qty" when the first row reads like
 // a header, "column 3" when it does not (or has fewer fields). Empty for every

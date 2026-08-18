@@ -28,9 +28,10 @@ import (
 // open, or an exact row count. The payload is the pane's own business — the
 // root model only routes it by Key, and discards it when no pane matches.
 type ResultMsg struct {
-	Key   string
-	open  *openResult
-	count *countResult
+	Key     string
+	open    *openResult
+	count   *countResult
+	profile *profileResult
 }
 
 // Discard releases what an unrouted result holds. Only the open carries a
@@ -110,6 +111,8 @@ func (m *Model) applyResult(msg ResultMsg) tea.Cmd {
 		return m.applyOpen(msg.open)
 	case msg.count != nil:
 		return m.applyCount(msg.count)
+	case msg.profile != nil:
+		return m.applyProfile(msg.profile)
 	}
 	return nil
 }
