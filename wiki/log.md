@@ -1,5 +1,19 @@
 # Log
 
+## 2026-08-18 (Python secret masking covers literal spans only, #1930)
+
+- **Secret masking in Python** (`plugins/languages/python/mask.go`) no longer
+  masks the whole right-hand side of a suspect assignment, only the string
+  literals inside it: `token = item["token"]`, `token = get_token()` and
+  `token = other` carry no mask at all, and
+  `PROXY_API_KEY = os.environ.get("PROXY_API_KEY", "8479…")` masks the fallback
+  alone. Quotes stay visible and the content masks (the JSON convention); a
+  literal that is not the whole value, is identifier-shaped and is itself
+  secret-suspect reads as a key name and stays readable; f-strings mask their
+  literal text and keep `{...}` interpolations; open triple-quoted values (PEM
+  keys) still mask whole across their lines. JSON and dotenv are unchanged —
+  their values are literals already.
+
 ## 2026-08-18 (DOM inspector tool pane, #1929)
 
 - **DOM inspector** (`internal/htmldom`, `internal/domview`,

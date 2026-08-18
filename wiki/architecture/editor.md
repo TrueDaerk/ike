@@ -2472,22 +2472,47 @@ per view and sticks like the other view toggles.
 A credential is just as exposed in source as in a `.env` file, so since #1811
 **Python assignments** mask too (`plugins/languages/python/mask.go`): the
 target names the value exactly as a dotenv key does, so `self.password =
-"hunter2"` or `API_TOKEN = os.environ["T"]` hides its right-hand side, decided
-by the same `secret.Suspect` — the same built-in tables and the same
-`secret_masking_keys` extensions and exemptions, which is what lets a
-configured `*timeout*` mask `self.timeout = 500`. Everything downstream is the
-dotenv behaviour unchanged: one fixed-width mask, the positional reveal, the
-view toggle and the `secret_masking=` conceal file rules. The recognition is
-deliberately shallow — one statement line, an identifier (dotted targets read
-by their last component) with an optional annotation, a bare `=` (never `==`
-or `+=`), and the value to the end of the statement. The value scan is
-quote-aware, so a trailing `#` comment stays readable while a `#` inside the
-value does not cut the mask short and leak its tail; a triple-quoted value
-masks on every line it spans, since hiding only the first line of a pasted
-private key hides nothing, and lines inside an ordinary docstring are prose,
-not assignments. The mask spans are emitted ahead of the other Python span
-families, so a masked value outranks the constant conceal (#1701) that would
-otherwise read it.
+"hunter2"` hides what follows, decided by the same `secret.Suspect` — the same
+built-in tables and the same `secret_masking_keys` extensions and exemptions,
+which is what lets a configured `*timeout*` mask `self.timeout = "500ms"`.
+Everything downstream is the dotenv behaviour unchanged: one fixed-width mask,
+the positional reveal, the view toggle and the `secret_masking=` conceal file
+rules. The recognition is deliberately shallow — one statement line, an
+identifier (dotted targets read by their last component) with an optional
+annotation, a bare `=` (never `==` or `+=`), and the value to the end of the
+statement. The value scan is quote-aware, so a trailing `#` comment stays
+readable while a `#` inside the value does not cut the mask short and leak its
+tail; a triple-quoted value masks on every line it spans, since hiding only the
+first line of a pasted private key hides nothing, and lines inside an ordinary
+docstring are prose, not assignments. The mask spans are emitted ahead of the
+other Python span families, so a masked value outranks the network-literal
+(#1653) or constant (#1701) hint that would otherwise read it.
+
+What the mask *covers*, though, is the string literals of that value and not
+the expression around them (#1930): only a literal can put a credential on
+screen, so `token = item["token"]`, `token = get_token()` and `token = other`
+carry no mask at all — masking a reference hides nothing and only trains
+people to switch masking off. `PROXY_API_KEY = os.environ.get("PROXY_API_KEY",
+"8479…")` masks the fallback alone; the environment variable's name is not a
+secret, and hiding it would destroy the line's meaning. As in JSON the quotes
+stay visible and the content masks, so the value still reads as a string.
+Telling a key name from a value is a heuristic: a literal that is **not** the
+whole right-hand side, is shaped like an identifier and is itself
+secret-suspect (`"PROXY_API_KEY"`, `"token"`, `"db.token"`) is a name being
+looked up and stays readable — which covers `os.environ.get`,
+`config["api_key"]` and `d.get("token")` at once — while everything else masks,
+keeping the `internal/secret` stance of erring towards hiding. A literal that
+*is* the whole value is the value whatever it says, so `password = "token"`
+masks, and a hyphenated or spaced literal (`"my-secret"`) is no key name and
+masks too. In an f-string the literal text masks and the `{...}`
+interpolations stay readable (`f"pw-{user}-x"` masks `pw-` and `-x`), since an
+interpolation is an expression like any other; a doubled `{{`/`}}` is an
+escaped brace and therefore text. A triple-quoted value left open still masks
+whole, quotes included, on every line it spans — a pasted PEM key has no
+closed content span to cover. **JSON** needs none of this: a JSON value is a
+literal already, and the producer has masked its content and not its
+surroundings since #1813. Dotenv values are raw text with no expression around
+them, so they mask whole as before.
 
 **JSON** (#1813) masks by the same rule, one producer down
 (`plugins/languages/json/mask.go`): in a member `"password": "hunter2"` the
