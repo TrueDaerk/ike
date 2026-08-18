@@ -273,6 +273,48 @@ func TestHTTPPaneReceivesSearchKeys(t *testing.T) {
 	}
 }
 
+// TestHTTPPanePasteRoutesIntoSearchPrompt is the #1955 regression guard: a
+// bracketed paste while the response pane's search prompt is open must reach
+// the query, exactly like the terminal scrollback search's #1882 fix.
+func TestHTTPPanePasteRoutesIntoSearchPrompt(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
+	m = out.(Model)
+	m.setFocus(pane.HTTPKey)
+
+	out, _ = m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	m = out.(Model)
+
+	out, _ = m.Update(tea.PasteMsg{Content: "ok"})
+	m = out.(Model)
+
+	q, open := m.httpPanel().SearchQuery()
+	if !open || q != "ok" {
+		t.Fatalf("pane search state after paste: query=%q open=%v", q, open)
+	}
+	if cur, total := m.httpPanel().MatchPosition(); cur != 1 || total == 0 {
+		t.Errorf("match position after paste: %d/%d", cur, total)
+	}
+}
+
+// TestHTTPPanePasteClosedPromptIsNoop covers paste while the response pane is
+// focused but the search prompt is closed (#1955): the pane has no other
+// editable field, so the paste must be a silent no-op, not fall through to
+// some other surface.
+func TestHTTPPanePasteClosedPromptIsNoop(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
+	m = out.(Model)
+	m.setFocus(pane.HTTPKey)
+
+	out, _ = m.Update(tea.PasteMsg{Content: "ok"})
+	m = out.(Model)
+
+	if q, open := m.httpPanel().SearchQuery(); q != "" || open {
+		t.Fatalf("paste with the prompt closed must not open it: query=%q open=%v", q, open)
+	}
+}
+
 // TestHTTPPaneMouseSelectionCopies covers the app wiring of #1266: a press,
 // motion and release over the response pane select text, and "y" hands it to
 // the clipboard through the pane's CopyMsg.

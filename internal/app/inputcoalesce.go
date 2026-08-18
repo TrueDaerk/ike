@@ -240,7 +240,16 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	inst := m.activeWS().Panes.FocusedInstance()
-	if inst == nil || inst.Kind() != pane.KindEditor {
+	if inst == nil {
+		return m, nil
+	}
+	if inst.Kind() == pane.KindHTTP {
+		// The response pane's "/" search prompt (#1955), same as the
+		// terminal's scrollback search (#1882): a closed prompt no-ops.
+		inst.HTTP().PasteText(text)
+		return m, nil
+	}
+	if inst.Kind() != pane.KindEditor {
 		return m, nil
 	}
 	ed := inst.Editor()

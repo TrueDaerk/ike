@@ -614,6 +614,25 @@ func (m *Model) searchKey(msg tea.KeyPressMsg) {
 	}
 }
 
+// PasteText routes a pasted block into the open search prompt (#1955),
+// mirroring the terminal scrollback search's #1882 fix: ui.PasteText
+// flattens the block into the query at the rune cursor, then the same
+// changed-branch searchKey runs on every edit — research() then
+// scrollToMatch() — keeps matches and viewport live. A closed prompt has no
+// text field to paste into, so the call is a no-op.
+func (m *Model) PasteText(text string) {
+	if !m.searching {
+		return
+	}
+	q, cur, changed := ui.PasteText(m.query, m.qcur, text)
+	if !changed {
+		return
+	}
+	m.query, m.qcur = q, cur
+	m.research()
+	m.scrollToMatch()
+}
+
 // clearSearch drops the prompt, the pattern and every match (Esc).
 func (m *Model) clearSearch() {
 	m.searching = false
