@@ -242,6 +242,12 @@ func defaults() *Config {
 			ResultsWindow: true, // parsed test runs open the Test Results tool (#1911)
 			AutoOpen:      true,
 		},
+		Scratch: Scratch{
+			// Hidden by default (#1932): users who don't want the strip lose
+			// no editor rows. 8 rows leave 4 scratches plus the hint line.
+			Panel:       false,
+			PanelHeight: 8,
+		},
 		Debug: Debug{
 			InlineValues: true, // paused locals annotate their lines (#1914)
 			PHP: DebugPHP{

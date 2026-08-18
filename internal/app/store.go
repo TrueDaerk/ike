@@ -328,6 +328,10 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			// The panel restores empty (#1025): the first buffer-change sync
 			// re-requests the symbols.
 			ids[key] = paneIdentity{Kind: "structure"}
+		case pane.KindScratch:
+			// The list rebuilds from the store on creation (#1932): the pane
+			// carries no session state worth persisting.
+			ids[key] = paneIdentity{Kind: "scratch"}
 		case pane.KindDOM:
 			// The panel restores empty (#1929): the first buffer-change sync
 			// reparses the focused HTML buffer.

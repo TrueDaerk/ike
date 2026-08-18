@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"ike/internal/lang"
 )
@@ -77,23 +78,43 @@ func Create(ext string) (string, error) {
 // List returns the existing scratch files newest-first by modification time.
 // A missing directory is an empty list, not an error.
 func List() ([]string, error) {
+	entries, err := Entries()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(entries))
+	for i, e := range entries {
+		out[i] = e.Path
+	}
+	return out, nil
+}
+
+// Entry is one scratch file: its absolute path plus the modification time the
+// listing sorts on. The scratch-files panel (#1932) renders name, extension
+// and age from it, so nothing outside this package stats the scratch dir.
+type Entry struct {
+	Path    string
+	ModTime time.Time
+}
+
+// Entries is List with the mod times kept: the existing scratch files
+// newest-first, ties broken by path so the order is stable. A missing
+// directory is an empty list, not an error; an entry that vanished between
+// the directory read and its stat is skipped.
+func Entries() ([]Entry, error) {
 	dir, err := Dir()
 	if err != nil {
 		return nil, err
 	}
-	entries, err := os.ReadDir(dir)
+	des, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("listing scratches: %w", err)
 	}
-	type item struct {
-		path string
-		mod  int64
-	}
-	var items []item
-	for _, e := range entries {
+	var out []Entry
+	for _, e := range des {
 		if e.IsDir() {
 			continue
 		}
@@ -101,17 +122,42 @@ func List() ([]string, error) {
 		if err != nil {
 			continue
 		}
-		items = append(items, item{filepath.Join(dir, e.Name()), info.ModTime().UnixNano()})
+		out = append(out, Entry{Path: filepath.Join(dir, e.Name()), ModTime: info.ModTime()})
 	}
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].mod != items[j].mod {
-			return items[i].mod > items[j].mod
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].ModTime.Equal(out[j].ModTime) {
+			return out[i].ModTime.After(out[j].ModTime)
 		}
-		return items[i].path < items[j].path // stable order for equal times
+		return out[i].Path < out[j].Path // stable order for equal times
 	})
-	out := make([]string, len(items))
-	for i, it := range items {
-		out[i] = it.path
-	}
 	return out, nil
+}
+
+// Delete removes one scratch file (#1932). The path must name a file directly
+// inside the scratch dir — anything else (a nested path, a directory, a
+// traversal through "..") is refused rather than deleted, so the panel's
+// delete action can never reach outside the store this package owns.
+func Delete(path string) error {
+	dir, err := Dir()
+	if err != nil {
+		return err
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("resolving scratch path: %w", err)
+	}
+	if filepath.Dir(abs) != filepath.Clean(dir) {
+		return fmt.Errorf("not a scratch file: %s", path)
+	}
+	info, err := os.Lstat(abs)
+	if err != nil {
+		return fmt.Errorf("deleting scratch: %w", err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("not a scratch file: %s", path)
+	}
+	if err := os.Remove(abs); err != nil {
+		return fmt.Errorf("deleting scratch: %w", err)
+	}
+	return nil
 }

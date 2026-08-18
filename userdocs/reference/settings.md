@@ -216,12 +216,19 @@ secrets — are documented together, with screenshots, in
 | Structured test results | `tests.results_window` | boolean | `true` | user | Parse test runs into the Test Results tool window (result tree, re-run failed, jump to failure) when the language declares an output parser; off keeps every test run in the raw Run tool terminal |
 | Open on test run | `tests.auto_open` | boolean | `true` | user | Open the Test Results tool window when a captured test run starts; off only updates an already open pane |
 
+### Scratch Files
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Show scratch panel | `scratch.panel` | boolean | `false` | user | Open the Scratch Files panel below the editor on start; off (the default) costs no editor rows and leaves the panel to the "Scratch Files" command, which shows and hides it for the session either way |
+| Scratch panel height | `scratch.panel_height` | integer (5–60) | `8` | user | Height in terminal rows the Scratch Files panel opens at, its border and title row included (8 shows four scratches plus the key hints). Dragging the divider above the panel resizes it afterwards, and that height persists with the window layout |
+
 ### Tool Layout
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Slot template rows | `tools.layout.template` | list | *(empty)* | user | Grid rows, one entry per row ("XEEH, XEEH, TTZZ"): every cell names a slot by a single letter, E is the editor region, each slot's cells must form a solid rectangle, and row/column counts set the proportions. Empty disables slot placement; a template that cannot be split into straight cuts is rejected with a config diagnostic |
-| Slot assignments | `tools.layout.assign` | list | *(empty)* | user | SLOT=tool entries pinning tools to template slots ("X=explorer, T=lazygit"): the tool is a custom tool's name or a built-in id (explorer, vcs, debug, problems, structure, usages, http, breakpoints, run, tests, issues, terminal). "terminal" pins fresh terminal panes (not the popup overlay); run and debug place independently. Several tools may share a slot — the first open materializes the pane, later ones join it as tabs; each tool takes at most one slot. While typing, the valid slot letters and tool ids are listed under the input |
+| Slot assignments | `tools.layout.assign` | list | *(empty)* | user | SLOT=tool entries pinning tools to template slots ("X=explorer, T=lazygit"): the tool is a custom tool's name or a built-in id (explorer, vcs, debug, problems, structure, usages, http, breakpoints, run, tests, issues, dom, scratch, terminal). "terminal" pins fresh terminal panes (not the popup overlay); run and debug place independently. Several tools may share a slot — the first open materializes the pane, later ones join it as tabs; each tool takes at most one slot. While typing, the valid slot letters and tool ids are listed under the input |
 
 ### Debug
 

@@ -44,6 +44,8 @@ type Config struct {
 	Tasks Tasks `toml:"tasks"`
 	// Tests holds Test Results tool-window behaviour (#1911).
 	Tests Tests `toml:"tests"`
+	// Scratch holds Scratch Files tool-window behaviour (#1932).
+	Scratch Scratch `toml:"scratch"`
 	// Debug holds debugger behaviour (0360, #823).
 	Debug Debug `toml:"debug"`
 	// Tools holds user-defined TUI tool panes (#741).
@@ -115,7 +117,8 @@ type ToolLayout struct {
 func BuiltinAssignTools() []string {
 	return []string{
 		"explorer", "vcs", "debug", "problems", "structure", "usages",
-		"http", "breakpoints", "tests", "issues", "dom", "run", "terminal",
+		"http", "breakpoints", "tests", "issues", "dom", "scratch", "run",
+		"terminal",
 	}
 }
 
@@ -247,6 +250,17 @@ type MatcherEntry struct {
 type Tests struct {
 	ResultsWindow bool `toml:"results_window"`
 	AutoOpen      bool `toml:"auto_open"`
+}
+
+// Scratch holds Scratch Files tool-window behaviour (#1932). Panel opens the
+// slim scratch list below the editor on start — off (the default) costs no
+// space and leaves the panel to the "Scratch Files" command. PanelHeight is
+// the height in terminal rows the panel opens at, borders and title row
+// included; dragging its divider afterwards resizes it for the session and
+// persists with the layout.
+type Scratch struct {
+	Panel       bool `toml:"panel"`
+	PanelHeight int  `toml:"panel_height"`
 }
 
 // Todo holds the comment-tag index settings (#61). Patterns is the list of tag

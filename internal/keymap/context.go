@@ -40,6 +40,7 @@ const (
 	Tests       Context = "tests"
 	Issues      Context = "issues"
 	DOM         Context = "dom"
+	Scratch     Context = "scratch"
 )
 
 // Matches reports whether a binding in context c is active for the focused pane

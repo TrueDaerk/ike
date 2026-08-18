@@ -36,6 +36,7 @@ var contextNames = map[string]Context{
 	"tests":       Tests,
 	"issues":      Issues,
 	"dom":         DOM,
+	"scratch":     Scratch,
 }
 
 // ContextNames returns the config spellings a binding key may be qualified
@@ -46,7 +47,8 @@ func ContextNames() []string {
 	return []string{
 		"global", "editor", "explorer", "palette", "diff",
 		"archive", "breakpoints", "data", "debug", "dom", "es", "http", "issues",
-		"preview", "problems", "structure", "terminal", "tests", "usages", "vcs",
+		"preview", "problems", "scratch", "structure", "terminal", "tests",
+		"usages", "vcs",
 	}
 }
 

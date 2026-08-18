@@ -109,3 +109,92 @@ func TestListNewestFirstAndMissingDir(t *testing.T) {
 		t.Fatalf("want newest first [%q %q], got %v", b, a, got)
 	}
 }
+
+// TestEntriesCarryModTimes covers the panel's data source (#1932): the same
+// newest-first order as List, with the mod time each row renders.
+func TestEntriesCarryModTimes(t *testing.T) {
+	sandbox(t)
+
+	if got, err := Entries(); err != nil || len(got) != 0 {
+		t.Fatalf("Entries() on missing dir = %v, %v", got, err)
+	}
+
+	a, _ := Create("txt")
+	b, _ := Create("txt")
+	old := time.Now().Add(-time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(a, old, old); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Entries()
+	if err != nil || len(got) != 2 {
+		t.Fatalf("Entries() = %v, %v", got, err)
+	}
+	if got[0].Path != b || got[1].Path != a {
+		t.Fatalf("want newest first [%q %q], got %v", b, a, got)
+	}
+	if !got[1].ModTime.Equal(old) {
+		t.Fatalf("mod time = %v, want %v", got[1].ModTime, old)
+	}
+}
+
+// TestDeleteRemovesScratch covers the panel's delete action (#1932).
+func TestDeleteRemovesScratch(t *testing.T) {
+	sandbox(t)
+
+	path, err := Create("txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Delete(path); err != nil {
+		t.Fatalf("Delete(%q) = %v", path, err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("scratch must be gone: %v", err)
+	}
+	if got, err := List(); err != nil || len(got) != 0 {
+		t.Fatalf("List() after delete = %v, %v", got, err)
+	}
+	// A second delete of the same path is an error, not a silent success.
+	if err := Delete(path); err == nil {
+		t.Fatal("deleting a missing scratch must fail")
+	}
+}
+
+// TestDeleteRefusesOutsideDir is the guard rail: Delete only ever removes a
+// file lying directly in the scratch dir (#1932).
+func TestDeleteRefusesOutsideDir(t *testing.T) {
+	dir := sandbox(t)
+	if _, err := Create("txt"); err != nil { // materializes the dir
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "victim.txt")
+	if err := os.WriteFile(outside, []byte("keep me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	deep := filepath.Join(nested, "deep.txt")
+	if err := os.WriteFile(deep, []byte("keep me too"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{
+		outside,
+		filepath.Join(dir, "..", filepath.Base(outside)),
+		deep,
+		nested, // a directory inside the scratch dir is not a scratch file
+		"",
+	} {
+		if err := Delete(path); err == nil {
+			t.Fatalf("Delete(%q) must be refused", path)
+		}
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("file outside the scratch dir must survive: %v", err)
+	}
+	if _, err := os.Stat(deep); err != nil {
+		t.Fatalf("nested file must survive: %v", err)
+	}
+}
