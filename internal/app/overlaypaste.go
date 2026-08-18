@@ -49,6 +49,10 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		return nil, m.pasteRenamePrompt(text)
 	case m.clonePromptOpen():
 		return nil, m.pasteClonePrompt(text)
+	case m.regexTesterOpen():
+		// The only prompt whose paste keeps its line breaks: the test-text
+		// area is exactly where a multi-line log excerpt belongs.
+		return m.pasteRegexTester(text)
 	case m.newProjectPromptOpen():
 		return nil, m.pasteNewProjectPrompt(text)
 	case m.saveAsOpen():

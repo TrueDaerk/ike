@@ -161,6 +161,7 @@ bring their own.
 | Toggle Terminal | `terminal.toggle` | `alt+f12` | — | everywhere |
 | Test Results | `tests.toggle` | — | — | everywhere |
 | TODO Index | `todo.list` | `cmd+6` | — | everywhere |
+| Regex Tester… | `tools.regexTester` | — | — | everywhere |
 | Set Up Tool Panes | `tools.setup` | — | — | everywhere |
 | Usages | `usages.toggle` | — | — | everywhere |
 | Toggle Inline Blame | `vcs.blameLine` | — | — | everywhere |

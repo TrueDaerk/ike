@@ -303,6 +303,11 @@ type OpenInBrowserMsg struct{}
 // active — against the clipboard contents.
 type CompareClipboardMsg struct{}
 
+// OpenRegexTesterMsg opens the regex tester (#1937): a floating pattern +
+// test-text dialog with live match and capture-group display, prefilled from
+// the focused editor's visual selection. Dispatched by tools.regexTester.
+type OpenRegexTesterMsg struct{}
+
 // DiffStepMsg steps the focused diff pane's current hunk (0340, #495).
 type DiffStepMsg struct{ Delta int }
 
@@ -388,6 +393,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("file.copyReference", "Copy Reference", CopyPathMsg{Kind: copyRef}),
 			appCommand("file.openInBrowser", "Open in Browser", OpenInBrowserMsg{}),
 			appCommand("tools.setup", "Set Up Tool Panes", ShowToolSetupMsg{}),
+			appCommand("tools.regexTester", "Regex Tester…", OpenRegexTesterMsg{}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),
 			appCommand("run.file", "Run File", RunFileMsg{}),
