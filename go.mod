@@ -9,6 +9,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.4
 	github.com/BurntSushi/toml v1.4.0
 	github.com/DerekStride/tree-sitter-sql v0.0.0-20260222203909-851e9cb257ba
+	github.com/andybalholm/cascadia v1.3.4
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/ultraviolet v0.0.0-20260525132238-948f4557a654
 	github.com/charmbracelet/x/ansi v0.11.7
@@ -31,7 +32,7 @@ require (
 	github.com/tree-sitter/tree-sitter-python v0.25.0
 	github.com/tree-sitter/tree-sitter-typescript v0.23.2
 	golang.org/x/image v0.44.0
-	golang.org/x/net v0.39.0
+	golang.org/x/net v0.55.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.40.0
 	gopkg.in/yaml.v3 v3.0.1

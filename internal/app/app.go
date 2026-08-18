@@ -40,6 +40,7 @@ import (
 	"ike/internal/debug"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
+	"ike/internal/domview"
 	"ike/internal/editor"
 	"ike/internal/editor/register"
 	"ike/internal/espane"
@@ -445,6 +446,15 @@ type Model struct {
 	// issuesReturnFocus is the same dance for the GitHub Issues tool window
 	// (#1934).
 	issuesReturnFocus string
+	// domReturnFocus is the same dance for the DOM inspector tool window
+	// (#1929). domReqPath/domReqVersion dedup the async buffer parses;
+	// domHLPath/domHLRev remember which file's editors carry the selector
+	// match highlights and at which pane match revision.
+	domReturnFocus string
+	domReqPath     string
+	domReqVersion  int
+	domHLPath      string
+	domHLRev       int
 	lastTestRun       *testRunState
 	testRunSeq        int
 	// rawDiags caches each path's last published, unfiltered diagnostic set;
@@ -1381,6 +1391,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below as the empty singleton panel (#1934)
 		} else if ids[key].Kind == "structure" {
 			continue // restored below as the empty singleton panel (#1025)
+		} else if ids[key].Kind == "dom" {
+			continue // restored below as the empty singleton panel (#1929)
 		} else if ids[key].Kind == "usages" {
 			continue // restored below as the empty singleton panel (#1155)
 		} else if ids[key].Kind == "http" {
@@ -1565,6 +1577,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// The Structure panel restores empty (#1025); the first
 			// buffer-change sync re-requests the symbols.
 			panes.AddStructure()
+			continue
+		}
+		if id := ids[key]; id.Kind == "dom" {
+			// The DOM inspector restores empty (#1929); the first
+			// buffer-change sync reparses the focused HTML buffer.
+			panes.AddDOM()
 			continue
 		}
 		if id := ids[key]; id.Kind == "diff" {
@@ -2496,6 +2514,7 @@ var terminalGlobalCommands = map[string]bool{
 	"tests.toggle":          true,
 	"issues.toggle":         true,
 	"structure.toggle":      true,
+	"dom.toggle":            true,
 	"notifications.history": true,
 	// #997: tab switching stays reachable from a focused terminal/tool pane
 	// (the shell never meaningfully sees ctrl+cmd+arrows). The secondary
@@ -3086,6 +3105,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// pass settled: cursor follow is a cheap in-place highlight, a buffer
 	// switch issues the documentSymbol refresh (deduplicated per path).
 	if sync := mm.structureSyncCmd(); sync != nil {
+		cmd = tea.Batch(cmd, sync)
+	}
+	// The DOM inspector rides the same settled pass (#1929): cursor follow is
+	// a cheap in-place highlight, a buffer switch or edit spawns the async
+	// reparse, and moved selector matches re-route to the editors.
+	if sync := mm.domSyncCmd(); sync != nil {
 		cmd = tea.Batch(cmd, sync)
 	}
 	// Image panes reconcile their Kitty graphics placements here, once the
@@ -4259,6 +4284,28 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the symbol through the standard open funnel, so nav history records
 		// it like a definition jump.
 		return m.openPathAt(msg.Path, msg.Line, msg.Col)
+
+	case DOMToggleMsg:
+		// dom.toggle (#1929): same state machine for the DOM inspector; the
+		// Update wrapper's sync parses the buffer and routes the highlights.
+		m.toggleDOMPanel()
+		return m, nil
+
+	case domParsedMsg:
+		// An async DOM parse finished (#1929) — fill the open panel.
+		m.applyDOMParsed(msg)
+		return m, nil
+
+	case domview.NavigateMsg:
+		// Enter / double-click on a DOM node row (#1929): jump the editor to
+		// the node's source position through the standard open funnel.
+		return m.openPathAt(msg.Path, msg.Line, msg.Col)
+
+	case domview.CopyMsg:
+		// Copy actions on a DOM node (#1929): selector path or outer HTML.
+		clipboardWrite(msg.Text)
+		m.host.Notify(host.Info, "copied "+msg.What)
+		return m, nil
 
 	case diff.EditRequestMsg:
 		// 'e' in a diff pane (0340, #496): mount a live editor as the right
@@ -6741,7 +6788,7 @@ func (m Model) viewerSplitTarget() string {
 		switch inst.Kind() {
 		case pane.KindExplorer, pane.KindVCS, pane.KindDebug, pane.KindProblems,
 			pane.KindStructure, pane.KindUsages, pane.KindHTTP, pane.KindBreakpoints,
-			pane.KindTests, pane.KindIssues:
+			pane.KindTests, pane.KindIssues, pane.KindDOM:
 			return false
 		}
 		return true
@@ -7975,6 +8022,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Structure().Wheel(lines)
 			}
+		case pane.KindDOM:
+			// The wheel scrolls the DOM tree (#1929).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.DOM().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.DOM().Wheel(lines)
+			}
 		case pane.KindUsages:
 			// The wheel scrolls the usages list (#1155).
 			switch msg.Button {
@@ -8958,6 +9013,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// navigates; the emitted message routes like the key-driven enter.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Structure().Click(localX, localY)
+		}
+	case pane.KindDOM:
+		// DOM-inspector clicks (#1929): the selector line starts editing, a
+		// fold glyph toggles, a row click selects, a double-click navigates.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.DOM().Click(localX, localY)
 		}
 	case pane.KindUsages:
 		// Usages-list clicks (#1155): a click selects, a double-click opens
@@ -10010,6 +10071,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title = "BREAKPOINTS"
 		case pane.KindStructure:
 			title = "STRUCTURE"
+		case pane.KindDOM:
+			title = "DOM"
 		case pane.KindUsages:
 			title = "USAGES"
 		case pane.KindHTTP:

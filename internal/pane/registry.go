@@ -12,6 +12,7 @@ import (
 	"ike/internal/dataview"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
+	"ike/internal/domview"
 	"ike/internal/editor/register"
 	"ike/internal/espane"
 	"ike/internal/ghissues"
@@ -90,6 +91,9 @@ const TestsKey = "tests"
 
 // IssuesKey is the stable key of the singleton GitHub Issues tool window (#1934).
 const IssuesKey = "issues"
+
+// DOMKey is the stable key of the singleton DOM inspector tool window (#1929).
+const DOMKey = "dom"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -634,6 +638,18 @@ func (r *Registry) AddIssues() string {
 	inst.gi = ghissues.New(r.pal)
 	r.put(inst)
 	return IssuesKey
+}
+
+// AddDOM creates the singleton DOM inspector tool window under DOMKey (#1929)
+// and returns its key; a second call returns the existing key.
+func (r *Registry) AddDOM() string {
+	if _, ok := r.instances[DOMKey]; ok {
+		return DOMKey
+	}
+	inst := &Instance{key: DOMKey, kind: KindDOM, cfg: r.cfg, pal: r.pal}
+	inst.dm = domview.New(r.pal)
+	r.put(inst)
+	return DOMKey
 }
 
 // AddBreakpoints creates the singleton Breakpoints tool window under

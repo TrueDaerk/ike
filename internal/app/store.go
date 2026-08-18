@@ -328,6 +328,10 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			// The panel restores empty (#1025): the first buffer-change sync
 			// re-requests the symbols.
 			ids[key] = paneIdentity{Kind: "structure"}
+		case pane.KindDOM:
+			// The panel restores empty (#1929): the first buffer-change sync
+			// reparses the focused HTML buffer.
+			ids[key] = paneIdentity{Kind: "dom"}
 		case pane.KindUsages:
 			// The panel restores empty (#1155): find-references results are
 			// session state; the next lsp.referencesPanel run re-fills it.

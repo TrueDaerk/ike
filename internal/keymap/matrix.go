@@ -144,6 +144,7 @@ var reachableAlternatives = map[string]string{
 	"problems.toggle":          "palette",
 	"lsp.ignoreDiagnostic":     "palette",
 	"structure.toggle":         "palette",
+	"dom.toggle":               "palette",
 	"explorer.newFile":         "palette (or a in the explorer)",
 	"scratch.new":              "palette",
 	// Unbound-command audit (#1378): Cmd-primary chords without a delivered
