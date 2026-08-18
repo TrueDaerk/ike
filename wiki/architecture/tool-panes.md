@@ -75,6 +75,13 @@ because its module name doesn't match the GitHub path — only a release
 binary download or `git clone` + `make install`, neither a single argv. Its
 entry is still offered and its binary check still works; the install dialog
 falls back to the "no supported installer found" path instead of a button.
+lazycssh (TrueDaerk/lazycssh, a lazygit-shaped parallel-SSH TUI: broadcasts
+keystrokes to many hosts with per-host output) sits near k9s/htop in display
+order and is install-gated the same way (#1935): its module path does match
+the GitHub path, but the module's `go.mod` carries a `replace` directive
+(pinning a forked dependency) that `go install` of a non-main-module package
+refuses outright — so, like lazysql, only `git clone` + `make install` works,
+not a single argv.
 
 Two surfaces draw from the catalog:
 

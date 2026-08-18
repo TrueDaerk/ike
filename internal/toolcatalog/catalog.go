@@ -81,6 +81,19 @@ var catalog = []Entry{
 		Description: "SQL database client TUI (MySQL, MariaDB, PostgreSQL, SQLite, DuckDB)",
 	},
 	{
+		// No install recipe fits the plain-argv model either: lazycssh ships
+		// no brew formula, and `go install
+		// github.com/TrueDaerk/lazycssh/cmd/lazycssh@latest` fails because
+		// the module's go.mod carries a replace directive (pointing
+		// ultraviolet at a fork), which `go install` of a non-main module
+		// rejects outright. Installing means `git clone` + `make install`,
+		// not a single argv — so this entry is offered install-gated like
+		// lazysql above.
+		Name:        "lazycssh",
+		Command:     "lazycssh",
+		Description: "Parallel SSH TUI — broadcast keystrokes to many hosts",
+	},
+	{
 		Name:        "k9s",
 		Command:     "k9s",
 		Description: "Kubernetes cluster TUI",
