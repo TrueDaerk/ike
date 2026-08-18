@@ -308,6 +308,7 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 		{Title: "Terminal", Description: "The integrated terminal and what it offers while you type at the shell prompt.", Entries: []Entry{
 			{Key: "terminal.shell", Type: Path, Title: "Shell", Description: "Program new terminal sessions spawn; empty follows $SHELL. Applies to sessions started after the change", Scope: config.UserScope},
 			{Key: "terminal.autosuggest", Type: Bool, Title: "Command auto-suggest", Description: "Popup with command/path/make-target completions while typing at the shell prompt; ctrl+space opens it on demand either way", Scope: config.UserScope},
+			{Key: "terminal.ssh_hosts", Type: List, Title: "Extra SSH hosts", Description: "Additional host aliases the SSH Host picker (terminal.ssh) offers, for machines no ~/.ssh/config entry declares. Each entry is passed to ssh verbatim (\"build01\", \"ops@10.0.0.5\"); the aliases parsed from ~/.ssh/config and its Include files are listed either way", Scope: config.UserScope, ValidateEntry: sshHostValidate},
 			{Key: "terminal.scrollback_lines", Type: Int, Title: "Scrollback lines", Description: "Lines of scrollback each terminal session keeps (#1545); the main memory cost per terminal pane. Applies to new sessions and, on lowering, trims live ones forward — already-trimmed history is not restored by raising it", Scope: config.UserScope, Min: 100, Max: 1000000},
 		}},
 		{Title: "Run", Description: "Where the Run tool — the dedicated pane every run's output goes to — opens.", Entries: []Entry{

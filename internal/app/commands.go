@@ -409,6 +409,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("json.jqPlayground", "jq Playground…", OpenJQPlaygroundMsg{}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),
+			appCommand("terminal.ssh", "SSH Host…", SSHPickerMsg{}),
 			appCommand("run.file", "Run File", RunFileMsg{}),
 			appCommand("run.rerun", "Rerun Last", RunRerunMsg{}),
 			appCommand("run.testAtCursor", "Run Test at Cursor", RunTestAtCursorMsg{}),

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Archive Viewer
-description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name."
+description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name; gzip members open decompressed (#1948)."
 resource: internal/archview
 tags: [architecture, archive, tar, viewer, pane, read-only, mouse]
-timestamp: 2026-08-13T12:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # Archive Viewer (#1762)
@@ -106,6 +106,9 @@ anything is buffered:
   gets. `archive.ReadEntry` also reads one byte past the limit rather than
   trusting the (untrusted) header size, so a corrupt archive cannot make it
   buffer a whole stream.
+- **Gzip members** are decompressed first — see below. Compressed bytes *are*
+  binary, so without that seam a `logs/app.log.gz` would be refused as a blob
+  nobody can look at.
 - **Binary members** are refused with a notice: a NUL byte in the leading 8 KB
   is the test. Routing archives away from the editor would be pointless if a
   `.so` inside one still reached a text buffer.
@@ -116,6 +119,40 @@ exactly why the buffer is read-only — but its tail is the member's own file
 name, so the tab title, the language lookup and the syntax highlighting all
 resolve from `main.go` with no special casing anywhere. Re-opening the same
 entry activates its existing tab (`TabForPath` on the virtual path).
+
+### Gzip members open decompressed (#1948)
+
+The two viewers compose: a `.gz` *inside* an archive is shown the way the [gz
+viewer](./gz-viewer.md) shows a lone one. The seam sits in `openArchiveEntry`
+right before the binary check — the member's bytes start with the gzip magic
+`1f 8b`, so `openArchiveGzipEntry` takes over and hands them to
+`gzfile.ReadBytes`, the in-memory twin of `gzfile.Read`. Nothing is
+duplicated: inner-name resolution, the caps, the footer metadata and the
+buffer install are the gz viewer's own code.
+
+- **Naming.** The decompressed name goes back where the member lived:
+  `logs/app.log.gz` → the virtual path `backup.tar!logs/app.log`. It is the
+  same `archiveEntryPath` scheme as any other member, so the tab title reads
+  `app.log (backup.tar)`, the language lookup answers `log`, and re-opening
+  activates the existing tab.
+- **Caps.** The limit is applied twice, and it has to be: `archive.ReadEntry`
+  holds the *compressed* member to `files.large_file_kb`, and the read of the
+  decompressed stream is capped again — that second one is the bomb guard,
+  because a kilobyte inside a tar unpacks to whatever it likes. An oversized
+  member opens truncated with a notice, never as a hang.
+- **Still binary underneath** (a gzipped PNG): the buffer holds the gz
+  viewer's metadata notice — archive, inner name, sizes, ratio — instead of
+  mojibake.
+- **A nested archive** — a member named `.tar.gz`/`.tgz`, or one whose
+  decompressed first block holds a tar header — is refused with `nested
+  archive — extract not supported`. There is no archive-inside-an-archive
+  view; the point is that the user is told which case they hit instead of
+  getting a blanket "binary archive entry". The name is checked *before*
+  decompressing, so an inner tarball costs nothing to decline.
+
+Refresh-on-change is *not* inherited: `refreshGzipBuffers` re-sniffs the path
+it is given and a `.tar` is not a plain gzip, so it declines. Like every other
+extracted member, the buffer is a snapshot of the archive as it was read.
 
 ## Read-only buffers
 

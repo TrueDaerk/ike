@@ -198,6 +198,21 @@ func validate(c *Config) []Diagnostic {
 	clampMin("backup.max_age_days", &c.Backup.MaxAgeDays, 1)
 	clampMin("notifications.timeout_seconds", &c.Notifications.TimeoutSeconds, 1)
 	clampMin("terminal.scrollback_lines", &c.Terminal.ScrollbackLines, 100)
+	// SSH host aliases (#1938) reach ssh as a single argument, so a blank
+	// entry is dropped and one carrying whitespace is rejected instead of
+	// producing an unrunnable `ssh "a b"`.
+	kept := c.Terminal.SSHHosts[:0]
+	for _, h := range c.Terminal.SSHHosts {
+		trimmed := strings.TrimSpace(h)
+		switch {
+		case trimmed == "":
+		case strings.ContainsAny(trimmed, " \t"):
+			diags = append(diags, Diagnostic{Field: "terminal.ssh_hosts", Message: fmt.Sprintf("host %q contains whitespace, ignored", h)})
+		default:
+			kept = append(kept, trimmed)
+		}
+	}
+	c.Terminal.SSHHosts = kept
 	// which-key delay (#1909): 0 shows the popup as soon as the prefix pends;
 	// beyond the 5s cap the hint would arrive long after the user gave up.
 	clampMin("keymap.which_key_delay_ms", &c.Keymap.WhichKeyDelayMs, 0)
