@@ -40,7 +40,8 @@ func find(t *testing.T, entries []Entry, name string) Entry {
 // git-clone-and-build only). These fall back to the "no supported installer
 // found" path instead of an install button.
 var noRecipeEntries = map[string]bool{
-	"lazysql": true,
+	"lazysql":  true,
+	"lazycssh": true,
 }
 
 func TestCatalogEntriesAreWellFormed(t *testing.T) {
@@ -62,7 +63,7 @@ func TestCatalogEntriesAreWellFormed(t *testing.T) {
 			}
 		}
 	}
-	for _, want := range []string{"lazygit", "lazydocker", "sqlit", "lazysql"} {
+	for _, want := range []string{"lazygit", "lazydocker", "sqlit", "lazysql", "lazycssh"} {
 		if !seen[want] {
 			t.Errorf("catalog is missing %s", want)
 		}
@@ -74,6 +75,18 @@ func TestLazysqlHasNoInstallRecipe(t *testing.T) {
 	stubLookPath(t) // nothing on PATH
 	if _, ok := e.InstallArgv(); ok {
 		t.Error("lazysql should have no install recipe available")
+	}
+	msg := Install(e)().(InstallResultMsg)
+	if msg.Err == nil || !strings.Contains(msg.Err.Error(), "no supported installer") {
+		t.Errorf("want no-installer failure, got %v", msg.Err)
+	}
+}
+
+func TestLazycsshHasNoInstallRecipe(t *testing.T) {
+	e := find(t, All(), "lazycssh")
+	stubLookPath(t) // nothing on PATH
+	if _, ok := e.InstallArgv(); ok {
+		t.Error("lazycssh should have no install recipe available")
 	}
 	msg := Install(e)().(InstallResultMsg)
 	if msg.Err == nil || !strings.Contains(msg.Err.Error(), "no supported installer") {
