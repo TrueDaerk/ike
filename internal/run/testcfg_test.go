@@ -136,3 +136,36 @@ func TestTestConfigRerunMemory(t *testing.T) {
 		t.Fatalf("configs = %d, want 1", len(s.Configs))
 	}
 }
+
+// TestTestConfigRunAtRoot: a RunAtRoot language (#1926, PHPUnit) runs from
+// the project root rather than the test file's directory, and its {file}
+// placeholder carries the root-relative path so the target still resolves.
+func TestTestConfigRunAtRoot(t *testing.T) {
+	lang.Register(lang.Language{
+		ID:         "roottst",
+		Extensions: []string{"rrt"},
+		Test: &lang.TestSpec{
+			FilePattern: `Test\.rrt$`,
+			Pattern:     `^func (?P<name>Test\w*)\s*\(`,
+			Kinds:       map[string][]string{"": {"{interpreter}", "--filter", "{name}", "{file}"}},
+			FileArgv:    []string{"{interpreter}", "{file}"},
+			Tool:        "rrtool",
+			Runner:      func(root string) []string { return []string{filepath.Join(root, "vendor", "rrtool")} },
+			RunAtRoot:   true,
+		},
+	})
+	root := "/proj"
+	file := filepath.Join(root, "tests", "UnitTest.rrt")
+	cfg, ok := TestConfig(root, file, nil)
+	if !ok {
+		t.Fatal("TestConfig must synthesize for a root-scoped test file")
+	}
+	if cfg.Cwd != "" || cfg.Dir(root) != root {
+		t.Fatalf("cwd = %q / dir = %q, want the project root", cfg.Cwd, cfg.Dir(root))
+	}
+	argv, ok := Argv(root, cfg, "")
+	want := []string{filepath.Join(root, "vendor", "rrtool"), "tests/UnitTest.rrt"}
+	if !ok || !reflect.DeepEqual(argv, want) {
+		t.Fatalf("argv = %v, want %v", argv, want)
+	}
+}

@@ -1,0 +1,20 @@
+PHPUnit 10.5.20 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.3.4
+Configuration: /srv/app/phpunit.xml
+
+##teamcity[testCount count='2' flowId='8123']
+##teamcity[testSuiteStarted name='default' flowId='8123']
+##teamcity[testSuiteStarted name='App\Tests\StringTest' locationHint='php_qn:///srv/app/tests/StringTest.php::\App\Tests\StringTest' flowId='8123']
+##teamcity[testStarted name='App\Tests\StringTest::testTrim' locationHint='php_qn:///srv/app/tests/StringTest.php::\App\Tests\StringTest::testTrim' flowId='8123']
+##teamcity[testFinished name='App\Tests\StringTest::testTrim' duration='12' flowId='8123']
+##teamcity[testStarted name='App\Tests\StringTest::testUpper' locationHint='php_qn:///srv/app/tests/StringTest.php::\App\Tests\StringTest::testUpper' flowId='8123']
+##teamcity[testFailed name='App\Tests\StringTest::testUpper' message='Failed asserting that two strings are equal.' details='|n/srv/app/tests/StringTest.php:27|n' duration='4' type='comparisonFailure' actual='ABc' expected='ABC' flowId='8123']
+##teamcity[testFinished name='App\Tests\StringTest::testUpper' duration='4' flowId='8123']
+##teamcity[testSuiteFinished name='App\Tests\StringTest' flowId='8123']
+##teamcity[testSuiteFinished name='default' flowId='8123']
+
+Time: 00:00.031, Memory: 22.00 MB
+
+FAILURES!
+Tests: 2, Assertions: 2, Failures: 1.

@@ -1,5 +1,27 @@
 # Log
 
+## 2026-08-18 (tests: PHPUnit parser for the Test Results tool window, #1926)
+
+- **PHP joins the structured test path** (`plugins/languages/php/test.go`,
+  `testoutput.go`): `*Test.php` files get the `▶` gutter markers, and a run
+  fills the Test Results tree (suite/class → test → data set) with glyphs,
+  durations and jump-to-failure instead of the raw Run-tool fallback.
+- **`--teamcity` is the parsed surface** — one `##teamcity[…]` service message
+  per line on stdout, stable across PHPUnit 9/10/11, and the only
+  machine-readable PHPUnit format that needs no temp file, so it fits the
+  captured-stdout model the Go and Python parsers already use. Data-provider
+  cases (`testSum with data set #0`) nest as subtests (`testSum/#0`); failure
+  locations prefer the frame in the test's own file over the PHPUnit-internal
+  frames above it.
+- **The seam grew two optional fields** (`internal/lang/test.go`):
+  `TestSpec.RunAtRoot` (run with cwd = the project root, `{file}` becomes the
+  root-relative path — PHPUnit needs phpunit.xml and the composer autoloader)
+  and `TestSpec.Runner` (resolve `{interpreter}` to the project's test binary,
+  `vendor/bin/phpunit` before a global one).
+- **Re-runs** go through one anchored filter:
+  `--filter '/::(testA|testB)( |$)/'` — the trailing `( |$)` keeps a test's
+  data sets in and same-prefix siblings out.
+
 ## 2026-08-17 (completion: postfix templates — `expr.if`, `err.nil`, `.for`, #1913)
 
 - **Postfix completion** (`internal/complete/postfix`): the JetBrains habit of

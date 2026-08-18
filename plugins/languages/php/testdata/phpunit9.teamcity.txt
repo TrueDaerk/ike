@@ -1,0 +1,46 @@
+PHPUnit 9.6.19 by Sebastian Bergmann and contributors.
+
+##teamcity[testCount count='6' flowId='4711']
+
+##teamcity[testSuiteStarted name='Unit' flowId='4711']
+
+##teamcity[testSuiteStarted name='App\Tests\CalculatorTest' locationHint='php_qn:///srv/app/tests/CalculatorTest.php::\App\Tests\CalculatorTest' flowId='4711']
+
+##teamcity[testStarted name='testAdd' locationHint='php_qn:///srv/app/tests/CalculatorTest.php::\App\Tests\CalculatorTest::testAdd' flowId='4711']
+
+##teamcity[testFinished name='testAdd' duration='7' flowId='4711']
+
+##teamcity[testStarted name='testDivideByZero' locationHint='php_qn:///srv/app/tests/CalculatorTest.php::\App\Tests\CalculatorTest::testDivideByZero' flowId='4711']
+
+##teamcity[testFailed name='testDivideByZero' message='Failed asserting that |'0|' matches expected |'1|'.' details='|n/srv/app/tests/CalculatorTest.php:34|n' duration='3' type='comparisonFailure' actual='0' expected='1' flowId='4711']
+
+##teamcity[testFinished name='testDivideByZero' duration='3' flowId='4711']
+
+##teamcity[testStarted name='testLegacyMode' locationHint='php_qn:///srv/app/tests/CalculatorTest.php::\App\Tests\CalculatorTest::testLegacyMode' flowId='4711']
+
+##teamcity[testIgnored name='testLegacyMode' message='Legacy mode was removed in 8.0' details='|n/srv/app/tests/CalculatorTest.php:41|n' duration='0' flowId='4711']
+
+##teamcity[testFinished name='testLegacyMode' duration='0' flowId='4711']
+
+##teamcity[testSuiteStarted name='App\Tests\CalculatorTest::testSum' locationHint='php_qn:///srv/app/tests/CalculatorTest.php::\App\Tests\CalculatorTest::testSum' flowId='4711']
+
+##teamcity[testStarted name='testSum with data set #0' locationHint='php_qn:///srv/app/tests/CalculatorTest.php::\App\Tests\CalculatorTest::testSum' flowId='4711']
+
+##teamcity[testFinished name='testSum with data set #0' duration='1' flowId='4711']
+
+##teamcity[testStarted name='testSum with data set "negatives"' locationHint='php_qn:///srv/app/tests/CalculatorTest.php::\App\Tests\CalculatorTest::testSum' flowId='4711']
+
+##teamcity[testFailed name='testSum with data set "negatives"' message='Failed asserting that -1 matches expected -2.' details='|n/srv/app/vendor/phpunit/phpunit/src/Framework/Assert.php:328|n/srv/app/tests/CalculatorTest.php:52|n' duration='2' flowId='4711']
+
+##teamcity[testFinished name='testSum with data set "negatives"' duration='2' flowId='4711']
+
+##teamcity[testSuiteFinished name='App\Tests\CalculatorTest::testSum' flowId='4711']
+
+##teamcity[testSuiteFinished name='App\Tests\CalculatorTest' flowId='4711']
+
+##teamcity[testSuiteFinished name='Unit' flowId='4711']
+
+Time: 00:00.042, Memory: 8.00 MB
+
+FAILURES!
+Tests: 6, Assertions: 6, Failures: 2, Skipped: 1.

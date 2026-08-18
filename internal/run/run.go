@@ -189,7 +189,9 @@ func TestConfig(root, file string, t *lang.TestMatch) (Config, bool) {
 	rel := relTo(root, file)
 	scope := filepath.ToSlash(filepath.Dir(rel))
 	cwd := filepath.Dir(rel)
-	if cwd == "." {
+	if cwd == "." || lang.TestRunsAtRoot(file) {
+		// PHPUnit and friends run at the project root (#1926): their config
+		// file and the composer autoloader live there, not next to the test.
 		cwd = ""
 	}
 	cfg := Config{

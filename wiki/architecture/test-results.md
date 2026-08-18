@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Test Results Tool Window
-description: Singleton bottom-split pane showing a captured test run as a structured tree — group → test → subtest with pass/fail/skip glyphs, durations and a summary line, a detail column with the selected test's output, jump-to-failure, and re-run all / failed / single actions; fed by a per-language output-parser seam on lang.TestSpec (#1911).
+description: Singleton bottom-split pane showing a captured test run as a structured tree — group → test → subtest with pass/fail/skip glyphs, durations and a summary line, a detail column with the selected test's output, jump-to-failure, and re-run all / failed / single actions; fed by a per-language output-parser seam on lang.TestSpec — Go, pytest and PHPUnit (#1911, #1926).
 resource: internal/testresults/testresults.go
 tags: [architecture, tests, run, tool-window, pane, languages]
-timestamp: 2026-08-17T00:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # Test Results Tool Window (#1911)
@@ -35,15 +35,58 @@ fields (`internal/lang/test.go`):
   empty `NamesJoin` expands a whole-element `{names}` to one argv element per
   id (node-id style). `{file}` resolves to the test file's base name.
 
+Two more fields serve runners that belong to the project rather than to the
+file (#1926):
+
+- **`RunAtRoot`** — the test argv runs with cwd = the project root instead of
+  the test file's directory, and `{file}` expands to the file's root-relative
+  path. `run.TestConfig` reads it when it picks a configuration's cwd.
+- **`Runner func(root string) []string`** — resolves a whole-element
+  `{interpreter}` to the project's test binary (rather than the language
+  interpreter the toolchain detection yields), with `Tool` as the fallback.
+
 Registered parsers: **Go** (`plugins/languages/go/testoutput.go`, the
 test2json event stream — per-test output buffering, elapsed times, the first
 indented `file.go:line:` marker as the failure location, a synthetic
-"(package failed)" node for build errors) and **Python**
+"(package failed)" node for build errors), **Python**
 (`plugins/languages/python/testoutput.go`, pytest's `-v` progress lines plus
 the `--tb=short` FAILURES blocks; pytest also gained its `TestSpec`, so the
 `▶` gutter markers and `run.testAtCursor` now cover `test_*.py` /
-`*_test.py`). A language without `ParseOutput` keeps the raw Run tool path
+`*_test.py`) and **PHP/PHPUnit**
+(`plugins/languages/php/testoutput.go`, the `--teamcity` service-message
+stream). A language without `ParseOutput` keeps the raw Run tool path
 (#1905) untouched — the fallback is the absence of the seam, not a crash.
+
+### PHP / PHPUnit (#1926)
+
+Detection is PHPUnit's own convention: `*Test.php` files holding
+`public function testX()` methods. The runner is the project's
+`vendor/bin/phpunit` (`vendor/bin/simple-phpunit` for the Symfony bridge); a
+root that only carries a `phpunit.xml` / `phpunit.xml.dist` falls back to a
+global `phpunit` on PATH, and a root with neither keeps the plain `phpunit`
+name in the argv. Runs happen at the project root (`RunAtRoot`), so PHPUnit
+finds its configuration file and the composer autoloader by itself — no
+`--configuration` plumbing.
+
+`--teamcity` is the parsed surface: one `##teamcity[event key='value' …]`
+service message per line on **stdout**, stable across PHPUnit 9, 10 and 11.
+`--log-junit` is the more familiar machine format but writes a *file* the
+captured run never sees, which is why the streaming-friendly TeamCity output
+wins here. Values are TeamCity-escaped (`|n`, `|'`, `||`, `|[`, `|]`), so a
+multi-line failure diff still stays on one line.
+
+The parser maps `testSuiteStarted` / `testStarted` / `testFailed` /
+`testIgnored` / `testFinished` onto the result tree: the group is the test's
+fully qualified class (from the message's `php_qn://file::\Class::method`
+locationHint, the enclosing suite as fallback), the duration comes from
+`testFinished` (milliseconds), and a data-provider case
+(`testSum with data set #0`) nests as the subtest `testSum/#0` — its
+`RerunID` stays the bare method name, because `--filter` cannot address a
+single data set. Failure locations prefer the stack frame inside the test's
+own file over the PHPUnit-internal frames above it, so Enter lands on the
+failing assertion. Single-test and re-run-failed runs use one anchored
+filter, `--filter '/::(testA|testB)( |$)/'` — the trailing `( |$)` keeps the
+data sets in and same-prefix siblings out.
 
 ## Wire
 
