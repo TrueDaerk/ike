@@ -90,6 +90,7 @@ const (
 	awaitSurrDelete    // after ds; awaiting the pair to remove
 	awaitSurrChange    // after cs; awaiting the pair to replace
 	awaitSurrChangeNew // after cs{old}; awaiting the replacement pair
+	awaitLabel         // label-jump session (#787): target chars, then a label key (labeljump.go)
 )
 
 // Model is the editor pane.
@@ -132,6 +133,9 @@ type Model struct {
 	// resolver and the pair cs is replacing.
 	surrResolve surroundResolve
 	surrOld     rune
+	// leap is the live label-jump session (#787): non-nil from the gs /
+	// editor.labelJump trigger until a label lands or the session cancels.
+	leap *leapState
 
 	// Command line / search input.
 	cmdline    string
@@ -1177,9 +1181,11 @@ func (m Model) ModeName() Mode { return m.mode }
 // Capturing also covers the modal editor prompts that consume keys ahead of
 // the mode machine: the find/replace panel (#283) and the ":s///c" confirm —
 // without this the app layer would steal plain keys (tab = pane cycle) from
-// their inputs.
+// their inputs. A label-jump session (#787) captures the same way: its target
+// and label characters include keys the app claims in plain normal mode
+// (q, tab, @).
 func (m Model) Capturing() bool {
-	return m.mode.Capturing() || m.replPanel != nil || m.subConfirm != nil
+	return m.mode.Capturing() || m.replPanel != nil || m.subConfirm != nil || m.leap != nil
 }
 
 // Cursor returns the 1-based line and column for the status line.

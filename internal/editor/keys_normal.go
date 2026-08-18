@@ -192,6 +192,11 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		}
 		m.pending.Reset()
 		return m, nil
+	case awaitLabel:
+		// Label jump (#787): the key routes through the leap session — target
+		// characters first, then a label key; esc (no rune) cancels.
+		m.wait = awaitNone
+		return m.labelJumpKey(r, hasRune)
 	case awaitPlayReg:
 		// @'s register name (#58): @@ repeats the last replay; the count typed
 		// before @ (5@a) is still pending here.
@@ -781,6 +786,15 @@ func (m Model) resolveAfterG(s string, r rune, hasRune bool) (Model, tea.Cmd) {
 		cmd := m.openFileUnderCursor()
 		m.pending.Reset()
 		return m, cmd
+	case "s":
+		// gs: label jump (#787) — a bare motion to a visible, labeled match.
+		// It cannot serve as an operator target, so a pending operator cancels.
+		if m.pending.HasOperator() {
+			m.pending.Reset()
+			return m, nil
+		}
+		m.pending.Reset()
+		m.startLabelJump()
 	case "0", "$", "j", "k":
 		// Display-line motions (#1193): visual rows under soft wrap, their
 		// buffer-line counterparts otherwise.

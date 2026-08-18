@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-18T12:00:00Z
+timestamp: 2026-08-18T14:00:00Z
 ---
 
 # Editor
@@ -438,8 +438,9 @@ read without comparing tones:
 Normal mode resolves an optional `"reg`, an optional count, an operator, and a
 motion / text object before committing. Secondary-key states (`awaitG`,
 `awaitFind`, `awaitReplace`, `awaitObject`, `awaitRecordReg`, `awaitPlayReg`,
-the mark states `awaitMark` / `awaitMarkLine` / `awaitMarkExact` (#1151), and
-the surround states `awaitSurr*` (#1475)) park the handler between keys.
+the mark states `awaitMark` / `awaitMarkLine` / `awaitMarkExact` (#1151),
+the surround states `awaitSurr*` (#1475), and the label-jump session
+`awaitLabel` (#787)) park the handler between keys.
 Visual mode accumulates counts with the same 1–9/continuing-0 rule (#265), so
 `V3j` extends the selection three lines and `3G` jumps inside a selection;
 the count is consumed by its motion and Esc clears the pending state.
@@ -742,6 +743,36 @@ else — horizontal motions, `Home`/`End`, mouse clicks, jumps, and every edit
 (`moveTo`, `applyMutate`, `fanApply`) — resets `desiredCol` to the new cursor
 column. Secondary carets carry their own `desiredCol` and follow the same rule
 (see [Multi-caret editing](#multi-caret-editing-145)).
+
+## Label jump (#787)
+
+`labeljump.go` is the easymotion / leap.nvim-style motion: `gs` in normal mode
+(or `editor.labelJump`, action `label_jump`) opens a session, the next one or
+two typed characters (`leapMaxQuery`) select the visible matches
+(case-sensitive, collected by `collectLeapTargets` mirroring the `View` body
+loop — below the sticky headers, skipping fold-hidden lines, clipped to the
+horizontal window unless soft wrap), and every match is overlaid with a short
+label. Typing a label lands via `jumpTo`, so the departure records in the
+navigation history like a search landing; esc cancels with the cursor
+untouched; a unique match autojumps without a label.
+
+The session is a `leapState` pointer on the Model plus the `awaitLabel` wait
+state; `Capturing()` reports true while it lives, because target and label
+characters include keys the app layer otherwise claims in plain normal mode
+(`q`, `tab`, `@`). Key resolution is never ambiguous by construction:
+`assignLeapLabels` excludes every rune that could still extend a match from
+the label alphabet (`labelAlphabet`, home-row first), so a typed key either
+narrows the query or picks a label, never both. Targets sort
+nearest-to-the-cursor first (line distance, then document order) so the
+closest get the most comfortable keys; past the alphabet, `leapLabels`
+reserves tail keys as two-character prefixes (prefix-free — a reserved key is
+never also a single label), and targets past the pair capacity stay unlabeled
+until the query narrows. Rendering slots into `renderSpanUncached`: the label
+glyph (`leapLabelAt`) wins over every decoration including the cursor, the
+typed span (`leapMatchAt`) highlights search-match-style below cursor and
+carets; once a two-character label's first key is typed, only its targets keep
+an overlay, showing the remaining key. No cache work is needed — every session
+mutation is key-driven, and `updateMsg` bumps `renderEpoch` per routed message.
 
 ## Vim marks & bookmarks (#1151)
 

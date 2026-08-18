@@ -61,6 +61,26 @@ before the jump, not one character to the left.
 `g;` and `g,` are the related vim keys: they walk your recent **edit**
 positions rather than your jumps.
 
+## By what you can see
+
+When the place you want is already on screen, the **label jump** (`gs` in
+normal mode, *Jump to Visible Text* in the palette) is the shortest path: type
+one or two characters of what you are looking at, every visible match gets a
+short label overlaid on it — home-row keys first, the nearest match gets `a` —
+and typing a label puts the caret right there. Two to four keystrokes to any
+visible position, no counting, no search-and-enter round trip.
+
+Details that make it fast:
+
+- A **unique match jumps immediately** — no label needed.
+- Labels never collide with the text: a key that could still narrow the search
+  keeps narrowing; everything else picks a label.
+- With more matches than keys, the overflow gets **two-letter labels** — or
+  just type a second target character to thin the field.
+- ++esc++ cancels; the cursor stays where it was.
+
+The landing counts as a jump, so Back (`cmd+[`) returns you afterwards.
+
 ## By marks you set yourself
 
 **Vim marks** are the lightweight option: `ma` sets mark `a` at the cursor,
@@ -177,6 +197,7 @@ filter* setting.
 |---|---|
 | The file's name | Go to file |
 | The symbol's name | Go to symbol |
+| You can see it on screen | Label jump (`gs`) |
 | Roughly where it is in the tree | The explorer |
 | That you were just there | Back, or Recent files |
 | That you will return often | Pinned files, or a mark |

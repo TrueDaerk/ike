@@ -1,5 +1,25 @@
 # Log
 
+## 2026-08-18 (label-jump motion: easymotion/leap-style navigation, #787)
+
+- **Editor** (`internal/editor/labeljump.go`): `gs` in normal mode (or
+  `editor.labelJump`) opens a label-jump session — the next 1–2 typed
+  characters select the visible matches (sticky-header/fold/scroll aware),
+  each match is overlaid with a home-row-first label, and the label key lands
+  the caret via `jumpTo`, so the departure records in the navigation history.
+  A unique match autojumps, esc cancels with the cursor untouched. Label
+  assignment excludes every rune that could still extend a match, so a key is
+  never ambiguous between narrowing and picking; past the 26-key alphabet the
+  tail keys become prefix-free two-character labels. New `awaitLabel` wait
+  state; `Capturing()` reports true while the session lives so the app layer
+  does not steal plain keys (`q`, `tab`, `@`). Labels render in
+  `renderSpanUncached` above every other decoration, the typed span
+  highlights search-match-style.
+- **Docs**: new `## Label jump` section in `/architecture/editor.md`, the
+  per-jump-entry list in `/architecture/navigation-history.md`, a "By what
+  you can see" section in the navigation user guide, docgen for the new
+  command.
+
 ## 2026-08-18 (follow mode: tail -f for log buffers, #1928)
 
 - **Editor** (`internal/editor/follow.go`): `view.toggleFollow` (palette,
