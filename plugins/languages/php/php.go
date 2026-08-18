@@ -55,6 +55,10 @@ func init() {
 		// New .php files start with the opening tag (#170). Override via
 		// `[lang.php] template`.
 		Template: "<?php\n\n",
+		// Test runner (#1926): PHPUnit — `▶` gutter markers on the test
+		// methods of `*Test.php`, and a structured Test Results tree fed by
+		// the `--teamcity` service-message stream. See test.go / testoutput.go.
+		Test: phpunitSpec,
 	})
 }
 
