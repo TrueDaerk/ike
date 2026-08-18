@@ -127,6 +127,16 @@ func (b *Buffer) ReplaceAll(s string) {
 	b.lines = FromString(s).lines
 }
 
+// AppendLine adds s as a new last line — the follow-mode streaming append
+// (#1928), which grows the document without touching existing lines.
+func (b *Buffer) AppendLine(s string) { b.lines = append(b.lines, s) }
+
+// AppendToLastLine extends the last line with s in place: the continuation of
+// a previously unterminated tail line (#1928).
+func (b *Buffer) AppendToLastLine(s string) {
+	b.lines[len(b.lines)-1] += s
+}
+
 // setLines replaces the entire backing store; helper for edit application.
 func (b *Buffer) setLines(lines []string) {
 	if len(lines) == 0 {

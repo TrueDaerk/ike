@@ -85,6 +85,7 @@ func defaults() *Config {
 			MarkdownRendering:      true,
 			CSVRendering:           true,
 			LogRendering:           true,
+			FollowPollMs:           500,
 			TimestampDecoding:      true,
 			UnicodeEscapeDecoding:  true,
 			EntityDecoding:         true,

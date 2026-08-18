@@ -192,6 +192,8 @@ var jetbrainsRows = []row{
 	// cmd+alt+z to free the primary, #711.)
 	{"cmd+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
 	{"alt+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
+	// Follow mode (#1928): tail -f for the open file, less-F style.
+	{"alt+shift+f", "view.toggleFollow", "Toggle follow (tail -f)", Editor, "Follow mode (#1928)"},
 	{"alt+1", "editor.tab.select1", "Go to tab 1", Global, "Editor tabs (0190)"},
 	{"alt+2", "editor.tab.select2", "Go to tab 2", Global, "Editor tabs (0190)"},
 	{"alt+3", "editor.tab.select3", "Go to tab 3", Global, "Editor tabs (0190)"},

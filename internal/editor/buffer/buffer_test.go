@@ -102,6 +102,24 @@ func TestApplyDeleteAcrossLinesAndUndo(t *testing.T) {
 	}
 }
 
+func TestAppendLineAndAppendToLastLine(t *testing.T) {
+	b := FromString("one\ntwo")
+	b.AppendLine("three")
+	if b.LineCount() != 3 || b.Line(2) != "three" {
+		t.Fatalf("AppendLine=%q", b.Lines())
+	}
+	b.AppendToLastLine(" more")
+	if b.Line(2) != "three more" {
+		t.Fatalf("AppendToLastLine=%q", b.Line(2))
+	}
+	// The empty document is a single "" line the continuation fills in place.
+	e := FromString("")
+	e.AppendToLastLine("first")
+	if e.LineCount() != 1 || e.Line(0) != "first" {
+		t.Fatalf("empty-doc continuation=%q", e.Lines())
+	}
+}
+
 func TestApplyReplaceMultilineText(t *testing.T) {
 	b := FromString("abc")
 	_, end := b.Apply(Edit{Range: NewRange(Position{0, 1}, Position{0, 2}), Text: "X\nY"})

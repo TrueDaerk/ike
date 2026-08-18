@@ -84,6 +84,11 @@ var (
 // form uses the same bound.
 const whichKeyMaxDelayMs = 5000
 
+// followPollMaxMs caps editor.follow_poll_ms (#1928); the settings form uses
+// the same bound. Below 100 ms the poll would stat every open buffer per
+// frame-ish; above 10 s follow mode stops feeling live.
+const followPollMaxMs = 10000
+
 // validate clamps c in place against the baseline rules and returns one
 // diagnostic per correction. Extension validators run after the built-in checks.
 func validate(c *Config) []Diagnostic {
@@ -184,6 +189,11 @@ func validate(c *Config) []Diagnostic {
 		c.Explorer.Sort = "name"
 	}
 	clampMin("editor.auto_save_idle_ms", &c.Editor.AutoSaveIdleMs, 100)
+	clampMin("editor.follow_poll_ms", &c.Editor.FollowPollMs, 100)
+	if c.Editor.FollowPollMs > followPollMaxMs {
+		diags = append(diags, Diagnostic{Field: "editor.follow_poll_ms", Message: fmt.Sprintf("%d above maximum %d, using %d", c.Editor.FollowPollMs, followPollMaxMs, followPollMaxMs)})
+		c.Editor.FollowPollMs = followPollMaxMs
+	}
 	clampMin("backup.debounce_ms", &c.Backup.DebounceMs, 100)
 	clampMin("backup.max_age_days", &c.Backup.MaxAgeDays, 1)
 	clampMin("notifications.timeout_seconds", &c.Notifications.TimeoutSeconds, 1)

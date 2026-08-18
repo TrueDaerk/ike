@@ -46,6 +46,7 @@ func (m Model) ScrollbarHit(x, y int) bool {
 // dragEditScroll gesture feeding ScrollbarDrag. On the track above/below the
 // thumb it jumps the viewport to the proportional position and returns false.
 func (m *Model) ScrollbarPress(y int) (drag bool) {
+	defer m.refreshFollowPause() // a track jump pauses/resumes follow (#1928)
 	track, total, start, length, ok := m.scrollbarGeometry()
 	if !ok {
 		return false
@@ -70,6 +71,7 @@ func (m *Model) ScrollbarPress(y int) (drag bool) {
 // ScrollbarDrag continues a thumb drag: the thumb's top follows the pointer
 // minus the recorded grab offset, mapped back to a scroll offset.
 func (m *Model) ScrollbarDrag(y int) {
+	defer m.refreshFollowPause() // a thumb drag pauses/resumes follow (#1928)
 	track, total, _, _, ok := m.scrollbarGeometry()
 	if !ok {
 		return

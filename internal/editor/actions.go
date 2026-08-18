@@ -645,6 +645,10 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.toggleMarkdownRendering()
 	case "toggle_log_rendering":
 		m.toggleLogRendering()
+	case "toggle_follow":
+		// Follow mode (#1928, follow.go): returns directly — the toggle
+		// carries commands (FollowMsg to the app, the reload's parse).
+		return m.toggleFollow()
 	case "toggle_timestamp_decoding":
 		m.toggleTimestampDecoding()
 	case "toggle_unicode_escape_decoding":

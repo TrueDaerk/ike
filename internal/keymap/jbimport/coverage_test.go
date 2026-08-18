@@ -20,6 +20,7 @@ var noCounterpart = map[string]string{
 	"http.showResponse":     "IKE-only concept (stored response without dispatch), no JetBrains equivalent",
 	"editor.copyDocPath":    "JetBrains copies file references, not a path inside a JSON/YAML document",
 	"markdown.preview":      "no default JetBrains keymap action",
+	"view.toggleFollow":     "tail -f follow mode is an IKE concept; JetBrains consoles auto-scroll without a keymap action",
 	"menu.open":             "JetBrains main menu is not a keymap action",
 	"nav.pins":              "PinActiveEditorTab is a per-tab toggle, not a pin list",
 	"notifications.history": "JetBrains notifications tool window has no default shortcut action",

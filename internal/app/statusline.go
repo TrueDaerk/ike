@@ -34,6 +34,7 @@ type statusSegment struct {
 var statusLeft = []statusSegment{
 	{id: "mode", render: modeSegment},
 	{id: "macro", render: macroSegment},
+	{id: "follow", render: followSegment},
 	{id: "file", render: fileSegment},
 	{id: "hint", render: emptyHintSegment},
 	{id: "eol", render: eolSegment},
@@ -118,6 +119,15 @@ func (m Model) branchSegment() string {
 		s += " ↓" + strconv.Itoa(snap.Behind)
 	}
 	return s
+}
+
+// followSegment shows "FOLLOW" while the active view tails its file (#1928),
+// with the paused state spelled out; hidden when not following.
+func followSegment(_ Model, ed *editor.Model) string {
+	if ed == nil {
+		return ""
+	}
+	return ed.FollowLabel()
 }
 
 // modeSegment is the editor input mode; NORMAL when no editor exists.

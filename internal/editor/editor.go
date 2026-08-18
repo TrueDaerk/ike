@@ -411,6 +411,20 @@ type Model struct {
 	// logRunCache caches the collapsed repeat runs (#1650, logfold.go) per
 	// document version (pointer, shared across the value copies like svTable).
 	logRunCache *logRunState
+	// Follow mode (#1928, follow.go): follow streams content appended to the
+	// open file into the buffer, tail -f style; followPaused parks the
+	// auto-scroll while the user inspects earlier lines. followOffset is the
+	// byte offset of the file consumed into the buffer and followTerm whether
+	// that offset sits just past a line terminator (an unterminated tail line
+	// is continued by the next append). followRotated remembers a remove
+	// event, so the next change reloads wholesale instead of appending into a
+	// replaced file; followPrevRO restores the read-only flag on toggle-off.
+	follow        bool
+	followPaused  bool
+	followPrevRO  bool
+	followRotated bool
+	followOffset  int64
+	followTerm    bool
 	// logDeltaCache caches the inter-line elapsed times (#1651, logdelta.go)
 	// per document version, the same way.
 	logDeltaCache *logDeltaState
@@ -928,6 +942,9 @@ func (m *Model) Load(path string) error {
 	}
 	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
 	m.readOnly = false // a real file replaced any read-only preview (#1762)
+	// A different file in the same view stops following (#1928); the app's
+	// follow tick self-stops once no view follows.
+	m.follow, m.followPaused, m.followRotated = false, false, false
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal
@@ -1307,8 +1324,23 @@ func (m *Model) SetRegisters(s *register.Store) {
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd { return nil }
 
-// Update routes a message to the handler for the current mode.
+// Update routes a message to the handler for the current mode, then re-derives
+// the follow-mode pause flag (#1928) for the user-driven message kinds — key
+// input and palette actions move the cursor/viewport, and whether the view
+// still sits at the buffer's end decides paused vs. resumed. Wheel and
+// scrollbar scrolls bypass Update (ScrollBy, ScrollbarDrag) and re-derive on
+// their own.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	nm, cmd := m.updateMsg(msg)
+	switch msg.(type) {
+	case tea.KeyPressMsg, ActionMsg:
+		nm.refreshFollowPause()
+	}
+	return nm, cmd
+}
+
+// updateMsg is the message dispatch behind Update.
+func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 	// Every routed message (a key, or an async decoration update — syntax,
 	// semantic, diagnostics, git marks, occurrences, inlay hints, sync) may change
 	// a rendered line, so invalidate the line cache (#614). Vertical scroll does
