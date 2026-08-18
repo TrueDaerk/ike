@@ -22,6 +22,25 @@
   Concept docs `/architecture/scratch-files.md` and `/architecture/explorer.md`
   updated.
 
+## 2026-08-18 (Column profile for the data viewer and csv buffers, #1940)
+
+- **Column profile** (`internal/datasrc/profile.go`,
+  `internal/dataview/profile.go`, `internal/app/columnprofile.go`): `P` in the
+  data viewer's grid — or `data.columnProfile` from the palette — profiles the
+  focused column: rows, nulls, empty strings, distinct values, min/max, the
+  ten most frequent values with counts, plus the mean of a numeric column or
+  the length range of a text one. `Profile(ctx, table, column, clause)` joins
+  the `Source` interface next to `Count`: SQLite and DuckDB answer with two
+  aggregate statements through the filter's own subquery wrapper (a
+  three-function dialect is the only engine-specific part — `typeof` vs
+  `TRY_CAST`), Parquet with a bounded scan through its reader, capped at
+  100 000 rows and marked as capped. The popup is async and cancelable (esc
+  closes it and kills the query; a superseded result is dropped), owns the
+  pane's input while open, and `y` copies exactly the lines it shows.
+  `csv.columnProfile` runs the same scan (`datasrc.ProfileCSV`, splitting
+  through `internal/sv`) over the caret's column of a table-rendered
+  csv/tsv/psv buffer and shows it in the floating shell.
+
 ## 2026-08-18 (Scratch files panel with delete, #1932)
 
 - **Scratch files** (`internal/scratchpanel`, `internal/app/scratch_panel.go`,

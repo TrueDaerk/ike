@@ -2,6 +2,7 @@ package datasrc
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -459,4 +460,88 @@ func plural(n int64) string {
 		return ""
 	}
 	return "s"
+}
+
+// profileBatch is how many rows one ReadRows call of the profiling scan
+// takes: enough to amortize the call, small enough to keep cancellation
+// responsive.
+const profileBatch = 1024
+
+// Profile aggregates one column (#1940). Unfiltered it is a **bounded scan**
+// through the same reader the grid pages with: parquet-go is a reader, not a
+// query engine, so the numbers are accumulated in Go over at most
+// ProfileLimit rows — past that the profile is marked Capped and every
+// renderer says so rather than passing the head of a huge file off as the
+// whole table.
+//
+// Under a filter the clause already belongs to DuckDB (PageWhere), so the
+// profile follows it there and runs the same aggregate SQL the DuckDB backend
+// does, over `read_parquet('<file>')` — exact, and capped by nothing.
+//
+// ctx cancels either shape: the scan checks it between row batches, the CLI
+// invocation dies with its process.
+func (s *parquetSource) Profile(ctx context.Context, _, column, clause string) (_ Profile, err error) {
+	if clause = normalizeClause(clause); clause != "" {
+		if err := checkClause(clause); err != nil {
+			return Profile{}, err
+		}
+		bin, lerr := lookDuckDB()
+		if lerr != nil {
+			return Profile{}, parquetFilterTool(lerr)
+		}
+		cli := duckCLI{bin: bin}
+		return duckProfile(ctx, func(sql string) ([]byte, error) {
+			return cli.queryMemCtx(ctx, sql)
+		}, s.filterBase(), s.name, column, clause)
+	}
+	// The library panics on some malformed schemas; a corrupt file must
+	// degrade to the popup's error, never take the editor down.
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("cannot read parquet rows: %v", r)
+		}
+	}()
+	idx := -1
+	for i, c := range s.cols {
+		if c.col.Name() == column {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return Profile{}, fmt.Errorf("no column %q", column)
+	}
+	acc := newScanProfile()
+	limit, capped := s.pq.NumRows(), false
+	if limit > ProfileLimit {
+		limit, capped = ProfileLimit, true
+	}
+	r := parquet.NewReader(s.pq)
+	defer r.Close()
+	leaves := len(s.pq.Schema().Columns())
+	buf := make([]parquet.Row, profileBatch)
+	for read := int64(0); read < limit; {
+		if err := ctx.Err(); err != nil {
+			return Profile{}, err
+		}
+		want := limit - read
+		if want > int64(len(buf)) {
+			want = int64(len(buf))
+		}
+		n, err := r.ReadRows(buf[:want])
+		for _, row := range buf[:n] {
+			acc.add(s.renderRow(row, leaves)[idx])
+		}
+		read += int64(n)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return Profile{}, err
+		}
+		if n == 0 {
+			break // a reader that makes no progress must not spin
+		}
+	}
+	return acc.result(s.name, column, "", capped), nil
 }

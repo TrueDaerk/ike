@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Data Viewer
-description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825/#1851/#1885 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table> (the head prefills through WHERE, so only the condition is typed), run inside a subquery so paging keeps working."
+description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825/#1851/#1885/#1940 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table> (the head prefills through WHERE, so only the condition is typed), run inside a subquery so paging keeps working; 'P' profiles the focused column (nulls, distinct, min/max, top values, plus mean or length range) through SQL aggregates or a bounded scan, asynchronously and cancelably."
 resource: internal/dataview
-tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sql, mouse, paging, async, performance]
-timestamp: 2026-08-13T12:00:00Z
+tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sql, mouse, paging, async, performance, profile, statistics]
+timestamp: 2026-08-18T16:00:00Z
 ---
 
-# Data Viewer (#1764, #1765, #1766, #1777, #1788, #1795)
+# Data Viewer (#1764, #1765, #1766, #1777, #1788, #1795, #1940)
 
 Opening a SQLite database, a DuckDB database or a Parquet file lands in a pane
 of kind `KindData`: a sidebar listing the tables and views (with row counts),
@@ -20,9 +20,11 @@ Three packages carry it, and only one of them knows SQL:
 - `internal/datasrc` — the backend contract plus the engines. The `Source`
   interface is the whole surface the pane sees: `Tables()`,
   `Page(table, offset, limit)`, `PageWhere(table, clause, offset, limit)`,
-  `Count(table, clause)`, `FilterPrefix(table)`, `Schema(table)`, `Close()`.
-  Nothing but `Count` ever counts rows, and nothing but the pane's background
-  command ever calls it (#1795, below). The pane holds
+  `Count(table, clause)`, `Profile(ctx, table, column, clause)` (#1940),
+  `FilterPrefix(table)`, `Schema(table)`, `Close()`.
+  Nothing but `Count` and the explicitly-invoked `Profile` ever scans rows,
+  and nothing but the pane's background commands ever calls either (#1795,
+  below). The pane holds
   **no SQL of its own** — not even under the filter (#1777), where it hands
   the user's clause straight to `PageWhere`. That is the seam SQLite, DuckDB
   and Parquet share.
@@ -92,9 +94,10 @@ accepted over a cgo driver):
 - **Read-only**: the DSN is `file:<path>?mode=ro` on a single connection.
   A concurrent writer is never blocked and never sees a lock from IKE
   (`TestReadOnlyNeverBlocksWriters` proves both directions).
-- **Read connections**: two. One carries the pane's page fetches, the other
-  the background row count (#1795) — with a single connection a `COUNT(*)`
-  over a huge table would queue every page fetch behind it.
+- **Read connections**: three, one per concurrent job the pane runs — page
+  fetches, the background row count (#1795) and the column profile (#1940).
+  With a single connection a `COUNT(*)` over a huge table would queue every
+  page fetch behind it.
 - **Paging**: `SELECT * FROM "t" ORDER BY rowid LIMIT n OFFSET m` — rowid
   gives `LIMIT/OFFSET` a stable order on ordinary tables; views and
   `WITHOUT ROWID` tables fall back to the bare scan. One page is `PageSize`
@@ -301,9 +304,10 @@ Two regions, `tab` between them; `h` at the grid's left edge also falls back
 to the sidebar. In the sidebar the shared list navigation (#1666) moves,
 `enter`/`l` loads the selection. In the grid `j`/`k` step rows — crossing a
 page edge fetches the neighbour page — `h`/`l` scroll columns, `g`/`G` jump to
-the first/last page, and `/` opens the SQL filter (above). The filter line owns
-the keyboard while it is open: the grid's single-letter keys are plain text
-inside a clause. Column widths derive from the loaded page, clamped with an
+the first/last page, `/` opens the SQL filter (above) and `P` the column
+profile (below). The filter line owns the keyboard while it is open: the
+grid's single-letter keys are plain text inside a clause, and the profile
+popup owns it the same way. Column widths derive from the loaded page, clamped with an
 ellipsis like the csv grid.
 
 `tab` reaches the pane because a focused data viewer is an exception to the
@@ -353,6 +357,67 @@ DuckDB, the schema view for Parquet — in a read-only editor tab under the
 virtual path `<db>!<table>.sql`, the same `!` convention as an archive entry
 (#1762). The tab titles itself `users.sql (app.db)`, picks up SQL highlighting
 from the `.sql` tail, and can never be written back.
+
+## The column profile (#1940)
+
+`P` on the grid — or `data.columnProfile` ("Data: Column Profile") from the
+palette, which the pane context scopes to a focused data viewer — answers "is
+this column ever null? what values does status take?" without writing SQL. The
+popup lists **rows, nulls, empty strings, distinct values, min/max** and the
+**ten most frequent values with counts**, plus one type-specific extra: the
+**mean** of a numeric column, the **length range** of a text one. Cheap
+aggregates only — no histograms, no quantiles.
+
+The profiled column is the grid's **leftmost visible** one, which `h`/`l`
+move: the grid scrolls columns rather than carrying a column cursor. An active
+filter travels with it, so a profile under `WHERE status = 'active'` describes
+exactly the rows the grid shows and says so in its `filter:` line.
+
+`Profile(ctx, table, column, clause)` sits on the `Source` interface next to
+`Count` — the same seam, for the same reason: it is a scan on every engine.
+
+- **SQLite and DuckDB** run **two SQL statements**: one row of scalars
+  (`count(*)`, `count(c)`, the empty-string sum, `count(DISTINCT c)`,
+  `min`/`max`, the numeric-value count, `avg`, `min`/`max(length(…))`) and the
+  frequency ranking `… GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 10`, NULL included
+  as its own group. Both go through the filter's subquery wrapper, so the
+  generated SQL is identical across the engines and a user `LIMIT` bounds the
+  profile like it bounds the grid. The only engine-specific part is a
+  three-function dialect: SQLite decides "is this a number?" per *value*
+  (`typeof(c) IN ('integer','real')`, its types being dynamic), DuckDB with
+  `TRY_CAST(… AS DOUBLE)` — type-agnostic on purpose, so no `DESCRIBE` round
+  trip is needed and a column of any type profiles.
+- **Parquet** has no query engine, so an unfiltered profile is a **bounded
+  scan** through the same reader the grid pages with, accumulated in Go: it
+  stops at `ProfileLimit` (100 000) rows and the result is marked `Capped`,
+  which the popup states (`first 100000 rows only (scan capped)`) rather than
+  passing the head of a huge file off as the whole table. Only the profiled
+  column's pages are decoded. Under a filter the clause already belongs to
+  DuckDB (see `PageWhere`), so the profile follows it there and is exact.
+  The scan decides numeric-ness from the rendered values, so an `INT64` column
+  still compares numerically — `9 < 10`, not `"10" < "9"` — and a numeric
+  column with empty cells stays numeric (an empty value is missing, not a
+  word). The same accumulator profiles a **csv/tsv/psv buffer** through
+  `datasrc.ProfileCSV` (see [editor](./editor.md)), which is why a csv column
+  and a database column read identically.
+
+**Async and cancelable.** The profile is a `tea.Cmd` like the row count
+(#1795): the popup appears immediately with `profiling <column>…` while the
+grid keeps rendering, and `esc` closes it *and* cancels the query through its
+context — SQLite's statement is interrupted, the duckdb CLI dies with its
+process, the Parquet scan stops between row batches. Each profile carries a
+sequence number, so a result landing after its popup closed (or after another
+column was asked for) is dropped instead of replacing what the user is looking
+at, and closing the pane cancels a profile still running. SQLite therefore
+opens **three** connections — page fetches, the background count, the profile
+— so none of the three ever queues behind another.
+
+While the popup is open it owns the pane's keyboard and mouse, like the filter
+line does: `esc`/`q` close, `y` (or `c`) copies the profile as text, `j`/`k`
+and the wheel scroll it when it is taller than the pane, and clicks are inert.
+The copied text is exactly the rendered lines (`Profile.Text`), so what is
+shown and what is copied cannot drift apart — a NULL reads as `NULL` there,
+plain text that survives a copy, rather than the grid's `∅`.
 
 ## Opening large databases (#1795)
 

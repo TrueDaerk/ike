@@ -34,6 +34,8 @@ bring their own.
 | Previous Bookmark | `bookmark.previous` | `ctrl+shift+f11` | — | everywhere |
 | Toggle Bookmark | `bookmark.toggle` | `f11` | — | everywhere |
 | Toggle Bookmark with Mnemonic | `bookmark.toggleMnemonic` | `alt+f3` | — | everywhere |
+| CSV: Column Profile | `csv.columnProfile` | — | — | `editor` pane |
+| Data: Column Profile | `data.columnProfile` | — | — | `data` pane |
 | Breakpoints | `debug.breakpoints` | `cmd+shift+f8` | — | everywhere |
 | Continue | `debug.continue` | `f9` | — | everywhere |
 | Listen for PHP Debug Connections | `debug.listen` | — | — | everywhere |

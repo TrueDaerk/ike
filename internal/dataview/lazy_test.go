@@ -1,6 +1,7 @@
 package dataview
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -28,6 +29,14 @@ type fakeSource struct {
 	pages   int      // Page/PageWhere calls
 	counts  int      // Count calls
 	counted []string // what each count was for, "table|clause"
+
+	// Column profile (#1940): profiles counts the calls, profiled records
+	// what each was for, block (when non-nil) suspends the call until the
+	// test closes it, and profileErr makes it fail.
+	profiles   int
+	profiled   []string
+	block      chan struct{}
+	profileErr error
 }
 
 func (f *fakeSource) Tables() ([]datasrc.Table, error) {
@@ -76,6 +85,30 @@ func (f *fakeSource) Count(table, clause string) (int64, error) {
 }
 
 func (f *fakeSource) FilterPrefix(table string) string { return "SELECT * FROM " + table + " " }
+
+// Profile answers the column profile (#1940). block, when set, holds the
+// call until the test releases it — that is how "the profile is async and
+// cancelable" is asserted without a real database to be slow.
+func (f *fakeSource) Profile(ctx context.Context, table, column, clause string) (datasrc.Profile, error) {
+	f.profiles++
+	f.profiled = append(f.profiled, table+"."+column+"|"+clause)
+	if f.block != nil {
+		select {
+		case <-f.block:
+		case <-ctx.Done():
+			return datasrc.Profile{}, ctx.Err()
+		}
+	}
+	if f.profileErr != nil {
+		return datasrc.Profile{}, f.profileErr
+	}
+	return datasrc.Profile{
+		Table: table, Column: column, Filter: clause,
+		Rows: f.rows, Nulls: 2, Distinct: 3,
+		Min: datasrc.Cell{Text: "1"}, Max: datasrc.Cell{Text: "9"},
+		Top: []datasrc.TopValue{{Value: datasrc.Cell{Text: "7"}, Count: 4}},
+	}, nil
+}
 
 func (f *fakeSource) Schema(string) (string, error) { return "CREATE TABLE big (id INTEGER)", nil }
 

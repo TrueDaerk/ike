@@ -353,6 +353,10 @@ type Model struct {
 	// newProj is the open new-project wizard (#1718); nil when it is closed.
 	newProj *newProjState
 
+	// csvProfile is the open csv column profile (#1940); nil when it is
+	// closed. The data viewer's profile lives in its own pane, not here.
+	csvProfile *csvProfileContent
+
 	// regexTester is the open regex tester (#1937); nil when it is closed.
 	// regexHistory outlives the dialog so reopening still offers the
 	// patterns tried earlier in this session.
@@ -4867,6 +4871,24 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dataview.ResultMsg:
 		// A data viewer's background open or row count landed (#1795).
 		return m, m.dataResult(msg)
+
+	case dataview.CopyMsg:
+		// y in the data viewer's column profile popup (#1940).
+		clipboardWrite(msg.Text)
+		m.host.Notify(host.Info, "copied "+msg.What)
+		return m, nil
+
+	case DataColumnProfileMsg:
+		// data.columnProfile (#1940): the focused grid column's aggregates.
+		return m, m.profileColumn()
+
+	case CSVColumnProfileMsg:
+		// csv.columnProfile (#1940): the caret's column in a table-rendered
+		// csv/tsv/psv buffer, scanned in the background.
+		return m, m.profileCSVColumn()
+
+	case csvProfileMsg:
+		return m, m.showCSVProfile(msg)
 
 	case dataview.ShowSchemaMsg:
 		// Schema key in the data pane: the table's DDL, read-only.
