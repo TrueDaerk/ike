@@ -41,48 +41,83 @@ func none(t *testing.T, lines []string, line int) {
 	}
 }
 
-// TestMaskSuspectAssignments (#1811): a built-in suspect name masks its value,
-// through a plain name, a `self.` attribute and an annotated target.
-func TestMaskSuspectAssignments(t *testing.T) {
-	lines := []string{
-		`self.password = "hunter2"`,
-		`API_TOKEN = os.environ["T"]`,
-		`    client_secret: str = "abc123"`,
-		`cfg.db.private_key = load()`,
+// equal asserts the line's masks cover exactly want, in order.
+func equal(t *testing.T, line string, want ...string) {
+	t.Helper()
+	got := masked(t, []string{line}, 0)
+	if len(got) != len(want) {
+		t.Errorf("%s masks %q, want %q", line, got, want)
+		return
 	}
-	one(t, lines, 0, `"hunter2"`)
-	one(t, lines, 1, `os.environ["T"]`)
-	one(t, lines, 2, `"abc123"`)
-	one(t, lines, 3, `load()`)
-}
-
-// TestMaskLeavesHarmlessLinesAlone: a name no pattern finds suspect, a
-// comparison, an augmented assignment, a comment and an empty value all stay
-// readable.
-func TestMaskLeavesHarmlessLinesAlone(t *testing.T) {
-	lines := []string{
-		`self.timeout = 500`,
-		`if password == "x":`,
-		`password += tail`,
-		`# self.password = "hunter2"`,
-		`self.password = `,
-		`self.public_key = "ssh-rsa AAAA"`,
-		`get_secret("name")`,
-	}
-	for li := range lines {
-		none(t, lines, li)
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("%s masks %q, want %q", line, got, want)
+			return
+		}
 	}
 }
 
-// TestMaskStopsAtComments: a trailing comment stays readable, but a `#` inside
-// the value is part of it — cutting there would leak the tail of the secret.
-func TestMaskStopsAtComments(t *testing.T) {
-	lines := []string{
-		`self.password = "hunter2"  # the staging one`,
-		`self.password = "a#b"`,
+// TestMaskLiteralSpans (#1930): the mask covers the secret string literals of
+// a suspect assignment and nothing else — a value that holds no literal holds
+// no secret, and a literal naming a key stays readable.
+func TestMaskLiteralSpans(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+		want []string
+	}{
+		// Nothing a literal could hide: a lookup, a call, a name.
+		{"subscript lookup", `token = item["token"]`, nil},
+		{"call", `token = get_token()`, nil},
+		{"name", `token = other_var`, nil},
+		{"attribute", `self._token = self._token or fetch()`, nil},
+		{"config key", `api_key = config["api_key"]`, nil},
+		{"dotted key name", `secret = cfg.get("db.token")`, nil},
+
+		// The literal is the value.
+		{"plain value", `token = "abc123"`, []string{"abc123"}},
+		{"single quotes", `api_key = 'abc123'`, []string{"abc123"}},
+		{"attribute target", `self.password = "hunter2"`, []string{"hunter2"}},
+		{"annotated target", `    client_secret: str = "abc123"`, []string{"abc123"}},
+		{"byte string", `password = b"abc123"`, []string{"abc123"}},
+		{"closed triple", `password = """abc123"""`, []string{"abc123"}},
+		{"empty value", `password = ""`, nil},
+
+		// A literal inside an expression: the key name stays, the value goes.
+		{"env fallback", `PROXY_API_KEY = os.environ.get("PARSER_PROXY_API_KEY", "84791234")`, []string{"84791234"}},
+		{"hyphenated fallback", `PROXY_API_KEY = os.environ.get("PARSER_PROXY_API_KEY", "my-secret")`, []string{"my-secret"}},
+		{"sole literal is never a name", `password = "token"`, []string{"token"}},
+		{"list of values", `TOKENS = ["abc", "def"]`, []string{"abc", "def"}},
+
+		// Comments and quotes.
+		{"trailing comment", `self.password = "hunter2"  # the staging one`, []string{"hunter2"}},
+		{"hash inside the value", `self.password = "a#b"`, []string{"a#b"}},
+		{"escaped quote", `self.password = "he said \"hi\" #1"`, []string{`he said \"hi\" #1`}},
+		{"unterminated string", `self.password = "abc`, []string{`"abc`}},
+
+		// Not an assignment at all.
+		{"comparison", `if password == "x":`, nil},
+		{"augmented", `password += "tail"`, nil},
+		{"commented out", `# self.password = "hunter2"`, nil},
+		{"empty right-hand side", `self.password = `, nil},
+		{"cleared by a public marker", `self.public_key = "ssh-rsa AAAA"`, nil},
+		{"call statement", `get_secret("name")`, nil},
+		{"no literal, no mask", `self.timeout = 500`, nil},
 	}
-	one(t, lines, 0, `"hunter2"`)
-	one(t, lines, 1, `"a#b"`)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) { equal(t, c.line, c.want...) })
+	}
+}
+
+// TestMaskFStringParts (#1930): an f-string masks its literal text and keeps
+// the `{...}` interpolations readable — an interpolation is an expression, and
+// only literal text can carry the secret.
+func TestMaskFStringParts(t *testing.T) {
+	equal(t, `password = f"pw-{user}-x"`, "pw-", "-x")
+	equal(t, `password = f"{base}"`)
+	equal(t, `password = f"a{{b}}c"`, "a{{b}}c")
+	equal(t, `token = f"{a[{k}]}tail"`, "tail")
+	equal(t, `TOKEN = os.getenv("TOKEN", f"dev-{user}")`, "dev-")
 }
 
 // TestMaskMultiLineValue: a triple-quoted secret masks on every one of its
@@ -124,27 +159,25 @@ func TestMaskCustomKeyPatterns(t *testing.T) {
 	t.Cleanup(func() { secret.SetKeyPatterns(nil) })
 
 	lines := []string{
-		`self.timeout = 500`,
+		`self.timeout = "500ms"`,
 		`self.legacy_token = "visible"`,
 		`self.api_token = "abc"`,
-		`self.retries = 3`,
+		`self.retries = "3"`,
 	}
-	one(t, lines, 0, `500`)
+	one(t, lines, 0, `500ms`)
 	none(t, lines, 1)
-	one(t, lines, 2, `"abc"`)
+	one(t, lines, 2, `abc`)
 	none(t, lines, 3)
 }
 
 // TestMaskWinsOverOtherFamilies: overlapping spans resolve first-covering-wins,
-// so a masked value must outrank the constant conceal (#1701) that would
-// otherwise read `500` as a duration.
+// so a masked value must outrank the network-literal hint (#1653) that would
+// otherwise draw over the same string.
 func TestMaskWinsOverOtherFamilies(t *testing.T) {
-	secret.SetKeyPatterns([]string{"*timeout*"})
-	t.Cleanup(func() { secret.SetKeyPatterns(nil) })
-
-	lines := []string{"timeout = 5000"}
+	lines := []string{`api_key = "10.0.0.1"`}
+	value := len(`api_key = "`)
 	for _, s := range pythonSpans(lines) {
-		if s.Line != 0 || s.StartCol > 10 || s.EndCol <= 10 {
+		if s.Line != 0 || s.StartCol > value || s.EndCol <= value {
 			continue
 		}
 		if s.Capture != secret.Capture {

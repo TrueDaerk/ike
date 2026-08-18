@@ -612,9 +612,14 @@ again — and the producer emits the value as a stand-in span carrying
 in `"password": "…"` the string's content masks and the quotes stay, decided by
 the key directly in front of the value and by no other. Since #1811 the Python producer
 (`plugins/languages/python/mask.go`) docks onto the same core for source-code
-assignments: `self.password = "hunter2"` masks its right-hand side because the
-assignment target names the value the way a dotenv key does, user patterns and
-exemptions included. No producer duplicates the pattern logic — they all ask
+assignments: `self.password = "hunter2"` masks because the assignment target
+names the value the way a dotenv key does, user patterns and exemptions
+included. Since #1930 the mask covers only the *string literals* of that value,
+never the expression around them — `token = item["token"]` and
+`token = get_token()` mask nothing, and
+`PROXY_API_KEY = os.environ.get("PROXY_API_KEY", "8479…")` masks the fallback
+alone, since a literal that is not the whole value, is identifier-shaped and is
+itself secret-suspect names a key rather than holding one. No producer duplicates the pattern logic — they all ask
 `internal/secret`, so the built-in tables and `editor.secret_masking_keys`
 hold identically in each. The ini-style config
 language (`plugins/languages/ini`, #1595) follows the same recipe for `.ini`

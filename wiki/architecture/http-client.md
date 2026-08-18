@@ -624,7 +624,11 @@ For a recognized stream:
   `home`/`end`/`super+left/right` jump to the line start/end, `alt+backspace`
   deletes the previous word, `alt+delete` the next, `super+backspace` kills to
   the line start. Every edit re-runs the search and rescrolls to the current
-  match.
+  match. A bracketed paste (cmd+v) while the prompt is open inserts at the
+  cursor via the shared `ui.PasteText` (#1955), flattening a multi-line block
+  to one line like the terminal scrollback search (#1882); the root model
+  routes `tea.PasteMsg` to the pane only while it is focused, and the pane
+  itself no-ops the call when the prompt is closed.
 - **Selection & copy** (#1266): a left-button drag selects text across the
   composed view, with the terminal pane's gestures (#227, #951) — double
   click selects a word (hyphens and dots included, so ids and tokens select

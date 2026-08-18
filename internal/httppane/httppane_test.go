@@ -387,6 +387,51 @@ func TestSearchBackspaceReRuns(t *testing.T) {
 	}
 }
 
+// TestSearchPasteInsertsAtCursor covers cmd+v while the prompt is open
+// (#1955): the clipboard block lands at the rune cursor and matches/footer
+// refresh immediately, mirroring the terminal scrollback search's #1882 fix.
+func TestSearchPasteInsertsAtCursor(t *testing.T) {
+	m := searchViewer(t)
+	typeSearch(m, "tokn")
+	m.qcur = 3 // "tok|n"
+	m.PasteText("e")
+	if q, open := m.SearchQuery(); q != "token" || !open {
+		t.Fatalf("query after paste: %q open=%v, want %q open=true", q, open, "token")
+	}
+	if want := 4; m.qcur != want { // cursor lands right after the inserted "e"
+		t.Fatalf("cursor after paste: %d, want %d", m.qcur, want)
+	}
+	if _, total := m.MatchPosition(); total != 4 {
+		t.Errorf("matches after paste: %d, want 4", total)
+	}
+	if !strings.Contains(m.View(), "1/4") {
+		t.Errorf("footer after paste must show the position:\n%s", m.View())
+	}
+}
+
+// TestSearchPasteFlattensMultipleLines covers a multi-line clipboard block
+// (#1955): ui.PasteText joins the trimmed, non-empty lines with single
+// spaces, matching every other paste target in the app.
+func TestSearchPasteFlattensMultipleLines(t *testing.T) {
+	m := searchViewer(t)
+	typeSearch(m, "")
+	m.PasteText("tok\nen\n")
+	if q, _ := m.SearchQuery(); q != "tok en" {
+		t.Fatalf("query after multi-line paste: %q, want %q", q, "tok en")
+	}
+}
+
+// TestSearchPasteClosedPromptIsNoop covers paste with the prompt closed
+// (#1955): the pane has no other editable text field, so paste must be a
+// pure no-op rather than reaching into stale search state.
+func TestSearchPasteClosedPromptIsNoop(t *testing.T) {
+	m := searchViewer(t)
+	m.PasteText("token")
+	if q, open := m.SearchQuery(); q != "" || open {
+		t.Fatalf("paste with the prompt closed must not open it: %q open=%v", q, open)
+	}
+}
+
 func TestSearchFooterShowsPosition(t *testing.T) {
 	m := searchViewer(t)
 	typeSearch(m, "token")
