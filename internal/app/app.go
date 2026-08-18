@@ -77,6 +77,7 @@ import (
 	"ike/internal/project"
 	"ike/internal/regextest"
 	"ike/internal/registry"
+	"ike/internal/scratchpanel"
 	"ike/internal/search"
 	"ike/internal/secret"
 	"ike/internal/settings"
@@ -459,8 +460,13 @@ type Model struct {
 	domReqVersion  int
 	domHLPath      string
 	domHLRev       int
-	lastTestRun       *testRunState
-	testRunSeq        int
+	// scratchReturnFocus is the same dance for the Scratch Files tool window
+	// (#1932); scratchAutoDone marks the one-shot [scratch] panel auto-open
+	// as spent, so hiding the panel afterwards sticks for the session.
+	scratchReturnFocus string
+	scratchAutoDone    bool
+	lastTestRun        *testRunState
+	testRunSeq         int
 	// rawDiags caches each path's last published, unfiltered diagnostic set;
 	// diagIgnore/diagIgnoreRaw are the compiled lsp.diagnostics_ignore rules
 	// and their source strings (#1259). Publishes filter through the rules
@@ -1397,6 +1403,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below as the empty singleton panel (#1025)
 		} else if ids[key].Kind == "dom" {
 			continue // restored below as the empty singleton panel (#1929)
+		} else if ids[key].Kind == "scratch" {
+			continue // restored below as the singleton scratch list (#1932)
 		} else if ids[key].Kind == "usages" {
 			continue // restored below as the empty singleton panel (#1155)
 		} else if ids[key].Kind == "http" {
@@ -1587,6 +1595,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// The DOM inspector restores empty (#1929); the first
 			// buffer-change sync reparses the focused HTML buffer.
 			panes.AddDOM()
+			continue
+		}
+		if id := ids[key]; id.Kind == "scratch" {
+			// The scratch list rebuilds itself from the store on creation
+			// (#1932) — there is no per-session state to restore.
+			panes.AddScratch()
 			continue
 		}
 		if id := ids[key]; id.Kind == "diff" {
@@ -2519,6 +2533,7 @@ var terminalGlobalCommands = map[string]bool{
 	"issues.toggle":         true,
 	"structure.toggle":      true,
 	"dom.toggle":            true,
+	"scratch.panel":         true,
 	"notifications.history": true,
 	// #997: tab switching stays reachable from a focused terminal/tool pane
 	// (the shell never meaningfully sees ctrl+cmd+arrows). The secondary
@@ -3117,6 +3132,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if sync := mm.domSyncCmd(); sync != nil {
 		cmd = tea.Batch(cmd, sync)
 	}
+	// [scratch] panel = true opens the scratch list once the first layout
+	// pass gave the panes geometry (#1932); the flag makes it a one-shot.
+	mm.scratchAutoOpen()
 	// Image panes reconcile their Kitty graphics placements here, once the
 	// pass settled (#1479): any message may have opened, closed or resized
 	// one, and the raw transmit/delete sequences must follow the layout.
@@ -4304,6 +4322,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Enter / double-click on a DOM node row (#1929): jump the editor to
 		// the node's source position through the standard open funnel.
 		return m.openPathAt(msg.Path, msg.Line, msg.Col)
+
+	case ScratchPanelToggleMsg:
+		// scratch.panel (#1932): open the scratch list below the editor,
+		// focus it, or hand focus back — the shared tool-window dance.
+		m.toggleScratchPanel()
+		return m, nil
+
+	case scratchpanel.OpenMsg:
+		// Enter / double-click on a scratch row (#1932): the standard open
+		// funnel, so the file lands as a focused tab exactly like scratch.list.
+		return m.openPath(msg.Path, false)
+
+	case scratchpanel.DeleteMsg:
+		// A confirmed delete in the scratch panel (#1932): remove the file
+		// through the store and close its open tabs across panes.
+		return m, m.deleteScratch(msg.Path)
 
 	case domview.CopyMsg:
 		// Copy actions on a DOM node (#1929): selector path or outer HTML.
@@ -6810,7 +6844,7 @@ func (m Model) viewerSplitTarget() string {
 		switch inst.Kind() {
 		case pane.KindExplorer, pane.KindVCS, pane.KindDebug, pane.KindProblems,
 			pane.KindStructure, pane.KindUsages, pane.KindHTTP, pane.KindBreakpoints,
-			pane.KindTests, pane.KindIssues, pane.KindDOM:
+			pane.KindTests, pane.KindIssues, pane.KindDOM, pane.KindScratch:
 			return false
 		}
 		return true
@@ -8052,6 +8086,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.DOM().Wheel(lines)
 			}
+		case pane.KindScratch:
+			// The wheel scrolls the scratch list (#1932).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Scratch().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Scratch().Wheel(lines)
+			}
 		case pane.KindUsages:
 			// The wheel scrolls the usages list (#1155).
 			switch msg.Button {
@@ -9041,6 +9083,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// fold glyph toggles, a row click selects, a double-click navigates.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.DOM().Click(localX, localY)
+		}
+	case pane.KindScratch:
+		// Scratch-list clicks (#1932): a click selects, a double-click opens
+		// the scratch, mirroring the Problems panel.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Scratch().Click(localX, localY)
 		}
 	case pane.KindUsages:
 		// Usages-list clicks (#1155): a click selects, a double-click opens
@@ -10095,6 +10143,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title = "STRUCTURE"
 		case pane.KindDOM:
 			title = "DOM"
+		case pane.KindScratch:
+			title = "SCRATCH FILES"
 		case pane.KindUsages:
 			title = "USAGES"
 		case pane.KindHTTP:

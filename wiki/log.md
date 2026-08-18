@@ -18,6 +18,23 @@
   `csv.columnProfile` runs the same scan (`datasrc.ProfileCSV`, splitting
   through `internal/sv`) over the caret's column of a table-rendered
   csv/tsv/psv buffer and shows it in the floating shell.
+## 2026-08-18 (Scratch files panel with delete, #1932)
+
+- **Scratch files** (`internal/scratchpanel`, `internal/app/scratch_panel.go`,
+  `internal/scratch`): `scratch.panel` ("Scratch Files") opens a slim
+  singleton pane below the editor listing the scratch store newest-first
+  (name, language, mod time). Enter/double click open through the standard
+  funnel; `d` arms a confirmation only `y`/`enter` answers, and the delete
+  then removes the file through the new `scratch.Delete` — which refuses any
+  path not lying directly in the scratch dir — closes its tabs across panes
+  via the explorer's `closeEditorsForPath`, and drops its Problems findings.
+  Scratches could be created and opened but never deleted from inside the IDE
+  before: the scratch dir lies outside the project root, so the explorer
+  cannot reach it. The panel is an ordinary split-tree leaf, so the line above
+  it is the usual draggable pane edge and its height persists with the layout;
+  `scratch.panel` / `scratch.panel_height` (default off, 8 rows) decide
+  whether and how tall it opens on start. Concept doc
+  `/architecture/scratch-files.md` extended.
 
 ## 2026-08-18 (Python secret masking covers literal spans only, #1930)
 

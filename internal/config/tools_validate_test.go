@@ -127,7 +127,7 @@ func TestValidateToolLayoutBadTemplate(t *testing.T) {
 // — terminal and run included — passes silently.
 func TestValidateToolLayoutUnknownTool(t *testing.T) {
 	c := defaults()
-	slots := "ABCDFGHIJKLMX" // one 1x1 slot per id plus X for the typo; no E
+	slots := "ABCDFGHIJKLMNX" // one 1x1 slot per id plus X for the typo; no E
 	assign := []string{"X=typo"}
 	for i, id := range BuiltinAssignTools() {
 		assign = append(assign, string(slots[i])+"="+id)

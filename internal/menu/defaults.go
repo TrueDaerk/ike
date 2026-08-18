@@ -78,6 +78,7 @@ func Defaults() []Menu {
 			{Title: "Test Results", Command: "tests.toggle"},
 			{Title: "GitHub Issues", Command: "issues.toggle"},
 			{Title: "DOM Inspector", Command: "dom.toggle"},
+			{Title: "Scratch Files", Command: "scratch.panel"},
 			{Title: "Terminal", Command: "terminal.toggle"},
 			{Title: "Popup Terminal", Command: "terminal.popup"},
 			{Title: "New Terminal", Command: "terminal.new"},

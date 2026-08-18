@@ -161,6 +161,7 @@ bring their own.
 | New Scratch File: Typescript | `scratch.new.typescript` | — | — | everywhere |
 | New Scratch File: XML | `scratch.new.xml` | — | — | everywhere |
 | New Scratch File: Yaml | `scratch.new.yaml` | — | — | everywhere |
+| Scratch Files | `scratch.panel` | — | — | everywhere |
 | Next Search Match | `search.nextMatch` | `f3` | — | everywhere |
 | Previous Search Match | `search.prevMatch` | `shift+f3` | — | everywhere |
 | Settings | `settings.open` | `cmd+,` | — | everywhere |
