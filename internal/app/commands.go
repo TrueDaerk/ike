@@ -308,6 +308,12 @@ type CompareClipboardMsg struct{}
 // the focused editor's visual selection. Dispatched by tools.regexTester.
 type OpenRegexTesterMsg struct{}
 
+// OpenJQPlaygroundMsg opens the jq playground (#1936): a floating query line
+// over the JSON at hand — the focused HTTP response body, else the focused
+// editor's visual selection, else its whole buffer — with the program's
+// output live underneath. Dispatched by json.jqPlayground.
+type OpenJQPlaygroundMsg struct{}
+
 // DiffStepMsg steps the focused diff pane's current hunk (0340, #495).
 type DiffStepMsg struct{ Delta int }
 
@@ -400,6 +406,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("file.openInBrowser", "Open in Browser", OpenInBrowserMsg{}),
 			appCommand("tools.setup", "Set Up Tool Panes", ShowToolSetupMsg{}),
 			appCommand("tools.regexTester", "Regex Tester…", OpenRegexTesterMsg{}),
+			appCommand("json.jqPlayground", "jq Playground…", OpenJQPlaygroundMsg{}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),
 			appCommand("run.file", "Run File", RunFileMsg{}),
