@@ -30,6 +30,14 @@ func (m *Model) Wheel(delta int) {
 	if m.err != nil || delta == 0 {
 		return
 	}
+	// With the profile popup open (#1940) the wheel scrolls the popup, which
+	// is what the pointer is over — never the grid it covers.
+	if m.prof != nil {
+		if m.prof.top += delta; m.prof.top < 0 {
+			m.prof.top = 0
+		}
+		return
+	}
 	if m.region == regionSidebar {
 		wheelWindow(&m.ttop, &m.tcur, len(m.tables), m.bodyHeight(), delta)
 		m.clampScroll()
@@ -71,7 +79,7 @@ func (m *Model) Wheel(delta int) {
 // the horizontal wheel and shift+wheel carry. It is grid-only: the sidebar has
 // nothing to pan.
 func (m *Model) WheelX(delta int) {
-	if m.err != nil {
+	if m.err != nil || m.prof != nil {
 		return
 	}
 	m.colOff += delta
@@ -109,8 +117,9 @@ func wheelWindow(top, cur *int, n, h, delta int) {
 func (m *Model) Click(x, y int) tea.Cmd {
 	// The filter line owns the input while it is open (#1777) — its clause is
 	// half-typed text, and loading a table would drop it — so clicks are inert
-	// until enter or esc closes the line.
-	if m.err != nil || m.src == nil || m.fEditing {
+	// until enter or esc closes the line. The profile popup (#1940) covers the
+	// grid it describes and holds the input the same way.
+	if m.err != nil || m.src == nil || m.fEditing || m.prof != nil {
 		return nil
 	}
 	if y < 1 || y > m.bodyHeight() {

@@ -337,6 +337,16 @@ func appCommand(id, title string, msg tea.Msg) plugin.Command {
 	}
 }
 
+// paneCommand is appCommand scoped to one pane context: the command only
+// exists while a pane advertising ctxID has the focus, which is what keeps a
+// grid action like the column profile (#1940) out of the palette everywhere
+// else.
+func paneCommand(id, title, ctxID string, msg tea.Msg) plugin.Command {
+	c := appCommand(id, title, msg)
+	c.Scope = plugin.PaneScope(ctxID)
+	return c
+}
+
 func (appCommands) Capabilities() plugin.Capabilities {
 	cmds := []plugin.Command{
 		appCommand("editor.closeTab", "Close Tab", CloseTabMsg{}),
@@ -476,6 +486,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("usages.toggle", "Usages", UsagesToggleMsg{}),
 			appCommand("tests.toggle", "Test Results", TestsToggleMsg{}),
 			appCommand("issues.toggle", "GitHub Issues", IssuesToggleMsg{}),
+			paneCommand("data.columnProfile", "Data: Column Profile", "data", DataColumnProfileMsg{}),
+			paneCommand("csv.columnProfile", "CSV: Column Profile", "editor", CSVColumnProfileMsg{}),
 			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
 			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),
 		), append(append(append(scratchCommands(), toolCommands()...), memoryCommands()...), esCommands()...)...),

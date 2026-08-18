@@ -1565,6 +1565,22 @@ by `editor.csv_rendering` (default on, Settings → Editor):
   `desiredCol = cursor.Col` and so drops it. Non-sv buffers, `editor.csv_rendering`
   off and soft wrap (i.e. `svActive` false) keep the raw column unchanged, and
   secondary carets keep their own per-caret `desiredCol`.
+- **Column profile** (#1940): `csv.columnProfile` ("CSV: Column Profile",
+  palette, editor context) profiles the *caret's* column — rows, nulls,
+  empties, distinct values, min/max, the ten most frequent values with their
+  counts, plus the mean of a numeric column or the length range of a text one.
+  `Model.SVProfileTarget` is the whole editor-side seam: the field index, its
+  header name (`sv.Header`, else `column <n>`), the separator and the raw
+  lines. The aggregation itself is `datasrc.ProfileCSV` — the same scan the
+  Parquet backend uses (see [data viewer](./data-viewer.md)), so a csv column
+  and a database column profile identically. A text buffer has no query
+  engine, so the scan is **bounded at `datasrc.ProfileLimit` (100 000) rows**
+  and the popup says `first 100000 rows only (scan capped)` when it caps.
+  Values are unquoted like a header name is; a row too short to reach the
+  column contributes a NULL, which is what keeps "empty here" apart from "no
+  such field". The result opens in the floating shell (esc closes, `y`
+  copies exactly the shown lines), and the scan runs as a background command
+  so a million-line file costs no keystroke.
 - **Quoting**: field splitting (`internal/sv`, shared with the plugin so both
   sides split identically) honors `"…"` regions — a quoted separator is
   literal, `""` escapes a quote. The csv separator is sniffed (`,` vs `;`)
