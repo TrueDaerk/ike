@@ -280,14 +280,23 @@ func validate(c *Config) []Diagnostic {
 	// arrangement); a broken template disables slot placement wholesale
 	// rather than guessing at intent. Assignments are then normalized to
 	// "SLOT=tool" with a known slot and at most one slot per tool; offenders
-	// are dropped with a warning. Tool names are not checked here — an
-	// assignment for a tool that does not exist is simply inert.
+	// are dropped with a warning. An unknown tool name — not a built-in id
+	// (BuiltinAssignTools) and not a [[tools.custom]] name — only warns: the
+	// entry is inert, and dropping it would rewrite the list on the next
+	// settings-UI edit (#1946).
 	if len(c.Tools.Layout.Template) > 0 {
 		tpl, err := layout.ParseTemplate(c.Tools.Layout.Template)
 		if err != nil {
 			diags = append(diags, Diagnostic{Field: "tools.layout.template", Message: fmt.Sprintf("%v; slot placement disabled", err)})
 			c.Tools.Layout.Template = nil
 		} else {
+			known := map[string]bool{}
+			for _, id := range BuiltinAssignTools() {
+				known[id] = true
+			}
+			for _, e := range c.Tools.Custom {
+				known[e.Name] = true
+			}
 			assigned := map[string]bool{}
 			kept := c.Tools.Layout.Assign[:0]
 			for _, a := range c.Tools.Layout.Assign {
@@ -303,6 +312,9 @@ func validate(c *Config) []Diagnostic {
 				case assigned[tool]:
 					diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("tool %q is already assigned to a slot, dropping the duplicate", tool)})
 				default:
+					if !known[tool] {
+						diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("unknown tool %q (built-in ids: %s; or a [[tools.custom]] name)", tool, strings.Join(BuiltinAssignTools(), " "))})
+					}
 					assigned[tool] = true
 					kept = append(kept, slot+"="+tool)
 				}

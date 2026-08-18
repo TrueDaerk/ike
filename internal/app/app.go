@@ -2751,10 +2751,17 @@ func terminalEnv() []string {
 }
 
 // openTerminal opens a fresh terminal pane rooted in the working directory
-// (the project root), split off the active editor — below by default, to the
-// right on wide landscape hosts (auxZone, #1588) — falling back to the
-// focused leaf when no editor exists.
+// (the project root): at the slot assigned to "terminal" when one is active
+// (#1946 — further terminals join the slot pane as tabs), otherwise split
+// off the active editor — below by default, to the right on wide landscape
+// hosts (auxZone, #1588) — falling back to the focused leaf when no editor
+// exists.
 func (m *Model) openTerminal() {
+	if m.activeWS().Tree != nil {
+		if tpl, slot := assignedSlot(terminalToolID); slot != "" && m.openShellAtSlot(tpl, slot) {
+			return
+		}
+	}
 	target := m.activeEditorKey()
 	if target == "" {
 		target = m.activeWS().Panes.Focused()
@@ -2762,11 +2769,7 @@ func (m *Model) openTerminal() {
 	if target == "" || m.activeWS().Tree == nil {
 		return
 	}
-	shell := ""
-	if v, ok := m.host.Config().Get("terminal.shell"); ok {
-		shell = v
-	}
-	key := m.activeWS().Panes.AddTerminal(terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
+	key := m.activeWS().Panes.AddTerminal(terminal.Shell(m.configuredShell()), ".", terminalEnv(), m.host.Send)
 	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
 	if !ok {
 		m.activeWS().Panes.Close(key)
@@ -2788,15 +2791,23 @@ func (m *Model) openTerminalTab() {
 		return
 	}
 	inst := m.activeWS().Panes.Get(target)
-	shell := ""
-	if v, ok := m.host.Config().Get("terminal.shell"); ok {
-		shell = v
-	}
-	key := m.activeWS().Panes.MintTerminalKey()
-	term := terminal.New(key, terminal.Shell(shell), ".", 80, 24, terminalEnv(), m.host.Send)
-	inst.AddTerminalTab(term)
+	inst.AddTerminalTab(m.newShellTab())
 	m.setFocus(target)
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+}
+
+// configuredShell reads the terminal.shell setting; "" follows $SHELL.
+func (m *Model) configuredShell() string {
+	if v, ok := m.host.Config().Get("terminal.shell"); ok {
+		return v
+	}
+	return ""
+}
+
+// newShellTab spawns a fresh shell session ready to host as a terminal tab.
+func (m *Model) newShellTab() terminal.Model {
+	key := m.activeWS().Panes.MintTerminalKey()
+	return terminal.New(key, terminal.Shell(m.configuredShell()), ".", 80, 24, terminalEnv(), m.host.Send)
 }
 
 // openMarkdownPreview opens a rendered preview pane for the active editor's

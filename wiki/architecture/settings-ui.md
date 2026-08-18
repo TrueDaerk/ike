@@ -68,7 +68,14 @@ box capped at ~110×32 cells above the workspace, laid out as the
   string slice and a raw comma string would fail the decode; **IntList**
   (#1663, `editor.rulers`) is the same editor over a `[]int` field — an element
   that does not parse as a number is refused in the row (`✗ not a number`,
-  nothing staged) and the commit writes a TOML integer array. Path inputs get shell-style
+  nothing staged) and the commit writes a TOML integer array. A List entry may
+  also declare **value help** in the schema (#1946): `EntryHints` renders
+  candidate values under the input while an element is typed, re-narrowed per
+  keystroke (`tools.layout.assign` lists the effective template's slot letters
+  for a bare token — staged template edits included — and the assignable tool
+  ids after a `SLOT=` prefix), and `ValidateEntry` refuses a committed element
+  in the row with a message naming the valid values
+  (`internal/settings/assign_hints.go`). Path inputs get shell-style
   **tab completion** (#541) via the shared `internal/pathcomplete` engine:
   matching entries render as a suggestion list under the row (final path
   component only, capped with a `+N more` tail), tab extends the input to the

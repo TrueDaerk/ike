@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-18 (Slot-assignment value hints + terminal/run/debug targets, #1946)
+
+- **Shared id list**: `config.BuiltinAssignTools` is the single authoritative
+  list of built-in `[tools.layout]` assign targets (the singleton tool
+  windows plus `run`, `tests`, `issues` and the new `terminal`), shared by
+  the settings form, the config validator (unknown tool ids now warn — the
+  entry stays inert) and the app-side resolver.
+- **Settings form value help** (`internal/settings/assign_hints.go`): List
+  entries may declare `EntryHints`/`ValidateEntry` in the schema; the Slot
+  assignments editor lists the effective template's slot letters (staged
+  edits included) for a bare token, the assignable tool ids — custom tools
+  included — after a `SLOT=` prefix, and rejects unknown slots/tools in the
+  row with a message naming the valid values. Template rows get a static
+  E-is-reserved reminder.
+- **Assignable terminal** (`Model.openShellAtSlot`): `X=terminal` opens
+  fresh integrated-terminal panes at slot X, later ones joining as tabs;
+  plain shell panes and pure shell tab hosts count as slot residents (layout
+  applies keep them in-slot). The popup overlay terminal and
+  `terminal.newTab` are unaffected. `run` and `debug` place independently
+  (both were already slot-capable; now documented and hinted).
+
 ## 2026-08-18 (Project bookmarks: mnemonics, notes, stepping, #55)
 
 - **Store** (`internal/bookmarks`): JetBrains-style line bookmarks keyed by

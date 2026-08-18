@@ -769,6 +769,14 @@ func (l *listEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 					return nil
 				}
 			}
+			// A schema-declared element check (#1946, tools.layout.assign):
+			// reject in place with the message naming the valid values.
+			if l.e.ValidateEntry != nil && text != "" {
+				if msg := l.e.ValidateEntry(l.m.value, text); msg != "" {
+					l.err = msg
+					return nil
+				}
+			}
 			l.err = ""
 			l.editing = false
 			switch {
@@ -861,6 +869,16 @@ func (l *listEditor) View(w, h int) []string {
 		add = "+  " + l.tf.View()
 	}
 	out = append(out, l.m.editorRow(w, l.idx == len(l.items), add, ""))
+	// Value hints while typing (#1946): the schema-declared candidates for
+	// the element under edit, re-narrowed on every keystroke.
+	if l.editing && l.e.EntryHints != nil {
+		for _, row := range hintRows(l.e.EntryHints(l.m.value, strings.TrimSpace(l.tf.text))) {
+			if len(out) >= h {
+				break
+			}
+			out = append(out, clip.Render(dim.Render(row)))
+		}
+	}
 	if l.err != "" && len(out) < h {
 		out = append(out, clip.Render(lipgloss.NewStyle().Foreground(pal.Error).Render(" ✗ "+l.err)))
 	}
