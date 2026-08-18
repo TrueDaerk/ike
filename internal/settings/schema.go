@@ -64,6 +64,15 @@ type Entry struct {
 	// (#1688: a theme row is a live mini-preview of the theme, up to the
 	// swatch strip). A false return leaves the row in the panel's colors.
 	RowColors func(option string) (fg, bg color.Color, ok bool)
+	// EntryHints supplies candidate values for the List element being typed
+	// (#1946: slot letters / tool ids for tools.layout.assign), rendered under
+	// the input and re-narrowed on every keystroke. lookup reads another
+	// entry's effective — staged-first — value, so hints follow an uncommitted
+	// template edit in the same session.
+	EntryHints func(lookup func(key string) string, text string) []string
+	// ValidateEntry rejects a committed List element with a message naming the
+	// valid values; "" accepts (#1946). Same lookup as EntryHints.
+	ValidateEntry func(lookup func(key string) string, text string) string
 }
 
 // Page is one category: a titled list of entries, or — when Custom is set — a
@@ -309,8 +318,8 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "tests.auto_open", Type: Bool, Title: "Open on test run", Description: "Open the Test Results tool window when a captured test run starts; off only updates an already open pane", Scope: config.UserScope},
 		}},
 		{Title: "Tool Layout", Description: "Named slot template pinning tool windows to exact layout positions (#1897). The template is an ASCII grid: each row is one entry, every cell names a slot by a single letter, E is the editor region. Assigned tools always open at their slot; unassigned ones keep their home position or the adaptive split.", Entries: []Entry{
-			{Key: "tools.layout.template", Type: List, Title: "Slot template rows", Description: "Grid rows, one entry per row (\"XEEH, XEEH, TTZZ\"): every cell names a slot by a single letter, E is the editor region, each slot's cells must form a solid rectangle, and row/column counts set the proportions. Empty disables slot placement; a template that cannot be split into straight cuts is rejected with a config diagnostic", Scope: config.UserScope},
-			{Key: "tools.layout.assign", Type: List, Title: "Slot assignments", Description: "SLOT=tool entries pinning tools to template slots (\"X=explorer, T=lazygit\"): the tool is a custom tool's name or a built-in tool-window id (explorer, vcs, debug, problems, structure, usages, http, breakpoints, run, tests). Several tools may share a slot — the first open materializes the pane, later ones join it as tabs; each tool takes at most one slot", Scope: config.UserScope},
+			{Key: "tools.layout.template", Type: List, Title: "Slot template rows", Description: "Grid rows, one entry per row (\"XEEH, XEEH, TTZZ\"): every cell names a slot by a single letter, E is the editor region, each slot's cells must form a solid rectangle, and row/column counts set the proportions. Empty disables slot placement; a template that cannot be split into straight cuts is rejected with a config diagnostic", Scope: config.UserScope, EntryHints: templateHints},
+			{Key: "tools.layout.assign", Type: List, Title: "Slot assignments", Description: "SLOT=tool entries pinning tools to template slots (\"X=explorer, T=lazygit\"): the tool is a custom tool's name or a built-in id (explorer, vcs, debug, problems, structure, usages, http, breakpoints, run, tests, issues, terminal). \"terminal\" pins fresh terminal panes (not the popup overlay); run and debug place independently. Several tools may share a slot — the first open materializes the pane, later ones join it as tabs; each tool takes at most one slot. While typing, the valid slot letters and tool ids are listed under the input", Scope: config.UserScope, EntryHints: assignHints, ValidateEntry: assignValidate},
 		}},
 		{Title: "Debug", Description: "Debugger transport settings. PHP debugging listens for incoming Xdebug connections; the hostname filter keeps foreign sessions out.", Entries: []Entry{
 			{Key: "debug.inline_values", Type: Bool, Title: "Inline variable values", Description: "While the debugger is stopped, show the paused frame's local variable values at the end of the lines that mention them; they disappear on resume", Scope: config.UserScope},

@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Custom TUI Tool Panes
-description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning tools to exact layout positions (#1897), global process-wide instances shared across workspaces (#1890) whose panes follow project switches (#1903), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, and the built-in Run tool that owns run output (#1905)."
+description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning tools to exact layout positions (#1897; #1946 adds `terminal`/`run`/`debug` as assignable targets plus settings-form value hints), global process-wide instances shared across workspaces (#1890) whose panes follow project switches (#1903), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, and the built-in Run tool that owns run output (#1905)."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
 timestamp: 2026-08-17T00:00:00Z
@@ -301,13 +301,37 @@ with a `tools.layout.template` diagnostic, which disables slot placement
 wholesale). Row/column counts set the proportions: above, `X` takes a
 quarter of the width over the top two thirds, the `T`/`Z` strip the bottom
 third. `assign` maps tools onto slots as `SLOT=tool` entries; the tool is a
-`[[tools.custom]]` name **or a built-in tool-window id** (`explorer`, `vcs`,
-`debug`, `problems`, `structure`, `usages`, `http`, `breakpoints`, `run`,
-`tests`). Each
+`[[tools.custom]]` name **or a built-in id** (`explorer`, `vcs`, `debug`,
+`problems`, `structure`, `usages`, `http`, `breakpoints`, `run`, `tests`,
+`issues`, `terminal`) — the single authoritative list is
+`config.BuiltinAssignTools` (#1946), shared by the settings form's value
+help, the config validator and the app-side resolver. Each
 tool takes at most one slot; unknown slots, the editor region and duplicates
-are dropped with diagnostics (`internal/config/validate.go`). Both keys are
+are dropped with diagnostics, an unknown tool id only warns — the entry is
+inert (`internal/config/validate.go`). Both keys are
 editable via **Settings → Tool Layout** (schema `List` entries, per the
-#1895 policy).
+#1895 policy), and the **Slot assignments** editor helps while typing
+(#1946): a bare token lists the effective template's slot letters —
+uncommitted template edits included — and a `SLOT=` prefix narrows to the
+assignable tool ids, custom tools included; an entry naming an unknown slot
+or tool is rejected in place with a message listing the valid values
+(`internal/settings/assign_hints.go`).
+
+Three targets beyond the tool windows (#1946):
+
+- **`terminal`** — an assigned slot is where fresh **integrated terminal
+  panes** open (`Model.openShellAtSlot`): the first terminal materializes
+  the slot pane, further `terminal.new` opens join it as focused tabs — the
+  ordinary shared-slot semantics. Plain shell panes (and pure shell tab
+  hosts) count as the slot's resident; the **popup overlay terminal and
+  torn-out floating panels are unaffected** — slot assignment governs pane
+  terminals only. `terminal.newTab` (a shell tab in the active editor pane)
+  keeps its explicit in-pane intent.
+- **`run` / `debug`** — independently assignable, so runs and debug
+  sessions can land in different slots: `run` pins the Run tool (#1905,
+  winning over `run.placement`), `debug` the debugger frames/variables
+  panel; the debuggee terminal keeps opening beside the panel, subdividing
+  its slot.
 
 The engine (`internal/layout/slots.go`) parses the grid into a **slot tree**
 — a binary split tree over slot names, derived by guillotine cuts, every

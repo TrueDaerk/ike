@@ -182,7 +182,12 @@ kind** — `TERMINAL │ zsh · goproj` (plus `[exited]` for a dead shell) or
 `EXPLORER` — instead of mirroring the active editor's mode/file/cursor, so
 the line always says where keystrokes go (#381).
 `terminal.new` splits the active editor's leaf toward the bottom — the
-conventional JetBrains placement.
+conventional JetBrains placement. A `[tools.layout]` slot assigned to
+`terminal` (#1946) wins instead: fresh terminal panes open at the slot's
+template position, further ones join the slot pane as focused tabs
+(`Model.openShellAtSlot`, the #1897 shared-slot semantics); the popup
+overlay terminal is unaffected, and `terminal.newTab` keeps its explicit
+in-editor-pane intent.
 
 **Layout persistence**: terminal leaves save with their origin dir
 (`paneIdentity{Kind: "terminal", Path: dir}`) and restore as **fresh shells**

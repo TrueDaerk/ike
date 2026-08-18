@@ -410,7 +410,12 @@ pattern) is the frames/variables panel; the debuggee's output lives in a
 stop, first output, or a `runInTerminal` request) the pair opens without
 stealing focus: the panel splits the active editor at the adaptive placement
 (`layout.SplitLeaf` with `auxZone`, #1588 — below, or right of a wide
-landscape host) and the debuggee terminal splits the panel (`ZoneRight`). Both are ordinary panes: independently resizable, movable and
+landscape host) and the debuggee terminal splits the panel (`ZoneRight`). A
+`[tools.layout]` slot assigned to `debug` (#1897, #1946) pins the panel to
+its template position instead — independent of a slot assigned to `run`, so
+runs and debug sessions can land in different slots; the debuggee terminal
+still opens beside the panel, subdividing its slot. Both are ordinary panes:
+independently resizable, movable and
 closable through the normal windowing system.
 
 **Debuggee terminal pane** (#1370): a `KindTerminal` instance marked

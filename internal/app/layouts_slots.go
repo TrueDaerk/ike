@@ -152,6 +152,10 @@ func (m *Model) liveSlotted(tpl *layout.Template) []slotResident {
 		switch {
 		case inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() != "":
 			slot = toolSlot(inst.Terminal().Tool())
+		case inst.Kind() == pane.KindTerminal && !inst.IsDebugTerm():
+			// Plain shell panes claim the "terminal" slot (#1946), so a
+			// layout apply keeps them in-slot like any slotted tool.
+			slot = toolSlot(terminalToolID)
 		case inst.Kind() == pane.KindEditor:
 			slot = tabHostSlot(inst)
 		case isToolKind(inst.Kind()):

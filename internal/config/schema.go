@@ -93,16 +93,30 @@ type Tools struct {
 // decompose into straight full-width/full-height cuts. Row/column counts set
 // the proportions ({"XEEH","XEEH","TTZZ"} gives X a quarter of the width over
 // two thirds of the height). Assign maps tools onto slots as "SLOT=tool"
-// entries — the tool is a [[tools.custom]] name or a built-in tool-window id
-// (explorer, vcs, debug, problems, structure, usages, http, breakpoints). An
-// assigned tool always opens at its slot's exact position; slots of closed
-// tools collapse, their space absorbed by the surviving neighbors. Several
-// tools may share one slot: the first to open materializes the pane, later
-// ones join it as tabs. Tools without an assignment keep the #1889 placement
-// / adaptive behavior. An empty Template disables slot placement entirely.
+// entries — the tool is a [[tools.custom]] name or a built-in id (see
+// BuiltinAssignTools). An assigned tool always opens at its slot's exact
+// position; slots of closed tools collapse, their space absorbed by the
+// surviving neighbors. Several tools may share one slot: the first to open
+// materializes the pane, later ones join it as tabs. Tools without an
+// assignment keep the #1889 placement / adaptive behavior. An empty Template
+// disables slot placement entirely.
 type ToolLayout struct {
 	Template []string `toml:"template"`
 	Assign   []string `toml:"assign"`
+}
+
+// BuiltinAssignTools lists the built-in ids a [tools.layout] assign entry may
+// name besides [[tools.custom]] names (#1946): the singleton tool windows,
+// the Run tool (#1905), and the integrated terminal — an assigned "terminal"
+// slot is where fresh terminal panes open, later ones joining as tabs; the
+// popup overlay terminal is unaffected. This is the single authoritative
+// list the settings form's hints/validation, the config validator and the
+// app-side slot resolver share.
+func BuiltinAssignTools() []string {
+	return []string{
+		"explorer", "vcs", "debug", "problems", "structure", "usages",
+		"http", "breakpoints", "tests", "issues", "run", "terminal",
+	}
 }
 
 // ToolEntry is one configured TUI tool. Name is the display/command suffix

@@ -6,7 +6,13 @@ import (
 	"ike/internal/config"
 	"ike/internal/layout"
 	"ike/internal/pane"
+	"ike/internal/terminal"
 )
+
+// terminalToolID is the assign id pinning the integrated terminal (#1946):
+// fresh terminal panes open at the assigned slot, later ones join as tabs.
+// It governs pane terminals only — the popup overlay is placement-free.
+const terminalToolID = "terminal"
 
 // tool_slots.go implements named-slot tool placement (#1897): the
 // [tools.layout] template declares exact positions for tool windows around
@@ -38,9 +44,10 @@ func slotTemplate() *layout.Template {
 }
 
 // toolSlot resolves the slot assigned to a tool id — a [[tools.custom]]
-// name, a built-in tool-window pane key (explorer, vcs, debug, problems,
-// structure, usages, http, breakpoints) or the Run tool (run, #1905) — ""
-// when unassigned. Assignments were normalized to "SLOT=tool" by validation.
+// name or a built-in id (config.BuiltinAssignTools: the singleton
+// tool-window pane keys, the Run tool #1905, the integrated terminal #1946)
+// — "" when unassigned. Assignments were normalized to "SLOT=tool" by
+// validation.
 func toolSlot(tool string) string {
 	c := config.Get()
 	if c == nil {
@@ -96,6 +103,10 @@ func (m *Model) slotResidents() map[string]string {
 		switch {
 		case inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() != "":
 			slot = toolSlot(inst.Terminal().Tool())
+		case inst.Kind() == pane.KindTerminal && !inst.IsDebugTerm():
+			// A plain shell pane occupies the "terminal" slot (#1946); the
+			// debuggee terminal belongs to the debug session, not the slot.
+			slot = toolSlot(terminalToolID)
 		case inst.Kind() == pane.KindEditor:
 			slot = tabHostSlot(inst)
 		case isToolKind(inst.Kind()):
@@ -113,21 +124,28 @@ func (m *Model) slotResidents() map[string]string {
 // tabHostSlot resolves the slot an editor-kind pane occupies as a converted
 // tool tab host: every tab must be a terminal session — an editor showing
 // documents is main content even when a tool tab was dragged into it — and
-// the slot is the first hosted tool's assignment.
+// the slot is the first hosted tool's assignment. A host carrying nothing
+// but plain shells stands in the "terminal" slot (#1946).
 func tabHostSlot(inst *pane.Instance) string {
 	n := inst.TabCount()
 	if n == 0 {
 		return ""
 	}
-	slot := ""
+	slot, shellsOnly := "", true
 	for i := 0; i < n; i++ {
 		t := inst.TabTerminal(i)
 		if t == nil {
 			return ""
 		}
-		if slot == "" && t.Tool() != "" {
-			slot = toolSlot(t.Tool())
+		if t.Tool() != "" {
+			shellsOnly = false
+			if slot == "" {
+				slot = toolSlot(t.Tool())
+			}
 		}
+	}
+	if slot == "" && shellsOnly {
+		return toolSlot(terminalToolID)
 	}
 	return slot
 }
@@ -232,6 +250,33 @@ func (m *Model) openToolAtSlot(sp toolSpawn, tpl *layout.Template, slot string) 
 	}
 	m.setFocus(key)
 	m.rememberTool(sp.name, key)
+	m.layout()
+	saveLayout(ws.Tree, ws.Panes)
+	return true
+}
+
+// openShellAtSlot opens a fresh integrated-terminal shell pinned to the
+// "terminal" slot (#1946), following the shared-slot semantics of every
+// assigned tool: a free slot materializes the pane at the template position,
+// an occupied tab-capable one takes the shell as a focused tab. The popup
+// overlay terminal never passes through here. Reports ok; the caller falls
+// back to the adaptive split.
+func (m *Model) openShellAtSlot(tpl *layout.Template, slot string) bool {
+	ws := m.activeWS()
+	if resident := m.slotResidents()[slot]; resident != "" &&
+		canHostTabs(ws.Panes.Get(resident)) && m.ensureTabHost(resident) {
+		ws.Panes.Get(resident).AddTerminalTab(m.newShellTab())
+		m.setFocus(resident)
+		m.layout()
+		saveLayout(ws.Tree, ws.Panes)
+		return true
+	}
+	key := ws.Panes.AddTerminal(terminal.Shell(m.configuredShell()), ".", terminalEnv(), m.host.Send)
+	if !m.placePaneInSlot(tpl, slot, key) {
+		ws.Panes.Close(key)
+		return false
+	}
+	m.setFocus(key)
 	m.layout()
 	saveLayout(ws.Tree, ws.Panes)
 	return true
