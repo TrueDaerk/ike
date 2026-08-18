@@ -115,7 +115,7 @@ type ToolLayout struct {
 func BuiltinAssignTools() []string {
 	return []string{
 		"explorer", "vcs", "debug", "problems", "structure", "usages",
-		"http", "breakpoints", "tests", "issues", "run", "terminal",
+		"http", "breakpoints", "tests", "issues", "dom", "run", "terminal",
 	}
 }
 

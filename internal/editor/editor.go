@@ -486,6 +486,12 @@ type Model struct {
 	// bridge on cursor moves; stale positions may briefly lag an edit like
 	// semIndex.
 	occurrences []ilsp.DocumentHighlight
+	// domMatches are the DOM inspector's selector-match ranges (#1929),
+	// painted like search matches (dommatches.go); domCurrent is the index
+	// of the underlined current match (-1 none). Stale positions may briefly
+	// lag an edit until the inspector reparses, like semIndex.
+	domMatches []buffer.Range
+	domCurrent int
 	// inlayHints are the LSP inlay hints (#171): inline parameter-name/type
 	// annotations refreshed by the bridge on every change, indexed per line
 	// for rendering. Stale positions may briefly lag an edit like semIndex.
@@ -1134,6 +1140,10 @@ func (m *Model) SetPath(path string) tea.Cmd {
 // upcoming diff viewer #60).
 func (m Model) Text() string { return m.buf.String() }
 
+// DocVersion reports the monotonic document version, bumped on every buffer
+// change — the DOM inspector's reparse test (#1929).
+func (m Model) DocVersion() int { return m.docVersion }
+
 // Dirty reports whether the buffer has unsaved changes.
 func (m Model) Dirty() bool { return m.dirty }
 
@@ -1407,6 +1417,12 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 	case ilsp.SemanticSpansMsg:
 		if msg.Path == m.path {
 			m.semIndex = highlight.NewIndex(msg.Spans)
+		}
+		return m, nil
+	case DOMMatchesMsg:
+		// DOM inspector selector matches (#1929, dommatches.go).
+		if msg.Path == m.path {
+			m.applyDOMMatches(msg)
 		}
 		return m, nil
 	case ilsp.FoldingRangesMsg:

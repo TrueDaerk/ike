@@ -28,6 +28,7 @@ Component-level concepts for the IKE codebase.
 * [Completion Engine](/architecture/completion.md) - multi-source autocomplete: LSP + local index sources as tagged batches, editor-side merge with priority de-dup and stable selection (Roadmap 0410)
 * [LSP & Language Intelligence](/architecture/lsp.md) - JSON-RPC client over a server's stdio, manager per (language, root), editor-driven sync, diagnostics/completion/hover/go-to-definition (Roadmap 0100)
 * [Structure View](/architecture/structure-view.md) - Structure tool pane: the focused buffer's LSP documentSymbol tree, cursor auto-follow, enter/double-click navigates via the open funnel (#1025)
+* [DOM Inspector](/architecture/dom-inspector.md) - DOM inspector tool pane: the focused HTML buffer's tolerant tokenizer-parsed DOM tree with source spans, live CSS selector tester highlighting matches in tree and editor, copy shortest-unique selector / outer HTML (#1929)
 * [Syntax Highlighting](/architecture/highlighting.md) - Tree-sitter lexical layer: per-language grammars parsed off-loop into theme-coloured spans, applied per cell (Roadmap 0100)
 * [Project Search](/architecture/search.md) - streaming find-in-path engine: rg --json backend + pure-Go fallback, generation-based cancellation, bounded results (Roadmap 0150)
 * [Formatter Registry](/architecture/format.md) - neutral reformat layer: provider chain (config override → external command → LSP → built-in) behind lsp.format/lsp.formatRange and format-on-save, edits as one undo unit (Roadmap 0470)

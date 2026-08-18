@@ -858,6 +858,11 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	matchStyle := lipgloss.NewStyle().Background(m.theme().SelectionMuted)
 	curMatchStyle := matchStyle.Underline(true)
 
+	// DOM inspector selector matches (#1929, dommatches.go) share the search
+	// styles: every match gets the background, the pane's current match the
+	// underline.
+	domSpans := m.domLineSpans(line)
+
 	// Label-jump overlays (#787): a target's typed span highlights like a
 	// search match, and its label characters draw over the buffer text above
 	// every other decoration — a label must stay readable to be typable.
@@ -1080,6 +1085,14 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				inMatch = true
 				inCurrent = line == m.cursor.Line && m.cursor.Col >= s.Start && m.cursor.Col < s.End
 				break
+			}
+		}
+		if !inMatch {
+			for _, s := range domSpans {
+				if col >= s.start && col < s.end {
+					inMatch, inCurrent = true, s.cur
+					break
+				}
 			}
 		}
 

@@ -246,6 +246,8 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 		return singleton(pane.IssuesKey, "issues")
 	case pane.KindStructure:
 		return singleton(pane.StructureKey, "structure")
+	case pane.KindDOM:
+		return singleton(pane.DOMKey, "dom")
 	case pane.KindUsages:
 		return singleton(pane.UsagesKey, "usages")
 	case pane.KindHTTP:
@@ -692,6 +694,8 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		return key, ok
 	case "structure":
 		return singleton(reg.AddStructure)
+	case "dom":
+		return singleton(reg.AddDOM)
 	case "tests":
 		return singleton(reg.AddTests)
 	case "issues":

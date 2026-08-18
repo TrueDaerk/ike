@@ -50,6 +50,7 @@ bring their own.
 | Diff Two Files… | `diff.files` | — | — | everywhere |
 | Next Change (Diff) | `diff.nextChange` | `f7` | — | everywhere |
 | Previous Change (Diff) | `diff.prevChange` | `shift+f7` | — | everywhere |
+| DOM Inspector | `dom.toggle` | — | — | everywhere |
 | Close Tab | `editor.closeTab` | `cmd+w` | — | everywhere |
 | Force Code Insight (Large File) | `editor.forceCodeInsight` | — | — | everywhere |
 | Paste from History | `editor.pasteFromHistory` | `cmd+shift+v` | — | everywhere |

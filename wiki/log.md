@@ -1,5 +1,21 @@
 # Log
 
+## 2026-08-18 (DOM inspector tool pane, #1929)
+
+- **DOM inspector** (`internal/htmldom`, `internal/domview`,
+  `internal/app/dom_panel.go`): `dom.toggle` opens a singleton right-split
+  pane with the focused HTML buffer's parsed DOM tree and a live CSS selector
+  tester. The parser drives the `x/net/html` tokenizer through a tolerant
+  stack machine — real `*html.Node`s (cascadia-matchable) with byte-offset
+  source spans, no implied elements, messy fixtures welcome — and runs off
+  the UI loop keyed by editor document version. Selector matches highlight in
+  the tree and, via the new `editor.DOMMatchesMsg` overlay, in every editor
+  showing the file (`n`/`N` step matches); `c` copies a verified
+  shortest-unique selector path, `Y` the verbatim outer HTML. Enter/double
+  click jumps through the open funnel; the editor cursor follow-selects the
+  enclosing node. Adds `github.com/andybalholm/cascadia`. New concept doc
+  `/architecture/dom-inspector.md`.
+
 ## 2026-08-18 (OpenAPI 3.x import for the HTTP client, #1939)
 
 - **HTTP client** (`internal/openapi/`, `internal/app/openapi_import.go`):

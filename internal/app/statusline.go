@@ -399,6 +399,11 @@ func (m Model) statusLine() string {
 			left += "TESTS"
 		case inst.Kind() == pane.KindIssues:
 			left += "ISSUES"
+		case inst.Kind() == pane.KindDOM:
+			left += "DOM"
+			if p := inst.DOM().Path(); p != "" {
+				left += " │ " + filepath.Base(p)
+			}
 		case inst.Kind() == pane.KindBreakpoints:
 			left += "BREAKPOINTS"
 		case inst.Kind() == pane.KindHTTP:
