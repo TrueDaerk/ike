@@ -250,6 +250,40 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "run.placement", Message: fmt.Sprintf("unknown placement %q, using \"bottom\"", c.Run.Placement)})
 		c.Run.Placement = "bottom"
 	}
+	// The #1932 scratch tool pane became the explorer's Scratches section
+	// (#1963). Old configs still carry [scratch] panel / panel_height; both
+	// migrate silently, like new_terminal: panel_height seeds section_height
+	// (minus the pane's ~3 chrome rows — the old default 8 lands on the new
+	// default 5) unless section_height was set explicitly, and panel is
+	// dropped — the section replaces the pane and shows by default.
+	if c.Scratch.PanelHeight != 0 {
+		if c.Scratch.SectionHeight == defaults().Scratch.SectionHeight {
+			h := c.Scratch.PanelHeight - 3
+			if h < 2 {
+				h = 2
+			}
+			if h > 30 {
+				h = 30
+			}
+			c.Scratch.SectionHeight = h
+		}
+		c.Scratch.PanelHeight = 0
+	}
+	c.Scratch.Panel = false
+	if c.Scratch.SectionHeight < 1 {
+		diags = append(diags, Diagnostic{Field: "scratch.section_height", Message: fmt.Sprintf("height %d out of range, using 5", c.Scratch.SectionHeight)})
+		c.Scratch.SectionHeight = 5
+	}
+	if c.Scratch.SectionHeight > 30 {
+		diags = append(diags, Diagnostic{Field: "scratch.section_height", Message: fmt.Sprintf("height %d out of range, using 30", c.Scratch.SectionHeight)})
+		c.Scratch.SectionHeight = 30
+	}
+	switch c.Scratch.Sort {
+	case "name", "modified":
+	default:
+		diags = append(diags, Diagnostic{Field: "scratch.sort", Message: fmt.Sprintf("unknown sort %q, using \"name\"", c.Scratch.Sort)})
+		c.Scratch.Sort = "name"
+	}
 	// [[tools.custom]] placement (#1889) names the tool's home dock edge;
 	// anything else (including pre-#1588 legacy values) degrades to the
 	// adaptive auxZone heuristic with a warning.
@@ -328,6 +362,10 @@ func validate(c *Config) []Diagnostic {
 				slot, tool, cut := strings.Cut(a, "=")
 				slot, tool = strings.TrimSpace(slot), strings.TrimSpace(tool)
 				switch {
+				case cut && tool == "scratch":
+					// The scratch tool pane became the explorer's Scratches
+					// section (#1963): a leftover slot assignment is dropped
+					// silently, like the other migrated legacy values.
 				case !cut || slot == "" || tool == "":
 					diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("entry %q is not \"SLOT=tool\", dropping it", a)})
 				case slot == layout.EditorSlot:

@@ -59,8 +59,6 @@ func singletonSlotKey(kind string) string {
 		return pane.StructureKey
 	case "dom":
 		return pane.DOMKey
-	case "scratch":
-		return pane.ScratchKey
 	case "usages":
 		return pane.UsagesKey
 	case "http":

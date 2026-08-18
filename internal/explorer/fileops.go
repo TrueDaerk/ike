@@ -288,6 +288,12 @@ func (m *Model) createEntry(dir, name string, isDir bool) tea.Cmd {
 // a multi-select range active (#1044), for the whole selection at once: one
 // prompt, one batch, one undo step. The root is never deletable.
 func (m *Model) promptDelete() {
+	if m.inScratch() {
+		// A Scratches row (#1963): the same confirm dialog, but the accept
+		// goes through the scratch store's guarded delete, not the trash.
+		m.promptScratchDelete()
+		return
+	}
 	if lo, hi, ok := m.selRange(); ok && hi > lo {
 		// A nested child of a selected directory is filtered out, so the
 		// count can be smaller than the row span — it names what actually
@@ -459,6 +465,12 @@ func (m *Model) toTrash(path string) (string, error) {
 // (and extension-only names like ".gitignore") preselect the whole name. The
 // root is never renameable.
 func (m *Model) promptRename() {
+	if m.inScratch() {
+		// A Scratches row (#1963): the same prefilled name prompt, accepted
+		// through the scratch store's boundary-guarded rename.
+		m.promptScratchRename()
+		return
+	}
 	n := m.current()
 	if n == nil || n == m.root {
 		return
@@ -858,6 +870,11 @@ func (m Model) promptBoxOrigin() (x, y, w, h int, ok bool) {
 func (m Model) promptAnchorRow() (row int, ok bool) {
 	if m.prompt == nil || m.prompt.anchor == "" {
 		return 0, false
+	}
+	if r, has := m.scratchAnchorRow(m.prompt.anchor); has {
+		// The anchor is a Scratches row (#1963): the box opens next to it in
+		// the section, exactly like a tree entry's dialog.
+		return r, true
 	}
 	idx := -1
 	for i, n := range m.rows {

@@ -1,9 +1,9 @@
 ---
 type: concept
 title: Scratch Files
-description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette, listed and deleted in the Scratch Files tool window, surviving restarts as ordinary files.
+description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette, listed as the explorer's Scratches section with the explorer's own open/rename/delete semantics, surviving restarts as ordinary files.
 resource: internal/scratch
-tags: [architecture, scratch, palette, languages, tool-window, pane]
+tags: [architecture, scratch, palette, languages, explorer]
 timestamp: 2026-08-18T14:00:00Z
 ---
 
@@ -28,6 +28,7 @@ func Create(ext string) (string, error) // next free scratch-N.<ext>, seeded wit
 func List() ([]string, error)     // existing scratches, newest-first (mod time)
 func Entries() ([]Entry, error)   // the same order, with each file's mod time
 func Delete(path string) error    // remove one scratch; refuses anything outside the dir
+func Rename(path, name string) (string, error) // rename inside the dir; both ends guarded
 ```
 
 `Dir` mirrors `config.Discover`'s user-layer override, so a sandboxed IKE
@@ -38,12 +39,14 @@ the race and a PHP scratch is runnable as created; the extension is
 dot-optional, empty means `txt`. A missing directory lists as empty, not as an
 error.
 
-`Delete` (#1932) is the removal half, and it is deliberately narrow: the path
-must name a file lying **directly** in the scratch dir. A nested path, a
-directory, a traversal through `..` or anything outside is refused with an
-error rather than deleted — the panel below can therefore pass whatever it has
+`Delete` (#1932) and `Rename` (#1963) are the mutation half, and they are
+deliberately narrow: the path must name a file lying **directly** in the
+scratch dir, and a rename's new name must be a bare file name — a nested path,
+a directory, a traversal through `..`, a pathy name or anything outside is
+refused with an error rather than acted on, and a rename never overwrites an
+existing target. The explorer section below can therefore pass whatever it has
 selected without the app re-deriving the guard rail. `Entries` is `List` with
-the mod times kept, so the panel's rows need no second stat pass and nothing
+the mod times kept, so the section's rows need no second stat pass and nothing
 outside this package reads the scratch directory.
 
 ## Creating (#351, #1223)
@@ -93,48 +96,54 @@ common case of typing "scratch" to find a scratch file. See [Command
 Palette](/architecture/command-palette.md) for the file-mode ranking this
 slots into.
 
-## Scratch Files tool window (#1932)
+## The explorer's Scratches section (#1963)
 
-The panel that makes scratches manageable without a terminal: the scratch dir
-lies outside the project root, so the [explorer](./explorer.md) cannot reach
-it — before this, an old scratch could only be deleted by leaving the IDE.
+The surface that makes scratches manageable without a terminal: the scratch
+dir lies outside the project root, so the [explorer](./explorer.md)'s tree
+cannot reach it. #1932 first shipped this as a separate tool pane
+(`internal/scratchpanel`) with its own keys; #1963 replaced that pane with a
+**section of the explorer itself** (`internal/explorer/scratches.go`), so
+there is exactly one interaction model: the scratch list sits behind a
+horizontal divider (`▾ Scratches ───`) at the bottom of the explorer pane and
+is operated with the explorer's own semantics. See the
+[explorer doc](./explorer.md#scratches-section-1963) for the mechanics; the
+short version:
 
-`scratch.panel` ("Scratch Files", palette + View menu) toggles a slim
-singleton pane (`internal/scratchpanel`, `pane.KindScratch`, key `"scratch"`,
-context id `"scratch"`) wired by `internal/app/scratch_panel.go` with the
-`vcs.panel` state machine (open → focus → return focus). Unlike the adaptive
-tool windows (#1588) it always docks **below** the active editor: the list is
-a wide few-rows strip, never a column.
+- **One unified cursor.** `j`/`k` walk off the last tree row into the section
+  and back; `G` lands on the last scratch, wrap-around passes both ends.
+- **Open like a project file.** `enter`/double-click go through the standard
+  open funnel (`OpenFileMsg`), `o` opens in a split.
+- **The explorer's dialogs.** `d` opens the confirm box, `R` the prefilled
+  rename prompt, both anchored next to the row (#1884); the accepts run
+  `scratch.Delete` / `scratch.Rename` and announce the standard
+  `FileDeletedMsg` / `FileMovedMsg`, so open tabs close or re-point exactly
+  like a tree delete/rename. Scratch deletes are permanent (the store has no
+  trash), which is also why the section has no multi-select delete.
+- **`a` delegates to `scratch.new`**: the store owns naming and templates, so
+  the explorer's new-file affordance opens the language picker.
+- The divider is **drag-resizable** and a click on it **collapses** the
+  section; both persist with the explorer's session state
+  (`session.json`, `explorerSession.ScratchCollapsed`/`ScratchHeight`).
+- The scratch dir joins the explorer's poll set, so an external change shows
+  up like any project-tree change; `r` refreshes it too.
 
-Rows are the store's files newest-first — name, language (the [language
-registry](./languages.md)'s id, falling back to the bare extension) and
-relative mod time. Navigation is the shared
-[list semantics](./list-navigation.md); `enter` and a double click open the
-scratch through the standard open funnel — the same focused tab `scratch.list`
-produces — and `r` re-reads the store. The list is also refreshed by the app
-whenever a scratch is created or deleted, so it never needs a restart.
+`scratch.panel` ("Scratch Files", palette + View menu) survives as a
+**redirect**: it focuses the explorer with the cursor on the section's first
+entry (`ScratchSectionFocusMsg`, `internal/app/scratch_section.go`) instead of
+opening a second pane.
 
-**Delete asks first.** `d` (or `delete`/`backspace`) arms a confirmation the
-footer spells out (`Delete scratch-3.py? [y]es [n]o`); `y`/`enter` performs
-it, *any* other key — and losing focus, and a click — cancels. The delete goes
-out as `scratchpanel.DeleteMsg`, so the app can do what the panel must not:
-`scratch.Delete` removes the file, `closeEditorsForPath` closes its tabs
-across every pane (the explorer's delete path), the
-[Problems](./problems.md) store drops its findings, and the list refreshes. A
-path the store refuses only warns — nothing is closed.
-
-**Resizing is not special.** The panel is an ordinary leaf of the
-[split tree](./pane-layout.md), so the line above it is the usual draggable
-pane edge and the dragged height persists in `layout.json` like any other
-split ratio.
-
-Two settings (Settings → Tools → *Scratch Files*) shape it:
+Three settings (Settings → Tools → *Scratch Files*) shape it:
 
 | key | default | meaning |
 | --- | --- | --- |
-| `scratch.panel` | `false` | open the panel on start; hidden by default, so users who don't want it lose no editor rows |
-| `scratch.panel_height` | `8` | rows the panel opens at, border and title row included (8 ≈ four scratches plus the hint line); 5–60 |
+| `scratch.section` | `true` | render the Scratches section at all; off removes it (scratches stay reachable via `scratch.list`) |
+| `scratch.section_height` | `5` | rows the section shows when expanded; it never grows past its content, and a divider drag overrides it for the session; 1–30 |
+| `scratch.sort` | `name` | row order: `name` like the tree, or `modified` newest-first |
 
-`scratch.panel` is a one-shot at startup, not a live mirror of the pane:
-toggling the panel away afterwards sticks for the session, and a panel left
-open at quit comes back through the layout either way.
+The legacy #1932 keys still decode and migrate silently in `config.Validate`:
+`scratch.panel_height` seeds `scratch.section_height` (minus the old pane's
+chrome rows — the old default 8 lands on the new default 5) unless the new key
+was set explicitly, `scratch.panel` is dropped, and a leftover
+`[tools.layout]` assignment of the removed `scratch` tool id is discarded
+without a diagnostic. Persisted layouts containing the old pane prune its leaf
+on restore.

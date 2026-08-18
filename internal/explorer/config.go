@@ -19,6 +19,11 @@ const (
 	cfgAutoReveal  = "explorer.auto_reveal"
 	cfgIcons       = "explorer.icons"
 	cfgExclude     = "explorer.exclude"
+	// The Scratches section (#1963) reads the [scratch] keys: whether the
+	// section renders, its initial height, and its sort order.
+	cfgScratchSection = "scratch.section"
+	cfgScratchHeight  = "scratch.section_height"
+	cfgScratchSort    = "scratch.sort"
 )
 
 // Configure applies the [explorer] configuration section to the model: initial
@@ -76,6 +81,30 @@ func (m *Model) Configure(cfg host.Config) {
 		m.exclude = parseExclude(v)
 		m.excludeCfg = v
 		m.rebuild()
+	}
+	if v, ok := cfg.Get(cfgScratchSection); ok {
+		// The Scratches section's visibility (#1963); on by default.
+		m.scrEnabled = v != "false"
+	}
+	if v, ok := cfg.Get(cfgScratchHeight); ok && v != m.scrHeightCfg {
+		// Apply-on-change like show_hidden: an unrelated live reload must not
+		// clobber a runtime divider drag.
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 {
+			m.scrHeight = n
+		}
+		m.scrHeightCfg = v
+	}
+	if v, ok := cfg.Get(cfgScratchSort); ok && v != "" {
+		switch v {
+		case "name", "modified":
+			if v != m.scrSort {
+				m.scrSort = v
+				m.sortScratches()
+				m.clampScratchTop()
+			}
+		default:
+			// Unknown value: keep the current (default "name") ordering.
+		}
 	}
 	if v, ok := cfg.Get(cfgIcons); ok {
 		// One-cell file-type marker glyphs before each name (#1046). Off by

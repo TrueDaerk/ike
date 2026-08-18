@@ -198,3 +198,65 @@ func TestDeleteRefusesOutsideDir(t *testing.T) {
 		t.Fatalf("nested file must survive: %v", err)
 	}
 }
+
+// TestRenameRenamesInPlace covers #1963: Rename gives a scratch a new base
+// name inside the store and returns the new absolute path.
+func TestRenameRenamesInPlace(t *testing.T) {
+	dir := sandbox(t)
+	path, err := Create("txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Rename(path, "notes.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, "notes.md"); got != want {
+		t.Fatalf("Rename = %q want %q", got, want)
+	}
+	if _, err := os.Stat(got); err != nil {
+		t.Fatalf("renamed scratch must exist: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("old name must be gone, stat err = %v", err)
+	}
+	// Renaming onto the same name is a no-op, not an "already exists" error.
+	if same, err := Rename(got, "notes.md"); err != nil || same != got {
+		t.Fatalf("same-name rename = %q, %v", same, err)
+	}
+}
+
+// TestRenameGuards is the boundary rail: Rename refuses paths outside the
+// store, pathy or traversal names, and existing targets.
+func TestRenameGuards(t *testing.T) {
+	dir := sandbox(t)
+	path, err := Create("txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := Create("txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "victim.txt")
+	if err := os.WriteFile(outside, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Rename(outside, "x.txt"); err == nil {
+		t.Fatal("a path outside the store must be refused")
+	}
+	for _, name := range []string{"", ".", "..", "sub/esc.txt", "../esc.txt"} {
+		if _, err := Rename(path, name); err == nil {
+			t.Fatalf("Rename(_, %q) must be refused", name)
+		}
+	}
+	if _, err := Rename(path, filepath.Base(other)); err == nil {
+		t.Fatal("an existing target must be refused")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("the scratch must survive every refusal: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, filepath.Base(other))); err != nil {
+		t.Fatalf("the target must survive: %v", err)
+	}
+}

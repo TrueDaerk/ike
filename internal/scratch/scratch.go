@@ -138,16 +138,9 @@ func Entries() ([]Entry, error) {
 // traversal through "..") is refused rather than deleted, so the panel's
 // delete action can never reach outside the store this package owns.
 func Delete(path string) error {
-	dir, err := Dir()
+	abs, err := inStore(path)
 	if err != nil {
 		return err
-	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return fmt.Errorf("resolving scratch path: %w", err)
-	}
-	if filepath.Dir(abs) != filepath.Clean(dir) {
-		return fmt.Errorf("not a scratch file: %s", path)
 	}
 	info, err := os.Lstat(abs)
 	if err != nil {
@@ -160,4 +153,56 @@ func Delete(path string) error {
 		return fmt.Errorf("deleting scratch: %w", err)
 	}
 	return nil
+}
+
+// Rename gives one scratch file a new base name and returns the new absolute
+// path (#1963, the explorer section's rename). Both ends are guarded like
+// Delete: path must name a file directly inside the scratch dir, and name must
+// be a bare file name — a separator or a ".."/"." component would let a rename
+// walk the file out of the store. An existing target is refused rather than
+// overwritten.
+func Rename(path, name string) (string, error) {
+	abs, err := inStore(path)
+	if err != nil {
+		return "", err
+	}
+	if name == "" || name != filepath.Base(name) || name == "." || name == ".." ||
+		strings.ContainsRune(name, filepath.Separator) || strings.ContainsRune(name, '/') {
+		return "", fmt.Errorf("not a valid scratch name: %s", name)
+	}
+	info, err := os.Lstat(abs)
+	if err != nil {
+		return "", fmt.Errorf("renaming scratch: %w", err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("not a scratch file: %s", path)
+	}
+	target := filepath.Join(filepath.Dir(abs), name)
+	if target == abs {
+		return abs, nil
+	}
+	if _, err := os.Lstat(target); err == nil {
+		return "", fmt.Errorf("already exists: %s", name)
+	}
+	if err := os.Rename(abs, target); err != nil {
+		return "", fmt.Errorf("renaming scratch: %w", err)
+	}
+	return target, nil
+}
+
+// inStore resolves path to absolute and verifies it names an entry directly
+// inside the scratch dir — the shared boundary guard of Delete and Rename.
+func inStore(path string) (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolving scratch path: %w", err)
+	}
+	if filepath.Dir(abs) != filepath.Clean(dir) {
+		return "", fmt.Errorf("not a scratch file: %s", path)
+	}
+	return abs, nil
 }

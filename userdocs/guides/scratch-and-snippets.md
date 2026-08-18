@@ -49,6 +49,14 @@ different project.
 **Open Scratch File…** lists them, newest first, with fuzzy filtering. Open
 scratch tabs also come back with your session like any other file.
 
+The explorer shows them too: a **Scratches** section sits behind a divider at
+the bottom of the file tree, sorted by name (switch to newest-first with the
+`scratch.sort` setting). The cursor walks into it with the explorer's normal
+keys, ++enter++ opens a scratch exactly like a project file, ++d++ deletes and
+++shift+r++ renames with the explorer's dialogs, and ++a++ creates a new
+scratch through the language picker. Click the divider to collapse the
+section, or drag it to resize; both stick across restarts.
+
 ## Snippets
 
 Type a trigger word, press ++tab++ with the cursor right after it, and it

@@ -18,6 +18,7 @@ import (
 
 	"ike/internal/lsp"
 	"ike/internal/overlay"
+	"ike/internal/scratch"
 	"ike/internal/scrollbar"
 	"ike/internal/theme"
 	"ike/internal/ui"
@@ -159,6 +160,28 @@ type Model struct {
 	// hidden-toggle or manual refresh collapses the selection (the row set
 	// shifts, so a stale range would cover the wrong entries — kept simple).
 	selAnchor int
+
+	// Scratches section (#1963, scratches.go): the scratch store listed as a
+	// divider-separated section below the tree, operated with the explorer's
+	// own semantics. A nil lister means "no section" (the default), so the
+	// bare tree — and every pre-section test — is unaffected. scrCursor >= 0
+	// puts the unified cursor in the section; -1 keeps it in the tree.
+	scrLister    func() ([]scratch.Entry, error)
+	scrRemove    func(string) error                   // delete seam; scratch.Delete
+	scrRename    func(string, string) (string, error) // rename seam; scratch.Rename
+	scrDir       string                               // store dir, for poll stamps
+	scrDirMod    time.Time                            // dir mtime at last refresh
+	scrEnabled   bool                                 // config scratch.section
+	scrEntries   []scratch.Entry
+	scrErr       string
+	scrSort      string // "name" (default) or "modified"
+	scrHeightCfg string // last applied scratch.section_height config value
+	scrCursor    int
+	scrTop       int
+	scrHover     int
+	scrCollapsed bool
+	scrHeight    int  // section body rows when expanded (drag-adjustable)
+	scrDragMoved bool // the active divider drag moved (release must not toggle)
 }
 
 // New creates an explorer rooted at dir. The root is marked expanded and a scan
@@ -192,6 +215,11 @@ func New(dir string) Model {
 		autoRefresh:  true,
 		pollEvery:    2 * time.Second,
 		wcache:       &widthCache{},
+		scrEnabled:   true,
+		scrSort:      "name",
+		scrHeight:    defaultScratchHeight,
+		scrCursor:    -1,
+		scrHover:     -1,
 	}
 	m.rebuildColorIndex()
 	m.rebuild()
@@ -627,11 +655,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case CursorTopMsg:
 		m.clearSel()
-		m.moveCursor(-len(m.rows))
+		m.moveCursor(-m.selCount())
 		return m, nil
 	case CursorBottomMsg:
 		m.clearSel()
-		m.moveCursor(len(m.rows))
+		m.moveCursor(m.selCount())
 		return m, nil
 	case ActivateMsg:
 		return m.activate()
@@ -644,6 +672,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m.openInSplit()
 	case RefreshMsg:
 		m.clearSel() // a manual refresh collapses the multi-select (#1044)
+		m.RefreshScratches()
 		return m, m.refresh()
 	case ResyncMsg:
 		// Workspace resume catch-up (#1520): rescan every expanded, loaded
@@ -654,9 +683,17 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case RevealMsg:
 		return m, m.reveal()
 	case NewFileMsg:
+		if m.inScratch() {
+			// The explorer's new-file affordance on the section delegates to
+			// scratch.new (#1963): the store owns naming and templates.
+			return m, scratchNewCmd
+		}
 		m.promptNewEntry(false)
 		return m, nil
 	case NewDirMsg:
+		if m.inScratch() {
+			return m, nil // the scratch store is flat: no folders
+		}
 		m.promptNewEntry(true)
 		return m, nil
 	case DeleteMsg:
@@ -666,6 +703,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.promptRename()
 		return m, nil
 	case SearchMsg:
+		m.exitScratch() // speed search matches tree rows; the cursor follows
 		m.startSearch()
 		return m, nil
 	case RenamePathMsg:
@@ -728,12 +766,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.stepCursor(-1)
 		case "g":
 			if armedG {
-				m.moveCursor(-len(m.rows)) // gg: top
+				m.moveCursor(-m.selCount()) // gg: top
 			} else {
 				m.pendingG = true
 			}
 		case "G":
-			m.moveCursor(len(m.rows)) // bottom
+			m.moveCursor(m.selCount()) // bottom (the last scratch row, #1963)
 		case "pgdown", "ctrl+d":
 			m.movePage(1, key == "ctrl+d")
 		case "pgup", "ctrl+u":
@@ -752,6 +790,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case "/":
 			// Speed search (#1087): "/" is the dedicated activation key — the
 			// tree's single-letter file-op keys rule out bare typing.
+			m.exitScratch()
 			m.startSearch()
 		}
 	}
@@ -760,8 +799,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // Selected returns the selected entry's path and kind, for app commands that
 // act on the explorer's selection (file.move, #175). ok is false with an empty
-// tree or when the root itself is selected — the root is never movable.
+// tree or when the root itself is selected — the root is never movable. With
+// the cursor in the Scratches section (#1963) it reports the selected scratch,
+// so path-driven commands (context menu, copy path) apply there too.
 func (m *Model) Selected() (path string, isDir bool, ok bool) {
+	if m.inScratch() {
+		if e, has := m.scratchSelected(); has {
+			return e.Path, false, true
+		}
+		return "", false, false
+	}
 	n := m.current()
 	if n == nil || n == m.root {
 		return "", false, false
@@ -786,15 +833,23 @@ func (m *Model) current() *node {
 
 // extendSel grows the contiguous selection (#1044) by one shifted motion:
 // the first extension anchors at the current cursor row, then the cursor
-// moves, so the selection is always the anchor..cursor range.
+// moves, so the selection is always the anchor..cursor range. The Scratches
+// section (#1963) has no multi-select — permanent deletes must stay
+// one-at-a-time deliberate — so there a shifted motion moves plainly, and a
+// tree range never extends past the last tree row.
 func (m *Model) extendSel(delta int) {
+	if m.inScratch() {
+		m.stepCursor(delta)
+		return
+	}
 	if len(m.rows) == 0 {
 		return
 	}
 	if m.selAnchor < 0 {
 		m.selAnchor = m.cursor
 	}
-	m.moveCursor(delta)
+	m.cursor = clamp(m.cursor+delta, 0, len(m.rows)-1)
+	m.followCursor()
 }
 
 // clearSel collapses the multi-select range back to the bare cursor.
@@ -860,27 +915,23 @@ func (m *Model) selTargets() []delTarget {
 
 // stepCursor moves the cursor by delta single steps with wrap-around (#1666):
 // down on the last row lands on the first, up on the first lands on the last.
-// Page jumps, gg/G and the wheel keep moveCursor's clamped semantics.
+// Page jumps, gg/G and the wheel keep moveCursor's clamped semantics. Both run
+// over the unified row space (#1963): the tree rows followed by the Scratches
+// section's entries, so the cursor walks seamlessly across the divider.
 func (m *Model) stepCursor(delta int) {
-	if len(m.rows) == 0 {
+	total := m.selCount()
+	if total == 0 {
 		return
 	}
-	m.cursor = ui.StepIndex(m.cursor, delta, len(m.rows))
-	m.followCursor()
+	m.setVcur(ui.StepIndex(m.vcur(), delta, total))
 }
 
 func (m *Model) moveCursor(delta int) {
-	if len(m.rows) == 0 {
+	total := m.selCount()
+	if total == 0 {
 		return
 	}
-	m.cursor += delta
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.cursor >= len(m.rows) {
-		m.cursor = len(m.rows) - 1
-	}
-	m.followCursor()
+	m.setVcur(clamp(m.vcur()+delta, 0, total-1))
 }
 
 // movePage moves the cursor by one page (PageUp/PageDown) or half a page
@@ -897,8 +948,15 @@ func (m *Model) movePage(dir int, half bool) {
 	m.moveCursor(dir * step)
 }
 
-// activate toggles a directory (expand/collapse) or opens a file (enter).
+// activate toggles a directory (expand/collapse) or opens a file (enter). On a
+// Scratches row (#1963) it opens the scratch through the same funnel.
 func (m Model) activate() (Model, tea.Cmd) {
+	if m.inScratch() {
+		if e, ok := m.scratchSelected(); ok {
+			return m, openCmd(e.Path)
+		}
+		return m, nil
+	}
 	n := m.current()
 	if n == nil {
 		return m, nil
@@ -919,6 +977,12 @@ func (m Model) activate() (Model, tea.Cmd) {
 // expandOrOpen expands a collapsed directory, steps into the first child of an
 // expanded one, or opens a file (l / right).
 func (m Model) expandOrOpen() (Model, tea.Cmd) {
+	if m.inScratch() {
+		if e, ok := m.scratchSelected(); ok {
+			return m, openCmd(e.Path) // a scratch row is always a file
+		}
+		return m, nil
+	}
 	n := m.current()
 	if n == nil {
 		return m, nil
@@ -945,6 +1009,9 @@ func (m Model) expandOrOpen() (Model, tea.Cmd) {
 // collapseOrParent collapses an expanded directory, otherwise jumps to the
 // parent node. It never moves above the root.
 func (m *Model) collapseOrParent() {
+	if m.inScratch() {
+		return // scratch rows are flat: no directory, no parent to jump to
+	}
 	n := m.current()
 	if n == nil {
 		return
@@ -972,6 +1039,12 @@ func (m *Model) jumpToParent() {
 // openInSplit opens the file under the cursor in a new pane (NewPane intent). It
 // is a no-op on a directory or an empty tree.
 func (m Model) openInSplit() (Model, tea.Cmd) {
+	if m.inScratch() {
+		if e, ok := m.scratchSelected(); ok {
+			return m, openSplitCmd(e.Path)
+		}
+		return m, nil
+	}
 	n := m.current()
 	if n == nil || n.isDir {
 		return m, nil
@@ -1169,6 +1242,13 @@ func (m *Model) schedulePoll() tea.Cmd {
 		}
 	}
 	walk(m.root)
+	// The scratch dir joins the poll set (#1963) so an external change shows
+	// up like any project-tree change — but only once the dir was seen to
+	// exist (a zero mod time), or a missing dir would wake the poll loop on
+	// every interval reporting its parent.
+	if m.scratchShown() && m.scrDir != "" && !m.scrDirMod.IsZero() {
+		stamps = append(stamps, dirStamp{path: m.scrDir, mod: m.scrDirMod})
+	}
 	interval := m.pollEvery
 	return func() tea.Msg {
 		// Idle-friendly loop (#1001): an unchanged tree re-checks in place
@@ -1215,6 +1295,10 @@ func (m *Model) applyPoll(msg pollMsg) tea.Cmd {
 			continue
 		}
 		seen[p] = true
+		if m.scrDir != "" && p == m.scrDir {
+			m.RefreshScratches() // the store changed externally (#1963)
+			continue
+		}
 		n := nodeByPath(m.root, p)
 		if n == nil || !n.isDir || !n.loaded || n.loading {
 			continue
@@ -1548,7 +1632,11 @@ func (m Model) contentWidth() int {
 // each bar is needed, and the total content width. Two passes settle the mutual
 // dependence (reserving for one bar can push the other axis into overflow).
 func (m Model) viewport() (textW, textH int, needV, needH bool, contentW int) {
-	vw, vh := m.width, m.height
+	// The Scratches section (#1963) docks at the pane's bottom edge; the tree
+	// viewport owns whatever it leaves. Funneling the reservation through here
+	// keeps every consumer — scroll clamps, hit tests, scrollbars, the prompt
+	// anchor — agreeing on the tree's real height.
+	vw, vh := m.width, m.height-m.scratchAreaRows()
 	if vw < 1 {
 		vw = 1
 	}
@@ -1644,6 +1732,15 @@ func (m Model) IsOpen(path string) bool { return m.open[path] }
 // SetHoverAt records the row under the mouse at content-local coordinates, or
 // clears the hover when the pointer is off a content row.
 func (m *Model) SetHoverAt(x, y int) {
+	m.scrHover = -1
+	if m.scratchShown() && y >= m.treeAreaRows() {
+		// The pointer is over the Scratches section (#1963).
+		m.hover = -1
+		if i, ok := m.scratchIndexAt(y); ok && x >= 0 && x < m.width {
+			m.scrHover = i
+		}
+		return
+	}
 	textW, textH, _, _, _ := m.viewport()
 	if x < 0 || y < 0 || x >= textW || y >= textH {
 		m.hover = -1
@@ -1657,7 +1754,7 @@ func (m *Model) SetHoverAt(x, y int) {
 }
 
 // ClearHover drops any hover highlight (pointer left the pane).
-func (m *Model) ClearHover() { m.hover = -1 }
+func (m *Model) ClearHover() { m.hover, m.scrHover = -1, -1 }
 
 // HoverRow returns the visible row index under the pointer, or -1 when none.
 func (m Model) HoverRow() int { return m.hover }
@@ -1677,6 +1774,12 @@ const doubleClickWindow = 400 * time.Millisecond
 func (m Model) MouseClick(x, y int) (Model, tea.Cmd) {
 	if len(m.rows) == 0 || x < 0 || y < 0 {
 		return m, nil
+	}
+	if m.scratchShown() && y >= m.treeAreaRows() {
+		// A press in the Scratches section (#1963): the divider toggles the
+		// collapse (the app's drag path intercepts presses it turns into a
+		// resize), a row selects, a double-click opens — tree semantics.
+		return m.scratchClick(x, y)
 	}
 	textW, textH, needV, needH, contentW := m.viewport()
 
@@ -1700,6 +1803,7 @@ func (m Model) MouseClick(x, y int) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.clearSel() // a plain click collapses the multi-select (#1044)
+	m.exitScratch()
 	m.cursor = i
 	m.followCursor()
 
@@ -1725,10 +1829,18 @@ func (m Model) MouseClick(x, y int) (Model, tea.Cmd) {
 func (m *Model) ShiftClick(x, y int) {
 	textW, textH, _, _, _ := m.viewport()
 	if x < 0 || y < 0 || x >= textW || y >= textH {
-		return
+		return // section rows (#1963) have no multi-select to extend into
 	}
 	i := m.offset + y
 	if i >= len(m.rows) {
+		return
+	}
+	if m.inScratch() {
+		// The anchor must live in the tree; treat this as a plain selection.
+		m.exitScratch()
+		m.cursor = i
+		m.followCursor()
+		m.resetClick()
 		return
 	}
 	if m.selAnchor < 0 {
@@ -1746,6 +1858,18 @@ func (m *Model) ShiftClick(x, y int) {
 // empty space below the rows keeps the current selection — the menu's
 // create actions then target the selected (or root) directory.
 func (m *Model) ContextClick(x, y int) bool {
+	if m.scratchShown() && y >= m.treeAreaRows() {
+		// A right-click on a Scratches row (#1963) selects it so the menu's
+		// path-driven actions target the scratch; the divider gets no menu.
+		if i, ok := m.scratchIndexAt(y); ok && x >= 0 && x < m.width {
+			m.clearSel()
+			m.scrCursor = i
+			m.followScratchCursor()
+			m.resetClick()
+			return true
+		}
+		return false
+	}
 	textW, textH, needV, _, _ := m.viewport()
 	if x < 0 || y < 0 || y >= textH || x > textW || (needV && x == textW) {
 		return false
@@ -1760,6 +1884,7 @@ func (m *Model) ContextClick(x, y int) bool {
 			return true
 		}
 		m.clearSel()
+		m.exitScratch()
 		m.cursor = i
 		m.followCursor()
 	}
@@ -2137,7 +2262,15 @@ func (m Model) View() string {
 		lines = append(lines, row)
 	}
 
-	out := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	// The Scratches section (#1963) renders below the tree block; the banner
+	// and search footer keep replacing the tree's last row, never a section
+	// row, so the divider and the scratch list stay intact underneath them.
+	scr := m.scratchLines()
+	join := func() string {
+		all := append(append([]string(nil), lines...), scr...)
+		return lipgloss.JoinVertical(lipgloss.Left, all...)
+	}
+	out := join()
 	if m.err != nil && m.prompt == nil {
 		// A non-modal (scan/poll) error keeps the tree and takes the last
 		// row as a themed banner (#1030) — never a full-view replacement;
@@ -2146,7 +2279,7 @@ func (m Model) View() string {
 			Render(ansi.Truncate("error: "+m.err.Error(), maxz(m.width), "…"))
 		if n := len(lines); n > 0 {
 			lines[n-1] = banner
-			out = lipgloss.JoinVertical(lipgloss.Left, lines...)
+			out = join()
 		} else {
 			out = banner
 		}
@@ -2159,7 +2292,7 @@ func (m Model) View() string {
 		field := m.searchLine()
 		if n := len(lines); n > 0 {
 			lines[n-1] = field
-			out = lipgloss.JoinVertical(lipgloss.Left, lines...)
+			out = join()
 		} else {
 			out = field
 		}
@@ -2239,7 +2372,10 @@ const (
 func (m Model) rowKind(i int) rowKind {
 	n := m.rows[i]
 	switch {
-	case i == m.cursor && m.focused:
+	// While the unified cursor sits in the Scratches section (#1963) the
+	// tree's remembered row reads as the muted idle cursor, like an unfocused
+	// pane — only one row in the whole pane carries the full highlight.
+	case i == m.cursor && m.focused && !m.inScratch():
 		return rowSelected
 	case m.inSelRange(i):
 		// A multi-select member (#1044) outranks hover: the range must stay

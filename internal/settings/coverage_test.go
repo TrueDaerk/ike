@@ -41,6 +41,10 @@ var internalKeys = map[string]string{
 	"lsp.onboarded":   "records that the first-start install dialog had its say",
 	"ui.onboarded":    "records that the welcome tour was shown",
 	"project.history": "the recent-projects list, maintained by internal/project",
+	// Legacy #1932 tool-pane keys, kept decodable so old configs load
+	// without warnings; Validate migrates them onto scratch.section_* (#1963).
+	"scratch.panel":        "legacy #1932 key, migrated to scratch.section by Validate",
+	"scratch.panel_height": "legacy #1932 key, migrated to scratch.section_height by Validate",
 }
 
 // uncoveredKeys are leaf keys with no settings surface yet, each with the

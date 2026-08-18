@@ -483,7 +483,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("problems.toggle", "Problems", ProblemsToggleMsg{}),
 			appCommand("structure.toggle", "Structure", StructureToggleMsg{}),
 			appCommand("dom.toggle", "DOM Inspector", DOMToggleMsg{}),
-			appCommand("scratch.panel", "Scratch Files", ScratchPanelToggleMsg{}),
+			appCommand("scratch.panel", "Scratch Files", ScratchSectionFocusMsg{}),
 			appCommand("usages.toggle", "Usages", UsagesToggleMsg{}),
 			appCommand("tests.toggle", "Test Results", TestsToggleMsg{}),
 			appCommand("issues.toggle", "GitHub Issues", IssuesToggleMsg{}),
