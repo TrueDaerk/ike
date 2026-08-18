@@ -57,6 +57,8 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		return nil, m.pasteNewProjectPrompt(text)
 	case m.saveAsOpen():
 		return nil, m.pasteSaveAsPrompt(text)
+	case m.bookmarkPromptOpen():
+		return nil, m.pasteBookmarkPrompt(text)
 	case m.layoutSavePromptOpen():
 		return nil, m.pasteLayoutSavePrompt(text)
 	case m.jbImportPromptOpen():

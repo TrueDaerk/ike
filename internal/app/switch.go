@@ -353,6 +353,7 @@ func detachWorkspaceServices(w *workspace.Workspace) {
 			ed.SetBreakpointDisabledSource(nil)
 			ed.SetBreakpointAdjuster(nil)
 			ed.SetMarkHooks(nil, nil, nil)
+			ed.SetBookmarkHooks(nil, nil)
 			ed.SetHistories(nil)
 			ed.SetCompletionMRU(nil)
 			// In-flight .http markers (#1746) belong to the model that

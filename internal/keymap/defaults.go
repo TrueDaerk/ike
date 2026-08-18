@@ -344,6 +344,15 @@ var jetbrainsRows = []row{
 	{"ctrl+shift+f10", "run.testAtCursor", "Run test at cursor", Editor, "Run (#1150)"},
 	// cmd+f3 is JetBrains' Show Bookmarks on the macOS keymap.
 	{"cmd+f3", "nav.bookmarks", "Bookmarks", Global, "Marks (#1151)"},
+	// Project bookmarks (#55). JetBrains' macOS F3 (Toggle Bookmark) is
+	// taken here by search.nextMatch, so the family uses the JetBrains
+	// Windows chord F11 — delivered everywhere — with alt+f3, the macOS
+	// mnemonic chord, for the mnemonic flavour. Both are editor-scoped:
+	// they bookmark the caret's line.
+	{"f11", "bookmark.toggle", "Toggle bookmark", Editor, "Bookmarks (#55)"},
+	{"alt+f3", "bookmark.toggleMnemonic", "Toggle bookmark with mnemonic", Editor, "Bookmarks (#55)"},
+	{"shift+f11", "bookmark.next", "Next bookmark", Editor, "Bookmarks (#55)"},
+	{"ctrl+shift+f11", "bookmark.previous", "Previous bookmark", Editor, "Bookmarks (#55)"},
 }
 
 // Defaults returns the default binding set for the named preset. Unknown presets

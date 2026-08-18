@@ -530,7 +530,7 @@ func (m Model) View() string {
 	bps := m.breakpointSet()
 	bpsOff := m.disabledBreakpointSet()
 	tests := m.testMarks()
-	bookmarks := m.bookmarkSet()
+	bookmarks := m.bookmarkSigns()
 	for i := m.view.Top + len(sticky); len(out) < height && i < lineCount; i++ {
 		if m.lineHidden(i) {
 			continue
@@ -563,11 +563,13 @@ func (m Model) View() string {
 				sign = "●"
 				signStyle = lipgloss.NewStyle().Foreground(m.theme().Error).Bold(true)
 			}
-		} else if bookmarks[i] {
+		} else if glyph, ok := bookmarks[i]; ok {
 			// A bookmark/mark glyph (#1151) slots below the breakpoint —
 			// breakpoints stay visible everywhere — and above the test run
-			// marker; the letter shows in the bookmarks picker, not here.
-			sign = "⚑"
+			// marker: ⚑ for a vim mark or an anonymous bookmark, the digit
+			// of a mnemonic bookmark (#55). The mark's letter shows in the
+			// bookmarks picker, not here.
+			sign = glyph
 			signStyle = lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true)
 		} else if _, ok := tests[i]; ok {
 			sign = "▶"

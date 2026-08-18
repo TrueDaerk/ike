@@ -21,6 +21,27 @@
   cycles the copy format and `ctrl+y` copies. Texts past 16 KiB evaluate
   off the event loop behind a generation stamp; pastes keep their line
   breaks here (the only prompt that does).
+## 2026-08-18 (Project bookmarks: mnemonics, notes, stepping, #55)
+
+- **Store** (`internal/bookmarks`): JetBrains-style line bookmarks keyed by
+  project-relative path + 0-based line, each with an optional mnemonic digit
+  (`0`-`9`, unique project-wide) and a note. Persisted in
+  `.ike/bookmarks.json` (`IKE_CONFIG_DIR` override) on every change and on
+  each buffer save; malformed files load empty. Edit shifts reuse the
+  breakpoint delta scheme (colliding bookmarks merge, lower line wins) and
+  `Rename` re-keys files and whole directories.
+- **Editor**: `SetBookmarkHooks` injects the gutter-sign and adjust closures
+  beside the mark hooks; the gutter draws the mnemonic digit where a bookmark
+  has one, otherwise the existing `⚑`.
+- **Commands** (`internal/app/bookmarks_store.go`): `bookmark.toggle` (`f11`),
+  `bookmark.toggleMnemonic` (`alt+f3`, digit prompt — the same digit on the
+  same line removes), `bookmark.jumpMnemonic`, `bookmark.annotate` (note
+  prompt), `bookmark.next`/`bookmark.previous` (`shift+f11` /
+  `ctrl+shift+f11`, wrapping in (path, line) order). All are in the Navigate
+  menu and the JetBrains import map.
+- **Picker**: `nav.bookmarks` now lists the project's bookmarks beside the vim
+  marks — `⚑[digit]  path:line` with the note (or the line) as preview,
+  shift+delete removes.
 
 ## 2026-08-18 (GitHub Issues tool window: list/filter, detail, start work, PR state, #1934)
 

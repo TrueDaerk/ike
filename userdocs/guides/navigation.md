@@ -67,10 +67,29 @@ positions rather than your jumps.
 `` `a `` jumps back exactly, `'a` to the line. Lowercase marks are local to
 the file; uppercase ones are global and jump across files.
 
-**Bookmarks** is the same data with a UI — a picker listing the current file's
-local marks plus every global one as `'x  path:line  preview`. ++enter++
-jumps; ++shift+delete++ removes a mark. It is palette-only (**Bookmarks**),
-because the vim keys are the interface.
+**Bookmarks** are the JetBrains flavour: a bookmark belongs to the project,
+not to a key you have to remember. ++f11++ toggles one on the current line —
+it shows as a `⚑` in the gutter and survives restarts.
+
+| Keys | What it does |
+|---|---|
+| ++f11++ | Toggle a bookmark on the current line |
+| ++alt+f3++ | Assign a mnemonic `0`–`9` (the same digit again removes the bookmark) |
+| ++shift+f11++ / ++ctrl+shift+f11++ | Next / previous bookmark, wrapping across files |
+| ++cmd+f3++ | Open the bookmarks picker |
+
+A bookmark with a mnemonic shows that digit in the gutter instead of the flag,
+and **Go to Bookmark by Mnemonic** (palette) jumps to it by pressing the digit.
+**Edit Bookmark Note** (palette) annotates the line — the note replaces the
+line preview in the picker, so a bookmark can say *why* it matters.
+
+The picker (**Bookmarks**, ++cmd+f3++) lists everything at once: the current
+file's local marks and every global one as `'x  path:line  preview`, plus the
+project's bookmarks as `⚑x  path:line`. ++enter++ jumps; ++shift+delete++
+removes the entry.
+
+Bookmarks move with your edits, follow files you rename or move, and are kept
+per project in `.ike/bookmarks.json`.
 
 ## By numbered slot
 

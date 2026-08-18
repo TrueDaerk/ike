@@ -50,6 +50,15 @@ func (m *Model) SetMarkHooks(set func(r rune, path string, line, col int), lines
 	m.markLines = m.buf.LineCount()
 }
 
+// SetBookmarkHooks injects the project bookmark store's closures (#55):
+// signs reports a file's gutter glyphs by 0-based line (a mnemonic digit or
+// the anonymous flag), adjust shifts the store's bookmarks after an edit
+// changed the line count. Nil hooks disable project bookmarks.
+func (m *Model) SetBookmarkHooks(signs func(path string) map[int]string, adjust func(path string, cursorAfter, delta int)) {
+	m.bmSigns = signs
+	m.bmAdjust = adjust
+}
+
 // localMarkName reports whether r names a local mark (a-z).
 func localMarkName(r rune) bool { return r >= 'a' && r <= 'z' }
 
@@ -147,20 +156,28 @@ func (m Model) LineText(i int) string {
 	return m.buf.Line(i)
 }
 
-// bookmarkSet snapshots the marked lines for the gutter: this view's local
-// marks plus the global marks recorded for the open file.
-func (m Model) bookmarkSet() map[int]bool {
-	if len(m.marks) == 0 && (m.gmLines == nil || !m.HasFile()) {
-		return nil
-	}
-	set := map[int]bool{}
+// bookmarkSigns snapshots the gutter glyphs for the marked lines: this
+// view's local marks and the global marks recorded for the open file draw
+// the anonymous flag, a project bookmark (#55) draws its mnemonic digit when
+// it has one — the digit outranks the flag, it carries more information.
+func (m Model) bookmarkSigns() map[int]string {
+	set := map[int]string{}
 	for _, pos := range m.marks {
-		set[m.buf.ClampCursor(pos).Line] = true
+		set[m.buf.ClampCursor(pos).Line] = "⚑"
 	}
-	if m.gmLines != nil && m.HasFile() {
-		for _, l := range m.gmLines(m.path) {
-			if l >= 0 && l < m.buf.LineCount() {
-				set[l] = true
+	if m.HasFile() {
+		if m.gmLines != nil {
+			for _, l := range m.gmLines(m.path) {
+				if l >= 0 && l < m.buf.LineCount() {
+					set[l] = "⚑"
+				}
+			}
+		}
+		if m.bmSigns != nil {
+			for l, sign := range m.bmSigns(m.path) {
+				if l >= 0 && l < m.buf.LineCount() {
+					set[l] = sign
+				}
 			}
 		}
 	}
@@ -185,8 +202,13 @@ func (m *Model) notifyMarkEdit() {
 	m.shiftLocalMarks(m.cursor.Line, delta)
 	// The change-list ring drifts with the same scheme (#1174).
 	m.changes.shift(m.cursor.Line, delta)
-	if m.gmAdjust != nil && m.HasFile() {
-		m.gmAdjust(m.path, m.cursor.Line, delta)
+	if m.HasFile() {
+		if m.gmAdjust != nil {
+			m.gmAdjust(m.path, m.cursor.Line, delta)
+		}
+		if m.bmAdjust != nil {
+			m.bmAdjust(m.path, m.cursor.Line, delta)
+		}
 	}
 }
 
