@@ -453,6 +453,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("structure.toggle", "Structure", StructureToggleMsg{}),
 			appCommand("usages.toggle", "Usages", UsagesToggleMsg{}),
 			appCommand("tests.toggle", "Test Results", TestsToggleMsg{}),
+			appCommand("issues.toggle", "GitHub Issues", IssuesToggleMsg{}),
 			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
 			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),
 		), append(append(append(scratchCommands(), toolCommands()...), memoryCommands()...), esCommands()...)...),

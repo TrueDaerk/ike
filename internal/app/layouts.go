@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 
+	"ike/internal/forge"
 	"ike/internal/host"
 	"ike/internal/layout"
 	"ike/internal/pane"
@@ -241,6 +242,8 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 		return singleton(pane.ProblemsKey, "problems")
 	case pane.KindTests:
 		return singleton(pane.TestsKey, "tests")
+	case pane.KindIssues:
+		return singleton(pane.IssuesKey, "issues")
 	case pane.KindStructure:
 		return singleton(pane.StructureKey, "structure")
 	case pane.KindUsages:
@@ -691,6 +694,14 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		return singleton(reg.AddStructure)
 	case "tests":
 		return singleton(reg.AddTests)
+	case "issues":
+		key, ok := singleton(reg.AddIssues)
+		if ok {
+			// A restored pane re-arms its refresh so 'r' works before any
+			// open-path injection (#1934).
+			reg.Get(key).Issues().SetRefresh(forge.RefreshCmd("."))
+		}
+		return key, ok
 	case "usages":
 		key, ok := singleton(reg.AddUsages)
 		if ok {

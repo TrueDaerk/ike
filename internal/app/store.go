@@ -321,6 +321,9 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 		case pane.KindTests:
 			// The panel restores empty (#1911): test results are session state.
 			ids[key] = paneIdentity{Kind: "tests"}
+		case pane.KindIssues:
+			// The panel restores empty (#1934): 'r' re-fetches the listing.
+			ids[key] = paneIdentity{Kind: "issues"}
 		case pane.KindStructure:
 			// The panel restores empty (#1025): the first buffer-change sync
 			// re-requests the symbols.

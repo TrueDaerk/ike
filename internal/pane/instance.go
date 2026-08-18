@@ -17,6 +17,7 @@ import (
 	"ike/internal/editor/register"
 	"ike/internal/espane"
 	"ike/internal/explorer"
+	"ike/internal/ghissues"
 	"ike/internal/host"
 	"ike/internal/httppane"
 	"ike/internal/imgview"
@@ -100,6 +101,10 @@ const (
 	// bottom-split panel with the last captured test run's result tree and
 	// detail pane, under key "tests".
 	KindTests
+	// KindIssues is the GitHub Issues tool window (#1934): a singleton panel
+	// listing the repository's open issues with detail view and the
+	// start-work action, under key "issues".
+	KindIssues
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -121,6 +126,7 @@ const (
 	ctxData     = "data"
 	ctxES       = "es"
 	ctxTests    = "tests"
+	ctxIssues   = "issues"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -150,6 +156,7 @@ type Instance struct {
 	dv   dataview.Model
 	es   espane.Model
 	tr   testresults.Model
+	gi   ghissues.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
@@ -274,6 +281,8 @@ func (i *Instance) ContextID() string {
 		return ctxES
 	case KindTests:
 		return ctxTests
+	case KindIssues:
+		return ctxIssues
 	}
 	return ctxEditor
 }
@@ -325,6 +334,10 @@ func (i *Instance) ES() *espane.Model { return &i.es }
 // Tests returns the underlying Test Results tool-window model (#1911). It is
 // only valid for a tests instance; callers gate on Kind first.
 func (i *Instance) Tests() *testresults.Model { return &i.tr }
+
+// Issues returns the underlying GitHub Issues tool-window model (#1934). It
+// is only valid for an issues instance; callers gate on Kind first.
+func (i *Instance) Issues() *ghissues.Model { return &i.gi }
 
 // Diff returns the underlying diff viewer model. It is only valid for a diff
 // instance; callers gate on Kind first.
@@ -984,6 +997,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.es.SetSize(w, h)
 	case KindTests:
 		i.tr.SetSize(w, h)
+	case KindIssues:
+		i.gi.SetSize(w, h)
 	}
 }
 
@@ -1034,6 +1049,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.es.SetFocused(f)
 	case KindTests:
 		i.tr.SetFocused(f)
+	case KindIssues:
+		i.gi.SetFocused(f)
 	}
 }
 
@@ -1099,6 +1116,8 @@ func (i *Instance) View() string {
 		return i.es.View()
 	case KindTests:
 		return i.tr.View()
+	case KindIssues:
+		return i.gi.View()
 	}
 	return ""
 }
@@ -1157,6 +1176,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.es.Update(msg)
 	case KindTests:
 		cmd = i.tr.Update(msg)
+	case KindIssues:
+		cmd = i.gi.Update(msg)
 	}
 	return cmd
 }
@@ -1301,6 +1322,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.es.SetPalette(p)
 	case KindTests:
 		i.tr.SetPalette(p)
+	case KindIssues:
+		i.gi.SetPalette(p)
 	}
 }
 
