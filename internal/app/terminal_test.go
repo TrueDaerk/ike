@@ -890,3 +890,44 @@ func TestTermGuardStaleTargetPane(t *testing.T) {
 		t.Fatalf("confirming a stale guard must not close another pane: %d -> %d", panes, got)
 	}
 }
+
+// TestDeadTerminalSelectionCopyKey guards #1951: after the run exited, cmd+c
+// still copies the mouse selection — the exited pane is a read-only view of
+// the output, not an inert one.
+func TestDeadTerminalSelectionCopyKey(t *testing.T) {
+	var copied string
+	orig := clipboardWrite
+	clipboardWrite = func(text string) { copied = text }
+	t.Cleanup(func() { clipboardWrite = orig })
+
+	m, key := openTestTerminal(t)
+	term := m.activeWS().Panes.Get(key).Terminal()
+	term.StartCommand("terminal-dead", []string{"/bin/sh", "-c", "echo dead-run-output"}, t.TempDir(), nil)
+	deadline := time.Now().Add(5 * time.Second)
+	for term.Running() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if term.Running() {
+		t.Fatal("the command session should have exited")
+	}
+	if m.terminalFocused() {
+		t.Fatal("a finished session is not a live terminal")
+	}
+	term.MousePress(0, 0)
+	term.MouseDrag(8, 0)
+	term.MouseRelease(8, 0)
+	if !term.HasSelection() {
+		t.Fatal("a dead pane must still select")
+	}
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModSuper})
+	m = out.(Model)
+	if term.HasSelection() {
+		t.Fatal("cmd+c should consume and clear the selection while dead")
+	}
+	if copied == "" {
+		t.Fatal("cmd+c should write the dead pane's selection to the clipboard")
+	}
+	if m.activeWS().Panes.Focused() != key {
+		t.Fatal("cmd+c must not move focus")
+	}
+}

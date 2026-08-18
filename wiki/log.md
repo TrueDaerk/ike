@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-18 (exited run pane: copy, resize reflow and scrollback, #1951)
+
+- **Terminal** (`internal/terminal/model.go`, `session.go`, `scrollbar.go`):
+  the exited state (#810) becomes a first-class read-only view of the finished
+  run. One gate — `Model.dead()` (no session, not running, or a pipe past
+  `FinishPipe`) — replaces the scattered `Running()` short-circuits: mouse
+  press/drag/release and the wheel no longer consult the gone child's
+  mouse-reporting/alt-screen modes, so selection and scrollback paging work;
+  `Model.deadKey` handles `pgup`/`pgdn`, `up`/`down`, `home`/`end` and `r`
+  (restart) and leaves every other key inert instead of snapping back to live;
+  the scrollbar shows even when the exited program left the alt screen behind.
+  `Session.Resize` now applies to a closed session (skipping only the closed
+  PTY), so dragging the divider reflows the dead pane and re-centers the
+  dialog — `release` clears the pending-resize flag and the debounced apply
+  sends its own repaint, since `notify` stays silent once closed. The
+  emulator's retirement moved from the child's exit to the pane's teardown
+  (`Session.closeEmulator`): a closed emulator drops the writes a width reflow
+  replays, so the dead grid stays writable until the pane goes away. The exit
+  dialog composites over the paged view too, keeping `DeadActionHit` valid
+  while scrolled (the footer fallback hit-tests at the live view only).
+- **App** (`internal/app/app.go`): `focusedDeadTerminal` routes the cmd+c copy
+  chord for a finished session the way `terminalFocused` routes it for a live
+  one, so a selected traceback lands on the clipboard.
+- **Docs**: exited-state paragraphs in `/architecture/tool-panes.md` and
+  `/architecture/terminal.md` (command sessions, PTY lifecycle, reserved set).
+
 ## 2026-08-18 (label-jump motion: easymotion/leap-style navigation, #787)
 
 - **Editor** (`internal/editor/labeljump.go`): `gs` in normal mode (or

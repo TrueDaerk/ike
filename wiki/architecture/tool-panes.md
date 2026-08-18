@@ -4,7 +4,7 @@ title: Custom TUI Tool Panes
 description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning tools to exact layout positions (#1897; #1946 adds `terminal`/`run`/`debug` as assignable targets plus settings-form value hints), global process-wide instances shared across workspaces (#1890) whose panes follow project switches (#1903), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, and the built-in Run tool that owns run output (#1905)."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
-timestamp: 2026-08-17T00:00:00Z
+timestamp: 2026-08-18T12:00:00Z
 ---
 
 # Custom TUI Tool Panes (#741)
@@ -400,6 +400,18 @@ with the same directory and environment; `ctrl+w` or the close button
 removes the pane. A pane too small for the dialog falls back to a one-line
 footer with the same actions. Run command sessions keep their existing
 stay-open behavior; plain shell terminals still close on exit.
+
+The exited pane is a **read-only view of the finished run** (#1951), not a
+half-dead one: the output stays selectable and the copy chord (cmd+c) copies
+the selection like in a live terminal, the wheel and the scroll keys
+(`shift+pgup`/`shift+pgdn`, `pgup`/`pgdn`, `up`/`down`, `home`/`end`) page the
+whole scrollback — with the dialog composited over the paged view too, so its
+click targets never move — and resizing the pane reflows the content and
+re-centers the dialog. `Restart`/`Close` keep hit-testing against the
+recomputed geometry after any scroll or resize; the small-pane footer
+fallback only hit-tests at the live view, where it is the row that renders.
+Everything else is inert: no key reaches a child that is gone, and none of
+them snaps the view back to live.
 
 ## Layout persistence
 

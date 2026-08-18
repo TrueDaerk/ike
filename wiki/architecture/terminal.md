@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-08-12T12:00:00Z
+timestamp: 2026-08-18T12:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -22,6 +22,18 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   and a finished command session renders `[process exited with code N]`
   instead of the bare marker. `IsCommand()`/`Argv()` distinguish it from a
   shell.
+- A **finished session is a read-only view** of the run's output (#1951):
+  `Model.dead()` (no session, not running, or a pipe past `FinishPipe`) is the
+  single gate — mouse press/drag/release and the wheel stop consulting the
+  gone child's mouse-reporting/alt-screen modes and serve selection and
+  scrollback paging instead, `Model.deadKey` handles the scroll keys plus `r`
+  (restart) and leaves everything else inert (no snap back to live), and the
+  scrollbar shows even when the exited program left the alt screen behind.
+  Copying is app-side: `focusedDeadTerminal` routes the cmd+c chord for a
+  finished session the way `terminalFocused` routes it for a live one. The
+  exit dialog (#810) is composited over the paged view too, so its geometry —
+  and `DeadActionHit` with it — stays valid while scrolling; the footer
+  fallback hit-tests only at the live view.
 - `Model.Occupied()` tracks whether the user ever sent input (a forwarded key
   or a paste; scrollback paging does not count). `Model.StartCommand` replaces
   a model's session in place — the reuse path when a run takes over a
@@ -55,7 +67,11 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   trailing apply of the final size, so the child redraws once instead of per
   drag step; `Close` kills the child and releases the PTY (bounded — the loop
   joins continue in the background, #1786), and a shell `exit` sends
-  `ExitedMsg` so the root model closes the pane.
+  `ExitedMsg` so the root model closes the pane. A **finished** session still
+  resizes (#1951) — its output stays on screen in the exited state, so the
+  divider drag must reflow it — only the closed PTY is skipped; the repaint
+  after a debounced apply is sent directly, since `notify` stays silent once
+  the session is closed.
 - **VT emulation** via `charmbracelet/x/vt` (`SafeEmulator` — the read loop
   writes while Update/View read): PTY output feeds `Write`, the screen
   renders with `Render()` (ANSI-styled, so 16/256/truecolor pass through),
@@ -154,8 +170,12 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   is not safe concurrently with `Read`/`Write` (plain-bool closed flag), so
   `join` collects the loops in order — read loop (closed PTY errors its
   read), feed loop (spool drains, exit output kept), then the write loop,
-  woken by a sentinel byte through the host-bound pipe — and closes the
-  emulator last. `join` never runs on the update loop (#1786): `Close`
+  woken by a sentinel byte through the host-bound pipe. The emulator itself is
+  retired by `closeEmulator` (idempotent, after both wait groups), and that
+  belongs to the **pane's** teardown rather than the child's exit (#1951): the
+  exited pane still renders and reflows its output, and a closed emulator
+  silently drops the history a width reflow replays — so a session whose child
+  ended keeps its grid writable until `Close` runs. `join` never runs on the update loop (#1786): `Close`
   performs the release and hands the join to a background goroutine (the
   UI-initiated close paths — tab close, popup collapse, project switch, quit
   — all call `Close` from bubbletea's update loop), and the exit path sends
@@ -392,8 +412,14 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 
 `shift+pgup` / `shift+pgdn` page the **scrollback** inside the pane (half a
 grid per step, position marker on the bottom line, any typed key snaps back
-to live — except `/`, which opens the scrollback search, #1169 below). A dead session (shell exited) falls back to normal key handling so
-`ctrl+w` can close the pane.
+to live — except `/`, which opens the scrollback search, #1169 below). A dead
+session (shell exited) falls back to normal key handling so `ctrl+w` can close
+the pane; inside the pane it becomes a read-only view of the finished output
+(#1951): `pgup`/`pgdn`, `up`/`down` and `home`/`end` page the scrollback in
+addition to the shift-chords, `r` restarts a run/tool session, `cmd+c` still
+copies the mouse selection (`focusedDeadTerminal` — `terminalFocused` reports
+live sessions only), and every other key is inert instead of snapping the view
+back to live.
 
 ## Scrollback bound (#1545)
 
