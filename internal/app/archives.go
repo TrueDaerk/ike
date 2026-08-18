@@ -10,6 +10,7 @@ import (
 
 	"ike/internal/archive"
 	"ike/internal/archview"
+	"ike/internal/gzfile"
 	"ike/internal/host"
 	"ike/internal/largefile"
 	"ike/internal/layout"
@@ -106,6 +107,12 @@ func (m *Model) openArchiveEntry(archivePath, entry string) tea.Cmd {
 		m.host.Notify(host.Error, "cannot read "+entry+": "+err.Error())
 		return nil
 	}
+	// A gzip member is compressed bytes, and compressed bytes are binary:
+	// without this seam logs/app.log.gz would be refused as a blob nobody can
+	// look at (#1948). Decompressing first makes the two viewers compose.
+	if gzfile.IsGzip(data) {
+		return m.openArchiveGzipEntry(archivePath, entry, data)
+	}
 	if isBinary(data) {
 		m.host.Notify(host.Warn, "binary archive entry — no preview: "+entry)
 		return nil
@@ -144,6 +151,52 @@ func (m *Model) openArchiveEntry(archivePath, entry string) tea.Cmd {
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	return ed.Reparse()
+}
+
+// nestedArchiveNotice prefixes the refusal for an archive inside an archive.
+// It replaces the blanket "binary archive entry" the member used to draw:
+// there is no nested archive view, and saying so is the point (#1948).
+const nestedArchiveNotice = "nested archive — extract not supported: "
+
+// openArchiveGzipEntry shows a gzip member of an archive decompressed, the
+// way the gz viewer shows a plain .gz (#1948): read-only buffer, language
+// from the inner name, the decompressed-byte cap as the bomb guard, and a
+// metadata notice for content that is still binary underneath.
+//
+// data holds the member's compressed bytes, already extracted under the
+// large-file limit; the cap is applied a second time to the *decompressed*
+// stream, because that is the size a bomb blows up to.
+func (m *Model) openArchiveGzipEntry(archivePath, entry string, data []byte) tea.Cmd {
+	// The compound name settles it before anything is decompressed: an
+	// inner.tar.gz is an archive, and IKE opens no archive inside an archive.
+	if gzfile.HasTarSuffix(entry) {
+		m.host.Notify(host.Warn, nestedArchiveNotice+entry)
+		return nil
+	}
+	c, err := gzfile.ReadBytes(entry, data, m.largeFileLimit())
+	if err != nil {
+		m.host.Notify(host.Error, "cannot read "+entry+": "+err.Error())
+		return nil
+	}
+	// The name said nothing, so the payload has to: a tar header in the first
+	// block is the same nested archive under a plainer name.
+	if gzfile.IsNestedArchive(entry, c.Data) {
+		m.host.Notify(host.Warn, nestedArchiveNotice+entry)
+		return nil
+	}
+	text, notice := m.gzipBufferText(c, entry)
+	return m.showGzipBuffer(archivePath, archiveGzipInner(entry, c.Name), text, notice)
+}
+
+// archiveGzipInner puts the decompressed name back where the member lived, so
+// the virtual path still reads like a member of the archive:
+// logs/app.log.gz → logs/app.log, and the tab, the language lookup and the
+// refresh behave like they do for any other entry.
+func archiveGzipInner(entry, inner string) string {
+	if i := strings.LastIndex(entry, "/"); i >= 0 {
+		return entry[:i+1] + inner
+	}
+	return inner
 }
 
 // largeFileLimits are the configured large-file thresholds (#149). Content

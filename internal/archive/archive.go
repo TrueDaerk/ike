@@ -143,6 +143,18 @@ func innerIsTar(p string, wrap func(io.Reader) (io.Reader, error)) bool {
 	return looksLikeTar(block[:n])
 }
 
+// LooksLikeTar reports whether block — the first 512 bytes of *decompressed*
+// content — starts with a tar header. It is the in-memory form of the sniff
+// Detect performs on a file, for callers already holding the bytes: an
+// archive member that turned out to be a gzip stream (#1948) is a nested
+// archive when its payload looks like this.
+func LooksLikeTar(block []byte) bool {
+	if len(block) > blockSize {
+		block = block[:blockSize]
+	}
+	return looksLikeTar(block)
+}
+
 // looksLikeTar reports whether block is a tar header: the POSIX/GNU "ustar"
 // magic at offset 257, or — for headerless v7 tars — a header checksum that
 // verifies. The checksum test is what tar itself uses, so a v7 archive with

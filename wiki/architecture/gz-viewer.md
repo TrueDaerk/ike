@@ -4,7 +4,7 @@ title: Gz Viewer
 description: "#1763 — a plain .gz opens transparently decompressed in a read-only editor buffer with the inner file's language and highlighting; the decompressed-byte cap is the bomb guard, tarballs route to the archive viewer instead."
 resource: internal/gzfile
 tags: [architecture, gzip, viewer, read-only, large-file]
-timestamp: 2026-08-10T00:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # Gz Viewer (#1763)
@@ -43,6 +43,14 @@ exact complement of `archive.IsArchive`:
 
 Everything else is a plain gzip. Exactly one of the two handlers ever answers,
 so `backup.tar.gz` lists its members while `app.log.gz` opens decompressed.
+
+That split is about *files*. A gzip stream that is an archive **member** is
+not routed by a handler at all — the [archive viewer](./archive-viewer.md)
+opens it itself, through `gzfile.ReadBytes` and this package's caps and
+inner-name rules, so `backup.tar!logs/app.log.gz` reads as decompressed text
+(#1948). The nested case is the same decision under a different name:
+`gzfile.IsNestedArchive` answers it with `HasTarSuffix` plus
+`archive.LooksLikeTar`, and the pane declines rather than opening tar blocks.
 
 ## The inner name decides the language
 
