@@ -4,7 +4,7 @@ title: Navigation History (Back/Forward)
 description: Cursor-position history across jumps — per-jump entries with JetBrains Back/Forward semantics, recorded at the open funnel, traversed by nav.back / nav.forward.
 resource: internal/nav/history.go
 tags: [architecture, navigation, editor, keybindings]
-timestamp: 2026-08-08T00:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 
 # Navigation History (Back/Forward)
@@ -27,9 +27,11 @@ menu entries, and the palette.
   palette, `host.OpenFileRequest`), go-to-definition, a references-list
   pick, a find-in-path result — and for in-file jumps (#219): large
   motions (`gg`, `G`, `{count}G`), search landings (the initial `/`/`?`
-  jump, `n`/`N`, `*`/`#`), and vim-mark jumps (#1151: `'{x}` / `` `{x} ``
+  jump, `n`/`N`, `*`/`#`), vim-mark jumps (#1151: `'{x}` / `` `{x} ``
   and the `nav.bookmarks` picker — global marks route through the open
-  funnel, local ones emit the same jump event). Small motions (hjkl, w/b,
+  funnel, local ones emit the same jump event), and label-jump landings
+  (#787: `gs`, which lands through the same `jumpTo` seam as a search
+  landing). Small motions (hjkl, w/b,
   paragraphs, page scrolls) never record, and an operator composed over a
   large motion (`dG`) is an edit, not a jump.
 - **Tab switches record too** (#816): activating another tab — the tab bar,

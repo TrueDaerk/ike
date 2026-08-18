@@ -858,6 +858,16 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	matchStyle := lipgloss.NewStyle().Background(m.theme().SelectionMuted)
 	curMatchStyle := matchStyle.Underline(true)
 
+	// Label-jump overlays (#787): a target's typed span highlights like a
+	// search match, and its label characters draw over the buffer text above
+	// every other decoration — a label must stay readable to be typable.
+	leapActive := m.leap != nil && len(m.leap.query) > 0
+	var leapLabelStyle, leapMatchStyle lipgloss.Style
+	if leapActive {
+		leapLabelStyle = lipgloss.NewStyle().Foreground(m.theme().Surface).Background(m.theme().Accent).Bold(true)
+		leapMatchStyle = lipgloss.NewStyle().Background(m.theme().SelectionMuted)
+	}
+
 	// Inlay hints (#171): virtual text injected before the cell it anchors at,
 	// dimmed and italic so it never reads as buffer content. Hints scrolled off
 	// the left edge are skipped up front. Code lenses (#1912) ride the same
@@ -953,6 +963,15 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		cursorHere := isCursorLine && col == m.cursor.Col
 		caretHere := m.focused && m.caretOnLine(line, col)
 		selected := hasSel && col >= selStart && col <= selEnd
+		var leapRune rune
+		leapHere, leapMatch := false, false
+		if leapActive {
+			if lr, ok := m.leapLabelAt(line, col); ok {
+				leapRune, leapHere = lr, true
+			} else {
+				leapMatch = m.leapMatchAt(line, col)
+			}
+		}
 		if col < len(runes) {
 			if cr, ok := rangeAt(conceals, col); ok {
 				// Concealed cell: marker chrome (#881) emits nothing; a
@@ -1002,7 +1021,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				continue
 			}
 		}
-		if col >= len(runes) && !cursorHere && !caretHere && !selected {
+		if col >= len(runes) && !cursorHere && !caretHere && !selected && !leapHere {
 			// Nothing meaningful left on this line; flush hints anchored at or
 			// past the line end (a type hint after the last token) first.
 			for hi < len(hints) && disp < width {
@@ -1080,6 +1099,14 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		}
 
 		switch {
+		case leapHere:
+			// Label jump (#787): the label glyph replaces the cell, above even
+			// the cursor — it is what the next key acts on. On a tab only the
+			// first cell carries the glyph, like the cursor.
+			b.WriteString(leapLabelStyle.Render(string(leapRune)))
+			if cells > 1 {
+				b.WriteString(strings.Repeat(" ", cells-1))
+			}
 		case cursorHere && cells > 1:
 			// Cursor on a tab: highlight only the first cell (which may carry
 			// a whitespace/guide glyph), leave the rest plain.
@@ -1092,6 +1119,10 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 			b.WriteString(strings.Repeat(" ", cells-1))
 		case caretHere:
 			b.WriteString(caretStyle.Render(cell))
+		case leapMatch:
+			// The typed span of a label-jump target (#787), below the cursor
+			// and carets but above the selection and search styling.
+			b.WriteString(leapMatchStyle.Render(cell))
 		case selected:
 			b.WriteString(selStyle.Render(cell))
 		case inCurrent:

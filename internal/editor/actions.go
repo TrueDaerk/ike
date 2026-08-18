@@ -683,6 +683,12 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.toggleIDColors()
 	case "decode_jwt":
 		return m, m.showJWT()
+	case "label_jump":
+		// Label jump (#787): a normal-mode motion — the session's keys route
+		// through the awaitLabel state, so other modes ignore the action.
+		if m.mode == Normal && m.leap == nil {
+			m.startLabelJump()
+		}
 	case "find":
 		if m.insert.active {
 			m.commitInsert()

@@ -213,6 +213,7 @@ bring their own.
 | Open All Folds | `editor.fold.openAll` | — | `zR` | `editor` pane |
 | Toggle Fold | `editor.fold.toggle` | — | `za` | `editor` pane |
 | Increment Number | `editor.increment` | — | `ctrl+a` | `editor` pane |
+| Jump to Visible Text (Label Jump) | `editor.labelJump` | — | `gs` | `editor` pane |
 | Move to Line End | `editor.lineEnd` | `cmd+right` | `$` | `editor` pane |
 | Move to Line Start | `editor.lineStart` | `home` | `0` | `editor` pane |
 | Paste | `editor.paste` | `cmd+v` | `p` | `editor` pane |

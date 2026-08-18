@@ -63,6 +63,10 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.lineEnd", "Move to Line End", "line_end", "$"),
 			action("editor.find", "Find in File", "find", "/"),
 			action("editor.replace", "Replace in File", "replace", ":s"),
+			// Label jump (#787): easymotion/leap-style motion — type 1-2
+			// target characters, every visible match gets a home-row label,
+			// and the label key moves the caret there.
+			action("editor.labelJump", "Jump to Visible Text (Label Jump)", "label_jump", "gs"),
 			action("editor.duplicateLine", "Duplicate Line", "duplicate_line", ""),
 			action("editor.caret.addNext", "Add Caret at Next Occurrence", "caret_add_next", ""),
 			action("editor.caret.addAll", "Add Carets at All Occurrences", "caret_add_all", ""),
