@@ -73,6 +73,7 @@ import (
 	"ike/internal/preview"
 	"ike/internal/problems"
 	"ike/internal/project"
+	"ike/internal/regextest"
 	"ike/internal/registry"
 	"ike/internal/search"
 	"ike/internal/secret"
@@ -343,6 +344,12 @@ type Model struct {
 
 	// newProj is the open new-project wizard (#1718); nil when it is closed.
 	newProj *newProjState
+
+	// regexTester is the open regex tester (#1937); nil when it is closed.
+	// regexHistory outlives the dialog so reopening still offers the
+	// patterns tried earlier in this session.
+	regexTester  *regexTesterState
+	regexHistory regextest.History
 
 	renamePos int
 	// layoutSaveOpen marks the window.saveLayout name prompt (#1175) while the
@@ -4590,6 +4597,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The clone finished: switch to the fresh checkout or show the error.
 		return m.finishClone(msg)
 
+	case regexEvalDoneMsg:
+		// An off-loop regex evaluation came back (#1937); a stale generation
+		// is dropped by finishRegexEval.
+		m.finishRegexEval(msg)
+		return m, nil
+
+	case OpenRegexTesterMsg:
+		// tools.regexTester (palette / Tools menu): the floating regex tester,
+		// prefilled from the editor's visual selection when there is one.
+		return m, m.startRegexTester()
+
 	case project.OpenNewProjectMsg:
 		// project.new (palette / File menu, #1718): the new-project wizard.
 		m.startNewProjectPrompt()
@@ -5782,6 +5800,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// between the URL and the directory-name field.
 		if m.clonePromptOpen() {
 			return m.updateClonePrompt(msg)
+		}
+		// The regex tester (#1937) owns the keyboard the same way: the
+		// pattern line and the test-text area, with tab between them.
+		if m.regexTesterOpen() {
+			return m.updateRegexTester(msg)
 		}
 		// The new-project wizard (#1718) mirrors it, with three steps walked
 		// by enter/esc.

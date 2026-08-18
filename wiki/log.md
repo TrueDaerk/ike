@@ -21,6 +21,27 @@
   `terminal.newTab` are unaffected. `run` and `debug` place independently
   (both were already slot-capable; now documented and hinted).
 
+## 2026-08-18 (Regex tester: pattern + test text with live match and group highlighting, #1937)
+
+- **Evaluation core** (`internal/regextest`): `Evaluate` compiles a pattern
+  and collects its matches with capture groups (index, name, value, plus a
+  `Set` flag separating "did not participate" from "matched empty"),
+  capped at 5000 matches; an empty pattern is idle, a compile error is
+  reported with regexp's preamble trimmed. `LineSpans` maps matches onto
+  per-line rune columns (multi-line matches split per line, zero-width
+  matches color nothing), `Quote` renders the pattern as a Go raw / Go /
+  TOML / JSON literal, `History` is the deduped, capped session list.
+- **Tester dialog** (`internal/app/regextester.go`, command
+  `tools.regexTester`, Tools menu): floating shell content with a pattern
+  line and a scrolling multi-line test area prefilled from the editor's
+  visual selection, live re-evaluation on every keystroke, matches
+  highlighted (selected match in the selection colors, the rest muted),
+  match count and the selected match's groups listed, compile errors
+  inline, RE2 semantics stated on screen. `tab` switches fields,
+  `ctrl+n/p` selects a match, `↑/↓` walks the pattern history, `ctrl+o`
+  cycles the copy format and `ctrl+y` copies. Texts past 16 KiB evaluate
+  off the event loop behind a generation stamp; pastes keep their line
+  breaks here (the only prompt that does).
 ## 2026-08-18 (Project bookmarks: mnemonics, notes, stepping, #55)
 
 - **Store** (`internal/bookmarks`): JetBrains-style line bookmarks keyed by
