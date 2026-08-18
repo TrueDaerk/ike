@@ -243,10 +243,15 @@ func defaults() *Config {
 			AutoOpen:      true,
 		},
 		Scratch: Scratch{
-			// Hidden by default (#1932): users who don't want the strip lose
-			// no editor rows. 8 rows leave 4 scratches plus the hint line.
-			Panel:       false,
-			PanelHeight: 8,
+			// The explorer's Scratches section (#1963) shows by default: it
+			// costs no editor rows, only the bottom of the explorer column.
+			// 5 rows list five scratches; the divider drag resizes at runtime.
+			// The legacy panel/panel_height stay zero — a non-zero
+			// panel_height can only come from an old config file, which
+			// Validate migrates onto section_height.
+			Section:       true,
+			SectionHeight: 5,
+			Sort:          "name",
 		},
 		Debug: Debug{
 			InlineValues: true, // paused locals annotate their lines (#1914)

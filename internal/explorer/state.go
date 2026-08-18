@@ -13,6 +13,10 @@ type State struct {
 	Expanded   []string
 	ShowHidden bool
 	Cursor     string
+	// Scratches section state (#1963): whether it is folded to its divider
+	// and the dragged body height (0 = keep the configured default).
+	ScratchCollapsed bool
+	ScratchHeight    int
 }
 
 // ShowingHidden reports whether dot-entries are currently rendered, whichever
@@ -37,7 +41,13 @@ func (m Model) Snapshot() State {
 	if n := m.currentConst(); n != nil {
 		cursor = n.path
 	}
-	return State{Expanded: expanded, ShowHidden: m.showHidden, Cursor: cursor}
+	return State{
+		Expanded:         expanded,
+		ShowHidden:       m.showHidden,
+		Cursor:           cursor,
+		ScratchCollapsed: m.scrCollapsed,
+		ScratchHeight:    m.scrHeight,
+	}
 }
 
 // currentConst is a non-mutating variant of current for snapshotting.
@@ -55,6 +65,10 @@ func (m Model) currentConst() *node {
 // loads the root synchronously, so Init must not issue a competing async scan.
 func (m *Model) Restore(s State) {
 	m.showHidden = s.ShowHidden
+	m.scrCollapsed = s.ScratchCollapsed
+	if s.ScratchHeight > 0 {
+		m.scrHeight = s.ScratchHeight
+	}
 	m.loadSync(m.root)
 
 	// Shallower paths first: a child can only be reached once its parent's

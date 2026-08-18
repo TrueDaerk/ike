@@ -117,7 +117,7 @@ type ToolLayout struct {
 func BuiltinAssignTools() []string {
 	return []string{
 		"explorer", "vcs", "debug", "problems", "structure", "usages",
-		"http", "breakpoints", "tests", "issues", "dom", "scratch", "run",
+		"http", "breakpoints", "tests", "issues", "dom", "run",
 		"terminal",
 	}
 }
@@ -252,15 +252,23 @@ type Tests struct {
 	AutoOpen      bool `toml:"auto_open"`
 }
 
-// Scratch holds Scratch Files tool-window behaviour (#1932). Panel opens the
-// slim scratch list below the editor on start — off (the default) costs no
-// space and leaves the panel to the "Scratch Files" command. PanelHeight is
-// the height in terminal rows the panel opens at, borders and title row
-// included; dragging its divider afterwards resizes it for the session and
-// persists with the layout.
+// Scratch holds the explorer's Scratches section behaviour (#1963, replacing
+// the #1932 tool pane). Section shows the scratch store as a divider-separated
+// section below the explorer's file tree; SectionHeight is the row count the
+// section opens at (dragging the divider resizes it for the session, and that
+// height persists with the explorer's session state); Sort orders the rows by
+// "name" (the default, like the tree) or "modified" (newest first).
+//
+// Panel and PanelHeight are the legacy #1932 tool-pane keys: still decoded so
+// old configs load without an unknown-setting warning, then migrated by
+// Validate (panel_height seeds section_height; panel is dropped — the section
+// replaces the pane and is visible by default).
 type Scratch struct {
-	Panel       bool `toml:"panel"`
-	PanelHeight int  `toml:"panel_height"`
+	Section       bool   `toml:"section"`
+	SectionHeight int    `toml:"section_height"`
+	Sort          string `toml:"sort"`
+	Panel         bool   `toml:"panel"`
+	PanelHeight   int    `toml:"panel_height"`
 }
 
 // Todo holds the comment-tag index settings (#61). Patterns is the list of tag

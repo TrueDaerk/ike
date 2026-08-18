@@ -94,6 +94,10 @@ type explorerSession struct {
 	Expanded   []string `json:"expanded,omitempty"`
 	ShowHidden bool     `json:"show_hidden"`
 	Cursor     string   `json:"cursor,omitempty"`
+	// The Scratches section's runtime state (#1963): folded to its divider,
+	// and the divider-dragged height (0 = the configured default).
+	ScratchCollapsed bool `json:"scratch_collapsed,omitempty"`
+	ScratchHeight    int  `json:"scratch_height,omitempty"`
 }
 
 // sessionFile mirrors layoutFile's discovery: IKE_CONFIG_DIR overrides the base

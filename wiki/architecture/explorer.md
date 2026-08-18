@@ -548,3 +548,55 @@ descent). `externalRefresh`'s stability snap — keeping the cursor on its entry
 across a watcher rebuild — deliberately sets `pendingSel` without the follow
 flag, so a background refresh never yanks the viewport back to an off-screen
 selection.
+
+## Scratches section (#1963)
+
+`internal/explorer/scratches.go` docks the [scratch store](./scratch-files.md)
+as a section at the pane's bottom edge, behind a horizontal divider
+(`▾ Scratches ───`), replacing the #1932 tool pane. The section is attached by
+`EnableScratches(dir, lister)` (called from `pane.newInstance`; a nil lister —
+every plain `New` — means no section, so the bare tree is unchanged) and is
+governed by `scratch.section` / `scratch.section_height` / `scratch.sort`
+(Settings → Tools → *Scratch Files*).
+
+**Geometry funnels through `viewport()`.** `scratchAreaRows` (divider + body;
+body = min(height, content), floor-clamped so the tree keeps ≥3 rows) is
+subtracted from the pane height there, so every tree consumer — scroll clamps,
+mouse hit-tests, scrollbars, the prompt anchor — agrees on the tree's real
+region without further special-casing. The section body scrolls internally
+(`scrTop`) when the list outgrows it.
+
+**One unified cursor.** Motions run over a virtual index space — tree rows
+first, section entries after (`selCount`/`vcur`/`setVcur`) — so `j`/`k` step
+across the divider, wrap-around passes both ends, `G` lands on the last
+scratch and `gg` returns to the tree top. `scrCursor >= 0` marks the cursor as
+being in the section; the tree's remembered row then renders as the muted idle
+cursor. The section has **no multi-select** (deletes there are permanent, so
+they stay one-at-a-time deliberate): a shifted motion moves plainly, and a
+tree range never extends past the last tree row. Speed search stays a tree
+affair — starting it exits the section.
+
+**Same operations, different store.** `enter`/`l`/double-click open through
+the standard funnel (`OpenFileMsg`), `o` opens in a split. `d` and `R` reuse
+the fileops prompt machinery — the same anchored boxes (#1884) — but their
+accepts call `scratch.Delete` / `scratch.Rename` (injectable via
+`SetScratchOps` for tests) instead of the trash, then emit the standard
+`FileDeletedMsg` / `FileMovedMsg` so the app closes or re-points tabs exactly
+like a tree operation. `a` emits `ScratchNewMsg`, which the app routes to the
+`scratch.new` language picker; `A` (new folder) is a no-op — the store is
+flat. Rows sort by name (default) or `modified` newest-first, render with the
+tree's highlight recipes (Selection/SelectionMuted/Panel, open-file underline,
+suffix tint), and refresh via `RefreshScratches` — called by the app on
+scratch creation, by `r`, and by the poll loop: the scratch dir joins the
+auto-refresh stamp set once it exists, so external changes surface like any
+project-tree change.
+
+**Divider gestures.** The app intercepts a left press on the divider
+(`ScratchDividerHit`) before row clicks and starts a `dragScratchDiv` drag:
+motion resizes the section (`ScratchDividerDrag`; dragging to the bottom edge
+collapses), an unmoved release toggles the collapse
+(`ScratchDividerRelease`). Both collapse state and dragged height persist
+immediately with the explorer's session state (`State.ScratchCollapsed` /
+`State.ScratchHeight` → `session.json`), while `scratch.section_height` only
+seeds the height (apply-on-change, so a live config reload never clobbers a
+drag — the #629 pattern).

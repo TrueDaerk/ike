@@ -75,7 +75,7 @@ func (m Model) newScratch(ext string) (tea.Model, tea.Cmd) {
 		m.host.Notify(host.Warn, "scratch: "+err.Error())
 		return m, nil
 	}
-	// An open Scratch Files panel (#1932) shows the new file right away.
-	m.refreshScratchPanel()
+	// The explorer's Scratches section (#1963) shows the new file right away.
+	m.explorer().RefreshScratches()
 	return m.openPath(path, false)
 }

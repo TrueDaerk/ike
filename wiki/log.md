@@ -1,5 +1,27 @@
 # Log
 
+## 2026-08-18 (Scratches as an explorer section, #1963)
+
+- **Scratch files** (`internal/explorer/scratches.go`, `internal/scratch`,
+  `internal/app/scratch_section.go`): the #1932 tool pane
+  (`internal/scratchpanel`) is gone; the scratch store now lists as a
+  **Scratches section** behind a draggable, click-collapsible divider at the
+  bottom of the explorer, operated entirely with the explorer's semantics —
+  one unified cursor across tree and section, enter/double-click through the
+  standard open funnel, `o` into a split, `d`/`R` with the explorer's anchored
+  dialogs running `scratch.Delete` and the new boundary-guarded
+  `scratch.Rename` (open tabs close/re-point via the standard
+  `FileDeletedMsg`/`FileMovedMsg` plumbing), `a` delegating to the
+  `scratch.new` picker. Rows sort by name; `scratch.sort = modified` keeps the
+  newest-first order. Collapse and dragged height persist with the explorer's
+  session state; the scratch dir joins the explorer's auto-refresh poll.
+  Settings `scratch.section` / `scratch.section_height` / `scratch.sort`
+  replace `scratch.panel` / `scratch.panel_height`, which migrate silently;
+  the `scratch.panel` command now focuses the section, persisted layouts
+  prune the old pane's leaf, and the `scratch` tool-slot id is retired.
+  Concept docs `/architecture/scratch-files.md` and `/architecture/explorer.md`
+  updated.
+
 ## 2026-08-18 (Scratch files panel with delete, #1932)
 
 - **Scratch files** (`internal/scratchpanel`, `internal/app/scratch_panel.go`,

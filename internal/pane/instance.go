@@ -25,7 +25,7 @@ import (
 	"ike/internal/merge"
 	"ike/internal/preview"
 	"ike/internal/problems"
-	"ike/internal/scratchpanel"
+	"ike/internal/scratch"
 	"ike/internal/structpanel"
 	"ike/internal/terminal"
 	"ike/internal/testresults"
@@ -111,10 +111,6 @@ const (
 	// panel with the focused HTML buffer's parsed DOM tree and a CSS
 	// selector tester, under key "dom".
 	KindDOM
-	// KindScratch is the Scratch Files tool window (#1932): a slim singleton
-	// bottom-split panel listing the scratch store newest-first with open and
-	// delete actions, under key "scratch".
-	KindScratch
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -138,7 +134,6 @@ const (
 	ctxTests    = "tests"
 	ctxIssues   = "issues"
 	ctxDOM      = "dom"
-	ctxScratch  = "scratch"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -170,7 +165,6 @@ type Instance struct {
 	tr   testresults.Model
 	gi   ghissues.Model
 	dm   domview.Model
-	sc   scratchpanel.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
@@ -299,8 +293,6 @@ func (i *Instance) ContextID() string {
 		return ctxIssues
 	case KindDOM:
 		return ctxDOM
-	case KindScratch:
-		return ctxScratch
 	}
 	return ctxEditor
 }
@@ -360,10 +352,6 @@ func (i *Instance) Issues() *ghissues.Model { return &i.gi }
 // DOM returns the underlying DOM inspector tool-window model (#1929). It is
 // only valid for a dom instance; callers gate on Kind first.
 func (i *Instance) DOM() *domview.Model { return &i.dm }
-
-// Scratch returns the underlying Scratch Files tool-window model (#1932). It
-// is only valid for a scratch instance; callers gate on Kind first.
-func (i *Instance) Scratch() *scratchpanel.Model { return &i.sc }
 
 // Diff returns the underlying diff viewer model. It is only valid for a diff
 // instance; callers gate on Kind first.
@@ -1027,8 +1015,6 @@ func (i *Instance) SetSize(w, h int) {
 		i.gi.SetSize(w, h)
 	case KindDOM:
 		i.dm.SetSize(w, h)
-	case KindScratch:
-		i.sc.SetSize(w, h)
 	}
 }
 
@@ -1083,8 +1069,6 @@ func (i *Instance) SetFocused(f bool) {
 		i.gi.SetFocused(f)
 	case KindDOM:
 		i.dm.SetFocused(f)
-	case KindScratch:
-		i.sc.SetFocused(f)
 	}
 }
 
@@ -1154,8 +1138,6 @@ func (i *Instance) View() string {
 		return i.gi.View()
 	case KindDOM:
 		return i.dm.View()
-	case KindScratch:
-		return i.sc.View()
 	}
 	return ""
 }
@@ -1218,8 +1200,6 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.gi.Update(msg)
 	case KindDOM:
 		cmd = i.dm.Update(msg)
-	case KindScratch:
-		cmd = i.sc.Update(msg)
 	}
 	return cmd
 }
@@ -1287,6 +1267,11 @@ func newInstance(key string, kind Kind, cfg host.Config, pal *theme.Palette, reg
 		i.exp = explorer.New(".")
 		i.exp.SetPalette(pal)
 		i.exp.Configure(cfg)
+		// The Scratches section (#1963): the store lists below the tree. A
+		// dir resolution error just leaves the poll stamp off; the lister
+		// reports the same error in the section body.
+		dir, _ := scratch.Dir()
+		i.exp.EnableScratches(dir, scratch.Entries)
 	case KindEditor:
 		ed := newEditorModel(cfg, pal, regs)
 		i.tabs = []*Tab{newEditorTab(&ed)}
@@ -1368,8 +1353,6 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.gi.SetPalette(p)
 	case KindDOM:
 		i.dm.SetPalette(p)
-	case KindScratch:
-		i.sc.SetPalette(p)
 	}
 }
 

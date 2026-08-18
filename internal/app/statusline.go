@@ -399,11 +399,6 @@ func (m Model) statusLine() string {
 			left += "TESTS"
 		case inst.Kind() == pane.KindIssues:
 			left += "ISSUES"
-		case inst.Kind() == pane.KindScratch:
-			left += "SCRATCH"
-			if e, ok := inst.Scratch().Selected(); ok {
-				left += " │ " + filepath.Base(e.Path)
-			}
 		case inst.Kind() == pane.KindDOM:
 			left += "DOM"
 			if p := inst.DOM().Path(); p != "" {

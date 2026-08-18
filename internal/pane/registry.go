@@ -22,7 +22,6 @@ import (
 	"ike/internal/merge"
 	"ike/internal/preview"
 	"ike/internal/problems"
-	"ike/internal/scratchpanel"
 	"ike/internal/structpanel"
 	"ike/internal/terminal"
 	"ike/internal/testresults"
@@ -95,10 +94,6 @@ const IssuesKey = "issues"
 
 // DOMKey is the stable key of the singleton DOM inspector tool window (#1929).
 const DOMKey = "dom"
-
-// ScratchKey is the stable key of the singleton Scratch Files tool window
-// (#1932).
-const ScratchKey = "scratch"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -655,19 +650,6 @@ func (r *Registry) AddDOM() string {
 	inst.dm = domview.New(r.pal)
 	r.put(inst)
 	return DOMKey
-}
-
-// AddScratch creates the singleton Scratch Files tool window under ScratchKey
-// (#1932) and returns its key; a second call returns the existing key.
-func (r *Registry) AddScratch() string {
-	if _, ok := r.instances[ScratchKey]; ok {
-		return ScratchKey
-	}
-	inst := &Instance{key: ScratchKey, kind: KindScratch, cfg: r.cfg, pal: r.pal}
-	inst.sc = scratchpanel.New(r.pal)
-	inst.sc.Refresh()
-	r.put(inst)
-	return ScratchKey
 }
 
 // AddBreakpoints creates the singleton Breakpoints tool window under

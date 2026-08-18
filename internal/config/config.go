@@ -277,8 +277,9 @@ func (c *Config) Flat() map[string]string {
 	put("run.vscode_launch", c.Run.VSCodeLaunch)
 	put("tests.results_window", c.Tests.ResultsWindow)
 	put("tests.auto_open", c.Tests.AutoOpen)
-	put("scratch.panel", c.Scratch.Panel)
-	put("scratch.panel_height", c.Scratch.PanelHeight)
+	put("scratch.section", c.Scratch.Section)
+	put("scratch.section_height", c.Scratch.SectionHeight)
+	put("scratch.sort", c.Scratch.Sort)
 
 	put("tools.layout.template", strings.Join(c.Tools.Layout.Template, ","))
 	put("tools.layout.assign", strings.Join(c.Tools.Layout.Assign, ","))
