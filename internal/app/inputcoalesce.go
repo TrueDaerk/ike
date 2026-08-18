@@ -201,7 +201,7 @@ func (m Model) overlayCapturesKeyboard() bool {
 		m.conflictOpen() || m.revertPromptOpen() || m.depEditPromptOpen() ||
 		m.switchPromptOpen() || m.closePromptOpen() || m.renameOpen() ||
 		m.clonePromptOpen() || m.newProjectPromptOpen() || m.saveAsOpen() ||
-		m.regexTesterOpen() ||
+		m.regexTesterOpen() || m.jqPlayOpen() ||
 		m.layoutSavePromptOpen() || m.jbImportPromptOpen() ||
 		m.bookmarkPromptOpen() ||
 		m.lspRenameOpen() || m.explorerCapturing()

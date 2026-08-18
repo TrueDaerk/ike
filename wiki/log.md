@@ -1,5 +1,35 @@
 # Log
 
+## 2026-08-18 (jq playground: live query line over JSON buffers and HTTP responses, #1936)
+
+- **Evaluation core** (`internal/jqplay`): `Parse` decodes a buffer as a JSON
+  stream once (`UseNumber`, so large integers survive; capped at 10 000
+  top-level values, malformed input reported with its line); `Run` compiles
+  and runs a jq program over every value under a caller-supplied context,
+  collecting pretty-printed output. An empty program is idle, a compile error
+  produces no output, a runtime error keeps the values produced before it, and
+  `halt` stops cleanly. Three bounds — `MaxOutputs` (500), `MaxResultBytes`
+  (256 KiB) and the caller's `EvalTimeout` (5 s) — cover infinite emitters,
+  enormous values and programs that loop emitting nothing.
+- **Engine**: gojq (`github.com/itchyny/gojq`, MIT) — pure Go, so the build
+  stays cgo-free and no `jq` binary is needed. No system-jq fallback: two
+  engines would be two dialects to explain in one dialog.
+- **Query-line colorizer** (`internal/jqplay/highlight.go`): a single-pass
+  rune scanner (`Tokens`/`KindAt`) that never fails, because a live query line
+  is usually holding a program that does not parse yet. Paths, strings,
+  numbers, keywords, functions, `$vars`, `@formats`, operators and comments,
+  mapped onto the chrome palette.
+- **The dialog** (`internal/app/jqplayground.go`, `json.jqPlayground`): the
+  input snapshot is the focused HTTP response body, else the editor's visual
+  selection, else its buffer; the query line is seeded with the caret's jq
+  path (#1660). Each change cancels the run in flight, bumps a generation and
+  schedules a 120 ms tick — only the current generation runs, and only the
+  current generation's result installs. `ctrl+y` copies the whole result,
+  `ctrl+o` opens it as a `.json` scratch, `↑`/`↓` walk the per-session program
+  history, and errors show inline under the query.
+- **Docs**: new concept doc [jq Playground](/architecture/jq-playground.md);
+  docgen refreshed for the new command.
+
 ## 2026-08-18 (Slot-assignment value hints + terminal/run/debug targets, #1946)
 
 - **Shared id list**: `config.BuiltinAssignTools` is the single authoritative

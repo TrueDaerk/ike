@@ -55,6 +55,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/httppane"
 	"ike/internal/idcolor"
+	"ike/internal/jqplay"
 	"ike/internal/keymap"
 	"ike/internal/lang"
 	"ike/internal/largefile"
@@ -350,6 +351,11 @@ type Model struct {
 	// patterns tried earlier in this session.
 	regexTester  *regexTesterState
 	regexHistory regextest.History
+
+	// jqPlay is the open jq playground (#1936); nil when it is closed.
+	// jqHistory outlives the dialog for the same reason regexHistory does.
+	jqPlay    *jqPlayState
+	jqHistory jqplay.History
 
 	renamePos int
 	// layoutSaveOpen marks the window.saveLayout name prompt (#1175) while the
@@ -4608,6 +4614,26 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// prefilled from the editor's visual selection when there is one.
 		return m, m.startRegexTester()
 
+	case OpenJQPlaygroundMsg:
+		// json.jqPlayground (palette / Tools menu, #1936): the floating jq
+		// query line over the JSON buffer or HTTP response at hand.
+		return m, m.startJQPlayground()
+
+	case jqParseDoneMsg:
+		// The input snapshot finished parsing off the event loop (#1936).
+		return m, m.finishJQParse(msg)
+
+	case jqDebounceMsg:
+		// The query line went quiet long enough to run the program (#1936);
+		// a stale generation means the user kept typing.
+		return m, m.fireJQDebounce(msg)
+
+	case jqEvalDoneMsg:
+		// An off-loop jq evaluation came back (#1936); a stale generation is
+		// dropped by finishJQEval.
+		m.finishJQEval(msg)
+		return m, nil
+
 	case project.OpenNewProjectMsg:
 		// project.new (palette / File menu, #1718): the new-project wizard.
 		m.startNewProjectPrompt()
@@ -5805,6 +5831,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// pattern line and the test-text area, with tab between them.
 		if m.regexTesterOpen() {
 			return m.updateRegexTester(msg)
+		}
+		// The jq playground (#1936) is the same shape with one field: the
+		// query line, with the result read-only underneath it.
+		if m.jqPlayOpen() {
+			return m.updateJQPlayground(msg)
 		}
 		// The new-project wizard (#1718) mirrors it, with three steps walked
 		// by enter/esc.
