@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, OpenAPI 3.x import, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-14T12:00:00Z
+timestamp: 2026-08-18T12:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -15,6 +15,9 @@ read-only response viewer with per-request history. This document tracks the
 subsystem: parser (#1248), dispatch (#1249), editor UX (#1250) and response
 history (#1251) — the full epic — are implemented, and each stored response
 keeps the request that produced it so it can be sent again verbatim (#1832).
+Request files need not be written by hand: `http.importOpenAPI` scaffolds one
+from an OpenAPI 3.x document (#1939, see
+[importing an OpenAPI spec](#importing-an-openapi-spec-internalopenapi-1939)).
 
 ## File format
 
@@ -203,6 +206,107 @@ failure is read.
 
 Re-send (#1832) is unaffected by all of this: it repeats the stored snapshot
 verbatim, so a switched environment cannot change what is repeated.
+
+## Importing an OpenAPI spec (`internal/openapi`, #1939)
+
+A new service usually ships an OpenAPI document long before anyone writes a
+request file for it. `http.importOpenAPI` ("Import OpenAPI Spec…", palette)
+turns one into the other: it prompts for a local OpenAPI **3.x** document —
+JSON or YAML, tab completes paths like the JetBrains keymap import (#677) —
+and generates a `.http` file plus the environment skeletons its placeholders
+resolve from.
+
+**Where the output lands** — *next to the spec*, named after it
+(`petstore.yaml` → `petstore.http`), and the generated file opens in the
+editor. It is not an unsaved buffer the user places afterwards, because the
+generated placeholders resolve from `http-client.env.json`, and the client
+looks for that file in the **request file's own directory**: a buffer without
+a home would resolve nothing, and saving it elsewhere would leave its
+environment behind.
+
+**What a block looks like.** Operations are grouped by tag (an empty `###
+<tag>` block carries the heading — a block of nothing but comments is skipped
+by the parser, so the group reads as its own foldable section), then by path,
+then by the read order of methods. The `###` name is the `operationId`, else
+`METHOD path`; a duplicate gains a numeric suffix, since the response history
+keys on it. The summary sits above the block as a comment.
+
+```
+### showPetById
+# Info for a specific pet
+GET {{host}}/pets/{{petId}}
+    ? status = {{status}}
+#   & limit = {{limit}}
+Accept: application/json
+# X-Request-Id: {{X-Request-Id}}
+Authorization: Bearer {{bearerAuth}}
+```
+
+- **Everything variable is a `{{name}}` placeholder** (#1867): the origin, every
+  path/query/header/cookie parameter, every credential. A value is then changed
+  in one place instead of in fifty blocks, and the same parameter in twenty
+  operations shares one variable. A name that is not a legal placeholder name
+  is sanitized (`filter[x]` → `filter_x_`), and a parameter that would collide
+  with an already-allocated name is suffixed (`host` → `host2`) rather than
+  rewriting the origin.
+- **Required is live, optional is commented.** Required query parameters are
+  written as folded `? key = value` continuation lines (#1269) — the very
+  spelling `lsp.format` produces, so a reformat is a no-op — with the optional
+  ones as `#   & key = value` comments below them. Uncommenting any subset
+  stays correct: with only a `&` line left the parser opens the query itself.
+  Optional header parameters are commented header lines; required cookie
+  parameters merge into one `Cookie:` header.
+- **Auth is env-only.** `components.securitySchemes` referenced by the
+  operation's (else the document's) first `security` alternative becomes
+  `Authorization: Bearer {{scheme}}` for `http`/`bearer`, `oauth2` and
+  `openIdConnect`, `Authorization: Basic {{scheme}}` for `http`/`basic`, and
+  the declared header/query/cookie for `apiKey`. The value is *always* a
+  placeholder — a generated file never holds a credential. `security: []` on an
+  operation means no credential at all.
+- **Bodies** take the media type's own `example`/`examples` when it has one,
+  else a payload synthesized from the schema: the **required** members (all of
+  them when the schema names none — an empty `{}` helps nobody), with each
+  value from `example` → `default` → first `enum` → a stand-in derived from the
+  type and `format` (a `date-time` field reads as `2024-01-01T00:00:00Z`, not
+  as the word "string"). `allOf` merges its branches, `oneOf`/`anyOf` take the
+  first, and a self-referential schema stops instead of recursing. JSON and
+  `application/x-www-form-urlencoded` are generated; another media type leaves
+  the block with its `Content-Type` and a note in the skip list.
+- **Environments.** `http-client.env.json` gets the host and every parameter
+  value, `http-client.private.env.json` gets the credentials with empty values
+  — the convention's split between what is committed and what is not. Both are
+  written **only when absent**: they hold the user's values, which an import
+  has no business replacing. When one is kept, the summary names the variables
+  it does not define yet. The generated environment is called `dev`; copying it
+  is how further ones are made (`http.selectEnvironment` then picks).
+
+**Determinism.** Nothing in the output depends on document member order:
+paths, properties, media types and security schemes are all visited sorted,
+JSON payloads render with sorted keys, and operations sort by tag/path/method.
+Re-importing the same spec is byte-identical, so a spec update diffs cleanly.
+
+**Overwrite rule.** Every generated file opens with
+`# Generated from <spec> (OpenAPI 3.0.3) by ike — http.importOpenAPI.` The
+import overwrites a file carrying that marker and **refuses** one that does
+not, naming it — a hand-written `petstore.http` is never lost to an import.
+
+**What is rejected, what is merely skipped.** Only a document that is not
+OpenAPI 3.x at all fails the import: unparseable content, a **Swagger 2.0**
+document (rejected with "convert the document to OpenAPI 3.x first" — ike does
+not convert), a missing/foreign `openapi` version, or a document declaring no
+operation. Everything else is tolerated and generated *partially*: an
+unresolvable or **external** `$ref` (never fetched — an import does not reach
+the network), a parameter in an unsupported location, a security scheme with
+no request-file spelling, a media type with no generator. Each is recorded
+once, listed as `# not generated: …` comments in the file's header **and**
+summarized in the import notification, so what was left out is visible where
+it matters rather than silently missing.
+
+The reader (`internal/openapi/spec.go`) walks the document as plain maps
+rather than unmarshalling it into a strict model, which is what makes that
+tolerance possible; `gopkg.in/yaml.v3` is the only dependency it adds, since a
+validating OpenAPI library would reject wholesale exactly the documents this
+command has to generate *something* from.
 
 ## Dispatch (`internal/httpclient`)
 
