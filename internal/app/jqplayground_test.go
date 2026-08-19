@@ -305,29 +305,119 @@ func TestJQPlaygroundHistory(t *testing.T) {
 	}
 }
 
-// TestJQPlaygroundScrollsResult: ctrl+n/ctrl+p move the result window and
-// clamp at both ends.
-func TestJQPlaygroundScrollsResult(t *testing.T) {
+// TestJQPlaygroundResultNavigation: tab moves the keyboard into the result
+// buffer, where the full editor keymap navigates — G jumps to the last line
+// and scrolls the viewport; tab returns to the query line.
+func TestJQPlaygroundResultNavigation(t *testing.T) {
 	m := openJQ(t, jqApp(t, "null"))
 	m = setProgram(m, "[range(100)]")
-	if got := len(m.jqPlay.result.Lines()); got <= jqResultRows {
-		t.Fatalf("the fixture must overflow the window, got %d rows", got)
+	ed := m.jqPlay.resultEd
+	if got := ed.LineCount(); got < 100 {
+		t.Fatalf("the fixture must overflow the pane, got %d rows", got)
 	}
-	m = drainKey(m, tea.KeyPressMsg{Code: 'n', Mod: tea.ModCtrl})
-	if m.jqPlay.top != 1 {
-		t.Fatalf("ctrl+n = row %d, want 1", m.jqPlay.top)
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	if !m.jqPlay.bufFocus {
+		t.Fatal("tab must move the focus into the result buffer")
 	}
-	for i := 0; i < 5; i++ {
-		m = drainKey(m, tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
+	m = drainKey(m, tea.KeyPressMsg{Code: 'G', Text: "G"})
+	if line, _ := ed.Cursor(); line != ed.LineCount() {
+		t.Fatalf("G moved the cursor to line %d, want %d", line, ed.LineCount())
 	}
-	if m.jqPlay.top != 0 {
-		t.Errorf("scrolling up must clamp at the first row, got %d", m.jqPlay.top)
+	if ed.ScrollTop() == 0 {
+		t.Error("jumping to the last line must scroll the result viewport")
 	}
-	for i := 0; i < 200; i++ {
-		m = drainKey(m, tea.KeyPressMsg{Code: 'n', Mod: tea.ModCtrl})
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	if m.jqPlay.bufFocus {
+		t.Error("tab must return the focus to the query line")
 	}
-	if want := len(m.jqPlay.result.Lines()) - jqResultRows; m.jqPlay.top != want {
-		t.Errorf("scrolling down must clamp at %d, got %d", want, m.jqPlay.top)
+}
+
+// TestJQPlaygroundInlineEnterExit is #1970's core acceptance case: the mode
+// mounts in the queried pane (no floating dialog), and esc restores the
+// original buffer unchanged and editable.
+func TestJQPlaygroundInlineEnterExit(t *testing.T) {
+	const body = `{"foo":[1,2,3]}`
+	m := jqApp(t, body)
+	m = openJQ(t, m)
+	if got, want := m.jqPlay.paneKey, m.activeWS().Panes.Focused(); got != want {
+		t.Fatalf("the mode must mount in the focused pane, got %q vs %q", got, want)
+	}
+	v := ansi.Strip(m.render())
+	if !strings.Contains(v, "> jq:") {
+		t.Errorf("the query line must render inside the pane, got:\n%s", v)
+	}
+	if ed := m.activeEditor(); ed.Text() != body {
+		t.Fatalf("the original buffer must stay untouched while the mode is open, got %q", ed.Text())
+	}
+
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.jqPlayOpen() {
+		t.Fatal("esc must leave the mode")
+	}
+	ed := m.activeEditor()
+	if ed.Text() != body {
+		t.Fatalf("esc must restore the original buffer unchanged, got %q", ed.Text())
+	}
+	if v := ansi.Strip(m.render()); !strings.Contains(v, `"foo"`) {
+		t.Errorf("the pane must show the original content again, got:\n%s", v)
+	}
+	// The buffer is editable again: x deletes the character under the caret.
+	m = drainKey(m, tea.KeyPressMsg{Code: 'x', Text: "x"})
+	if got := m.activeEditor().Text(); got == body {
+		t.Error("the buffer must be editable again after esc")
+	}
+}
+
+// TestJQPlaygroundResultReadOnly: the result buffer refuses every mutation —
+// typing in query focus edits only the program, and edit keys in buffer
+// focus bounce off the read-only flag.
+func TestJQPlaygroundResultReadOnly(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m = setProgram(m, ".")
+	ed := m.jqPlay.resultEd
+	if !ed.ReadOnly() {
+		t.Fatal("the result buffer must be read-only")
+	}
+	before := ed.Text()
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	for _, k := range []tea.KeyPressMsg{
+		{Code: 'x', Text: "x"},
+		{Code: 'd', Text: "d"}, {Code: 'd', Text: "d"},
+		{Code: 'i', Text: "i"}, {Code: 'z', Text: "z"},
+	} {
+		m = drainKey(m, k)
+	}
+	if got := ed.Text(); got != before {
+		t.Fatalf("edit keys mutated the read-only result: %q -> %q", before, got)
+	}
+	if m.jqPlay.result.Text() != before {
+		t.Error("the evaluation result itself must be untouched")
+	}
+}
+
+// TestJQPlaygroundResultSelection: visual selection works in the result
+// buffer, esc first leaves visual mode like in any buffer, and only a second
+// esc — from resting normal mode — closes the playground.
+func TestJQPlaygroundResultSelection(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"foo":[1,2,3]}`))
+	m = setProgram(m, ".foo[]")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	m = drainKey(m, tea.KeyPressMsg{Code: 'V', Text: "V"})
+	m = drainKey(m, tea.KeyPressMsg{Code: 'j', Text: "j"})
+	sel, has := m.jqPlay.resultEd.SelectionText()
+	if !has || strings.TrimSpace(sel) == "" {
+		t.Fatalf("visual selection must work in the result buffer, got %q", sel)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if !m.jqPlayOpen() {
+		t.Fatal("esc in visual mode must only leave the selection, not the mode")
+	}
+	if _, has := m.jqPlay.resultEd.SelectionText(); has {
+		t.Error("esc must have collapsed the visual selection")
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.jqPlayOpen() {
+		t.Error("esc from resting normal mode must close the playground")
 	}
 }
 
@@ -345,6 +435,9 @@ func TestJQPlaygroundQueriesHTTPResponse(t *testing.T) {
 	m = openJQ(t, m)
 	if got := m.jqPlay.source; got != "HTTP response" {
 		t.Fatalf("source = %q, want the response pane", got)
+	}
+	if got := m.jqPlay.paneKey; got != pane.HTTPKey {
+		t.Fatalf("the mode must mount in the response pane, got %q", got)
 	}
 	m = setProgram(m, "[.items[].id]")
 	if got := strings.Join(strings.Fields(m.jqPlay.result.Text()), ""); got != "[7,8]" {

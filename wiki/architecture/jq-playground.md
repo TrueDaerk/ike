@@ -1,23 +1,25 @@
 ---
 type: concept
 title: jq Playground
-description: Floating jq query line over a JSON buffer or HTTP response body with a live result view — gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, session program history.
+description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, session program history.
 resource: internal/jqplay/jqplay.go
-tags: [architecture, json, jq, tools, floating, modal, http]
-timestamp: 2026-08-18T00:00:00Z
+tags: [architecture, json, jq, tools, inline, editor, http]
+timestamp: 2026-08-19T00:00:00Z
 ---
 
 # jq Playground
 
-#1936. JSON is everywhere in the daily workflow — `.http` responses,
-Elasticsearch hits, parser output, fixtures — and until now the only way to run
-a jq program against one was to leave the IDE. The playground is a **floating
-query line over a JSON snapshot with the program's output live underneath**:
-the `/`-filter pattern of the [Data Viewer](./data-viewer.md) (#1777) and the
-[Regex Tester](./regex-tester.md) (#1937), applied to jq.
+#1936, inline since #1970. JSON is everywhere in the daily workflow — `.http`
+responses, Elasticsearch hits, parser output, fixtures — and until now the only
+way to run a jq program against one was to leave the IDE. The playground is a
+**query line mounted inline in the pane holding the JSON**, with the pane's
+body replaced by a **read-only editor buffer showing the program's live
+output**: no floating dialog, the result reads and navigates like any buffer.
 
 Opened by the **`json.jqPlayground`** command (command palette, Tools menu; no
-default chord).
+default chord), on JSON editor buffers and the HTTP response pane alike.
+`esc` leaves the mode; the pane's own content was never touched, so leaving
+restores it bit-identically — editability included.
 
 ## Structure
 
@@ -26,13 +28,38 @@ internal/jqplay/
   jqplay.go      evaluation core: Parse, Run, Evaluate, Result, History — pure, no UI state
   highlight.go   the query line's jq scanner: Tokens/KindAt, single pass, never fails
 internal/app/
-  jqplayground.go the dialog: query line, result window, key routing, debounce and async eval
+  jqplayground.go the inline mode: query header, result buffer, key routing, debounce and async eval
   commands.go     json.jqPlayground → OpenJQPlaygroundMsg
 ```
 
 The split is the usual one: everything interesting — parsing, running, error
 and cap handling, colorization, history — is pure and testable in
 `internal/jqplay`; `internal/app` owns the terminal.
+
+## The inline mount
+
+While the mode is active on a pane:
+
+- The pane's first two content rows are the **query header**: the colored
+  query line, then one info row (input origin and size, result summary, key
+  hints — or the error, or a transient status). The header height is fixed, so
+  an error appearing mid-keystroke never resizes the buffer below it.
+- The rest of the pane shows a **substitute read-only editor**
+  (`ShowReadOnly`, the #1762 buffer) holding the result under the virtual
+  path `jq result.json`, so JSON highlighting applies. It is a full editor:
+  motions, search, folds, **visual selection and yank**, mouse click/drag
+  selection, wheel and scrollbar all work; mutations are refused with the
+  usual `E45`.
+- The pane's own component — the document editor, the HTTP viewer — is not
+  rendered but keeps its entire state. The breadcrumbs row (#1153) is
+  suppressed for the pane; the query header takes its place in the mouse
+  translation (`contentYOff`).
+
+The keyboard is modal while the mode is open and starts on the query line;
+**tab** moves it into the result buffer and back. A mouse click into the
+result body also focuses it (and places the caret); a click on the header
+returns to the query line; a click into **another pane closes the mode** —
+the clicked pane must not stay dead to typing.
 
 ## Engine: gojq, not a jq binary
 
@@ -48,14 +75,15 @@ pure-Go SQLite driver. Two gojq properties matter here beyond "it is jq":
   keystroke.
 
 A system `jq` fallback is deliberately absent: two engines would mean two
-dialects to explain in one dialog.
+dialects to explain in one playground.
 
 ## What is queried
 
 The input is **snapshotted and parsed once** when the playground opens — a jq
 program is written against the document that was on screen, and re-parsing a
 10 MB response on every rune would make the query line stutter for no gain. The
-snapshot is resolved in this order:
+snapshot is resolved in this order, and the mode mounts **in the pane the
+snapshot came from** (focus moves there):
 
 1. the **focused HTTP response pane**'s body ([HTTP Client](./http-client.md)) —
    the pane the user is looking at is the one they mean;
@@ -63,9 +91,10 @@ snapshot is resolved in this order:
    file is queryable without extracting it first;
 3. the focused editor's **whole buffer**;
 4. a visible-but-unfocused HTTP response pane — the usual focus right after a
-   dispatch is the editor holding the `.http` file.
+   dispatch is the editor holding the `.http` file; a tab-nested viewer
+   (#1778) gets its tab activated.
 
-With none of those the command notifies instead of opening an empty dialog.
+With none of those the command notifies instead of opening over nothing.
 
 The text is decoded as a **JSON stream**: one value for an ordinary document,
 many for a `.jsonl` export or a concatenated body, and the program runs against
@@ -87,8 +116,10 @@ Evaluation never runs on the event loop:
   the current generation starts a run — that is the debounce.
 - The run itself is a `tea.Cmd` under a `context.WithTimeout(EvalTimeout)`; its
   `jqEvalDoneMsg` carries both the generation and the state it belongs to, so a
-  result superseded by a newer keystroke — or one arriving after the dialog
-  closed — is dropped instead of overwriting the current one.
+  result superseded by a newer keystroke — or one arriving after the mode
+  closed — is dropped instead of overwriting the current one. A current one
+  reinstalls the result buffer's content (cursor and scroll reset with it —
+  the text they pointed into just changed).
 - `enter` and the initial evaluation skip the debounce; the result is wanted
   now, not a tick later.
 
@@ -101,15 +132,15 @@ no single one covers all of them:
 | Output size | `MaxResultBytes` (256 KiB) | few values, each enormous |
 | Wall clock | `EvalTimeout` (5 s) | `def f: f; f` — loops emitting *nothing* |
 
-A capped run is **not an error**: the result header says `(stopped at 500)` and
-the values collected stand. Opening the playground over an input larger than
-`AsyncThreshold` (64 KiB) parses off the loop too, so even the open is not a
-stall.
+A capped run is **not an error**: the result summary says `(stopped at 500)`
+and the values collected stand. Opening the playground over an input larger
+than `AsyncThreshold` (64 KiB) parses off the loop too, so even the open is
+not a stall.
 
 ## Errors are inline, never a crash
 
-Everything that can go wrong shows on one error line under the query, in the
-theme's error color:
+Everything that can go wrong shows on the header's info row, in the theme's
+error color:
 
 - an **input** that is not JSON (which beats a program error — with no parsed
   input no program could have run);
@@ -117,7 +148,7 @@ theme's error color:
   wat/0`, `variable not defined: $x`), which produces no output;
 - a **runtime** error, which may arrive *after* some values were produced —
   `.[] | .x` over `[{"x":1},3]` prints one value and then fails. `Err` and
-  `Outputs` are therefore not mutually exclusive, and the header says
+  `Outputs` are therefore not mutually exclusive, and the summary says
   `… before the error`.
 
 `halt` ends a run cleanly rather than as a diagnostic, as it does in jq.
@@ -131,48 +162,66 @@ when the color helps most, so the scanner never fails: an unterminated string
 runs to the end of the line, an unknown rune is punctuation. It classifies
 paths, strings, numbers, keywords, functions, `$variables`, `@formats`,
 operators and comments, mapped onto the **chrome** palette (Accent, Success,
-Info, Secondary, Warning, Hint) rather than the editor's capture colors — this
-is a dialog over the shell surface, not a buffer.
+Info, Secondary, Warning, Hint) rather than the editor's capture colors — the
+header is chrome over the pane surface, not buffer text. The **result** is
+highlighted separately, as JSON, by the substitute editor's ordinary pipeline.
 
 ## Keys
+
+Query line (the default focus):
 
 | Key | Effect |
 | --- | --- |
 | *(typing)* | edit the program; each change re-evaluates, debounced |
 | `enter` | record the program in the history and run it now |
 | `↑` / `↓` | walk the session program history |
-| `ctrl+n` / `ctrl+p` | scroll the result one row |
-| `pgdn` / `pgup` | scroll the result one page |
-| `ctrl+y` | copy the **whole** result (not just the visible window) |
+| `tab` | move the keyboard into the result buffer |
+| `pgup` / `pgdn` | page the result buffer without leaving the query line |
+| `ctrl+y` | copy the **whole** result (not just the visible part) |
 | `ctrl+o` | open the result as a fresh `.json` scratch |
 | `esc` | close (recording the program in the history) |
 
-Everything else is ordinary line editing (`ui.EditKey`). A bracketed paste is
-**flattened** into the one-line query, like every other single-field prompt.
+Result buffer (after `tab`): the **full editor keymap** — motions, search,
+folds, visual selection, `y` yank of the selection — against the read-only
+buffer, with four exceptions: `tab` returns to the query line, `ctrl+y` /
+`ctrl+o` keep their result-action meaning (shadowing the editor's scroll and
+jumplist keys — a throwaway result has no jumplist worth keeping), and `esc`
+closes the mode only from resting normal mode; a visual selection, a pending
+operator or a search prompt is quit first, like in any buffer. The pane border
+signals the buffer's input mode (#1353) while it holds the keyboard.
 
-The result area is read-only text: editing output belongs in a buffer, which is
-exactly what `ctrl+o` makes — a [scratch file](./scratch-files.md) opened
-through the standard funnel, so highlighting, folding and the path breadcrumb
-all apply, and the playground can be run again over the result. That is how a
-multi-step jq session actually goes.
+A bracketed paste always lands in the query line, **flattened** to one line,
+like every other single-field prompt — the result buffer refuses pastes with
+everything else.
+
+Editing output belongs in a writable buffer, which is exactly what `ctrl+o`
+makes — a [scratch file](./scratch-files.md) opened through the standard
+funnel, so folding and the path breadcrumb apply, and the playground can be
+run again over the result. That is how a multi-step jq session actually goes.
 
 ## History
 
 Programs are remembered **per session, in memory only** (newest first, repeats
 moved to the front, capped at 50), like the regex tester's patterns: a jq
 program under construction is scratch work, and persisting it into the project
-state would be noise. The history lives on the root model, not on the dialog,
-so it survives closing and reopening the playground.
+state would be noise. The history lives on the root model, not on the mode
+state, so it survives closing and reopening the playground.
 
 ## Boundaries
 
-- **No raw output mode** (`jq -r`), no `--slurp`, no `--arg`: the dialog is a
-  JSON-in/JSON-out playground, and every one of those would be a mode the
-  result actions then have to reason about.
+- **No raw output mode** (`jq -r`), no `--slurp`, no `--arg`: the playground is
+  a JSON-in/JSON-out tool, and every one of those would be a mode the result
+  actions then have to reason about.
 - **No live re-read of the buffer.** The snapshot is taken at open; editing the
   file underneath and re-running means reopening the playground.
-- **Not a pane.** Like the regex tester it is modal by design — a program is
-  written, tried, copied and forgotten. A persistent pane is only worth it if
-  persistent use emerges.
+- **In-pane, but not a pane.** #1970 revised the old "floating modal" boundary:
+  the playground now lives inside the pane it queries — but it is still a
+  *mode*, not a layout leaf. It has no key of its own, cannot be split, moved
+  or persisted, and the keyboard is modal while it is open; a click into any
+  other pane ends it. A program is written, tried, copied and forgotten — a
+  persistent pane is only worth it if persistent use emerges.
+- **The result buffer is a substitute, not the document.** The hosting pane's
+  own component keeps its entire state and is simply not rendered; the mode
+  never mutates it, which is what makes `esc` a perfect restore.
 - **No settings.** The caps are the safety net, not a preference; exposing them
-  would invite raising them past what the dialog can render.
+  would invite raising them past what the pane can render.

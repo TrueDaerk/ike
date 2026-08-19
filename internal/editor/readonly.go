@@ -68,6 +68,10 @@ func (m *Model) ShowReadOnly(path, text string) {
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
 	m.readOnly = true
+	// The whole buffer was just replaced outside the Update choke point, so
+	// the line cache must not serve bodies of the previous content (#614) —
+	// callers (archive viewer, jq playground #1970) install text directly.
+	m.bumpRender()
 	m.applyConfig()
 	m.scroll()
 }
