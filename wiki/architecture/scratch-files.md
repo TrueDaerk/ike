@@ -121,6 +121,12 @@ short version:
   trash), which is also why the section has no multi-select delete.
 - **`a` delegates to `scratch.new`**: the store owns naming and templates, so
   the explorer's new-file affordance opens the language picker.
+- **Scrolls like the tree** (#1965): the cursor pulls the section's window
+  along, and the wheel over the section scrolls the section — over the tree it
+  scrolls the tree.
+- **A right-aligned "last opened" column** (#1965): `ui.ShortAge` over the
+  MRU store's last-opened time (the app pushes it in with `SetScratchOpened`),
+  falling back to the file's mtime — "now", "5m", "3h", "7d", "6w".
 - The divider is **drag-resizable** and a click on it **collapses** the
   section; both persist with the explorer's session state
   (`session.json`, `explorerSession.ScratchCollapsed`/`ScratchHeight`).

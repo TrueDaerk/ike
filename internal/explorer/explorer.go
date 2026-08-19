@@ -182,6 +182,10 @@ type Model struct {
 	scrCollapsed bool
 	scrHeight    int  // section body rows when expanded (drag-adjustable)
 	scrDragMoved bool // the active divider drag moved (release must not toggle)
+	// scrOpened is the last-opened time per path behind the section's
+	// right-aligned age column (#1965), pushed in by the app from its MRU
+	// store. A path the store never saw falls back to the file's mtime.
+	scrOpened map[string]time.Time
 }
 
 // New creates an explorer rooted at dir. The root is marked expanded and a scan
@@ -1688,6 +1692,18 @@ func (m *Model) ScrollBy(delta int) {
 	if m.offset < 0 {
 		m.offset = 0
 	}
+}
+
+// ScrollAt moves the viewport under the pointer by delta rows (#1965): a
+// wheel over the Scratches section scrolls the section, anywhere else the
+// tree. It is the seam the app's wheel handler uses, since only it knows the
+// content-local row the pointer sits on.
+func (m *Model) ScrollAt(y, delta int) {
+	if m.scratchShown() && !m.scrCollapsed && y > m.treeAreaRows() {
+		m.ScratchScrollBy(delta)
+		return
+	}
+	m.ScrollBy(delta)
 }
 
 // ScrollXBy moves the horizontal viewport by delta columns (positive scrolls

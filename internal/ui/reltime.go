@@ -29,3 +29,27 @@ func RelTime(t, now time.Time) string {
 		return strconv.Itoa(int(d.Hours()/(24*7))) + "w ago"
 	}
 }
+
+// ShortAge is RelTime without the " ago" suffix and without a spelled-out
+// "just now": the badge form for narrow columns that align on a fixed width,
+// like the explorer's Scratches "last opened" column (#1965) — "now", "5m",
+// "3h", "7d", "6w". A future timestamp (clock skew) reads as "now" rather
+// than a negative age. The zero time yields "".
+func ShortAge(t, now time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	d := now.Sub(t)
+	switch {
+	case d < time.Minute:
+		return "now"
+	case d < time.Hour:
+		return strconv.Itoa(int(d.Minutes())) + "m"
+	case d < 24*time.Hour:
+		return strconv.Itoa(int(d.Hours())) + "h"
+	case d < 14*24*time.Hour:
+		return strconv.Itoa(int(d.Hours()/24)) + "d"
+	default:
+		return strconv.Itoa(int(d.Hours()/(24*7))) + "w"
+	}
+}

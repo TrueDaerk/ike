@@ -410,3 +410,158 @@ func TestScratchListerError(t *testing.T) {
 		t.Fatalf("lister error must render:\n%s", ansi.Strip(m.View()))
 	}
 }
+
+// scratchNames builds n numbered scratch file names, "s00.txt" upward.
+func scratchNames(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = fmt.Sprintf("s%02d.txt", i)
+	}
+	return out
+}
+
+// sectionLines returns the rendered section body rows (everything below the
+// divider), stripped of styling.
+func sectionLines(m Model) []string {
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	for i, l := range lines {
+		if strings.Contains(l, "Scratches") {
+			return lines[i+1:]
+		}
+	}
+	return nil
+}
+
+// TestScratchSectionWheelScroll (#1965): the wheel over the section scrolls
+// the section — not the tree — and clamps at both ends.
+func TestScratchSectionWheelScroll(t *testing.T) {
+	m, _ := scratchModel(t, 2, scratchNames(12)...)
+	body := m.scratchBodyRows()
+	if body >= len(m.ScratchEntries()) {
+		t.Fatalf("the fixture must overflow the section: body = %d of %d rows", body, len(m.ScratchEntries()))
+	}
+	row := m.treeAreaRows() + 1 // the section's first body row
+	m.ScrollAt(row, 3)
+	if m.ScratchTop() != 3 {
+		t.Fatalf("wheel down: top = %d want 3", m.ScratchTop())
+	}
+	if got := sectionLines(m); !strings.Contains(got[0], "s03.txt") {
+		t.Fatalf("scrolled section must start at s03.txt:\n%s", strings.Join(got, "\n"))
+	}
+	m.ScrollAt(row, 99) // clamps to the last window
+	if want := len(m.ScratchEntries()) - body; m.ScratchTop() != want {
+		t.Fatalf("wheel past the end: top = %d want %d", m.ScratchTop(), want)
+	}
+	if got := sectionLines(m); !strings.Contains(got[body-1], "s11.txt") {
+		t.Fatalf("the last window must end at s11.txt:\n%s", strings.Join(got, "\n"))
+	}
+	m.ScrollAt(row, -99)
+	if m.ScratchTop() != 0 {
+		t.Fatalf("wheel past the top: top = %d want 0", m.ScratchTop())
+	}
+	// The cursor never moves with the wheel — the tree's contract (#1036).
+	if m.inScratch() {
+		t.Fatal("the wheel must not move the unified cursor into the section")
+	}
+}
+
+// TestScratchWheelOverTreeLeavesSection (#1965): the wheel above the divider
+// keeps scrolling the tree, so the routing only claims the section's rows.
+func TestScratchWheelOverTreeLeavesSection(t *testing.T) {
+	m, _ := scratchModel(t, 2, scratchNames(12)...)
+	m.ScrollAt(m.treeAreaRows()+1, 4)
+	if m.ScratchTop() != 4 {
+		t.Fatalf("setup: top = %d want 4", m.ScratchTop())
+	}
+	m.ScrollAt(0, 3)                // over the tree
+	m.ScrollAt(m.treeAreaRows(), 3) // the divider row itself belongs to the tree side
+	if m.ScratchTop() != 4 {
+		t.Fatalf("a tree wheel moved the section: top = %d want 4", m.ScratchTop())
+	}
+	// A collapsed section has no body, so every row routes to the tree.
+	m.ToggleScratchCollapsed()
+	m.ScrollAt(m.height-1, 3)
+	if m.ScratchTop() != 4 {
+		t.Fatalf("a collapsed section must not scroll: top = %d want 4", m.ScratchTop())
+	}
+}
+
+// TestScratchCursorScrollsSection (#1965): walking the unified cursor past
+// the section's last visible row scrolls the window with it.
+func TestScratchCursorScrollsSection(t *testing.T) {
+	m, _ := scratchModel(t, 2, scratchNames(12)...)
+	m = press(m, "G") // the last scratch row
+	if got := m.ScratchCursor(); got != 11 {
+		t.Fatalf("G must land on the last scratch, cursor = %d", got)
+	}
+	if want := 12 - m.scratchBodyRows(); m.ScratchTop() != want {
+		t.Fatalf("the section must scroll to the cursor: top = %d want %d", m.ScratchTop(), want)
+	}
+	lines := sectionLines(m)
+	if !strings.Contains(lines[len(lines)-1], "s11.txt") {
+		t.Fatalf("the cursor row must be visible:\n%s", strings.Join(lines, "\n"))
+	}
+	for i := 0; i < 11; i++ {
+		m = press(m, "k")
+	}
+	if m.ScratchCursor() != 0 || m.ScratchTop() != 0 {
+		t.Fatalf("walking back must scroll home: cursor = %d top = %d", m.ScratchCursor(), m.ScratchTop())
+	}
+}
+
+// TestScratchLastOpenedColumn (#1965): each row carries a right-aligned
+// relative age — the MRU store's last-opened time where the app pushed one
+// in, the file's mtime otherwise.
+func TestScratchLastOpenedColumn(t *testing.T) {
+	now := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
+	m, entries := scratchModel(t, 1, "a.txt", "b.txt")
+	m.now = func() time.Time { return now }
+	(*entries)[0].ModTime = now.Add(-7 * 24 * time.Hour)
+	(*entries)[1].ModTime = now.Add(-3 * time.Hour)
+	m.RefreshScratches()
+	rows := sectionLines(m)
+	if !strings.HasPrefix(rows[0], "  a.txt") || !strings.HasSuffix(rows[0], "7d") {
+		t.Fatalf("a.txt row = %q want the name left and 7d right", rows[0])
+	}
+	if !strings.HasSuffix(rows[1], "3h") {
+		t.Fatalf("b.txt row = %q want 3h right-aligned", rows[1])
+	}
+	if got := ansi.StringWidth(rows[0]); got != 30 {
+		t.Fatalf("row width = %d want the full pane width 30 (%q)", got, rows[0])
+	}
+	// The store's last-opened time wins over the mtime.
+	m.SetScratchOpened(map[string]time.Time{
+		filepath.Join("/scratches", "a.txt"): now.Add(-5 * time.Minute),
+	})
+	rows = sectionLines(m)
+	if !strings.HasSuffix(rows[0], "5m") {
+		t.Fatalf("last-opened row = %q want 5m", rows[0])
+	}
+	if !strings.HasSuffix(rows[1], "3h") {
+		t.Fatalf("an unknown path must keep the mtime age: %q", rows[1])
+	}
+}
+
+// TestScratchLastOpenedNarrowPane (#1965): too narrow for both columns, the
+// age is dropped rather than squeezing the name out of legibility.
+func TestScratchLastOpenedNarrowPane(t *testing.T) {
+	now := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
+	m, entries := scratchModel(t, 1, "a-long-scratch-name.txt")
+	m.now = func() time.Time { return now }
+	(*entries)[0].ModTime = now.Add(-3 * time.Hour)
+	m.RefreshScratches()
+	m.SetSize(12, 12)
+	row := sectionLines(m)[0]
+	if strings.Contains(row, "3h") {
+		t.Fatalf("a 12-column pane must drop the age column: %q", row)
+	}
+	// Wide enough again: the name clips and the age keeps its place.
+	m.SetSize(20, 12)
+	row = sectionLines(m)[0]
+	if !strings.HasSuffix(row, "3h") || !strings.Contains(row, "…") {
+		t.Fatalf("row = %q want a clipped name and a right-aligned 3h", row)
+	}
+	if got := ansi.StringWidth(row); got != 20 {
+		t.Fatalf("row width = %d want 20 (%q)", got, row)
+	}
+}

@@ -54,8 +54,12 @@ the bottom of the file tree, sorted by name (switch to newest-first with the
 `scratch.sort` setting). The cursor walks into it with the explorer's normal
 keys, ++enter++ opens a scratch exactly like a project file, ++d++ deletes and
 ++shift+r++ renames with the explorer's dialogs, and ++a++ creates a new
-scratch through the language picker. Click the divider to collapse the
-section, or drag it to resize; both stick across restarts.
+scratch through the language picker. Each row shows on the right how long ago
+you last opened that scratch (`5m`, `3h`, `7d`); a scratch you have not opened
+in this installation shows how long ago it was last changed. When the list is
+longer than the section, the cursor and the mouse wheel scroll it. Click the
+divider to collapse the section, or drag it to resize; both stick across
+restarts.
 
 ## Snippets
 
