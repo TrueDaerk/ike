@@ -12,6 +12,23 @@
   own width, and the caret on a marker reveals the raw source. Concept doc
   `/architecture/editor.md` updated.
 
+## 2026-08-19 (Scratches section: wheel scrolling and a last-opened column, #1965)
+
+- **Explorer Scratches section** (`internal/explorer/scratches.go`,
+  `internal/app/app.go`, `internal/ui/reltime.go`): the section scrolls with
+  the mouse wheel now — the app translates the pointer into a content-local
+  row and calls the new `ScrollAt`, which routes the section's body rows to
+  `ScratchScrollBy` and the tree rows (and the divider) to the tree's
+  `ScrollBy`, so the wheel moves the viewport under the pointer without moving
+  the cursor. Each row also gained a right-aligned **last opened** column:
+  the new `ui.ShortAge` ("now", "5m", "3h", "7d", "6w") over the MRU store's
+  last-opened time, pushed into the explorer by `syncExplorerOpen` via
+  `SetScratchOpened`, falling back to the file's mtime for a scratch the MRU
+  never saw. The name field shrinks and clips with "…" to make room; a pane
+  too narrow to leave 8 columns for the name drops the age instead. Concept
+  docs `/architecture/explorer.md` and `/architecture/scratch-files.md`
+  updated.
+
 ## 2026-08-18 (Scratches as an explorer section, #1963)
 
 - **Scratch files** (`internal/explorer/scratches.go`, `internal/scratch`,

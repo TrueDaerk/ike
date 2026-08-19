@@ -6437,9 +6437,22 @@ func (m *Model) loadOrShare(key, path string) error {
 	return target.Load(path)
 }
 
+// explorerLocalY translates an absolute mouse row into the explorer pane's
+// content-local row, so the wheel knows whether it sits over the tree or the
+// Scratches section (#1965). A pane without a rect keeps the absolute row —
+// it can only be above the section anyway.
+func (m Model) explorerLocalY(key string, y int) int {
+	r, ok := m.lay.Panes[key]
+	if !ok {
+		return y
+	}
+	return y - (r.Y + m.contentYOff(key))
+}
+
 // syncExplorerOpen refreshes the explorer's set of open files (every editor
-// pane holding a file), so their rows render underlined + italic. Called after
-// anything that opens or closes an editor.
+// pane holding a file), so their rows render underlined + italic, and pushes
+// the MRU store's last-opened times in for the Scratches age column (#1965).
+// Called after anything that opens or closes an editor.
 func (m *Model) syncExplorerOpen() {
 	var open []string
 	for _, key := range m.activeWS().Panes.Keys() {
@@ -6454,6 +6467,23 @@ func (m *Model) syncExplorerOpen() {
 		}
 	}
 	m.explorer().SetOpen(open)
+	m.explorer().SetScratchOpened(m.lastOpenedTimes())
+}
+
+// lastOpenedTimes is the MRU store as a path → last-opened lookup, the data
+// behind the Scratches section's age column (#1965). Entries without a
+// timestamp (pre-#1113 sessions) are dropped so the section falls back to the
+// file's mtime instead of rendering a zero time.
+func (m Model) lastOpenedTimes() map[string]time.Time {
+	entries := m.recent.Entries()
+	out := make(map[string]time.Time, len(entries))
+	for _, e := range entries {
+		if e.LastOpened.IsZero() {
+			continue
+		}
+		out[e.Path] = e.LastOpened
+	}
+	return out
 }
 
 // fileChangeKind maps a watcher file-event kind onto the hook payload kind
@@ -7954,9 +7984,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case msg.Button == tea.MouseWheelDown && shift:
 				m.explorer().ScrollXBy(lines)
 			case msg.Button == tea.MouseWheelUp:
-				m.explorer().ScrollBy(-lines)
+				m.explorer().ScrollAt(m.explorerLocalY(key, msg.Y), -lines)
 			case msg.Button == tea.MouseWheelDown:
-				m.explorer().ScrollBy(lines)
+				m.explorer().ScrollAt(m.explorerLocalY(key, msg.Y), lines)
 			}
 		case pane.KindMarkdown:
 			// The wheel scrolls the rendered document (#62); the next cursor
