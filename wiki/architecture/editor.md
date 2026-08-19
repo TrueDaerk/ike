@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-18T14:00:00Z
+timestamp: 2026-08-19T00:00:00Z
 ---
 
 # Editor
@@ -1452,6 +1452,19 @@ attributes in `styleAt`):
   — `ScrollWrapped`, `wrapVertical` (gj/gk), `wrapRows`, `wrapClickAt`,
   `DisplayRow` and the per-segment `renderSpan` slicing — follows unchanged.
   Lines without conceal ranges wrap on raw rune columns exactly as before.
+- **List markers** (#1966, `mdlist.go`): every list marker becomes a *dynamic*
+  conceal range (like the sv separator padding #1589) whose stand-in is the
+  indented marker — `-`, `*` and `+` render as a two-cell indent plus a `•`
+  bullet, an ordered `1.` as its number right-aligned to the widest number of
+  its own list, so a list crossing the 9 → 10 width boundary keeps its dots in
+  one column (` 9.` under `10.`). Lists are detected from the buffer text
+  (`detectListRanges`, grammar-free like table detection, fenced code blocks
+  skipped) and cached per document version; a run is the consecutive items
+  sharing one source indent — a paragraph at or left of that indent ends it,
+  deeper text is item continuation, and a nested list aligns on its own widest
+  number, keeping the item's source indent in front of the stand-in. Thematic
+  breaks (`---`, `* * *`) are rules, not items. The caret on a marker reveals
+  the raw source like any other conceal range.
 - **Pipe tables**: detected from the buffer text (a pipe row above a `|---|`
   delimiter row — equivalent to the grammar's `pipe_table`, but it also works
   in `CGO_ENABLED=0` builds), re-rendered with box-drawing characters, cells
