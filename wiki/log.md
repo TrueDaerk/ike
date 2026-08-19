@@ -1,5 +1,17 @@
 # Log
 
+## 2026-08-19 (Markdown list rendering, #1966)
+
+- **List markers** (`internal/editor/mdlist.go`): the markdown rich-rendering
+  layer now renders list markers as dynamic conceal stand-ins — `-`, `*` and
+  `+` as a two-cell indent plus a `•` bullet, ordered markers as their number
+  right-aligned to the widest number of their own list, so `1.` … `10.` keep
+  the dots in one column. Lists are detected from the buffer text
+  (grammar-free, fenced code skipped) and cached per document version; runs
+  are the consecutive items at one source indent, nested lists align on their
+  own width, and the caret on a marker reveals the raw source. Concept doc
+  `/architecture/editor.md` updated.
+
 ## 2026-08-19 (Scratches section: wheel scrolling and a last-opened column, #1965)
 
 - **Explorer Scratches section** (`internal/explorer/scratches.go`,

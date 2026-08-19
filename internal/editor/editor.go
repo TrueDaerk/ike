@@ -396,6 +396,9 @@ type Model struct {
 	// view toggled.
 	mdRenderSet bool
 	mdTables    *mdTableState
+	// mdLists caches the list marker stand-ins per document version (#1966,
+	// mdlist.go), a shared pointer like mdTables.
+	mdLists *mdListState
 	// Separator-delimited table rendering (#1589, svtable.go). svRender is
 	// the editor.csv_rendering toggle; svTable caches the visible-row column
 	// layout (pointer, shared across the value copies like mdTables).
@@ -685,6 +688,7 @@ func New() Model {
 		conflictCache:      newConflictStore(),
 		mdRender:           true,
 		mdTables:           &mdTableState{},
+		mdLists:            &mdListState{},
 		rainbowGuides:      true,
 		svRender:           true,
 		svTable:            &svState{},

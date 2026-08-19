@@ -154,8 +154,10 @@ func concealSplit(spans []highlight.Span) (style []highlight.Span, conceal, exte
 // the parse-produced ranges (markdown marker chrome #881, decoded stand-ins
 // #1585 — gated by the markdown-rendering toggle), the decode families
 // (epoch timestamps #1618, escaped text #1620 — each gated by its own
-// editor.*_decoding toggle) plus the dynamic sv separator ranges (#1589,
-// gated by editor.csv_rendering), with every range the caret sits inside —
+// editor.*_decoding toggle) plus the dynamic ranges: the markdown list marker
+// stand-ins (#1966, mdlist.go — on the markdown-rendering toggle) and the sv
+// separator padding (#1589, gated by editor.csv_rendering), with every range
+// the caret sits inside —
 // or a selection intersects — dropped, so exactly that spot shows raw source
 // while the rest of the line stays rendered (#1594, vim's concealcursor
 // granularity).
@@ -176,6 +178,9 @@ func (m Model) lineConcealRanges(line int) []concealRange {
 				}
 			}
 		}
+	}
+	if ls := m.mdListConcealRanges(line); len(ls) > 0 {
+		ranges = append(append([]concealRange(nil), ranges...), ls...)
 	}
 	if sv := m.svConcealRanges(line); len(sv) > 0 {
 		ranges = append(append([]concealRange(nil), ranges...), sv...)
