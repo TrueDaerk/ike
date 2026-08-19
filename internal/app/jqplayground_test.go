@@ -284,13 +284,15 @@ func TestJQPlaygroundHistory(t *testing.T) {
 	m = typeInto(m, ".b")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 
+	// enter left the query line holding the newest entry, so the first ↑
+	// skips it (#1973) — a step that changed nothing would read as a dead key.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.jqPlay.program; got != ".b" {
-		t.Fatalf("first ↑ = %q, want the newest program", got)
+	if got := m.jqPlay.program; got != ".a" {
+		t.Fatalf("first ↑ = %q, want the program before the one on the line", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
 	if got := m.jqPlay.program; got != ".a" {
-		t.Fatalf("second ↑ = %q, want the older program", got)
+		t.Fatalf("↑ at the oldest program = %q, want it to stay", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
 	if got := m.jqPlay.program; got != ".b" {
@@ -302,6 +304,59 @@ func TestJQPlaygroundHistory(t *testing.T) {
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
 	if got := m.jqPlay.program; got != ".b" {
 		t.Errorf("the history must outlive the dialog, got %q", got)
+	}
+}
+
+// TestJQPlaygroundHistoryKeepsDraft: browsing away from a half-written
+// program and back restores it — ↓ to the live slot must not clear the query
+// line (#1973).
+func TestJQPlaygroundHistoryKeepsDraft(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"a":1,"b":2}`))
+	m.jqPlay.program, m.jqPlay.pos = "", 0
+	m = typeInto(m, ".a")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m.jqPlay.program, m.jqPlay.pos = "", 0
+	m = typeInto(m, ".b")
+
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	if got := m.jqPlay.program; got != ".a" {
+		t.Fatalf("↑ = %q, want the recorded program", got)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	if got := m.jqPlay.program; got != ".b" {
+		t.Fatalf("↓ = %q, want the draft back", got)
+	}
+	if got := m.jqPlay.pos; got != len(".b") {
+		t.Errorf("the caret should sit at the end of the restored draft, got %d", got)
+	}
+	if got := m.jqPlay.result.Text(); got != "2" {
+		t.Errorf("the restored draft must be evaluated again, got %q", got)
+	}
+	// A ↓ with nothing to come back from leaves the line alone.
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	if got := m.jqPlay.program; got != ".b" {
+		t.Errorf("↓ at the live slot = %q, want the line untouched", got)
+	}
+}
+
+// TestJQPlaygroundHistorySkipsSeededProgram: reopening over the same caret
+// seeds the program that was last run, so the first ↑ must offer the one
+// before it rather than re-typing what is already on the line (#1973).
+func TestJQPlaygroundHistorySkipsSeededProgram(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"a":1,"b":2}`))
+	m.jqPlay.program, m.jqPlay.pos = "", 0
+	m = typeInto(m, ".a")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m.jqPlay.program, m.jqPlay.pos = "", 0
+	m = typeInto(m, ".b")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	m = openJQ(t, m)
+	// Reopening seeds "." here; pretend the caret seeded the last program.
+	m.jqPlay.program, m.jqPlay.pos = ".b", len(".b")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	if got := m.jqPlay.program; got != ".a" {
+		t.Errorf("↑ over the seeded program = %q, want the entry before it", got)
 	}
 }
 

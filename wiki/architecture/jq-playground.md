@@ -174,7 +174,7 @@ Query line (the default focus):
 | --- | --- |
 | *(typing)* | edit the program; each change re-evaluates, debounced |
 | `enter` | record the program in the history and run it now |
-| `↑` / `↓` | walk the session program history |
+| `↑` / `↓` | walk the session program history (`↓` past the newest restores the draft) |
 | `tab` | move the keyboard into the result buffer |
 | `pgup` / `pgdn` | page the result buffer without leaving the query line |
 | `ctrl+y` | copy the **whole** result (not just the visible part) |
@@ -206,6 +206,16 @@ moved to the front, capped at 50), like the regex tester's patterns: a jq
 program under construction is scratch work, and persisting it into the project
 state would be noise. The history lives on the root model, not on the mode
 state, so it survives closing and reopening the playground.
+
+Browsing it is draft-preserving and skips the redundant first step (#1973).
+The query line a walk starts from is kept, so `↓` back past the newest entry
+restores the half-written program instead of clearing the line; and a newest
+entry that only repeats what the query line already holds is stepped over on
+the way out. That second rule is what makes `↑` do something: both commit
+points leave the line equal to the newest entry — `enter` keeps the program it
+just recorded, and reopening over the same caret seeds the path that was last
+run — so without it the first `↑` would visibly change nothing and the history
+would read as broken.
 
 ## Boundaries
 
