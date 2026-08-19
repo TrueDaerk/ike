@@ -363,8 +363,9 @@ type Model struct {
 	regexTester  *regexTesterState
 	regexHistory regextest.History
 
-	// jqPlay is the open jq playground (#1936); nil when it is closed.
-	// jqHistory outlives the dialog for the same reason regexHistory does.
+	// jqPlay is the open jq playground (#1936), inline in its hosting pane
+	// since #1970; nil when it is closed. jqHistory outlives the mode for
+	// the same reason regexHistory does.
 	jqPlay    *jqPlayState
 	jqHistory jqplay.History
 
@@ -4748,8 +4749,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.startRegexTester()
 
 	case OpenJQPlaygroundMsg:
-		// json.jqPlayground (palette / Tools menu, #1936): the floating jq
-		// query line over the JSON buffer or HTTP response at hand.
+		// json.jqPlayground (palette / Tools menu, #1936): the jq query
+		// line, mounted inline in the JSON buffer or HTTP response pane at
+		// hand (#1970).
 		return m, m.startJQPlayground()
 
 	case jqParseDoneMsg:
@@ -4763,9 +4765,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case jqEvalDoneMsg:
 		// An off-loop jq evaluation came back (#1936); a stale generation is
-		// dropped by finishJQEval.
-		m.finishJQEval(msg)
-		return m, nil
+		// dropped by finishJQEval, a current one refreshes the result buffer.
+		return m, m.finishJQEval(msg)
 
 	case project.OpenNewProjectMsg:
 		// project.new (palette / File menu, #1718): the new-project wizard.
@@ -5034,6 +5035,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case highlight.SpansMsg:
+		// The inline jq result buffer (#1970) lives outside every pane; parse
+		// results for its virtual path route to it directly, and its lint
+		// notes never reach the Problems store — a throwaway result is not a
+		// project diagnostic.
+		if s := m.jqPlay; s != nil && s.resultEd != nil && msg.Path == jqResultPath {
+			var cmd tea.Cmd
+			*s.resultEd, cmd = s.resultEd.Update(msg)
+			return m, cmd
+		}
 		// Async Tree-sitter parse results route to every editor leaf owning the
 		// path (background panes and shared-document views included); each pane
 		// filters by its own document version. The pass's Go-computed lint
@@ -6019,8 +6029,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.regexTesterOpen() {
 			return m.updateRegexTester(msg)
 		}
-		// The jq playground (#1936) is the same shape with one field: the
-		// query line, with the result read-only underneath it.
+		// The jq playground (#1936, inline #1970) owns the keyboard the same
+		// way while it is mounted in its pane: the query line by default,
+		// the read-only result buffer after tab.
 		if m.jqPlayOpen() {
 			return m.updateJQPlayground(msg)
 		}
@@ -7607,6 +7618,9 @@ func (m *Model) layout() {
 			m.pendingScroll = nil
 		}
 	}
+	// The inline jq playground's result buffer (#1970) tracks its hosting
+	// pane's interior minus the query header rows.
+	m.sizeJQResult()
 	m.syncFocus()
 }
 
@@ -7968,6 +7982,26 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		if inst == nil {
 			return m, nil
 		}
+		// The wheel scrolls the inline jq result buffer (#1970) while the
+		// mode owns the pane; horizontal wheel and shift+wheel sideways,
+		// like the editor (#230).
+		if s := m.jqPlay; s != nil && s.paneKey == key {
+			switch {
+			case msg.Button == tea.MouseWheelLeft:
+				s.resultEd.ScrollXBy(-lines)
+			case msg.Button == tea.MouseWheelRight:
+				s.resultEd.ScrollXBy(lines)
+			case msg.Button == tea.MouseWheelUp && shift:
+				s.resultEd.ScrollXBy(-lines)
+			case msg.Button == tea.MouseWheelDown && shift:
+				s.resultEd.ScrollXBy(lines)
+			case msg.Button == tea.MouseWheelUp:
+				s.resultEd.ScrollBy(-lines)
+			case msg.Button == tea.MouseWheelDown:
+				s.resultEd.ScrollBy(lines)
+			}
+			return m, nil
+		}
 		if c := inst.ActiveContent(); c != nil {
 			// A tab host's body scrolls like the equivalent dedicated pane
 			// (#1778); the tab-bar row keeps its tab-cycling wheel below.
@@ -8308,19 +8342,17 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				}
 			}
 		case dragEditSelect:
+			// dragEditor: the drag may target the inline jq result buffer
+			// (#1970) instead of the pane's own document editor.
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil {
-					if ed := inst.Editor(); ed != nil {
-						ed.MouseDrag(lx, ly)
-					}
+				if ed := m.dragEditor(m.drag.srcPane); ed != nil {
+					ed.MouseDrag(lx, ly)
 				}
 			}
 		case dragEditScroll:
 			if _, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil {
-					if ed := inst.Editor(); ed != nil {
-						ed.ScrollbarDrag(ly)
-					}
+				if ed := m.dragEditor(m.drag.srcPane); ed != nil {
+					ed.ScrollbarDrag(ly)
 				}
 			}
 		case dragExplScroll:
@@ -8899,6 +8931,17 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	m.setFocus(key)
 	localX := msg.X - (r.X + paneContentX)
 	localY := msg.Y - (r.Y + m.contentYOff(key))
+	// The inline jq playground (#1970) owns its pane's mouse: body clicks
+	// move the caret and select in the result buffer, header clicks return
+	// the focus to the query line. A click into any other pane leaves the
+	// mode — its keyboard is modal, so the pane the click focused must not
+	// stay dead to typing.
+	if s := m.jqPlay; s != nil {
+		if key == s.paneKey {
+			return m.jqPaneClick(key, msg, localX, localY)
+		}
+		m.closeJQPlayground()
+	}
 	// The breadcrumbs row (#1153) sits between the title row and the content
 	// (content-local y = -1): a left press on a symbol segment jumps there, any
 	// other press on the row is swallowed so it can't hit the content below.
@@ -10183,6 +10226,12 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 		}
 	}
 
+	// The inline jq playground (#1970) takes over the pane's chrome with its
+	// content: the title names the mode and the queried snapshot.
+	if m.jqInlineActive(key) {
+		title = "JQ — " + m.jqPlay.source
+	}
+
 	border := m.pal().Border
 	if focused {
 		border = m.pal().BorderFocus
@@ -10191,7 +10240,13 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 		// keeps BorderFocus, so the resting look is unchanged and a coloured
 		// border always means "this pane is doing something other than
 		// navigating" — green insert, yellow visual, red replace, blue command.
-		if md, ok := paneEditorMode(inst); ok && md != editor.Normal {
+		// The jq result buffer signals its mode the same way while it holds
+		// the keyboard (#1970).
+		if s := m.jqPlay; s != nil && s.paneKey == key {
+			if md := s.resultEd.ModeName(); s.bufFocus && md != editor.Normal {
+				border = editor.ModeColor(md, m.pal())
+			}
+		} else if md, ok := paneEditorMode(inst); ok && md != editor.Normal {
 			border = editor.ModeColor(md, m.pal())
 		}
 	}
@@ -10215,12 +10270,20 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 	// stale; it only skips the expensive lipgloss box composition (border,
 	// padding, per-line width measurement) when the pane's output is identical to
 	// the last frame — the common case for the panes the user is not touching.
-	content := inst.View()
-	// The breadcrumbs bar (#1153) is the first content row of an editor pane
-	// showing it; layout() shrank the instance's interior by the same row, so
-	// the composed box still fills the rect exactly.
-	if row, ok := m.breadcrumbRowFor(inst, r.W-paneChromeW); ok {
-		content = row + "\n" + content
+	var content string
+	if m.jqInlineActive(key) {
+		// The inline jq playground (#1970): the query header plus the
+		// read-only result buffer replace the pane's own content; the pane's
+		// component keeps its state untouched underneath.
+		content = m.jqInlineBody(r.W - paneChromeW)
+	} else {
+		content = inst.View()
+		// The breadcrumbs bar (#1153) is the first content row of an editor
+		// pane showing it; layout() shrank the instance's interior by the same
+		// row, so the composed box still fills the rect exactly.
+		if row, ok := m.breadcrumbRowFor(inst, r.W-paneChromeW); ok {
+			content = row + "\n" + content
+		}
 	}
 	br, bg, bb, ba := border.RGBA()
 	sig := pane.BoxSig{

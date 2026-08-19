@@ -308,10 +308,11 @@ type CompareClipboardMsg struct{}
 // the focused editor's visual selection. Dispatched by tools.regexTester.
 type OpenRegexTesterMsg struct{}
 
-// OpenJQPlaygroundMsg opens the jq playground (#1936): a floating query line
-// over the JSON at hand — the focused HTTP response body, else the focused
-// editor's visual selection, else its whole buffer — with the program's
-// output live underneath. Dispatched by json.jqPlayground.
+// OpenJQPlaygroundMsg opens the jq playground (#1936): a query line mounted
+// inline in the pane holding the JSON at hand (#1970) — the focused HTTP
+// response body, else the focused editor's visual selection, else its whole
+// buffer — with the program's output live in a read-only result buffer
+// underneath. Dispatched by json.jqPlayground.
 type OpenJQPlaygroundMsg struct{}
 
 // DiffStepMsg steps the focused diff pane's current hunk (0340, #495).
