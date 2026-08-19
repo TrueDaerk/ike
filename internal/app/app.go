@@ -576,10 +576,13 @@ type Model struct {
 	pinSel      int                  // pin-picker selection
 	pinPicker   bool                 // pin picker owns the modal shell
 	lhStore     *localhistory.Store  // local-history snapshot store (#1023)
-	lhSel       int                  // local-history picker selection
-	lhPicker    bool                 // local-history picker owns the modal shell
-	lhPath      string               // file the open picker lists
+	lhSel       int                  // local-history panel selection
+	lhPicker    bool                 // local-history panel owns the modal shell
+	lhPath      string               // file the open panel lists
 	lhEntries   []localhistory.Entry // its snapshots, newest-first
+	lhCur       string               // buffer text the open panel diffs against
+	lhDiff      diff.Result          // selected snapshot vs lhCur, for the inline diff pane
+	lhErr       string               // selection's snapshot load error, shown in place of the diff
 
 	tl       timelineState // per-file Timeline data (#1916)
 	tlPicker bool          // the Timeline owns the modal shell

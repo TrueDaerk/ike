@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Local History
-description: Per-project file snapshots on every save, with a floating picker to diff a snapshot against the current buffer or restore it through the undoable edit path, plus the per-file Timeline merging those snapshots with the file's git history
+description: Per-project file snapshots on every save, with a floating two-pane panel — snapshot list left, live inline diff against the current buffer right — plus restore through the undoable edit path and the per-file Timeline merging those snapshots with the file's git history
 resource: internal/localhistory/localhistory.go
 tags: [history, snapshots, diff, restore, persistence, timeline, git]
 timestamp: 2026-08-17T00:00:00Z
@@ -59,16 +59,28 @@ autosave, save-as — funnels through the editor's `saveAs`, which emits
 `localHistorySnapshotMsg`, whose handler reads the just-written file and
 records it. One central hook, so no save path can miss a snapshot.
 
-## Picker, diff, restore
+## Panel, diff, restore
 
-`file.localHistory` opens a floating modal (the shared `ui.Floating` shell,
-pins-picker pattern) listing the focused file's snapshots newest-first with
-humanized timestamps ("5m ago") plus the absolute time.
+`file.localHistory` opens a floating two-pane panel (#1969, the shared
+`ui.Floating` shell hosting a width-aware `ui.Content`): the **left pane**
+lists the focused file's snapshots newest-first, each row showing the file
+name, the absolute save time, and the humanized age ("5m ago"); the **right
+pane** shows an inline (unified) diff of the *selected* snapshot against the
+current buffer, styled like a git diff — `@@` hunk headers with three context
+lines, a `+`/`-` marker per line, added lines green, removed lines red,
+context plain. Moving the selection recomputes the diff immediately, so
+browsing snapshots *is* previewing them; an identical snapshot renders a
+"no changes" notice, an unreadable one an error line, in place of the diff.
+The buffer text is captured at open time (the panel is modal, so it cannot
+change underneath), and the snapshot bytes are re-read and re-diffed per
+selection move.
 
-- `j`/`k` (or arrows) move the selection; `esc`/`q` closes.
+- `j`/`k` (or arrows) move the selection and update the diff live;
+  `esc`/`q` closes.
 - `enter` opens the reusable diff pane (#60) with the snapshot on the left
   ("name @ 5m ago") and the live buffer on the right, following the
-  vcs.diff single-slot reuse behavior.
+  vcs.diff single-slot reuse behavior — the full pane remains the place for
+  intra-line emphasis, hunk navigation and editing the right side.
 - `r` restores the snapshot into the buffer **through the normal edit path**
   (`ApplyTextEdits`, one history change): the buffer marks dirty, a single
   undo reverts the restore, and the file on disk is untouched until the next

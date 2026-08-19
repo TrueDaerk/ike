@@ -3,10 +3,12 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/pane"
 	"ike/internal/ui"
@@ -139,7 +141,7 @@ func TestLocalHistoryPickerNeedsSnapshots(t *testing.T) {
 
 // TestLocalHistoryPickerRenderFollowsSelection guards #1440: the shell body
 // must reflect a selection move made in a LATER model copy (the root model is
-// a value model — a closure bound only at open time renders the open-time
+// a value model — content bound only at open time renders the open-time
 // selection forever).
 func TestLocalHistoryPickerRenderFollowsSelection(t *testing.T) {
 	dir := t.TempDir()
@@ -154,13 +156,98 @@ func TestLocalHistoryPickerRenderFollowsSelection(t *testing.T) {
 
 	m.openLocalHistoryPicker()
 	if !m.localHistoryOpen() {
-		t.Fatal("picker did not open")
+		t.Fatal("panel did not open")
 	}
 	tm, _ := m.updateLocalHistoryPicker(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m2 := tm.(Model)
-	body := m2.shell.Content().(ui.ModelContent).Render(80)
+	body := ansi.Strip(m2.shell.Content().(ui.Content).Render(120))
 	lines := strings.Split(body, "\n")
 	if len(lines) < 2 || !strings.HasPrefix(lines[1], "▍") {
 		t.Fatalf("marker not on row 2 after j:\n%s", body)
+	}
+}
+
+// TestLocalHistoryPanelLayout (#1969): the panel body splits into two panes —
+// the snapshot list showing file name and date on the left, the selected
+// snapshot's inline git-style diff (+/- markers, @@ hunk header) on the right
+// of the column separator.
+func TestLocalHistoryPanelLayout(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	m = openDirty(t, m, path) // buffer: "Xone\ntwo"
+	m.lhStore.Record(path, []byte("one\ntwo\n"))
+
+	m.openLocalHistoryPicker()
+	if !m.localHistoryOpen() {
+		t.Fatal("panel did not open")
+	}
+	body := ansi.Strip(m.shell.Content().(ui.Content).Render(120))
+	first := strings.Split(body, "\n")[0]
+	left, right, ok := strings.Cut(first, "│")
+	if !ok {
+		t.Fatalf("no column separator in row 1: %q", first)
+	}
+	if !strings.Contains(left, "a.txt") {
+		t.Errorf("left pane misses the file name: %q", left)
+	}
+	if !regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}`).MatchString(left) {
+		t.Errorf("left pane misses the date: %q", left)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(right), "@@ ") {
+		t.Errorf("right pane row 1 is not a hunk header: %q", right)
+	}
+	if !strings.Contains(body, "│ - one") || !strings.Contains(body, "│ + Xone") {
+		t.Errorf("right pane misses the -/+ diff lines:\n%s", body)
+	}
+}
+
+// TestLocalHistoryDiffFollowsSelection (#1969): moving the selection in the
+// left list recomputes the inline diff on the right immediately — no extra
+// step to open a diff.
+func TestLocalHistoryDiffFollowsSelection(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	m = openDirty(t, m, path)               // buffer: "Xone"
+	m.lhStore.Record(path, []byte("OLD\n")) // older snapshot (row 2)
+	m.lhStore.Record(path, []byte("NEW\n")) // newest snapshot (row 1)
+
+	m.openLocalHistoryPicker()
+	body := ansi.Strip(m.shell.Content().(ui.Content).Render(120))
+	if !strings.Contains(body, "- NEW") || strings.Contains(body, "- OLD") {
+		t.Fatalf("diff at open does not show the newest snapshot:\n%s", body)
+	}
+	tm, _ := m.updateLocalHistoryPicker(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	m2 := tm.(Model)
+	body = ansi.Strip(m2.shell.Content().(ui.Content).Render(120))
+	if !strings.Contains(body, "- OLD") || strings.Contains(body, "- NEW") {
+		t.Fatalf("diff did not follow the selection to the older snapshot:\n%s", body)
+	}
+}
+
+// TestLocalHistoryDiffNoChanges (#1969): a snapshot identical to the buffer
+// renders a notice instead of an empty diff.
+func TestLocalHistoryDiffNoChanges(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	tm, _ := m.openPath(path, false)
+	m = tm.(Model)
+	m.lhStore.Record(path, []byte("one\n"))
+
+	m.openLocalHistoryPicker()
+	body := ansi.Strip(m.shell.Content().(ui.Content).Render(120))
+	if !strings.Contains(body, "no changes") {
+		t.Fatalf("identical snapshot did not render the no-changes notice:\n%s", body)
 	}
 }
