@@ -1,5 +1,19 @@
 # Log
 
+## 2026-08-19 (Local History as a two-pane panel with a live inline diff, #1969)
+
+- **Local History panel** (`internal/app/localhistory.go`): `file.localHistory`
+  is a two-pane panel now — the snapshot list (file name, absolute date,
+  humanized age) on the left, an inline git-style unified diff of the
+  *selected* snapshot against the current buffer on the right: `@@` hunk
+  headers with three context lines, `+`/`-` markers, added lines green
+  (`VCSAdded`), removed red (`VCSDeleted`). Moving the selection recomputes
+  the diff immediately; the separate diff pane no longer gates previewing
+  (though `enter` still opens it for emphasis/editing, and `r` still
+  restores). The body is a width-aware `ui.Content` (the layout-select
+  pattern) splitting the shell's budget between the columns. Concept doc
+  `/architecture/local-history.md` updated.
+
 ## 2026-08-19 (Markdown list rendering, #1966)
 
 - **List markers** (`internal/editor/mdlist.go`): the markdown rich-rendering
