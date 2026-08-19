@@ -65,9 +65,10 @@ var jqDebounce = 120 * time.Millisecond
 // inputErr then holds the message); source labels where it came from.
 // program/pos are the query line, result the last evaluation. hist is the
 // per-session program history, histIdx the position while browsing it (-1 =
-// editing a live program). gen stamps debounce ticks and runs so a stale one
-// is dropped, cancel aborts the run in flight, and status carries the
-// transient confirmation line.
+// editing a live program) and draft/draftPos the query line that browsing
+// started from, so stepping back to -1 restores it (#1973). gen stamps
+// debounce ticks and runs so a stale one is dropped, cancel aborts the run in
+// flight, and status carries the transient confirmation line.
 type jqPlayState struct {
 	paneKey  string
 	resultEd *editor.Model
@@ -84,8 +85,10 @@ type jqPlayState struct {
 	result  jqplay.Result
 	pending bool
 
-	hist    jqplay.History
-	histIdx int
+	hist     jqplay.History
+	histIdx  int
+	draft    string
+	draftPos int
 
 	gen    int
 	cancel context.CancelFunc
@@ -501,17 +504,37 @@ func (m *Model) pasteJQPlayground(text string) tea.Cmd {
 }
 
 // stepJQHistory walks the session program history (delta +1 = older).
+//
+// Two details make it feel like a history instead of a dead key (#1973):
+//
+//   - The query line browsing started from is kept as the draft, so stepping
+//     back to -1 restores the half-written program instead of clearing the
+//     line. Any edit resets histIdx, so the next walk captures a fresh draft.
+//   - A newest entry that merely repeats the query line is skipped on the way
+//     out. Both commit points leave exactly that state — enter keeps the
+//     program it just recorded, and reopening over the same caret seeds the
+//     path that was last run — so without the skip the first ↑ would change
+//     nothing at all.
 func (m *Model) stepJQHistory(delta int) tea.Cmd {
 	s := m.jqPlay
 	next := s.histIdx + delta
+	if s.histIdx == -1 && delta > 0 {
+		s.draft, s.draftPos = s.program, s.pos
+		if p, ok := s.hist.At(next); ok && p == strings.TrimSpace(s.program) {
+			next++
+		}
+	}
 	if next < -1 {
 		next = -1
+	}
+	if next == s.histIdx {
+		return nil // already live / at the oldest entry: nothing to restore
 	}
 	if next >= s.hist.Len() {
 		return nil
 	}
 	if next == -1 {
-		s.histIdx, s.program, s.pos = -1, "", 0
+		s.histIdx, s.program, s.pos = -1, s.draft, s.draftPos
 		return m.runJQNow()
 	}
 	program, ok := s.hist.At(next)
