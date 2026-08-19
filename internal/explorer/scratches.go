@@ -15,12 +15,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/scratch"
+	"ike/internal/ui"
 )
 
 // ScratchNewMsg asks the app to create a new scratch (#1963): the explorer's
@@ -537,10 +539,22 @@ func (m Model) scratchDividerLine() string {
 	return ansi.Truncate(line, maxz(m.width), "")
 }
 
-// scratchRow renders one section entry with the tree's highlight recipes.
+// scratchRow renders one section entry with the tree's highlight recipes,
+// plus the right-aligned "last opened" age column (#1965). The name field
+// shrinks to make room for the age; on a pane too narrow for both the age is
+// dropped and the name keeps the full width.
 func (m Model) scratchRow(i int) string {
 	e := m.scrEntries[i]
 	name := filepath.Base(e.Path)
+	age := m.scratchAge(e)
+	nameW := maxz(m.width - 2)
+	if age != "" {
+		if w := m.width - 2 - ansi.StringWidth(age) - 1; w >= scratchMinNameWidth {
+			nameW = w
+		} else {
+			age = "" // no legible room for both columns
+		}
+	}
 	ss := m.styleSet()
 	style := ss.plain
 	if isHidden(name) {
@@ -559,9 +573,14 @@ func (m Model) scratchRow(i int) string {
 	if m.open[e.Path] {
 		nameStyle = nameStyle.Underline(true) // open files underline, like the tree
 	}
-	rendered := nameStyle.Render(name)
-	if !selected || !m.focused {
-		// The suffix-tint model (#1051) applies to plain section rows too.
+	shown := name
+	if ansi.StringWidth(shown) > nameW {
+		shown = ansi.Truncate(shown, nameW, "…")
+	}
+	rendered := nameStyle.Render(shown)
+	if (!selected || !m.focused) && shown == name {
+		// The suffix-tint model (#1051) applies to plain section rows too; a
+		// name clipped by the age column has no extension left to tint.
 		if c := m.colors.suffixColor(&node{name: name, path: e.Path}, m.colorGlobs, m.colorVals); c != nil {
 			if dot := strings.LastIndex(name, "."); dot > 0 {
 				rendered = nameStyle.Render(name[:dot]) + nameStyle.Foreground(c).Render(name[dot:])
@@ -571,12 +590,70 @@ func (m Model) scratchRow(i int) string {
 		}
 	}
 	line := style.Render("  ") + rendered
-	w := 2 + ansi.StringWidth(name)
-	if w > m.width && m.width > 0 {
-		return ansi.Cut(line, 0, maxz(m.width-1)) + style.Bold(false).Render("…")
+	w := 2 + ansi.StringWidth(shown)
+	if age != "" {
+		// Right-align the age: pad the name field out, then the one-column
+		// gutter and the age itself fill the row to its last cell.
+		if pad := 2 + nameW - w; pad > 0 {
+			line += style.Render(strings.Repeat(" ", pad))
+			w = 2 + nameW
+		}
+		ageStyle := style
+		if !selected {
+			ageStyle = ageStyle.Foreground(ss.pal.InlayHint)
+		}
+		line += style.Render(" ") + ageStyle.Render(age)
+		w += 1 + ansi.StringWidth(age)
 	}
 	if pad := m.width - w; pad > 0 {
 		line += style.Render(strings.Repeat(" ", pad))
 	}
+	if w > m.width {
+		// Only a degenerate pane gets here (narrower than the indent itself).
+		return ansi.Truncate(line, maxz(m.width), "")
+	}
 	return line
+}
+
+// scratchMinNameWidth is the narrowest name field worth keeping: a pane that
+// cannot spare this much beside the age column drops the age instead.
+const scratchMinNameWidth = 8
+
+// scratchAge renders the entry's right-aligned "last opened" value (#1965):
+// the MRU store's last-opened time for the scratch when the app pushed one in,
+// else the file's modification time — a scratch that was never opened in this
+// install still shows how old it is. Compact by design ("5m", "3h", "7d"), so
+// the column stays narrow in a slim explorer.
+func (m Model) scratchAge(e scratch.Entry) string {
+	t := m.scrOpened[e.Path]
+	if t.IsZero() {
+		t = e.ModTime
+	}
+	return ui.ShortAge(t, m.now())
+}
+
+// SetScratchOpened replaces the section's last-opened times, keyed by scratch
+// path (#1965). The app pushes its MRU store in whenever the set of open files
+// changes; an unknown path falls back to the file's mtime.
+func (m *Model) SetScratchOpened(opened map[string]time.Time) { m.scrOpened = opened }
+
+// ScratchScrollBy moves the section viewport by delta rows without moving the
+// cursor — the wheel seam, mirroring the tree's ScrollBy (#1965).
+func (m *Model) ScratchScrollBy(delta int) {
+	m.scrTop += delta
+	m.clampScratchTop()
+}
+
+// ScratchTop reports the section's scroll offset (tests).
+func (m Model) ScratchTop() int { return m.scrTop }
+
+// ScratchAgeFor reports the "last opened" value rendered for one scratch path,
+// "" when the path is no section entry (tests).
+func (m Model) ScratchAgeFor(path string) string {
+	for _, e := range m.scrEntries {
+		if e.Path == path {
+			return m.scratchAge(e)
+		}
+	}
+	return ""
 }

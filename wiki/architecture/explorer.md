@@ -564,7 +564,12 @@ body = min(height, content), floor-clamped so the tree keeps ≥3 rows) is
 subtracted from the pane height there, so every tree consumer — scroll clamps,
 mouse hit-tests, scrollbars, the prompt anchor — agrees on the tree's real
 region without further special-casing. The section body scrolls internally
-(`scrTop`) when the list outgrows it.
+(`scrTop`) when the list outgrows it: the cursor pulls the window along
+(`followScratchCursor`), and the wheel scrolls whichever region it sits over —
+the app translates the pointer to a content-local row and calls `ScrollAt`,
+which routes body rows to `ScratchScrollBy` and everything else (tree rows and
+the divider) to the tree's `ScrollBy` (#1965). Like the tree, the wheel moves
+the viewport without moving the cursor.
 
 **One unified cursor.** Motions run over a virtual index space — tree rows
 first, section entries after (`selCount`/`vcur`/`setVcur`) — so `j`/`k` step
@@ -586,7 +591,12 @@ like a tree operation. `a` emits `ScratchNewMsg`, which the app routes to the
 `scratch.new` language picker; `A` (new folder) is a no-op — the store is
 flat. Rows sort by name (default) or `modified` newest-first, render with the
 tree's highlight recipes (Selection/SelectionMuted/Panel, open-file underline,
-suffix tint), and refresh via `RefreshScratches` — called by the app on
+suffix tint) plus a right-aligned **last-opened** age (#1965) — `ui.ShortAge`
+("now", "5m", "3h", "7d", "6w") over the MRU store's last-opened time, which
+the app pushes in with `SetScratchOpened` from `syncExplorerOpen`, falling
+back to the file's mtime for a scratch the MRU never saw. The name field
+shrinks to make room and clips with "…"; a pane too narrow to leave 8 columns
+for the name drops the age instead. Rows refresh via `RefreshScratches` — called by the app on
 scratch creation, by `r`, and by the poll loop: the scratch dir joins the
 auto-refresh stamp set once it exists, so external changes surface like any
 project-tree change.
