@@ -406,6 +406,8 @@ func (m Model) statusLine() string {
 			}
 		case inst.Kind() == pane.KindBreakpoints:
 			left += "BREAKPOINTS"
+		case inst.Kind() == pane.KindDoctor:
+			left += "XDEBUG DOCTOR"
 		case inst.Kind() == pane.KindHTTP:
 			left += "HTTP │ " + inst.HTTP().Title()
 		case inst.Kind() == pane.KindVCS:

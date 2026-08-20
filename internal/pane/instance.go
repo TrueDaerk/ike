@@ -11,6 +11,7 @@ import (
 	"ike/internal/breakpanel"
 	"ike/internal/clipboard"
 	"ike/internal/dataview"
+	"ike/internal/debugdoctor"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/domview"
@@ -111,6 +112,10 @@ const (
 	// panel with the focused HTML buffer's parsed DOM tree and a CSS
 	// selector tester, under key "dom".
 	KindDOM
+	// KindDoctor is the Xdebug Doctor tool window (#1991): a singleton panel
+	// with the DBGp listener status and the per-connection accept/reject
+	// trace, under key "xdoctor".
+	KindDoctor
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -134,6 +139,7 @@ const (
 	ctxTests    = "tests"
 	ctxIssues   = "issues"
 	ctxDOM      = "dom"
+	ctxDoctor   = "xdoctor"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -165,6 +171,7 @@ type Instance struct {
 	tr   testresults.Model
 	gi   ghissues.Model
 	dm   domview.Model
+	xd   debugdoctor.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
@@ -293,6 +300,8 @@ func (i *Instance) ContextID() string {
 		return ctxIssues
 	case KindDOM:
 		return ctxDOM
+	case KindDoctor:
+		return ctxDoctor
 	}
 	return ctxEditor
 }
@@ -352,6 +361,10 @@ func (i *Instance) Issues() *ghissues.Model { return &i.gi }
 // DOM returns the underlying DOM inspector tool-window model (#1929). It is
 // only valid for a dom instance; callers gate on Kind first.
 func (i *Instance) DOM() *domview.Model { return &i.dm }
+
+// Doctor returns the underlying Xdebug Doctor tool-window model (#1991). It
+// is only valid for a doctor instance; callers gate on Kind first.
+func (i *Instance) Doctor() *debugdoctor.Model { return &i.xd }
 
 // Diff returns the underlying diff viewer model. It is only valid for a diff
 // instance; callers gate on Kind first.
@@ -1015,6 +1028,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.gi.SetSize(w, h)
 	case KindDOM:
 		i.dm.SetSize(w, h)
+	case KindDoctor:
+		i.xd.SetSize(w, h)
 	}
 }
 
@@ -1069,6 +1084,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.gi.SetFocused(f)
 	case KindDOM:
 		i.dm.SetFocused(f)
+	case KindDoctor:
+		i.xd.SetFocused(f)
 	}
 }
 
@@ -1138,6 +1155,8 @@ func (i *Instance) View() string {
 		return i.gi.View()
 	case KindDOM:
 		return i.dm.View()
+	case KindDoctor:
+		return i.xd.View()
 	}
 	return ""
 }
@@ -1200,6 +1219,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.gi.Update(msg)
 	case KindDOM:
 		cmd = i.dm.Update(msg)
+	case KindDoctor:
+		cmd = i.xd.Update(msg)
 	}
 	return cmd
 }
@@ -1353,6 +1374,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.gi.SetPalette(p)
 	case KindDOM:
 		i.dm.SetPalette(p)
+	case KindDoctor:
+		i.xd.SetPalette(p)
 	}
 }
 

@@ -38,6 +38,7 @@ import (
 	"ike/internal/config"
 	"ike/internal/dataview"
 	"ike/internal/debug"
+	"ike/internal/debugdoctor"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/domview"
@@ -462,6 +463,12 @@ type Model struct {
 	// issuesReturnFocus is the same dance for the GitHub Issues tool window
 	// (#1934).
 	issuesReturnFocus string
+	// doctorReturnFocus is the same dance for the Xdebug Doctor tool window
+	// (#1991); doctorLog is its app-owned listener/connection trace, fed from
+	// the bridge's ike.listenState / ike.debugConn events and surviving the
+	// panel being closed.
+	doctorReturnFocus string
+	doctorLog         *debugdoctor.Log
 	// domReturnFocus is the same dance for the DOM inspector tool window
 	// (#1929). domReqPath/domReqVersion dedup the async buffer parses;
 	// domHLPath/domHLRev remember which file's editors carry the selector
@@ -972,6 +979,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		jqLastProgram:  map[string]string{}, // per-file last valid jq program (#1982)
 		compMRU:        mru.Load(mru.DefaultFile()),
 		bpts:           debug.Load(),
+		doctorLog:      debugdoctor.NewLog(),
 		host:           h,
 		reg:            reg,
 		themePal:       themePal,
@@ -1598,6 +1606,13 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// The Breakpoints panel restores in its saved slot (#1377),
 			// seeded from the persisted store loaded at start.
 			m.wireBreakpointsPanel(panes.Get(panes.AddBreakpoints()).Breakpoints())
+			continue
+		}
+		if id := ids[key]; id.Kind == "xdoctor" {
+			// The Xdebug Doctor restores in its saved slot (#1991), sharing
+			// the app-owned trace log (empty at start; connection attempts
+			// are session state).
+			m.wireDoctorPanel(panes.Get(panes.AddDoctor()).Doctor())
 			continue
 		}
 		if id := ids[key]; id.Kind == "structure" {
@@ -2546,6 +2561,7 @@ var terminalGlobalCommands = map[string]bool{
 	"issues.toggle":         true,
 	"structure.toggle":      true,
 	"dom.toggle":            true,
+	"debug.doctor":          true,
 	"scratch.panel":         true,
 	"notifications.history": true,
 	// #997: tab switching stays reachable from a focused terminal/tool pane
@@ -4322,6 +4338,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// dom.toggle (#1929): same state machine for the DOM inspector; the
 		// Update wrapper's sync parses the buffer and routes the highlights.
 		m.toggleDOMPanel()
+		return m, nil
+
+	case DebugDoctorMsg:
+		// debug.doctor (#1991): same state machine for the Xdebug Doctor.
+		m.toggleDoctorPanel()
+		return m, nil
+
+	case debugdoctor.ClearMsg:
+		// 'c' in the doctor pane (#1991): drop the connection trace; the
+		// listener status stays.
+		m.doctorLog.Clear()
 		return m, nil
 
 	case domParsedMsg:
@@ -6907,7 +6934,7 @@ func (m Model) viewerSplitTarget() string {
 		switch inst.Kind() {
 		case pane.KindExplorer, pane.KindVCS, pane.KindDebug, pane.KindProblems,
 			pane.KindStructure, pane.KindUsages, pane.KindHTTP, pane.KindBreakpoints,
-			pane.KindTests, pane.KindIssues, pane.KindDOM:
+			pane.KindTests, pane.KindIssues, pane.KindDOM, pane.KindDoctor:
 			return false
 		}
 		return true
@@ -8200,6 +8227,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.DOM().Wheel(lines)
 			}
+		case pane.KindDoctor:
+			// The wheel scrolls the connection trace (#1991).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Doctor().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Doctor().Wheel(lines)
+			}
 		case pane.KindUsages:
 			// The wheel scrolls the usages list (#1155).
 			switch msg.Button {
@@ -9221,6 +9256,11 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// fold glyph toggles, a row click selects, a double-click navigates.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.DOM().Click(localX, localY)
+		}
+	case pane.KindDoctor:
+		// Doctor-trace clicks (#1991): a row click selects.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Doctor().Click(localX, localY)
 		}
 	case pane.KindUsages:
 		// Usages-list clicks (#1155): a click selects, a double-click opens
@@ -10276,6 +10316,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title = "STRUCTURE"
 		case pane.KindDOM:
 			title = "DOM"
+		case pane.KindDoctor:
+			title = "XDEBUG DOCTOR"
 		case pane.KindUsages:
 			title = "USAGES"
 		case pane.KindHTTP:

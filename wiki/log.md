@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-20 (Xdebug connection doctor, #1991)
+
+- **Doctor tool window** (`internal/debugdoctor`, `internal/app/xdebug_doctor.go`):
+  new singleton pane (key `xdoctor`, command `debug.doctor`, Run menu /
+  palette) showing the DBGp listener state — running/stopped, bound port,
+  hostname filter, path-mapping count — and a newest-first trace of every
+  incoming connection attempt with its accept/reject outcome; `c` clears.
+  The app owns the 200-entry ring (`Model.doctorLog`), so the trace survives
+  the panel being closed and records parked-session events too.
+- **Structured bridge events** (`internal/dbgp/bridge/bridge.go`):
+  `ike.listenState` `{state, port, hostname, mappings}` on listener
+  start/stop and `ike.debugConn` `{outcome, reason, detail, remote, ideKey,
+  fileURI, host, local, mapped}` per attempt — observability only, the
+  accept/reject semantics are unchanged; `mapped=false` marks an accepted
+  request whose entry file has no local path mapping.
+- **Malformed init distinguished** (`internal/dbgp/conn.go`): a pre-init
+  packet that fails to parse (or a well-formed non-init first packet) makes
+  `WaitInit` fail fast with `ErrBadInit`; the bridge rejects with the new
+  reason `init` ("malformed init packet: …") while `handshake` keeps meaning
+  "no init at all".
+- **Docs**: `wiki/architecture/debugger.md` § Xdebug Doctor;
+  `userdocs/guides/run-and-debug.md` § PHP and Xdebug; generated
+  `userdocs/reference/commands.md`.
+
 ## 2026-08-20 (Capture response values into variables, #1993)
 
 - **Directive** (`internal/httpfile/capture.go`): `# @capture name = <jq-expr>`

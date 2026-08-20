@@ -506,6 +506,17 @@ func withAdapterStderr(err error, sess *dap.Session) error {
 
 // handleDebugEvent routes one adapter event.
 func (m *Model) handleDebugEvent(evSess *dap.Session, ev dap.Event) {
+	// The Xdebug doctor trace (#1991) is app-global: it records listener
+	// state and connection attempts from the active *and* a parked listen
+	// session, before the session-tagging guard below would swallow them.
+	switch ev.Name {
+	case "ike.listenState":
+		m.applyDoctorListenState(ev)
+		return
+	case "ike.debugConn":
+		m.applyDoctorConn(ev)
+		return
+	}
 	dbg := m.dbg
 	if dbg == nil || (evSess != nil && evSess != dbg.sess) {
 		// Not the active session's event. A parked workspace's debuggee owns
@@ -970,6 +981,7 @@ func (m *Model) applyParkedDebugEvent(sess *dap.Session, ev dap.Event) bool {
 // reports work again — and the dead session's transport is released.
 func (m *Model) finishParkedDebugSession(w *workspace.Workspace, root string, extras wsExtras, ev dap.Event) {
 	dbg := extras.dbg
+	m.doctorSessionEnded(dbg.cfgName)
 	exitCode, hasCode := 0, false
 	if ev.Name == "exited" {
 		exitCode, hasCode = ev.Exited().ExitCode, true
@@ -1195,6 +1207,7 @@ func (m *Model) stopDebugSession(notify bool) {
 	m.clearPausedMarker()
 	m.dbg = nil
 	m.dbgLaunching = false
+	m.doctorSessionEnded(dbg.cfgName)
 	// The pane pair stays open (#689): the debuggee terminal keeps the
 	// program's output reviewable until the user closes it or a new launch
 	// resets it.
@@ -1226,6 +1239,7 @@ func (m *Model) finishDebugSession(msg debugEndedMsg) {
 	m.clearPausedMarker()
 	m.dbg = nil
 	m.dbgLaunching = false
+	m.doctorSessionEnded(dbg.cfgName)
 	// Keep the pane pair open in a finished state (#689) so the final output
 	// — the debuggee terminal's scrollback — stays reviewable.
 	if p := m.debugPanel(); p != nil {

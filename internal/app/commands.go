@@ -450,6 +450,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("debug.start", "Debug File", DebugStartMsg{}),
 			appCommand("debug.testAtCursor", "Debug Test at Cursor", DebugTestAtCursorMsg{}),
 			appCommand("debug.listen", "Listen for PHP Debug Connections", DebugListenMsg{}),
+			appCommand("debug.doctor", "Xdebug Doctor", DebugDoctorMsg{}),
 			appCommand("debug.stop", "Stop Debug Session", DebugStopMsg{}),
 			appCommand("debug.stepOver", "Step Over", DebugStepOverMsg{}),
 			appCommand("debug.stepInto", "Step Into", DebugStepIntoMsg{}),

@@ -335,6 +335,10 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			// The panel restores empty (#1929): the first buffer-change sync
 			// reparses the focused HTML buffer.
 			ids[key] = paneIdentity{Kind: "dom"}
+		case pane.KindDoctor:
+			// The panel restores empty (#1991): the trace is session state;
+			// the shared log re-wires on restore.
+			ids[key] = paneIdentity{Kind: "xdoctor"}
 		case pane.KindUsages:
 			// The panel restores empty (#1155): find-references results are
 			// session state; the next lsp.referencesPanel run re-fills it.

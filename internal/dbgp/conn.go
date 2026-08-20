@@ -13,6 +13,11 @@ import (
 // ErrClosed reports a call on (or interrupted by) a closed connection.
 var ErrClosed = errors.New("dbgp: connection closed")
 
+// ErrBadInit reports that the engine's first packet arrived but could not be
+// parsed as DBGp XML (#1991). Distinguishing it from a silent handshake lets
+// the listener doctor name the concrete cause instead of a generic timeout.
+var ErrBadInit = errors.New("dbgp: malformed init packet")
+
 // Conn is one DBGp connection to a debug engine. Commands are correlated by
 // transaction id; the read loop runs until the stream ends. Continuation
 // commands (run, step_*) block in Call until the engine breaks or finishes —
@@ -29,6 +34,11 @@ type Conn struct {
 	closed  bool
 
 	initCh chan *Init
+	// initFail carries the parse error of a malformed pre-init packet so
+	// WaitInit can fail fast with the concrete cause (#1991); initSeen stops
+	// later garbage from being mistaken for a broken handshake.
+	initFail chan error
+	initSeen bool
 
 	// onStream receives engine stream packets (stdout/stderr when
 	// redirected) on the read-loop goroutine — hand off, don't block.
@@ -41,6 +51,7 @@ func NewConn(rwc io.ReadWriteCloser, onStream func(Stream)) *Conn {
 		rwc:      rwc,
 		pending:  map[int]chan *Response{},
 		initCh:   make(chan *Init, 1),
+		initFail: make(chan error, 1),
 		onStream: onStream,
 	}
 	go c.readLoop()
@@ -56,6 +67,8 @@ func (c *Conn) WaitInit(timeout time.Duration) (*Init, error) {
 			return nil, ErrClosed
 		}
 		return init, nil
+	case err := <-c.initFail:
+		return nil, fmt.Errorf("%w: %v", ErrBadInit, err)
 	case <-time.After(timeout):
 		return nil, errors.New("dbgp: timeout waiting for init")
 	}
@@ -116,11 +129,30 @@ func (c *Conn) readLoop() {
 			return
 		}
 		pkt, err := parsePacket(data)
-		if err != nil {
-			continue // a malformed packet is skipped, not fatal
+		if pkt == nil {
+			// A malformed or unknown packet is skipped, not fatal — but before
+			// the init arrived it means the handshake itself is broken (#1991),
+			// which WaitInit reports as ErrBadInit instead of timing out.
+			// (err is nil for well-formed XML of an unknown kind.)
+			c.mu.Lock()
+			seen := c.initSeen
+			c.mu.Unlock()
+			if !seen {
+				if err == nil {
+					err = errors.New("the first packet is not a DBGp init element")
+				}
+				select {
+				case c.initFail <- err:
+				default:
+				}
+			}
+			continue
 		}
 		switch p := pkt.(type) {
 		case *Init:
+			c.mu.Lock()
+			c.initSeen = true
+			c.mu.Unlock()
 			select {
 			case c.initCh <- p:
 			default:

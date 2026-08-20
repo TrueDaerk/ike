@@ -175,6 +175,16 @@ breakpoint, the reason is on screen: `busy` (finish or stop the paused session
 first), `filter` (the hostname filter in **Settings › Debug** rejected it) or
 `handshake` (something dialed the port without speaking DBGp).
 
+When the drops scroll past faster than you can read them, open the **Xdebug
+Doctor** (Run menu or the command palette). It shows whether the listener is
+running, on which port and with which hostname filter and path mappings, plus
+a live trace of every connection attempt: accepted ones with their locally
+mapped entry file (with a warning when no path mapping resolves it), rejected
+ones with the concrete reason and enough identity to fix it — the source
+address, the IDE key, the request's entry file and its `HTTP_HOST`. The trace
+works with or without an active debug session and survives closing the panel;
+`c` clears it.
+
 ## When something does not run
 
 **"No configuration"** — the language has no run template. Running is
