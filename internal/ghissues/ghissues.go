@@ -441,3 +441,19 @@ func (m *Model) theme() *theme.Palette {
 	}
 	return theme.DefaultPalette()
 }
+
+// PasteText inserts a pasted block into the open filter line at its cursor
+// (#2002) and re-narrows the list, exactly like typing there does.
+func (m *Model) PasteText(text string) bool {
+	if !m.fEditing {
+		return false
+	}
+	out, ncur, changed := ui.PasteText(m.fInput, m.fCur, text)
+	if !changed {
+		return false
+	}
+	m.fInput, m.fCur = out, ncur
+	m.cursor, m.top = 0, 0
+	m.applyFilter()
+	return true
+}

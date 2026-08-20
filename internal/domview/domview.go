@@ -711,3 +711,18 @@ func maxInt(a, b int) int {
 	}
 	return b
 }
+
+// PasteText inserts a pasted block into the open selector input at its cursor
+// (#2002) and re-matches live, exactly like typing there does.
+func (m *Model) PasteText(text string) bool {
+	if !m.selEditing {
+		return false
+	}
+	out, ncur, changed := ui.PasteText(m.selector, m.selCursor, text)
+	if !changed {
+		return false
+	}
+	m.selector, m.selCursor = out, ncur
+	m.recomputeMatches()
+	return true
+}

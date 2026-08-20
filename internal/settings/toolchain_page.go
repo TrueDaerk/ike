@@ -135,6 +135,23 @@ func (t *ToolchainPage) Capturing() bool {
 	return t.picking || t.custom || t.pkgViewing
 }
 
+// Paste inserts into whichever of the page's own inputs is open (#2002): the
+// package-install line or the custom interpreter path. The version picker is
+// a list and takes no text.
+func (t *ToolchainPage) Paste(text string) bool {
+	switch {
+	case t.pkgViewing && t.pkgMode == "input":
+		return t.pkgInput.Paste(text)
+	case t.custom:
+		if !t.inputField.Paste(text) {
+			return false
+		}
+		t.suggest.refresh(t.inputField.text)
+		return true
+	}
+	return false
+}
+
 // Receive implements MsgReceiver: async version probes land in the cache,
 // environment results clear the busy marker.
 func (t *ToolchainPage) Receive(msg tea.Msg) {

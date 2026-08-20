@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-08-17T12:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -494,6 +494,16 @@ hand-rolled append-only inputs byte-sliced backspace and corrupted umlauts).
 Ported: schema String/Int/Path edits, the keymap import path, the toolchain
 custom path, the venv wizard's location step, the Tools and PHP-debug-mapping
 forms, and the LSP override fields.
+
+The **filter lines** followed in #2002 — the panel-wide filter, the colour
+page's and the keymap page's, and the enum editor's type-to-filter. Their
+text stays a plain `string` (every renderer and matcher reads it) with a
+rune cursor beside it, routed through `filterKey`/`filterPaste`/`filterView`
+in `textfield.go`; the panel's and the keymap page's backspace had been byte
+sliced and cut multi-byte filters in half. The same change routed **paste**
+into the topmost sub-panel form (any `SubPanel` implementing `Paste`), the
+toolchain page's own inputs and the filters, so `cmd+v` works wherever the
+panel accepts typing. See [Single-Line Text Input](/architecture/text-input.md).
 
 ## Widget affordances (0420, #889)
 

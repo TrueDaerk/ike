@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-08-13T12:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # File Explorer
@@ -167,7 +167,11 @@ auto-expansion): the cursor jumps to the row whose *name* contains the query,
 case-insensitively — scanning forward with wrap-around from the stable anchor
 (the row the search opened on), with **prefix matches ranked first** (a later
 prefix match beats an earlier contains match). A miss leaves the cursor put
-and flags `no matches`. Backspace edits and re-resolves from the anchor; an
+and flags `no matches`. The query is an ordinary single-line input
+(`ui.EditKey`, #2002): the cursor moves with the arrows and word motions,
+`opt`/`cmd`+backspace kill a word or the line, and a paste lands at the
+cursor — `ctrl+n`/`ctrl+p` keep their meaning as match stepping. Every edit
+re-resolves from the anchor; an
 emptied query returns the cursor there.
 
 Keys while open (`searchState`, `handleSearchKey` in `search.go`): the search

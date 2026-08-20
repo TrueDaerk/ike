@@ -360,7 +360,7 @@ func (m *Model) renderFilter() string {
 	pal := m.theme()
 	text := " ⌕ " + m.filter
 	if m.filtering {
-		text += "▌"
+		text = " ⌕ " + filterView(m.filter, m.filterCur)
 	}
 	out := lipgloss.NewStyle().Foreground(pal.Info).Render(text)
 	if m.filter != "" {

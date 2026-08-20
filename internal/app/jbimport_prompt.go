@@ -49,15 +49,7 @@ func (m Model) jbImportPromptOpen() bool { return m.jbImportOpen && m.shell.IsOp
 // renderJBImportPrompt (re)fills the shell with the prompt for the current
 // input; candidates (from the last tab press) render underneath.
 func (m *Model) renderJBImportPrompt(candidates []string) {
-	r := []rune(m.jbImportInput)
-	pos := m.jbImportPos
-	before, after := string(r[:pos]), ""
-	cur := " "
-	if pos < len(r) {
-		cur = string(r[pos])
-		after = string(r[pos+1:])
-	}
-	line := "> " + before + renamePromptCursor.Render(cur) + after
+	line := "> " + ui.CursorView(m.jbImportInput, m.jbImportPos)
 	const maxLines = 8
 	var sug string
 	if n := len(candidates); n > 0 {
@@ -78,8 +70,9 @@ func (m *Model) renderJBImportPrompt(candidates []string) {
 	})
 }
 
-// updateJBImportPrompt consumes every key while the import prompt is open,
-// mirroring the rename prompt's line editing plus tab path completion.
+// updateJBImportPrompt consumes every key while the import prompt is open:
+// tab completes the path, everything else is shared line editing via
+// ui.EditKey (#2002).
 func (m Model) updateJBImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	closePrompt := func() {
 		m.jbImportOpen = false
@@ -87,7 +80,6 @@ func (m Model) updateJBImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.jbImportPos = 0
 		m.shell.Close()
 	}
-	r := []rune(m.jbImportInput)
 	var candidates []string
 	switch {
 	case msg.Code == tea.KeyEscape:
@@ -105,31 +97,10 @@ func (m Model) updateJBImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.jbImportInput = res.Completed
 		m.jbImportPos = len([]rune(m.jbImportInput))
 		candidates = res.Candidates
-	case msg.Code == tea.KeyLeft:
-		if m.jbImportPos > 0 {
-			m.jbImportPos--
+	default:
+		if out, pos, handled, _ := ui.EditKey(msg, m.jbImportInput, m.jbImportPos); handled {
+			m.jbImportInput, m.jbImportPos = out, pos
 		}
-	case msg.Code == tea.KeyRight:
-		if m.jbImportPos < len(r) {
-			m.jbImportPos++
-		}
-	case msg.Code == tea.KeyHome:
-		m.jbImportPos = 0
-	case msg.Code == tea.KeyEnd:
-		m.jbImportPos = len(r)
-	case msg.Code == tea.KeyBackspace:
-		if m.jbImportPos > 0 {
-			m.jbImportInput = string(append(r[:m.jbImportPos-1:m.jbImportPos-1], r[m.jbImportPos:]...))
-			m.jbImportPos--
-		}
-	case msg.Code == tea.KeyDelete:
-		if m.jbImportPos < len(r) {
-			m.jbImportInput = string(append(r[:m.jbImportPos:m.jbImportPos], r[m.jbImportPos+1:]...))
-		}
-	case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
-		ins := []rune(msg.Text)
-		m.jbImportInput = string(append(append(append([]rune{}, r[:m.jbImportPos]...), ins...), r[m.jbImportPos:]...))
-		m.jbImportPos += len(ins)
 	}
 	m.renderJBImportPrompt(candidates)
 	return m, nil

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"ike/internal/explorer"
 	"ike/internal/palette"
@@ -66,22 +65,10 @@ func (m *Model) startRenameFile() tea.Cmd {
 // renameOpen reports whether the shell currently shows the rename prompt.
 func (m Model) renameOpen() bool { return m.renamePath != "" && m.shell.IsOpen() }
 
-// renamePromptCursor reverse-videos the cell the input cursor sits on, the
-// same rendering the explorer's inline prompt uses.
-var renamePromptCursor = lipgloss.NewStyle().Reverse(true)
-
 // renderRenamePrompt (re)fills the shell with the prompt for the current
 // input; called on open and after every accepted key.
 func (m *Model) renderRenamePrompt() {
-	r := []rune(m.renameInput)
-	pos := m.renamePos
-	before, after := string(r[:pos]), ""
-	cur := " "
-	if pos < len(r) {
-		cur = string(r[pos])
-		after = string(r[pos+1:])
-	}
-	line := "> " + before + renamePromptCursor.Render(cur) + after
+	line := "> " + ui.CursorView(m.renameInput, m.renamePos)
 	m.shell.SetContent(ui.ModelContent{
 		Heading: "Rename " + displayPath(m.renamePath),
 		Body: func() string {
@@ -90,10 +77,11 @@ func (m *Model) renderRenamePrompt() {
 	})
 }
 
-// updateRenamePrompt consumes every key while the rename prompt is open,
-// mirroring the explorer prompt's line editing (arrows, home/end, backspace,
-// delete). Enter renames through the explorer's fileops so the operation
-// lands on the shared undo/redo stack.
+// updateRenamePrompt consumes every key while the rename prompt is open.
+// Enter renames through the explorer's fileops so the operation lands on the
+// shared undo/redo stack; every other key is line editing via ui.EditKey
+// (#2002), which is what gives the field word motions, word/line kills and
+// the macOS opt/cmd chords.
 func (m Model) updateRenamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	closePrompt := func() {
 		m.renamePath = ""
@@ -101,7 +89,6 @@ func (m Model) updateRenamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.renamePos = 0
 		m.shell.Close()
 	}
-	r := []rune(m.renameInput)
 	switch {
 	case msg.Code == tea.KeyEscape:
 		closePrompt()
@@ -117,31 +104,9 @@ func (m Model) updateRenamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		*exp, cmd = exp.Update(explorer.RenamePathMsg{Path: path, Name: name})
 		return m, cmd
-	case msg.Code == tea.KeyLeft:
-		if m.renamePos > 0 {
-			m.renamePos--
-		}
-	case msg.Code == tea.KeyRight:
-		if m.renamePos < len(r) {
-			m.renamePos++
-		}
-	case msg.Code == tea.KeyHome:
-		m.renamePos = 0
-	case msg.Code == tea.KeyEnd:
-		m.renamePos = len(r)
-	case msg.Code == tea.KeyBackspace:
-		if m.renamePos > 0 {
-			m.renameInput = string(append(r[:m.renamePos-1:m.renamePos-1], r[m.renamePos:]...))
-			m.renamePos--
-		}
-	case msg.Code == tea.KeyDelete:
-		if m.renamePos < len(r) {
-			m.renameInput = string(append(r[:m.renamePos:m.renamePos], r[m.renamePos+1:]...))
-		}
-	case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
-		ins := []rune(msg.Text)
-		m.renameInput = string(append(append(append([]rune{}, r[:m.renamePos]...), ins...), r[m.renamePos:]...))
-		m.renamePos += len(ins)
+	}
+	if out, pos, handled, _ := ui.EditKey(msg, m.renameInput, m.renamePos); handled {
+		m.renameInput, m.renamePos = out, pos
 	}
 	m.renderRenamePrompt()
 	return m, nil

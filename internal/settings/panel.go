@@ -89,6 +89,7 @@ type Model struct {
 	writeErr string // inline write/reload error (#891), cleared on the next action
 
 	filtering bool
+	filterCur int // rune cursor inside filter (#2002)
 	filter    string
 
 	// writeScope is the explicit write-target selector (0380, #794): auto
@@ -212,7 +213,7 @@ func (m *Model) Open() {
 	m.hoverCat, m.hoverRow = -1, -1
 	m.followCat, m.followForm = true, true
 	m.filtering = false
-	m.filter, m.notice, m.writeErr = "", "", ""
+	m.filter, m.filterCur, m.notice, m.writeErr = "", 0, "", ""
 	m.editor, m.editorKey = nil, ""
 	m.stack = nil
 }
@@ -561,7 +562,7 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 	switch key.String() {
 	case "esc":
 		if m.filter != "" {
-			m.filter = ""
+			m.filter, m.filterCur = "", 0
 			m.sel = 0
 			return nil
 		}
@@ -823,21 +824,25 @@ func (m *Model) cycleEnum(dir int) tea.Cmd {
 }
 
 // Paste inserts a pasted block into whichever of the panel's own text inputs
-// is active (#1273): the focused detail-column editor when it is text-backed,
-// else the category/entry filter. It returns false when neither is active —
-// the panel is then navigating, and the caller drops the paste rather than
-// typing into a list. Sub-panels and custom pages (the keymap page captures
-// chords, not text) are deliberately not routed.
+// is active (#1273): the topmost sub-panel form when it has one (#2002), the
+// focused detail-column editor when it is text-backed, else the
+// category/entry filter. It returns false when none is active — the panel is
+// then navigating, and the caller drops the paste rather than typing into a
+// list.
 func (m *Model) Paste(text string) (handled bool) {
-	if m.topSub() != nil {
+	if top := m.topSub(); top != nil {
+		// A sub-panel form is the only text input on screen while it is up
+		// (#2002); the ones without a field (chord capture, pickers) simply
+		// do not implement the seam and the paste is dropped.
+		if pe, ok := top.(pasteEditor); ok {
+			return pe.Paste(text)
+		}
 		return false
 	}
 	if m.filtering {
-		out, _, changed := ui.PasteText(m.filter, len([]rune(m.filter)), text)
-		if !changed {
+		if !filterPaste(text, &m.filter, &m.filterCur) {
 			return false
 		}
-		m.filter = out
 		m.sel = 0
 		return true
 	}
@@ -861,17 +866,14 @@ func (m *Model) updateFilter(key tea.KeyPressMsg) tea.Cmd {
 	switch key.Code {
 	case tea.KeyEscape:
 		m.filtering = false
-		m.filter = ""
+		m.filter, m.filterCur = "", 0
 		m.sel = 0
 	case tea.KeyEnter:
 		m.filtering = false
-	case tea.KeyBackspace:
-		if m.filter != "" {
-			m.filter = m.filter[:len(m.filter)-1]
-		}
 	default:
-		if key.Text != "" {
-			m.filter += key.Text
+		// Shared line editing (#2002) — the byte-sliced backspace here used
+		// to corrupt a multi-byte filter.
+		if _, changed := filterKey(key, &m.filter, &m.filterCur); changed {
 			m.sel = 0
 		}
 	}

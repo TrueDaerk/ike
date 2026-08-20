@@ -29,6 +29,43 @@
 - **Docs**: `/architecture/http-client.md` gains "Capturing values from a
   response"; the user guide gains "Chaining requests: `# @capture`".
 
+## 2026-08-20 (Every text input on the shared ui helpers, #2002)
+
+- **Audit + convention** (`wiki/architecture/text-input.md`, new): every
+  single-line input site in `internal/` listed with its status, the ordering
+  rules for callers (own chords first, `changed` drives side effects,
+  preselect is a caller concern, paste is routed not typed), and the four
+  sites deliberately left hand-rolled with the reason.
+- **Migrated to `ui.EditKey`** — these had hand-rolled a subset of line
+  editing, so word motions, word/line kills and the macOS `opt`/`cmd` chords
+  were missing: the file rename (`internal/app/fileops.go`), symbol rename
+  (`lsprename.go`), JetBrains-keymap (`jbimport_prompt.go`) and OpenAPI
+  (`openapi_import.go`) import prompts, the explorer's name prompt
+  (`internal/explorer/fileops.go`), and the two debug inline editors
+  (`internal/debugpanel/debugpanel.go`, `internal/breakpanel/meta.go`). The
+  four shell prompts also render through `ui.CursorView` now instead of each
+  slicing its own cursor cell.
+- **Gained a cursor** — these were append-only strings, a typo meant retyping
+  from the end: the editor's find/replace panel
+  (`internal/editor/replace_panel.go`, one cursor per field, kept across a
+  `tab` switch), the explorer's speed search (`internal/explorer/search.go`),
+  and the four settings filters (panel-wide, colour page, keymap page, enum
+  editor) via new `filterKey`/`filterPaste`/`filterView` helpers in
+  `internal/settings/textfield.go`. The panel's and keymap page's backspace
+  had been byte-sliced and cut multi-byte filter text in half.
+- **Paste routing filled in** (#1273's remaining gaps): the topmost settings
+  sub-panel form (any `SubPanel` implementing `Paste` — ES, Tools, format,
+  associations, debug map, LSP override, keymap import, venv wizard), the
+  toolchain page's own inputs, the settings filters, and the tool-window
+  panes with a text input (`handlePaste` in `internal/app/inputcoalesce.go`:
+  data viewer, DOM inspector, issues, debug variables, breakpoint
+  refinements). A surface whose input is closed still drops the block rather
+  than letting it leak into a list or the buffer underneath.
+- **Guard** (`internal/ui/inputsweep_test.go`): walks `internal/` and fails on
+  `x += key.Text` / the `key.Text != ""` insertion guard outside
+  `internal/ui`, against a reasoned allowlist; a second test fails when an
+  allowlist entry goes stale.
+
 ## 2026-08-20 (Tool-tab panes are no longer editor slots, #1989)
 
 - **Persistence** (`internal/app/store.go`, `layouts.go`): a tab host holding

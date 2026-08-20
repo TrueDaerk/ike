@@ -268,3 +268,19 @@ func (m *Model) rebuildTheme() {
 	}
 	m.hl = highlight.NewTheme(captures, nil)
 }
+
+// PasteText inserts a pasted block into the open filter line at its cursor
+// (#2002); it reports whether the line consumed it, so a closed line lets the
+// paste fall through.
+func (m *Model) PasteText(text string) bool {
+	if !m.fEditing {
+		return false
+	}
+	out, ncur, changed := ui.PasteText(m.fInput, m.fCur, text)
+	if !changed {
+		return false
+	}
+	m.fInput, m.fCur = out, ncur
+	m.fErr = nil
+	return true
+}

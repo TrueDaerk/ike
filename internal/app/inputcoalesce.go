@@ -249,6 +249,28 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 		inst.HTTP().PasteText(text)
 		return m, nil
 	}
+	// The tool-window panes with a text input of their own (#2002): the data
+	// viewer's filter line, the DOM inspector's selector, the issues filter
+	// and the two debug panels' inline editors. Each reports whether its
+	// input was open; a closed one drops the paste rather than letting it
+	// leak into a list.
+	switch inst.Kind() {
+	case pane.KindData:
+		inst.Data().PasteText(text)
+		return m, nil
+	case pane.KindDOM:
+		inst.DOM().PasteText(text)
+		return m, nil
+	case pane.KindIssues:
+		inst.Issues().PasteText(text)
+		return m, nil
+	case pane.KindDebug:
+		inst.Debug().PasteText(text)
+		return m, nil
+	case pane.KindBreakpoints:
+		inst.Breakpoints().PasteText(text)
+		return m, nil
+	}
 	if inst.Kind() != pane.KindEditor {
 		return m, nil
 	}

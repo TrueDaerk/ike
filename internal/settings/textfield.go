@@ -61,3 +61,28 @@ func (f *textField) Paste(text string) (changed bool) {
 
 // View renders the text with the cursor cell.
 func (f textField) View() string { return ui.CursorView(f.text, f.cur) }
+
+// filterKey applies one key to a page's live filter through ui.EditKey
+// (#2002). The filter columns keep their text in a plain string (every
+// renderer and matcher reads it) plus a rune cursor, so this is the seam that
+// gives them the same editing as textField: a movable cursor, word motions,
+// word/line kills, the macOS opt/cmd chords, and rune-safe backspace.
+func filterKey(key tea.KeyPressMsg, filter *string, cur *int) (handled, changed bool) {
+	out, ncur, handled, changed := ui.EditKey(key, *filter, *cur)
+	if handled {
+		*filter, *cur = out, ncur
+	}
+	return handled, changed
+}
+
+// filterPaste inserts a pasted block into a filter at its cursor.
+func filterPaste(text string, filter *string, cur *int) (changed bool) {
+	out, ncur, changed := ui.PasteText(*filter, *cur, text)
+	if changed {
+		*filter, *cur = out, ncur
+	}
+	return changed
+}
+
+// filterView renders a filter with its cursor cell.
+func filterView(filter string, cur int) string { return ui.CursorView(filter, cur) }

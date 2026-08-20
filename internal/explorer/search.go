@@ -38,6 +38,7 @@ func (SearchMsg) explorerMsg() {}
 // value-receiver Update/View copies share it, mirroring prompt.
 type searchState struct {
 	query string
+	pos   int // rune cursor inside query (#2002)
 	prev  int // cursor row when the search opened; esc returns here
 }
 
@@ -70,18 +71,20 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) {
 		}
 	case msg.Code == tea.KeyEnter:
 		m.search = nil // accept: the cursor stays on the match
-	case msg.Code == tea.KeyBackspace:
-		if r := []rune(s.query); len(r) > 0 {
-			s.query = string(r[:len(r)-1])
-		}
-		m.searchJump()
 	case msg.String() == "ctrl+n" || msg.Code == tea.KeyDown:
 		m.searchStep(1)
 	case msg.String() == "ctrl+p" || msg.Code == tea.KeyUp:
 		m.searchStep(-1)
-	case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
-		s.query += msg.Text
-		m.searchJump()
+	default:
+		// Everything else is shared line editing (#2002): a movable cursor
+		// with word motions, word/line kills and the macOS opt/cmd chords.
+		// ctrl+n / ctrl+p above keep priority over anything EditKey binds.
+		if out, pos, handled, changed := ui.EditKey(msg, s.query, s.pos); handled {
+			s.query, s.pos = out, pos
+			if changed {
+				m.searchJump()
+			}
+		}
 	}
 }
 
@@ -189,14 +192,14 @@ func searchMatchRange(name, query string) (start, end int, ok bool) {
 
 // searchLine renders the speed-search input for the pane's last row,
 // mirroring the editor's "/" command line: the slash prefix, the query with a
-// block cursor at its end (ui.CursorView), and a dim match counter ("3/17",
+// block cursor at the edit position (ui.CursorView), and a dim match counter ("3/17",
 // or "no matches" in the Error colour). Truncated to the pane width like
 // every footer line.
 func (m Model) searchLine() string {
 	s := m.search
 	pal := m.theme()
 	counter := ""
-	line := "/" + ui.CursorView(s.query, len([]rune(s.query)))
+	line := "/" + ui.CursorView(s.query, s.pos)
 	if s.query != "" {
 		matches := m.searchMatches()
 		dim := lipgloss.NewStyle().Foreground(pal.InlayHint)

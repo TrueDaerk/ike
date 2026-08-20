@@ -43,6 +43,7 @@ type KeymapPage struct {
 	host      SubPanelHost
 	off       int // list scroll offset (#537)
 	filter    string
+	filterCur int  // rune cursor inside filter (#2002)
 	filtering bool // "/" opened the filter input; every key is filter text
 
 	conflict string // colliding command id awaiting confirmation
@@ -267,8 +268,10 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			return config.RemoveAndReload(k.opts, config.UserScope, k.overrideKeyFor(b))
 		}
 	case "backspace":
-		if k.filter != "" {
-			k.filter = k.filter[:len(k.filter)-1]
+		// List mode: backspace shortens the filter from the end. The typed
+		// filter itself is edited in filter mode ("/"), through ui.EditKey.
+		if r := []rune(k.filter); len(r) > 0 {
+			k.filter, k.filterCur = string(r[:len(r)-1]), len(r)-1
 			k.sel = 0
 		}
 	case "/":
@@ -289,28 +292,36 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 }
 
 // updateFilter handles keys while the filter input is open: enter keeps the
-// filter and returns to the list, esc clears it, backspace edits, printable
-// text appends verbatim.
+// filter and returns to the list, esc clears it, everything else is shared
+// line editing via ui.EditKey (#2002).
 func (k *KeymapPage) updateFilter(key tea.KeyPressMsg) tea.Cmd {
 	switch key.Code {
 	case tea.KeyEscape:
 		k.filtering = false
-		k.filter = ""
+		k.filter, k.filterCur = "", 0
 		k.sel = 0
 	case tea.KeyEnter:
 		k.filtering = false
-	case tea.KeyBackspace:
-		if k.filter != "" {
-			k.filter = k.filter[:len(k.filter)-1]
-			k.sel = 0
-		}
 	default:
-		if key.Text != "" {
-			k.filter += key.Text
+		if _, changed := filterKey(key, &k.filter, &k.filterCur); changed {
 			k.sel = 0
 		}
 	}
 	return nil
+}
+
+// Paste inserts into the page's live filter while it is open (#2002). The
+// page otherwise captures chords, not text, so there is nothing to paste
+// into.
+func (k *KeymapPage) Paste(text string) bool {
+	if !k.filtering {
+		return false
+	}
+	if !filterPaste(text, &k.filter, &k.filterCur) {
+		return false
+	}
+	k.sel = 0
+	return true
 }
 
 // commitImport runs the JetBrains keymap import for the typed path: the
@@ -433,7 +444,7 @@ func (k *KeymapPage) renderList(w, h int) string {
 	head := " chord · command"
 	switch {
 	case k.filtering:
-		head += "   filter: " + k.filter + "▌"
+		head += "   filter: " + filterView(k.filter, k.filterCur)
 	case k.filter != "":
 		head += "   filter: " + k.filter
 	default:
