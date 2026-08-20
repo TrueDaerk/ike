@@ -102,11 +102,12 @@ func TestJQPlaygroundTypingReEvaluates(t *testing.T) {
 	}
 }
 
-// TestJQPlaygroundSeedsFromCaretPath: the caret's jq path (#1660) prefills
-// the query line, so "the value I was looking at" is already a program.
-func TestJQPlaygroundSeedsFromCaretPath(t *testing.T) {
+// jqCaretApp opens a JSON file with the caret parked on the "name" key, whose
+// document path is .spec.name — the input the two path-seeding cases need.
+func jqCaretApp(t *testing.T) Model {
+	t.Helper()
 	noDebounce(t)
-	// The seed reads the caret's document path, which needs the buffer's
+	// The path seed reads the caret's document path, which needs the buffer's
 	// language id — and internal/app does not pull in the language plugins
 	// the shipped binary registers. A bare entry under a test-only extension
 	// is enough: it keeps every other .json-opening test in this package on
@@ -119,11 +120,83 @@ func TestJQPlaygroundSeedsFromCaretPath(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{\n  \"spec\": {\n    \"name\": \"ike\"\n  }\n}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Park the caret on the "name" key, whose path is .spec.name.
 	tm, cmd := m.openPathAt(path, 2, 6)
-	m = openJQ(t, drainCmd(tm.(Model), cmd))
+	return drainCmd(tm.(Model), cmd)
+}
+
+// TestJQPlaygroundAtPathSeedsFromCaret: json.jqPlaygroundAtPath prefills the
+// query line with the caret's jq path (#1660), which is what the separate
+// command exists for (#1982).
+func TestJQPlaygroundAtPathSeedsFromCaret(t *testing.T) {
+	m := jqCaretApp(t)
+	tm, cmd := m.Update(OpenJQPlaygroundAtPathMsg{})
+	m = drainCmd(tm.(Model), cmd)
+	if !m.jqPlayOpen() {
+		t.Fatal("json.jqPlaygroundAtPath must open the playground")
+	}
 	if got := m.jqPlay.program; got != ".spec.name" {
 		t.Errorf("seeded program = %q, want the caret's jq path", got)
+	}
+}
+
+// TestJQPlaygroundOpensOnIdentity: the ordinary open does *not* prefill the
+// caret's path any more (#1982) — a fresh file starts on `.`, so checking
+// something needs no deleting first.
+func TestJQPlaygroundOpensOnIdentity(t *testing.T) {
+	m := openJQ(t, jqCaretApp(t))
+	if got := m.jqPlay.program; got != "." {
+		t.Errorf("seeded program = %q, want the identity program", got)
+	}
+}
+
+// TestJQPlaygroundRecallsLastProgramPerFile: a program that ran cleanly over a
+// file is what the next open over that same file starts on, while another file
+// still opens on `.` (#1982).
+func TestJQPlaygroundRecallsLastProgramPerFile(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"foo":{"bar":1}}`))
+	m = runJQProgram(m, ".foo.bar")
+	m = closeJQ(m)
+
+	m = openJQ(t, m)
+	if got := m.jqPlay.program; got != ".foo.bar" {
+		t.Errorf("reopened on %q, want the file's last valid program", got)
+	}
+	m = closeJQ(m)
+
+	// A second file in the same session has its own memory — and none yet, so
+	// it opens on the identity program even though the history is shared.
+	pathB := filepath.Join(t.TempDir(), "other.json")
+	if err := os.WriteFile(pathB, []byte(`{"b":2}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm, cmd := m.openPath(pathB, false)
+	m = openJQ(t, drainCmd(tm.(Model), cmd))
+	if got := m.jqPlay.program; got != "." {
+		t.Errorf("fresh file opened on %q, want the identity program", got)
+	}
+}
+
+// closeJQ leaves the playground with esc, dismissing the completion popup
+// first when typing left one open (#1979) — esc would only close that.
+func closeJQ(m Model) Model {
+	m = dismissJQPopup(m)
+	return drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+}
+
+// TestJQPlaygroundDoesNotRecallBrokenProgram: only a program that actually ran
+// is remembered — a compile error leaves the last good one in place (#1982).
+func TestJQPlaygroundDoesNotRecallBrokenProgram(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"foo":1}`))
+	m = runJQProgram(m, ".foo")
+	m = setProgram(m, ".foo[")
+	if m.jqPlay.result.Err == "" {
+		t.Fatal("the broken program must report a compile error")
+	}
+	m = closeJQ(m)
+
+	m = openJQ(t, m)
+	if got := m.jqPlay.program; got != ".foo" {
+		t.Errorf("reopened on %q, want the last program that ran", got)
 	}
 }
 
@@ -366,8 +439,11 @@ func TestJQPlaygroundHistory(t *testing.T) {
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = openJQ(t, m)
+	// The reopen seeds this file's last valid program, ".b" (#1982), so the
+	// first ↑ skips it and offers the entry before it — the history is still
+	// there, and it is still the session-wide one.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.jqPlay.program; got != ".b" {
+	if got := m.jqPlay.program; got != ".a" {
 		t.Errorf("the history must outlive the dialog, got %q", got)
 	}
 }
@@ -415,8 +491,11 @@ func TestJQPlaygroundHistorySkipsSeededProgram(t *testing.T) {
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
 
 	m = openJQ(t, m)
-	// Reopening seeds "." here; pretend the caret seeded the last program.
-	m.jqPlay.program, m.jqPlay.pos = ".b", len(".b")
+	// Reopening seeds the file's last valid program, ".b" (#1982) — which is
+	// exactly the newest history entry the first ↑ has to step over.
+	if got := m.jqPlay.program; got != ".b" {
+		t.Fatalf("reopen seeded %q, want the last program run on the file", got)
+	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
 	if got := m.jqPlay.program; got != ".a" {
 		t.Errorf("↑ over the seeded program = %q, want the entry before it", got)
