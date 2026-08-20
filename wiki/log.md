@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-20 (jq playground opens on `.`, recalls the file's last program, #1982)
+
+- **No cursor-path prefill by default** (`internal/app/jqplayground.go`):
+  `json.jqPlayground` opens the query line on `.` instead of the caret's jq
+  path. Most openings only check something, so the prefilled path was a
+  deletion to perform before typing the program actually wanted.
+- **Per-input recall**: every run that comes back without an error records its
+  program under the input's key (file path, unsaved buffer's editor key,
+  response pane key) in `Model.jqLastProgram`, and the next open over that
+  input seeds it. Failing programs and `.` are not recorded, so a half-typed
+  one never displaces the last one that worked. In memory for the session,
+  like the program history — which stays one shared, buffer-agnostic list:
+  it answers "what did I run recently, anywhere", the recall answers "where
+  was I in this file".
+- **The old behavior as its own command**: `json.jqPlaygroundAtPath` ("jq
+  Playground at Cursor Path…", palette + Tools menu) opens the same mode
+  seeded with the caret's jq path (#1660), falling back to `.` when the caret
+  has none or the input is a selection/response body.
+- **Docs**: `/architecture/jq-playground.md` gains a "What the query line
+  opens on" section; docgen refreshed for the new command.
+
 ## 2026-08-20 (Markdown list continuation lines align with the item text, #1975)
 
 - **List continuations** (`internal/editor/mdlist.go`): a list item's

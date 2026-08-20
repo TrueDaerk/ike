@@ -370,8 +370,15 @@ type Model struct {
 	// session-wide list, so the history is the same whichever buffer or
 	// response pane the mode was opened over — and no exit path can drop
 	// entries by failing to copy them back.
-	jqPlay    *jqPlayState
-	jqHistory *jqplay.History
+	// jqLastProgram remembers, per queried input (file path, unsaved buffer,
+	// response pane), the last program that ran against it without an error
+	// (#1982). The ordinary open prefills it instead of `.`, so reopening a
+	// file resumes the look that was interrupted — something the one shared,
+	// buffer-agnostic history cannot express. In memory for the session, like
+	// the history itself.
+	jqPlay        *jqPlayState
+	jqHistory     *jqplay.History
+	jqLastProgram map[string]string
 
 	renamePos int
 	// layoutSaveOpen marks the window.saveLayout name prompt (#1175) while the
@@ -961,7 +968,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		toolchainSeg:   map[string]string{},
 		liveImages:     map[int]bool{},
 		navHist:        &nav.History{},
-		jqHistory:      &jqplay.History{}, // one session-wide jq program list (#1977)
+		jqHistory:      &jqplay.History{},   // one session-wide jq program list (#1977)
+		jqLastProgram:  map[string]string{}, // per-file last valid jq program (#1982)
 		compMRU:        mru.Load(mru.DefaultFile()),
 		bpts:           debug.Load(),
 		host:           h,
@@ -4756,8 +4764,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case OpenJQPlaygroundMsg:
 		// json.jqPlayground (palette / Tools menu, #1936): the jq query
 		// line, mounted inline in the JSON buffer or HTTP response pane at
-		// hand (#1970).
-		return m, m.startJQPlayground()
+		// hand (#1970), on `.` or this input's last valid program (#1982).
+		return m, m.startJQPlayground(false)
+
+	case OpenJQPlaygroundAtPathMsg:
+		// json.jqPlaygroundAtPath (palette / Tools menu, #1982): the same
+		// mode, prefilled with the caret's jq path (#1660).
+		return m, m.startJQPlayground(true)
 
 	case jqParseDoneMsg:
 		// The input snapshot finished parsing off the event loop (#1936).
