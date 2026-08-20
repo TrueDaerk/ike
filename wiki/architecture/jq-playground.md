@@ -206,6 +206,20 @@ The spatial focus keys (default ctrl+arrows) work from both the query line and
 the result buffer: they move the focus out of the pane with the playground
 still mounted (#1980).
 
+**Global-scope chords keep working** (#1983): a key the playground leaves over
+resolves against the Global scope of the live binding table and dispatches its
+command — `cmd+shift+a` opens Search Everywhere, `cmd+e` opens Recent Files,
+and every other Global binding that does not collide with the mode's own keys
+behaves as it would in any pane. From the query line that is any key neither
+the mode nor the single-line editing claims; from the result buffer only
+modified chords (ctrl/alt/cmd) are eligible — plain and shift-only keys stay
+with the buffer as motions, search input and prompt text, the same rule the
+main dispatch applies to a capturing editor. Local keys keep priority where
+they collide, pane-scoped bindings never fire (the mode replaces the pane's
+component, so its context keys would act on a hidden editor), and multi-step
+chords are left alone — resolving them would mean buffering query input, the
+same trade the terminal makes (#805).
+
 A bracketed paste always lands in the query line, **flattened** to one line,
 like every other single-field prompt — the result buffer refuses pastes with
 everything else.

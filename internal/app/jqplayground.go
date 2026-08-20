@@ -481,6 +481,14 @@ func (m Model) updateJQPlayground(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	out, pos, handled, changed := ui.EditKey(msg, s.program, s.pos)
 	if !handled {
+		// A key neither the mode nor the query line claims resolves against
+		// the Global keymap scope (#1983), so cmd+shift+a (Search Everywhere),
+		// cmd+e (Recent Files) and the other IDE-level chords keep working
+		// like in any pane. Local keys already returned above, so they keep
+		// priority where they collide.
+		if ok, cmd := m.jqGlobalChord(msg); ok {
+			return m, cmd
+		}
 		return m, nil
 	}
 	s.program, s.pos = out, pos
@@ -526,6 +534,17 @@ func (m Model) updateJQBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
+	// Modified chords the result actions leave over resolve against the
+	// Global keymap scope (#1983) before the buffer sees them — the same
+	// eligibility rule the main dispatch applies to a capturing editor.
+	// Plain and shift-only keys stay with the buffer: they are motions,
+	// search input and typed prompt text.
+	if k, ok := keymap.FromKeyMsg(msg); ok &&
+		(k.Has(keymap.ModCtrl) || k.Has(keymap.ModAlt) || k.Has(keymap.ModMeta)) {
+		if handled, cmd := m.jqGlobalChord(msg); handled {
+			return m, cmd
+		}
+	}
 	var cmd tea.Cmd
 	*s.resultEd, cmd = s.resultEd.Update(msg)
 	return m, cmd
@@ -547,6 +566,33 @@ func (m Model) jqCopyChord(msg tea.KeyPressMsg) bool {
 	chord := keymap.Chord{Steps: []keymap.Key{k}}
 	b, found := m.bindings.Table().Lookup(chord, keymap.Context(editor.ContextID))
 	return found && b.Command == "editor.copy"
+}
+
+// jqGlobalChord resolves a single-step chord against the Global scope of the
+// live binding table and dispatches its command (#1983). The playground owns
+// the keyboard while its pane is focused, so without this a chord like
+// cmd+shift+a would never reach the keymap layer. Only keys the playground
+// leaves over get here — its own keys keep priority — and only Global-scope
+// bindings fire: a pane-scoped binding belongs to the pane the mode replaces,
+// not to the playground. Multi-step chords cannot resolve without buffering
+// query input and are left alone, the same trade the terminal makes (#805).
+func (m Model) jqGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+	if m.bindings == nil || m.bindings.Table() == nil {
+		return false, nil
+	}
+	k, ok := keymap.FromKeyMsg(msg)
+	if !ok {
+		return false, nil
+	}
+	chord := keymap.Chord{Steps: []keymap.Key{k}}
+	b, found := m.bindings.Table().Lookup(chord, keymap.Global)
+	if !found {
+		return false, nil
+	}
+	if c, okc := m.reg.Command(b.Command); okc {
+		return true, m.dispatchCommand(b.Command, c)
+	}
+	return false, nil
 }
 
 // pasteJQPlayground inserts a bracketed paste into the query line, flattened:
