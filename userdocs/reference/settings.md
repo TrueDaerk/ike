@@ -177,6 +177,7 @@ secrets — are documented together, with screenshots, in
 | Auto reload | `files.auto_reload` | enum: `clean`, `never` | `clean` | user | Reload clean buffers when their file changes on disk |
 | Persistent undo | `files.persistent_undo` | boolean | `true` | user | Keep undo history across restarts while the file is unchanged |
 | Large file threshold (KB) | `files.large_file_kb` | integer | `1024` | user | Above this size, highlighting and language features are disabled for the file (#149); 0 disables the size guard. Applies to subsequently opened or reloaded files |
+| External-change feed size | `files.change_feed_limit` | integer (0–5000) | `200` | user | How many externally changed files the change feed (watch.changeFeed) keeps for the session, oldest dropped first; 0 turns the feed off. It records writes by other processes — a coding agent, a git checkout, a formatter in a tool pane — never IKE's own saves |
 | Large file threshold (lines) | `files.large_file_lines` | integer | `100000` | user | Above this line count, highlighting and language features are disabled for the file (#149); 0 disables the line guard. Applies to subsequently opened or reloaded files |
 
 ### Backup

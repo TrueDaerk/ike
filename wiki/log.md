@@ -25,6 +25,60 @@
   Browsing): the download cap, enforced against the listing size before any
   bytes move and again during the fetch.
 - Wiki: [Remote File Browsing (SFTP)](/architecture/remote-browsing.md).
+## 2026-08-20 (Agent change feed, #2000)
+
+- **`internal/changefeed`** (new): the session-scoped record of files changed
+  by something other than IKE, as pure data — no I/O, no clock, no config, so
+  ordering, coalescing and the caps stay testable without a filesystem. An
+  `Entry` is one *file*: path, time, kind (changed/created/removed), a repeat
+  count, and the pre-change content with the `Origin` that produced it
+  (`FromBuffer`, `FromSnapshot`, `NoBefore`, `Dropped`). `Add` coalesces per
+  path — the row moves back to the front, counts up, and keeps the content it
+  was *first* recorded with, because reverting an agent's fifth rewrite means
+  restoring what the file held before the first one. Kinds merge like the
+  watcher's (removal wins; a created file stays created). Two caps: `Limit`
+  bounds the rows, and `MaxBytes` bounds the retained pre-change content across
+  all entries — past it the oldest entries release their content and go
+  `Dropped`, keeping their row. Without the byte cap a batch over large files
+  grew the session's memory with every write; without keeping the row the user
+  would silently lose the fact that the file was touched.
+- **`internal/watch`**: `Ignored(root, path)` exports the rule the recursive
+  walk already prunes with, judged on the segments *below* the root (so a
+  project under `~/.config` is not wholesale ignored), plus `Root()` for the
+  root it is relative to. Exported rather than re-derived, so a consumer
+  filtering watcher-derived lists cannot drift from what the watcher actually
+  descends into.
+- **`internal/app/changefeed.go`** (new): `recordChangeFeed` runs from the
+  `watch.EventMsg` case *before* the event is routed onward — the auto-reload
+  it triggers would otherwise overwrite the buffer the pre-change content is
+  read from. Own saves are dropped twice over (the watcher's save epoch, then a
+  `SavedRecently` re-check); non-file kinds never enter. The "before" side is
+  the open, unmodified buffer where there is one — a dirty or stale buffer holds
+  text that was never on disk, so the newest local-history snapshot (#1023) is
+  the fallback. `watch.changeFeed` ("Show External Changes") raises the floating
+  two-pane panel (#1969's layout): files newest-first left — kind marker,
+  humanized age, name, then directory, name first because the column truncates
+  at half the panel — and the selected entry's mini-diff right, its captured
+  content against what the file holds *now*. The list is live: an event landing
+  while the panel is open folds in, with the selection re-found by path rather
+  than sliding down as rows prepend.
+- **Actions:** `enter` opens, `d` sends the pair to the reusable diff pane
+  (#60), `R` reloads the buffer (the conflicted case — a clean buffer has
+  usually auto-reloaded already), `x` dismisses a row, `c` clears the feed, and
+  `r` reverts **behind a confirmation**. An existing file is restored into its
+  buffer through the local-history restore path (one undoable edit, dirty
+  buffer, disk untouched until the save), so a revert is never itself
+  destructive; a file deleted externally has no buffer to restore into, so its
+  content is written back and opened, stamping the save epoch so the restore
+  does not echo into the feed. A created file offers no revert — there is no
+  previous version to invent. An action that cannot apply notifies and leaves
+  the panel up rather than closing the list to toast a refusal. The command
+  also sits in **View → External Changes**.
+- **Config:** `files.change_feed_limit` (Settings → Files) caps the list; 0
+  turns the feed off and clears it, since an off switch must not leave a stale
+  list behind. Read on every recorded event, so a change takes effect at once.
+- **Docs:** new concept doc `/architecture/change-feed.md`, indexed; the
+  foundation doc's watcher section notes the exported ignore rule and the feed.
 
 ## 2026-08-20 (Built-in performance HUD, #1999)
 

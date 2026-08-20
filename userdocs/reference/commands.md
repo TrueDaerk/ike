@@ -199,6 +199,7 @@ bring their own.
 | Revert Hunk Under Caret | `vcs.revertHunk` | — | — | everywhere |
 | Undo Revert… | `vcs.undoRevert` | — | — | everywhere |
 | Zen Mode | `view.zenMode` | `ctrl+alt+f` | — | everywhere |
+| Show External Changes | `watch.changeFeed` | — | — | everywhere |
 | Hide All Tool Windows | `window.hideAllTools` | `cmd+shift+f12` | — | everywhere |
 | Window Layouts… | `window.layouts` | — | — | everywhere |
 | Restore Default Layout | `window.restoreLayout` | `shift+f12` | — | everywhere |
