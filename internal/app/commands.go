@@ -7,6 +7,7 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/host"
+	"ike/internal/intention"
 	"ike/internal/layout"
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -380,6 +381,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 		SettingsPages: []settings.Page{
 			{Title: "Elasticsearch", Custom: settings.NewESPage(config.Discover("."))},
 		},
+		// The built-in intention catalog (#2020): caret-dependent doorways
+		// into the commands above, merged into alt+enter's popup.
+		Intentions: intention.Builtins(),
 		Commands: append(append(cmds,
 			appCommand("palette.keymapHelp", "Keymap Cheatsheet", ShowKeymapHelpMsg{}),
 			appCommand("help.welcomeTour", "Welcome Tour", ShowWelcomeTourMsg{}),
@@ -456,6 +460,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.importOpenAPI", "Import OpenAPI Spec…", ImportOpenAPIMsg{}),
 			appCommand("http.importCurl", "Import curl Command…", ImportCurlMsg{}),
 			appCommand("http.copyAsCurl", "Copy HTTP Request as curl", HTTPCopyAsCurlMsg{}),
+			appCommand("http.insertCurlAsRequest", "Insert curl as HTTP Request", InsertCurlAsRequestMsg{}),
 			appCommand("http.cancel", "Cancel Running HTTP Request", HTTPCancelMsg{}),
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
 			appCommand("debug.breakpoints", "Breakpoints", BreakpointsToggleMsg{}),

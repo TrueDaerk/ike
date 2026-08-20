@@ -4,7 +4,7 @@ title: Plugin Extension Contract
 description: Compile-in plugin registry — the extension points (Command, Keymap, Pane, FileHandler, Hook), the host API, and how the root model consumes them.
 resource: internal/plugin/plugin.go
 tags: [architecture, plugins, extension, bubbletea]
-timestamp: 2026-07-17T00:00:00Z
+timestamp: 2026-08-20T12:00:00Z
 ---
 
 # Plugin Extension Contract
@@ -55,6 +55,12 @@ returns them all from `Capabilities()`:
   every command dispatch with the command id as payload, #679). App-internal
   consumers can instead observe the equivalent `CommandExecutedMsg` in the
   Update loop without registering a hook.
+- **Intentions** (`[]intention.Provider`, #2020) — caret-dependent
+  intention-action providers: alt+enter snapshots the caret into an
+  `intention.Context`, queries every registered provider and merges the
+  applicable items into the code-action popup. Each item names a registered
+  Command, so a provider contributes visibility, never new behavior. See
+  [intention-actions](./intention-actions.md).
 
 ### Scope and pane context
 

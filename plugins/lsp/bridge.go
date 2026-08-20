@@ -959,14 +959,20 @@ func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, newNa
 }
 
 // codeAction lists the actions available at the cursor (or the active visual
-// selection) and asks the app to show the picker; the chosen action applies
-// its WorkspaceEdit (workspace_edit.go) and/or executes its command, whose
-// effects come back as workspace/applyEdit.
+// selection) and asks the app to show the intention picker; the chosen action
+// applies its WorkspaceEdit (workspace_edit.go) and/or executes its command,
+// whose effects come back as workspace/applyEdit.
+//
+// Every path delivers a CodeActionsMsg with Intentions set (#2020) — even
+// with no server attached, no request position, or an empty/failed reply —
+// because the app merges the built-in intention providers into the same
+// popup and owns the "no code actions here" verdict for the merged list.
 func (b *bridge) codeAction(h host.API) tea.Cmd {
 	b.ensure(h)
 	path, line, col := b.cur()
 	mgr := b.manager()
 	if path == "" || mgr == nil {
+		h.Send(ilsp.CodeActionsMsg{Path: path, Intentions: true})
 		return nil
 	}
 	start := buffer.Position{Line: line, Col: col}
@@ -978,10 +984,8 @@ func (b *bridge) codeAction(h host.API) tea.Cmd {
 	go func() {
 		actions, err := mgr.CodeActions(context.Background(), path, start, end, diags)
 		if requestFailed(h, "code actions", err) {
-			return
-		}
-		if len(actions) == 0 {
-			h.Send(ilsp.ServerStatusMsg{Text: "no code actions here", Kind: ilsp.ServerEventInfo})
+			// The failure toast reported already; the built-ins still apply.
+			h.Send(ilsp.CodeActionsMsg{Path: path, Intentions: true})
 			return
 		}
 		choices := make([]ilsp.CodeActionChoice, len(actions))
@@ -989,8 +993,9 @@ func (b *bridge) codeAction(h host.API) tea.Cmd {
 			choices[i] = ilsp.CodeActionChoice{Title: a.Title, Kind: a.Kind, Preferred: a.IsPreferred}
 		}
 		h.Send(ilsp.CodeActionsMsg{
-			Path:    path,
-			Actions: choices,
+			Path:       path,
+			Actions:    choices,
+			Intentions: true,
 			Apply: func(i int) tea.Cmd {
 				if i < 0 || i >= len(actions) {
 					return nil

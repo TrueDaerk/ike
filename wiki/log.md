@@ -1,5 +1,33 @@
 # Log
 
+## 2026-08-20 (Intention actions: context-aware built-ins merged into alt+enter, #2020)
+
+- **`internal/intention`** (new): the intention-action seam — `Context` (caret
+  snapshot: position, language, line access, precomputed caret facts), `Item`
+  (`{Title, Kind, CommandID}`, always a registered command), `Provider` (pure
+  `Items(Context)`), plus the built-in catalog (`Builtins()`): doc-path
+  copies + jq playground, `.http` request actions, curl→request insert, JWT
+  decode, conceal explain + family toggle, ignore-diagnostic, VCS
+  hunk/conflict/blame/history, run/debug test, toggle value, compare with
+  clipboard.
+- **Seam wiring**: `plugin.Capabilities.Intentions` +
+  `registry.IntentionProviders()` (dedup, deterministic order) — providers
+  are a plugin capability; the catalog ships through the `app` plugin, the
+  LSP plugin contributes a capability-gated "Rename Symbol"
+  (`Manager.RenameSupported`, new).
+- **Flow**: `lsp.codeAction` (id kept, retitled "Show Intention Actions")
+  always delivers `CodeActionsMsg{Intentions: true}` — no manager, empty or
+  failed reply included; the app merges (★ preferred LSP → LSP → built-ins
+  grouped by kind), opens the picker **anchored at the caret**
+  (`caretPopupAnchor`), and owns the "no code actions here" toast for the
+  merged list. Code-lens picker unchanged (centered).
+- **`http.insertCurlAsRequest`** (new command): caret curl line (+
+  backslash continuations) through the #1994 parser — replaced in place in an
+  `.http` buffer, else into a fresh scratch `.http`; ignored-flags warning
+  preserved.
+- New editor probes (`internal/editor/intentions.go`), `concealfilter.IsFamily`.
+  Added the Intention Actions concept doc; updated the LSP and Plugins docs.
+
 ## 2026-08-20 (OpenAPI import from a URL, #2009)
 
 - **`internal/openapi/fetch.go`** (new): `openapi.Discover` resolves an

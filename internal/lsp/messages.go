@@ -460,6 +460,12 @@ type CodeActionsMsg struct {
 	Path    string
 	Actions []CodeActionChoice
 	Apply   func(index int) tea.Cmd
+	// Intentions marks the alt+enter flow (#2020): the app merges the offer
+	// with the built-in intention providers and opens the picker anchored at
+	// the caret — Actions may then be empty (no server, or nothing offered),
+	// the built-ins still show. The code-lens picker leaves it false and
+	// keeps the plain centered list.
+	Intentions bool
 }
 
 // SignatureHelpMsg delivers call-signature info for the cursor-anchored popup

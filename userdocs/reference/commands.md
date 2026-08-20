@@ -97,6 +97,7 @@ bring their own.
 | Compare Stored HTTP Responses | `http.diffResponses` | — | — | everywhere |
 | Import curl Command… | `http.importCurl` | — | — | everywhere |
 | Import OpenAPI Spec… | `http.importOpenAPI` | — | — | everywhere |
+| Insert curl as HTTP Request | `http.insertCurlAsRequest` | — | — | everywhere |
 | Re-send Stored HTTP Request | `http.resend` | — | — | everywhere |
 | Browse HTTP Response History | `http.responseHistory` | — | — | everywhere |
 | Run HTTP Request | `http.run` | `ctrl+f9` | — | everywhere |
@@ -332,7 +333,7 @@ bring their own.
 | Command | ID | Chord | In the editor | Available in |
 |---|---|---|---|---|
 | LSP: Call Hierarchy | `lsp.callHierarchy` | `ctrl+alt+h` | — | `editor` pane |
-| LSP: Show Intention Actions | `lsp.codeAction` | `alt+enter` | — | `editor` pane |
+| Show Intention Actions | `lsp.codeAction` | `alt+enter` | — | `editor` pane |
 | LSP: Run Code Lens | `lsp.codeLens` | — | — | `editor` pane |
 | LSP: Go to Definition | `lsp.definition` | `f4` | — | `editor` pane |
 | LSP: Diagnostic Under Caret | `lsp.diagnosticInfo` | `cmd+f1` | — | `editor` pane |

@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	"ike/internal/intention"
 	"ike/internal/settings"
 	"ike/internal/theme"
 )
@@ -40,6 +41,12 @@ type Capabilities struct {
 	// page descriptors the panel renders alongside the built-in pages (used by
 	// the toolchain page and future plugin settings).
 	SettingsPages []settings.Page
+	// Intentions are caret-dependent intention-action providers (#2020):
+	// alt+enter queries every registered provider with the caret context and
+	// merges the applicable items into the code-action popup. Each item names
+	// a registered Command, so a provider contributes visibility, never new
+	// behavior.
+	Intentions []intention.Provider
 }
 
 // Scope constrains where a Command or Keymap applies. A global capability is
