@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/editor"
@@ -163,6 +165,70 @@ func TestJQPlaygroundCapsHugeResult(t *testing.T) {
 	v := ansi.Strip(m.render())
 	if !strings.Contains(v, "stopped at") {
 		t.Errorf("the dialog should mark the capped result, got:\n%s", v)
+	}
+	// The cap is a caveat, not decoration: it renders in the Warning slot,
+	// not the row's dim Hint (#1978).
+	warn := lipgloss.NewStyle().Foreground(m.pal().Warning)
+	if row := m.jqInfoRow(120); !strings.Contains(row, warn.Render(fmt.Sprintf(" (stopped at %d)", jqplay.MaxOutputs))) {
+		t.Errorf("the cap should render in the Warning color, got %q", row)
+	}
+}
+
+// TestJQPlaygroundErrorKeepsValueCount (#1978): a runtime error arriving
+// after values were produced must not hide that count — the values sit in
+// the buffer below the error line.
+func TestJQPlaygroundErrorKeepsValueCount(t *testing.T) {
+	m := openJQ(t, jqApp(t, `[{"x":1},3]`))
+	m = setProgram(m, ".[] | .x")
+	s := m.jqPlay
+	if s.result.Err == "" || len(s.result.Outputs) != 1 {
+		t.Fatalf("want one value then an error, got err=%q outputs=%v", s.result.Err, s.result.Outputs)
+	}
+	row := ansi.Strip(m.jqInfoRow(200))
+	if !strings.HasPrefix(row, "E: ") {
+		t.Errorf("the error must render, got %q", row)
+	}
+	if !strings.Contains(row, "1 value(s) before the error") {
+		t.Errorf("the error row should keep the produced value count, got %q", row)
+	}
+}
+
+// TestJQPlaygroundZeroValuesWarn (#1978): a program yielding nothing blanks
+// the result buffer, so the zero count is the only signal — it renders in
+// Warning, not the row's dim Hint.
+func TestJQPlaygroundZeroValuesWarn(t *testing.T) {
+	m := openJQ(t, jqApp(t, `[1,2,3]`))
+	m = setProgram(m, ".[] | select(. > 9)")
+	if got := m.jqPlay.result.Text(); got != "" {
+		t.Fatalf("result = %q, want empty", got)
+	}
+	warn := lipgloss.NewStyle().Foreground(m.pal().Warning)
+	if row := m.jqInfoRow(120); !strings.Contains(row, warn.Render("Result — 0 value(s)")) {
+		t.Errorf("a zero-value summary should render in Warning, got %q", row)
+	}
+}
+
+// TestJQPlaygroundNarrowInfoRowDropsWholeHints (#1978): on a narrow pane the
+// key hints are dropped as whole segments, never clipped mid-word, and the
+// input/result summary always survives.
+func TestJQPlaygroundNarrowInfoRowDropsWholeHints(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m = setProgram(m, ".")
+	wide := ansi.Strip(m.jqInfoRow(200))
+	if !strings.Contains(wide, "esc close") {
+		t.Fatalf("a wide row should hold every hint, got %q", wide)
+	}
+	narrow := ansi.Strip(m.jqInfoRow(60))
+	if !strings.Contains(narrow, "Result — 1 value(s)") {
+		t.Errorf("the summary must survive a narrow row, got %q", narrow)
+	}
+	if strings.Contains(narrow, "esc close") {
+		t.Errorf("a 60-cell row cannot hold every hint, got %q", narrow)
+	}
+	// Whatever fit is whole segments: the row ends with a complete hint, not
+	// a mid-word cut marked by the truncation ellipsis.
+	if strings.Contains(narrow, "…") {
+		t.Errorf("hints should be dropped whole, not clipped, got %q", narrow)
 	}
 }
 
@@ -628,8 +694,11 @@ func TestJQPlaygroundSurvivesFocusChange(t *testing.T) {
 		t.Fatalf("result = %q, must survive the focus change", got)
 	}
 	v := ansi.Strip(m.render())
-	if !strings.Contains(v, "> jq:") {
+	if !strings.Contains(v, "jq:") {
 		t.Errorf("the unfocused playground must keep rendering, got:\n%s", v)
+	}
+	if strings.Contains(v, "> jq:") {
+		t.Errorf("the unfocused query line must blank its `>` marker (#1978), got:\n%s", v)
 	}
 
 	// Refocusing the hosting pane resumes the query line.

@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/clipboard"
 	"ike/internal/editor"
@@ -752,21 +753,50 @@ func (m Model) jqInlineBody(width int) string {
 // jqInfoRow is the header's second line: an error beats a transient status
 // beats the input/result summary with the key hints. One fixed row — the
 // buffer below must not resize when an error appears mid-keystroke.
+//
+// The row is composed of styled segments (#1978): caps render in Warning so
+// a capped run is not the dimmest thing on the row, a runtime error keeps
+// the count of values produced before it, and the key hints are dropped as
+// whole `·`-separated segments on a narrow pane instead of being cut
+// mid-word. Truncation is cell-aware (ansi.Truncate), so a wide glyph in the
+// source label cannot overflow the row.
 func (m Model) jqInfoRow(width int) string {
 	s := m.jqPlay
 	pal := m.pal()
+	hint := lipgloss.NewStyle().Foreground(pal.Hint)
 	if err := m.jqErrorLine(); err != "" {
-		return lipgloss.NewStyle().Foreground(pal.Error).Render(clip("E: "+err, width))
+		line := lipgloss.NewStyle().Foreground(pal.Error).Render("E: " + err)
+		// A runtime error can arrive after values were produced; they are
+		// sitting in the buffer below, so say so instead of hiding the count.
+		if s.inputErr == "" && len(s.result.Outputs) > 0 {
+			line += hint.Render(fmt.Sprintf(" · %d value(s) before the error", len(s.result.Outputs)))
+		}
+		return ansi.Truncate(line, width, "…")
 	}
 	if s.status != "" {
-		return lipgloss.NewStyle().Foreground(pal.Success).Render(clip(s.status, width))
+		return ansi.Truncate(lipgloss.NewStyle().Foreground(pal.Success).Render(s.status), width, "…")
 	}
-	hint := "tab: result · enter: run · ↑/↓ history · ctrl+y copy · ctrl+o scratch · esc close"
+	line := m.jqInputSegment()
+	if res := m.jqResultSegment(); res != "" {
+		line += hint.Render(" · ") + res
+	}
+	for _, h := range s.jqHints() {
+		seg := hint.Render(" · " + h)
+		if ansi.StringWidth(line)+ansi.StringWidth(seg) > width {
+			break
+		}
+		line += seg
+	}
+	return ansi.Truncate(line, width, "…")
+}
+
+// jqHints is the key-hint tail of the info row, one segment per hint so a
+// narrow pane drops trailing hints whole rather than clipping one mid-word.
+func (s *jqPlayState) jqHints() []string {
 	if s.bufFocus {
-		hint = "tab: query line · ctrl+y copy · ctrl+o scratch · esc close"
+		return []string{"tab query line", "ctrl+y copy", "ctrl+o scratch", "esc close"}
 	}
-	line := m.jqInputLine() + " · " + m.jqResultHeader() + " · " + hint
-	return lipgloss.NewStyle().Foreground(pal.Hint).Render(clip(line, width))
+	return []string{"tab result", "enter run", "↑/↓ history", "ctrl+y copy", "ctrl+o scratch", "esc close"}
 }
 
 // jqErrorLine is the message shown on the info row: a bad input beats a bad
@@ -779,30 +809,40 @@ func (m Model) jqErrorLine() string {
 	return s.result.Err
 }
 
-// jqInputLine names the queried snapshot: where it came from, how big it is
-// and how many top-level values it holds (a `.jsonl` body holds many).
-func (m Model) jqInputLine() string {
+// jqInputSegment names the queried snapshot: where it came from, how big it
+// is and how many top-level values it holds (a `.jsonl` body holds many). A
+// truncated read renders its cap in Warning — the user is seeing less than
+// the buffer holds, which the row's dim Hint color would undersell.
+func (m Model) jqInputSegment() string {
 	s := m.jqPlay
+	pal := m.pal()
+	hint := lipgloss.NewStyle().Foreground(pal.Hint)
 	if s.parsing {
-		return "Input: " + s.source + " — parsing…"
+		return hint.Render("Input: " + s.source + " — parsing…")
 	}
 	if s.input == nil {
-		return "Input: " + s.source
+		return hint.Render("Input: " + s.source)
 	}
 	line := fmt.Sprintf("Input: %s — %s", s.source, humanBytes(int64(s.input.Size())))
 	if n := s.input.Len(); n > 1 {
 		line += fmt.Sprintf(", %d values", n)
 	}
+	out := hint.Render(line)
 	if s.input.Truncated {
-		line += fmt.Sprintf(" (first %d only)", jqplay.MaxInputValues)
+		out += lipgloss.NewStyle().Foreground(pal.Warning).Render(fmt.Sprintf(" (first %d only)", jqplay.MaxInputValues))
 	}
-	return line
+	return out
 }
 
 // jqQueryRow renders the query line, windowed around its cursor and colored
 // by the jq scanner. While the result buffer holds the keyboard — or the
-// focus is on another pane entirely (#1980) — the cursor cell is not drawn:
-// the caret lives elsewhere then.
+// focus is on another pane entirely (#1980) — the cursor cell is not drawn
+// and the `>` marker is blanked, the same inactive affordance the regex
+// tester's and clone prompt's field labels use: an absent cursor alone is
+// too subtle a cue that typing goes elsewhere. The label renders in the
+// chrome's Secondary either way, marking the row as chrome over the pane
+// surface rather than buffer text. Both prefixes are 6 cells, so the window
+// math never changes with focus.
 func (m Model) jqQueryRow(width int) string {
 	s := m.jqPlay
 	avail := width - 8
@@ -810,10 +850,13 @@ func (m Model) jqQueryRow(width int) string {
 		avail = 10
 	}
 	pos := s.pos
+	prefix := "> jq: "
 	if s.bufFocus || !m.jqPlayFocused() {
 		pos = -1
+		prefix = "  jq: "
 	}
-	return "> jq: " + m.jqHighlighted(s.program, pos, avail)
+	label := lipgloss.NewStyle().Foreground(m.pal().Secondary).Render(prefix)
+	return label + m.jqHighlighted(s.program, pos, avail)
 }
 
 // jqHighlighted renders the program clipped to width runes around the cursor,
@@ -877,26 +920,40 @@ func (m Model) jqKindStyles() map[jqplay.Kind]lipgloss.Style {
 	}
 }
 
-// jqResultHeader summarises the evaluation: how many values, the caveats
-// (evaluation in flight, capped output), or why there is nothing to show.
-func (m Model) jqResultHeader() string {
+// jqResultSegment summarises the evaluation: how many values, the caveats
+// (capped output, evaluation in flight), or why there is nothing to show.
+// While a re-run is pending the previous count stays up with an
+// "evaluating…" suffix — replacing it outright made the row shimmer on
+// every keystroke, since pending is set the moment the debounce tick is
+// scheduled. A zero-value result renders in Warning: the buffer below is
+// blank then, and this summary is the only signal that nothing matched. The
+// input-error and after-error cases never reach here — jqInfoRow's error
+// branch owns them.
+func (m Model) jqResultSegment() string {
 	s := m.jqPlay
+	pal := m.pal()
+	hint := lipgloss.NewStyle().Foreground(pal.Hint)
+	warn := lipgloss.NewStyle().Foreground(pal.Warning)
 	switch {
 	case s.parsing:
-		return "Result — parsing the input…"
-	case s.inputErr != "":
-		return "Result — the input is not JSON"
-	case s.pending:
-		return "Result — evaluating…"
+		return "" // the input segment already says so
 	case strings.TrimSpace(s.program) == "":
-		return "Result — no program yet"
+		return hint.Render("Result — no program yet")
 	}
-	out := fmt.Sprintf("Result — %d value(s)", len(s.result.Outputs))
+	n := len(s.result.Outputs)
+	if s.pending && n == 0 {
+		return hint.Render("Result — evaluating…")
+	}
+	st := hint
+	if n == 0 {
+		st = warn
+	}
+	out := st.Render(fmt.Sprintf("Result — %d value(s)", n))
 	if s.result.Truncated {
-		out += fmt.Sprintf(" (stopped at %d)", jqplay.MaxOutputs)
+		out += warn.Render(fmt.Sprintf(" (stopped at %d)", jqplay.MaxOutputs))
 	}
-	if s.result.Err != "" && len(s.result.Outputs) > 0 {
-		out += " before the error"
+	if s.pending {
+		out += hint.Render(" · evaluating…")
 	}
 	return out
 }
