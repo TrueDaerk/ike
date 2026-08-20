@@ -554,6 +554,14 @@ func (m Model) updateJQPlayground(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "ctrl+o":
 		return m.openJQResultAsScratch()
+	case "ctrl+s":
+		// Name the program and keep it (#1995) — json.jqSaveFilter's chord.
+		m.startJQSavePrompt()
+		return m, nil
+	case "ctrl+l":
+		// The saved-filter picker (#1995) — json.jqFilters' chord.
+		m.openJQFilterPicker(false)
+		return m, nil
 	}
 	out, pos, handled, changed := ui.EditKey(msg, s.program, s.pos)
 	if !handled {
@@ -876,7 +884,7 @@ func (s *jqPlayState) jqHints() []string {
 	if s.bufFocus {
 		return []string{"tab query line", "ctrl+y copy", "ctrl+o scratch", "esc close"}
 	}
-	return []string{"tab result", "enter run", "↑/↓ history", "ctrl+y copy", "ctrl+o scratch", "esc close"}
+	return []string{"tab result", "enter run", "↑/↓ history", "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close"}
 }
 
 // jqErrorLine is the message shown on the info row: a bad input beats a bad
