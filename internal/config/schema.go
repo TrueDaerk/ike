@@ -69,6 +69,17 @@ type Config struct {
 	Perf Perf `toml:"perf"`
 	// Remote holds the SFTP remote browser's behaviour (#1997).
 	Remote Remote `toml:"remote"`
+	// Screenshot holds the in-IDE PNG export's behaviour (#2001).
+	Screenshot Screenshot `toml:"screenshot"`
+}
+
+// Screenshot holds the in-IDE screenshot export settings (#2001). Directory
+// is where view.exportScreenshot writes its PNGs: "~" expands, a relative path
+// resolves against the project directory, and an empty value selects the
+// built-in default (~/.ike/screenshots). The directory is created on the first
+// capture, so it need not exist yet.
+type Screenshot struct {
+	Directory string `toml:"directory"`
 }
 
 // Remote holds the SFTP remote browser settings (#1997). MaxFetchMB caps the
