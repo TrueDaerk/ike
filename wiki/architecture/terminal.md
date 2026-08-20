@@ -787,6 +787,10 @@ picker and connects a terminal to the pick — remote work without typing
   error stays readable; the pane closes with `ctrl+w` like any other. Layout
   restore re-spawns it as a plain shell, as it does for every terminal.
 
+The same host list can also be **browsed over SFTP** instead of opening a
+shell (`remote.browse`, #1997) — see
+[Remote File Browsing (SFTP)](./remote-browsing.md).
+
 ## Toolchain environment activation (#98, #652)
 
 The **effective** interpreter per language — the explicit settings-page

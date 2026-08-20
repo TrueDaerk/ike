@@ -87,6 +87,7 @@ func Defaults() []Menu {
 			{Title: "New Terminal", Command: "terminal.new"},
 			{Title: "New Terminal Tab", Command: "terminal.newTab"},
 			{Title: "SSH Host…", Command: "terminal.ssh"},
+			{Title: "Browse SSH Host (SFTP)…", Command: "remote.browse"},
 			{Title: "Regex Tester…", Command: "tools.regexTester"},
 			{Title: "jq Playground…", Command: "json.jqPlayground"},
 			{Title: "jq Playground at Cursor Path…", Command: "json.jqPlaygroundAtPath"},

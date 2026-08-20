@@ -142,6 +142,7 @@ bring their own.
 | Go to File | `project.goToFile` | `cmd+shift+o` | — | everywhere |
 | Replace in Path | `project.replaceInPath` | `cmd+shift+r` | — | everywhere |
 | New Python Environment… | `python.newEnvironment` | — | — | everywhere |
+| Browse SSH Host (SFTP)… | `remote.browse` | — | — | everywhere |
 | Run File | `run.file` | `shift+f10` | — | everywhere |
 | Rerun Last | `run.rerun` | `cmd+f5` | — | everywhere |
 | Run/Debug Configurations… | `run.select` | — | — | everywhere |

@@ -26,6 +26,7 @@ import (
 	"ike/internal/merge"
 	"ike/internal/preview"
 	"ike/internal/problems"
+	"ike/internal/remote"
 	"ike/internal/scratch"
 	"ike/internal/structpanel"
 	"ike/internal/terminal"
@@ -116,6 +117,10 @@ const (
 	// with the DBGp listener status and the per-connection accept/reject
 	// trace, under key "xdoctor".
 	KindDoctor
+	// KindRemote is an SFTP remote file browser pane (#1997); any number may
+	// exist, each bound to one ssh host alias, listing the host's files and
+	// asking the root model to open one via the download cache.
+	KindRemote
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -140,6 +145,7 @@ const (
 	ctxIssues   = "issues"
 	ctxDOM      = "dom"
 	ctxDoctor   = "xdoctor"
+	ctxRemote   = "remote"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -172,6 +178,7 @@ type Instance struct {
 	gi   ghissues.Model
 	dm   domview.Model
 	xd   debugdoctor.Model
+	rm   remote.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
@@ -302,6 +309,8 @@ func (i *Instance) ContextID() string {
 		return ctxDOM
 	case KindDoctor:
 		return ctxDoctor
+	case KindRemote:
+		return ctxRemote
 	}
 	return ctxEditor
 }
@@ -365,6 +374,10 @@ func (i *Instance) DOM() *domview.Model { return &i.dm }
 // Doctor returns the underlying Xdebug Doctor tool-window model (#1991). It
 // is only valid for a doctor instance; callers gate on Kind first.
 func (i *Instance) Doctor() *debugdoctor.Model { return &i.xd }
+
+// Remote returns the underlying SFTP remote browser model (#1997). It is
+// only valid for a remote instance; callers gate on Kind first.
+func (i *Instance) Remote() *remote.Model { return &i.rm }
 
 // Diff returns the underlying diff viewer model. It is only valid for a diff
 // instance; callers gate on Kind first.
@@ -747,6 +760,9 @@ func (i *Instance) releaseContent() {
 		i.dv.Close()
 	case KindES:
 		i.es.Close()
+	case KindRemote:
+		// Ends the SFTP session and its ssh subprocess (#1997).
+		i.rm.Close()
 	case KindEditor:
 		for _, t := range i.tabs {
 			t.close()
@@ -1030,6 +1046,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.dm.SetSize(w, h)
 	case KindDoctor:
 		i.xd.SetSize(w, h)
+	case KindRemote:
+		i.rm.SetSize(w, h)
 	}
 }
 
@@ -1086,6 +1104,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.dm.SetFocused(f)
 	case KindDoctor:
 		i.xd.SetFocused(f)
+	case KindRemote:
+		i.rm.SetFocused(f)
 	}
 }
 
@@ -1157,6 +1177,8 @@ func (i *Instance) View() string {
 		return i.dm.View()
 	case KindDoctor:
 		return i.xd.View()
+	case KindRemote:
+		return i.rm.View()
 	}
 	return ""
 }
@@ -1221,6 +1243,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.dm.Update(msg)
 	case KindDoctor:
 		cmd = i.xd.Update(msg)
+	case KindRemote:
+		cmd = i.rm.Update(msg)
 	}
 	return cmd
 }
@@ -1274,6 +1298,9 @@ func (i *Instance) Init() tea.Cmd {
 	case KindES:
 		// The ES console connects in the background the same way (#1927).
 		return i.es.Init()
+	case KindRemote:
+		// The remote browser dials its host in the background (#1997).
+		return i.rm.Init()
 	}
 	return nil
 }
@@ -1376,6 +1403,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.dm.SetPalette(p)
 	case KindDoctor:
 		i.xd.SetPalette(p)
+	case KindRemote:
+		i.rm.SetPalette(p)
 	}
 }
 

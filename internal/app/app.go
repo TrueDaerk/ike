@@ -79,6 +79,7 @@ import (
 	"ike/internal/project"
 	"ike/internal/regextest"
 	"ike/internal/registry"
+	"ike/internal/remote"
 	"ike/internal/search"
 	"ike/internal/secret"
 	"ike/internal/settings"
@@ -436,6 +437,9 @@ type Model struct {
 	// ssh is the palette mode listing the ssh_config host aliases (#1938);
 	// terminal.ssh fills and opens it.
 	ssh *sshMode
+	// remote is the SFTP browse host picker mode (#1997), the ssh list with a
+	// browse pick.
+	remote *remoteMode
 	// watchExprs are the debugger watch expressions (#1914): in memory,
 	// surviving debug sessions; re-evaluated on every stop.
 	watchExprs []string
@@ -988,6 +992,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	runConfigs := newRunConfigsMode()               // run/debug configurations picker (#1914)
 	tasksPicker := newTasksMode()                   // discovered-tasks picker (#1915)
 	sshPicker := newSSHMode()                       // ssh_config host picker (#1938)
+	remotePicker := newRemoteMode()                 // SFTP browse host picker (#1997)
 	jqFilters := newJQFiltersMode()                 // named saved jq filters (#1995)
 	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
@@ -1023,7 +1028,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:           help.New(reg, bindings, helpMinCol(cfg)),
 		shell:          ui.New(shellConfig(cfg)),
 		vcs:            vcsSt,
-		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, sshPicker, jqFilters),
+		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, sshPicker, remotePicker, jqFilters),
 		layoutsPicker:  layoutsPicker,
 		httpRequests:   httpRequests,
 		httpEntries:    httpEntries,
@@ -1031,6 +1036,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		runConfigs:     runConfigs,
 		tasks:          tasksPicker,
 		ssh:            sshPicker,
+		remote:         remotePicker,
 		jqFilters:      jqFilters,
 		httpEnv:        loadHTTPEnv(), // selected HTTP environments (#1867)
 		refs:           refs,
@@ -1716,6 +1722,13 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			panes.AddESKey(key, id.Path)
 			continue
 		}
+		if id := ids[key]; id.Kind == "remote" {
+			// A remote browser restores by re-dialing its host in the
+			// background (#1997); an unreachable host restores as the pane's
+			// own error notice.
+			panes.AddRemoteKey(key, id.Path)
+			continue
+		}
 		inst := panes.AddEditorKey(key)
 		id, hasID := ids[key]
 		if !hasID {
@@ -2248,7 +2261,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, ssh *sshMode, jqFilters *jqFiltersMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, ssh *sshMode, remoteHosts *remoteMode, jqFilters *jqFiltersMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -2313,7 +2326,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, ssh, jqFilters)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, ssh, remoteHosts, jqFilters)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -3134,6 +3147,7 @@ func (m Model) Init() tea.Cmd {
 	cmds = append(cmds, m.initDataPanes()...)
 	// Restored ES consoles reconnect to their clusters the same way (#1927).
 	cmds = append(cmds, m.initESPanes()...)
+	cmds = append(cmds, m.initRemotePanes()...)
 	// Highlight any files restored from the previous session at startup, before
 	// the user edits them, and announce each to the plugin hooks (#332): the
 	// restore paths (restoreLayout/restoreSession) load editors directly via
@@ -4130,6 +4144,28 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A host row was activated (#1938): a terminal running `ssh <host>`.
 		m.openSSHTerminal(msg.Host)
 		return m, nil
+
+	case RemoteBrowseMsg:
+		// remote.browse (palette / Tools menu, #1997): the same host list,
+		// picked for SFTP browsing instead of a terminal.
+		m.openRemotePicker()
+		return m, nil
+
+	case RemoteHostPickedMsg:
+		// A host row was activated (#1997): the host's SFTP browser pane.
+		return m, m.openRemotePane(msg.Host)
+
+	case remote.ResultMsg:
+		// A browser's background dial or directory scan landed (#1997).
+		return m, m.remoteResult(msg)
+
+	case remote.OpenFileMsg:
+		// A remote file was activated (#1997): download it into the cache.
+		return m, m.openRemoteFile(msg)
+
+	case remoteFetchedMsg:
+		// The download landed (#1997): viewer dispatch or read-only buffer.
+		return m, m.remoteFetched(msg)
 
 	case TaskPickedMsg:
 		// A task row was activated (#1915): run it or promote it.
@@ -10486,7 +10522,7 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 			} else {
 				title = m.terminalTitle(inst)
 			}
-		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindES, pane.KindDiff:
+		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindES, pane.KindDiff, pane.KindRemote:
 			title = contentPaneTitle(inst)
 		case pane.KindVCS:
 			title = "VCS"
@@ -10598,6 +10634,8 @@ func contentPaneTitle(inst *pane.Instance) string {
 		return "DATA " + baseName(inst.Data().Path())
 	case pane.KindES:
 		return "ES " + inst.ES().Endpoint()
+	case pane.KindRemote:
+		return "SFTP " + inst.Remote().Alias()
 	case pane.KindDiff:
 		l, r := inst.Diff().Titles()
 		return "DIFF " + l + " ⇄ " + r
@@ -10664,6 +10702,9 @@ func (m Model) editorTitle(ed *editor.Model) string {
 		// unwritable content came from. A merged rotation set (#1996) names
 		// the set instead: "app.log (merged)".
 		if t, ok := mergedLogTitle(ed.Path()); ok {
+			name = t
+		} else if t, ok := remoteEntryTitle(ed.Path()); ok {
+			// A remote preview names its host (#1997): "app.log (web01)".
 			name = t
 		} else if t, ok := archiveEntryTitle(ed.Path()); ok {
 			name = t

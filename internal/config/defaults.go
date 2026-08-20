@@ -266,5 +266,10 @@ func defaults() *Config {
 			HUDIntervalMs:     1000,
 			HUDHistorySeconds: 60,
 		},
+		Remote: Remote{
+			// 64 MiB covers logs, configs and most artifacts without letting
+			// an accidental open of a dump stall a slow link (#1997).
+			MaxFetchMB: 64,
+		},
 	}
 }

@@ -67,6 +67,15 @@ type Config struct {
 	Format map[string]map[string]any `toml:"format"`
 	// Perf holds the built-in performance HUD's behaviour (#1999).
 	Perf Perf `toml:"perf"`
+	// Remote holds the SFTP remote browser's behaviour (#1997).
+	Remote Remote `toml:"remote"`
+}
+
+// Remote holds the SFTP remote browser settings (#1997). MaxFetchMB caps the
+// size of a remote file the browser will download into the local cache to
+// preview it — the guard against pulling gigabytes over a slow link.
+type Remote struct {
+	MaxFetchMB int `toml:"max_fetch_mb"`
 }
 
 // Perf holds the performance HUD settings (#1999). HUDIntervalMs is how often

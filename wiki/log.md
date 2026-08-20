@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-20 (SFTP remote file browsing, #1997)
+
+- **`internal/remote`** (new): the SFTP browser. `Conn` is the mockable
+  session interface; the real one dials `ssh -o BatchMode=yes -s <alias>
+  sftp` and speaks SFTP over the subprocess's stdio (`github.com/pkg/sftp`,
+  the first use of that dependency) — auth, jump hosts and known_hosts stay
+  ssh's job, the #1938 stance. The pane model is an archview-shaped lazy
+  tree with the ES console's async discipline (background dial + scans,
+  results routed by pane key), a reveal-at-$HOME walk, the explorer's `.`
+  hidden toggle, and merge-on-rescan. `CachePath` mirrors the remote tree
+  under `<UserCacheDir>/ike/sftp/<alias>/…` with sanitized segments;
+  `VPath`/`ParseVPath` carry the `sftp://<alias><path>` virtual-path scheme.
+- **`internal/pane`**: `KindRemote`, keyed `remote:<alias>` (one browser per
+  host, reopen refocuses); close ends the session and the ssh subprocess.
+- **`internal/app/remote.go`**: `remote.browse` ("Browse SSH Host (SFTP)…",
+  palette + Tools menu) opens the ssh host list in a browse picker mode; a
+  download that lands opens via the file-handler dispatch on the cached
+  local copy (archives, gz, images, databases) or as a read-only
+  `ShowReadOnly` buffer titled `name (alias) [RO]` — saves refuse with E45,
+  never silently landing in the cache. Persistence follows the ES console:
+  `{kind: "remote", path: alias}`, restore re-dials in the background.
+- **Setting** `remote.max_fetch_mb` (default 64, Settings → Remote
+  Browsing): the download cap, enforced against the listing size before any
+  bytes move and again during the fetch.
+- Wiki: [Remote File Browsing (SFTP)](/architecture/remote-browsing.md).
+
 ## 2026-08-20 (Built-in performance HUD, #1999)
 
 - **`internal/perfhud`** (new): the metrics collector plus both renderers. The

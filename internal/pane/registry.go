@@ -23,6 +23,7 @@ import (
 	"ike/internal/merge"
 	"ike/internal/preview"
 	"ike/internal/problems"
+	"ike/internal/remote"
 	"ike/internal/structpanel"
 	"ike/internal/terminal"
 	"ike/internal/testresults"
@@ -65,6 +66,11 @@ const dataKeyBase = "data"
 // configured endpoint, keyed "es:<endpoint>" — the endpoint name is the
 // identity, so no counter is minted.
 const esKeyBase = "es"
+
+// remoteKeyBase prefixes SFTP remote browser keys (#1997): one browser per
+// ssh host alias, keyed "remote:<alias>" — the alias is the identity, so no
+// counter is minted, and opening a host twice refocuses.
+const remoteKeyBase = "remote"
 
 // VCSKey is the stable key of the singleton VCS tool window (Roadmap 0330).
 const VCSKey = "vcs"
@@ -507,6 +513,41 @@ func (r *Registry) AddESKey(key, endpoint string) *Instance {
 	inst := &Instance{key: key, kind: KindES, cfg: r.cfg, pal: r.pal}
 	inst.es = espane.New(key, endpoint, r.pal)
 	r.put(inst)
+	return inst
+}
+
+// AddRemote creates (or returns) the SFTP remote browser instance for the ssh
+// host alias, keyed "remote:<alias>" (#1997) — one browser per host, so
+// opening it twice refocuses rather than duplicates. The dial happens in the
+// pane's background Init, never here.
+func (r *Registry) AddRemote(alias string) string {
+	key := remoteKeyBase + ":" + alias
+	if _, ok := r.instances[key]; ok {
+		return key
+	}
+	r.put(r.newRemoteInstance(key, alias))
+	return key
+}
+
+// AddRemoteKey recreates a remote browser under an exact key, used by layout
+// restore; Init re-dials the host in the background.
+func (r *Registry) AddRemoteKey(key, alias string) *Instance {
+	inst := r.newRemoteInstance(key, alias)
+	r.put(inst)
+	return inst
+}
+
+// newRemoteInstance builds one browser, seeding its hidden-entry filter from
+// the explorer's setting so both trees agree on what a fresh pane shows; the
+// runtime "." toggle stays authoritative afterwards.
+func (r *Registry) newRemoteInstance(key, alias string) *Instance {
+	inst := &Instance{key: key, kind: KindRemote, cfg: r.cfg, pal: r.pal}
+	inst.rm = remote.New(key, alias, nil, r.pal)
+	if r.cfg != nil {
+		if v, ok := r.cfg.Get("explorer.show_hidden"); ok && v == "true" {
+			inst.rm.SetShowHidden(true)
+		}
+	}
 	return inst
 }
 
