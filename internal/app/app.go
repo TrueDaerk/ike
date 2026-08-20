@@ -365,9 +365,13 @@ type Model struct {
 
 	// jqPlay is the open jq playground (#1936), inline in its hosting pane
 	// since #1970; nil when it is closed. jqHistory outlives the mode for
-	// the same reason regexHistory does.
+	// the same reason regexHistory does, and is a *shared pointer* (#1977):
+	// every open playground writes its programs straight into this one
+	// session-wide list, so the history is the same whichever buffer or
+	// response pane the mode was opened over — and no exit path can drop
+	// entries by failing to copy them back.
 	jqPlay    *jqPlayState
-	jqHistory jqplay.History
+	jqHistory *jqplay.History
 
 	renamePos int
 	// layoutSaveOpen marks the window.saveLayout name prompt (#1175) while the
@@ -957,6 +961,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		toolchainSeg:   map[string]string{},
 		liveImages:     map[int]bool{},
 		navHist:        &nav.History{},
+		jqHistory:      &jqplay.History{}, // one session-wide jq program list (#1977)
 		compMRU:        mru.Load(mru.DefaultFile()),
 		bpts:           debug.Load(),
 		host:           h,

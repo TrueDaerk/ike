@@ -725,3 +725,75 @@ func TestJQPlaygroundPasteFlattens(t *testing.T) {
 		t.Errorf("the flattened program should still compile, got %q", m.jqPlay.result.Err)
 	}
 }
+
+// runJQProgram clears the query line, types program and records it with enter,
+// the way a user runs one.
+func runJQProgram(m Model, program string) Model {
+	m.jqPlay.program, m.jqPlay.pos = "", 0
+	m = typeInto(m, program)
+	return drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+}
+
+// TestJQPlaygroundHistoryCrossBuffer (#1977): the program history is one
+// session-wide list. A program run over file A is offered by ↑ when the
+// playground is reopened over a *different* file, and one run over an HTTP
+// response body joins the same list.
+func TestJQPlaygroundHistoryCrossBuffer(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m = runJQProgram(m, ".a")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	// A second JSON file in the same editor pane.
+	pathB := filepath.Join(t.TempDir(), "other.json")
+	if err := os.WriteFile(pathB, []byte(`{"b":2}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm, cmd := m.openPath(pathB, false)
+	m = drainCmd(tm.(Model), cmd)
+	m = openJQ(t, m)
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	if got := m.jqPlay.program; got != ".a" {
+		t.Fatalf("↑ over another buffer = %q, want the program run on the first one", got)
+	}
+	m = runJQProgram(m, ".b")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	// And the HTTP response pane shares the very same list, both ways.
+	resp := sampleResponse("one")
+	resp.Body = []byte(`{"items":[1,2]}`)
+	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: resp})
+	m = out.(Model)
+	m.setFocus(pane.HTTPKey)
+	m = openJQ(t, m)
+	if got := m.jqPlay.paneKey; got != pane.HTTPKey {
+		t.Fatalf("the mode must mount in the response pane, got %q", got)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	if got := m.jqPlay.program; got != ".b" {
+		t.Fatalf("↑ over the response pane = %q, want the newest editor program", got)
+	}
+	m = runJQProgram(m, ".items")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	m.setFocus(m.recentEditor)
+	m = openJQ(t, m)
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	if got := m.jqPlay.program; got != ".items" {
+		t.Errorf("↑ back in an editor = %q, want the program run on the response", got)
+	}
+}
+
+// TestJQPlaygroundHistorySurvivesReopen (#1977): the playground is reachable
+// from the Tools menu while one is already open, and reopening replaces the
+// mode. The programs the replaced one recorded must not go with it — the
+// history is the root model's, not the mode's.
+func TestJQPlaygroundHistorySurvivesReopen(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m = runJQProgram(m, ".a")
+
+	m = openJQ(t, m) // reopened without esc: the mode is replaced
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	if got := m.jqPlay.program; got != ".a" {
+		t.Errorf("↑ after reopening = %q, want the program recorded before it", got)
+	}
+}

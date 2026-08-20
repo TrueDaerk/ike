@@ -64,8 +64,10 @@ var jqDebounce = 120 * time.Millisecond
 // bufFocus routes the keyboard into it (tab toggles). input is the parsed
 // snapshot (nil while it is still being parsed, or when parsing failed —
 // inputErr then holds the message); source labels where it came from.
-// program/pos are the query line, result the last evaluation. hist is the
-// per-session program history, histIdx the position while browsing it (-1 =
+// program/pos are the query line, result the last evaluation. hist points at
+// the root model's one session-wide program history (#1977) — never a copy,
+// so a program recorded here is offered by every later playground whatever
+// buffer it opens over — histIdx the position while browsing it (-1 =
 // editing a live program) and draft/draftPos the query line that browsing
 // started from, so stepping back to -1 restores it (#1973). gen stamps
 // debounce ticks and runs so a stale one is dropped, cancel aborts the run in
@@ -86,7 +88,7 @@ type jqPlayState struct {
 	result  jqplay.Result
 	pending bool
 
-	hist     jqplay.History
+	hist     *jqplay.History
 	histIdx  int
 	draft    string
 	draftPos int
@@ -112,13 +114,18 @@ func (s *jqPlayState) setBufFocus(v bool) {
 // keystroke from being a program. The mode mounts *in* the resolved pane
 // (#1970): focus moves there and the pane shows the query header plus the
 // read-only result buffer until esc.
+//
+// Opening while a playground is already up (the Tools menu is one click away
+// even then) closes that one first: it is one mode, and the program on its
+// query line belongs in the history like any other (#1977).
 func (m *Model) startJQPlayground() tea.Cmd {
 	src, ok := m.jqSource()
 	if !ok {
 		m.host.Notify(host.Info, "jq: no JSON buffer or HTTP response to query")
 		return nil
 	}
-	s := &jqPlayState{paneKey: src.paneKey, source: src.label, histIdx: -1, hist: m.jqHistory, program: m.jqSeedProgram(src)}
+	m.closeJQPlayground()
+	s := &jqPlayState{paneKey: src.paneKey, source: src.label, histIdx: -1, hist: m.jqHist(), program: m.jqSeedProgram(src)}
 	s.pos = len([]rune(s.program))
 	ed := editor.New()
 	ed.SetRegisters(m.regs) // app-wide registers (#1540): yanks in the result reach every buffer
@@ -218,6 +225,16 @@ func (m Model) jqPlayFocused() bool {
 	return m.jqPlay != nil && m.activeWS().Panes.Focused() == m.jqPlay.paneKey
 }
 
+// jqHist returns the session-wide program history, allocating it on first use.
+// New() installs it, but a Model assembled by hand in a test must not panic on
+// the first ↑ — and the list is shared, so it may only ever be allocated once.
+func (m *Model) jqHist() *jqplay.History {
+	if m.jqHistory == nil {
+		m.jqHistory = &jqplay.History{}
+	}
+	return m.jqHistory
+}
+
 // jqInlineActive reports whether the inline playground owns pane key: its
 // content is then the query header plus the result buffer, not the pane's own
 // component.
@@ -252,12 +269,12 @@ func (m *Model) sizeJQResult() {
 // closeJQPlayground records the program in the session history, aborts a run
 // in flight and drops the inline mode. The hosting pane never held anything
 // but its own untouched content, so leaving the mode *is* the restore. The
-// history outlives the mode, so reopening offers the last programs again.
+// history is the root model's shared list (#1977), so reopening offers the
+// last programs again — over any buffer, not just the one they were run on.
 func (m *Model) closeJQPlayground() {
 	if s := m.jqPlay; s != nil {
 		s.cancelRun()
 		s.hist.Add(s.program)
-		m.jqHistory = s.hist
 	}
 	m.jqPlay = nil
 }
