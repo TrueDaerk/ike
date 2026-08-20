@@ -4,7 +4,8 @@
 // keyed on the name's hash, so one thread keeps one color across the whole
 // file (#1589's palette mechanic) — logfmt keys past the header as log.key
 // with their message value as log.message (#1633), escape bytes as conceal, and SGR-styled
-// stretches as ansi.<spec>. Emission order matters: the span index returns
+// stretches as ansi.<spec>. A merged rotation set's origin separator (#1996)
+// captures whole-line as log.origin. Emission order matters: the span index returns
 // the first covering span, so header captures win over an enclosing ANSI run,
 // which wins over the whole-line dim of a debug line.
 package logline
@@ -30,6 +31,12 @@ func Spans(lines []string) []lang.Span {
 }
 
 func lineSpans(li int, raw string) []lang.Span {
+	// The origin separator of a merged rotation set (#1996) is not a log line:
+	// it names the file the region below it came from, and styling it as one
+	// whole span keeps it out of the header parsing entirely.
+	if _, ok := OriginName(raw); ok {
+		return []lang.Span{{Line: li, StartCol: 0, EndCol: len([]rune(raw)), Capture: "log.origin"}}
+	}
 	escapes, runs := ScanSGR(raw)
 	visible, vmap := visibleText(raw, escapes)
 	p := Parse(visible)

@@ -321,6 +321,9 @@ type OpenJQPlaygroundMsg struct{}
 // json.jqPlaygroundAtPath.
 type OpenJQPlaygroundAtPathMsg struct{}
 
+// OpenMergedLogMsg is declared in logsets.go: it merges the focused log
+// buffer's rotation set into one chronological timeline (#1996).
+
 // DiffStepMsg steps the focused diff pane's current hunk (0340, #495).
 type DiffStepMsg struct{ Delta int }
 
@@ -425,6 +428,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("tools.regexTester", "Regex Tester…", OpenRegexTesterMsg{}),
 			appCommand("json.jqPlayground", "jq Playground…", OpenJQPlaygroundMsg{}),
 			appCommand("json.jqPlaygroundAtPath", "jq Playground at Cursor Path…", OpenJQPlaygroundAtPathMsg{}),
+			appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),
 			appCommand("terminal.ssh", "SSH Host…", SSHPickerMsg{}),

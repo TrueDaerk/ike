@@ -79,6 +79,12 @@ func tabLabels(inst *pane.Instance) []string {
 			name = contentTabGlyph(t.Content().Kind()) + t.Title()
 		} else if ed := inst.TabEditor(i); ed != nil && ed.HasFile() {
 			name = baseName(ed.Path())
+			// A merged rotation set (#1996) reduces to the live log's name,
+			// which is also the name of the plain file it was merged from:
+			// label it as the timeline it is.
+			if t, ok := mergedLogTitle(ed.Path()); ok {
+				name = t
+			}
 		}
 		names[i] = name
 		counts[name]++

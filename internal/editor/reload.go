@@ -25,6 +25,12 @@ import (
 // place save (write temp + rename) coalesces to FileCreated, so both kinds
 // count as "changed".
 func (m Model) handleExternalChange(msg watch.EventMsg) (Model, tea.Cmd) {
+	if m.follow && m.followSrc != "" && samePath(m.followSrc, msg.Path) {
+		// A merged rotation set tails a file its buffer path does not name
+		// (#1996): the follow handling is the only thing that can apply, the
+		// buffer having no single file to reload from.
+		return m.followHandleEvent(msg)
+	}
 	if !m.HasFile() || !samePath(m.path, msg.Path) {
 		return m, nil
 	}

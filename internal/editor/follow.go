@@ -28,6 +28,11 @@ import (
 // repeat runs extended incrementally (logfold.go). A file that shrank or was
 // replaced (truncation, logrotate) reloads wholesale with a toast.
 //
+// The followed file is the buffer's own path, except for a merged rotation set
+// (#1996, mergedlog.go): that buffer holds several files at once and tails the
+// newest of them (followTarget), with the wholesale-reload cases turning into a
+// re-merge request instead.
+//
 // The events themselves come from the shared external-change service
 // (internal/watch): fsnotify where it reaches, plus the app's demand-armed
 // follow tick driving the poll fallback while at least one view follows —
@@ -59,6 +64,15 @@ func (m Model) FollowLabel() string {
 	return "FOLLOW"
 }
 
+// followTarget is the file this view tails: its own path, or the merged
+// rotation set's newest member for a merged timeline (#1996).
+func (m Model) followTarget() string {
+	if m.followSrc != "" {
+		return m.followSrc
+	}
+	return m.path
+}
+
 // toggleFollow flips follow mode for this view (view.toggleFollow). Enabling
 // re-syncs the buffer with the file and anchors the read offset at its end;
 // disabling restores writability and reconciles once against disk (held-back
@@ -66,6 +80,9 @@ func (m Model) FollowLabel() string {
 func (m Model) toggleFollow() (Model, tea.Cmd) {
 	if m.follow {
 		return m.stopFollow()
+	}
+	if m.mergedLog {
+		return m.followMerged()
 	}
 	if !m.HasFile() {
 		m.cmdMsg = "E: follow needs a file on disk"
@@ -90,8 +107,27 @@ func (m Model) toggleFollow() (Model, tea.Cmd) {
 	m.followOffset = int64(len(data))
 	m.followTerm = len(data) > 0 && data[len(data)-1] == '\n'
 	m.followToEnd()
-	path := m.path
+	path := m.followTarget()
 	return m, tea.Batch(cmd, func() tea.Msg { return FollowMsg{Path: path, On: true} })
+}
+
+// followMerged enters follow mode on a merged rotation set (#1996). There is
+// nothing to re-sync: the merge already read the newest member to its end and
+// handed over that offset, so the buffer is anchored where it stands — reading
+// the source file into the buffer would throw the older members away.
+func (m Model) followMerged() (Model, tea.Cmd) {
+	if m.followSrc == "" {
+		m.cmdMsg = "E: cannot follow this set — its newest member is compressed"
+		return m, nil
+	}
+	m.follow = true
+	m.followPaused = false
+	m.followRotated = false
+	m.followPrevRO = true // the merged timeline is read-only either way
+	m.readOnly = true
+	m.followToEnd()
+	path := m.followSrc
+	return m, func() tea.Msg { return FollowMsg{Path: path, On: true} }
 }
 
 // stopFollow leaves follow mode: writability restored, one reconcile against
@@ -101,6 +137,14 @@ func (m Model) stopFollow() (Model, tea.Cmd) {
 	m.followPaused = false
 	m.followRotated = false
 	m.readOnly = m.followPrevRO
+	if m.mergedLog {
+		// A merged timeline has no file to reconcile against: its content is
+		// the set as of the last merge, and re-reading the virtual path would
+		// find nothing (#1996).
+		m.mergeWait = false
+		m.cmdMsg = "follow off"
+		return m, nil
+	}
 	nm, cmd := m.reloadFromDisk()
 	nm.cmdMsg = "follow off"
 	return nm, cmd
@@ -141,6 +185,11 @@ func (m *Model) followToEnd() {
 // (dispatched from handleExternalChange). Content growth appends the tail
 // past followOffset; shrinkage and re-creation reload wholesale.
 func (m Model) followHandleEvent(msg watch.EventMsg) (Model, tea.Cmd) {
+	if m.mergeWait {
+		// A re-merge of the rotation set is on its way (#1996): the offsets of
+		// the file that triggered it mean nothing until it lands.
+		return m, nil
+	}
 	switch msg.Kind {
 	case watch.FileRemoved:
 		// Rotation in progress (logrotate moved the file away): keep the
@@ -151,21 +200,22 @@ func (m Model) followHandleEvent(msg watch.EventMsg) (Model, tea.Cmd) {
 	case watch.FileCreated:
 		// The path was re-created under the follower: a rename-style
 		// rotation, whatever the content size says.
-		return m.followReload("log rotated — reloaded " + filepath.Base(m.path))
+		return m.followReload("log rotated — reloaded " + filepath.Base(m.followTarget()))
 	case watch.FileChanged:
 	default:
 		return m, nil
 	}
+	target := m.followTarget()
 	if m.followRotated {
-		return m.followReload("log rotated — reloaded " + filepath.Base(m.path))
+		return m.followReload("log rotated — reloaded " + filepath.Base(target))
 	}
-	st, err := os.Stat(m.path)
+	st, err := os.Stat(target)
 	if err != nil {
 		return m, nil // gone (again); a later event decides
 	}
 	switch {
 	case st.Size() < m.followOffset:
-		return m.followReload("log truncated — reloaded " + filepath.Base(m.path))
+		return m.followReload("log truncated — reloaded " + filepath.Base(target))
 	case st.Size() == m.followOffset:
 		return m, nil // a bare touch, or a same-size rewrite: nothing to stream
 	}
@@ -175,7 +225,7 @@ func (m Model) followHandleEvent(msg watch.EventMsg) (Model, tea.Cmd) {
 		// only grew).
 		return m.followReload("")
 	}
-	chunk, err := readFileFrom(m.path, m.followOffset)
+	chunk, err := readFileFrom(target, m.followOffset)
 	if err != nil || len(chunk) == 0 {
 		return m, nil
 	}
@@ -190,7 +240,19 @@ func (m Model) followHandleEvent(msg watch.EventMsg) (Model, tea.Cmd) {
 // followReload replaces the buffer with the file's current content and
 // re-anchors the follow offset — the truncation/rotation path. A non-empty
 // noticeText surfaces as a toast.
+//
+// A merged rotation set (#1996) cannot reload from a file: the replacement's
+// lines belong *after* the ones the buffer already holds, which is a new merge
+// of the whole set. The view asks the root model for one and parks until it
+// arrives; noticeText is dropped there — it describes a reload that does not
+// happen, and the root model toasts the merge it *does* run.
 func (m Model) followReload(noticeText string) (Model, tea.Cmd) {
+	if m.mergedLog {
+		m.mergeWait = true
+		m.followRotated = false
+		path := m.path
+		return m, func() tea.Msg { return MergeLogSetMsg{Path: path} }
+	}
 	data, err := os.ReadFile(m.path)
 	if err != nil {
 		return m, nil // still mid-rotation; a later event finds the new file

@@ -114,6 +114,42 @@ room for it, so it never covers text.
 
 Toggle it per view with **Toggle Log Rendering**.
 
+### Rotated logs as one timeline
+
+A rotated log is one log split across files: `app.log` holds the last hour,
+`app.log.1` the hour before, `app.log.2.gz` the day before that. Opening one of
+them says how many more files belong to it, and **Open Rotated Log Set (Merged
+Timeline)** puts the whole set into a single read-only buffer, oldest lines
+first. Compressed members are read decompressed, and each region opens with a
+separator naming the file it came from:
+
+```
+──── app.log.2.gz ────
+2026-08-08 08:00:00 INFO  compressed line
+──── app.log.1 ────
+2026-08-09 09:00:00 INFO  yesterday
+──── app.log ────
+2026-08-10 10:00:00 INFO  live
+```
+
+Everything the log rendering does keeps working across the whole timeline —
+severities, deltas, repeat collapsing, search — so a question that spans a
+rotation ("what happened around midnight") is one buffer and one search away.
+The elapsed-time hint on a region's first line measures against the last
+timestamped line above it, which is exactly the gap across the boundary.
+
+**Toggle Follow (Tail -f)** works on the timeline too: it tails the newest file
+of the set, and when the log rotates under it — the live file moving to
+`app.log.1`, a new one taking its place — the set is merged again and the tail
+continues, so nothing is lost at the boundary. Run the command again to refresh
+a timeline you are not following.
+
+The set is found next to the file: same directory, same name, a numeric or date
+suffix (`.1`, `.2026-08-01`, `.20260801`) with an optional `.gz`. Very large
+sets are cut at the [large-file
+limits](../reference/settings.md) — from the *oldest* end, so the lines next to
+the live log always survive, and a toast says what was left out.
+
 ## Turning it off
 
 Each layer is one setting, and each has a palette command that flips it for the

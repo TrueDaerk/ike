@@ -4,7 +4,7 @@ title: Follow Mode (tail -f)
 description: Per-view follow mode for buffers — streams appended file content read-only with the viewport stuck to the end, pause-on-scroll, incremental log analyses, and truncation/rotation handling (#1928).
 resource: internal/editor/follow.go
 tags: [architecture, editor, log, watch, follow]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # Follow Mode (tail -f)
@@ -71,5 +71,17 @@ editor's `FollowMsg`, polls off-loop each `editor.follow_poll_ms`
 (default 500, clamped 100–10000, Settings → Editor), and re-arms only while
 some view still follows — no idle cost when nothing does, per the
 [performance rules](/architecture/performance.md).
+
+## Merged rotation sets
+
+A [merged rotated log timeline](/architecture/log-timeline.md) (#1996) is a
+buffer assembled from several files, whose own path names nothing on disk. It
+follows the set's **newest member** instead (`followSrc`, `followTarget` in
+`internal/editor/mergedlog.go`): enabling costs no read (the merge handed over
+the member's end offset), appends stream into the buffer's tail as usual, and
+the wholesale-reload cases turn into a re-merge request to the root model —
+a rotated file's lines belong *after* the ones the buffer holds, which no
+append can express. Watcher events reach such a view by follow source rather
+than by path.
 
 Out of scope (follow-ups): following remote files over SSH, SFTP editing.
