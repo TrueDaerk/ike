@@ -12,6 +12,7 @@ package bridge
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -180,6 +181,11 @@ func (b *bridge) shutdown() {
 	}
 	if l != nil {
 		_ = l.Close()
+	}
+	if listen {
+		// Best effort (#1991): a client-initiated disconnect may already have
+		// stopped reading; writeMsg failures are ignored anyway.
+		b.event("ike.listenState", map[string]any{"state": "stopped"})
 	}
 	_ = b.rwc.Close()
 }
@@ -465,11 +471,20 @@ func (b *bridge) handleListen(req envelope, args launchArgs) {
 
 	b.respond(req, map[string]any{})
 	b.event("initialized", nil)
-	note := fmt.Sprintf("Listening for Xdebug connections on port %d", l.Addr().(*net.TCPAddr).Port)
+	bound := l.Addr().(*net.TCPAddr).Port
+	note := fmt.Sprintf("Listening for Xdebug connections on port %d", bound)
 	if args.Hostname != "" {
 		note += " (host filter: " + args.Hostname + ")"
 	}
 	b.event("output", map[string]any{"category": "console", "output": note + "…\n"})
+	// Structured twin of the console note (#1991): the Xdebug doctor renders
+	// the listener state from this instead of parsing the banner.
+	b.event("ike.listenState", map[string]any{
+		"state":    "listening",
+		"port":     bound,
+		"hostname": args.Hostname,
+		"mappings": len(args.PathMappings),
+	})
 	go b.acceptLoop(l)
 }
 
@@ -496,11 +511,41 @@ func (b *bridge) acceptLoop(l net.Listener) {
 	}
 }
 
+// attempt is the identifying trace of one dialed-in connection (#1991): what
+// the Xdebug doctor needs to show so a rejected request can be fixed. Fields
+// fill in as vetting progresses — a handshake failure knows only the remote
+// address, a filter mismatch also knows the init packet and the probed host.
+type attempt struct {
+	remote  string // source address of the TCP connection
+	ideKey  string // idekey from the init packet
+	fileURI string // initial file URI from the init packet
+	host    string // $_SERVER['HTTP_HOST'] when the filter probe ran
+}
+
+// connEvent emits the ike.debugConn trace event (#1991): one per incoming
+// connection, accepted or rejected, carrying the attempt's identity. extra
+// merges outcome-specific fields in.
+func (b *bridge) connEvent(outcome string, att attempt, extra map[string]any) {
+	body := map[string]any{
+		"outcome": outcome,
+		"remote":  att.remote,
+		"ideKey":  att.ideKey,
+		"fileURI": att.fileURI,
+		"host":    att.host,
+	}
+	for k, v := range extra {
+		body[k] = v
+	}
+	b.event("ike.debugConn", body)
+}
+
 // dropConn turns one connection away, always visibly (#1328): the console
 // gets a line and the client a structured event carrying the reason and how
 // often it has fired, so a request that never attaches is never indistinguishable
-// from a broken setup. Detach lets the PHP request run on undisturbed.
-func (b *bridge) dropConn(dc *dbgp.Conn, reason, detail string) {
+// from a broken setup. Detach lets the PHP request run on undisturbed. The
+// doctor trace (#1991) additionally records the rejection with the attempt's
+// identity.
+func (b *bridge) dropConn(dc *dbgp.Conn, att attempt, reason, detail string) {
 	b.mu.Lock()
 	if b.drops == nil {
 		b.drops = map[string]int{}
@@ -516,6 +561,7 @@ func (b *bridge) dropConn(dc *dbgp.Conn, reason, detail string) {
 	b.event("output", map[string]any{"category": "console",
 		"output": fmt.Sprintf("Dropped debug connection: %s\n", text)})
 	b.event("ike.debugDrop", map[string]any{"reason": reason, "detail": detail, "count": count})
+	b.connEvent("rejected", att, map[string]any{"reason": reason, "detail": text})
 	if dc != nil {
 		// Bounded (#1375): an engine that never answers the polite detach must
 		// not pin this goroutine and its connection forever.
@@ -546,6 +592,7 @@ func (b *bridge) reapDeadSession() {
 // cached breakpoints and resumes. Rejections detach politely so the request
 // completes undisturbed.
 func (b *bridge) handleIncoming(conn net.Conn) {
+	att := attempt{remote: conn.RemoteAddr().String()}
 	dc := dbgp.NewConn(conn, func(s dbgp.Stream) {
 		category := "stdout"
 		if s.Type == "stderr" {
@@ -557,10 +604,17 @@ func (b *bridge) handleIncoming(conn net.Conn) {
 	if err != nil {
 		// A connection that never completes its handshake used to vanish
 		// without a trace (#1328) — the one drop path that left no evidence
-		// at all when capture "just didn't work".
-		b.dropConn(dc, "handshake", "no DBGp init within "+acceptTimeout.String())
+		// at all when capture "just didn't work". A packet that arrives but
+		// does not parse is its own reason (#1991): "malformed init" points
+		// at the peer, "no init" at the network path.
+		if errors.Is(err, dbgp.ErrBadInit) {
+			b.dropConn(dc, att, "init", err.Error())
+		} else {
+			b.dropConn(dc, att, "handshake", "no DBGp init within "+acceptTimeout.String())
+		}
 		return
 	}
+	att.ideKey, att.fileURI = init.IDEKey, init.FileURI
 	// A session whose connection died unnoticed would refuse everything that
 	// follows (#1328); collect it before deciding this one is a latecomer.
 	b.reapDeadSession()
@@ -568,28 +622,29 @@ func (b *bridge) handleIncoming(conn net.Conn) {
 	busy, ended, host := b.dc != nil, b.ended, b.hostname
 	b.mu.Unlock()
 	if ended {
-		b.dropConn(dc, "ended", "the debug session is over")
+		b.dropConn(dc, att, "ended", "the debug session is over")
 		return
 	}
 	if busy {
 		// Sequential sessions only: a request arriving while another is
 		// being debugged runs through undisturbed. Say so (#938) — listener
 		// state must never change silently.
-		b.dropConn(dc, "busy", "another request is being debugged — one session at a time")
+		b.dropConn(dc, att, "busy", "another request is being debugged — one session at a time")
 		return
 	}
 	if host != "" {
 		reqHost, ok := b.requestHost(dc)
+		att.host = reqHost
 		if !ok || !hostMatches(reqHost, host) {
 			// Never a silent drop (#938): the client raises a visible
 			// notification, otherwise a filter false-negative is
 			// indistinguishable from "debugging is broken".
 			b.event("ike.filterDetach", map[string]any{"host": reqHost, "filter": host})
-			b.dropConn(dc, "filter", fmt.Sprintf("request from %q does not match the host filter %s", reqHost, host))
+			b.dropConn(dc, att, "filter", fmt.Sprintf("request from %q does not match the host filter %s", reqHost, host))
 			return
 		}
 	}
-	b.adoptConn(dc, init)
+	b.adoptConn(dc, init, att)
 }
 
 // requestHost fetches the request's $_SERVER['HTTP_HOST']. Commands need the
@@ -626,7 +681,7 @@ func hostMatches(reqHost, filter string) bool {
 // adoptConn makes an accepted connection the live session: feature limits,
 // breakpoint replay from the DAP-side cache, then run. Break/end reporting
 // goes through the same resume path as launch mode.
-func (b *bridge) adoptConn(dc *dbgp.Conn, init *dbgp.Init) {
+func (b *bridge) adoptConn(dc *dbgp.Conn, init *dbgp.Init, att attempt) {
 	_ = dc.FeatureSet("max_depth", "1")
 	_ = dc.FeatureSet("max_children", "100")
 	_ = dc.FeatureSet("max_data", "4096")
@@ -637,7 +692,7 @@ func (b *bridge) adoptConn(dc *dbgp.Conn, init *dbgp.Init) {
 		// Lost the race against another connection accepted at the same
 		// moment (#1328): the loser is turned away like any other drop, not
 		// dropped in silence.
-		b.dropConn(dc, "busy", "another request won the session — one session at a time")
+		b.dropConn(dc, att, "busy", "another request won the session — one session at a time")
 		return
 	}
 	b.dc = dc
@@ -668,14 +723,20 @@ func (b *bridge) adoptConn(dc *dbgp.Conn, init *dbgp.Init) {
 	// likely differs from the project layout — hint the client so it can
 	// offer creating a path mapping. Purely informational; the session runs
 	// either way (breakpoints just won't bind until the mapping exists).
+	mapped := true
 	if !strings.Contains(local, "://") {
 		if _, err := os.Stat(local); err != nil {
+			mapped = false
 			b.event("ike.pathMappingHint", map[string]any{
 				"server": filepath.Dir(serverPath),
 				"file":   serverPath,
 			})
 		}
 	}
+	// The accept side of the doctor trace (#1991). mapped=false is the
+	// "unmapped file path" diagnosis: the request is debugged anyway, but
+	// breakpoints cannot bind until a path mapping exists.
+	b.connEvent("accepted", att, map[string]any{"local": local, "mapped": mapped})
 	go b.resume(envelope{}, "breakpoint", (*dbgp.Conn).Run)
 }
 

@@ -10,6 +10,7 @@ import (
 	"ike/internal/archview"
 	"ike/internal/breakpanel"
 	"ike/internal/dataview"
+	"ike/internal/debugdoctor"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/domview"
@@ -94,6 +95,9 @@ const IssuesKey = "issues"
 
 // DOMKey is the stable key of the singleton DOM inspector tool window (#1929).
 const DOMKey = "dom"
+
+// DoctorKey is the stable key of the singleton Xdebug Doctor tool window (#1991).
+const DoctorKey = "xdoctor"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -650,6 +654,18 @@ func (r *Registry) AddDOM() string {
 	inst.dm = domview.New(r.pal)
 	r.put(inst)
 	return DOMKey
+}
+
+// AddDoctor creates the singleton Xdebug Doctor tool window under DoctorKey
+// (#1991) and returns its key; a second call returns the existing key.
+func (r *Registry) AddDoctor() string {
+	if _, ok := r.instances[DoctorKey]; ok {
+		return DoctorKey
+	}
+	inst := &Instance{key: DoctorKey, kind: KindDoctor, cfg: r.cfg, pal: r.pal}
+	inst.xd = debugdoctor.New(r.pal)
+	r.put(inst)
+	return DoctorKey
 }
 
 // AddBreakpoints creates the singleton Breakpoints tool window under

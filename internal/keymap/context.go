@@ -40,6 +40,7 @@ const (
 	Tests       Context = "tests"
 	Issues      Context = "issues"
 	DOM         Context = "dom"
+	Doctor      Context = "xdoctor"
 	Scratch     Context = "scratch"
 )
 

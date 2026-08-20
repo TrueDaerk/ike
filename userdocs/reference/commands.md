@@ -38,6 +38,7 @@ bring their own.
 | Data: Column Profile | `data.columnProfile` | — | — | `data` pane |
 | Breakpoints | `debug.breakpoints` | `cmd+shift+f8` | — | everywhere |
 | Continue | `debug.continue` | `f9` | — | everywhere |
+| Xdebug Doctor | `debug.doctor` | — | — | everywhere |
 | Listen for PHP Debug Connections | `debug.listen` | — | — | everywhere |
 | Debug File | `debug.start` | `shift+f9` | — | everywhere |
 | Step Into | `debug.stepInto` | `f7` | — | everywhere |

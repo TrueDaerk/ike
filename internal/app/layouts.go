@@ -248,6 +248,8 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 		return singleton(pane.StructureKey, "structure")
 	case pane.KindDOM:
 		return singleton(pane.DOMKey, "dom")
+	case pane.KindDoctor:
+		return singleton(pane.DoctorKey, "xdoctor")
 	case pane.KindUsages:
 		return singleton(pane.UsagesKey, "usages")
 	case pane.KindHTTP:
@@ -712,6 +714,12 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		return singleton(reg.AddStructure)
 	case "dom":
 		return singleton(reg.AddDOM)
+	case "xdoctor":
+		key, ok := singleton(reg.AddDoctor)
+		if ok {
+			m.wireDoctorPanel(reg.Get(key).Doctor())
+		}
+		return key, ok
 	case "tests":
 		return singleton(reg.AddTests)
 	case "issues":

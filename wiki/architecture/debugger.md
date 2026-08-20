@@ -226,7 +226,45 @@ turned-away connection, with the reason), "Debugged request ended without a
 reply — listening…" (a reaped dead session) and "Request finished —
 listening…" as they happen (the first output auto-opens the panel).
 
-Troubleshooting a request that never stops at breakpoints:
+### Xdebug Doctor (#1991)
+
+`debug.doctor` (palette / Run menu) toggles the **Xdebug Doctor** tool
+window (`internal/debugdoctor`, pane key `xdoctor`), which mechanizes the
+troubleshooting list below: the listener state (running/stopped, bound port,
+hostname filter, path-mapping count) plus a live, newest-first trace of every
+connection attempt with its outcome. Observability only — accept/reject
+decisions stay in the bridge; the doctor just surfaces them.
+
+The bridge emits two structured events alongside the existing console lines:
+
+- `ike.listenState` `{state, port, hostname, mappings}` on listener
+  start (with the actually bound port) and, best-effort, on shutdown.
+- `ike.debugConn` `{outcome, reason, detail, remote, ideKey, fileURI, host,
+  local, mapped}` — one per attempt. Accepted entries carry the locally
+  mapped entry file and `mapped=false` when it does not resolve (the #832
+  hint's diagnosis, rendered as a warning row). Rejected entries carry the
+  reason (`handshake`, `init`, `busy`, `filter`, `ended`) plus the identity
+  needed to fix it: source address, the init packet's IDE key and file URI,
+  and the probed `HTTP_HOST` for filter rejects.
+
+`init` is a new *distinguished* handshake failure (still a rejection as
+before): `dbgp.Conn` records a pre-init packet that fails to parse (or a
+well-formed non-init first packet) and `WaitInit` fails fast with
+`ErrBadInit` instead of running out the 30s timeout, so "malformed init
+packet: …" points at the peer while `handshake` keeps meaning "no init at
+all".
+
+The app owns the trace (`Model.doctorLog`, a 200-entry ring in
+`internal/debugdoctor.Log`): it is fed in `handleDebugEvent` *before* the
+session-tagging guard, so attempts from a parked workspace's listen session
+are recorded too, and it survives the panel being closed. The listener is
+additionally marked stopped when the listen session ends client-side
+(`doctorSessionEnded`), covering a disconnect that closes the pipe before
+the bridge's stopped event is read. `c` clears the trace; the panel works
+with or without an active debug session.
+
+Troubleshooting a request that never stops at breakpoints (the doctor shows
+1, 3 and 4 directly):
 
 1. Listener bound? `lsof -iTCP:9003 -sTCP:LISTEN` while listening — the
    bind happens at `debug.listen` start and a failure fails the launch

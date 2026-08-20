@@ -67,6 +67,7 @@ func Defaults() []Menu {
 			{Title: "Debug File", Command: "debug.start"},
 			{Title: "Debug Test at Cursor", Command: "debug.testAtCursor"},
 			{Title: "Listen for PHP Debug Connections", Command: "debug.listen"},
+			{Title: "Xdebug Doctor", Command: "debug.doctor"},
 			{Title: "Step Over", Command: "debug.stepOver"},
 			{Title: "Step Into", Command: "debug.stepInto"},
 			{Title: "Step Out", Command: "debug.stepOut"},

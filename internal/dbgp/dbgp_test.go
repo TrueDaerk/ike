@@ -300,3 +300,41 @@ func TestLatin1EncodedPacket(t *testing.T) {
 		t.Fatalf("latin-1 conversion failed: %q", resp.Stack[0].Where)
 	}
 }
+
+// TestWaitInitMalformedPacket guards #1991: a first packet that is not a
+// parseable DBGp init fails WaitInit fast with ErrBadInit, so the listener
+// doctor can name the concrete cause instead of a generic 30s timeout.
+func TestWaitInitMalformedPacket(t *testing.T) {
+	e, c, _ := newFakeEngine(t)
+	go e.send(`<init fileuri="file:///x.php"><broken></init>`)
+	if _, err := c.WaitInit(3 * time.Second); !errors.Is(err, ErrBadInit) {
+		t.Fatalf("WaitInit = %v, want ErrBadInit", err)
+	}
+}
+
+// TestWaitInitUnsupportedPacket guards #1991: a well-formed first packet of
+// an unknown kind is a broken handshake too, not a silent timeout.
+func TestWaitInitUnsupportedPacket(t *testing.T) {
+	e, c, _ := newFakeEngine(t)
+	go e.send(`<notify name="something"/>`)
+	if _, err := c.WaitInit(3 * time.Second); !errors.Is(err, ErrBadInit) {
+		t.Fatalf("WaitInit = %v, want ErrBadInit", err)
+	}
+}
+
+// TestWaitInitSurvivesLateGarbage guards the flip side: a malformed packet
+// *after* the init keeps being skipped, not fatal.
+func TestWaitInitSurvivesLateGarbage(t *testing.T) {
+	e, c, _ := newFakeEngine(t)
+	go func() {
+		e.send(`<init fileuri="file:///x.php" idekey="k" language="PHP"/>`)
+		e.send(`<init fileuri="x"><broken></init>`)
+	}()
+	init, err := c.WaitInit(3 * time.Second)
+	if err != nil || init.IDEKey != "k" {
+		t.Fatalf("WaitInit = %+v, %v", init, err)
+	}
+	if c.Closed() {
+		t.Fatal("late garbage must not close the connection")
+	}
+}
