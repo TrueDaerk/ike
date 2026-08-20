@@ -7073,13 +7073,22 @@ func (m Model) splitView(zone layout.Zone) (tea.Model, tea.Cmd) {
 	return m, ed.Reparse()
 }
 
-// spawnEditor splits the active editor's leaf toward the default zone, returning
-// the new editor's key. Used by open-in-new-pane and Replace-with-no-editor. The
-// split target is the active editor (so opening from the explorer lands the new
-// pane in the editor area, not beside the explorer); only when no editor exists
-// does it fall back to the focused leaf.
+// spawnEditor splits a fresh editor pane into the tree, returning its key.
+// Used by open-in-new-pane and Replace-with-no-editor. The split target is
+// the pane a file open would land in (so opening from the explorer lands the
+// new pane in the editor area, not beside the explorer — and never at a
+// tool-tab host, #1989); with no such pane the designated layout's editor
+// slot anchors the split, and only as a last resort the focused leaf does.
 func (m *Model) spawnEditor() string {
-	target := m.activeEditorKey()
+	target := m.fileEditorKey()
+	zone, ratio := m.splitZone, 0.0
+	if target == "" {
+		// No live pane edits files: a tool-tab host must not attract the
+		// split (#1989) — the designated layout's editor slot decides the
+		// position instead, so the recreated editor lands in its original
+		// layout area.
+		target, zone, ratio = m.editorSlotAnchor()
+	}
 	if target == "" {
 		target = m.activeWS().Panes.Focused()
 	}
@@ -7091,11 +7100,18 @@ func (m *Model) spawnEditor() string {
 		// instance registered and let layout() build around it.
 		return newKey
 	}
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, newKey, m.splitZone)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, newKey, zone)
 	if !ok {
 		// Target not in the tree (e.g. focused leaf already gone): drop the spare.
 		m.activeWS().Panes.Close(newKey)
 		return m.activeWS().Panes.Focused()
+	}
+	if ratio > 0 && ratio < 1 {
+		// The saved layout's split share carries over, so the recreated
+		// editor slot keeps its original proportions instead of an even split.
+		if sp := parentSplit(tree, newKey); sp != nil {
+			sp.Ratio = ratio
+		}
 	}
 	m.activeWS().Tree = tree
 	return newKey

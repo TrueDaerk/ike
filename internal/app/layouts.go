@@ -272,6 +272,12 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 			if len(tools) == 1 && files == 0 {
 				return st.mintTerminal(), paneIdentity{Kind: "tool", Tool: tools[0]}, true
 			}
+			if toolTabHost(inst) {
+				// A host holding nothing but tool tabs is a tools pane, not an
+				// editor slot (#1989): its own kind keeps editor placement and
+				// slot resolution away from the layout's editor area.
+				return st.mintEditor(), paneIdentity{Kind: "tools", Tools: tools}, true
+			}
 			if len(tools) > 0 {
 				return st.mintEditor(), paneIdentity{Kind: "editor", Tools: tools}, true
 			}
@@ -325,6 +331,7 @@ func defaultLayoutSnapshot() (layout.Node, map[string]paneIdentity, bool) {
 // re-slots into the target layout's leaves.
 type applyState struct {
 	content []string            // editor/markdown/diff/tab-host keys, in registry order
+	hosts   []string            // pure tool-tab host keys (#1989), in registry order
 	shells  []string            // plain shell terminal keys
 	tools   map[string][]string // tool pane keys by tool name
 	used    map[string]bool     // resolved singleton keys (duplicate guard)
@@ -419,7 +426,14 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 		}
 		switch inst.Kind() {
 		case pane.KindEditor, pane.KindMarkdown, pane.KindImage, pane.KindDiff, pane.KindMerge, pane.KindArchive, pane.KindData, pane.KindES:
-			st.content = append(st.content, key)
+			if toolTabHost(inst) {
+				// A pure tool-tab host queues for "tools" slots (#1989): an
+				// editor slot must never re-slot the tools pane into the
+				// layout's editor area.
+				st.hosts = append(st.hosts, key)
+			} else {
+				st.content = append(st.content, key)
+			}
 		case pane.KindTerminal:
 			if tool := inst.Terminal().Tool(); tool != "" {
 				st.tools[tool] = append(st.tools[tool], key)
@@ -615,7 +629,9 @@ func implicitHostSlot(reg *pane.Registry, slots []string) string {
 		}
 		return ""
 	}
-	if key := last(func(i *pane.Instance) bool { return i.Kind() == pane.KindEditor }); key != "" {
+	// A pure tool-tab host is not an editor slot (#1989): leftovers must not
+	// graft into the layout's tools area.
+	if key := last(func(i *pane.Instance) bool { return i.Kind() == pane.KindEditor && !toolTabHost(i) }); key != "" {
 		return key
 	}
 	if key := last(func(i *pane.Instance) bool {
@@ -755,7 +771,28 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 			return reg.AddTool(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send), true
 		}
 		return m.spawnShellPane(), true
+	case "tools":
+		// A tools pane (#1989): a live tool-tab host re-slots, else the saved
+		// tools restart as tabs of a fresh host. The content queue is never
+		// consumed — the layout's editor slots keep their panes.
+		if len(st.hosts) > 0 {
+			key := st.hosts[0]
+			st.hosts = st.hosts[1:]
+			return key, true
+		}
+		key := reg.AddEditor()
+		m.restartToolTabs(reg, key, id.Tools)
+		return key, true
 	case "editor", "":
+		if len(id.Tools) > 0 && len(st.hosts) > 0 {
+			// A legacy snapshot wrote a pure tool host as "editor"+Tools
+			// (pre-#1989): a live tool host re-slots there before any content
+			// pane is consumed, so the tools pane never swaps places with an
+			// editor.
+			key := st.hosts[0]
+			st.hosts = st.hosts[1:]
+			return key, true
+		}
 		if len(st.content) > 0 {
 			key := st.content[0]
 			st.content = st.content[1:]
@@ -766,25 +803,33 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		// as tabs (#1277), mirroring the startup restore of id.Tools; a live
 		// content pane re-slotted above keeps its own tabs instead.
 		if len(id.Tools) > 0 {
-			inst := reg.Get(key)
-			spawned := 0
-			for _, tool := range id.Tools {
-				entry, ok := toolEntry(tool)
-				if !ok {
-					continue // tool no longer configured: restores as nothing
-				}
-				// A parked live global instance re-attaches instead of
-				// spawning a duplicate (#1890); restoredToolSession decides.
-				inst.AddTerminalTab(m.restoredToolSession(reg, entry))
-				spawned++
-			}
-			if spawned > 0 {
-				inst.CloseTab(0) // drop the placeholder scratch tab
-			}
+			m.restartToolTabs(reg, key, id.Tools)
 		}
 		return key, true
 	}
 	return "", false
+}
+
+// restartToolTabs restarts the snapshot's tool sessions as terminal tabs of
+// the fresh editor-kind pane key (#1277), dropping the placeholder scratch
+// tab once at least one tool spawned — shared by the "tools" (#1989) and
+// legacy "editor"+Tools slot resolutions.
+func (m *Model) restartToolTabs(reg *pane.Registry, key string, tools []string) {
+	inst := reg.Get(key)
+	spawned := 0
+	for _, tool := range tools {
+		entry, ok := toolEntry(tool)
+		if !ok {
+			continue // tool no longer configured: restores as nothing
+		}
+		// A parked live global instance re-attaches instead of spawning a
+		// duplicate (#1890); restoredToolSession decides.
+		inst.AddTerminalTab(m.restoredToolSession(reg, entry))
+		spawned++
+	}
+	if spawned > 0 {
+		inst.CloseTab(0) // drop the placeholder scratch tab
+	}
 }
 
 // spawnShellPane creates a fresh shell terminal pane in the project root,
@@ -795,6 +840,181 @@ func (m *Model) spawnShellPane() string {
 		shell = v
 	}
 	return m.activeWS().Panes.AddTerminal(terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
+}
+
+// editorSlotAnchor picks where a fresh editor pane splits in when no live
+// pane edits files (#1989): a tool-tab host must not attract the split, so
+// the designated default layout is consulted for its editor slot and the new
+// editor splits off the nearest layout neighbour with a live counterpart —
+// with all editors closed, opening a file recreates the editor in its
+// original layout slot. Without a usable default layout the built-in
+// explorer+editor arrangement anchors at the explorer; target "" leaves the
+// caller its focused-pane fallback. ratio is the anchor split's saved share
+// (0 keeps the even split).
+func (m *Model) editorSlotAnchor() (target string, zone layout.Zone, ratio float64) {
+	if tree, ids, ok := defaultLayoutSnapshot(); ok {
+		if target, zone, ratio, ok := m.anchorFromLayout(tree, ids); ok {
+			return target, zone, ratio
+		}
+	}
+	if m.liveLeaf(pane.ExplorerKey) {
+		r := 0.0
+		if m.width > 0 {
+			r = float64(explorerWidth) / float64(m.width)
+		}
+		return pane.ExplorerKey, layout.ZoneRight, r
+	}
+	return "", m.splitZone, 0
+}
+
+// anchorFromLayout resolves the saved layout's editor slot to a live split
+// anchor: the path from the slot up to the root is walked inside-out, and the
+// first sibling subtree holding a leaf with a live counterpart wins. The zone
+// puts the new editor on the side of the anchor the slot occupied; the ratio
+// is that split's saved share.
+func (m *Model) anchorFromLayout(tree layout.Node, ids map[string]paneIdentity) (string, layout.Zone, float64, bool) {
+	slot := editorSlotLeaf(tree, ids)
+	if slot == "" {
+		return "", 0, 0, false
+	}
+	type hop struct {
+		sibling layout.Node
+		zone    layout.Zone
+		ratio   float64
+	}
+	var path []hop // innermost hop first: descend appends on the way back up
+	var descend func(n layout.Node) bool
+	descend = func(n layout.Node) bool {
+		switch t := n.(type) {
+		case *layout.Leaf:
+			return t.Pane == slot
+		case *layout.Split:
+			zoneA, zoneB := layout.ZoneLeft, layout.ZoneRight
+			if t.Orient == layout.Vertical {
+				zoneA, zoneB = layout.ZoneTop, layout.ZoneBottom
+			}
+			if descend(t.A) {
+				path = append(path, hop{sibling: t.B, zone: zoneA, ratio: t.Ratio})
+				return true
+			}
+			if descend(t.B) {
+				path = append(path, hop{sibling: t.A, zone: zoneB, ratio: t.Ratio})
+				return true
+			}
+		}
+		return false
+	}
+	if !descend(tree) {
+		return "", 0, 0, false
+	}
+	for _, h := range path {
+		for _, key := range layout.Leaves(h.sibling) {
+			if live := m.liveCounterpart(ids[key]); live != "" {
+				return live, h.zone, h.ratio, true
+			}
+		}
+	}
+	return "", 0, 0, false
+}
+
+// editorSlotLeaf returns the saved layout's designated editor slot: the first
+// editor-kind leaf in walk order. A leaf carrying tool tabs only counts when
+// no plain editor slot exists — a legacy snapshot wrote a pure tool host as
+// "editor"+Tools (pre-#1989), and that pane is the tools area, not the
+// editor area.
+func editorSlotLeaf(tree layout.Node, ids map[string]paneIdentity) string {
+	plain, tooled := "", ""
+	for _, key := range layout.Leaves(tree) {
+		id := ids[key]
+		if id.Kind != "editor" {
+			continue
+		}
+		if len(id.Tools) == 0 {
+			if plain == "" {
+				plain = key
+			}
+		} else if tooled == "" {
+			tooled = key
+		}
+	}
+	if plain != "" {
+		return plain
+	}
+	return tooled
+}
+
+// liveCounterpart maps one saved-layout identity to a leaf of the current
+// tree whose live pane can stand for it, "" when none does.
+func (m *Model) liveCounterpart(id paneIdentity) string {
+	ws := m.activeWS()
+	if ws.Tree == nil {
+		return ""
+	}
+	for _, key := range layout.Leaves(ws.Tree) {
+		if inst := ws.Panes.Get(key); inst != nil && identityMatches(id, inst) {
+			return key
+		}
+	}
+	return ""
+}
+
+// identityMatches reports whether the live pane inst stands for the saved
+// identity id when anchoring a fresh editor split (#1989). Editor slots match
+// panes hosting file or viewer content, tool-tab identities match live tool
+// hosts, terminals and tools match by kind and tool name, and the singleton
+// panels match their fixed keys.
+func identityMatches(id paneIdentity, inst *pane.Instance) bool {
+	switch id.Kind {
+	case "tools":
+		return toolTabHost(inst)
+	case "editor":
+		if len(id.Tools) > 0 {
+			// Legacy pure tool hosts persist as "editor"+Tools: a live tool
+			// host is their counterpart, never an editor pane.
+			return toolTabHost(inst)
+		}
+		switch inst.Kind() {
+		case pane.KindMarkdown, pane.KindImage, pane.KindDiff, pane.KindMerge,
+			pane.KindArchive, pane.KindData, pane.KindES:
+			return true
+		}
+		return inst.Kind() == pane.KindEditor && !toolTabHost(inst)
+	case "terminal":
+		return inst.Kind() == pane.KindTerminal && !inst.IsDebugTerm() && inst.Terminal().Tool() == ""
+	case "tool":
+		return inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() == id.Tool
+	default:
+		if key := singletonSlotKey(id.Kind); key != "" {
+			return inst.Key() == key
+		}
+	}
+	return false
+}
+
+// liveLeaf reports whether key is a leaf of the current tree backed by a
+// registered instance.
+func (m *Model) liveLeaf(key string) bool {
+	ws := m.activeWS()
+	return ws.Tree != nil && layout.Panes(ws.Tree)[key] && ws.Panes.Get(key) != nil
+}
+
+// parentSplit returns the split whose direct child is the leaf key, nil when
+// the leaf is the root or absent.
+func parentSplit(n layout.Node, key string) *layout.Split {
+	sp, ok := n.(*layout.Split)
+	if !ok {
+		return nil
+	}
+	if lf, ok := sp.A.(*layout.Leaf); ok && lf.Pane == key {
+		return sp
+	}
+	if lf, ok := sp.B.(*layout.Leaf); ok && lf.Pane == key {
+		return sp
+	}
+	if p := parentSplit(sp.A, key); p != nil {
+		return p
+	}
+	return parentSplit(sp.B, key)
 }
 
 // editorPaneTools returns the tool names hosted as terminal tabs of an
@@ -813,4 +1033,25 @@ func editorPaneTools(inst *pane.Instance) (tools []string, files int) {
 		}
 	}
 	return tools, files
+}
+
+// toolTabHost reports whether an editor-kind pane hosts nothing but terminal
+// tabs with at least one tool session among them — no editor tabs (scratch
+// included) and no content tabs (#1989). Such a pane is the layout's tools
+// area, not an editor slot: persistence marks it "tools" and editor placement
+// never targets it.
+func toolTabHost(inst *pane.Instance) bool {
+	if inst == nil || inst.Kind() != pane.KindEditor {
+		return false
+	}
+	tools := 0
+	for i := 0; i < inst.TabCount(); i++ {
+		if inst.TabEditor(i) != nil || inst.TabContent(i) != nil {
+			return false
+		}
+		if tt := inst.TabTerminal(i); tt != nil && tt.Tool() != "" {
+			tools++
+		}
+	}
+	return tools > 0
 }

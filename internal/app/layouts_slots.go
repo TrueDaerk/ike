@@ -71,10 +71,11 @@ func singletonSlotKey(kind string) string {
 
 // snapshotSlotOpens classifies one snapshot identity under the active
 // template: the slot opens it stands for when the leaf must re-materialize
-// through the slot engine, ok=false when the leaf applies as saved. An
-// editor identity hosting tool tabs is claimed only when every tool is
-// slot-assigned (a pure tool host); a mixed host — some tools unassigned, or
-// file tabs alongside — stays main content at its snapshot position.
+// through the slot engine, ok=false when the leaf applies as saved. A tool
+// host identity — "tools" (#1989), or the legacy "editor"+Tools shape — is
+// claimed only when every tool is slot-assigned; a mixed host with some
+// tools unassigned, or file tabs alongside, stays main content at its
+// snapshot position.
 func snapshotSlotOpens(tpl *layout.Template, id paneIdentity) ([]slotOpen, bool) {
 	assigned := func(tool string) (string, bool) {
 		slot := toolSlot(tool)
@@ -85,7 +86,7 @@ func snapshotSlotOpens(tpl *layout.Template, id paneIdentity) ([]slotOpen, bool)
 		if slot, ok := assigned(id.Tool); ok {
 			return []slotOpen{{slot: slot, kind: "tool", tool: id.Tool}}, true
 		}
-	case "editor":
+	case "editor", "tools":
 		if len(id.Tools) == 0 {
 			return nil, false
 		}

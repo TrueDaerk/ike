@@ -29,6 +29,9 @@ import (
 // Scratch tabs are not persisted (their text is the crash-recovery side's
 // job). Path stays the active tab's file so older builds — and the legacy
 // reader below — keep working; files without Tabs restore as single-tab panes.
+// A tab host carrying nothing but tool tabs saves as Kind "tools" (#1989) so
+// editor placement can tell it from a real editor slot; older files with the
+// pre-#1989 "editor"+Tools shape restore identically.
 type paneIdentity struct {
 	Kind   string   `json:"kind"`
 	Path   string   `json:"path,omitempty"`
@@ -403,6 +406,13 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 					id.Pinned = append(id.Pinned, len(id.Tabs))
 				}
 				id.Tabs = append(id.Tabs, ed.Path())
+			}
+			if toolTabHost(inst) {
+				// A pane holding nothing but tool tabs persists as "tools"
+				// (#1989), so nothing mistakes it for an editor slot; restore
+				// treats it exactly like the old "editor"+Tools shape, which
+				// older files keep loading under.
+				id.Kind = "tools"
 			}
 			ids[key] = id
 		}
