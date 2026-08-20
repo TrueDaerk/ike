@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-07-16T00:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # Foundation Slice
@@ -101,9 +101,19 @@ model routes file kinds to the editor leaf owning the path
   `Untrack` (paths still open elsewhere stay tracked) — the last-view-close
   untrack (#1541) never fires for panes torn down whole, so both maps would
   otherwise grow for the session's lifetime.
+- **Ignore rule, exported:** `watch.Ignored(root, path)` is the same rule the
+  recursive walk prunes with (`skipWatchDir`), judged on the segments below the
+  root. Consumers that build lists out of watcher events — the
+  [external-change feed](/architecture/change-feed.md) — reuse it instead of
+  re-deriving a second rule that would drift from this one.
 - **Config:** `files.watch = true|false` (default true). `main.go` starts the
   watcher after wiring `Send`; a project switch (Roadmap 0090) calls
   `StartWatcher` again, which restarts on the new root.
+
+Every file event is also recorded into the session's
+[external-change feed](/architecture/change-feed.md) (#2000) before it is routed
+onward, so what a coding agent changed across the tree is reviewable — with a
+mini-diff, a reload and a revert — instead of only landing silently in buffers.
 
 ## Input coalescing (#602)
 

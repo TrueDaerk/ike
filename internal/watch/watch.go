@@ -132,6 +132,40 @@ func skipWatchDir(name string) bool {
 	return vendorNoiseDirs[name]
 }
 
+// Ignored reports whether path lies below a directory the recursive watch
+// prunes — a dot-directory or a vendored-noise name (see skipWatchDir). It is
+// the same rule Start walks with, exported so consumers that build lists out
+// of watcher events (the change feed, #2000) hide exactly what the watcher
+// would never have descended into, rather than re-deriving a second rule that
+// drifts from this one.
+//
+// Only the directory segments *below* root are judged, mirroring Start's
+// "the root itself is always watched" exception: a project living under
+// ~/.config is not wholesale ignored. A path outside root is never ignored —
+// this rule has nothing to say about it. An empty root judges every segment
+// of the absolute path, which is what a caller without a watch root wants.
+func Ignored(root, path string) bool {
+	abs := absPath(path)
+	rel := abs
+	if root != "" {
+		r, err := filepath.Rel(absPath(root), abs)
+		if err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) {
+			return false
+		}
+		rel = r
+	}
+	segs := strings.Split(filepath.ToSlash(rel), "/")
+	for _, seg := range segs[:max(0, len(segs)-1)] { // the base name is a file, not a dir
+		if seg == "" || seg == "." {
+			continue
+		}
+		if skipWatchDir(seg) {
+			return true
+		}
+	}
+	return false
+}
+
 // TruncatedMsg reports that the recursive watch hit maxWatchDirs (#1011) and
 // stopped adding directories: external changes below the unwatched remainder
 // go unseen (open buffers stay covered by the poll fallback). Sent once per
@@ -393,6 +427,15 @@ func (s *Service) ingestGit(ev fsnotify.Event, path, gitDir string) {
 // fileNameSettings is the settings file name inside <root>/.ike (mirrors
 // internal/config; kept literal so watch stays dependency-free).
 const fileNameSettings = "settings.toml"
+
+// Root returns the directory the watcher last started on, empty while it has
+// never run. Consumers filtering watcher-derived lists pass it to Ignored.
+func (s *Service) Root() string {
+	if s == nil {
+		return ""
+	}
+	return s.rootDir()
+}
 
 // rootDir returns the current watch root.
 func (s *Service) rootDir() string {
