@@ -1,5 +1,19 @@
 # Log
 
+## 2026-08-20 (Markdown list continuation lines align with the item text, #1975)
+
+- **List continuations** (`internal/editor/mdlist.go`): a list item's
+  continuation lines now render flush with the item's text instead of keeping
+  their bare source indent — `- My multiline bullet` / `  point` renders as
+  `  • My multiline bullet` / `    point`. The pad is a display-only conceal
+  range like the marker stand-ins: the continuation's leading whitespace is
+  concealed behind a run of spaces as wide as the item's text column, so the
+  buffer never changes and the caret in that indent reveals the raw source.
+  Ordered items get their pad at run-flush time, so it follows the run's
+  aligned number width across the 9 → 10 boundary. Nested items stay items,
+  fenced blocks, blank lines and tab indents stay untouched. Concept doc
+  `/architecture/editor.md` updated.
+
 ## 2026-08-19 (Local History as a two-pane panel with a live inline diff, #1969)
 
 - **Local History panel** (`internal/app/localhistory.go`): `file.localHistory`

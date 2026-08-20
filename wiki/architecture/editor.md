@@ -1465,6 +1465,17 @@ attributes in `styleAt`):
   number, keeping the item's source indent in front of the stand-in. Thematic
   breaks (`---`, `* * *`) are rules, not items. The caret on a marker reveals
   the raw source like any other conceal range.
+  **Continuation lines** (#1975) are padded the same display-only way: a plain
+  text line indented deeper than the innermost open item conceals its leading
+  whitespace behind a run of spaces as wide as that item's *text* column
+  (source indent + the two cells + the stand-in marker + the space after it),
+  so wrapped item text lines up under the first character instead of under the
+  bullet. An ordered item's column is only known once its run is flushed, so
+  those pads are emitted with the run's number alignment. Nested items are
+  items, not continuations; fenced blocks inside an item, blank lines and
+  lines already indented past the text column stay untouched, as do items
+  whose indent holds a tab (rune columns would lie about display width). The
+  caret in a padded indent reveals the raw source.
 - **Pipe tables**: detected from the buffer text (a pipe row above a `|---|`
   delimiter row — equivalent to the grammar's `pipe_table`, but it also works
   in `CGO_ENABLED=0` builds), re-rendered with box-drawing characters, cells
