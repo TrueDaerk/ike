@@ -70,6 +70,7 @@ import (
 	"ike/internal/menu"
 	"ike/internal/nav"
 	"ike/internal/numhint"
+	"ike/internal/openapi"
 	"ike/internal/overlay"
 	"ike/internal/palette"
 	"ike/internal/pane"
@@ -462,6 +463,14 @@ type Model struct {
 	oapiImportOpen  bool
 	oapiImportInput string
 	oapiImportPos   int
+	// oapiCheck* hold the URL validation of that prompt (#2009): the
+	// sequence number of the newest check (older answers are stale),
+	// whether one is in flight, the last error message, and the resolved
+	// document a confirm imports from.
+	oapiCheckSeq  int
+	oapiChecking  bool
+	oapiCheckErr  string
+	oapiCheckDisc *openapi.Discovery
 	// curlImportOpen marks the curl import prompt (#1994) while the shell
 	// shows it; curlImportInput/curlImportPos are the typed command and
 	// cursor.
@@ -3625,6 +3634,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// document, then generate the .http file beside it.
 		m.startOpenAPIImport()
 		return m, nil
+
+	case openAPICheckDoneMsg:
+		// A finished URL discovery (#2009): arm the confirm or turn the
+		// prompt red with the reason.
+		return m.finishOpenAPICheck(msg)
 
 	case openAPIImportDoneMsg:
 		// The finished import: toast the summary and open the generated file.

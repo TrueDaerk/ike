@@ -69,6 +69,7 @@ type Floating struct {
 	pal     *theme.Palette // active theme (Roadmap 0110); nil = default
 
 	content  Content
+	accent   color.Color // per-content border override (#2009); nil follows cfg/theme
 	open     bool
 	width    int // terminal width
 	height   int // terminal height
@@ -158,8 +159,23 @@ func (f *Floating) Open() {
 	f.relayout()
 }
 
-// Close hides the shell.
-func (f *Floating) Close() { f.open = false }
+// SetAccent overrides the border colour of the shell until it is closed
+// (#2009): a hosted dialog whose input failed validation — the OpenAPI
+// import's URL check — turns the whole popup red, which reads at a glance
+// where a line of body text does not. Passing nil restores the configured
+// accent.
+func (f *Floating) SetAccent(c color.Color) { f.accent = c }
+
+// Accent returns the active border override, nil when the shell follows its
+// configured accent.
+func (f *Floating) Accent() color.Color { return f.accent }
+
+// Close hides the shell and drops any accent override, so the next content
+// opens in the normal colour rather than inheriting the last dialog's alarm.
+func (f *Floating) Close() {
+	f.open = false
+	f.accent = nil
+}
 
 // SetSize records the terminal size and recomputes the layout.
 func (f *Floating) SetSize(width, height int) {
@@ -320,6 +336,9 @@ func (f *Floating) View() string {
 	var accent color.Color = f.theme().BorderFocus
 	if f.cfg.Accent != "" {
 		accent = lipgloss.Color(f.cfg.Accent)
+	}
+	if f.accent != nil {
+		accent = f.accent
 	}
 	titleStyle := lipgloss.NewStyle().Foreground(f.theme().Foreground).Bold(true).Underline(true)
 	hintStyle := lipgloss.NewStyle().Foreground(f.theme().Border)

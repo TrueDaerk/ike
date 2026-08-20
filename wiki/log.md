@@ -1,5 +1,32 @@
 # Log
 
+## 2026-08-20 (OpenAPI import from a URL, #2009)
+
+- **`internal/openapi/fetch.go`** (new): `openapi.Discover` resolves an
+  `http(s)` URL to a parseable OpenAPI 3.x document. A URL whose path names a
+  document is fetched as it is; a base URL is probed over the fixed, documented
+  `ProbePaths` order (`/openapi.json`, `/openapi.yaml`, `/openapi.yml`,
+  `/swagger.json`, `/swagger.yaml`, `/v3/api-docs`, `/api-docs`,
+  `/api/openapi.json`, `/api/openapi.yaml`), first parseable answer wins; a
+  path prefix that is not a document is probed *under*. Probing is sequential
+  with a five second `ProbeTimeout` per request, and a transport failure ends
+  the run at the first path — a dead host must not cost nine timeouts. Errors
+  are typed so the dialog can name the actual cause (transport, HTTP status,
+  parse error, "no OpenAPI document at … — probed …").
+- **`internal/openapi/import.go`**: `ImportDocument` splits out of
+  `ImportFile` — the import of bytes already in hand, which is what a
+  confirmed URL import generates from, so the validated document and the
+  imported one are the same bytes.
+- **`internal/app/openapi_import.go`**: the prompt takes a path *or* a URL. A
+  path still imports on the first enter; a URL is validated first (off-loop
+  discovery, sequence-numbered so a stale answer for an edited input is
+  dropped) and only a second enter confirms it. The resolved URL and its
+  operation count are shown before confirming; a failure paints the popup in
+  the theme's error colour and shows the reason. Tab completes paths only.
+- **`internal/ui/floating.go`**: `SetAccent`/`Accent` let hosted content
+  override the shell's border colour until it closes — the seam the red
+  failure state uses.
+
 ## 2026-08-20 (Number-hint mapping: input base and skipped entries, #2008)
 
 - **`internal/numhint`**: `EntryError` words why an `editor.number_hint_units`

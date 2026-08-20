@@ -72,17 +72,27 @@ func ImportFile(specPath string) (*ImportResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	return ImportDocument(data, filepath.Base(specPath), filepath.Dir(specPath))
+}
+
+// ImportDocument writes the request file for an already-read document into
+// dir, named after specName (`petstore.yaml` → `petstore.http`). It is what
+// ImportFile does once the bytes are in hand, and the seam the URL import
+// (#2009) generates from: the dialog has already fetched and validated the
+// document, so importing it must not fetch it a second time — a spec served
+// dynamically could otherwise differ between the check and the import.
+func ImportDocument(data []byte, specName, dir string) (*ImportResult, error) {
+	specName = filepath.Base(specName)
 	spec, err := Parse(data)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %v", filepath.Base(specPath), err)
+		return nil, fmt.Errorf("%s: %v", specName, err)
 	}
-	res := Generate(spec, Options{SpecName: filepath.Base(specPath)})
+	res := Generate(spec, Options{SpecName: specName})
 	if res.Operations == 0 {
-		return nil, fmt.Errorf("%s: the document declares no operations", filepath.Base(specPath))
+		return nil, fmt.Errorf("%s: the document declares no operations", specName)
 	}
 
-	dir := filepath.Dir(specPath)
-	base := strings.TrimSuffix(filepath.Base(specPath), filepath.Ext(specPath))
+	base := strings.TrimSuffix(specName, filepath.Ext(specName))
 	if base == "" {
 		base = "openapi"
 	}

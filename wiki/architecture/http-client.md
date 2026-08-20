@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-20T18:00:00Z
+timestamp: 2026-08-20T21:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -16,7 +16,7 @@ subsystem: parser (#1248), dispatch (#1249), editor UX (#1250) and response
 history (#1251) — the full epic — are implemented, and each stored response
 keeps the request that produced it so it can be sent again verbatim (#1832).
 Request files need not be written by hand: `http.importOpenAPI` scaffolds one
-from an OpenAPI 3.x document (#1939, see
+from an OpenAPI 3.x document — a file or a URL (#1939, #2009, see
 [importing an OpenAPI spec](#importing-an-openapi-spec-internalopenapi-1939)),
 and `http.importCurl` / `http.copyAsCurl` convert single requests to and from
 curl commands (#1994, see
@@ -281,10 +281,10 @@ GET https://example.com/_tasks/{{task}}
 
 A new service usually ships an OpenAPI document long before anyone writes a
 request file for it. `http.importOpenAPI` ("Import OpenAPI Spec…", palette)
-turns one into the other: it prompts for a local OpenAPI **3.x** document —
-JSON or YAML, tab completes paths like the JetBrains keymap import (#677) —
-and generates a `.http` file plus the environment skeletons its placeholders
-resolve from.
+turns one into the other: it prompts for an OpenAPI **3.x** document —
+JSON or YAML, a path (tab completes it like the JetBrains keymap import, #677)
+or an `http(s)` URL (#2009) — and generates a `.http` file plus the
+environment skeletons its placeholders resolve from.
 
 **Where the output lands** — *next to the spec*, named after it
 (`petstore.yaml` → `petstore.http`), and the generated file opens in the
@@ -292,7 +292,61 @@ editor. It is not an unsaved buffer the user places afterwards, because the
 generated placeholders resolve from `http-client.env.json`, and the client
 looks for that file in the **request file's own directory**: a buffer without
 a home would resolve nothing, and saving it elsewhere would leave its
-environment behind.
+environment behind. A URL has no directory of its own, so its import lands in
+the **working directory** — the project root, where a relative path typed into
+the same prompt would resolve too — named after the resolved URL's last
+segment (`…/v3/api-docs` → `api-docs.http`).
+
+### Importing from a URL (`internal/openapi/fetch.go`, #2009)
+
+The spec of a *running* service lives behind a URL, and downloading it by hand
+first is a detour the prompt does not need to impose. Two shapes are accepted,
+and `openapi.Discover` tells them apart by the URL's path:
+
+- **A document URL** (`https://api.example.com/v3/api-docs`,
+  `…/openapi.json`) is fetched as it is.
+- **A base URL** (`https://api.example.com`) is resolved by probing
+  `openapi.ProbePaths` **in order** — the OpenAPI conventions, then Swagger's,
+  then springdoc's and the common `/api` prefix:
+
+  `/openapi.json`, `/openapi.yaml`, `/openapi.yml`, `/swagger.json`,
+  `/swagger.yaml`, `/v3/api-docs`, `/api-docs`, `/api/openapi.json`,
+  `/api/openapi.yaml`
+
+  The first path that answers with a **parseable** document wins. The order is
+  what decides which document a service exporting several of them is imported
+  from, so it is fixed here rather than guessed per host. A URL whose path is
+  neither empty nor a `.json`/`.yaml`/`.yml` document (`…/api`) is fetched
+  directly *and*, failing that, probed **under** that prefix — a service
+  mounted below its origin still resolves.
+
+**Validate before confirm.** A path imports on the first enter; a URL does
+not. The first enter runs discovery off the update loop and the prompt reports
+what came back: the resolved URL and its operation count, or the failure. Only
+then does a second enter import — from the bytes the check already fetched, so
+a dynamically served spec cannot change between checking and importing. Every
+edit of the input (typing, paste) invalidates what was verified and bumps a
+sequence number, so an answer still in flight for an older input is dropped
+instead of arming a confirm for a URL nobody is looking at.
+
+**Failure is red, and concrete.** A failed check paints the whole popup in the
+theme's error colour (`ui.Floating.SetAccent`, cleared when the shell closes)
+and shows the reason as the dialog's own body: the transport failure
+(`dial tcp …: connection refused`), the HTTP status (`… : HTTP 404 Not
+Found`), the parse error of a document that answered but is not OpenAPI 3.x,
+or `no OpenAPI document at <base> — probed …` listing every path tried.
+
+**Probing is sequential**, one request at a time with a `ProbeTimeout` of five
+seconds each: a live host is not hit with a burst just because its origin was
+typed, and a *dead* host aborts the run at the very first probe — the
+remaining paths would fail identically, and the dialog must not sit through
+nine timeouts to say so. The client is `http.DefaultTransport.Clone()` with
+that timeout, the dispatcher's convention (`internal/httpclient/dispatch.go`)
+rather than a second TLS setup.
+
+Note the asymmetry with the reader below, which never fetches an external
+`$ref`: reaching the network here is the *user's* explicit request, while a
+`$ref` would be the document's.
 
 **What a block looks like.** Operations are grouped by tag (an empty `###
 <tag>` block carries the heading — a block of nothing but comments is skipped
@@ -365,8 +419,8 @@ OpenAPI 3.x at all fails the import: unparseable content, a **Swagger 2.0**
 document (rejected with "convert the document to OpenAPI 3.x first" — ike does
 not convert), a missing/foreign `openapi` version, or a document declaring no
 operation. Everything else is tolerated and generated *partially*: an
-unresolvable or **external** `$ref` (never fetched — an import does not reach
-the network), a parameter in an unsupported location, a security scheme with
+unresolvable or **external** `$ref` (never fetched — only the document the
+user named is retrieved, never what it points at), a parameter in an unsupported location, a security scheme with
 no request-file spelling, a media type with no generator. Each is recorded
 once, listed as `# not generated: …` comments in the file's header **and**
 summarized in the import notification, so what was left out is visible where
