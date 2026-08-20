@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store, named user-scoped saved layouts, and slot templates (#1897) deriving tool-window positions from an ASCII grid.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-08-15T00:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -248,6 +248,20 @@ split beside it (#1851). With no editor pane left, one is spawned to host the
 tab. Only the explorer's explicit **open in split** (`o`, `OpenFileMsg{NewPane:
 true}`) still goes through `viewerSplitTarget`.
 
+**Where a spawned editor lands (#1989).** `spawnEditor` anchors at the pane
+`fileEditorKey` resolves — never at a pane whose tabs are all tool sessions (a
+**tool-tab host**, `toolTabHost`): that pane is the layout's tools area, not
+an editor slot. When *no* live pane edits files (last editor closed, only
+explorer/terminals/tool hosts remain), the **designated default layout**
+decides the position (`editorSlotAnchor`): its first real editor slot is
+located, the path to the root is walked inside-out, and the first layout
+sibling with a live counterpart (matched by identity kind — singletons by
+fixed key, tools by name, tool hosts by shape) becomes the split anchor, on
+the side the slot occupied and with the saved split share — so with all
+editors closed, opening a file recreates the editor in its original layout
+slot. Without a usable default layout the built-in explorer+editor
+arrangement anchors at the explorer; the focused leaf stays the last resort.
+
 The root model exposes these as binding-agnostic ops (`SplitFocused(zone)`,
 `CloseFocused`, `FocusDir(dir)`, plus tab focus-cycle), so Roadmap 0080 binds
 keys and the mouse reaches the same methods. `Leaves(root)` returns the leaf keys
@@ -334,7 +348,11 @@ per-project state file rather than `settings.toml`:
   wrapper: alongside the encoded tree, a **per-leaf identity table** maps each
   instance key to `{kind, path}` so a restored editor reopens its file. Old
   bare-tree files still load — their leaves are inferred (`explorer` → the
-  explorer, everything else → a file-less editor).
+  explorer, everything else → a file-less editor). A tab host holding
+  **nothing but tool tabs** saves as kind `tools` (#1989) so editor placement
+  can tell it from a real editor slot; older files with the pre-#1989
+  `editor`+`tools` shape restore identically (tolerant reader), and the next
+  save migrates them.
 - **Tolerant restore** (`internal/app`): the explorer must be present exactly
   once and every other leaf must be a well-formed editor key, else the default
   layout is rebuilt. A saved editor whose **file no longer exists** restores as an
@@ -406,12 +424,18 @@ named, user-scoped snapshots of the split tree.
   becomes one scratch editor. At **startup** (default-layout materialization)
   a placeholder has no live panes to graft and materializes as one scratch
   editor slot.
-- **Tool tabs in snapshots (#1277):** a tab host (#836) whose tabs are exactly
-  one tool session and no file-backed editors snapshots as a dedicated
-  `tool` slot; any other editor-kind pane hosting tool tabs keeps the tool
-  names in its identity, and a fresh editor slot restarts them as tabs on
-  apply (the startup restore of `id.Tools` already did the same). Plain
-  terminal tabs stay session-local either way.
+- **Tool tabs in snapshots (#1277, #1989):** a tab host (#836) whose tabs are
+  exactly one tool session and no file-backed editors snapshots as a dedicated
+  `tool` slot; a **pure multi-tool host** (tool tabs only, no editor or
+  content tabs) snapshots as kind `tools` with the tool names — on apply a
+  `tools` slot re-slots a live tool host or restarts the saved tools as tabs
+  of a fresh host, and **never consumes an editor slot's content pane**
+  (`implicitHostSlot` skips tool hosts too, so leftovers never graft into the
+  tools area). A mixed host — files alongside tools — stays an editor slot
+  that keeps the tool names, and a fresh editor slot restarts them as tabs on
+  apply (the startup restore of `id.Tools` already did the same); a legacy
+  snapshot's `editor`+`tools` identity re-slots a live tool host before any
+  content pane. Plain terminal tabs stay session-local either way.
 - **Slot templates (#1899):** with a `[tools.layout]` template active
   (#1897), the **current slot config is authoritative** for slotted tools.
   Apply prunes every snapshot leaf the template claims — dedicated tool

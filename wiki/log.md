@@ -1,5 +1,21 @@
 # Log
 
+## 2026-08-20 (Tool-tab panes are no longer editor slots, #1989)
+
+- **Persistence** (`internal/app/store.go`, `layouts.go`): a tab host holding
+  nothing but tool tabs saves as kind `tools` — per-project `layout.json` and
+  user-layout snapshots alike — instead of `editor`+`tools`; legacy files
+  keep loading and migrate on the next save.
+- **Editor placement** (`internal/app/app.go` `spawnEditor`,
+  `editorSlotAnchor`): a tool-tab host never attracts a fresh editor split.
+  With no live file-editing pane, the designated default layout's editor slot
+  anchors the split (nearest live layout sibling, saved side and share), so
+  opening a file with all editors closed recreates the editor in its original
+  layout slot.
+- **Apply** (`resolveLeaf`, `implicitHostSlot`): `tools` slots re-slot live
+  tool hosts and never consume an editor slot's content pane; leftovers never
+  graft into the tools area.
+
 ## 2026-08-20 (Markdown list continuation lines align with the item text, #1975)
 
 - **List continuations** (`internal/editor/mdlist.go`): a list item's
