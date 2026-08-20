@@ -786,6 +786,12 @@ func (m Model) resolveAfterG(s string, r rune, hasRune bool) (Model, tea.Cmd) {
 		cmd := m.openFileUnderCursor()
 		m.pending.Reset()
 		return m, cmd
+	case "?":
+		// g?: explain the concealed or masked value at the caret (#1998) —
+		// which rule fired, what it decided, and the keys that overrule it.
+		cmd := m.explainConceal()
+		m.pending.Reset()
+		return m, cmd
 	case "s":
 		// gs: label jump (#787) — a bare motion to a visible, labeled match.
 		// It cannot serve as an operator target, so a pending operator cancels.

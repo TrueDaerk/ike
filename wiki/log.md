@@ -1,5 +1,33 @@
 # Log
 
+## 2026-08-20 (Conceal/secret explain popover, #1998)
+
+- **Span → provenance** (`internal/numhint`, `internal/secret`,
+  `internal/epochtime`, `internal/consthint`): the hint sources now report
+  *which* rule produced a reading. `numhint.Hint.Why` carries the rule level
+  (field rule / key word / shape), the pattern or word it matched and the unit
+  it applied, filled in on the branches that pick the family; `FieldRule`,
+  `KeyWord`, `ValueAt`, `HintAt` and `UnitName` expose the pieces around it.
+  `secret.Explain` replays the key tables in order with the pattern that
+  decided, `epochtime.Unit` reports the digit-count reading, and
+  `consthint.FlavorForLang` lets a caller evaluate a constant's right-hand side
+  for the buffer's language.
+- **`internal/concealexplain`** (new): composes those into one explanation —
+  raw value, stand-in, key, family, the rule in its own words, the reading and
+  its mapping word — plus the reclassification choices and the entry formats of
+  the two stores.
+- **The popover** (`internal/editor/explainconceal.go`, `g?` /
+  `editor.explainConceal`): the caret's stand-in (with #1686's widening, and
+  answering for families switched off) or the plain value under it, with
+  `r` reveal, `1`–`9` reclassify, `a` pin the current reading and `m`/`u` for
+  the masking rules. Rules persist through `editor.ConcealRuleMsg` and
+  `app/conceal_rule.go` into `editor.number_hint_units` /
+  `editor.secret_masking_keys` — the same stores the Settings UI edits — with
+  an existing entry for the same pattern replaced rather than shadowed.
+- **Docs**: `/architecture/editor.md` gained the popover section and the
+  cross-references from the number-hint and secret-masking sections;
+  `userdocs/reference/commands.md` regenerated.
+
 ## 2026-08-20 (Capture response values into variables, #1993)
 
 - **Directive** (`internal/httpfile/capture.go`): `# @capture name = <jq-expr>`

@@ -586,7 +586,11 @@ type Model struct {
 	signature  *signatureState
 	// peek is the peek-definition popup (#1154): a cursor-anchored excerpt of
 	// the definition target; owns esc/enter/scroll keys while open (peek.go).
-	peek      *peekState
+	peek *peekState
+	// explain is the conceal/secret explain popover (#1998): why the value at
+	// the caret draws the way it does, plus the one-key overrides that persist
+	// the answer as a rule (explainconceal.go). It owns its keys while open.
+	explain   *explainState
 	popupMaxW int // app-set popup content-width cap (#316); 0 = pane-derived
 
 	// Editor settings, refreshed from cfg on each event so live config changes
@@ -1522,6 +1526,14 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 			// The peek popup (#1154) owns esc/enter/up/down/ctrl+d/ctrl+u;
 			// any other key closes it and falls through to normal dispatch.
 			if handled, cmd := m.peekKey(msg); handled {
+				return m, cmd
+			}
+		}
+		if m.explain != nil {
+			// The explain popover (#1998) owns its action keys the same way:
+			// reveal, reclassify, the masking rules and esc.
+			if handled, cmd := m.explainKey(msg); handled {
+				m.scroll()
 				return m, cmd
 			}
 		}

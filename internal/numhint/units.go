@@ -137,18 +137,85 @@ func SetFieldUnits(entries []string) bool {
 // characters; a camel-case name is additionally matched in its snake_case
 // form, so `max_body_size` covers `maxBodySize` too.
 func FieldUnit(key string) (Unit, bool) {
+	_, u, ok := FieldRule(key)
+	return u, ok
+}
+
+// FieldRule is FieldUnit with the pattern of the entry that matched (#1998):
+// the explain popover names the rule that decided a value's reading, and with
+// a wildcard entry the pattern is the only way to point at it in the settings.
+func FieldRule(key string) (pattern string, u Unit, ok bool) {
 	rs := rules.Load()
 	if rs == nil || len(*rs) == 0 || key == "" {
-		return Unit{}, false
+		return "", Unit{}, false
 	}
 	lower := strings.ToLower(key)
 	snake := strings.Join(keyWords(key), "_")
 	for _, r := range *rs {
 		if globMatch(r.pattern, lower) || (snake != lower && globMatch(r.pattern, snake)) {
-			return r.unit, true
+			return r.pattern, r.unit, true
 		}
 	}
-	return Unit{}, false
+	return "", Unit{}, false
+}
+
+// UnitName is the mapping word for a unit — the right-hand side an entry in
+// editor.number_hint_units is written with. It is the inverse of ParseUnit for
+// every unit ParseUnit produces, so a reading the heuristics chose can be
+// pinned as a rule verbatim (#1998).
+func UnitName(u Unit) string {
+	switch u.Kind {
+	case UnitOff:
+		return "none"
+	case UnitBytes:
+		return "bytes"
+	case UnitTimestampSeconds:
+		return "timestamp-s"
+	case UnitTimestampMillis:
+		return "timestamp-ms"
+	case UnitOctal:
+		return "octal"
+	case UnitHex:
+		return "hex"
+	case UnitGroup:
+		return "group"
+	case UnitDuration:
+		for _, name := range durationUnitNames {
+			if unitWords[name] == u.Base {
+				return name
+			}
+		}
+	}
+	return ""
+}
+
+// durationUnitNames are the duration words UnitName prefers, one per base —
+// unitWords holds several spellings of each ("ms", "msec", "millis") and the
+// shortest is the one a written rule reads best with.
+var durationUnitNames = []string{"ns", "us", "ms", "s", "min", "h", "d"}
+
+// Label renders a unit the way the explain popover names a reading: the
+// mapping word, with the duration base spelled out.
+func (u Unit) Label() string {
+	switch u.Kind {
+	case UnitOff:
+		return "none (no stand-in)"
+	case UnitBytes:
+		return "binary byte size"
+	case UnitDuration:
+		return "duration in " + UnitName(u)
+	case UnitTimestampSeconds:
+		return "Unix timestamp in seconds"
+	case UnitTimestampMillis:
+		return "Unix timestamp in milliseconds"
+	case UnitOctal:
+		return "octal reading"
+	case UnitHex:
+		return "hex reading"
+	case UnitGroup:
+		return "grouped digits"
+	}
+	return ""
 }
 
 // globMatch reports whether s matches pattern, where `*` stands for any run of

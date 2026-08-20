@@ -69,21 +69,22 @@ func SetKeyPatterns(entries []string) bool {
 	return true
 }
 
-// keyVerdict returns what the configured patterns say about key: masked/not
-// plus whether any entry matched at all. A key nothing matches is left to the
+// keyVerdict returns what the configured patterns say about key: masked/not,
+// whether any entry matched at all, and the pattern of the entry that did —
+// the explain popover names it (#1998). A key nothing matches is left to the
 // built-in tables.
-func keyVerdict(key string) (mask, matched bool) {
+func keyVerdict(key string) (mask, matched bool, pattern string) {
 	rs := keyRules.Load()
 	if rs == nil || len(*rs) == 0 || key == "" {
-		return false, false
+		return false, false, ""
 	}
 	lower := strings.ToLower(key)
 	for _, r := range *rs {
 		if globMatch(r.pattern, lower) {
-			return !r.exempt, true
+			return !r.exempt, true, r.pattern
 		}
 	}
-	return false, false
+	return false, false, ""
 }
 
 // globMatch reports whether s matches pattern, where `*` stands for any run of
