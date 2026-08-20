@@ -2132,13 +2132,27 @@ channel and `decodeOn` gates it, exactly like the decode families (#1620).
   `max_body_size` covers `maxBodySize`. Units: `bytes`, any duration unit word
   (`ns`, `us`, `ms`, `s`, `min`, `h`, `d`, plus the spelled-out forms),
   `timestamp-s`, `timestamp-ms`, `octal`, `hex`, `group` and `none`. Earlier
-  entries win, so a specific name may precede a wildcard covering it, and a
-  malformed entry or unknown unit is skipped rather than failing the mapping.
+  entries win, so a specific name may precede a wildcard covering it.
   A mapped field is read in that unit and **no other**: the shape triggers and
   the built-in key words are not consulted, a value the unit says nothing
   about (512 in a `bytes` field) stays bare rather than falling through, and
   `none` silences every family over the field's values — including the epoch
-  decoding. The mapping is a process-wide global in `numhint` (the span
+  decoding. The unit is the base the raw number is read **in**, not just the
+  family it draws as (#2008): under `request_timeout=s` the value `1500` is
+  1500 *seconds* and draws as `25m`, where the built-in `timeout` word would
+  have counted it in milliseconds (`1s500ms`) — and every position the mapping
+  reaches reads it that way, the Python keyword argument of a call line
+  (#1761/#1773) exactly like the assignment beside it.
+
+  A malformed entry or unknown unit is skipped rather than failing the whole
+  mapping, and the skip is reported: `numhint.EntryError` words what is wrong
+  with an entry, `numhint.InvalidEntries` lists the ones the install dropped,
+  and `app` turns those into `editor.number_hint_units` config diagnostics
+  (toasted like an unknown language id in a file association). The Settings
+  list editor runs the same check per element and refuses to commit one that
+  would be skipped, listing the unit words while the entry is typed — a
+  dropped entry is invisible otherwise, and reads as the mapping being
+  ignored: the field simply keeps its built-in reading. The mapping is a process-wide global in `numhint` (the span
   producers are `lang.Language.Spans` hooks with no config plumbing, as with
   `internal/idcolor`); `applyNumberHintUnits` in `app` pushes it on every
   config load and re-parses the open editors when it moved. Since #1998 an
