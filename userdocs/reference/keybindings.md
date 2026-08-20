@@ -70,6 +70,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Next tab | `ctrl+alt+right` | `ctrl+alt+right` | `editor.tab.next` |
 | Notification history | `cmd+alt+n` | `ctrl+alt+n` | `notifications.history` |
 | Open menu bar | `f10` | `f10` | `menu.open` |
+| Performance HUD | `ctrl+alt+p` | `ctrl+alt+p` | `perf.hud` |
 | Pinned files | `cmd+2` | `ctrl+2` | `nav.pins` |
 | Popup terminal | `cmd+alt+t` | `ctrl+alt+t` | `terminal.popup` |
 | Previous search match | `shift+f3` | `shift+f3` | `search.prevMatch` |

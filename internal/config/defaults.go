@@ -259,5 +259,12 @@ func defaults() *Config {
 				Port: 9003, // Xdebug's default DBGp port
 			},
 		},
+		Perf: Perf{
+			// One HUD refresh per second: fast enough to watch a spike
+			// build, slow enough that the HUD's own wake is a rounding
+			// error in the rate it reports (#1999).
+			HUDIntervalMs:     1000,
+			HUDHistorySeconds: 60,
+		},
 	}
 }

@@ -333,6 +333,10 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "debug.php.port", Type: Int, Title: "PHP listen port", Description: "DBGp port debug.listen binds for incoming Xdebug connections (Xdebug's default is 9003)", Scope: config.UserScope, Min: 1, Max: 65535},
 			{Key: "debug.php.hostname", Type: String, Title: "PHP hostname filter", Description: "Only accept listen-mode debug sessions whose request HTTP_HOST matches (port suffix ignored); empty accepts all — per project", Scope: config.ProjectScope},
 		}},
+		{Title: "Performance HUD", Description: "The built-in performance HUD (#1999): a floating overlay with message rates, per-pane render cost, goroutines and memory, toggled with the Performance HUD command. It only measures while it is shown.", Entries: []Entry{
+			{Key: "perf.hud_interval_ms", Type: Int, Title: "HUD refresh interval", Description: "Milliseconds between HUD samples. This is also the wake rate the open HUD costs the program, so a very short interval shows up in the numbers it reports; the HUD counts its own tick either way", Scope: config.UserScope, Min: 100, Max: 10000},
+			{Key: "perf.hud_history_seconds", Type: Int, Title: "HUD history span", Description: "Seconds of rolling history behind the HUD's sparklines and the min/avg/max block the snapshot copies, so a spike stays readable after it passed", Scope: config.UserScope, Min: 5, Max: 600},
+		}},
 		{Title: "Notifications", Description: "Toasts and the notification history: how long they stay and which severities are worth interrupting for.", Entries: []Entry{
 			{Key: "notifications.timeout_seconds", Type: Int, Title: "Notification timeout", Description: "Seconds before info/warn toasts expire", Scope: config.UserScope, Min: 1, Max: 300},
 			{Key: "notifications.min_severity", Type: Enum, Title: "Notification severity floor", Description: "Below this severity notifications go to the history only", Scope: config.UserScope, Options: []string{"info", "warn", "error"}},

@@ -1,5 +1,41 @@
 # Log
 
+## 2026-08-20 (Built-in performance HUD, #1999)
+
+- **`internal/perfhud`** (new): the metrics collector plus both renderers. The
+  collector is a package-level singleton (the root model is a value type copied
+  per message, so measurement state cannot live in it) gated by an atomic bool:
+  `Count` buckets a message by coarse category (key/mouse/resize/tick/other,
+  structural where bubbletea's interfaces allow, `Tick`-spelling for timer
+  deadlines) *and* by concrete type name, `RecordFrame` takes the full-frame
+  cost, `RecordPane` books render time against a pane key. `Sample` closes a
+  window into rates, ranks the panes by total cost, reads
+  `runtime.ReadMemStats`/`NumGoroutine`/RSS and appends to a bounded ring.
+  Classification is cached per type name, so the type switch runs once per
+  message *type*. `Render` draws the box (sparklines scaled to their own
+  window's maximum); `SnapshotText` renders the same numbers as a plain-text
+  block with the build stamp and min/avg/max over the history. RSS comes from
+  `/proc/self/statm` where it exists and from `getrusage`'s peak otherwise —
+  labelled as a peak rather than passed off as current.
+- **Hooks** (`internal/app`): `Update` counts, `render` books the frame,
+  `renderPane` (split from the new `renderPaneBox`) books the leaf. Each sits
+  behind a `perfhud.Enabled()` check, so a hidden HUD costs one atomic load and
+  adds no allocation, clock read or defer closure to any hot path (#1095–#1101);
+  with the HUD open the box is laid out once per sample and cached in the model
+  (`perfBox`/`perfBoxW`) rather than composed per frame.
+- **`internal/app/perfhud.go`** (new): `perf.hud` (`ctrl+alt+p`, View menu)
+  toggles collection and the demand-armed sampling tick — the HUD's only wake,
+  counted in the armed-timer gauge it reports; `perf.snapshot` copies the block
+  to the clipboard, using the sample on screen while the HUD is open and a
+  fresh one (runtime gauges only, stated as such) while it is closed. The open
+  state lives in the collector so a project switch's model rebuild cannot orphan
+  the tick. The box composites top-right, above every overlay but the toasts.
+- **Settings**: `[perf] hud_interval_ms` (100–10000, default 1000) and
+  `hud_history_seconds` (5–600, default 60), validated, on a "Performance HUD"
+  settings page; the ring length follows from the pair.
+- Wiki: a HUD section in Performance & Diagnostics; reference pages and the
+  keybinding ledger regenerated.
+
 ## 2026-08-20 (Rotated log sets as one merged timeline, #1996)
 
 - **`internal/logset`** (new): rotation-set detection and merging. `Stem`

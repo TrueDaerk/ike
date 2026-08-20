@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Performance & Diagnostics
-description: Idle-behavior rules (who may wake the render loop, and how often) and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
-resource: internal/diag
-tags: [architecture, performance, pprof, idle, diagnostics]
-timestamp: 2026-08-18T00:00:00Z
+description: Idle-behavior rules (who may wake the render loop, and how often), the in-app performance HUD, and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
+resource: internal/perfhud
+tags: [architecture, performance, pprof, idle, diagnostics, hud]
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -62,6 +62,71 @@ so with many panes each unnecessary wake is expensive. The standing rules:
   files — `index`, `HEAD`, `packed-refs`, `logs/HEAD` — carry every real
   change). Regression tests: `TestGitStatusEchoesStaySilent`,
   `TestRelativeRootClassifiesGitDir`.
+
+## The performance HUD (`internal/perfhud`, #1999)
+
+Every idle-CPU and memory regression so far (#1001, #1886, #1537) needed
+external profiling to diagnose, which is why they were noticed late and
+reported without data. The HUD is the self-service answer: **Performance HUD**
+(`perf.hud`, `ctrl+alt+p`, View menu) floats a box in the workspace's
+top-right corner — above every overlay but the toasts, so it cannot be hidden
+by the very frames it explains — showing, per refresh interval:
+
+- **Message rate**, total and by coarse category (key, mouse, resize, tick,
+  other) plus the loudest *concrete* message type. The buckets say what kind of
+  thing wakes the loop; the type name (`followTickMsg`, `terminal.OutputMsg`)
+  is what actually named the culprit in the regressions above. Categories are
+  structural where bubbletea's own interfaces allow (`KeyMsg`, `MouseMsg`,
+  `WindowSizeMsg`); a timer deadline is recognised by the `Tick` spelling every
+  ticker in the codebase uses, and everything else is a Cmd result.
+- **Frame cost**: mean and worst full-frame composition in the window, plus the
+  frame rate — the same measurement the input coalescer paces scroll injection
+  with (`renderNanos`).
+- **Per-pane render cost**, avg per frame, most expensive first: the answer to
+  "which pane is burning CPU". Attribution sits in `renderPane`, so a leaf's
+  chrome *and* its content are booked against its registry key (`editor:2`,
+  `explorer`, `terminal`).
+- **Runtime gauges**: goroutines, armed tickers, GCs and pause in the window,
+  heap in use, and RSS. Only Linux exposes a current RSS (`/proc/self/statm`);
+  macOS falls back to `getrusage`'s peak, which the HUD and the snapshot label
+  as such rather than passing a peak off as a live number.
+- **Sparklines** over the rolling history (`perf.hud_history_seconds`, default
+  60s), scaled to the window's own maximum, so a spike stays readable after it
+  passed.
+
+**Armed tickers** is the number the idle rules above are about: it should sit
+near zero in a quiet session, and a stuck debounce loop shows up as a count
+that never falls. The HUD's own sampling tick is counted in it — the HUD does
+not get to hide its cost — and it is the only wake the HUD adds
+(`perf.hud_interval_ms`, default 1000ms, floor 100ms so a diagnostic overlay
+cannot become the regression it is looking for).
+
+**Cheap when hidden** is the design constraint, taking the #1095–#1101 lesson
+seriously: measurement must not become the regression. Every hook —
+`Update` (counting), `render` (frame cost), `renderPane` (attribution) — is
+wrapped in a `perfhud.Enabled()` check, an atomic bool load. With the HUD off
+there is no clock read, no map touch, no defer closure and no allocation on
+any hot path; `runtime.ReadMemStats` (which briefly stops the world) runs once
+per interval and only while someone is looking. The box itself is laid out on
+the sampling tick and cached in the model (`perfBox`, keyed by the width it was
+laid out for) — its numbers cannot change between samples, so composing it per
+frame would be its own small regression. Turning the HUD on drops the previous
+history: rates spanning the closed period would be fiction.
+
+**Copy Performance Snapshot** (`perf.snapshot`) puts the whole set on the
+clipboard as a plain-text block — build stamp, every rate, the per-pane table
+and min/avg/max over the history — ready to paste into a bug report. With the
+HUD open it copies the sample on screen (not a fresh sub-second window nobody
+can reason about); with it closed it samples on the spot and says plainly that
+the rates are missing rather than printing measured-looking zeros.
+
+The HUD's open state lives in the collector, not in the root model: the model
+is rebuilt on a project switch and the in-flight sampling tick has to find the
+HUD still open across it.
+
+Reach for the HUD first — it answers "what is waking me and which pane is
+expensive" in seconds. Reach for the pprof hooks below when the answer is
+"something inside one pane" and you need the stack.
 
 ## Diagnostics hooks (`internal/diag`, #1001)
 

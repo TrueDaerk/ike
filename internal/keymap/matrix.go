@@ -93,6 +93,7 @@ var reachableAlternatives = map[string]string{
 	"editor.splitViewDown":     "palette",
 	"editor.pasteFromHistory":  "palette",
 	"view.zenMode":             "palette / View menu",
+	"perf.hud":                 "palette / View menu",
 	"view.toggleFollow":        "palette",
 	"editor.tab.next":          "palette",
 	"editor.tab.prev":          "palette",

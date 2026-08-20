@@ -65,6 +65,18 @@ type Config struct {
 	// config-override provider reads it; enabled = false switches a
 	// language's external formatting off entirely.
 	Format map[string]map[string]any `toml:"format"`
+	// Perf holds the built-in performance HUD's behaviour (#1999).
+	Perf Perf `toml:"perf"`
+}
+
+// Perf holds the performance HUD settings (#1999). HUDIntervalMs is how often
+// the HUD closes a measurement window and refreshes — it is also the wake rate
+// the HUD costs while open, so it is a setting rather than a constant.
+// HUDHistorySeconds is the span the sparklines and the snapshot's min/avg/max
+// cover; the ring length follows from the two.
+type Perf struct {
+	HUDIntervalMs     int `toml:"hud_interval_ms"`
+	HUDHistorySeconds int `toml:"hud_history_seconds"`
 }
 
 // SnippetEntry is one user live template ([[snippets]], #1152). Trigger is the

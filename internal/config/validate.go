@@ -284,6 +284,25 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "scratch.sort", Message: fmt.Sprintf("unknown sort %q, using \"name\"", c.Scratch.Sort)})
 		c.Scratch.Sort = "name"
 	}
+	// Performance HUD (#1999): the refresh interval is also the HUD's own
+	// wake rate, so the lower bound keeps a diagnostic overlay from becoming
+	// the regression it is there to find.
+	if c.Perf.HUDIntervalMs < 100 {
+		diags = append(diags, Diagnostic{Field: "perf.hud_interval_ms", Message: fmt.Sprintf("interval %d out of range, using 100", c.Perf.HUDIntervalMs)})
+		c.Perf.HUDIntervalMs = 100
+	}
+	if c.Perf.HUDIntervalMs > 10000 {
+		diags = append(diags, Diagnostic{Field: "perf.hud_interval_ms", Message: fmt.Sprintf("interval %d out of range, using 10000", c.Perf.HUDIntervalMs)})
+		c.Perf.HUDIntervalMs = 10000
+	}
+	if c.Perf.HUDHistorySeconds < 5 {
+		diags = append(diags, Diagnostic{Field: "perf.hud_history_seconds", Message: fmt.Sprintf("history %d out of range, using 5", c.Perf.HUDHistorySeconds)})
+		c.Perf.HUDHistorySeconds = 5
+	}
+	if c.Perf.HUDHistorySeconds > 600 {
+		diags = append(diags, Diagnostic{Field: "perf.hud_history_seconds", Message: fmt.Sprintf("history %d out of range, using 600", c.Perf.HUDHistorySeconds)})
+		c.Perf.HUDHistorySeconds = 600
+	}
 	// [[tools.custom]] placement (#1889) names the tool's home dock edge;
 	// anything else (including pre-#1588 legacy values) degrades to the
 	// adaptive auxZone heuristic with a warning.

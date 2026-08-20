@@ -284,6 +284,9 @@ func (c *Config) Flat() map[string]string {
 	put("tools.layout.template", strings.Join(c.Tools.Layout.Template, ","))
 	put("tools.layout.assign", strings.Join(c.Tools.Layout.Assign, ","))
 
+	put("perf.hud_interval_ms", c.Perf.HUDIntervalMs)
+	put("perf.hud_history_seconds", c.Perf.HUDHistorySeconds)
+
 	put("debug.inline_values", c.Debug.InlineValues)
 	put("debug.php.port", c.Debug.PHP.Port)
 	put("debug.php.hostname", c.Debug.PHP.Hostname)

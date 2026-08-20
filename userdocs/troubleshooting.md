@@ -157,9 +157,19 @@ notifications suppressed by `notifications.min_severity`.
 
 **LSP: Show Server Log** dumps what a language server has been saying.
 
-**Profiling**, when something is slow rather than broken: `IKE_PPROF=<addr>`
-serves `net/http/pprof`, and `SIGUSR1` writes goroutine and heap dumps to
-`IKE_PPROF_DIR`.
+**Performance HUD** (++ctrl+alt+p++, or **Performance HUD** in the palette and
+the View menu), when IKE feels slow or busy while you are doing nothing: a
+floating box with the message rate and what is producing it, the render cost of
+every visible pane, the frame time, goroutines, armed timers and memory, with
+sparklines over the last minute so a spike stays readable after it passed. It
+measures only while it is shown. **Copy Performance Snapshot** puts the whole
+set on the clipboard as plain text — paste that into the issue instead of
+describing the feeling. Its refresh interval and history span are on the
+**Performance HUD** settings page.
+
+**Profiling**, when the HUD says a pane is expensive and you want the stack:
+`IKE_PPROF=<addr>` serves `net/http/pprof`, and `SIGUSR1` writes goroutine and
+heap dumps to `IKE_PPROF_DIR`.
 
 **Memory**, when the process footprint looks bloated: **Memory Statistics**
 in the palette prints a heap summary (a growing "in use" number is a real
@@ -176,4 +186,5 @@ save a round trip:
 - **Your terminal emulator and version** — a large share of reports turn out
   to be the terminal.
 - **The output of `ike --version`** — it names the exact commit, and whether
-  the build came from a modified tree.
+  the build came from a modified tree. For a "slow" or "hot" report, **Copy
+  Performance Snapshot** carries the version *and* the numbers.
