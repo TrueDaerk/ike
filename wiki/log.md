@@ -1,5 +1,37 @@
 # Log
 
+## 2026-08-20 (jq playground: named saved-filter library, #1995)
+
+- **Store** (`internal/jqplay/library.go`, new): `Library` — a named
+  saved-filter store that is path-agnostic, so one type and one set of tests
+  serve both scopes. `Filter{Name, Program}`, `LoadLibrary(path)` (a missing
+  or malformed file is an empty library; entries with an empty name or
+  program are dropped on the way in), `Save(path)` (an error is *reported* —
+  the user asked for this write), `Get`/`Has`/`All`, `Set` (add or overwrite,
+  kept sorted case-insensitively, capped at `MaxFilters`), `Rename` (refusing
+  a taken name — only a confirmed save may replace a filter), `Delete`, plus
+  `Scope` (`ScopeProject`/`ScopeGlobal`) and `Preview` for the picker's
+  one-line program chip.
+- **UI** (`internal/app/jqfilters.go`, new): the two store paths —
+  `.ike/jqfilters.json` and `~/.ike/jqfilters-global.json`, distinct names
+  under the `IKE_CONFIG_DIR` seam (the `winsize-global.json` precedent,
+  #1714) — the shell name prompt shared by save and rename (scope toggled by
+  `tab`, a taken name held for a confirming second `enter`), and the locked
+  palette picker `jqFiltersMode` (prefix `}`): rows fuzzy-matched over the
+  name, the program as the detail chip, the scope as the accent badge,
+  `shift+delete` deleting in place, both scopes listed project-first and
+  re-read on every open.
+- **Commands** (`internal/app/commands.go`, `internal/menu/defaults.go`):
+  `json.jqSaveFilter` ("Save jq Filter…"), `json.jqFilters` ("Saved jq
+  Filters…") and `json.jqRenameFilter` ("Rename Saved jq Filter…"), all three
+  in the Tools menu; `ctrl+s` and `ctrl+l` are their chords on the
+  playground's query line.
+- **Playground** (`internal/app/jqplayground.go`): the two chords and their
+  info-row hints. Inserting a filter puts it on the query line and runs it,
+  opening a playground first when none is up.
+- Docs: `userdocs/reference/commands.md` regenerated;
+  `wiki/architecture/jq-playground.md` gained "The saved-filter library".
+
 ## 2026-08-20 (curl import/export for .http files, #1994)
 
 - **Converter** (`internal/httpfile/curl.go`, new): `ParseCurl` turns a curl

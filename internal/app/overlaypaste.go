@@ -53,6 +53,11 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		// The only prompt whose paste keeps its line breaks: the test-text
 		// area is exactly where a multi-line log excerpt belongs.
 		return m.pasteRegexTester(text)
+	case m.jqNamePromptOpen():
+		// The saved-filter name prompt (#1995) is checked before the
+		// playground: it is a modal shell prompt opened from it, and the
+		// mode's pane still holds the focus while it is up.
+		return nil, m.pasteJQNamePrompt(text)
 	case m.jqPlayFocused():
 		// The jq query line is one line; a pasted program is flattened into
 		// it like every other single-field prompt (#1936). An unfocused
