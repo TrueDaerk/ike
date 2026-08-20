@@ -47,6 +47,10 @@ func querySpans(lines []string) []lang.Span {
 	// else this producer computes for the same cells — a "{{host}}" sitting
 	// inside a variable definition's value, say.
 	out := placeholderSpans(lines)
+	// Capture directives (#1993) are claimed right after: the line is a
+	// comment to the grammar, and its parts must read as the structure they
+	// are (capture.go).
+	out = append(out, captureSpans(lines)...)
 	// JWTs (#1619) are scanned over the whole buffer, not per request region:
 	// they show up in an Authorization header, in a body, in a @token variable
 	// and in a pasted response block alike. Detection is structural — three

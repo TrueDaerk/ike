@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, OpenAPI 3.x import, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, values captured out of responses for request chaining, OpenAPI 3.x import, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-18T12:00:00Z
+timestamp: 2026-08-20T12:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -112,6 +112,10 @@ Authorization: Bearer {{$env TOKEN}}
   request line below it still completes methods, and definitions pass
   through a reformat byte-verbatim (their spelling is the author's
   business). The reformatter's no-change guard compares them too.
+- **Capture directives** (#1993): `# @capture name = <jq-expr>` comment lines
+  inside a request block store a value out of *its response* under `name`, for
+  the `{{name}}` placeholders of later requests — see
+  [capturing values from a response](#capturing-values-from-a-response-1993).
 
 ## Parser (`internal/httpfile`)
 
@@ -182,14 +186,18 @@ Two sources, the JetBrains / VS Code REST Client convention:
 
 **Precedence** for `{{name}}`, highest first (`httpfile.Vars`):
 
-1. the `.http` file's own `@name=value` definitions
-2. the selected environment (private file merged over the public one)
-3. the process environment
+1. values captured from a response (`# @capture`, #1993)
+2. the `.http` file's own `@name=value` definitions
+3. the selected environment (private file merged over the public one)
+4. the process environment
 
-The in-file definition wins because it sits in front of the author, right
-above the request; an environment is the shared default it overrides. Falling
-through to the process environment last means `{{HOME}}` works and no `.http`
-file has to repeat what is already exported.
+A captured value wins because it is the freshest thing in the chain: it came
+out of a response of this very file, and an `@token = paste-me-here` line is
+exactly the stand-in it supersedes. The in-file definition wins over an
+environment because it sits in front of the author, right above the request;
+an environment is the shared default it overrides. Falling through to the
+process environment last means `{{HOME}}` works and no `.http` file has to
+repeat what is already exported.
 
 **Choosing the environment**: `http.selectEnvironment` ("Select HTTP
 Environment", palette) lists the environments of the focused `.http` file's
@@ -206,6 +214,65 @@ failure is read.
 
 Re-send (#1832) is unaffected by all of this: it repeats the stored snapshot
 verbatim, so a switched environment cannot change what is repeated.
+
+### Capturing values from a response (#1993)
+
+A `.http` file often describes a *chain*: start an async operation, then poll
+the id the first response returned. The `# @capture` directive is the
+declarative way to carry the value across — a comment line on the request,
+evaluated against the response body once it arrives:
+
+```
+### start
+# @capture task = .task
+POST https://example.com/_reindex?wait_for_completion=false
+
+### poll
+GET https://example.com/_tasks/{{task}}
+```
+
+- **Syntax**: `# @capture name = <jq-expression>`, also spelled `##` or `//`;
+  `###` is deliberately not accepted, since that opens a new request block.
+  The name follows the `@name=value` rules — the two feed the same `{{name}}`
+  slot. The expression is everything after the `=`, kept verbatim, and it is
+  real jq: `.task`, `.items[] | select(.state=="done") | .id`,
+  `.task | "\(.node):\(.id)"`. Parsing lives in `httpfile.CaptureDirective`
+  / `httpfile.Capture`; a directive belongs to the request block it sits in
+  (before the request line, between folded query lines, in the header block —
+  anywhere a comment is allowed, but **not** inside a body).
+- **Evaluation** (`internal/httpclient/capture.go`) runs after the response is
+  complete — for a stream, after it ended — through `jqplay.EvaluateRaw`, the
+  `jq -r`-shaped single-value form of the playground's engine (gojq). The
+  first non-null output is the value: a string unquoted (it is going into a
+  request, not into a JSON document), everything else in its JSON spelling,
+  objects and arrays compact. Nulls are skipped, so a directive over an NDJSON
+  body takes the first line that actually has the value.
+- **Failure is loud but harmless.** A capture never fails the exchange — the
+  response arrived and is worth reading. Every failure (a path that matched
+  nothing, a body that is not JSON, an empty body, an expression that does not
+  compile, a jq runtime error) becomes a warning row in the response pane
+  *and* a warning diagnostic on the directive's own line in the buffer
+  (`internal/app/http_capture.go`, source `http capture`), so the reason sits
+  where the fix goes. Directives are independent: one broken expression does
+  not stop the others. Each dispatch republishes the file's set, so a fixed
+  directive stops complaining the moment it works.
+- **Lifetime**: captured values are stored **with the response**
+  (`httphistory.Entry.Captured`, written into `.ike/http/*.json`), so a value
+  lives exactly as long as the response it came from — it comes back when the
+  project is reopened, and it disappears when its entry is pruned
+  (`MaxPerRequest`, 5). Nothing is kept in memory beside it. Before a
+  dispatch, `Model.httpCaptured` collects the stored values of the file's
+  capturing requests (`Store.Captured`); a name captured twice reads the value
+  of whichever *response* is newer, whichever request produced it.
+- **Re-send** (#1832) captures nothing: it repeats a stored snapshot rather
+  than a parsed request, so it has no directives to run. Its entry carries no
+  captured values and therefore never shadows the ones a real dispatch stored.
+- **Highlighting** (`plugins/languages/http/capture.go`): the line is a
+  comment to the grammar, so a Go-computed span producer lifts its parts out —
+  `@capture` as a keyword, the name as a variable, `=` as an operator, and the
+  expression through the jq playground's own tokenizer, so a path, a string
+  literal and a builtin read exactly as they do in the playground's query
+  line.
 
 ## Importing an OpenAPI spec (`internal/openapi`, #1939)
 

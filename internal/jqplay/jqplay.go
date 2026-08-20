@@ -86,7 +86,7 @@ func Parse(text string) (*Input, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("input is not valid JSON: %s", decodeError(err, text))
+			return nil, &InputError{Detail: decodeError(err, text)}
 		}
 		in.values = append(in.values, v)
 		if len(in.values) >= MaxInputValues {
@@ -99,6 +99,15 @@ func Parse(text string) (*Input, error) {
 	}
 	return in, nil
 }
+
+// InputError reports that a text could not be read as a JSON stream. Detail
+// is the decoder's own complaint (with the line it happened on) without any
+// preamble, so a caller can phrase the failure in its own terms — the .http
+// client's capture directive (#1993) says "the response body is not JSON"
+// where the playground says "input".
+type InputError struct{ Detail string }
+
+func (e *InputError) Error() string { return "input is not valid JSON: " + e.Detail }
 
 // decodeError renders a decode failure with the line it happened on, which a
 // byte offset alone does not tell the reader of a pretty-printed document.

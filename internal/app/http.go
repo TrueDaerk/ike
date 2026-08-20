@@ -330,17 +330,18 @@ func (m *Model) appendHTTPStream(msg HTTPStreamChunkMsg) {
 
 // fillHTTPPanel routes one dispatch result into the viewer, opening it first
 // when it is not part of the layout — the reuse path: a later dispatch
-// replaces the content of the existing pane.
-func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) {
+// replaces the content of the existing pane. The returned command carries the
+// capture report (#1993) into the .http buffer.
+func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
 	canceled := m.finishHTTPFlight(httpFlightKey(msg.Source, msg.Request))
 	if msg.Err != nil {
 		if canceled || errors.Is(msg.Err, context.Canceled) {
 			// The user aborted it (#1272): a confirmation, not a failure.
 			m.host.Notify(host.Info, "http: "+msg.Request+" canceled")
-			return
+			return nil
 		}
 		m.host.Notify(host.Error, "http: "+msg.Err.Error())
-		return
+		return nil
 	}
 	if canceled {
 		// A canceled *stream* still returns its partial response (#1776): what
@@ -348,6 +349,9 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) {
 		// the body ends where it does.
 		m.host.Notify(host.Info, "http: "+msg.Request+" canceled — keeping the partial response")
 	}
+	// A failed capture (#1993) is reported on its own directive line, whether
+	// or not the viewer opens — the next request depends on the value.
+	report := m.reportHTTPCaptures(msg.Source, msg.Resp)
 	if m.httpPanel() == nil {
 		m.openHTTPPanel()
 	}
@@ -356,7 +360,7 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) {
 		// Reopening failed (no target leaf, empty tree) — never swallow a
 		// finished dispatch silently (#1271).
 		m.host.Notify(host.Error, "http: response received but the viewer cannot open — "+msg.Request)
-		return
+		return report
 	}
 	p.Set(msg.Request, msg.Resp)
 	// The source enables the pane's request picker (#1829) and tells a
@@ -375,6 +379,7 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) {
 		p.SetHistory(items)
 	}
 	m.layout()
+	return report
 }
 
 // copyHTTPResponse copies the shown response to the system clipboard
