@@ -44,6 +44,18 @@ While the mode is active on a pane:
   query line, then one info row (input origin and size, result summary, key
   hints — or the error, or a transient status). The header height is fixed, so
   an error appearing mid-keystroke never resizes the buffer below it.
+- The info row is composed of **styled segments** (#1978): the summary in the
+  theme's Hint, the caps — `(stopped at 500)`, `(first 10000 only)` — and a
+  zero-value result in **Warning** (the buffer is blank then, and the summary
+  is the only signal that nothing matched). On a narrow pane the key hints are
+  **dropped as whole `·`-separated segments** instead of being cut mid-word;
+  the input and result summary always survive. Truncation is cell-aware, so a
+  wide glyph in the source label cannot overflow the row.
+- The query line's `> ` marker is **blanked while the line does not hold the
+  keyboard** — the result buffer has it, or the focus is on another pane —
+  the same inactive affordance the regex tester's field labels use; the `jq:`
+  label renders in the chrome's Secondary either way. The prefix width never
+  changes, so the cursor window math is focus-independent.
 - The rest of the pane shows a **substitute read-only editor**
   (`ShowReadOnly`, the #1762 buffer) holding the result under the virtual
   path `jq result.json`, so JSON highlighting applies. It is a full editor:
@@ -139,9 +151,16 @@ no single one covers all of them:
 | Wall clock | `EvalTimeout` (5 s) | `def f: f; f` — loops emitting *nothing* |
 
 A capped run is **not an error**: the result summary says `(stopped at 500)`
-and the values collected stand. Opening the playground over an input larger
-than `AsyncThreshold` (64 KiB) parses off the loop too, so even the open is
-not a stall.
+— in the theme's Warning color, since the user is seeing less than the run
+produced — and the values collected stand. Opening the playground over an
+input larger than `AsyncThreshold` (64 KiB) parses off the loop too, so even
+the open is not a stall.
+
+While a re-run is pending the summary keeps the **previous count** with an
+`· evaluating…` suffix rather than replacing it (#1978): pending is set the
+moment the debounce tick is scheduled, and swapping the text outright made
+the row shimmer on every keystroke. A bare `Result — evaluating…` appears
+only when there is no previous count to keep.
 
 ## Errors are inline, never a crash
 
@@ -154,8 +173,9 @@ error color:
   wat/0`, `variable not defined: $x`), which produces no output;
 - a **runtime** error, which may arrive *after* some values were produced —
   `.[] | .x` over `[{"x":1},3]` prints one value and then fails. `Err` and
-  `Outputs` are therefore not mutually exclusive, and the summary says
-  `… before the error`.
+  `Outputs` are therefore not mutually exclusive, and the error row keeps the
+  count — `E: … · 1 value(s) before the error` — because those values are
+  sitting in the buffer below it (#1978).
 
 `halt` ends a run cleanly rather than as a diagnostic, as it does in jq.
 
