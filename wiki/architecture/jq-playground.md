@@ -1,10 +1,10 @@
 ---
 type: concept
 title: jq Playground
-description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, session program history.
+description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, one session-wide program history shared by every buffer and response pane.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, jq, tools, inline, editor, http]
-timestamp: 2026-08-19T00:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # jq Playground
@@ -206,6 +206,15 @@ moved to the front, capped at 50), like the regex tester's patterns: a jq
 program under construction is scratch work, and persisting it into the project
 state would be noise. The history lives on the root model, not on the mode
 state, so it survives closing and reopening the playground.
+
+It is **one session-wide list, shared by every playground** — a program run
+over a `.http` response is offered by `↑` in a `.json` buffer and the other way
+round, because the mode was never the thing that owned it. The open mode holds
+a *pointer* to that one list and writes into it the moment `enter` records a
+program (#1977); it used to carry a copy that was only handed back on close,
+so any exit that skipped the close — reopening the playground over another
+buffer while one was still up, which the Tools menu allows with a click — took
+that session's programs with it and the history read as per-file.
 
 Browsing it is draft-preserving and skips the redundant first step (#1973).
 The query line a walk starts from is kept, so `↓` back past the newest entry
