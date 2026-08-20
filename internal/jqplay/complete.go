@@ -4,6 +4,11 @@ package jqplay
 // given the program, the cursor and the parsed input snapshot, it answers
 // "what could be typed here" — the object keys that actually exist at the
 // path under construction, or the jq builtins matching a half-typed name.
+// Key completion is pipeline-aware (#2019): the chain under the cursor is
+// resolved in the context established by the preceding pipe segments,
+// `select`/`map`-style arguments and object constructions, so `.[] |
+// select(.` offers the element keys; a context the static analysis cannot
+// answer for stays silent rather than guessing.
 //
 // Everything is synchronous and bounded. The input was parsed once at open,
 // so key extraction is a walk over decoded values, capped by a node budget so
@@ -53,8 +58,11 @@ type Candidate struct {
 
 // Complete returns the candidates for the program at rune position pos over
 // the parsed input, and the rune index of the partial they replace. It
-// answers two contexts: after a `.` (and deeper, `.foo.` or `.items[].`) the
-// object keys that exist at that path in the snapshot; on a bare identifier
+// answers three contexts: after a `.` (and deeper, `.foo.` or `.items[].`)
+// the object keys that exist at that path in the snapshot, resolved in the
+// pipeline context the preceding segments establish (`.[] | select(.` offers
+// the element keys, #2019); at an object-construction key position (`{a`,
+// jq's `{a: .a}` shorthand) the context value's keys; on a bare identifier
 // the jq builtins matching it. Anywhere else — inside a string or comment,
 // after `$` or `@`, on a number — it offers nothing. manual forces the
 // builtin list open on an empty identifier (the explicit completion request);
@@ -82,11 +90,21 @@ func Complete(program string, pos int, in *Input, manual bool) (items []Candidat
 		if start > 1 && r[start-2] == '.' {
 			return nil, 0 // `..` — keys at every depth are not a list to offer
 		}
-		steps, ok := parseChain(r, start-1)
+		steps, root, ok := parseChain(r, start-1, false)
 		if !ok {
 			return nil, 0
 		}
-		return filterPrefix(keyCandidates(in, steps), partial), start
+		ctx, cok := contextAt(r, root, contextDepthCap)
+		if !cok {
+			return nil, 0
+		}
+		return filterPrefix(keyCandidates(in, append(ctx, steps...)), partial), start
+	}
+	if ctx, isKey, ok := constructionKeyContext(r, start); isKey {
+		if !ok {
+			return nil, 0
+		}
+		return filterPrefix(keyCandidates(in, ctx), partial), start
 	}
 	if partial == "" && !manual {
 		return nil, 0
@@ -167,71 +185,86 @@ type step struct {
 // bracket whose content is longer than a screenful is not a plain index.
 const bracketScanCap = 256
 
-// parseChain reads the field-access chain that ends with the trigger dot at
-// rune index dot, right to left: `.foo.bar[].` yields [key foo, key bar,
-// iter]. ok is false when the chain is not rooted at the input — `f(x).`,
-// `env.`, `$v.` — because those keys cannot be read off the snapshot. A bare
-// trigger dot after an expression boundary (`| .`) is the root itself: an
-// empty chain, ok.
-func parseChain(r []rune, dot int) (steps []step, ok bool) {
-	i := dot // exclusive end of the unconsumed chain text
+// parseChain reads the field-access chain ending at rune index end
+// (exclusive), right to left: called with the trigger dot's index over
+// `.foo.bar[].` it yields [key foo, key bar, iter]. root is the rune index
+// where the chain's text begins — its leading dot, or end itself when the
+// chain is empty and the trigger dot after a boundary is the root (`| .`) —
+// the position the pipeline context resolves at (contextAt). ok is false when
+// the chain is not rooted at a path — `f(x).`, `env.`, `$v.` — because those
+// keys cannot be read off the snapshot. needRootDot additionally demands an
+// explicit leading `.`: a pipe segment must be a path expression of its own,
+// while the trigger chain may be the bare dot itself.
+func parseChain(r []rune, end int, needRootDot bool) (steps []step, root int, ok bool) {
+	i := end // exclusive end of the unconsumed chain text
+	rooted := false
 	for i > 0 {
 		switch c := r[i-1]; {
 		case c == '?':
 			// `.foo?.` — the optional marker changes nothing about the keys.
 			i--
+			rooted = false
 		case c == ']':
 			open := matchOpen(r, i-1)
 			if open < 0 {
-				return nil, false
+				return nil, 0, false
 			}
 			st, sok := bracketStep(r[open+1 : i-1])
 			if !sok {
-				return nil, false
+				return nil, 0, false
 			}
 			steps = append(steps, st)
 			i = open
+			rooted = false
 		case c == '"':
 			open := openingQuote(r, i-1)
 			if open <= 0 || r[open-1] != '.' {
-				return nil, false
+				return nil, 0, false
 			}
 			key, kok := unquote(string(r[open:i]))
 			if !kok {
-				return nil, false
+				return nil, 0, false
 			}
 			steps = append(steps, step{kind: stepKey, key: key})
-			i = open - 1
+			i = open - 1 // the segment's dot is consumed with it
+			rooted = true
 		case identRune(c):
 			s := i
 			for s > 0 && identRune(r[s-1]) {
 				s--
 			}
 			if s == 0 || r[s-1] != '.' {
-				return nil, false // `env.`, `f(x).` — not rooted at the input
+				return nil, 0, false // `env.`, `f(x).` — not rooted at the input
 			}
 			steps = append(steps, step{kind: stepKey, key: string(r[s:i])})
-			i = s - 1
+			i = s - 1 // the segment's dot is consumed with it
+			rooted = true
 		case c == '.':
 			// The chain's own root (`.[0].` consumed down to its leading dot).
 			// It must sit at the program start or after a boundary.
 			if i-1 > 0 && !chainBoundary(r[i-2]) {
-				return nil, false
+				return nil, 0, false
 			}
 			reverseSteps(steps)
-			return steps, true
+			return steps, i - 1, true
 		default:
-			if !chainBoundary(c) {
-				return nil, false
+			if needRootDot || !chainBoundary(c) {
+				return nil, 0, false
 			}
 			// Boundary without an explicit root dot: the trigger dot itself
-			// is the root — `| .` offers the top-level keys.
+			// is the root, completing in the boundary's context.
 			reverseSteps(steps)
-			return steps, true
+			return steps, i, true
 		}
 	}
+	// The chain reached the program start. It is dot-rooted when the last
+	// consumed segment carried its own leading dot (`.foo`); a `[0]` or `?`
+	// at index zero is a construction, not a path.
+	if needRootDot && !rooted {
+		return nil, 0, false
+	}
 	reverseSteps(steps)
-	return steps, true
+	return steps, 0, true
 }
 
 // chainBoundary reports whether c may legitimately precede a root path
@@ -241,6 +274,255 @@ func parseChain(r []rune, dot int) (steps []step, ok bool) {
 func chainBoundary(c rune) bool {
 	return c != ')' && c != '$' && c != '@'
 }
+
+// --- pipeline context (#2019) ---
+
+// contextDepthCap bounds the recursion of the context analysis. Each level
+// consumes at least one program rune leftwards, so the cap only guards
+// degenerate nesting on a pathological query line.
+const contextDepthCap = 32
+
+// contextScanCap bounds the leftward scans of the context analysis (sibling
+// expressions, paren matching); a query line stretch longer than this holds
+// an expression the static walk should not guess about.
+const contextScanCap = 512
+
+// contextAt resolves the path context in effect for an expression beginning
+// at rune index i: the steps leading from the input root to the value `.`
+// denotes there — after `.[] |` one iterate step, inside `select(`'s argument
+// whatever the enclosing pipeline position established. An empty step list is
+// the root itself. ok is false when the context cannot be read statically —
+// an unknown function's argument, a variable, a computed expression — in
+// which case completion stays silent rather than offering keys that may not
+// exist at that point.
+func contextAt(r []rune, i, depth int) ([]step, bool) {
+	if depth <= 0 {
+		return nil, false
+	}
+	for i > 0 && spaceRune(r[i-1]) {
+		i--
+	}
+	if i == 0 {
+		return nil, true
+	}
+	switch c := r[i-1]; {
+	case c == '|':
+		// The preceding pipe segment establishes the context.
+		return pipeContext(r, i-1, depth-1)
+	case c == '(':
+		// A function argument or a plain group. select runs its filter on
+		// the current input; map and the by-functions on each element.
+		word, s := wordBefore(r, i-1)
+		switch word {
+		case "select":
+			return contextAt(r, s, depth-1)
+		case "map", "map_values", "sort_by", "group_by", "unique_by", "min_by", "max_by":
+			ctx, ok := contextAt(r, s, depth-1)
+			if !ok {
+				return nil, false
+			}
+			return append(ctx, step{kind: stepIter}), true
+		default:
+			// A bare group inherits its context; a keyword before the paren
+			// resolves through the identifier case below, and an unknown
+			// function name refuses there — its argument's input is not the
+			// snapshot's to answer.
+			return contextAt(r, i-1, depth-1)
+		}
+	case c == '{':
+		// Object construction: every entry runs on the construction's input.
+		return contextAt(r, i-1, depth-1)
+	case c == '[':
+		// Construction or index brackets: either way the expression inside
+		// runs on the context enclosing the whole bracketed path (`.a[.b]`
+		// evaluates `.b` on the same input as `.a`).
+		_, root, ok := parseChain(r, i-1, false)
+		if !ok {
+			return nil, false
+		}
+		return contextAt(r, root, depth-1)
+	case c == ':':
+		// A construction value (`{x: .`) shares the construction's input; a
+		// colon under any other opener (a slice) is not resolved.
+		pos, ok := exprContextStart(r, i-1)
+		if !ok || pos == 0 || r[pos-1] != '{' {
+			return nil, false
+		}
+		return contextAt(r, pos-1, depth-1)
+	case strings.ContainsRune(",+-*/%<>=!", c):
+		// Operators and the comma hand every operand the same input: the
+		// context enclosing the whole expression list. (`|=` lands on the
+		// pipe stop, whose left side is exactly the update's path.)
+		pos, ok := exprContextStart(r, i-1)
+		if !ok {
+			return nil, false
+		}
+		return contextAt(r, pos, depth-1)
+	case identRune(c):
+		// Only the operator-like keywords may precede a path expression and
+		// keep its input; `as`, `reduce`, `catch` and any plain function
+		// name mean a context the snapshot cannot answer for.
+		word, s := wordBefore(r, i)
+		switch word {
+		case "and", "or", "if", "then", "elif", "else", "try":
+			pos, ok := exprContextStart(r, s)
+			if !ok {
+				return nil, false
+			}
+			return contextAt(r, pos, depth-1)
+		}
+		return nil, false
+	}
+	return nil, false
+}
+
+// pipeContext resolves the context established by the pipe at rune index
+// pipe: the segment left of it parsed as a simple path chain (`.foo`, `.[]?`)
+// prepended onto that segment's own context, or a `select(...)` call passing
+// its input through unchanged. Anything else — a function call, a variable,
+// arithmetic, a construction — refuses: its output shape is not the
+// snapshot's to answer.
+func pipeContext(r []rune, pipe, depth int) ([]step, bool) {
+	end := pipe
+	for end > 0 && spaceRune(r[end-1]) {
+		end--
+	}
+	if end == 0 {
+		return nil, false
+	}
+	if r[end-1] == ')' {
+		open := matchParen(r, end-1)
+		if open < 0 {
+			return nil, false
+		}
+		word, s := wordBefore(r, open)
+		if word != "select" {
+			return nil, false
+		}
+		return contextAt(r, s, depth)
+	}
+	steps, root, ok := parseChain(r, end, true)
+	if !ok {
+		return nil, false
+	}
+	ctx, ok := contextAt(r, root, depth)
+	if !ok {
+		return nil, false
+	}
+	return append(ctx, steps...), true
+}
+
+// exprContextStart scans left from rune index i (exclusive) over complete
+// sibling expressions — balanced brackets and strings are skipped whole — to
+// the position whose context the expression at i shares: just after the
+// enclosing `|`, `(`, `{` or `[`, or the program start. A `;` at depth zero
+// is the argument separator of a function the analysis does not model, and a
+// scan past contextScanCap gives up.
+func exprContextStart(r []rune, i int) (int, bool) {
+	depth := 0
+	k, n := i-1, 0
+	for ; k >= 0 && n < contextScanCap; k, n = k-1, n+1 {
+		switch r[k] {
+		case ')', ']', '}':
+			depth++
+		case '(', '[', '{':
+			if depth == 0 {
+				return k + 1, true
+			}
+			depth--
+		case '|':
+			if depth == 0 {
+				return k + 1, true
+			}
+		case ';':
+			if depth == 0 {
+				return 0, false
+			}
+		case '"':
+			q := openingQuote(r, k)
+			if q < 0 {
+				return 0, false
+			}
+			k = q
+		}
+	}
+	if k < 0 {
+		return 0, true
+	}
+	return 0, false
+}
+
+// constructionKeyContext detects the object-construction key position — an
+// identifier right after `{`, or after a `,` whose enclosing opener is `{` —
+// where jq's shorthand (`{a}` means `{a: .a}`) makes the context value's keys
+// the thing to offer instead of builtins. isKey reports the position, ok
+// whether the construction's context resolved; an unresolved key position
+// stays silent, it never offers functions.
+func constructionKeyContext(r []rune, start int) (ctx []step, isKey, ok bool) {
+	i := start
+	for i > 0 && spaceRune(r[i-1]) {
+		i--
+	}
+	if i == 0 {
+		return nil, false, false
+	}
+	switch r[i-1] {
+	case '{':
+		ctx, ok = contextAt(r, i-1, contextDepthCap)
+		return ctx, true, ok
+	case ',':
+		pos, sok := exprContextStart(r, i-1)
+		if !sok || pos == 0 || r[pos-1] != '{' {
+			return nil, false, false
+		}
+		ctx, ok = contextAt(r, pos-1, contextDepthCap)
+		return ctx, true, ok
+	}
+	return nil, false, false
+}
+
+// matchParen finds the `(` opening the paren closed at rune index close,
+// tracking nesting and skipping strings, within contextScanCap.
+func matchParen(r []rune, close int) int {
+	depth := 0
+	for k, n := close-1, 0; k >= 0 && n < contextScanCap; k, n = k-1, n+1 {
+		switch r[k] {
+		case ')':
+			depth++
+		case '(':
+			if depth == 0 {
+				return k
+			}
+			depth--
+		case '"':
+			q := openingQuote(r, k)
+			if q < 0 {
+				return -1
+			}
+			k = q
+		}
+	}
+	return -1
+}
+
+// wordBefore reads the identifier ending just left of rune index i (spaces
+// skipped), returning it with its start index; empty when none.
+func wordBefore(r []rune, i int) (string, int) {
+	for i > 0 && spaceRune(r[i-1]) {
+		i--
+	}
+	s := i
+	for s > 0 && identRune(r[s-1]) {
+		s--
+	}
+	if s == i || !identStart(r[s]) {
+		return "", i
+	}
+	return string(r[s:i]), s
+}
+
+// spaceRune reports a plain blank the context scans skip over.
+func spaceRune(c rune) bool { return c == ' ' || c == '\t' }
 
 // matchOpen finds the `[` opening the bracket closed at rune index close,
 // skipping over a quoted string inside (`.["a[b"]`). It refuses nesting and

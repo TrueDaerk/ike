@@ -154,14 +154,130 @@ func TestCompleteNotRooted(t *testing.T) {
 	}
 }
 
-// TestCompleteRootAfterPipe: a bare `.` after a pipe or an operator offers
-// the top-level keys — the chain is just the trigger dot.
+// TestCompleteRootAfterPipe: a bare `.` after an identity pipe, an operator
+// comma or inside select's argument still offers the top-level keys — the
+// chain is just the trigger dot and the context resolves to the root.
 func TestCompleteRootAfterPipe(t *testing.T) {
-	for _, program := range []string{".a | .", "[.], .", "select(."} {
+	for _, program := range []string{". | .", "[.], .", "select(.", ".key == ."} {
 		items, _ := complete(t, program, `{"key":1}`)
 		if got := fmt.Sprint(labels(items)); got != "[key]" {
 			t.Errorf("%q keys = %v, want the top level", program, got)
 		}
+	}
+}
+
+// TestCompletePipelineElementKeys (#2019): key completion follows the
+// pipeline — after `.[] |` the context is the array's elements, and inside a
+// select argument the enclosing pipeline position's input.
+func TestCompletePipelineElementKeys(t *testing.T) {
+	const input = `[{"name":"x","age":1}]`
+	for program, want := range map[string]string{
+		".[] | .":                           "[age name]",
+		".[] | select(.":                    "[age name]",
+		".[] | select(.n":                   "[name]",
+		".[]|select(.":                      "[age name]",
+		`.[] | select(.name == "xyz") | .`:  "[age name]",
+		`.[] | select(.name == "xyz") | .a`: "[age]",
+		".[] | select(.name == .":           "[age name]",
+	} {
+		items, _ := complete(t, program, input)
+		if got := fmt.Sprint(labels(items)); got != want {
+			t.Errorf("%q keys = %v, want %v", program, got, want)
+		}
+	}
+}
+
+// TestCompletePipelinePrefixesCompose: chained pipe segments concatenate
+// their steps before resolving keys, and a segment landing on a scalar
+// offers nothing rather than falling back to the root.
+func TestCompletePipelinePrefixesCompose(t *testing.T) {
+	for _, tc := range []struct{ program, input, want string }{
+		{".foo | .", `{"foo":{"bar":1},"key":2}`, "[bar]"},
+		{".foo.bar | .", `{"foo":{"bar":{"leaf":1}}}`, "[leaf]"},
+		{".foo | .[] | .", `{"foo":[{"deep":1}]}`, "[deep]"},
+		{".foo? | .", `{"foo":{"bar":1}}`, "[bar]"},
+		{".foo | .", `{"foo":1,"key":2}`, "[]"},
+	} {
+		items, _ := complete(t, tc.program, tc.input)
+		if got := fmt.Sprint(labels(items)); got != tc.want {
+			t.Errorf("%q keys = %v, want %v", tc.program, got, tc.want)
+		}
+	}
+}
+
+// TestCompleteConstructionKeys (#2019): `{` and the identifier after it (or
+// after a comma inside the construction) are jq's shorthand key position —
+// the context value's keys, prefix-filtered, never builtins.
+func TestCompleteConstructionKeys(t *testing.T) {
+	const input = `[{"name":"x","age":1}]`
+	for program, want := range map[string]string{
+		`.[] | select(.name == "xyz") | {`:  "[age name]",
+		`.[] | select(.name == "xyz") | {a`: "[age]",
+		".[] | {":                           "[age name]",
+		".[] | {name: .name, a":             "[age]",
+		".[] | {x: .":                       "[age name]",
+	} {
+		items, _ := complete(t, program, input)
+		if got := fmt.Sprint(labels(items)); got != want {
+			t.Errorf("%q keys = %v, want %v", program, got, want)
+		}
+	}
+	// Top-level construction over an object input offers its keys.
+	items, _ := complete(t, "{", `{"k":1}`)
+	if got := fmt.Sprint(labels(items)); got != "[k]" {
+		t.Errorf("{ keys = %v, want [k]", got)
+	}
+	// The value position after the colon is still a filter: builtins.
+	items, _ = complete(t, "{a: sel", `{"a":1}`)
+	if len(items) == 0 || items[0].Label != "select" {
+		t.Errorf("{a: sel offered %v, want builtins", labels(items))
+	}
+}
+
+// TestCompleteFunctionArgContexts: map (and the by-functions) run their
+// argument per element, so the inner dot adds an iterate step; nesting
+// composes (`select(map(.`).
+func TestCompleteFunctionArgContexts(t *testing.T) {
+	for _, tc := range []struct{ program, input, want string }{
+		{"map(.", `[{"a":1,"b":2}]`, "[a b]"},
+		{"select(map(.", `[{"a":1,"b":2}]`, "[a b]"},
+		{"sort_by(.", `[{"a":1}]`, "[a]"},
+		{".[] | map(.", `[[{"x":1}]]`, "[x]"},
+		{"map(select(.", `[{"a":1}]`, "[a]"},
+	} {
+		items, _ := complete(t, tc.program, tc.input)
+		if got := fmt.Sprint(labels(items)); got != tc.want {
+			t.Errorf("%q keys = %v, want %v", tc.program, got, tc.want)
+		}
+	}
+}
+
+// TestCompleteNonAnalyzableContextsSilent: unknown functions, variables,
+// bindings and computed pipe segments refuse rather than guess — a wrong key
+// list is worse than none.
+func TestCompleteNonAnalyzableContextsSilent(t *testing.T) {
+	const input = `{"a":{"b":1}}`
+	for _, program := range []string{
+		"f(x) | .", "$v | .", "(.a + .b) | .", "foo(.",
+		"limit(3; .", ".[] as $x | .", "reduce .[] as $x (0; .",
+		".. | .", `{"q": 1} | .`, "keys | .", "f(x) | {",
+	} {
+		if items, _ := complete(t, program, input); len(items) != 0 {
+			t.Errorf("%q offered %v, want nothing", program, labels(items))
+		}
+	}
+	// An empty array input has no element keys to offer after the pipe.
+	if items, _ := complete(t, ".[] | select(.", "[]"); len(items) != 0 {
+		t.Errorf(".[] over [] offered %v, want nothing", labels(items))
+	}
+}
+
+// TestCompleteBuiltinsAfterPipe: builtin completion is untouched by the
+// pipeline analysis — a bare identifier after a pipe still offers functions.
+func TestCompleteBuiltinsAfterPipe(t *testing.T) {
+	items, _ := complete(t, ".[] | sel", `[{"name":1}]`)
+	if len(items) == 0 || items[0].Label != "select" {
+		t.Fatalf(".[] | sel offered %v, want select first", labels(items))
 	}
 }
 

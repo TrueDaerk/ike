@@ -1,7 +1,7 @@
 ---
 type: concept
 title: jq Playground
-description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and response pane, a completion popup offering the snapshot's keys after a dot and gojq's builtins on an identifier, and a library of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them.
+description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and response pane, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, and a library of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, jq, tools, inline, editor, http, completion]
 timestamp: 2026-08-20T18:00:00Z
@@ -245,6 +245,20 @@ candidate logic in `internal/jqplay/complete.go` and the popup in
   indexes, the `?` marker); a chain not rooted at the input — `f(x).`,
   `$v.`, `(.a).`, `env.` — offers **nothing**, because a wrong list is worse
   than none. A key that is no identifier inserts its quoted form (`."a b"`).
+- **Pipeline-aware context (#2019).** A chain rooted at a boundary resolves
+  in the context the preceding program establishes: pipe segments that are
+  themselves simple path chains prepend their steps (`.[] | .` offers the
+  element keys, `.foo | .` the keys under `foo`), a `select(...)` segment
+  passes its input through, and inside the argument of `select` (same input)
+  or `map` and the `_by` functions (per element, one extra iterate step) the
+  inner dot inherits the enclosing position's context — nesting composes
+  (`select(map(.`). Object construction is a context too: `{` and a bare
+  identifier after it or after a comma inside it are jq's `{a: .a}` shorthand
+  key position and offer the context value's keys instead of builtins, and a
+  value chain (`{x: .`) resolves the same way. Anything the analysis cannot
+  answer statically — an unknown function, `$var`, arithmetic pipe segments,
+  `reduce`/`as` — stays **silent**; keys that may not exist are never
+  offered.
 - **Builtin completion.** A bare identifier offers gojq's builtins — the
   engine's own `builtins` list, evaluated once and memoized, so it names
   exactly what the playground accepts whatever gojq version ships (entries
