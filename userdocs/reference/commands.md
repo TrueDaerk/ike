@@ -213,6 +213,7 @@ bring their own.
 | Decode JWT at Caret | `editor.decodeJWT` | — | — | `editor` pane |
 | Decrement Number | `editor.decrement` | — | `ctrl+x` | `editor` pane |
 | Duplicate Line | `editor.duplicateLine` | `cmd+d` | — | `editor` pane |
+| Explain Concealed Value | `editor.explainConceal` | — | `g?` | `editor` pane |
 | Find in File | `editor.find` | `cmd+f` | `/` | `editor` pane |
 | Close Fold | `editor.fold.close` | — | `zc` | `editor` pane |
 | Close All Folds | `editor.fold.closeAll` | — | `zM` | `editor` pane |

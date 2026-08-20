@@ -5204,6 +5204,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ilsp.IgnoreDiagnosticMsg:
 		// The editor's "ignore diagnostic under caret" action (#1259).
 		return m, m.ignoreDiagnostic(msg.Diagnostic)
+	case editor.ConcealRuleMsg:
+		// A rule made in the conceal explain popover (#1998): persisted into
+		// the store the heuristics already read, so the reload re-parses the
+		// open editors and the Settings UI lists it like a hand-written entry.
+		return m, m.writeConcealRule(msg)
 	case ilsp.CompletionMsg:
 		return m, m.routeToEditor(msg.Path, msg)
 	case ilsp.HoverMsg:
@@ -9629,6 +9634,12 @@ func (m Model) compositeLSPPopups(base string) string {
 		// over the transient popups below.
 		col, line := ed.PeekAnchor()
 		return place(ed.PeekView(), col, line)
+	}
+	if ed.ExplainOpen() {
+		// The conceal explain popover (#1998) is explicitly invoked too, and
+		// owns its keys while open.
+		col, line := ed.ExplainAnchor()
+		return place(ed.ExplainView(), col, line)
 	}
 	if ed.CompletionOpen() {
 		col, line := ed.CompletionAnchor()

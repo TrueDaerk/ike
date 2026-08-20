@@ -91,38 +91,84 @@ var publicMarkers = []string{
 // first and decide on their own: a positive entry masks a key the tables below
 // never heard of, a negative one exempts a key they would otherwise mask. Only
 // a key no configured pattern matches reaches the built-ins.
-func Suspect(key string) bool {
+func Suspect(key string) bool { return Explain(key).Mask }
+
+// Reason names the table — or the configured pattern — that decided a key
+// (#1998). It is the provenance the explain popover reports: "masked because
+// the key contains PASSWORD" is a verdict a user can argue with, "masked"
+// alone is not.
+type Reason int
+
+const (
+	// ReasonNone marks a key no rule matched: it is not a secret because
+	// nothing said it was.
+	ReasonNone Reason = iota
+	// ReasonUserPattern / ReasonUserExempt mark a configured
+	// editor.secret_masking_keys entry (#1712), positive or exempting.
+	ReasonUserPattern
+	ReasonUserExempt
+	// ReasonStrong marks a strong built-in word (SECRET, PASSWORD, …), which
+	// names a secret whatever else the key says.
+	ReasonStrong
+	// ReasonPublicMarker marks a built-in public marker (PUBLIC, KEY_ID, …),
+	// which clears an otherwise-suspect key.
+	ReasonPublicMarker
+	// ReasonMarker marks a built-in marker word (TOKEN, AUTH, CERT, …).
+	ReasonMarker
+	// ReasonSuffix marks a built-in key ending (`*_KEY`, `*_PWD`).
+	ReasonSuffix
+	// ReasonExact marks a whole key name that is a secret on its own (KEY,
+	// PWD, PASS).
+	ReasonExact
+)
+
+// Verdict is what the rules say about a key: whether its value masks, which
+// rule decided it, and the pattern or word that rule matched on.
+type Verdict struct {
+	Mask    bool
+	Reason  Reason
+	Pattern string
+}
+
+// Explain is Suspect with its reasoning: the same walk in the same order,
+// reporting the rule that decided and the pattern or word it matched. An empty
+// key is never suspect and matches nothing.
+func Explain(key string) Verdict {
 	up := strings.ToUpper(strings.TrimSpace(key))
 	if up == "" {
-		return false
+		return Verdict{}
 	}
-	if mask, matched := keyVerdict(up); matched {
-		return mask
+	if mask, matched, pattern := keyVerdict(up); matched {
+		reason := ReasonUserPattern
+		if !mask {
+			reason = ReasonUserExempt
+		}
+		return Verdict{Mask: mask, Reason: reason, Pattern: pattern}
 	}
 	for _, s := range strong {
 		if strings.Contains(up, s) {
-			return true
+			return Verdict{Mask: true, Reason: ReasonStrong, Pattern: s}
 		}
 	}
 	for _, p := range publicMarkers {
 		if strings.Contains(up, p) {
-			return false
+			return Verdict{Reason: ReasonPublicMarker, Pattern: p}
 		}
 	}
 	for _, m := range markers {
 		if strings.Contains(up, m) {
-			return true
+			return Verdict{Mask: true, Reason: ReasonMarker, Pattern: m}
 		}
 	}
 	for _, s := range suffixes {
 		if strings.HasSuffix(up, s) {
-			return true
+			return Verdict{Mask: true, Reason: ReasonSuffix, Pattern: s}
 		}
 	}
 	for _, e := range exact {
 		if up == e {
-			return true
+			return Verdict{Mask: true, Reason: ReasonExact, Pattern: e}
 		}
 	}
-	return false
+	return Verdict{}
 }

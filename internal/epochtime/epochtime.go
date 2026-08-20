@@ -158,6 +158,21 @@ func decodeUnit(digits string, unit time.Duration) (string, bool) {
 	return format(time.Unix(n/per, (n%per)*int64(unit))), true
 }
 
+// Unit reports which unit the digit-count heuristic reads a run in — seconds
+// for a 9–10 digit run, milliseconds for a 12–13 digit one — for a run inside
+// the plausible range. It is what the explain popover (#1998) names as the
+// rule behind a decoded timestamp: the reading rests on the run's length and
+// on nothing about the field it hangs off.
+func Unit(digits string) (time.Duration, bool) {
+	if _, ok := decodeTime(digits); !ok {
+		return 0, false
+	}
+	if len(digits) <= 10 {
+		return time.Second, true
+	}
+	return time.Millisecond, true
+}
+
 // Time exposes the instant behind a digit run, for callers that need to
 // compute with it rather than display it — the log renderer's inter-line
 // deltas (#1651) parse a numeric header stamp through here. The same range and
