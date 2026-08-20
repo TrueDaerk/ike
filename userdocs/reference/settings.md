@@ -222,7 +222,7 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Show Scratches section | `scratch.section` | boolean | `true` | user | List the scratch store as a divider-separated section at the bottom of the explorer; off removes the section entirely (scratches stay reachable through the "Open Scratch File…" command) |
 | Scratches section height | `scratch.section_height` | integer (1–30) | `5` | user | Rows the Scratches section shows when expanded (it never grows past its content). Dragging the divider resizes it afterwards, and that height persists with the explorer's session state |
-| Scratches sort order | `scratch.sort` | `name` / `modified` | `name` | user | How the Scratches section orders its rows: by name like the file tree, or by modification time newest first |
+| Scratches sort order | `scratch.sort` | enum: `name`, `modified` | `name` | user | How the Scratches section orders its rows: by name like the file tree, or by modification time newest first |
 
 ### Tool Layout
 
