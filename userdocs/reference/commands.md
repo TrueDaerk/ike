@@ -93,6 +93,7 @@ bring their own.
 | Copy HTTP Response Body | `http.copyBody` | — | — | everywhere |
 | Copy Folded Range (HTTP Response) | `http.copyFold` | — | — | everywhere |
 | Copy HTTP Response Headers | `http.copyHeaders` | — | — | everywhere |
+| Compare Stored HTTP Responses | `http.diffResponses` | — | — | everywhere |
 | Import OpenAPI Spec… | `http.importOpenAPI` | — | — | everywhere |
 | Re-send Stored HTTP Request | `http.resend` | — | — | everywhere |
 | Browse HTTP Response History | `http.responseHistory` | — | — | everywhere |

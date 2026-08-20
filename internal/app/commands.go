@@ -442,6 +442,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.responseHistory", "Browse HTTP Response History", HTTPResponseHistoryMsg{}),
 			appCommand("http.showResponse", "Show Stored HTTP Response", HTTPShowResponseMsg{}),
 			appCommand("http.resend", "Re-send Stored HTTP Request", HTTPResendMsg{}),
+			appCommand("http.diffResponses", "Compare Stored HTTP Responses", HTTPDiffResponsesMsg{}),
 			appCommand("http.selectEnvironment", "Select HTTP Environment", HTTPSelectEnvMsg{}),
 			appCommand("http.importOpenAPI", "Import OpenAPI Spec…", ImportOpenAPIMsg{}),
 			appCommand("http.cancel", "Cancel Running HTTP Request", HTTPCancelMsg{}),
