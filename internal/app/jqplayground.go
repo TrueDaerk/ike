@@ -15,6 +15,7 @@ import (
 	"ike/internal/editor"
 	"ike/internal/host"
 	"ike/internal/jqplay"
+	"ike/internal/keymap"
 	"ike/internal/pane"
 	"ike/internal/scratch"
 	"ike/internal/ui"
@@ -207,6 +208,15 @@ func (m Model) jqSeedProgram(src jqInputSource) string {
 
 // jqPlayOpen reports whether the inline playground is active.
 func (m Model) jqPlayOpen() bool { return m.jqPlay != nil }
+
+// jqPlayFocused reports whether the playground's hosting pane holds the focus.
+// The mode's keyboard routing is scoped to its own pane (#1980): moving the
+// focus elsewhere leaves the playground mounted — query, result and history
+// position intact — while the other pane takes keys normally, and returning
+// the focus resumes the query line as it was.
+func (m Model) jqPlayFocused() bool {
+	return m.jqPlay != nil && m.activeWS().Panes.Focused() == m.jqPlay.paneKey
+}
 
 // jqInlineActive reports whether the inline playground owns pane key: its
 // content is then the query header plus the result buffer, not the pane's own
@@ -407,14 +417,22 @@ func (m *Model) syncJQResultBuffer() tea.Cmd {
 	return s.resultEd.Reparse()
 }
 
-// updateJQPlayground consumes every key while the playground is open: the
-// query line owns them by default, the result buffer after tab (#1970).
+// updateJQPlayground consumes every key while the playground's pane is
+// focused: the query line owns them by default, the result buffer after tab
+// (#1970).
 func (m Model) updateJQPlayground(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.jqPlay
 	if s == nil {
 		return m, nil
 	}
 	s.status = ""
+	// The spatial focus moves (default ctrl+arrows) leave the pane with the
+	// playground still mounted (#1980), the way they escape a focused
+	// terminal: the mode is scoped to its pane, not to the whole keyboard.
+	if dir, ok := m.focusKeys[msg.String()]; ok {
+		m.FocusDir(dir)
+		return m, nil
+	}
 	if s.bufFocus {
 		return m.updateJQBufferKey(msg)
 	}
@@ -465,6 +483,17 @@ func (m Model) updateJQPlayground(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // and jumplist keys — a throwaway result buffer has no jumplist worth keeping.
 func (m Model) updateJQBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.jqPlay
+	// The app keymap's copy chord (editor.copy, default cmd+c) copies the
+	// visual selection like in any read-only buffer (#1980). Resolved here
+	// against the editor context directly: the playground owns the keyboard,
+	// so the chord never reaches the keymap layer on its own — and the
+	// ActionMsg it dispatches would route to the pane's hidden document
+	// editor, not the substitute result buffer.
+	if m.jqCopyChord(msg) {
+		var cmd tea.Cmd
+		*s.resultEd, cmd = s.resultEd.Update(editor.ActionMsg{Action: "copy"})
+		return m, cmd
+	}
 	switch msg.String() {
 	case "tab":
 		s.setBufFocus(false)
@@ -483,6 +512,24 @@ func (m Model) updateJQBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	*s.resultEd, cmd = s.resultEd.Update(msg)
 	return m, cmd
+}
+
+// jqCopyChord reports whether msg is the app keymap's editor.copy binding in
+// the editor context — the chord that must reach the result buffer's selection
+// (#1980) even though the playground's modal routing keeps it from the keymap
+// layer. The lookup is against the editor context, not the hosting pane's: the
+// substitute buffer is an editor regardless of what pane it is mounted in.
+func (m Model) jqCopyChord(msg tea.KeyPressMsg) bool {
+	if m.bindings == nil || m.bindings.Table() == nil {
+		return false
+	}
+	k, ok := keymap.FromKeyMsg(msg)
+	if !ok {
+		return false
+	}
+	chord := keymap.Chord{Steps: []keymap.Key{k}}
+	b, found := m.bindings.Table().Lookup(chord, keymap.Context(editor.ContextID))
+	return found && b.Command == "editor.copy"
 }
 
 // pasteJQPlayground inserts a bracketed paste into the query line, flattened:
@@ -690,8 +737,9 @@ func (m Model) jqInputLine() string {
 }
 
 // jqQueryRow renders the query line, windowed around its cursor and colored
-// by the jq scanner. While the result buffer holds the keyboard the cursor
-// cell is not drawn — the caret lives in the buffer then.
+// by the jq scanner. While the result buffer holds the keyboard — or the
+// focus is on another pane entirely (#1980) — the cursor cell is not drawn:
+// the caret lives elsewhere then.
 func (m Model) jqQueryRow(width int) string {
 	s := m.jqPlay
 	avail := width - 8
@@ -699,7 +747,7 @@ func (m Model) jqQueryRow(width int) string {
 		avail = 10
 	}
 	pos := s.pos
-	if s.bufFocus {
+	if s.bufFocus || !m.jqPlayFocused() {
 		pos = -1
 	}
 	return "> jq: " + m.jqHighlighted(s.program, pos, avail)

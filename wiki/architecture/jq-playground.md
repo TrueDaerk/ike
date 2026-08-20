@@ -4,7 +4,7 @@ title: jq Playground
 description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, session program history.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, jq, tools, inline, editor, http]
-timestamp: 2026-08-19T00:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # jq Playground
@@ -55,11 +55,17 @@ While the mode is active on a pane:
   suppressed for the pane; the query header takes its place in the mouse
   translation (`contentYOff`).
 
-The keyboard is modal while the mode is open and starts on the query line;
-**tab** moves it into the result buffer and back. A mouse click into the
-result body also focuses it (and places the caret); a click on the header
-returns to the query line; a click into **another pane closes the mode** —
-the clicked pane must not stay dead to typing.
+The keyboard is modal **while the hosting pane is focused** and starts on the
+query line; **tab** moves it into the result buffer and back. A mouse click
+into the result body also focuses it (and places the caret); a click on the
+header returns to the query line. Moving the focus to another pane — a click,
+or the spatial focus keys (default ctrl+arrows), which escape the mode the way
+they escape a focused terminal — **leaves the playground mounted** (#1980):
+query, result and history position stay intact while the other pane takes keys
+normally, so another file can be edited with the filtered result still
+visible. Returning the focus to the pane resumes the query line as it was;
+the pane's `esc` remains the way to close the mode. The hosting pane closing
+from elsewhere closes the playground with it.
 
 ## Engine: gojq, not a jq binary
 
@@ -187,8 +193,18 @@ buffer, with four exceptions: `tab` returns to the query line, `ctrl+y` /
 `ctrl+o` keep their result-action meaning (shadowing the editor's scroll and
 jumplist keys — a throwaway result has no jumplist worth keeping), and `esc`
 closes the mode only from resting normal mode; a visual selection, a pending
-operator or a search prompt is quit first, like in any buffer. The pane border
-signals the buffer's input mode (#1353) while it holds the keyboard.
+operator or a search prompt is quit first, like in any buffer. The app
+keymap's copy chord (`editor.copy`, default cmd+c) copies the visual selection
+like in any read-only buffer (#1980): the mode resolves the chord against the
+editor context itself, since its modal routing keeps it from the keymap layer,
+and the Edit menu's copy (an `editor.ActionMsg`) is routed to the substitute
+buffer rather than the pane's hidden document while the pane is focused. The
+pane border signals the buffer's input mode (#1353) while it holds the
+keyboard.
+
+The spatial focus keys (default ctrl+arrows) work from both the query line and
+the result buffer: they move the focus out of the pane with the playground
+still mounted (#1980).
 
 A bracketed paste always lands in the query line, **flattened** to one line,
 like every other single-field prompt — the result buffer refuses pastes with
@@ -227,8 +243,9 @@ would read as broken.
 - **In-pane, but not a pane.** #1970 revised the old "floating modal" boundary:
   the playground now lives inside the pane it queries — but it is still a
   *mode*, not a layout leaf. It has no key of its own, cannot be split, moved
-  or persisted, and the keyboard is modal while it is open; a click into any
-  other pane ends it. A program is written, tried, copied and forgotten — a
+  or persisted, and the keyboard is modal only while its pane is focused
+  (#1980); it survives focus changes but not its pane closing, a project
+  switch or `esc`. A program is written, tried, copied and forgotten — a
   persistent pane is only worth it if persistent use emerges.
 - **The result buffer is a substitute, not the document.** The hosting pane's
   own component keeps its entire state and is simply not rendered; the mode

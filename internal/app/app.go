@@ -5023,8 +5023,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case editor.ActionMsg:
 		// A registry command drives the focused editor through this message
-		// path. A focused merge view routes it into its result editor
-		// (#1478), so the merge accepts / write work from the palette.
+		// path. The inline jq playground's result buffer takes it while its
+		// pane is focused (#1980) — the Edit menu's copy must act on the
+		// visible selection, not the pane's hidden document; mutations bounce
+		// off the read-only flag as usual. A focused merge view routes it into
+		// its result editor (#1478), so the merge accepts / write work from
+		// the palette.
+		if s := m.jqPlay; s != nil && s.resultEd != nil && m.jqPlayFocused() {
+			var cmd tea.Cmd
+			*s.resultEd, cmd = s.resultEd.Update(msg)
+			return m, cmd
+		}
 		if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindMerge {
 			return m, inst.Update(msg)
 		}
@@ -6030,9 +6039,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateRegexTester(msg)
 		}
 		// The jq playground (#1936, inline #1970) owns the keyboard the same
-		// way while it is mounted in its pane: the query line by default,
-		// the read-only result buffer after tab.
-		if m.jqPlayOpen() {
+		// way while its hosting pane is focused: the query line by default,
+		// the read-only result buffer after tab. With the focus on another
+		// pane the mode stays mounted but keys route normally (#1980), so
+		// editing elsewhere works while the filtered result stays visible.
+		if m.jqPlayFocused() {
 			return m.updateJQPlayground(msg)
 		}
 		// The new-project wizard (#1718) mirrors it, with three steps walked
@@ -6936,6 +6947,12 @@ func (m *Model) setFocus(key string) {
 	}
 	// The Problems pane's current-file scope tracks the same file (#1024).
 	m.syncProblemsActive()
+	// The inline jq playground survives focus leaving its pane (#1980); the
+	// substitute editor's cursor cell tracks whether the pane holds the
+	// keyboard, so an unfocused playground draws no caret.
+	if s := m.jqPlay; s != nil && s.resultEd != nil {
+		s.resultEd.SetFocused(key == s.paneKey && s.bufFocus)
+	}
 }
 
 // autosaveOnBlur saves the editor pane focus is leaving (#174): every focus
@@ -7147,6 +7164,12 @@ func (m *Model) closeKey(key string) bool {
 	m.backupDropOnClose(inst, key)
 	m.activeWS().Tree = tree
 	m.activeWS().Panes.Close(key)
+	// The inline jq playground dies with its hosting pane (#1980): the mode
+	// survives focus changes, so the pane can be closed from elsewhere while
+	// the playground is still mounted in it.
+	if s := m.jqPlay; s != nil && s.paneKey == key {
+		m.closeJQPlayground()
+	}
 	if m.recentEditor == key {
 		m.recentEditor = firstEditorKey(layout.Leaves(m.activeWS().Tree))
 	}
@@ -8933,14 +8956,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	localY := msg.Y - (r.Y + m.contentYOff(key))
 	// The inline jq playground (#1970) owns its pane's mouse: body clicks
 	// move the caret and select in the result buffer, header clicks return
-	// the focus to the query line. A click into any other pane leaves the
-	// mode — its keyboard is modal, so the pane the click focused must not
-	// stay dead to typing.
-	if s := m.jqPlay; s != nil {
-		if key == s.paneKey {
-			return m.jqPaneClick(key, msg, localX, localY)
-		}
-		m.closeJQPlayground()
+	// the focus to the query line. A click into any other pane just moves
+	// the focus (#1980) — the playground stays mounted with its query and
+	// result intact, and its key routing is scoped to its pane, so the
+	// clicked pane takes typing normally.
+	if s := m.jqPlay; s != nil && key == s.paneKey {
+		return m.jqPaneClick(key, msg, localX, localY)
 	}
 	// The breadcrumbs row (#1153) sits between the title row and the content
 	// (content-local y = -1): a left press on a symbol segment jumps there, any

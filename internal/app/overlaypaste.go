@@ -53,9 +53,11 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		// The only prompt whose paste keeps its line breaks: the test-text
 		// area is exactly where a multi-line log excerpt belongs.
 		return m.pasteRegexTester(text)
-	case m.jqPlayOpen():
+	case m.jqPlayFocused():
 		// The jq query line is one line; a pasted program is flattened into
-		// it like every other single-field prompt (#1936).
+		// it like every other single-field prompt (#1936). An unfocused
+		// playground (#1980) never captures — the paste belongs to the
+		// focused pane then.
 		return m.pasteJQPlayground(text), true
 	case m.newProjectPromptOpen():
 		return nil, m.pasteNewProjectPrompt(text)
