@@ -849,6 +849,14 @@ func (m *Manager) RangeFormatSupported(path string) bool {
 	return ok && srv.cl.Caps().RangeFormatting
 }
 
+// RenameSupported reports whether a ready server tracks path and offers
+// rename — the intention popup's capability gate for the rename entry
+// (#2020). PrepareRename validation still runs when the entry is picked.
+func (m *Manager) RenameSupported(path string) bool {
+	srv, _, ok := m.docServer(path)
+	return ok && srv.cl.Caps().Rename
+}
+
 // ServerName returns the base name of the server binary handling path ("" when
 // none) — the formatter registry's status-line label (`reformat: gopls`).
 func (m *Manager) ServerName(path string) string {

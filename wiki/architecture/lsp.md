@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-08-17T12:00:00Z
+timestamp: 2026-08-20T12:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -529,19 +529,30 @@ explorer. Go-to-declaration's sheet-11
 verdict made `f4` the delivered primary for `lsp.definition` (`cmd+b` stays a
 secondary).
 
-**Code actions (#8).** Code actions are *server-defined* fixes and
-refactorings for the code at the cursor — "add the missing import", "organize
-imports", "extract function"; what the list offers depends entirely on the
-language server and the diagnostics at that spot. `lsp.codeAction` (default
-`alt+enter`, fragile — option-as-meta) sends `textDocument/codeAction` for
-the cursor or the active visual selection, passing the cached published
-diagnostics overlapping the range so servers offer quick-fixes. The offer
-opens as a locked palette list (`internal/app/codeactions.go`) — preferred
-actions starred and sorted first, the kind rendered readably as the detail
+**Code actions (#8, merged into intentions #2020).** Code actions are
+*server-defined* fixes and refactorings for the code at the cursor — "add the
+missing import", "organize imports", "extract function"; what the list offers
+depends entirely on the language server and the diagnostics at that spot.
+`lsp.codeAction` (default `alt+enter`, fragile — option-as-meta; retitled
+"Show Intention Actions") sends `textDocument/codeAction` for the cursor or
+the active visual selection, passing the cached published diagnostics
+overlapping the range so servers offer quick-fixes. The bridge always answers
+with a `CodeActionsMsg` carrying `Intentions: true` — even with no server
+attached, an empty reply, or a failed request (the error toast still fires) —
+because the app merges the offer with the **built-in intention actions**
+([intention-actions](./intention-actions.md)) and owns the "no code actions
+here" toast for the *merged* list. The merged offer opens as a palette list
+**anchored at the caret** (`internal/app/codeactions.go`, falling back to the
+centered locked box without a laid-out editor pane) — preferred LSP actions
+starred and sorted first, then the remaining LSP actions in server order,
+then the built-ins grouped by kind; the kind renders readably as the detail
 chip ("quick fix", "source · organize imports"; a server that omits the kind
-gets a generic "action", #309); picking an entry runs a bridge-built
-continuation
-(same seam as rename). The chosen action applies its inline `WorkspaceEdit`
+gets a generic "action", #309). Picking an LSP entry runs a bridge-built
+continuation (same seam as rename); a built-in entry dispatches its
+registered command. The LSP plugin also contributes a provider of its own:
+"Rename Symbol" appears in the popup when the attached server declares the
+rename capability (`Manager.RenameSupported`). The chosen LSP action applies
+its inline `WorkspaceEdit`
 through `workspace_edit.go` and/or executes its `command` via
 `workspace/executeCommand`; server-initiated `workspace/applyEdit` requests
 (how gopls delivers e.g. Organize Imports) are answered by the manager off

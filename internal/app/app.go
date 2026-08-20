@@ -4088,6 +4088,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// its variables substituted, as a runnable curl command.
 		return m, m.copyHTTPRequestAsCurl()
 
+	case InsertCurlAsRequestMsg:
+		// http.insertCurlAsRequest (intention popup, #2020): the caret
+		// line's curl command becomes an .http block — in place, or in a
+		// fresh scratch file.
+		return m.insertCurlAsRequest()
+
 	case HTTPCopyFoldMsg:
 		// http.copyFold (palette, #1787): the target fold, hidden rows and all.
 		return m, m.copyHTTPFold()
@@ -5506,14 +5512,25 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.navigateHistory(m.navHist.ForwardWhere, "no later position in the navigation history")
 
 	case ilsp.CodeActionsMsg:
-		// lsp.codeAction: the offer opens as a locked palette list; picking an
-		// entry dispatches actionPickedMsg below.
+		// lsp.codeAction (#2020): the offer merges with the built-in
+		// intention providers and opens anchored at the caret; picking an
+		// entry dispatches actionPickedMsg below. The code-lens picker
+		// (Intentions false, #1912) keeps the plain centered list.
+		if msg.Intentions {
+			m.openIntentions(msg)
+			return m, nil
+		}
 		m.actions.Set(msg)
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, actionsPrefix)
 		return m, nil
 
 	case actionPickedMsg:
+		// A built-in intention entry names a registered command; an LSP
+		// entry runs the bridge-built continuation.
+		if id := m.actions.CommandFor(msg); id != "" {
+			return m, m.RunCommand(id)
+		}
 		return m, m.actions.Run(msg)
 
 	case ilsp.RenamePromptMsg:

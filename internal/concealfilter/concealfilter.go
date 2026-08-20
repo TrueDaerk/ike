@@ -52,6 +52,11 @@ const (
 	SecretMasking         = "secret_masking"
 )
 
+// IsFamily reports whether name is a registered conceal family — the
+// validation the rule parser applies, exported for the intention catalog's
+// family→toggle map (#2020).
+func IsFamily(name string) bool { return families[name] }
+
 // families is the set a rule may name, for validation and for the settings
 // description.
 var families = map[string]bool{

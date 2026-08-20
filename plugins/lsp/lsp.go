@@ -10,6 +10,7 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/host"
+	"ike/internal/intention"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 	"ike/internal/plugin"
@@ -114,8 +115,12 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().typeHierarchy(h) },
 			},
 			{
-				ID:    "lsp.codeAction",
-				Title: "LSP: Show Intention Actions",
+				ID: "lsp.codeAction",
+				// Keeps the lsp.codeAction id (JetBrains keymap import and
+				// the blocked-key matrix reference it) but is no longer
+				// LSP-only: the popup merges the server offer with the
+				// built-in intention providers (#2020).
+				Title: "Show Intention Actions",
 				Scope: plugin.PaneScope("editor"),
 				Run:   func(h host.API) tea.Cmd { return shared().codeAction(h) },
 			},
@@ -168,6 +173,22 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Title: "LSP: Show Server Log",
 				Scope: plugin.GlobalScope(),
 				Run:   showLog,
+			},
+		},
+		Intentions: []intention.Provider{
+			{
+				// Rename appears in the intention popup only when the
+				// attached server declares the rename capability (#2020);
+				// PrepareRename still validates the exact position when the
+				// entry is picked.
+				ID: "lsp.rename",
+				Items: func(cx intention.Context) []intention.Item {
+					mgr := shared().manager()
+					if cx.Path == "" || mgr == nil || !mgr.RenameSupported(cx.Path) {
+						return nil
+					}
+					return []intention.Item{{Title: "Rename Symbol", Kind: "refactor", CommandID: "lsp.rename"}}
+				},
 			},
 		},
 		SettingsPages: []settings.Page{

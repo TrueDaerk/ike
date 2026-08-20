@@ -7,8 +7,38 @@ import (
 	"testing"
 
 	"ike/internal/host"
+	"ike/internal/intention"
 	"ike/internal/plugin"
 )
+
+// TestIntentionProviders guards the #2020 seam: providers surface in plugin
+// order, duplicates drop (first owner wins), and disabled plugins vanish.
+func TestIntentionProviders(t *testing.T) {
+	prov := func(id string) intention.Provider {
+		return intention.Provider{ID: id, Items: func(intention.Context) []intention.Item { return nil }}
+	}
+	r := New()
+	r.Add(fake{id: "b", caps: plugin.Capabilities{Intentions: []intention.Provider{prov("b.one"), prov("dup")}}})
+	r.Add(fake{id: "a", caps: plugin.Capabilities{Intentions: []intention.Provider{prov("a.one"), prov("dup")}}})
+
+	got := r.IntentionProviders()
+	ids := make([]string, len(got))
+	for i, p := range got {
+		ids[i] = p.ID
+	}
+	if !reflect.DeepEqual(ids, []string{"a.one", "dup", "b.one"}) {
+		t.Fatalf("providers = %v", ids)
+	}
+	if got[1].Owner != "a" {
+		t.Fatalf("dup should keep the first owner by plugin order, got %q", got[1].Owner)
+	}
+
+	r.SetEnabled("a", false)
+	got = r.IntentionProviders()
+	if len(got) != 2 || got[0].ID != "b.one" || got[1].ID != "dup" || got[1].Owner != "b" {
+		t.Fatalf("disabled plugin's providers should vanish, got %+v", got)
+	}
+}
 
 // fake is a configurable test plugin.
 type fake struct {

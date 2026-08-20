@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 
+	"ike/internal/intention"
 	"ike/internal/plugin"
 	"ike/internal/settings"
 	"ike/internal/theme"
@@ -132,6 +133,30 @@ func (r *Registry) Commands() []OwnedCommand {
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// OwnedIntentionProvider pairs an intention Provider with its owning plugin id.
+type OwnedIntentionProvider struct {
+	Owner string
+	intention.Provider
+}
+
+// IntentionProviders returns enabled plugins' intention providers (#2020) in
+// deterministic plugin order, registration order within a plugin. Duplicate
+// provider ids are dropped (first owner wins), mirroring Commands.
+func (r *Registry) IntentionProviders() []OwnedIntentionProvider {
+	seen := map[string]bool{}
+	var out []OwnedIntentionProvider
+	for _, p := range r.activePlugins() {
+		for _, ip := range p.Capabilities().Intentions {
+			if seen[ip.ID] {
+				continue
+			}
+			seen[ip.ID] = true
+			out = append(out, OwnedIntentionProvider{Owner: p.ID(), Provider: ip})
+		}
+	}
 	return out
 }
 
