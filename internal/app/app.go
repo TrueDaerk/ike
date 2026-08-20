@@ -395,6 +395,10 @@ type Model struct {
 	// httpRequests is the palette mode listing the .http requests that have
 	// stored responses (#1829); the response pane's "r" fills and opens it.
 	httpRequests *httpRequestsMode
+	// httpEntries is the palette mode listing the stored responses of one
+	// request (#1992); the response pane's "D" fills and opens it to pick the
+	// second side of the diff.
+	httpEntries *httpEntriesMode
 	// httpEnvs is the palette mode listing the environments of an
 	// http-client.env.json (#1867); httpEnv persists the chosen one per
 	// directory.
@@ -956,6 +960,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	vcsSt := &vcsState{}                            // shared before the literal: the reverts picker mode reads it
 	layoutsPicker := newLayoutsMode(layoutNames)    // saved window layouts picker (#1175)
 	httpRequests := newHTTPRequestsMode()           // stored HTTP responses picker (#1829)
+	httpEntries := newHTTPEntriesMode()             // stored-response diff picker (#1992)
 	httpEnvs := newHTTPEnvMode()                    // http-client.env.json picker (#1867)
 	runConfigs := newRunConfigsMode()               // run/debug configurations picker (#1914)
 	tasksPicker := newTasksMode()                   // discovered-tasks picker (#1915)
@@ -993,9 +998,10 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:           help.New(reg, bindings, helpMinCol(cfg)),
 		shell:          ui.New(shellConfig(cfg)),
 		vcs:            vcsSt,
-		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEnvs, runConfigs, tasksPicker, sshPicker),
+		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, sshPicker),
 		layoutsPicker:  layoutsPicker,
 		httpRequests:   httpRequests,
+		httpEntries:    httpEntries,
 		httpEnvs:       httpEnvs,
 		runConfigs:     runConfigs,
 		tasks:          tasksPicker,
@@ -2216,7 +2222,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, ssh *sshMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, ssh *sshMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -2281,7 +2287,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEnvs, runConfigs, tasks, ssh)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, ssh)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -3977,6 +3983,24 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case HTTPCopyFoldMsg:
 		// http.copyFold (palette, #1787): the target fold, hidden rows and all.
 		return m, m.copyHTTPFold()
+
+	case HTTPDiffResponsesMsg:
+		// http.diffResponses (palette, #1992): pick a second stored response
+		// and open the pair side by side.
+		m.openHTTPResponseDiff()
+		return m, nil
+
+	case httppane.DiffHistoryMsg:
+		// "D" in the response pane (#1992): same picker, reached without
+		// knowing the command.
+		m.openHTTPResponseDiff()
+		return m, nil
+
+	case DiffHTTPEntriesMsg:
+		// A row of that picker was chosen (#1992): the two stored responses
+		// open in the reusable diff pane, JSON-normalized.
+		m.diffHTTPEntries(msg)
+		return m, nil
 
 	case httppane.PickRequestMsg:
 		// "r" in the response pane (#1829): list the .http file's requests

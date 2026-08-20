@@ -55,6 +55,10 @@ type HTTPShowResponseMsg struct{}
 // again, exactly as it went out (#1832).
 type HTTPResendMsg struct{}
 
+// HTTPDiffResponsesMsg runs http.diffResponses: compare the shown stored
+// response with another one of the same request, side by side (#1992).
+type HTTPDiffResponsesMsg struct{}
+
 // HTTPSelectEnvMsg runs http.selectEnvironment: pick the http-client.env.json
 // environment the file's {{name}} placeholders resolve against (#1867).
 type HTTPSelectEnvMsg struct{}
@@ -426,6 +430,7 @@ var httpPaneKeys = []struct{ Key, Title string }{
 	{"h / l  ← / →", "Browse older / newer stored response"},
 	{"r", "Switch to another request's stored responses"},
 	{"s", "Keep scroll position while browsing history (per request)"},
+	{"D", "Compare this stored response with another one (diff)"},
 	{"j / k", "Scroll"},
 	{"shift+← / shift+→", "Pan sideways in wide lines"},
 	{"0 / $", "Left edge / right edge"},

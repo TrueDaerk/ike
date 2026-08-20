@@ -207,6 +207,12 @@ type HistoryItem struct {
 // reach the clipboard (CopyMsg).
 type ResendMsg struct{}
 
+// DiffHistoryMsg asks the host to compare the shown stored response with
+// another one of the same request (#1992), "D" in the focused viewer. The
+// pane knows neither the history store nor the diff viewer, so the host opens
+// the entry picker on its behalf — the PickRequestMsg arrangement.
+type DiffHistoryMsg struct{}
+
 // resendLabel is the clickable re-send affordance in the pane header (#1832).
 const resendLabel = "⟳ re-send"
 
@@ -532,6 +538,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// pane knows neither the history store nor the .http file's requests,
 		// so the host opens the picker on its behalf.
 		return func() tea.Msg { return PickRequestMsg{} }
+	case "D":
+		// Compare this stored response with another one of the same request
+		// (#1992). Uppercase: "d" is the page-down key.
+		return func() tea.Msg { return DiffHistoryMsg{} }
 	case "s":
 		// Keep the scroll position while stepping through history (#1493),
 		// per request; the footer anchor marks the active state.
@@ -956,6 +966,10 @@ func (m *Model) footerText() string {
 			s += " ⚓ keep pos"
 		} else if len(m.hist) > 1 {
 			s += " · s keep pos"
+		}
+		// Diffing needs a second entry to compare against (#1992).
+		if len(m.hist) > 1 {
+			s += " · D diff"
 		}
 		s += " ·"
 	}

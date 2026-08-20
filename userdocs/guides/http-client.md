@@ -424,6 +424,30 @@ shows anything at all.
 Text bodies are stored as plain text inside the JSON, so `.ike/http/*.json`
 opens and diffs readably in the editor.
 
+### Comparing two responses
+
+Stepping back and forth between two responses only gets you so far — to see
+*what* changed, press ++shift+d++ in the focused response pane (or run
+**Compare Stored HTTP Responses**, `http.diffResponses`). A list of the
+request's other stored responses opens; pick one and the two open side by side
+in the normal diff viewer, the older response on the left. Each column is
+labelled with the request, its position in the history and the time it was
+stored.
+
+Both sides are rendered the same way: status line, headers, then the body — so
+a header that changed shows up next to the payload that did. **JSON bodies are
+normalized first**: keys are sorted and the indentation is unified, so a
+response whose keys come back in a different order, or minified where the
+previous run was pretty-printed, diffs as *no change at all* and only real
+differences remain. Line-delimited JSON (NDJSON) is normalized the same way;
+everything else — XML, HTML, plain text — is compared exactly as it arrived,
+and a binary body is summarized by its size instead of being compared byte by
+byte.
+
+The hint `D diff` appears in the footer as soon as a second response is
+stored; with only one there is nothing to compare it with, and the pane says so
+rather than opening an empty list.
+
 ## Sending the same request again
 
 Every stored response also keeps the **request as it was sent** — method,
@@ -462,6 +486,7 @@ once and the entry after that is re-sendable.
 | Browse HTTP Response History | `http.responseHistory` | — |
 | Show Stored HTTP Response | `http.showResponse` | — |
 | Re-send Stored HTTP Request | `http.resend` | — |
+| Compare Stored HTTP Responses | `http.diffResponses` | — |
 
 A scratch file is a quick way to try something without adding a file to the
 repository: **New Scratch File: Http** (`scratch.new.http`).
