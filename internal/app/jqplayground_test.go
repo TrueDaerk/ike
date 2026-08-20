@@ -3,14 +3,17 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/editor"
 	"ike/internal/jqplay"
 	"ike/internal/lang"
+	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/scratch"
 )
@@ -473,6 +476,162 @@ func TestJQPlaygroundResultSelection(t *testing.T) {
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.jqPlayOpen() {
 		t.Error("esc from resting normal mode must close the playground")
+	}
+}
+
+// jqTestClip is a fake system clipboard for the result buffer's `+` register.
+type jqTestClip struct{ text string }
+
+func (c *jqTestClip) Read() (string, error) { return c.text, nil }
+func (c *jqTestClip) Write(s string) error  { c.text = s; return nil }
+
+// jqCopyKey is the app keymap's editor.copy chord as a key event: cmd+c on
+// macOS, folded to ctrl+c everywhere else (keymap.NormalizeKey).
+func jqCopyKey() tea.KeyPressMsg {
+	if runtime.GOOS == "darwin" {
+		return tea.KeyPressMsg{Code: 'c', Mod: tea.ModMeta}
+	}
+	return tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
+}
+
+// TestJQPlaygroundCopyChordCopiesSelection (#1980): the copy chord writes the
+// result buffer's visual selection to the system clipboard, like in a normal
+// read-only buffer — the modal routing must not swallow it.
+func TestJQPlaygroundCopyChordCopiesSelection(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"foo":[1,2,3]}`))
+	m = setProgram(m, ".foo[]")
+	clip := &jqTestClip{}
+	m.jqPlay.resultEd.SetClipboard(clip)
+
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	m = drainKey(m, tea.KeyPressMsg{Code: 'V', Text: "V"})
+	m = drainKey(m, tea.KeyPressMsg{Code: 'j', Text: "j"})
+	if _, has := m.jqPlay.resultEd.SelectionText(); !has {
+		t.Fatal("the fixture needs a visual selection")
+	}
+	m = drainKey(m, jqCopyKey())
+	if !strings.Contains(clip.text, "1") || !strings.Contains(clip.text, "2") {
+		t.Fatalf("clipboard = %q, want the selected lines", clip.text)
+	}
+	if strings.Contains(clip.text, "3") {
+		t.Errorf("clipboard = %q, must hold only the selection, not the whole result", clip.text)
+	}
+	if !m.jqPlayOpen() {
+		t.Error("copying must leave the playground open")
+	}
+}
+
+// TestJQPlaygroundMenuCopyReachesResultBuffer (#1980): the Edit menu's copy
+// dispatches editor.ActionMsg — while the playground pane is focused it must
+// act on the substitute result buffer, not the pane's hidden document.
+func TestJQPlaygroundMenuCopyReachesResultBuffer(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"foo":[1,2,3]}`))
+	m = setProgram(m, ".foo[]")
+	clip := &jqTestClip{}
+	m.jqPlay.resultEd.SetClipboard(clip)
+
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	m = drainKey(m, tea.KeyPressMsg{Code: 'V', Text: "V"})
+	tm, cmd := m.Update(editor.ActionMsg{Action: "copy"})
+	m = drainCmd(tm.(Model), cmd)
+	if !strings.Contains(clip.text, "1") {
+		t.Fatalf("clipboard = %q, want the result buffer's selection", clip.text)
+	}
+}
+
+// TestJQPlaygroundSurvivesFocusChange (#1980): moving the focus to another
+// pane leaves the playground mounted with query and result intact, the other
+// pane takes keys normally, and refocusing resumes the query line as it was.
+func TestJQPlaygroundSurvivesFocusChange(t *testing.T) {
+	m := jqApp(t, `{"foo":[1,2,3]}`)
+	jqKey := m.activeWS().Panes.Focused()
+	// A second editor pane to work in while the result stays visible.
+	m.SplitFocused(layout.ZoneRight)
+	otherKey := m.activeWS().Panes.Focused()
+	m.setFocus(jqKey)
+	m = openJQ(t, m)
+	m = setProgram(m, ".foo[]")
+	program := m.jqPlay.program
+
+	// The spatial focus move escapes the playground pane instead of being
+	// swallowed by the modal routing.
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl})
+	if !m.jqPlayOpen() {
+		t.Fatal("a focus change must not close the playground")
+	}
+	if got := m.activeWS().Panes.Focused(); got != otherKey {
+		t.Fatalf("focus = %q, want the other pane %q", got, otherKey)
+	}
+
+	// Editing in the other pane works normally; nothing leaks into the query
+	// line and the result stays intact.
+	m = drainKey(m, tea.KeyPressMsg{Code: 'i', Text: "i"})
+	m = typeInto(m, "hello")
+	if ed := m.activeWS().Panes.Get(otherKey).Editor(); ed == nil || !strings.Contains(ed.Text(), "hello") {
+		t.Fatal("typing must edit the focused pane while the playground is open elsewhere")
+	}
+	if got := m.jqPlay.program; got != program {
+		t.Fatalf("query line = %q, keys for the other pane must not reach it", got)
+	}
+	if got := m.jqPlay.result.Text(); got != "1\n2\n3" {
+		t.Fatalf("result = %q, must survive the focus change", got)
+	}
+	v := ansi.Strip(m.render())
+	if !strings.Contains(v, "> jq:") {
+		t.Errorf("the unfocused playground must keep rendering, got:\n%s", v)
+	}
+
+	// Refocusing the hosting pane resumes the query line.
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape}) // leave insert mode first
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl})
+	if got := m.activeWS().Panes.Focused(); got != jqKey {
+		t.Fatalf("focus = %q, want back on the playground pane %q", got, jqKey)
+	}
+	m = typeInto(m, " ")
+	if got := m.jqPlay.program; got != program+" " {
+		t.Fatalf("query line = %q, refocusing must resume it", got)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.jqPlayOpen() {
+		t.Error("esc in the playground pane must still close the mode")
+	}
+}
+
+// TestJQPlaygroundSurvivesClickIntoOtherPane (#1980): a mouse click into
+// another pane moves the focus and leaves the playground mounted.
+func TestJQPlaygroundSurvivesClickIntoOtherPane(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"foo":[1,2,3]}`))
+	m = setProgram(m, ".foo[]")
+	r, ok := m.lay.Panes[pane.ExplorerKey]
+	if !ok {
+		t.Fatal("the explorer pane must be laid out")
+	}
+	tm, cmd := m.Update(tea.MouseClickMsg{X: r.X + r.W/2, Y: r.Y + r.H/2, Button: tea.MouseLeft})
+	m = drainCmd(tm.(Model), cmd)
+	if !m.jqPlayOpen() {
+		t.Fatal("a click into another pane must not close the playground")
+	}
+	if got := m.activeWS().Panes.Focused(); got != pane.ExplorerKey {
+		t.Fatalf("focus = %q, want the clicked explorer", got)
+	}
+	if got := m.jqPlay.result.Text(); got != "1\n2\n3" {
+		t.Errorf("result = %q, must survive the click", got)
+	}
+}
+
+// TestJQPlaygroundClosesWithHostingPane (#1980): the mode survives focus
+// changes, so its pane can now be closed from elsewhere — the playground must
+// die with it instead of dangling over a removed key.
+func TestJQPlaygroundClosesWithHostingPane(t *testing.T) {
+	m := jqApp(t, `{"foo":[1,2,3]}`)
+	jqKey := m.activeWS().Panes.Focused()
+	m.SplitFocused(layout.ZoneRight)
+	m.setFocus(jqKey)
+	m = openJQ(t, m)
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl})
+	m.closePane(jqKey)
+	if m.jqPlayOpen() {
+		t.Fatal("closing the hosting pane must close the playground")
 	}
 }
 
