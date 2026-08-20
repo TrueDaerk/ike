@@ -27,6 +27,27 @@
   override the shell's border colour until it closes — the seam the red
   failure state uses.
 
+## 2026-08-20 (Number-hint mapping: input base and skipped entries, #2008)
+
+- **`internal/numhint`**: `EntryError` words why an `editor.number_hint_units`
+  line cannot be used (no `=`, empty pattern, unknown unit — the message lists
+  the vocabulary), `SetFieldUnits` keeps the entries it had to skip and
+  `InvalidEntries` reports them, `UnitVocabulary` names the accepted words.
+  A blank list element is nothing to complain about. The mapped unit already
+  was the base the raw number is read in — `request_timeout=s` reads `1500` as
+  1500 seconds and draws `25m`, not the built-in `timeout` word's `1s500ms` —
+  in every position, config formats and code alike; table-driven tests lock
+  that down per base and per code shape (kwarg, def default, assignment,
+  constant, computed expression, Go and PHP).
+- **`internal/app`**: `unitMappingDiags` turns the skipped entries into
+  `editor.number_hint_units` config diagnostics, toasted like `associationDiags`
+  — a silently dropped entry reads as the mapping being ignored, because the
+  field simply keeps its built-in reading. The mapping and the secret key
+  patterns now install *before* the reload's diagnostics are worded.
+- **Settings**: the *Number hint field units* list rejects an element the
+  mapping would skip, with the same message, and lists the unit words while
+  the entry is typed.
+- Wiki: [Editor](/architecture/editor.md) — field-unit mapping.
 ## 2026-08-20 (In-IDE screenshot export, #2001)
 
 - **`internal/app/screenshot.go`** (new): `view.exportScreenshot` and

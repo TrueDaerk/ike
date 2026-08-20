@@ -1,6 +1,7 @@
 package numhint
 
 import (
+	"strings"
 	"testing"
 
 	"ike/internal/epochtime"
@@ -204,5 +205,89 @@ func TestSetFieldUnitsReportsChange(t *testing.T) {
 	}
 	if !SetFieldUnits([]string{"size=ms"}) {
 		t.Error("a changed mapping reported no change")
+	}
+}
+
+// TestMappedUnitIsTheInputBase: the mapped unit decides how the raw number is
+// *read*, not only which family draws it (#2008). The same 1500 is 1500
+// seconds under `=s` (25 minutes), 1500 milliseconds under `=ms`, and 1500
+// bytes under `=bytes` — the built-in `timeout` word, which counts in
+// milliseconds, never gets a say over a mapped field.
+func TestMappedUnitIsTheInputBase(t *testing.T) {
+	cases := []struct {
+		entry            string
+		capture, replace string
+	}{
+		{"request_timeout=s", DurationCapture, "25m"},
+		{"request_timeout=seconds", DurationCapture, "25m"},
+		{"request_timeout=ms", DurationCapture, "1s500ms"},
+		{"request_timeout=min", DurationCapture, "25h"},
+		{"request_timeout=bytes", SizeCapture, "1.5 KiB"},
+		{"*_timeout=s", DurationCapture, "25m"},
+	}
+	for _, c := range cases {
+		mapping(t, c.entry)
+		capture, replace := hint(t, `request_timeout: 1500`)
+		if capture != c.capture || replace != c.replace {
+			t.Errorf("%s: request_timeout: 1500 = %s %q; want %s %q",
+				c.entry, capture, replace, c.capture, c.replace)
+		}
+	}
+}
+
+// TestEntryError: what makes a mapping entry unusable, and the wording that
+// says so. A blank element is nothing to complain about.
+func TestEntryError(t *testing.T) {
+	for _, ok := range []string{"request_timeout=s", " retention = seconds ", "*_bytes=bytes", "id=none", ""} {
+		if msg := EntryError(ok); msg != "" {
+			t.Errorf("EntryError(%q) = %q; want it accepted", ok, msg)
+		}
+	}
+	for _, bad := range []string{"request_timeout", "request_timeout: s", "=bytes", "ttl=parsecs"} {
+		if msg := EntryError(bad); msg == "" {
+			t.Errorf("EntryError(%q) accepted an unusable entry", bad)
+		}
+	}
+	if msg := EntryError("ttl=parsecs"); !strings.Contains(msg, "timestamp-ms") {
+		t.Errorf("EntryError(\"ttl=parsecs\") = %q; want it to list the units that would work", msg)
+	}
+}
+
+// TestInvalidEntriesReported: an entry the install had to skip is kept with
+// its reason, so the app can report a rule that gates nothing (#2008) instead
+// of leaving the field silently on its built-in reading.
+func TestInvalidEntriesReported(t *testing.T) {
+	mapping(t, "size=bytes", "", "ttl=parsecs", "no-separator")
+	bad := InvalidEntries()
+	if len(bad) != 2 {
+		t.Fatalf("InvalidEntries() = %+v; want the two unusable entries", bad)
+	}
+	if bad[0].Entry != "ttl=parsecs" || bad[1].Entry != "no-separator" {
+		t.Errorf("InvalidEntries() = %+v; want the entries verbatim, in order", bad)
+	}
+	for _, e := range bad {
+		if e.Reason == "" {
+			t.Errorf("%q was skipped without a reason", e.Entry)
+		}
+	}
+	mapping(t, "size=bytes")
+	if bad := InvalidEntries(); len(bad) != 0 {
+		t.Errorf("a clean mapping still reports %+v", bad)
+	}
+}
+
+// TestUnitVocabulary: every word the vocabulary offers parses, and each names
+// the reading UnitName writes back — the list the Settings form and the
+// rejection message hand the user has to be usable verbatim.
+func TestUnitVocabulary(t *testing.T) {
+	for _, name := range UnitVocabulary() {
+		u, ok := ParseUnit(name)
+		if !ok {
+			t.Errorf("UnitVocabulary offers %q, which ParseUnit rejects", name)
+			continue
+		}
+		if u.Kind != UnitOff && UnitName(u) != name {
+			t.Errorf("UnitName(ParseUnit(%q)) = %q; want the round trip", name, UnitName(u))
+		}
 	}
 }
