@@ -86,6 +86,7 @@ func Defaults() []Menu {
 			{Title: "SSH Host…", Command: "terminal.ssh"},
 			{Title: "Regex Tester…", Command: "tools.regexTester"},
 			{Title: "jq Playground…", Command: "json.jqPlayground"},
+			{Title: "jq Playground at Cursor Path…", Command: "json.jqPlaygroundAtPath"},
 			{Title: "Restart Language Servers", Command: "lsp.restart"},
 			{Title: "Plugins", Command: "tools.plugins"},
 		}},

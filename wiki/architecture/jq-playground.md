@@ -1,7 +1,7 @@
 ---
 type: concept
 title: jq Playground
-description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, one session-wide program history shared by every buffer and response pane, and a completion popup offering the snapshot's keys after a dot and gojq's builtins on an identifier.
+description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and response pane, and a completion popup offering the snapshot's keys after a dot and gojq's builtins on an identifier.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, jq, tools, inline, editor, http, completion]
 timestamp: 2026-08-20T00:00:00Z
@@ -17,9 +17,10 @@ body replaced by a **read-only editor buffer showing the program's live
 output**: no floating dialog, the result reads and navigates like any buffer.
 
 Opened by the **`json.jqPlayground`** command (command palette, Tools menu; no
-default chord), on JSON editor buffers and the HTTP response pane alike.
-`esc` leaves the mode; the pane's own content was never touched, so leaving
-restores it bit-identically — editability included.
+default chord), on JSON editor buffers and the HTTP response pane alike — and
+by **`json.jqPlaygroundAtPath`**, the same mode seeded with the caret's jq
+path (#1982). `esc` leaves the mode; the pane's own content was never touched,
+so leaving restores it bit-identically — editability included.
 
 ## Structure
 
@@ -31,7 +32,7 @@ internal/jqplay/
 internal/app/
   jqplayground.go the inline mode: query header, result buffer, key routing, debounce and async eval
   jqcomplete.go   the completion popup: state, keys, rendering and compositing
-  commands.go     json.jqPlayground → OpenJQPlaygroundMsg
+  commands.go     json.jqPlayground / json.jqPlaygroundAtPath → the two open messages
 ```
 
 The split is the usual one: everything interesting — parsing, running, error
@@ -122,10 +123,35 @@ every one, as jq's own stdin does (capped at `MaxInputValues`, 10 000). A buffer
 that is not JSON is an inline message naming the offending **line** — a byte
 offset says nothing to the reader of a pretty-printed document.
 
-The query line is **prefilled with the caret's jq path** (`.spec.containers[2].name`,
-from the [path breadcrumb](./editor.md) of #1660) when the buffer has one, so
-"the value I was looking at" is already a program; otherwise it opens on `.`,
-which pretty-prints the input.
+## What the query line opens on
+
+The ordinary open starts on **`.`**, which pretty-prints the input (#1982).
+Until then it was prefilled with the caret's jq path, and that was the wrong
+default: most openings only check something, so the prefilled program was a
+deletion to perform before the first keystroke of the program actually wanted.
+
+Two things override the identity:
+
+- **This input's last valid program of the session.** Every run that comes
+  back without an error records its program under the input's key — the file
+  path, the unsaved buffer's editor key, the response pane's key — and the
+  next open over that same input starts on it. Reopening a file therefore
+  resumes the look that was interrupted, which the session program **history**
+  cannot express: that list is deliberately one shared, buffer-agnostic
+  sequence, so its newest entry is whatever was run last *anywhere*. A
+  program that failed to compile or raised at runtime is not recorded, so a
+  half-typed one never displaces the last one that worked, and `.` is not
+  recorded either — it is the default already.
+- **`json.jqPlaygroundAtPath`**, the explicit form of the old behavior: the
+  caret's jq path (`.spec.containers[2].name`, from the
+  [path breadcrumb](./editor.md) of #1660), so "the value I was looking at" is
+  already a program. It needs the whole focused buffer as the input — against
+  a response body or a selection the caret's path indexes the *file* and would
+  name a location the input does not contain — and falls back to `.` when the
+  caret has no path.
+
+The memory is in-memory for the session, like the history: a jq program is
+scratch work, and persisting it into the project state would be noise.
 
 ## Debounce, generations, cancellation
 
@@ -311,9 +337,14 @@ restores the half-written program instead of clearing the line; and a newest
 entry that only repeats what the query line already holds is stepped over on
 the way out. That second rule is what makes `↑` do something: both commit
 points leave the line equal to the newest entry — `enter` keeps the program it
-just recorded, and reopening over the same caret seeds the path that was last
-run — so without it the first `↑` would visibly change nothing and the history
-would read as broken.
+just recorded, and reopening over the same file seeds the last program run on
+it (#1982) — so without it the first `↑` would visibly change nothing and the
+history would read as broken.
+
+The history and the per-file recall are **different memories on purpose**: the
+history answers "what did I run recently, anywhere", the recall answers "where
+was I in *this* file". The list is not keyed by file precisely because a
+program written against one response is usually worth trying against the next.
 
 ## Boundaries
 

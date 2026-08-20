@@ -79,6 +79,7 @@ type jqPlayState struct {
 	bufFocus bool
 
 	source   string
+	srcKey   string
 	input    *jqplay.Input
 	inputErr string
 	parsing  bool
@@ -117,23 +118,23 @@ func (s *jqPlayState) setBufFocus(v bool) {
 
 // startJQPlayground opens the playground over the JSON at hand: the focused
 // HTTP response pane's body, else the focused editor's visual selection, else
-// its whole buffer. The query line is prefilled with the caret's jq path
-// (#1660) when the buffer has one, so "the value I was looking at" is one
-// keystroke from being a program. The mode mounts *in* the resolved pane
-// (#1970): focus moves there and the pane shows the query header plus the
-// read-only result buffer until esc.
+// its whole buffer. atPath picks the seed program: the ordinary open starts
+// on `.` — or on this input's last valid program of the session (#1982) — the
+// json.jqPlaygroundAtPath open on the caret's jq path (#1660). The mode
+// mounts *in* the resolved pane (#1970): focus moves there and the pane shows
+// the query header plus the read-only result buffer until esc.
 //
 // Opening while a playground is already up (the Tools menu is one click away
 // even then) closes that one first: it is one mode, and the program on its
 // query line belongs in the history like any other (#1977).
-func (m *Model) startJQPlayground() tea.Cmd {
+func (m *Model) startJQPlayground(atPath bool) tea.Cmd {
 	src, ok := m.jqSource()
 	if !ok {
 		m.host.Notify(host.Info, "jq: no JSON buffer or HTTP response to query")
 		return nil
 	}
 	m.closeJQPlayground()
-	s := &jqPlayState{paneKey: src.paneKey, source: src.label, histIdx: -1, hist: m.jqHist(), program: m.jqSeedProgram(src)}
+	s := &jqPlayState{paneKey: src.paneKey, source: src.label, srcKey: src.key, histIdx: -1, hist: m.jqHist(), program: m.jqSeedProgram(src, atPath)}
 	s.pos = len([]rune(s.program))
 	ed := editor.New()
 	ed.SetRegisters(m.regs) // app-wide registers (#1540): yanks in the result reach every buffer
@@ -151,13 +152,16 @@ func (m *Model) startJQPlayground() tea.Cmd {
 }
 
 // jqInputSource is one resolved snapshot: the JSON text, the label naming
-// where it came from, the pane the inline mode mounts in (with the tab to
-// activate for a tab-nested response viewer, -1 otherwise), and whether it is
-// the *whole* focused buffer — the only case in which the caret's document
-// path is a valid program against it.
+// where it came from, the key the session's last valid program is remembered
+// under (#1982 — the file path, not the label, so the same file is recognized
+// whether the whole buffer or a selection in it was queried), the pane the
+// inline mode mounts in (with the tab to activate for a tab-nested response
+// viewer, -1 otherwise), and whether it is the *whole* focused buffer — the
+// only case in which the caret's document path is a valid program against it.
 type jqInputSource struct {
 	text     string
 	label    string
+	key      string
 	paneKey  string
 	tabIdx   int
 	fullFile bool
@@ -170,17 +174,19 @@ type jqInputSource struct {
 func (m Model) jqSource() (jqInputSource, bool) {
 	if c := m.focusedContent(); c != nil && c.Kind() == pane.KindHTTP {
 		if body := c.HTTP().BodyText(); strings.TrimSpace(body) != "" {
-			return jqInputSource{text: body, label: "HTTP response", paneKey: m.activeWS().Panes.Focused(), tabIdx: -1}, true
+			paneKey := m.activeWS().Panes.Focused()
+			return jqInputSource{text: body, label: "HTTP response", key: "http:" + paneKey, paneKey: paneKey, tabIdx: -1}, true
 		}
 	}
 	if ed := m.activeEditor(); ed != nil {
 		name := jqEditorLabel(ed)
 		key := m.activeEditorKey()
+		docKey := jqDocKey(ed, key)
 		if sel, has := ed.SelectionText(); has && strings.TrimSpace(sel) != "" {
-			return jqInputSource{text: sel, label: name + " (selection)", paneKey: key, tabIdx: -1}, true
+			return jqInputSource{text: sel, label: name + " (selection)", key: docKey, paneKey: key, tabIdx: -1}, true
 		}
 		if body := ed.Text(); strings.TrimSpace(body) != "" {
-			return jqInputSource{text: body, label: name, paneKey: key, tabIdx: -1, fullFile: true}, true
+			return jqInputSource{text: body, label: name, key: docKey, paneKey: key, tabIdx: -1, fullFile: true}, true
 		}
 	}
 	// The response pane may be open without being focused — an editor holding
@@ -190,7 +196,7 @@ func (m Model) jqSource() (jqInputSource, bool) {
 		return c.Kind() == pane.KindHTTP
 	}); ok && m.leafVisible(hostKey) {
 		if body := inst.HTTP().BodyText(); strings.TrimSpace(body) != "" {
-			return jqInputSource{text: body, label: "HTTP response", paneKey: hostKey, tabIdx: tabIdx}, true
+			return jqInputSource{text: body, label: "HTTP response", key: "http:" + hostKey, paneKey: hostKey, tabIdx: tabIdx}, true
 		}
 	}
 	return jqInputSource{}, false
@@ -204,21 +210,64 @@ func jqEditorLabel(ed *editor.Model) string {
 	return "untitled buffer"
 }
 
-// jqSeedProgram is the program the query line opens on: the caret's jq path
-// (#1660) when the whole focused buffer is the input, else the identity
-// program, which pretty-prints it. A response body or a selection gets the
-// identity — the caret's path indexes the *file*, and against a sub-document
-// it would name a location the input does not contain.
-func (m Model) jqSeedProgram(src jqInputSource) string {
-	if !src.fullFile {
+// jqSeedProgram is the program the query line opens on.
+//
+// The ordinary open (json.jqPlayground) starts on the identity program, which
+// pretty-prints the input: most openings only want to check something, and a
+// prefilled path had to be deleted before typing (#1982). When a valid
+// program was already run against this input during the session, that one is
+// offered instead — reopening a file resumes the look that was interrupted,
+// which the session-wide history (one shared list, any buffer) cannot express.
+//
+// atPath (json.jqPlaygroundAtPath) is the explicit form of the old default:
+// the caret's jq path (#1660), so "the value I was looking at" is already a
+// program. It needs the *whole* focused buffer as the input — against a
+// response body or a selection the caret's path indexes the file and would
+// name a location the input does not contain — and falls back to the identity
+// when the caret has no path.
+func (m Model) jqSeedProgram(src jqInputSource, atPath bool) string {
+	if atPath {
+		if !src.fullFile {
+			return "."
+		}
+		if ed := m.activeEditor(); ed != nil {
+			if path, ok := ed.DocPath(editor.DocPathJQ); ok && path != "." {
+				return path
+			}
+		}
 		return "."
 	}
-	if ed := m.activeEditor(); ed != nil {
-		if path, ok := ed.DocPath(editor.DocPathJQ); ok && path != "." {
-			return path
-		}
+	if last := m.jqLastProgram[src.key]; last != "" {
+		return last
 	}
 	return "."
+}
+
+// rememberJQProgram records program as the input's last valid program of the
+// session (#1982), so reopening the playground over the same file offers it
+// again. Only a program that actually ran — it compiled and raised no runtime
+// error — is worth reoffering; the identity program is the default anyway and
+// is not stored, so it never displaces an earlier real program.
+func (m *Model) rememberJQProgram(key, program string) {
+	program = strings.TrimSpace(program)
+	if key == "" || program == "" || program == "." {
+		return
+	}
+	if m.jqLastProgram == nil {
+		m.jqLastProgram = map[string]string{}
+	}
+	m.jqLastProgram[key] = program
+}
+
+// jqDocKey identifies the queried document for the per-file last-program
+// memory (#1982): its path, so the same file is recognized across reopens and
+// across panes. An unsaved buffer has none and falls back to its editor key,
+// which lives exactly as long as the buffer does.
+func jqDocKey(ed *editor.Model, edKey string) string {
+	if path := ed.Path(); path != "" {
+		return "file:" + path
+	}
+	return "buf:" + edKey
 }
 
 // jqPlayOpen reports whether the inline playground is active.
@@ -418,7 +467,9 @@ func (m *Model) runJQ() tea.Cmd {
 
 // finishJQEval installs a result unless a newer generation superseded it, and
 // refreshes the read-only buffer showing it; the returned command starts its
-// highlight parse.
+// highlight parse. A run that came back clean also makes its program this
+// input's last valid one (#1982), which the next open over the same file
+// prefills.
 func (m *Model) finishJQEval(msg jqEvalDoneMsg) tea.Cmd {
 	s := m.jqPlay
 	if s == nil || msg.st != s || msg.gen != s.gen {
@@ -426,6 +477,9 @@ func (m *Model) finishJQEval(msg jqEvalDoneMsg) tea.Cmd {
 	}
 	s.pending, s.cancel = false, nil
 	s.result = msg.res
+	if msg.res.Err == "" {
+		m.rememberJQProgram(s.srcKey, s.program)
+	}
 	return m.syncJQResultBuffer()
 }
 
