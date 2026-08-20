@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Documentation Screenshots
-description: Feature screenshots for the user docs generated from the app itself — a headless model driven by cmd/shotgen, its frame painted to PNG by internal/shotpng.
+description: Feature screenshots for the user docs generated from the app itself — a headless model driven by cmd/shotgen, its frame painted to PNG by internal/shotpng — plus the in-IDE export of the focused pane or the whole window.
 resource: cmd/shotgen/main.go
 tags: [docs, screenshots, tooling]
-timestamp: 2026-08-07T12:00:00Z
+timestamp: 2026-08-20T12:00:00Z
 ---
 
 # Documentation Screenshots
@@ -70,6 +70,32 @@ command.
 * **A shot must not carry the machine that rendered it** (#1857). The terminal shot spawns
   `/bin/sh` rather than `$SHELL` and the driver clears `VIRTUAL_ENV`: a themed prompt with a
   username in it, or a virtualenv path in the pane title, is machine state rather than a feature.
+
+## Screenshots from inside the IDE (#2001)
+
+The painter is not docs-only: **Export Screenshot (Pane)** (`view.exportScreenshot`) and **Export
+Screenshot (Window)** (`view.exportWindowScreenshot`) — palette and *View* menu — write a PNG of the
+running IDE. `internal/app/screenshot.go` is the whole wiring:
+
+* **The subject is the composed frame.** The capture takes the very string `View()` hands the
+  renderer (`Model.render()`), never a re-render from file content — so syntax colours, conceal
+  stand-ins, selections, gutter decorations, popups and the status line are in the shot exactly as
+  they are on screen. `Options.Fg`/`Bg` carry the active theme's base colours, the same pair the
+  view sets on the renderer.
+* **Cropping is a cell region, again done by the app.** A pane capture passes the focused pane's
+  layout rect (`Model.lay.Panes[...]`, borders included) as `Options.Region`; the window capture
+  passes the whole frame. Whole cells, no pixel cropping — the shotgen stance.
+* **Painting is off the update loop.** `exportScreenshot` composes the frame synchronously (the app
+  renders one every tick anyway) and returns a `tea.Cmd` that loads the fonts, paints and writes;
+  the result comes back as `screenshotDoneMsg`. The font set is loaded once per process — resolving
+  and parsing the platform faces is the expensive part, and every shot wants the same set.
+* **Where it lands.** `screenshot.directory` (Settings → Screenshots, user scope) names the output
+  directory; `~` expands, a relative path resolves against the project directory, and an empty
+  value — the default — means `~/.ike/screenshots`. The directory is created on the first capture.
+  File names are `ike-<pane|window>-YYYYMMDD-HHMMSS.png`, with a counter appended when two shots of
+  the same kind fall in one second.
+* **The path is the deliverable.** On success it goes to the system clipboard and into a
+  notification, so it can be pasted straight into an issue, a wiki page or a `![](…)`.
 
 ## Adding a shot
 

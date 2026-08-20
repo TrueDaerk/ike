@@ -21,6 +21,19 @@
   mapping would skip, with the same message, and lists the unit words while
   the entry is typed.
 - Wiki: [Editor](/architecture/editor.md) — field-unit mapping.
+## 2026-08-20 (In-IDE screenshot export, #2001)
+
+- **`internal/app/screenshot.go`** (new): `view.exportScreenshot` and
+  `view.exportWindowScreenshot` paint the running IDE into a PNG through
+  `internal/shotpng` — the docs renderer, until now only driven offline by
+  `cmd/shotgen`. The subject is the composed frame `Model.render()` produces
+  (never a re-render from file content), cropped by cell region: the focused
+  pane's layout rect, or the whole window. Painting and writing run off the
+  update loop behind a `tea.Cmd`; the fonts load once per process. The new
+  `screenshot.directory` setting (Settings → Screenshots, default
+  `~/.ike/screenshots`) names the output directory, files are
+  `ike-<pane|window>-<timestamp>.png`, and the written path lands in the
+  clipboard and a notification. Both commands are also View-menu entries.
 
 ## 2026-08-20 (SFTP remote file browsing, #1997)
 

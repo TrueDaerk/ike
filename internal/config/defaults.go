@@ -275,5 +275,11 @@ func defaults() *Config {
 			// an accidental open of a dump stall a slow link (#1997).
 			MaxFetchMB: 64,
 		},
+		Screenshot: Screenshot{
+			// Empty resolves to ~/.ike/screenshots (internal/app owns the
+			// fallback): shots sit next to the user config rather than in the
+			// project, so nothing has to be gitignored (#2001).
+			Directory: "",
+		},
 	}
 }
