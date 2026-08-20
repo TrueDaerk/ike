@@ -845,9 +845,25 @@ func New() Model {
 	config.Set(cfg)
 	terminal.SetDefaultScrollbackLines(cfg.Terminal.ScrollbackLines)
 	m := NewWith(registry.Global(), host.FromConfig(cfg))
-	m.notifyConfigDiags(append(diags, associationDiags()...))
+	m.notifyConfigDiags(append(append(diags, associationDiags()...), unitMappingDiags()...))
 	m.notifyKeymapDiags()
 	return m
+}
+
+// unitMappingDiags reports every editor.number_hint_units entry the install
+// skipped (#2008): a malformed line or an unknown unit word gates nothing, so
+// the field keeps rendering in the built-in base — a `request_timeout` still
+// read in milliseconds — while the mapping looks like it is in force. Same
+// rule as associationDiags: an inert entry must be visible.
+func unitMappingDiags() []config.Diagnostic {
+	var out []config.Diagnostic
+	for _, e := range numhint.InvalidEntries() {
+		out = append(out, config.Diagnostic{
+			Field:   "editor.number_hint_units",
+			Message: strconv.Quote(e.Entry) + ": " + e.Reason + " — ignored",
+		})
+	}
+	return out
 }
 
 // associationDiags reports every [files.associations] entry whose target
@@ -5156,7 +5172,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// recomputes so config-backed lists (recent projects, #842) reflect
 		// the reload immediately; Refresh is a no-op while closed.
 		m.reloadConfig(msg.Config)
+		// Number-hint field units (#1685) and custom secret key patterns
+		// (#1712) install before the diagnostics are worded: the entries the
+		// mapping had to skip (#2008) are part of what this reload reports,
+		// and both must run — no short-circuit — so one changing never skips
+		// installing the other. The re-parse they need happens below.
+		changedUnits := applyNumberHintUnits()
+		changedSecrets := applySecretMaskingKeys()
 		diags := append(msg.Diags, associationDiags()...)
+		diags = append(diags, unitMappingDiags()...)
 		m.notifyConfigDiags(diags)
 		m.notifyKeymapDiags()             // the reload above rebuilt the binding table
 		m.settings.NoteReloadDiags(diags) // inline in the panel too (#891)
@@ -5167,19 +5191,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// short-circuit — so one changing never skips recompiling the other.
 		changedIgnore := m.compileDiagIgnore()
 		if m.compileDiagSeverity() || changedIgnore {
-			if cmds := m.refilterDiagnostics(); len(cmds) > 0 {
+			cmds := m.refilterDiagnostics()
+			// The conceal stores installed above are already committed, so
+			// their re-parse has to ride this batch: leaving on the branch
+			// below would drop it, and the next reload reports no change.
+			if changedUnits || changedSecrets {
+				cmds = append(cmds, m.reparseOpenEditors()...)
+			}
+			if len(cmds) > 0 {
 				return m, tea.Batch(cmds...)
 			}
 		}
 		applyIDColorConfig() // identifier colors (#1626): no re-parse needed
-		// Number-hint field units (#1685): the mapping decides which family a
-		// literal gets, so a change only lands once the spans are produced
-		// again — re-parse every open editor when it moved.
-		// Custom secret key patterns (#1712) install the same way and need
-		// the same re-parse; both are applied before the check so one
-		// changing never skips installing the other.
-		changedUnits := applyNumberHintUnits()
-		if applySecretMaskingKeys() || changedUnits {
+		// The mapping and the key patterns installed above decide which family
+		// a literal gets, so a change only lands once the spans are produced
+		// again — re-parse every open editor when either moved.
+		if changedSecrets || changedUnits {
 			return m, tea.Batch(m.reparseOpenEditors()...)
 		}
 		// Rainbow brackets (#789): a toggle flip re-parses every open editor

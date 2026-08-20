@@ -1,6 +1,7 @@
 package numhint
 
 import (
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -93,13 +94,70 @@ type rule struct {
 }
 
 // rules holds the installed mapping, installed holds the entries it was built
-// from so a config reload can tell whether anything actually changed. Atomic
-// pointers: config reloads run on the UI loop while span production may read
-// from a render elsewhere.
+// from so a config reload can tell whether anything actually changed, and
+// skipped holds the entries the install dropped (#2008) so the app can report
+// them. Atomic pointers: config reloads run on the UI loop while span
+// production may read from a render elsewhere.
 var (
 	rules     atomic.Pointer[[]rule]
 	installed atomic.Pointer[string]
+	skipped   atomic.Pointer[[]InvalidEntry]
 )
+
+// InvalidEntry is one mapping line SetFieldUnits could not use, with the
+// reason it was dropped.
+type InvalidEntry struct {
+	Entry  string
+	Reason string
+}
+
+// unitVocabulary lists the units a mapping entry may name, in the order the
+// setting's description lists them — the message a rejected entry is worded
+// with has to say what would have worked.
+var unitVocabulary = []string{
+	"bytes", "ns", "us", "ms", "s", "min", "h", "d",
+	"timestamp-s", "timestamp-ms", "octal", "hex", "group", "none",
+}
+
+// UnitVocabulary is the list of unit words a mapping entry's right-hand side
+// may use — one spelling per reading, the ones UnitName writes.
+func UnitVocabulary() []string { return append([]string(nil), unitVocabulary...) }
+
+// EntryError explains why entry cannot serve as a `pattern=unit` mapping line,
+// or returns "" when it can. A blank line is not an error — an empty list
+// element is nothing, not a typo. It is shared between SetFieldUnits, which
+// skips the entry and lets the app report it, and the Settings form, which
+// rejects the input outright with the same message (#2008): an entry silently
+// dropped is exactly how a field keeps rendering in the built-in base while
+// the user believes the mapping is in force.
+func EntryError(entry string) string {
+	if strings.TrimSpace(entry) == "" {
+		return ""
+	}
+	name, unit, ok := strings.Cut(entry, "=")
+	if !ok {
+		return `not a "pattern=unit" entry — write the field name, "=", then the unit`
+	}
+	if strings.TrimSpace(name) == "" {
+		return `the field pattern before "=" is empty`
+	}
+	if _, ok := ParseUnit(unit); !ok {
+		return "unknown unit " + strconv.Quote(strings.TrimSpace(unit)) +
+			" — use one of: " + strings.Join(unitVocabulary, ", ")
+	}
+	return ""
+}
+
+// InvalidEntries returns the entries the installed mapping had to skip, each
+// with its reason (#2008). The app turns them into config diagnostics the same
+// way it reports an unknown language id in a file association: a rule that
+// gates nothing must be visible, not silently inert.
+func InvalidEntries() []InvalidEntry {
+	if s := skipped.Load(); s != nil {
+		return append([]InvalidEntry(nil), *s...)
+	}
+	return nil
+}
 
 // SetFieldUnits installs the user's field-name mapping, each entry written
 // `pattern=unit` (`*_bytes=bytes`, `retention=s`, `session_id=none`).
@@ -116,19 +174,22 @@ func SetFieldUnits(entries []string) bool {
 	}
 	installed.Store(&joined)
 	var out []rule
+	var bad []InvalidEntry
 	for _, e := range entries {
+		if msg := EntryError(e); msg != "" {
+			bad = append(bad, InvalidEntry{Entry: e, Reason: msg})
+			continue
+		}
 		name, unit, ok := strings.Cut(e, "=")
 		if !ok {
-			continue
+			continue // a blank entry: nothing to map, nothing to report
 		}
 		name = strings.ToLower(strings.TrimSpace(name))
-		u, ok := ParseUnit(unit)
-		if name == "" || !ok {
-			continue
-		}
+		u, _ := ParseUnit(unit)
 		out = append(out, rule{pattern: name, unit: u})
 	}
 	rules.Store(&out)
+	skipped.Store(&bad)
 	return true
 }
 
