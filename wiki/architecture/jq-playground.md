@@ -1,9 +1,9 @@
 ---
 type: concept
 title: jq Playground
-description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, one session-wide program history shared by every buffer and response pane.
+description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, one session-wide program history shared by every buffer and response pane, and a completion popup offering the snapshot's keys after a dot and gojq's builtins on an identifier.
 resource: internal/jqplay/jqplay.go
-tags: [architecture, json, jq, tools, inline, editor, http]
+tags: [architecture, json, jq, tools, inline, editor, http, completion]
 timestamp: 2026-08-20T00:00:00Z
 ---
 
@@ -27,8 +27,10 @@ restores it bit-identically — editability included.
 internal/jqplay/
   jqplay.go      evaluation core: Parse, Run, Evaluate, Result, History — pure, no UI state
   highlight.go   the query line's jq scanner: Tokens/KindAt, single pass, never fails
+  complete.go    the typing aid: Complete — snapshot keys at a path, gojq's builtin list
 internal/app/
   jqplayground.go the inline mode: query header, result buffer, key routing, debounce and async eval
+  jqcomplete.go   the completion popup: state, keys, rendering and compositing
   commands.go     json.jqPlayground → OpenJQPlaygroundMsg
 ```
 
@@ -192,13 +194,50 @@ Info, Secondary, Warning, Hint) rather than the editor's capture colors — the
 header is chrome over the pane surface, not buffer text. The **result** is
 highlighted separately, as JSON, by the substitute editor's ordinary pipeline.
 
+## Completion
+
+The query line has a typing aid (#1979), synchronous and bounded, with the
+candidate logic in `internal/jqplay/complete.go` and the popup in
+`internal/app/jqcomplete.go`:
+
+- **Path completion from the input.** A `.` — and deeper, `.foo.`,
+  `.items[].`, `.items[0].`, `."a b".` — offers the object keys that actually
+  exist at that path in the parsed snapshot, sorted, each with its value's
+  type as the detail. The chain before the dot is parsed right-to-left
+  (fields, quoted fields, `[]` iteration through arrays and objects, integer
+  indexes, the `?` marker); a chain not rooted at the input — `f(x).`,
+  `$v.`, `(.a).`, `env.` — offers **nothing**, because a wrong list is worse
+  than none. A key that is no identifier inserts its quoted form (`."a b"`).
+- **Builtin completion.** A bare identifier offers gojq's builtins — the
+  engine's own `builtins` list, evaluated once and memoized, so it names
+  exactly what the playground accepts whatever gojq version ships (entries
+  the plain compiler rejects, like `input`, are probed out). The arity
+  notation (`select /1`, `range /1 /2 /3`) is the detail, and the common
+  builtins carry a curated one-line description shown under the popup.
+- **Bounded, never blocking.** The snapshot was parsed once at open; the key
+  walk visits at most a fixed node budget (10 000) and offers what it saw,
+  the list caps at 200 candidates, and everything runs inline on the
+  keystroke — no async round-trip to go stale.
+
+The popup follows the **editor completion pattern** (its keys, its look, the
+same accept hint row): typing a `.` or an identifier rune opens it,
+`ctrl+space` asks explicitly (the full builtin list on an empty line), typing
+re-filters, a matchless partial closes it. While it shows it owns
+`↑`/`↓`/`ctrl+n`/`ctrl+p` (step, wrapping), `pgup`/`pgdn` (page), `enter` and
+plain `tab` (accept), `esc` (dismiss) — the query line's own meaning of those
+keys returns the moment it closes. A cursor motion, a paste, a focus change
+into the result buffer all drop it. It is composited over the pane below the
+query line like the editor's popups (#316), shifting at the screen edges.
+
 ## Keys
 
-Query line (the default focus):
+Query line (the default focus; while the completion popup is open its keys
+above win):
 
 | Key | Effect |
 | --- | --- |
-| *(typing)* | edit the program; each change re-evaluates, debounced |
+| *(typing)* | edit the program; each change re-evaluates, debounced, and re-filters or opens the completion popup |
+| `ctrl+space` | open the completion popup explicitly (the full builtin list on an empty line) |
 | `enter` | record the program in the history and run it now |
 | `↑` / `↓` | walk the session program history (`↓` past the newest restores the draft) |
 | `tab` | move the keyboard into the result buffer |

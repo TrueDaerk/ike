@@ -94,6 +94,8 @@ type jqPlayState struct {
 	draft    string
 	draftPos int
 
+	comp *jqCompState
+
 	gen    int
 	cancel context.CancelFunc
 	status string
@@ -101,8 +103,13 @@ type jqPlayState struct {
 
 // setBufFocus moves the keyboard between the query line and the result
 // buffer, keeping the substitute editor's focus flag (cursor cell) in step.
+// Leaving the query line drops the completion popup (#1979) — it completes
+// typing, and the keyboard just went elsewhere.
 func (s *jqPlayState) setBufFocus(v bool) {
 	s.bufFocus = v
+	if v {
+		s.comp = nil
+	}
 	if s.resultEd != nil {
 		s.resultEd.SetFocused(v)
 	}
@@ -454,12 +461,26 @@ func (m Model) updateJQPlayground(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if s.bufFocus {
 		return m.updateJQBufferKey(msg)
 	}
+	// The open completion popup (#1979) owns its keys first: arrows step it,
+	// enter/tab accept, esc dismisses — the query line's own meaning of those
+	// keys comes back the moment it closes. Typing falls through and
+	// re-filters below.
+	if s.comp != nil {
+		if handled, cmd := m.jqCompletionKey(msg); handled {
+			return m, cmd
+		}
+	}
 	switch msg.String() {
 	case "esc":
 		m.closeJQPlayground()
 		return m, nil
 	case "tab":
 		s.setBufFocus(true)
+		return m, nil
+	case "ctrl+space":
+		// The editor's manual completion request: open the popup without a
+		// trigger rune, the full builtin list on an empty partial.
+		m.refreshJQCompletion("", true)
 		return m, nil
 	case "enter":
 		s.hist.Add(s.program)
@@ -494,9 +515,13 @@ func (m Model) updateJQPlayground(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	s.program, s.pos = out, pos
 	if !changed {
+		// A cursor motion under the popup moves away from the span it would
+		// replace; it closes rather than accepting at a stale position.
+		s.comp = nil
 		return m, nil
 	}
 	s.histIdx = -1
+	m.refreshJQCompletion(msg.Text, false)
 	return m, m.scheduleJQEval()
 }
 
@@ -610,6 +635,7 @@ func (m *Model) pasteJQPlayground(text string) tea.Cmd {
 		return nil
 	}
 	s.program, s.pos, s.histIdx = out, pos, -1
+	s.comp = nil         // a paste is not typing: no popup over it (the editor's rule)
 	s.setBufFocus(false) // pasting a program is query-line work
 	return m.scheduleJQEval()
 }

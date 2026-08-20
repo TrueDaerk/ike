@@ -9631,6 +9631,7 @@ func (m Model) render() string {
 		base = overlay.Place(base, box, x, y, m.width, m.height)
 	}
 	base = m.compositeLSPPopups(base)
+	base = m.compositeJQCompletion(base)
 	base = m.compositeWhichKey(base)
 	if text, bx, by, _, ok := m.largeFileBanner(); ok {
 		// Persistent large-file notice (#1124): an overlay over the focused
