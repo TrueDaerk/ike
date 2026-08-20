@@ -16,11 +16,12 @@ import (
 // language plugin emits captures the ordinary highlight pipeline carries —
 // log.time / log.error / log.warn / log.info / log.debug for header fields,
 // log.rainbow.N for thread/logger names, log.key / log.message for the logfmt
-// pairs past the header (#1633), ansi.<spec> for SGR-styled runs and
+// pairs past the header (#1633), ansi.<spec> for SGR-styled runs,
+// log.origin for a merged rotation set's file separator (#1996) and
 // conceal for the escape bytes — and this file resolves them into styles the
 // theme table does not know: severities from the palette's semantic colors,
 // timestamps, keys and debug lines as terminal faint, the message bold,
-// ANSI colors from the theme's
+// the origin separator in the accent colour, ANSI colors from the theme's
 // terminal palette (#1363). A `theme.captures.log.*` config key still wins,
 // because styleAt consults the capture table first. Everything is gated by
 // logRender (editor.log_rendering / view.toggleLogRendering), which also
@@ -72,6 +73,11 @@ func (m Model) logStyle(capture string) (lipgloss.Style, bool) {
 		return lipgloss.NewStyle().Faint(true), true
 	case "log.message":
 		return lipgloss.NewStyle().Bold(true), true
+	case "log.origin":
+		// The merged rotation set's file separator (#1996): the accent
+		// foreground marks it as structure rather than log content, without
+		// the loudness of a severity colour.
+		return lipgloss.NewStyle().Foreground(pal.Accent), true
 	}
 	if n, ok := strings.CutPrefix(capture, "log.rainbow."); ok {
 		return m.hlTheme.Style("rainbow." + n)

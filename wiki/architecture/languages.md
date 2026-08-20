@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-08-17T18:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # Language Registry
@@ -129,8 +129,11 @@ brings severity spans (`internal/logline`) and log rendering
 (`internal/editor/logrender.go`) along for free. A name with no inner
 extension (`backup.1`, `foo.2026-08-01`) stays plain text, and a language
 claiming such a suffix outright still wins (direct lookup runs first).
-Compressed rotated logs (`app.log.1.gz`) are out of scope — the content is
-binary, so log detection would be misleading.
+Compressed rotated logs (`app.log.1.gz`) are out of scope for the *language*
+lookup — the content is binary, so log detection would be misleading. They are
+read decompressed by the [gz viewer](/architecture/gz-viewer.md) (#1763) and as
+members of a [merged rotation set](/architecture/log-timeline.md) (#1996),
+which reuses these very suffix shapes to find the set.
 
 ### Context sniffers (#897)
 

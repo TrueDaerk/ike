@@ -201,8 +201,12 @@ type Model struct {
 	// large-file toast (#149), so re-activating the tab stays quiet. Held as
 	// a map so value-receiver open paths mutate the shared set.
 	largeToasted map[string]bool
-	host         *host.Host
-	reg          *registry.Registry
+	// logsetToasted remembers which log paths already offered their rotated
+	// set as a merged timeline (#1996), so re-opening the tab stays quiet.
+	// A map for the same reason largeToasted is one.
+	logsetToasted map[string]bool
+	host          *host.Host
+	reg           *registry.Registry
 	// toasts is the active notification stack (Roadmap 0130): drained from the
 	// host after every Update pass, rendered bottom-right above the status line.
 	toasts   []toast
@@ -991,6 +995,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		recentEditor:   edKey,
 		recent:         recent,
 		largeToasted:   map[string]bool{},
+		logsetToasted:  map[string]bool{},
 		toolchainSeg:   map[string]string{},
 		liveImages:     map[int]bool{},
 		navHist:        &nav.History{},
@@ -5647,6 +5652,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// the parse the fresh content needs (#1853).
 			hookCmds = append(hookCmds, m.refreshGzipBuffers(msg.Path))
 		}
+		// A merged rotation set's buffer path names no file either (#1996): its
+		// followers tail the set's newest member, so the event is routed by
+		// follow source rather than by path.
+		hookCmds = append(hookCmds, m.routeMergedLogFollow(msg))
 		return m, tea.Batch(append(hookCmds, m.routeToEditor(msg.Path, msg), vcsCmd)...)
 
 	case vcsInvalidateMsg:
@@ -5835,6 +5844,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The follow poll deadline elapsed (#1928): poll the tracked files
 		// and re-arm while a view still follows.
 		return m, m.followTick()
+
+	case OpenMergedLogMsg:
+		// log.openRotatedSet (#1996): merge the focused buffer's rotation set
+		// into one timeline, off the loop.
+		return m, m.openMergedLogSet()
+
+	case editor.MergeLogSetMsg:
+		// A followed merged timeline saw its newest member rotated (#1996):
+		// read the whole set again, the replacement's lines belonging after
+		// the ones the buffer holds.
+		return m, m.remergeLogSet(msg.Path)
+
+	case mergedLogMsg:
+		// An assembled timeline came back (#1996): install it read-only, or
+		// replace the content of the views already showing that set.
+		return m, m.installMergedLog(msg)
 
 	case backupTickMsg:
 		// A debounce deadline elapsed: snapshot the quiet dirty buffers and
@@ -6417,6 +6442,10 @@ func (m Model) openPathWith(path string, newPane bool) (tea.Model, tea.Cmd) {
 		}
 		if m.openInTab(key, path) {
 			m.notifyLargeFile(m.activeWS().Panes.Get(key).Editor())
+			// A log file with rotated siblings offers its merged timeline
+			// (#1996) — nothing else says that the file next to this one holds
+			// the hour before it.
+			m.notifyRotatedSet(m.activeWS().Panes.Get(key).Editor())
 			m.recent.Touch(path)  // MRU for the recent-files palette mode (0230)
 			m.watcher.Track(path) // poll-fallback comparison for open buffers
 			m.explorer().SetActive(path)
@@ -10574,8 +10603,11 @@ func (m Model) editorTitle(ed *editor.Model) string {
 	if ed.ReadOnly() {
 		// A read-only preview names what it previews (#1762): an archive
 		// entry shows "main.go (src.tar)", so the pane says where the
-		// unwritable content came from.
-		if t, ok := archiveEntryTitle(ed.Path()); ok {
+		// unwritable content came from. A merged rotation set (#1996) names
+		// the set instead: "app.log (merged)".
+		if t, ok := mergedLogTitle(ed.Path()); ok {
+			name = t
+		} else if t, ok := archiveEntryTitle(ed.Path()); ok {
 			name = t
 		}
 		name += " [RO]"

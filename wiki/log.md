@@ -1,5 +1,49 @@
 # Log
 
+## 2026-08-20 (Rotated log sets as one merged timeline, #1996)
+
+- **`internal/logset`** (new): rotation-set detection and merging. `Stem`
+  reduces a member name to the live log's (`app.log.2.gz` → `app.log`) using
+  the #1745 suffix shapes — sequence number, `YYYY-MM-DD`/`YYYYMMDD` date
+  stamp, optional `.gz`, and a remainder that must keep an extension of its
+  own, so `backup.1` is nobody's set; `Detect` lists the directory for every
+  file reducing to that stem. Ordering is oldest first: dated by date, numbered
+  by descending number, the live log always last, with a per-set fallback to
+  modification times when the two spellings mix (or a rank-less `app.log.gz`
+  is present), which keeps the comparison a total order. `Merge` assembles the
+  timeline under both large-file thresholds (#149), reading members **newest
+  first** and cutting each region from the front, so a cap costs the oldest end
+  of the timeline and never the lines next to the live log; gz members go
+  through `gzfile.Read` (bomb guard included), an unreadable member is skipped
+  and named, and the newest member's end offset comes back as the follow
+  anchor.
+- **Origin separators** (`internal/logline/origin.go`): `OriginLine` /
+  `OriginName` are the shared format of the `──── app.log.1 ────` line opening
+  each region. `Spans` captures a recognized separator whole-line as
+  `log.origin` instead of parsing it as a log entry; `logrender.go` styles it
+  in the accent colour.
+- **Command and buffer** (`internal/app/logsets.go`, new):
+  `log.openRotatedSet` ("Open Rotated Log Set (Merged Timeline)") merges the
+  set behind the focused buffer — from the live log or any rotated member, and
+  on a merged buffer it re-merges — off the Update loop, and installs it as a
+  read-only tab under the virtual path `<stem>!merged/<name>` (title
+  `app.log (merged) [RO]`). Opening a log file with siblings offers the
+  timeline once per path per session; truncation, omitted members and
+  unreadable ones surface as a warning toast.
+- **Follow mode on a merged buffer** (`internal/editor/mergedlog.go`, new):
+  `ShowMergedLog` installs the timeline and anchors follow on the set's newest
+  member (`followSrc`), which `followTarget` makes the file every #1928 path
+  operates on. Enabling costs no read; appends stream into the buffer's tail as
+  usual; a rotation or truncation emits `MergeLogSetMsg` and parks the view
+  (`mergeWait`) until the root model's fresh merge lands, keeping follow armed
+  across it. Watcher events reach such a view by follow source rather than by
+  path (`routeMergedLogFollow`), and a set whose newest member is compressed
+  refuses to be followed for want of an anchor.
+- **Docs**: `wiki/architecture/log-timeline.md` (new) plus the log-rendering
+  section of `wiki/architecture/editor.md`, `follow-mode.md`, `languages.md`;
+  `userdocs/guides/file-rendering.md` § Rotated logs as one timeline;
+  generated `userdocs/reference/commands.md`.
+
 ## 2026-08-20 (jq playground: named saved-filter library, #1995)
 
 - **Store** (`internal/jqplay/library.go`, new): `Library` — a named

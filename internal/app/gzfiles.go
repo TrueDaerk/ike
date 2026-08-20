@@ -148,7 +148,9 @@ func (m *Model) refreshGzipBuffers(path string) tea.Cmd {
 		}
 		for i := 0; i < inst.TabCount(); i++ {
 			ed := inst.TabEditor(i)
-			if ed != nil && ed.ReadOnly() && strings.HasPrefix(ed.Path(), prefix) {
+			// A merged log timeline (#1996) shares the "<path>!" shape but holds
+			// a whole rotation set: its own re-merge path owns it.
+			if ed != nil && ed.ReadOnly() && !ed.MergedLog() && strings.HasPrefix(ed.Path(), prefix) {
 				stale = append(stale, ed)
 			}
 		}

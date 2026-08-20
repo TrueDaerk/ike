@@ -1835,6 +1835,16 @@ emits everything through the Go span seam (#1585); the parsing lives in
   Soft-wrapped rows and collapsed run headers show no annotation, like the
   hints.
 
+- **Merged rotation sets** (#1996, `internal/logset`): a rotated log set —
+  `app.log` plus the `app.log.1`, `app.log.2026-08-01`, `app.log.2.gz` next to
+  it — opens as one chronological read-only buffer via `log.openRotatedSet`,
+  every region opened by an origin separator naming its file (capture
+  `log.origin`, accent colour). Everything above applies to it unchanged; the
+  separator is not parsed as a log line and carries no timestamp, so it shows no
+  delta hint and does not break the delta chain. Follow mode tails the set's
+  newest member and re-merges across a rotation. The whole feature is described
+  in [merged rotated log timeline](/architecture/log-timeline.md).
+
 Toggling off shows plain raw source — no styling, escape bytes visible, every
 repeat expanded. The buffer never changes.
 

@@ -51,6 +51,9 @@ func (m *Model) ShowReadOnly(path, text string) {
 	m.searching = false
 	m.dirty = false
 	m.stale = false
+	// Whatever the view held before is gone, a merged rotation set (#1996)
+	// included; ShowMergedLog re-declares itself right after this call.
+	m.mergedLog, m.followSrc, m.mergeWait = false, "", false
 	// The dependency guard is about confirming an edit; a read-only buffer has
 	// no edit to confirm, so it never applies here.
 	m.depFile, m.depOK, m.depPending = false, false, nil

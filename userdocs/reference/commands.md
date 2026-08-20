@@ -109,6 +109,7 @@ bring their own.
 | Rename Saved jq Filter… | `json.jqRenameFilter` | — | — | everywhere |
 | Save jq Filter… | `json.jqSaveFilter` | — | — | everywhere |
 | Import JetBrains Keymap XML… | `keymap.importJetBrains` | — | — | everywhere |
+| Open Rotated Log Set (Merged Timeline) | `log.openRotatedSet` | — | — | everywhere |
 | Markdown Preview | `markdown.preview` | `cmd+alt+m` | — | everywhere |
 | Open Menu Bar | `menu.open` | `f10` | — | everywhere |
 | Navigate Back | `nav.back` | `mouse-back` | — | everywhere |

@@ -432,6 +432,14 @@ type Model struct {
 	followRotated bool
 	followOffset  int64
 	followTerm    bool
+	// Merged rotated log set (#1996, mergedlog.go): mergedLog marks a buffer
+	// assembled from several files, whose own path names nothing on disk.
+	// followSrc is the file follow mode tails for it — the set's newest member
+	// — and mergeWait parks the event handling while the root model re-merges
+	// the set after a rotation.
+	mergedLog bool
+	followSrc string
+	mergeWait bool
 	// logDeltaCache caches the inter-line elapsed times (#1651, logdelta.go)
 	// per document version, the same way.
 	logDeltaCache *logDeltaState
@@ -961,8 +969,10 @@ func (m *Model) Load(path string) error {
 	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
 	m.readOnly = false // a real file replaced any read-only preview (#1762)
 	// A different file in the same view stops following (#1928); the app's
-	// follow tick self-stops once no view follows.
+	// follow tick self-stops once no view follows. A real file also replaces
+	// any merged rotation set the view held (#1996).
 	m.follow, m.followPaused, m.followRotated = false, false, false
+	m.mergedLog, m.followSrc, m.mergeWait = false, "", false
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal
@@ -1021,6 +1031,9 @@ func (m *Model) NewFile(path string) {
 	}
 	m.largeFile = false // a template seed is never large
 	m.readOnly = false  // a new file is writable from its first :w (#1762)
+	// Fresh content replaces any merged rotation set the view held (#1996),
+	// whose follow source names a file this buffer has nothing to do with.
+	m.mergedLog, m.followSrc, m.mergeWait = false, "", false
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal
