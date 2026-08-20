@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, values captured out of responses for request chaining, OpenAPI 3.x import, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-20T12:00:00Z
+timestamp: 2026-08-20T18:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -846,8 +846,8 @@ leads the footer line, so a narrow pane clips the generic hints, not it; the
 palette carries `http.responseHistory` ("Browse HTTP Response History"),
 which focuses the viewer and reports how many responses are stored; and the
 help overlay gains an `http response pane` group listing the pane-local keys
-(`h/l ←/→`, `r`, `s`, `j/k`, `shift+←/→`, `0/$`, `g/G`, `/`, `n/N`, `za…`, `zy`,
-`y`, `Y`, `ctrl+r`, `x`, `esc`) — they belong to no
+(`h/l ←/→`, `r`, `s`, `D`, `j/k`, `shift+←/→`, `0/$`, `g/G`, `/`, `n/N`, `za…`,
+`zy`, `y`, `Y`, `ctrl+r`, `x`, `esc`) — they belong to no
 registry command, so nothing else would document them. `help.SetExtra` takes
 several groups for that.
 
@@ -889,6 +889,45 @@ pane the `⟳ re-send` affordance is absent and `ctrl+r` answers with a notice.
 `ctrl+r` (or the button) re-dispatches the snapshot through
 `httpclient.Resend` and the answer is appended to the same history like any
 dispatch, snapshot included, so re-sends chain.
+
+**Comparing two stored responses** (#1992): keep-scroll (#1493) only made
+*manual* comparison bearable — the actual question ("what changed between
+these two runs?") belongs to the diff viewer. `D` in the focused pane
+(uppercase: `d` is page-down) emits `httppane.DiffHistoryMsg`, the palette
+pendant is `http.diffResponses` ("Compare Stored HTTP Responses"); both land
+in `Model.openHTTPResponseDiff` (`internal/app/http_diff.go`), which opens the
+palette locked to the entry picker (`httpEntriesMode`, prefix `{`) listing the
+request's stored responses *except* the one on show, each row labelled
+`2/5 · 200 OK` with proto/size as detail and the stored time on the right.
+Choosing a row sends `DiffHTTPEntriesMsg{Source, Request, Shown, Other}`
+through `diffHTTPEntries`, which re-reads the store, puts the **older**
+response (the higher index — the list is newest first) on the left and opens
+the pair via the shared `openDiffTexts` — the same reusable diff slot the
+local-history and clipboard comparisons use (#1023, #1477), read-only and
+without a backing path, since neither side is a file. Fewer than two stored
+responses, a missing pane and a pair pruned between opening the picker and
+choosing a row each notify instead of opening something wrong; the footer
+advertises `D diff` once a second entry exists, and the pane-local help group
+lists the key.
+
+**Normalizing what is compared** (`internal/httpdiff`, #1992): comparing two
+responses byte for byte drowns the real difference in serialization noise —
+key order, indentation, a minified answer against a pretty-printed one.
+`httpdiff.Text` renders one `httphistory.Entry` as status line, sorted
+headers, blank line, body (a combined view: the body — what matters — sits
+last, where a growing diff does not push the headers out of sight), and the
+dispatch *duration*, which differs on every run, stays out of it deliberately.
+`httpdiff.NormalizeBody` decodes a JSON body and re-encodes it with sorted
+keys (Go's encoder sorts map keys) and a fixed two-space indent, so a
+key-order-only difference produces an **empty** diff. Numbers are decoded with
+`UseNumber`, so `1.0` does not collapse to `1` and a large integer keeps its
+digits; HTML escaping is off, so a URL stays readable. A body counts as JSON
+when the `Content-Type` says so (`/json`, `+json`, and the `ndjson`/`jsonl`/
+`json-seq` stream types, which normalize value by value) or when it has no
+content type and starts with `{`/`[` — a `text/plain` "123" is valid JSON but
+not a JSON response, so it is left alone. Malformed JSON diffs verbatim (it is
+still what the server answered), and a binary body collapses to a
+`(binary body, N bytes)` notice, mirroring the viewer's refusal to render it.
 
 **On-disk format** (#1267): a text body (valid UTF-8, no NUL) is stored as a
 plain JSON string under `bodyText`, so `.ike/http/*.json` reads and diffs in

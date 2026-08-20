@@ -1,5 +1,30 @@
 # Log
 
+## 2026-08-20 (Diff two stored HTTP responses, #1992)
+
+- **`internal/httpdiff`** (new): renders a stored response
+  (`httphistory.Entry`) as the text the diff viewer compares — status line,
+  sorted headers, blank line, body, with the per-run duration left out. A JSON
+  body is normalized first (`NormalizeBody`): decoded with `UseNumber` and
+  re-encoded with sorted keys, a fixed two-space indent and HTML escaping off,
+  so a key-order-only or formatting-only difference diffs as *nothing*.
+  JSON is detected by `Content-Type` (`/json`, `+json`, `ndjson`/`jsonl`/
+  `json-seq` streams normalize value by value) or, without one, by a leading
+  `{`/`[`; non-JSON, malformed JSON and binary bodies fall back to as-is
+  (binary to a size notice).
+- **Entry picker and diff** (`internal/app/http_diff.go`): `D` in the response
+  pane (`httppane.DiffHistoryMsg`) or `http.diffResponses` ("Compare Stored
+  HTTP Responses") opens the palette locked to `httpEntriesMode` (prefix `{`)
+  listing the request's other stored responses; `DiffHTTPEntriesMsg` then puts
+  the older response left and the newer right into the shared reusable diff
+  slot via `openDiffTexts`, read-only. Fewer than two entries, no pane and a
+  pair pruned in between notify instead.
+- **Pane**: footer hint `D diff` once a second response is stored, plus the
+  key in the pane-local help group.
+- **Docs**: `wiki/architecture/http-client.md` § Response history;
+  `userdocs/guides/http-client.md` § Comparing two responses; generated
+  `userdocs/reference/commands.md`.
+
 ## 2026-08-20 (Xdebug connection doctor, #1991)
 
 - **Doctor tool window** (`internal/debugdoctor`, `internal/app/xdebug_doctor.go`):
