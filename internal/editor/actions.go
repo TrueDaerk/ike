@@ -741,6 +741,13 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		// Ignore the diagnostic under the caret (#1259): the app persists the
 		// rule to lsp.diagnostics_ignore in the project config.
 		return m, m.ignoreDiagnosticUnderCaret()
+	case "explain_conceal":
+		// Explain the concealed/masked value at the caret (#1998); the
+		// popover's own keys then reveal or reclassify it.
+		if m.insert.active {
+			m.commitInsert()
+		}
+		return m, m.explainConceal()
 	case "next_diagnostic", "prev_diagnostic":
 		if m.insert.active {
 			m.commitInsert()

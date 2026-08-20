@@ -35,10 +35,41 @@ import (
 // applies; Claims marks the literals whose reading the field name decided
 // (#1685) — a mapped field or a built-in key word — and those claim their
 // columns whether or not a hint was produced: no other family may draw a
-// stand-in where the field already said what the number means.
+// stand-in where the field already said what the number means. Why records
+// which of the three rule levels decided it (#1998).
 type Hint struct {
 	Span   lang.Span
 	Claims bool
+	Why    Why
+}
+
+// Source names the level that decided a literal's reading — the provenance
+// the explain popover reports (#1998).
+type Source int
+
+const (
+	// SourceNone marks a hint no rule produced.
+	SourceNone Source = iota
+	// SourceFieldRule marks a reading a user editor.number_hint_units entry
+	// decided. It beats everything else.
+	SourceFieldRule
+	// SourceKeyWord marks a reading a built-in field-name word decided
+	// (`*size*`, `*timeout*`, `*mode*`).
+	SourceKeyWord
+	// SourceShape marks a reading the value's own shape decided — a multiple
+	// of 1024, a `0x` literal, a long digit run.
+	SourceShape
+)
+
+// Why is one hint's provenance: the rule level that fired, the pattern or word
+// it fired on, the field name it was read off and the unit it applied. Shape
+// carries the wording of a shape rule, which has no pattern to name.
+type Why struct {
+	Source  Source
+	Key     string // the field name the literal hangs off ("" when unkeyed)
+	Pattern string // the mapping entry's pattern, or the key word that matched
+	Shape   string // the shape rule that fired, for SourceShape
+	Unit    Unit   // the reading applied
 }
 
 // hinted reports whether the hint produced a stand-in of its own.
@@ -153,9 +184,33 @@ func overlapsAny(s lang.Span, taken []lang.Span) bool {
 
 // appendLine scans one line, tracking the key the current value hangs off.
 func appendLine(out []Hint, li int, runes []rune) []Hint {
+	scanLine(runes, func(v Value) bool {
+		if h, ok := literalHint(li, v.Start, v.End, v.Text, v.Key); ok {
+			out = append(out, h)
+		}
+		return true
+	})
+	return out
+}
+
+// Value is one value token of a line: the text between rune columns
+// [Start, End) and the field name it hangs off. It is what the scan reports
+// before any family looks at it, so the explain path (#1998) can name the key
+// of a value no hint was produced for — a masked secret, a raw number.
+type Value struct {
+	Text  string
+	Key   string
+	Start int
+	End   int
+}
+
+// scanLine walks a line's value tokens left to right — every token that is not
+// itself a key — reporting each with the key it hangs off. fn stops the scan
+// by returning false.
+func scanLine(runes []rune, fn func(Value) bool) {
 	runes = runes[:contentEnd(runes)]
 	if start := skipSpace(runes, 0); start >= len(runes) || isCommentStart(runes, start) {
-		return out
+		return
 	}
 	key, last := "", ""
 	for i := 0; i < len(runes); {
@@ -167,12 +222,12 @@ func appendLine(out []Hint, li int, runes []rune) []Hint {
 				j++
 			}
 			if j >= len(runes) {
-				return out // unterminated quote: the rest is not structure
+				return // unterminated quote: the rest is not structure
 			}
 			text := string(runes[i+1 : j])
 			if !keyAhead(runes, j+1) {
-				if h, ok := literalHint(li, i+1, j, text, key); ok {
-					out = append(out, h)
+				if !fn(Value{Text: text, Key: key, Start: i + 1, End: j}) {
+					return
 				}
 			}
 			last, i = text, j+1
@@ -183,8 +238,8 @@ func appendLine(out []Hint, li int, runes []rune) []Hint {
 			}
 			text := string(runes[i:j])
 			if !keyAhead(runes, j) {
-				if h, ok := literalHint(li, i, j, text, key); ok {
-					out = append(out, h)
+				if !fn(Value{Text: text, Key: key, Start: i, End: j}) {
+					return
 				}
 			}
 			last, i = text, j
@@ -199,7 +254,41 @@ func appendLine(out []Hint, li int, runes []rune) []Hint {
 			i++
 		}
 	}
-	return out
+}
+
+// ValueAt returns the value token at rune column col of line, with the key it
+// hangs off (#1998). The caret counts as being on a token while it sits
+// inside it and directly after its last rune, the same one-column widening the
+// value conceals reveal on (#1686).
+func ValueAt(line string, col int) (Value, bool) {
+	var inside, after Value
+	var okIn, okAfter bool
+	scanLine([]rune(line), func(v Value) bool {
+		switch {
+		case col >= v.Start && col < v.End:
+			inside, okIn = v, true
+			return false
+		case col == v.End:
+			after, okAfter = v, true
+		}
+		return true
+	})
+	if okIn {
+		return inside, true
+	}
+	return after, okAfter
+}
+
+// HintAt returns the hint covering rune column col of the line at index li,
+// provenance included — the explain popover's entry point into the same scan
+// the producers run (#1998).
+func HintAt(li int, line string, col int) (Hint, bool) {
+	for _, h := range LineHints(li, line) {
+		if h.Span.StartCol <= col && col < h.Span.EndCol {
+			return h, true
+		}
+	}
+	return Hint{}, false
 }
 
 // literalHint builds the hint for the token at rune columns [start, end) of
@@ -217,14 +306,24 @@ func literalHint(li, start, end int, text, key string) (Hint, bool) {
 		s.Capture, s.Replace = capture, replace
 		return s, true
 	}
-	shape := func(s lang.Span, ok bool) (Hint, bool) { return Hint{Span: s}, ok }
-	claim := func(s lang.Span, ok bool) (Hint, bool) {
-		if !ok {
-			return Hint{}, false
+	// The provenance closures mirror the three rule levels (#1998): a shape
+	// hint names the rule that fired, a claimed one the pattern or key word
+	// the field name matched.
+	shape := func(rule string, u Unit) func(lang.Span, bool) (Hint, bool) {
+		return func(s lang.Span, ok bool) (Hint, bool) {
+			return Hint{Span: s, Why: Why{Source: SourceShape, Key: key, Shape: rule, Unit: u}}, ok
 		}
-		return Hint{Span: s, Claims: true}, true
 	}
-	if u, ok := FieldUnit(key); ok {
+	claim := func(word string, u Unit) func(lang.Span, bool) (Hint, bool) {
+		return func(s lang.Span, ok bool) (Hint, bool) {
+			if !ok {
+				return Hint{}, false
+			}
+			why := Why{Source: SourceKeyWord, Key: key, Pattern: word, Unit: u}
+			return Hint{Span: s, Claims: true, Why: why}, true
+		}
+	}
+	if pattern, u, ok := FieldRule(key); ok {
 		if !isDecimal(text) {
 			if _, hex := hexLiteral(text); !hex {
 				return Hint{}, false
@@ -237,14 +336,15 @@ func literalHint(li, start, end int, text, key string) (Hint, bool) {
 			// family may read them as something else.
 			s = bare
 		}
-		return Hint{Span: s, Claims: true}, true
+		why := Why{Source: SourceFieldRule, Key: key, Pattern: pattern, Unit: u}
+		return Hint{Span: s, Claims: true, Why: why}, true
 	}
 	if hexDigits, ok := hexLiteral(text); ok {
 		dec, ok := DecimalOf(hexDigits)
 		if !ok {
 			return Hint{}, false
 		}
-		return shape(span(RadixCapture, text+Gap+"= "+dec))
+		return shape("a 0x literal always has a decimal reading", Unit{Kind: UnitHex})(span(RadixCapture, text+Gap+"= "+dec))
 	}
 	if !isDecimal(text) {
 		return Hint{}, false
@@ -260,34 +360,36 @@ func literalHint(li, start, end int, text, key string) (Hint, bool) {
 	if err != nil {
 		// Past an uint64 the run is an identifier, but grouping still reads.
 		if g, ok := Group(text); ok {
-			return shape(span(GroupCapture, g))
+			return shape(groupShape, Unit{Kind: UnitGroup})(span(GroupCapture, g))
 		}
 		return Hint{}, false
 	}
+	sizeWord, isSizeKey := sizeWordOf(key)
+	radixWord, r := radixWordOf(key)
 	if isEpoch {
-		if sizeKey(key) {
+		if isSizeKey {
 			if s, ok := FormatBytes(v); ok {
-				return claim(span(SizeCapture, s))
+				return claim(sizeWord, Unit{Kind: UnitBytes})(span(SizeCapture, s))
 			}
 		}
-		if r := radixOf(key); r != radixNone {
-			return claim(radixSpan(span, r, text, v))
+		if r != radixNone {
+			return claim(radixWord, radixUnit(r))(radixSpan(span, r, text, v))
 		}
 		return Hint{}, false
 	}
-	if r := radixOf(key); r != radixNone {
+	if r != radixNone {
 		if s, ok := radixSpan(span, r, text, v); ok {
-			return claim(s, true)
+			return claim(radixWord, radixUnit(r))(s, true)
 		}
 	}
-	if sizeKey(key) {
+	if isSizeKey {
 		if s, ok := FormatBytes(v); ok {
-			return claim(span(SizeCapture, s))
+			return claim(sizeWord, Unit{Kind: UnitBytes})(span(SizeCapture, s))
 		}
 	}
-	if base, ok := durationBase(key); ok {
+	if durWord, base, ok := durationWordOf(key); ok {
 		if s, ok := FormatDuration(v, base); ok {
-			return claim(span(DurationCapture, s))
+			return claim(durWord, Unit{Kind: UnitDuration, Base: base})(span(DurationCapture, s))
 		}
 	}
 	// The shape trigger comes after both key families: a duration in
@@ -295,13 +397,29 @@ func literalHint(li, start, end int, text, key string) (Hint, bool) {
 	// key has to win when it names one.
 	if v >= sizeStepBytes && v%sizeStepBytes == 0 {
 		if s, ok := FormatBytes(v); ok {
-			return shape(span(SizeCapture, s))
+			return shape(sizeShape, Unit{Kind: UnitBytes})(span(SizeCapture, s))
 		}
 	}
 	if g, ok := Group(text); ok {
-		return shape(span(GroupCapture, g))
+		return shape(groupShape, Unit{Kind: UnitGroup})(span(GroupCapture, g))
 	}
 	return Hint{}, false
+}
+
+// The wording of the shape rules, for the explain popover (#1998): what about
+// the value itself — never its field name — produced the hint.
+const (
+	sizeShape  = "the value is a multiple of 1024"
+	groupShape = "the value is a plain integer of five digits or more"
+)
+
+// radixUnit maps an internal radix onto the mapping unit that names it, so a
+// key-word reading can be pinned as a rule with one word.
+func radixUnit(r radix) Unit {
+	if r == radixOctal {
+		return Unit{Kind: UnitOctal}
+	}
+	return Unit{Kind: UnitHex}
 }
 
 // LiteralHint is literalHint exported for the code-constant producer (#1701):
@@ -318,19 +436,24 @@ func LiteralHint(li, start, end int, text, key string) (Hint, bool) {
 // expression values and has no literal to hand literalHint. The order mirrors
 // literalHint: radix, byte size, duration.
 func KeyUnit(key string) (Unit, bool) {
-	switch radixOf(key) {
-	case radixOctal:
-		return Unit{Kind: UnitOctal}, true
-	case radixHex:
-		return Unit{Kind: UnitHex}, true
+	_, u, ok := KeyWord(key)
+	return u, ok
+}
+
+// KeyWord is KeyUnit with the word that matched (#1998): the explain popover
+// names the heuristic that fired, and it is the key word — not the whole field
+// name — that the built-in tables actually matched on.
+func KeyWord(key string) (word string, u Unit, ok bool) {
+	if w, r := radixWordOf(key); r != radixNone {
+		return w, radixUnit(r), true
 	}
-	if sizeKey(key) {
-		return Unit{Kind: UnitBytes}, true
+	if w, ok := sizeWordOf(key); ok {
+		return w, Unit{Kind: UnitBytes}, true
 	}
-	if base, ok := durationBase(key); ok {
-		return Unit{Kind: UnitDuration, Base: base}, true
+	if w, base, ok := durationWordOf(key); ok {
+		return w, Unit{Kind: UnitDuration, Base: base}, true
 	}
-	return Unit{}, false
+	return "", Unit{}, false
 }
 
 // mappedSpan renders a literal in the unit its field name is mapped to
@@ -439,55 +562,74 @@ const (
 )
 
 // radixOf classifies a key as a permission (octal) or bit-flag (hex) context.
-// Permissions are checked first: `umask` carries both words.
 func radixOf(key string) radix {
+	_, r := radixWordOf(key)
+	return r
+}
+
+// radixWordOf is radixOf with the word that matched (#1998). Permissions are
+// checked first: `umask` carries both words.
+func radixWordOf(key string) (string, radix) {
 	k := strings.ToLower(key)
 	for _, w := range []string{"umask", "mode", "perm"} {
 		if strings.Contains(k, w) {
-			return radixOctal
+			return w, radixOctal
 		}
 	}
 	for _, w := range []string{"mask", "flag"} {
 		if strings.Contains(k, w) {
-			return radixHex
+			return w, radixHex
 		}
 	}
-	return radixNone
+	return "", radixNone
 }
 
 // sizeKey reports whether the key names a byte count.
 func sizeKey(key string) bool {
+	_, ok := sizeWordOf(key)
+	return ok
+}
+
+// sizeWordOf is sizeKey with the word that matched (#1998).
+func sizeWordOf(key string) (string, bool) {
 	k := strings.ToLower(key)
 	for _, w := range sizeWords {
 		if strings.Contains(k, w) {
-			return true
+			return w, true
 		}
 	}
-	return false
+	return "", false
 }
 
 // durationBase returns the unit a key's value is counted in: the unit word the
 // key ends with when it spells one out, the conventional base of the duration
 // family it names otherwise.
 func durationBase(key string) (time.Duration, bool) {
+	_, d, ok := durationWordOf(key)
+	return d, ok
+}
+
+// durationWordOf is durationBase with the word that matched (#1998) — the
+// spelled-out unit word, or the family word whose conventional base applies.
+func durationWordOf(key string) (string, time.Duration, bool) {
 	words := keyWords(key)
 	if len(words) > 1 {
 		if d, ok := unitWords[words[len(words)-1]]; ok {
-			return d, true
+			return words[len(words)-1], d, true
 		}
 	}
 	k := strings.ToLower(key)
 	for _, w := range durationSecondWords {
 		if strings.Contains(k, w) {
-			return time.Second, true
+			return w, time.Second, true
 		}
 	}
 	for _, w := range durationMillisWords {
 		if strings.Contains(k, w) {
-			return time.Millisecond, true
+			return w, time.Millisecond, true
 		}
 	}
-	return 0, false
+	return "", 0, false
 }
 
 // keyWords splits a key into lowercase words on both separators and camel-case

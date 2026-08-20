@@ -452,7 +452,8 @@ the `g`-prefixed layer — case/reflow operators `gu gU g~ gq` (double or repeat
 for linewise, e.g. `guu`/`gugu`), `gv` (reselect the last visual selection),
 `gi` (insert at the last insert position), `gJ` (join without a space),
 `ge`/`gE`, `gf` (open the file under the cursor via `OpenPathMsg`, resolved
-app-side), and the display-line motions `g0 g$ gj gk` (visual rows under soft
+app-side), `g?` (explain the concealed or masked value at the caret, #1998),
+and the display-line motions `g0 g$ gj gk` (visual rows under soft
 wrap, plain line motions otherwise) — plus `zz zt zb` (scroll the cursor line
 to centre/top/bottom next to the `z` fold keys) and `ZZ`/`ZQ` (save-and-close /
 force-close, mirroring `:x` / `:q!`). Visual mode gained `u U ~` (case), `J`
@@ -2130,7 +2131,10 @@ channel and `decodeOn` gates it, exactly like the decode families (#1620).
   decoding. The mapping is a process-wide global in `numhint` (the span
   producers are `lang.Language.Spans` hooks with no config plumbing, as with
   `internal/idcolor`); `applyNumberHintUnits` in `app` pushes it on every
-  config load and re-parses the open editors when it moved.
+  config load and re-parses the open editors when it moved. Since #1998 an
+  entry can also be written from the buffer: `g?` on a literal explains which
+  rule read it and reclassifies the field into this very list — see
+  *Conceal explain popover*.
 - **Contexts** are every position the highlighting already recognises as a
   *value* (#1684), never a key: the config formats, where keys carry the
   intent — JSON/ndjson, YAML, TOML, ini/conf and dotenv — plus `.http` query
@@ -2503,7 +2507,9 @@ its own; `app` installs it on load and re-parses the open editors when the list
 moves, since which values carry a mask is decided when the spans are produced.
 Nothing else changes: the per-family toggle, the conceal file filters (#1704)
 and the positional reveal all apply to a custom-matched key exactly as they do
-to a built-in one.
+to a built-in one. `g?` on a value names the entry or built-in word that
+decided it and writes the correcting entry into this list (#1998, see *Conceal
+explain popover*).
 
 It is not a decode, but it rides the identical mechanic: the producer
 emits the value as a stand-in span (#1585) and `concealSplit` gives it its own
@@ -2629,6 +2635,51 @@ default and an explicit toggle in this buffer says otherwise. And because
 changed buffer path takes effect on the next frame with no reload;
 `refreshConcealRules` memoizes the compiled filter on the joined raw values
 (the `rulersRaw` discipline) so the per-keystroke pass stays free.
+
+## Conceal explain popover (#1998)
+
+Every family above rests on a heuristic — a field name mapped to a unit
+(#1685), a built-in key word, the shape of the digits, a secret key pattern
+(#1712) — and a heuristic that misfires used to be invisible from the buffer:
+a byte count drawn as a date, an over-masked assignment (#1930), a credential
+left readable. `g?` (`editor.explainConceal`, `explain_conceal`) opens a
+popover on the value at the caret that says which rule fired, what it decided,
+and offers the one-key corrections.
+
+**Provenance comes from the producers, not from a second guess.** Each hint
+source now reports which rule it applied: `numhint.Hint.Why` records the level
+(`SourceFieldRule` / `SourceKeyWord` / `SourceShape`), the pattern or key word
+it matched and the unit it chose — filled in on the same branches that pick the
+family, so it cannot drift from the rendering — with `numhint.FieldRule` and
+`KeyWord` naming the entry or word behind a reading, `ValueAt`/`HintAt`
+resolving a column back to a value or a hint, `secret.Explain` replaying the
+key tables in order (user pattern, strong word, public marker, marker, suffix,
+exact name), `epochtime.Unit` reporting the digit-count reading, and
+`consthint.Eval` re-evaluating a computed constant right-hand side.
+`internal/concealexplain` composes those into one `Explanation` (raw value,
+stand-in, key, family, rule sentence, reading, mapping word) and words it;
+`internal/editor/explainconceal.go` is the caret → span → popover half plus the
+keys.
+
+The caret finds its span through `decodes` directly, in the fixed
+`decodeCaptures` order and with #1686's one-column widening, so a caret
+appended to a literal still explains it and a family switched **off** in this
+view still answers — "nothing draws here" is exactly the case people ask
+about. With no stand-in at all the popover explains the plain value instead
+("why is this *not* masked"), which is the other half of the same question.
+
+The actions write into the **existing** stores rather than a parallel one:
+`r` reveals (the caret inside the span *is* the reveal, #1594/#1686), `1`–`9`
+reclassify the field into `editor.number_hint_units`, `a` pins the reading the
+heuristic chose as a rule of its own, and on a masked value `m`/`u` add the
+masking or exempting entry to `editor.secret_masking_keys`. The editor writes
+no config itself — it emits `editor.ConcealRuleMsg` and `app`
+(`conceal_rule.go`) persists through `config.WriteAndReload`, so the ordinary
+`ConfigReloadedMsg` path re-installs the mapping and re-parses the open
+editors, and the new entry is listed and editable in `Settings → Editor` like a
+hand-written one. A rule for a pattern that already has an entry **replaces**
+it: both stores resolve by first match, so appending would leave the
+reclassification shadowed by the reading it was meant to correct.
 
 ## Inline color preview (#790, #1622)
 
