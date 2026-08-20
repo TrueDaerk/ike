@@ -487,6 +487,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("pane.maximize", "Maximize Pane", MaximizePaneMsg{}),
 			appCommand("pane.close", "Close Pane", ClosePaneMsg{}),
 			appCommand("view.zenMode", "Zen Mode", ZenModeMsg{}),
+			appCommand("view.exportScreenshot", "Export Screenshot (Pane)", ExportScreenshotMsg{}),
+			appCommand("view.exportWindowScreenshot", "Export Screenshot (Window)", ExportScreenshotMsg{Whole: true}),
 			appCommand("window.hideAllTools", "Hide All Tool Windows", HideToolWindowsMsg{}),
 			appCommand("window.saveLayout", "Save Window Layout…", SaveLayoutPromptMsg{}),
 			appCommand("window.layouts", "Window Layouts…", ShowLayoutsMsg{}),

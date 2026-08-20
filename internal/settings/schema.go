@@ -312,6 +312,9 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "terminal.ssh_hosts", Type: List, Title: "Extra SSH hosts", Description: "Additional host aliases the SSH Host picker (terminal.ssh) offers, for machines no ~/.ssh/config entry declares. Each entry is passed to ssh verbatim (\"build01\", \"ops@10.0.0.5\"); the aliases parsed from ~/.ssh/config and its Include files are listed either way", Scope: config.UserScope, ValidateEntry: sshHostValidate},
 			{Key: "terminal.scrollback_lines", Type: Int, Title: "Scrollback lines", Description: "Lines of scrollback each terminal session keeps (#1545); the main memory cost per terminal pane. Applies to new sessions and, on lowering, trims live ones forward — already-trimmed history is not restored by raising it", Scope: config.UserScope, Min: 100, Max: 1000000},
 		}},
+		{Title: "Screenshots", Description: "The in-IDE PNG export (#2001): Export Screenshot paints the focused pane — or the whole window — as it is rendered, and copies the written path to the clipboard.", Entries: []Entry{
+			{Key: "screenshot.directory", Type: Path, Dirs: true, Title: "Screenshot directory", Description: "Directory the exported PNGs are written to, created on the first capture; \"~\" expands and a relative path resolves against the project directory. Empty means the built-in default, ~/.ike/screenshots", Scope: config.UserScope},
+		}},
 		{Title: "Remote Browsing", Description: "The SFTP remote file browser (#1997): an SSH host from ~/.ssh/config browsed as a pane, remote files downloaded into a local cache and opened read-only.", Entries: []Entry{
 			{Key: "remote.max_fetch_mb", Type: Int, Title: "Download size limit", Description: "Largest remote file the browser downloads into the local cache to preview, in MiB; opening a bigger file is refused with a notice instead of stalling the link", Scope: config.UserScope, Min: 1, Max: 4096},
 		}},

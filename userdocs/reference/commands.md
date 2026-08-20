@@ -198,6 +198,8 @@ bring their own.
 | Revert File | `vcs.revertFile` | `cmd+alt+z` | — | everywhere |
 | Revert Hunk Under Caret | `vcs.revertHunk` | — | — | everywhere |
 | Undo Revert… | `vcs.undoRevert` | — | — | everywhere |
+| Export Screenshot (Pane) | `view.exportScreenshot` | — | — | everywhere |
+| Export Screenshot (Window) | `view.exportWindowScreenshot` | — | — | everywhere |
 | Zen Mode | `view.zenMode` | `ctrl+alt+f` | — | everywhere |
 | Show External Changes | `watch.changeFeed` | — | — | everywhere |
 | Hide All Tool Windows | `window.hideAllTools` | `cmd+shift+f12` | — | everywhere |

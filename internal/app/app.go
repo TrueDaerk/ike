@@ -5425,6 +5425,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// a mini-diff of the selected one.
 		m.openChangeFeed()
 		return m, nil
+	case ExportScreenshotMsg:
+		// view.exportScreenshot / view.exportWindowScreenshot (#2001): paint
+		// the composed frame — the focused pane, or the whole window — into a
+		// PNG off the update loop.
+		return m, m.exportScreenshot(msg.Whole)
+	case screenshotDoneMsg:
+		m.screenshotDone(msg)
+		return m, nil
 
 	case TimelineMsg:
 		// file.timeline (#1916): snapshots and commits on one axis; the git
