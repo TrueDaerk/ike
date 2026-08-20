@@ -90,10 +90,12 @@ bring their own.
 | Show Timeline | `file.timeline` | — | — | everywhere |
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
 | Cancel Running HTTP Request | `http.cancel` | — | — | everywhere |
+| Copy HTTP Request as curl | `http.copyAsCurl` | — | — | everywhere |
 | Copy HTTP Response Body | `http.copyBody` | — | — | everywhere |
 | Copy Folded Range (HTTP Response) | `http.copyFold` | — | — | everywhere |
 | Copy HTTP Response Headers | `http.copyHeaders` | — | — | everywhere |
 | Compare Stored HTTP Responses | `http.diffResponses` | — | — | everywhere |
+| Import curl Command… | `http.importCurl` | — | — | everywhere |
 | Import OpenAPI Spec… | `http.importOpenAPI` | — | — | everywhere |
 | Re-send Stored HTTP Request | `http.resend` | — | — | everywhere |
 | Browse HTTP Response History | `http.responseHistory` | — | — | everywhere |

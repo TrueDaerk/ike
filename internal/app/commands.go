@@ -445,6 +445,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.diffResponses", "Compare Stored HTTP Responses", HTTPDiffResponsesMsg{}),
 			appCommand("http.selectEnvironment", "Select HTTP Environment", HTTPSelectEnvMsg{}),
 			appCommand("http.importOpenAPI", "Import OpenAPI Spec…", ImportOpenAPIMsg{}),
+			appCommand("http.importCurl", "Import curl Command…", ImportCurlMsg{}),
+			appCommand("http.copyAsCurl", "Copy HTTP Request as curl", HTTPCopyAsCurlMsg{}),
 			appCommand("http.cancel", "Cancel Running HTTP Request", HTTPCancelMsg{}),
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
 			appCommand("debug.breakpoints", "Breakpoints", BreakpointsToggleMsg{}),

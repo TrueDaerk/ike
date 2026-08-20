@@ -434,6 +434,12 @@ type Model struct {
 	oapiImportOpen  bool
 	oapiImportInput string
 	oapiImportPos   int
+	// curlImportOpen marks the curl import prompt (#1994) while the shell
+	// shows it; curlImportInput/curlImportPos are the typed command and
+	// cursor.
+	curlImportOpen  bool
+	curlImportInput string
+	curlImportPos   int
 	// lspRename is the open symbol-rename prompt (Roadmap 0100, #6); nil when
 	// no rename is in flight.
 	lspRename *lspRenameState
@@ -3544,6 +3550,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The finished import: toast the summary and open the generated file.
 		return m.finishOpenAPIImport(msg)
 
+	case ImportCurlMsg:
+		// http.importCurl (palette, #1994): prompt for a curl command, then
+		// append the equivalent request block to the focused .http file.
+		m.startCurlImport()
+		return m, nil
+
 	case palette.MoveTargetMsg:
 		return m, m.finishMoveFile(msg.Dir)
 
@@ -3962,6 +3974,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case HTTPCopyHeadersMsg:
 		// http.copyHeaders (palette, #1266): status line plus headers.
 		return m, m.copyHTTPResponse(true)
+
+	case HTTPCopyAsCurlMsg:
+		// http.copyAsCurl (palette, #1994): the request under the caret, with
+		// its variables substituted, as a runnable curl command.
+		return m, m.copyHTTPRequestAsCurl()
 
 	case HTTPCopyFoldMsg:
 		// http.copyFold (palette, #1787): the target fold, hidden rows and all.
@@ -6152,6 +6169,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The OpenAPI import prompt (#1939) mirrors it exactly.
 		if m.openAPIImportPromptOpen() {
 			return m.updateOpenAPIImportPrompt(msg)
+		}
+		// The curl import prompt (#1994) likewise — one line, enter/esc.
+		if m.curlImportPromptOpen() {
+			return m.updateCurlImportPrompt(msg)
 		}
 		// The symbol-rename prompt (0100, #6) mirrors it.
 		if m.lspRenameOpen() {
