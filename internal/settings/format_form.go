@@ -347,3 +347,18 @@ func (f *formatForm) theme() *theme.Palette {
 	}
 	return theme.DefaultPalette()
 }
+
+// Paste inserts a pasted block into the focused field at its cursor (#2002);
+// a paste into the command field refreshes the path suggestions exactly like
+// typing there does.
+func (f *formatForm) Paste(text string) bool {
+	tf := newTextFieldAt(f.values[f.field], f.cur)
+	if !tf.Paste(text) {
+		return false
+	}
+	f.values[f.field], f.cur = tf.text, tf.cur
+	if f.fields[f.field].key == "command" {
+		f.suggest.refresh(f.values[f.field])
+	}
+	return true
+}

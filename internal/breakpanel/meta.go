@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/debug"
+	"ike/internal/ui"
 )
 
 // meta.go is the breakpoint-refinement editing (#1914): condition, hit count
@@ -102,33 +103,27 @@ func (m *Model) editKey(k tea.KeyPressMsg) tea.Cmd {
 	case tea.KeyEscape:
 		m.cancelEdit()
 		return nil
-	case tea.KeyBackspace:
-		if m.editCur > 0 {
-			m.editBuf = append(m.editBuf[:m.editCur-1], m.editBuf[m.editCur:]...)
-			m.editCur--
-		}
-		return nil
-	case tea.KeyLeft:
-		if m.editCur > 0 {
-			m.editCur--
-		}
-		return nil
-	case tea.KeyRight:
-		if m.editCur < len(m.editBuf) {
-			m.editCur++
-		}
-		return nil
-	case tea.KeyHome:
-		m.editCur = 0
-		return nil
-	case tea.KeyEnd:
-		m.editCur = len(m.editBuf)
-		return nil
 	}
-	if k.Text != "" {
-		runes := []rune(k.Text)
-		m.editBuf = append(m.editBuf[:m.editCur], append(runes, m.editBuf[m.editCur:]...)...)
-		m.editCur += len(runes)
+	// Everything else is shared line editing (#2002): a movable cursor with
+	// word motions, word/line kills, the macOS opt/cmd chords and rune-safe
+	// backspace, plus printable insertion at the cursor.
+	if out, ncur, handled, _ := ui.EditKey(k, string(m.editBuf), m.editCur); handled {
+		m.editBuf, m.editCur = []rune(out), ncur
 	}
 	return nil
+}
+
+// PasteText inserts a pasted block into the open inline editor at its cursor
+// (#2002); it reports whether anything was consumed, so a closed editor lets
+// the paste fall through.
+func (m *Model) PasteText(text string) bool {
+	if !m.editing {
+		return false
+	}
+	out, ncur, changed := ui.PasteText(string(m.editBuf), m.editCur, text)
+	if !changed {
+		return false
+	}
+	m.editBuf, m.editCur = []rune(out), ncur
+	return true
 }

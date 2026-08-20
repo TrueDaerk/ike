@@ -45,14 +45,7 @@ func (m Model) lspRenameOpen() bool { return m.lspRename != nil && m.shell.IsOpe
 // renderLSPRenamePrompt (re)fills the shell for the current input.
 func (m *Model) renderLSPRenamePrompt() {
 	s := m.lspRename
-	r := []rune(s.input)
-	before, after := string(r[:s.pos]), ""
-	cur := " "
-	if s.pos < len(r) {
-		cur = string(r[s.pos])
-		after = string(r[s.pos+1:])
-	}
-	line := "> " + before + renamePromptCursor.Render(cur) + after
+	line := "> " + ui.CursorView(s.input, s.pos)
 	m.shell.SetContent(ui.ModelContent{
 		Heading: "Rename symbol",
 		Body: func() string {
@@ -70,7 +63,6 @@ func (m Model) updateLSPRenamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.lspRename = nil
 		m.shell.Close()
 	}
-	r := []rune(s.input)
 	switch {
 	case msg.Code == tea.KeyEscape:
 		closePrompt()
@@ -83,34 +75,14 @@ func (m Model) updateLSPRenamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, apply(name)
-	case msg.Code == tea.KeyLeft:
-		if s.pos > 0 {
-			s.pos--
-		}
-	case msg.Code == tea.KeyRight:
-		if s.pos < len(r) {
-			s.pos++
-		}
-	case msg.Code == tea.KeyHome:
-		s.pos = 0
-	case msg.Code == tea.KeyEnd:
-		s.pos = len(r)
-	case msg.Code == tea.KeyBackspace:
-		if s.pos > 0 {
-			s.input = string(append(r[:s.pos-1:s.pos-1], r[s.pos:]...))
-			s.pos--
-		}
 	case msg.Code == 'u' && msg.Mod == tea.ModCtrl:
-		s.input = ""
-		s.pos = 0
-	case msg.Code == tea.KeyDelete:
-		if s.pos < len(r) {
-			s.input = string(append(r[:s.pos:s.pos], r[s.pos+1:]...))
+		// ctrl+u clears the whole line — the prompt's own chord, kept ahead
+		// of ui.EditKey (which does not bind it).
+		s.input, s.pos = "", 0
+	default:
+		if out, pos, handled, _ := ui.EditKey(msg, s.input, s.pos); handled {
+			s.input, s.pos = out, pos
 		}
-	case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
-		ins := []rune(msg.Text)
-		s.input = string(append(append(append([]rune{}, r[:s.pos]...), ins...), r[s.pos:]...))
-		s.pos += len(ins)
 	}
 	m.renderLSPRenamePrompt()
 	return m, nil

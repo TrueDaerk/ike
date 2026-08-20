@@ -124,11 +124,11 @@ func (m *Model) Paste(text string) (handled bool) {
 		return true
 	}
 	if s := m.search; s != nil {
-		out, _, changed := ui.PasteText(s.query, len([]rune(s.query)), text)
+		out, ncur, changed := ui.PasteText(s.query, s.pos, text)
 		if !changed {
 			return false
 		}
-		s.query = out
+		s.query, s.pos = out, ncur
 		m.searchJump()
 		return true
 	}
@@ -169,13 +169,13 @@ func (m *Model) handlePromptKey(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		case msg.Code == tea.KeyEnter || msg.Code == tea.KeyEscape:
 			p.selStart, p.selEnd = 0, 0 // accept/cancel act on the full text
-		case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
+		case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper|tea.ModMeta) == 0:
+			// Typing replaces the selection: drop it here, then fall through
+			// to the shared editor below, which inserts at the new cursor.
 			r := []rune(p.input)
-			ins := []rune(msg.Text)
-			p.input = string(append(append(append([]rune{}, r[:p.selStart]...), ins...), r[p.selEnd:]...))
-			p.pos = p.selStart + len(ins)
+			p.input = string(append(r[:p.selStart:p.selStart], r[p.selEnd:]...))
+			p.pos = p.selStart
 			p.selStart, p.selEnd = 0, 0
-			return nil
 		default:
 			p.selStart, p.selEnd = 0, 0
 		}
@@ -190,33 +190,13 @@ func (m *Model) handlePromptKey(msg tea.KeyPressMsg) tea.Cmd {
 		return p.accept(m, name)
 	case msg.Code == tea.KeyEscape:
 		m.prompt = nil
-	case msg.Code == tea.KeyLeft:
-		if p.pos > 0 {
-			p.pos--
+	default:
+		// Everything else is shared line editing (#2002): cursor and word
+		// motions, word/line kills and the macOS opt/cmd chords, plus
+		// printable insertion at the cursor (a bare space included).
+		if out, pos, handled, _ := ui.EditKey(msg, p.input, p.pos); handled {
+			p.input, p.pos = out, pos
 		}
-	case msg.Code == tea.KeyRight:
-		if r := []rune(p.input); p.pos < len(r) {
-			p.pos++
-		}
-	case msg.Code == tea.KeyHome:
-		p.pos = 0
-	case msg.Code == tea.KeyEnd:
-		p.pos = len([]rune(p.input))
-	case msg.Code == tea.KeyBackspace:
-		if r := []rune(p.input); p.pos > 0 {
-			p.input = string(append(r[:p.pos-1:p.pos-1], r[p.pos:]...))
-			p.pos--
-		}
-	case msg.Code == tea.KeyDelete:
-		if r := []rune(p.input); p.pos < len(r) {
-			p.input = string(append(r[:p.pos:p.pos], r[p.pos+1:]...))
-		}
-	case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
-		// Printable input, including a bare space (Text == " "), inserted at pos.
-		r := []rune(p.input)
-		ins := []rune(msg.Text)
-		p.input = string(append(append(append([]rune{}, r[:p.pos]...), ins...), r[p.pos:]...))
-		p.pos += len(ins)
 	}
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor/search"
+	"ike/internal/ui"
 )
 
 // replace_panel.go is the two-field find/replace panel (Epic 0240 phase 2,
@@ -25,7 +26,11 @@ import (
 // substitute confirm prompt).
 type replacePanel struct {
 	find, repl string
-	field      int // 0 = Find, 1 = Replace
+	// findCur/replCur are the rune cursors inside the two fields (#2002):
+	// both are ordinary single-line inputs edited through ui.EditKey, so
+	// each keeps its own position across a tab switch.
+	findCur, replCur int
+	field            int // 0 = Find, 1 = Replace
 	// preselect marks a prefilled Find as selected (#292, mirroring the
 	// find-in-path overlay's #277): the first typed rune replaces it
 	// wholesale, any other key keeps the text and drops the mark.
@@ -42,6 +47,8 @@ func (m *Model) beginReplacePanel() {
 	if !m.query.Empty() && !m.query.Regex {
 		m.replPanel.find = m.query.Pattern
 	}
+	m.replPanel.findCur = len([]rune(m.replPanel.find))
+	m.replPanel.replCur = len([]rune(m.replPanel.repl))
 	m.replPanel.preselect = m.replPanel.find != ""
 	m.searchOrigin = m.cursor
 	m.searchOrigTop, m.searchOrigLft = m.view.Top, m.view.Left
@@ -94,25 +101,30 @@ func (m Model) updateReplacePanel(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m.runPanelSubstitute("gc")
 	case key.Code == 'a' && key.Mod == tea.ModCtrl:
 		return m.runPanelSubstitute("g")
-	case key.Code == tea.KeyBackspace, key.Code == 'h' && key.Mod == tea.ModCtrl:
-		f := m.panelField()
-		if r := []rune(*f); len(r) > 0 {
-			*f = string(r[:len(r)-1])
-			if p.field == 0 {
-				m.previewPanelFind()
-			}
-		}
 	case key.Code == 'u' && key.Mod == tea.ModCtrl:
-		*m.panelField() = ""
+		// Clear the field — the panel's own chord, ahead of ui.EditKey,
+		// which does not bind ctrl+u.
+		*m.panelField(), *m.panelCursor() = "", 0
 		if p.field == 0 {
 			m.previewPanelFind()
 		}
-	case key.Text != "" && key.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
-		if pre && p.field == 0 {
-			p.find = "" // typing replaces the preselected prefill (#292)
+	default:
+		if key.Code == 'h' && key.Mod == tea.ModCtrl {
+			key = tea.KeyPressMsg{Code: tea.KeyBackspace} // ctrl+h is backspace
 		}
-		*m.panelField() += key.Text
-		if p.field == 0 {
+		if pre && p.field == 0 && key.Text != "" &&
+			key.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper|tea.ModMeta) == 0 {
+			// Typing replaces the preselected prefill wholesale (#292); the
+			// shared editor below then inserts into the emptied field.
+			p.find, p.findCur = "", 0
+		}
+		f, cur := m.panelField(), m.panelCursor()
+		out, ncur, handled, changed := ui.EditKey(key, *f, *cur)
+		if !handled {
+			break
+		}
+		*f, *cur = out, ncur
+		if changed && p.field == 0 {
 			m.previewPanelFind()
 		}
 	}
@@ -125,6 +137,14 @@ func (m *Model) panelField() *string {
 		return &m.replPanel.find
 	}
 	return &m.replPanel.repl
+}
+
+// panelCursor returns the active field's rune cursor.
+func (m *Model) panelCursor() *int {
+	if m.replPanel.field == 0 {
+		return &m.replPanel.findCur
+	}
+	return &m.replPanel.replCur
 }
 
 // runPanelSubstitute closes the panel and runs the whole-file substitute with
@@ -177,8 +197,8 @@ func (m Model) replacePanelRows(width int) []string {
 			tally = "  no matches"
 		}
 	}
-	find := "Find     " + m.panelInput(p.find, p.field == 0) + tally
-	repl := "Replace  " + m.panelInput(p.repl, p.field == 1)
+	find := "Find     " + m.panelInput(p.find, p.findCur, p.field == 0) + tally
+	repl := "Replace  " + m.panelInput(p.repl, p.replCur, p.field == 1)
 	hint := "[enter] confirm each · [ctrl+a] replace all · [tab] switch field · [esc] cancel"
 	if m.cmdMsg != "" {
 		// Panel errors ("E: empty pattern") render where the ex line would
@@ -191,12 +211,17 @@ func (m Model) replacePanelRows(width int) []string {
 // panelInput renders one field's text, the active one with a cursor block.
 // A preselected Find prefill renders inverted so it reads as replace-on-type
 // (#292).
-func (m Model) panelInput(text string, active bool) string {
+func (m Model) panelInput(text string, cur int, active bool) string {
 	if m.replPanel.preselect && active && m.replPanel.field == 0 && text != "" {
-		text = lipgloss.NewStyle().Reverse(true).Render(text)
+		return lipgloss.NewStyle().Reverse(true).Render(text) + "▏"
 	}
 	if active {
-		return text + "▏"
+		// The cursor sits inside the text (#2002), so it has to be visible
+		// wherever it is — end-of-text still shows the trailing block.
+		if cur >= len([]rune(text)) {
+			return text + "▏"
+		}
+		return ui.CursorView(text, cur)
 	}
 	return text
 }

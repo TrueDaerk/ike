@@ -39,6 +39,7 @@ type ColorsPage struct {
 	off int
 
 	filter    string
+	filterCur int // rune cursor inside filter (#2002)
 	filtering bool
 
 	// picking opens the colour list in the detail column; custom swaps it for
@@ -237,17 +238,13 @@ func (c *ColorsPage) pickIndexFor(name string) int {
 func (c *ColorsPage) updateFilter(key tea.KeyPressMsg) tea.Cmd {
 	switch key.Code {
 	case tea.KeyEscape:
-		c.filtering, c.filter, c.sel = false, "", 0
+		c.filtering, c.filter, c.filterCur, c.sel = false, "", 0, 0
 	case tea.KeyEnter:
 		c.filtering = false
-	case tea.KeyBackspace:
-		if c.filter != "" {
-			r := []rune(c.filter)
-			c.filter, c.sel = string(r[:len(r)-1]), 0
-		}
 	default:
-		if key.Text != "" {
-			c.filter, c.sel = c.filter+key.Text, 0
+		// Shared line editing (#2002).
+		if _, changed := filterKey(key, &c.filter, &c.filterCur); changed {
+			c.sel = 0
 		}
 	}
 	return nil
@@ -308,8 +305,16 @@ func (c *ColorsPage) updateCustom(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// Paste implements the panel's paste routing for the free-token input.
+// Paste implements the panel's paste routing: the free-token input, or the
+// page's own capture filter while that is open (#2002).
 func (c *ColorsPage) Paste(text string) bool {
+	if c.filtering {
+		if !filterPaste(text, &c.filter, &c.filterCur) {
+			return false
+		}
+		c.sel = 0
+		return true
+	}
 	if !c.custom {
 		return false
 	}
@@ -325,7 +330,7 @@ func (c *ColorsPage) SearchItems() []SearchItem {
 		out = append(out, SearchItem{
 			Label:    n,
 			Keywords: "colour color syntax capture highlight " + n,
-			Activate: func() { c.filter, c.sel = "", i },
+			Activate: func() { c.filter, c.filterCur, c.sel = "", 0, i },
 		})
 	}
 	return out

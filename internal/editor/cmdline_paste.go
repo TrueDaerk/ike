@@ -50,22 +50,22 @@ func (m *Model) pasteCmdline(text string) {
 	}
 }
 
-// pasteReplacePanel appends to the panel's active field (the fields keep no
-// cursor — typing appends too). Pasting into a preselected Find prefill
-// replaces it wholesale, matching the replace-on-type behavior (#292).
+// pasteReplacePanel inserts into the panel's active field at its cursor
+// (#2002). Pasting into a preselected Find prefill replaces it wholesale,
+// matching the replace-on-type behavior (#292).
 func (m *Model) pasteReplacePanel(text string) {
 	p := m.replPanel
-	f := m.panelField()
+	f, cur := m.panelField(), m.panelCursor()
 	if p.preselect && p.field == 0 {
-		*f = ""
+		*f, *cur = "", 0
 	}
 	p.preselect = false
-	out, _, changed := ui.PasteText(*f, len([]rune(*f)), text)
+	out, ncur, changed := ui.PasteText(*f, *cur, text)
 	if !changed {
 		return
 	}
 	m.bumpRender()
-	*f = out
+	*f, *cur = out, ncur
 	if p.field == 0 {
 		m.previewPanelFind()
 	}

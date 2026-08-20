@@ -58,7 +58,7 @@ func (c *ColorsPage) renderList(w, h int) string {
 	head := " capture · colour"
 	switch {
 	case c.filtering:
-		head += "   ⌕ " + c.filter + "▌"
+		head += "   ⌕ " + filterView(c.filter, c.filterCur)
 	case c.filter != "":
 		head += "   ⌕ " + c.filter
 	default:
