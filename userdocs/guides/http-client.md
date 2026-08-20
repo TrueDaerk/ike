@@ -181,11 +181,40 @@ than as text:
 
 A new service usually ships an OpenAPI document long before anyone writes a
 request file for it. **Import OpenAPI Spec…** (`http.importOpenAPI`) asks for
-a local OpenAPI 3.x document — JSON or YAML, ++tab++ completes paths — and
-writes the request file for you.
+an OpenAPI 3.x document — JSON or YAML, ++tab++ completes paths — and writes
+the request file for you.
 
-The result lands **next to the spec**, named after it (`petstore.yaml` →
-`petstore.http`), and opens in the editor. Next to it you get a
+### From a path or from a URL
+
+The prompt takes a **path** or an `http(s)` **URL**, and the two confirm
+differently:
+
+- A **path** imports right away on ++enter++.
+- A **URL** is checked first. ++enter++ fetches it and reports what it found;
+  only a second ++enter++ imports. A URL that names the document
+  (`https://api.example.com/openapi.json`) is fetched as it is, while a plain
+  base URL (`https://api.example.com`) is resolved by probing the well-known
+  locations **in this order**:
+
+    `/openapi.json` · `/openapi.yaml` · `/openapi.yml` · `/swagger.json` ·
+    `/swagger.yaml` · `/v3/api-docs` · `/api-docs` · `/api/openapi.json` ·
+    `/api/openapi.yaml`
+
+    The first one that answers with a parseable document wins, and the prompt
+    shows which URL that was before you confirm. A URL with a path prefix that
+    is not a document (`https://api.example.com/api`) is probed *under* that
+    prefix.
+
+If nothing usable is found, the popup turns **red** and tells you why — the
+host is unreachable, the server answered `HTTP 404`, or the document is not
+OpenAPI 3.x. Nothing is written until a document has been verified. Each
+request has a five second timeout, and an unreachable host stops the probe run
+at the first path instead of waiting nine times over.
+
+The result lands **next to the spec** — for a URL, in the project directory —
+named after it (`petstore.yaml` → `petstore.http`,
+`https://api.example.com/v3/api-docs` → `api-docs.http`), and opens in the
+editor. Next to it you get a
 `http-client.env.json` with the host and every parameter value, and a
 `http-client.private.env.json` with the credentials left empty for you to fill
 in. Fill those in, pick an environment with **Select HTTP Environment**, and
