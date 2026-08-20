@@ -67,6 +67,62 @@ request runs**, never from the file. A request with an unresolved variable is
 not sent at all — you get a notification naming every variable that is
 missing.
 
+`{{name}}` is a variable of your own. It is filled, in this order, from a
+value [captured out of a response](#chaining-requests-capture), from an
+`@name = value` line in the file, from the environment picked with **Select
+HTTP Environment** (a `http-client.env.json` next to the file), and finally
+from the process environment.
+
+```http
+@host = https://example.com
+
+### thing
+GET {{host}}/my/path
+```
+
+### Chaining requests: `# @capture` { #chaining-requests-capture }
+
+Some workflows only make sense as a chain — start an operation, then ask about
+the id the answer contained. A `# @capture` comment on a request stores a
+value out of **its** response under a variable name, and later requests of the
+file use it like any other `{{name}}`:
+
+```http
+### start
+# @capture task = .task
+POST {{host}}/_reindex?wait_for_completion=false
+
+### poll
+GET {{host}}/_tasks/{{task}}
+```
+
+Everything right of the `=` is a [jq](https://jqlang.github.io/jq/) expression
+evaluated against the response body — the same language as the jq playground,
+so it is not limited to plain paths:
+
+```http
+# @capture id    = .items[] | select(.state=="done") | .id
+# @capture token = .data.access_token
+# @capture where = .task | "\(.node):\(.id)"
+```
+
+A string is captured without its quotes (it is going into a URL or a header),
+anything else keeps its JSON spelling. When several values come out, the first
+one is taken. A capture beats an `@name =` line of the same name, which makes
+`@token = fill-me-in` a useful placeholder to keep in the file.
+
+If a capture cannot produce a value — the path matches nothing, the body is
+not JSON, the expression is broken — **the request still completes and its
+response still shows**. The reason appears twice: as a warning row above the
+response, and as a warning marker on the directive line itself, so it is where
+you would fix it. Running the request again once it works clears the marker.
+
+Captured values are stored with the response, in `.ike/http/`, so they are
+still there when you reopen the project — and they are gone once that response
+falls out of the five kept per request. Re-sending a stored request
+(++ctrl+r++) captures nothing: it repeats what was sent, it does not re-read
+the file.
+
 ### A body from a file
 
 When the whole body is a directive line, the payload comes from disk:

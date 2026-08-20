@@ -28,6 +28,35 @@
   cross-references from the number-hint and secret-masking sections;
   `userdocs/reference/commands.md` regenerated.
 
+## 2026-08-20 (Capture response values into variables, #1993)
+
+- **Directive** (`internal/httpfile/capture.go`): `# @capture name = <jq-expr>`
+  comment lines (`#`, `##`, `//` — not `###`, which opens a block) inside a
+  request block parse into `Request.Captures`, carrying the name, the verbatim
+  jq expression and the directive's position for the marker below.
+- **Evaluation** (`internal/httpclient/capture.go`, `internal/jqplay/raw.go`):
+  after the response is complete, each directive runs through the new
+  `jqplay.EvaluateRaw` — the `jq -r`-shaped single-value form of the
+  playground's gojq engine: first non-null output, strings unquoted, anything
+  else in JSON spelling. Results land in `Response.Captures`; a re-send (#1832)
+  has no parsed request and therefore captures nothing.
+- **Precedence** (`httpfile.Vars.Captured`): a captured value is the new top of
+  the `{{name}}` chain, above the file's `@name=value` definitions, the
+  selected environment and the process environment — it is the freshest value
+  and supersedes exactly the `@token = paste-me-here` stand-in.
+- **Lifetime** (`httphistory.Entry.Captured`, `Store.Captured`): values are
+  stored with the response in `.ike/http/*.json`, so they survive a restart and
+  are pruned with their entry; per name, the newest response wins.
+- **Failure is loud, never fatal** (`internal/app/http_capture.go`): a path
+  that matched nothing, a non-JSON body or a broken expression warns in the
+  response pane *and* as a warning diagnostic on the directive's own line;
+  each dispatch republishes the file's set, so a fixed directive clears.
+- **Highlighting** (`plugins/languages/http/capture.go`): the directive's parts
+  are lifted out of the comment colour — keyword, variable, operator, and the
+  expression through the jq playground's tokenizer.
+- **Docs**: `/architecture/http-client.md` gains "Capturing values from a
+  response"; the user guide gains "Chaining requests: `# @capture`".
+
 ## 2026-08-20 (Every text input on the shared ui helpers, #2002)
 
 - **Audit + convention** (`wiki/architecture/text-input.md`, new): every

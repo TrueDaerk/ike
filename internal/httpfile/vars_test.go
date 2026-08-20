@@ -102,11 +102,16 @@ func TestResolveFileVariables(t *testing.T) {
 // the way through (#1867).
 func TestVarsPrecedence(t *testing.T) {
 	vars := &Vars{
-		File:   map[string]string{"host": "file"},
-		Env:    map[string]string{"host": "env", "port": "8080"},
-		Lookup: lookupMap(map[string]string{"host": "os", "port": "1", "user": "root"}),
+		// A captured value (#1993) sits on top of the chain: it came out of a
+		// response of this very file, and the `@token = paste-me-here` line
+		// below is exactly the stand-in it supersedes.
+		Captured: map[string]string{"token": "captured"},
+		File:     map[string]string{"host": "file", "token": "file"},
+		Env:      map[string]string{"host": "env", "port": "8080", "token": "env"},
+		Lookup:   lookupMap(map[string]string{"host": "os", "port": "1", "user": "root", "token": "os"}),
 	}
 	for _, c := range []struct{ in, want string }{
+		{"{{token}}", "captured"},
 		{"{{host}}", "file"},
 		{"{{port}}", "8080"},
 		{"{{user}}", "root"},

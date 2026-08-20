@@ -39,6 +39,12 @@ type Entry struct {
 	Truncated  bool          `json:"truncated,omitempty"`
 	Duration   time.Duration `json:"duration"`
 	Warnings   []string      `json:"warnings,omitempty"`
+	// Captured holds the values this response's `# @capture` directives took
+	// out of it (#1993). They are stored with the entry rather than kept in
+	// memory, so a captured value lives exactly as long as the response it
+	// came from: re-opening the project restores both, and pruning the entry
+	// drops the value with it.
+	Captured map[string]string `json:"captured,omitempty"`
 	// Request is the request as it was sent (#1832), so this very exchange can
 	// be repeated without re-reading the .http file. nil for entries written
 	// before the capture existed — those load fine and only lose re-send.
@@ -59,9 +65,10 @@ type wireEntry struct {
 	BodyText   *string       `json:"bodyText,omitempty"`
 	Body       []byte        `json:"body,omitempty"` // base64, binary bodies only
 	Truncated  bool          `json:"truncated,omitempty"`
-	Duration   time.Duration `json:"duration"`
-	Warnings   []string      `json:"warnings,omitempty"`
-	Request    *wireRequest  `json:"request,omitempty"` // as-sent snapshot (#1832)
+	Duration   time.Duration     `json:"duration"`
+	Warnings   []string          `json:"warnings,omitempty"`
+	Captured   map[string]string `json:"captured,omitempty"` // capture directives (#1993)
+	Request    *wireRequest      `json:"request,omitempty"`  // as-sent snapshot (#1832)
 }
 
 // wireRequest is the on-disk shape of the as-sent request snapshot (#1832).
@@ -121,7 +128,7 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 	w := wireEntry{
 		Time: e.Time, Status: e.Status, StatusCode: e.StatusCode, Proto: e.Proto,
 		Headers: e.Headers, Truncated: e.Truncated, Duration: e.Duration,
-		Warnings: e.Warnings, Request: toWire(e.Request),
+		Warnings: e.Warnings, Captured: e.Captured, Request: toWire(e.Request),
 	}
 	switch {
 	case len(e.Body) == 0:
@@ -144,7 +151,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	*e = Entry{
 		Time: w.Time, Status: w.Status, StatusCode: w.StatusCode, Proto: w.Proto,
 		Headers: w.Headers, Truncated: w.Truncated, Duration: w.Duration,
-		Warnings: w.Warnings, Request: fromWire(w.Request),
+		Warnings: w.Warnings, Captured: w.Captured, Request: fromWire(w.Request),
 	}
 	switch {
 	case w.BodyText != nil:
@@ -183,6 +190,7 @@ func FromResponse(resp *httpclient.Response, at time.Time) Entry {
 		Truncated:  resp.Truncated,
 		Duration:   resp.Duration,
 		Warnings:   resp.Warnings,
+		Captured:   resp.CapturedValues(),
 		Request:    resp.Request,
 	}
 }

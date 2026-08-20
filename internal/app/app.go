@@ -3880,9 +3880,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.runHTTPRequestAtCursor()
 
 	case HTTPResponseMsg:
-		// One dispatch finished (#1250): open/reuse the response viewer.
-		m.fillHTTPPanel(msg)
-		return m, nil
+		// One dispatch finished (#1250): open/reuse the response viewer, and
+		// report what the request's capture directives took out of the
+		// response (#1993).
+		return m, m.fillHTTPPanel(msg)
 
 	case HTTPStreamStartMsg:
 		// A streaming response's headers arrived (#1776): show them live and

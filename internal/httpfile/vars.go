@@ -15,17 +15,23 @@ import "strings"
 //
 // Precedence for {{name}}, highest first:
 //
-//  1. File — the .http file's own `@name=value` definitions
-//  2. Env — the selected environment of http-client.env.json, with
+//  1. Captured — values a `# @capture` directive took out of a response
+//     (#1993)
+//  2. File — the .http file's own `@name=value` definitions
+//  3. Env — the selected environment of http-client.env.json, with
 //     http-client.private.env.json merged over it
-//  3. Lookup — the process environment (typically os.LookupEnv)
+//  4. Lookup — the process environment (typically os.LookupEnv)
 //
-// The in-file definition wins because it sits in front of the author, right
+// A captured value wins because it is the freshest thing in the chain: it was
+// produced by a response of this very file, and an `@token = paste-me-here`
+// definition is the stand-in it is meant to supersede. The in-file definition
+// wins over an environment because it sits in front of the author, right
 // above the request; an environment is the shared default it overrides.
 type Vars struct {
-	File   map[string]string
-	Env    map[string]string
-	Lookup func(string) (string, bool)
+	Captured map[string]string
+	File     map[string]string
+	Env      map[string]string
+	Lookup   func(string) (string, bool)
 }
 
 // EnvValue resolves the {{$env NAME}} / ${NAME} forms: the process
@@ -42,6 +48,9 @@ func (v *Vars) EnvValue(name string) (string, bool) {
 func (v *Vars) raw(name string) (string, bool) {
 	if v == nil {
 		return "", false
+	}
+	if value, ok := v.Captured[name]; ok {
+		return value, true
 	}
 	if value, ok := v.File[name]; ok {
 		return value, true

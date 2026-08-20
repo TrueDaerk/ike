@@ -10,6 +10,7 @@ import (
 	"ike/internal/fuzzy"
 	"ike/internal/host"
 	"ike/internal/httpfile"
+	"ike/internal/httphistory"
 	"ike/internal/palette"
 )
 
@@ -121,7 +122,7 @@ func (m Model) httpEnvName(dir string, envs *httpfile.Environments) string {
 // request with unresolved variables because of a JSON typo would be worse
 // than not sending it.
 func (m Model) httpVars(source string, f *httpfile.File) (vars *httpfile.Vars, hint string, err error) {
-	vars = &httpfile.Vars{File: f.VarMap()}
+	vars = &httpfile.Vars{File: f.VarMap(), Captured: m.httpCaptured(source, f)}
 	dir := filepath.Dir(source)
 	envs, err := httpfile.LoadEnvironments(dir)
 	if err != nil {
@@ -136,6 +137,24 @@ func (m Model) httpVars(source string, f *httpfile.File) (vars *httpfile.Vars, h
 			") — choose one with http.selectEnvironment"
 	}
 	return vars, hint, nil
+}
+
+// httpCaptured returns the values the file's `# @capture` directives took out
+// of earlier responses (#1993). They live in the response history, so they
+// come back with the project: only the requests that actually declare a
+// directive are looked up, which keeps the read to the handful of files that
+// can contribute anything.
+func (m Model) httpCaptured(source string, f *httpfile.File) map[string]string {
+	var keys []string
+	for _, r := range f.Requests {
+		if len(r.Captures) > 0 {
+			keys = append(keys, r.Key())
+		}
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	return httphistory.New(httpHistoryDir()).Captured(source, keys)
 }
 
 // httpEnvMode is the palette Mode listing the environments of one directory.
