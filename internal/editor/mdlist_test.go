@@ -10,7 +10,8 @@ import (
 
 // mdlist_test.go covers the markdown list rendering (#1966): unordered items
 // render as a two-cell indent plus a bullet, ordered items as their number
-// right-aligned to the widest number of their own list.
+// right-aligned to the widest number of their own list, and (#1975) an item's
+// continuation lines are padded to its text column.
 
 // mdViewLines renders m and returns the plain text of its rows, trimmed of
 // trailing padding, so assertions can compare whole rendered lines.
@@ -196,5 +197,115 @@ func TestListNonMarkdownBufferUntouched(t *testing.T) {
 	m.buf = buffer.New([]string{"- alpha"})
 	if r := m.mdListConcealRanges(0); len(r) != 0 {
 		t.Errorf("a non-markdown buffer got %d list ranges, want none", len(r))
+	}
+}
+
+// TestListContinuationAlignsUnordered (#1975): a continuation line of an
+// unordered item renders flush with the item's text, not with its bare
+// source indent.
+func TestListContinuationAlignsUnordered(t *testing.T) {
+	m, _ := mdLoaded(t, "- My multiline bullet\n  point\n")
+	m.cursor = buffer.Position{Line: 5} // off both lines
+	if row := mdRow(t, m, 0); !strings.HasSuffix(row, "  • My multiline bullet") {
+		t.Errorf("item line renders %q, want the bullet stand-in", row)
+	}
+	if row := mdRow(t, m, 1); !strings.HasSuffix(row, "    point") {
+		t.Errorf("continuation renders %q, want it aligned with the item text", row)
+	}
+}
+
+// TestListContinuationRangeIsDisplayOnly: the pad is a conceal range over the
+// continuation's leading whitespace, so the buffer never changes.
+func TestListContinuationRangeIsDisplayOnly(t *testing.T) {
+	ranges := detectListRanges([]string{"- item", "  cont"})
+	got, ok := ranges[1]
+	if !ok {
+		t.Fatal("the continuation line got no pad range")
+	}
+	want := concealRange{start: 0, end: 2, repl: "    "}
+	if got != want {
+		t.Errorf("continuation pad is %+v, want %+v", got, want)
+	}
+}
+
+// TestListContinuationOrderedWidthBoundary: an ordered item's continuation
+// aligns on the run's padded number width, so a run crossing 9 → 10 pads both
+// items' text to the same column.
+func TestListContinuationOrderedWidthBoundary(t *testing.T) {
+	m, _ := mdLoaded(t, "9. nine\n   more\n10. ten\n    more\n")
+	m.cursor = buffer.Position{Line: 8}
+	rows := []string{mdRow(t, m, 0), mdRow(t, m, 1), mdRow(t, m, 2), mdRow(t, m, 3)}
+	if !strings.HasSuffix(rows[1], "      more") || !strings.HasSuffix(rows[3], "      more") {
+		t.Fatalf("continuations render %q / %q, want both padded to the text column", rows[1], rows[3])
+	}
+	for _, p := range []struct {
+		item, cont int
+		text       string
+	}{{0, 1, "nine"}, {2, 3, "ten"}} {
+		item, cont := rows[p.item], rows[p.cont]
+		if strings.Index(item, p.text) != strings.Index(cont, "more") {
+			t.Errorf("continuation not aligned with its item text:\n%q\n%q", item, cont)
+		}
+	}
+}
+
+// TestListContinuationNestedItemsNotContinuations: a nested item keeps its
+// own marker stand-in, and its continuation aligns with *its* text; text back
+// at the outer item's level continues the outer item.
+func TestListContinuationNestedItemsNotContinuations(t *testing.T) {
+	ranges := detectListRanges([]string{"- outer", "  - inner", "    inner cont", "  outer cont"})
+	if got := ranges[1].repl; got != "  "+mdBullet {
+		t.Errorf("nested item stands in as %q, want its own bullet", got)
+	}
+	if got, want := ranges[2], (concealRange{start: 0, end: 4, repl: strings.Repeat(" ", 6)}); got != want {
+		t.Errorf("nested continuation pad is %+v, want %+v", got, want)
+	}
+	if got, want := ranges[3], (concealRange{start: 0, end: 2, repl: "    "}); got != want {
+		t.Errorf("outer continuation pad is %+v, want %+v", got, want)
+	}
+}
+
+// TestListContinuationSkipsFenceAndBlanks: blank lines stay untouched, a
+// fenced block inside an item keeps its source indent, and a loose list's
+// continuation after a blank line still aligns.
+func TestListContinuationSkipsFenceAndBlanks(t *testing.T) {
+	src := []string{"- item", "  ```go", "  code", "  ```", "", "  after"}
+	ranges := detectListRanges(src)
+	for _, line := range []int{1, 2, 3, 4} {
+		if r, ok := ranges[line]; ok {
+			t.Errorf("line %d (%q) got the range %+v, want none", line, src[line], r)
+		}
+	}
+	if got, want := ranges[5], (concealRange{start: 0, end: 2, repl: "    "}); got != want {
+		t.Errorf("continuation after the fence is %+v, want %+v", got, want)
+	}
+}
+
+// TestListContinuationKeepsDeeperIndent: a line already indented past the
+// item's text column is left alone — the pad never pulls text left.
+func TestListContinuationKeepsDeeperIndent(t *testing.T) {
+	ranges := detectListRanges([]string{"- item", "      deep"})
+	if r, ok := ranges[1]; ok {
+		t.Errorf("a deeper continuation got the range %+v, want none", r)
+	}
+}
+
+// TestListContinuationTabIndentUntouched: a tabbed item indent counts runes,
+// not display cells, so its continuations stay raw rather than misaligned.
+func TestListContinuationTabIndentUntouched(t *testing.T) {
+	ranges := detectListRanges([]string{"- outer", "\t- inner", "\t  cont"})
+	if r, ok := ranges[2]; ok {
+		t.Errorf("continuation of a tab-indented item got %+v, want none", r)
+	}
+}
+
+// TestListContinuationCaretRevealsRawIndent (#1594): the caret inside the
+// padded indent shows the raw source, like every other conceal range.
+func TestListContinuationCaretRevealsRawIndent(t *testing.T) {
+	m, _ := mdLoaded(t, "- item\n  point\n")
+	m.cursor = buffer.Position{Line: 1, Col: 0}
+	row := mdRow(t, m, 1)
+	if !strings.HasSuffix(row, "  point") || strings.HasSuffix(row, "    point") {
+		t.Errorf("caret in the indent renders %q, want the raw source", row)
 	}
 }
