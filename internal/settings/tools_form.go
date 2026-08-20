@@ -194,3 +194,14 @@ func (f *toolForm) theme() *theme.Palette {
 	}
 	return theme.DefaultPalette()
 }
+
+// Paste inserts a pasted block into the focused field at its cursor (#2002),
+// through the same shared helper the typed keys use.
+func (f *toolForm) Paste(text string) bool {
+	tf := newTextFieldAt(f.form[f.field], f.cur)
+	if !tf.Paste(text) {
+		return false
+	}
+	f.form[f.field], f.cur = tf.text, tf.cur
+	return true
+}

@@ -47,15 +47,7 @@ func (m Model) openAPIImportPromptOpen() bool { return m.oapiImportOpen && m.she
 // renderOpenAPIImportPrompt (re)fills the shell with the prompt for the
 // current input; completion candidates render underneath.
 func (m *Model) renderOpenAPIImportPrompt(candidates []string) {
-	r := []rune(m.oapiImportInput)
-	pos := m.oapiImportPos
-	before, after := string(r[:pos]), ""
-	cur := " "
-	if pos < len(r) {
-		cur = string(r[pos])
-		after = string(r[pos+1:])
-	}
-	line := "> " + before + renamePromptCursor.Render(cur) + after
+	line := "> " + ui.CursorView(m.oapiImportInput, m.oapiImportPos)
 	const maxLines = 8
 	var sug string
 	if n := len(candidates); n > 0 {
@@ -86,7 +78,6 @@ func (m Model) updateOpenAPIImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 		m.oapiImportPos = 0
 		m.shell.Close()
 	}
-	r := []rune(m.oapiImportInput)
 	var candidates []string
 	switch {
 	case msg.Code == tea.KeyEscape:
@@ -104,31 +95,10 @@ func (m Model) updateOpenAPIImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 		m.oapiImportInput = res.Completed
 		m.oapiImportPos = len([]rune(m.oapiImportInput))
 		candidates = res.Candidates
-	case msg.Code == tea.KeyLeft:
-		if m.oapiImportPos > 0 {
-			m.oapiImportPos--
+	default:
+		if out, pos, handled, _ := ui.EditKey(msg, m.oapiImportInput, m.oapiImportPos); handled {
+			m.oapiImportInput, m.oapiImportPos = out, pos
 		}
-	case msg.Code == tea.KeyRight:
-		if m.oapiImportPos < len(r) {
-			m.oapiImportPos++
-		}
-	case msg.Code == tea.KeyHome:
-		m.oapiImportPos = 0
-	case msg.Code == tea.KeyEnd:
-		m.oapiImportPos = len(r)
-	case msg.Code == tea.KeyBackspace:
-		if m.oapiImportPos > 0 {
-			m.oapiImportInput = string(append(r[:m.oapiImportPos-1:m.oapiImportPos-1], r[m.oapiImportPos:]...))
-			m.oapiImportPos--
-		}
-	case msg.Code == tea.KeyDelete:
-		if m.oapiImportPos < len(r) {
-			m.oapiImportInput = string(append(r[:m.oapiImportPos:m.oapiImportPos], r[m.oapiImportPos+1:]...))
-		}
-	case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
-		ins := []rune(msg.Text)
-		m.oapiImportInput = string(append(append(append([]rune{}, r[:m.oapiImportPos]...), ins...), r[m.oapiImportPos:]...))
-		m.oapiImportPos += len(ins)
 	}
 	m.renderOpenAPIImportPrompt(candidates)
 	return m, nil

@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-19T00:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # Editor
@@ -966,7 +966,12 @@ the nearest match) and Replace, `tab` switching fields. `ctrl+a` runs
 `%s/find/repl/g` (replace all, the engine's "N substitutions" report), `enter`
 runs the `gc` variant and hands over to the y/n/a/q/l confirm flow — exactly
 replace-current / skip / all with one undo unit — and `esc` cancels with
-nothing mutated, restoring cursor and viewport. The delimiter is picked to
+nothing mutated, restoring cursor and viewport. Both fields are ordinary
+single-line inputs (`ui.EditKey`, #2002 — they used to be append-only
+strings): each keeps its own cursor across a `tab` switch, word motions and
+the `opt`/`cmd` kills work, a paste lands at the cursor, and `ctrl+u` still
+clears the active field. A mid-field edit re-runs the incremental preview
+like typing at the end always did. The delimiter is picked to
 avoid both fields, so slashes need no escaping; the panel (like the confirm
 prompt) counts as *capturing*, so global plain keys (`tab` pane cycle) never
 steal its input. The pattern follows the search-layer convention — literal by

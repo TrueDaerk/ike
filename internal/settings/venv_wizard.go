@@ -107,6 +107,18 @@ func (w *venvWizard) Title() string {
 // step, not abort-everything) and the path step is a text input.
 func (w *venvWizard) Capturing() bool { return true }
 
+// Paste inserts into the path input at its cursor (#2002) and refreshes the
+// completion candidates; the other steps are pickers with nothing to paste
+// into.
+func (w *venvWizard) Paste(text string) bool {
+	if w.step != wStepPath || !w.path.Paste(text) {
+		return false
+	}
+	w.suggest.refresh(w.path.text)
+	w.refreshPathNote()
+	return true
+}
+
 // Buttons implements SubPanel.
 func (w *venvWizard) Buttons() []Button {
 	back := Button{Label: "Back", Do: func() tea.Cmd { w.back(); return nil }}

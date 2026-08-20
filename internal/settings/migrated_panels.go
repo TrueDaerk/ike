@@ -224,6 +224,16 @@ func (i *keymapImport) Update(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// Paste inserts into the path input at its cursor (#2002) and refreshes the
+// completion candidates, exactly like a typed rune does.
+func (i *keymapImport) Paste(text string) bool {
+	if !i.path.Paste(text) {
+		return false
+	}
+	i.suggest.refresh(i.path.text)
+	return true
+}
+
 func (i *keymapImport) commit() tea.Cmd {
 	i.host.Pop()
 	return i.page.commitImportPath(i.path.text)
@@ -300,6 +310,9 @@ func (f *lspOverrideForm) Update(key tea.KeyPressMsg) tea.Cmd {
 	f.input.Handle(key)
 	return nil
 }
+
+// Paste inserts into the override input at its cursor (#2002).
+func (f *lspOverrideForm) Paste(text string) bool { return f.input.Paste(text) }
 
 func (f *lspOverrideForm) commit() tea.Cmd {
 	if f.kind == lspEditSettings {
@@ -493,6 +506,16 @@ func (f *debugMapForm) validate() string {
 		}
 	}
 	return ""
+}
+
+// Paste inserts into the focused field at its cursor (#2002).
+func (f *debugMapForm) Paste(text string) bool {
+	tf := newTextFieldAt(f.form[f.field], f.cur)
+	if !tf.Paste(text) {
+		return false
+	}
+	f.form[f.field], f.cur = tf.text, tf.cur
+	return true
 }
 
 func (f *debugMapForm) save() tea.Cmd {

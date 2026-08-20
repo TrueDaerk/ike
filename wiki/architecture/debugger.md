@@ -4,7 +4,7 @@ title: Debugger
 description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit (with conditions, hit counts and logpoints), paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; frames/variables panel with watch expressions, inline variable values in the editor, a real debuggee terminal pane; Python via debugpy, Go via delve (dlv dap over a socket), PHP via the in-process Xdebug/DBGp bridge.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, dbgp, xdebug, delve, run, breakpoints, watches]
-timestamp: 2026-08-17T12:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # Debugger (0350)
@@ -51,6 +51,11 @@ LogMessage}` per breakpoint (`SetMeta`/`MetaAt`; `EnabledSpecs` is what
 adapters receive). Persistence adds a backward-compatible `"meta"` field to
 `.ike/breakpoints.json`; `AdjustEdit` shifts refinements with their line like
 the disabled flag, and removing a breakpoint drops them.
+
+In the Breakpoints tool window `c`, `n` and `l` open a one-line editor
+prefilled with the current value; it shares the same input helpers as the
+variables editor (`ui.EditKey`, #2002), so word motions, the `opt`/`cmd`
+kills and `cmd+v` all work there too.
 
 On the wire, `dap.SourceBreakpoint` carries `condition`/`hitCondition`/
 `logMessage`, and **`Session.SetBreakpoints` strips fields the adapter did
@@ -489,8 +494,10 @@ proportionally on panel resize, session-local like scroll state.
   selects normally, and a wheel while editing scrolls without moving the
   selection (which would re-anchor the editor onto a different row).
 - **Editing values** (#627): `e` on a variable row opens an inline line editor
-  (prefilled with the current value); typing/backspace/←→/home/end edit it,
-  `enter` commits and `esc` cancels. Commit emits `SetVarMsg{Ref, Name, Value}`;
+  (prefilled with the current value); it is a shared single-line input
+  (`ui.EditKey`, #2002 — word motions, the `opt`/`cmd` kills, rune-safe
+  backspace, and `cmd+v` routed to it while it is open), `enter` commits and
+  `esc` cancels. Commit emits `SetVarMsg{Ref, Name, Value}`;
   the app calls `Session.SetVariable` (DAP `setVariable`, targeting the row's
   *containing* `variablesReference`) then refetches that reference so the panel
   shows the adapter's new value. The affordance is gated on the adapter's

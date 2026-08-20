@@ -206,12 +206,13 @@ func (b *boolEditor) View(w, h int) []string {
 // enumEditor is the filterable option list. The current value is marked ●;
 // typing narrows the list instead of scrolling a long one (18 themes).
 type enumEditor struct {
-	navRows // last rendered height, the pgup/pgdn page (#1666)
-	m       *Model
-	e       Entry
-	idx     int
-	filter  string
-	off     int
+	navRows   // last rendered height, the pgup/pgdn page (#1666)
+	m         *Model
+	e         Entry
+	idx       int
+	filter    string
+	filterCur int // rune cursor inside filter (#2002)
+	off       int
 }
 
 func newEnumEditor(m *Model, e Entry) *enumEditor {
@@ -246,12 +247,23 @@ func (n *enumEditor) Value() any {
 func (n *enumEditor) Capturing() bool { return n.filter != "" }
 func (n *enumEditor) Dirty() bool     { return n.Value() != n.m.value(n.e.Key) }
 
+// Paste inserts a pasted block into the type-to-filter line at its cursor
+// (#2002).
+func (n *enumEditor) Paste(text string) bool {
+	if !filterPaste(text, &n.filter, &n.filterCur) {
+		return false
+	}
+	n.idx, n.off = 0, 0
+	return true
+}
+
 func (n *enumEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	opts := n.matches()
 	switch key.String() {
 	case "esc":
 		if n.filter != "" {
-			n.filter, n.idx = "", optionIndex(n.e, n.m.value(n.e.Key))
+			n.filter, n.filterCur = "", 0
+			n.idx = optionIndex(n.e, n.m.value(n.e.Key))
 			return nil
 		}
 		n.m.leaveEditor()
@@ -259,13 +271,6 @@ func (n *enumEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	case "enter":
 		if n.idx >= 0 && n.idx < len(opts) {
 			return n.m.writeValue(n.e, opts[n.idx])
-		}
-		return nil
-	case "backspace":
-		if n.filter != "" {
-			r := []rune(n.filter)
-			n.filter = string(r[:len(r)-1])
-			n.idx = clamp(n.idx, 0, len(n.matches())-1)
 		}
 		return nil
 	}
@@ -277,10 +282,18 @@ func (n *enumEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 		listNav(key.String(), &n.idx, len(opts), n.navPageSize())
 		return nil
 	}
-	if key.Text != "" && key.Text != " " {
-		n.filter += key.Text
+	if key.Text == " " {
+		// Space stays inert: no option name needs it and it would silently
+		// empty the list.
+		return nil
+	}
+	// Everything else is shared line editing (#2002).
+	if _, changed := filterKey(key, &n.filter, &n.filterCur); changed {
 		n.idx = 0
 		n.off = 0
+		if n.filter != "" {
+			n.idx = clamp(n.idx, 0, len(n.matches())-1)
+		}
 	}
 	return nil
 }
@@ -314,7 +327,7 @@ func (n *enumEditor) View(w, h int) []string {
 
 	head := strconv.Itoa(len(n.e.Options)) + " options · type to filter"
 	if n.filter != "" {
-		head = "⌕ " + n.filter + "▌ · " + strconv.Itoa(len(opts)) + " of " + strconv.Itoa(len(n.e.Options))
+		head = "⌕ " + filterView(n.filter, n.filterCur) + " · " + strconv.Itoa(len(opts)) + " of " + strconv.Itoa(len(n.e.Options))
 	}
 	out := []string{clip.Render(dim.Render(" " + head))}
 
