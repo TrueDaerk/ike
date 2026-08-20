@@ -229,6 +229,58 @@ Re-running the import regenerates the same file byte for byte, so updating a
 spec produces a clean diff. A `.http` file the importer did **not** write is
 never overwritten — it stops with an error instead.
 
+## Starting from a curl command
+
+A request that reaches you as a curl command — the browser devtools' **Copy as
+cURL**, an API doc, a line out of your shell history — becomes a request block
+without retyping. Copy the command, then run **Import curl Command…**
+(`http.importCurl`) with the `.http` file open: the prompt is already filled
+with the command from your clipboard, and ++enter++ appends the block to the
+end of the file and puts the cursor on it, ready to run.
+
+```
+curl 'https://api.example.com/v1/things?page=2' \
+  -X POST \
+  -H 'accept: application/json' \
+  -H 'content-type: application/json' \
+  --data-raw '{"name":"thing"}'
+```
+
+becomes
+
+```http
+### POST /v1/things
+POST https://api.example.com/v1/things?page=2
+accept: application/json
+content-type: application/json
+
+{"name":"thing"}
+```
+
+Understood: `-X`, the URL (and `--url`), `-H`, `-d` / `--data*` (including
+`--data-urlencode`, and `-d @file` as a `< file` body), `--json`, `-F` forms
+(files, `;type=`, `;filename=`), `-u` basic auth, `--oauth2-bearer`, `-A`,
+`-e`, `-b`, `--compressed`, `-G` and `-I`. Anything else — `-L`, `-k`, `-s`,
+`--retry`, an output file, a second URL — is **named in the notification**
+rather than quietly dropped, so you can decide whether it mattered.
+
+## Copying a request out as curl
+
+The way back is **Copy HTTP Request as curl** (`http.copyAsCurl`): put the
+cursor in a block and the clipboard gets a runnable curl command for it, with
+every `{{variable}}` already substituted — the same values a real dispatch
+would send. Basic auth comes back as `-u`, a multipart body as `-F` parts, a
+`< file` body as `--data-binary @…` with the path made relative to where you
+run it.
+
+!!! warning "It carries your secrets"
+    Because the values are substituted, a copied command contains the token or
+    password the request would send. That is what makes it runnable — just
+    take care where you paste it.
+
+If a variable cannot be resolved, nothing is copied and the notification says
+which one is missing (and which environment you may not have picked yet).
+
 ## Running one
 
 Put the cursor anywhere in a request block and press ++cmd+enter++
@@ -402,6 +454,8 @@ once and the entry after that is re-sendable.
 | Run HTTP Request | `http.run` | ++cmd+enter++, ++ctrl+f9++ |
 | Cancel Running HTTP Request | `http.cancel` | — |
 | Import OpenAPI Spec… | `http.importOpenAPI` | — |
+| Import curl Command… | `http.importCurl` | — |
+| Copy HTTP Request as curl | `http.copyAsCurl` | — |
 | Select HTTP Environment | `http.selectEnvironment` | — |
 | Copy HTTP Response Body | `http.copyBody` | — |
 | Copy HTTP Response Headers | `http.copyHeaders` | — |

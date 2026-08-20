@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, values captured out of responses for request chaining, OpenAPI 3.x import, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-20T12:00:00Z
+timestamp: 2026-08-20T18:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -17,7 +17,10 @@ history (#1251) — the full epic — are implemented, and each stored response
 keeps the request that produced it so it can be sent again verbatim (#1832).
 Request files need not be written by hand: `http.importOpenAPI` scaffolds one
 from an OpenAPI 3.x document (#1939, see
-[importing an OpenAPI spec](#importing-an-openapi-spec-internalopenapi-1939)).
+[importing an OpenAPI spec](#importing-an-openapi-spec-internalopenapi-1939)),
+and `http.importCurl` / `http.copyAsCurl` convert single requests to and from
+curl commands (#1994, see
+[curl import and export](#curl-import-and-export-internalhttpfilecurlgo-1994)).
 
 ## File format
 
@@ -374,6 +377,80 @@ rather than unmarshalling it into a strict model, which is what makes that
 tolerance possible; `gopkg.in/yaml.v3` is the only dependency it adds, since a
 validating OpenAPI library would reject wholesale exactly the documents this
 command has to generate *something* from.
+
+## curl import and export (`internal/httpfile/curl.go`, #1994)
+
+Requests arrive as curl commands (devtools' "Copy as cURL", API docs, shell
+history) and leave as curl commands (handing one to a colleague, running it on
+a server). Both directions are one conversion each, and they are inverses of
+one another wherever curl has its own spelling for something a request block
+writes as a header.
+
+**Import** — `http.importCurl` ("Import curl Command…", palette) opens a
+one-line shell prompt, **prefilled from the clipboard** when that already
+holds a curl command (`httpfile.IsCurlCommand`), with the wrapped
+backslash-continuation lines folded onto the single input line. Enter parses
+the command and *appends* the equivalent block to the focused `.http` file —
+appended, never inserted at the caret, which could split the block the caret
+sits in — then puts the caret on the new request line. The block is named
+`METHOD /path` (a duplicate gains a numeric suffix, since the response history
+keys on the name). A command that is not curl, names no URL or carries an
+unterminated quote is refused with a message and leaves the buffer untouched.
+The splice runs through the editor's paste path, so the command asks for
+normal mode: mid-insert the block would join the open insert, in visual mode
+it would replace the selection.
+
+`ParseCurl` tokenizes with POSIX-shell rules — single quotes literal, double
+quotes with `\"`/`\\`/`\$`/`` \` `` escapes, backslash-newline continuations,
+the Windows `^` continuation — and maps:
+
+| curl | request block |
+|---|---|
+| `-X`/`--request` | the method (else `POST` when there is a payload, `GET` otherwise) |
+| the URL operand, `--url` | the request target; a bare host gains `https://` |
+| `-H`/`--header` | a header line; `Name;` is the empty-header spelling |
+| `-d`, `--data`, `--data-raw`, `--data-ascii`, `--data-binary` | the body; several are joined with `&` |
+| `--data-urlencode` | the body, content percent-encoded |
+| a lone `-d @file` | the external-body directive `< file` (#1305) |
+| `--json` | the body plus `Content-Type`/`Accept: application/json` |
+| `-F`/`--form`, `--form-string` | an inline multipart body (#1707) with a fixed boundary, `name=@path` becoming a per-part `< path` directive, `;type=`/`;filename=` becoming the part's headers |
+| `-u`/`--user` | `Authorization: Basic <base64>` |
+| `--oauth2-bearer` | `Authorization: Bearer …` |
+| `-A`, `-e`, `-b` (a value, not a cookie file) | `User-Agent`, `Referer`, `Cookie` |
+| `--compressed` | `Accept-Encoding: gzip, deflate` |
+| `-G` | the data moves into the query string, no body |
+| `-I` | `HEAD` |
+
+A payload without an explicit `Content-Type` gets curl's own default
+(`application/x-www-form-urlencoded`). Everything else — transport options
+(`-L`, `-k`, `-s`, `--retry`, `--proxy`), an output file, a second URL — is
+collected in `CurlImport.Ignored` and **named in the notification**
+(`IgnoredSummary`, sorted, capped at eight with a `+n more` tail). Nothing is
+dropped in silence, which is the whole point of the list.
+
+**Export** — `http.copyAsCurl` ("Copy HTTP Request as curl", palette) takes
+the block under the caret, resolves it through the same variable chain a
+dispatch uses (in-file `@name`, the selected environment, captured values, the
+process environment), and writes a runnable command to the clipboard. So the
+command carries the **substituted** values — including credentials, which is
+why it is an explicit command and not something the editor offers on its own.
+An unresolved placeholder aborts with the same message a dispatch gives (plus
+the "no environment selected" hint), and the clipboard is left alone.
+
+`ExportCurl` inverts the mapping: an `Authorization: Basic` header that
+decodes to a `user:password` pair becomes `-u`, an inline multipart body
+becomes one `-F` per part (its `Content-Type` header dropped, since curl
+generates its own boundary), an external body becomes `--data-binary @path`
+with the path rebased onto the `.http` file's directory (curl resolves it
+against the working directory, the request file does not), anything else
+becomes `--data-raw`. Values are single-quoted unless they are plain enough
+for a shell to pass through. A body that merely *claims* to be multipart but
+does not follow its declared boundary is exported as raw data rather than
+guessed at.
+
+The conversions round-trip: importing a command and exporting it again yields
+the same request, flag order and quoting following the block rather than the
+original line.
 
 ## Dispatch (`internal/httpclient`)
 

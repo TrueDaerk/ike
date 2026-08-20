@@ -1,5 +1,35 @@
 # Log
 
+## 2026-08-20 (curl import/export for .http files, #1994)
+
+- **Converter** (`internal/httpfile/curl.go`, new): `ParseCurl` turns a curl
+  command line into a request block — POSIX-shell tokenizing (single/double
+  quotes, backslash and `^` continuations), `-X`, the URL operand and
+  `--url`, `-H` (including the `Name;` empty-header spelling), `-d` /
+  `--data*` / `--data-urlencode` (a lone `-d @file` becoming a `< file` body,
+  #1305), `--json`, `-F`/`--form-string` into an inline multipart body
+  (#1707, fixed boundary, `;type=`/`;filename=` and file parts as per-part
+  `< path` directives), `-u` into `Authorization: Basic`,
+  `--oauth2-bearer`, `-A`/`-e`/`-b`, `--compressed`, `-G` and `-I`.
+  Everything else lands in `CurlImport.Ignored` (`IgnoredSummary`) — named,
+  never dropped silently. `ExportCurl` is the inverse: `-u` from a decodable
+  basic-auth header, `-F` parts from an inline multipart body,
+  `--data-binary @path` from an external body, `--data-raw` otherwise, with
+  shell quoting. `FormatRequest` renders a request as block text the parser
+  reads back unchanged.
+- **Commands** (`internal/app/http_curl.go`, new): `http.importCurl`
+  ("Import curl Command…") opens a one-line prompt prefilled from the
+  clipboard when it holds a curl command (`httpfile.IsCurlCommand`, wrapped
+  lines folded), appends the block named `METHOD /path` (deduplicated) to the
+  focused `.http` file and lands the caret on it; `http.copyAsCurl`
+  ("Copy HTTP Request as curl") resolves the block under the caret through
+  the dispatch variable chain (#1867/#1993) and writes a runnable command to
+  the clipboard, rebasing an external body onto the file's directory. An
+  unresolved placeholder aborts with the dispatch's own message.
+- **Docs**: `wiki/architecture/http-client.md` § curl import and export;
+  `userdocs/guides/http-client.md` §§ Starting from a curl command / Copying
+  a request out as curl; generated `userdocs/reference/commands.md`.
+
 ## 2026-08-20 (Xdebug connection doctor, #1991)
 
 - **Doctor tool window** (`internal/debugdoctor`, `internal/app/xdebug_doctor.go`):
