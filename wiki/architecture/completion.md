@@ -245,3 +245,9 @@ end-to-end should also implement `ExclusiveSource` (see above), or the generic
 indexes will merge their identifiers into its popup; one that needs a
 punctuation trigger implements `TriggerSource`. All Phase-2 sources have
 landed.
+
+Not every popup routes through the engine: the protocol is wired to *editor*
+events, so a non-editor input rolls a self-contained aid in the same look and
+keys — the [jq playground](./jq-playground.md)'s query line (#1979) is the
+precedent, with synchronous candidates (snapshot keys, gojq builtins) and its
+own popup mirroring the editor's accept/dismiss/navigation.

@@ -346,12 +346,8 @@ func TestJQPlaygroundEmptyResultActions(t *testing.T) {
 // session history, and the history survives closing the dialog.
 func TestJQPlaygroundHistory(t *testing.T) {
 	m := openJQ(t, jqApp(t, `{"a":1,"b":2}`))
-	m.jqPlay.program, m.jqPlay.pos = "", 0
-	m = typeInto(m, ".a")
-	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
-	m.jqPlay.program, m.jqPlay.pos = "", 0
-	m = typeInto(m, ".b")
-	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = runJQProgram(m, ".a")
+	m = runJQProgram(m, ".b")
 
 	// enter left the query line holding the newest entry, so the first ↑
 	// skips it (#1973) — a step that changed nothing would read as a dead key.
@@ -381,11 +377,10 @@ func TestJQPlaygroundHistory(t *testing.T) {
 // line (#1973).
 func TestJQPlaygroundHistoryKeepsDraft(t *testing.T) {
 	m := openJQ(t, jqApp(t, `{"a":1,"b":2}`))
-	m.jqPlay.program, m.jqPlay.pos = "", 0
-	m = typeInto(m, ".a")
-	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = runJQProgram(m, ".a")
 	m.jqPlay.program, m.jqPlay.pos = "", 0
 	m = typeInto(m, ".b")
+	m = dismissJQPopup(m) // ↑ must reach the history, not the popup (#1979)
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
 	if got := m.jqPlay.program; got != ".a" {
@@ -413,11 +408,10 @@ func TestJQPlaygroundHistoryKeepsDraft(t *testing.T) {
 // before it rather than re-typing what is already on the line (#1973).
 func TestJQPlaygroundHistorySkipsSeededProgram(t *testing.T) {
 	m := openJQ(t, jqApp(t, `{"a":1,"b":2}`))
-	m.jqPlay.program, m.jqPlay.pos = "", 0
-	m = typeInto(m, ".a")
-	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = runJQProgram(m, ".a")
 	m.jqPlay.program, m.jqPlay.pos = "", 0
 	m = typeInto(m, ".b")
+	m = dismissJQPopup(m) // the first esc would only dismiss the popup (#1979)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
 
 	m = openJQ(t, m)
@@ -537,6 +531,7 @@ func TestJQPlaygroundGlobalChords(t *testing.T) {
 	if m.palette.IsOpen() {
 		t.Fatal("plain typing must not dispatch global bindings")
 	}
+	m = dismissJQPopup(m) // typing opened the completion popup (#1979)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.jqPlayOpen() {
 		t.Fatal("esc must keep closing the playground")
@@ -847,10 +842,13 @@ func TestJQPlaygroundPasteFlattens(t *testing.T) {
 }
 
 // runJQProgram clears the query line, types program and records it with enter,
-// the way a user runs one.
+// the way a user runs one. Typing may have opened the completion popup
+// (#1979), which owns enter while it shows; it is dismissed first so enter
+// keeps its record-and-run meaning.
 func runJQProgram(m Model, program string) Model {
 	m.jqPlay.program, m.jqPlay.pos = "", 0
 	m = typeInto(m, program)
+	m = dismissJQPopup(m)
 	return drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 }
 
