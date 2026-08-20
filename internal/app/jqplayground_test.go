@@ -426,6 +426,57 @@ func TestJQPlaygroundInlineEnterExit(t *testing.T) {
 	}
 }
 
+// TestJQPlaygroundGlobalChords guards #1983: Global-scope chords the
+// playground doesn't claim keep working while it owns the keyboard —
+// cmd+shift+a opens Search Everywhere and cmd+e opens Recent Files, from the
+// query line and from the result buffer alike — while the playground's own
+// keys keep priority.
+func TestJQPlaygroundGlobalChords(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"name":"ike"}`))
+
+	m = drainKey(m, tea.KeyPressMsg{Code: 'a', Mod: tea.ModSuper | tea.ModShift})
+	if !m.palette.IsOpen() {
+		t.Fatal("cmd+shift+a in the playground must open Search Everywhere")
+	}
+	if !m.jqPlayOpen() {
+		t.Fatal("a global chord must not close the playground")
+	}
+	m.palette.Close()
+
+	m = drainKey(m, tea.KeyPressMsg{Code: 'e', Mod: tea.ModSuper})
+	if !m.palette.IsOpen() {
+		t.Fatal("cmd+e in the playground must open Recent Files")
+	}
+	m.palette.Close()
+
+	// The same chords escape the result buffer after tab moves the focus.
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	if !m.jqPlay.bufFocus {
+		t.Fatal("tab must move the focus into the result buffer")
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: 'a', Mod: tea.ModSuper | tea.ModShift})
+	if !m.palette.IsOpen() {
+		t.Fatal("cmd+shift+a from the result buffer must open Search Everywhere")
+	}
+	m.palette.Close()
+
+	// The playground's own keys keep priority: typing still edits the query
+	// line, and esc still closes the mode.
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab}) // back to the query line
+	m.jqPlay.program, m.jqPlay.pos = "", 0
+	m = typeInto(m, ".name")
+	if m.jqPlay.program != ".name" {
+		t.Fatalf("typing must stay with the query line, got %q", m.jqPlay.program)
+	}
+	if m.palette.IsOpen() {
+		t.Fatal("plain typing must not dispatch global bindings")
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.jqPlayOpen() {
+		t.Fatal("esc must keep closing the playground")
+	}
+}
+
 // TestJQPlaygroundResultReadOnly: the result buffer refuses every mutation —
 // typing in query focus edits only the program, and edit keys in buffer
 // focus bounce off the read-only flag.
