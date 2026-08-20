@@ -72,6 +72,7 @@ import (
 	"ike/internal/overlay"
 	"ike/internal/palette"
 	"ike/internal/pane"
+	"ike/internal/perfhud"
 	"ike/internal/plugin"
 	"ike/internal/preview"
 	"ike/internal/problems"
@@ -313,6 +314,17 @@ type Model struct {
 	// file; it self-stops (no re-arm) once none does, so an idle session
 	// never pays for it.
 	followTickArmed bool
+
+	// Performance HUD (#1999, perfhud.go): the sampling tick, armed only
+	// while the HUD is on. The HUD's visibility itself lives in the
+	// perfhud collector, not here — the model is rebuilt on a project
+	// switch and the in-flight tick has to find the HUD still open.
+	// perfBox caches the rendered box (perfBoxW: the width it was laid out
+	// for): its content only changes once per sample, so composing it per
+	// frame would be exactly the kind of waste the HUD exists to find.
+	perfTickArmed bool
+	perfBox       string
+	perfBoxW      int
 
 	// Idle autosave (#731): same debouncer shape as backup, but the tick
 	// saves the quiet dirty buffers instead of snapshotting them.
@@ -3155,6 +3167,12 @@ func (m Model) Init() tea.Cmd {
 // a toast appears in the very frame its event produced. updateMsg holds the
 // actual dispatch switch.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The performance HUD's message counter (#1999). Dispatch is the natural
+	// counting point — every wake of the program passes here exactly once —
+	// and with the HUD hidden the whole hook is one atomic load.
+	if perfhud.Enabled() {
+		perfhud.Count(msg)
+	}
 	start := time.Now()
 	tm, cmd := m.updateMsg(msg)
 	if took := time.Since(start); took > slowUpdateThreshold {
@@ -3815,6 +3833,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case HeapDumpMsg:
 		// diag.heapDump (#1537): write goroutine + heap profiles.
 		return m.writeHeapDump()
+
+	case TogglePerfHUDMsg:
+		// perf.hud (ctrl+alt+p / View menu, #1999): show or hide the HUD and
+		// start or stop the measurement hooks with it.
+		return m, m.togglePerfHUD()
+
+	case perfTickMsg:
+		// One HUD measurement window closed (#1999); re-arms while open.
+		return m, m.perfTick()
+
+	case PerfSnapshotMsg:
+		// perf.snapshot (#1999): the numbers as a plain-text block, ready to
+		// paste into a bug report.
+		return m.copyPerfSnapshot()
 
 	case NewScratchMsg:
 		// scratch.new.<lang> (#351): create under the scratch store, open
@@ -9801,7 +9833,13 @@ func (m Model) render() string {
 		return "starting ike…"
 	}
 	start := time.Now()
-	defer func() { renderNanos.Store(int64(time.Since(start))) }()
+	defer func() {
+		took := time.Since(start)
+		renderNanos.Store(int64(took))
+		if perfhud.Enabled() {
+			perfhud.RecordFrame(took)
+		}
+	}()
 	body := ""
 	if m.zoomed != "" {
 		// Zoomed (#358): render only that pane; the tree survives untouched.
@@ -9887,6 +9925,11 @@ func (m Model) render() string {
 		// The floating stack composites bottom-to-top (#1237): the topmost
 		// layer is drawn last and fully readable over the lower ones.
 		result = m.floats.Composite(base, m.width, m.height)
+	}
+	if perfhud.Enabled() {
+		// The performance HUD (#1999) floats in the top-right corner above
+		// every overlay but the toasts.
+		result = m.compositePerfHUD(result)
 	}
 	result = m.compositeToasts(result)
 	// The palette wash paints the theme background/foreground under the whole
@@ -10381,11 +10424,26 @@ func paneEditorMode(inst *pane.Instance) (editor.Mode, bool) {
 	return ed.ModeName(), true
 }
 
-// renderPane renders a single leaf at its outer rectangle, resolving its key to
-// an instance for title, content, and focus state. During a move drag the source
-// pane and the hovered drop target are recolored. An unknown key (no instance)
-// renders an empty titled box rather than crashing.
+// renderPane renders a single leaf at its outer rectangle. It is the
+// performance HUD's per-pane attribution point (#1999): with the HUD on, the
+// wall-clock cost of this leaf's chrome and content is booked against its
+// registry key, which is what answers "which pane is burning CPU". With the
+// HUD off the wrapper is one atomic load — no clock read, no defer closure.
 func (m Model) renderPane(key string, r layout.Rect) string {
+	if perfhud.Enabled() {
+		start := time.Now()
+		out := m.renderPaneBox(key, r)
+		perfhud.RecordPane(key, time.Since(start))
+		return out
+	}
+	return m.renderPaneBox(key, r)
+}
+
+// renderPaneBox resolves the leaf's key to an instance for title, content, and
+// focus state. During a move drag the source pane and the hovered drop target
+// are recolored. An unknown key (no instance) renders an empty titled box
+// rather than crashing.
+func (m Model) renderPaneBox(key string, r layout.Rect) string {
 	inst := m.activeWS().Panes.Get(key)
 	// Title (chrome) is computed without touching the content, so a cached pane
 	// never calls inst.View() (#612). Content is pulled lazily inside paneBox.

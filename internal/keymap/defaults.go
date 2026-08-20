@@ -220,6 +220,11 @@ var jetbrainsRows = []row{
 	// works from a focused terminal/tool pane (multi-step sequences cannot be
 	// intercepted there — see terminalGlobalChord).
 	{"ctrl+alt+f", "view.zenMode", "Zen mode", Global, "Zen & maximize (#358)"},
+	// Performance HUD (#1999): JetBrains has no equivalent, so the chord is
+	// IKE's own — p for performance, next to the other ctrl+alt view toggles.
+	// Global so it also opens from a focused terminal or tool pane, which is
+	// exactly where an "is this pane burning CPU" question comes up.
+	{"ctrl+alt+p", "perf.hud", "Performance HUD", Global, "Performance HUD (#1999)"},
 	{"cmd+shift+v", "editor.pasteFromHistory", "Paste from history", Editor, "Paste history (#57)"},
 	// Multi-caret (#145): JetBrains' ctrl+g occurrence walk plus a deliverable
 	// select-all-occurrences chord (the JetBrains original needs alt).

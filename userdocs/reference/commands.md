@@ -135,6 +135,8 @@ bring their own.
 | Split Right | `pane.splitRight` | `cmd+k right` | — | everywhere |
 | Split Up | `pane.splitUp` | `cmd+k up` | — | everywhere |
 | Switch Pane Focus | `pane.switcher` | `ctrl+tab` | — | everywhere |
+| Performance HUD | `perf.hud` | `ctrl+alt+p` | — | everywhere |
+| Copy Performance Snapshot | `perf.snapshot` | — | — | everywhere |
 | Problems | `problems.toggle` | `cmd+8` | — | everywhere |
 | Find in Path | `project.findInPath` | `cmd+shift+f` | — | everywhere |
 | Go to File | `project.goToFile` | `cmd+shift+o` | — | everywhere |

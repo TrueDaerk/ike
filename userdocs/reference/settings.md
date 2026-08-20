@@ -239,6 +239,13 @@ secrets — are documented together, with screenshots, in
 | PHP listen port | `debug.php.port` | integer (1–65535) | `9003` | user | DBGp port debug.listen binds for incoming Xdebug connections (Xdebug's default is 9003) |
 | PHP hostname filter | `debug.php.hostname` | string | *(empty)* | project | Only accept listen-mode debug sessions whose request HTTP_HOST matches (port suffix ignored); empty accepts all — per project |
 
+### Performance HUD
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| HUD refresh interval | `perf.hud_interval_ms` | integer (100–10000) | `1000` | user | Milliseconds between HUD samples. This is also the wake rate the open HUD costs the program, so a very short interval shows up in the numbers it reports; the HUD counts its own tick either way |
+| HUD history span | `perf.hud_history_seconds` | integer (5–600) | `60` | user | Seconds of rolling history behind the HUD's sparklines and the min/avg/max block the snapshot copies, so a spike stays readable after it passed |
+
 ### Notifications
 
 | Setting | Key | Type | Default | Scope | Description |

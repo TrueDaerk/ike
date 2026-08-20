@@ -25,6 +25,7 @@ var noCounterpart = map[string]string{
 	"nav.pins":              "PinActiveEditorTab is a per-tab toggle, not a pin list",
 	"notifications.history": "JetBrains notifications tool window has no default shortcut action",
 	"palette.keymapHelp":    "no JetBrains equivalent",
+	"perf.hud":              "IKE-only concept (#1999); JetBrains profiles from the IDE's own tooling, not a keymap action",
 	"pane.splitDown":        "JetBrains has only the two editor splits, mapped to editor.splitView*",
 	"pane.splitLeft":        "JetBrains has only the two editor splits, mapped to editor.splitView*",
 	"pane.splitRight":       "JetBrains has only the two editor splits, mapped to editor.splitView*",

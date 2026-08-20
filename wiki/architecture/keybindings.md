@@ -688,6 +688,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `pane.splitRight` | `cmd+k right` | fragile | `palette` | live via palette |
 | `pane.splitUp` | `cmd+k up` | fragile | `palette` | live via palette |
 | `pane.switcher` | `ctrl+tab` | fragile | `tab key` | live via tab key |
+| `perf.hud` | `ctrl+alt+p` | fragile | `palette / View menu` | live via palette / View menu |
 | `problems.toggle` | `cmd+8` | fragile | `palette` | live via palette |
 | `project.close` | `cmd+shift+w` | fragile | `palette / File menu` | live via palette / File menu |
 | `project.findInPath` | `cmd+shift+f` | fragile | `palette` | live via palette |
@@ -710,6 +711,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `todo.list` | `cmd+6` | fragile | `palette` | live via palette |
 | `vcs.panel` | `cmd+9` | fragile | `palette` | live via palette |
 | `vcs.revertFile` | `cmd+alt+z` | fragile | `palette` | live via palette |
+| `view.toggleFollow` | `alt+shift+f` | fragile | `palette` | live via palette |
 | `view.zenMode` | `ctrl+alt+f` | fragile | `palette / View menu` | live via palette / View menu |
 | `window.hideAllTools` | `cmd+shift+f12` | fragile | `palette` | live via palette |
 | `window.restoreLayout` | `shift+f12` | delivered | `—` | live |

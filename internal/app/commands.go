@@ -510,7 +510,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			paneCommand("csv.columnProfile", "CSV: Column Profile", "editor", CSVColumnProfileMsg{}),
 			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
 			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),
-		), append(append(append(scratchCommands(), toolCommands()...), memoryCommands()...), esCommands()...)...),
+		), append(append(append(append(scratchCommands(), toolCommands()...), memoryCommands()...), perfCommands()...), esCommands()...)...),
 	}
 }
 

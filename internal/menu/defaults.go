@@ -35,6 +35,8 @@ func Defaults() []Menu {
 			{Title: "Maximize Pane", Command: "pane.maximize"},
 			{Title: "Zen Mode", Command: "view.zenMode"},
 			{Title: "Hide All Tool Windows", Command: "window.hideAllTools"},
+			{Title: "Performance HUD", Command: "perf.hud"},
+			{Title: "Copy Performance Snapshot", Command: "perf.snapshot"},
 		}},
 		{Title: "Navigate", Items: []Item{
 			{Title: "Go to File", Command: "project.goToFile"},
