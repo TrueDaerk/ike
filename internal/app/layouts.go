@@ -262,7 +262,7 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 			return k, paneIdentity{Kind: "tool", Tool: tool}, true
 		}
 		return k, paneIdentity{Kind: "terminal"}, true
-	case pane.KindEditor, pane.KindMarkdown, pane.KindImage, pane.KindDiff, pane.KindMerge, pane.KindArchive, pane.KindData, pane.KindES:
+	case pane.KindEditor, pane.KindMarkdown, pane.KindImage, pane.KindDiff, pane.KindMerge, pane.KindArchive, pane.KindData, pane.KindES, pane.KindRemote:
 		// Content panes are anonymous editor slots: what files they held is
 		// session state, only the space they occupied is layout. Tool sessions
 		// hosted as tabs (#836) are the exception, like in saveLayout: a host
@@ -427,7 +427,7 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 			continue
 		}
 		switch inst.Kind() {
-		case pane.KindEditor, pane.KindMarkdown, pane.KindImage, pane.KindDiff, pane.KindMerge, pane.KindArchive, pane.KindData, pane.KindES:
+		case pane.KindEditor, pane.KindMarkdown, pane.KindImage, pane.KindDiff, pane.KindMerge, pane.KindArchive, pane.KindData, pane.KindES, pane.KindRemote:
 			if toolTabHost(inst) {
 				// A pure tool-tab host queues for "tools" slots (#1989): an
 				// editor slot must never re-slot the tools pane into the
@@ -573,7 +573,7 @@ func (m *Model) graftImplicit(newTree, liveClone layout.Node, st *applyState) la
 		}
 		switch inst.Kind() {
 		case pane.KindEditor, pane.KindMarkdown, pane.KindImage, pane.KindDiff,
-			pane.KindMerge, pane.KindArchive, pane.KindData, pane.KindES, pane.KindTerminal:
+			pane.KindMerge, pane.KindArchive, pane.KindData, pane.KindES, pane.KindRemote, pane.KindTerminal:
 			return true
 		}
 		return false
@@ -983,7 +983,7 @@ func identityMatches(id paneIdentity, inst *pane.Instance) bool {
 		}
 		switch inst.Kind() {
 		case pane.KindMarkdown, pane.KindImage, pane.KindDiff, pane.KindMerge,
-			pane.KindArchive, pane.KindData, pane.KindES:
+			pane.KindArchive, pane.KindData, pane.KindES, pane.KindRemote:
 			return true
 		}
 		return inst.Kind() == pane.KindEditor && !toolTabHost(inst)

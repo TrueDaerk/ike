@@ -436,6 +436,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),
 			appCommand("terminal.ssh", "SSH Host…", SSHPickerMsg{}),
+			appCommand("remote.browse", "Browse SSH Host (SFTP)…", RemoteBrowseMsg{}),
 			appCommand("run.file", "Run File", RunFileMsg{}),
 			appCommand("run.rerun", "Rerun Last", RunRerunMsg{}),
 			appCommand("run.testAtCursor", "Run Test at Cursor", RunTestAtCursorMsg{}),

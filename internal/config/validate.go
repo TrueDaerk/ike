@@ -306,6 +306,17 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "perf.hud_history_seconds", Message: fmt.Sprintf("history %d out of range, using 600", c.Perf.HUDHistorySeconds)})
 		c.Perf.HUDHistorySeconds = 600
 	}
+	// Remote browser download cap (#1997): the lower bound keeps the browser
+	// able to open anything at all, the upper one keeps a typo from unlocking
+	// terabyte downloads.
+	if c.Remote.MaxFetchMB < 1 {
+		diags = append(diags, Diagnostic{Field: "remote.max_fetch_mb", Message: fmt.Sprintf("cap %d out of range, using 1", c.Remote.MaxFetchMB)})
+		c.Remote.MaxFetchMB = 1
+	}
+	if c.Remote.MaxFetchMB > 4096 {
+		diags = append(diags, Diagnostic{Field: "remote.max_fetch_mb", Message: fmt.Sprintf("cap %d out of range, using 4096", c.Remote.MaxFetchMB)})
+		c.Remote.MaxFetchMB = 4096
+	}
 	// [[tools.custom]] placement (#1889) names the tool's home dock edge;
 	// anything else (including pre-#1588 legacy values) degrades to the
 	// adaptive auxZone heuristic with a warning.
