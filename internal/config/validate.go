@@ -168,6 +168,9 @@ func validate(c *Config) []Diagnostic {
 	clampMin("editor.sticky_scroll_depth", &c.Editor.StickyScrollDepth, 1)
 	clampMin("explorer.tree_indent", &c.Explorer.TreeIndent, 0)
 	clampMin("project.max_history", &c.Project.MaxHistory, 0)
+	// The external-change feed's cap (#2000). 0 is the legitimate "off"
+	// value, so only a negative count is a mistake worth reporting.
+	clampMin("files.change_feed_limit", &c.Files.ChangeFeedLimit, 0)
 
 	// explorer.exclude entries are filepath.Match glob patterns over entry
 	// base names (#1139): a malformed pattern (e.g. an unclosed "[") is

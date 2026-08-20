@@ -28,6 +28,7 @@ import (
 	"ike/internal/bookmarks"
 	"ike/internal/breakpanel"
 	"ike/internal/callhier"
+	"ike/internal/changefeed"
 	"ike/internal/clipboard"
 	"ike/internal/complete"
 	"ike/internal/complete/emmet"
@@ -636,6 +637,19 @@ type Model struct {
 	lhDiff      diff.Result          // selected snapshot vs lhCur, for the inline diff pane
 	lhErr       string               // selection's snapshot load error, shown in place of the diff
 
+	// feed is the session-scoped record of files changed by something other
+	// than IKE (#2000) — a coding agent, a git checkout, a formatter run in a
+	// tool pane. Recorded off every watcher file event (own saves already
+	// suppressed), reviewed in the change-feed panel; the cf* fields are that
+	// panel's open state, which is why the feed itself survives pane switches.
+	feed      *changefeed.Feed
+	cfEntries []changefeed.Entry // the open panel's snapshot of the feed
+	cfSel     int                // change-feed panel selection
+	cfPicker  bool               // change-feed panel owns the modal shell
+	cfDiff    diff.Result        // selected entry's before vs now, for the mini-diff
+	cfErr     string             // why the selection has no diff, shown in its place
+	cfRevert  string             // file awaiting the revert confirmation
+
 	tl       timelineState // per-file Timeline data (#1916)
 	tlPicker bool          // the Timeline owns the modal shell
 
@@ -1002,6 +1016,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		winSizesAll:    winSizesAll,
 		pins:           loadPins(),                          // pinned file slots (#788)
 		lhStore:        localhistory.New(localHistoryDir()), // local history (#1023)
+		feed:           changefeed.New(),                    // external-change feed (#2000)
 		completeEngine: engine,
 		ws:             wsMgr,
 		recentEditor:   edKey,
@@ -1059,6 +1074,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	applySecretMaskingKeys()                        // custom secret key patterns (#1712)
 	m.palette.SetMaxWidth(popupMaxWidth())
 	m.watcher = watch.New(m.host.Send)
+	// The change feed hides exactly what the watcher would never have walked
+	// into (#2000): dot-directories and vendored noise below the watch root.
+	m.feed.Ignore = feedIgnore(m.watcher)
 	m.backupSvc = backupService()
 	m.backupIv = backupInterval(cfg)
 	m.backupDeb = backup.NewDebouncer(m.backupIv)
@@ -5366,6 +5384,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// file.localHistory (#1023): list the focused file's snapshots.
 		m.openLocalHistoryPicker()
 		return m, nil
+	case ChangeFeedMsg:
+		// watch.changeFeed (#2000): the session's external file changes with
+		// a mini-diff of the selected one.
+		m.openChangeFeed()
+		return m, nil
+
 	case TimelineMsg:
 		// file.timeline (#1916): snapshots and commits on one axis; the git
 		// half loads incrementally behind the already-shown snapshots. The
@@ -5651,6 +5675,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				msg.Kind = watch.FileChanged
 			}
 		}
+		// Record it in the change feed (#2000) *before* anything routes the
+		// event onward: the pre-change content is read off the open buffer,
+		// which the auto-reload below is about to overwrite.
+		m.recordChangeFeed(msg)
 		// Announce the (kind-fixed) file event to hook subscribers (#1144):
 		// the LSP bridge forwards it to the servers as
 		// workspace/didChangeWatchedFiles, so Intelephense re-indexes
@@ -6069,6 +6097,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The per-file Timeline (#1916) owns the keyboard the same way.
 		if m.timelineOpen() {
 			return m.updateTimeline(msg)
+		}
+		// The external-change feed (#2000) owns the keyboard the same way.
+		if m.changeFeedOpen() {
+			return m.updateChangeFeed(msg)
+		}
+		// Its revert confirmation (#2000): enter / esc answer it.
+		if m.changeFeedRevertOpen() {
+			return m.updateChangeFeedRevert(msg)
 		}
 		// The range-history picker (#1430) owns the keyboard the same way.
 		if m.historyPickerOpen() {

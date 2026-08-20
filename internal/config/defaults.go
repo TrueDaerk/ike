@@ -4,6 +4,7 @@ import (
 	"os/exec"
 	"sync"
 
+	"ike/internal/changefeed"
 	"ike/internal/largefile"
 )
 
@@ -208,7 +209,10 @@ func defaults() *Config {
 			LargeFileKB:    largefile.DefaultMaxKB,
 			LargeFileLines: largefile.DefaultMaxLines,
 			PersistentUndo: true,
-			Associations:   map[string]string{},
+			// Enough to review a long agent run without unbounded growth
+			// (#2000); past it the oldest rows drop out.
+			ChangeFeedLimit: changefeed.DefaultLimit,
+			Associations:    map[string]string{},
 		},
 		UI: UI{
 			MenuBar:       true,

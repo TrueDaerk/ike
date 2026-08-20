@@ -253,6 +253,7 @@ func (c *Config) Flat() map[string]string {
 	put("files.large_file_kb", c.Files.LargeFileKB)
 	put("files.large_file_lines", c.Files.LargeFileLines)
 	put("files.persistent_undo", c.Files.PersistentUndo)
+	put("files.change_feed_limit", c.Files.ChangeFeedLimit)
 	// User file-type associations (#1365); pattern keys contain dots and
 	// globs, so files.associations is a slot map on the write-back side.
 	for k, v := range c.Files.Associations {

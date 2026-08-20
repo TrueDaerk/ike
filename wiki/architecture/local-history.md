@@ -4,7 +4,7 @@ title: Local History
 description: Per-project file snapshots on every save, with a floating two-pane panel — snapshot list left, live inline diff against the current buffer right — plus restore through the undoable edit path and the per-file Timeline merging those snapshots with the file's git history
 resource: internal/localhistory/localhistory.go
 tags: [history, snapshots, diff, restore, persistence, timeline, git]
-timestamp: 2026-08-17T00:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 
 # Local History
@@ -129,3 +129,11 @@ via the shared `openDiffTexts` (single-slot reuse, otherwise a titled split).
 
 The filter the view **opens** with is the `history.timeline_source` setting
 (Settings → Timeline): `both` (default), `local` or `git`.
+
+## Third consumer: the external-change feed
+
+The [external-change feed](/architecture/change-feed.md) (#2000) reads the
+store too: when a coding agent rewrites a file IKE does not have open, the
+newest snapshot is the only record of what the file held before that write, so
+it supplies both the feed's mini-diff and its revert. The revert itself goes
+through `restoreLocalHistory` — the same undoable edit path described above.
