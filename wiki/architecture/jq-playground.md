@@ -4,7 +4,7 @@ title: jq Playground
 description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and response pane, and a completion popup offering the snapshot's keys after a dot and gojq's builtins on an identifier.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, jq, tools, inline, editor, http, completion]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-08-20T13:00:00Z
 ---
 
 # jq Playground
@@ -27,6 +27,7 @@ so leaving restores it bit-identically — editability included.
 ```
 internal/jqplay/
   jqplay.go      evaluation core: Parse, Run, Evaluate, Result, History — pure, no UI state
+  raw.go         EvaluateRaw: the `jq -r`-shaped single-value form (used by .http captures, #1993)
   highlight.go   the query line's jq scanner: Tokens/KindAt, single pass, never fails
   complete.go    the typing aid: Complete — snapshot keys at a path, gojq's builtin list
 internal/app/
@@ -38,6 +39,13 @@ internal/app/
 The split is the usual one: everything interesting — parsing, running, error
 and cap handling, colorization, history — is pure and testable in
 `internal/jqplay`; `internal/app` owns the terminal.
+
+The package is also the one place gojq is spoken to. Besides the playground,
+the `.http` client's `# @capture name = <jq-expr>` directive (#1993, see
+[HTTP client](/architecture/http-client.md)) evaluates through
+`jqplay.EvaluateRaw` and colours its expression with `jqplay.Tokens` — the
+same engine and the same scanner, so a program that works in the playground
+works in a request file.
 
 ## The inline mount
 

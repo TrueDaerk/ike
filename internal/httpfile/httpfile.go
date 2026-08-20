@@ -61,6 +61,10 @@ type Request struct {
 	// BodyFileSubstitute reports the `<@ ./payload.json` spelling: the file's
 	// own placeholders are substituted before it is sent.
 	BodyFileSubstitute bool
+	// Captures are the request's `# @capture name = <jq-expr>` directives
+	// (#1993), in file order. They are evaluated against the response after
+	// dispatch; the parser only collects them.
+	Captures []Capture
 	// BodyStart/BodyEnd delimit the body's lines (1-based, inclusive), with
 	// the surrounding blank lines excluded — 0 when the request has no body.
 	// Consumers that need the body *in* the file rather than as a string use
@@ -200,9 +204,21 @@ func VarDefinition(line string) (name, value string, ok bool) {
 // separator (-1 when the block opens the file). Blocks holding only
 // blanks/comments (or only variable definitions) are skipped silently.
 func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
+	// Capture directives (#1993) are comment lines, so they are picked up
+	// wherever a comment is skipped below — before the request line, between
+	// folded query lines, in the header block. They belong to the block's
+	// request, which does not exist yet at the first of those places.
+	var captures []Capture
+	noteCapture := func(idx int) {
+		if c, ok := captureAt(lines[idx], idx); ok {
+			captures = append(captures, c)
+		}
+	}
+
 	i := start
 	for i < end {
 		if strings.TrimSpace(lines[i]) == "" || isComment(lines[i]) {
+			noteCapture(i)
 			i++
 			continue
 		}
@@ -259,6 +275,7 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	var query []string
 	for i < end {
 		if isComment(lines[i]) {
+			noteCapture(i)
 			i++
 			continue
 		}
@@ -274,6 +291,7 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	// Header field lines until the empty line that starts the body.
 	for i < end && strings.TrimSpace(lines[i]) != "" {
 		if isComment(lines[i]) {
+			noteCapture(i)
 			i++
 			continue
 		}
@@ -307,6 +325,7 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 		}
 	}
 
+	req.Captures = captures
 	f.Requests = append(f.Requests, req)
 }
 

@@ -62,6 +62,12 @@ type Response struct {
 	RequestKey string
 	// Warnings lists non-fatal issues (e.g. ignored .curlrc options).
 	Warnings []string
+	// Captures holds the outcome of the request's `# @capture` directives
+	// (#1993), successes and failures alike — the successes feed the variable
+	// chain of later requests, the failures are reported at their directive.
+	// nil when the request declared none (and for a re-send, which repeats a
+	// snapshot rather than a parsed request).
+	Captures []CaptureResult
 	// Request is the request exactly as it went out (#1832); nil for a
 	// response restored from a history file written before the capture
 	// existed, which is what makes re-send unavailable there.
@@ -340,13 +346,19 @@ func prepareSnapshot(ctx context.Context, key string, snap *RequestSnapshot, opt
 
 // Dispatch resolves placeholders in req, applies local configuration and
 // executes it. Unresolved placeholders or transport failures return an
-// error; HTTP error statuses are regular responses.
+// error; HTTP error statuses are regular responses. The request's `# @capture`
+// directives (#1993) run over the body before the response is returned.
 func Dispatch(ctx context.Context, req *httpfile.Request, opts Options) (*Response, error) {
 	p, err := prepare(ctx, req, opts)
 	if err != nil {
 		return nil, err
 	}
-	return p.collect(req.Key())
+	resp, err := p.collect(req.Key())
+	if err != nil {
+		return nil, err
+	}
+	applyCaptures(resp, req)
+	return resp, nil
 }
 
 // collect executes the prepared request and reads the whole body — the
@@ -432,7 +444,14 @@ func DispatchStream(ctx context.Context, req *httpfile.Request, opts Options, cb
 	if err != nil {
 		return nil, err
 	}
-	return p.run(ctx, req.Key(), opts, cb)
+	resp, err := p.run(ctx, req.Key(), opts, cb)
+	if err != nil {
+		return nil, err
+	}
+	// Captures (#1993) run once the body is complete — for a stream that is
+	// when it ended, so a partial NDJSON body still yields what it holds.
+	applyCaptures(resp, req)
+	return resp, nil
 }
 
 // Resend executes a stored request snapshot again, byte for byte (#1832): the
