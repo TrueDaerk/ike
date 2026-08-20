@@ -103,8 +103,11 @@ bring their own.
 | Select HTTP Environment | `http.selectEnvironment` | — | — | everywhere |
 | Show Stored HTTP Response | `http.showResponse` | `ctrl+shift+f9` | — | everywhere |
 | GitHub Issues | `issues.toggle` | — | — | everywhere |
+| Saved jq Filters… | `json.jqFilters` | — | — | everywhere |
 | jq Playground… | `json.jqPlayground` | — | — | everywhere |
 | jq Playground at Cursor Path… | `json.jqPlaygroundAtPath` | — | — | everywhere |
+| Rename Saved jq Filter… | `json.jqRenameFilter` | — | — | everywhere |
+| Save jq Filter… | `json.jqSaveFilter` | — | — | everywhere |
 | Import JetBrains Keymap XML… | `keymap.importJetBrains` | — | — | everywhere |
 | Open Rotated Log Set (Merged Timeline) | `log.openRotatedSet` | — | — | everywhere |
 | Markdown Preview | `markdown.preview` | `cmd+alt+m` | — | everywhere |

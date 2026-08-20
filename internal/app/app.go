@@ -384,6 +384,13 @@ type Model struct {
 	jqPlay        *jqPlayState
 	jqHistory     *jqplay.History
 	jqLastProgram map[string]string
+	// jqFilters is the palette mode listing the named saved filters of both
+	// scopes (#1995), kept on the model so the insert and rename entry
+	// commands can flip its action before opening it locked; jqName is the
+	// shell prompt that names a filter on save and on rename. The libraries
+	// themselves are on disk, re-read per open — nothing to cache here.
+	jqFilters *jqFiltersMode
+	jqName    jqNamePrompt
 
 	renamePos int
 	// layoutSaveOpen marks the window.saveLayout name prompt (#1175) while the
@@ -969,6 +976,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	runConfigs := newRunConfigsMode()               // run/debug configurations picker (#1914)
 	tasksPicker := newTasksMode()                   // discovered-tasks picker (#1915)
 	sshPicker := newSSHMode()                       // ssh_config host picker (#1938)
+	jqFilters := newJQFiltersMode()                 // named saved jq filters (#1995)
 	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
 	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
@@ -1003,7 +1011,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:           help.New(reg, bindings, helpMinCol(cfg)),
 		shell:          ui.New(shellConfig(cfg)),
 		vcs:            vcsSt,
-		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, sshPicker),
+		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, sshPicker, jqFilters),
 		layoutsPicker:  layoutsPicker,
 		httpRequests:   httpRequests,
 		httpEntries:    httpEntries,
@@ -1011,6 +1019,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		runConfigs:     runConfigs,
 		tasks:          tasksPicker,
 		ssh:            sshPicker,
+		jqFilters:      jqFilters,
 		httpEnv:        loadHTTPEnv(), // selected HTTP environments (#1867)
 		refs:           refs,
 		lspStatus:      map[string]string{},
@@ -2227,7 +2236,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, ssh *sshMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, ssh *sshMode, jqFilters *jqFiltersMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -2292,7 +2301,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, ssh)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, ssh, jqFilters)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -4846,6 +4855,36 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// mode, prefilled with the caret's jq path (#1660).
 		return m, m.startJQPlayground(true)
 
+	case SaveJQFilterPromptMsg:
+		// json.jqSaveFilter (ctrl+s in the query line, palette / Tools menu,
+		// #1995): name the program on the query line and store it in the
+		// project or the global filter library.
+		m.startJQSavePrompt()
+		return m, nil
+
+	case ShowJQFiltersMsg:
+		// json.jqFilters / json.jqRenameFilter (ctrl+l in the query line,
+		// palette / Tools menu, #1995): the saved-filter picker, in its
+		// insert or its rename spelling.
+		m.openJQFilterPicker(msg.Rename)
+		return m, nil
+
+	case InsertJQFilterMsg:
+		// A picked filter goes on the query line and runs (#1995), opening
+		// the playground first when none is up.
+		return m, m.insertJQFilter(msg)
+
+	case RenameJQFilterPromptMsg:
+		// The picker's rename spelling reached an entry (#1995).
+		m.startJQRenamePrompt(msg)
+		return m, nil
+
+	case DeleteJQFilterMsg:
+		// The picker's aux action (shift+delete) on a saved filter (#1995);
+		// the picker stays open and refreshes in place.
+		m.deleteJQFilter(msg)
+		return m, nil
+
 	case jqParseDoneMsg:
 		// The input snapshot finished parsing off the event loop (#1936).
 		return m, m.finishJQParse(msg)
@@ -6160,6 +6199,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the read-only result buffer after tab. With the focus on another
 		// pane the mode stays mounted but keys route normally (#1980), so
 		// editing elsewhere works while the filtered result stays visible.
+		// The saved-filter name prompt (#1995) is checked first: it is a
+		// modal shell prompt opened *from* the playground, and the mode's
+		// pane still holds the focus while it is up.
+		if m.jqNamePromptOpen() {
+			return m.updateJQNamePrompt(msg)
+		}
 		if m.jqPlayFocused() {
 			return m.updateJQPlayground(msg)
 		}

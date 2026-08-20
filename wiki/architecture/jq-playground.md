@@ -1,10 +1,10 @@
 ---
 type: concept
 title: jq Playground
-description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and response pane, and a completion popup offering the snapshot's keys after a dot and gojq's builtins on an identifier.
+description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and response pane, a completion popup offering the snapshot's keys after a dot and gojq's builtins on an identifier, and a library of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, jq, tools, inline, editor, http, completion]
-timestamp: 2026-08-20T13:00:00Z
+timestamp: 2026-08-20T18:00:00Z
 ---
 
 # jq Playground
@@ -30,10 +30,13 @@ internal/jqplay/
   raw.go         EvaluateRaw: the `jq -r`-shaped single-value form (used by .http captures, #1993)
   highlight.go   the query line's jq scanner: Tokens/KindAt, single pass, never fails
   complete.go    the typing aid: Complete — snapshot keys at a path, gojq's builtin list
+  library.go     the named saved-filter store: Library, Filter, Scope — path-agnostic, one type for both scopes
 internal/app/
   jqplayground.go the inline mode: query header, result buffer, key routing, debounce and async eval
   jqcomplete.go   the completion popup: state, keys, rendering and compositing
-  commands.go     json.jqPlayground / json.jqPlaygroundAtPath → the two open messages
+  jqfilters.go    the filter library's UI: the two store paths, the name prompt, the palette picker
+  commands.go     json.jqPlayground / json.jqPlaygroundAtPath → the two open messages,
+                  json.jqSaveFilter / json.jqFilters / json.jqRenameFilter → the library
 ```
 
 The split is the usual one: everything interesting — parsing, running, error
@@ -276,6 +279,8 @@ above win):
 | `↑` / `↓` | walk the session program history (`↓` past the newest restores the draft) |
 | `tab` | move the keyboard into the result buffer |
 | `pgup` / `pgdn` | page the result buffer without leaving the query line |
+| `ctrl+s` | save the program as a **named filter** (`json.jqSaveFilter`) |
+| `ctrl+l` | open the **saved-filter picker** (`json.jqFilters`) |
 | `ctrl+y` | copy the **whole** result (not just the visible part) |
 | `ctrl+o` | open the result as a fresh `.json` scratch |
 | `esc` | close (recording the program in the history) |
@@ -327,7 +332,8 @@ run again over the result. That is how a multi-step jq session actually goes.
 Programs are remembered **per session, in memory only** (newest first, repeats
 moved to the front, capped at 50), like the regex tester's patterns: a jq
 program under construction is scratch work, and persisting it into the project
-state would be noise. The history lives on the root model, not on the mode
+state would be noise. The program that *is* worth keeping gets a name instead —
+see [the saved-filter library](#the-saved-filter-library) below. The history lives on the root model, not on the mode
 state, so it survives closing and reopening the playground.
 
 It is **one session-wide list, shared by every playground** — a program run
@@ -354,6 +360,74 @@ history answers "what did I run recently, anywhere", the recall answers "where
 was I in *this* file". The list is not keyed by file precisely because a
 program written against one response is usually worth trying against the next.
 
+## The saved-filter library
+
+The history above is the playground's *short* memory. #1995 adds the long one:
+a **library of named filters**, because the program that took an afternoon to
+get right — the mapping-flattening one for an Elasticsearch response — was
+until now indistinguishable from the fifty one-off experiments around it in
+the history, and rotated out with them.
+
+A saved filter is a **name and a program**, in one of two scopes:
+
+| Scope | File | For |
+| --- | --- | --- |
+| **project** | `.ike/jqfilters.json` | filters shaped by *this* project's data — next to the HTTP environment selection |
+| **global** | `~/.ike/jqfilters-global.json` | filters that are about jq, not about a project — next to the [saved window layouts](./pane-layout.md) |
+
+Both files follow the `IKE_CONFIG_DIR` redirection seam every other state store
+uses, under **distinct file names** (the `winsize.json` / `winsize-global.json`
+precedent, #1714), so redirecting one directory still yields two libraries. A
+missing or malformed store loads as an empty library — the playground must open
+even when a hand-edited file is broken — and entries with an empty name or
+program are dropped on the way in.
+
+The store is a *file per scope*, not a config key. A jq program is data the
+user creates from inside the IDE, like a saved layout; adding one by
+hand-editing `settings.toml` would be the wrong affordance, and TOML lists
+*replace* across the config layers, so a project file would hide the user's
+whole library instead of adding to it.
+
+### Saving
+
+`ctrl+s` on the query line (or `json.jqSaveFilter`) opens a one-line name
+prompt over the current program. `tab` toggles the scope the save goes to,
+which starts on **project** — a filter written against this project's data
+usually belongs to it, and promoting it is one keystroke. The identity program
+is refused: `.` is the playground's default, not a filter. A name already taken
+**in the target scope** holds the prompt open for a second `enter`, the
+save-layout store's guard (#1175) — and that confirmed overwrite is also how a
+filter is *edited*: insert it, change it on the query line, save it under the
+same name.
+
+### The picker
+
+`ctrl+l` (or `json.jqFilters`) opens a locked palette mode listing **both**
+scopes, project first:
+
+- Rows are fuzzy-matched over the **name** — what a saved filter is remembered
+  by — never over the program; searching for `select` would otherwise match
+  half the library.
+- The program rides along as the row's **detail chip**, collapsed to one line
+  and cut at 48 columns, so the pipeline behind a name is visible without
+  picking it.
+- The **scope is the row's accent badge** (`project` / `global`), which is what
+  tells the two apart at a glance. A name may exist in both scopes — they are
+  separate stores, and shadowing one with the other would hide a filter that
+  was saved deliberately — so both rows are listed.
+- `enter` puts the program on the query line and runs it. With no playground up
+  the command still completes: it opens one over the JSON at hand first (and
+  says so when there is no JSON to query).
+- `shift+delete` (or `cmd+backspace`) **deletes** the row's filter from its own
+  store and refreshes the list in place — the palette's aux convention (#1113).
+- `json.jqRenameFilter` opens the same picker in its **rename** spelling, where
+  `enter` opens the name prompt over the entry instead of inserting it. Renaming
+  onto a taken name is refused: only the confirmed save overwrite may replace a
+  filter, never a rename that happens to collide.
+
+The list is re-read from both files on every open and after every delete, so a
+library changed by another window — or by hand — is never stale.
+
 ## Boundaries
 
 - **No raw output mode** (`jq -r`), no `--slurp`, no `--arg`: the playground is
@@ -366,10 +440,16 @@ program written against one response is usually worth trying against the next.
   *mode*, not a layout leaf. It has no key of its own, cannot be split, moved
   or persisted, and the keyboard is modal only while its pane is focused
   (#1980); it survives focus changes but not its pane closing, a project
-  switch or `esc`. A program is written, tried, copied and forgotten — a
-  persistent pane is only worth it if persistent use emerges.
+  switch or `esc`. The *mode* is disposable even now that programs are not: a
+  saved filter outlives the session, the pane it was written in does not.
 - **The result buffer is a substitute, not the document.** The hosting pane's
   own component keeps its entire state and is simply not rendered; the mode
   never mutates it, which is what makes `esc` a perfect restore.
 - **No settings.** The caps are the safety net, not a preference; exposing them
-  would invite raising them past what the pane can render.
+  would invite raising them past what the pane can render. The filter library
+  has none either: it is data the user creates, not a preference to configure —
+  the only knob is a `MaxFilters` runaway guard nobody should ever feel.
+- **The history is still not persisted.** #1995 gives the durable programs a
+  *name* and a file; the anonymous ones stay in memory. Persisting the history
+  too would put every half-typed experiment into the project state, which is
+  exactly the noise the library exists to separate out.
