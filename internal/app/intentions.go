@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -52,11 +53,18 @@ func (m Model) intentionContext() (intention.Context, bool) {
 		LineCount:         ed.LineCount(),
 		LineAt:            ed.LineText,
 		HasSelection:      hasSel,
+		ReadOnly:          ed.ReadOnly(),
 		Fileless:          !ed.HasFile(),
 		DiagnosticAtCaret: ed.DiagnosticOnCaretLine(),
 		HunkAtCaret:       ed.HunkAtCursor(),
 		ConflictAtCaret:   ed.ConflictAtCursor(),
 		CanToggleValue:    ed.CanToggleValueAtCaret(),
+	}
+	if hasSel {
+		// Only the clipboard diff needs this, and reading the system
+		// clipboard runs a helper process — so it is asked for exactly when
+		// an entry depends on the answer (#2026).
+		cx.HasClipboard = clipboardRead() != ""
 	}
 	if _, ok := ed.DocPath(editor.DocPathJQ); ok {
 		cx.DocPath = true
@@ -69,17 +77,44 @@ func (m Model) intentionContext() (intention.Context, bool) {
 		// records), like every other caller.
 		if _, ok := httpfile.Parse(ed.Text()).RequestAt(line + 1); ok {
 			cx.HTTPRequest = true
+			m.fillHTTPIntentions(&cx)
 		}
 	}
-	if snap := m.vcs.snap; snap != nil && ed.HasFile() && snap.Status(ed.Path()) != vcs.StatusUntracked {
+	// A tracked file *inside* the open repository: a file opened from
+	// elsewhere on disk answers StatusNone like a clean one, but has neither
+	// blame nor history here (#2026).
+	if snap := m.vcs.snap; snap != nil && ed.HasFile() &&
+		snap.Contains(ed.Path()) && snap.Status(ed.Path()) != vcs.StatusUntracked {
 		cx.InRepo = true
 	}
 	if ed.HasFile() && lang.HasTests(ed.Path()) {
 		if _, ok := ed.NearestTestAt(line); ok {
 			cx.TestAtCaret = true
+			cx.CanDebug = m.dbg == nil && !m.dbgLaunching && lang.SupportsDebug(ed.LangID())
 		}
 	}
 	return cx, true
+}
+
+// fillHTTPIntentions adds the response-side and environment facts of the HTTP
+// client to a caret inside a request block (#2026). The copy and re-send
+// entries read the visible response pane rather than the caret, and the
+// environment picker the env files next to the same source it resolves
+// (httpPickerSource) — two small local reads, the ones a dispatch performs
+// anyway.
+func (m Model) fillHTTPIntentions(cx *intention.Context) {
+	if p := m.httpPanel(); p != nil {
+		cx.HTTPResponseBody = p.HasBodyText()
+		cx.HTTPResponseHeaders = p.HasHeadersText()
+		cx.HTTPResendable = p.CurrentRequest() != nil
+	}
+	source := m.httpPickerSource()
+	if source == "" {
+		return
+	}
+	if envs, err := httpfile.LoadEnvironments(filepath.Dir(source)); err == nil {
+		cx.HTTPEnvironments = envs.Len() > 0
+	}
 }
 
 // openIntentions merges the LSP offer with the built-in providers and opens
@@ -174,7 +209,10 @@ func (m Model) insertCurlAsRequest() (tea.Model, tea.Cmd) {
 		m.host.Notify(host.Error, "curl: "+err.Error())
 		return m, nil
 	}
-	if isHTTPBuffer(ed) {
+	// A read-only buffer (#1762) drops the in-place edit without a word, so a
+	// curl line found in a preview or an archive member takes the scratch
+	// route instead of doing nothing (#2026).
+	if isHTTPBuffer(ed) && !ed.ReadOnly() {
 		name := uniqueRequestName(httpfile.Parse(ed.Text()), curlRequestName(imp.Request))
 		block := strings.TrimSuffix(httpfile.FormatRequest(imp.Request, name), "\n")
 		endCol := len([]rune(ed.LineText(endLine)))
@@ -213,18 +251,10 @@ func (m Model) notifyCurlInsert(what string, imp *httpfile.CurlImport) {
 
 // curlCommandAt gathers the curl command starting on the caret line plus its
 // backslash-continued follow-up lines, flattened to the single-line form the
-// parser reads. It returns "" when the caret line is no curl command.
+// parser reads. It returns "" when the caret line is no curl command. The
+// probe itself lives in httpfile so the intention gate reads the exact same
+// command this conversion parses (#2026).
 func curlCommandAt(ed *editor.Model, line int) (cmd string, endLine int) {
-	if !httpfile.IsCurlCommand(ed.LineText(line)) {
-		return "", line
-	}
-	end := line
-	for end < ed.LineCount()-1 && strings.HasSuffix(strings.TrimSpace(ed.LineText(end)), "\\") {
-		end++
-	}
-	parts := make([]string, 0, end-line+1)
-	for i := line; i <= end; i++ {
-		parts = append(parts, ed.LineText(i))
-	}
-	return flattenCurlCommand(strings.Join(parts, "\n")), end
+	cmd, endLine, _ = httpfile.CurlCommandAt(ed.LineText, ed.LineCount(), line)
+	return cmd, endLine
 }

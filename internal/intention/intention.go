@@ -37,6 +37,14 @@ type Context struct {
 	LineAt    func(i int) string
 	// HasSelection reports an active visual selection.
 	HasSelection bool
+	// ReadOnly reports a buffer that refuses edits (#1762): every intention
+	// that rewrites text would apply nothing there, so none is offered
+	// (#2026).
+	ReadOnly bool
+	// HasClipboard reports that the system clipboard holds text — the
+	// precondition of diff.compareWithClipboard, which otherwise answers
+	// "clipboard is empty".
+	HasClipboard bool
 	// Fileless reports that the buffer has no file at all — the state the
 	// buffer-level language pick applies to (#2033). Path is empty in that
 	// case too, but a zero Context must offer nothing, so the fact is
@@ -49,6 +57,19 @@ type Context struct {
 	// HTTPRequest reports that the buffer is an .http file and the caret
 	// sits inside a request block.
 	HTTPRequest bool
+	// The response-side facts of the HTTP client (#2026): the copy and
+	// re-send actions read the *visible* response pane, not the caret, so
+	// without one they can only answer "no response pane open".
+	// HTTPResponseBody / HTTPResponseHeaders report that the shown response
+	// has a body / a headers block to copy, HTTPResendable that it carries
+	// the request snapshot http.resend repeats.
+	HTTPResponseBody    bool
+	HTTPResponseHeaders bool
+	HTTPResendable      bool
+	// HTTPEnvironments reports that an http-client.env.json (or its private
+	// twin) next to the buffer defines at least one environment, which is
+	// all http.selectEnvironment has to offer.
+	HTTPEnvironments bool
 	// DiagnosticAtCaret reports an LSP diagnostic on the caret line.
 	DiagnosticAtCaret bool
 	// HunkAtCaret reports a VCS gutter mark (added/changed/deleted line)
@@ -57,19 +78,48 @@ type Context struct {
 	// ConflictAtCaret reports that the caret sits inside a merge-conflict
 	// block (#1149).
 	ConflictAtCaret bool
-	// InRepo reports that the buffer is a tracked file in a git repository.
+	// InRepo reports that the buffer is a tracked file *inside* the open
+	// repository — a file from elsewhere on disk has no blame and no
+	// history to show (#2026).
 	InRepo bool
 	// TestAtCaret reports a runnable test at or above the caret (the
 	// run.testAtCursor gate, lang.TestsInFile).
 	TestAtCaret bool
+	// CanDebug reports that the test at the caret could actually start under
+	// the debugger: the language has a debug adapter (lang.SupportsDebug)
+	// and no session is running or launching (#2026).
+	CanDebug bool
 	// CanToggleValue reports that the caret word is a known toggle pair
 	// (true/false, on/off, …; #1658).
 	CanToggleValue bool
-	// ConcealValue reports that the conceal explainer resolves a value at
-	// the caret (#1998). ConcealFamily names the concealfilter family
-	// gating the stand-in ("" when the value has none).
+	// ConcealValue reports that the caret sits on a conceal stand-in the
+	// explainer speaks for (#1998) — a decoded timestamp, a size/duration
+	// hint, a mask. ConcealFamily names the concealfilter family gating it.
+	// A plain identifier is *not* one (#2026): explaining it only ever said
+	// "nothing conceals this", which is no intention.
 	ConcealValue  bool
 	ConcealFamily string
+}
+
+// lineAt reads line i of the buffer through the snapshot's accessor, falling
+// back to the caret line so a provider works in a single-line test context
+// (LineAt may be nil there). Out-of-range reads answer "".
+func (c Context) lineAt(i int) string {
+	if c.LineAt != nil {
+		return c.LineAt(i)
+	}
+	if i == c.Line {
+		return c.LineText
+	}
+	return ""
+}
+
+// lineCount is LineCount with the single-line fallback lineAt implies.
+func (c Context) lineCount() int {
+	if c.LineAt != nil {
+		return c.LineCount
+	}
+	return c.Line + 1
 }
 
 // Item is one applicable intention action: a title, the kind chip the picker

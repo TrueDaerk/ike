@@ -320,6 +320,27 @@ func (m *Model) HeadersText() string {
 	return strings.Join(lines, "\n")
 }
 
+// HasBodyText and HasHeadersText report whether BodyText / HeadersText would
+// yield anything worth copying, without building the string. The intention
+// popup asks on every open (#2026) to decide whether to offer the copies at
+// all, and a large response body is not worth joining just to compare it
+// against "".
+func (m *Model) HasBodyText() bool { return m.hasTextRow(kindBody) }
+
+// HasHeadersText mirrors HasBodyText for the status/headers block.
+func (m *Model) HasHeadersText() bool { return m.hasTextRow(kindStatus) || m.hasTextRow(kindHeader) }
+
+// hasTextRow reports whether any shown row of kind k carries text — a row
+// holding only a blank line would join into a clipboard write of whitespace.
+func (m *Model) hasTextRow(k rowKind) bool {
+	for _, r := range m.rows {
+		if r.kind == k && r.text != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // copyCmd wraps text in a CopyMsg command, or nil when there is nothing to
 // copy — an empty clipboard write would silently destroy what the user had.
 func copyCmd(text, what string) tea.Cmd {

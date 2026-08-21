@@ -77,28 +77,12 @@ func (m *Model) startCurlImport() {
 	if text := clipboardRead(); httpfile.IsCurlCommand(text) {
 		// The overwhelmingly common source is a "Copy as cURL" still sitting
 		// on the clipboard; offering it saves the paste and stays editable.
-		m.curlImportInput = flattenCurlCommand(text)
+		m.curlImportInput = httpfile.FlattenCurlCommand(text)
 	}
 	m.curlImportPos = len([]rune(m.curlImportInput))
 	m.renderCurlImportPrompt()
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
-}
-
-// flattenCurlCommand folds a multi-line command (the backslash-wrapped
-// spelling devtools and documentation produce) onto the prompt's single line.
-// Only the line breaks and their continuation backslashes go; quoted values
-// keep every space they carry.
-func flattenCurlCommand(text string) string {
-	var out []string
-	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
-		line = strings.TrimSpace(line)
-		line = strings.TrimSpace(strings.TrimSuffix(line, "\\"))
-		if line != "" {
-			out = append(out, line)
-		}
-	}
-	return strings.Join(out, " ")
 }
 
 // curlImportPromptOpen reports whether the shell shows the import prompt.
@@ -154,7 +138,7 @@ func (m Model) updateCurlImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 // (#1873). The input is one line, so a wrapped command is flattened the way
 // every other single-field prompt flattens a paste (#1936).
 func (m *Model) pasteCurlImportPrompt(text string) bool {
-	out, pos, changed := ui.PasteText(m.curlImportInput, m.curlImportPos, flattenCurlCommand(text))
+	out, pos, changed := ui.PasteText(m.curlImportInput, m.curlImportPos, httpfile.FlattenCurlCommand(text))
 	if !changed {
 		return false
 	}

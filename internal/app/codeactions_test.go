@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor"
+	"ike/internal/httpfile"
 	"ike/internal/intention"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
@@ -347,6 +348,98 @@ func TestIntentionsFilelessBufferOffersLanguagePick(t *testing.T) {
 	items := m.actions.Results("", palette.Context{})
 	if len(items) != 1 || items[0].Title != "Treat Buffer as…" {
 		t.Fatalf("items = %+v, want only the buffer-language pick", items)
+	}
+}
+
+// intentionTitles lists the merged picker's row titles for the caret.
+func intentionTitles(t *testing.T, m Model) []string {
+	t.Helper()
+	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
+	m = out.(Model)
+	var titles []string
+	for _, it := range m.actions.Results("", palette.Context{}) {
+		titles = append(titles, it.Title)
+	}
+	return titles
+}
+
+func offers(titles []string, title string) bool {
+	for _, t := range titles {
+		if t == title {
+			return true
+		}
+	}
+	return false
+}
+
+// TestIntentionsHTTPResponseEntriesNeedAResponse guards #2026: inside a
+// request block the run/curl entries always apply, but the response copies
+// and the re-send act on the shown response pane — with none open they only
+// ever answered "no response pane open", so they are not offered.
+func TestIntentionsHTTPResponseEntriesNeedAResponse(t *testing.T) {
+	stubClipboardRead(t, "")
+	m := intentionModel(t, "api.http", "GET https://example.com/things\n", 0, 0)
+	titles := intentionTitles(t, m)
+	for _, want := range []string{"Run Request", "Copy as curl"} {
+		if !offers(titles, want) {
+			t.Fatalf("missing %q in %v", want, titles)
+		}
+	}
+	for _, unwanted := range []string{"Copy Response Body", "Copy Response Headers", "Re-send Stored Request"} {
+		if offers(titles, unwanted) {
+			t.Fatalf("unexpected %q in %v", unwanted, titles)
+		}
+	}
+}
+
+// TestIntentionsHTTPEnvironmentNeedsAnEnvFile: "Select Environment" appears
+// only next to an http-client.env.json that defines one (#2026).
+func TestIntentionsHTTPEnvironmentNeedsAnEnvFile(t *testing.T) {
+	stubClipboardRead(t, "")
+	m := intentionModel(t, "api.http", "GET https://example.com/things\n", 0, 0)
+	if titles := intentionTitles(t, m); offers(titles, "Select Environment") {
+		t.Fatalf("unexpected environment entry without an env file: %v", titles)
+	}
+	dir := filepath.Dir(m.activeEditor().Path())
+	env := filepath.Join(dir, httpfile.EnvFileName)
+	if err := os.WriteFile(env, []byte(`{"dev": {"host": "example.com"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if titles := intentionTitles(t, m); !offers(titles, "Select Environment") {
+		t.Fatalf("environment entry missing next to %s: %v", httpfile.EnvFileName, titles)
+	}
+}
+
+// TestIntentionsClipboardDiffNeedsAClipboard guards #2026: comparing a
+// selection with an empty clipboard only reported "clipboard is empty".
+func TestIntentionsClipboardDiffNeedsAClipboard(t *testing.T) {
+	stubClipboardRead(t, "")
+	m := intentionModel(t, "x.json", "{\n  \"name\": \"value\"\n}\n", 1, 3)
+	m = drainKey(m, tea.KeyPressMsg{Code: 'V', Text: "V"}) // visual-line select
+	if _, _, ok := m.activeEditor().SelectionLines(); !ok {
+		t.Fatal("V did not start a visual selection")
+	}
+	if titles := intentionTitles(t, m); offers(titles, "Compare Selection with Clipboard") {
+		t.Fatalf("unexpected clipboard diff with an empty clipboard: %v", titles)
+	}
+	stubClipboardRead(t, "something")
+	if titles := intentionTitles(t, m); !offers(titles, "Compare Selection with Clipboard") {
+		t.Fatalf("clipboard diff missing with a filled clipboard: %v", titles)
+	}
+}
+
+// TestIntentionsReadOnlyBufferOffersNoEdits guards #2026: a read-only buffer
+// (#1762) drops every edit through the locked recorder, so the rewriting
+// entries — here the value toggle — stay out of the popup.
+func TestIntentionsReadOnlyBufferOffersNoEdits(t *testing.T) {
+	stubClipboardRead(t, "")
+	m := intentionModel(t, "x.json", "{\n  \"debug\": true\n}\n", 1, 12)
+	if titles := intentionTitles(t, m); !offers(titles, "Toggle Value Under Caret") {
+		t.Fatalf("value toggle missing on a writable buffer: %v", titles)
+	}
+	m.activeEditor().SetReadOnly(true)
+	if titles := intentionTitles(t, m); offers(titles, "Toggle Value Under Caret") {
+		t.Fatalf("unexpected value toggle on a read-only buffer: %v", titles)
 	}
 }
 
