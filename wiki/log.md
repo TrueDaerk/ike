@@ -1,5 +1,22 @@
 # Log
 
+## 2026-08-21 (Intention popup: digit shortcuts, #2023)
+
+- **`palette.DigitPicker`** (new, `internal/palette/mode.go`): optional Mode
+  extension (`DigitShortcuts() bool`) the palette consults for the **locked**
+  mode on an **empty** query — `1`–`9` then activate the nth listed row
+  through the ordinary activation path (`Palette.quickPick`). A digit past
+  the last row is swallowed; every non-opting mode keeps plain digit typing.
+- **`Item.Hint`** (new): dim leading shortcut column rendered before the row
+  title (`Palette.hintView`), Spans-neutral.
+- **`actionsMode`** (`internal/app/codeactions.go`): implements the seam and
+  numbers the first nine rows of the *unfiltered* list; once a filter query
+  is typed the hints drop and digits type into the query again (chosen over
+  renumbering against the filtered list).
+- **Wiki**: `architecture/intention-actions.md` gains the "Digit shortcuts"
+  section and an "Adding new actions" guideline — new caret-/context-dependent
+  commands should also be surfaced as intention items.
+
 ## 2026-08-20 (Intention actions: context-aware built-ins merged into alt+enter, #2020)
 
 - **`internal/intention`** (new): the intention-action seam — `Context` (caret
