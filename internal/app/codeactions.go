@@ -2,6 +2,7 @@ package app
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -24,6 +25,10 @@ import (
 // actionsPrefix selects the code-actions mode inside the palette; only ever
 // opened locked (no user-facing prefix story).
 const actionsPrefix = '!'
+
+// actionHintMax is how many rows carry a digit hint — "1" through "9"; the
+// palette's digit fast path runs exactly these.
+const actionHintMax = 9
 
 // actionPickedMsg is the activation msg of one list entry; index addresses
 // the merged entry list, not the raw LSP offer.
@@ -146,6 +151,11 @@ func (a *actionsMode) Run(msg actionPickedMsg) tea.Cmd {
 	return a.apply(e.lspIndex)
 }
 
+// DigitShortcuts implements palette.DigitPicker (#2023): the intention popup
+// numbers its rows, so alt+enter followed by a digit runs that action. The
+// palette consults this only while the query is empty.
+func (a *actionsMode) DigitShortcuts() bool { return true }
+
 // Prefix implements palette.Mode.
 func (a *actionsMode) Prefix() rune { return actionsPrefix }
 
@@ -153,7 +163,11 @@ func (a *actionsMode) Prefix() rune { return actionsPrefix }
 func (a *actionsMode) Placeholder() string { return "Code actions…" }
 
 // Results implements palette.Mode: the offered actions fuzzy-matched on title
-// (an empty query lists all, preferred first).
+// (an empty query lists all, preferred first). On the unfiltered list the
+// first nine rows carry a "1"–"9" hint (#2023) matching the palette's digit
+// fast path; as soon as a filter query is typed the digits type into the
+// query instead, so the hints are dropped rather than renumbered against the
+// filtered list — a visible number that no longer runs anything would lie.
 func (a *actionsMode) Results(query string, cx palette.Context) []palette.Item {
 	type scored struct {
 		item  palette.Item
@@ -170,6 +184,9 @@ func (a *actionsMode) Results(query string, cx palette.Context) []palette.Item {
 	items := make([]palette.Item, len(out))
 	for i, s := range out {
 		items[i] = s.item
+		if query == "" && i < actionHintMax {
+			items[i].Hint = strconv.Itoa(i + 1)
+		}
 	}
 	return items
 }

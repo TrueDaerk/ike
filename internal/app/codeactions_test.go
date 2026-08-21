@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -198,6 +199,91 @@ func TestIntentionsEmptyMergeToasts(t *testing.T) {
 	}
 	if !noticed(m, "no code actions here") {
 		t.Fatalf("missing empty-offer toast, history = %+v", m.history)
+	}
+}
+
+// TestActionsModeDigitHints guards #2023: the unfiltered list numbers its
+// first nine rows and nothing beyond, and a filter query drops the hints
+// (digits type into the query then, so a visible number would lie).
+func TestActionsModeDigitHints(t *testing.T) {
+	a := &actionsMode{}
+	var builtins []intention.Item
+	for i := 0; i < 11; i++ {
+		builtins = append(builtins, intention.Item{
+			Title:     "Action " + strconv.Itoa(i),
+			Kind:      "test",
+			CommandID: "cmd." + strconv.Itoa(i),
+		})
+	}
+	a.SetMerged(ilsp.CodeActionsMsg{}, builtins)
+
+	items := a.Results("", palette.Context{})
+	if len(items) != 11 {
+		t.Fatalf("items = %d", len(items))
+	}
+	for i, it := range items {
+		want := ""
+		if i < 9 {
+			want = strconv.Itoa(i + 1)
+		}
+		if it.Hint != want {
+			t.Fatalf("row %d hint = %q, want %q", i, it.Hint, want)
+		}
+	}
+
+	for _, it := range a.Results("Action 1", palette.Context{}) {
+		if it.Hint != "" {
+			t.Fatalf("a filtered list must not show digit hints: %+v", it)
+		}
+	}
+}
+
+// TestIntentionPopupDigitRunsAction drives the #2023 fast path end to end: the
+// caret popup is open with an empty query, "2" runs the second listed entry —
+// the same dispatch enter on that row would do.
+func TestIntentionPopupDigitRunsAction(t *testing.T) {
+	m := intentionModel(t, "x.json", `{"name": "value"}`, 0, 11)
+	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
+	m = out.(Model)
+	items := m.actions.Results("", palette.Context{})
+	if len(items) < 2 {
+		t.Fatalf("need at least two intention rows, got %+v", items)
+	}
+	want := items[1].Msg.(actionPickedMsg)
+
+	out, cmd := m.Update(tea.KeyPressMsg{Code: '2', Text: "2"})
+	m = out.(Model)
+	if m.palette.IsOpen() {
+		t.Fatal("a digit shortcut must close the popup")
+	}
+	if cmd == nil {
+		t.Fatal("a digit shortcut must dispatch the row")
+	}
+	got, ok := cmd().(actionPickedMsg)
+	if !ok || got != want {
+		t.Fatalf("digit emitted %#v, want %#v", cmd(), want)
+	}
+}
+
+// TestIntentionPopupDigitFiltersWithQuery: once a filter query is typed the
+// digits are ordinary query text again and the popup stays open.
+func TestIntentionPopupDigitFiltersWithQuery(t *testing.T) {
+	m := intentionModel(t, "x.json", `{"name": "value"}`, 0, 11)
+	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
+	m = out.(Model)
+
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	m = out.(Model)
+	out, cmd := m.Update(tea.KeyPressMsg{Code: '2', Text: "2"})
+	m = out.(Model)
+	if cmd != nil {
+		t.Fatal("with a query typed, the digit must filter instead of running")
+	}
+	if !m.palette.IsOpen() {
+		t.Fatal("filtering must keep the popup open")
+	}
+	if got := m.palette.Query(); got != "c2" {
+		t.Fatalf("query = %q, want the typed digit appended", got)
 	}
 }
 
