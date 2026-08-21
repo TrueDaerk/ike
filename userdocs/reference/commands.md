@@ -58,6 +58,7 @@ bring their own.
 | Force Code Insight (Large File) | `editor.forceCodeInsight` | — | — | everywhere |
 | Paste from History | `editor.pasteFromHistory` | `cmd+shift+v` | — | everywhere |
 | Save All | `editor.saveAll` | `cmd+shift+s` | — | everywhere |
+| Treat Buffer as… | `editor.setBufferLanguage` | — | — | everywhere |
 | Split View Down | `editor.splitViewDown` | `cmd+alt+shift+down` | — | everywhere |
 | Split View Right | `editor.splitViewRight` | `cmd+alt+shift+right` | — | everywhere |
 | Close Other Tabs | `editor.tab.closeOthers` | — | — | everywhere |
@@ -107,6 +108,7 @@ bring their own.
 | Saved jq Filters… | `json.jqFilters` | — | — | everywhere |
 | jq Playground… | `json.jqPlayground` | — | — | everywhere |
 | jq Playground at Cursor Path… | `json.jqPlaygroundAtPath` | — | — | everywhere |
+| Toggle Full jq Query View | `json.jqQueryView` | `ctrl+alt+e` | — | everywhere |
 | Rename Saved jq Filter… | `json.jqRenameFilter` | — | — | everywhere |
 | Save jq Filter… | `json.jqSaveFilter` | — | — | everywhere |
 | Import JetBrains Keymap XML… | `keymap.importJetBrains` | — | — | everywhere |

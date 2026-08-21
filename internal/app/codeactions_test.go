@@ -335,18 +335,19 @@ func TestIntentionsFilelessBufferOpensPicker(t *testing.T) {
 	}
 }
 
-// TestIntentionsFilelessBufferEmptyToasts: with nothing applicable at the
-// caret the fileless buffer gets the honest verdict — never silence, never a
-// hang.
-func TestIntentionsFilelessBufferEmptyToasts(t *testing.T) {
+// TestIntentionsFilelessBufferOffersLanguagePick: an otherwise featureless
+// buffer with no file is never empty-handed since #2033 — the caret has no
+// facts, but the buffer itself can still be given a type.
+func TestIntentionsFilelessBufferOffersLanguagePick(t *testing.T) {
 	m := filelessModel(t, "", 0, 0)
 	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
 	m = out.(Model)
-	if m.palette.IsOpen() {
-		t.Fatal("an empty merged offer must not open the picker")
+	if !m.palette.IsOpen() {
+		t.Fatal("a fileless buffer offers the language pick, so the picker opens")
 	}
-	if !noticed(m, "no code actions here") {
-		t.Fatalf("missing empty-offer toast, history = %+v", m.history)
+	items := m.actions.Results("", palette.Context{})
+	if len(items) != 1 || items[0].Title != "Treat Buffer as…" {
+		t.Fatalf("items = %+v, want only the buffer-language pick", items)
 	}
 }
 

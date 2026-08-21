@@ -96,7 +96,18 @@ const (
 // Model is the editor pane.
 type Model struct {
 	path string
-	buf  *buffer.Buffer
+	// langOverride is the buffer-level language chosen for a *fileless*
+	// buffer (#2033, "Treat Buffer as …"): a lang registry id whose
+	// synthetic name langPath hands to every path-keyed language lookup.
+	// A real path always wins, so the field is cleared the moment the
+	// buffer gets one. See langoverride.go.
+	langOverride string
+	// parseTag is this view's identity for the async parse result of a
+	// buffer with no file (#2033): SpansMsg travels keyed by ParseKey, and
+	// an empty path could not tell two file-less buffers apart. Unique per
+	// view, never a path (the NUL prefix cannot occur in one).
+	parseTag string
+	buf      *buffer.Buffer
 
 	cursor     buffer.Position
 	desiredCol int // remembered column for vertical motion across short lines
@@ -483,6 +494,13 @@ type Model struct {
 	// the next reply, so the merge clamps them to the buffer.
 	lspFolds   []highlight.Fold
 	lspFolding bool
+	// hostFolds are ranges a host installed for a synthetic buffer (#2029,
+	// hostfold.go) — the jq playground's result window — merged over folds
+	// the same way and winning on a shared header; foldSummary overrides the
+	// collapsed header's placeholder text so it can name what the node holds
+	// ("3 keys") instead of how tall it is.
+	hostFolds   []highlight.Fold
+	foldSummary func(header, end int) string
 	// selRange is the extend/shrink-selection ladder state (#1912,
 	// selrange.go): the innermost-first range ladder of the last request plus
 	// the applied depth; nil while idle. Pointer state like hover, shared
@@ -674,6 +692,7 @@ func parseWhitespaceMode(v string) whitespaceMode {
 func New() Model {
 	m := Model{
 		buf:                buffer.New(nil),
+		parseTag:           nextParseTag(),
 		sbcache:            &sbCache{},
 		mode:               Normal,
 		regs:               register.New(),
@@ -922,10 +941,11 @@ func (m *Model) applyConfig() {
 // win over the global preference. Runs before applyEditorconfig, so an
 // explicit .editorconfig indent_style keeps the last word.
 func (m *Model) applyLangIndent() {
-	if m.path == "" {
+	path := m.langPath()
+	if path == "" {
 		return
 	}
-	if l, ok := lang.ByPath(m.path); ok && l.UseTabs != nil {
+	if l, ok := lang.ByPath(path); ok && l.UseTabs != nil {
 		m.useSpaces = !*l.UseTabs
 	}
 }
@@ -942,12 +962,13 @@ func (m *Model) Load(path string) error {
 	// Resolve .editorconfig before decoding: its charset is the decode
 	// fallback (#63). Restore the previous identity if the decode fails, so a
 	// failed :e leaves the open buffer untouched.
-	prevPath, prevEC := m.path, m.ec
+	prevPath, prevEC, prevLang := m.path, m.ec, m.langOverride
 	m.path = path
+	m.clearLangOverride() // the file name classifies the buffer now (#2033)
 	m.resolveEditorconfig()
 	text, info, err := textenc.Decode(data, m.fallbackEncoding())
 	if err != nil {
-		m.path, m.ec = prevPath, prevEC
+		m.path, m.ec, m.langOverride = prevPath, prevEC, prevLang
 		return err
 	}
 	m.buf = buffer.FromString(text)
@@ -1015,6 +1036,7 @@ func (m *Model) Load(path string) error {
 // resets exactly like Load.
 func (m *Model) NewFile(path string) {
 	m.path = path
+	m.clearLangOverride() // the file name classifies the buffer now (#2033)
 	m.resolveEditorconfig()
 	m.buf = buffer.FromString(lang.TemplateFor(path))
 	m.seedBreakpointLines()
@@ -1143,16 +1165,7 @@ func (m *Model) SetPath(path string) tea.Cmd {
 	}
 	m.path = path
 	m.resolveEditorconfig()
-	m.hlIndex = highlight.Index{}
-	m.conceal = nil
-	m.decodes = nil
-	m.notes = nil
-	m.scopes = nil
-	m.resetFolds()
-	m.semIndex = highlight.Index{}
-	m.occurrences = nil
-	m.inlayHints, m.hintsByLine = nil, nil
-	m.lensesByLine = nil
+	m.resetLangState()
 	m.emit(EventChange)
 	return m.parseCmd()
 }
@@ -1388,7 +1401,7 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 	case highlight.SpansMsg:
 		// Accept a parse result only if it matches the current document and
 		// version; a newer edit since the parse was scheduled drops it.
-		if msg.Path == m.path && msg.Version == m.docVersion {
+		if msg.Path == m.ParseKey() && msg.Version == m.docVersion {
 			// Conceal spans (#881) feed the markdown rendering layer, not the
 			// style index — a marker cell styles raw on the cursor line but
 			// disappears elsewhere.

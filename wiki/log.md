@@ -32,6 +32,97 @@
   `internal/app/intentions_test.go`, `internal/httpfile/curl_test.go`,
   `internal/vcs/status_test.go`.
 
+## 2026-08-21 ("Treat Buffer as …" — a language for file-less buffers, #2033)
+
+- **Buffer language override** (`internal/editor/langoverride.go`): a buffer
+  with no file can be told which language it is. The chosen id resolves to a
+  synthetic name — `buffer.md`, `buffer.http`, `Dockerfile` — and `langPath()`
+  hands that to every path-keyed lookup in the editor in place of the empty
+  path, so highlighting, linting, concealing, comment toggling, indent rules,
+  snippets, smart typing, id colors, the conceal file filter, the doc-path
+  scanner, markdown rendering, the csv table layer and log rendering all treat
+  the buffer as a file of that type. `Path()` stays empty — the name never
+  reaches file I/O; LSP and runners are deliberately out of scope.
+- **A path always wins**: the override is dropped when the buffer gets one
+  (`Load`, `NewFile`, `:w name`), so a saved buffer is classified by its file
+  name. A split inherits the type like the encoding (`ShareDocumentWith`).
+  Switching languages invalidates the version-keyed rendering caches
+  (`resetLangState`), which a language change alone would leave answering for
+  the old type until the next edit.
+- **Parse results route by view** (`editor.ParseKey`, `routeParse`,
+  `pane.Instance.UpdateForParseKey`): a `SpansMsg` used to be delivered to the
+  editor leaves *showing its path*, which skipped every path-less buffer — the
+  chosen language resolved and still rendered plain. Each view now carries its
+  file path or a unique tag (`\x00buffer/<n>`) and accepts only results under
+  it; the Problems store keeps its path key (empty for a view-tagged result,
+  as before).
+- **The door** is the alt+enter intention "Treat Buffer as …"
+  (`editor.setBufferLanguage`, `internal/intention/catalog.go`), offered in
+  file-less buffers only — a saved file is classified by its name and the
+  editor refuses the override there. `Context.Fileless` carries the fact
+  explicitly, so a zero context still offers nothing. The entry names the
+  current type (`Treat Buffer as… (now markdown)`).
+- **The picker** (`internal/app/bufferlang.go`) is a locked palette mode
+  listing "Plain Text" plus every language a path lookup could match; the
+  status line's new `buflang` segment shows the choice (`as Markdown`) and a
+  click on it reopens the picker.
+- **HTTP by type, not by file name**: `isHTTPBuffer`/`httpSource` replace the
+  `HasFile() && isHTTPPath(Path())` gates, so a pasted request block in a
+  file-less HTTP buffer runs, converts to curl and shows in-flight marks; its
+  dispatches are attributed to `buffer.http`.
+- Tests: `internal/editor/langoverride_test.go` (resolution, refusals, path
+  wins, comment/markdown/csv consumers, split, parse-key identity and
+  delivery), `internal/app/bufferlang_test.go` (intention visibility, picker,
+  applied type, status segment, HTTP intentions, parse routing),
+  `internal/intention/catalog_test.go` (the empty-context floor).
+
+## 2026-08-21 (jq playground: the full query expression on demand, #2032)
+
+- **`jqplay.Wrap` / `jqplay.LineAt`** (`internal/jqplay/wrap.go`, new): pure,
+  rune-indexed line breaking for a jq program — greedy packing that breaks at
+  top-level `|` stages (a `|` in a string or comment and `||` are not
+  boundaries), a hard cut at the width for a stage that is wider than a row,
+  and the blanks after a pipe dropped at a stage's row start.
+- **The full-query view** (`internal/app/jqplayground.go`): `json.jqQueryView`
+  (`ctrl+alt+e`, palette / Tools menu) toggles the one-line query header into a
+  wrapped multi-row one — same scanner colors, same cursor, program and result
+  untouched. `jqHeaderRowsFor` now reports the query rows plus the info row, so
+  the rendering, the result buffer's height and the mouse translation all move
+  with the header; the view caps at 8 rows, always leaves 3 rows of result, and
+  windows around the cursor's row past the cap. The info row gained a
+  `· query cut` marker in Warning whenever the rows show less than the program
+  holds, and the key hints name the chord bound to the command.
+- **Tests**: `internal/jqplay/wrap_test.go` (pipe breaks, full coverage of the
+  program at five widths, hard splits, literals, `LineAt`);
+  `internal/app/jqplayground_test.go` (the whole program readable after the
+  toggle, highlighting kept, the header/result geometry stays exact, the cap
+  windows and flags, the hints document the chord from both focuses, the
+  command form).
+- **Wiki**: `architecture/jq-playground.md` gains "The full-query view" and the
+  key-table row; `architecture/keybindings.md`'s ledger and the generated
+  reference pages pick up `json.jqQueryView`.
+
+## 2026-08-21 (fold objects and arrays in the jq result window, #2029)
+
+- **`jqplay.Folds`** (`internal/jqplay/fold.go`): the foldable objects and
+  arrays of a result, in pre-order, each with the number of members it holds —
+  a rune walk over the pretty-printed text counting delimiters outside strings,
+  never a re-decode. `Fold.Label` is the collapsed row's placeholder
+  (`⋯ 3 keys }`, `⋯ 12 items ]`).
+- **Host folds** (`internal/editor/hostfold.go`): `SetHostFolds` installs
+  ranges a host computed for a synthetic buffer — merged over the Tree-sitter
+  ranges by `foldRanges`, winning on a shared header — and `SetFoldSummary`
+  overrides the collapsed header's placeholder text. Everything else about
+  folding (#144, #1741) stays untouched: one fold engine, one collapsed set.
+- **jq playground** (`internal/app/jqplayground.go`): the result buffer folds
+  with `za`/`zc`/`zo`/`zM`/`zR`, nested included; the ranges are reinstalled
+  with every result, so a changed filter leaves no fold behind. The info row
+  advertises the keys while the buffer holds the keyboard.
+- **Why the playground computes its own ranges**: the result window must fold
+  in a cgo-free build (no grammar there), and only the structural scan knows a
+  node's *member* count, which is what the placeholder says.
+- See [jq Playground](/architecture/jq-playground.md#folding-the-result).
+
 ## 2026-08-21 (alt+enter in a fileless buffer froze the IDE, #2027)
 
 - **`host.Host.Send`** (`internal/host/host.go`): messages are queued into an

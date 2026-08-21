@@ -264,7 +264,7 @@ func (m Model) lineColorSwatches(line int) []colorSpan {
 // literal, every other language (config formats included) only value
 // positions.
 func (m Model) colorPolicy() colorPolicy {
-	if l, ok := lang.ByPath(m.path); ok && cssFamily[l.ID] {
+	if l, ok := lang.ByPath(m.langPath()); ok && cssFamily[l.ID] {
 		return colorAll
 	}
 	return colorValue

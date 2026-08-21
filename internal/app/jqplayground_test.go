@@ -994,3 +994,307 @@ func TestJQPlaygroundHistorySurvivesReopen(t *testing.T) {
 		t.Errorf("↑ after reopening = %q, want the program recorded before it", got)
 	}
 }
+
+// jqLongProgram is a pipeline of the shape the issue reports (#2032): far
+// wider than a pane, with `|` stages to break at.
+const jqLongProgram = `.hits.hits[]._source | .keyword as $keyword | .ser[] | select(.domain == "universal-search-box.com") | {$keyword, type: .kind, url: .link}`
+
+// toggleJQView presses the chord bound to json.jqQueryView (default
+// ctrl+alt+e), the way a user reaches the full-query view.
+func toggleJQView(m Model) Model {
+	return drainKey(m, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl | tea.ModAlt})
+}
+
+// jqQueryText renders the query rows and strips the color, so an assertion can
+// talk about the program that is actually on screen.
+func jqQueryText(m Model, width int) string {
+	var b strings.Builder
+	for _, row := range m.jqQueryRows(width) {
+		b.WriteString(ansi.Strip(row))
+	}
+	return b.String()
+}
+
+// TestJQPlaygroundExpandedQueryShowsWholeProgram is the issue's acceptance
+// case (#2032): a program wider than the pane is cut on the one-line view and
+// fully readable after the toggle — without leaving the playground and
+// without changing the program.
+func TestJQPlaygroundExpandedQueryShowsWholeProgram(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"hits":{"hits":[]}}`))
+	m = setProgram(m, jqLongProgram)
+
+	const width = 80
+	if got := jqQueryText(m, width); strings.Contains(got, ".hits.hits[]") {
+		t.Fatalf("the one-line view cannot show the whole program, got %q", got)
+	}
+	m = toggleJQView(m)
+	if !m.jqPlay.expanded {
+		t.Fatal("the json.jqQueryView chord must expand the query view")
+	}
+	if got := m.jqPlay.program; got != jqLongProgram {
+		t.Fatalf("the view must not touch the program, got %q", got)
+	}
+	got := strings.ReplaceAll(jqQueryText(m, width), " ", "")
+	want := strings.ReplaceAll(jqLongProgram, " ", "")
+	if !strings.Contains(got, want) {
+		t.Errorf("the expanded view must show the whole program, got %q", got)
+	}
+	// Toggling back restores the resting one-line layout.
+	m = toggleJQView(m)
+	if m.jqPlay.expanded || len(m.jqQueryRows(width)) != 1 {
+		t.Error("the toggle must fold the view back to one row")
+	}
+}
+
+// TestJQPlaygroundExpandedQueryKeepsHighlighting (#2032): the wrapped rows are
+// colored by the same scanner the one-line view uses.
+func TestJQPlaygroundExpandedQueryKeepsHighlighting(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"a":"x"}`))
+	m = setProgram(m, `.aaaaaaaaaa | select(.b == "x") | .ccccccccc | map(.d)`)
+	m = toggleJQView(m)
+	rows := m.jqQueryRows(40)
+	if len(rows) < 2 {
+		t.Fatalf("the program should wrap over several rows, got %d", len(rows))
+	}
+	joined := strings.Join(rows, "")
+	if ansi.Strip(joined) == joined {
+		t.Fatal("the expanded rows should carry color")
+	}
+	styles := m.jqKindStyles()
+	for _, want := range []string{
+		styles[jqplay.KindString].Render("x"),
+		styles[jqplay.KindFunc].Render("m"),
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the expanded view should render %q, got %q", want, joined)
+		}
+	}
+}
+
+// jqResultHeight is how many rows the substitute result buffer renders — the
+// editor keeps its height private, and the rendered row count is what the
+// pane geometry is about anyway.
+func jqResultHeight(m Model) int {
+	return len(strings.Split(m.jqPlay.resultEd.View(), "\n"))
+}
+
+// TestJQPlaygroundExpandedHeaderKeepsGeometry (#2032): the growing header is
+// what the pane geometry reserves and what the result buffer shrinks by, so
+// the mode still fills its pane exactly — and the mouse translation follows.
+func TestJQPlaygroundExpandedHeaderKeepsGeometry(t *testing.T) {
+	// A result long enough to fill the pane, so the buffer's rendered height is
+	// its geometry rather than its (shorter) content.
+	items := make([]string, 40)
+	for i := range items {
+		items[i] = fmt.Sprintf(`{"n":%d}`, i)
+	}
+	m := openJQ(t, jqApp(t, `{"items":[`+strings.Join(items, ",")+`]}`))
+	m = setProgram(m, `.items[] | select(.n >= 0) | {n: .n, doubled: (.n * 2), label: ("row-" + (.n | tostring))}`)
+	key := m.jqPlay.paneKey
+	r, ok := m.lay.Panes[key]
+	if !ok {
+		t.Fatal("the hosting pane must have a rect")
+	}
+	width := r.W - paneChromeW
+	if got := m.jqHeaderRowsFor(key); got != jqHeaderRows {
+		t.Fatalf("the resting header is %d rows, want %d", got, jqHeaderRows)
+	}
+	before := jqResultHeight(m)
+	if got, want := len(strings.Split(m.jqInlineBody(width), "\n")), paneInterior(r.H, paneChromeH); got != want {
+		t.Fatalf("the resting pane body renders %d rows, want %d", got, want)
+	}
+
+	m = toggleJQView(m)
+	rows := m.jqHeaderRowsFor(key)
+	if rows <= jqHeaderRows {
+		t.Fatalf("the expanded header must grow, got %d rows", rows)
+	}
+	if got, want := len(m.jqQueryRows(width))+jqInfoRows, rows; got != want {
+		t.Errorf("rendered %d header rows, geometry reserved %d", got, want)
+	}
+	if got, want := jqResultHeight(m), before-(rows-jqHeaderRows); got != want {
+		t.Errorf("result buffer is %d rows, want %d", got, want)
+	}
+	if got, want := len(strings.Split(m.jqInlineBody(width), "\n")), paneInterior(r.H, paneChromeH); got != want {
+		t.Errorf("the expanded pane body renders %d rows, want %d", got, want)
+	}
+}
+
+// TestJQPlaygroundExpandedQueryCaps (#2032): a program too long even for the
+// expanded view keeps the result visible, windows around the cursor's row and
+// says that it is still cut.
+func TestJQPlaygroundExpandedQueryCaps(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m = setProgram(m, strings.Repeat(".aaaaaaaa | ", 40)+".a")
+	m = toggleJQView(m)
+	rows := m.jqQueryRows(60)
+	if len(rows) > jqMaxQueryRows {
+		t.Fatalf("the expanded view must cap at %d rows, got %d", jqMaxQueryRows, len(rows))
+	}
+	if !strings.Contains(ansi.Strip(strings.Join(rows, "")), "…") {
+		t.Error("a capped expanded view must mark that it is cut")
+	}
+	// The cursor sits at the end of the program, so the last rows are the ones
+	// on screen — the window follows the caret like the one-line view.
+	if got := ansi.Strip(rows[0]); !strings.HasPrefix(got, "> jq: …") {
+		t.Errorf("the capped view must window around the cursor, got %q", got)
+	}
+	if got := strings.TrimRight(jqQueryText(m, 60), " "); !strings.HasSuffix(got, "| .a") {
+		t.Errorf("the cursor's row must be on screen, got %q", got)
+	}
+	if !strings.Contains(ansi.Strip(m.jqInfoRow(60)), "query cut") {
+		t.Error("the info row must still flag the cut")
+	}
+}
+
+// TestJQPlaygroundQueryCutHint (#2032): a cut program is flagged on the info
+// row, and the hint names the chord that shows it whole — from the query line
+// and from the result buffer alike.
+func TestJQPlaygroundQueryCutHint(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"hits":{"hits":[]}}`))
+	m = setProgram(m, ".a")
+	if got := ansi.Strip(m.jqInfoRow(90)); strings.Contains(got, "query cut") {
+		t.Errorf("a program that fits is not cut, got %q", got)
+	}
+	m = setProgram(m, jqLongProgram)
+	if got := ansi.Strip(m.jqInfoRow(90)); !strings.Contains(got, "query cut") {
+		t.Errorf("a cut program must be flagged, got %q", got)
+	}
+	if got := ansi.Strip(m.jqInfoRow(200)); !strings.Contains(got, "ctrl+alt+e full query") {
+		t.Errorf("the info row must document the full-query chord, got %q", got)
+	}
+	m = toggleJQView(m)
+	if got := ansi.Strip(m.jqInfoRow(200)); !strings.Contains(got, "ctrl+alt+e one-line query") {
+		t.Errorf("the expanded view must document the way back, got %q", got)
+	}
+	// The result buffer's hint row documents it too — the toggle works from
+	// there as well.
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	if !m.jqPlay.bufFocus {
+		t.Fatal("tab must move the focus into the result buffer")
+	}
+	if got := ansi.Strip(m.jqInfoRow(200)); !strings.Contains(got, "ctrl+alt+e") {
+		t.Errorf("the result buffer's hints must document the toggle, got %q", got)
+	}
+	m = toggleJQView(m)
+	if m.jqPlay.expanded {
+		t.Error("the toggle must work from the result buffer too")
+	}
+}
+
+// TestJQPlaygroundQueryViewCommand (#2032): the palette / Tools menu command
+// drives the same toggle as the chord, and is inert with no playground open.
+func TestJQPlaygroundQueryViewCommand(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m = setProgram(m, jqLongProgram)
+	tm, cmd := m.Update(ToggleJQQueryViewMsg{})
+	m = drainCmd(tm.(Model), cmd)
+	if !m.jqPlay.expanded {
+		t.Fatal("json.jqQueryView must expand the query view")
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	tm, cmd = m.Update(ToggleJQQueryViewMsg{})
+	m = drainCmd(tm.(Model), cmd)
+	if m.jqPlayOpen() {
+		t.Error("the command must not open a playground of its own")
+	}
+}
+
+// jqKeys feeds a run of plain keys into the model one at a time — the vim
+// fold commands are two-key sequences (z then a), so a test types them the
+// way a user does.
+func jqKeys(m Model, keys string) Model {
+	for _, r := range keys {
+		m = drainKey(m, tea.KeyPressMsg{Text: string(r), Code: r})
+	}
+	return m
+}
+
+// TestJQResultFoldsAtCursor is the issue's acceptance case (#2029): za in the
+// result buffer collapses the object under the cursor to one row carrying a
+// placeholder with its key count, and hides its body.
+func TestJQResultFoldsAtCursor(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"spec":{"image":"ike","tag":"v1"},"n":3}`))
+	m = setProgram(m, ".")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab}) // keyboard into the result
+	m = jqKeys(m, "jjza")                              // onto the "spec" line, fold it
+
+	view := ansi.Strip(m.render())
+	if !strings.Contains(view, "⋯ 2 keys }") {
+		t.Fatalf("the collapsed object must render its key count, got:\n%s", view)
+	}
+	if strings.Contains(view, `"image"`) {
+		t.Errorf("the folded body must be hidden, got:\n%s", view)
+	}
+	if !strings.Contains(view, `"n": 3`) {
+		t.Errorf("only the fold's own body may be hidden, got:\n%s", view)
+	}
+}
+
+// TestJQResultFoldsNested: a node inside an opened parent folds on its own —
+// zM collapses everything, zo on the outer node reveals one level with the
+// inner fold still closed, and its placeholder counts array items.
+func TestJQResultFoldsNested(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"spec":{"ports":[80,443,8080]}}`))
+	m = setProgram(m, ".")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	m = jqKeys(m, "zM") // every fold closed
+	if view := ansi.Strip(m.render()); !strings.Contains(view, "⋯ 1 key }") || strings.Contains(view, `"ports"`) {
+		t.Fatalf("zM must collapse the outermost value, got:\n%s", view)
+	}
+	m = jqKeys(m, "zo") // one level open again
+	view := ansi.Strip(m.render())
+	if !strings.Contains(view, `"spec": { ⋯ 1 key }`) {
+		t.Fatalf("zo must reveal one level, with the node inside it still folded, got:\n%s", view)
+	}
+	m = jqKeys(m, "jzo") // and the node inside it opens on its own
+	view = ansi.Strip(m.render())
+	if !strings.Contains(view, "⋯ 3 items ]") {
+		t.Errorf("the nested array must fold with its item count, got:\n%s", view)
+	}
+	if strings.Contains(view, "443") {
+		t.Errorf("a fold inside the opened node must stay closed, got:\n%s", view)
+	}
+}
+
+// TestJQResultFoldsResetOnNewQuery: a new program installs a new result, and
+// the folds of the previous one must not survive it — no orphan fold, no
+// hidden line in a document that never had one.
+func TestJQResultFoldsResetOnNewQuery(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"spec":{"image":"ike","tag":"v1"},"n":3}`))
+	m = setProgram(m, ".")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	m = jqKeys(m, "jjza")
+
+	m = setProgram(m, ".spec")
+	view := ansi.Strip(m.render())
+	if strings.Contains(view, "⋯") {
+		t.Fatalf("a new query must leave no fold behind, got:\n%s", view)
+	}
+	if !strings.Contains(view, `"image": "ike"`) {
+		t.Fatalf("the new result must render in full, got:\n%s", view)
+	}
+	// The new result folds on its own terms: one object, two keys.
+	m = jqKeys(m, "za")
+	if view := ansi.Strip(m.render()); !strings.Contains(view, "⋯ 2 keys }") {
+		t.Errorf("the new result must be foldable, got:\n%s", view)
+	}
+}
+
+// TestJQResultFoldHintsAdvertised: the info row names the fold keys while the
+// result buffer holds the keyboard — the mode's own help line is where the
+// binding is documented (#2029).
+func TestJQResultFoldHintsAdvertised(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m = setProgram(m, ".")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	hints := strings.Join(m.jqHints(), " · ")
+	if !strings.Contains(hints, "za fold") || !strings.Contains(hints, "zM/zR fold all") {
+		t.Fatalf("the result buffer's hints must name the fold keys, got %q", hints)
+	}
+	// The row drops trailing hints whole on a narrow pane, so the assertion
+	// that they reach the screen is made against a wide one.
+	if row := ansi.Strip(m.jqInfoRow(200)); !strings.Contains(row, "za fold") {
+		t.Errorf("the info row must show the fold hint, got:\n%s", row)
+	}
+}

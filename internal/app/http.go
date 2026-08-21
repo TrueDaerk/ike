@@ -13,6 +13,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/editor"
 	"ike/internal/help"
 	"ike/internal/host"
 	"ike/internal/httpclient"
@@ -115,16 +116,36 @@ func isHTTPPath(path string) bool {
 	return ext == httpfile.Ext || ext == ".rest"
 }
 
+// isHTTPBuffer reports whether an editor holds requests the client runs: an
+// .http/.rest file, or a file-less buffer treated as HTTP (#2033). Every gate
+// that only reads the buffer's text asks this instead of isHTTPPath(Path()),
+// which is what makes "Run Request" work on a pasted request block.
+func isHTTPBuffer(ed *editor.Model) bool {
+	return ed != nil && isHTTPPath(ed.LangPath())
+}
+
+// httpSource names the request file a dispatch is attributed to: the buffer's
+// path, or — for a file-less HTTP buffer (#2033) — its synthetic language name
+// ("buffer.http"). The name keys the response history and anchors relative
+// external bodies (`< ./payload.json`), which for a buffer with no file means
+// the working directory.
+func httpSource(ed *editor.Model) string {
+	if ed.HasFile() {
+		return ed.Path()
+	}
+	return ed.LangPath()
+}
+
 // runHTTPRequestAtCursor resolves the request block under the focused
 // editor's cursor and dispatches it off-loop; the response (or error)
 // returns as an HTTPResponseMsg.
 func (m *Model) runHTTPRequestAtCursor() tea.Cmd {
 	ed := m.activeEditor()
-	if ed == nil || !ed.HasFile() {
+	if ed == nil {
 		m.host.Notify(host.Info, "http: focus a file tab first")
 		return nil
 	}
-	if !isHTTPPath(ed.Path()) {
+	if !isHTTPBuffer(ed) {
 		m.host.Notify(host.Info, "http: not an .http file")
 		return nil
 	}
@@ -144,12 +165,13 @@ func (m *Model) runHTTPRequestAtCursor() tea.Cmd {
 	// User-defined variables (#1867): the file's own @name=value definitions
 	// plus the selected http-client.env.json environment. A broken
 	// environment file aborts before anything is sent.
-	vars, envHint, err := m.httpVars(ed.Path(), f)
+	source := httpSource(ed)
+	vars, envHint, err := m.httpVars(source, f)
 	if err != nil {
 		m.host.Notify(host.Error, "http: "+err.Error())
 		return nil
 	}
-	return m.dispatchHTTP(ed.Path(), req.Key(), requestLabel(req),
+	return m.dispatchHTTP(source, req.Key(), requestLabel(req),
 		func(ctx context.Context, source, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
 			// The .http file's directory anchors relative external-body paths
 			// (#1305): `< ./payload.json` is relative to the request file, not
@@ -474,11 +496,11 @@ func (m *Model) showHTTPHistory() {
 // then works exactly as after a dispatch (#1251).
 func (m *Model) showStoredHTTPResponse() {
 	ed := m.activeEditor()
-	if ed == nil || !ed.HasFile() {
+	if ed == nil {
 		m.host.Notify(host.Info, "http: focus a file tab first")
 		return
 	}
-	if !isHTTPPath(ed.Path()) {
+	if !isHTTPBuffer(ed) {
 		m.host.Notify(host.Info, "http: not an .http file")
 		return
 	}
@@ -489,7 +511,7 @@ func (m *Model) showStoredHTTPResponse() {
 		m.host.Notify(host.Info, "http: no request under the cursor")
 		return
 	}
-	m.loadStoredHTTPResponse(ed.Path(), req.Key())
+	m.loadStoredHTTPResponse(httpSource(ed), req.Key())
 }
 
 // loadStoredHTTPResponse shows the stored responses of one request in the
@@ -684,11 +706,11 @@ func (m *Model) refreshHTTPFlightMarks() {
 			continue
 		}
 		for _, ed := range inst.Editors() {
-			if idle || !ed.HasFile() || !isHTTPPath(ed.Path()) {
+			if idle || !isHTTPBuffer(ed) {
 				ed.SetHTTPFlight(nil)
 				continue
 			}
-			ed.SetHTTPFlight(m.httpFlightMarks(ed.Path(), ed.Text()))
+			ed.SetHTTPFlight(m.httpFlightMarks(httpSource(ed), ed.Text()))
 		}
 	}
 }

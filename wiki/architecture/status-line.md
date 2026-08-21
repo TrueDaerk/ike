@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Status Line Segments
-description: Extensible left/right slot model behind the bottom status bar — mode, file, diagnostics, host/LSP status, toolchain interpreter, csv column, json/yaml path, notification counter.
+description: Extensible left/right slot model behind the bottom status bar — mode, file, buffer language, diagnostics, host/LSP status, toolchain interpreter, csv column, json/yaml path, notification counter.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
-timestamp: 2026-08-07T13:00:00Z
+timestamp: 2026-08-21T13:00:00Z
 ---
 
 # Status Line Segments
@@ -25,6 +25,7 @@ segments.
 | `mode` | editor input mode (`NORMAL`, `INSERT`, …) | never |
 | `macro` | `recording @x` while a macro recording is active (#58) | idle |
 | `file` | project-relative path + `[+]` / `[disk changed]` / `[large file]` markers | never (`no file`) |
+| `buflang` | chosen buffer language of a file-less buffer, `as Markdown` (#2033, see [Language Registry](/architecture/languages.md)) | the buffer has a file, or no type was chosen |
 | `hint` | empty-editor discovery hint, `? help · shift shift find` (#659); the search chord renders resolver-truth (a remap outside the known defaults shows the live chord) | a file is open, or the terminal is narrower than ~70 columns |
 | `eol` | on-disk line-ending flavor, `LF` / `CRLF` (+ ` (mixed)` when the load saw both, #66) | no file |
 | `encoding` | on-disk character encoding (`UTF-8`, `UTF-16 LE`, …, #66) | no file |
@@ -48,7 +49,7 @@ priority-aware (#471, `composeStatus`): first the file segment shortens by
 exactly the overflow with a JetBrains-style middle ellipsis (floor 16
 cells), then low-priority segments drop in a defined order (hint, eol,
 encoding, indent, svcolumn, docpath, toolchain, todo, host, notifications, macro,
-branch, diagnostics, lsp — mode, file and the cursor never drop), and only as a
+branch, buflang, diagnostics, lsp — mode, file and the cursor never drop), and only as a
 last resort the bar hard-clips on the right.
 
 ## Mode badge (#1323)
@@ -108,6 +109,7 @@ router dispatches a left press through `statusSegmentCommands`:
 
 | segment | command |
 |---|---|
+| `buflang` (chosen buffer language) | `editor.setBufferLanguage` |
 | `todo` (TODO count) | `todo.list` |
 | `notifications` (`● N` counter) | `notifications.history` |
 | `lsp` (server state) | `lsp.showLog` |

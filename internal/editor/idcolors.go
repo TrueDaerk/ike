@@ -39,7 +39,7 @@ func (m *Model) toggleIDColors() {
 // lineIDColors returns the identifier spans of one line when coloring is
 // enabled for this buffer; nil otherwise.
 func (m Model) lineIDColors(line int) []idcolor.Span {
-	if !m.idColors || !idColorLangs[highlight.Lang(m.path)] {
+	if !m.idColors || !idColorLangs[highlight.Lang(m.langPath())] {
 		return nil
 	}
 	return idcolor.Scan(m.buf.Line(line), m.idColorMin)

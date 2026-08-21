@@ -39,11 +39,11 @@ type HTTPCopyAsCurlMsg struct{}
 // says why it does not otherwise — both conversions need one.
 func (m *Model) httpEditor(what string) (*editor.Model, bool) {
 	ed := m.activeEditor()
-	if ed == nil || !ed.HasFile() {
+	if ed == nil {
 		m.host.Notify(host.Info, what+": focus a file tab first")
 		return nil, false
 	}
-	if !isHTTPPath(ed.Path()) {
+	if !isHTTPBuffer(ed) {
 		m.host.Notify(host.Info, what+": not an .http file")
 		return nil, false
 	}
@@ -236,7 +236,7 @@ func (m *Model) copyHTTPRequestAsCurl() tea.Cmd {
 		m.host.Notify(host.Info, "curl: no request under the cursor")
 		return nil
 	}
-	vars, hint, err := m.httpVars(ed.Path(), f)
+	vars, hint, err := m.httpVars(httpSource(ed), f)
 	if err != nil {
 		m.host.Notify(host.Error, "curl: "+err.Error())
 		return nil

@@ -228,6 +228,7 @@ func (m *Model) insertJQFilter(msg InsertJQFilterMsg) tea.Cmd {
 	s.histIdx, s.comp = -1, nil
 	s.setBufFocus(false)
 	s.status = "inserted filter " + f.Name
+	m.sizeJQResult() // the inserted program may change the expanded header's height (#2032)
 	// A newer generation supersedes the seed run the open above may have
 	// started, so the filter — not the seed — is what the buffer shows.
 	return tea.Batch(append(cmds, m.runJQNow())...)

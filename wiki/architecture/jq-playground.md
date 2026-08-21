@@ -1,10 +1,10 @@
 ---
 type: concept
 title: jq Playground
-description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and response pane, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, and a library of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them.
+description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and response pane, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, a library of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects and arrays with member-counting placeholders, and a toggleable full-query view laying a program too wide for the query line out over several pipe-broken rows.
 resource: internal/jqplay/jqplay.go
-tags: [architecture, json, jq, tools, inline, editor, http, completion]
-timestamp: 2026-08-20T18:00:00Z
+tags: [architecture, json, jq, tools, inline, editor, http, completion, folding]
+timestamp: 2026-08-21T12:00:00Z
 ---
 
 # jq Playground
@@ -28,15 +28,18 @@ so leaving restores it bit-identically — editability included.
 internal/jqplay/
   jqplay.go      evaluation core: Parse, Run, Evaluate, Result, History — pure, no UI state
   raw.go         EvaluateRaw: the `jq -r`-shaped single-value form (used by .http captures, #1993)
+  fold.go        Folds: the result's foldable objects/arrays with their member counts (#2029)
   highlight.go   the query line's jq scanner: Tokens/KindAt, single pass, never fails
   complete.go    the typing aid: Complete — snapshot keys at a path, gojq's builtin list
   library.go     the named saved-filter store: Library, Filter, Scope — path-agnostic, one type for both scopes
+  wrap.go        the full-query view's line breaking: Wrap/LineAt, pipe-aware, rune-indexed
 internal/app/
   jqplayground.go the inline mode: query header, result buffer, key routing, debounce and async eval
   jqcomplete.go   the completion popup: state, keys, rendering and compositing
   jqfilters.go    the filter library's UI: the two store paths, the name prompt, the palette picker
   commands.go     json.jqPlayground / json.jqPlaygroundAtPath → the two open messages,
-                  json.jqSaveFilter / json.jqFilters / json.jqRenameFilter → the library
+                  json.jqSaveFilter / json.jqFilters / json.jqRenameFilter → the library,
+                  json.jqQueryView → the full-query view toggle
 ```
 
 The split is the usual one: everything interesting — parsing, running, error
@@ -57,7 +60,9 @@ While the mode is active on a pane:
 - The pane's first two content rows are the **query header**: the colored
   query line, then one info row (input origin and size, result summary, key
   hints — or the error, or a transient status). The header height is fixed, so
-  an error appearing mid-keystroke never resizes the buffer below it.
+  an error appearing mid-keystroke never resizes the buffer below it — the
+  [full-query view](#the-full-query-view) is the one thing that grows it, and
+  only on the user's key.
 - The info row is composed of **styled segments** (#1978): the summary in the
   theme's Hint, the caps — `(stopped at 500)`, `(first 10000 only)` — and a
   zero-value result in **Warning** (the buffer is blank then, and the summary
@@ -73,9 +78,9 @@ While the mode is active on a pane:
 - The rest of the pane shows a **substitute read-only editor**
   (`ShowReadOnly`, the #1762 buffer) holding the result under the virtual
   path `jq result.json`, so JSON highlighting applies. It is a full editor:
-  motions, search, folds, **visual selection and yank**, mouse click/drag
-  selection, wheel and scrollbar all work; mutations are refused with the
-  usual `E45`.
+  motions, search, **folds** (see below), **visual selection and yank**, mouse
+  click/drag selection, wheel and scrollbar all work; mutations are refused
+  with the usual `E45`.
 - The pane's own component — the document editor, the HTTP viewer — is not
   rendered but keeps its entire state. The breadcrumbs row (#1153) is
   suppressed for the pane; the query header takes its place in the mouse
@@ -231,6 +236,92 @@ Info, Secondary, Warning, Hint) rather than the editor's capture colors — the
 header is chrome over the pane surface, not buffer text. The **result** is
 highlighted separately, as JSON, by the substitute editor's ordinary pipeline.
 
+## The full-query view
+
+The query line is one row, windowed around the cursor and cut with `…` at both
+edges. That is right for typing and wrong for reading: a pipeline like
+`.hits.hits[]._source | .keyword as $keyword | .ser[] | select(…) | {…}` is
+never on screen as a whole, so the overview is lost exactly where it is needed
+— while building a long pipeline (#2032).
+
+**`json.jqQueryView`** (`ctrl+alt+e`, or the palette / Tools menu) toggles the
+**full-query view**: the same program laid out over several rows, in place, with
+the program, the cursor, the history position and the result untouched. It
+works from the query line and from the result buffer alike (the mode resolves
+Global chords it does not claim, #1983), and the info row's key hints name the
+chord actually bound to it — a rebind renames the hint with it.
+
+- **The wrap breaks at the pipes** (`jqplay.Wrap`, pure and rune-indexed like
+  the scanner): a jq pipeline reads as a sequence of stages, so a row boundary
+  on a `|` keeps a stage whole. Stages are packed greedily, a stage wider than
+  the row is cut at the width (there is nothing better to break it on), and a
+  `|` inside a string or a comment — or a `||` — is not a boundary. The blanks
+  that separated a stage from the pipe before it are dropped, so no row starts
+  on a space; a hard cut inside a stage keeps every rune, because it may land
+  inside a string literal whose spaces are text.
+- **Highlighting is the same** — the rows are colored rune by rune by
+  `jqplay.Tokens`, and the cursor cell is drawn on its own row, so the
+  expanded view is the one-line view with more rows rather than a second
+  renderer.
+- **The header grows, the result shrinks.** `jqHeaderRowsFor` reports the query
+  rows plus the info row, and the rendering, the result buffer's height and the
+  mouse translation all read that one number, so the mode still fills its pane
+  exactly. The view is capped at **8 rows** and always leaves **3 rows of
+  result** standing: expanding is for seeing the program, not for hiding the
+  output. Past the cap the rows window around the **cursor's** row and mark the
+  cut with `…`, the way the one-line view windows around the cursor cell.
+- **A cut is announced.** Whenever the rows show less than the program holds,
+  the info row carries a `· query cut` marker in the theme's Warning — the same
+  "you are seeing less than there is" color the output caps use, because the
+  `…` at the row's edge alone is too easy to miss.
+
+The one-line header stays the **default**: the full-query view costs result
+rows, and the resting layout is the one to type in. It is view state only —
+nothing about it reaches the program, the history or the saved filters.
+
+## Folding the result
+
+A result is regularly taller than the pane, and reading its *shape* before
+opening the interesting branch is what folding is for. Every multi-line object
+and array of the result window collapses (#2029) with the editor's own vim
+fold keys, from the result buffer (`tab`):
+
+| Key | Effect |
+| --- | --- |
+| `za` | toggle the innermost node at the cursor |
+| `zc` / `zo` | close / open one level |
+| `zM` / `zR` | close every node / open every node |
+| `zy` | copy the collapsed node whole (#1787), the `⧉` affordance's keyboard form |
+
+A collapsed node is **one row** carrying a placeholder that names its size —
+`"spec": { ⋯ 3 keys }`, `"ports": [ ⋯ 12 items ]` — so the row still reads as
+a complete value, and every fold-aware behaviour of an ordinary buffer (`j`/`k`
+stepping over a fold as one row, scrolling, the mouse map, a linewise operator
+taking the whole fold, #1741) applies unchanged. Folding **nests**: opening a
+node reveals one level, with the nodes inside it still folded.
+
+Two deliberate choices behind it:
+
+- **The ranges are the playground's, the folding is the editor's.**
+  `jqplay.Folds` (`internal/jqplay/fold.go`) scans the pretty-printed result —
+  a rune walk counting delimiters outside strings, not a re-decode — and hands
+  the ranges to the result editor through `SetHostFolds`
+  (`internal/editor/hostfold.go`), where they merge over the Tree-sitter ranges
+  and win on a shared header line. No second fold engine: the collapsed set,
+  the z-commands and every fold-aware motion stay the editor's (#144, #1741).
+  Computing the ranges here rather than taking the parse's is what makes the
+  result window fold in a **cgo-free build** too (no grammar there) — and only
+  the structural scan knows how many *members* a node holds, which is what the
+  placeholder says. `SetFoldSummary` is the hook that lets it say "3 keys"
+  where a file says "3 lines".
+- **A new result is a new document.** `ShowReadOnly` resets cursor, scroll and
+  fold state together, and the playground installs the fresh result's ranges
+  right after — so a changed filter can never leave a fold of the previous
+  result behind, and a fold never outlives the lines it hid.
+
+Raw output has no folds because there is none: the playground is JSON-in /
+JSON-out (`jq -r` lives in `raw.go` for the `.http` client, not in the window).
+
 ## Completion
 
 The query line has a typing aid (#1979), synchronous and bounded, with the
@@ -292,6 +383,7 @@ above win):
 | `enter` | record the program in the history and run it now |
 | `↑` / `↓` | walk the session program history (`↓` past the newest restores the draft) |
 | `tab` | move the keyboard into the result buffer |
+| `ctrl+alt+e` | toggle the [full-query view](#the-full-query-view) (`json.jqQueryView`) |
 | `pgup` / `pgdn` | page the result buffer without leaving the query line |
 | `ctrl+s` | save the program as a **named filter** (`json.jqSaveFilter`) |
 | `ctrl+l` | open the **saved-filter picker** (`json.jqFilters`) |
@@ -299,8 +391,12 @@ above win):
 | `ctrl+o` | open the result as a fresh `.json` scratch |
 | `esc` | close (recording the program in the history) |
 
+`ctrl+alt+e` works from the result buffer too.
+
 Result buffer (after `tab`): the **full editor keymap** — motions, search,
-folds, visual selection, `y` yank of the selection — against the read-only
+folds (`za` / `zc` / `zo` / `zM` / `zR`, see
+[Folding the result](#folding-the-result)), visual selection, `y` yank of the
+selection — against the read-only
 buffer, with four exceptions: `tab` returns to the query line, `ctrl+y` /
 `ctrl+o` keep their result-action meaning (shadowing the editor's scroll and
 jumplist keys — a throwaway result has no jumplist worth keeping), and `esc`

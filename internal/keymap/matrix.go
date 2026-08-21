@@ -94,6 +94,7 @@ var reachableAlternatives = map[string]string{
 	"editor.pasteFromHistory":  "palette",
 	"view.zenMode":             "palette / View menu",
 	"perf.hud":                 "palette / View menu",
+	"json.jqQueryView":         "palette / Tools menu",
 	"view.toggleFollow":        "palette",
 	"editor.tab.next":          "palette",
 	"editor.tab.prev":          "palette",

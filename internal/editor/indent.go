@@ -19,7 +19,7 @@ import (
 // buffer's own language. A region whose language has no rules deliberately
 // yields none: a plain-text body must not inherit the host's openers.
 func (m *Model) indentOpeners(line int) ([]string, bool) {
-	if l, ok := lang.ByPath(m.path); ok && l.Regions != nil {
+	if l, ok := lang.ByPath(m.langPath()); ok && l.Regions != nil {
 		if r, ok := lang.RegionAt(l.ID, m.buf.Lines(), line); ok {
 			el, known := lang.ByID(r.Lang)
 			if !known || len(el.IndentAfter) == 0 {
@@ -28,7 +28,7 @@ func (m *Model) indentOpeners(line int) ([]string, bool) {
 			return el.IndentAfter, true
 		}
 	}
-	return lang.IndentAfter(m.path)
+	return lang.IndentAfter(m.langPath())
 }
 
 // smartIndent returns the leading whitespace for a line opened after ref, the

@@ -48,7 +48,7 @@ type svState struct {
 // svLangID returns the buffer's *sv language id, or "" when the buffer is
 // not a separator-delimited file.
 func (m Model) svLangID() string {
-	if id := highlight.Lang(m.path); sv.IsLang(id) {
+	if id := highlight.Lang(m.langPath()); sv.IsLang(id) {
 		return id
 	}
 	return ""

@@ -96,7 +96,7 @@ func (m Model) listRanges() map[int]concealRange {
 		return st.ranges
 	}
 	st.ranges = nil
-	if highlight.Lang(m.path) == "markdown" {
+	if highlight.Lang(m.langPath()) == "markdown" {
 		st.ranges = detectListRanges(m.buf.Lines())
 	}
 	st.version, st.valid = m.docVersion, true

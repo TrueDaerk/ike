@@ -54,6 +54,7 @@ func (m Model) intentionContext() (intention.Context, bool) {
 		LineAt:            ed.LineText,
 		HasSelection:      hasSel,
 		ReadOnly:          ed.ReadOnly(),
+		Fileless:          !ed.HasFile(),
 		DiagnosticAtCaret: ed.DiagnosticOnCaretLine(),
 		HunkAtCaret:       ed.HunkAtCursor(),
 		ConflictAtCaret:   ed.ConflictAtCursor(),
@@ -69,7 +70,9 @@ func (m Model) intentionContext() (intention.Context, bool) {
 		cx.DocPath = true
 	}
 	cx.ConcealFamily, cx.ConcealValue = ed.ConcealExplainAtCaret()
-	if ed.HasFile() && isHTTPPath(ed.Path()) {
+	// The HTTP entries follow the buffer's *type*, so a file-less buffer
+	// treated as HTTP (#2033) offers them too.
+	if isHTTPBuffer(ed) {
 		// RequestAt speaks 1-based cursor lines (the block ranges the parser
 		// records), like every other caller.
 		if _, ok := httpfile.Parse(ed.Text()).RequestAt(line + 1); ok {
@@ -209,7 +212,7 @@ func (m Model) insertCurlAsRequest() (tea.Model, tea.Cmd) {
 	// A read-only buffer (#1762) drops the in-place edit without a word, so a
 	// curl line found in a preview or an archive member takes the scratch
 	// route instead of doing nothing (#2026).
-	if isHTTPPath(ed.Path()) && !ed.ReadOnly() {
+	if isHTTPBuffer(ed) && !ed.ReadOnly() {
 		name := uniqueRequestName(httpfile.Parse(ed.Text()), curlRequestName(imp.Request))
 		block := strings.TrimSuffix(httpfile.FormatRequest(imp.Request, name), "\n")
 		endCol := len([]rune(ed.LineText(endLine)))

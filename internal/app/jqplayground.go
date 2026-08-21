@@ -14,6 +14,7 @@ import (
 
 	"ike/internal/clipboard"
 	"ike/internal/editor"
+	"ike/internal/highlight"
 	"ike/internal/host"
 	"ike/internal/jqplay"
 	"ike/internal/keymap"
@@ -47,9 +48,29 @@ import (
 //     rendering the substitute, so `esc` restores the buffer bit-identically.
 
 // jqHeaderRows is the vertical space the inline query header takes at the top
-// of the hosting pane: the query line plus the input/result/status line. It is
-// fixed — an error appearing must not resize the result buffer per keystroke.
+// of the hosting pane with the query on one line: the query line plus the
+// input/result/status line. It is fixed — an error appearing must not resize
+// the result buffer per keystroke. The expanded query view (#2032) is the one
+// thing that grows it, and only on the user's key.
 const jqHeaderRows = 2
+
+// jqInfoRows is the header's second half: the one input/result/status row,
+// which the expanded query view does not change.
+const jqInfoRows = 1
+
+// jqMaxQueryRows caps the expanded query view (#2032). A program long enough
+// to need more than eight rows would push the result out of sight, which is
+// the opposite of what expanding is for; past the cap the view windows around
+// the cursor row the way the one-line view windows around the cursor cell.
+const jqMaxQueryRows = 8
+
+// jqMinResultRows is the result buffer the expanded query view must leave
+// standing: the playground is still a playground, not a program editor.
+const jqMinResultRows = 3
+
+// jqQueryPrefixW is the width of the query line's `> jq: ` label. Continuation
+// rows of the expanded view indent by it, so the program stays in one column.
+const jqQueryPrefixW = 6
 
 // jqResultPath is the display path of the substitute result editor. Like an
 // archive entry's virtual path (#1762) it is never written to; it exists so
@@ -87,6 +108,12 @@ type jqPlayState struct {
 	program string
 	pos     int
 
+	// expanded is the full-query view (#2032): the query line lays itself out
+	// over several wrapped rows instead of one windowed one. Off by default —
+	// the one-line header is the resting layout, and growing it costs result
+	// rows.
+	expanded bool
+
 	result  jqplay.Result
 	pending bool
 
@@ -96,6 +123,11 @@ type jqPlayState struct {
 	draftPos int
 
 	comp *jqCompState
+
+	// folds are the result's foldable nodes by header line (#2029), the
+	// lookup behind the collapsed placeholder's member count; the ranges
+	// themselves live on the result editor.
+	folds map[int]jqplay.Fold
 
 	gen    int
 	cancel context.CancelFunc
@@ -144,6 +176,7 @@ func (m *Model) startJQPlayground(atPath bool) tea.Cmd {
 		ed.SetClipboard(c)
 	}
 	ed.ShowReadOnly(jqResultPath, "")
+	ed.SetFoldSummary(s.jqFoldSummary) // the fold placeholder names members, not lines (#2029)
 	s.resultEd = &ed
 	m.jqPlay = s
 	m.focusContentAt(src.paneKey, src.tabIdx)
@@ -300,12 +333,82 @@ func (m Model) jqInlineActive(key string) bool {
 }
 
 // jqHeaderRowsFor is the vertical chrome the query header adds to pane key —
-// the breadcrumbRows analogue (#1153) the mouse translation keys off.
+// the breadcrumbRows analogue (#1153) the mouse translation keys off. With the
+// expanded query view up (#2032) it grows with the wrapped program, so the
+// mouse translation and the result buffer's height follow the header instead
+// of assuming the two-row default.
 func (m Model) jqHeaderRowsFor(key string) int {
 	if m.jqInlineActive(key) {
-		return jqHeaderRows
+		return m.jqQueryRowCount() + jqInfoRows
 	}
 	return 0
+}
+
+// jqQueryRowCount is how many rows the query occupies: one in the resting
+// layout, and in the expanded view (#2032) as many as the wrapped program
+// needs — bounded by jqMaxQueryRows and by leaving jqMinResultRows of result
+// standing. Rendering, the mouse translation and the result buffer's height
+// all read this one number, so the header can never disagree with the space
+// reserved for it.
+func (m Model) jqQueryRowCount() int {
+	s := m.jqPlay
+	if s == nil {
+		return 1
+	}
+	r, ok := m.lay.Panes[s.paneKey]
+	if !ok {
+		return 1
+	}
+	return m.jqQueryRowsFor(paneInterior(r.W, paneChromeW))
+}
+
+// jqQueryRowsFor is jqQueryRowCount for a given interior width — the form the
+// rendering uses, so the rows drawn are the rows the geometry reserved. The
+// height bound still comes from the hosting pane: it is what "leave the result
+// standing" is measured against.
+func (m Model) jqQueryRowsFor(width int) int {
+	s := m.jqPlay
+	if s == nil || !s.expanded {
+		return 1
+	}
+	rows := len(jqplay.Wrap(s.program, m.jqQueryWidth(width)))
+	limit := jqMaxQueryRows
+	if r, ok := m.lay.Panes[s.paneKey]; ok {
+		if fits := paneInterior(r.H, paneChromeH) - jqInfoRows - jqMinResultRows; fits < limit {
+			limit = fits
+		}
+	}
+	if rows > limit {
+		rows = limit
+	}
+	if rows < 1 {
+		rows = 1
+	}
+	return rows
+}
+
+// jqQueryWidth is how many runes of the program a query row holds: the pane's
+// interior less the label column and the two cells the `…` window markers may
+// take. The floor keeps the window math sane on a pane too narrow to render
+// into anyway.
+func (m Model) jqQueryWidth(paneWidth int) int {
+	if avail := paneWidth - jqQueryPrefixW - 2; avail > 10 {
+		return avail
+	}
+	return 10
+}
+
+// toggleJQQueryView switches the expanded query view (#2032) — json.jqQueryView
+// from the query line, the result buffer, the palette or the Tools menu. It is
+// a pure view state: the program, the cursor and the result are untouched, only
+// the header's height and the result buffer's are.
+func (m *Model) toggleJQQueryView() {
+	s := m.jqPlay
+	if s == nil {
+		return
+	}
+	s.expanded = !s.expanded
+	m.sizeJQResult()
 }
 
 // sizeJQResult fits the substitute result editor under the query header in
@@ -320,7 +423,7 @@ func (m *Model) sizeJQResult() {
 	if !ok {
 		return
 	}
-	s.resultEd.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH+jqHeaderRows))
+	s.resultEd.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH+m.jqQueryRowCount()+jqInfoRows))
 }
 
 // closeJQPlayground records the program in the session history, aborts a run
@@ -485,21 +588,68 @@ func (m *Model) finishJQEval(msg jqEvalDoneMsg) tea.Cmd {
 
 // syncJQResultBuffer reinstalls the current result text into the substitute
 // editor. ShowReadOnly resets cursor and scroll — the buffer's content just
-// changed under them, so a stale position would point at nothing.
+// changed under them, so a stale position would point at nothing — and with
+// them the fold state, which is why the result's own fold ranges (#2029) are
+// installed right after: a new query can never leave a fold of the previous
+// result behind.
 func (m *Model) syncJQResultBuffer() tea.Cmd {
 	s := m.jqPlay
 	if s == nil || s.resultEd == nil {
 		return nil
 	}
 	s.resultEd.ShowReadOnly(jqResultPath, s.result.Text())
+	s.setResultFolds(jqplay.Folds(s.result.Text()))
 	s.resultEd.SetFocused(s.bufFocus)
 	return s.resultEd.Reparse()
 }
 
+// setResultFolds installs the result's foldable objects and arrays on the
+// substitute editor (#2029). The playground computes them itself instead of
+// waiting for the Tree-sitter parse: the result window must fold in a
+// grammar-less build too, and only the structural scan knows how many members
+// a node holds, which is what the placeholder says. The collapsing itself
+// stays the editor's — za/zc/zo/zM/zR and every fold-aware motion (#1741)
+// work in the result buffer exactly as they do in a file.
+func (s *jqPlayState) setResultFolds(folds []jqplay.Fold) {
+	s.folds = make(map[int]jqplay.Fold, len(folds))
+	ranges := make([]highlight.Fold, 0, len(folds))
+	for _, f := range folds {
+		s.folds[f.HeaderLine] = f
+		ranges = append(ranges, highlight.Fold{HeaderLine: f.HeaderLine, EndLine: f.EndLine})
+	}
+	if s.resultEd != nil {
+		s.resultEd.SetHostFolds(ranges)
+	}
+}
+
+// jqFoldSummary is the placeholder a collapsed node renders as: its member
+// count in its own unit, `{ ⋯ 3 keys }` rather than the file buffer's
+// "⋯ 3 lines" — how big the value is, which is what a reader skimming a
+// result wants to know. An unknown header falls back to the editor's default.
+func (s *jqPlayState) jqFoldSummary(header, end int) string {
+	f, ok := s.folds[header]
+	if !ok || f.EndLine != end {
+		return ""
+	}
+	return f.Label()
+}
+
 // updateJQPlayground consumes every key while the playground's pane is
 // focused: the query line owns them by default, the result buffer after tab
-// (#1970).
+// (#1970). The result buffer is refit afterwards because a key may have
+// changed the program, and with the expanded query view up (#2032) the header
+// then holds a different number of rows than the buffer was sized under.
 func (m Model) updateJQPlayground(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	out, cmd := m.updateJQPlaygroundKey(msg)
+	if mm, ok := out.(Model); ok {
+		mm.sizeJQResult()
+		return mm, cmd
+	}
+	return out, cmd
+}
+
+// updateJQPlaygroundKey is the routing itself; updateJQPlayground wraps it.
+func (m Model) updateJQPlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.jqPlay
 	if s == nil {
 		return m, nil
@@ -699,6 +849,7 @@ func (m *Model) pasteJQPlayground(text string) tea.Cmd {
 	s.program, s.pos, s.histIdx = out, pos, -1
 	s.comp = nil         // a paste is not typing: no popup over it (the editor's rule)
 	s.setBufFocus(false) // pasting a program is query-line work
+	m.sizeJQResult()     // a longer program is a taller expanded header (#2032)
 	return m.scheduleJQEval()
 }
 
@@ -825,8 +976,10 @@ func (m Model) openJQResultAsScratch() (tea.Model, tea.Cmd) {
 	return m.openPath(path, false)
 }
 
-// jqInlineBody renders the hosting pane's content: the two header rows and
-// the result buffer underneath, filling the pane's interior exactly.
+// jqInlineBody renders the hosting pane's content: the query rows, the info
+// row and the result buffer underneath, filling the pane's interior exactly.
+// The query row count comes from jqQueryRowCount, the same number the pane
+// geometry reserved.
 func (m Model) jqInlineBody(width int) string {
 	s := m.jqPlay
 	if s == nil {
@@ -835,7 +988,7 @@ func (m Model) jqInlineBody(width int) string {
 	if width < 20 {
 		width = 20
 	}
-	return m.jqQueryRow(width) + "\n" + m.jqInfoRow(width) + "\n" + s.resultEd.View()
+	return strings.Join(m.jqQueryRows(width), "\n") + "\n" + m.jqInfoRow(width) + "\n" + s.resultEd.View()
 }
 
 // jqInfoRow is the header's second line: an error beats a transient status
@@ -868,7 +1021,13 @@ func (m Model) jqInfoRow(width int) string {
 	if res := m.jqResultSegment(); res != "" {
 		line += hint.Render(" · ") + res
 	}
-	for _, h := range s.jqHints() {
+	if m.jqQueryCut(width) {
+		// The `…` at the row's edge alone is too easy to miss (#2032): say
+		// that the program on screen is not all of it, in the same Warning the
+		// other "you are seeing less than there is" markers use.
+		line += lipgloss.NewStyle().Foreground(pal.Warning).Render(" · query cut")
+	}
+	for _, h := range m.jqHints() {
 		seg := hint.Render(" · " + h)
 		if ansi.StringWidth(line)+ansi.StringWidth(seg) > width {
 			break
@@ -880,11 +1039,51 @@ func (m Model) jqInfoRow(width int) string {
 
 // jqHints is the key-hint tail of the info row, one segment per hint so a
 // narrow pane drops trailing hints whole rather than clipping one mid-word.
-func (s *jqPlayState) jqHints() []string {
-	if s.bufFocus {
-		return []string{"tab query line", "ctrl+y copy", "ctrl+o scratch", "esc close"}
+// The query-view toggle (#2032) is named with the chord actually bound to
+// json.jqQueryView, so a rebind renames the hint with it, and it sits early in
+// the list: a program that does not fit the row is exactly the situation in
+// which the hint has to survive a narrow pane.
+func (m Model) jqHints() []string {
+	s := m.jqPlay
+	view := m.jqQueryViewChord() + " full query"
+	if s.expanded {
+		view = m.jqQueryViewChord() + " one-line query"
 	}
-	return []string{"tab result", "enter run", "↑/↓ history", "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close"}
+	if s.bufFocus {
+		// za/zM/zR are the editor's own fold keys (#1741), listed here
+		// because folding a big result (#2029) is the reason to be in the
+		// buffer at all — and nothing else on the row advertises them.
+		return []string{"tab query line", "za fold", "zM/zR fold all", view, "ctrl+y copy", "ctrl+o scratch", "esc close"}
+	}
+	return []string{"tab result", "enter run", view, "↑/↓ history", "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close"}
+}
+
+// jqQueryViewChord names the chord bound to json.jqQueryView (#2032) for the
+// hints, resolved against the live binding table so a rebind is reflected
+// rather than a hard-coded default being advertised. With the command unbound
+// — a user may unbind it — the palette is what is left to name.
+func (m Model) jqQueryViewChord() string {
+	if m.bindings != nil && m.bindings.Table() != nil {
+		for _, b := range m.bindings.Table().Bindings() {
+			if b.Command == "json.jqQueryView" {
+				return b.Chord.String()
+			}
+		}
+	}
+	return "palette"
+}
+
+// jqQueryCut reports whether the query rows are showing less than the program
+// holds: the one-line view windowed around the cursor, or an expanded view
+// capped at jqMaxQueryRows. It drives the info row's marker and is the reason
+// the toggle is worth pressing.
+func (m Model) jqQueryCut(width int) bool {
+	s := m.jqPlay
+	avail := m.jqQueryWidth(width)
+	if !s.expanded {
+		return len([]rune(s.program)) > avail
+	}
+	return len(jqplay.Wrap(s.program, avail)) > m.jqQueryRowsFor(width)
 }
 
 // jqErrorLine is the message shown on the info row: a bad input beats a bad
@@ -933,10 +1132,6 @@ func (m Model) jqInputSegment() string {
 // math never changes with focus.
 func (m Model) jqQueryRow(width int) string {
 	s := m.jqPlay
-	avail := width - 8
-	if avail < 10 {
-		avail = 10
-	}
 	pos := s.pos
 	prefix := "> jq: "
 	if s.bufFocus || !m.jqPlayFocused() {
@@ -944,7 +1139,75 @@ func (m Model) jqQueryRow(width int) string {
 		prefix = "  jq: "
 	}
 	label := lipgloss.NewStyle().Foreground(m.pal().Secondary).Render(prefix)
-	return label + m.jqHighlighted(s.program, pos, avail)
+	return label + m.jqHighlighted(s.program, pos, m.jqQueryWidth(width))
+}
+
+// jqQueryRows is the query half of the header: the one windowed row by
+// default, the wrapped program over jqQueryRowCount rows in the expanded view
+// (#2032). Exactly that many rows are always returned — a short program pads
+// with blank rows rather than letting the pane's content shrink under the
+// geometry the header reserved.
+//
+// The wrap breaks at `|` boundaries (jqplay.Wrap), so a row holds whole
+// pipeline stages wherever the width allows, and every row is highlighted by
+// the same scanner the one-line view uses. Rows past the cap are windowed
+// around the cursor's row and marked with the `…` the one-line view marks a
+// cut with, so the cursor is always on screen and there is always a sign that
+// more program exists.
+func (m Model) jqQueryRows(width int) []string {
+	s := m.jqPlay
+	rows := m.jqQueryRowsFor(width)
+	if rows <= 1 {
+		return []string{m.jqQueryRow(width)}
+	}
+	pal := m.pal()
+	label := lipgloss.NewStyle().Foreground(pal.Secondary)
+	prefix, pos := "> jq: ", s.pos
+	if s.bufFocus || !m.jqPlayFocused() {
+		prefix, pos = "  jq: ", -1
+	}
+	lines := jqplay.Wrap(s.program, m.jqQueryWidth(width))
+	start := 0
+	if pos >= 0 {
+		if cur := jqplay.LineAt(lines, pos); cur >= rows {
+			start = cur - rows + 1
+		}
+	}
+	r := []rune(s.program)
+	tokens := jqplay.Tokens(s.program)
+	styles := m.jqKindStyles()
+	cursor := lipgloss.NewStyle().Reverse(true)
+	out := make([]string, 0, rows)
+	for i := 0; i < rows; i++ {
+		row := label.Render(prefix)
+		if i > 0 {
+			row = strings.Repeat(" ", jqQueryPrefixW)
+		}
+		idx := start + i
+		if idx >= len(lines) {
+			out = append(out, row)
+			continue
+		}
+		if idx == start && start > 0 {
+			row += "…"
+		}
+		l := lines[idx]
+		for j := l.Start; j < l.End; j++ {
+			if j == pos {
+				row += cursor.Render(string(r[j]))
+				continue
+			}
+			row += styles[jqplay.KindAt(tokens, j)].Render(string(r[j]))
+		}
+		if pos == l.End && idx == jqplay.LineAt(lines, pos) {
+			row += cursor.Render(" ")
+		}
+		if idx == start+rows-1 && idx < len(lines)-1 {
+			row += "…"
+		}
+		out = append(out, row)
+	}
+	return out
 }
 
 // jqHighlighted renders the program clipped to width runes around the cursor,

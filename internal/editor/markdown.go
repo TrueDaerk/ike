@@ -479,7 +479,7 @@ func (m Model) tableBlocks() []mdTableBlock {
 		return st.blocks
 	}
 	st.blocks = nil
-	if highlight.Lang(m.path) == "markdown" {
+	if highlight.Lang(m.langPath()) == "markdown" {
 		st.blocks = detectTables(m.buf.Lines(), m.cellStyles())
 	}
 	st.version, st.valid = m.docVersion, true

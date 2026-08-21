@@ -34,7 +34,7 @@ func (m *Model) commentLine() tea.Cmd {
 	if m.insert.active {
 		m.commitInsert()
 	}
-	marker, _, ok := lang.Comments(m.path)
+	marker, _, ok := lang.Comments(m.langPath())
 	if !ok || marker == "" {
 		return notice("no line-comment syntax for this file")
 	}
@@ -61,7 +61,7 @@ func (m *Model) commentBlock() tea.Cmd {
 	if m.insert.active {
 		m.commitInsert()
 	}
-	marker, block, ok := lang.Comments(m.path)
+	marker, block, ok := lang.Comments(m.langPath())
 	opener, closer := block[0], block[1]
 	if !ok || (opener == "" && marker == "") {
 		return notice("no comment syntax for this file")

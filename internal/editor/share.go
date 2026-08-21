@@ -52,6 +52,7 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.conflictCache = newConflictStore() // per-view cache like testCache (#1149)
 	m.renderEpoch++
 	m.path = src.path
+	m.langOverride = src.langOverride // a chosen type is a document property (#2033)
 	m.buf = src.buf
 	m.seedBreakpointLines()
 	m.seedMarkLines()
