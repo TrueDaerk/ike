@@ -108,10 +108,16 @@ type jqPlayState struct {
 	program string
 	pos     int
 
-	// expanded is the full-query view (#2032): the query line lays itself out
-	// over several wrapped rows instead of one windowed one. Off by default —
-	// the one-line header is the resting layout, and growing it costs result
-	// rows.
+	// qgoal is the column a run of vertical motions through the expanded
+	// view's rows aims for (#2038), -1 when none is in flight. It is what
+	// makes ↑/↓ over a short row return to the column they left, instead of
+	// walking left one row at a time; every other key clears it.
+	qgoal int
+
+	// expanded is the multi-line view (#2032, edited in since #2038): the
+	// query line lays itself out over several wrapped rows instead of one
+	// windowed one, and the caret moves through them. Off by default — the
+	// one-line header is the resting layout, and growing it costs result rows.
 	expanded bool
 
 	result  jqplay.Result
@@ -166,7 +172,7 @@ func (m *Model) startJQPlayground(atPath bool) tea.Cmd {
 		return nil
 	}
 	m.closeJQPlayground()
-	s := &jqPlayState{paneKey: src.paneKey, source: src.label, srcKey: src.key, histIdx: -1, hist: m.jqHist(), program: m.jqSeedProgram(src, atPath)}
+	s := &jqPlayState{paneKey: src.paneKey, source: src.label, srcKey: src.key, histIdx: -1, qgoal: -1, hist: m.jqHist(), program: m.jqSeedProgram(src, atPath)}
 	s.pos = len([]rune(s.program))
 	ed := editor.New()
 	ed.SetRegisters(m.regs) // app-wide registers (#1540): yanks in the result reach every buffer
@@ -409,6 +415,77 @@ func (m *Model) toggleJQQueryView() {
 	}
 	s.expanded = !s.expanded
 	m.sizeJQResult()
+}
+
+// moveJQQueryRow moves the cursor delta rows through the wrapped program of
+// the multi-line view (#2038), aiming for column goal — the column the run of
+// motions started in, so stepping over a short stage returns to it instead of
+// dragging the cursor left one row at a time.
+//
+// It reports whether it moved: the one-line view, a program that wraps to a
+// single row, and the row above the first / below the last all answer false,
+// which is what hands ↑/↓ back to the history walk.
+func (m *Model) moveJQQueryRow(delta, goal int) bool {
+	s := m.jqPlay
+	if s == nil || !s.expanded {
+		return false
+	}
+	width, ok := m.jqPaneQueryWidth()
+	if !ok {
+		return false
+	}
+	lines := jqplay.Wrap(s.program, width)
+	row, col := jqplay.RowCol(lines, s.pos)
+	next := row + delta
+	if next < 0 || next >= len(lines) {
+		return false
+	}
+	if goal > col {
+		col = goal // an unset goal is -1 and never wins over a real column
+	}
+	s.pos, s.qgoal = jqplay.PosAt(lines, next, col), col
+	s.comp = nil // the popup completes the span the cursor just left
+	return true
+}
+
+// moveJQQueryEdge puts the cursor on the start or the end of its own row in
+// the multi-line view (#2038), reporting whether it applied. With one row
+// there is nothing row-local about home/end, so they stay the program's ends.
+func (m *Model) moveJQQueryEdge(toEnd bool) bool {
+	s := m.jqPlay
+	if s == nil || !s.expanded {
+		return false
+	}
+	width, ok := m.jqPaneQueryWidth()
+	if !ok {
+		return false
+	}
+	lines := jqplay.Wrap(s.program, width)
+	if len(lines) < 2 {
+		return false
+	}
+	row, _ := jqplay.RowCol(lines, s.pos)
+	l := lines[row]
+	s.pos, s.comp = l.Start, nil
+	if toEnd {
+		s.pos = l.End
+	}
+	return true
+}
+
+// jqPaneQueryWidth is how many runes of the program one query row holds in the
+// hosting pane as it is laid out right now. The key handlers wrap against it,
+// so a motion works in exactly the rows that are on screen.
+func (m Model) jqPaneQueryWidth() (int, bool) {
+	s := m.jqPlay
+	if s == nil {
+		return 0, false
+	}
+	r, ok := m.lay.Panes[s.paneKey]
+	if !ok {
+		return 0, false
+	}
+	return m.jqQueryWidth(paneInterior(r.W, paneChromeW)), true
 }
 
 // sizeJQResult fits the substitute result editor under the query header in
@@ -655,6 +732,11 @@ func (m Model) updateJQPlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	s.status = ""
+	// A goal column survives a *run* of vertical motions only (#2038): it is
+	// stashed here and cleared, so every other key re-anchors it on the
+	// column the cursor is actually in.
+	goal := s.qgoal
+	s.qgoal = -1
 	// The spatial focus moves (default ctrl+arrows) leave the pane with the
 	// playground still mounted (#1980), the way they escape a focused
 	// terminal: the mode is scoped to its pane, not to the whole keyboard.
@@ -691,9 +773,35 @@ func (m Model) updateJQPlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		s.histIdx = -1
 		return m, m.runJQNow()
 	case "up":
+		// In the multi-line view the arrows are cursor motion first (#2038);
+		// they fall through to the history walk at the program's own top and
+		// bottom, the way a multi-line shell prompt hands ↑ over once there is
+		// no line above. alt+↑/↓ reach the history from anywhere.
+		if m.moveJQQueryRow(-1, goal) {
+			return m, nil
+		}
 		return m, m.stepJQHistory(1)
 	case "down":
+		if m.moveJQQueryRow(1, goal) {
+			return m, nil
+		}
 		return m, m.stepJQHistory(-1)
+	case "alt+up":
+		return m, m.stepJQHistory(1)
+	case "alt+down":
+		return m, m.stepJQHistory(-1)
+	case "home", "end":
+		// "this line" once there are lines (#2038); in the one-line view
+		// ui.EditKey's whole-program ends below still apply.
+		if m.moveJQQueryEdge(msg.String() == "end") {
+			return m, nil
+		}
+	case "ctrl+home":
+		s.pos, s.comp = 0, nil
+		return m, nil
+	case "ctrl+end":
+		s.pos, s.comp = len([]rune(s.program)), nil
+		return m, nil
 	case "pgup", "pgdown":
 		// Paging works from the query line without moving the focus.
 		var cmd tea.Cmd
@@ -906,6 +1014,7 @@ func (m Model) jqPaneClick(key string, msg mouseEvent, x, y int) (tea.Model, tea
 	if y < 0 {
 		if msg.Button == tea.MouseLeft {
 			s.setBufFocus(false)
+			m.clickJQQueryRow(x, y)
 		}
 		return m, nil
 	}
@@ -922,6 +1031,61 @@ func (m Model) jqPaneClick(key string, msg mouseEvent, x, y int) (tea.Model, tea
 	ed.MouseClick(x, y)
 	m.drag = &dragState{kind: dragEditSelect, srcPane: key, curX: msg.X, curY: msg.Y}
 	return m, nil
+}
+
+// clickJQQueryRow puts the caret on the clicked cell of the query header — in
+// the multi-line view the way to reach a stage far down a long pipeline
+// without walking there (#2038), and in the one-line view a click into the
+// visible window. x/y are content-local, so the header sits at negative y with
+// the query rows first and the info row last; a click on the info row or left
+// of the `jq:` label only returns the focus to the query line.
+func (m *Model) clickJQQueryRow(x, y int) {
+	s := m.jqPlay
+	r, ok := m.lay.Panes[s.paneKey]
+	if !ok {
+		return
+	}
+	width := paneInterior(r.W, paneChromeW)
+	lines, rows, start := m.jqQueryWindow(width)
+	idx := y + rows + jqInfoRows // the clicked query row, 0-based
+	col := x - jqQueryPrefixW
+	if idx < 0 || idx >= rows || col < 0 {
+		return
+	}
+	s.comp = nil
+	if rows <= 1 {
+		s.pos = jqOneLinePos(s.program, s.pos, m.jqQueryWidth(width), col)
+		return
+	}
+	if idx == 0 && start > 0 {
+		col-- // the row's leading `…` marker is not program text
+	}
+	if line := start + idx; line < len(lines) {
+		s.pos = jqplay.PosAt(lines, line, col)
+		return
+	}
+	s.pos = lines[len(lines)-1].End // a blank row below a short program
+}
+
+// jqOneLinePos maps a column of the one-line query row back onto a rune
+// position, mirroring jqHighlighted's cursor window — its start offset and the
+// leading `…` cell that stands for the runes scrolled off to the left.
+func jqOneLinePos(program string, pos, width, col int) int {
+	r := []rune(program)
+	start := 0
+	if pos >= width {
+		start = pos - width + 1
+	}
+	if start > 0 {
+		col--
+	}
+	if col < 0 {
+		col = 0
+	}
+	if p := start + col; p < len(r) {
+		return p
+	}
+	return len(r)
 }
 
 // dragEditor resolves the editor a selection or scrollbar drag targets in
@@ -1055,7 +1219,15 @@ func (m Model) jqHints() []string {
 		// buffer at all — and nothing else on the row advertises them.
 		return []string{"tab query line", "za fold", "zM/zR fold all", view, "ctrl+y copy", "ctrl+o scratch", "esc close"}
 	}
-	return []string{"tab result", "enter run", view, "↑/↓ history", "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close"}
+	// The arrows change meaning with the view (#2038), so the hints say which
+	// one is in front of the user: rows to walk, or the history.
+	hist := []string{"↑/↓ history"}
+	if s.expanded {
+		hist = []string{"↑/↓ lines", "alt+↑/↓ history"}
+	}
+	out := []string{"tab result", "enter run", view}
+	out = append(out, hist...)
+	return append(out, "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close")
 }
 
 // jqQueryViewChord names the chord bound to json.jqQueryView (#2032) for the
@@ -1156,7 +1328,7 @@ func (m Model) jqQueryRow(width int) string {
 // more program exists.
 func (m Model) jqQueryRows(width int) []string {
 	s := m.jqPlay
-	rows := m.jqQueryRowsFor(width)
+	lines, rows, start := m.jqQueryWindow(width)
 	if rows <= 1 {
 		return []string{m.jqQueryRow(width)}
 	}
@@ -1166,12 +1338,9 @@ func (m Model) jqQueryRows(width int) []string {
 	if s.bufFocus || !m.jqPlayFocused() {
 		prefix, pos = "  jq: ", -1
 	}
-	lines := jqplay.Wrap(s.program, m.jqQueryWidth(width))
-	start := 0
+	curRow := -1
 	if pos >= 0 {
-		if cur := jqplay.LineAt(lines, pos); cur >= rows {
-			start = cur - rows + 1
-		}
+		curRow, _ = jqplay.RowCol(lines, pos)
 	}
 	r := []rune(s.program)
 	tokens := jqplay.Tokens(s.program)
@@ -1192,14 +1361,21 @@ func (m Model) jqQueryRows(width int) []string {
 			row += "…"
 		}
 		l := lines[idx]
+		// The cursor may stand in the blanks a stage break dropped, which are
+		// on no row at all; it is drawn on this row's first cell then (#2038),
+		// which is also where a vertical motion into the row lands.
+		cur := pos
+		if idx == curRow && cur < l.Start {
+			cur = l.Start
+		}
 		for j := l.Start; j < l.End; j++ {
-			if j == pos {
+			if j == cur {
 				row += cursor.Render(string(r[j]))
 				continue
 			}
 			row += styles[jqplay.KindAt(tokens, j)].Render(string(r[j]))
 		}
-		if pos == l.End && idx == jqplay.LineAt(lines, pos) {
+		if cur == l.End && idx == curRow {
 			row += cursor.Render(" ")
 		}
 		if idx == start+rows-1 && idx < len(lines)-1 {
@@ -1208,6 +1384,25 @@ func (m Model) jqQueryRows(width int) []string {
 		out = append(out, row)
 	}
 	return out
+}
+
+// jqQueryWindow is the multi-line view's layout at a pane interior of width
+// cells: the wrapped program, how many of its rows are on screen and the row
+// the window starts at. The rendering, the click mapping (#2038) and the
+// completion anchor all read it, so the row drawn, the row clicked and the row
+// the popup hangs under can never disagree.
+//
+// The window follows the cursor's row whether or not the cursor is *drawn* —
+// the focus moving into the result buffer must not scroll the program away
+// under it.
+func (m Model) jqQueryWindow(width int) (lines []jqplay.Line, rows, start int) {
+	s := m.jqPlay
+	lines = jqplay.Wrap(s.program, m.jqQueryWidth(width))
+	rows = m.jqQueryRowsFor(width)
+	if cur, _ := jqplay.RowCol(lines, s.pos); cur >= rows {
+		start = cur - rows + 1
+	}
+	return lines, rows, start
 }
 
 // jqHighlighted renders the program clipped to width runes around the cursor,

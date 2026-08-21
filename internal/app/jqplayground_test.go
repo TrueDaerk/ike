@@ -1298,3 +1298,262 @@ func TestJQResultFoldHintsAdvertised(t *testing.T) {
 		t.Errorf("the info row must show the fold hint, got:\n%s", row)
 	}
 }
+
+// jqMultiLineProgram is a pipeline that wraps over more than one row in the
+// test pane, with a *shorter* row above the last one — so a vertical motion
+// over it has a goal column to lose (#2038).
+const jqMultiLineProgram = `.items[] | select(.n >= 1) | {a: .n, b: (.n * 2), c: (.n * 3), d: (.n * 4)} | .a`
+
+// jqQueryLines is the wrapped program as the hosting pane lays it out — the
+// rows a cursor motion moves through.
+func jqQueryLines(t *testing.T, m Model) []jqplay.Line {
+	t.Helper()
+	w, ok := m.jqPaneQueryWidth()
+	if !ok {
+		t.Fatal("the hosting pane must be laid out")
+	}
+	return jqplay.Wrap(m.jqPlay.program, w)
+}
+
+// jqMultiLineApp opens the playground over a two-item document with
+// jqMultiLineProgram on the query line and the multi-line view up.
+func jqMultiLineApp(t *testing.T) (Model, []jqplay.Line) {
+	t.Helper()
+	m := openJQ(t, jqApp(t, `{"items":[{"n":1},{"n":2}]}`))
+	m = setProgram(m, jqMultiLineProgram)
+	m = toggleJQView(m)
+	lines := jqQueryLines(t, m)
+	if len(lines) < 2 {
+		t.Fatalf("setup: the program must wrap over several rows, got %d", len(lines))
+	}
+	last, prev := lines[len(lines)-1], lines[len(lines)-2]
+	if last.End-last.Start <= prev.End-prev.Start {
+		t.Fatalf("setup: the caret's row must be the longer one, got %+v", lines)
+	}
+	return m, lines
+}
+
+// TestJQPlaygroundMultiLineWalksRows is the issue's acceptance case (#2038):
+// in the multi-line view ↑/↓ move the caret between the program's rows — with
+// the goal column surviving a shorter row on the way — instead of walking the
+// history, and the program is never touched by a motion.
+func TestJQPlaygroundMultiLineWalksRows(t *testing.T) {
+	m, lines := jqMultiLineApp(t)
+	end := m.jqPlay.pos
+	row, _ := jqplay.RowCol(lines, end)
+	if row != len(lines)-1 {
+		t.Fatalf("setup: the caret starts on the last row, got %d", row)
+	}
+
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	if got := m.jqPlay.program; got != jqMultiLineProgram {
+		t.Fatalf("↑ must move the caret, not the program: %q", got)
+	}
+	up, col := jqplay.RowCol(lines, m.jqPlay.pos)
+	if up != row-1 {
+		t.Fatalf("↑ put the caret on row %d, want %d", up, row-1)
+	}
+	if want := lines[up].End - lines[up].Start; col != want {
+		t.Errorf("the caret sits in column %d of a %d-wide row, want its end", col, want)
+	}
+	if m.jqPlay.histIdx != -1 {
+		t.Error("a row motion must not enter the history")
+	}
+
+	// The goal column is remembered across the shorter row: ↓ lands back on
+	// the column ↑ left, not on the one the short row clamped it to.
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	if got := m.jqPlay.pos; got != end {
+		t.Errorf("↓ back = %d, want the goal column restored to %d", got, end)
+	}
+	// ↓ on the last row has no row to go to, so it hands over to the history —
+	// which is at the live slot with nothing newer, and leaves the line alone.
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	if got := m.jqPlay.program; got != jqMultiLineProgram {
+		t.Errorf("↓ at the last row = %q, want the program untouched", got)
+	}
+	// The one-line view keeps the arrows on the history (#1973).
+	m = toggleJQView(m)
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	if got := m.jqPlay.pos; got != end {
+		t.Errorf("↑ in the one-line view moved the caret to %d", got)
+	}
+}
+
+// TestJQPlaygroundMultiLineEditsAnyRow (#2038): home/end are row-local once
+// there are rows, the caret edits where it stands — several rows up from the
+// end of the program — and the edit runs live like any other keystroke.
+func TestJQPlaygroundMultiLineEditsAnyRow(t *testing.T) {
+	m, lines := jqMultiLineApp(t)
+	if got := m.jqPlay.result.Text(); got != "1\n2" {
+		t.Fatalf("setup: result = %q, want both items", got)
+	}
+
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp}) // onto the first row
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyHome})
+	if got := m.jqPlay.pos; got != lines[0].Start {
+		t.Fatalf("home = %d, want the row's start %d", got, lines[0].Start)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnd})
+	if got := m.jqPlay.pos; got != lines[0].End {
+		t.Fatalf("end = %d, want the row's end %d", got, lines[0].End)
+	}
+
+	// Typing at the caret inserts a whole stage in the middle of the program.
+	m = typeInto(m, " select(.n > 1) |")
+	m = dismissJQPopup(m)
+	want := jqMultiLineProgram[:lines[0].End] + " select(.n > 1) |" + jqMultiLineProgram[lines[0].End:]
+	if got := m.jqPlay.program; got != want {
+		t.Fatalf("program = %q, want the stage inserted at the caret: %q", got, want)
+	}
+	if got := m.jqPlay.result.Text(); got != "2" {
+		t.Errorf("result = %q, want the edited program's live result", got)
+	}
+	// ctrl+home / ctrl+end still reach the ends of the whole program.
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyHome, Mod: tea.ModCtrl})
+	if got := m.jqPlay.pos; got != 0 {
+		t.Errorf("ctrl+home = %d, want the program's start", got)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnd, Mod: tea.ModCtrl})
+	if got := m.jqPlay.pos; got != len([]rune(want)) {
+		t.Errorf("ctrl+end = %d, want the program's end", got)
+	}
+}
+
+// TestJQPlaygroundMultiLineHistoryKeys (#2038): with ↑/↓ on the rows, the
+// history moves to alt+↑/alt+↓ — reachable from any row — and a plain ↑ on the
+// first row still hands over to it, the way a multi-line shell prompt does.
+func TestJQPlaygroundMultiLineHistoryKeys(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"items":[{"n":1},{"n":2}]}`))
+	m = runJQProgram(m, ".items")
+	m = setProgram(m, jqMultiLineProgram)
+	m = toggleJQView(m)
+	if lines := jqQueryLines(t, m); len(lines) < 2 {
+		t.Fatalf("setup: the program must wrap, got %d row(s)", len(lines))
+	}
+
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModAlt})
+	if got := m.jqPlay.program; got != ".items" {
+		t.Fatalf("alt+↑ = %q, want the recorded program", got)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModAlt})
+	if got := m.jqPlay.program; got != jqMultiLineProgram {
+		t.Fatalf("alt+↓ = %q, want the draft back", got)
+	}
+
+	// Walk to the first row, then off its top: the plain ↑ falls through.
+	for i := 0; i < len(jqQueryLines(t, m)); i++ {
+		m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	}
+	if got := m.jqPlay.program; got != ".items" {
+		t.Errorf("↑ off the first row = %q, want the history entry", got)
+	}
+}
+
+// TestJQPlaygroundMultiLineClickPlacesCaret (#2038): a click on a query row
+// puts the caret on the clicked cell — the way to reach a stage far down a
+// long pipeline — and returns the keyboard to the query line.
+func TestJQPlaygroundMultiLineClickPlacesCaret(t *testing.T) {
+	m, lines := jqMultiLineApp(t)
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab}) // keyboard in the result
+	r, ok := m.lay.Panes[m.jqPlay.paneKey]
+	if !ok {
+		t.Fatal("the hosting pane must have a rect")
+	}
+	const col = 3
+	x := r.X + paneContentX + jqQueryPrefixW + col
+	y := r.Y + paneContentY + 1 // the second query row
+	tm, cmd := m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+	m = drainCmd(tm.(Model), cmd)
+	if m.jqPlay.bufFocus {
+		t.Fatal("a click on the query header must return the keyboard to the query line")
+	}
+	if got, want := m.jqPlay.pos, lines[1].Start+col; got != want {
+		t.Errorf("the click put the caret at %d, want %d", got, want)
+	}
+	// Typing lands where the click put it.
+	m = typeInto(m, "x")
+	m = dismissJQPopup(m)
+	if got := []rune(m.jqPlay.program)[lines[1].Start+col]; got != 'x' {
+		t.Errorf("the rune at the clicked cell is %q, want the typed one", got)
+	}
+}
+
+// TestJQPlaygroundMultiLineWindowFollowsCaret (#2038): a program past the row
+// cap scrolls under the caret, and the header the geometry reserves still
+// matches the header that is drawn.
+func TestJQPlaygroundMultiLineWindowFollowsCaret(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m = setProgram(m, strings.Repeat(".aaaaaaaa | ", 40)+".a")
+	m = toggleJQView(m)
+	key := m.jqPlay.paneKey
+	r, ok := m.lay.Panes[key]
+	if !ok {
+		t.Fatal("the hosting pane must have a rect")
+	}
+	width := paneInterior(r.W, paneChromeW)
+	before := jqQueryText(m, width)
+	for i := 0; i < jqMaxQueryRows+4; i++ {
+		m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	}
+	if after := jqQueryText(m, width); after == before {
+		t.Error("↑ past the top of the window must scroll the rows")
+	}
+	lines, rows, start := m.jqQueryWindow(width)
+	if cur := jqplay.LineAt(lines, m.jqPlay.pos); cur < start || cur >= start+rows {
+		t.Errorf("the caret's row %d is outside the window [%d,%d)", cur, start, start+rows)
+	}
+	if got, want := len(m.jqQueryRows(width))+jqInfoRows, m.jqHeaderRowsFor(key); got != want {
+		t.Errorf("rendered %d header rows, geometry reserved %d", got, want)
+	}
+	if rows > jqMaxQueryRows {
+		t.Errorf("the scrolled window is %d rows, want at most %d", rows, jqMaxQueryRows)
+	}
+}
+
+// TestJQPlaygroundMultiLineKeepsOneLineProgram (#2038): the rows are a display
+// and editing device only — the program never grows a line break, so the
+// history, the saved filters (#1995) and the seeding all keep working on one
+// line, and toggling the view moves neither the program nor the caret.
+func TestJQPlaygroundMultiLineKeepsOneLineProgram(t *testing.T) {
+	m, _ := jqMultiLineApp(t)
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
+	pos := m.jqPlay.pos
+
+	m = toggleJQView(m)
+	if m.jqPlay.program != jqMultiLineProgram || m.jqPlay.pos != pos {
+		t.Fatalf("the toggle moved the program or the caret: %q at %d", m.jqPlay.program, m.jqPlay.pos)
+	}
+	m = toggleJQView(m)
+	if m.jqPlay.program != jqMultiLineProgram || m.jqPlay.pos != pos {
+		t.Fatalf("the toggle back moved the program or the caret: %q at %d", m.jqPlay.program, m.jqPlay.pos)
+	}
+
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	got, ok := m.jqPlay.hist.At(0)
+	if !ok || got != jqMultiLineProgram {
+		t.Fatalf("history holds %q (ok=%v), want the program as one line", got, ok)
+	}
+	m = saveFilter(t, m, "multi line", false)
+	f, ok := loadJQFilters(jqplay.ScopeProject).Get("multi line")
+	if !ok || f.Program != jqMultiLineProgram {
+		t.Errorf("saved filter = %+v (ok=%v), want the program as one line", f, ok)
+	}
+	if strings.Contains(m.jqPlay.program, "\n") {
+		t.Error("the query line must never hold a line break")
+	}
+}
+
+// TestJQPlaygroundMultiLineHints (#2038): the info row says which meaning the
+// arrows have in the view in front of the user.
+func TestJQPlaygroundMultiLineHints(t *testing.T) {
+	m, _ := jqMultiLineApp(t)
+	got := ansi.Strip(m.jqInfoRow(240))
+	if !strings.Contains(got, "↑/↓ lines") || !strings.Contains(got, "alt+↑/↓ history") {
+		t.Errorf("the multi-line hints = %q, want the row and history keys", got)
+	}
+	m = toggleJQView(m)
+	if got := ansi.Strip(m.jqInfoRow(240)); !strings.Contains(got, "↑/↓ history") {
+		t.Errorf("the one-line hints = %q, want the history keys", got)
+	}
+}

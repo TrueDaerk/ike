@@ -225,7 +225,8 @@ var jetbrainsRows = []row{
 	// Global so it also opens from a focused terminal or tool pane, which is
 	// exactly where an "is this pane burning CPU" question comes up.
 	{"ctrl+alt+p", "perf.hud", "Performance HUD", Global, "Performance HUD (#1999)"},
-	// The jq playground's full-query view (#2032). The playground owns the
+	// The jq playground's multi-line view (#2032, edited in since #2038). The
+	// playground owns the
 	// keyboard while its pane is focused and resolves the keys it does not
 	// claim against the Global scope (#1983), so a Global row is what makes the
 	// toggle reachable from both the query line and the result buffer — and

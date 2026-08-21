@@ -6,6 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"ike/internal/jqplay"
 )
 
 // jqcomplete_test.go covers the query line's completion popup (#1979): open
@@ -252,5 +254,43 @@ func TestJQCompletionClosesOnFocusAndHistory(t *testing.T) {
 	m.jqPlay.setBufFocus(true)
 	if m.jqPlay.comp != nil {
 		t.Error("moving the keyboard into the result buffer must close the popup")
+	}
+}
+
+// TestJQCompletionAnchorsOnTheCaretsRow (#2038): with the multi-line view up
+// the popup hangs under the *caret's* row and under the partial's column in
+// it, not under the first row — the list has to point at the text it replaces
+// wherever in the pipeline that is.
+func TestJQCompletionAnchorsOnTheCaretsRow(t *testing.T) {
+	m, _ := jqMultiLineApp(t)
+	r, ok := m.lay.Panes[m.jqPlay.paneKey]
+	if !ok {
+		t.Fatal("the hosting pane must have a rect")
+	}
+	paneW := r.W - paneChromeW
+
+	// A partial typed into a later stage of the pipeline, rows down from the
+	// query line's first row.
+	m = typeInto(m, " | ma")
+	if m.jqPlay.comp == nil {
+		t.Fatal("typing a builtin's first runes must open the popup")
+	}
+	lines, _, start := m.jqQueryWindow(paneW)
+	row, _ := jqplay.RowCol(lines, m.jqPlay.pos)
+	if row == 0 {
+		t.Fatalf("setup: the caret must sit below the first row, rows %+v", lines)
+	}
+	col, got := m.jqCompAnchor(paneW)
+	if want := row - start; got != want {
+		t.Errorf("the popup hangs under row %d, want the caret's row %d", got, want)
+	}
+	if want := m.jqPlay.comp.start - lines[row].Start; col != want {
+		t.Errorf("the popup's column = %d, want the partial's column %d in its row", col, want)
+	}
+
+	// The one-line view puts it back on the single row.
+	m = toggleJQView(m)
+	if _, got := m.jqCompAnchor(paneW); got != 0 {
+		t.Errorf("the one-line view's popup hangs under row %d, want 0", got)
 	}
 }
