@@ -23,12 +23,21 @@ import (
 	"ike/internal/ui"
 )
 
-// jqplayground.go is the UI half of the jq playground (#1936, inline since
-// #1970): a query line rendered *inside the pane it queries* — a JSON editor
-// pane or the HTTP response viewer — with the pane's body replaced by a
-// read-only editor holding the live jq result. The evaluation core — parsing,
-// running, error and cap handling, history — is internal/jqplay; this file
-// owns the query header, the result buffer, the rendering and the key routing.
+// playground.go is the UI half of the jq and yq playgrounds (#1936, inline
+// since #1970, two dialects since #2039): a query line rendered *inside the
+// pane it queries* — a JSON or YAML editor pane, or the HTTP response viewer —
+// with the pane's body replaced by a read-only editor holding the live result.
+// The evaluation core — parsing, running, error and cap handling, history — is
+// internal/jqplay; this file owns the query header, the result buffer, the
+// rendering and the key routing.
+//
+// There is **one** mode, not two. Everything on this side is dialect-neutral
+// and reads jqplay.Dialect off the open state: the label on the query line,
+// the file extension the result is written under, the fold scan and the
+// wording of the messages. That is why the identifiers here say "play" rather
+// than "jq" — a yq playground is the same playground with another decoder
+// under it, and a second copy of the hosting, the geometry or the key routing
+// would be two things to fix for every later bug.
 //
 // Three deliberate choices:
 //
@@ -47,41 +56,38 @@ import (
 //     original pane content is never touched — leaving the mode simply stops
 //     rendering the substitute, so `esc` restores the buffer bit-identically.
 
-// jqHeaderRows is the vertical space the inline query header takes at the top
+// playHeaderRows is the vertical space the inline query header takes at the top
 // of the hosting pane with the query on one line: the query line plus the
 // input/result/status line. It is fixed — an error appearing must not resize
 // the result buffer per keystroke. The expanded query view (#2032) is the one
 // thing that grows it, and only on the user's key.
-const jqHeaderRows = 2
+const playHeaderRows = 2
 
-// jqInfoRows is the header's second half: the one input/result/status row,
+// playInfoRows is the header's second half: the one input/result/status row,
 // which the expanded query view does not change.
-const jqInfoRows = 1
+const playInfoRows = 1
 
-// jqMaxQueryRows caps the expanded query view (#2032). A program long enough
+// playMaxQueryRows caps the expanded query view (#2032). A program long enough
 // to need more than eight rows would push the result out of sight, which is
 // the opposite of what expanding is for; past the cap the view windows around
 // the cursor row the way the one-line view windows around the cursor cell.
-const jqMaxQueryRows = 8
+const playMaxQueryRows = 8
 
-// jqMinResultRows is the result buffer the expanded query view must leave
+// playMinResultRows is the result buffer the expanded query view must leave
 // standing: the playground is still a playground, not a program editor.
-const jqMinResultRows = 3
+const playMinResultRows = 3
 
-// jqQueryPrefixW is the width of the query line's `> jq: ` label. Continuation
-// rows of the expanded view indent by it, so the program stays in one column.
-const jqQueryPrefixW = 6
+// playQueryPrefixW is the width of the query line's `> jq: ` label.
+// Continuation rows of the expanded view indent by it, so the program stays in
+// one column. Both dialect names are two cells wide, so the window math never
+// depends on which playground is open.
+const playQueryPrefixW = 6
 
-// jqResultPath is the display path of the substitute result editor. Like an
-// archive entry's virtual path (#1762) it is never written to; it exists so
-// the language sniff resolves JSON highlighting for the result.
-const jqResultPath = "jq result.json"
-
-// jqDebounce is how long the query line stays quiet before a program runs. A
+// playDebounce is how long the query line stays quiet before a program runs. A
 // var, not a const, so tests drive the evaluation without sleeping.
-var jqDebounce = 120 * time.Millisecond
+var playDebounce = 120 * time.Millisecond
 
-// jqPlayState is the open playground. paneKey names the hosting pane and
+// playState is the open playground. paneKey names the hosting pane and
 // resultEd is the substitute read-only editor showing the live result;
 // bufFocus routes the keyboard into it (tab toggles). input is the parsed
 // snapshot (nil while it is still being parsed, or when parsing failed —
@@ -93,8 +99,11 @@ var jqDebounce = 120 * time.Millisecond
 // editing a live program) and draft/draftPos the query line that browsing
 // started from, so stepping back to -1 restores it (#1973). gen stamps
 // debounce ticks and runs so a stale one is dropped, cancel aborts the run in
-// flight, and status carries the transient confirmation line.
-type jqPlayState struct {
+// flight, and status carries the transient confirmation line. dialect is which
+// of the two playgrounds this is (#2039) — the one field the rendering, the
+// scratch extension, the fold scan and the filter library all read.
+type playState struct {
+	dialect  jqplay.Dialect
 	paneKey  string
 	resultEd *editor.Model
 	bufFocus bool
@@ -128,7 +137,7 @@ type jqPlayState struct {
 	draft    string
 	draftPos int
 
-	comp *jqCompState
+	comp *playCompState
 
 	// folds are the result's foldable nodes by header line (#2029), the
 	// lookup behind the collapsed placeholder's member count; the ranges
@@ -144,7 +153,7 @@ type jqPlayState struct {
 // buffer, keeping the substitute editor's focus flag (cursor cell) in step.
 // Leaving the query line drops the completion popup (#1979) — it completes
 // typing, and the keyboard just went elsewhere.
-func (s *jqPlayState) setBufFocus(v bool) {
+func (s *playState) setBufFocus(v bool) {
 	s.bufFocus = v
 	if v {
 		s.comp = nil
@@ -154,25 +163,27 @@ func (s *jqPlayState) setBufFocus(v bool) {
 	}
 }
 
-// startJQPlayground opens the playground over the JSON at hand: the focused
-// HTTP response pane's body, else the focused editor's visual selection, else
-// its whole buffer. atPath picks the seed program: the ordinary open starts
+// startPlayground opens the playground of dialect d over the document at
+// hand: for jq the focused HTTP response pane's body, else the focused
+// editor's visual selection, else its whole buffer; for yq the editor alone
+// (see playSource). atPath picks the seed program: the ordinary open starts
 // on `.` — or on this input's last valid program of the session (#1982) — the
-// json.jqPlaygroundAtPath open on the caret's jq path (#1660). The mode
-// mounts *in* the resolved pane (#1970): focus moves there and the pane shows
-// the query header plus the read-only result buffer until esc.
+// …AtPath open on the caret's document path (#1660). The mode mounts *in* the
+// resolved pane (#1970): focus moves there and the pane shows the query header
+// plus the read-only result buffer until esc.
 //
 // Opening while a playground is already up (the Tools menu is one click away
-// even then) closes that one first: it is one mode, and the program on its
-// query line belongs in the history like any other (#1977).
-func (m *Model) startJQPlayground(atPath bool) tea.Cmd {
-	src, ok := m.jqSource()
+// even then) closes that one first — including a playground of the *other*
+// dialect: it is one mode, one pane's content is replaced at a time, and the
+// program on its query line belongs in the history like any other (#1977).
+func (m *Model) startPlayground(d jqplay.Dialect, atPath bool) tea.Cmd {
+	src, ok := m.playSource(d)
 	if !ok {
-		m.host.Notify(host.Info, "jq: no JSON buffer or HTTP response to query")
+		m.host.Notify(host.Info, playNoSourceMessage(d))
 		return nil
 	}
-	m.closeJQPlayground()
-	s := &jqPlayState{paneKey: src.paneKey, source: src.label, srcKey: src.key, histIdx: -1, qgoal: -1, hist: m.jqHist(), program: m.jqSeedProgram(src, atPath)}
+	m.closePlayground()
+	s := &playState{dialect: d, paneKey: src.paneKey, source: src.label, srcKey: src.key, histIdx: -1, qgoal: -1, hist: m.playHist(), program: m.playSeedProgram(d, src, atPath)}
 	s.pos = len([]rune(s.program))
 	ed := editor.New()
 	ed.SetRegisters(m.regs) // app-wide registers (#1540): yanks in the result reach every buffer
@@ -181,23 +192,23 @@ func (m *Model) startJQPlayground(atPath bool) tea.Cmd {
 	if c := clipboard.System(); c != nil {
 		ed.SetClipboard(c)
 	}
-	ed.ShowReadOnly(jqResultPath, "")
-	ed.SetFoldSummary(s.jqFoldSummary) // the fold placeholder names members, not lines (#2029)
+	ed.ShowReadOnly(d.ResultPath(), "")
+	ed.SetFoldSummary(s.playFoldSummary) // the fold placeholder names members, not lines (#2029)
 	s.resultEd = &ed
-	m.jqPlay = s
+	m.play = s
 	m.focusContentAt(src.paneKey, src.tabIdx)
-	m.sizeJQResult()
-	return m.parseJQInput(src.text)
+	m.sizePlayResult()
+	return m.parsePlayInput(src.text)
 }
 
-// jqInputSource is one resolved snapshot: the JSON text, the label naming
+// playInputSource is one resolved snapshot: the document text, the label naming
 // where it came from, the key the session's last valid program is remembered
 // under (#1982 — the file path, not the label, so the same file is recognized
 // whether the whole buffer or a selection in it was queried), the pane the
 // inline mode mounts in (with the tab to activate for a tab-nested response
 // viewer, -1 otherwise), and whether it is the *whole* focused buffer — the
 // only case in which the caret's document path is a valid program against it.
-type jqInputSource struct {
+type playInputSource struct {
 	text     string
 	label    string
 	key      string
@@ -206,158 +217,185 @@ type jqInputSource struct {
 	fullFile bool
 }
 
-// jqSource resolves what the playground queries. The focused HTTP response
-// wins over the editor (the pane the user is looking at is the one they mean);
-// a visual selection wins over the whole buffer, so a single embedded JSON
-// blob in a log file is queryable without extracting it first.
-func (m Model) jqSource() (jqInputSource, bool) {
-	if c := m.focusedContent(); c != nil && c.Kind() == pane.KindHTTP {
+// playSource resolves what the playground of dialect d queries. For jq the
+// focused HTTP response wins over the editor (the pane the user is looking at
+// is the one they mean); a visual selection wins over the whole buffer, so a
+// single embedded JSON blob in a log file is queryable without extracting it
+// first.
+//
+// The yq playground (#2039) resolves the **editor only**. A response body is
+// JSON in every workflow the .http client serves, and letting a focused
+// response outrank the YAML file the user has open would answer "yq
+// Playground" with a parse error over somebody else's pane. Selection and
+// whole buffer work there exactly as they do for jq — a YAML block embedded
+// in a Markdown file is queryable by selecting it.
+func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
+	httpOK := d != jqplay.DialectYQ
+	if c := m.focusedContent(); httpOK && c != nil && c.Kind() == pane.KindHTTP {
 		if body := c.HTTP().BodyText(); strings.TrimSpace(body) != "" {
 			paneKey := m.activeWS().Panes.Focused()
-			return jqInputSource{text: body, label: "HTTP response", key: "http:" + paneKey, paneKey: paneKey, tabIdx: -1}, true
+			return playInputSource{text: body, label: "HTTP response", key: "http:" + paneKey, paneKey: paneKey, tabIdx: -1}, true
 		}
 	}
 	if ed := m.activeEditor(); ed != nil {
-		name := jqEditorLabel(ed)
+		name := playEditorLabel(ed)
 		key := m.activeEditorKey()
-		docKey := jqDocKey(ed, key)
+		docKey := playDocKey(d, ed, key)
 		if sel, has := ed.SelectionText(); has && strings.TrimSpace(sel) != "" {
-			return jqInputSource{text: sel, label: name + " (selection)", key: docKey, paneKey: key, tabIdx: -1}, true
+			return playInputSource{text: sel, label: name + " (selection)", key: docKey, paneKey: key, tabIdx: -1}, true
 		}
 		if body := ed.Text(); strings.TrimSpace(body) != "" {
-			return jqInputSource{text: body, label: name, key: docKey, paneKey: key, tabIdx: -1, fullFile: true}, true
+			return playInputSource{text: body, label: name, key: docKey, paneKey: key, tabIdx: -1, fullFile: true}, true
 		}
 	}
 	// The response pane may be open without being focused — an editor holding
 	// the .http file is the usual focus after a dispatch. It may live as a
 	// content tab of a tab host (#1778); the mode then activates that tab.
 	if hostKey, tabIdx, inst, ok := m.findContent(func(c *pane.Instance) bool {
-		return c.Kind() == pane.KindHTTP
+		return httpOK && c.Kind() == pane.KindHTTP
 	}); ok && m.leafVisible(hostKey) {
 		if body := inst.HTTP().BodyText(); strings.TrimSpace(body) != "" {
-			return jqInputSource{text: body, label: "HTTP response", key: "http:" + hostKey, paneKey: hostKey, tabIdx: tabIdx}, true
+			return playInputSource{text: body, label: "HTTP response", key: "http:" + hostKey, paneKey: hostKey, tabIdx: tabIdx}, true
 		}
 	}
-	return jqInputSource{}, false
+	return playInputSource{}, false
 }
 
-// jqEditorLabel names the queried buffer for the header line.
-func jqEditorLabel(ed *editor.Model) string {
+// playNoSourceMessage says what the dialect looked for and did not find.
+func playNoSourceMessage(d jqplay.Dialect) string {
+	if d == jqplay.DialectYQ {
+		return "yq: no YAML buffer to query"
+	}
+	return "jq: no JSON buffer or HTTP response to query"
+}
+
+// playEditorLabel names the queried buffer for the header line.
+func playEditorLabel(ed *editor.Model) string {
 	if path := ed.Path(); path != "" {
 		return baseName(path)
 	}
 	return "untitled buffer"
 }
 
-// jqSeedProgram is the program the query line opens on.
+// playSeedProgram is the program the query line opens on.
 //
-// The ordinary open (json.jqPlayground) starts on the identity program, which
-// pretty-prints the input: most openings only want to check something, and a
-// prefilled path had to be deleted before typing (#1982). When a valid
-// program was already run against this input during the session, that one is
-// offered instead — reopening a file resumes the look that was interrupted,
-// which the session-wide history (one shared list, any buffer) cannot express.
+// The ordinary open (json.jqPlayground / yaml.yqPlayground) starts on the
+// identity program, which pretty-prints the input: most openings only want to
+// check something, and a prefilled path had to be deleted before typing
+// (#1982). When a valid program was already run against this input during the
+// session, that one is offered instead — reopening a file resumes the look
+// that was interrupted, which the session-wide history (one shared list, any
+// buffer) cannot express.
 //
-// atPath (json.jqPlaygroundAtPath) is the explicit form of the old default:
-// the caret's jq path (#1660), so "the value I was looking at" is already a
-// program. It needs the *whole* focused buffer as the input — against a
+// atPath (…PlaygroundAtPath) is the explicit form of the old default: the
+// caret's document path (#1660), so "the value I was looking at" is already a
+// program. The jq and yq spellings of that path differ only in how a key
+// needing quotes is written (`.["a b"]` vs `."a b"`), and each dialect asks
+// for its own. It needs the *whole* focused buffer as the input — against a
 // response body or a selection the caret's path indexes the file and would
 // name a location the input does not contain — and falls back to the identity
 // when the caret has no path.
-func (m Model) jqSeedProgram(src jqInputSource, atPath bool) string {
+func (m Model) playSeedProgram(d jqplay.Dialect, src playInputSource, atPath bool) string {
 	if atPath {
 		if !src.fullFile {
 			return "."
 		}
+		kind := editor.DocPathJQ
+		if d == jqplay.DialectYQ {
+			kind = editor.DocPathYQ
+		}
 		if ed := m.activeEditor(); ed != nil {
-			if path, ok := ed.DocPath(editor.DocPathJQ); ok && path != "." {
+			if path, ok := ed.DocPath(kind); ok && path != "." {
 				return path
 			}
 		}
 		return "."
 	}
-	if last := m.jqLastProgram[src.key]; last != "" {
+	if last := m.playLastProgram[src.key]; last != "" {
 		return last
 	}
 	return "."
 }
 
-// rememberJQProgram records program as the input's last valid program of the
+// rememberPlayProgram records program as the input's last valid program of the
 // session (#1982), so reopening the playground over the same file offers it
 // again. Only a program that actually ran — it compiled and raised no runtime
 // error — is worth reoffering; the identity program is the default anyway and
 // is not stored, so it never displaces an earlier real program.
-func (m *Model) rememberJQProgram(key, program string) {
+func (m *Model) rememberPlayProgram(key, program string) {
 	program = strings.TrimSpace(program)
 	if key == "" || program == "" || program == "." {
 		return
 	}
-	if m.jqLastProgram == nil {
-		m.jqLastProgram = map[string]string{}
+	if m.playLastProgram == nil {
+		m.playLastProgram = map[string]string{}
 	}
-	m.jqLastProgram[key] = program
+	m.playLastProgram[key] = program
 }
 
-// jqDocKey identifies the queried document for the per-file last-program
+// playDocKey identifies the queried document for the per-file last-program
 // memory (#1982): its path, so the same file is recognized across reopens and
 // across panes. An unsaved buffer has none and falls back to its editor key,
-// which lives exactly as long as the buffer does.
-func jqDocKey(ed *editor.Model, edKey string) string {
+// which lives exactly as long as the buffer does. The dialect is part of the
+// key (#2039): the same buffer can be opened in both playgrounds — a YAML file
+// after a `to_json`, a JSON one in yq — and the program that was last valid
+// there is not the one to offer here.
+func playDocKey(d jqplay.Dialect, ed *editor.Model, edKey string) string {
 	if path := ed.Path(); path != "" {
-		return "file:" + path
+		return d.Name() + ":file:" + path
 	}
-	return "buf:" + edKey
+	return d.Name() + ":buf:" + edKey
 }
 
-// jqPlayOpen reports whether the inline playground is active.
-func (m Model) jqPlayOpen() bool { return m.jqPlay != nil }
+// playOpen reports whether the inline playground is active.
+func (m Model) playOpen() bool { return m.play != nil }
 
-// jqPlayFocused reports whether the playground's hosting pane holds the focus.
+// playFocused reports whether the playground's hosting pane holds the focus.
 // The mode's keyboard routing is scoped to its own pane (#1980): moving the
 // focus elsewhere leaves the playground mounted — query, result and history
 // position intact — while the other pane takes keys normally, and returning
 // the focus resumes the query line as it was.
-func (m Model) jqPlayFocused() bool {
-	return m.jqPlay != nil && m.activeWS().Panes.Focused() == m.jqPlay.paneKey
+func (m Model) playFocused() bool {
+	return m.play != nil && m.activeWS().Panes.Focused() == m.play.paneKey
 }
 
-// jqHist returns the session-wide program history, allocating it on first use.
+// playHist returns the session-wide program history, allocating it on first use.
 // New() installs it, but a Model assembled by hand in a test must not panic on
 // the first ↑ — and the list is shared, so it may only ever be allocated once.
-func (m *Model) jqHist() *jqplay.History {
-	if m.jqHistory == nil {
-		m.jqHistory = &jqplay.History{}
+func (m *Model) playHist() *jqplay.History {
+	if m.playHistory == nil {
+		m.playHistory = &jqplay.History{}
 	}
-	return m.jqHistory
+	return m.playHistory
 }
 
-// jqInlineActive reports whether the inline playground owns pane key: its
+// playInlineActive reports whether the inline playground owns pane key: its
 // content is then the query header plus the result buffer, not the pane's own
 // component.
-func (m Model) jqInlineActive(key string) bool {
-	return m.jqPlay != nil && m.jqPlay.paneKey == key
+func (m Model) playInlineActive(key string) bool {
+	return m.play != nil && m.play.paneKey == key
 }
 
-// jqHeaderRowsFor is the vertical chrome the query header adds to pane key —
+// playHeaderRowsFor is the vertical chrome the query header adds to pane key —
 // the breadcrumbRows analogue (#1153) the mouse translation keys off. With the
 // expanded query view up (#2032) it grows with the wrapped program, so the
 // mouse translation and the result buffer's height follow the header instead
 // of assuming the two-row default.
-func (m Model) jqHeaderRowsFor(key string) int {
-	if m.jqInlineActive(key) {
-		return m.jqQueryRowCount() + jqInfoRows
+func (m Model) playHeaderRowsFor(key string) int {
+	if m.playInlineActive(key) {
+		return m.playQueryRowCount() + playInfoRows
 	}
 	return 0
 }
 
-// jqQueryRowCount is how many rows the query occupies: one in the resting
+// playQueryRowCount is how many rows the query occupies: one in the resting
 // layout, and in the expanded view (#2032) as many as the wrapped program
-// needs — bounded by jqMaxQueryRows and by leaving jqMinResultRows of result
+// needs — bounded by playMaxQueryRows and by leaving playMinResultRows of result
 // standing. Rendering, the mouse translation and the result buffer's height
 // all read this one number, so the header can never disagree with the space
 // reserved for it.
-func (m Model) jqQueryRowCount() int {
-	s := m.jqPlay
+func (m Model) playQueryRowCount() int {
+	s := m.play
 	if s == nil {
 		return 1
 	}
@@ -365,22 +403,22 @@ func (m Model) jqQueryRowCount() int {
 	if !ok {
 		return 1
 	}
-	return m.jqQueryRowsFor(paneInterior(r.W, paneChromeW))
+	return m.playQueryRowsFor(paneInterior(r.W, paneChromeW))
 }
 
-// jqQueryRowsFor is jqQueryRowCount for a given interior width — the form the
+// playQueryRowsFor is playQueryRowCount for a given interior width — the form the
 // rendering uses, so the rows drawn are the rows the geometry reserved. The
 // height bound still comes from the hosting pane: it is what "leave the result
 // standing" is measured against.
-func (m Model) jqQueryRowsFor(width int) int {
-	s := m.jqPlay
+func (m Model) playQueryRowsFor(width int) int {
+	s := m.play
 	if s == nil || !s.expanded {
 		return 1
 	}
-	rows := len(jqplay.Wrap(s.program, m.jqQueryWidth(width)))
-	limit := jqMaxQueryRows
+	rows := len(jqplay.Wrap(s.program, m.playQueryWidth(width)))
+	limit := playMaxQueryRows
 	if r, ok := m.lay.Panes[s.paneKey]; ok {
-		if fits := paneInterior(r.H, paneChromeH) - jqInfoRows - jqMinResultRows; fits < limit {
+		if fits := paneInterior(r.H, paneChromeH) - playInfoRows - playMinResultRows; fits < limit {
 			limit = fits
 		}
 	}
@@ -393,31 +431,31 @@ func (m Model) jqQueryRowsFor(width int) int {
 	return rows
 }
 
-// jqQueryWidth is how many runes of the program a query row holds: the pane's
+// playQueryWidth is how many runes of the program a query row holds: the pane's
 // interior less the label column and the two cells the `…` window markers may
 // take. The floor keeps the window math sane on a pane too narrow to render
 // into anyway.
-func (m Model) jqQueryWidth(paneWidth int) int {
-	if avail := paneWidth - jqQueryPrefixW - 2; avail > 10 {
+func (m Model) playQueryWidth(paneWidth int) int {
+	if avail := paneWidth - playQueryPrefixW - 2; avail > 10 {
 		return avail
 	}
 	return 10
 }
 
-// toggleJQQueryView switches the expanded query view (#2032) — json.jqQueryView
+// togglePlayQueryView switches the expanded query view (#2032) — json.jqQueryView
 // from the query line, the result buffer, the palette or the Tools menu. It is
 // a pure view state: the program, the cursor and the result are untouched, only
 // the header's height and the result buffer's are.
-func (m *Model) toggleJQQueryView() {
-	s := m.jqPlay
+func (m *Model) togglePlayQueryView() {
+	s := m.play
 	if s == nil {
 		return
 	}
 	s.expanded = !s.expanded
-	m.sizeJQResult()
+	m.sizePlayResult()
 }
 
-// moveJQQueryRow moves the cursor delta rows through the wrapped program of
+// movePlayQueryRow moves the cursor delta rows through the wrapped program of
 // the multi-line view (#2038), aiming for column goal — the column the run of
 // motions started in, so stepping over a short stage returns to it instead of
 // dragging the cursor left one row at a time.
@@ -425,12 +463,12 @@ func (m *Model) toggleJQQueryView() {
 // It reports whether it moved: the one-line view, a program that wraps to a
 // single row, and the row above the first / below the last all answer false,
 // which is what hands ↑/↓ back to the history walk.
-func (m *Model) moveJQQueryRow(delta, goal int) bool {
-	s := m.jqPlay
+func (m *Model) movePlayQueryRow(delta, goal int) bool {
+	s := m.play
 	if s == nil || !s.expanded {
 		return false
 	}
-	width, ok := m.jqPaneQueryWidth()
+	width, ok := m.playPaneQueryWidth()
 	if !ok {
 		return false
 	}
@@ -448,15 +486,15 @@ func (m *Model) moveJQQueryRow(delta, goal int) bool {
 	return true
 }
 
-// moveJQQueryEdge puts the cursor on the start or the end of its own row in
+// movePlayQueryEdge puts the cursor on the start or the end of its own row in
 // the multi-line view (#2038), reporting whether it applied. With one row
 // there is nothing row-local about home/end, so they stay the program's ends.
-func (m *Model) moveJQQueryEdge(toEnd bool) bool {
-	s := m.jqPlay
+func (m *Model) movePlayQueryEdge(toEnd bool) bool {
+	s := m.play
 	if s == nil || !s.expanded {
 		return false
 	}
-	width, ok := m.jqPaneQueryWidth()
+	width, ok := m.playPaneQueryWidth()
 	if !ok {
 		return false
 	}
@@ -473,11 +511,11 @@ func (m *Model) moveJQQueryEdge(toEnd bool) bool {
 	return true
 }
 
-// jqPaneQueryWidth is how many runes of the program one query row holds in the
+// playPaneQueryWidth is how many runes of the program one query row holds in the
 // hosting pane as it is laid out right now. The key handlers wrap against it,
 // so a motion works in exactly the rows that are on screen.
-func (m Model) jqPaneQueryWidth() (int, bool) {
-	s := m.jqPlay
+func (m Model) playPaneQueryWidth() (int, bool) {
+	s := m.play
 	if s == nil {
 		return 0, false
 	}
@@ -485,14 +523,14 @@ func (m Model) jqPaneQueryWidth() (int, bool) {
 	if !ok {
 		return 0, false
 	}
-	return m.jqQueryWidth(paneInterior(r.W, paneChromeW)), true
+	return m.playQueryWidth(paneInterior(r.W, paneChromeW)), true
 }
 
-// sizeJQResult fits the substitute result editor under the query header in
+// sizePlayResult fits the substitute result editor under the query header in
 // the hosting pane's interior. Called at open and from layout(), so a resize
 // or zoom keeps the buffer in step.
-func (m *Model) sizeJQResult() {
-	s := m.jqPlay
+func (m *Model) sizePlayResult() {
+	s := m.play
 	if s == nil || s.resultEd == nil {
 		return
 	}
@@ -500,69 +538,70 @@ func (m *Model) sizeJQResult() {
 	if !ok {
 		return
 	}
-	s.resultEd.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH+m.jqQueryRowCount()+jqInfoRows))
+	s.resultEd.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH+m.playQueryRowCount()+playInfoRows))
 }
 
-// closeJQPlayground records the program in the session history, aborts a run
+// closePlayground records the program in the session history, aborts a run
 // in flight and drops the inline mode. The hosting pane never held anything
 // but its own untouched content, so leaving the mode *is* the restore. The
 // history is the root model's shared list (#1977), so reopening offers the
 // last programs again — over any buffer, not just the one they were run on.
-func (m *Model) closeJQPlayground() {
-	if s := m.jqPlay; s != nil {
+func (m *Model) closePlayground() {
+	if s := m.play; s != nil {
 		s.cancelRun()
 		s.hist.Add(s.program)
 	}
-	m.jqPlay = nil
+	m.play = nil
 }
 
 // cancelRun aborts the evaluation in flight, if any.
-func (s *jqPlayState) cancelRun() {
+func (s *playState) cancelRun() {
 	if s.cancel != nil {
 		s.cancel()
 		s.cancel = nil
 	}
 }
 
-// jqParseDoneMsg carries the parsed input snapshot back to the model. It
+// playParseDoneMsg carries the parsed input snapshot back to the model. It
 // names the state it was started for, so a snapshot arriving after the
 // playground closed (or reopened over another buffer) is dropped.
-type jqParseDoneMsg struct {
-	st  *jqPlayState
+type playParseDoneMsg struct {
+	st  *playState
 	in  *jqplay.Input
 	err string
 }
 
-// jqDebounceMsg fires jqDebounce after a program change; a stale generation
+// playDebounceMsg fires playDebounce after a program change; a stale generation
 // means the user kept typing and this tick is not the one to run.
-type jqDebounceMsg struct {
-	st  *jqPlayState
+type playDebounceMsg struct {
+	st  *playState
 	gen int
 }
 
-// jqEvalDoneMsg carries an off-loop evaluation back to the model.
-type jqEvalDoneMsg struct {
-	st  *jqPlayState
+// playEvalDoneMsg carries an off-loop evaluation back to the model.
+type playEvalDoneMsg struct {
+	st  *playState
 	gen int
 	res jqplay.Result
 }
 
-// parseJQInput decodes the snapshot: inline for a screenful, off the event
+// parsePlayInput decodes the snapshot: inline for a screenful, off the event
 // loop past jqplay.AsyncThreshold so opening the playground over a large
 // response cannot stall a frame.
-func (m *Model) parseJQInput(text string) tea.Cmd {
-	s := m.jqPlay
+func (m *Model) parsePlayInput(text string) tea.Cmd {
+	s := m.play
 	if s == nil {
 		return nil
 	}
+	d := s.dialect
 	if len(text) <= jqplay.AsyncThreshold {
-		in, err := jqplay.Parse(text)
-		return m.finishJQParse(jqParseDoneMsg{st: s, in: in, err: errText(err)})
+		in, err := d.Parse(text)
+		return m.finishPlayParse(playParseDoneMsg{st: s, in: in, err: errText(err)})
 	}
 	s.parsing = true
 	return func() tea.Msg {
-		in, err := jqplay.Parse(text)
-		return jqParseDoneMsg{st: s, in: in, err: errText(err)}
+		in, err := d.Parse(text)
+		return playParseDoneMsg{st: s, in: in, err: errText(err)}
 	}
 }
 
@@ -574,9 +613,9 @@ func errText(err error) string {
 	return err.Error()
 }
 
-// finishJQParse installs the snapshot and runs the seeded program against it.
-func (m *Model) finishJQParse(msg jqParseDoneMsg) tea.Cmd {
-	s := m.jqPlay
+// finishPlayParse installs the snapshot and runs the seeded program against it.
+func (m *Model) finishPlayParse(msg playParseDoneMsg) tea.Cmd {
+	s := m.play
 	if s == nil || msg.st != s {
 		return nil
 	}
@@ -585,14 +624,14 @@ func (m *Model) finishJQParse(msg jqParseDoneMsg) tea.Cmd {
 	if s.inputErr != "" {
 		return nil
 	}
-	return m.runJQNow()
+	return m.runPlayNow()
 }
 
-// scheduleJQEval debounces a program change: the run in flight is abandoned
+// schedulePlayEval debounces a program change: the run in flight is abandoned
 // and a tick stamped with the new generation is scheduled. Only the tick
 // still holding the current generation starts a run.
-func (m *Model) scheduleJQEval() tea.Cmd {
-	s := m.jqPlay
+func (m *Model) schedulePlayEval() tea.Cmd {
+	s := m.play
 	if s == nil || s.inputErr != "" {
 		return nil
 	}
@@ -600,39 +639,39 @@ func (m *Model) scheduleJQEval() tea.Cmd {
 	s.gen++
 	s.pending = true
 	gen := s.gen
-	return tea.Tick(jqDebounce, func(time.Time) tea.Msg {
-		return jqDebounceMsg{st: s, gen: gen}
+	return tea.Tick(playDebounce, func(time.Time) tea.Msg {
+		return playDebounceMsg{st: s, gen: gen}
 	})
 }
 
-// fireJQDebounce starts the run the tick was scheduled for, unless a newer
+// firePlayDebounce starts the run the tick was scheduled for, unless a newer
 // keystroke already superseded it.
-func (m *Model) fireJQDebounce(msg jqDebounceMsg) tea.Cmd {
-	s := m.jqPlay
+func (m *Model) firePlayDebounce(msg playDebounceMsg) tea.Cmd {
+	s := m.play
 	if s == nil || msg.st != s || msg.gen != s.gen {
 		return nil
 	}
-	return m.runJQ()
+	return m.runPlay()
 }
 
-// runJQNow skips the debounce — the enter key and the initial evaluation want
+// runPlayNow skips the debounce — the enter key and the initial evaluation want
 // the result immediately, not a tick later.
-func (m *Model) runJQNow() tea.Cmd {
-	s := m.jqPlay
+func (m *Model) runPlayNow() tea.Cmd {
+	s := m.play
 	if s == nil || s.inputErr != "" || s.input == nil {
 		return nil // still parsing, or the input never became one
 	}
 	s.cancelRun()
 	s.gen++
 	s.pending = true
-	return m.runJQ()
+	return m.runPlay()
 }
 
-// runJQ evaluates the current program off the event loop under a cancellable
+// runPlay evaluates the current program off the event loop under a cancellable
 // context carrying jqplay.EvalTimeout, so neither a huge result nor a
 // non-terminating program can hold the UI.
-func (m *Model) runJQ() tea.Cmd {
-	s := m.jqPlay
+func (m *Model) runPlay() tea.Cmd {
+	s := m.play
 	if s == nil || s.input == nil {
 		return nil
 	}
@@ -641,41 +680,41 @@ func (m *Model) runJQ() tea.Cmd {
 	program, in, gen := s.program, s.input, s.gen
 	return func() tea.Msg {
 		defer cancel()
-		return jqEvalDoneMsg{st: s, gen: gen, res: jqplay.Run(ctx, program, in)}
+		return playEvalDoneMsg{st: s, gen: gen, res: jqplay.Run(ctx, program, in)}
 	}
 }
 
-// finishJQEval installs a result unless a newer generation superseded it, and
+// finishPlayEval installs a result unless a newer generation superseded it, and
 // refreshes the read-only buffer showing it; the returned command starts its
 // highlight parse. A run that came back clean also makes its program this
 // input's last valid one (#1982), which the next open over the same file
 // prefills.
-func (m *Model) finishJQEval(msg jqEvalDoneMsg) tea.Cmd {
-	s := m.jqPlay
+func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
+	s := m.play
 	if s == nil || msg.st != s || msg.gen != s.gen {
 		return nil
 	}
 	s.pending, s.cancel = false, nil
 	s.result = msg.res
 	if msg.res.Err == "" {
-		m.rememberJQProgram(s.srcKey, s.program)
+		m.rememberPlayProgram(s.srcKey, s.program)
 	}
-	return m.syncJQResultBuffer()
+	return m.syncPlayResultBuffer()
 }
 
-// syncJQResultBuffer reinstalls the current result text into the substitute
+// syncPlayResultBuffer reinstalls the current result text into the substitute
 // editor. ShowReadOnly resets cursor and scroll — the buffer's content just
 // changed under them, so a stale position would point at nothing — and with
 // them the fold state, which is why the result's own fold ranges (#2029) are
 // installed right after: a new query can never leave a fold of the previous
 // result behind.
-func (m *Model) syncJQResultBuffer() tea.Cmd {
-	s := m.jqPlay
+func (m *Model) syncPlayResultBuffer() tea.Cmd {
+	s := m.play
 	if s == nil || s.resultEd == nil {
 		return nil
 	}
-	s.resultEd.ShowReadOnly(jqResultPath, s.result.Text())
-	s.setResultFolds(jqplay.Folds(s.result.Text()))
+	s.resultEd.ShowReadOnly(s.dialect.ResultPath(), s.result.Text())
+	s.setResultFolds(s.dialect.Folds(s.result.Text()))
 	s.resultEd.SetFocused(s.bufFocus)
 	return s.resultEd.Reparse()
 }
@@ -687,7 +726,7 @@ func (m *Model) syncJQResultBuffer() tea.Cmd {
 // a node holds, which is what the placeholder says. The collapsing itself
 // stays the editor's — za/zc/zo/zM/zR and every fold-aware motion (#1741)
 // work in the result buffer exactly as they do in a file.
-func (s *jqPlayState) setResultFolds(folds []jqplay.Fold) {
+func (s *playState) setResultFolds(folds []jqplay.Fold) {
 	s.folds = make(map[int]jqplay.Fold, len(folds))
 	ranges := make([]highlight.Fold, 0, len(folds))
 	for _, f := range folds {
@@ -699,11 +738,11 @@ func (s *jqPlayState) setResultFolds(folds []jqplay.Fold) {
 	}
 }
 
-// jqFoldSummary is the placeholder a collapsed node renders as: its member
+// playFoldSummary is the placeholder a collapsed node renders as: its member
 // count in its own unit, `{ ⋯ 3 keys }` rather than the file buffer's
 // "⋯ 3 lines" — how big the value is, which is what a reader skimming a
 // result wants to know. An unknown header falls back to the editor's default.
-func (s *jqPlayState) jqFoldSummary(header, end int) string {
+func (s *playState) playFoldSummary(header, end int) string {
 	f, ok := s.folds[header]
 	if !ok || f.EndLine != end {
 		return ""
@@ -711,23 +750,23 @@ func (s *jqPlayState) jqFoldSummary(header, end int) string {
 	return f.Label()
 }
 
-// updateJQPlayground consumes every key while the playground's pane is
+// updatePlayground consumes every key while the playground's pane is
 // focused: the query line owns them by default, the result buffer after tab
 // (#1970). The result buffer is refit afterwards because a key may have
 // changed the program, and with the expanded query view up (#2032) the header
 // then holds a different number of rows than the buffer was sized under.
-func (m Model) updateJQPlayground(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	out, cmd := m.updateJQPlaygroundKey(msg)
+func (m Model) updatePlayground(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	out, cmd := m.updatePlaygroundKey(msg)
 	if mm, ok := out.(Model); ok {
-		mm.sizeJQResult()
+		mm.sizePlayResult()
 		return mm, cmd
 	}
 	return out, cmd
 }
 
-// updateJQPlaygroundKey is the routing itself; updateJQPlayground wraps it.
-func (m Model) updateJQPlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.jqPlay
+// updatePlaygroundKey is the routing itself; updatePlayground wraps it.
+func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	s := m.play
 	if s == nil {
 		return m, nil
 	}
@@ -745,20 +784,20 @@ func (m Model) updateJQPlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if s.bufFocus {
-		return m.updateJQBufferKey(msg)
+		return m.updatePlayBufferKey(msg)
 	}
 	// The open completion popup (#1979) owns its keys first: arrows step it,
 	// enter/tab accept, esc dismisses — the query line's own meaning of those
 	// keys comes back the moment it closes. Typing falls through and
 	// re-filters below.
 	if s.comp != nil {
-		if handled, cmd := m.jqCompletionKey(msg); handled {
+		if handled, cmd := m.playCompletionKey(msg); handled {
 			return m, cmd
 		}
 	}
 	switch msg.String() {
 	case "esc":
-		m.closeJQPlayground()
+		m.closePlayground()
 		return m, nil
 	case "tab":
 		s.setBufFocus(true)
@@ -766,34 +805,34 @@ func (m Model) updateJQPlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+space":
 		// The editor's manual completion request: open the popup without a
 		// trigger rune, the full builtin list on an empty partial.
-		m.refreshJQCompletion("", true)
+		m.refreshPlayCompletion("", true)
 		return m, nil
 	case "enter":
 		s.hist.Add(s.program)
 		s.histIdx = -1
-		return m, m.runJQNow()
+		return m, m.runPlayNow()
 	case "up":
 		// In the multi-line view the arrows are cursor motion first (#2038);
 		// they fall through to the history walk at the program's own top and
 		// bottom, the way a multi-line shell prompt hands ↑ over once there is
 		// no line above. alt+↑/↓ reach the history from anywhere.
-		if m.moveJQQueryRow(-1, goal) {
+		if m.movePlayQueryRow(-1, goal) {
 			return m, nil
 		}
-		return m, m.stepJQHistory(1)
+		return m, m.stepPlayHistory(1)
 	case "down":
-		if m.moveJQQueryRow(1, goal) {
+		if m.movePlayQueryRow(1, goal) {
 			return m, nil
 		}
-		return m, m.stepJQHistory(-1)
+		return m, m.stepPlayHistory(-1)
 	case "alt+up":
-		return m, m.stepJQHistory(1)
+		return m, m.stepPlayHistory(1)
 	case "alt+down":
-		return m, m.stepJQHistory(-1)
+		return m, m.stepPlayHistory(-1)
 	case "home", "end":
 		// "this line" once there are lines (#2038); in the one-line view
 		// ui.EditKey's whole-program ends below still apply.
-		if m.moveJQQueryEdge(msg.String() == "end") {
+		if m.movePlayQueryEdge(msg.String() == "end") {
 			return m, nil
 		}
 	case "ctrl+home":
@@ -808,17 +847,18 @@ func (m Model) updateJQPlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		*s.resultEd, cmd = s.resultEd.Update(msg)
 		return m, cmd
 	case "ctrl+y":
-		m.copyJQResult()
+		m.copyPlayResult()
 		return m, nil
 	case "ctrl+o":
-		return m.openJQResultAsScratch()
+		return m.openPlayResultAsScratch()
 	case "ctrl+s":
 		// Name the program and keep it (#1995) — json.jqSaveFilter's chord.
-		m.startJQSavePrompt()
+		m.startPlaySavePrompt()
 		return m, nil
 	case "ctrl+l":
-		// The saved-filter picker (#1995) — json.jqFilters' chord.
-		m.openJQFilterPicker(false)
+		// The saved-filter picker (#1995) — json.jqFilters' chord, over this
+		// playground's own library (#2039).
+		m.openPlayFilterPicker(s.dialect, false)
 		return m, nil
 	}
 	out, pos, handled, changed := ui.EditKey(msg, s.program, s.pos)
@@ -828,7 +868,7 @@ func (m Model) updateJQPlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// cmd+e (Recent Files) and the other IDE-level chords keep working
 		// like in any pane. Local keys already returned above, so they keep
 		// priority where they collide.
-		if ok, cmd := m.jqGlobalChord(msg); ok {
+		if ok, cmd := m.playGlobalChord(msg); ok {
 			return m, cmd
 		}
 		return m, nil
@@ -841,26 +881,26 @@ func (m Model) updateJQPlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	s.histIdx = -1
-	m.refreshJQCompletion(msg.Text, false)
-	return m, m.scheduleJQEval()
+	m.refreshPlayCompletion(msg.Text, false)
+	return m, m.schedulePlayEval()
 }
 
-// updateJQBufferKey routes a key into the result buffer: the full editor
+// updatePlayBufferKey routes a key into the result buffer: the full editor
 // keymap applies (motions, search, visual selection, yank — mutations are
 // refused by the read-only flag, #1762). tab returns to the query line; esc
 // closes the mode only from resting normal mode, so it first quits a visual
 // selection, a search prompt or a pending command like it would in any
 // buffer. The result actions (ctrl+y / ctrl+o) shadow the editor's scroll
 // and jumplist keys — a throwaway result buffer has no jumplist worth keeping.
-func (m Model) updateJQBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.jqPlay
+func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	s := m.play
 	// The app keymap's copy chord (editor.copy, default cmd+c) copies the
 	// visual selection like in any read-only buffer (#1980). Resolved here
 	// against the editor context directly: the playground owns the keyboard,
 	// so the chord never reaches the keymap layer on its own — and the
 	// ActionMsg it dispatches would route to the pane's hidden document
 	// editor, not the substitute result buffer.
-	if m.jqCopyChord(msg) {
+	if m.playCopyChord(msg) {
 		var cmd tea.Cmd
 		*s.resultEd, cmd = s.resultEd.Update(editor.ActionMsg{Action: "copy"})
 		return m, cmd
@@ -870,13 +910,13 @@ func (m Model) updateJQBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		s.setBufFocus(false)
 		return m, nil
 	case "ctrl+y":
-		m.copyJQResult()
+		m.copyPlayResult()
 		return m, nil
 	case "ctrl+o":
-		return m.openJQResultAsScratch()
+		return m.openPlayResultAsScratch()
 	case "esc":
 		if s.resultEd.ModeName() == editor.Normal {
-			m.closeJQPlayground()
+			m.closePlayground()
 			return m, nil
 		}
 	}
@@ -887,7 +927,7 @@ func (m Model) updateJQBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// search input and typed prompt text.
 	if k, ok := keymap.FromKeyMsg(msg); ok &&
 		(k.Has(keymap.ModCtrl) || k.Has(keymap.ModAlt) || k.Has(keymap.ModMeta)) {
-		if handled, cmd := m.jqGlobalChord(msg); handled {
+		if handled, cmd := m.playGlobalChord(msg); handled {
 			return m, cmd
 		}
 	}
@@ -896,12 +936,12 @@ func (m Model) updateJQBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// jqCopyChord reports whether msg is the app keymap's editor.copy binding in
+// playCopyChord reports whether msg is the app keymap's editor.copy binding in
 // the editor context — the chord that must reach the result buffer's selection
 // (#1980) even though the playground's modal routing keeps it from the keymap
 // layer. The lookup is against the editor context, not the hosting pane's: the
 // substitute buffer is an editor regardless of what pane it is mounted in.
-func (m Model) jqCopyChord(msg tea.KeyPressMsg) bool {
+func (m Model) playCopyChord(msg tea.KeyPressMsg) bool {
 	if m.bindings == nil || m.bindings.Table() == nil {
 		return false
 	}
@@ -914,7 +954,7 @@ func (m Model) jqCopyChord(msg tea.KeyPressMsg) bool {
 	return found && b.Command == "editor.copy"
 }
 
-// jqGlobalChord resolves a single-step chord against the Global scope of the
+// playGlobalChord resolves a single-step chord against the Global scope of the
 // live binding table and dispatches its command (#1983). The playground owns
 // the keyboard while its pane is focused, so without this a chord like
 // cmd+shift+a would never reach the keymap layer. Only keys the playground
@@ -922,7 +962,7 @@ func (m Model) jqCopyChord(msg tea.KeyPressMsg) bool {
 // bindings fire: a pane-scoped binding belongs to the pane the mode replaces,
 // not to the playground. Multi-step chords cannot resolve without buffering
 // query input and are left alone, the same trade the terminal makes (#805).
-func (m Model) jqGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+func (m Model) playGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	if m.bindings == nil || m.bindings.Table() == nil {
 		return false, nil
 	}
@@ -941,12 +981,12 @@ func (m Model) jqGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	return false, nil
 }
 
-// pasteJQPlayground inserts a bracketed paste into the query line, flattened:
+// pastePlayground inserts a bracketed paste into the query line, flattened:
 // the query line is one line, and a pasted multi-line program would otherwise
 // smuggle newlines into it. The result buffer never takes a paste — it is
 // read-only.
-func (m *Model) pasteJQPlayground(text string) tea.Cmd {
-	s := m.jqPlay
+func (m *Model) pastePlayground(text string) tea.Cmd {
+	s := m.play
 	if s == nil || text == "" {
 		return nil
 	}
@@ -957,11 +997,11 @@ func (m *Model) pasteJQPlayground(text string) tea.Cmd {
 	s.program, s.pos, s.histIdx = out, pos, -1
 	s.comp = nil         // a paste is not typing: no popup over it (the editor's rule)
 	s.setBufFocus(false) // pasting a program is query-line work
-	m.sizeJQResult()     // a longer program is a taller expanded header (#2032)
-	return m.scheduleJQEval()
+	m.sizePlayResult()   // a longer program is a taller expanded header (#2032)
+	return m.schedulePlayEval()
 }
 
-// stepJQHistory walks the session program history (delta +1 = older).
+// stepPlayHistory walks the session program history (delta +1 = older).
 //
 // Two details make it feel like a history instead of a dead key (#1973):
 //
@@ -973,8 +1013,8 @@ func (m *Model) pasteJQPlayground(text string) tea.Cmd {
 //     program it just recorded, and reopening over the same caret seeds the
 //     path that was last run — so without the skip the first ↑ would change
 //     nothing at all.
-func (m *Model) stepJQHistory(delta int) tea.Cmd {
-	s := m.jqPlay
+func (m *Model) stepPlayHistory(delta int) tea.Cmd {
+	s := m.play
 	next := s.histIdx + delta
 	if s.histIdx == -1 && delta > 0 {
 		s.draft, s.draftPos = s.program, s.pos
@@ -993,28 +1033,28 @@ func (m *Model) stepJQHistory(delta int) tea.Cmd {
 	}
 	if next == -1 {
 		s.histIdx, s.program, s.pos = -1, s.draft, s.draftPos
-		return m.runJQNow()
+		return m.runPlayNow()
 	}
 	program, ok := s.hist.At(next)
 	if !ok {
 		return nil
 	}
 	s.histIdx, s.program, s.pos = next, program, len([]rune(program))
-	return m.runJQNow()
+	return m.runPlayNow()
 }
 
-// jqPaneClick handles a mouse press inside the hosting pane: a press on the
+// playPaneClick handles a mouse press inside the hosting pane: a press on the
 // query header returns the focus to the query line, a press in the body moves
 // the caret in the result buffer and arms the selection drag, and the
 // scrollbar column outranks the content like in any editor pane (#1022).
 // x/y are content-local, so the header rows sit at negative y.
-func (m Model) jqPaneClick(key string, msg mouseEvent, x, y int) (tea.Model, tea.Cmd) {
-	s := m.jqPlay
+func (m Model) playPaneClick(key string, msg mouseEvent, x, y int) (tea.Model, tea.Cmd) {
+	s := m.play
 	ed := s.resultEd
 	if y < 0 {
 		if msg.Button == tea.MouseLeft {
 			s.setBufFocus(false)
-			m.clickJQQueryRow(x, y)
+			m.clickPlayQueryRow(x, y)
 		}
 		return m, nil
 	}
@@ -1033,28 +1073,28 @@ func (m Model) jqPaneClick(key string, msg mouseEvent, x, y int) (tea.Model, tea
 	return m, nil
 }
 
-// clickJQQueryRow puts the caret on the clicked cell of the query header — in
+// clickPlayQueryRow puts the caret on the clicked cell of the query header — in
 // the multi-line view the way to reach a stage far down a long pipeline
 // without walking there (#2038), and in the one-line view a click into the
 // visible window. x/y are content-local, so the header sits at negative y with
 // the query rows first and the info row last; a click on the info row or left
 // of the `jq:` label only returns the focus to the query line.
-func (m *Model) clickJQQueryRow(x, y int) {
-	s := m.jqPlay
+func (m *Model) clickPlayQueryRow(x, y int) {
+	s := m.play
 	r, ok := m.lay.Panes[s.paneKey]
 	if !ok {
 		return
 	}
 	width := paneInterior(r.W, paneChromeW)
-	lines, rows, start := m.jqQueryWindow(width)
-	idx := y + rows + jqInfoRows // the clicked query row, 0-based
-	col := x - jqQueryPrefixW
+	lines, rows, start := m.playQueryWindow(width)
+	idx := y + rows + playInfoRows // the clicked query row, 0-based
+	col := x - playQueryPrefixW
 	if idx < 0 || idx >= rows || col < 0 {
 		return
 	}
 	s.comp = nil
 	if rows <= 1 {
-		s.pos = jqOneLinePos(s.program, s.pos, m.jqQueryWidth(width), col)
+		s.pos = playOneLinePos(s.program, s.pos, m.playQueryWidth(width), col)
 		return
 	}
 	if idx == 0 && start > 0 {
@@ -1067,10 +1107,10 @@ func (m *Model) clickJQQueryRow(x, y int) {
 	s.pos = lines[len(lines)-1].End // a blank row below a short program
 }
 
-// jqOneLinePos maps a column of the one-line query row back onto a rune
-// position, mirroring jqHighlighted's cursor window — its start offset and the
+// playOneLinePos maps a column of the one-line query row back onto a rune
+// position, mirroring playHighlighted's cursor window — its start offset and the
 // leading `…` cell that stands for the runes scrolled off to the left.
-func jqOneLinePos(program string, pos, width, col int) int {
+func playOneLinePos(program string, pos, width, col int) int {
 	r := []rune(program)
 	start := 0
 	if pos >= width {
@@ -1089,11 +1129,11 @@ func jqOneLinePos(program string, pos, width, col int) int {
 }
 
 // dragEditor resolves the editor a selection or scrollbar drag targets in
-// pane key: the inline jq result buffer when the mode owns that pane (#1970)
+// pane key: the inline playground result buffer when the mode owns that pane (#1970)
 // — which may be an HTTP pane with no editor of its own — else the pane's
 // active document editor.
 func (m Model) dragEditor(key string) *editor.Model {
-	if s := m.jqPlay; s != nil && s.paneKey == key {
+	if s := m.play; s != nil && s.paneKey == key {
 		return s.resultEd
 	}
 	if inst := m.activeWS().Panes.Get(key); inst != nil {
@@ -1102,10 +1142,10 @@ func (m Model) dragEditor(key string) *editor.Model {
 	return nil
 }
 
-// copyJQResult writes the whole result — not just the visible window — to the
+// copyPlayResult writes the whole result — not just the visible window — to the
 // system clipboard.
-func (m *Model) copyJQResult() {
-	s := m.jqPlay
+func (m *Model) copyPlayResult() {
+	s := m.play
 	text := s.result.Text()
 	if text == "" {
 		s.status = "nothing to copy — the result is empty"
@@ -1113,21 +1153,22 @@ func (m *Model) copyJQResult() {
 	}
 	clipboardWrite(text)
 	s.status = "copied the result (" + strconv.Itoa(len(s.result.Outputs)) + " value(s))"
-	m.host.Notify(host.Info, "copied the jq result")
+	m.host.Notify(host.Info, "copied the "+s.dialect.Name()+" result")
 }
 
-// openJQResultAsScratch writes the result into a fresh .json scratch and
-// opens it through the standard funnel, so highlighting, folding and the
-// path breadcrumb all apply — and the playground can be run again over the
-// result, which is how a multi-step jq session actually goes.
-func (m Model) openJQResultAsScratch() (tea.Model, tea.Cmd) {
-	s := m.jqPlay
+// openPlayResultAsScratch writes the result into a fresh scratch — `.json` for
+// jq, `.yaml` for yq (#2039) — and opens it through the standard funnel, so
+// highlighting, folding and the path breadcrumb all apply, and the playground
+// can be run again over the result, which is how a multi-step session actually
+// goes.
+func (m Model) openPlayResultAsScratch() (tea.Model, tea.Cmd) {
+	s := m.play
 	text := s.result.Text()
 	if text == "" {
 		s.status = "nothing to open — the result is empty"
 		return m, nil
 	}
-	path, err := scratch.Create("json")
+	path, err := scratch.Create(s.dialect.Ext())
 	if err != nil {
 		s.status = "scratch: " + err.Error()
 		return m, nil
@@ -1136,26 +1177,26 @@ func (m Model) openJQResultAsScratch() (tea.Model, tea.Cmd) {
 		s.status = "scratch: " + err.Error()
 		return m, nil
 	}
-	m.closeJQPlayground()
+	m.closePlayground()
 	return m.openPath(path, false)
 }
 
-// jqInlineBody renders the hosting pane's content: the query rows, the info
+// playInlineBody renders the hosting pane's content: the query rows, the info
 // row and the result buffer underneath, filling the pane's interior exactly.
-// The query row count comes from jqQueryRowCount, the same number the pane
+// The query row count comes from playQueryRowCount, the same number the pane
 // geometry reserved.
-func (m Model) jqInlineBody(width int) string {
-	s := m.jqPlay
+func (m Model) playInlineBody(width int) string {
+	s := m.play
 	if s == nil {
 		return ""
 	}
 	if width < 20 {
 		width = 20
 	}
-	return strings.Join(m.jqQueryRows(width), "\n") + "\n" + m.jqInfoRow(width) + "\n" + s.resultEd.View()
+	return strings.Join(m.playQueryRows(width), "\n") + "\n" + m.playInfoRow(width) + "\n" + s.resultEd.View()
 }
 
-// jqInfoRow is the header's second line: an error beats a transient status
+// playInfoRow is the header's second line: an error beats a transient status
 // beats the input/result summary with the key hints. One fixed row — the
 // buffer below must not resize when an error appears mid-keystroke.
 //
@@ -1165,11 +1206,11 @@ func (m Model) jqInlineBody(width int) string {
 // whole `·`-separated segments on a narrow pane instead of being cut
 // mid-word. Truncation is cell-aware (ansi.Truncate), so a wide glyph in the
 // source label cannot overflow the row.
-func (m Model) jqInfoRow(width int) string {
-	s := m.jqPlay
+func (m Model) playInfoRow(width int) string {
+	s := m.play
 	pal := m.pal()
 	hint := lipgloss.NewStyle().Foreground(pal.Hint)
-	if err := m.jqErrorLine(); err != "" {
+	if err := m.playErrorLine(); err != "" {
 		line := lipgloss.NewStyle().Foreground(pal.Error).Render("E: " + err)
 		// A runtime error can arrive after values were produced; they are
 		// sitting in the buffer below, so say so instead of hiding the count.
@@ -1181,17 +1222,17 @@ func (m Model) jqInfoRow(width int) string {
 	if s.status != "" {
 		return ansi.Truncate(lipgloss.NewStyle().Foreground(pal.Success).Render(s.status), width, "…")
 	}
-	line := m.jqInputSegment()
-	if res := m.jqResultSegment(); res != "" {
+	line := m.playInputSegment()
+	if res := m.playResultSegment(); res != "" {
 		line += hint.Render(" · ") + res
 	}
-	if m.jqQueryCut(width) {
+	if m.playQueryCut(width) {
 		// The `…` at the row's edge alone is too easy to miss (#2032): say
 		// that the program on screen is not all of it, in the same Warning the
 		// other "you are seeing less than there is" markers use.
 		line += lipgloss.NewStyle().Foreground(pal.Warning).Render(" · query cut")
 	}
-	for _, h := range m.jqHints() {
+	for _, h := range m.playHints() {
 		seg := hint.Render(" · " + h)
 		if ansi.StringWidth(line)+ansi.StringWidth(seg) > width {
 			break
@@ -1201,17 +1242,17 @@ func (m Model) jqInfoRow(width int) string {
 	return ansi.Truncate(line, width, "…")
 }
 
-// jqHints is the key-hint tail of the info row, one segment per hint so a
+// playHints is the key-hint tail of the info row, one segment per hint so a
 // narrow pane drops trailing hints whole rather than clipping one mid-word.
 // The query-view toggle (#2032) is named with the chord actually bound to
 // json.jqQueryView, so a rebind renames the hint with it, and it sits early in
 // the list: a program that does not fit the row is exactly the situation in
 // which the hint has to survive a narrow pane.
-func (m Model) jqHints() []string {
-	s := m.jqPlay
-	view := m.jqQueryViewChord() + " full query"
+func (m Model) playHints() []string {
+	s := m.play
+	view := m.playQueryViewChord() + " full query"
 	if s.expanded {
-		view = m.jqQueryViewChord() + " one-line query"
+		view = m.playQueryViewChord() + " one-line query"
 	}
 	if s.bufFocus {
 		// za/zM/zR are the editor's own fold keys (#1741), listed here
@@ -1230,11 +1271,11 @@ func (m Model) jqHints() []string {
 	return append(out, "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close")
 }
 
-// jqQueryViewChord names the chord bound to json.jqQueryView (#2032) for the
+// playQueryViewChord names the chord bound to json.jqQueryView (#2032) for the
 // hints, resolved against the live binding table so a rebind is reflected
 // rather than a hard-coded default being advertised. With the command unbound
 // — a user may unbind it — the palette is what is left to name.
-func (m Model) jqQueryViewChord() string {
+func (m Model) playQueryViewChord() string {
 	if m.bindings != nil && m.bindings.Table() != nil {
 		for _, b := range m.bindings.Table().Bindings() {
 			if b.Command == "json.jqQueryView" {
@@ -1245,35 +1286,35 @@ func (m Model) jqQueryViewChord() string {
 	return "palette"
 }
 
-// jqQueryCut reports whether the query rows are showing less than the program
+// playQueryCut reports whether the query rows are showing less than the program
 // holds: the one-line view windowed around the cursor, or an expanded view
-// capped at jqMaxQueryRows. It drives the info row's marker and is the reason
+// capped at playMaxQueryRows. It drives the info row's marker and is the reason
 // the toggle is worth pressing.
-func (m Model) jqQueryCut(width int) bool {
-	s := m.jqPlay
-	avail := m.jqQueryWidth(width)
+func (m Model) playQueryCut(width int) bool {
+	s := m.play
+	avail := m.playQueryWidth(width)
 	if !s.expanded {
 		return len([]rune(s.program)) > avail
 	}
-	return len(jqplay.Wrap(s.program, avail)) > m.jqQueryRowsFor(width)
+	return len(jqplay.Wrap(s.program, avail)) > m.playQueryRowsFor(width)
 }
 
-// jqErrorLine is the message shown on the info row: a bad input beats a bad
+// playErrorLine is the message shown on the info row: a bad input beats a bad
 // program, because with no parsed input no program could have run.
-func (m Model) jqErrorLine() string {
-	s := m.jqPlay
+func (m Model) playErrorLine() string {
+	s := m.play
 	if s.inputErr != "" {
 		return s.inputErr
 	}
 	return s.result.Err
 }
 
-// jqInputSegment names the queried snapshot: where it came from, how big it
+// playInputSegment names the queried snapshot: where it came from, how big it
 // is and how many top-level values it holds (a `.jsonl` body holds many). A
 // truncated read renders its cap in Warning — the user is seeing less than
 // the buffer holds, which the row's dim Hint color would undersell.
-func (m Model) jqInputSegment() string {
-	s := m.jqPlay
+func (m Model) playInputSegment() string {
+	s := m.play
 	pal := m.pal()
 	hint := lipgloss.NewStyle().Foreground(pal.Hint)
 	if s.parsing {
@@ -1293,7 +1334,7 @@ func (m Model) jqInputSegment() string {
 	return out
 }
 
-// jqQueryRow renders the query line, windowed around its cursor and colored
+// playQueryRow renders the query line, windowed around its cursor and colored
 // by the jq scanner. While the result buffer holds the keyboard — or the
 // focus is on another pane entirely (#1980) — the cursor cell is not drawn
 // and the `>` marker is blanked, the same inactive affordance the regex
@@ -1302,20 +1343,20 @@ func (m Model) jqInputSegment() string {
 // chrome's Secondary either way, marking the row as chrome over the pane
 // surface rather than buffer text. Both prefixes are 6 cells, so the window
 // math never changes with focus.
-func (m Model) jqQueryRow(width int) string {
-	s := m.jqPlay
+func (m Model) playQueryRow(width int) string {
+	s := m.play
 	pos := s.pos
-	prefix := "> jq: "
-	if s.bufFocus || !m.jqPlayFocused() {
+	prefix := "> " + s.dialect.Name() + ": "
+	if s.bufFocus || !m.playFocused() {
 		pos = -1
-		prefix = "  jq: "
+		prefix = "  " + s.dialect.Name() + ": "
 	}
 	label := lipgloss.NewStyle().Foreground(m.pal().Secondary).Render(prefix)
-	return label + m.jqHighlighted(s.program, pos, m.jqQueryWidth(width))
+	return label + m.playHighlighted(s.program, pos, m.playQueryWidth(width))
 }
 
-// jqQueryRows is the query half of the header: the one windowed row by
-// default, the wrapped program over jqQueryRowCount rows in the expanded view
+// playQueryRows is the query half of the header: the one windowed row by
+// default, the wrapped program over playQueryRowCount rows in the expanded view
 // (#2032). Exactly that many rows are always returned — a short program pads
 // with blank rows rather than letting the pane's content shrink under the
 // geometry the header reserved.
@@ -1326,17 +1367,17 @@ func (m Model) jqQueryRow(width int) string {
 // around the cursor's row and marked with the `…` the one-line view marks a
 // cut with, so the cursor is always on screen and there is always a sign that
 // more program exists.
-func (m Model) jqQueryRows(width int) []string {
-	s := m.jqPlay
-	lines, rows, start := m.jqQueryWindow(width)
+func (m Model) playQueryRows(width int) []string {
+	s := m.play
+	lines, rows, start := m.playQueryWindow(width)
 	if rows <= 1 {
-		return []string{m.jqQueryRow(width)}
+		return []string{m.playQueryRow(width)}
 	}
 	pal := m.pal()
 	label := lipgloss.NewStyle().Foreground(pal.Secondary)
-	prefix, pos := "> jq: ", s.pos
-	if s.bufFocus || !m.jqPlayFocused() {
-		prefix, pos = "  jq: ", -1
+	prefix, pos := "> "+s.dialect.Name()+": ", s.pos
+	if s.bufFocus || !m.playFocused() {
+		prefix, pos = "  "+s.dialect.Name()+": ", -1
 	}
 	curRow := -1
 	if pos >= 0 {
@@ -1344,13 +1385,13 @@ func (m Model) jqQueryRows(width int) []string {
 	}
 	r := []rune(s.program)
 	tokens := jqplay.Tokens(s.program)
-	styles := m.jqKindStyles()
+	styles := m.playKindStyles()
 	cursor := lipgloss.NewStyle().Reverse(true)
 	out := make([]string, 0, rows)
 	for i := 0; i < rows; i++ {
 		row := label.Render(prefix)
 		if i > 0 {
-			row = strings.Repeat(" ", jqQueryPrefixW)
+			row = strings.Repeat(" ", playQueryPrefixW)
 		}
 		idx := start + i
 		if idx >= len(lines) {
@@ -1386,7 +1427,7 @@ func (m Model) jqQueryRows(width int) []string {
 	return out
 }
 
-// jqQueryWindow is the multi-line view's layout at a pane interior of width
+// playQueryWindow is the multi-line view's layout at a pane interior of width
 // cells: the wrapped program, how many of its rows are on screen and the row
 // the window starts at. The rendering, the click mapping (#2038) and the
 // completion anchor all read it, so the row drawn, the row clicked and the row
@@ -1395,22 +1436,22 @@ func (m Model) jqQueryRows(width int) []string {
 // The window follows the cursor's row whether or not the cursor is *drawn* —
 // the focus moving into the result buffer must not scroll the program away
 // under it.
-func (m Model) jqQueryWindow(width int) (lines []jqplay.Line, rows, start int) {
-	s := m.jqPlay
-	lines = jqplay.Wrap(s.program, m.jqQueryWidth(width))
-	rows = m.jqQueryRowsFor(width)
+func (m Model) playQueryWindow(width int) (lines []jqplay.Line, rows, start int) {
+	s := m.play
+	lines = jqplay.Wrap(s.program, m.playQueryWidth(width))
+	rows = m.playQueryRowsFor(width)
 	if cur, _ := jqplay.RowCol(lines, s.pos); cur >= rows {
 		start = cur - rows + 1
 	}
 	return lines, rows, start
 }
 
-// jqHighlighted renders the program clipped to width runes around the cursor,
+// playHighlighted renders the program clipped to width runes around the cursor,
 // each rune in its token's color, with the cursor cell reversed; pos < 0
 // draws no cursor. It is the windowedInput of clone_prompt.go plus the
 // colors: the cursor has to be drawn per rune anyway, so coloring per rune
 // costs nothing extra.
-func (m Model) jqHighlighted(program string, pos, width int) string {
+func (m Model) playHighlighted(program string, pos, width int) string {
 	r := []rune(program)
 	if pos > len(r) {
 		pos = len(r)
@@ -1421,7 +1462,7 @@ func (m Model) jqHighlighted(program string, pos, width int) string {
 	}
 	end := min(start+width, len(r))
 	tokens := jqplay.Tokens(program)
-	styles := m.jqKindStyles()
+	styles := m.playKindStyles()
 	cursor := lipgloss.NewStyle().Reverse(true)
 	var b strings.Builder
 	if start > 0 {
@@ -1444,12 +1485,12 @@ func (m Model) jqHighlighted(program string, pos, width int) string {
 	return b.String()
 }
 
-// jqKindStyles maps the scanner's kinds onto the theme, once per render
+// playKindStyles maps the scanner's kinds onto the theme, once per render
 // rather than once per rune. The query line borrows the **chrome** palette
 // rather than the editor's capture colors: it is a header row over the pane
 // surface, not buffer text, and the chrome slots are the ones every theme
 // guarantees to contrast against it.
-func (m Model) jqKindStyles() map[jqplay.Kind]lipgloss.Style {
+func (m Model) playKindStyles() map[jqplay.Kind]lipgloss.Style {
 	pal := m.pal()
 	style := lipgloss.NewStyle()
 	return map[jqplay.Kind]lipgloss.Style{
@@ -1466,17 +1507,17 @@ func (m Model) jqKindStyles() map[jqplay.Kind]lipgloss.Style {
 	}
 }
 
-// jqResultSegment summarises the evaluation: how many values, the caveats
+// playResultSegment summarises the evaluation: how many values, the caveats
 // (capped output, evaluation in flight), or why there is nothing to show.
 // While a re-run is pending the previous count stays up with an
 // "evaluating…" suffix — replacing it outright made the row shimmer on
 // every keystroke, since pending is set the moment the debounce tick is
 // scheduled. A zero-value result renders in Warning: the buffer below is
 // blank then, and this summary is the only signal that nothing matched. The
-// input-error and after-error cases never reach here — jqInfoRow's error
+// input-error and after-error cases never reach here — playInfoRow's error
 // branch owns them.
-func (m Model) jqResultSegment() string {
-	s := m.jqPlay
+func (m Model) playResultSegment() string {
+	s := m.play
 	pal := m.pal()
 	hint := lipgloss.NewStyle().Foreground(pal.Hint)
 	warn := lipgloss.NewStyle().Foreground(pal.Warning)

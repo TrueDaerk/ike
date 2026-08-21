@@ -8,6 +8,7 @@ import (
 	"ike/internal/config"
 	"ike/internal/host"
 	"ike/internal/intention"
+	"ike/internal/jqplay"
 	"ike/internal/layout"
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -309,25 +310,27 @@ type CompareClipboardMsg struct{}
 // the focused editor's visual selection. Dispatched by tools.regexTester.
 type OpenRegexTesterMsg struct{}
 
-// OpenJQPlaygroundMsg opens the jq playground (#1936): a query line mounted
-// inline in the pane holding the JSON at hand (#1970) — the focused HTTP
-// response body, else the focused editor's visual selection, else its whole
-// buffer — with the program's output live in a read-only result buffer
-// underneath. Dispatched by json.jqPlayground.
-type OpenJQPlaygroundMsg struct{}
+// OpenPlaygroundMsg opens the playground of one dialect (#1936, #2039): a
+// query line mounted inline in the pane holding the document at hand (#1970) —
+// for jq the focused HTTP response body, else the focused editor's visual
+// selection, else its whole buffer; for yq the editor alone — with the
+// program's output live in a read-only result buffer underneath. Dispatched by
+// json.jqPlayground and yaml.yqPlayground.
+type OpenPlaygroundMsg struct{ Dialect jqplay.Dialect }
 
-// OpenJQPlaygroundAtPathMsg opens the jq playground prefilled with the
-// caret's jq path (#1982) instead of the default program — the explicit form
-// of what used to happen on every open. Dispatched by
-// json.jqPlaygroundAtPath.
-type OpenJQPlaygroundAtPathMsg struct{}
+// OpenPlaygroundAtPathMsg opens the playground prefilled with the caret's
+// document path (#1982) instead of the default program — the explicit form of
+// what used to happen on every open. Dispatched by json.jqPlaygroundAtPath and
+// yaml.yqPlaygroundAtPath.
+type OpenPlaygroundAtPathMsg struct{ Dialect jqplay.Dialect }
 
-// ToggleJQQueryViewMsg toggles the playground's expanded query view (#2032):
+// TogglePlaygroundQueryViewMsg toggles the playground's expanded query view (#2032):
 // the query line lays the whole program out over several wrapped rows —
 // broken at its `|` stages, highlighted like the one-line view — instead of
 // windowing one row around the cursor. Dispatched by json.jqQueryView; a no-op
-// while no playground is open.
-type ToggleJQQueryViewMsg struct{}
+// while no playground is open. It carries no dialect — it is a view toggle on
+// whichever playground is up.
+type TogglePlaygroundQueryViewMsg struct{}
 
 // OpenMergedLogMsg is declared in logsets.go: it merges the focused log
 // buffer's rotation set into one chronological timeline (#1996).
@@ -439,12 +442,21 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("file.openInBrowser", "Open in Browser", OpenInBrowserMsg{}),
 			appCommand("tools.setup", "Set Up Tool Panes", ShowToolSetupMsg{}),
 			appCommand("tools.regexTester", "Regex Tester…", OpenRegexTesterMsg{}),
-			appCommand("json.jqPlayground", "jq Playground…", OpenJQPlaygroundMsg{}),
-			appCommand("json.jqPlaygroundAtPath", "jq Playground at Cursor Path…", OpenJQPlaygroundAtPathMsg{}),
-			appCommand("json.jqSaveFilter", "Save jq Filter…", SaveJQFilterPromptMsg{}),
-			appCommand("json.jqFilters", "Saved jq Filters…", ShowJQFiltersMsg{}),
-			appCommand("json.jqRenameFilter", "Rename Saved jq Filter…", ShowJQFiltersMsg{Rename: true}),
-			appCommand("json.jqQueryView", "Toggle Full jq Query View", ToggleJQQueryViewMsg{}),
+			appCommand("json.jqPlayground", "jq Playground…", OpenPlaygroundMsg{}),
+			appCommand("json.jqPlaygroundAtPath", "jq Playground at Cursor Path…", OpenPlaygroundAtPathMsg{}),
+			appCommand("json.jqFilters", "Saved jq Filters…", ShowFiltersMsg{}),
+			appCommand("json.jqRenameFilter", "Rename Saved jq Filter…", ShowFiltersMsg{Rename: true}),
+			// The yq playground (#2039) is the same mode over YAML, so it is
+			// the same five commands under the yaml namespace. The save
+			// prompt and the query-view toggle are not among them: both act
+			// on whichever playground is open and would only be a second name
+			// for one behavior.
+			appCommand("yaml.yqPlayground", "yq Playground…", OpenPlaygroundMsg{Dialect: jqplay.DialectYQ}),
+			appCommand("yaml.yqPlaygroundAtPath", "yq Playground at Cursor Path…", OpenPlaygroundAtPathMsg{Dialect: jqplay.DialectYQ}),
+			appCommand("yaml.yqFilters", "Saved yq Filters…", ShowFiltersMsg{Dialect: jqplay.DialectYQ}),
+			appCommand("yaml.yqRenameFilter", "Rename Saved yq Filter…", ShowFiltersMsg{Dialect: jqplay.DialectYQ, Rename: true}),
+			appCommand("json.jqSaveFilter", "Save Playground Filter…", SaveFilterPromptMsg{}),
+			appCommand("json.jqQueryView", "Toggle Full Query View", TogglePlaygroundQueryViewMsg{}),
 			appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),

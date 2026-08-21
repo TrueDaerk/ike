@@ -1,5 +1,48 @@
 # Log
 
+## 2026-08-21 (yq playground on the shared playground base, #2039)
+
+- **A yq playground**: YAML buffers get the playground the jq one has had since
+  #1936, under `yaml.yqPlayground` / `yaml.yqPlaygroundAtPath` (palette, Tools
+  menu, and the caret intention over a YAML value). Live query against the
+  buffer or the visual selection, YAML rendered back into the read-only result
+  buffer, `ctrl+y` copy and `ctrl+o` scratch as `.yaml`, history and saved
+  filters as before.
+- **One implementation, two dialects**: nothing was copied. `jqplay.Dialect`
+  (`internal/jqplay/dialect.go`) is the whole seam — how a buffer is decoded,
+  how a value is written back, how the result folds — and the app-side mode was
+  *renamed* from `jq…` to `play…` and parameterized rather than duplicated
+  (`internal/app/playground.go`, `playcomplete.go`, `playfilters.go`, formerly
+  `jqplayground.go` / `jqcomplete.go` / `jqfilters.go`). The query line,
+  completion, geometry, key routing, debounce, result buffer and filter store
+  are shared verbatim.
+- **Engine**: gojq for both. YAML decodes into the value shapes gojq already
+  runs over and is re-encoded on the way out (`internal/jqplay/yaml.go`), the
+  trade `gojq --yaml-input --yaml-output` makes — yq's expression language is
+  jq's for everything a query line holds, so a second engine would only have
+  bought a second builtin list, scanner and error vocabulary. Given up: yq's
+  comment/anchor preservation and `style`/`tag` operators, none of which a
+  read-only query tool has a job for.
+- **YAML specifics handled**: anchors and aliases resolved under a
+  `MaxYAMLNodes` budget (a billion-laughs file is an error line, not an OOM),
+  merge keys (`<<`) folded in with explicit keys winning, non-string keys
+  stringified so `1:` is reachable as `."1"`, `0x1f`/`1_000`/20-digit ids kept
+  as numbers with their digits, multi-document `---` files queried as a stream
+  and rendered back as one.
+- **YAML folding**: `yamlfold.go` scans the rendered result by indentation
+  (JSON has delimiters, YAML does not) — mapping blocks, sequences and block
+  scalars, the last counting `⋯ 7 lines`. `Fold` grew `Unit`/`Closer` in place
+  of the JSON-only `Object` flag, so one `Label` serves both.
+- **Filters are per dialect**, `yqfilters.json` / `yqfilters-global.json`
+  beside the jq pair: a filter written for a Kubernetes manifest has no
+  business in the picker over an API response. The **history stays shared** —
+  unnamed scratch work in the same language. `json.jqSaveFilter` is retitled
+  "Save Playground Filter…" and `json.jqQueryView` "Toggle Full Query View";
+  both act on whichever playground is open.
+- **Wiki**: `architecture/jq-playground.md` becomes "jq & yq Playground" and
+  gains "The yq dialect" (engine trade-off, what differs, what is shared);
+  folding, the filter library, the history and the keys table updated.
+
 ## 2026-08-21 (Palette: projects-column scroll window + scrolloff, #2041)
 
 - **The Recent Projects column scrolls**: it gained its own window (`sideTop`,

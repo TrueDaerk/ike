@@ -1,20 +1,21 @@
 ---
 type: concept
-title: jq Playground
-description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and response pane, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, a library of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects and arrays with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line.
+title: jq & yq Playground
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line.
 resource: internal/jqplay/jqplay.go
-tags: [architecture, json, jq, tools, inline, editor, http, completion, folding]
-timestamp: 2026-08-21T12:00:00Z
+tags: [architecture, json, yaml, jq, yq, tools, inline, editor, http, completion, folding]
+timestamp: 2026-08-21T16:00:00Z
 ---
 
-# jq Playground
+# jq & yq Playground
 
-#1936, inline since #1970. JSON is everywhere in the daily workflow — `.http`
-responses, Elasticsearch hits, parser output, fixtures — and until now the only
-way to run a jq program against one was to leave the IDE. The playground is a
-**query line mounted inline in the pane holding the JSON**, with the pane's
-body replaced by a **read-only editor buffer showing the program's live
-output**: no floating dialog, the result reads and navigates like any buffer.
+#1936, inline since #1970, two dialects since #2039. JSON is everywhere in the
+daily workflow — `.http` responses, Elasticsearch hits, parser output,
+fixtures — and until now the only way to run a jq program against one was to
+leave the IDE. The playground is a **query line mounted inline in the pane
+holding the document**, with the pane's body replaced by a **read-only editor
+buffer showing the program's live output**: no floating dialog, the result
+reads and navigates like any buffer.
 
 Opened by the **`json.jqPlayground`** command (command palette, Tools menu; no
 default chord), on JSON editor buffers and the HTTP response pane alike — and
@@ -22,29 +23,42 @@ by **`json.jqPlaygroundAtPath`**, the same mode seeded with the caret's jq
 path (#1982). `esc` leaves the mode; the pane's own content was never touched,
 so leaving restores it bit-identically — editability included.
 
+YAML gets the **same mode** under `yaml.yqPlayground` /
+`yaml.yqPlaygroundAtPath`: same query line, same result buffer, same history,
+same keys — only the decoder, the rendering, the fold scan and the filter
+library differ. See [the yq dialect](#the-yq-dialect); everything else in this
+document describes both.
+
 ## Structure
 
 ```
 internal/jqplay/
   jqplay.go      evaluation core: Parse, Run, Evaluate, Result, History — pure, no UI state
+  dialect.go     the jq/yq seam: Dialect — how a buffer is read, a value written, a result folded
+  yaml.go        the yq input/output path (#2039): YAML stream → gojq values → YAML
+  yamlfold.go    yamlFolds: the YAML result's foldable blocks, by indentation
   raw.go         EvaluateRaw: the `jq -r`-shaped single-value form (used by .http captures, #1993)
-  fold.go        Folds: the result's foldable objects/arrays with their member counts (#2029)
+  fold.go        Fold + jsonFolds: the JSON result's foldable objects/arrays with their member counts (#2029)
   highlight.go   the query line's jq scanner: Tokens/KindAt, single pass, never fails
   complete.go    the typing aid: Complete — snapshot keys at a path, gojq's builtin list
-  library.go     the named saved-filter store: Library, Filter, Scope — path-agnostic, one type for both scopes
+  library.go     the named saved-filter store: Library, Filter, Scope — path-agnostic, one type for every store
   wrap.go        the multi-line view's line breaking and caret coordinates: Wrap/LineAt/RowCol/PosAt
 internal/app/
-  jqplayground.go the inline mode: query header, result buffer, key routing, debounce and async eval
-  jqcomplete.go   the completion popup: state, keys, rendering and compositing
-  jqfilters.go    the filter library's UI: the two store paths, the name prompt, the palette picker
-  commands.go     json.jqPlayground / json.jqPlaygroundAtPath → the two open messages,
-                  json.jqSaveFilter / json.jqFilters / json.jqRenameFilter → the library,
+  playground.go   the inline mode: query header, result buffer, key routing, debounce and async eval
+  playcomplete.go the completion popup: state, keys, rendering and compositing
+  playfilters.go  the filter library's UI: the store paths, the name prompt, the palette picker
+  commands.go     json.jqPlayground / …AtPath and yaml.yqPlayground / …AtPath → the two open messages,
+                  json.jqSaveFilter / {json.jq,yaml.yq}Filters / …RenameFilter → the libraries,
                   json.jqQueryView → the multi-line view toggle
 ```
 
 The split is the usual one: everything interesting — parsing, running, error
 and cap handling, colorization, history — is pure and testable in
 `internal/jqplay`; `internal/app` owns the terminal.
+
+The app-side identifiers say **`play`**, not `jq`: there is one playground with
+two dialects, and a `playState` carrying a `jqplay.Dialect` is what keeps the
+hosting, the geometry, the key routing and the rendering from existing twice.
 
 The package is also the one place gojq is spoken to. Besides the playground,
 the `.http` client's `# @capture name = <jq-expr>` directive (#1993, see
@@ -73,11 +87,13 @@ While the mode is active on a pane:
 - The query line's `> ` marker is **blanked while the line does not hold the
   keyboard** — the result buffer has it, or the focus is on another pane —
   the same inactive affordance the regex tester's field labels use; the `jq:`
-  label renders in the chrome's Secondary either way. The prefix width never
-  changes, so the cursor window math is focus-independent.
+  (or `yq:`) label renders in the chrome's Secondary either way. Both dialect
+  names are two cells wide and the prefix width never changes, so the cursor
+  window math is independent of both focus and dialect.
 - The rest of the pane shows a **substitute read-only editor**
   (`ShowReadOnly`, the #1762 buffer) holding the result under the virtual
-  path `jq result.json`, so JSON highlighting applies. It is a full editor:
+  path `jq result.json` — `yq result.yaml` in the other dialect — so the
+  matching highlighting applies. It is a full editor:
   motions, search, **folds** (see below), **visual selection and yank**, mouse
   click/drag selection, wheel and scrollbar all work; mutations are refused
   with the usual `E45`.
@@ -114,6 +130,113 @@ pure-Go SQLite driver. Two gojq properties matter here beyond "it is jq":
 A system `jq` fallback is deliberately absent: two engines would mean two
 dialects to explain in one playground.
 
+## The yq dialect
+
+#2039. The machinery above is not about JSON — a query line, a result window,
+a history and a filter library are the same tools whatever the document is.
+YAML is the other format the daily workflow is full of (manifests, CI
+pipelines, compose files), and it had no counterpart. It has one now, and it is
+**the same playground**: `jqplay.Dialect` is the only thing that differs, and
+it decides exactly three things — how the buffer is decoded, how a value is
+written back, and how the result folds.
+
+### Engine: gojq again, with YAML on both ends
+
+The obvious alternative was a Go port of mikefarah's yq. It was not taken.
+yq's expression language *is* jq's for everything anyone types into a query
+line, so decoding YAML into the value shapes gojq already runs over buys the
+whole language for the price of a decoder — the trade `gojq --yaml-input
+--yaml-output` makes. A second engine would have meant a second builtin list
+for the completion popup, a second scanner for the highlighting and a second
+set of error spellings, all for a dialect the user cannot tell apart.
+
+What is given up is yq's own extensions — comment and anchor *preservation*,
+`style`/`tag` operators, in-place document editing. The playground is a
+read-only query tool, so none of them has a job here; a program that needs
+them is a `yq` invocation in a terminal, not a query line. What is gained is
+that a jq program written in one playground runs unchanged in the other.
+
+The decoder (`internal/jqplay/yaml.go`) walks `yaml.Node` rather than
+unmarshalling into `any`, which is what makes four YAML facts survive:
+
+| YAML | Becomes | Why not the convenient form |
+| --- | --- | --- |
+| anchors / aliases (`*base`) | resolved, under a node budget | `Decode(&any)` expands them with no bound — a "billion laughs" file would be an OOM instead of an error line |
+| merge keys (`<<: *base`) | folded into the mapping, explicit keys winning | jq has no merge operator; without this a compose file's inherited keys are invisible |
+| non-string keys (`1:`, `true:`) | their source text (`."1"`) | jq objects have string keys; `map[any]any` is a value gojq refuses |
+| `0x1f`, `1_000`, a 20-digit id | `json.Number` with its decimal digits | plain decoding yields `int` (losing width) or `time.Time` (which the engine cannot compute on) |
+
+Everything the YAML core schema does not cover — a timestamp, a `!Ref`, a
+binary blob — arrives as the string it was written as: a query language has
+nothing better to do with a value it cannot compute on, and a string at least
+stays visible and greppable. `MaxYAMLNodes` (1 Mi values) bounds the alias
+expansion; exceeding it is an ordinary input error on the info row.
+
+Rendering is the mirror image: the encoder builds a `yaml.Node` tree instead
+of marshalling the Go value, because gojq's outputs contain `json.Number` and
+`*big.Int`, which the reflective encoder would write as a quoted string and as
+a struct. Building the nodes also fixes the key order to gojq's own, so the
+same value reads the same in both playgrounds. Strings that would read back as
+another type are quoted (`v: "123"`); multi-line strings become literal blocks
+(`script: |`) rather than one `\n`-riddled row.
+
+A **multi-document** file (`---`) is a stream, exactly like a `.jsonl` export:
+the program runs over each document, and the outputs come back separated by
+`---` rather than merged.
+
+### What differs, concretely
+
+| | jq | yq |
+| --- | --- | --- |
+| Commands | `json.jqPlayground`, `json.jqPlaygroundAtPath` | `yaml.yqPlayground`, `yaml.yqPlaygroundAtPath` |
+| Input | focused HTTP response, else editor selection, else whole buffer | editor selection, else whole buffer |
+| Query-line label | `> jq: ` | `> yq: ` |
+| Result | pretty JSON, outputs joined by a newline | block YAML, documents joined by `---` |
+| `ctrl+o` scratch | `.json` | `.yaml` |
+| Folding | multi-line objects / arrays, `{ ⋯ 3 keys }` | indented blocks and block scalars, `⋯ 3 keys` (YAML closes nothing) |
+| Filter library | `jqfilters.json` / `jqfilters-global.json` | `yqfilters.json` / `yqfilters-global.json` |
+| Seeded path | `.spec.["my-key"]` (`DocPathJQ`) | `.spec."my-key"` (`DocPathYQ`) |
+
+The yq playground deliberately does **not** consider HTTP response bodies. A
+response is JSON in every workflow the [HTTP client](./http-client.md) serves,
+and letting a focused response outrank the YAML file the user asked about would
+answer "yq Playground" with a parse error over somebody else's pane.
+
+Only **one** playground is open at a time — it replaces a pane's content, and
+that is one pane's worth of content whichever dialect it is. Opening the other
+closes the first, recording its program in the history like any other close.
+
+### What is shared
+
+Everything not in the table above, which is the point of the issue:
+
+- the inline mount, the geometry and the header layout;
+- the query line: editing, highlighting, the multi-line view, click-to-place;
+- the completion popup — the builtins are gojq's for both, and the key
+  candidates come from the parsed snapshot whatever decoded it;
+- the debounce, the generation stamping and the cancellation;
+- the read-only result buffer, its folding keys and the copy / scratch actions;
+- the session program history — **one list for both dialects**: a yq program
+  *is* a jq program here, and the list was already deliberately promiscuous
+  across buffers and response panes;
+- the saved-filter *store* (`jqplay.Library`), the name prompt and the picker,
+  parameterized by which pair of files they read.
+
+The **libraries themselves are separate** rather than tagged. A saved filter is
+written against a shape of document —
+`.spec.template.spec.containers[0].image` is a Kubernetes-manifest filter and
+has no business in the picker over a JSON API response — so mixing them would
+make the picker noisier for both. The two commands name their own library;
+`ctrl+l` on a query line passes the **open playground's**, so the chord means
+"my filters" in either mode. Picking a filter with nothing open — or with the
+other dialect's playground up — starts the playground of the filter's own
+dialect, since that is the only kind of document its program can run against.
+
+Saving is the one command that stays single: `json.jqSaveFilter` ("Save
+Playground Filter…") writes into whichever playground is open, because the
+program being named is that playground's. A `yaml.yqSaveFilter` would be a
+second name for one behavior.
+
 ## What is queried
 
 The input is **snapshotted and parsed once** when the playground opens — a jq
@@ -131,13 +254,19 @@ snapshot came from** (focus moves there):
    dispatch is the editor holding the `.http` file; a tab-nested viewer
    (#1778) gets its tab activated.
 
+The yq playground skips steps 1 and 4 (see [the yq
+dialect](#the-yq-dialect)); 2 and 3 work there identically, so a YAML block
+selected inside a Markdown file is queryable without extracting it first.
+
 With none of those the command notifies instead of opening over nothing.
 
-The text is decoded as a **JSON stream**: one value for an ordinary document,
-many for a `.jsonl` export or a concatenated body, and the program runs against
-every one, as jq's own stdin does (capped at `MaxInputValues`, 10 000). A buffer
-that is not JSON is an inline message naming the offending **line** — a byte
-offset says nothing to the reader of a pretty-printed document.
+The text is decoded as a **document stream**: one value for an ordinary
+document, many for a `.jsonl` export, a concatenated body or a `---`-separated
+YAML file, and the program runs against every one, as jq's own stdin does
+(capped at `MaxInputValues`, 10 000). A buffer the dialect cannot decode is an
+inline message — for JSON naming the offending **line**, since a byte offset
+says nothing to the reader of a pretty-printed document; for YAML the decoder's
+own complaint, which already carries its line.
 
 ## What the query line opens on
 
@@ -346,8 +475,9 @@ or rebinding.
 
 A result is regularly taller than the pane, and reading its *shape* before
 opening the interesting branch is what folding is for. Every multi-line object
-and array of the result window collapses (#2029) with the editor's own vim
-fold keys, from the result buffer (`tab`):
+and array of the result window — every indented block and block scalar of a
+YAML one — collapses (#2029, #2039) with the editor's own vim fold keys, from
+the result buffer (`tab`):
 
 | Key | Effect |
 | --- | --- |
@@ -357,8 +487,10 @@ fold keys, from the result buffer (`tab`):
 | `zy` | copy the collapsed node whole (#1787), the `⧉` affordance's keyboard form |
 
 A collapsed node is **one row** carrying a placeholder that names its size —
-`"spec": { ⋯ 3 keys }`, `"ports": [ ⋯ 12 items ]` — so the row still reads as
-a complete value, and every fold-aware behaviour of an ordinary buffer (`j`/`k`
+`"spec": { ⋯ 3 keys }`, `"ports": [ ⋯ 12 items ]`, and in YAML `spec: ⋯ 3 keys`
+with no closer, because YAML has none to restore. A block scalar counts its
+`⋯ 7 lines`, since "3 keys" over a shell script would be nonsense. The row
+still reads as a complete value, and every fold-aware behaviour of an ordinary buffer (`j`/`k`
 stepping over a fold as one row, scrolling, the mouse map, a linewise operator
 taking the whole fold, #1741) applies unchanged. Folding **nests**: opening a
 node reveals one level, with the nodes inside it still folded.
@@ -366,9 +498,10 @@ node reveals one level, with the nodes inside it still folded.
 Two deliberate choices behind it:
 
 - **The ranges are the playground's, the folding is the editor's.**
-  `jqplay.Folds` (`internal/jqplay/fold.go`) scans the pretty-printed result —
-  a rune walk counting delimiters outside strings, not a re-decode — and hands
-  the ranges to the result editor through `SetHostFolds`
+  `Dialect.Folds` scans the rendered result — for JSON
+  (`internal/jqplay/fold.go`) a rune walk counting delimiters outside strings,
+  for YAML (`yamlfold.go`) a line walk over the indentation — not a re-decode,
+  and hands the ranges to the result editor through `SetHostFolds`
   (`internal/editor/hostfold.go`), where they merge over the Tree-sitter ranges
   and win on a shared header line. No second fold engine: the collapsed set,
   the z-commands and every fold-aware motion stay the editor's (#144, #1741).
@@ -382,14 +515,21 @@ Two deliberate choices behind it:
   right after — so a changed filter can never leave a fold of the previous
   result behind, and a fold never outlives the lines it hid.
 
-Raw output has no folds because there is none: the playground is JSON-in /
-JSON-out (`jq -r` lives in `raw.go` for the `.http` client, not in the window).
+Both scans read text the playground's *own* encoder wrote, which is what makes
+a delimiter walk and a line walk sufficient. The YAML scan only treats a row as
+a block header when it cannot be a wrapped scalar — it ends on a colon, it is a
+bare dash, it is a `|`/`>` indicator, or it is a `- key: value` entry — so a
+long value the emitter broke across rows never folds as if it had members.
+
+Raw output has no folds because there is none: the playground is
+document-in / document-out (`jq -r` lives in `raw.go` for the `.http` client,
+not in the window).
 
 ## Completion
 
 The query line has a typing aid (#1979), synchronous and bounded, with the
 candidate logic in `internal/jqplay/complete.go` and the popup in
-`internal/app/jqcomplete.go`:
+`internal/app/playcomplete.go`:
 
 - **Path completion from the input.** A `.` — and deeper, `.foo.`,
   `.items[].`, `.items[0].`, `."a b".` — offers the object keys that actually
@@ -451,9 +591,9 @@ above win):
 | `ctrl+alt+e` | toggle the [multi-line view](#the-multi-line-view) (`json.jqQueryView`) |
 | `pgup` / `pgdn` | page the result buffer without leaving the query line |
 | `ctrl+s` | save the program as a **named filter** (`json.jqSaveFilter`) |
-| `ctrl+l` | open the **saved-filter picker** (`json.jqFilters`) |
+| `ctrl+l` | open the **saved-filter picker** over this playground's library (`json.jqFilters` / `yaml.yqFilters`) |
 | `ctrl+y` | copy the **whole** result (not just the visible part) |
-| `ctrl+o` | open the result as a fresh `.json` scratch |
+| `ctrl+o` | open the result as a fresh scratch in the dialect's extension (`.json` / `.yaml`) |
 | `esc` | close (recording the program in the history) |
 
 `ctrl+alt+e` works from the result buffer too.
@@ -511,9 +651,13 @@ state would be noise. The program that *is* worth keeping gets a name instead �
 see [the saved-filter library](#the-saved-filter-library) below. The history lives on the root model, not on the mode
 state, so it survives closing and reopening the playground.
 
-It is **one session-wide list, shared by every playground** — a program run
-over a `.http` response is offered by `↑` in a `.json` buffer and the other way
-round, because the mode was never the thing that owned it. The open mode holds
+It is **one session-wide list, shared by every playground and both dialects**
+(#2039) — a program run over a `.http` response is offered by `↑` in a `.json`
+buffer, and a yq program by `↑` in the jq playground, because the mode was
+never the thing that owned it and the language is the same one either way. That
+is the opposite call from the saved filters, deliberately: the history is
+unnamed scratch work where a stale entry costs one `↑`, a library is a curated
+list where a foreign entry costs attention on every open. The open mode holds
 a *pointer* to that one list and writes into it the moment `enter` records a
 program (#1977); it used to carry a copy that was only handed back on close,
 so any exit that skipped the close — reopening the playground over another
@@ -543,30 +687,34 @@ get right — the mapping-flattening one for an Elasticsearch response — was
 until now indistinguishable from the fifty one-off experiments around it in
 the history, and rotated out with them.
 
-A saved filter is a **name and a program**, in one of two scopes:
+A saved filter is a **name and a program**, in one of two scopes — and since
+#2039 in one of two dialects, which is a third file name rather than a flag on
+the entry (see [the yq dialect](#the-yq-dialect) for why):
 
-| Scope | File | For |
-| --- | --- | --- |
-| **project** | `.ike/jqfilters.json` | filters shaped by *this* project's data — next to the HTTP environment selection |
-| **global** | `~/.ike/jqfilters-global.json` | filters that are about jq, not about a project — next to the [saved window layouts](./pane-layout.md) |
+| Scope | File (jq) | File (yq) | For |
+| --- | --- | --- | --- |
+| **project** | `.ike/jqfilters.json` | `.ike/yqfilters.json` | filters shaped by *this* project's data — next to the HTTP environment selection |
+| **global** | `~/.ike/jqfilters-global.json` | `~/.ike/yqfilters-global.json` | filters that are about the language, not about a project — next to the [saved window layouts](./pane-layout.md) |
 
-Both files follow the `IKE_CONFIG_DIR` redirection seam every other state store
-uses, under **distinct file names** (the `winsize.json` / `winsize-global.json`
-precedent, #1714), so redirecting one directory still yields two libraries. A
-missing or malformed store loads as an empty library — the playground must open
-even when a hand-edited file is broken — and entries with an empty name or
-program are dropped on the way in.
+Every file follows the `IKE_CONFIG_DIR` redirection seam every other state
+store uses, under **distinct file names** (the `winsize.json` /
+`winsize-global.json` precedent, #1714), so redirecting one directory still
+yields four libraries. A missing or malformed store loads as an empty library —
+the playground must open even when a hand-edited file is broken — and entries
+with an empty name or program are dropped on the way in.
 
-The store is a *file per scope*, not a config key. A jq program is data the
-user creates from inside the IDE, like a saved layout; adding one by
+The store is a *file per scope and dialect*, not a config key. A jq program is
+data the user creates from inside the IDE, like a saved layout; adding one by
 hand-editing `settings.toml` would be the wrong affordance, and TOML lists
 *replace* across the config layers, so a project file would hide the user's
 whole library instead of adding to it.
 
 ### Saving
 
-`ctrl+s` on the query line (or `json.jqSaveFilter`) opens a one-line name
-prompt over the current program. `tab` toggles the scope the save goes to,
+`ctrl+s` on the query line (or `json.jqSaveFilter`, "Save Playground Filter…")
+opens a one-line name prompt over the current program; it lands in the **open
+playground's** dialect, since that is what the program was written against.
+`tab` toggles the scope the save goes to,
 which starts on **project** — a filter written against this project's data
 usually belongs to it, and promoting it is one keystroke. The identity program
 is refused: `.` is the playground's default, not a filter. A name already taken
@@ -577,8 +725,9 @@ same name.
 
 ### The picker
 
-`ctrl+l` (or `json.jqFilters`) opens a locked palette mode listing **both**
-scopes, project first:
+`ctrl+l` (or `json.jqFilters` / `yaml.yqFilters`) opens a locked palette mode
+listing **both** scopes of one dialect, project first — the chord takes the
+open playground's, each command its own:
 
 - Rows are fuzzy-matched over the **name** — what a saved filter is remembered
   by — never over the program; searching for `select` would otherwise match
@@ -591,14 +740,16 @@ scopes, project first:
   separate stores, and shadowing one with the other would hide a filter that
   was saved deliberately — so both rows are listed.
 - `enter` puts the program on the query line and runs it. With no playground up
-  the command still completes: it opens one over the JSON at hand first (and
-  says so when there is no JSON to query).
+  — or with the *other* dialect's open — the command still completes: it opens
+  one of the filter's own dialect over the document at hand first (and says so
+  when there is nothing to query).
 - `shift+delete` (or `cmd+backspace`) **deletes** the row's filter from its own
   store and refreshes the list in place — the palette's aux convention (#1113).
-- `json.jqRenameFilter` opens the same picker in its **rename** spelling, where
-  `enter` opens the name prompt over the entry instead of inserting it. Renaming
-  onto a taken name is refused: only the confirmed save overwrite may replace a
-  filter, never a rename that happens to collide.
+- `json.jqRenameFilter` / `yaml.yqRenameFilter` opens the same picker in its
+  **rename** spelling, where `enter` opens the name prompt over the entry
+  instead of inserting it. Renaming onto a taken name is refused: only the
+  confirmed save overwrite may replace a filter, never a rename that happens to
+  collide.
 
 The list is re-read from both files on every open and after every delete, so a
 library changed by another window — or by hand — is never stale.
@@ -606,8 +757,14 @@ library changed by another window — or by hand — is never stale.
 ## Boundaries
 
 - **No raw output mode** (`jq -r`), no `--slurp`, no `--arg`: the playground is
-  a JSON-in/JSON-out tool, and every one of those would be a mode the result
-  actions then have to reason about.
+  a document-in/document-out tool, and every one of those would be a mode the
+  result actions then have to reason about.
+- **No yq-only operators.** The yq dialect speaks jq, not mikefarah's
+  extensions: no comment or anchor *preservation*, no `style`/`tag` operators,
+  no in-place edit. The playground reads documents; a program that needs to
+  rewrite one is a `yq` invocation in a terminal.
+- **Two dialects, one open playground.** The mode replaces a pane's content,
+  and that is one pane's worth of content; opening either closes the other.
 - **No live re-read of the buffer.** The snapshot is taken at open; editing the
   file underneath and re-running means reopening the playground.
 - **In-pane, but not a pane.** #1970 revised the old "floating modal" boundary:

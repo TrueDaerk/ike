@@ -14,8 +14,8 @@ func TestFoldsNested(t *testing.T) {
 	text := Evaluate(".", `{"name":"ike","tags":["tui","go"]}`).Text()
 	got := Folds(text)
 	want := []Fold{
-		{HeaderLine: 0, EndLine: 6, Items: 2, Object: true},
-		{HeaderLine: 2, EndLine: 5, Items: 2},
+		{HeaderLine: 0, EndLine: 6, Items: 2, Unit: UnitKeys, Closer: "}"},
+		{HeaderLine: 2, EndLine: 5, Items: 2, Unit: UnitItems, Closer: "]"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Folds(%q) = %+v, want %+v", text, got, want)
@@ -41,7 +41,7 @@ func TestFoldsSkipSingleLineNodes(t *testing.T) {
 func TestFoldsIgnoreDelimitersInStrings(t *testing.T) {
 	text := Evaluate(".", `{"tpl":"{{ .Values }}","q":"a \" [b"}`).Text()
 	folds := Folds(text)
-	if len(folds) != 1 || folds[0].Items != 2 || !folds[0].Object {
+	if len(folds) != 1 || folds[0].Items != 2 || folds[0].Unit != UnitKeys {
 		t.Fatalf("Folds = %+v, want only the 2-key outer object for %q", folds, text)
 	}
 }
@@ -52,8 +52,8 @@ func TestFoldsSpanSeveralOutputs(t *testing.T) {
 	text := Evaluate(".[]", `[[1,2],[3,4,5]]`).Text()
 	got := Folds(text)
 	want := []Fold{
-		{HeaderLine: 0, EndLine: 3, Items: 2},
-		{HeaderLine: 4, EndLine: 8, Items: 3},
+		{HeaderLine: 0, EndLine: 3, Items: 2, Unit: UnitItems, Closer: "]"},
+		{HeaderLine: 4, EndLine: 8, Items: 3, Unit: UnitItems, Closer: "]"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Folds(%q) = %+v, want %+v", text, got, want)
@@ -78,10 +78,10 @@ func TestFoldLabel(t *testing.T) {
 		fold Fold
 		want string
 	}{
-		{Fold{Items: 3, Object: true}, "⋯ 3 keys }"},
-		{Fold{Items: 1, Object: true}, "⋯ 1 key }"},
-		{Fold{Items: 12}, "⋯ 12 items ]"},
-		{Fold{Items: 1}, "⋯ 1 item ]"},
+		{Fold{Items: 3, Unit: UnitKeys, Closer: "}"}, "⋯ 3 keys }"},
+		{Fold{Items: 1, Unit: UnitKeys, Closer: "}"}, "⋯ 1 key }"},
+		{Fold{Items: 12, Unit: UnitItems, Closer: "]"}, "⋯ 12 items ]"},
+		{Fold{Items: 1, Unit: UnitItems, Closer: "]"}, "⋯ 1 item ]"},
 	}
 	for _, c := range cases {
 		if got := c.fold.Label(); got != c.want {

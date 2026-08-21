@@ -20,7 +20,7 @@ import (
 	"ike/internal/scratch"
 )
 
-// jqplayground_test.go covers the jq playground dialog (#1936): live
+// playground_test.go covers the playground (#1936, jq dialect): live
 // evaluation over a JSON buffer and over an HTTP response body, inline
 // errors, the debounce/generation cancellation, the result actions and the
 // session program history.
@@ -29,14 +29,14 @@ import (
 // human-scale delay, so a test drives the dialog without sleeping.
 func noDebounce(t *testing.T) {
 	t.Helper()
-	prev := jqDebounce
-	jqDebounce = 0
-	t.Cleanup(func() { jqDebounce = prev })
+	prev := playDebounce
+	playDebounce = 0
+	t.Cleanup(func() { playDebounce = prev })
 }
 
-// jqApp opens body as a .json file in the focused editor and returns the
+// playApp opens body as a .json file in the focused editor and returns the
 // model, which is the "open JSON buffer" the playground is written for.
-func jqApp(t *testing.T, body string) Model {
+func playApp(t *testing.T, body string) Model {
 	t.Helper()
 	noDebounce(t)
 	m := newSized()
@@ -51,9 +51,9 @@ func jqApp(t *testing.T, body string) Model {
 // openJQ opens the playground through the real command message.
 func openJQ(t *testing.T, m Model) Model {
 	t.Helper()
-	tm, cmd := m.Update(OpenJQPlaygroundMsg{})
+	tm, cmd := m.Update(OpenPlaygroundMsg{})
 	m = drainCmd(tm.(Model), cmd)
-	if !m.jqPlayOpen() {
+	if !m.playOpen() {
 		t.Fatal("json.jqPlayground must open the playground")
 	}
 	return m
@@ -61,18 +61,18 @@ func openJQ(t *testing.T, m Model) Model {
 
 // setProgram replaces the query line and evaluates, the way enter does.
 func setProgram(m Model, program string) Model {
-	m.jqPlay.program = program
-	m.jqPlay.pos = len([]rune(program))
-	return drainCmd(m, m.runJQNow())
+	m.play.program = program
+	m.play.pos = len([]rune(program))
+	return drainCmd(m, m.runPlayNow())
 }
 
 // TestJQPlaygroundEvaluatesLive is the issue's acceptance case: a select
 // program against an open JSON buffer shows the matching values.
 func TestJQPlaygroundEvaluatesLive(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"foo":[{"bar":1},{"bar":4},{"bar":9}]}`))
+	m := openJQ(t, playApp(t, `{"foo":[{"bar":1},{"bar":4},{"bar":9}]}`))
 	m = setProgram(m, ".foo[] | select(.bar > 3)")
 
-	s := m.jqPlay
+	s := m.play
 	if s.result.Err != "" {
 		t.Fatalf("valid program reported %q", s.result.Err)
 	}
@@ -94,17 +94,17 @@ func TestJQPlaygroundEvaluatesLive(t *testing.T) {
 // TestJQPlaygroundTypingReEvaluates: the query line is live — typing runs the
 // program without an explicit enter.
 func TestJQPlaygroundTypingReEvaluates(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"name":"ike"}`))
-	m.jqPlay.program, m.jqPlay.pos = "", 0
+	m := openJQ(t, playApp(t, `{"name":"ike"}`))
+	m.play.program, m.play.pos = "", 0
 	m = typeInto(m, ".name")
-	if got := m.jqPlay.result.Text(); got != `"ike"` {
+	if got := m.play.result.Text(); got != `"ike"` {
 		t.Fatalf("live result = %q, want the field value", got)
 	}
 }
 
-// jqCaretApp opens a JSON file with the caret parked on the "name" key, whose
+// playCaretApp opens a JSON file with the caret parked on the "name" key, whose
 // document path is .spec.name — the input the two path-seeding cases need.
-func jqCaretApp(t *testing.T) Model {
+func playCaretApp(t *testing.T) Model {
 	t.Helper()
 	noDebounce(t)
 	// The path seed reads the caret's document path, which needs the buffer's
@@ -128,13 +128,13 @@ func jqCaretApp(t *testing.T) Model {
 // query line with the caret's jq path (#1660), which is what the separate
 // command exists for (#1982).
 func TestJQPlaygroundAtPathSeedsFromCaret(t *testing.T) {
-	m := jqCaretApp(t)
-	tm, cmd := m.Update(OpenJQPlaygroundAtPathMsg{})
+	m := playCaretApp(t)
+	tm, cmd := m.Update(OpenPlaygroundAtPathMsg{})
 	m = drainCmd(tm.(Model), cmd)
-	if !m.jqPlayOpen() {
+	if !m.playOpen() {
 		t.Fatal("json.jqPlaygroundAtPath must open the playground")
 	}
-	if got := m.jqPlay.program; got != ".spec.name" {
+	if got := m.play.program; got != ".spec.name" {
 		t.Errorf("seeded program = %q, want the caret's jq path", got)
 	}
 }
@@ -143,8 +143,8 @@ func TestJQPlaygroundAtPathSeedsFromCaret(t *testing.T) {
 // caret's path any more (#1982) — a fresh file starts on `.`, so checking
 // something needs no deleting first.
 func TestJQPlaygroundOpensOnIdentity(t *testing.T) {
-	m := openJQ(t, jqCaretApp(t))
-	if got := m.jqPlay.program; got != "." {
+	m := openJQ(t, playCaretApp(t))
+	if got := m.play.program; got != "." {
 		t.Errorf("seeded program = %q, want the identity program", got)
 	}
 }
@@ -153,12 +153,12 @@ func TestJQPlaygroundOpensOnIdentity(t *testing.T) {
 // file is what the next open over that same file starts on, while another file
 // still opens on `.` (#1982).
 func TestJQPlaygroundRecallsLastProgramPerFile(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"foo":{"bar":1}}`))
+	m := openJQ(t, playApp(t, `{"foo":{"bar":1}}`))
 	m = runJQProgram(m, ".foo.bar")
 	m = closeJQ(m)
 
 	m = openJQ(t, m)
-	if got := m.jqPlay.program; got != ".foo.bar" {
+	if got := m.play.program; got != ".foo.bar" {
 		t.Errorf("reopened on %q, want the file's last valid program", got)
 	}
 	m = closeJQ(m)
@@ -171,7 +171,7 @@ func TestJQPlaygroundRecallsLastProgramPerFile(t *testing.T) {
 	}
 	tm, cmd := m.openPath(pathB, false)
 	m = openJQ(t, drainCmd(tm.(Model), cmd))
-	if got := m.jqPlay.program; got != "." {
+	if got := m.play.program; got != "." {
 		t.Errorf("fresh file opened on %q, want the identity program", got)
 	}
 }
@@ -186,16 +186,16 @@ func closeJQ(m Model) Model {
 // TestJQPlaygroundDoesNotRecallBrokenProgram: only a program that actually ran
 // is remembered — a compile error leaves the last good one in place (#1982).
 func TestJQPlaygroundDoesNotRecallBrokenProgram(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"foo":1}`))
+	m := openJQ(t, playApp(t, `{"foo":1}`))
 	m = runJQProgram(m, ".foo")
 	m = setProgram(m, ".foo[")
-	if m.jqPlay.result.Err == "" {
+	if m.play.result.Err == "" {
 		t.Fatal("the broken program must report a compile error")
 	}
 	m = closeJQ(m)
 
 	m = openJQ(t, m)
-	if got := m.jqPlay.program; got != ".foo" {
+	if got := m.play.program; got != ".foo" {
 		t.Errorf("reopened on %q, want the last program that ran", got)
 	}
 }
@@ -203,9 +203,9 @@ func TestJQPlaygroundDoesNotRecallBrokenProgram(t *testing.T) {
 // TestJQPlaygroundInvalidProgramShowsError: a program that does not compile
 // paints an error line in the dialog instead of crashing or clearing it.
 func TestJQPlaygroundInvalidProgramShowsError(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".foo[")
-	if m.jqPlay.result.Err == "" {
+	if m.play.result.Err == "" {
 		t.Fatal("an invalid program must report an error")
 	}
 	v := ansi.Strip(m.render())
@@ -217,8 +217,8 @@ func TestJQPlaygroundInvalidProgramShowsError(t *testing.T) {
 // TestJQPlaygroundInvalidInputShowsError: a buffer that is not JSON is an
 // inline message on the input line, not a failed open.
 func TestJQPlaygroundInvalidInputShowsError(t *testing.T) {
-	m := openJQ(t, jqApp(t, "this is not json\n"))
-	if m.jqPlay.inputErr == "" {
+	m := openJQ(t, playApp(t, "this is not json\n"))
+	if m.play.inputErr == "" {
 		t.Fatal("a non-JSON buffer must report an input error")
 	}
 	v := ansi.Strip(m.render())
@@ -230,9 +230,9 @@ func TestJQPlaygroundInvalidInputShowsError(t *testing.T) {
 // TestJQPlaygroundCapsHugeResult: an unbounded program stops at the cap and
 // says so, and the dialog stays responsive (the run is off the event loop).
 func TestJQPlaygroundCapsHugeResult(t *testing.T) {
-	m := openJQ(t, jqApp(t, "null"))
+	m := openJQ(t, playApp(t, "null"))
 	m = setProgram(m, "range(infinite)")
-	if !m.jqPlay.result.Truncated {
+	if !m.play.result.Truncated {
 		t.Fatal("an infinite program must report a truncated result")
 	}
 	v := ansi.Strip(m.render())
@@ -242,7 +242,7 @@ func TestJQPlaygroundCapsHugeResult(t *testing.T) {
 	// The cap is a caveat, not decoration: it renders in the Warning slot,
 	// not the row's dim Hint (#1978).
 	warn := lipgloss.NewStyle().Foreground(m.pal().Warning)
-	if row := m.jqInfoRow(120); !strings.Contains(row, warn.Render(fmt.Sprintf(" (stopped at %d)", jqplay.MaxOutputs))) {
+	if row := m.playInfoRow(120); !strings.Contains(row, warn.Render(fmt.Sprintf(" (stopped at %d)", jqplay.MaxOutputs))) {
 		t.Errorf("the cap should render in the Warning color, got %q", row)
 	}
 }
@@ -251,13 +251,13 @@ func TestJQPlaygroundCapsHugeResult(t *testing.T) {
 // after values were produced must not hide that count — the values sit in
 // the buffer below the error line.
 func TestJQPlaygroundErrorKeepsValueCount(t *testing.T) {
-	m := openJQ(t, jqApp(t, `[{"x":1},3]`))
+	m := openJQ(t, playApp(t, `[{"x":1},3]`))
 	m = setProgram(m, ".[] | .x")
-	s := m.jqPlay
+	s := m.play
 	if s.result.Err == "" || len(s.result.Outputs) != 1 {
 		t.Fatalf("want one value then an error, got err=%q outputs=%v", s.result.Err, s.result.Outputs)
 	}
-	row := ansi.Strip(m.jqInfoRow(200))
+	row := ansi.Strip(m.playInfoRow(200))
 	if !strings.HasPrefix(row, "E: ") {
 		t.Errorf("the error must render, got %q", row)
 	}
@@ -270,13 +270,13 @@ func TestJQPlaygroundErrorKeepsValueCount(t *testing.T) {
 // the result buffer, so the zero count is the only signal — it renders in
 // Warning, not the row's dim Hint.
 func TestJQPlaygroundZeroValuesWarn(t *testing.T) {
-	m := openJQ(t, jqApp(t, `[1,2,3]`))
+	m := openJQ(t, playApp(t, `[1,2,3]`))
 	m = setProgram(m, ".[] | select(. > 9)")
-	if got := m.jqPlay.result.Text(); got != "" {
+	if got := m.play.result.Text(); got != "" {
 		t.Fatalf("result = %q, want empty", got)
 	}
 	warn := lipgloss.NewStyle().Foreground(m.pal().Warning)
-	if row := m.jqInfoRow(120); !strings.Contains(row, warn.Render("Result — 0 value(s)")) {
+	if row := m.playInfoRow(120); !strings.Contains(row, warn.Render("Result — 0 value(s)")) {
 		t.Errorf("a zero-value summary should render in Warning, got %q", row)
 	}
 }
@@ -285,13 +285,13 @@ func TestJQPlaygroundZeroValuesWarn(t *testing.T) {
 // key hints are dropped as whole segments, never clipped mid-word, and the
 // input/result summary always survives.
 func TestJQPlaygroundNarrowInfoRowDropsWholeHints(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".")
-	wide := ansi.Strip(m.jqInfoRow(200))
+	wide := ansi.Strip(m.playInfoRow(200))
 	if !strings.Contains(wide, "esc close") {
 		t.Fatalf("a wide row should hold every hint, got %q", wide)
 	}
-	narrow := ansi.Strip(m.jqInfoRow(60))
+	narrow := ansi.Strip(m.playInfoRow(60))
 	if !strings.Contains(narrow, "Result — 1 value(s)") {
 		t.Errorf("the summary must survive a narrow row, got %q", narrow)
 	}
@@ -309,15 +309,15 @@ func TestJQPlaygroundNarrowInfoRowDropsWholeHints(t *testing.T) {
 // abandons it — the stale generation's result must not overwrite the current
 // one, which is the whole point of stamping the runs.
 func TestJQPlaygroundDropsSupersededEvaluation(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1,"b":2}`))
-	s := m.jqPlay
+	m := openJQ(t, playApp(t, `{"a":1,"b":2}`))
+	s := m.play
 
 	// Two program changes: the first tick is stale by the time it arrives.
 	s.result = jqplay.Result{} // drop the seed program's output
 	s.program, s.pos = ".a", 2
-	stale := m.scheduleJQEval()
+	stale := m.schedulePlayEval()
 	s.program, s.pos = ".b", 2
-	fresh := m.scheduleJQEval()
+	fresh := m.schedulePlayEval()
 
 	m = drainCmd(m, stale)
 	if len(s.result.Outputs) != 0 {
@@ -329,7 +329,7 @@ func TestJQPlaygroundDropsSupersededEvaluation(t *testing.T) {
 	}
 
 	// A late result carrying an old generation is dropped outright.
-	m.finishJQEval(jqEvalDoneMsg{st: s, gen: s.gen - 1, res: jqplay.Result{Outputs: []string{"999"}}})
+	m.finishPlayEval(playEvalDoneMsg{st: s, gen: s.gen - 1, res: jqplay.Result{Outputs: []string{"999"}}})
 	if got := s.result.Text(); got != "2" {
 		t.Errorf("a stale result overwrote the current one: %q", got)
 	}
@@ -338,14 +338,14 @@ func TestJQPlaygroundDropsSupersededEvaluation(t *testing.T) {
 // TestJQPlaygroundDropsResultAfterClose: a run outliving its dialog must not
 // resurrect it, and must not panic on the nil state.
 func TestJQPlaygroundDropsResultAfterClose(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1}`))
-	s := m.jqPlay
+	m := openJQ(t, playApp(t, `{"a":1}`))
+	s := m.play
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
-	if m.jqPlayOpen() {
+	if m.playOpen() {
 		t.Fatal("esc must close the playground")
 	}
-	m.finishJQEval(jqEvalDoneMsg{st: s, gen: s.gen, res: jqplay.Result{Outputs: []string{"1"}}})
-	if _, cmd := m.Update(jqParseDoneMsg{st: s}); cmd != nil {
+	m.finishPlayEval(playEvalDoneMsg{st: s, gen: s.gen, res: jqplay.Result{Outputs: []string{"1"}}})
+	if _, cmd := m.Update(playParseDoneMsg{st: s}); cmd != nil {
 		t.Error("a parse finishing after the close must do nothing")
 	}
 }
@@ -358,7 +358,7 @@ func TestJQPlaygroundCopiesResult(t *testing.T) {
 	clipboardWrite = func(s string) { copied = s }
 	t.Cleanup(func() { clipboardWrite = prev })
 
-	m := openJQ(t, jqApp(t, `{"foo":[1,2,3]}`))
+	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	m = setProgram(m, ".foo[]")
 	m = drainKey(m, tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
 	if copied != "1\n2\n3" {
@@ -372,11 +372,11 @@ func TestJQPlaygroundCopiesResult(t *testing.T) {
 // TestJQPlaygroundOpensResultAsScratch: ctrl+o writes the result into a fresh
 // .json scratch and opens it, so a multi-step jq session can keep going.
 func TestJQPlaygroundOpensResultAsScratch(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"foo":[1,2,3]}`))
+	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	m = setProgram(m, "[.foo[] | . * 2]")
 	m = drainKey(m, tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
 
-	if m.jqPlayOpen() {
+	if m.playOpen() {
 		t.Error("opening the result as a scratch should close the playground")
 	}
 	ed := m.activeEditor()
@@ -403,14 +403,14 @@ func TestJQPlaygroundEmptyResultActions(t *testing.T) {
 	clipboardWrite = func(s string) { copied = s }
 	t.Cleanup(func() { clipboardWrite = prev })
 
-	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, "empty")
 	m = drainKey(m, tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
 	if copied != "untouched" {
 		t.Errorf("an empty result must not write to the clipboard, got %q", copied)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
-	if !m.jqPlayOpen() {
+	if !m.playOpen() {
 		t.Error("an empty result must not open a scratch")
 	}
 }
@@ -418,22 +418,22 @@ func TestJQPlaygroundEmptyResultActions(t *testing.T) {
 // TestJQPlaygroundHistory: enter records the program, up/down walk the
 // session history, and the history survives closing the dialog.
 func TestJQPlaygroundHistory(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1,"b":2}`))
+	m := openJQ(t, playApp(t, `{"a":1,"b":2}`))
 	m = runJQProgram(m, ".a")
 	m = runJQProgram(m, ".b")
 
 	// enter left the query line holding the newest entry, so the first ↑
 	// skips it (#1973) — a step that changed nothing would read as a dead key.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.jqPlay.program; got != ".a" {
+	if got := m.play.program; got != ".a" {
 		t.Fatalf("first ↑ = %q, want the program before the one on the line", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.jqPlay.program; got != ".a" {
+	if got := m.play.program; got != ".a" {
 		t.Fatalf("↑ at the oldest program = %q, want it to stay", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
-	if got := m.jqPlay.program; got != ".b" {
+	if got := m.play.program; got != ".b" {
 		t.Fatalf("↓ = %q, want back to the newer program", got)
 	}
 
@@ -443,7 +443,7 @@ func TestJQPlaygroundHistory(t *testing.T) {
 	// first ↑ skips it and offers the entry before it — the history is still
 	// there, and it is still the session-wide one.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.jqPlay.program; got != ".a" {
+	if got := m.play.program; got != ".a" {
 		t.Errorf("the history must outlive the dialog, got %q", got)
 	}
 }
@@ -452,29 +452,29 @@ func TestJQPlaygroundHistory(t *testing.T) {
 // program and back restores it — ↓ to the live slot must not clear the query
 // line (#1973).
 func TestJQPlaygroundHistoryKeepsDraft(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1,"b":2}`))
+	m := openJQ(t, playApp(t, `{"a":1,"b":2}`))
 	m = runJQProgram(m, ".a")
-	m.jqPlay.program, m.jqPlay.pos = "", 0
+	m.play.program, m.play.pos = "", 0
 	m = typeInto(m, ".b")
 	m = dismissJQPopup(m) // ↑ must reach the history, not the popup (#1979)
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.jqPlay.program; got != ".a" {
+	if got := m.play.program; got != ".a" {
 		t.Fatalf("↑ = %q, want the recorded program", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
-	if got := m.jqPlay.program; got != ".b" {
+	if got := m.play.program; got != ".b" {
 		t.Fatalf("↓ = %q, want the draft back", got)
 	}
-	if got := m.jqPlay.pos; got != len(".b") {
+	if got := m.play.pos; got != len(".b") {
 		t.Errorf("the caret should sit at the end of the restored draft, got %d", got)
 	}
-	if got := m.jqPlay.result.Text(); got != "2" {
+	if got := m.play.result.Text(); got != "2" {
 		t.Errorf("the restored draft must be evaluated again, got %q", got)
 	}
 	// A ↓ with nothing to come back from leaves the line alone.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
-	if got := m.jqPlay.program; got != ".b" {
+	if got := m.play.program; got != ".b" {
 		t.Errorf("↓ at the live slot = %q, want the line untouched", got)
 	}
 }
@@ -483,9 +483,9 @@ func TestJQPlaygroundHistoryKeepsDraft(t *testing.T) {
 // seeds the program that was last run, so the first ↑ must offer the one
 // before it rather than re-typing what is already on the line (#1973).
 func TestJQPlaygroundHistorySkipsSeededProgram(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1,"b":2}`))
+	m := openJQ(t, playApp(t, `{"a":1,"b":2}`))
 	m = runJQProgram(m, ".a")
-	m.jqPlay.program, m.jqPlay.pos = "", 0
+	m.play.program, m.play.pos = "", 0
 	m = typeInto(m, ".b")
 	m = dismissJQPopup(m) // the first esc would only dismiss the popup (#1979)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -493,11 +493,11 @@ func TestJQPlaygroundHistorySkipsSeededProgram(t *testing.T) {
 	m = openJQ(t, m)
 	// Reopening seeds the file's last valid program, ".b" (#1982) — which is
 	// exactly the newest history entry the first ↑ has to step over.
-	if got := m.jqPlay.program; got != ".b" {
+	if got := m.play.program; got != ".b" {
 		t.Fatalf("reopen seeded %q, want the last program run on the file", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.jqPlay.program; got != ".a" {
+	if got := m.play.program; got != ".a" {
 		t.Errorf("↑ over the seeded program = %q, want the entry before it", got)
 	}
 }
@@ -506,14 +506,14 @@ func TestJQPlaygroundHistorySkipsSeededProgram(t *testing.T) {
 // buffer, where the full editor keymap navigates — G jumps to the last line
 // and scrolls the viewport; tab returns to the query line.
 func TestJQPlaygroundResultNavigation(t *testing.T) {
-	m := openJQ(t, jqApp(t, "null"))
+	m := openJQ(t, playApp(t, "null"))
 	m = setProgram(m, "[range(100)]")
-	ed := m.jqPlay.resultEd
+	ed := m.play.resultEd
 	if got := ed.LineCount(); got < 100 {
 		t.Fatalf("the fixture must overflow the pane, got %d rows", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
-	if !m.jqPlay.bufFocus {
+	if !m.play.bufFocus {
 		t.Fatal("tab must move the focus into the result buffer")
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: 'G', Text: "G"})
@@ -524,7 +524,7 @@ func TestJQPlaygroundResultNavigation(t *testing.T) {
 		t.Error("jumping to the last line must scroll the result viewport")
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
-	if m.jqPlay.bufFocus {
+	if m.play.bufFocus {
 		t.Error("tab must return the focus to the query line")
 	}
 }
@@ -534,9 +534,9 @@ func TestJQPlaygroundResultNavigation(t *testing.T) {
 // original buffer unchanged and editable.
 func TestJQPlaygroundInlineEnterExit(t *testing.T) {
 	const body = `{"foo":[1,2,3]}`
-	m := jqApp(t, body)
+	m := playApp(t, body)
 	m = openJQ(t, m)
-	if got, want := m.jqPlay.paneKey, m.activeWS().Panes.Focused(); got != want {
+	if got, want := m.play.paneKey, m.activeWS().Panes.Focused(); got != want {
 		t.Fatalf("the mode must mount in the focused pane, got %q vs %q", got, want)
 	}
 	v := ansi.Strip(m.render())
@@ -548,7 +548,7 @@ func TestJQPlaygroundInlineEnterExit(t *testing.T) {
 	}
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
-	if m.jqPlayOpen() {
+	if m.playOpen() {
 		t.Fatal("esc must leave the mode")
 	}
 	ed := m.activeEditor()
@@ -571,13 +571,13 @@ func TestJQPlaygroundInlineEnterExit(t *testing.T) {
 // query line and from the result buffer alike — while the playground's own
 // keys keep priority.
 func TestJQPlaygroundGlobalChords(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"name":"ike"}`))
+	m := openJQ(t, playApp(t, `{"name":"ike"}`))
 
 	m = drainKey(m, tea.KeyPressMsg{Code: 'a', Mod: tea.ModSuper | tea.ModShift})
 	if !m.palette.IsOpen() {
 		t.Fatal("cmd+shift+a in the playground must open Search Everywhere")
 	}
-	if !m.jqPlayOpen() {
+	if !m.playOpen() {
 		t.Fatal("a global chord must not close the playground")
 	}
 	m.palette.Close()
@@ -590,7 +590,7 @@ func TestJQPlaygroundGlobalChords(t *testing.T) {
 
 	// The same chords escape the result buffer after tab moves the focus.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
-	if !m.jqPlay.bufFocus {
+	if !m.play.bufFocus {
 		t.Fatal("tab must move the focus into the result buffer")
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: 'a', Mod: tea.ModSuper | tea.ModShift})
@@ -602,17 +602,17 @@ func TestJQPlaygroundGlobalChords(t *testing.T) {
 	// The playground's own keys keep priority: typing still edits the query
 	// line, and esc still closes the mode.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab}) // back to the query line
-	m.jqPlay.program, m.jqPlay.pos = "", 0
+	m.play.program, m.play.pos = "", 0
 	m = typeInto(m, ".name")
-	if m.jqPlay.program != ".name" {
-		t.Fatalf("typing must stay with the query line, got %q", m.jqPlay.program)
+	if m.play.program != ".name" {
+		t.Fatalf("typing must stay with the query line, got %q", m.play.program)
 	}
 	if m.palette.IsOpen() {
 		t.Fatal("plain typing must not dispatch global bindings")
 	}
 	m = dismissJQPopup(m) // typing opened the completion popup (#1979)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
-	if m.jqPlayOpen() {
+	if m.playOpen() {
 		t.Fatal("esc must keep closing the playground")
 	}
 }
@@ -621,9 +621,9 @@ func TestJQPlaygroundGlobalChords(t *testing.T) {
 // typing in query focus edits only the program, and edit keys in buffer
 // focus bounce off the read-only flag.
 func TestJQPlaygroundResultReadOnly(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".")
-	ed := m.jqPlay.resultEd
+	ed := m.play.resultEd
 	if !ed.ReadOnly() {
 		t.Fatal("the result buffer must be read-only")
 	}
@@ -639,7 +639,7 @@ func TestJQPlaygroundResultReadOnly(t *testing.T) {
 	if got := ed.Text(); got != before {
 		t.Fatalf("edit keys mutated the read-only result: %q -> %q", before, got)
 	}
-	if m.jqPlay.result.Text() != before {
+	if m.play.result.Text() != before {
 		t.Error("the evaluation result itself must be untouched")
 	}
 }
@@ -648,37 +648,37 @@ func TestJQPlaygroundResultReadOnly(t *testing.T) {
 // buffer, esc first leaves visual mode like in any buffer, and only a second
 // esc — from resting normal mode — closes the playground.
 func TestJQPlaygroundResultSelection(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"foo":[1,2,3]}`))
+	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	m = setProgram(m, ".foo[]")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	m = drainKey(m, tea.KeyPressMsg{Code: 'V', Text: "V"})
 	m = drainKey(m, tea.KeyPressMsg{Code: 'j', Text: "j"})
-	sel, has := m.jqPlay.resultEd.SelectionText()
+	sel, has := m.play.resultEd.SelectionText()
 	if !has || strings.TrimSpace(sel) == "" {
 		t.Fatalf("visual selection must work in the result buffer, got %q", sel)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
-	if !m.jqPlayOpen() {
+	if !m.playOpen() {
 		t.Fatal("esc in visual mode must only leave the selection, not the mode")
 	}
-	if _, has := m.jqPlay.resultEd.SelectionText(); has {
+	if _, has := m.play.resultEd.SelectionText(); has {
 		t.Error("esc must have collapsed the visual selection")
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
-	if m.jqPlayOpen() {
+	if m.playOpen() {
 		t.Error("esc from resting normal mode must close the playground")
 	}
 }
 
-// jqTestClip is a fake system clipboard for the result buffer's `+` register.
-type jqTestClip struct{ text string }
+// playTestClip is a fake system clipboard for the result buffer's `+` register.
+type playTestClip struct{ text string }
 
-func (c *jqTestClip) Read() (string, error) { return c.text, nil }
-func (c *jqTestClip) Write(s string) error  { c.text = s; return nil }
+func (c *playTestClip) Read() (string, error) { return c.text, nil }
+func (c *playTestClip) Write(s string) error  { c.text = s; return nil }
 
-// jqCopyKey is the app keymap's editor.copy chord as a key event: cmd+c on
+// playCopyKey is the app keymap's editor.copy chord as a key event: cmd+c on
 // macOS, folded to ctrl+c everywhere else (keymap.NormalizeKey).
-func jqCopyKey() tea.KeyPressMsg {
+func playCopyKey() tea.KeyPressMsg {
 	if runtime.GOOS == "darwin" {
 		return tea.KeyPressMsg{Code: 'c', Mod: tea.ModMeta}
 	}
@@ -689,25 +689,25 @@ func jqCopyKey() tea.KeyPressMsg {
 // result buffer's visual selection to the system clipboard, like in a normal
 // read-only buffer — the modal routing must not swallow it.
 func TestJQPlaygroundCopyChordCopiesSelection(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"foo":[1,2,3]}`))
+	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	m = setProgram(m, ".foo[]")
-	clip := &jqTestClip{}
-	m.jqPlay.resultEd.SetClipboard(clip)
+	clip := &playTestClip{}
+	m.play.resultEd.SetClipboard(clip)
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	m = drainKey(m, tea.KeyPressMsg{Code: 'V', Text: "V"})
 	m = drainKey(m, tea.KeyPressMsg{Code: 'j', Text: "j"})
-	if _, has := m.jqPlay.resultEd.SelectionText(); !has {
+	if _, has := m.play.resultEd.SelectionText(); !has {
 		t.Fatal("the fixture needs a visual selection")
 	}
-	m = drainKey(m, jqCopyKey())
+	m = drainKey(m, playCopyKey())
 	if !strings.Contains(clip.text, "1") || !strings.Contains(clip.text, "2") {
 		t.Fatalf("clipboard = %q, want the selected lines", clip.text)
 	}
 	if strings.Contains(clip.text, "3") {
 		t.Errorf("clipboard = %q, must hold only the selection, not the whole result", clip.text)
 	}
-	if !m.jqPlayOpen() {
+	if !m.playOpen() {
 		t.Error("copying must leave the playground open")
 	}
 }
@@ -716,10 +716,10 @@ func TestJQPlaygroundCopyChordCopiesSelection(t *testing.T) {
 // dispatches editor.ActionMsg — while the playground pane is focused it must
 // act on the substitute result buffer, not the pane's hidden document.
 func TestJQPlaygroundMenuCopyReachesResultBuffer(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"foo":[1,2,3]}`))
+	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	m = setProgram(m, ".foo[]")
-	clip := &jqTestClip{}
-	m.jqPlay.resultEd.SetClipboard(clip)
+	clip := &playTestClip{}
+	m.play.resultEd.SetClipboard(clip)
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	m = drainKey(m, tea.KeyPressMsg{Code: 'V', Text: "V"})
@@ -734,20 +734,20 @@ func TestJQPlaygroundMenuCopyReachesResultBuffer(t *testing.T) {
 // pane leaves the playground mounted with query and result intact, the other
 // pane takes keys normally, and refocusing resumes the query line as it was.
 func TestJQPlaygroundSurvivesFocusChange(t *testing.T) {
-	m := jqApp(t, `{"foo":[1,2,3]}`)
-	jqKey := m.activeWS().Panes.Focused()
+	m := playApp(t, `{"foo":[1,2,3]}`)
+	playKey := m.activeWS().Panes.Focused()
 	// A second editor pane to work in while the result stays visible.
 	m.SplitFocused(layout.ZoneRight)
 	otherKey := m.activeWS().Panes.Focused()
-	m.setFocus(jqKey)
+	m.setFocus(playKey)
 	m = openJQ(t, m)
 	m = setProgram(m, ".foo[]")
-	program := m.jqPlay.program
+	program := m.play.program
 
 	// The spatial focus move escapes the playground pane instead of being
 	// swallowed by the modal routing.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl})
-	if !m.jqPlayOpen() {
+	if !m.playOpen() {
 		t.Fatal("a focus change must not close the playground")
 	}
 	if got := m.activeWS().Panes.Focused(); got != otherKey {
@@ -761,10 +761,10 @@ func TestJQPlaygroundSurvivesFocusChange(t *testing.T) {
 	if ed := m.activeWS().Panes.Get(otherKey).Editor(); ed == nil || !strings.Contains(ed.Text(), "hello") {
 		t.Fatal("typing must edit the focused pane while the playground is open elsewhere")
 	}
-	if got := m.jqPlay.program; got != program {
+	if got := m.play.program; got != program {
 		t.Fatalf("query line = %q, keys for the other pane must not reach it", got)
 	}
-	if got := m.jqPlay.result.Text(); got != "1\n2\n3" {
+	if got := m.play.result.Text(); got != "1\n2\n3" {
 		t.Fatalf("result = %q, must survive the focus change", got)
 	}
 	v := ansi.Strip(m.render())
@@ -778,15 +778,15 @@ func TestJQPlaygroundSurvivesFocusChange(t *testing.T) {
 	// Refocusing the hosting pane resumes the query line.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape}) // leave insert mode first
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl})
-	if got := m.activeWS().Panes.Focused(); got != jqKey {
-		t.Fatalf("focus = %q, want back on the playground pane %q", got, jqKey)
+	if got := m.activeWS().Panes.Focused(); got != playKey {
+		t.Fatalf("focus = %q, want back on the playground pane %q", got, playKey)
 	}
 	m = typeInto(m, " ")
-	if got := m.jqPlay.program; got != program+" " {
+	if got := m.play.program; got != program+" " {
 		t.Fatalf("query line = %q, refocusing must resume it", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
-	if m.jqPlayOpen() {
+	if m.playOpen() {
 		t.Error("esc in the playground pane must still close the mode")
 	}
 }
@@ -794,7 +794,7 @@ func TestJQPlaygroundSurvivesFocusChange(t *testing.T) {
 // TestJQPlaygroundSurvivesClickIntoOtherPane (#1980): a mouse click into
 // another pane moves the focus and leaves the playground mounted.
 func TestJQPlaygroundSurvivesClickIntoOtherPane(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"foo":[1,2,3]}`))
+	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	m = setProgram(m, ".foo[]")
 	r, ok := m.lay.Panes[pane.ExplorerKey]
 	if !ok {
@@ -802,13 +802,13 @@ func TestJQPlaygroundSurvivesClickIntoOtherPane(t *testing.T) {
 	}
 	tm, cmd := m.Update(tea.MouseClickMsg{X: r.X + r.W/2, Y: r.Y + r.H/2, Button: tea.MouseLeft})
 	m = drainCmd(tm.(Model), cmd)
-	if !m.jqPlayOpen() {
+	if !m.playOpen() {
 		t.Fatal("a click into another pane must not close the playground")
 	}
 	if got := m.activeWS().Panes.Focused(); got != pane.ExplorerKey {
 		t.Fatalf("focus = %q, want the clicked explorer", got)
 	}
-	if got := m.jqPlay.result.Text(); got != "1\n2\n3" {
+	if got := m.play.result.Text(); got != "1\n2\n3" {
 		t.Errorf("result = %q, must survive the click", got)
 	}
 }
@@ -817,14 +817,14 @@ func TestJQPlaygroundSurvivesClickIntoOtherPane(t *testing.T) {
 // changes, so its pane can now be closed from elsewhere — the playground must
 // die with it instead of dangling over a removed key.
 func TestJQPlaygroundClosesWithHostingPane(t *testing.T) {
-	m := jqApp(t, `{"foo":[1,2,3]}`)
-	jqKey := m.activeWS().Panes.Focused()
+	m := playApp(t, `{"foo":[1,2,3]}`)
+	playKey := m.activeWS().Panes.Focused()
 	m.SplitFocused(layout.ZoneRight)
-	m.setFocus(jqKey)
+	m.setFocus(playKey)
 	m = openJQ(t, m)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl})
-	m.closePane(jqKey)
-	if m.jqPlayOpen() {
+	m.closePane(playKey)
+	if m.playOpen() {
 		t.Fatal("closing the hosting pane must close the playground")
 	}
 }
@@ -841,14 +841,14 @@ func TestJQPlaygroundQueriesHTTPResponse(t *testing.T) {
 	m.setFocus(pane.HTTPKey)
 
 	m = openJQ(t, m)
-	if got := m.jqPlay.source; got != "HTTP response" {
+	if got := m.play.source; got != "HTTP response" {
 		t.Fatalf("source = %q, want the response pane", got)
 	}
-	if got := m.jqPlay.paneKey; got != pane.HTTPKey {
+	if got := m.play.paneKey; got != pane.HTTPKey {
 		t.Fatalf("the mode must mount in the response pane, got %q", got)
 	}
 	m = setProgram(m, "[.items[].id]")
-	if got := strings.Join(strings.Fields(m.jqPlay.result.Text()), ""); got != "[7,8]" {
+	if got := strings.Join(strings.Fields(m.play.result.Text()), ""); got != "[7,8]" {
 		t.Errorf("result = %q, want the ids from the response body", got)
 	}
 }
@@ -857,18 +857,18 @@ func TestJQPlaygroundQueriesHTTPResponse(t *testing.T) {
 // selected lines are the input — an embedded JSON blob in a log file is
 // queryable without extracting it first.
 func TestJQPlaygroundQueriesSelection(t *testing.T) {
-	m := jqApp(t, "{\"a\":1}\nnot json at all\n")
+	m := playApp(t, "{\"a\":1}\nnot json at all\n")
 	// Select the first line in visual-line mode.
 	m = drainKey(m, tea.KeyPressMsg{Code: 'V', Text: "V"})
 	m = openJQ(t, m)
-	if !strings.Contains(m.jqPlay.source, "selection") {
-		t.Fatalf("source = %q, want the selection", m.jqPlay.source)
+	if !strings.Contains(m.play.source, "selection") {
+		t.Fatalf("source = %q, want the selection", m.play.source)
 	}
-	if m.jqPlay.inputErr != "" {
-		t.Fatalf("the selected JSON must parse, got %q", m.jqPlay.inputErr)
+	if m.play.inputErr != "" {
+		t.Fatalf("the selected JSON must parse, got %q", m.play.inputErr)
 	}
 	m = setProgram(m, ".a")
-	if got := m.jqPlay.result.Text(); got != "1" {
+	if got := m.play.result.Text(); got != "1" {
 		t.Errorf("result = %q, want the selected object's field", got)
 	}
 }
@@ -877,13 +877,13 @@ func TestJQPlaygroundQueriesSelection(t *testing.T) {
 // scanner, so a path and a string literal in the same program do not render
 // in one flat color.
 func TestJQPlaygroundHighlightsQuery(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":"x"}`))
+	m := openJQ(t, playApp(t, `{"a":"x"}`))
 	m = setProgram(m, `.a == "x"`)
-	row := m.jqQueryRow(60)
+	row := m.playQueryRow(60)
 	if ansi.Strip(row) == row {
 		t.Fatalf("the query line should carry color, got %q", row)
 	}
-	styles := m.jqKindStyles()
+	styles := m.playKindStyles()
 	for _, want := range []string{
 		styles[jqplay.KindPath].Render("a"),
 		styles[jqplay.KindString].Render("x"),
@@ -898,9 +898,9 @@ func TestJQPlaygroundHighlightsQuery(t *testing.T) {
 // instead of opening an empty dialog.
 func TestJQPlaygroundWithoutInput(t *testing.T) {
 	m := newSized()
-	tm, cmd := m.Update(OpenJQPlaygroundMsg{})
+	tm, cmd := m.Update(OpenPlaygroundMsg{})
 	m = drainCmd(tm.(Model), cmd)
-	if m.jqPlayOpen() {
+	if m.playOpen() {
 		t.Fatal("with no JSON at hand the playground must not open")
 	}
 }
@@ -908,15 +908,15 @@ func TestJQPlaygroundWithoutInput(t *testing.T) {
 // TestJQPlaygroundPasteFlattens: a bracketed paste lands in the query line as
 // one line — a multi-line program must not smuggle newlines into it.
 func TestJQPlaygroundPasteFlattens(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1}`))
-	m.jqPlay.program, m.jqPlay.pos = "", 0
+	m := openJQ(t, playApp(t, `{"a":1}`))
+	m.play.program, m.play.pos = "", 0
 	tm, cmd := m.Update(tea.PasteMsg{Content: ".a\n| tostring"})
 	m = drainCmd(tm.(Model), cmd)
-	if strings.Contains(m.jqPlay.program, "\n") {
-		t.Fatalf("the query line kept a newline: %q", m.jqPlay.program)
+	if strings.Contains(m.play.program, "\n") {
+		t.Fatalf("the query line kept a newline: %q", m.play.program)
 	}
-	if m.jqPlay.result.Err != "" {
-		t.Errorf("the flattened program should still compile, got %q", m.jqPlay.result.Err)
+	if m.play.result.Err != "" {
+		t.Errorf("the flattened program should still compile, got %q", m.play.result.Err)
 	}
 }
 
@@ -925,7 +925,7 @@ func TestJQPlaygroundPasteFlattens(t *testing.T) {
 // (#1979), which owns enter while it shows; it is dismissed first so enter
 // keeps its record-and-run meaning.
 func runJQProgram(m Model, program string) Model {
-	m.jqPlay.program, m.jqPlay.pos = "", 0
+	m.play.program, m.play.pos = "", 0
 	m = typeInto(m, program)
 	m = dismissJQPopup(m)
 	return drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -936,7 +936,7 @@ func runJQProgram(m Model, program string) Model {
 // playground is reopened over a *different* file, and one run over an HTTP
 // response body joins the same list.
 func TestJQPlaygroundHistoryCrossBuffer(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = runJQProgram(m, ".a")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
 
@@ -949,7 +949,7 @@ func TestJQPlaygroundHistoryCrossBuffer(t *testing.T) {
 	m = drainCmd(tm.(Model), cmd)
 	m = openJQ(t, m)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.jqPlay.program; got != ".a" {
+	if got := m.play.program; got != ".a" {
 		t.Fatalf("↑ over another buffer = %q, want the program run on the first one", got)
 	}
 	m = runJQProgram(m, ".b")
@@ -962,11 +962,11 @@ func TestJQPlaygroundHistoryCrossBuffer(t *testing.T) {
 	m = out.(Model)
 	m.setFocus(pane.HTTPKey)
 	m = openJQ(t, m)
-	if got := m.jqPlay.paneKey; got != pane.HTTPKey {
+	if got := m.play.paneKey; got != pane.HTTPKey {
 		t.Fatalf("the mode must mount in the response pane, got %q", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.jqPlay.program; got != ".b" {
+	if got := m.play.program; got != ".b" {
 		t.Fatalf("↑ over the response pane = %q, want the newest editor program", got)
 	}
 	m = runJQProgram(m, ".items")
@@ -975,7 +975,7 @@ func TestJQPlaygroundHistoryCrossBuffer(t *testing.T) {
 	m.setFocus(m.recentEditor)
 	m = openJQ(t, m)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.jqPlay.program; got != ".items" {
+	if got := m.play.program; got != ".items" {
 		t.Errorf("↑ back in an editor = %q, want the program run on the response", got)
 	}
 }
@@ -985,19 +985,19 @@ func TestJQPlaygroundHistoryCrossBuffer(t *testing.T) {
 // mode. The programs the replaced one recorded must not go with it — the
 // history is the root model's, not the mode's.
 func TestJQPlaygroundHistorySurvivesReopen(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = runJQProgram(m, ".a")
 
 	m = openJQ(t, m) // reopened without esc: the mode is replaced
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.jqPlay.program; got != ".a" {
+	if got := m.play.program; got != ".a" {
 		t.Errorf("↑ after reopening = %q, want the program recorded before it", got)
 	}
 }
 
-// jqLongProgram is a pipeline of the shape the issue reports (#2032): far
+// playLongProgram is a pipeline of the shape the issue reports (#2032): far
 // wider than a pane, with `|` stages to break at.
-const jqLongProgram = `.hits.hits[]._source | .keyword as $keyword | .ser[] | select(.domain == "universal-search-box.com") | {$keyword, type: .kind, url: .link}`
+const playLongProgram = `.hits.hits[]._source | .keyword as $keyword | .ser[] | select(.domain == "universal-search-box.com") | {$keyword, type: .kind, url: .link}`
 
 // toggleJQView presses the chord bound to json.jqQueryView (default
 // ctrl+alt+e), the way a user reaches the full-query view.
@@ -1005,11 +1005,11 @@ func toggleJQView(m Model) Model {
 	return drainKey(m, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl | tea.ModAlt})
 }
 
-// jqQueryText renders the query rows and strips the color, so an assertion can
+// playQueryText renders the query rows and strips the color, so an assertion can
 // talk about the program that is actually on screen.
-func jqQueryText(m Model, width int) string {
+func playQueryText(m Model, width int) string {
 	var b strings.Builder
-	for _, row := range m.jqQueryRows(width) {
+	for _, row := range m.playQueryRows(width) {
 		b.WriteString(ansi.Strip(row))
 	}
 	return b.String()
@@ -1020,28 +1020,28 @@ func jqQueryText(m Model, width int) string {
 // fully readable after the toggle — without leaving the playground and
 // without changing the program.
 func TestJQPlaygroundExpandedQueryShowsWholeProgram(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"hits":{"hits":[]}}`))
-	m = setProgram(m, jqLongProgram)
+	m := openJQ(t, playApp(t, `{"hits":{"hits":[]}}`))
+	m = setProgram(m, playLongProgram)
 
 	const width = 80
-	if got := jqQueryText(m, width); strings.Contains(got, ".hits.hits[]") {
+	if got := playQueryText(m, width); strings.Contains(got, ".hits.hits[]") {
 		t.Fatalf("the one-line view cannot show the whole program, got %q", got)
 	}
 	m = toggleJQView(m)
-	if !m.jqPlay.expanded {
+	if !m.play.expanded {
 		t.Fatal("the json.jqQueryView chord must expand the query view")
 	}
-	if got := m.jqPlay.program; got != jqLongProgram {
+	if got := m.play.program; got != playLongProgram {
 		t.Fatalf("the view must not touch the program, got %q", got)
 	}
-	got := strings.ReplaceAll(jqQueryText(m, width), " ", "")
-	want := strings.ReplaceAll(jqLongProgram, " ", "")
+	got := strings.ReplaceAll(playQueryText(m, width), " ", "")
+	want := strings.ReplaceAll(playLongProgram, " ", "")
 	if !strings.Contains(got, want) {
 		t.Errorf("the expanded view must show the whole program, got %q", got)
 	}
 	// Toggling back restores the resting one-line layout.
 	m = toggleJQView(m)
-	if m.jqPlay.expanded || len(m.jqQueryRows(width)) != 1 {
+	if m.play.expanded || len(m.playQueryRows(width)) != 1 {
 		t.Error("the toggle must fold the view back to one row")
 	}
 }
@@ -1049,10 +1049,10 @@ func TestJQPlaygroundExpandedQueryShowsWholeProgram(t *testing.T) {
 // TestJQPlaygroundExpandedQueryKeepsHighlighting (#2032): the wrapped rows are
 // colored by the same scanner the one-line view uses.
 func TestJQPlaygroundExpandedQueryKeepsHighlighting(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":"x"}`))
+	m := openJQ(t, playApp(t, `{"a":"x"}`))
 	m = setProgram(m, `.aaaaaaaaaa | select(.b == "x") | .ccccccccc | map(.d)`)
 	m = toggleJQView(m)
-	rows := m.jqQueryRows(40)
+	rows := m.playQueryRows(40)
 	if len(rows) < 2 {
 		t.Fatalf("the program should wrap over several rows, got %d", len(rows))
 	}
@@ -1060,7 +1060,7 @@ func TestJQPlaygroundExpandedQueryKeepsHighlighting(t *testing.T) {
 	if ansi.Strip(joined) == joined {
 		t.Fatal("the expanded rows should carry color")
 	}
-	styles := m.jqKindStyles()
+	styles := m.playKindStyles()
 	for _, want := range []string{
 		styles[jqplay.KindString].Render("x"),
 		styles[jqplay.KindFunc].Render("m"),
@@ -1071,11 +1071,11 @@ func TestJQPlaygroundExpandedQueryKeepsHighlighting(t *testing.T) {
 	}
 }
 
-// jqResultHeight is how many rows the substitute result buffer renders — the
+// playResultHeight is how many rows the substitute result buffer renders — the
 // editor keeps its height private, and the rendered row count is what the
 // pane geometry is about anyway.
-func jqResultHeight(m Model) int {
-	return len(strings.Split(m.jqPlay.resultEd.View(), "\n"))
+func playResultHeight(m Model) int {
+	return len(strings.Split(m.play.resultEd.View(), "\n"))
 }
 
 // TestJQPlaygroundExpandedHeaderKeepsGeometry (#2032): the growing header is
@@ -1088,34 +1088,34 @@ func TestJQPlaygroundExpandedHeaderKeepsGeometry(t *testing.T) {
 	for i := range items {
 		items[i] = fmt.Sprintf(`{"n":%d}`, i)
 	}
-	m := openJQ(t, jqApp(t, `{"items":[`+strings.Join(items, ",")+`]}`))
+	m := openJQ(t, playApp(t, `{"items":[`+strings.Join(items, ",")+`]}`))
 	m = setProgram(m, `.items[] | select(.n >= 0) | {n: .n, doubled: (.n * 2), label: ("row-" + (.n | tostring))}`)
-	key := m.jqPlay.paneKey
+	key := m.play.paneKey
 	r, ok := m.lay.Panes[key]
 	if !ok {
 		t.Fatal("the hosting pane must have a rect")
 	}
 	width := r.W - paneChromeW
-	if got := m.jqHeaderRowsFor(key); got != jqHeaderRows {
-		t.Fatalf("the resting header is %d rows, want %d", got, jqHeaderRows)
+	if got := m.playHeaderRowsFor(key); got != playHeaderRows {
+		t.Fatalf("the resting header is %d rows, want %d", got, playHeaderRows)
 	}
-	before := jqResultHeight(m)
-	if got, want := len(strings.Split(m.jqInlineBody(width), "\n")), paneInterior(r.H, paneChromeH); got != want {
+	before := playResultHeight(m)
+	if got, want := len(strings.Split(m.playInlineBody(width), "\n")), paneInterior(r.H, paneChromeH); got != want {
 		t.Fatalf("the resting pane body renders %d rows, want %d", got, want)
 	}
 
 	m = toggleJQView(m)
-	rows := m.jqHeaderRowsFor(key)
-	if rows <= jqHeaderRows {
+	rows := m.playHeaderRowsFor(key)
+	if rows <= playHeaderRows {
 		t.Fatalf("the expanded header must grow, got %d rows", rows)
 	}
-	if got, want := len(m.jqQueryRows(width))+jqInfoRows, rows; got != want {
+	if got, want := len(m.playQueryRows(width))+playInfoRows, rows; got != want {
 		t.Errorf("rendered %d header rows, geometry reserved %d", got, want)
 	}
-	if got, want := jqResultHeight(m), before-(rows-jqHeaderRows); got != want {
+	if got, want := playResultHeight(m), before-(rows-playHeaderRows); got != want {
 		t.Errorf("result buffer is %d rows, want %d", got, want)
 	}
-	if got, want := len(strings.Split(m.jqInlineBody(width), "\n")), paneInterior(r.H, paneChromeH); got != want {
+	if got, want := len(strings.Split(m.playInlineBody(width), "\n")), paneInterior(r.H, paneChromeH); got != want {
 		t.Errorf("the expanded pane body renders %d rows, want %d", got, want)
 	}
 }
@@ -1124,12 +1124,12 @@ func TestJQPlaygroundExpandedHeaderKeepsGeometry(t *testing.T) {
 // expanded view keeps the result visible, windows around the cursor's row and
 // says that it is still cut.
 func TestJQPlaygroundExpandedQueryCaps(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, strings.Repeat(".aaaaaaaa | ", 40)+".a")
 	m = toggleJQView(m)
-	rows := m.jqQueryRows(60)
-	if len(rows) > jqMaxQueryRows {
-		t.Fatalf("the expanded view must cap at %d rows, got %d", jqMaxQueryRows, len(rows))
+	rows := m.playQueryRows(60)
+	if len(rows) > playMaxQueryRows {
+		t.Fatalf("the expanded view must cap at %d rows, got %d", playMaxQueryRows, len(rows))
 	}
 	if !strings.Contains(ansi.Strip(strings.Join(rows, "")), "…") {
 		t.Error("a capped expanded view must mark that it is cut")
@@ -1139,10 +1139,10 @@ func TestJQPlaygroundExpandedQueryCaps(t *testing.T) {
 	if got := ansi.Strip(rows[0]); !strings.HasPrefix(got, "> jq: …") {
 		t.Errorf("the capped view must window around the cursor, got %q", got)
 	}
-	if got := strings.TrimRight(jqQueryText(m, 60), " "); !strings.HasSuffix(got, "| .a") {
+	if got := strings.TrimRight(playQueryText(m, 60), " "); !strings.HasSuffix(got, "| .a") {
 		t.Errorf("the cursor's row must be on screen, got %q", got)
 	}
-	if !strings.Contains(ansi.Strip(m.jqInfoRow(60)), "query cut") {
+	if !strings.Contains(ansi.Strip(m.playInfoRow(60)), "query cut") {
 		t.Error("the info row must still flag the cut")
 	}
 }
@@ -1151,33 +1151,33 @@ func TestJQPlaygroundExpandedQueryCaps(t *testing.T) {
 // row, and the hint names the chord that shows it whole — from the query line
 // and from the result buffer alike.
 func TestJQPlaygroundQueryCutHint(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"hits":{"hits":[]}}`))
+	m := openJQ(t, playApp(t, `{"hits":{"hits":[]}}`))
 	m = setProgram(m, ".a")
-	if got := ansi.Strip(m.jqInfoRow(90)); strings.Contains(got, "query cut") {
+	if got := ansi.Strip(m.playInfoRow(90)); strings.Contains(got, "query cut") {
 		t.Errorf("a program that fits is not cut, got %q", got)
 	}
-	m = setProgram(m, jqLongProgram)
-	if got := ansi.Strip(m.jqInfoRow(90)); !strings.Contains(got, "query cut") {
+	m = setProgram(m, playLongProgram)
+	if got := ansi.Strip(m.playInfoRow(90)); !strings.Contains(got, "query cut") {
 		t.Errorf("a cut program must be flagged, got %q", got)
 	}
-	if got := ansi.Strip(m.jqInfoRow(200)); !strings.Contains(got, "ctrl+alt+e full query") {
+	if got := ansi.Strip(m.playInfoRow(200)); !strings.Contains(got, "ctrl+alt+e full query") {
 		t.Errorf("the info row must document the full-query chord, got %q", got)
 	}
 	m = toggleJQView(m)
-	if got := ansi.Strip(m.jqInfoRow(200)); !strings.Contains(got, "ctrl+alt+e one-line query") {
+	if got := ansi.Strip(m.playInfoRow(200)); !strings.Contains(got, "ctrl+alt+e one-line query") {
 		t.Errorf("the expanded view must document the way back, got %q", got)
 	}
 	// The result buffer's hint row documents it too — the toggle works from
 	// there as well.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
-	if !m.jqPlay.bufFocus {
+	if !m.play.bufFocus {
 		t.Fatal("tab must move the focus into the result buffer")
 	}
-	if got := ansi.Strip(m.jqInfoRow(200)); !strings.Contains(got, "ctrl+alt+e") {
+	if got := ansi.Strip(m.playInfoRow(200)); !strings.Contains(got, "ctrl+alt+e") {
 		t.Errorf("the result buffer's hints must document the toggle, got %q", got)
 	}
 	m = toggleJQView(m)
-	if m.jqPlay.expanded {
+	if m.play.expanded {
 		t.Error("the toggle must work from the result buffer too")
 	}
 }
@@ -1185,25 +1185,25 @@ func TestJQPlaygroundQueryCutHint(t *testing.T) {
 // TestJQPlaygroundQueryViewCommand (#2032): the palette / Tools menu command
 // drives the same toggle as the chord, and is inert with no playground open.
 func TestJQPlaygroundQueryViewCommand(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1}`))
-	m = setProgram(m, jqLongProgram)
-	tm, cmd := m.Update(ToggleJQQueryViewMsg{})
+	m := openJQ(t, playApp(t, `{"a":1}`))
+	m = setProgram(m, playLongProgram)
+	tm, cmd := m.Update(TogglePlaygroundQueryViewMsg{})
 	m = drainCmd(tm.(Model), cmd)
-	if !m.jqPlay.expanded {
+	if !m.play.expanded {
 		t.Fatal("json.jqQueryView must expand the query view")
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
-	tm, cmd = m.Update(ToggleJQQueryViewMsg{})
+	tm, cmd = m.Update(TogglePlaygroundQueryViewMsg{})
 	m = drainCmd(tm.(Model), cmd)
-	if m.jqPlayOpen() {
+	if m.playOpen() {
 		t.Error("the command must not open a playground of its own")
 	}
 }
 
-// jqKeys feeds a run of plain keys into the model one at a time — the vim
+// playKeys feeds a run of plain keys into the model one at a time — the vim
 // fold commands are two-key sequences (z then a), so a test types them the
 // way a user does.
-func jqKeys(m Model, keys string) Model {
+func playKeys(m Model, keys string) Model {
 	for _, r := range keys {
 		m = drainKey(m, tea.KeyPressMsg{Text: string(r), Code: r})
 	}
@@ -1214,10 +1214,10 @@ func jqKeys(m Model, keys string) Model {
 // result buffer collapses the object under the cursor to one row carrying a
 // placeholder with its key count, and hides its body.
 func TestJQResultFoldsAtCursor(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"spec":{"image":"ike","tag":"v1"},"n":3}`))
+	m := openJQ(t, playApp(t, `{"spec":{"image":"ike","tag":"v1"},"n":3}`))
 	m = setProgram(m, ".")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab}) // keyboard into the result
-	m = jqKeys(m, "jjza")                              // onto the "spec" line, fold it
+	m = playKeys(m, "jjza")                            // onto the "spec" line, fold it
 
 	view := ansi.Strip(m.render())
 	if !strings.Contains(view, "⋯ 2 keys }") {
@@ -1235,19 +1235,19 @@ func TestJQResultFoldsAtCursor(t *testing.T) {
 // zM collapses everything, zo on the outer node reveals one level with the
 // inner fold still closed, and its placeholder counts array items.
 func TestJQResultFoldsNested(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"spec":{"ports":[80,443,8080]}}`))
+	m := openJQ(t, playApp(t, `{"spec":{"ports":[80,443,8080]}}`))
 	m = setProgram(m, ".")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
-	m = jqKeys(m, "zM") // every fold closed
+	m = playKeys(m, "zM") // every fold closed
 	if view := ansi.Strip(m.render()); !strings.Contains(view, "⋯ 1 key }") || strings.Contains(view, `"ports"`) {
 		t.Fatalf("zM must collapse the outermost value, got:\n%s", view)
 	}
-	m = jqKeys(m, "zo") // one level open again
+	m = playKeys(m, "zo") // one level open again
 	view := ansi.Strip(m.render())
 	if !strings.Contains(view, `"spec": { ⋯ 1 key }`) {
 		t.Fatalf("zo must reveal one level, with the node inside it still folded, got:\n%s", view)
 	}
-	m = jqKeys(m, "jzo") // and the node inside it opens on its own
+	m = playKeys(m, "jzo") // and the node inside it opens on its own
 	view = ansi.Strip(m.render())
 	if !strings.Contains(view, "⋯ 3 items ]") {
 		t.Errorf("the nested array must fold with its item count, got:\n%s", view)
@@ -1261,10 +1261,10 @@ func TestJQResultFoldsNested(t *testing.T) {
 // the folds of the previous one must not survive it — no orphan fold, no
 // hidden line in a document that never had one.
 func TestJQResultFoldsResetOnNewQuery(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"spec":{"image":"ike","tag":"v1"},"n":3}`))
+	m := openJQ(t, playApp(t, `{"spec":{"image":"ike","tag":"v1"},"n":3}`))
 	m = setProgram(m, ".")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
-	m = jqKeys(m, "jjza")
+	m = playKeys(m, "jjza")
 
 	m = setProgram(m, ".spec")
 	view := ansi.Strip(m.render())
@@ -1275,7 +1275,7 @@ func TestJQResultFoldsResetOnNewQuery(t *testing.T) {
 		t.Fatalf("the new result must render in full, got:\n%s", view)
 	}
 	// The new result folds on its own terms: one object, two keys.
-	m = jqKeys(m, "za")
+	m = playKeys(m, "za")
 	if view := ansi.Strip(m.render()); !strings.Contains(view, "⋯ 2 keys }") {
 		t.Errorf("the new result must be foldable, got:\n%s", view)
 	}
@@ -1285,44 +1285,44 @@ func TestJQResultFoldsResetOnNewQuery(t *testing.T) {
 // result buffer holds the keyboard — the mode's own help line is where the
 // binding is documented (#2029).
 func TestJQResultFoldHintsAdvertised(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
-	hints := strings.Join(m.jqHints(), " · ")
+	hints := strings.Join(m.playHints(), " · ")
 	if !strings.Contains(hints, "za fold") || !strings.Contains(hints, "zM/zR fold all") {
 		t.Fatalf("the result buffer's hints must name the fold keys, got %q", hints)
 	}
 	// The row drops trailing hints whole on a narrow pane, so the assertion
 	// that they reach the screen is made against a wide one.
-	if row := ansi.Strip(m.jqInfoRow(200)); !strings.Contains(row, "za fold") {
+	if row := ansi.Strip(m.playInfoRow(200)); !strings.Contains(row, "za fold") {
 		t.Errorf("the info row must show the fold hint, got:\n%s", row)
 	}
 }
 
-// jqMultiLineProgram is a pipeline that wraps over more than one row in the
+// playMultiLineProgram is a pipeline that wraps over more than one row in the
 // test pane, with a *shorter* row above the last one — so a vertical motion
 // over it has a goal column to lose (#2038).
-const jqMultiLineProgram = `.items[] | select(.n >= 1) | {a: .n, b: (.n * 2), c: (.n * 3), d: (.n * 4)} | .a`
+const playMultiLineProgram = `.items[] | select(.n >= 1) | {a: .n, b: (.n * 2), c: (.n * 3), d: (.n * 4)} | .a`
 
-// jqQueryLines is the wrapped program as the hosting pane lays it out — the
+// playQueryLines is the wrapped program as the hosting pane lays it out — the
 // rows a cursor motion moves through.
-func jqQueryLines(t *testing.T, m Model) []jqplay.Line {
+func playQueryLines(t *testing.T, m Model) []jqplay.Line {
 	t.Helper()
-	w, ok := m.jqPaneQueryWidth()
+	w, ok := m.playPaneQueryWidth()
 	if !ok {
 		t.Fatal("the hosting pane must be laid out")
 	}
-	return jqplay.Wrap(m.jqPlay.program, w)
+	return jqplay.Wrap(m.play.program, w)
 }
 
-// jqMultiLineApp opens the playground over a two-item document with
-// jqMultiLineProgram on the query line and the multi-line view up.
-func jqMultiLineApp(t *testing.T) (Model, []jqplay.Line) {
+// playMultiLineApp opens the playground over a two-item document with
+// playMultiLineProgram on the query line and the multi-line view up.
+func playMultiLineApp(t *testing.T) (Model, []jqplay.Line) {
 	t.Helper()
-	m := openJQ(t, jqApp(t, `{"items":[{"n":1},{"n":2}]}`))
-	m = setProgram(m, jqMultiLineProgram)
+	m := openJQ(t, playApp(t, `{"items":[{"n":1},{"n":2}]}`))
+	m = setProgram(m, playMultiLineProgram)
 	m = toggleJQView(m)
-	lines := jqQueryLines(t, m)
+	lines := playQueryLines(t, m)
 	if len(lines) < 2 {
 		t.Fatalf("setup: the program must wrap over several rows, got %d", len(lines))
 	}
@@ -1338,44 +1338,44 @@ func jqMultiLineApp(t *testing.T) (Model, []jqplay.Line) {
 // the goal column surviving a shorter row on the way — instead of walking the
 // history, and the program is never touched by a motion.
 func TestJQPlaygroundMultiLineWalksRows(t *testing.T) {
-	m, lines := jqMultiLineApp(t)
-	end := m.jqPlay.pos
+	m, lines := playMultiLineApp(t)
+	end := m.play.pos
 	row, _ := jqplay.RowCol(lines, end)
 	if row != len(lines)-1 {
 		t.Fatalf("setup: the caret starts on the last row, got %d", row)
 	}
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.jqPlay.program; got != jqMultiLineProgram {
+	if got := m.play.program; got != playMultiLineProgram {
 		t.Fatalf("↑ must move the caret, not the program: %q", got)
 	}
-	up, col := jqplay.RowCol(lines, m.jqPlay.pos)
+	up, col := jqplay.RowCol(lines, m.play.pos)
 	if up != row-1 {
 		t.Fatalf("↑ put the caret on row %d, want %d", up, row-1)
 	}
 	if want := lines[up].End - lines[up].Start; col != want {
 		t.Errorf("the caret sits in column %d of a %d-wide row, want its end", col, want)
 	}
-	if m.jqPlay.histIdx != -1 {
+	if m.play.histIdx != -1 {
 		t.Error("a row motion must not enter the history")
 	}
 
 	// The goal column is remembered across the shorter row: ↓ lands back on
 	// the column ↑ left, not on the one the short row clamped it to.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
-	if got := m.jqPlay.pos; got != end {
+	if got := m.play.pos; got != end {
 		t.Errorf("↓ back = %d, want the goal column restored to %d", got, end)
 	}
 	// ↓ on the last row has no row to go to, so it hands over to the history —
 	// which is at the live slot with nothing newer, and leaves the line alone.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
-	if got := m.jqPlay.program; got != jqMultiLineProgram {
+	if got := m.play.program; got != playMultiLineProgram {
 		t.Errorf("↓ at the last row = %q, want the program untouched", got)
 	}
 	// The one-line view keeps the arrows on the history (#1973).
 	m = toggleJQView(m)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.jqPlay.pos; got != end {
+	if got := m.play.pos; got != end {
 		t.Errorf("↑ in the one-line view moved the caret to %d", got)
 	}
 }
@@ -1384,38 +1384,38 @@ func TestJQPlaygroundMultiLineWalksRows(t *testing.T) {
 // there are rows, the caret edits where it stands — several rows up from the
 // end of the program — and the edit runs live like any other keystroke.
 func TestJQPlaygroundMultiLineEditsAnyRow(t *testing.T) {
-	m, lines := jqMultiLineApp(t)
-	if got := m.jqPlay.result.Text(); got != "1\n2" {
+	m, lines := playMultiLineApp(t)
+	if got := m.play.result.Text(); got != "1\n2" {
 		t.Fatalf("setup: result = %q, want both items", got)
 	}
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp}) // onto the first row
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyHome})
-	if got := m.jqPlay.pos; got != lines[0].Start {
+	if got := m.play.pos; got != lines[0].Start {
 		t.Fatalf("home = %d, want the row's start %d", got, lines[0].Start)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnd})
-	if got := m.jqPlay.pos; got != lines[0].End {
+	if got := m.play.pos; got != lines[0].End {
 		t.Fatalf("end = %d, want the row's end %d", got, lines[0].End)
 	}
 
 	// Typing at the caret inserts a whole stage in the middle of the program.
 	m = typeInto(m, " select(.n > 1) |")
 	m = dismissJQPopup(m)
-	want := jqMultiLineProgram[:lines[0].End] + " select(.n > 1) |" + jqMultiLineProgram[lines[0].End:]
-	if got := m.jqPlay.program; got != want {
+	want := playMultiLineProgram[:lines[0].End] + " select(.n > 1) |" + playMultiLineProgram[lines[0].End:]
+	if got := m.play.program; got != want {
 		t.Fatalf("program = %q, want the stage inserted at the caret: %q", got, want)
 	}
-	if got := m.jqPlay.result.Text(); got != "2" {
+	if got := m.play.result.Text(); got != "2" {
 		t.Errorf("result = %q, want the edited program's live result", got)
 	}
 	// ctrl+home / ctrl+end still reach the ends of the whole program.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyHome, Mod: tea.ModCtrl})
-	if got := m.jqPlay.pos; got != 0 {
+	if got := m.play.pos; got != 0 {
 		t.Errorf("ctrl+home = %d, want the program's start", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnd, Mod: tea.ModCtrl})
-	if got := m.jqPlay.pos; got != len([]rune(want)) {
+	if got := m.play.pos; got != len([]rune(want)) {
 		t.Errorf("ctrl+end = %d, want the program's end", got)
 	}
 }
@@ -1424,28 +1424,28 @@ func TestJQPlaygroundMultiLineEditsAnyRow(t *testing.T) {
 // history moves to alt+↑/alt+↓ — reachable from any row — and a plain ↑ on the
 // first row still hands over to it, the way a multi-line shell prompt does.
 func TestJQPlaygroundMultiLineHistoryKeys(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"items":[{"n":1},{"n":2}]}`))
+	m := openJQ(t, playApp(t, `{"items":[{"n":1},{"n":2}]}`))
 	m = runJQProgram(m, ".items")
-	m = setProgram(m, jqMultiLineProgram)
+	m = setProgram(m, playMultiLineProgram)
 	m = toggleJQView(m)
-	if lines := jqQueryLines(t, m); len(lines) < 2 {
+	if lines := playQueryLines(t, m); len(lines) < 2 {
 		t.Fatalf("setup: the program must wrap, got %d row(s)", len(lines))
 	}
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModAlt})
-	if got := m.jqPlay.program; got != ".items" {
+	if got := m.play.program; got != ".items" {
 		t.Fatalf("alt+↑ = %q, want the recorded program", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModAlt})
-	if got := m.jqPlay.program; got != jqMultiLineProgram {
+	if got := m.play.program; got != playMultiLineProgram {
 		t.Fatalf("alt+↓ = %q, want the draft back", got)
 	}
 
 	// Walk to the first row, then off its top: the plain ↑ falls through.
-	for i := 0; i < len(jqQueryLines(t, m)); i++ {
+	for i := 0; i < len(playQueryLines(t, m)); i++ {
 		m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
 	}
-	if got := m.jqPlay.program; got != ".items" {
+	if got := m.play.program; got != ".items" {
 		t.Errorf("↑ off the first row = %q, want the history entry", got)
 	}
 }
@@ -1454,27 +1454,27 @@ func TestJQPlaygroundMultiLineHistoryKeys(t *testing.T) {
 // puts the caret on the clicked cell — the way to reach a stage far down a
 // long pipeline — and returns the keyboard to the query line.
 func TestJQPlaygroundMultiLineClickPlacesCaret(t *testing.T) {
-	m, lines := jqMultiLineApp(t)
+	m, lines := playMultiLineApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab}) // keyboard in the result
-	r, ok := m.lay.Panes[m.jqPlay.paneKey]
+	r, ok := m.lay.Panes[m.play.paneKey]
 	if !ok {
 		t.Fatal("the hosting pane must have a rect")
 	}
 	const col = 3
-	x := r.X + paneContentX + jqQueryPrefixW + col
+	x := r.X + paneContentX + playQueryPrefixW + col
 	y := r.Y + paneContentY + 1 // the second query row
 	tm, cmd := m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
 	m = drainCmd(tm.(Model), cmd)
-	if m.jqPlay.bufFocus {
+	if m.play.bufFocus {
 		t.Fatal("a click on the query header must return the keyboard to the query line")
 	}
-	if got, want := m.jqPlay.pos, lines[1].Start+col; got != want {
+	if got, want := m.play.pos, lines[1].Start+col; got != want {
 		t.Errorf("the click put the caret at %d, want %d", got, want)
 	}
 	// Typing lands where the click put it.
 	m = typeInto(m, "x")
 	m = dismissJQPopup(m)
-	if got := []rune(m.jqPlay.program)[lines[1].Start+col]; got != 'x' {
+	if got := []rune(m.play.program)[lines[1].Start+col]; got != 'x' {
 		t.Errorf("the rune at the clicked cell is %q, want the typed one", got)
 	}
 }
@@ -1483,31 +1483,31 @@ func TestJQPlaygroundMultiLineClickPlacesCaret(t *testing.T) {
 // cap scrolls under the caret, and the header the geometry reserves still
 // matches the header that is drawn.
 func TestJQPlaygroundMultiLineWindowFollowsCaret(t *testing.T) {
-	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, strings.Repeat(".aaaaaaaa | ", 40)+".a")
 	m = toggleJQView(m)
-	key := m.jqPlay.paneKey
+	key := m.play.paneKey
 	r, ok := m.lay.Panes[key]
 	if !ok {
 		t.Fatal("the hosting pane must have a rect")
 	}
 	width := paneInterior(r.W, paneChromeW)
-	before := jqQueryText(m, width)
-	for i := 0; i < jqMaxQueryRows+4; i++ {
+	before := playQueryText(m, width)
+	for i := 0; i < playMaxQueryRows+4; i++ {
 		m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
 	}
-	if after := jqQueryText(m, width); after == before {
+	if after := playQueryText(m, width); after == before {
 		t.Error("↑ past the top of the window must scroll the rows")
 	}
-	lines, rows, start := m.jqQueryWindow(width)
-	if cur := jqplay.LineAt(lines, m.jqPlay.pos); cur < start || cur >= start+rows {
+	lines, rows, start := m.playQueryWindow(width)
+	if cur := jqplay.LineAt(lines, m.play.pos); cur < start || cur >= start+rows {
 		t.Errorf("the caret's row %d is outside the window [%d,%d)", cur, start, start+rows)
 	}
-	if got, want := len(m.jqQueryRows(width))+jqInfoRows, m.jqHeaderRowsFor(key); got != want {
+	if got, want := len(m.playQueryRows(width))+playInfoRows, m.playHeaderRowsFor(key); got != want {
 		t.Errorf("rendered %d header rows, geometry reserved %d", got, want)
 	}
-	if rows > jqMaxQueryRows {
-		t.Errorf("the scrolled window is %d rows, want at most %d", rows, jqMaxQueryRows)
+	if rows > playMaxQueryRows {
+		t.Errorf("the scrolled window is %d rows, want at most %d", rows, playMaxQueryRows)
 	}
 }
 
@@ -1516,30 +1516,30 @@ func TestJQPlaygroundMultiLineWindowFollowsCaret(t *testing.T) {
 // history, the saved filters (#1995) and the seeding all keep working on one
 // line, and toggling the view moves neither the program nor the caret.
 func TestJQPlaygroundMultiLineKeepsOneLineProgram(t *testing.T) {
-	m, _ := jqMultiLineApp(t)
+	m, _ := playMultiLineApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	pos := m.jqPlay.pos
+	pos := m.play.pos
 
 	m = toggleJQView(m)
-	if m.jqPlay.program != jqMultiLineProgram || m.jqPlay.pos != pos {
-		t.Fatalf("the toggle moved the program or the caret: %q at %d", m.jqPlay.program, m.jqPlay.pos)
+	if m.play.program != playMultiLineProgram || m.play.pos != pos {
+		t.Fatalf("the toggle moved the program or the caret: %q at %d", m.play.program, m.play.pos)
 	}
 	m = toggleJQView(m)
-	if m.jqPlay.program != jqMultiLineProgram || m.jqPlay.pos != pos {
-		t.Fatalf("the toggle back moved the program or the caret: %q at %d", m.jqPlay.program, m.jqPlay.pos)
+	if m.play.program != playMultiLineProgram || m.play.pos != pos {
+		t.Fatalf("the toggle back moved the program or the caret: %q at %d", m.play.program, m.play.pos)
 	}
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
-	got, ok := m.jqPlay.hist.At(0)
-	if !ok || got != jqMultiLineProgram {
+	got, ok := m.play.hist.At(0)
+	if !ok || got != playMultiLineProgram {
 		t.Fatalf("history holds %q (ok=%v), want the program as one line", got, ok)
 	}
 	m = saveFilter(t, m, "multi line", false)
-	f, ok := loadJQFilters(jqplay.ScopeProject).Get("multi line")
-	if !ok || f.Program != jqMultiLineProgram {
+	f, ok := loadPlayFilters(jqplay.DialectJQ, jqplay.ScopeProject).Get("multi line")
+	if !ok || f.Program != playMultiLineProgram {
 		t.Errorf("saved filter = %+v (ok=%v), want the program as one line", f, ok)
 	}
-	if strings.Contains(m.jqPlay.program, "\n") {
+	if strings.Contains(m.play.program, "\n") {
 		t.Error("the query line must never hold a line break")
 	}
 }
@@ -1547,13 +1547,13 @@ func TestJQPlaygroundMultiLineKeepsOneLineProgram(t *testing.T) {
 // TestJQPlaygroundMultiLineHints (#2038): the info row says which meaning the
 // arrows have in the view in front of the user.
 func TestJQPlaygroundMultiLineHints(t *testing.T) {
-	m, _ := jqMultiLineApp(t)
-	got := ansi.Strip(m.jqInfoRow(240))
+	m, _ := playMultiLineApp(t)
+	got := ansi.Strip(m.playInfoRow(240))
 	if !strings.Contains(got, "↑/↓ lines") || !strings.Contains(got, "alt+↑/↓ history") {
 		t.Errorf("the multi-line hints = %q, want the row and history keys", got)
 	}
 	m = toggleJQView(m)
-	if got := ansi.Strip(m.jqInfoRow(240)); !strings.Contains(got, "↑/↓ history") {
+	if got := ansi.Strip(m.playInfoRow(240)); !strings.Contains(got, "↑/↓ history") {
 		t.Errorf("the one-line hints = %q, want the history keys", got)
 	}
 }

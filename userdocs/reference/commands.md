@@ -108,9 +108,9 @@ bring their own.
 | Saved jq Filters… | `json.jqFilters` | — | — | everywhere |
 | jq Playground… | `json.jqPlayground` | — | — | everywhere |
 | jq Playground at Cursor Path… | `json.jqPlaygroundAtPath` | — | — | everywhere |
-| Toggle Full jq Query View | `json.jqQueryView` | `ctrl+alt+e` | — | everywhere |
+| Toggle Full Query View | `json.jqQueryView` | `ctrl+alt+e` | — | everywhere |
 | Rename Saved jq Filter… | `json.jqRenameFilter` | — | — | everywhere |
-| Save jq Filter… | `json.jqSaveFilter` | — | — | everywhere |
+| Save Playground Filter… | `json.jqSaveFilter` | — | — | everywhere |
 | Import JetBrains Keymap XML… | `keymap.importJetBrains` | — | — | everywhere |
 | Open Rotated Log Set (Merged Timeline) | `log.openRotatedSet` | — | — | everywhere |
 | Markdown Preview | `markdown.preview` | `cmd+alt+m` | — | everywhere |
@@ -210,6 +210,10 @@ bring their own.
 | Restore Default Layout | `window.restoreLayout` | `shift+f12` | — | everywhere |
 | Save Window Layout… | `window.saveLayout` | — | — | everywhere |
 | Set Default Window Layout… | `window.setDefaultLayout` | — | — | everywhere |
+| Saved yq Filters… | `yaml.yqFilters` | — | — | everywhere |
+| yq Playground… | `yaml.yqPlayground` | — | — | everywhere |
+| yq Playground at Cursor Path… | `yaml.yqPlaygroundAtPath` | — | — | everywhere |
+| Rename Saved yq Filter… | `yaml.yqRenameFilter` | — | — | everywhere |
 
 ## editor
 
