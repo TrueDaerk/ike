@@ -9,7 +9,7 @@ timestamp: 2026-08-21T12:00:00Z
 
 # Intention Actions
 
-Issue #2020. IntelliJ's alt+enter mixes server fixes with IDE intentions; IKE
+Issues #2020, #2025. IntelliJ's alt+enter mixes server fixes with IDE intentions; IKE
 does the same: one caret-anchored popup that merges **LSP code actions**
 ([lsp](./lsp.md), #8) with **built-in intention actions** whose applicability
 is decided from the caret context. Before this slice the popup was
@@ -26,7 +26,7 @@ internal/registry/            IntentionProviders() — dedup + deterministic ord
 internal/app/intentions.go    caret snapshot, merge, caret-anchored open, curl insert
 internal/app/codeactions.go   the palette mode over the merged entry list
 internal/editor/intentions.go exported caret probes (diag/hunk/toggle/conceal)
-plugins/lsp                   Intentions=true offer + the rename provider
+plugins/lsp                   Intentions=true offer + the position-gated rename provider
 ```
 
 ## The seam
@@ -138,9 +138,20 @@ Each entry delegates to the existing command; applicability per caret:
 | test at/above caret (`lang.HasTests` + `NearestTestAt`) | `run.testAtCursor`, `debug.testAtCursor` |
 | togglable caret word / selection | `editor.toggleValue`; `diff.compareWithClipboard` |
 
-The LSP plugin adds "Rename Symbol" (`lsp.rename`) gated on the attached
-server's rename capability (`Manager.RenameSupported`; `PrepareRename` still
-validates the exact position on pick).
+The LSP plugin adds "Rename Symbol" (`lsp.rename`), gated **twice** (#2025):
+the attached server must declare rename at all (`Manager.RenameSupported`) and
+`prepareRename` must accept this exact caret. The position check cannot live in
+the provider — `Items` is synchronous, the check is a server round trip — so
+the bridge validates instead (`plugins/lsp/renamegate.go`): `codeAction` fires
+`prepareRename` *concurrently* with the code-action request, so the popup waits
+on one round trip rather than two, and records the verdict for that one
+`(path, line, col)` before sending the message that makes the app query the
+providers. An unvalidated caret is not offered, and an edit to the buffer drops
+the verdict. Picking the entry reuses it instead of asking again — which is what
+makes the "cannot rename here" toast unreachable from the popup; before #2025
+the entry showed up in every Markdown paragraph and led there. Servers without
+`prepareRename` keep the #426 contract: the manager answers ok without asking,
+so the entry stays offered and the rename attempt decides.
 
 **`http.insertCurlAsRequest`** is the one intention without a pre-existing
 command: the caret line's curl command (plus backslash continuations,
@@ -161,5 +172,7 @@ query, digit filters once a query is typed); `internal/palette/digit_test.go`
 covers the `DigitPicker` seam itself (fast path, out-of-range digit, opt-out
 modes, hint rendering);
 `internal/app/intentions_test.go` covers the curl conversion (in-place,
-scratch, continuations, dropped-flag notice); `internal/registry` covers
-provider dedup/order.
+scratch, continuations, dropped-flag notice); `plugins/lsp/renamegate_test.go`
+drives the position gate against a scripted server (accepted caret, rejected
+caret, no verdict, no `prepareRename` support, verdict dropped by an edit,
+verdict reused on pick); `internal/registry` covers provider dedup/order.
