@@ -101,6 +101,9 @@ func lastRune(text string) rune {
 // exactly the block, and characters typed afterwards form the next segment
 // rather than joining it.
 func (m *Model) pasteIntoInsert(text string) {
+	// Filling an empty, file-less buffer classifies it (#2037).
+	cand := m.detectCandidate()
+	defer func() { m.detectPastedLang(cand) }()
 	m.breakInsertUndo()
 	m.insertText(text)
 	m.breakInsertUndo()

@@ -300,6 +300,9 @@ func (m *Model) paste(reg rune, after bool, count int, gp bool) {
 	if e.Text == "" {
 		return
 	}
+	// Filling an empty, file-less buffer classifies it (#2037).
+	cand := m.detectCandidate()
+	defer func() { m.detectPastedLang(cand) }()
 	if m.hasCarets() {
 		if e.Linewise {
 			m.caretsOnePerLine()
@@ -940,16 +943,24 @@ func (m *Model) clipboardPaste() {
 func (m *Model) PasteText(text string) tea.Cmd {
 	before := m.docVersion
 	m.pasteText(text)
+	// This path bypasses maybeReparse, so it drains the auto-detect toast
+	// (#2037) itself — otherwise it would surface only at the next keystroke.
+	sig := m.takeDetectSignal()
 	if m.docVersion == before {
-		return nil
+		return sig
 	}
-	return m.Reparse()
+	return tea.Batch(sig, m.Reparse())
 }
 
 func (m *Model) pasteText(text string) {
 	if text == "" {
 		return
 	}
+	// Filling an empty, file-less buffer classifies it (#2037). The nested
+	// paths this delegates to gate themselves the same way, so the detection
+	// still runs exactly once.
+	cand := m.detectCandidate()
+	defer func() { m.detectPastedLang(cand) }()
 	// An open editor-internal input (search/ex line, find/replace panel,
 	// substitute confirm) owns the paste (#1380) — never the buffer under it.
 	if m.pasteIntoPrompt(text) {
