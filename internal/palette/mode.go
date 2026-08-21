@@ -28,6 +28,11 @@ type Item struct {
 	// palette, e.g. closing a background workspace from the recent-projects
 	// list. Nil hides the affordance.
 	Aux tea.Msg
+	// Hint is an optional leading shortcut label (#2023): the intention
+	// popup numbers its first nine rows "1"…"9" so a digit runs that action
+	// directly. It is rendered dim in front of the title and does not shift
+	// the Spans, which stay title-relative.
+	Hint string
 	// AuxGlyph overrides the aux zone's default "✕" glyph (#1418), so rows
 	// whose aux action is not a removal — closing an in-memory workspace
 	// keeps the history entry — are visually distinct. Single-cell glyphs
@@ -74,6 +79,17 @@ type Completer interface {
 // returning false leaves the tab press inert as before.
 type ItemCompleter interface {
 	CompleteItem(query string, sel Item) (string, bool)
+}
+
+// DigitPicker is an optional Mode extension (#2023): a locked mode whose
+// listed rows can be run by their number. While the palette's query is empty,
+// digits 1–9 activate the first nine rows directly (the same path as selecting
+// a row and pressing enter); once a filter query is typed, digits are ordinary
+// query text again. The intention popup enables it; every other mode leaves
+// digit keys alone.
+type DigitPicker interface {
+	// DigitShortcuts reports whether the digit fast path is active.
+	DigitShortcuts() bool
 }
 
 // RunCommandMsg is emitted when a command-mode item is activated. The root model

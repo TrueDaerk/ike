@@ -3,8 +3,8 @@ type: concept
 title: Intention Actions
 description: The alt+enter popup — LSP code actions merged with built-in caret-dependent intention actions through a plugin-registered provider seam, opened anchored at the caret.
 resource: internal/intention
-tags: [architecture, intentions, code-actions, palette, plugins]
-timestamp: 2026-08-20T12:00:00Z
+tags: [architecture, intentions, code-actions, palette, plugins, shortcuts]
+timestamp: 2026-08-21T12:00:00Z
 ---
 
 # Intention Actions
@@ -80,6 +80,48 @@ built-in kinds ("copy", "http", "vcs", "test", …) pass through
 `actionKindLabel` unchanged. The code-lens picker (#1912) leaves
 `Intentions` false and keeps the centered list.
 
+## Digit shortcuts
+
+Issue #2023. The common case is "pop the list, run the first or second
+entry", so the popup numbers its rows: the **first nine listed entries carry
+a `1`–`9` hint** in front of the title, and while the query is **empty** that
+digit runs the entry directly — the same dispatch as selecting the row and
+pressing enter. Arrow keys, enter and fuzzy filtering are unchanged; a digit
+past the last row is swallowed (the popup stays open) so the hints and the
+accepted keys never disagree.
+
+As soon as a filter query is typed the digits are ordinary query text again
+(titles like "Run test 2" stay reachable) and **the hints disappear** rather
+than renumbering against the filtered list — a visible number that no longer
+runs anything would lie. This is the chosen half of the #2023 design
+alternative.
+
+The seam is `palette.DigitPicker`, an optional Mode extension
+(`DigitShortcuts() bool`) the palette consults only for the **locked** mode
+and only on an empty query; `actionsMode` is its single implementer, so every
+other palette mode keeps plain digit typing. The hint itself is `Item.Hint`,
+a dim leading column rendered before the title (it does not shift the fuzzy
+`Spans`); `actionsMode.Results` assigns it by result index, so the numbers
+follow the kind-grouped merge order (★ preferred LSP, LSP, built-ins by
+kind). No setting — this is fixed UX.
+
+## Adding new actions
+
+**When a new action or command is added to IKE and its applicability is
+caret- or context-dependent, surface it as an intention item too.** The
+alt+enter list is only as useful as its coverage: a command that is only
+meaningful "here" (at this caret, in this file type, on this hunk) but is
+reachable only through the palette is invisible exactly when it applies.
+
+The cost is small — add an `Item{Title, Kind, CommandID}` to an existing
+provider in `internal/intention` when the caret fact already exists, or write
+a new `Provider` (plus, for a plugin, register it via the `Intentions`
+capability) when it needs a new one. Precompute any new caret fact into
+`Context` in `Model.intentionContext` instead of reaching into editor state
+from the provider, keep the item pointing at a **registered command**, and
+extend the `catalog_test.go` applicability table. Globally applicable
+commands (save all, open settings, …) stay out — they belong in the palette.
+
 ## The catalog
 
 Each entry delegates to the existing command; applicability per caret:
@@ -113,7 +155,11 @@ ignored-flags warning is preserved either way.
 `internal/intention/catalog_test.go` is the table-driven applicability
 matrix (one row per caret situation, want/want-not command ids);
 `internal/app/codeactions_test.go` covers merge order, both activation paths,
-the anchored open over a JSON buffer and the empty-merge toast;
+the anchored open over a JSON buffer, the empty-merge toast and the digit
+shortcuts (hints on the first nine unfiltered rows, digit runs on an empty
+query, digit filters once a query is typed); `internal/palette/digit_test.go`
+covers the `DigitPicker` seam itself (fast path, out-of-range digit, opt-out
+modes, hint rendering);
 `internal/app/intentions_test.go` covers the curl conversion (in-place,
 scratch, continuations, dropped-flag notice); `internal/registry` covers
 provider dedup/order.

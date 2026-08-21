@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-08-14T00:00:00Z
+timestamp: 2026-08-21T00:00:00Z
 ---
 
 # Command Palette
@@ -97,6 +97,15 @@ cursor over the raw query (prefix included) — arrows/home/end move it,
 `delete` removes forward, typed and pasted text insert at the cursor.
 `queryView` renders the cursor inside the prefix-stripped body; the finder's
 input fields share the same helper.
+
+**Digit shortcuts (`DigitPicker`, #2023).** An optional Mode extension —
+`DigitShortcuts() bool` — turns `1`–`9` into "run the nth listed row" while
+the palette is **locked** to that mode and the query is **empty**; the press
+activates the row through the ordinary activation path and a digit past the
+last row is swallowed. Any other mode (or a non-empty query) keeps the digit
+as query text. Rows advertise their number via `Item.Hint`, a dim leading
+column rendered before the title. Only the intention popup opts in — see
+[intention actions](./intention-actions.md).
 
 ## Command mode (`:`)
 

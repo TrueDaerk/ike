@@ -353,6 +353,12 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		(msg.Code == tea.KeyBackspace && msg.Mod == tea.ModSuper) {
 		return p.auxCmd()
 	}
+	// Digit fast path (#2023): in a DigitPicker mode — the intention popup —
+	// an empty query turns 1–9 into "run that row". With a filter query typed
+	// the digits fall through to ordinary query editing below.
+	if cmd, ok := p.quickPick(msg); ok {
+		return cmd
+	}
 	switch {
 	case msg.Code == tea.KeyEscape:
 		p.Close()
@@ -401,6 +407,32 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// quickPick resolves a digit press against the locked mode's numbered rows
+// (#2023). It only fires for a DigitPicker mode with an empty query and an
+// unmodified 1–9 key, and then activates the nth listed row exactly as enter
+// on that row would. handled is true for every digit the fast path owns — a
+// digit past the end of the list is swallowed rather than typed, so the hints
+// and the accepted keys stay in sync.
+func (p *Palette) quickPick(msg tea.KeyPressMsg) (cmd tea.Cmd, handled bool) {
+	if p.query != "" || p.sideFocus || msg.Mod != 0 {
+		return nil, false
+	}
+	d, ok := p.locked.(DigitPicker)
+	if !ok || !d.DigitShortcuts() {
+		return nil, false
+	}
+	if msg.Code < '1' || msg.Code > '9' {
+		return nil, false
+	}
+	i := int(msg.Code - '1')
+	if i >= len(p.items) {
+		return nil, true
+	}
+	p.selected = i
+	p.scrollToSelected()
+	return p.activate(), true
 }
 
 // completeBody resolves what tab should replace the query body with: the
@@ -879,6 +911,16 @@ func (p *Palette) badgeView(it Item) (string, int) {
 		1 + ansi.StringWidth(it.Badge)
 }
 
+// hintView renders an item's Hint (#2023) as a dim-accent shortcut column in
+// front of the title, one trailing space separating it from the title.
+func (p *Palette) hintView(it Item) (string, int) {
+	if it.Hint == "" {
+		return "", 0
+	}
+	return lipgloss.NewStyle().Foreground(p.accentColor()).Render(it.Hint) + " ",
+		ansi.StringWidth(it.Hint) + 1
+}
+
 // timeView renders an item's Time column (#1114) in the dim accent, unpadded
 // — the row layout owns the separation around it.
 func (p *Palette) timeView(it Item) (string, int) {
@@ -911,6 +953,7 @@ func (p *Palette) row(it Item, selected, focused bool, width int) string {
 	}
 
 	badge, badgeW := p.badgeView(it)
+	hint, hintW := p.hintView(it)
 	timeStr, timeW := p.timeView(it)
 	auxW := 0
 	aux := ""
@@ -918,7 +961,7 @@ func (p *Palette) row(it Item, selected, focused bool, width int) string {
 		auxW = auxGlyphW
 		aux = lipgloss.NewStyle().Foreground(p.theme().Border).Render(" " + auxGlyph(it))
 	}
-	avail := width - markerW
+	avail := width - markerW - hintW
 	rightW := detailW + auxW
 	if timeW > 0 {
 		rightW += timeW + timeSepW
@@ -940,7 +983,7 @@ func (p *Palette) row(it Item, selected, focused bool, width int) string {
 	if gap < 1 {
 		gap = 1
 	}
-	line := marker + title + badge + strings.Repeat(" ", gap) + detail
+	line := marker + hint + title + badge + strings.Repeat(" ", gap) + detail
 	if timeW > 0 {
 		line += strings.Repeat(" ", timeSepW) + timeStr
 	}
