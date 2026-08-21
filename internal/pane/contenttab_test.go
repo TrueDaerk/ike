@@ -36,16 +36,15 @@ func viewerPanes(t *testing.T, r *Registry) map[Kind]string {
 		KindDiff:     r.AddDiff(l, rr),
 		KindArchive:  r.AddArchiveView(arch),
 		KindData:     r.AddDataView(db),
-		KindHTTP:     r.AddHTTP(),
 	}
 }
 
 // TestKindTabbable pins the tabbable set: editors, terminals and the viewer
-// kinds are in; the explorer, the singleton tool windows and the merge view
-// stay out.
+// kinds are in; the explorer, the singleton tool windows — the HTTP response
+// viewer included (#2042) — and the merge view stay out.
 func TestKindTabbable(t *testing.T) {
-	in := []Kind{KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindHTTP}
-	out := []Kind{KindExplorer, KindVCS, KindDebug, KindProblems, KindStructure, KindUsages, KindBreakpoints, KindMerge}
+	in := []Kind{KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData}
+	out := []Kind{KindExplorer, KindVCS, KindDebug, KindProblems, KindStructure, KindUsages, KindBreakpoints, KindMerge, KindHTTP}
 	for _, k := range in {
 		if !KindTabbable(k) {
 			t.Errorf("kind %d must be tabbable", k)
@@ -175,39 +174,21 @@ func TestDetachContentTabRoundtrip(t *testing.T) {
 	}
 }
 
-// TestHTTPTabSplitsBackToSingletonKey: HTTP content adopted into a host (its
-// pane closed) re-registers under the singleton key when dragged back out.
-func TestHTTPTabSplitsBackToSingletonKey(t *testing.T) {
+// TestHTTPViewerNeverNests (#2042): the HTTP response viewer is a tool
+// window with a fixed position in the layout model, not editor content — it
+// refuses to detach into a tab, to convert into a tab host, and to restore
+// as a content tab (the legacy layout.json migration path).
+func TestHTTPViewerNeverNests(t *testing.T) {
 	r := newReg()
-	httpKey := r.AddHTTP()
-	src := r.Get(httpKey)
-	nested, ok := src.DetachContent()
-	if !ok {
-		t.Fatal("DetachContent failed for the HTTP viewer")
+	src := r.Get(r.AddHTTP())
+	if _, ok := src.DetachContent(); ok {
+		t.Fatal("the HTTP viewer must not detach into a tab")
 	}
-	r.Close(httpKey) // the vacated pane closes after adoption
-	host := r.Get(r.AddEditor())
-	if !host.AddContentTab(nested) {
-		t.Fatal("AddContentTab failed for the HTTP viewer")
+	if src.ConvertToTabHost() {
+		t.Fatal("the HTTP viewer must not convert into a tab host")
 	}
-	c, ok := host.DetachContentTab(1) // tab 0 is the host's scratch document
-	if !ok {
-		t.Fatal("detach failed")
-	}
-	key, ok := r.AddContentPaneFrom(c)
-	if !ok || key != HTTPKey {
-		t.Fatalf("HTTP re-registers under %q, want %q", key, HTTPKey)
-	}
-}
-
-// TestAddContentPaneFromRefusesTakenSingleton: while an instance holds the
-// "http" key, a second HTTP registration is refused instead of colliding.
-func TestAddContentPaneFromRefusesTakenSingleton(t *testing.T) {
-	r := newReg()
-	first := r.Get(r.AddHTTP())
-	nested, _ := first.DetachContent() // the key "http" stays registered
-	if _, ok := r.AddContentPaneFrom(nested); ok {
-		t.Fatal("a taken singleton key must refuse re-registration")
+	if nested := r.NewContentPane(KindHTTP, "", "", "", ""); nested != nil {
+		t.Fatal("a legacy nested-http tab must restore as nothing")
 	}
 }
 

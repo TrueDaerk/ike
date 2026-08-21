@@ -894,8 +894,8 @@ func suffixedKey(base string, n int) string {
 
 // mintContentKey allocates the next key of a viewer kind (#1778) — the same
 // counters the Add* constructors advance, so tab-detached content re-keys
-// without collisions. The HTTP viewer keeps its singleton key; unknown kinds
-// yield "".
+// without collisions. Unknown kinds — the HTTP viewer included, which is a
+// fixed-position tool window and never lives in a tab (#2042) — yield "".
 func (r *Registry) mintContentKey(kind Kind) string {
 	switch kind {
 	case KindMarkdown:
@@ -913,8 +913,6 @@ func (r *Registry) mintContentKey(kind Kind) string {
 	case KindData:
 		r.datas++
 		return suffixedKey(dataKeyBase, r.datas)
-	case KindHTTP:
-		return HTTPKey
 	}
 	return ""
 }
@@ -923,7 +921,9 @@ func (r *Registry) mintContentKey(kind Kind) string {
 // it (#1778): the tab restore's constructor, mirroring what the Add*Key
 // restore paths build for dedicated panes. path/path2/rev/rev2 follow the
 // paneIdentity conventions (diff panes use all four, the others just path).
-// It returns nil for kinds that cannot live in tabs.
+// It returns nil for kinds that cannot live in tabs — the HTTP viewer
+// included since #2042, so a legacy layout.json with a nested "http" tab
+// restores without that tab instead of crashing.
 func (r *Registry) NewContentPane(kind Kind, path, path2, rev, rev2 string) *Instance {
 	if kind == KindES {
 		// The console's identity is its endpoint name (carried as path), like
@@ -954,8 +954,6 @@ func (r *Registry) NewContentPane(kind Kind, path, path2, rev, rev2 string) *Ins
 		inst.df = diff.NewFiles(key, path, path2, r.pal)
 		inst.df.SetEditable(true)
 		r.applyDiffConfig(inst)
-	case KindHTTP:
-		inst.hp = httppane.New(r.pal)
 	default:
 		return nil
 	}
@@ -965,8 +963,7 @@ func (r *Registry) NewContentPane(kind Kind, path, path2, rev, rev2 string) *Ins
 // AddContentPaneFrom registers a live content instance — detached from a tab
 // (#1778) — as its own pane under a freshly minted key of its kind, so a
 // dragged-out viewer tab becomes a dedicated pane again without reloading.
-// The HTTP viewer keeps its singleton key and is refused while that key is
-// taken. It returns the new pane key and success.
+// It returns the new pane key and success.
 func (r *Registry) AddContentPaneFrom(inst *Instance) (string, bool) {
 	if inst == nil {
 		return "", false

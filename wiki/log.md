@@ -1,5 +1,43 @@
 # Log
 
+## 2026-08-21 (Layouts: the saved layout is the whole truth, #2042)
+
+- **Apply is verbatim**: applying a saved layout (#1175) reproduces the
+  snapshot exactly — tool panes, multi-tool tab hosts and singleton panels
+  included — matching what the startup restore always did. The #1899
+  apply-time reconciliation ("current slot config wins",
+  `internal/app/layouts_slots.go`) is **removed**; the `[tools.layout]`
+  template now only governs where tools open at *runtime*. A live configured
+  tool the applied layout does not mention re-places at its slot/home
+  position (`leftoverConfiguredTools`/`replaceToolPane`) instead of grafting
+  into the flexible region.
+- **Multi-tool panes are first-class**: a `tools` slot re-slots the live host
+  whose tab composition best matches the saved tool list (`takeBestHost`; a
+  host sharing no tool is never adopted, so tool areas cannot swap) and
+  restores any saved tool missing from its tabs in place
+  (`restoreMissingToolTabs`) — save/apply/restart/switch reproduce exactly
+  the saved tab set.
+- **Project switch groups tools**: `attachGlobalToolIn` tab-joins at every
+  tier — slot resident, home-dock occupant (the "global tools never
+  tab-host" rule is gone; the switch detaches tab-hosted globals tab-wise),
+  and, for unplaced tools, an existing tool pane/tool host (`toolAreaPane`)
+  — before falling back to the adaptive split, so arriving tools land
+  grouped at their configured position, never scattered over the editor
+  area. Fresh opens at an occupied home dock tab-join for global tools too
+  (`openToolAtHome`; the `dockTabs` flag is gone).
+- **HTTP viewer is a tool**: `KindHTTP` left `pane.KindTabbable` — the
+  response viewer no longer nests as a content tab (which made every later
+  save/apply treat it as anonymous editor content), keeps its edge-only drag
+  zones and always persists/applies as the fixed-position `http` singleton.
+  A legacy `layout.json` with a nested `http` content tab restores without
+  that tab (the viewer restored empty anyway) — no crash, documented
+  migration.
+- The save-selector mini-map labels a multi-tool host with its tool names.
+- Docs: `wiki/architecture/pane-layout.md` (new model statement, rewritten
+  saved-layout bullets), `tool-panes.md`, `project-switching.md`. Tests:
+  `internal/app/layouts_redesign_test.go`, rewritten
+  `layouts_slots_test.go`, `internal/pane/contenttab_test.go`.
+
 ## 2026-08-21 (Editor: pasted content classifies an empty buffer, #2037)
 
 - **`lang.DetectContent`** (`internal/lang/detect.go`): the content-shaped

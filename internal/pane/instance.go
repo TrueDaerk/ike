@@ -597,10 +597,13 @@ func (i *Instance) AddTerminalTab(term terminal.Model) *terminal.Model {
 // editors and terminals natively, plus the viewer kinds. The explorer and the
 // singleton tool windows (VCS, Debug, Problems, Structure, Usages,
 // Breakpoints) keep their fixed toggle-driven roles, and a merge view stays a
-// dedicated pane — its conflict workflow is session-bound.
+// dedicated pane — its conflict workflow is session-bound. The HTTP response
+// viewer is a tool window with a fixed position in the layout model (#2042),
+// not editor content: it never nests as a tab, so a layout apply always
+// treats it as the singleton "http" tool pane.
 func KindTabbable(k Kind) bool {
 	switch k {
-	case KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindES, KindHTTP:
+	case KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindES:
 		return true
 	}
 	return false
@@ -655,8 +658,6 @@ func (i *Instance) DetachContent() (*Instance, bool) {
 		nested.dv, i.dv = i.dv, dataview.Model{}
 	case KindES:
 		nested.es, i.es = i.es, espane.Model{}
-	case KindHTTP:
-		nested.hp, i.hp = i.hp, httppane.Model{}
 	default:
 		return nil, false
 	}

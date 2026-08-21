@@ -156,12 +156,11 @@ func toolPaneTitle(t *terminal.Model) string {
 // configuration, not from [[tools.custom]] — reaches the same slot / home /
 // adaptive rules as a configured tool.
 type toolSpawn struct {
-	name     string   // tool identity (terminal.Model.SetTool)
-	label    string   // chrome label; "" keeps the tool name
-	argv     []string // program and arguments
-	dir      string   // working directory
-	env      []string // environment overlay
-	dockTabs bool     // may join a tab-capable dock occupant (#1889)
+	name  string   // tool identity (terminal.Model.SetTool)
+	label string   // chrome label; "" keeps the tool name
+	argv  []string // program and arguments
+	dir   string   // working directory
+	env   []string // environment overlay
 }
 
 // customToolSpawn describes the session of a [[tools.custom]] entry.
@@ -175,9 +174,6 @@ func (m *Model) customToolSpawn(entry config.ToolEntry) toolSpawn {
 		argv: append([]string{entry.Command}, entry.Args...),
 		dir:  dir,
 		env:  toolSpawnEnv(m.pal()),
-		// A global tool (#1890) never tab-hosts into a dock occupant: it stays
-		// a dedicated pane so the next project switch can detach it wholesale.
-		dockTabs: !entry.Global,
 	}
 }
 
@@ -343,9 +339,9 @@ func (m *Model) dockOccupant(zone layout.Zone) string {
 func (m *Model) openToolAtHome(sp toolSpawn, zone layout.Zone) bool {
 	ws := m.activeWS()
 	occupant := m.dockOccupant(zone)
-	// A global tool (#1890) never tab-hosts: it stays a dedicated pane so the
-	// next project switch can detach the whole session.
-	if occupant != "" && sp.dockTabs && canHostTabs(ws.Panes.Get(occupant)) && m.ensureTabHost(occupant) {
+	// Global tools (#1890) tab-join too (#2042): the project switch detaches
+	// tab-hosted global sessions tab-wise, so sharing the dock is safe.
+	if occupant != "" && canHostTabs(ws.Panes.Get(occupant)) && m.ensureTabHost(occupant) {
 		ws.Panes.Get(occupant).AddTerminalTab(m.newToolTab(sp))
 		m.setFocus(occupant)
 		m.rememberTool(sp.name, occupant)

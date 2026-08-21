@@ -10326,12 +10326,10 @@ func (m Model) dropZoneFor(d *dragState, key string, r layout.Rect) (layout.Zone
 
 // canHostTabs reports whether the pane can take a merged tab (#836, #1778):
 // an editor pane natively, every other tabbable kind (terminal/tool, viewer)
-// after in-place conversion. The explorer and the singleton tool windows stay
-// edge-only targets. The HTTP viewer is a tab *source* but not a host: a
-// converted host would sit on the singleton "http" key and block the tab
-// from ever splitting back out (AddContentPaneFrom minting).
+// after in-place conversion. The explorer and the singleton tool windows —
+// the HTTP response viewer included (#2042) — stay edge-only targets.
 func canHostTabs(inst *pane.Instance) bool {
-	return inst != nil && pane.KindTabbable(inst.Kind()) && inst.Kind() != pane.KindHTTP
+	return inst != nil && pane.KindTabbable(inst.Kind())
 }
 
 // ensureTabHost makes the target pane tab-hosting in place (#836): editors
@@ -10360,8 +10358,9 @@ func (m Model) dragCarriesTerminal(d *dragState) bool {
 }
 
 // dragCarriesContent reports whether the drag moves a whole viewer pane
-// (#1778) — markdown, image, diff, archive, data, HTTP — whose content a
-// tab-host target could adopt as a content tab.
+// (#1778) — markdown, image, diff, archive, data — whose content a tab-host
+// target could adopt as a content tab. The HTTP response viewer is a tool
+// window (#2042): its drag keeps the edge-only relocate zones.
 func (m Model) dragCarriesContent(d *dragState) bool {
 	if d.kind != dragMove {
 		return false

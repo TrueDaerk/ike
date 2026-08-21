@@ -211,12 +211,11 @@ func (m *Model) startInRunTool(cfg *run.Config, argv []string, dir string, env [
 // adaptive split). Reports whether the tool materialized.
 func (m *Model) openRunTool(cfg *run.Config, argv []string, dir string, env []string) bool {
 	sp := toolSpawn{
-		name:     runToolName,
-		label:    cfg.Name, // chrome names the pane/tab after the configuration
-		argv:     argv,
-		dir:      dir,
-		env:      env,
-		dockTabs: true,
+		name:  runToolName,
+		label: cfg.Name, // chrome names the pane/tab after the configuration
+		argv:  argv,
+		dir:   dir,
+		env:   env,
 	}
 	placement := m.runPlacement()
 	// A slot assignment (#1897) pins the Run tool like any other tool — it

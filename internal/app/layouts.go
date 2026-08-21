@@ -338,7 +338,7 @@ type applyState struct {
 	tools   map[string][]string // tool pane keys by tool name
 	used    map[string]bool     // resolved singleton keys (duplicate guard)
 	slots   []string            // resolved leaf keys in walk order
-	skip    map[string]bool     // live slotted panes held out of queues and grafts (#1899)
+	skip    map[string]bool     // leftover tool panes re-placed via config, held out of grafts (#2042)
 }
 
 // applyLayoutByName re-shapes the ACTIVE workspace to the named saved layout
@@ -384,8 +384,12 @@ func (m *Model) applyDefaultLayout() {
 }
 
 // applySnapshot re-shapes the active workspace to the snapshot's tree,
-// preserving live instances. It reports success; failure leaves the
-// workspace untouched.
+// preserving live instances. The snapshot is applied verbatim (#2042): the
+// layout — tool panes, tool-tab hosts and singleton panels included — is the
+// whole truth about positions, and no slot-template reconciliation rewrites
+// it (the pre-#2042 "current slot config wins" rule is gone; the
+// [tools.layout] template only governs where tools open at runtime). It
+// reports success; failure leaves the workspace untouched.
 func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) bool {
 	ws := m.activeWS()
 	reg := ws.Panes
@@ -395,35 +399,15 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 			hasFlex = true
 		}
 	}
-	// With a slot template active the slot config is authoritative (#1899):
-	// slotted snapshot leaves are pruned here and re-open through the slot
-	// engine after the ordinary apply, and live slotted panes are held out of
-	// the queues and grafts to survive in their slots. Singleton panels
-	// absent from a full layout keep the #791 hide semantics instead.
-	tpl := slotTemplate()
-	var slotOpens []slotOpen
-	var slotLive []slotResident
-	if tpl != nil {
-		tree, slotOpens = pruneSlottedLeaves(tree, ids, tpl)
-		for _, r := range m.liveSlotted(tpl) {
-			if r.panel && !hasFlex {
-				continue
-			}
-			slotLive = append(slotLive, r)
-		}
-	}
 	// Unconsumed live panes graft — in their current relative arrangement —
 	// into the flexible region (explicit placeholder or implicit host slot,
 	// #1577), so the clone of the pre-apply tree is that arrangement's source
 	// of truth.
 	liveClone := layout.Clone(ws.Tree)
 	st := &applyState{tools: map[string][]string{}, used: map[string]bool{}, skip: map[string]bool{}}
-	for _, r := range slotLive {
-		st.skip[r.key] = true
-	}
 	for _, key := range reg.Keys() {
 		inst := reg.Get(key)
-		if inst == nil || st.skip[key] {
+		if inst == nil {
 			continue
 		}
 		switch inst.Kind() {
@@ -449,6 +433,15 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 		m.host.Notify(host.Warn, "layout is malformed — nothing applied")
 		return false
 	}
+	// Leftover tool panes with a configured position (a slot assignment or a
+	// home placement) re-place through the runtime open rules after the apply
+	// instead of grafting into the layout's flexible region (#2042): a tool
+	// the layout does not mention lands where a fresh open would put it —
+	// never scattered over the editor area.
+	replace := m.leftoverConfiguredTools(st)
+	for _, key := range replace {
+		st.skip[key] = true
+	}
 	if hasFlex {
 		// A selective layout (#1568) never merges: everything the slots did
 		// not consume keeps its pane and flows into the placeholder region.
@@ -464,10 +457,8 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 	m.toolHide = nil
 	m.zoomed = ""
 	ws.Tree = newTree
-	if tpl != nil {
-		// Slotted occupants re-materialize through the slot engine: live
-		// slotted panes first, then the snapshot's pruned slot opens (#1899).
-		m.applySlots(tpl, slotLive, slotOpens, st)
+	for _, key := range replace {
+		m.replaceToolPane(key)
 	}
 	if key := firstEditorKey(st.slots); key != "" {
 		m.setFocus(key)
@@ -478,6 +469,117 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 	m.layout()
 	saveLayout(ws.Tree, ws.Panes)
 	return true
+}
+
+// leftoverConfiguredTools lists the live tool panes the resolve walk left in
+// the queues — dedicated tool panes and pure tool-tab hosts the layout has no
+// leaf for — whose tool has a configured position: a slot assignment (#1897)
+// or a home placement (#1889). Those re-place through the runtime open rules
+// (replaceToolPane); unconfigured leftovers keep the #1577 graft, preserving
+// their relative arrangement.
+func (m *Model) leftoverConfiguredTools(st *applyState) []string {
+	reg := m.activeWS().Panes
+	pending := map[string]bool{}
+	for _, keys := range st.tools {
+		for _, key := range keys {
+			pending[key] = true
+		}
+	}
+	for _, key := range st.hosts {
+		pending[key] = true
+	}
+	var out []string
+	// Registry order keeps the re-placement deterministic (st.tools is a map).
+	for _, key := range reg.Keys() {
+		if !pending[key] {
+			continue
+		}
+		inst := reg.Get(key)
+		if inst == nil {
+			continue
+		}
+		switch inst.Kind() {
+		case pane.KindTerminal:
+			name := inst.Terminal().Tool()
+			if _, slot := assignedSlot(name); slot != "" {
+				out = append(out, key)
+				continue
+			}
+			if entry, ok := toolEntry(name); ok {
+				if _, ok := toolHomeZone(entry.Placement); ok {
+					out = append(out, key)
+				}
+			}
+		case pane.KindEditor:
+			if slot := tabHostSlot(inst); slot != "" {
+				if tpl := slotTemplate(); tpl != nil && tpl.HasSlot(slot) {
+					out = append(out, key)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// replaceToolPane re-places one leftover tool pane after an apply, following
+// the fresh-open precedence (#2042): its assigned slot pins it — the pane
+// keeps its own identity, so an occupied slot subdivides (the
+// placePaneInSlot rule) rather than merging the pane's sessions into the
+// resident's tabs — else the home dock. The pane already lost its leaf
+// (skipped by the grafts), so a placement failure degrades to the adaptive
+// split off the first editor slot — a session is never dropped.
+func (m *Model) replaceToolPane(key string) {
+	ws := m.activeWS()
+	inst := ws.Panes.Get(key)
+	if inst == nil {
+		return
+	}
+	name := ""
+	switch inst.Kind() {
+	case pane.KindTerminal:
+		name = inst.Terminal().Tool()
+	case pane.KindEditor:
+		if slot := tabHostSlot(inst); slot != "" {
+			if tpl := slotTemplate(); tpl != nil && tpl.HasSlot(slot) && m.placePaneInSlot(tpl, slot, key) {
+				return
+			}
+		}
+	}
+	if name != "" {
+		if tpl, slot := assignedSlot(name); slot != "" && m.placePaneInSlot(tpl, slot, key) {
+			return
+		}
+		if entry, ok := toolEntry(name); ok {
+			if zone, ok := toolHomeZone(entry.Placement); ok {
+				if occupant := m.dockOccupant(zone); occupant != "" {
+					share := layout.ZoneBottom
+					if zone == layout.ZoneTop || zone == layout.ZoneBottom {
+						share = layout.ZoneRight
+					}
+					if tree, ok := layout.SplitLeaf(ws.Tree, occupant, key, share); ok {
+						ws.Tree = tree
+						return
+					}
+				} else {
+					ws.Tree = layout.DockNew(ws.Tree, key, zone, toolDockShare)
+					return
+				}
+			}
+		}
+	}
+	// Last resort: split off the first content leaf so the session stays
+	// reachable (#1275).
+	leaves := layout.Leaves(ws.Tree)
+	if len(leaves) == 0 {
+		return
+	}
+	target := firstEditorKey(leaves)
+	if target == "" {
+		target = leaves[0]
+	}
+	if tree, ok := layout.SplitLeaf(ws.Tree, target, key, m.auxZone(target)); ok {
+		ws.Tree = tree
+	}
 }
 
 // graftFlex resolves the flexible placeholder of a selective layout (#1568):
@@ -499,8 +601,8 @@ func (m *Model) graftFlex(newTree, liveClone layout.Node, st *applyState) layout
 	}
 	sub := liveClone
 	for _, key := range layout.Leaves(liveClone) {
-		// Slotted panes (st.skip) never count as leftovers (#1899): they
-		// re-materialize in their template slots after the apply instead.
+		// Configured tool panes (st.skip) never count as leftovers (#2042):
+		// they re-place at their configured position after the apply instead.
 		if consumed[key] || st.skip[key] || reg.Get(key) == nil {
 			if p, ok := layout.Close(sub, key); ok {
 				sub = p
@@ -565,7 +667,7 @@ func (m *Model) graftImplicit(newTree, liveClone layout.Node, st *applyState) la
 	}
 	graftable := func(key string) bool {
 		if st.skip[key] {
-			return false // slotted panes re-materialize in their slots (#1899)
+			return false // configured tool panes re-place at their position (#2042)
 		}
 		inst := reg.Get(key)
 		if inst == nil {
@@ -780,12 +882,15 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		}
 		return m.spawnShellPane(), true
 	case "tools":
-		// A tools pane (#1989): a live tool-tab host re-slots, else the saved
-		// tools restart as tabs of a fresh host. The content queue is never
-		// consumed — the layout's editor slots keep their panes.
-		if len(st.hosts) > 0 {
-			key := st.hosts[0]
-			st.hosts = st.hosts[1:]
+		// A tools pane (#1989): the live tool-tab host whose tab composition
+		// best matches the saved tool list re-slots — not blind queue order
+		// (#2042), so two multi-tool hosts never swap places — and any saved
+		// tool missing from its tabs restores in place, so the pane comes
+		// back exactly as saved. With no live host the saved tools restart as
+		// tabs of a fresh host. The content queue is never consumed — the
+		// layout's editor slots keep their panes.
+		if key := takeBestHost(reg, st, id.Tools); key != "" {
+			m.restoreMissingToolTabs(reg, key, id.Tools)
 			return key, true
 		}
 		key := reg.AddEditor()
@@ -797,9 +902,10 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 			// (pre-#1989): a live tool host re-slots there before any content
 			// pane is consumed, so the tools pane never swaps places with an
 			// editor.
-			key := st.hosts[0]
-			st.hosts = st.hosts[1:]
-			return key, true
+			if key := takeBestHost(reg, st, id.Tools); key != "" {
+				m.restoreMissingToolTabs(reg, key, id.Tools)
+				return key, true
+			}
 		}
 		if len(st.content) > 0 {
 			key := st.content[0]
@@ -816,6 +922,83 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		return key, true
 	}
 	return "", false
+}
+
+// takeBestHost dequeues the live tool-tab host whose hosted tool names best
+// match the saved list (#2042): an exact multiset match wins outright, else
+// the largest overlap, ties broken by queue (registry) order. A host sharing
+// no tool with the saved list is never adopted — it may be the exact match
+// of a later slot, and a mismatched adoption would swap two tool areas — so
+// "" also means "restart the saved tools fresh".
+func takeBestHost(reg *pane.Registry, st *applyState, saved []string) string {
+	want := map[string]int{}
+	for _, tool := range saved {
+		want[tool]++
+	}
+	bestIdx, bestScore, bestExact := -1, 0, false
+	for i, key := range st.hosts {
+		inst := reg.Get(key)
+		if inst == nil {
+			continue
+		}
+		tools, _ := editorPaneTools(inst)
+		have := map[string]int{}
+		for _, tool := range tools {
+			have[tool]++
+		}
+		score, exact := 0, len(tools) == len(saved)
+		for tool, n := range want {
+			if have[tool] < n {
+				exact = false
+				score += have[tool]
+			} else {
+				score += n
+			}
+		}
+		if score == 0 {
+			continue
+		}
+		if (exact && !bestExact) || (exact == bestExact && score > bestScore) {
+			bestIdx, bestScore, bestExact = i, score, exact
+		}
+	}
+	if bestIdx < 0 {
+		return ""
+	}
+	key := st.hosts[bestIdx]
+	st.hosts = append(st.hosts[:bestIdx], st.hosts[bestIdx+1:]...)
+	return key
+}
+
+// restoreMissingToolTabs appends the saved tools a re-slotted live host no
+// longer hosts (#2042) — a parked global session re-attaches, anything else
+// restarts — so a multi-tool pane restores with exactly its saved tab set.
+// Tabs beyond the saved set are kept: an apply never kills a session.
+func (m *Model) restoreMissingToolTabs(reg *pane.Registry, key string, saved []string) {
+	inst := reg.Get(key)
+	if inst == nil {
+		return
+	}
+	have := map[string]int{}
+	for i := 0; i < inst.TabCount(); i++ {
+		if tt := inst.TabTerminal(i); tt != nil && tt.Tool() != "" {
+			have[tt.Tool()]++
+		}
+	}
+	for _, tool := range saved {
+		if have[tool] > 0 {
+			have[tool]--
+			continue
+		}
+		entry, ok := toolEntry(tool)
+		if !ok {
+			continue // tool no longer configured: restores as nothing
+		}
+		if entry.Global && m.staleGlobalTool(entry) {
+			continue // explicitly closed elsewhere: must not resurrect (#1903)
+		}
+		inst.AddTerminalTab(m.restoredToolSession(reg, entry))
+	}
 }
 
 // restartToolTabs restarts the snapshot's tool sessions as terminal tabs of
@@ -997,6 +1180,39 @@ func identityMatches(id paneIdentity, inst *pane.Instance) bool {
 		}
 	}
 	return false
+}
+
+// singletonSlotKey maps a snapshot singleton identity kind to its fixed pane
+// key — the join point between kind-only snapshot identities and the
+// key-based [tools.layout] assign entries.
+func singletonSlotKey(kind string) string {
+	switch kind {
+	case "explorer":
+		return pane.ExplorerKey
+	case "vcs":
+		return pane.VCSKey
+	case "debug":
+		return pane.DebugKey
+	case "problems":
+		return pane.ProblemsKey
+	case "tests":
+		return pane.TestsKey
+	case "issues":
+		return pane.IssuesKey
+	case "structure":
+		return pane.StructureKey
+	case "dom":
+		return pane.DOMKey
+	case "xdoctor":
+		return pane.DoctorKey
+	case "usages":
+		return pane.UsagesKey
+	case "http":
+		return pane.HTTPKey
+	case "breakpoints":
+		return pane.BreakpointsKey
+	}
+	return ""
 }
 
 // liveLeaf reports whether key is a leaf of the current tree backed by a

@@ -206,10 +206,13 @@ func (m *Model) parkGlobalTool(name string, term terminal.Model) {
 // workspace — the same placement rules as a fresh spawn: a slot assignment
 // (#1897) pins it, an occupied tab-capable slot pane takes the live session
 // as a focused tab (#1901, mirroring openToolAtSlot; the next switch extracts
-// it tab-wise again); otherwise the home position (#1889) or the adaptive
-// auxZone places a dedicated pane — outside its slot a global tool never
-// tab-hosts, so the next switch can detach it wholesale. A failed splice puts
-// the session back on the manager instead of dropping it.
+// it tab-wise again); otherwise the home position (#1889), where a
+// tab-capable dock occupant likewise takes the session as a tab (#2042 — the
+// switch detaches tab-hosted globals tab-wise, so nothing blocks sharing);
+// otherwise an existing tool pane or tool-tab host adopts it as a tab, so
+// several unplaced tools group in one pane instead of scattering over the
+// editor area; the adaptive auxZone split is the last resort. A failed
+// splice puts the session back on the manager instead of dropping it.
 func (m *Model) attachGlobalTool(entry config.ToolEntry, term terminal.Model) {
 	m.attachGlobalToolIn(entry, term, true)
 }
@@ -227,24 +230,40 @@ func (m *Model) attachGlobalToolIn(entry config.ToolEntry, term terminal.Model, 
 		m.ws.ParkGlobalTool(entry.Name, term) // nowhere to attach; keep it parked
 		return
 	}
+	// A tab-capable pane already standing at the tool's place adopts the
+	// session as a focused tab: the slot resident (#1901), the home-dock
+	// occupant, or — with no configured position — any live tool pane / tool
+	// host, so unplaced tools group instead of scattering (#2042).
+	adoptInto := func(host string) bool {
+		if host == "" || !canHostTabs(ws.Panes.Get(host)) || !m.ensureTabHost(host) {
+			return false
+		}
+		term.SetParked(false)
+		if focus {
+			ws.ReturnFocus = ws.Panes.Focused()
+		}
+		ws.Panes.Get(host).AddTerminalTab(term)
+		if focus {
+			m.setFocus(host)
+		}
+		m.rememberTool(entry.Name, host)
+		m.layout()
+		saveLayout(ws.Tree, ws.Panes)
+		return true
+	}
 	tpl, slot := slotTemplate(), toolSlot(entry.Name)
 	slotted := tpl != nil && slot != "" && tpl.HasSlot(slot)
+	zone, homed := toolHomeZone(entry.Placement)
 	if slotted {
-		if resident := m.slotResidents()[slot]; resident != "" &&
-			canHostTabs(ws.Panes.Get(resident)) && m.ensureTabHost(resident) {
-			term.SetParked(false)
-			if focus {
-				ws.ReturnFocus = ws.Panes.Focused()
-			}
-			ws.Panes.Get(resident).AddTerminalTab(term)
-			if focus {
-				m.setFocus(resident)
-			}
-			m.rememberTool(entry.Name, resident)
-			m.layout()
-			saveLayout(ws.Tree, ws.Panes)
+		if adoptInto(m.slotResidents()[slot]) {
 			return
 		}
+	} else if homed {
+		if adoptInto(m.dockOccupant(zone)) {
+			return
+		}
+	} else if adoptInto(m.toolAreaPane()) {
+		return
 	}
 	term.SetParked(false)
 	if focus {
@@ -258,10 +277,10 @@ func (m *Model) attachGlobalToolIn(entry config.ToolEntry, term terminal.Model, 
 			m.reparkGlobalToolPane(entry.Name, key)
 			return
 		}
-	} else if zone, ok := toolHomeZone(entry.Placement); ok {
+	} else if homed {
 		if occupant := m.dockOccupant(zone); occupant != "" {
-			// A dock occupant shares the edge via a perpendicular split,
-			// like openToolAtHome's non-tabbable branch.
+			// A non-tabbable dock occupant shares the edge via a
+			// perpendicular split, like openToolAtHome's non-tabbable branch.
 			share := layout.ZoneBottom
 			if zone == layout.ZoneTop || zone == layout.ZoneBottom {
 				share = layout.ZoneRight
@@ -289,6 +308,38 @@ func (m *Model) attachGlobalToolIn(entry config.ToolEntry, term terminal.Model, 
 	m.rememberTool(entry.Name, key)
 	m.layout()
 	saveLayout(ws.Tree, ws.Panes)
+}
+
+// toolAreaPane picks the live pane an unplaced arriving tool should group
+// with (#2042): the first tree leaf — in registry order — that is a pure
+// tool-tab host or a dedicated tool pane. The Run tool's output pane and the
+// debuggee terminal stay out — they belong to their sessions, not to the
+// tools area. "" when the workspace has no tool area yet (the caller falls
+// back to a dedicated pane at the adaptive split).
+func (m *Model) toolAreaPane() string {
+	ws := m.activeWS()
+	if ws.Tree == nil {
+		return ""
+	}
+	inTree := layout.Panes(ws.Tree)
+	for _, key := range ws.Panes.Keys() {
+		if !inTree[key] {
+			continue
+		}
+		inst := ws.Panes.Get(key)
+		if inst == nil {
+			continue
+		}
+		if toolTabHost(inst) {
+			return key
+		}
+		if inst.Kind() == pane.KindTerminal && !inst.IsDebugTerm() {
+			if tool := inst.Terminal().Tool(); tool != "" && tool != runToolName {
+				return key
+			}
+		}
+	}
+	return ""
 }
 
 // attachOpenGlobalTools splices every still-parked global tool session into

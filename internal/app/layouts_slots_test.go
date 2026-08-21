@@ -8,11 +8,13 @@ import (
 )
 
 // layouts_slots_test.go covers the interaction of saved window layouts
-// (#1175) with named slot templates (#1897), defined in #1899: slotted tools
-// in a snapshot re-materialize through the slot engine at the template's
-// exact geometry, save→apply round-trips tabs-per-slot without duplicates,
-// live slotted panes survive an apply in their slots, and the current slot
-// config wins over a snapshot saved under a different config.
+// (#1175) with named slot templates (#1897) under the #2042 model: the
+// saved layout is the whole truth on apply — a snapshot saved with tools in
+// their slots reproduces that geometry because it was saved that way, a
+// snapshot saved under a different config restores at its saved positions
+// (the template only governs runtime opens), and a live slotted tool the
+// applied layout does not mention re-places at its configured position
+// instead of grafting into the layout's flexible region.
 
 // closeLeafTerminals ends every terminal session still holding a leaf —
 // dedicated panes and tab-hosted sessions — so sleepTool processes never
@@ -209,11 +211,11 @@ func TestApplyLayoutGlobalSlotTab(t *testing.T) {
 	}
 }
 
-// TestApplyLayoutSlottedNowButNotAtSave pins the mismatch rule: a snapshot
-// saved without any template restores its tool through the slot engine once
-// the tool is assigned — the snapshot position is only a hint for
-// non-slotted panes, the current slot config wins.
-func TestApplyLayoutSlottedNowButNotAtSave(t *testing.T) {
+// TestApplyLayoutWinsOverSlotConfig pins the #2042 rule: a snapshot saved
+// without any template restores its tool at the saved position even after
+// the template assigns the tool a slot — the layout is the whole truth on
+// apply; the slot config only governs where a runtime open would place it.
+func TestApplyLayoutWinsOverSlotConfig(t *testing.T) {
 	withTools(t, sleepTool("toolt"))
 	m := sized(t, 100, 40)
 	m = step(m, ToolOpenMsg{Name: "toolt"}) // adaptive placement, no template
@@ -221,28 +223,38 @@ func TestApplyLayoutSlottedNowButNotAtSave(t *testing.T) {
 	if !ok {
 		t.Fatal("snapshot failed")
 	}
+	wantTree, _, ok := layout.DecodeTree(snap.Tree)
+	if !ok {
+		t.Fatal("snapshot tree does not decode")
+	}
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"dev": snap}})
 	closeToolInstances(m, "toolt")
 	if inst := m.toolPane("toolt"); inst != nil {
 		m.activeWS().Panes.Close(inst.Key())
 	}
 
-	// Now the template assigns the tool; apply must use the slot, not the
-	// snapshot's adaptive position.
+	// Now the template assigns the tool; apply must restore the snapshot's
+	// arrangement, not re-route the tool through the slot engine.
 	issueLayout(t, []string{"T=toolt"}, sleepTool("toolt"))
 	m = step(m, ApplyLayoutMsg{Name: "dev"})
 	defer closeLeafTerminals(m)
-	tKey := m.slotResidents()["T"]
-	if tKey == "" {
-		t.Fatalf("tool must restart in its slot, residents %v", m.slotResidents())
+	inst := m.toolPane("toolt")
+	if inst == nil {
+		t.Fatalf("tool must restart on apply, leaves %v", leafSet(m))
 	}
 	root, ok := m.activeWS().Tree.(*layout.Split)
-	if !ok || root.Orient != layout.Vertical {
-		t.Fatalf("root = %#v, want the template's vertical strip split", m.activeWS().Tree)
+	if !ok {
+		t.Fatalf("root = %#v, want a split", m.activeWS().Tree)
 	}
-	ratioNear(t, root.Ratio, 2.0/3.0, "strip")
-	if l, ok := root.B.(*layout.Leaf); !ok || l.Pane != tKey {
-		t.Fatalf("bottom strip = %#v, want the T pane %q", root.B, tKey)
+	wantRoot, ok := wantTree.(*layout.Split)
+	if !ok {
+		t.Fatalf("snapshot root = %#v, want a split", wantTree)
+	}
+	if root.Orient != wantRoot.Orient {
+		t.Fatalf("root orientation = %v, want the snapshot's %v — the saved layout must win over the slot config", root.Orient, wantRoot.Orient)
+	}
+	if len(layout.Leaves(m.activeWS().Tree)) != len(layout.Leaves(wantTree)) {
+		t.Fatalf("leaf count = %d, want the snapshot's %d", len(layout.Leaves(m.activeWS().Tree)), len(layout.Leaves(wantTree)))
 	}
 }
 
