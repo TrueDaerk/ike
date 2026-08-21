@@ -102,15 +102,14 @@ func contentIdentity(inst *pane.Instance) (paneIdentity, bool) {
 		// backed sides so restore re-reads blobs instead of files (#508).
 		lr, rr := inst.Diff().Revs()
 		return paneIdentity{Kind: "diff", Path: inst.Diff().LeftPath(), Path2: inst.Diff().RightPath(), Rev: lr, Rev2: rr}, true
-	case pane.KindHTTP:
-		// The viewer restores empty (#1250): responses are session state.
-		return paneIdentity{Kind: "http"}, true
 	}
 	return paneIdentity{}, false
 }
 
 // contentKindFromString maps a persisted content kind back to its pane.Kind
-// (#1778); ok=false for unknown strings (a newer build's kind).
+// (#1778); ok=false for unknown strings (a newer build's kind) and for
+// "http" — the HTTP viewer stopped nesting as a tab (#2042), so a legacy
+// nested-http tab restores as nothing (the viewer restored empty anyway).
 func contentKindFromString(s string) (pane.Kind, bool) {
 	switch s {
 	case "markdown":
@@ -125,8 +124,6 @@ func contentKindFromString(s string) (pane.Kind, bool) {
 		return pane.KindES, true
 	case "diff":
 		return pane.KindDiff, true
-	case "http":
-		return pane.KindHTTP, true
 	}
 	return 0, false
 }

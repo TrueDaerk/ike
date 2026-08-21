@@ -145,12 +145,19 @@ func (m Model) layoutSelectCell(key string, r layout.Rect, ls *layoutSelectState
 }
 
 // layoutSelectLabel is the cell label: a configured tool pane (#741) shows
-// its tool name instead of TERMINAL; everything else follows paneLabel.
+// its tool name instead of TERMINAL, a pane hosting nothing but tool tabs
+// (#2042) lists its tool names so the mini-map reads as the layout that will
+// be saved; everything else follows paneLabel.
 func (m Model) layoutSelectLabel(key string) string {
-	if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindTerminal {
+	inst := m.activeWS().Panes.Get(key)
+	if inst != nil && inst.Kind() == pane.KindTerminal {
 		if tool := inst.Terminal().Tool(); tool != "" {
 			return strings.ToUpper(tool)
 		}
+	}
+	if toolTabHost(inst) {
+		tools, _ := editorPaneTools(inst)
+		return strings.ToUpper(strings.Join(tools, " · "))
 	}
 	return m.paneLabel(key)
 }

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Pane Layout & Drag
-description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store, named user-scoped saved layouts, and slot templates (#1897) deriving tool-window positions from an ASCII grid.
+description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store and named user-scoped saved layouts that are the whole truth on apply (#2042), tools and multi-tool tab hosts included; slot templates (#1897) only govern runtime tool opens.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-08-21T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -150,13 +150,16 @@ editor — keep the four-zone relocate behaviour everywhere.
 
 **Universal tabs (#1778).** Which kinds take part is one predicate,
 `pane.KindTabbable`: editors and terminals natively, plus the viewer kinds
-(markdown preview, image, diff, archive, data viewer, HTTP). The **explorer**
+(markdown preview, image, diff, archive, data viewer). The **explorer**
 and the **singleton tool windows** (VCS, Debug, Problems, Structure, Usages,
-Breakpoints) keep their fixed toggle-driven roles and stay edge-only targets,
-as does the merge view, whose conflict workflow is session-bound — their drags
-show edge zones only, never a silent no-op center drop. The **HTTP viewer** is
-a tab *source* but not a tab *host*: it sits on the singleton `http` pane key,
-so a converted host would block the tab from ever splitting back out. A whole
+Breakpoints, **HTTP**) keep their fixed toggle-driven roles and stay
+edge-only targets, as does the merge view, whose conflict workflow is
+session-bound — their drags show edge zones only, never a silent no-op
+center drop. The HTTP response viewer left the tabbable set in #2042: in the
+layout model it is a **tool with a fixed position**, and nesting it as a
+content tab made every later save/apply treat the response pane as anonymous
+editor content (a legacy layout.json with a nested `http` tab restores
+without that tab — the viewer restores empty anyway). A whole
 viewer pane dropped in a center zone hands its live content over
 (`dragCarriesContent` → `adoptContentPane`); the per-drag capability check is
 the kind-agnostic `dragCarriesTab` (files, terminal session or viewer content)
@@ -363,7 +366,12 @@ per-project state file rather than `settings.toml`:
 ## Saved window layouts (#1175)
 
 `internal/app/layouts.go` + `layouts_ui.go` add JetBrains' **Window Layouts**:
-named, user-scoped snapshots of the split tree.
+named, user-scoped snapshots of the split tree. The mental model since #2042
+is one sentence: **what you see is what is saved, and what is saved comes
+back exactly** — a layout covers editor areas *and* the tool arrangement
+(positions, dedicated tool panes, multi-tool tab groups, singleton panels),
+and applying it reproduces that arrangement without any competing
+slot-template rewrite.
 
 - A **snapshot** is the tree with canonically re-keyed leaves plus a
   **kind-only** identity per leaf — no paths, tab lists or revisions. Content
@@ -424,35 +432,42 @@ named, user-scoped snapshots of the split tree.
   becomes one scratch editor. At **startup** (default-layout materialization)
   a placeholder has no live panes to graft and materializes as one scratch
   editor slot.
-- **Tool tabs in snapshots (#1277, #1989):** a tab host (#836) whose tabs are
-  exactly one tool session and no file-backed editors snapshots as a dedicated
-  `tool` slot; a **pure multi-tool host** (tool tabs only, no editor or
-  content tabs) snapshots as kind `tools` with the tool names — on apply a
-  `tools` slot re-slots a live tool host or restarts the saved tools as tabs
-  of a fresh host, and **never consumes an editor slot's content pane**
-  (`implicitHostSlot` skips tool hosts too, so leftovers never graft into the
-  tools area). A mixed host — files alongside tools — stays an editor slot
-  that keeps the tool names, and a fresh editor slot restarts them as tabs on
-  apply (the startup restore of `id.Tools` already did the same); a legacy
-  snapshot's `editor`+`tools` identity re-slots a live tool host before any
-  content pane. Plain terminal tabs stay session-local either way.
-- **Slot templates (#1899):** with a `[tools.layout]` template active
-  (#1897), the **current slot config is authoritative** for slotted tools.
-  Apply prunes every snapshot leaf the template claims — dedicated tool
-  leaves, pure tool tab hosts, singleton panels with a slot assignment
-  (`pruneSlottedLeaves`, `internal/app/layouts_slots.go`) — runs the
-  ordinary apply on the rest, then re-opens the pruned occupants **through
-  the slot engine** (`applySlots`): template positions and proportions,
-  tools sharing a slot restored as tabs. Live slotted panes are held out of
-  the queues and grafts and survive the apply **in their slots** (they never
-  count as leftovers for the flexible region); singleton panels absent from
-  a full layout still hide as before. The kind-only tool name is the join
-  point to the `assign` map, so a snapshot saved under a different config
-  resolves to "current slot config wins": a tool slotted *now* lands in its
-  slot wherever the snapshot put it, a tool slotted only *at save time*
-  applies as an ordinary leaf at its snapshot position. `restoreLayout` and
-  layouts without slotted tools behave identically; without a template
-  nothing changes.
+- **Tool tabs in snapshots (#1277, #1989, #2042):** a tab host (#836) whose
+  tabs are exactly one tool session and no file-backed editors snapshots as a
+  dedicated `tool` slot; a **pure multi-tool host** (tool tabs only, no
+  editor or content tabs) snapshots as kind `tools` with the tool names in
+  tab order. On apply a `tools` slot re-slots the live tool host whose tab
+  composition **best matches the saved tool list** (`takeBestHost`: exact
+  multiset match first, then largest overlap; a host sharing no tool is
+  never adopted, so two tool areas cannot swap places), restores any saved
+  tool missing from the matched host's tabs in place
+  (`restoreMissingToolTabs` — a parked global session re-attaches, anything
+  else restarts; surplus live tabs are kept, an apply never kills a
+  session), or restarts all saved tools as tabs of a fresh host. A `tools`
+  slot **never consumes an editor slot's content pane** (`implicitHostSlot`
+  skips tool hosts too, so leftovers never graft into the tools area). A
+  mixed host — files alongside tools — stays an editor slot that keeps the
+  tool names, and a fresh editor slot restarts them as tabs on apply (the
+  startup restore of `id.Tools` already did the same); a legacy snapshot's
+  `editor`+`tools` identity re-slots a live tool host before any content
+  pane. Plain terminal tabs stay session-local either way. The multi-tool
+  pane invariant is: **save, apply, restart and project switch reproduce
+  exactly the saved tab set in the saved position**.
+- **The layout is the whole truth (#2042):** applying a saved layout applies
+  it **verbatim** — tool panes, tool-tab hosts and singleton panels land at
+  the layout's positions. The pre-#2042 reconciliation with `[tools.layout]`
+  slot templates ("current slot config wins", #1899: snapshot leaves pruned
+  and re-opened through the slot engine) is **gone**; apply now behaves
+  exactly like the startup restore, which always materialized the saved
+  tree as-is. The slot template remains the rule for **runtime opens** only:
+  where a tool lands when it is opened fresh and the current layout has no
+  pane for it (see [Tool Panes → Slot templates](./tool-panes.md)). One
+  consequence is deliberate: a live **configured** tool pane (slot-assigned
+  or with a home placement) that the applied layout does *not* mention
+  re-places at its configured position after the apply
+  (`leftoverConfiguredTools`/`replaceToolPane`) instead of grafting into the
+  flexible region — an unmentioned tool behaves as if opened fresh, and
+  unconfigured leftovers keep the #1577 graft.
 - **New projects:** `restoreLayout` falls back to materializing the designated
   default layout when the project has no persisted `layout.json`; the built-in
   `layout.Default` pair stays the last resort. A project that saves its own

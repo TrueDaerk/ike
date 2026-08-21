@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Custom TUI Tool Panes
-description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning tools to exact layout positions (#1897; #1946 adds `terminal`/`run`/`debug` as assignable targets plus settings-form value hints), global process-wide instances shared across workspaces (#1890) whose panes follow project switches (#1903), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, and the built-in Run tool that owns run output (#1905)."
+description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning runtime tool opens to exact layout positions (#1897; #1946 adds `terminal`/`run`/`debug` as assignable targets; since #2042 saved layouts win over the template on apply), global process-wide instances shared across workspaces (#1890) whose panes follow project switches grouped at their configured positions (#1903, #2042), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, and the built-in Run tool that owns run output (#1905)."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
-timestamp: 2026-08-18T12:00:00Z
+timestamp: 2026-08-21T00:00:00Z
 ---
 
 # Custom TUI Tool Panes (#741)
@@ -183,7 +183,11 @@ Implemented in `internal/app/tools_global.go`:
   rebuild, `attachOpenGlobalTools` splices every session still parked into
   the incoming workspace through the normal open path — the slot rule
   (#1897, tab-join when the slot pane is occupied, #1901), else the home
-  placement (#1889), else the adaptive split — **without moving focus**.
+  placement (#1889, likewise **tab-joining** a tab-capable dock occupant,
+  #2042), else **tab-joining an existing tool pane / tool-tab host**
+  (`toolAreaPane`, #2042 — several unplaced tools arrive grouped in one
+  pane instead of scattering as separate splits over the editor area), else
+  the adaptive split — **without moving focus**.
   This covers both a resumed parked workspace and a first-visit build from
   `layout.json`; a restore that already re-attached the session from the
   saved layout leaves nothing parked, so no duplicate can arise (first one
@@ -194,10 +198,11 @@ Implemented in `internal/app/tools_global.go`:
   (`TakeGlobalTool`) and splices it in (`attachGlobalTool`): a slot
   assignment pins it, an occupied tab-capable slot pane taking the live
   session as a **focused tab** (#1901, the same tab-in-slot rule as a fresh
-  open); otherwise a dedicated pane at the home position or adaptive
-  placement — outside its slot a global tool never tab-hosts into a dock
-  occupant, so the next switch can detach it wholesale. Only with no live
-  session anywhere does the command spawn a fresh process.
+  open); otherwise the home position, an existing tool area or the adaptive
+  placement — the same tab-joining precedence as the switch-in attach
+  (#2042; the switch detaches tab-hosted global sessions tab-wise, so
+  sharing a pane is safe everywhere). Only with no live session anywhere
+  does the command spawn a fresh process.
 - **Lifecycle** — parked workspaces never contain a global tool, so workspace
   switch, project close (#1355), close-from-list (#820) and LRU eviction
   (#780) cannot end it; it also gates none of those guards. It ends only when
@@ -364,18 +369,16 @@ ratio a cell fraction — so slots materialize through the ordinary
   round-trips a slotted arrangement verbatim with no new persisted state,
   and a re-attached global tool lands in its slot (`attachGlobalTool`),
   tab-joining an occupied one (#1901).
-- **Saved window layouts cooperate (#1899)** — applying a saved layout
-  (#1175) or the default (`window.restoreLayout`) while a template is active
-  keeps the slot config **authoritative**: slotted leaves are pruned from
-  the snapshot and re-materialize through the slot engine
-  (`internal/app/layouts_slots.go`), tabs-per-slot included, and live
-  slotted panes survive the apply in their slots instead of grafting into
-  the layout's flexible region. Snapshot identities are kind-only, so the
-  tool name joins against the *current* `assign` map — a mismatch between
-  save-time and apply-time config resolves to "current slot config wins",
-  the snapshot position remaining a hint for non-slotted panes only. After
-  any apply the derived residency matches the tree by construction, so
-  open/close/collapse/expand keep working exactly as specified here.
+- **Saved window layouts win on apply (#2042)** — applying a saved layout
+  (#1175) or the default (`window.restoreLayout`) applies the snapshot
+  **verbatim**, template or not: a tool saved at a position restores at that
+  position, exactly as the startup restore always did. The pre-#2042
+  apply-time reconciliation ("current slot config wins", #1899) is gone —
+  the template is a rule for *opens*, the layout is the truth for
+  *applies/restores*. A live slotted tool the applied layout does not
+  mention re-places at its slot after the apply (it behaves as if opened
+  fresh); since residency stays derived, the next slotted open after any
+  apply still rebuilds the defined slot arrangement as specified here.
 
 Built-in tool windows honor their assignment through the shared
 `insertToolPane` tail of every panel opener; the explorer participates as a
