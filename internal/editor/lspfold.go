@@ -22,10 +22,17 @@ import (
 // contribute; fold lists are small (one entry per foldable node), so merging
 // on demand keeps the collapsed set free of a second cache to invalidate.
 func (m Model) foldRanges() []highlight.Fold {
-	if !m.lspFolding || len(m.lspFolds) == 0 {
-		return m.folds
+	folds := m.folds
+	// Host-supplied ranges (#2029) merge the same way and win on a shared
+	// header: a host that knows its content's structure first-hand outranks a
+	// parse that depends on a registered grammar.
+	if len(m.hostFolds) > 0 {
+		folds = mergeFolds(folds, m.hostFolds, m.buf.LineCount())
 	}
-	return mergeFolds(m.folds, m.lspFolds, m.buf.LineCount())
+	if !m.lspFolding || len(m.lspFolds) == 0 {
+		return folds
+	}
+	return mergeFolds(folds, m.lspFolds, m.buf.LineCount())
 }
 
 // mergeFolds merges the Tree-sitter and LSP fold sets into pre-order (header

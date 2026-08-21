@@ -26,6 +26,27 @@
   key-table row; `architecture/keybindings.md`'s ledger and the generated
   reference pages pick up `json.jqQueryView`.
 
+## 2026-08-21 (fold objects and arrays in the jq result window, #2029)
+
+- **`jqplay.Folds`** (`internal/jqplay/fold.go`): the foldable objects and
+  arrays of a result, in pre-order, each with the number of members it holds —
+  a rune walk over the pretty-printed text counting delimiters outside strings,
+  never a re-decode. `Fold.Label` is the collapsed row's placeholder
+  (`⋯ 3 keys }`, `⋯ 12 items ]`).
+- **Host folds** (`internal/editor/hostfold.go`): `SetHostFolds` installs
+  ranges a host computed for a synthetic buffer — merged over the Tree-sitter
+  ranges by `foldRanges`, winning on a shared header — and `SetFoldSummary`
+  overrides the collapsed header's placeholder text. Everything else about
+  folding (#144, #1741) stays untouched: one fold engine, one collapsed set.
+- **jq playground** (`internal/app/jqplayground.go`): the result buffer folds
+  with `za`/`zc`/`zo`/`zM`/`zR`, nested included; the ranges are reinstalled
+  with every result, so a changed filter leaves no fold behind. The info row
+  advertises the keys while the buffer holds the keyboard.
+- **Why the playground computes its own ranges**: the result window must fold
+  in a cgo-free build (no grammar there), and only the structural scan knows a
+  node's *member* count, which is what the placeholder says.
+- See [jq Playground](/architecture/jq-playground.md#folding-the-result).
+
 ## 2026-08-21 (alt+enter in a fileless buffer froze the IDE, #2027)
 
 - **`host.Host.Send`** (`internal/host/host.go`): messages are queued into an
