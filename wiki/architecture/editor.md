@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-21T14:00:00Z
+timestamp: 2026-08-21T16:00:00Z
 ---
 
 # Editor
@@ -1320,6 +1320,39 @@ because routing by path skipped every path-less buffer. The user-facing picker, 
 status-line marker are described in
 [Language Registry](/architecture/languages.md#buffer-language-override--treat-buffer-as--2033)
 and [Intention Actions](/architecture/intention-actions.md#treat-buffer-as--2033).
+
+## Language detection on paste (#2037)
+
+The override above still needs a decision. The common case makes it for the
+user: content pasted into a **fresh, file-less buffer** is classified from the
+content itself. Every paste funnel in this package — vim `p`/`P` (`paste`), a
+clipboard paste in normal or insert mode (`clipboardPaste`,
+`pasteIntoInsert`), a visual-mode put (`visualPaste`) and the terminal's
+bracketed paste (`PasteText`) — takes a candidacy snapshot *before* the insert
+and classifies *after* it (`langdetect.go`). Nested funnels (`clipboardPaste`
+→ `paste`) re-check the gates, so a paste is never classified twice.
+
+The detection itself is `lang.DetectContent` — pure, table-tested and
+conservative, see
+[Language Registry](/architecture/languages.md#content-detection-on-paste-2037).
+It recognizes JSON, CSV/TSV, YAML, Markdown, XML/HTML, `.http` request blocks
+and curl commands (as `shell`); anything else stays plain text.
+
+Three properties keep it from becoming a nuisance:
+
+- **It fires into a blank slate only.** No file (a path classifies), no
+  override already set (a decision — the user's or an earlier detect — is
+  never overwritten), and nothing but whitespace in the buffer before the
+  paste. A paste into existing content never retypes it.
+- **It is silent on failure, quiet on success.** An unrecognized paste says
+  nothing; a recognized one emits one `NoticeMsg` naming the type
+  (`buffer language: detected json — alt+enter to change`). No modal, no
+  confirmation, nothing that interrupts the paste. The toast is parked in
+  `Model.detectSignal` because the vim paste paths return no command of their
+  own, and drained by `maybeReparse` (every buffer change passes it) or by
+  `PasteText`, which bypasses it.
+- **A wrong verdict costs nothing.** The language is not part of the
+  document: the #2033 picker changes or clears it without touching the text.
 
 ## Line endings & encodings (#66)
 

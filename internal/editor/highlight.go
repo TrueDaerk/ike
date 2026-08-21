@@ -22,6 +22,12 @@ import (
 // maybeReparse appends a parse command when the document version advanced during
 // this update (i.e. the buffer changed), so highlighting tracks every edit.
 func (m Model) maybeReparse(beforeVersion int, cmd tea.Cmd) (Model, tea.Cmd) {
+	// A paste that classified an empty file-less buffer (#2037) reports here:
+	// every buffer change funnels through this call, and the vim paste paths
+	// hand back no command of their own to carry the toast.
+	if sig := m.takeDetectSignal(); sig != nil {
+		cmd = tea.Batch(cmd, sig)
+	}
 	if m.docVersion == beforeVersion {
 		return m, cmd
 	}

@@ -44,6 +44,33 @@
   and the one-line decision; `architecture/text-input.md`'s site table notes
   the vertical motion.
 
+## 2026-08-21 (Editor: pasted content classifies an empty buffer, #2037)
+
+- **`lang.DetectContent`** (`internal/lang/detect.go`): the content-shaped
+  counterpart to the path-shaped lookups — a pure function, text in, language
+  id (or `""`) out, specified by a table in `detect_test.go`. It recognizes
+  JSON, XML/HTML, `.http` request blocks, curl commands (as `shell`), YAML,
+  Markdown and CSV/TSV, most-specific first. Every check is deliberately
+  conservative: JSON must parse, YAML needs every line to be structure plus
+  two keys or a `---`, Markdown needs a heading/fence/table/link, CSV needs
+  consistent widths and a table that is wide or tall. Prose, source code and
+  anything ambiguous get no verdict — the normal outcome.
+- **The paste trigger** (`internal/editor/langdetect.go`): every paste funnel
+  — vim `p`/`P`, clipboard paste in normal and insert mode, visual put, the
+  terminal's bracketed paste — snapshots candidacy *before* the insert and
+  classifies *after* it, installing the verdict through the #2033 override.
+  Gates: no file, no language already set, nothing but whitespace in the
+  buffer. Nested funnels re-check them, so one paste classifies once.
+- **Feedback is one toast**, never a modal: `buffer language: detected json —
+  alt+enter to change`, parked in `Model.detectSignal` (the vim paste paths
+  return no command) and drained by `maybeReparse` or `PasteText`. An
+  unrecognized paste says nothing at all, and a wrong verdict is corrected by
+  the #2033 picker without touching the text.
+- Tests: `internal/lang/detect_test.go` (the content → verdict table, positive
+  and negative), `internal/editor/langdetect_test.go` (the acceptance cases,
+  the three gates, the single toast, correctability, the vim and insert-mode
+  funnels).
+
 ## 2026-08-21 (Intentions: every entry audited for real applicability, #2026)
 
 - **The rule** (`wiki/architecture/intention-actions.md`): an intention entry
