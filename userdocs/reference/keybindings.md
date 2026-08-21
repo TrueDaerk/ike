@@ -37,6 +37,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Continue (debug) | `f9` | `f9` | `debug.continue` |
 | Debug file | `shift+f9` | `shift+f9` | `debug.start` |
 | Find in path | `cmd+shift+f` | `ctrl+shift+f` | `project.findInPath` |
+| Full jq query view | `ctrl+alt+e` | `ctrl+alt+e` | `json.jqQueryView` |
 | Go to file | `cmd+shift+o` | `ctrl+shift+o` | `project.goToFile` |
 | Go to pinned file 1 | `ctrl+shift+1` | `ctrl+shift+1` | `nav.pinGoto1` |
 | Go to pinned file 2 | `ctrl+shift+2` | `ctrl+shift+2` | `nav.pinGoto2` |

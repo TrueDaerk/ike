@@ -322,6 +322,13 @@ type OpenJQPlaygroundMsg struct{}
 // json.jqPlaygroundAtPath.
 type OpenJQPlaygroundAtPathMsg struct{}
 
+// ToggleJQQueryViewMsg toggles the playground's expanded query view (#2032):
+// the query line lays the whole program out over several wrapped rows —
+// broken at its `|` stages, highlighted like the one-line view — instead of
+// windowing one row around the cursor. Dispatched by json.jqQueryView; a no-op
+// while no playground is open.
+type ToggleJQQueryViewMsg struct{}
+
 // OpenMergedLogMsg is declared in logsets.go: it merges the focused log
 // buffer's rotation set into one chronological timeline (#1996).
 
@@ -436,6 +443,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("json.jqSaveFilter", "Save jq Filter…", SaveJQFilterPromptMsg{}),
 			appCommand("json.jqFilters", "Saved jq Filters…", ShowJQFiltersMsg{}),
 			appCommand("json.jqRenameFilter", "Rename Saved jq Filter…", ShowJQFiltersMsg{Rename: true}),
+			appCommand("json.jqQueryView", "Toggle Full jq Query View", ToggleJQQueryViewMsg{}),
 			appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),

@@ -4991,6 +4991,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openJQFilterPicker(msg.Rename)
 		return m, nil
 
+	case ToggleJQQueryViewMsg:
+		// json.jqQueryView (ctrl+alt+e, palette / Tools menu, #2032): show the
+		// whole program over several wrapped rows, or fold it back to the one
+		// windowed line.
+		m.toggleJQQueryView()
+		return m, nil
+
 	case InsertJQFilterMsg:
 		// A picked filter goes on the query line and runs (#1995), opening
 		// the playground first when none is up.

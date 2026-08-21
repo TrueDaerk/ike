@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-08-21T12:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -651,6 +651,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `file.rename` | `shift+f6` | delivered | `—` | live |
 | `http.run` | `ctrl+f9` | fragile | `palette` | live via palette |
 | `http.showResponse` | `cmd+shift+enter` | fragile | `ctrl+shift+f9` | live via ctrl+shift+f9 |
+| `json.jqQueryView` | `ctrl+alt+e` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `palette` | live via palette |
 | `lsp.codeAction` | `alt+enter` | fragile | `palette` | live via palette |
 | `lsp.definition` | `f4` | delivered | `—` | live |

@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-21 (jq playground: the full query expression on demand, #2032)
+
+- **`jqplay.Wrap` / `jqplay.LineAt`** (`internal/jqplay/wrap.go`, new): pure,
+  rune-indexed line breaking for a jq program — greedy packing that breaks at
+  top-level `|` stages (a `|` in a string or comment and `||` are not
+  boundaries), a hard cut at the width for a stage that is wider than a row,
+  and the blanks after a pipe dropped at a stage's row start.
+- **The full-query view** (`internal/app/jqplayground.go`): `json.jqQueryView`
+  (`ctrl+alt+e`, palette / Tools menu) toggles the one-line query header into a
+  wrapped multi-row one — same scanner colors, same cursor, program and result
+  untouched. `jqHeaderRowsFor` now reports the query rows plus the info row, so
+  the rendering, the result buffer's height and the mouse translation all move
+  with the header; the view caps at 8 rows, always leaves 3 rows of result, and
+  windows around the cursor's row past the cap. The info row gained a
+  `· query cut` marker in Warning whenever the rows show less than the program
+  holds, and the key hints name the chord bound to the command.
+- **Tests**: `internal/jqplay/wrap_test.go` (pipe breaks, full coverage of the
+  program at five widths, hard splits, literals, `LineAt`);
+  `internal/app/jqplayground_test.go` (the whole program readable after the
+  toggle, highlighting kept, the header/result geometry stays exact, the cap
+  windows and flags, the hints document the chord from both focuses, the
+  command form).
+- **Wiki**: `architecture/jq-playground.md` gains "The full-query view" and the
+  key-table row; `architecture/keybindings.md`'s ledger and the generated
+  reference pages pick up `json.jqQueryView`.
+
 ## 2026-08-21 (fold objects and arrays in the jq result window, #2029)
 
 - **`jqplay.Folds`** (`internal/jqplay/fold.go`): the foldable objects and
