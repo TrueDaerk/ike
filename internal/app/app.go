@@ -8358,6 +8358,17 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				return m, m.palette.Click(msg.X-bx, msg.Y-by)
 			}
 		}
+		// The wheel scrolls the column under the cursor (#2041): the recent
+		// dialog's projects column has its own window, so a notch over it must
+		// move that column and not the file list.
+		if msg.action == mouseWheel && inRect(msg.X, msg.Y, bx, by, lipgloss.Width(v), lipgloss.Height(v)) {
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				m.palette.Wheel(msg.X-bx, msg.Y-by, -wheelLines*msg.ticks())
+			case tea.MouseWheelDown:
+				m.palette.Wheel(msg.X-bx, msg.Y-by, wheelLines*msg.ticks())
+			}
+		}
 		return m, nil
 	}
 	// The popup terminal layer (#1398, floating panels #1793) hit-tests after

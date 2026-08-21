@@ -43,6 +43,26 @@
   gains "The yq dialect" (engine trade-off, what differs, what is shared);
   folding, the filter library, the history and the keys table updated.
 
+## 2026-08-21 (Palette: projects-column scroll window + scrolloff, #2041)
+
+- **The Recent Projects column scrolls**: it gained its own window (`sideTop`,
+  `scrollSideToSelected`, `sideVisibleRows`) beside the main list's `top`.
+  Keyboard navigation, paging, rendering and the click mapping all go through
+  it, so with more projects than rows everything below the fold is reachable
+  again instead of invisible; `enter` and the aux actions (close workspace,
+  prune from history) still hit the selected row after scrolling.
+- **Scrolloff of one entry**: both palette windows follow the selection through
+  the new `ui.ScrollToShowOff(top, sel, height, n, off)` with `off = 1`, so the
+  window moves on already when the cursor reaches the second-to-last visible
+  row — the next entry is always visible. The margin is capped at
+  `(height-1)/2` and clipped against the list ends, so short lists and the
+  first/last entries do not jitter or scroll blank rows into view.
+  `ScrollToShow` is now the `off = 0` case of the same helper.
+- **The wheel reaches the palette**: `Palette.Wheel(x, y, delta)` scrolls the
+  column under the pointer (projects column on the left, results on the right),
+  moving the column focus with it like a click does and clamping at both ends;
+  `handleMouse` routes coalesced wheel bursts inside the box to it.
+
 ## 2026-08-21 (Layouts: the saved layout is the whole truth, #2042)
 
 - **Apply is verbatim**: applying a saved layout (#1175) reproduces the
