@@ -80,6 +80,14 @@ built-in kinds ("copy", "http", "vcs", "test", …) pass through
 `actionKindLabel` unchanged. The code-lens picker (#1912) leaves
 `Intentions` false and keeps the centered list.
 
+**Buffers with no file** (a `ctrl+t` tab, an unsaved `cmd+n` buffer, the split
+pane a pasted response body lands in) take the bridge's short path: nothing to
+ask a server about, so the offer is empty and only the built-ins that need no
+path apply (curl line, JWT, conceal explain, value toggle, clipboard diff) —
+or the toast. That answer is handed back as a `tea.Cmd`, never `Send`, because
+it is produced on the Update goroutine; `Send`ing it there froze the IDE
+(#2027, see [plugins](./plugins.md#host-api)).
+
 ## Digit shortcuts
 
 Issue #2023. The common case is "pop the list, run the first or second
@@ -166,8 +174,9 @@ ignored-flags warning is preserved either way.
 `internal/intention/catalog_test.go` is the table-driven applicability
 matrix (one row per caret situation, want/want-not command ids);
 `internal/app/codeactions_test.go` covers merge order, both activation paths,
-the anchored open over a JSON buffer, the empty-merge toast and the digit
-shortcuts (hints on the first nine unfiltered rows, digit runs on an empty
+the anchored open over a JSON buffer, the empty-merge toast, both fileless
+cases (#2027: applicable built-ins open the anchored picker, nothing
+applicable toasts) and the digit shortcuts (hints on the first nine unfiltered rows, digit runs on an empty
 query, digit filters once a query is typed); `internal/palette/digit_test.go`
 covers the `DigitPicker` seam itself (fast path, out-of-range digit, opt-out
 modes, hint rendering);

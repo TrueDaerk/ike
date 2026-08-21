@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/editor"
 	"ike/internal/intention"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
@@ -284,6 +285,67 @@ func TestIntentionPopupDigitFiltersWithQuery(t *testing.T) {
 	}
 	if got := m.palette.Query(); got != "c2" {
 		t.Fatalf("query = %q, want the typed digit appended", got)
+	}
+}
+
+// filelessModel puts content into the untitled startup buffer — no path, the
+// shape a cmd+n tab and the split pane a pasted response body lands in share
+// (#2027) — and parks the caret at (line, col).
+func filelessModel(t *testing.T, content string, line, col int) Model {
+	t.Helper()
+	m := sizedWith(t, registry.Global(), 100, 40)
+	ed := m.activeEditor()
+	if ed == nil {
+		t.Fatal("the startup model must have an editor to anchor on")
+	}
+	if ed.HasFile() {
+		t.Fatalf("the startup buffer must have no file, got %q", ed.Path())
+	}
+	if content != "" {
+		ed.ApplyTextEdits([]editor.TextEdit{{Text: content}})
+	}
+	ed.SetCursor(line, col)
+	return m
+}
+
+// TestIntentionsFilelessBufferOpensPicker guards the #2027 freeze at the app
+// surface: alt+enter in a buffer with no file must answer like any other —
+// here the caret line is a curl command, an intention the catalog offers in
+// any buffer — instead of hanging the Update loop on the bridge's reply.
+func TestIntentionsFilelessBufferOpensPicker(t *testing.T) {
+	m := filelessModel(t, "curl https://example.com/things", 0, 0)
+	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
+	m = out.(Model)
+	if !m.palette.IsOpen() {
+		t.Fatal("a fileless buffer with applicable built-ins must open the picker")
+	}
+	if !m.palette.Anchored() {
+		t.Fatal("the intention picker must anchor at the caret here too")
+	}
+	items := m.actions.Results("", palette.Context{})
+	found := false
+	for _, it := range items {
+		if it.Title == "Insert as HTTP Request" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("curl built-in missing from %+v", items)
+	}
+}
+
+// TestIntentionsFilelessBufferEmptyToasts: with nothing applicable at the
+// caret the fileless buffer gets the honest verdict — never silence, never a
+// hang.
+func TestIntentionsFilelessBufferEmptyToasts(t *testing.T) {
+	m := filelessModel(t, "", 0, 0)
+	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
+	m = out.(Model)
+	if m.palette.IsOpen() {
+		t.Fatal("an empty merged offer must not open the picker")
+	}
+	if !noticed(m, "no code actions here") {
+		t.Fatalf("missing empty-offer toast, history = %+v", m.history)
 	}
 }
 

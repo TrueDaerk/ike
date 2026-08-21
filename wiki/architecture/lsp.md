@@ -818,7 +818,11 @@ server. The watched-files path closes that gap.
   `host.Send`. `Update`/`View` never do LSP I/O. Even notifications sent from the
   Update goroutine (didOpen/didChange/didSave/didClose) are safe: the jsonrpc
   layer enqueues them and a dedicated writer goroutine owns the blocking pipe
-  write (#594), so a stalled server never stalls a caller.
+  write (#594), so a stalled server never stalls a caller. An answer the bridge
+  already has on the Update goroutine — `lsp.codeAction` in a buffer with no
+  file, a local hover/definition/references provider claiming (#922/#1629) —
+  goes back as a `tea.Cmd` where the seam returns one; `host.Send` queues
+  rather than blocking, so neither shape can freeze the IDE (#2027).
 - **One manager owns all servers.** Spawning, routing, capability gating and
   restart live in `manager`/`client`; features never touch a raw connection.
 - **Position mapping is centralised.** `protocol/convert.go` is the only place
