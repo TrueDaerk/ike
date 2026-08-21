@@ -102,6 +102,10 @@ type Model struct {
 	// A real path always wins, so the field is cleared the moment the
 	// buffer gets one. See langoverride.go.
 	langOverride string
+	// detectSignal holds the toast of a paste-time language detection
+	// (#2037) until Update drains it — the vim paste paths return no
+	// command of their own. See langdetect.go.
+	detectSignal string
 	// parseTag is this view's identity for the async parse result of a
 	// buffer with no file (#2033): SpansMsg travels keyed by ParseKey, and
 	// an empty path could not tell two file-less buffers apart. Unique per

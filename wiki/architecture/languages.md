@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-08-21T13:00:00Z
+timestamp: 2026-08-21T16:00:00Z
 ---
 
 # Language Registry
@@ -222,24 +222,43 @@ listing "Plain Text" plus every language a path lookup could match
 entry names it (`Treat Buffer as… (now markdown)`). Picking "Plain Text"
 clears the type again.
 
-### Shebang fallback (#893)
+### Content detection on paste (#2037)
 
-Files with no extension and no known base name (`deploy`, `run-tests`) resolve
-via the `#!` line: a language declares `Interpreters` (base names, e.g. python
-→ `python`, `python3`), and the **editor** — only when the static lookups both
-miss — reads the first buffer line on open and calls `lang.ForShebang`. The
-parser handles the plain form (`#!/bin/bash`), the env form
-(`#!/usr/bin/env python3`) and env `-S` (`#!/usr/bin/env -S deno run`: first
-non-flag, non-assignment word after env); trailing version digits are stripped
-on a miss so `python3.12` matches `python`. A hit is recorded with
-`lang.AssociatePath(path, id)` — a per-path override consulted first by
-`ByPath` — so highlighting, the LSP bridge and the statusline (all path-keyed)
-follow without any extra plumbing.
+The override above answers "this buffer is Markdown" once the user says so.
+The case that dominates needs no saying: a fresh, file-less buffer, content
+pasted into it — a JSON response, a CSV export, notes, a curl command — where
+the type is plain from the first line. `lang.DetectContent(text)`
+(`internal/lang/detect.go`) is the content-shaped counterpart to the
+path-shaped lookups: a **pure** function, text in, registry id (or `""`) out,
+specified by a table of content → verdict in `detect_test.go`.
 
-`Grammar` is `any`: the concrete compiled Tree-sitter grammar is built by
-`highlight.NewGrammar` (behind the cgo tag) and only stored/handed back here, so
-`lang` stays CGo-free. Any of Grammar / Server / Toolchain may be nil — a language
-can have highlighting but no server, or vice versa.
+It recognizes JSON, XML/HTML, `.http` request blocks, curl commands (as
+`shell` — the buffer holds a shell command, not HTTP syntax; the "Insert as
+HTTP request" intention of #2026 is what converts it), YAML, Markdown and
+CSV/TSV, in that order — most-specific first, so a YAML document opening with
+a `# comment` line is not read as a Markdown heading, and separator counting
+(the weakest signal) runs last.
+
+Every check is deliberately **conservative — no verdict is the normal
+outcome**, because a wrong one retypes the buffer under the user's cursor:
+
+- JSON must open and close as an object or array *and* parse; a bare string or
+  number does not qualify (any single word would).
+- Markup needs angle brackets on both ends and a real closing or
+  self-closing tag; a short root-element list decides HTML vs XML.
+- YAML needs *every* line to be structure (key, sequence item, comment,
+  document marker) plus two mapping keys or an explicit `---` — so
+  `TODO: fix this` stays plain text.
+- Markdown needs a signal prose does not produce by accident: an ATX heading,
+  a fence, a table separator or an inline link. Bullets and `*emphasis*` are
+  not signals.
+- CSV needs consistent field counts under one separator and a table that is
+  wide (3 columns) or tall (3 rows) — two two-field lines are as likely prose.
+- Only the first 200 lines are scanned, so a megabyte paste costs the same as
+  a small one.
+
+The editor is the only caller; the trigger and its gates are described in
+[Editor](/architecture/editor.md#language-detection-on-paste-2037).
 
 ## A language plugin
 
@@ -745,3 +764,22 @@ The dotenv duplicate-key check (`plugins/languages/env/lint.go`) is its first
 user: a key assigned twice is silently reduced to one assignment by every
 loader — in practice the last — so every earlier occurrence is flagged as a
 warning naming the line that wins.
+
+### Shebang fallback (#893)
+
+Files with no extension and no known base name (`deploy`, `run-tests`) resolve
+via the `#!` line: a language declares `Interpreters` (base names, e.g. python
+→ `python`, `python3`), and the **editor** — only when the static lookups both
+miss — reads the first buffer line on open and calls `lang.ForShebang`. The
+parser handles the plain form (`#!/bin/bash`), the env form
+(`#!/usr/bin/env python3`) and env `-S` (`#!/usr/bin/env -S deno run`: first
+non-flag, non-assignment word after env); trailing version digits are stripped
+on a miss so `python3.12` matches `python`. A hit is recorded with
+`lang.AssociatePath(path, id)` — a per-path override consulted first by
+`ByPath` — so highlighting, the LSP bridge and the statusline (all path-keyed)
+follow without any extra plumbing.
+
+`Grammar` is `any`: the concrete compiled Tree-sitter grammar is built by
+`highlight.NewGrammar` (behind the cgo tag) and only stored/handed back here, so
+`lang` stays CGo-free. Any of Grammar / Server / Toolchain may be nil — a language
+can have highlighting but no server, or vice versa.

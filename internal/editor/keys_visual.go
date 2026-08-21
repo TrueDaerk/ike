@@ -256,6 +256,10 @@ func (m *Model) visualIndent(dir int) {
 // put; reg 0 is the unnamed register), leaving the replaced text in the
 // unnamed register.
 func (m *Model) visualPaste(reg rune) {
+	// Replacing a whitespace-only selection in an empty, file-less buffer
+	// fills it like any other paste, so it classifies it too (#2037).
+	cand := m.detectCandidate()
+	defer func() { m.detectPastedLang(cand) }()
 	e := m.regs.Get(reg)
 	// The replaced selection is deleted, so it expands over collapsed folds
 	// exactly like a plain visual delete does (#1741).
