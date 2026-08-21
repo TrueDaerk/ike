@@ -244,6 +244,18 @@ func (s *Snapshot) Status(path string) FileStatus {
 	return s.Files[rel]
 }
 
+// Contains reports whether path lies inside the snapshot's repository. A
+// clean tracked file and an unknown file outside the repo both have
+// StatusNone, so the file-scoped VCS actions (blame, range history, revert)
+// need this to tell them apart (#2026).
+func (s *Snapshot) Contains(path string) bool {
+	if s == nil {
+		return false
+	}
+	_, ok := s.relPath(path)
+	return ok
+}
+
 // DirDirty reports whether the directory at path (absolute or repo-relative)
 // contains at least one changed file, at any depth.
 func (s *Snapshot) DirDirty(path string) bool {

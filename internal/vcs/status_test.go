@@ -118,9 +118,29 @@ func TestSnapshotStatusAndDirDirty(t *testing.T) {
 	}
 }
 
+// TestSnapshotContains guards the #2026 distinction Status cannot make: a
+// clean tracked file and a file from elsewhere on disk both answer
+// StatusNone, but only the first has blame, history or a HEAD to revert to.
+func TestSnapshotContains(t *testing.T) {
+	s := parseStatus(z("1 .M N... 100644 100644 100644 aaaa bbbb internal/app/app.go"))
+	s.Root = filepath.FromSlash("/work/repo")
+
+	for _, in := range []string{
+		"internal/app/clean.go",
+		filepath.FromSlash("/work/repo/internal/app/clean.go"),
+	} {
+		if !s.Contains(in) {
+			t.Errorf("Contains(%q) = false", in)
+		}
+	}
+	if s.Contains(filepath.FromSlash("/elsewhere/app.go")) {
+		t.Error("a file outside the repository must not be contained")
+	}
+}
+
 func TestNilSnapshotIsClean(t *testing.T) {
 	var s *Snapshot
-	if s.Status("x.go") != StatusNone || s.DirDirty("x") {
+	if s.Status("x.go") != StatusNone || s.DirDirty("x") || s.Contains("x.go") {
 		t.Fatal("nil snapshot must be clean")
 	}
 }

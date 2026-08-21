@@ -31,6 +31,12 @@ func Builtins() []Provider {
 // docPathProvider offers the JSON/YAML path actions (#1660) when the caret
 // sits on a value: the three copy flavours, and — for buffers jq itself can
 // read, so not for YAML — the playground seeded with the caret's path.
+//
+// The playground needs the *whole* buffer as its input: against a selection
+// the caret's path indexes the file and would name a location the input does
+// not contain, so json.jqPlaygroundAtPath silently falls back to the identity
+// program there (#2026) — an entry promising "at Cursor Path" that does not
+// go to the cursor's path is not offered.
 func docPathProvider() Provider {
 	return Provider{
 		ID: "app.docpath",
@@ -43,7 +49,7 @@ func docPathProvider() Provider {
 				{Title: "Copy Path as yq Expression", Kind: "copy", CommandID: "editor.copyDocPathYQ"},
 				{Title: "Copy Path", Kind: "copy", CommandID: "editor.copyDocPath"},
 			}
-			if !docpath.IsYAML(cx.LangID) {
+			if !docpath.IsYAML(cx.LangID) && !cx.HasSelection {
 				items = append(items, Item{Title: "jq Playground at Cursor Path", Kind: "jq", CommandID: "json.jqPlaygroundAtPath"})
 			}
 			return items
@@ -54,6 +60,12 @@ func docPathProvider() Provider {
 // httpProvider offers the request actions when the caret sits inside an
 // .http request block (#1131 and friends); the app precomputes the block
 // probe (httpfile.RequestAt) into Context.
+//
+// Only the first two act on the caret's block. The copy and re-send entries
+// act on the *shown response* and the environment picker on the env file
+// next to the buffer, so each rides its own precomputed fact (#2026) — the
+// caret being inside a request says nothing about a response ever having
+// arrived.
 func httpProvider() Provider {
 	return Provider{
 		ID: "app.http",
@@ -61,14 +73,23 @@ func httpProvider() Provider {
 			if !cx.HTTPRequest {
 				return nil
 			}
-			return []Item{
+			items := []Item{
 				{Title: "Run Request", Kind: "http", CommandID: "http.run"},
 				{Title: "Copy as curl", Kind: "http", CommandID: "http.copyAsCurl"},
-				{Title: "Copy Response Body", Kind: "http", CommandID: "http.copyBody"},
-				{Title: "Copy Response Headers", Kind: "http", CommandID: "http.copyHeaders"},
-				{Title: "Re-send Stored Request", Kind: "http", CommandID: "http.resend"},
-				{Title: "Select Environment", Kind: "http", CommandID: "http.selectEnvironment"},
 			}
+			if cx.HTTPResponseBody {
+				items = append(items, Item{Title: "Copy Response Body", Kind: "http", CommandID: "http.copyBody"})
+			}
+			if cx.HTTPResponseHeaders {
+				items = append(items, Item{Title: "Copy Response Headers", Kind: "http", CommandID: "http.copyHeaders"})
+			}
+			if cx.HTTPResendable {
+				items = append(items, Item{Title: "Re-send Stored Request", Kind: "http", CommandID: "http.resend"})
+			}
+			if cx.HTTPEnvironments {
+				items = append(items, Item{Title: "Select Environment", Kind: "http", CommandID: "http.selectEnvironment"})
+			}
+			return items
 		},
 	}
 }
@@ -76,11 +97,22 @@ func httpProvider() Provider {
 // curlProvider offers the caret line as an .http request when it is a curl
 // command (#1994's parser), in any buffer — the shell-history paste becomes
 // a runnable block.
+//
+// The gate parses the command the conversion would parse — the caret line
+// plus its backslash continuations — rather than only recognizing the "curl "
+// prefix (#2026): a truncated or malformed command (`curl -H` with no value,
+// a command with no URL at all) used to be offered and then answered with the
+// parser's error. ParseCurl is pure string work, so the check stays a cheap
+// caret probe.
 func curlProvider() Provider {
 	return Provider{
 		ID: "app.curl",
 		Items: func(cx Context) []Item {
-			if !httpfile.IsCurlCommand(cx.LineText) {
+			cmd, _, ok := httpfile.CurlCommandAt(cx.lineAt, cx.lineCount(), cx.Line)
+			if !ok {
+				return nil
+			}
+			if _, err := httpfile.ParseCurl(cmd); err != nil {
 				return nil
 			}
 			return []Item{{Title: "Insert as HTTP Request", Kind: "http", CommandID: "http.insertCurlAsRequest"}}
@@ -124,9 +156,13 @@ var concealToggles = map[string]Item{
 	concealfilter.LogRendering:          {Title: "Toggle Log Rendering", Kind: "view", CommandID: "view.toggleLogRendering"},
 }
 
-// concealProvider offers the explain popover (#1998) for a value the
-// explainer resolves at the caret, plus the per-view toggle of the family
-// concealing it.
+// concealProvider offers the explain popover (#1998) for the conceal
+// stand-in under the caret, plus the per-view toggle of the family drawing
+// it. The command itself also answers "why is this *not* masked" for any
+// plain value (#1930), but as an intention that read was pure noise (#2026):
+// on `getConfig` in a Python import the popup offered "Explain Concealed
+// Value" and the popover then said nothing conceals it. The palette entry and
+// `g?` keep the plain-value reading; the popup only offers what is concealed.
 func concealProvider() Provider {
 	return Provider{
 		ID: "app.conceal",
@@ -160,15 +196,19 @@ func diagnosticProvider() Provider {
 // vcsProvider offers the change actions: revert for the hunk under the caret
 // (#555), the conflict-block accepts (#1149), and — for any tracked file —
 // blame plus, with a selection, its history (#1020).
+//
+// The rewriting entries — the revert and the three accepts — also need a
+// writable buffer (#2026): in a read-only preview the edit would be dropped
+// by the recorder lock without a word.
 func vcsProvider() Provider {
 	return Provider{
 		ID: "app.vcs",
 		Items: func(cx Context) []Item {
 			var items []Item
-			if cx.HunkAtCaret {
+			if cx.HunkAtCaret && cx.InRepo && !cx.ReadOnly {
 				items = append(items, Item{Title: "Revert Hunk Under Caret", Kind: "vcs", CommandID: "vcs.revertHunk"})
 			}
-			if cx.ConflictAtCaret {
+			if cx.ConflictAtCaret && !cx.ReadOnly {
 				items = append(items,
 					Item{Title: "Accept Ours", Kind: "vcs", CommandID: "merge.acceptOurs"},
 					Item{Title: "Accept Theirs", Kind: "vcs", CommandID: "merge.acceptTheirs"},
@@ -187,7 +227,9 @@ func vcsProvider() Provider {
 }
 
 // testProvider offers run/debug for the test the caret sits in (#1085's
-// nearest-test gate, precomputed into Context).
+// nearest-test gate, precomputed into Context). Debugging needs more than a
+// test: a language with a debug adapter and no session already running
+// (#2026), both of which the launch would otherwise refuse after the pick.
 func testProvider() Provider {
 	return Provider{
 		ID: "app.test",
@@ -195,26 +237,29 @@ func testProvider() Provider {
 			if !cx.TestAtCaret {
 				return nil
 			}
-			return []Item{
-				{Title: "Run Test at Cursor", Kind: "test", CommandID: "run.testAtCursor"},
-				{Title: "Debug Test at Cursor", Kind: "test", CommandID: "debug.testAtCursor"},
+			items := []Item{{Title: "Run Test at Cursor", Kind: "test", CommandID: "run.testAtCursor"}}
+			if cx.CanDebug {
+				items = append(items, Item{Title: "Debug Test at Cursor", Kind: "test", CommandID: "debug.testAtCursor"})
 			}
+			return items
 		},
 	}
 }
 
 // editProvider offers the general editor intentions: the value toggle when
-// the caret word has a counterpart (#1658), and the clipboard diff (#1477)
-// over a selection.
+// the caret word has a counterpart (#1658) and the buffer takes edits, and
+// the clipboard diff (#1477) over a selection — which needs something on the
+// clipboard to compare against, or it only reports "clipboard is empty"
+// (#2026).
 func editProvider() Provider {
 	return Provider{
 		ID: "app.edit",
 		Items: func(cx Context) []Item {
 			var items []Item
-			if cx.CanToggleValue {
+			if cx.CanToggleValue && !cx.ReadOnly {
 				items = append(items, Item{Title: "Toggle Value Under Caret", Kind: "edit", CommandID: "editor.toggleValue"})
 			}
-			if cx.HasSelection {
+			if cx.HasSelection && cx.HasClipboard {
 				items = append(items, Item{Title: "Compare Selection with Clipboard", Kind: "diff", CommandID: "diff.compareWithClipboard"})
 			}
 			return items

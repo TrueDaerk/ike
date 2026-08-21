@@ -76,3 +76,22 @@ func TestInsertCurlAsRequestScratch(t *testing.T) {
 		t.Fatalf("scratch content = %q", ed.Text())
 	}
 }
+
+// TestInsertCurlAsRequestReadOnlyFallsBackToScratch guards #2026: a
+// read-only .http buffer (#1762) drops the in-place edit through the locked
+// recorder, so the conversion takes the scratch route rather than appearing
+// to do nothing.
+func TestInsertCurlAsRequestReadOnlyFallsBackToScratch(t *testing.T) {
+	m := intentionModel(t, "api.http", "curl https://example.com/a\n", 0, 0)
+	source := m.activeEditor().Text()
+	m.activeEditor().SetReadOnly(true)
+	out, _ := m.Update(InsertCurlAsRequestMsg{})
+	m = out.(Model)
+	ed := m.activeEditor()
+	if ed == nil || ed.Text() == source {
+		t.Fatal("the conversion should have opened a scratch buffer")
+	}
+	if !strings.Contains(ed.Text(), "GET https://example.com/a") {
+		t.Fatalf("scratch content = %q", ed.Text())
+	}
+}

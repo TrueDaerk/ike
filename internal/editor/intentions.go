@@ -2,6 +2,7 @@ package editor
 
 import (
 	"ike/internal/concealexplain"
+	ilsp "ike/internal/lsp"
 )
 
 // intentions.go exports the caret probes the intention-action context needs
@@ -14,10 +15,17 @@ import (
 // scanner already resolve.
 func (m Model) LangID() string { return m.langID() }
 
-// DiagnosticOnCaretLine reports an LSP diagnostic on the caret line — the
-// lsp.ignoreDiagnostic gate (#1259).
+// DiagnosticOnCaretLine reports an LSP diagnostic on the caret line that
+// lsp.ignoreDiagnostic could actually write a rule for (#1259): a diagnostic
+// carrying neither source, code nor message matches on nothing, and the
+// command answers that instead of ignoring anything (#2026).
 func (m Model) DiagnosticOnCaretLine() bool {
-	return len(m.diagByLine[m.cursor.Line]) > 0
+	for _, d := range m.diagByLine[m.cursor.Line] {
+		if ilsp.IgnoreRuleFor(d) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // HunkAtCursor reports a VCS gutter mark (added/changed/deleted, #464) on
@@ -38,20 +46,28 @@ func (m *Model) CanToggleValueAtCaret() bool {
 	return ok
 }
 
-// ConcealExplainAtCaret reports whether the conceal explainer resolves a
-// value at the caret (#1998) and, when the value renders through a conceal
-// stand-in, the concealfilter family gating it ("" for a plain value). It is
-// the read-only twin of explainConceal.
+// ConcealExplainAtCaret reports whether a conceal stand-in the explainer
+// speaks for sits under the caret (#1998), and names the concealfilter family
+// gating it. It is the read-only twin of explainConceal, narrowed to what the
+// intention popup may offer (#2026): explainConceal also explains a plain
+// value ("why is this *not* masked", #1930), but as a popup entry that read
+// fired on every identifier and answered that nothing conceals it. The
+// stand-in is what makes "Explain Concealed Value" true, and a family that is
+// toggled off in this view still has one — which is exactly the case worth
+// asking about.
 func (m *Model) ConcealExplainAtCaret() (family string, ok bool) {
 	line := m.cursor.Line
 	if line >= m.buf.LineCount() {
 		return "", false
 	}
-	req := concealexplain.Request{Line: m.buf.Line(line), Col: m.cursor.Col, Lang: m.langID()}
-	if capture, r, hit := m.concealAtCaret(); hit {
-		req.Start, req.End, req.Capture, req.Display = r.start, r.end, capture, r.repl
+	capture, r, hit := m.concealAtCaret()
+	if !hit {
+		return "", false
 	}
-	ex, ok := concealexplain.Explain(req)
+	ex, ok := concealexplain.Explain(concealexplain.Request{
+		Line: m.buf.Line(line), Col: m.cursor.Col, Lang: m.langID(),
+		Start: r.start, End: r.end, Capture: capture, Display: r.repl,
+	})
 	if !ok {
 		return "", false
 	}

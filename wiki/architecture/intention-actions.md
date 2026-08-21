@@ -4,12 +4,12 @@ title: Intention Actions
 description: The alt+enter popup — LSP code actions merged with built-in caret-dependent intention actions through a plugin-registered provider seam, opened anchored at the caret.
 resource: internal/intention
 tags: [architecture, intentions, code-actions, palette, plugins, shortcuts]
-timestamp: 2026-08-21T12:00:00Z
+timestamp: 2026-08-21T16:00:00Z
 ---
 
 # Intention Actions
 
-Issues #2020, #2025. IntelliJ's alt+enter mixes server fixes with IDE intentions; IKE
+Issues #2020, #2025, #2026. IntelliJ's alt+enter mixes server fixes with IDE intentions; IKE
 does the same: one caret-anchored popup that merges **LSP code actions**
 ([lsp](./lsp.md), #8) with **built-in intention actions** whose applicability
 is decided from the caret context. Before this slice the popup was
@@ -33,12 +33,14 @@ plugins/lsp                   Intentions=true offer + the position-gated rename 
 
 A `Provider` is a pure function `Items(Context) []Item` plus an id. The
 `Context` snapshots the caret at popup-open time: path, language id, 0-based
-position, the caret line's text, whole-buffer line access, selection — plus
-**precomputed caret facts** (doc-path presence, http-request block,
-diagnostic/hunk/conflict at caret, tracked-in-repo, test at caret, togglable
-word, conceal explanation and its family). The facts come from state the
-editor and the app already cache, so providers stay cheap and table-testable;
-the snapshot is built once per open (`Model.intentionContext`).
+position, the caret line's text, whole-buffer line access, selection and
+read-only-ness — plus **precomputed caret facts** (doc-path presence,
+http-request block plus the response/environment facts beside it,
+diagnostic/hunk/conflict at caret, tracked-in-repo, test at caret and its
+debuggability, togglable word, conceal stand-in and its family, clipboard
+occupancy). The facts come from state the editor and the app already cache, so
+providers stay cheap and table-testable; the snapshot is built once per open
+(`Model.intentionContext`).
 
 An `Item` is `{Title, Kind, CommandID}` — **always a registered command,
 never new logic**. Activation funnels through `RunCommand` →
@@ -130,21 +132,24 @@ from the provider, keep the item pointing at a **registered command**, and
 extend the `catalog_test.go` applicability table. Globally applicable
 commands (save all, open settings, …) stay out — they belong in the palette.
 
+Gate the new entry against *everything* its command refuses on, not only the
+caret fact — see the applicability rule below.
+
 ## The catalog
 
 Each entry delegates to the existing command; applicability per caret:
 
 | Context | Items (command ids) |
 |---|---|
-| JSON/YAML value (`DocPath`) | copy path as jq / yq / dotted (`editor.copyDocPath*`); `json.jqPlaygroundAtPath` (not for YAML — jq reads JSON) |
-| caret in `.http` request (`httpfile.RequestAt`) | `http.run`, `http.copyAsCurl`, `http.copyBody`, `http.copyHeaders`, `http.resend`, `http.selectEnvironment` |
-| curl command line (`httpfile.IsCurlCommand`, any buffer) | `http.insertCurlAsRequest` (new, see below) |
+| JSON/YAML value (`DocPath`) | copy path as jq / yq / dotted (`editor.copyDocPath*`); `json.jqPlaygroundAtPath` (not for YAML — jq reads JSON — and not with a selection, which the caret's path does not index) |
+| caret in `.http` request (`httpfile.RequestAt`) | `http.run`, `http.copyAsCurl`; with a shown response `http.copyBody` / `http.copyHeaders` / `http.resend`; with an env file `http.selectEnvironment` |
+| curl command line that parses (`httpfile.CurlCommandAt` + `ParseCurl`, any buffer) | `http.insertCurlAsRequest` (new, see below) |
 | JWT on the line (`jwt.At`) | `editor.decodeJWT` |
-| explainable value (`ConcealExplainAtCaret`) | `editor.explainConceal`; the family's `view.toggle*` via the `concealToggles` map |
-| diagnostic on caret line | `lsp.ignoreDiagnostic` |
-| hunk under caret / conflict block / tracked file (+selection) | `vcs.revertHunk`; `merge.accept{Ours,Theirs,Both}`; `vcs.blameLine`, `vcs.historyForSelection` |
-| test at/above caret (`lang.HasTests` + `NearestTestAt`) | `run.testAtCursor`, `debug.testAtCursor` |
-| togglable caret word / selection | `editor.toggleValue`; `diff.compareWithClipboard` |
+| conceal stand-in under caret (`ConcealExplainAtCaret`) | `editor.explainConceal`; the family's `view.toggle*` via the `concealToggles` map |
+| ignorable diagnostic on caret line (`ilsp.IgnoreRuleFor`) | `lsp.ignoreDiagnostic` |
+| hunk under caret / conflict block / tracked file (+selection) | `vcs.revertHunk`; `merge.accept{Ours,Theirs,Both}` (the rewriting entries only in a writable buffer); `vcs.blameLine`, `vcs.historyForSelection` |
+| test at/above caret (`lang.HasTests` + `NearestTestAt`) | `run.testAtCursor`; `debug.testAtCursor` only with a debug adapter and no running session |
+| togglable caret word (writable buffer) / selection + non-empty clipboard | `editor.toggleValue`; `diff.compareWithClipboard` |
 
 The LSP plugin adds "Rename Symbol" (`lsp.rename`), gated **twice** (#2025):
 the attached server must declare rename at all (`Manager.RenameSupported`) and
@@ -164,10 +169,57 @@ so the entry stays offered and the rename attempt decides.
 **`http.insertCurlAsRequest`** is the one intention without a pre-existing
 command: the caret line's curl command (plus backslash continuations,
 flattened like a pasted import) runs through the #1994 parser
-(`httpfile.ParseCurl`/`FormatRequest`). In an `.http` buffer the command
-lines are replaced in place as one text edit (single undo); elsewhere the
-block lands in a fresh scratch `.http` file which opens focused. The
-ignored-flags warning is preserved either way.
+(`httpfile.ParseCurl`/`FormatRequest`). In a *writable* `.http` buffer the
+command lines are replaced in place as one text edit (single undo);
+elsewhere — including a read-only preview, which would drop the edit through
+the locked recorder — the block lands in a fresh scratch `.http` file which
+opens focused. The ignored-flags warning is preserved either way.
+
+## The applicability rule
+
+Issue #2026. **An entry is offered only where its command would actually do
+something.** "Pick it and read the error" is a bug, and so is picking it and
+watching nothing happen: the popup is a claim about this caret, and every row
+that cannot deliver makes the rows that can harder to find.
+
+Applicability is therefore *all* of the preconditions the command checks, not
+just the positional one — the caret situation, the buffer state (a read-only
+buffer drops every edit through the locked recorder, #1762) and the external
+state the command reads (a shown HTTP response, an env file, the clipboard, a
+debug adapter). #2026 audited the whole catalog against that rule; what it
+tightened:
+
+| Entry | Was offered on | Now also needs |
+|---|---|---|
+| `editor.explainConceal` | any value the explainer resolved — i.e. every identifier | a conceal stand-in under the caret (`concealAtCaret`). The "why is this *not* masked" reading (#1930) stays on `g?` and the palette |
+| `http.copyBody` / `http.copyHeaders` | the caret's request block | a visible response pane with that text |
+| `http.resend` | the caret's request block | a shown response carrying its request snapshot |
+| `http.selectEnvironment` | the caret's request block | an `http-client(.private).env.json` beside the buffer defining ≥ 1 environment |
+| `http.insertCurlAsRequest` | the `curl ` prefix on the caret line | the gathered command to parse (`ParseCurl`) — no URL, a dangling flag value or an unterminated quote is no offer |
+| `json.jqPlaygroundAtPath` | any non-YAML doc path | no selection — against one the caret's path indexes a document the input does not contain, and the seeded open silently degrades to the plain one |
+| `debug.testAtCursor` | a test at the caret | `lang.SupportsDebug` for the file *and* no session running or launching |
+| `vcs.blameLine` / `vcs.historyForSelection` / `vcs.revertHunk` | `snap.Status(path) != untracked`, which a file from outside the repo also satisfies | `snap.Contains(path)` |
+| `editor.toggleValue`, `merge.accept*`, `vcs.revertHunk` | the caret fact alone | a writable buffer |
+| `diff.compareWithClipboard` | a selection | a non-empty clipboard |
+| `lsp.ignoreDiagnostic` | any diagnostic on the line | one `ilsp.IgnoreRuleFor` can build a rule from |
+
+Verified as already exact and left alone: the three `editor.copyDocPath*`
+flavours, `http.run` and `http.copyAsCurl` (the caret block *is* the
+precondition; `http.run`'s "already running" refusal is a deliberate
+duplicate guard, not an inapplicable caret), `editor.decodeJWT` (the gate
+calls the same `jwt.At`), the `view.toggle*` family switches (always
+executable), `merge.accept*` beyond the read-only gate, and
+`run.testAtCursor` (`run.TestConfig` succeeds exactly when `lang.HasTests`
+does). Rename is #2025's, gated in the bridge.
+
+Where a check is too expensive to run synchronously — a server round trip —
+the answer is precomputed *before* the popup queries the providers, the way
+#2025 validates `prepareRename` alongside the code-action request. Everything
+in the table above is a cheap local probe (a map lookup, a pure parse, two
+small file reads the dispatch performs anyway), so it rides in `Context`. Two
+of them are still paid only when they can matter: the env files are read only
+for a caret inside a request block, and the clipboard — whose read runs a
+helper process — only when there is a selection to compare.
 
 ## Testing
 
@@ -177,11 +229,18 @@ matrix (one row per caret situation, want/want-not command ids);
 the anchored open over a JSON buffer, the empty-merge toast, both fileless
 cases (#2027: applicable built-ins open the anchored picker, nothing
 applicable toasts) and the digit shortcuts (hints on the first nine unfiltered rows, digit runs on an empty
-query, digit filters once a query is typed); `internal/palette/digit_test.go`
+query, digit filters once a query is typed) plus the #2026 gates that need a
+whole model (HTTP response and env-file facts, clipboard, read-only buffer);
+`internal/palette/digit_test.go`
 covers the `DigitPicker` seam itself (fast path, out-of-range digit, opt-out
 modes, hint rendering);
-`internal/app/intentions_test.go` covers the curl conversion (in-place,
-scratch, continuations, dropped-flag notice); `plugins/lsp/renamegate_test.go`
+`internal/editor/intentions_test.go` covers the tightened caret probes (a
+plain identifier is not a concealed value, a mask and a size hint are, a
+diagnostic needs an ignore rule); `internal/app/intentions_test.go` covers the
+curl conversion (in-place, scratch, continuations, dropped-flag notice,
+read-only fallback); `internal/httpfile` covers the shared `CurlCommandAt`
+probe and `internal/vcs` the `Snapshot.Contains` distinction;
+`plugins/lsp/renamegate_test.go`
 drives the position gate against a scripted server (accepted caret, rejected
 caret, no verdict, no `prepareRename` support, verdict dropped by an edit,
 verdict reused on pick); `internal/registry` covers provider dedup/order.

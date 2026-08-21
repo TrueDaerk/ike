@@ -286,6 +286,42 @@ func TestIsCurlCommand(t *testing.T) {
 	}
 }
 
+// TestCurlCommandAt covers the buffer probe the conversion and its intention
+// gate share (#2026): the caret line plus its backslash continuations,
+// flattened, with the last consumed line reported.
+func TestCurlCommandAt(t *testing.T) {
+	lines := []string{
+		"# fetch the things",
+		"curl -X POST https://api.example.com/things \\",
+		"  -H 'Content-Type: application/json' \\",
+		"  -d '{\"a\":1}'",
+		"plain text",
+	}
+	at := func(i int) string { return lines[i] }
+
+	cmd, end, ok := CurlCommandAt(at, len(lines), 1)
+	if !ok {
+		t.Fatal("the curl line was not recognized")
+	}
+	if end != 3 {
+		t.Fatalf("endLine = %d, want 3", end)
+	}
+	if strings.Contains(cmd, "\\") || !strings.Contains(cmd, "-H 'Content-Type: application/json'") {
+		t.Fatalf("flattened command = %q", cmd)
+	}
+	if _, err := ParseCurl(cmd); err != nil {
+		t.Fatalf("the gathered command does not parse: %v", err)
+	}
+	for _, line := range []int{0, 4, -1, len(lines)} {
+		if _, _, ok := CurlCommandAt(at, len(lines), line); ok {
+			t.Errorf("line %d reported a curl command", line)
+		}
+	}
+	if _, _, ok := CurlCommandAt(nil, 1, 0); ok {
+		t.Error("a nil line accessor reported a curl command")
+	}
+}
+
 // TestFormatRequest checks that an imported request renders as a block the
 // parser reads back unchanged.
 func TestFormatRequest(t *testing.T) {

@@ -52,14 +52,39 @@ func TestCatalogApplicability(t *testing.T) {
 			wantNot: []string{"json.jqPlaygroundAtPath"},
 		},
 		{
+			// #2026: the playground queries the selection, which the caret's
+			// path does not index — the seeded open would silently be a
+			// plain one.
+			name:    "selection in a json buffer has no jq playground at path",
+			cx:      Context{LangID: "json", DocPath: true, HasSelection: true, HasClipboard: true},
+			want:    []string{"editor.copyDocPathJQ"},
+			wantNot: []string{"json.jqPlaygroundAtPath"},
+		},
+		{
 			name:    "go buffer offers no doc path",
 			cx:      Context{LangID: "go"},
 			wantNot: []string{"editor.copyDocPath", "editor.copyDocPathJQ", "json.jqPlaygroundAtPath"},
 		},
 		{
-			name: "caret inside http request",
-			cx:   Context{LangID: "http", HTTPRequest: true},
+			name: "caret inside http request with a shown response",
+			cx: Context{LangID: "http", HTTPRequest: true, HTTPResponseBody: true,
+				HTTPResponseHeaders: true, HTTPResendable: true, HTTPEnvironments: true},
 			want: []string{"http.run", "http.copyAsCurl", "http.copyBody", "http.copyHeaders", "http.resend", "http.selectEnvironment"},
+		},
+		{
+			// #2026: the caret block says nothing about a response having
+			// arrived or an env file existing — those entries only ever
+			// answered "no response pane open" / "no http-client.env.json".
+			name:    "caret inside http request without a response or env file",
+			cx:      Context{LangID: "http", HTTPRequest: true},
+			want:    []string{"http.run", "http.copyAsCurl"},
+			wantNot: []string{"http.copyBody", "http.copyHeaders", "http.resend", "http.selectEnvironment"},
+		},
+		{
+			name:    "response with a body but no stored request",
+			cx:      Context{LangID: "http", HTTPRequest: true, HTTPResponseBody: true},
+			want:    []string{"http.copyBody"},
+			wantNot: []string{"http.copyHeaders", "http.resend"},
 		},
 		{
 			name:    "http buffer outside a request",
@@ -75,6 +100,29 @@ func TestCatalogApplicability(t *testing.T) {
 			name:    "plain prose is not a curl command",
 			cx:      Context{LangID: "markdown", LineText: "use curl to fetch the thing"},
 			wantNot: []string{"http.insertCurlAsRequest"},
+		},
+		{
+			// #2026: the prefix alone used to offer the entry, and the pick
+			// then answered with the parser's error.
+			name:    "curl command with no url does not parse",
+			cx:      Context{LangID: "markdown", LineText: "curl -sS -H 'Accept: application/json'"},
+			wantNot: []string{"http.insertCurlAsRequest"},
+		},
+		{
+			name:    "curl command with a dangling flag value does not parse",
+			cx:      Context{LangID: "markdown", LineText: "curl https://example.com -H"},
+			wantNot: []string{"http.insertCurlAsRequest"},
+		},
+		{
+			name: "curl command continued over backslash lines",
+			cx: Context{
+				LangID: "sh", Line: 1, LineCount: 3,
+				LineText: "curl https://api.example.com/things \\",
+				LineAt: func(i int) string {
+					return []string{"# fetch", "curl https://api.example.com/things \\", "  -H 'Accept: application/json'"}[i]
+				},
+			},
+			want: []string{"http.insertCurlAsRequest"},
 		},
 		{
 			name: "jwt under caret",
@@ -113,6 +161,21 @@ func TestCatalogApplicability(t *testing.T) {
 			want: []string{"merge.acceptOurs", "merge.acceptTheirs", "merge.acceptBoth"},
 		},
 		{
+			// #2026: a read-only buffer drops every edit silently, so the
+			// rewriting entries stay out of the popup.
+			name: "read-only buffer offers no rewriting intentions",
+			cx: Context{ReadOnly: true, InRepo: true, HunkAtCaret: true,
+				ConflictAtCaret: true, CanToggleValue: true},
+			want: []string{"vcs.blameLine"},
+			wantNot: []string{"vcs.revertHunk", "merge.acceptOurs", "merge.acceptTheirs",
+				"merge.acceptBoth", "editor.toggleValue"},
+		},
+		{
+			name:    "hunk mark outside the open repository",
+			cx:      Context{HunkAtCaret: true},
+			wantNot: []string{"vcs.revertHunk", "vcs.blameLine"},
+		},
+		{
 			name:    "tracked file without hunk or selection",
 			cx:      Context{InRepo: true},
 			want:    []string{"vcs.blameLine"},
@@ -120,13 +183,29 @@ func TestCatalogApplicability(t *testing.T) {
 		},
 		{
 			name: "selection in tracked file",
-			cx:   Context{InRepo: true, HasSelection: true},
+			cx:   Context{InRepo: true, HasSelection: true, HasClipboard: true},
 			want: []string{"vcs.historyForSelection", "diff.compareWithClipboard"},
 		},
 		{
-			name: "caret in a test function",
-			cx:   Context{TestAtCaret: true},
+			// #2026: comparing against an empty clipboard only reported
+			// "clipboard is empty".
+			name:    "selection with an empty clipboard",
+			cx:      Context{InRepo: true, HasSelection: true},
+			want:    []string{"vcs.historyForSelection"},
+			wantNot: []string{"diff.compareWithClipboard"},
+		},
+		{
+			name: "caret in a test function of a debuggable language",
+			cx:   Context{TestAtCaret: true, CanDebug: true},
 			want: []string{"run.testAtCursor", "debug.testAtCursor"},
+		},
+		{
+			// #2026: without a debug adapter (or with a session already
+			// running) the launch refuses right after the pick.
+			name:    "caret in a test function without a debug adapter",
+			cx:      Context{TestAtCaret: true},
+			want:    []string{"run.testAtCursor"},
+			wantNot: []string{"debug.testAtCursor"},
 		},
 		{
 			name:    "outside a test function",

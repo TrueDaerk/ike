@@ -1,5 +1,37 @@
 # Log
 
+## 2026-08-21 (Intentions: every entry audited for real applicability, #2026)
+
+- **The rule** (`wiki/architecture/intention-actions.md`): an intention entry
+  is offered only where its command would actually do something. "Pick it and
+  read the error" is a bug, and so is picking it and watching nothing happen.
+  Applicability is *all* of the command's preconditions — caret situation,
+  buffer state, and the external state it reads — not just the positional one.
+- **The audit**: all 24 catalog entries in `internal/intention/catalog.go`
+  were checked against their command implementations; the doc carries the
+  full result table (tightened / already exact).
+- **`editor.explainConceal`** (`internal/editor/intentions.go`): the reported
+  issue. `ConcealExplainAtCaret` now requires a conceal stand-in under the
+  caret instead of any value the explainer can resolve — the entry appeared on
+  `getConfig` in a Python import and the popover then said nothing conceals it.
+  `g?` and the palette keep the "why is this *not* masked" reading (#1930).
+- **Also tightened**: the HTTP response copies and `http.resend` need a shown
+  response, `http.selectEnvironment` an env file defining one;
+  `http.insertCurlAsRequest` needs the gathered command to *parse* (shared
+  probe `httpfile.CurlCommandAt`, so the gate and the conversion read one
+  command); `json.jqPlaygroundAtPath` no longer appears over a selection;
+  `debug.testAtCursor` needs a debug adapter and no running session; the
+  file-scoped VCS actions need `vcs.Snapshot.Contains` (new — a file from
+  outside the repo answered `StatusNone` like a clean one);
+  `lsp.ignoreDiagnostic` needs a diagnostic a rule can be built from; and the
+  rewriting entries need a writable buffer (a read-only `.http` buffer sends
+  the curl conversion down the scratch route rather than dropping the edit).
+- **Tests**: `internal/intention/catalog_test.go` (new rows per tightened
+  gate), `internal/app/codeactions_test.go` (the gates needing a whole model),
+  `internal/editor/intentions_test.go` (new — the caret probes),
+  `internal/app/intentions_test.go`, `internal/httpfile/curl_test.go`,
+  `internal/vcs/status_test.go`.
+
 ## 2026-08-21 (alt+enter in a fileless buffer froze the IDE, #2027)
 
 - **`host.Host.Send`** (`internal/host/host.go`): messages are queued into an

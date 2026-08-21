@@ -57,6 +57,42 @@ func IsCurlCommand(s string) bool {
 	return rest != "" && (rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' || rest[0] == '\\')
 }
 
+// FlattenCurlCommand folds a multi-line command (the backslash-wrapped form
+// devtools and documentation hand out) into the single line ParseCurl reads:
+// the continuation backslashes drop out and the pieces join with a space.
+func FlattenCurlCommand(text string) string {
+	var out []string
+	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.TrimSpace(strings.TrimSuffix(line, "\\"))
+		if line != "" {
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+// CurlCommandAt gathers the curl command that starts on line — the line plus
+// its backslash-continued follow-ups — flattened to the single-line form
+// ParseCurl reads, and reports the last line it consumed. ok is false when
+// line is no curl command at all. lineAt/lineCount are the buffer accessors
+// the caller already holds, so the intention gate (#2026) and the conversion
+// itself read the exact same command.
+func CurlCommandAt(lineAt func(int) string, lineCount, line int) (cmd string, endLine int, ok bool) {
+	if lineAt == nil || line < 0 || line >= lineCount || !IsCurlCommand(lineAt(line)) {
+		return "", line, false
+	}
+	end := line
+	for end < lineCount-1 && strings.HasSuffix(strings.TrimSpace(lineAt(end)), "\\") {
+		end++
+	}
+	parts := make([]string, 0, end-line+1)
+	for i := line; i <= end; i++ {
+		parts = append(parts, lineAt(i))
+	}
+	return FlattenCurlCommand(strings.Join(parts, "\n")), end, true
+}
+
 // valueShort lists the short options that consume a value, so "-X POST" and
 // "-XPOST" both parse and a combined "-sS" is still split into flags.
 var valueShort = map[byte]string{
