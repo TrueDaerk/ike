@@ -1,8 +1,11 @@
 package jqplay
 
-// fold.go computes the foldable regions of a *result*: every multi-line
+// fold.go computes the foldable regions of a *JSON* result: every multi-line
 // object and array of the pretty-printed output, with the number of members
-// it holds (#2029). A jq result is regularly taller than the pane, and
+// it holds (#2029). The YAML half of the same job — indentation instead of
+// delimiters — is yamlfold.go; both produce the Fold defined here, so the
+// host installs and labels them through one code path (#2039). A jq result is
+// regularly taller than the pane, and
 // scanning its shape before opening the interesting branch is what folding is
 // for — the same thing #144 gives an ordinary buffer.
 //
@@ -26,39 +29,56 @@ import (
 	"strings"
 )
 
-// Fold is one foldable node of a result: the line its opening delimiter sits
-// on, the line its closing delimiter sits on, and how many members it has.
-// Object reports which spelling the placeholder uses — keys or items.
+// Fold is one foldable node of a result: the line it starts on, the line it
+// ends on, and how many members it has. Unit names what Items counts and
+// Closer the delimiter that finishes the placeholder — the two facts that
+// differ between JSON's braced nodes and YAML's indented blocks, held as data
+// so Label serves both (#2039).
 type Fold struct {
 	HeaderLine int
 	EndLine    int
 	Items      int
-	Object     bool
+	// Unit is the plural noun Items is counted in — "keys" for a mapping,
+	// "items" for a sequence, "lines" for a YAML block scalar. Label
+	// singularizes it for a count of one.
+	Unit string
+	// Closer is the delimiter the placeholder ends with, so a folded JSON row
+	// still reads as a complete value. YAML closes nothing and leaves it "".
+	Closer string
 }
 
+// The units a fold counts its members in.
+const (
+	UnitKeys  = "keys"
+	UnitItems = "items"
+	UnitLines = "lines"
+)
+
 // Label is the placeholder a collapsed node renders as: the ellipsis, the
-// member count in its own unit, and the closing delimiter — so a folded row
-// still reads as a complete value (`"users": { ⋯ 3 keys }`).
+// member count in its own unit, and — in JSON — the closing delimiter, so a
+// folded row still reads as a complete value (`"users": { ⋯ 3 keys }`).
 func (f Fold) Label() string {
-	unit := "items"
-	if f.Object {
-		unit = "keys"
-	}
+	unit := f.Unit
 	if f.Items == 1 {
 		unit = strings.TrimSuffix(unit, "s")
 	}
-	closer := "]"
-	if f.Object {
-		closer = "}"
+	label := "⋯ " + strconv.Itoa(f.Items) + " " + unit
+	if f.Closer != "" {
+		label += " " + f.Closer
 	}
-	return "⋯ " + strconv.Itoa(f.Items) + " " + unit + " " + closer
+	return label
 }
 
-// Folds returns the foldable objects and arrays of text in pre-order (outer
-// before inner, the order the editor's innermost-fold lookup relies on).
-// Single-line nodes are left out: they hide nothing, and a placeholder over
-// `[]` would be longer than the value.
-func Folds(text string) []Fold {
+// Folds returns the foldable objects and arrays of a JSON result — the jq
+// dialect's half of Dialect.Folds, kept under its original name for the tests
+// and callers that only ever mean JSON.
+func Folds(text string) []Fold { return jsonFolds(text) }
+
+// jsonFolds returns the foldable objects and arrays of text in pre-order
+// (outer before inner, the order the editor's innermost-fold lookup relies
+// on). Single-line nodes are left out: they hide nothing, and a placeholder
+// over `[]` would be longer than the value.
+func jsonFolds(text string) []Fold {
 	type frame struct {
 		line   int
 		object bool
@@ -105,7 +125,11 @@ func Folds(text string) []Fold {
 				if f.filled {
 					items = f.commas + 1
 				}
-				out = append(out, Fold{HeaderLine: f.line, EndLine: line, Items: items, Object: f.object})
+				fold := Fold{HeaderLine: f.line, EndLine: line, Items: items, Unit: UnitItems, Closer: "]"}
+				if f.object {
+					fold.Unit, fold.Closer = UnitKeys, "}"
+				}
+				out = append(out, fold)
 			}
 		case r == ',':
 			if n := len(stack); n > 0 {

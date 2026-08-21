@@ -383,29 +383,29 @@ type Model struct {
 	regexTester  *regexTesterState
 	regexHistory regextest.History
 
-	// jqPlay is the open jq playground (#1936), inline in its hosting pane
-	// since #1970; nil when it is closed. jqHistory outlives the mode for
+	// play is the open jq playground (#1936), inline in its hosting pane
+	// since #1970; nil when it is closed. playHistory outlives the mode for
 	// the same reason regexHistory does, and is a *shared pointer* (#1977):
 	// every open playground writes its programs straight into this one
 	// session-wide list, so the history is the same whichever buffer or
 	// response pane the mode was opened over — and no exit path can drop
 	// entries by failing to copy them back.
-	// jqLastProgram remembers, per queried input (file path, unsaved buffer,
+	// playLastProgram remembers, per queried input (file path, unsaved buffer,
 	// response pane), the last program that ran against it without an error
 	// (#1982). The ordinary open prefills it instead of `.`, so reopening a
 	// file resumes the look that was interrupted — something the one shared,
 	// buffer-agnostic history cannot express. In memory for the session, like
 	// the history itself.
-	jqPlay        *jqPlayState
-	jqHistory     *jqplay.History
-	jqLastProgram map[string]string
-	// jqFilters is the palette mode listing the named saved filters of both
+	play            *playState
+	playHistory     *jqplay.History
+	playLastProgram map[string]string
+	// playFilters is the palette mode listing the named saved filters of both
 	// scopes (#1995), kept on the model so the insert and rename entry
-	// commands can flip its action before opening it locked; jqName is the
+	// commands can flip its action before opening it locked; playName is the
 	// shell prompt that names a filter on save and on rename. The libraries
 	// themselves are on disk, re-read per open — nothing to cache here.
-	jqFilters *jqFiltersMode
-	jqName    jqNamePrompt
+	playFilters *playFiltersMode
+	playName    playNamePrompt
 
 	renamePos int
 	// layoutSaveOpen marks the window.saveLayout name prompt (#1175) while the
@@ -1032,7 +1032,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	tasksPicker := newTasksMode()                   // discovered-tasks picker (#1915)
 	sshPicker := newSSHMode()                       // ssh_config host picker (#1938)
 	remotePicker := newRemoteMode()                 // SFTP browse host picker (#1997)
-	jqFilters := newJQFiltersMode()                 // named saved jq filters (#1995)
+	playFilters := newPlayFiltersMode()             // named saved jq filters (#1995)
 	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
 	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
@@ -1040,59 +1040,59 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	wsMgr := wsManager(mgr, resumed, root, panes) // hoisted: the palette's recent-projects sources read it (#820)
 	wsMgr.SetRegisters(regs)                      // first start: the manager adopts the store (#1540); a switch hands back its own
 	m := Model{
-		cmdUsage:       cmdUsage,
-		fileUsage:      fileUsage,
-		winSizes:       winSizes,
-		winSizesAll:    winSizesAll,
-		pins:           loadPins(),                          // pinned file slots (#788)
-		lhStore:        localhistory.New(localHistoryDir()), // local history (#1023)
-		feed:           changefeed.New(),                    // external-change feed (#2000)
-		completeEngine: engine,
-		ws:             wsMgr,
-		recentEditor:   edKey,
-		recent:         recent,
-		largeToasted:   map[string]bool{},
-		logsetToasted:  map[string]bool{},
-		toolchainSeg:   map[string]string{},
-		liveImages:     map[int]bool{},
-		navHist:        &nav.History{},
-		jqHistory:      &jqplay.History{},   // one session-wide jq program list (#1977)
-		jqLastProgram:  map[string]string{}, // per-file last valid jq program (#1982)
-		compMRU:        mru.Load(mru.DefaultFile()),
-		bpts:           debug.Load(),
-		doctorLog:      debugdoctor.NewLog(),
-		host:           h,
-		reg:            reg,
-		themePal:       themePal,
-		bindings:       bindings,
-		help:           help.New(reg, bindings, helpMinCol(cfg)),
-		shell:          ui.New(shellConfig(cfg)),
-		vcs:            vcsSt,
-		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, sshPicker, remotePicker, jqFilters),
-		layoutsPicker:  layoutsPicker,
-		httpRequests:   httpRequests,
-		httpEntries:    httpEntries,
-		httpEnvs:       httpEnvs,
-		runConfigs:     runConfigs,
-		tasks:          tasksPicker,
-		ssh:            sshPicker,
-		remote:         remotePicker,
-		jqFilters:      jqFilters,
-		httpEnv:        loadHTTPEnv(), // selected HTTP environments (#1867)
-		refs:           refs,
-		lspStatus:      map[string]string{},
-		symbols:        symbols,
-		actions:        actions,
-		pasteHist:      pasteHist,
-		bookmarks:      bookmarksPicker,
-		gmarks:         &marks.Store{},
-		bmarks:         bookmarks.Load(), // project bookmarks (#55)
-		qhist:          &histories.Store{},
-		regs:           regs,
-		paletteKey:     paletteToggleKey(cfg),
-		splitZone:      splitZone(cfg),
-		focusKeys:      focusKeys(cfg),
-		keys:           buildKeymap(cfg, bindings),
+		cmdUsage:        cmdUsage,
+		fileUsage:       fileUsage,
+		winSizes:        winSizes,
+		winSizesAll:     winSizesAll,
+		pins:            loadPins(),                          // pinned file slots (#788)
+		lhStore:         localhistory.New(localHistoryDir()), // local history (#1023)
+		feed:            changefeed.New(),                    // external-change feed (#2000)
+		completeEngine:  engine,
+		ws:              wsMgr,
+		recentEditor:    edKey,
+		recent:          recent,
+		largeToasted:    map[string]bool{},
+		logsetToasted:   map[string]bool{},
+		toolchainSeg:    map[string]string{},
+		liveImages:      map[int]bool{},
+		navHist:         &nav.History{},
+		playHistory:     &jqplay.History{},   // one session-wide program list (#1977)
+		playLastProgram: map[string]string{}, // per-file last valid program (#1982)
+		compMRU:         mru.Load(mru.DefaultFile()),
+		bpts:            debug.Load(),
+		doctorLog:       debugdoctor.NewLog(),
+		host:            h,
+		reg:             reg,
+		themePal:        themePal,
+		bindings:        bindings,
+		help:            help.New(reg, bindings, helpMinCol(cfg)),
+		shell:           ui.New(shellConfig(cfg)),
+		vcs:             vcsSt,
+		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, sshPicker, remotePicker, playFilters),
+		layoutsPicker:   layoutsPicker,
+		httpRequests:    httpRequests,
+		httpEntries:     httpEntries,
+		httpEnvs:        httpEnvs,
+		runConfigs:      runConfigs,
+		tasks:           tasksPicker,
+		ssh:             sshPicker,
+		remote:          remotePicker,
+		playFilters:     playFilters,
+		httpEnv:         loadHTTPEnv(), // selected HTTP environments (#1867)
+		refs:            refs,
+		lspStatus:       map[string]string{},
+		symbols:         symbols,
+		actions:         actions,
+		pasteHist:       pasteHist,
+		bookmarks:       bookmarksPicker,
+		gmarks:          &marks.Store{},
+		bmarks:          bookmarks.Load(), // project bookmarks (#55)
+		qhist:           &histories.Store{},
+		regs:            regs,
+		paletteKey:      paletteToggleKey(cfg),
+		splitZone:       splitZone(cfg),
+		focusKeys:       focusKeys(cfg),
+		keys:            buildKeymap(cfg, bindings),
 	}
 	m.floats = ui.NewStack(m.shell)                 // z-ordered floating stack (#1237)
 	m.floats.SetSizeStore(winSizes)                 // resizable modal shell (#774)
@@ -2304,7 +2304,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, ssh *sshMode, remoteHosts *remoteMode, jqFilters *jqFiltersMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -2370,7 +2370,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, ssh, remoteHosts, jqFilters, bufLang)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, ssh, remoteHosts, playFilters, bufLang)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -4979,67 +4979,71 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// prefilled from the editor's visual selection when there is one.
 		return m, m.startRegexTester()
 
-	case OpenJQPlaygroundMsg:
-		// json.jqPlayground (palette / Tools menu, #1936): the jq query
-		// line, mounted inline in the JSON buffer or HTTP response pane at
-		// hand (#1970), on `.` or this input's last valid program (#1982).
-		return m, m.startJQPlayground(false)
+	case OpenPlaygroundMsg:
+		// json.jqPlayground / yaml.yqPlayground (palette / Tools menu, #1936,
+		// #2039): the query line, mounted inline in the buffer or HTTP
+		// response pane at hand (#1970), on `.` or this input's last valid
+		// program (#1982).
+		return m, m.startPlayground(msg.Dialect, false)
 
-	case OpenJQPlaygroundAtPathMsg:
-		// json.jqPlaygroundAtPath (palette / Tools menu, #1982): the same
-		// mode, prefilled with the caret's jq path (#1660).
-		return m, m.startJQPlayground(true)
+	case OpenPlaygroundAtPathMsg:
+		// json.jqPlaygroundAtPath / yaml.yqPlaygroundAtPath (palette / Tools
+		// menu, #1982): the same mode, prefilled with the caret's document
+		// path in the dialect's own spelling (#1660).
+		return m, m.startPlayground(msg.Dialect, true)
 
-	case SaveJQFilterPromptMsg:
+	case SaveFilterPromptMsg:
 		// json.jqSaveFilter (ctrl+s in the query line, palette / Tools menu,
 		// #1995): name the program on the query line and store it in the
-		// project or the global filter library.
-		m.startJQSavePrompt()
+		// project or the global filter library of the open playground's
+		// dialect (#2039).
+		m.startPlaySavePrompt()
 		return m, nil
 
-	case ShowJQFiltersMsg:
-		// json.jqFilters / json.jqRenameFilter (ctrl+l in the query line,
-		// palette / Tools menu, #1995): the saved-filter picker, in its
-		// insert or its rename spelling.
-		m.openJQFilterPicker(msg.Rename)
+	case ShowFiltersMsg:
+		// json.jqFilters / json.jqRenameFilter and their yq twins (ctrl+l in
+		// the query line, palette / Tools menu, #1995): the saved-filter
+		// picker over one dialect's two libraries, in its insert or its
+		// rename spelling.
+		m.openPlayFilterPicker(msg.Dialect, msg.Rename)
 		return m, nil
 
-	case ToggleJQQueryViewMsg:
+	case TogglePlaygroundQueryViewMsg:
 		// json.jqQueryView (ctrl+alt+e, palette / Tools menu, #2032): show the
 		// whole program over several wrapped rows, or fold it back to the one
 		// windowed line.
-		m.toggleJQQueryView()
+		m.togglePlayQueryView()
 		return m, nil
 
-	case InsertJQFilterMsg:
+	case InsertFilterMsg:
 		// A picked filter goes on the query line and runs (#1995), opening
 		// the playground first when none is up.
-		return m, m.insertJQFilter(msg)
+		return m, m.insertPlayFilter(msg)
 
-	case RenameJQFilterPromptMsg:
+	case RenameFilterPromptMsg:
 		// The picker's rename spelling reached an entry (#1995).
-		m.startJQRenamePrompt(msg)
+		m.startPlayRenamePrompt(msg)
 		return m, nil
 
-	case DeleteJQFilterMsg:
+	case DeleteFilterMsg:
 		// The picker's aux action (shift+delete) on a saved filter (#1995);
 		// the picker stays open and refreshes in place.
-		m.deleteJQFilter(msg)
+		m.deletePlayFilter(msg)
 		return m, nil
 
-	case jqParseDoneMsg:
+	case playParseDoneMsg:
 		// The input snapshot finished parsing off the event loop (#1936).
-		return m, m.finishJQParse(msg)
+		return m, m.finishPlayParse(msg)
 
-	case jqDebounceMsg:
+	case playDebounceMsg:
 		// The query line went quiet long enough to run the program (#1936);
 		// a stale generation means the user kept typing.
-		return m, m.fireJQDebounce(msg)
+		return m, m.firePlayDebounce(msg)
 
-	case jqEvalDoneMsg:
+	case playEvalDoneMsg:
 		// An off-loop jq evaluation came back (#1936); a stale generation is
-		// dropped by finishJQEval, a current one refreshes the result buffer.
-		return m, m.finishJQEval(msg)
+		// dropped by finishPlayEval, a current one refreshes the result buffer.
+		return m, m.finishPlayEval(msg)
 
 	case project.OpenNewProjectMsg:
 		// project.new (palette / File menu, #1718): the new-project wizard.
@@ -5307,13 +5311,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case editor.ActionMsg:
 		// A registry command drives the focused editor through this message
-		// path. The inline jq playground's result buffer takes it while its
+		// path. The inline playground's result buffer takes it while its
 		// pane is focused (#1980) — the Edit menu's copy must act on the
 		// visible selection, not the pane's hidden document; mutations bounce
 		// off the read-only flag as usual. A focused merge view routes it into
 		// its result editor (#1478), so the merge accepts / write work from
 		// the palette.
-		if s := m.jqPlay; s != nil && s.resultEd != nil && m.jqPlayFocused() {
+		if s := m.play; s != nil && s.resultEd != nil && m.playFocused() {
 			var cmd tea.Cmd
 			*s.resultEd, cmd = s.resultEd.Update(msg)
 			return m, cmd
@@ -5328,11 +5332,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case highlight.SpansMsg:
-		// The inline jq result buffer (#1970) lives outside every pane; parse
-		// results for its virtual path route to it directly, and its lint
-		// notes never reach the Problems store — a throwaway result is not a
-		// project diagnostic.
-		if s := m.jqPlay; s != nil && s.resultEd != nil && msg.Path == jqResultPath {
+		// The inline playground's result buffer (#1970) lives outside every
+		// pane; parse results for its virtual path route to it directly, and
+		// its lint notes never reach the Problems store — a throwaway result
+		// is not a project diagnostic.
+		if s := m.play; s != nil && s.resultEd != nil && msg.Path == s.dialect.ResultPath() {
 			var cmd tea.Cmd
 			*s.resultEd, cmd = s.resultEd.Update(msg)
 			return m, cmd
@@ -6399,11 +6403,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The saved-filter name prompt (#1995) is checked first: it is a
 		// modal shell prompt opened *from* the playground, and the mode's
 		// pane still holds the focus while it is up.
-		if m.jqNamePromptOpen() {
-			return m.updateJQNamePrompt(msg)
+		if m.playNamePromptOpen() {
+			return m.updatePlayNamePrompt(msg)
 		}
-		if m.jqPlayFocused() {
-			return m.updateJQPlayground(msg)
+		if m.playFocused() {
+			return m.updatePlayground(msg)
 		}
 		// The new-project wizard (#1718) mirrors it, with three steps walked
 		// by enter/esc.
@@ -7314,10 +7318,10 @@ func (m *Model) setFocus(key string) {
 	}
 	// The Problems pane's current-file scope tracks the same file (#1024).
 	m.syncProblemsActive()
-	// The inline jq playground survives focus leaving its pane (#1980); the
+	// The inline playground survives focus leaving its pane (#1980); the
 	// substitute editor's cursor cell tracks whether the pane holds the
 	// keyboard, so an unfocused playground draws no caret.
-	if s := m.jqPlay; s != nil && s.resultEd != nil {
+	if s := m.play; s != nil && s.resultEd != nil {
 		s.resultEd.SetFocused(key == s.paneKey && s.bufFocus)
 	}
 }
@@ -7547,11 +7551,11 @@ func (m *Model) closeKey(key string) bool {
 	m.backupDropOnClose(inst, key)
 	m.activeWS().Tree = tree
 	m.activeWS().Panes.Close(key)
-	// The inline jq playground dies with its hosting pane (#1980): the mode
+	// The inline playground dies with its hosting pane (#1980): the mode
 	// survives focus changes, so the pane can be closed from elsewhere while
 	// the playground is still mounted in it.
-	if s := m.jqPlay; s != nil && s.paneKey == key {
-		m.closeJQPlayground()
+	if s := m.play; s != nil && s.paneKey == key {
+		m.closePlayground()
 	}
 	if m.recentEditor == key {
 		m.recentEditor = firstEditorKey(layout.Leaves(m.activeWS().Tree))
@@ -8045,9 +8049,9 @@ func (m *Model) layout() {
 			m.pendingScroll = nil
 		}
 	}
-	// The inline jq playground's result buffer (#1970) tracks its hosting
+	// The inline playground's result buffer (#1970) tracks its hosting
 	// pane's interior minus the query header rows.
-	m.sizeJQResult()
+	m.sizePlayResult()
 	m.syncFocus()
 }
 
@@ -8409,10 +8413,10 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		if inst == nil {
 			return m, nil
 		}
-		// The wheel scrolls the inline jq result buffer (#1970) while the
+		// The wheel scrolls the inline playground result buffer (#1970) while the
 		// mode owns the pane; horizontal wheel and shift+wheel sideways,
 		// like the editor (#230).
-		if s := m.jqPlay; s != nil && s.paneKey == key {
+		if s := m.play; s != nil && s.paneKey == key {
 			switch {
 			case msg.Button == tea.MouseWheelLeft:
 				s.resultEd.ScrollXBy(-lines)
@@ -8777,7 +8781,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				}
 			}
 		case dragEditSelect:
-			// dragEditor: the drag may target the inline jq result buffer
+			// dragEditor: the drag may target the inline playground result buffer
 			// (#1970) instead of the pane's own document editor.
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if ed := m.dragEditor(m.drag.srcPane); ed != nil {
@@ -9366,14 +9370,14 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	m.setFocus(key)
 	localX := msg.X - (r.X + paneContentX)
 	localY := msg.Y - (r.Y + m.contentYOff(key))
-	// The inline jq playground (#1970) owns its pane's mouse: body clicks
+	// The inline playground (#1970) owns its pane's mouse: body clicks
 	// move the caret and select in the result buffer, header clicks return
 	// the focus to the query line. A click into any other pane just moves
 	// the focus (#1980) — the playground stays mounted with its query and
 	// result intact, and its key routing is scoped to its pane, so the
 	// clicked pane takes typing normally.
-	if s := m.jqPlay; s != nil && key == s.paneKey {
-		return m.jqPaneClick(key, msg, localX, localY)
+	if s := m.play; s != nil && key == s.paneKey {
+		return m.playPaneClick(key, msg, localX, localY)
 	}
 	// The breadcrumbs row (#1153) sits between the title row and the content
 	// (content-local y = -1): a left press on a symbol segment jumps there, any
@@ -10055,7 +10059,7 @@ func (m Model) render() string {
 		base = overlay.Place(base, box, x, y, m.width, m.height)
 	}
 	base = m.compositeLSPPopups(base)
-	base = m.compositeJQCompletion(base)
+	base = m.compositePlayCompletion(base)
 	base = m.compositeWhichKey(base)
 	if text, bx, by, _, ok := m.largeFileBanner(); ok {
 		// Persistent large-file notice (#1124): an overlay over the focused
@@ -10698,10 +10702,11 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 		}
 	}
 
-	// The inline jq playground (#1970) takes over the pane's chrome with its
-	// content: the title names the mode and the queried snapshot.
-	if m.jqInlineActive(key) {
-		title = "JQ — " + m.jqPlay.source
+	// The inline playground (#1970) takes over the pane's chrome with its
+	// content: the title names the mode — jq or yq (#2039) — and the queried
+	// snapshot.
+	if m.playInlineActive(key) {
+		title = strings.ToUpper(m.play.dialect.Name()) + " — " + m.play.source
 	}
 
 	border := m.pal().Border
@@ -10712,9 +10717,9 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 		// keeps BorderFocus, so the resting look is unchanged and a coloured
 		// border always means "this pane is doing something other than
 		// navigating" — green insert, yellow visual, red replace, blue command.
-		// The jq result buffer signals its mode the same way while it holds
+		// The playground result buffer signals its mode the same way while it holds
 		// the keyboard (#1970).
-		if s := m.jqPlay; s != nil && s.paneKey == key {
+		if s := m.play; s != nil && s.paneKey == key {
 			if md := s.resultEd.ModeName(); s.bufFocus && md != editor.Normal {
 				border = editor.ModeColor(md, m.pal())
 			}
@@ -10743,11 +10748,11 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 	// padding, per-line width measurement) when the pane's output is identical to
 	// the last frame — the common case for the panes the user is not touching.
 	var content string
-	if m.jqInlineActive(key) {
-		// The inline jq playground (#1970): the query header plus the
+	if m.playInlineActive(key) {
+		// The inline playground (#1970): the query header plus the
 		// read-only result buffer replace the pane's own content; the pane's
 		// component keeps its state untouched underneath.
-		content = m.jqInlineBody(r.W - paneChromeW)
+		content = m.playInlineBody(r.W - paneChromeW)
 	} else {
 		content = inst.View()
 		// The breadcrumbs bar (#1153) is the first content row of an editor

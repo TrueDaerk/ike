@@ -46,9 +46,12 @@ func TestCatalogApplicability(t *testing.T) {
 			want: []string{"editor.copyDocPathJQ", "editor.copyDocPathYQ", "editor.copyDocPath", "json.jqPlaygroundAtPath"},
 		},
 		{
-			name:    "yaml value caret has no jq playground",
+			// #2039: a YAML value gets the yq playground, not the jq one —
+			// the same entry over the same mode, dispatching the dialect the
+			// buffer is actually written in.
+			name:    "yaml value caret offers the yq playground",
 			cx:      Context{LangID: "yaml", DocPath: true},
-			want:    []string{"editor.copyDocPathJQ", "editor.copyDocPathYQ"},
+			want:    []string{"editor.copyDocPathJQ", "editor.copyDocPathYQ", "yaml.yqPlaygroundAtPath"},
 			wantNot: []string{"json.jqPlaygroundAtPath"},
 		},
 		{
@@ -61,9 +64,15 @@ func TestCatalogApplicability(t *testing.T) {
 			wantNot: []string{"json.jqPlaygroundAtPath"},
 		},
 		{
+			name:    "selection in a yaml buffer has no yq playground at path",
+			cx:      Context{LangID: "yaml", DocPath: true, HasSelection: true},
+			want:    []string{"editor.copyDocPathYQ"},
+			wantNot: []string{"yaml.yqPlaygroundAtPath", "json.jqPlaygroundAtPath"},
+		},
+		{
 			name:    "go buffer offers no doc path",
 			cx:      Context{LangID: "go"},
-			wantNot: []string{"editor.copyDocPath", "editor.copyDocPathJQ", "json.jqPlaygroundAtPath"},
+			wantNot: []string{"editor.copyDocPath", "editor.copyDocPathJQ", "json.jqPlaygroundAtPath", "yaml.yqPlaygroundAtPath"},
 		},
 		{
 			name: "caret inside http request with a shown response",

@@ -225,14 +225,14 @@ var jetbrainsRows = []row{
 	// Global so it also opens from a focused terminal or tool pane, which is
 	// exactly where an "is this pane burning CPU" question comes up.
 	{"ctrl+alt+p", "perf.hud", "Performance HUD", Global, "Performance HUD (#1999)"},
-	// The jq playground's multi-line view (#2032, edited in since #2038). The
-	// playground owns the
+	// The playground's multi-line view (#2032, edited in since #2038; both
+	// dialects since #2039). The playground owns the
 	// keyboard while its pane is focused and resolves the keys it does not
 	// claim against the Global scope (#1983), so a Global row is what makes the
 	// toggle reachable from both the query line and the result buffer — and
 	// rebindable, unlike the mode's hard-wired ctrl+s/ctrl+l. ctrl+alt+e joins
 	// the ctrl+alt view-toggle family above; e for expand.
-	{"ctrl+alt+e", "json.jqQueryView", "Full jq query view", Global, "jq playground (#2032)"},
+	{"ctrl+alt+e", "json.jqQueryView", "Full query view", Global, "jq/yq playground (#2032)"},
 	{"cmd+shift+v", "editor.pasteFromHistory", "Paste from history", Editor, "Paste history (#57)"},
 	// Multi-caret (#145): JetBrains' ctrl+g occurrence walk plus a deliverable
 	// select-all-occurrences chord (the JetBrains original needs alt).

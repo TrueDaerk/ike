@@ -55,10 +55,10 @@ func (m Model) breadcrumbRows(inst *pane.Instance) int {
 	if inst == nil || m.zen || inst.Kind() != pane.KindEditor || inst.ActiveTerminal() != nil {
 		return 0
 	}
-	// The inline jq playground (#1970) replaces the pane's content with its
+	// The inline playground (#1970) replaces the pane's content with its
 	// own header plus the result buffer; the document's breadcrumbs would
 	// caption content that is not on screen.
-	if m.jqInlineActive(inst.Key()) {
+	if m.playInlineActive(inst.Key()) {
 		return 0
 	}
 	if !m.breadcrumbsOn() {
@@ -76,11 +76,11 @@ func (m Model) breadcrumbRows(inst *pane.Instance) int {
 
 // contentYOff is the pane's content-local Y origin: the shared chrome rows
 // (border + title) plus the breadcrumbs row when the pane shows one, plus the
-// inline jq playground's query header when the mode owns the pane (#1970).
+// inline playground's query header when the mode owns the pane (#1970).
 // Every absolute→content-local mouse translation for a keyed pane goes
 // through it.
 func (m Model) contentYOff(key string) int {
-	return paneContentY + m.breadcrumbRows(m.activeWS().Panes.Get(key)) + m.jqHeaderRowsFor(key)
+	return paneContentY + m.breadcrumbRows(m.activeWS().Panes.Get(key)) + m.playHeaderRowsFor(key)
 }
 
 // symbolChain returns the chain of symbols enclosing the 0-based cursor line,

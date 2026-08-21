@@ -1,7 +1,7 @@
-// Package jqplay is the evaluation core of the jq playground (#1936): parse a
-// JSON buffer once, then run jq programs against it as the user types and
-// report what came out — the values, the compile or runtime error, and
-// whether the output had to be capped.
+// Package jqplay is the evaluation core of the jq and yq playgrounds (#1936,
+// #2039): parse a JSON or YAML buffer once, then run jq programs against it
+// as the user types and report what came out — the values, the compile or
+// runtime error, and whether the output had to be capped.
 //
 // It holds no UI state on purpose: the floating playground in internal/app
 // owns the query line, the result window and the rendering, and calls Run on
@@ -16,6 +16,11 @@
 // are bounded by MaxOutputs/MaxResultBytes and by the context the host passes
 // in, which carries EvalTimeout and is cancelled when a newer keystroke
 // supersedes the run.
+//
+// The YAML half (#2039) is a second *input and output* path, not a second
+// engine: a YAML stream decodes into the same value shapes gojq already runs
+// over, and the outputs are written back as YAML. See dialect.go for the seam
+// and yaml.go for the decoding rules.
 package jqplay
 
 import (
@@ -40,9 +45,9 @@ const MaxOutputs = 500
 // that each happen to be a megabyte cannot blow up the model either.
 const MaxResultBytes = 256 << 10
 
-// MaxInputValues caps how many top-level values Parse reads out of a JSON
-// stream (a `.jsonl` export is one value per line). Input.Truncated marks a
-// capped read.
+// MaxInputValues caps how many top-level values Parse reads out of an input
+// stream (a `.jsonl` export is one value per line, a YAML file one per `---`).
+// Input.Truncated marks a capped read.
 const MaxInputValues = 10000
 
 // EvalTimeout bounds one evaluation. jq programs can loop without ever
@@ -56,25 +61,40 @@ const EvalTimeout = 5 * time.Second
 // a screenful of JSON is free; parsing a 10 MB API dump is not.
 const AsyncThreshold = 64 << 10
 
-// Input is a parsed JSON input: the top-level values of a JSON stream, kept
+// Input is a parsed input: the top-level values of a document stream, kept
 // decoded so that typing in the query line re-runs the program without
 // re-parsing the buffer. Numbers stay json.Number, which gojq understands
 // natively, so a 64-bit id survives the round trip that float64 would round.
+// dialect remembers which language the values were read from, so a run over
+// them writes its outputs back in the same one (#2039).
 type Input struct {
-	values []any
-	size   int
+	values  []any
+	size    int
+	dialect Dialect
 	// Truncated reports that the stream held more than MaxInputValues values
 	// and the tail was dropped.
 	Truncated bool
 }
 
+// Dialect reports which document language the input was read as.
+func (in *Input) Dialect() Dialect {
+	if in == nil {
+		return DialectJQ
+	}
+	return in.dialect
+}
+
 // Parse decodes text as a JSON stream — one value for an ordinary document,
 // many for a `.jsonl` export or a concatenated body. An empty or non-JSON
 // text is an error the playground shows on its input line; it is never a
-// crash.
-func Parse(text string) (*Input, error) {
+// crash. It is DialectJQ.Parse under the name the callers outside the
+// playground (the .http client's capture directive, #1993) already use.
+func Parse(text string) (*Input, error) { return parseJSON(text) }
+
+// parseJSON is the JSON half of Dialect.Parse.
+func parseJSON(text string) (*Input, error) {
 	if strings.TrimSpace(text) == "" {
-		return nil, errors.New("no JSON input — the buffer is empty")
+		return nil, errors.New(DialectJQ.emptyInput())
 	}
 	dec := json.NewDecoder(strings.NewReader(text))
 	dec.UseNumber()
@@ -95,19 +115,26 @@ func Parse(text string) (*Input, error) {
 		}
 	}
 	if len(in.values) == 0 {
-		return nil, errors.New("no JSON input — the buffer is empty")
+		return nil, errors.New(DialectJQ.emptyInput())
 	}
 	return in, nil
 }
 
-// InputError reports that a text could not be read as a JSON stream. Detail
-// is the decoder's own complaint (with the line it happened on) without any
-// preamble, so a caller can phrase the failure in its own terms — the .http
-// client's capture directive (#1993) says "the response body is not JSON"
-// where the playground says "input".
-type InputError struct{ Detail string }
+// InputError reports that a text could not be read as the dialect's document
+// stream. Detail is the decoder's own complaint (with the line it happened
+// on) without any preamble, so a caller can phrase the failure in its own
+// terms — the .http client's capture directive (#1993) says "the response
+// body is not JSON" where the playground says "input".
+type InputError struct {
+	Detail string
+	// Dialect names the language that failed to parse. The zero value is jq,
+	// so every caller outside the yq path (#2039) keeps its JSON wording.
+	Dialect Dialect
+}
 
-func (e *InputError) Error() string { return "input is not valid JSON: " + e.Detail }
+func (e *InputError) Error() string {
+	return "input is not valid " + e.Dialect.Format() + ": " + e.Detail
+}
 
 // decodeError renders a decode failure with the line it happened on, which a
 // byte offset alone does not tell the reader of a pretty-printed document.
@@ -158,11 +185,20 @@ type Result struct {
 	// Truncated reports that collection stopped at MaxOutputs or
 	// MaxResultBytes rather than at the end of the iterator.
 	Truncated bool
+	// dialect is the language the outputs are written in — it decides how
+	// they are joined into one document (#2039). The zero value is jq, so a
+	// Result built by hand for a failure the host phrases itself stays
+	// JSON-shaped.
+	dialect Dialect
 }
 
-// Text joins the outputs the way jq's stdout would, which is what the copy
-// and open-as-scratch actions write.
-func (r Result) Text() string { return strings.Join(r.Outputs, "\n") }
+// Dialect reports which document language the outputs are written in.
+func (r Result) Dialect() Dialect { return r.dialect }
+
+// Text joins the outputs into the document the result buffer shows, which is
+// also what the copy and open-as-scratch actions write: jq's stdout puts one
+// value per line, a YAML stream separates its documents with `---`.
+func (r Result) Text() string { return strings.Join(r.Outputs, r.dialect.separator()) }
 
 // Lines splits the result into display rows.
 func (r Result) Lines() []string {
@@ -176,10 +212,14 @@ func (r Result) Lines() []string {
 // convenient form for tests and for callers that hold text rather than a
 // parsed Input. A parse failure comes back as the Result's error, so one call
 // covers both failure modes the playground renders identically.
-func Evaluate(program, text string) Result {
-	in, err := Parse(text)
+func Evaluate(program, text string) Result { return EvaluateWith(DialectJQ, program, text) }
+
+// EvaluateWith is Evaluate in one dialect (#2039): the yq path reads and
+// renders YAML, the jq path is Evaluate itself.
+func EvaluateWith(d Dialect, program, text string) Result {
+	in, err := d.Parse(text)
 	if err != nil {
-		return Result{Err: err.Error()}
+		return Result{Err: err.Error(), dialect: d}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), EvalTimeout)
 	defer cancel()
@@ -196,20 +236,20 @@ func Evaluate(program, text string) Result {
 func Run(ctx context.Context, program string, in *Input) Result {
 	program = strings.TrimSpace(program)
 	if program == "" {
-		return Result{}
+		return Result{dialect: in.Dialect()}
 	}
 	if in == nil || len(in.values) == 0 {
-		return Result{Err: "no JSON input — the buffer is empty"}
+		return Result{Err: in.Dialect().emptyInput(), dialect: in.Dialect()}
 	}
 	query, err := gojq.Parse(program)
 	if err != nil {
-		return Result{Err: err.Error()}
+		return Result{Err: err.Error(), dialect: in.dialect}
 	}
 	code, err := gojq.Compile(query)
 	if err != nil {
-		return Result{Err: err.Error()}
+		return Result{Err: err.Error(), dialect: in.dialect}
 	}
-	var res Result
+	res := Result{dialect: in.dialect}
 	size := 0
 	for _, v := range in.values {
 		iter := code.RunWithContext(ctx, v)
@@ -230,7 +270,7 @@ func Run(ctx context.Context, program string, in *Input) Result {
 				res.Truncated = true
 				return res
 			}
-			text := encode(out)
+			text := in.dialect.encode(out)
 			size += len(text)
 			res.Outputs = append(res.Outputs, text)
 		}
@@ -260,11 +300,11 @@ func contextError(ctx context.Context) string {
 	return "evaluation cancelled"
 }
 
-// encode pretty-prints one output value in jq's JSON flavour. gojq.Marshal
+// encodeJSON pretty-prints one output value in jq's JSON flavour. gojq.Marshal
 // emits jq's escaping (which differs from encoding/json: no `&` for
 // `&`); json.Indent then lays the value out over lines, so a nested object
 // reads as a document instead of as one very long row.
-func encode(v any) string {
+func encodeJSON(v any) string {
 	compact, err := gojq.Marshal(v)
 	if err != nil {
 		return fmt.Sprintf("%v", v)
@@ -280,8 +320,10 @@ func encode(v any) string {
 const HistoryLimit = 50
 
 // History is the session-scoped list of programs the playground evaluated,
-// newest first. It lives in memory only: a jq program under construction is
-// scratch work, not something to persist into the project.
+// newest first. It lives in memory only: a program under construction is
+// scratch work, not something to persist into the project. One list serves
+// both dialects (#2039) — a yq program *is* a jq program here, and the list
+// is already deliberately promiscuous across buffers.
 type History struct{ items []string }
 
 // Add records program as the newest entry, moving a repeat to the front

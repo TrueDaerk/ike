@@ -30,12 +30,15 @@ func Builtins() []Provider {
 }
 
 // docPathProvider offers the JSON/YAML path actions (#1660) when the caret
-// sits on a value: the three copy flavours, and — for buffers jq itself can
-// read, so not for YAML — the playground seeded with the caret's path.
+// sits on a value: the three copy flavours, and the playground seeded with the
+// caret's path — the jq one over a JSON buffer, the yq one over a YAML buffer
+// (#2039). The two playgrounds are the same mode over two decoders, so the
+// entry is the same entry; only the buffer's language decides which command it
+// dispatches.
 //
 // The playground needs the *whole* buffer as its input: against a selection
 // the caret's path indexes the file and would name a location the input does
-// not contain, so json.jqPlaygroundAtPath silently falls back to the identity
+// not contain, so the …AtPath commands silently fall back to the identity
 // program there (#2026) — an entry promising "at Cursor Path" that does not
 // go to the cursor's path is not offered.
 func docPathProvider() Provider {
@@ -50,8 +53,12 @@ func docPathProvider() Provider {
 				{Title: "Copy Path as yq Expression", Kind: "copy", CommandID: "editor.copyDocPathYQ"},
 				{Title: "Copy Path", Kind: "copy", CommandID: "editor.copyDocPath"},
 			}
-			if !docpath.IsYAML(cx.LangID) && !cx.HasSelection {
-				items = append(items, Item{Title: "jq Playground at Cursor Path", Kind: "jq", CommandID: "json.jqPlaygroundAtPath"})
+			if !cx.HasSelection {
+				if docpath.IsYAML(cx.LangID) {
+					items = append(items, Item{Title: "yq Playground at Cursor Path", Kind: "yq", CommandID: "yaml.yqPlaygroundAtPath"})
+				} else {
+					items = append(items, Item{Title: "jq Playground at Cursor Path", Kind: "jq", CommandID: "json.jqPlaygroundAtPath"})
+				}
 			}
 			return items
 		},
