@@ -53,14 +53,38 @@ func PageIndex(i, delta, n, page int) int {
 // inside a height-row window over n rows. It never scrolls past the end and
 // never returns a negative offset.
 func ScrollToShow(top, sel, height, n int) int {
+	return ScrollToShowOff(top, sel, height, n, 0)
+}
+
+// ScrollToShowOff is ScrollToShow with a scrolloff margin (#2041): the window
+// keeps off rows visible above and below sel wherever the list allows it, so
+// navigating downwards moves the window on as soon as the cursor reaches the
+// off-th-last visible row instead of only at the very edge (vim's
+// 'scrolloff'). The margin is capped at (height-1)/2 so it can always be
+// honoured on both sides, and it is clipped against the list ends — the first
+// and last rows still sit flush against the window edge.
+func ScrollToShowOff(top, sel, height, n, off int) int {
 	if height < 1 {
 		return 0
 	}
-	if sel < top {
-		top = sel
+	if off < 0 {
+		off = 0
 	}
-	if sel >= top+height {
-		top = sel - height + 1
+	if max := (height - 1) / 2; off > max {
+		off = max
+	}
+	lo, hi := sel-off, sel+off
+	if lo < 0 {
+		lo = 0
+	}
+	if hi > n-1 {
+		hi = n - 1
+	}
+	if lo < top {
+		top = lo
+	}
+	if hi >= top+height {
+		top = hi - height + 1
 	}
 	if max := n - height; top > max {
 		top = max

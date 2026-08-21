@@ -284,6 +284,16 @@ path into the seamless workspace switch (#777), so terminals and runs keep
 running. The query fuzzy-filters both columns at once. Anchored palettes
 and search everywhere never show the column.
 
+**The column has its own scroll window (#2041).** `sideTop` is to the column
+what `top` is to the main list: `scrollSideToSelected` keeps the selection
+inside `sideVisibleRows() = visibleRows() - 1` rows (the column spends one
+line on its heading), `sideView` renders that window, and the click mapping
+resolves a row as `sideTop + (y - 3)`. Before it the column had a selection
+but no window, so with more projects than rows everything below the fold was
+invisible and unreachable. Both the aux action and `enter` go through
+`sideSel`, so closing a workspace or pruning an entry still hits the row the
+user sees after scrolling.
+
 **Automatic focus placement (#819).** On open and after every query edit the
 column focus follows the best match: an empty files list starts the focus on
 the projects column (fresh project, `enter` reopens the previous project),
@@ -454,6 +464,20 @@ discoverability, the project-switch command's appearance) is owned by roadmaps
   and `pgup`/`pgdn` jump one visible result window, clamped; `enter` activates.
   `home`/`end` stay with the query's text cursor. Both columns behave the same;
   see [Selection-List Navigation](/architecture/list-navigation.md).
+- **Scrolloff of one entry (#2041).** Both windows follow the selection through
+  `ui.ScrollToShowOff(…, scrollOff)` with `scrollOff = 1`: moving down scrolls
+  already when the selection reaches the second-to-last visible row (moving up,
+  the second), so the next entry is always visible. It applies to every palette
+  mode, not just the recent dialog. The list ends stay flush — the first and
+  last entries are not padded with blank rows.
+- **The wheel scrolls the column under the pointer (#2041).** `Palette.Wheel(x,
+  y, delta)` maps the box-relative `x` onto the two-column layout exactly as
+  `Click` does: over the projects column it moves `sideSel`, otherwise the main
+  selection, and it takes the column focus along so `enter` and the aux action
+  stay on the row just scrolled to. Wheel movement **clamps** at both ends
+  (keyboard steps wrap, a wheel flick must not). The root model routes wheel
+  events inside the box here (`handleMouse`), coalesced like every other wheel
+  burst (#238).
 
 ## Boundaries
 

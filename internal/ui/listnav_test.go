@@ -68,6 +68,30 @@ func TestScrollToShow(t *testing.T) {
 	}
 }
 
+// TestScrollToShowOff covers the scrolloff margin (#2041): the window moves on
+// one row early, but never past a list end and never beyond half the window.
+func TestScrollToShowOff(t *testing.T) {
+	cases := []struct{ top, sel, height, n, off, want int }{
+		{0, 3, 5, 10, 1, 0},    // row 4 still visible below the cursor
+		{0, 4, 5, 10, 1, 1},    // the margin pulls the window on early
+		{1, 2, 5, 10, 1, 1},    // row 1 still visible above the cursor
+		{2, 2, 5, 10, 1, 1},    // one row above the cursor scrolls back
+		{5, 9, 5, 10, 1, 5},    // the last row sits flush at the window edge
+		{0, 0, 5, 10, 1, 0},    // …as does the first
+		{0, 2, 5, 3, 1, 0},     // list shorter than the window: no scroll
+		{0, 4, 5, 10, 9, 2},    // the margin is capped at (height-1)/2 = 2
+		{0, 4, 5, 10, 0, 0},    // off=0 is the plain edge-triggered window
+		{0, 4, 5, 10, -1, 0},   // a negative margin is treated as none
+		{20, 50, 0, 100, 1, 0}, // unsized viewport
+	}
+	for _, c := range cases {
+		if got := ScrollToShowOff(c.top, c.sel, c.height, c.n, c.off); got != c.want {
+			t.Errorf("ScrollToShowOff(%d,%d,%d,%d,%d) = %d, want %d",
+				c.top, c.sel, c.height, c.n, c.off, got, c.want)
+		}
+	}
+}
+
 func TestListNavWrapsStepsAndClampsPages(t *testing.T) {
 	sel := 0
 	if !ListNav("up", &sel, 5, 3, NavDefault) || sel != 4 {

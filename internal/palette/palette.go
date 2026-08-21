@@ -71,6 +71,7 @@ type Palette struct {
 	// current query, its selection, and whether it holds the column focus.
 	sideItems []Item
 	sideSel   int
+	sideTop   int // first visible row of the column (scroll window, #2041)
 	sideFocus bool
 	// sideManual marks an explicit column switch (tab/arrows/click) for the
 	// current query (#819): while set, recompute keeps the user's column
@@ -218,6 +219,7 @@ func (p *Palette) reset(cx Context) {
 	p.cx = cx
 	p.sideFocus = false
 	p.sideSel = 0
+	p.sideTop = 0
 	p.sideItems = nil
 	p.sideManual = false
 }
@@ -268,6 +270,7 @@ func (p *Palette) AdjustSize(ddw, ddh int) {
 	}
 	p.sizes.Nudge(winKind, ddw, ddh)
 	p.scrollToSelected()
+	p.scrollSideToSelected()
 }
 
 // visibleRows is the effective result-window height: the configured
@@ -305,6 +308,7 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 	if ddw, ddh, ok := ui.ResizeDelta(msg.String()); ok && p.sizes != nil {
 		p.sizes.Adjust(winKind, ddw, ddh)
 		p.scrollToSelected()
+		p.scrollSideToSelected()
 		return nil
 	}
 	// Column focus for a SideMode open (#778): tab toggles between the left
@@ -558,6 +562,7 @@ func (p *Palette) moveSide(delta int) {
 		return
 	}
 	p.sideSel = ui.StepIndex(p.sideSel, delta, len(p.sideItems))
+	p.scrollSideToSelected()
 }
 
 // moveSidePage jumps the left column by delta windows, clamped. The side
@@ -567,7 +572,8 @@ func (p *Palette) moveSidePage(delta int) {
 	if len(p.sideItems) == 0 {
 		return
 	}
-	p.sideSel = ui.PageIndex(p.sideSel, delta, len(p.sideItems), p.visibleRows()-1)
+	p.sideSel = ui.PageIndex(p.sideSel, delta, len(p.sideItems), p.sideVisibleRows())
+	p.scrollSideToSelected()
 }
 
 // Click maps a left press at box-relative (x, y) onto the row layout (#820):
@@ -589,9 +595,9 @@ func (p *Palette) Click(x, y int) tea.Cmd {
 			mainW = 10
 		}
 		if x < sideW { // side column: heading at y==2, items below
-			idx := y - 3
-			if idx < 0 || idx >= len(p.sideItems) {
-				return nil
+			idx := p.sideTop + (y - 3)
+			if idx < 0 || idx >= len(p.sideItems) || y-3 >= p.sideVisibleRows() {
+				return nil // above the first row or past the column's window
 			}
 			p.sideFocus, p.sideSel, p.sideManual = true, idx, true
 			it := p.sideItems[idx]
@@ -663,6 +669,7 @@ func (p *Palette) recompute() {
 		p.sideItems = nil
 	}
 	p.sideSel = 0
+	p.sideTop = 0
 	if len(p.sideItems) == 0 {
 		p.sideFocus = false
 	} else if !p.sideManual {
@@ -685,14 +692,58 @@ func (p *Palette) autoSideFocus(query string) bool {
 	return p.sideItems[0].Score > p.items[0].Score
 }
 
-// scrollToSelected keeps the selected row within the visible window.
+// scrollOff is the palette's scrolloff margin (#2041): navigating keeps one
+// entry visible beyond the selection, so the window moves on already when the
+// cursor reaches the second-to-last visible row. It applies to every palette
+// mode, both columns included.
+const scrollOff = 1
+
+// scrollToSelected keeps the selected row — plus the scrolloff margin — within
+// the main list's visible window.
 func (p *Palette) scrollToSelected() {
-	if p.selected < p.top {
-		p.top = p.selected
+	p.top = ui.ScrollToShowOff(p.top, p.selected, p.visibleRows(), len(p.items), scrollOff)
+}
+
+// sideVisibleRows is the left column's window height (#2041): the result
+// window minus the column's heading line, floored at one row.
+func (p *Palette) sideVisibleRows() int {
+	if n := p.visibleRows() - 1; n > 0 {
+		return n
 	}
-	if p.selected >= p.top+p.visibleRows() {
-		p.top = p.selected - p.visibleRows() + 1
+	return 1
+}
+
+// scrollSideToSelected keeps the left column's selection — plus the scrolloff
+// margin — inside its own window (#2041). Before it the column had a selection
+// but no window, so entries past the visible rows were unreachable.
+func (p *Palette) scrollSideToSelected() {
+	p.sideTop = ui.ScrollToShowOff(p.sideTop, p.sideSel, p.sideVisibleRows(), len(p.sideItems), scrollOff)
+}
+
+// Wheel scrolls the column under the box-relative cursor (x, y) by delta rows
+// (#2041). It moves that column's selection — clamped, wheel scrolling does
+// not wrap — and takes the column focus with it, so enter and the aux action
+// stay on the row the user just scrolled to, exactly as a click would.
+func (p *Palette) Wheel(x, y, delta int) {
+	if !p.open || delta == 0 {
+		return
 	}
+	x -= 2 // border + horizontal padding
+	inner := p.boxWidth() - 4
+	if len(p.sideItems) > 0 && x >= 0 && x < sideWidth(inner) {
+		p.sideSel = ui.ClampIndex(p.sideSel+delta, len(p.sideItems))
+		p.sideFocus, p.sideManual = true, true
+		p.scrollSideToSelected()
+		return
+	}
+	if len(p.items) == 0 {
+		return
+	}
+	p.selected = ui.ClampIndex(p.selected+delta, len(p.items))
+	if len(p.sideItems) > 0 {
+		p.sideFocus, p.sideManual = false, true
+	}
+	p.scrollToSelected()
 }
 
 // View renders the centered palette box, or empty when closed or unsized. The
@@ -805,11 +856,11 @@ func (p *Palette) sideView(width int) string {
 		head = lipgloss.NewStyle().Foreground(p.accentColor()).Bold(true)
 	}
 	lines := []string{head.Render(s.SideTitle())}
-	end := len(p.sideItems)
-	if max := p.visibleRows() - 1; end > max {
-		end = max
+	end := p.sideTop + p.sideVisibleRows()
+	if end > len(p.sideItems) {
+		end = len(p.sideItems)
 	}
-	for i := 0; i < end; i++ {
+	for i := p.sideTop; i < end; i++ {
 		lines = append(lines, p.sideRow(p.sideItems[i], i == p.sideSel, p.sideFocus, width))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
