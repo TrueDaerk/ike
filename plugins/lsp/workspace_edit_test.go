@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -63,9 +64,11 @@ func TestDispatchWorkspaceEditsSplitsOpenAndDisk(t *testing.T) {
 	if err := os.WriteFile(closed, []byte("abc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	var sent []tea.Msg
+	// Send delivers through the host's dispatcher goroutine (#2027), so the
+	// captured messages arrive on a channel, not in a slice the test reads.
+	sent := make(chan tea.Msg, 4)
 	rec := host.New(host.MapConfig{})
-	rec.SetSender(func(msg tea.Msg) { sent = append(sent, msg) })
+	rec.SetSender(func(msg tea.Msg) { sent <- msg })
 	n, err := dispatchWorkspaceEdits(rec, []manager.FileEdits{
 		{Path: "/open.go", Open: true, Edits: []ilsp.FormatEdit{{EndCol: 1, Text: "X"}}},
 		{Path: closed, Open: false, Edits: []ilsp.FormatEdit{{EndCol: 3, Text: "xyz"}}},
@@ -74,11 +77,18 @@ func TestDispatchWorkspaceEditsSplitsOpenAndDisk(t *testing.T) {
 	if err != nil || n != 2 {
 		t.Fatalf("n=%d err=%v", n, err)
 	}
-	if len(sent) != 1 {
-		t.Fatalf("open file should go through Send, got %+v", sent)
+	select {
+	case msg := <-sent:
+		if fm, ok := msg.(ilsp.FormatEditsMsg); !ok || fm.Path != "/open.go" {
+			t.Fatalf("sent = %+v", msg)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("open file should go through Send, nothing arrived")
 	}
-	if fm, ok := sent[0].(ilsp.FormatEditsMsg); !ok || fm.Path != "/open.go" {
-		t.Fatalf("sent = %+v", sent[0])
+	select {
+	case msg := <-sent:
+		t.Fatalf("only the open file may be Sent, also got %+v", msg)
+	case <-time.After(100 * time.Millisecond):
 	}
 	data, _ := os.ReadFile(closed)
 	if string(data) != "xyz\n" {

@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-08-20T12:00:00Z
+timestamp: 2026-08-21T12:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -797,7 +797,11 @@ server. The watched-files path closes that gap.
   `host.Send`. `Update`/`View` never do LSP I/O. Even notifications sent from the
   Update goroutine (didOpen/didChange/didSave/didClose) are safe: the jsonrpc
   layer enqueues them and a dedicated writer goroutine owns the blocking pipe
-  write (#594), so a stalled server never stalls a caller.
+  write (#594), so a stalled server never stalls a caller. An answer the bridge
+  already has on the Update goroutine — `lsp.codeAction` in a buffer with no
+  file, a local hover/definition/references provider claiming (#922/#1629) —
+  goes back as a `tea.Cmd` where the seam returns one; `host.Send` queues
+  rather than blocking, so neither shape can freeze the IDE (#2027).
 - **One manager owns all servers.** Spawning, routing, capability gating and
   restart live in `manager`/`client`; features never touch a raw connection.
 - **Position mapping is centralised.** `protocol/convert.go` is the only place

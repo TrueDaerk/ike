@@ -3,6 +3,7 @@ package bridge
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -44,27 +45,32 @@ func TestHostAdapterSeverityMapping(t *testing.T) {
 
 func TestHostAdapterOpenFileAndDispatch(t *testing.T) {
 	h := host.New(host.MapConfig{})
-	var sent []tea.Msg
-	h.SetSender(func(msg tea.Msg) { sent = append(sent, msg) })
+	// Send delivers through the host's dispatcher goroutine (#2027), so the
+	// guest's messages arrive on a channel — in Send order.
+	sent := make(chan tea.Msg, 4)
+	h.SetSender(func(msg tea.Msg) { sent <- msg })
 	a := NewHostAdapter()
 	a.SetAPI(h)
 
 	a.OpenFile("/tmp/direct.txt")
 	a.Dispatch(abi.DispatchEnvelope{Type: "open_file", Payload: json.RawMessage(`{"path":"/tmp/enveloped.txt"}`)})
-	if len(sent) != 2 {
-		t.Fatalf("sent = %+v", sent)
-	}
-	if req, ok := sent[0].(host.OpenFileRequest); !ok || req.Path != "/tmp/direct.txt" {
-		t.Fatalf("sent[0] = %+v", sent[0])
-	}
-	if req, ok := sent[1].(host.OpenFileRequest); !ok || req.Path != "/tmp/enveloped.txt" {
-		t.Fatalf("sent[1] = %+v", sent[1])
+	for _, want := range []string{"/tmp/direct.txt", "/tmp/enveloped.txt"} {
+		select {
+		case msg := <-sent:
+			if req, ok := msg.(host.OpenFileRequest); !ok || req.Path != want {
+				t.Fatalf("sent %+v, want an open request for %q", msg, want)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("no open request for %q arrived", want)
+		}
 	}
 
 	// Unknown dispatch types warn instead of guessing a message shape.
 	a.Dispatch(abi.DispatchEnvelope{Type: "launch_missiles"})
-	if len(sent) != 2 {
-		t.Fatalf("unknown type must not send: %+v", sent)
+	select {
+	case msg := <-sent:
+		t.Fatalf("unknown type must not send: %+v", msg)
+	case <-time.After(100 * time.Millisecond):
 	}
 	notes := h.DrainNotifications()
 	if len(notes) != 1 || notes[0].Severity != host.Warn {

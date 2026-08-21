@@ -50,6 +50,10 @@ type API interface {
 	// Dispatch (which returns a tea.Cmd for the caller to hand back from Update),
 	// Send is for background workers — async LSP results, server notifications —
 	// that have no Cmd to return. It is a no-op until the program is running.
+	// It never blocks the caller: delivery is queued (#2027), so a seam that
+	// answers straight from Update — a command's Run, an EditorEmitter.Emit —
+	// may Send without deadlocking the program against itself. Queued messages
+	// keep their Send order.
 	Send(msg tea.Msg)
 	// SetStatus replaces the persistent status-line segment (e.g. LSP server
 	// state). It is rendered until overwritten; event-like messages belong in
@@ -196,6 +200,13 @@ type Host struct {
 	// background workers (LSP goroutines) may Notify while Update drains.
 	mu            sync.Mutex
 	notifications []Notification
+
+	// Outbox for Send (#2027), guarded by sendMu: messages awaiting the
+	// dispatcher goroutine that hands them to the program in Send order.
+	// pumping says that dispatcher is alive, so at most one runs at a time.
+	sendMu  sync.Mutex
+	outbox  []tea.Msg
+	pumping bool
 }
 
 // New returns a Host backed by cfg. A nil cfg yields an empty configuration.
@@ -219,9 +230,45 @@ func (h *Host) SetConfig(cfg Config) {
 	}
 }
 
-// Send implements API.
+// Send implements API. The message is queued for a dispatcher goroutine
+// instead of being handed to the program on the caller's own goroutine
+// (#2027): bubbletea's Send blocks until the event loop receives the message,
+// so a Send from inside Update — a command's Run answering without a server, a
+// local hover/definition provider claiming an EditorEmitter.Emit — froze the
+// whole IDE against itself. Queueing keeps Send order (one dispatcher, FIFO
+// outbox) while making it non-blocking for every caller.
 func (h *Host) Send(msg tea.Msg) {
-	if h.send != nil {
+	if h.send == nil {
+		return // no program yet: nothing to deliver to
+	}
+	h.sendMu.Lock()
+	h.outbox = append(h.outbox, msg)
+	if h.pumping {
+		h.sendMu.Unlock()
+		return // the live dispatcher picks it up
+	}
+	h.pumping = true
+	h.sendMu.Unlock()
+	go h.pump()
+}
+
+// pump drains the outbox into the program, in Send order, until it runs dry.
+// It is the only goroutine allowed to block on the program's Send.
+func (h *Host) pump() {
+	for {
+		h.sendMu.Lock()
+		if len(h.outbox) == 0 {
+			h.pumping = false
+			h.sendMu.Unlock()
+			return
+		}
+		msg := h.outbox[0]
+		// Drop the slot's reference before advancing: a delivered message
+		// (a whole document's spans, a diagnostics batch) must not stay
+		// reachable through the backing array.
+		h.outbox[0] = nil
+		h.outbox = h.outbox[1:]
+		h.sendMu.Unlock()
 		h.send(msg)
 	}
 }

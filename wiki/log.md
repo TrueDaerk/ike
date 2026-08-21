@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-21 (alt+enter in a fileless buffer froze the IDE, #2027)
+
+- **`host.Host.Send`** (`internal/host/host.go`): messages are queued into an
+  outbox that a single dispatcher goroutine drains into the program, instead
+  of being handed to `Program.Send` on the caller's goroutine. bubbletea's
+  Send blocks until the event loop *receives* the message, so a Send issued
+  from inside Update deadlocked the program against itself — the whole IDE
+  froze, no crash, no error. Delivery keeps Send order; a caller never blocks.
+- **Root cause** (`plugins/lsp/bridge.go`): `codeAction` answers a buffer with
+  no path on the spot (no server to ask) and did so with `h.Send` while
+  running on the Update goroutine — alt+enter in an untitled tab or a pasted
+  response body froze IKE. It now returns the offer as a `tea.Cmd`
+  (`h.Dispatch`). The same shape sat in the local hover/definition/references
+  provider paths (#922/#1629) and in `codeLensPick`: `ctrl+q` on a YAML alias
+  froze the IDE identically (verified against the pre-fix binary), and the
+  host fix is what covers those.
+- **Tests**: `internal/host/host_test.go` (Send returns while the program is
+  busy, queued messages keep Send order, no queueing before the program
+  exists); `plugins/lsp/codeaction_fileless_test.go` (the fileless offer comes
+  back as a command); `internal/app/codeactions_test.go` (alt+enter in a
+  fileless buffer opens the anchored picker with the path-free built-ins, and
+  toasts when nothing applies).
+- **Wiki**: `architecture/plugins.md` gains a "Dispatch vs. Send" contract,
+  `architecture/lsp.md` extends its never-block rule, `architecture/intention-actions.md`
+  documents the fileless path.
+
 ## 2026-08-21 (Intention popup: digit shortcuts, #2023)
 
 - **`palette.DigitPicker`** (new, `internal/palette/mode.go`): optional Mode

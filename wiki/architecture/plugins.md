@@ -4,7 +4,7 @@ title: Plugin Extension Contract
 description: Compile-in plugin registry — the extension points (Command, Keymap, Pane, FileHandler, Hook), the host API, and how the root model consumes them.
 resource: internal/plugin/plugin.go
 tags: [architecture, plugins, extension, bubbletea]
-timestamp: 2026-08-20T12:00:00Z
+timestamp: 2026-08-21T12:00:00Z
 ---
 
 # Plugin Extension Contract
@@ -79,10 +79,27 @@ Plugins affect the editor only through `host.API` — never globals — so roadm
 type API interface {
     OpenFile(path string) tea.Cmd   // → host.OpenFileRequest, routed via handlers
     Dispatch(msg tea.Msg) tea.Cmd   // re-inject a message into Update
+    Send(msg tea.Msg)               // inject a message from any goroutine
     SetStatus(text string)          // transient status-line text
     Config() Config                 // read-only key/value config
 }
 ```
+
+**Dispatch vs. Send.** A seam that runs *on* the Update goroutine — a command's
+`Run`, an `EditorEmitter.Emit`, a hook `Notify` — answers by returning a
+`tea.Cmd`, which is what `Dispatch` wraps a ready message in. `Send` is the
+background-worker door: an LSP reply, a server notification, a timer flush,
+anything with no Cmd to return.
+
+`Send` never blocks its caller (#2027). bubbletea's own `Program.Send` blocks
+until the event loop *receives* the message, so a `Send` issued from inside
+Update deadlocked the program against itself — the IDE froze with no crash and
+no error (alt+enter in a buffer with no file, where the LSP bridge answers on
+the spot with no server to ask). `host.Host` therefore queues into an outbox
+that a single dispatcher goroutine drains into the program, so delivery keeps
+`Send` order while the caller returns immediately. Returning a Cmd stays the
+better shape where one is available — it is ordered against the model's own
+commands — but a `Send` from the wrong goroutine can no longer hang the IDE.
 
 ## Registry semantics
 

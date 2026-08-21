@@ -967,13 +967,16 @@ func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, newNa
 // with no server attached, no request position, or an empty/failed reply —
 // because the app merges the built-in intention providers into the same
 // popup and owns the "no code actions here" verdict for the merged list.
+//
+// The answer a fileless buffer gets right here is dispatched as a tea.Cmd, not
+// sent (#2027): this runs on the Update goroutine, and the only seam that may
+// block on the program is a background worker's.
 func (b *bridge) codeAction(h host.API) tea.Cmd {
 	b.ensure(h)
 	path, line, col := b.cur()
 	mgr := b.manager()
 	if path == "" || mgr == nil {
-		h.Send(ilsp.CodeActionsMsg{Path: path, Intentions: true})
-		return nil
+		return h.Dispatch(ilsp.CodeActionsMsg{Path: path, Intentions: true})
 	}
 	start := buffer.Position{Line: line, Col: col}
 	end := start
