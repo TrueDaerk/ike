@@ -19,6 +19,7 @@ var noCounterpart = map[string]string{
 	"http.run":              "JetBrains HTTP client runs via context Run, no dedicated keymap action",
 	"http.showResponse":     "IKE-only concept (stored response without dispatch), no JetBrains equivalent",
 	"editor.copyDocPath":    "JetBrains copies file references, not a path inside a JSON/YAML document",
+	"json.jqQueryView":      "IKE-only concept (#2032): the inline jq playground has no JetBrains equivalent",
 	"markdown.preview":      "no default JetBrains keymap action",
 	"view.toggleFollow":     "tail -f follow mode is an IKE concept; JetBrains consoles auto-scroll without a keymap action",
 	"menu.open":             "JetBrains main menu is not a keymap action",

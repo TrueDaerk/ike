@@ -97,6 +97,7 @@ func Defaults() []Menu {
 			{Title: "Save jq Filter…", Command: "json.jqSaveFilter"},
 			{Title: "Saved jq Filters…", Command: "json.jqFilters"},
 			{Title: "Rename Saved jq Filter…", Command: "json.jqRenameFilter"},
+			{Title: "Toggle Full jq Query View", Command: "json.jqQueryView"},
 			{Title: "Restart Language Servers", Command: "lsp.restart"},
 			{Title: "Plugins", Command: "tools.plugins"},
 		}},
