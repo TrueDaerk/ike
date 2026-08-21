@@ -4,7 +4,7 @@ title: Selection-List Navigation
 description: The shared cursor semantics every selectable list obeys — single steps wrap around, page keys jump one visible page and clamp, home/end go to the extremes, and the scroll window follows the selection.
 resource: internal/ui/listnav.go
 tags: [architecture, ui, lists, navigation, keys, reusable]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-08-21T00:00:00Z
 ---
 
 # Selection-List Navigation
@@ -41,6 +41,19 @@ first/last entry. Lists that sit behind a text query — the palette, the finder
 The mouse wheel keeps **clamped** semantics everywhere: a wheel flick past the
 end must not teleport to the other end of the list.
 
+## Scrolloff (#2041)
+
+`ScrollToShowOff` is `ScrollToShow` with vim's `scrolloff`: it keeps `off`
+rows visible **above and below** the selection wherever the list allows it, so
+navigating downwards moves the window on as soon as the cursor reaches the
+`off`-th-last visible row instead of only at the very edge — the next entry is
+always on screen before the user asks for it. Two clamps keep it quiet: the
+margin is capped at `(height-1)/2` so it can be honoured on both sides of a
+short window, and it is clipped against the list ends, so the first and last
+entries still sit flush against the window edge and no empty row is ever
+scrolled into view. `ScrollToShow` is `off = 0`. The command palette passes
+`off = 1` for both of its columns.
+
 ## API
 
 ```go
@@ -49,6 +62,7 @@ ClampIndex(i, n) int                  // confine to [0, n-1]
 StepIndex(i, delta, n) int            // wrapping single step
 PageIndex(i, delta, n, page) int      // clamping page jump
 ScrollToShow(top, sel, height, n) int // viewport follows the selection
+ScrollToShowOff(top, sel, height, n, off) int // …with a scrolloff margin
 
 ListNav(key string, sel *int, n, page int, keys NavKeys) bool
 ```
