@@ -108,6 +108,7 @@ bring their own.
 | Saved jq Filters… | `json.jqFilters` | — | — | everywhere |
 | jq Playground… | `json.jqPlayground` | — | — | everywhere |
 | jq Playground at Cursor Path… | `json.jqPlaygroundAtPath` | — | — | everywhere |
+| Toggle Full jq Query View | `json.jqQueryView` | `ctrl+alt+e` | — | everywhere |
 | Rename Saved jq Filter… | `json.jqRenameFilter` | — | — | everywhere |
 | Save jq Filter… | `json.jqSaveFilter` | — | — | everywhere |
 | Import JetBrains Keymap XML… | `keymap.importJetBrains` | — | — | everywhere |
