@@ -26,6 +26,33 @@
   `architecture/lsp.md` extends its never-block rule, `architecture/intention-actions.md`
   documents the fileless path.
 
+## 2026-08-21 (Intentions: rename gated by position, Markdown heading rename completed, #2025)
+
+- **Position gate** (`plugins/lsp/renamegate.go`, new): the intention popup's
+  "Rename Symbol" entry now needs a `prepareRename` verdict for the caret, not
+  just the server's rename capability (#2020). `Items` is synchronous and the
+  check is a round trip, so the bridge validates instead: `codeAction` fires
+  `prepareRename` concurrently with the code-action request and records the
+  verdict for that one `(path, line, col)` before the message that makes the
+  app query the providers goes out. The popup therefore still waits on one
+  round trip. An unvalidated caret is not offered; a buffer edit drops the
+  verdict; servers without `prepareRename` keep the #426 contract (offered,
+  the rename attempt decides).
+- **"cannot rename here" is unreachable from the popup**: picking the entry
+  reuses (and consumes) the recorded verdict — including its placeholder —
+  instead of asking a second time whose answer could differ.
+- **Markdown heading rename** (`plugins/lsp/markdown_rename.go`, new): checked
+  what marksman delivers before building anything, as the issue asked — it
+  already rewrites every same-document `](#old-heading)` alongside the
+  heading, and IKE applies those edits. The gap was the link *title*: a TOC
+  entry kept reading "Old Heading" while pointing at `#new-heading`, invisible
+  because IKE conceals destinations. Now a link whose destination the server
+  just rewrote and whose title spells the old heading exactly is retitled too,
+  in the same edit slice (one undo unit). Differently worded titles are left
+  alone; no anchor slugification is reimplemented.
+- **Wiki**: [intention-actions](./architecture/intention-actions.md) and
+  [lsp](./architecture/lsp.md) updated.
+
 ## 2026-08-21 (Intention popup: digit shortcuts, #2023)
 
 - **`palette.DigitPicker`** (new, `internal/palette/mode.go`): optional Mode

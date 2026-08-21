@@ -44,6 +44,9 @@ type bridge struct {
 	// diags caches the latest published protocol diagnostics per path, so a
 	// code-action request can pass the overlapping ones as context.
 	diags map[string][]protocol.Diagnostic
+	// rgate is the prepareRename verdict the intention popup's rename entry
+	// is gated on (renamegate.go, #2025).
+	rgate renameGate
 	// sigActive marks a showing signature popup for a path: while set, every
 	// change retriggers the request so the active parameter tracks the
 	// cursor; the server answering null clears it (and the popup).
@@ -169,6 +172,9 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 	case host.EditorChange:
 		b.setCur(ev.Path, ev.Line, ev.Col)
 		b.setSel(ev)
+		// A recorded prepareRename verdict describes the pre-edit text
+		// (#2025); the edit may well have invalidated it.
+		b.invalidateRenameGate(ev.Path)
 		if ev.Large {
 			// Large-file mode (#149): the event carries no text on purpose.
 			// The document is usually not open server-side (the didOpen gate),
@@ -905,6 +911,12 @@ func locationsToRefs(mgr *manager.Manager, path string, locs []protocol.Location
 // prompt's answer runs the Apply continuation, which requests the rename and
 // applies the WorkspaceEdit (workspace_edit.go). A rejected position surfaces
 // as a warn toast; the current project is untouched until edits arrive.
+//
+// A rename picked from the intention popup skips the validation round trip:
+// the popup only offered the entry because the gate (renamegate.go, #2025)
+// already accepted this exact caret, so re-asking could only add latency — and
+// a second, differing answer would surface the "cannot rename here" toast the
+// gate exists to make unreachable.
 func (b *bridge) rename(h host.API) tea.Cmd {
 	b.ensure(h)
 	path, line, col := b.cur()
@@ -914,6 +926,10 @@ func (b *bridge) rename(h host.API) tea.Cmd {
 	}
 	pos := buffer.Position{Line: line, Col: col}
 	go func() {
+		if gated, ok, known := b.takeRenameGate(path, line, col); known && ok {
+			b.promptRename(h, path, pos, gated)
+			return
+		}
 		placeholder, ok, err := mgr.PrepareRename(context.Background(), path, pos)
 		if errors.Is(err, manager.ErrRenameUnsupported) {
 			h.Send(ilsp.ServerStatusMsg{Text: "language server does not support rename", Kind: ilsp.ServerEventWarn})
@@ -923,18 +939,29 @@ func (b *bridge) rename(h host.API) tea.Cmd {
 			h.Send(ilsp.ServerStatusMsg{Text: "cannot rename here", Kind: ilsp.ServerEventWarn})
 			return
 		}
-		h.Send(ilsp.RenamePromptMsg{
-			Path:        path,
-			Placeholder: placeholder,
-			Apply:       func(newName string) tea.Cmd { return b.applyRename(h, path, pos, newName) },
-		})
+		b.promptRename(h, path, pos, placeholder)
 	}()
 	return nil
 }
 
+// promptRename asks the app for the new name, carrying the Apply continuation
+// the prompt runs on enter. placeholder is both the prefill and the old symbol
+// text the Markdown completion (markdown_rename.go) compares link titles to.
+func (b *bridge) promptRename(h host.API, path string, pos buffer.Position, placeholder string) {
+	h.Send(ilsp.RenamePromptMsg{
+		Path:        path,
+		Placeholder: placeholder,
+		Apply: func(newName string) tea.Cmd {
+			return b.applyRename(h, path, pos, placeholder, newName)
+		},
+	})
+}
+
 // applyRename requests the workspace edit for newName and applies it: open
 // buffers in-editor, closed files on disk, followed by a summary toast.
-func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, newName string) tea.Cmd {
+// oldName is the prepareRename placeholder, needed by the Markdown heading
+// completion (markdown_rename.go).
+func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, oldName, newName string) tea.Cmd {
 	mgr := b.manager()
 	if mgr == nil || strings.TrimSpace(newName) == "" {
 		return nil
@@ -945,6 +972,7 @@ func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, newNa
 			h.Send(ilsp.ServerStatusMsg{Text: "rename failed: " + err.Error(), Kind: ilsp.ServerEventError})
 			return
 		}
+		files = b.mergeHeadingTitleEdits(files, path, oldName, strings.TrimSpace(newName))
 		n, derr := dispatchWorkspaceEdits(h, files)
 		switch {
 		case derr != nil:
@@ -968,6 +996,11 @@ func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, newNa
 // because the app merges the built-in intention providers into the same
 // popup and owns the "no code actions here" verdict for the merged list.
 //
+// It is also where the popup's rename entry is position-gated (#2025):
+// prepareRename runs concurrently with the code-action request, so the popup
+// waits on one round trip rather than two, and the verdict is recorded before
+// the message that makes the app query the providers goes out.
+//
 // The answer a fileless buffer gets right here is dispatched as a tea.Cmd, not
 // sent (#2027): this runs on the Update goroutine, and the only seam that may
 // block on the program is a background worker's.
@@ -976,6 +1009,7 @@ func (b *bridge) codeAction(h host.API) tea.Cmd {
 	path, line, col := b.cur()
 	mgr := b.manager()
 	if path == "" || mgr == nil {
+		b.clearRenameGate()
 		return h.Dispatch(ilsp.CodeActionsMsg{Path: path, Intentions: true})
 	}
 	start := buffer.Position{Line: line, Col: col}
@@ -985,7 +1019,14 @@ func (b *bridge) codeAction(h host.API) tea.Cmd {
 	}
 	diags := b.diagsOverlapping(path, start.Line, end.Line)
 	go func() {
+		// The caret, not the selection: rename acts where lsp.rename would.
+		gated := make(chan struct{})
+		go func() {
+			defer close(gated)
+			b.refreshRenameGate(path, buffer.Position{Line: line, Col: col})
+		}()
 		actions, err := mgr.CodeActions(context.Background(), path, start, end, diags)
+		<-gated
 		if requestFailed(h, "code actions", err) {
 			// The failure toast reported already; the built-ins still apply.
 			h.Send(ilsp.CodeActionsMsg{Path: path, Intentions: true})

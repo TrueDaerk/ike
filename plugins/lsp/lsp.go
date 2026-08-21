@@ -178,17 +178,12 @@ func (Plugin) Capabilities() plugin.Capabilities {
 		Intentions: []intention.Provider{
 			{
 				// Rename appears in the intention popup only when the
-				// attached server declares the rename capability (#2020);
-				// PrepareRename still validates the exact position when the
-				// entry is picked.
-				ID: "lsp.rename",
-				Items: func(cx intention.Context) []intention.Item {
-					mgr := shared().manager()
-					if cx.Path == "" || mgr == nil || !mgr.RenameSupported(cx.Path) {
-						return nil
-					}
-					return []intention.Item{{Title: "Rename Symbol", Kind: "refactor", CommandID: "lsp.rename"}}
-				},
+				// attached server declares the rename capability (#2020)
+				// *and* prepareRename accepts the caret (#2025) — the
+				// verdict the bridge recorded alongside the code-action
+				// request (renamegate.go).
+				ID:    "lsp.rename",
+				Items: func(cx intention.Context) []intention.Item { return renameIntentionItems(shared(), cx) },
 			},
 		},
 		SettingsPages: []settings.Page{
