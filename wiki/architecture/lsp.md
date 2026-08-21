@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-08-20T12:00:00Z
+timestamp: 2026-08-21T12:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -508,7 +508,9 @@ server does not support rename" (`manager.ErrRenameUnsupported`, #426 —
 intelephense gates rename behind its paid licence), a rejected position
 toasts "cannot rename here", an accepted one
 opens an input prompt (`internal/app/lsprename.go`) prefilled with the ranged
-symbol text. The prompt msg carries a bridge-built `Apply` continuation, so
+symbol text. A rename picked from the intention popup skips that round trip:
+the popup only offered the entry because the position gate already validated
+this caret (#2025, below), and the recorded verdict carries the placeholder. The prompt msg carries a bridge-built `Apply` continuation, so
 the manager stays unreachable from the app. Confirming sends
 `textDocument/rename`; the returned `WorkspaceEdit` (both `changes` and
 `documentChanges` shapes decode; when a server populates both,
@@ -522,6 +524,20 @@ per view, #366; the change-sync broadcast converges the other views, the
 same single-view rule as replace-in-path) and stay dirty; every other file
 is rewritten on disk
 (bottom-up, mode-preserving). A summary toast reports the touched file count.
+
+*Markdown headings (#2025).* marksman resolves same-document references
+itself: renaming `## Old Heading` already returns edits rewriting every
+`](#old-heading)` in the file alongside the heading, and IKE applies them —
+that half needed no code, only checking (the issue asked for exactly that
+order). What the server leaves behind is the link *title*, so a table of
+contents kept reading "Old Heading" while pointing at `#new-heading` — and
+since IKE conceals link destinations, the rename looked like it had done
+nothing. `plugins/lsp/markdown_rename.go` adds one narrow completion: a link
+whose destination the server just rewrote, and whose title spells the old
+heading exactly, is retitled too — appended to the same edit slice, so it is
+still one undo unit. The server's own edits are the reference resolution (no
+anchor slugification is reimplemented), and a title the author worded
+differently ("see [the section below](#…)") keeps its wording.
 Gated on `renameProvider`. The 0082 sheet-13 verdict landed (#18): `shift+f6`
 binds `lsp.rename` in the Editor context — JetBrains' context-aware
 refactor-rename — while the Global `file.rename` row keeps the chord in the
@@ -550,8 +566,13 @@ chip ("quick fix", "source · organize imports"; a server that omits the kind
 gets a generic "action", #309). Picking an LSP entry runs a bridge-built
 continuation (same seam as rename); a built-in entry dispatches its
 registered command. The LSP plugin also contributes a provider of its own:
-"Rename Symbol" appears in the popup when the attached server declares the
-rename capability (`Manager.RenameSupported`). The chosen LSP action applies
+"Rename Symbol" appears in the popup only when the attached server declares
+the rename capability (`Manager.RenameSupported`) **and** `prepareRename`
+accepts the caret (#2025) — `codeAction` validates the position concurrently
+with the code-action request and records the verdict
+(`plugins/lsp/renamegate.go`), so the popup costs one round trip, never offers
+an entry that could only answer "cannot rename here", and leaves servers
+without `prepareRename` support offering it as before (#426). The chosen LSP action applies
 its inline `WorkspaceEdit`
 through `workspace_edit.go` and/or executes its `command` via
 `workspace/executeCommand`; server-initiated `workspace/applyEdit` requests

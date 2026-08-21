@@ -851,7 +851,8 @@ func (m *Manager) RangeFormatSupported(path string) bool {
 
 // RenameSupported reports whether a ready server tracks path and offers
 // rename — the intention popup's capability gate for the rename entry
-// (#2020). PrepareRename validation still runs when the entry is picked.
+// (#2020). It is the cheap half of that gate: the popup also requires a
+// PrepareRename verdict for the caret before offering the entry (#2025).
 func (m *Manager) RenameSupported(path string) bool {
 	srv, _, ok := m.docServer(path)
 	return ok && srv.cl.Caps().Rename
