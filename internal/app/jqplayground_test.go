@@ -994,3 +994,102 @@ func TestJQPlaygroundHistorySurvivesReopen(t *testing.T) {
 		t.Errorf("↑ after reopening = %q, want the program recorded before it", got)
 	}
 }
+
+// jqKeys feeds a run of plain keys into the model one at a time — the vim
+// fold commands are two-key sequences (z then a), so a test types them the
+// way a user does.
+func jqKeys(m Model, keys string) Model {
+	for _, r := range keys {
+		m = drainKey(m, tea.KeyPressMsg{Text: string(r), Code: r})
+	}
+	return m
+}
+
+// TestJQResultFoldsAtCursor is the issue's acceptance case (#2029): za in the
+// result buffer collapses the object under the cursor to one row carrying a
+// placeholder with its key count, and hides its body.
+func TestJQResultFoldsAtCursor(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"spec":{"image":"ike","tag":"v1"},"n":3}`))
+	m = setProgram(m, ".")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab}) // keyboard into the result
+	m = jqKeys(m, "jjza")                              // onto the "spec" line, fold it
+
+	view := ansi.Strip(m.render())
+	if !strings.Contains(view, "⋯ 2 keys }") {
+		t.Fatalf("the collapsed object must render its key count, got:\n%s", view)
+	}
+	if strings.Contains(view, `"image"`) {
+		t.Errorf("the folded body must be hidden, got:\n%s", view)
+	}
+	if !strings.Contains(view, `"n": 3`) {
+		t.Errorf("only the fold's own body may be hidden, got:\n%s", view)
+	}
+}
+
+// TestJQResultFoldsNested: a node inside an opened parent folds on its own —
+// zM collapses everything, zo on the outer node reveals one level with the
+// inner fold still closed, and its placeholder counts array items.
+func TestJQResultFoldsNested(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"spec":{"ports":[80,443,8080]}}`))
+	m = setProgram(m, ".")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	m = jqKeys(m, "zM") // every fold closed
+	if view := ansi.Strip(m.render()); !strings.Contains(view, "⋯ 1 key }") || strings.Contains(view, `"ports"`) {
+		t.Fatalf("zM must collapse the outermost value, got:\n%s", view)
+	}
+	m = jqKeys(m, "zo") // one level open again
+	view := ansi.Strip(m.render())
+	if !strings.Contains(view, `"spec": { ⋯ 1 key }`) {
+		t.Fatalf("zo must reveal one level, with the node inside it still folded, got:\n%s", view)
+	}
+	m = jqKeys(m, "jzo") // and the node inside it opens on its own
+	view = ansi.Strip(m.render())
+	if !strings.Contains(view, "⋯ 3 items ]") {
+		t.Errorf("the nested array must fold with its item count, got:\n%s", view)
+	}
+	if strings.Contains(view, "443") {
+		t.Errorf("a fold inside the opened node must stay closed, got:\n%s", view)
+	}
+}
+
+// TestJQResultFoldsResetOnNewQuery: a new program installs a new result, and
+// the folds of the previous one must not survive it — no orphan fold, no
+// hidden line in a document that never had one.
+func TestJQResultFoldsResetOnNewQuery(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"spec":{"image":"ike","tag":"v1"},"n":3}`))
+	m = setProgram(m, ".")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	m = jqKeys(m, "jjza")
+
+	m = setProgram(m, ".spec")
+	view := ansi.Strip(m.render())
+	if strings.Contains(view, "⋯") {
+		t.Fatalf("a new query must leave no fold behind, got:\n%s", view)
+	}
+	if !strings.Contains(view, `"image": "ike"`) {
+		t.Fatalf("the new result must render in full, got:\n%s", view)
+	}
+	// The new result folds on its own terms: one object, two keys.
+	m = jqKeys(m, "za")
+	if view := ansi.Strip(m.render()); !strings.Contains(view, "⋯ 2 keys }") {
+		t.Errorf("the new result must be foldable, got:\n%s", view)
+	}
+}
+
+// TestJQResultFoldHintsAdvertised: the info row names the fold keys while the
+// result buffer holds the keyboard — the mode's own help line is where the
+// binding is documented (#2029).
+func TestJQResultFoldHintsAdvertised(t *testing.T) {
+	m := openJQ(t, jqApp(t, `{"a":1}`))
+	m = setProgram(m, ".")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	hints := strings.Join(m.jqPlay.jqHints(), " · ")
+	if !strings.Contains(hints, "za fold") || !strings.Contains(hints, "zM/zR fold all") {
+		t.Fatalf("the result buffer's hints must name the fold keys, got %q", hints)
+	}
+	// The row drops trailing hints whole on a narrow pane, so the assertion
+	// that they reach the screen is made against a wide one.
+	if row := ansi.Strip(m.jqInfoRow(200)); !strings.Contains(row, "za fold") {
+		t.Errorf("the info row must show the fold hint, got:\n%s", row)
+	}
+}
