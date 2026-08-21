@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-08-21T14:00:00Z
 ---
 
 # Editor
@@ -1293,6 +1293,33 @@ and the file-opened hooks all run, so the fresh file behaves exactly like
 one opened from disk. `:wq` carries its close intent through the prompt
 (`SaveAsPromptMsg.CloseAfter`); `:w other/path` on any buffer still saves
 directly without the prompt.
+
+## Buffer language — "Treat Buffer as …" (#2033)
+
+An untitled buffer used to be typeless: everything language-derived in this
+package resolves a *path* (`lang.ByPath`, `highlight.Lang`), so pasted JSON,
+Markdown or an HTTP request got no highlighting, no concealing, no rendering
+and no type-specific intentions until it was saved with the right extension.
+`Model.SetLangOverride(id)` gives the buffer a language without a file
+(`langoverride.go`): the id resolves to a **synthetic name** — `buffer.md`,
+`buffer.http`, `Dockerfile` — that `langPath()` hands to every lookup in this
+package in place of the empty path, so highlighting, comment toggling, indent
+rules, snippets, the conceal filter, markdown rendering, the csv table layer
+and log rendering all behave like a file of that type. `Path()` stays empty:
+the synthetic name never reaches file I/O.
+
+The choice lives as long as the buffer does, travels to a split
+(`ShareDocumentWith`, like the encoding), is changeable at any time and is
+cleared the moment the buffer gets a real path (`Load`, `NewFile`, `:w name`)
+— from then on the file name classifies it, as it does for every other file.
+Switching the language invalidates the version-keyed rendering caches along
+with the highlight state, so the new type shows on the next frame instead of
+after the next edit. The parse result finds its way back through
+`ParseKey()` — the file path, or a unique per-view tag when there is none —
+because routing by path skipped every path-less buffer. The user-facing picker, the alt+enter entry and the
+status-line marker are described in
+[Language Registry](/architecture/languages.md#buffer-language-override--treat-buffer-as--2033)
+and [Intention Actions](/architecture/intention-actions.md#treat-buffer-as--2033).
 
 ## Line endings & encodings (#66)
 

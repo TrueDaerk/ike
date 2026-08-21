@@ -113,10 +113,11 @@ func (m Model) concealAtCaret() (string, concealRange, bool) {
 // langID resolves the buffer's language id for the explain path, which needs
 // it to evaluate a constant's right-hand side in the right flavour.
 func (m Model) langID() string {
-	if m.path == "" {
+	path := m.langPath()
+	if path == "" {
 		return ""
 	}
-	if l, ok := lang.ByPath(m.path); ok {
+	if l, ok := lang.ByPath(path); ok {
 		return l.ID
 	}
 	return ""

@@ -427,6 +427,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("file.move", "Move File", MoveFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}),
+			appCommand("editor.setBufferLanguage", "Treat Buffer as…", ShowBufferLangMsg{}),
 			appCommand("diff.files", "Diff Two Files…", DiffFilesMsg{}),
 			appCommand("diff.compareWithClipboard", "Compare with Clipboard", CompareClipboardMsg{}),
 			appCommand("file.localHistory", "Show Local History", LocalHistoryMsg{}),

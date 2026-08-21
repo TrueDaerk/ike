@@ -62,7 +62,7 @@ func (m Model) concealAllows(family string) bool {
 	if m.concealRules.Empty() {
 		return true
 	}
-	return m.concealRules.Allows(family, m.path)
+	return m.concealRules.Allows(family, m.langPath())
 }
 
 // The rendering-layer gates. The stand-in families all funnel through

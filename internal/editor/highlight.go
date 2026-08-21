@@ -45,8 +45,16 @@ func (m *Model) parseCmd() tea.Cmd {
 	if m.InsightOff() {
 		return nil
 	}
-	supported := highlight.Supported(m.path)
-	path := m.path
+	// The parse resolves its grammar through langPath — a file-less buffer
+	// with a "Treat Buffer as …" language (#2033) highlights like a file of
+	// that type — while the message travels under the real path, which is
+	// what the version guard and the LSP bridge key on.
+	langPath := m.langPath()
+	supported := highlight.Supported(langPath)
+	// The result travels under this view's parse key: the file path, or —
+	// for a buffer with no file — the view's own tag, which is what lets the
+	// app route it back to exactly this buffer (#2033).
+	key := m.ParseKey()
 	version := m.docVersion
 	lines := m.buf.Lines()
 	return func() tea.Msg {
@@ -55,16 +63,16 @@ func (m *Model) parseCmd() tea.Cmd {
 		var folds []highlight.Fold
 		var notes []lang.Note
 		if supported {
-			spans, scopes, folds = highlight.HighlightScoped(path, lines)
+			spans, scopes, folds = highlight.HighlightScoped(langPath, lines)
 			// The Go-computed linter (#1623) rides the same off-loop pass as
 			// the parse: same snapshot, same version guard, no second schedule.
-			notes = highlight.Lint(path, lines)
+			notes = highlight.Lint(langPath, lines)
 		}
 		// Invisible/deceptive Unicode findings (#1654) merge into the same
 		// note stream, so every buffer — with or without a language — marks
 		// zero-width characters, bidi controls and confusable identifiers.
 		notes = append(notes, unihint.Notes(lines)...)
-		return highlight.SpansMsg{Path: path, Version: version, Spans: spans, Scopes: scopes, Folds: folds, Notes: notes}
+		return highlight.SpansMsg{Path: key, Version: version, Spans: spans, Scopes: scopes, Folds: folds, Notes: notes}
 	}
 }
 

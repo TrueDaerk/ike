@@ -53,7 +53,7 @@ func (m Model) docPathLang() string {
 	if m.InsightOff() {
 		return ""
 	}
-	id := highlight.Lang(m.path)
+	id := highlight.Lang(m.langPath())
 	if !docpath.IsLang(id) {
 		return ""
 	}

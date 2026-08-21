@@ -565,6 +565,7 @@ func (m *Model) saveAs(path string) error {
 		// ":w other" retargets the buffer; its .editorconfig overrides (#63)
 		// follow the new path from the next applyConfig pass on.
 		m.path = path
+		m.clearLangOverride() // the file name classifies the buffer now (#2033)
 		m.resolveEditorconfig()
 	}
 	m.dirty = false

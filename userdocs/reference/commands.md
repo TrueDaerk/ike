@@ -58,6 +58,7 @@ bring their own.
 | Force Code Insight (Large File) | `editor.forceCodeInsight` | — | — | everywhere |
 | Paste from History | `editor.pasteFromHistory` | `cmd+shift+v` | — | everywhere |
 | Save All | `editor.saveAll` | `cmd+shift+s` | — | everywhere |
+| Treat Buffer as… | `editor.setBufferLanguage` | — | — | everywhere |
 | Split View Down | `editor.splitViewDown` | `cmd+alt+shift+down` | — | everywhere |
 | Split View Right | `editor.splitViewRight` | `cmd+alt+shift+right` | — | everywhere |
 | Close Other Tabs | `editor.tab.closeOthers` | — | — | everywhere |

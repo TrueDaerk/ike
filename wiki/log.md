@@ -1,5 +1,49 @@
 # Log
 
+## 2026-08-21 ("Treat Buffer as …" — a language for file-less buffers, #2033)
+
+- **Buffer language override** (`internal/editor/langoverride.go`): a buffer
+  with no file can be told which language it is. The chosen id resolves to a
+  synthetic name — `buffer.md`, `buffer.http`, `Dockerfile` — and `langPath()`
+  hands that to every path-keyed lookup in the editor in place of the empty
+  path, so highlighting, linting, concealing, comment toggling, indent rules,
+  snippets, smart typing, id colors, the conceal file filter, the doc-path
+  scanner, markdown rendering, the csv table layer and log rendering all treat
+  the buffer as a file of that type. `Path()` stays empty — the name never
+  reaches file I/O; LSP and runners are deliberately out of scope.
+- **A path always wins**: the override is dropped when the buffer gets one
+  (`Load`, `NewFile`, `:w name`), so a saved buffer is classified by its file
+  name. A split inherits the type like the encoding (`ShareDocumentWith`).
+  Switching languages invalidates the version-keyed rendering caches
+  (`resetLangState`), which a language change alone would leave answering for
+  the old type until the next edit.
+- **Parse results route by view** (`editor.ParseKey`, `routeParse`,
+  `pane.Instance.UpdateForParseKey`): a `SpansMsg` used to be delivered to the
+  editor leaves *showing its path*, which skipped every path-less buffer — the
+  chosen language resolved and still rendered plain. Each view now carries its
+  file path or a unique tag (`\x00buffer/<n>`) and accepts only results under
+  it; the Problems store keeps its path key (empty for a view-tagged result,
+  as before).
+- **The door** is the alt+enter intention "Treat Buffer as …"
+  (`editor.setBufferLanguage`, `internal/intention/catalog.go`), offered in
+  file-less buffers only — a saved file is classified by its name and the
+  editor refuses the override there. `Context.Fileless` carries the fact
+  explicitly, so a zero context still offers nothing. The entry names the
+  current type (`Treat Buffer as… (now markdown)`).
+- **The picker** (`internal/app/bufferlang.go`) is a locked palette mode
+  listing "Plain Text" plus every language a path lookup could match; the
+  status line's new `buflang` segment shows the choice (`as Markdown`) and a
+  click on it reopens the picker.
+- **HTTP by type, not by file name**: `isHTTPBuffer`/`httpSource` replace the
+  `HasFile() && isHTTPPath(Path())` gates, so a pasted request block in a
+  file-less HTTP buffer runs, converts to curl and shows in-flight marks; its
+  dispatches are attributed to `buffer.http`.
+- Tests: `internal/editor/langoverride_test.go` (resolution, refusals, path
+  wins, comment/markdown/csv consumers, split, parse-key identity and
+  delivery), `internal/app/bufferlang_test.go` (intention visibility, picker,
+  applied type, status segment, HTTP intentions, parse routing),
+  `internal/intention/catalog_test.go` (the empty-context floor).
+
 ## 2026-08-21 (jq playground: the full query expression on demand, #2032)
 
 - **`jqplay.Wrap` / `jqplay.LineAt`** (`internal/jqplay/wrap.go`, new): pure,

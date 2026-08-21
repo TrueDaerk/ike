@@ -4,12 +4,12 @@ title: Intention Actions
 description: The alt+enter popup — LSP code actions merged with built-in caret-dependent intention actions through a plugin-registered provider seam, opened anchored at the caret.
 resource: internal/intention
 tags: [architecture, intentions, code-actions, palette, plugins, shortcuts]
-timestamp: 2026-08-21T12:00:00Z
+timestamp: 2026-08-21T14:00:00Z
 ---
 
 # Intention Actions
 
-Issues #2020, #2025. IntelliJ's alt+enter mixes server fixes with IDE intentions; IKE
+Issues #2020, #2025, #2033. IntelliJ's alt+enter mixes server fixes with IDE intentions; IKE
 does the same: one caret-anchored popup that merges **LSP code actions**
 ([lsp](./lsp.md), #8) with **built-in intention actions** whose applicability
 is decided from the caret context. Before this slice the popup was
@@ -84,9 +84,29 @@ built-in kinds ("copy", "http", "vcs", "test", …) pass through
 pane a pasted response body lands in) take the bridge's short path: nothing to
 ask a server about, so the offer is empty and only the built-ins that need no
 path apply (curl line, JWT, conceal explain, value toggle, clipboard diff) —
-or the toast. That answer is handed back as a `tea.Cmd`, never `Send`, because
-it is produced on the Update goroutine; `Send`ing it there froze the IDE
-(#2027, see [plugins](./plugins.md#host-api)).
+plus, since #2033, **"Treat Buffer as …"**, which applies in any file-less
+buffer and so makes that popup never empty. That answer is handed back as a
+`tea.Cmd`, never `Send`, because it is produced on the Update goroutine;
+`Send`ing it there froze the IDE (#2027, see
+[plugins](./plugins.md#host-api)).
+
+### Treat Buffer as … (#2033)
+
+`bufferLangProvider` is the one entry that is about the **buffer** rather than
+the caret, so it lists last. It is offered **only** in a buffer with no file
+(`Context.Fileless`, carried explicitly so a zero `Context` still offers
+nothing): a saved file is classified by its name, and the editor refuses the
+override there — offering it would advertise a choice that cannot apply. The
+current type rides in the title (`Treat Buffer as… (now markdown)`), so the
+popup both shows what the buffer is treated as and changes it.
+
+The item points at `editor.setBufferLanguage` like every other entry points at
+a registered command; the picker, the status-line segment and the override
+itself live in [Language Registry](./languages.md#buffer-language-override--treat-buffer-as--2033).
+Because the gates that used to read "is this an `.http` *file*" now read the
+buffer's *type* (`isHTTPBuffer`), a file-less buffer treated as HTTP offers the
+full request block list — Run Request included — with the dispatch attributed
+to the synthetic `buffer.http` source.
 
 ## Digit shortcuts
 
@@ -137,7 +157,7 @@ Each entry delegates to the existing command; applicability per caret:
 | Context | Items (command ids) |
 |---|---|
 | JSON/YAML value (`DocPath`) | copy path as jq / yq / dotted (`editor.copyDocPath*`); `json.jqPlaygroundAtPath` (not for YAML — jq reads JSON) |
-| caret in `.http` request (`httpfile.RequestAt`) | `http.run`, `http.copyAsCurl`, `http.copyBody`, `http.copyHeaders`, `http.resend`, `http.selectEnvironment` |
+| caret in an HTTP request block (`isHTTPBuffer` + `httpfile.RequestAt` — an `.http`/`.rest` file or a buffer treated as HTTP, #2033) | `http.run`, `http.copyAsCurl`, `http.copyBody`, `http.copyHeaders`, `http.resend`, `http.selectEnvironment` |
 | curl command line (`httpfile.IsCurlCommand`, any buffer) | `http.insertCurlAsRequest` (new, see below) |
 | JWT on the line (`jwt.At`) | `editor.decodeJWT` |
 | explainable value (`ConcealExplainAtCaret`) | `editor.explainConceal`; the family's `view.toggle*` via the `concealToggles` map |
@@ -145,6 +165,7 @@ Each entry delegates to the existing command; applicability per caret:
 | hunk under caret / conflict block / tracked file (+selection) | `vcs.revertHunk`; `merge.accept{Ours,Theirs,Both}`; `vcs.blameLine`, `vcs.historyForSelection` |
 | test at/above caret (`lang.HasTests` + `NearestTestAt`) | `run.testAtCursor`, `debug.testAtCursor` |
 | togglable caret word / selection | `editor.toggleValue`; `diff.compareWithClipboard` |
+| buffer with no file (`Fileless`, #2033) | `editor.setBufferLanguage` — "Treat Buffer as …", naming the current type |
 
 The LSP plugin adds "Rename Symbol" (`lsp.rename`), gated **twice** (#2025):
 the attached server must declare rename at all (`Manager.RenameSupported`) and
@@ -174,14 +195,20 @@ ignored-flags warning is preserved either way.
 `internal/intention/catalog_test.go` is the table-driven applicability
 matrix (one row per caret situation, want/want-not command ids);
 `internal/app/codeactions_test.go` covers merge order, both activation paths,
-the anchored open over a JSON buffer, the empty-merge toast, both fileless
-cases (#2027: applicable built-ins open the anchored picker, nothing
-applicable toasts) and the digit shortcuts (hints on the first nine unfiltered rows, digit runs on an empty
+the anchored open over a JSON buffer, the empty-merge toast, the fileless
+cases (#2027: applicable built-ins open the anchored picker; since #2033 the
+otherwise featureless fileless buffer still offers the type pick) and the
+digit shortcuts (hints on the first nine unfiltered rows, digit runs on an empty
 query, digit filters once a query is typed); `internal/palette/digit_test.go`
 covers the `DigitPicker` seam itself (fast path, out-of-range digit, opt-out
 modes, hint rendering);
 `internal/app/intentions_test.go` covers the curl conversion (in-place,
-scratch, continuations, dropped-flag notice); `plugins/lsp/renamegate_test.go`
+scratch, continuations, dropped-flag notice);
+`internal/app/bufferlang_test.go` covers the #2033 entry (offered fileless,
+hidden with a file, naming the current type), the picker (refusal with a file,
+locked open, row list), the applied type (language resolution, status-line
+segment, clearing) and the HTTP intentions it unlocks;
+`internal/editor/langoverride_test.go` the override resolution itself; `plugins/lsp/renamegate_test.go`
 drives the position gate against a scripted server (accepted caret, rejected
 caret, no verdict, no `prepareRename` support, verdict dropped by an edit,
 verdict reused on pick); `internal/registry` covers provider dedup/order.

@@ -593,6 +593,15 @@ For a recognized stream:
 
 ## Editor UX (#1250)
 
+- **A buffer treated as HTTP** (#2033): the gates that decide whether a
+  buffer holds requests read its *type*, not its file name (`isHTTPBuffer` =
+  `isHTTPPath(ed.LangPath())`), so a file-less buffer a pasted request block
+  landed in runs, converts and marks in flight exactly like an `.http` file
+  once alt+enter's "Treat Buffer as …" sets it to HTTP. Its dispatches are
+  attributed to the synthetic source `buffer.http` (`httpSource`), which keys
+  the response history and anchors relative external bodies at the working
+  directory. See
+  [Language Registry](/architecture/languages.md#buffer-language-override--treat-buffer-as--2033).
 - **Syntax highlighting**: the `http` language (`plugins/languages/http`,
   extensions `.http`/`.rest`) uses the vendored rest-nvim/tree-sitter-http
   grammar — request line (method, target, version), header names/values,

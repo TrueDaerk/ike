@@ -1273,6 +1273,31 @@ func (i *Instance) UpdateForPath(path string, skip *editor.Model, msg tea.Msg) t
 	return tea.Batch(cmds...)
 }
 
+// UpdateForParseKey dispatches a message to every tab whose editor answers to
+// key — the parse route (#2033). It exists beside UpdateForPath because a
+// buffer with no file has no path to be found by: its parse result travels
+// under the view's own key, so a file-less buffer given a language
+// (editor.SetLangOverride) is highlighted like any other buffer.
+func (i *Instance) UpdateForParseKey(key string, msg tea.Msg) tea.Cmd {
+	if i.kind != KindEditor || key == "" {
+		return nil
+	}
+	var cmds []tea.Cmd
+	for _, t := range i.tabs {
+		ed := t.Editor()
+		if ed == nil || ed.ParseKey() != key {
+			continue
+		}
+		if cmd := t.update(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
 // UpdateTab dispatches a message to tab idx regardless of which tab is active.
 func (i *Instance) UpdateTab(idx int, msg tea.Msg) tea.Cmd {
 	if i.kind != KindEditor || idx < 0 || idx >= len(i.tabs) {

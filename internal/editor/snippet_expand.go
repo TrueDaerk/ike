@@ -33,7 +33,7 @@ func (m *Model) expandSnippetTrigger() bool {
 		return false
 	}
 	word := string(runes[start.Col:m.cursor.Col])
-	body, ok := snippets.Lookup(m.path, word)
+	body, ok := snippets.Lookup(m.langPath(), word)
 	if !ok {
 		return false
 	}
