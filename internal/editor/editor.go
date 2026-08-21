@@ -483,6 +483,13 @@ type Model struct {
 	// the next reply, so the merge clamps them to the buffer.
 	lspFolds   []highlight.Fold
 	lspFolding bool
+	// hostFolds are ranges a host installed for a synthetic buffer (#2029,
+	// hostfold.go) — the jq playground's result window — merged over folds
+	// the same way and winning on a shared header; foldSummary overrides the
+	// collapsed header's placeholder text so it can name what the node holds
+	// ("3 keys") instead of how tall it is.
+	hostFolds   []highlight.Fold
+	foldSummary func(header, end int) string
 	// selRange is the extend/shrink-selection ladder state (#1912,
 	// selrange.go): the innermost-first range ladder of the last request plus
 	// the applied depth; nil while idle. Pointer state like hover, shared

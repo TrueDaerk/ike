@@ -14,6 +14,7 @@ import (
 
 	"ike/internal/clipboard"
 	"ike/internal/editor"
+	"ike/internal/highlight"
 	"ike/internal/host"
 	"ike/internal/jqplay"
 	"ike/internal/keymap"
@@ -97,6 +98,11 @@ type jqPlayState struct {
 
 	comp *jqCompState
 
+	// folds are the result's foldable nodes by header line (#2029), the
+	// lookup behind the collapsed placeholder's member count; the ranges
+	// themselves live on the result editor.
+	folds map[int]jqplay.Fold
+
 	gen    int
 	cancel context.CancelFunc
 	status string
@@ -144,6 +150,7 @@ func (m *Model) startJQPlayground(atPath bool) tea.Cmd {
 		ed.SetClipboard(c)
 	}
 	ed.ShowReadOnly(jqResultPath, "")
+	ed.SetFoldSummary(s.jqFoldSummary) // the fold placeholder names members, not lines (#2029)
 	s.resultEd = &ed
 	m.jqPlay = s
 	m.focusContentAt(src.paneKey, src.tabIdx)
@@ -485,15 +492,50 @@ func (m *Model) finishJQEval(msg jqEvalDoneMsg) tea.Cmd {
 
 // syncJQResultBuffer reinstalls the current result text into the substitute
 // editor. ShowReadOnly resets cursor and scroll — the buffer's content just
-// changed under them, so a stale position would point at nothing.
+// changed under them, so a stale position would point at nothing — and with
+// them the fold state, which is why the result's own fold ranges (#2029) are
+// installed right after: a new query can never leave a fold of the previous
+// result behind.
 func (m *Model) syncJQResultBuffer() tea.Cmd {
 	s := m.jqPlay
 	if s == nil || s.resultEd == nil {
 		return nil
 	}
 	s.resultEd.ShowReadOnly(jqResultPath, s.result.Text())
+	s.setResultFolds(jqplay.Folds(s.result.Text()))
 	s.resultEd.SetFocused(s.bufFocus)
 	return s.resultEd.Reparse()
+}
+
+// setResultFolds installs the result's foldable objects and arrays on the
+// substitute editor (#2029). The playground computes them itself instead of
+// waiting for the Tree-sitter parse: the result window must fold in a
+// grammar-less build too, and only the structural scan knows how many members
+// a node holds, which is what the placeholder says. The collapsing itself
+// stays the editor's — za/zc/zo/zM/zR and every fold-aware motion (#1741)
+// work in the result buffer exactly as they do in a file.
+func (s *jqPlayState) setResultFolds(folds []jqplay.Fold) {
+	s.folds = make(map[int]jqplay.Fold, len(folds))
+	ranges := make([]highlight.Fold, 0, len(folds))
+	for _, f := range folds {
+		s.folds[f.HeaderLine] = f
+		ranges = append(ranges, highlight.Fold{HeaderLine: f.HeaderLine, EndLine: f.EndLine})
+	}
+	if s.resultEd != nil {
+		s.resultEd.SetHostFolds(ranges)
+	}
+}
+
+// jqFoldSummary is the placeholder a collapsed node renders as: its member
+// count in its own unit, `{ ⋯ 3 keys }` rather than the file buffer's
+// "⋯ 3 lines" — how big the value is, which is what a reader skimming a
+// result wants to know. An unknown header falls back to the editor's default.
+func (s *jqPlayState) jqFoldSummary(header, end int) string {
+	f, ok := s.folds[header]
+	if !ok || f.EndLine != end {
+		return ""
+	}
+	return f.Label()
 }
 
 // updateJQPlayground consumes every key while the playground's pane is
@@ -882,7 +924,10 @@ func (m Model) jqInfoRow(width int) string {
 // narrow pane drops trailing hints whole rather than clipping one mid-word.
 func (s *jqPlayState) jqHints() []string {
 	if s.bufFocus {
-		return []string{"tab query line", "ctrl+y copy", "ctrl+o scratch", "esc close"}
+		// za/zM/zR are the editor's own fold keys (#1741), listed here
+		// because folding a big result (#2029) is the reason to be in the
+		// buffer at all — and nothing else on the row advertises them.
+		return []string{"tab query line", "za fold", "zM/zR fold all", "ctrl+y copy", "ctrl+o scratch", "esc close"}
 	}
 	return []string{"tab result", "enter run", "↑/↓ history", "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close"}
 }

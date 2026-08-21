@@ -329,7 +329,8 @@ func (m *Model) reconcileFolds() {
 // the load/share paths that reset the highlight caches.
 func (m *Model) resetFolds() {
 	m.folds = nil
-	m.lspFolds = nil // server ranges belong to the previous document (#1912)
+	m.lspFolds = nil  // server ranges belong to the previous document (#1912)
+	m.hostFolds = nil // host ranges likewise (#2029): the host reinstalls them
 	m.folded = nil
 	m.foldLines = m.buf.LineCount()
 }
@@ -393,8 +394,17 @@ func (m *Model) foldScrollFix() {
 // reading a folded JSON object out of a file never needs an unfold plus a drag.
 const foldCopyGlyph = "⧉"
 
-// foldTag is the "⋯ N lines" placeholder of a collapsed header.
-func foldTag(line, end int) string { return " ⋯ " + strconv.Itoa(end-line) + " lines" }
+// foldTag is the "⋯ N lines" placeholder of a collapsed header — or whatever
+// a host's fold summary (#2029, hostfold.go) names the node instead, which is
+// how the jq result window says "3 keys" where a file says "3 lines".
+func (m Model) foldTag(line, end int) string {
+	if m.foldSummary != nil {
+		if s := m.foldSummary(line, end); s != "" {
+			return " " + s
+		}
+	}
+	return " ⋯ " + strconv.Itoa(end-line) + " lines"
+}
 
 // annotColumnWidth is the width right-aligned row annotations budget against:
 // the text width, minus the column the overlaid scrollbar claims (#1728).
@@ -416,7 +426,7 @@ func (m Model) annotColumnWidth() int {
 func (m Model) foldCopyCell(line, end int) (off, width int, ok bool) {
 	annot := m.annotColumnWidth()
 	gw := lipgloss.Width(foldCopyGlyph)
-	if annot <= 0 || annot-gw-1 <= lipgloss.Width(foldTag(line, end)) {
+	if annot <= 0 || annot-gw-1 <= lipgloss.Width(m.foldTag(line, end)) {
 		return 0, 0, false
 	}
 	return annot - gw, gw, true
@@ -430,7 +440,7 @@ func (m Model) foldCopyCell(line, end int) (off, width int, ok bool) {
 // the affordance's hit target is a fixed cell instead of drifting with the
 // header's length.
 func (m Model) renderFoldHeader(line, end, width int, cursorStyle, selStyle lipgloss.Style) string {
-	tag := foldTag(line, end)
+	tag := m.foldTag(line, end)
 	tw := lipgloss.Width(tag)
 	faint := lipgloss.NewStyle().Faint(true)
 	off, _, ok := m.foldCopyCell(line, end)

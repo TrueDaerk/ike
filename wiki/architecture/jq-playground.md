@@ -1,10 +1,10 @@
 ---
 type: concept
 title: jq Playground
-description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and response pane, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, and a library of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them.
+description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and response pane, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, a library of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, and vim-style folding of the result's objects and arrays with member-counting placeholders.
 resource: internal/jqplay/jqplay.go
-tags: [architecture, json, jq, tools, inline, editor, http, completion]
-timestamp: 2026-08-20T18:00:00Z
+tags: [architecture, json, jq, tools, inline, editor, http, completion, folding]
+timestamp: 2026-08-21T12:00:00Z
 ---
 
 # jq Playground
@@ -28,6 +28,7 @@ so leaving restores it bit-identically — editability included.
 internal/jqplay/
   jqplay.go      evaluation core: Parse, Run, Evaluate, Result, History — pure, no UI state
   raw.go         EvaluateRaw: the `jq -r`-shaped single-value form (used by .http captures, #1993)
+  fold.go        Folds: the result's foldable objects/arrays with their member counts (#2029)
   highlight.go   the query line's jq scanner: Tokens/KindAt, single pass, never fails
   complete.go    the typing aid: Complete — snapshot keys at a path, gojq's builtin list
   library.go     the named saved-filter store: Library, Filter, Scope — path-agnostic, one type for both scopes
@@ -73,9 +74,9 @@ While the mode is active on a pane:
 - The rest of the pane shows a **substitute read-only editor**
   (`ShowReadOnly`, the #1762 buffer) holding the result under the virtual
   path `jq result.json`, so JSON highlighting applies. It is a full editor:
-  motions, search, folds, **visual selection and yank**, mouse click/drag
-  selection, wheel and scrollbar all work; mutations are refused with the
-  usual `E45`.
+  motions, search, **folds** (see below), **visual selection and yank**, mouse
+  click/drag selection, wheel and scrollbar all work; mutations are refused
+  with the usual `E45`.
 - The pane's own component — the document editor, the HTTP viewer — is not
   rendered but keeps its entire state. The breadcrumbs row (#1153) is
   suppressed for the pane; the query header takes its place in the mouse
@@ -231,6 +232,49 @@ Info, Secondary, Warning, Hint) rather than the editor's capture colors — the
 header is chrome over the pane surface, not buffer text. The **result** is
 highlighted separately, as JSON, by the substitute editor's ordinary pipeline.
 
+## Folding the result
+
+A result is regularly taller than the pane, and reading its *shape* before
+opening the interesting branch is what folding is for. Every multi-line object
+and array of the result window collapses (#2029) with the editor's own vim
+fold keys, from the result buffer (`tab`):
+
+| Key | Effect |
+| --- | --- |
+| `za` | toggle the innermost node at the cursor |
+| `zc` / `zo` | close / open one level |
+| `zM` / `zR` | close every node / open every node |
+| `zy` | copy the collapsed node whole (#1787), the `⧉` affordance's keyboard form |
+
+A collapsed node is **one row** carrying a placeholder that names its size —
+`"spec": { ⋯ 3 keys }`, `"ports": [ ⋯ 12 items ]` — so the row still reads as
+a complete value, and every fold-aware behaviour of an ordinary buffer (`j`/`k`
+stepping over a fold as one row, scrolling, the mouse map, a linewise operator
+taking the whole fold, #1741) applies unchanged. Folding **nests**: opening a
+node reveals one level, with the nodes inside it still folded.
+
+Two deliberate choices behind it:
+
+- **The ranges are the playground's, the folding is the editor's.**
+  `jqplay.Folds` (`internal/jqplay/fold.go`) scans the pretty-printed result —
+  a rune walk counting delimiters outside strings, not a re-decode — and hands
+  the ranges to the result editor through `SetHostFolds`
+  (`internal/editor/hostfold.go`), where they merge over the Tree-sitter ranges
+  and win on a shared header line. No second fold engine: the collapsed set,
+  the z-commands and every fold-aware motion stay the editor's (#144, #1741).
+  Computing the ranges here rather than taking the parse's is what makes the
+  result window fold in a **cgo-free build** too (no grammar there) — and only
+  the structural scan knows how many *members* a node holds, which is what the
+  placeholder says. `SetFoldSummary` is the hook that lets it say "3 keys"
+  where a file says "3 lines".
+- **A new result is a new document.** `ShowReadOnly` resets cursor, scroll and
+  fold state together, and the playground installs the fresh result's ranges
+  right after — so a changed filter can never leave a fold of the previous
+  result behind, and a fold never outlives the lines it hid.
+
+Raw output has no folds because there is none: the playground is JSON-in /
+JSON-out (`jq -r` lives in `raw.go` for the `.http` client, not in the window).
+
 ## Completion
 
 The query line has a typing aid (#1979), synchronous and bounded, with the
@@ -300,7 +344,9 @@ above win):
 | `esc` | close (recording the program in the history) |
 
 Result buffer (after `tab`): the **full editor keymap** — motions, search,
-folds, visual selection, `y` yank of the selection — against the read-only
+folds (`za` / `zc` / `zo` / `zM` / `zR`, see
+[Folding the result](#folding-the-result)), visual selection, `y` yank of the
+selection — against the read-only
 buffer, with four exceptions: `tab` returns to the query line, `ctrl+y` /
 `ctrl+o` keep their result-action meaning (shadowing the editor's scroll and
 jumplist keys — a throwaway result has no jumplist worth keeping), and `esc`
