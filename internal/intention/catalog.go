@@ -25,6 +25,7 @@ func Builtins() []Provider {
 		vcsProvider(),
 		testProvider(),
 		editProvider(),
+		bufferLangProvider(),
 	}
 }
 
@@ -218,6 +219,28 @@ func editProvider() Provider {
 				items = append(items, Item{Title: "Compare Selection with Clipboard", Kind: "diff", CommandID: "diff.compareWithClipboard"})
 			}
 			return items
+		},
+	}
+}
+
+// bufferLangProvider offers the buffer-level language pick (#2033) — the only
+// entry that is about the *buffer* rather than the caret, which is why it
+// lists last. It appears in a buffer with no file only: a saved file is
+// classified by its name, so offering the pick there would advertise a choice
+// the editor deliberately refuses. The current type rides in the title, so the
+// popup both shows what the buffer is treated as and changes it.
+func bufferLangProvider() Provider {
+	return Provider{
+		ID: "app.bufferlang",
+		Items: func(cx Context) []Item {
+			if !cx.Fileless {
+				return nil
+			}
+			title := "Treat Buffer as…"
+			if cx.LangID != "" {
+				title += " (now " + cx.LangID + ")"
+			}
+			return []Item{{Title: title, Kind: "buffer", CommandID: "editor.setBufferLanguage"}}
 		},
 	}
 }

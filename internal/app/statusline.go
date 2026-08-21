@@ -36,6 +36,7 @@ var statusLeft = []statusSegment{
 	{id: "macro", render: macroSegment},
 	{id: "follow", render: followSegment},
 	{id: "file", render: fileSegment},
+	{id: "buflang", render: bufferLangSegment},
 	{id: "hint", render: emptyHintSegment},
 	{id: "eol", render: eolSegment},
 	{id: "encoding", render: encodingSegment},
@@ -503,7 +504,7 @@ func renderParts(m Model, ed *editor.Model, segs []statusSegment) []renderedSeg 
 // (already shrunken) file segment and the cursor never drop.
 var statusDropOrder = []string{
 	"hint", "eol", "encoding", "indent", "svcolumn", "docpath", "logspan", "toolchain", "todo",
-	"host", "notifications", "macro", "branch", "diagnostics", "lsp",
+	"host", "notifications", "macro", "branch", "buflang", "diagnostics", "lsp",
 }
 
 // statusFileMin is the narrowest the file segment shrinks to before other
@@ -634,6 +635,7 @@ func middleEllipsis(s string, max int) string {
 // click on them dispatches (#1128); unlisted segments ignore clicks — only
 // segments with one clear, obvious target are wired.
 var statusSegmentCommands = map[string]string{
+	"buflang":       "editor.setBufferLanguage",
 	"todo":          "todo.list",
 	"notifications": "notifications.history",
 	"lsp":           "lsp.showLog",

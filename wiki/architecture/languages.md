@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-08-21T13:00:00Z
 ---
 
 # Language Registry
@@ -168,6 +168,59 @@ entries), YAML inventories (keys under `hosts:` / `children:`), and
 
 The index is best-effort text scanning with a 2s cache — no ansible
 invocation; dynamically computed names stay unknown.
+
+### Buffer language override — "Treat Buffer as …" (#2033)
+
+Every lookup above resolves a **path**, so a buffer with no file — a fresh
+tab, a split, the target of a paste — had no language at all: no highlighting,
+no concealing, no markdown or CSV rendering, no type-specific intentions,
+until the content was saved somewhere with the right extension. The override
+closes that gap without growing a second, id-shaped resolution seam:
+
+- The editor stores one language id per buffer (`Model.langOverride`,
+  `internal/editor/langoverride.go`) and answers every language question
+  through `langPath()`: the real path when there is one, else a **synthetic
+  name** for the chosen language — `buffer.md` for markdown, `buffer.http` for
+  http, `Dockerfile` for a language recognized by base name only. Since the
+  name resolves through the ordinary `ByPath`, every path-keyed consumer
+  follows unchanged: the parse and lint pass, comment toggling, indent rules,
+  snippets, smart typing, id colors, the conceal file filter, the doc-path
+  scanner, markdown rendering, the csv table layer, log rendering.
+- The synthetic name is **only** handed to language resolution. File I/O —
+  save, reload, follow mode, `didOpen`, the runner — keeps reading `Path()`,
+  which stays empty. LSP and run configurations need real paths and are
+  deliberately out of scope; the type is about display, editing and
+  intentions.
+- **A path always wins.** `langPath` returns it unchanged, and the override is
+  dropped the moment the buffer gets one (`Load`, `NewFile`, `:w name`), so a
+  saved buffer is classified by its file name like every other file. A split
+  inherits the type, which is a document property like the encoding and the
+  line-ending flavour.
+- A language change invalidates the same caches a path change does — the
+  highlight index, folds, conceal/decode state — **plus** the version-keyed
+  rendering caches (markdown tables and lists, sv column layout, doc path, log
+  runs and deltas), which a language switch alone would otherwise leave
+  answering for the old type until the next edit.
+- **Parse results route by view, not by path.** The async parse
+  (`highlight.SpansMsg`) used to be delivered to every editor leaf *showing
+  the path* — which skipped every path-less buffer, so a chosen language
+  resolved perfectly and still rendered as plain text. Each view therefore
+  carries a `ParseKey`: its file path, or a unique per-view tag
+  (`\x00buffer/<n>`, a prefix no path can have) when it has none. `parseCmd`
+  stamps the message with it, the editor accepts a result only under its own
+  key, and the app routes by it (`routeParse` →
+  `pane.Instance.UpdateForParseKey`). The Problems store stays path-keyed: a
+  view-tagged result feeds it under the empty path, exactly as a path-less
+  buffer's Unicode findings (#1654) always did.
+
+The user-facing door is the alt+enter intention **"Treat Buffer as …"**
+(`editor.setBufferLanguage`), offered in file-less buffers only — see
+[Intention Actions](./intention-actions.md). It opens a locked palette mode
+listing "Plain Text" plus every language a path lookup could match
+(`internal/app/bufferlang.go`), the chosen type shows in the status line's
+`buflang` segment (`as Markdown`, clickable to change it) and the intention
+entry names it (`Treat Buffer as… (now markdown)`). Picking "Plain Text"
+clears the type again.
 
 ### Shebang fallback (#893)
 

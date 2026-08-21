@@ -2359,6 +2359,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	})
 	scr := palette.NewScratchMode(scratchList)
 	scrNew := scratchNewMode{}
+	bufLang := bufferLangMode{} // "Treat Buffer as …" language picker (#2033)
 	// Classes are their own search-everywhere category (#1849), ranked right
 	// after the commands: a class is what users most often search for by name,
 	// and its own per-kind cap keeps it out of the workspace-symbol crowd. Both
@@ -2369,7 +2370,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, ssh, remoteHosts, jqFilters)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, ssh, remoteHosts, jqFilters, bufLang)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -3915,6 +3916,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// through the standard funnel.
 		return m.newScratch(msg.Ext)
 
+	case ShowBufferLangMsg:
+		// editor.setBufferLanguage (alt+enter intention / palette, #2033):
+		// pick the language a file-less buffer is treated as, locked to the
+		// picker mode.
+		m.openBufferLangPicker()
+		return m, nil
+
+	case SetBufferLangMsg:
+		// One picked language installed on the focused file-less buffer
+		// (#2033); the returned command reparses under the new type.
+		return m, m.setBufferLang(msg)
+
 	case ShowNewScratchMsg:
 		// scratch.new (cmd+shift+n / File menu, #1223): pick the language
 		// first, locked to the picker mode; the chosen row runs the matching
@@ -5323,9 +5336,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// notes (#1623/#1654) also feed the Problems store — its own channel,
 		// so server publishes and lint findings replace independently — and an
 		// empty set legitimately clears the path.
-		m.probStore.SetNotes(msg.Path, editor.NoteDiagnostics(msg.Notes))
+		// A file-less buffer's parse (#2033) travels under its view's key
+		// rather than a path; the Problems store stays path-keyed, so such a
+		// result feeds it under the empty path exactly as before.
+		notesPath := msg.Path
+		if editor.IsBufferKey(notesPath) {
+			notesPath = ""
+		}
+		m.probStore.SetNotes(notesPath, editor.NoteDiagnostics(msg.Notes))
 		m.refreshProblemsPanel()
-		return m, m.routeToEditor(msg.Path, msg)
+		return m, m.routeParse(msg)
 
 	case editor.SyncMsg:
 		// A shared document changed in one pane (#142): every other view of the
@@ -7634,6 +7654,27 @@ func (m *Model) routeToEditor(path string, msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
 	for _, key := range m.editorKeysForPath(path) {
 		if cmd := m.activeWS().Panes.Get(key).UpdateForPath(path, nil, msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
+// routeParse delivers a finished parse to the view that scheduled it, keyed by
+// editor.ParseKey: the file path for a saved buffer — every leaf showing it,
+// background panes and shared-document views included — or the view's own tag
+// for a buffer with no file, which a path route could never find (#2033).
+func (m *Model) routeParse(msg highlight.SpansMsg) tea.Cmd {
+	var cmds []tea.Cmd
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		if cmd := inst.UpdateForParseKey(msg.Path, msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}

@@ -139,9 +139,19 @@ func TestCatalogApplicability(t *testing.T) {
 			want: []string{"editor.toggleValue"},
 		},
 		{
+			name: "buffer with no file offers the language pick",
+			cx:   Context{Fileless: true},
+			want: []string{"editor.setBufferLanguage"},
+		},
+		{
+			name:    "buffer with a file is classified by its name",
+			cx:      Context{Path: "/proj/notes.md", LangID: "markdown"},
+			wantNot: []string{"editor.setBufferLanguage"},
+		},
+		{
 			name:    "empty context offers nothing",
 			cx:      Context{},
-			wantNot: []string{"editor.toggleValue", "diff.compareWithClipboard", "vcs.blameLine"},
+			wantNot: []string{"editor.toggleValue", "diff.compareWithClipboard", "vcs.blameLine", "editor.setBufferLanguage"},
 		},
 	}
 	for _, tc := range cases {

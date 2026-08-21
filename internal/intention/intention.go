@@ -37,6 +37,11 @@ type Context struct {
 	LineAt    func(i int) string
 	// HasSelection reports an active visual selection.
 	HasSelection bool
+	// Fileless reports that the buffer has no file at all — the state the
+	// buffer-level language pick applies to (#2033). Path is empty in that
+	// case too, but a zero Context must offer nothing, so the fact is
+	// carried explicitly rather than inferred from the empty path.
+	Fileless bool
 
 	// DocPath reports that the caret sits on a JSON/YAML value with a
 	// non-root document path (the status-line breadcrumb, #1660).

@@ -34,7 +34,7 @@ func logCapture(capture string) bool {
 }
 
 // logBuffer reports whether the buffer renders as a log file.
-func (m Model) logBuffer() bool { return highlight.Lang(m.path) == "log" }
+func (m Model) logBuffer() bool { return highlight.Lang(m.langPath()) == "log" }
 
 // parseConcealOn reports whether the parse-produced conceal ranges apply
 // right now: for log buffers the log toggle gates them (concealed ANSI escape

@@ -52,6 +52,7 @@ func (m Model) intentionContext() (intention.Context, bool) {
 		LineCount:         ed.LineCount(),
 		LineAt:            ed.LineText,
 		HasSelection:      hasSel,
+		Fileless:          !ed.HasFile(),
 		DiagnosticAtCaret: ed.DiagnosticOnCaretLine(),
 		HunkAtCaret:       ed.HunkAtCursor(),
 		ConflictAtCaret:   ed.ConflictAtCursor(),
@@ -61,7 +62,9 @@ func (m Model) intentionContext() (intention.Context, bool) {
 		cx.DocPath = true
 	}
 	cx.ConcealFamily, cx.ConcealValue = ed.ConcealExplainAtCaret()
-	if ed.HasFile() && isHTTPPath(ed.Path()) {
+	// The HTTP entries follow the buffer's *type*, so a file-less buffer
+	// treated as HTTP (#2033) offers them too.
+	if isHTTPBuffer(ed) {
 		// RequestAt speaks 1-based cursor lines (the block ranges the parser
 		// records), like every other caller.
 		if _, ok := httpfile.Parse(ed.Text()).RequestAt(line + 1); ok {
@@ -171,7 +174,7 @@ func (m Model) insertCurlAsRequest() (tea.Model, tea.Cmd) {
 		m.host.Notify(host.Error, "curl: "+err.Error())
 		return m, nil
 	}
-	if isHTTPPath(ed.Path()) {
+	if isHTTPBuffer(ed) {
 		name := uniqueRequestName(httpfile.Parse(ed.Text()), curlRequestName(imp.Request))
 		block := strings.TrimSuffix(httpfile.FormatRequest(imp.Request, name), "\n")
 		endCol := len([]rune(ed.LineText(endLine)))

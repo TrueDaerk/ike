@@ -36,6 +36,7 @@ func Defaults() []Menu {
 			{Title: "Zen Mode", Command: "view.zenMode"},
 			{Title: "Hide All Tool Windows", Command: "window.hideAllTools"},
 			{Title: "External Changes", Command: "watch.changeFeed"},
+			{Title: "Treat Buffer as…", Command: "editor.setBufferLanguage"},
 			{Title: "Export Screenshot (Pane)", Command: "view.exportScreenshot"},
 			{Title: "Export Screenshot (Window)", Command: "view.exportWindowScreenshot"},
 			{Title: "Performance HUD", Command: "perf.hud"},

@@ -23,7 +23,7 @@ import (
 // from — a JSON body follows JSON's typing conventions, not the host's),
 // otherwise the buffer's own. ok=false when no language is known.
 func (m *Model) spaceAfterLang(line int) (lang.Language, bool) {
-	host, ok := lang.ByPath(m.path)
+	host, ok := lang.ByPath(m.langPath())
 	if !ok {
 		return lang.Language{}, false
 	}
