@@ -1,7 +1,7 @@
 ---
 type: concept
 title: jq Playground
-description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and response pane, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, a library of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects and arrays with member-counting placeholders, and a toggleable full-query view laying a program too wide for the query line out over several pipe-broken rows.
+description: Inline jq query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; gojq as the engine, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and response pane, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, a library of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects and arrays with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, jq, tools, inline, editor, http, completion, folding]
 timestamp: 2026-08-21T12:00:00Z
@@ -32,14 +32,14 @@ internal/jqplay/
   highlight.go   the query line's jq scanner: Tokens/KindAt, single pass, never fails
   complete.go    the typing aid: Complete — snapshot keys at a path, gojq's builtin list
   library.go     the named saved-filter store: Library, Filter, Scope — path-agnostic, one type for both scopes
-  wrap.go        the full-query view's line breaking: Wrap/LineAt, pipe-aware, rune-indexed
+  wrap.go        the multi-line view's line breaking and caret coordinates: Wrap/LineAt/RowCol/PosAt
 internal/app/
   jqplayground.go the inline mode: query header, result buffer, key routing, debounce and async eval
   jqcomplete.go   the completion popup: state, keys, rendering and compositing
   jqfilters.go    the filter library's UI: the two store paths, the name prompt, the palette picker
   commands.go     json.jqPlayground / json.jqPlaygroundAtPath → the two open messages,
                   json.jqSaveFilter / json.jqFilters / json.jqRenameFilter → the library,
-                  json.jqQueryView → the full-query view toggle
+                  json.jqQueryView → the multi-line view toggle
 ```
 
 The split is the usual one: everything interesting — parsing, running, error
@@ -61,7 +61,7 @@ While the mode is active on a pane:
   query line, then one info row (input origin and size, result summary, key
   hints — or the error, or a transient status). The header height is fixed, so
   an error appearing mid-keystroke never resizes the buffer below it — the
-  [full-query view](#the-full-query-view) is the one thing that grows it, and
+  [multi-line view](#the-multi-line-view) is the one thing that grows it, and
   only on the user's key.
 - The info row is composed of **styled segments** (#1978): the summary in the
   theme's Hint, the caps — `(stopped at 500)`, `(first 10000 only)` — and a
@@ -236,20 +236,24 @@ Info, Secondary, Warning, Hint) rather than the editor's capture colors — the
 header is chrome over the pane surface, not buffer text. The **result** is
 highlighted separately, as JSON, by the substitute editor's ordinary pipeline.
 
-## The full-query view
+## The multi-line view
 
 The query line is one row, windowed around the cursor and cut with `…` at both
 edges. That is right for typing and wrong for reading: a pipeline like
 `.hits.hits[]._source | .keyword as $keyword | .ser[] | select(…) | {…}` is
 never on screen as a whole, so the overview is lost exactly where it is needed
-— while building a long pipeline (#2032).
+— while building a long pipeline (#2032) — and building one blind is how an
+afternoon goes into a filter that should have taken minutes (#2038).
 
 **`json.jqQueryView`** (`ctrl+alt+e`, or the palette / Tools menu) toggles the
-**full-query view**: the same program laid out over several rows, in place, with
-the program, the cursor, the history position and the result untouched. It
-works from the query line and from the result buffer alike (the mode resolves
-Global chords it does not claim, #1983), and the info row's key hints name the
-chord actually bound to it — a rebind renames the hint with it.
+**multi-line view**: the same program laid out over several rows, in place,
+with the program, the cursor, the history position and the result untouched. It
+is one mechanism for both halves of the ask — *seeing* the whole expression
+(#2032) and *editing* it as a small jq script (#2038) — because a view you can
+read but not type in would only be a second mode to leave. It works from the
+query line and from the result buffer alike (the mode resolves Global chords it
+does not claim, #1983), and the info row's key hints name the chord actually
+bound to it — a rebind renames the hint with it.
 
 - **The wrap breaks at the pipes** (`jqplay.Wrap`, pure and rune-indexed like
   the scanner): a jq pipeline reads as a sequence of stages, so a row boundary
@@ -275,9 +279,68 @@ chord actually bound to it — a rebind renames the hint with it.
   "you are seeing less than there is" color the output caps use, because the
   `…` at the row's edge alone is too easy to miss.
 
-The one-line header stays the **default**: the full-query view costs result
+The one-line header stays the **default**: the multi-line view costs result
 rows, and the resting layout is the one to type in. It is view state only —
 nothing about it reaches the program, the history or the saved filters.
+
+### Editing across the rows
+
+The rows are not a preview: the caret moves through them and the program is
+edited wherever it stands (#2038), with the same highlighting, the same
+completion popup and the same live run per keystroke as on the one-line query
+line — it is one query line with more rows, never a second editor.
+
+| Key | Effect in the multi-line view |
+| --- | --- |
+| `↑` / `↓` | move the caret one row up / down, keeping its **goal column** |
+| `alt+↑` / `alt+↓` | walk the session program history |
+| `home` / `end` | start / end of the **caret's row** |
+| `ctrl+home` / `ctrl+end` | start / end of the whole program |
+| *click* | put the caret on the clicked cell of any query row |
+
+- **The arrows are motion first, history second.** `↑`/`↓` are the history
+  walk on the one-line query line (#1973) and rows to walk once there are rows.
+  A `↑` on the *first* row — or a `↓` on the last — has no row to go to and
+  hands over to the history from there, the way a multi-line shell prompt does;
+  `alt+↑`/`alt+↓` reach it from any row. The info row's hints say which meaning
+  is in front of the user, so the rebound arrows are never a surprise.
+- **The goal column survives a short row.** A run of vertical motions aims for
+  the column it started in (`jqPlayState.qgoal`, cleared by every other key),
+  so stepping over a short stage and on returns to the column left behind
+  instead of dragging the caret to the left edge.
+- **A caret on a row's end stays on that row.** `jqplay.RowCol` — not `LineAt`
+  — resolves the caret's coordinates: a position on the end of a row the wrap
+  broke at a pipe belongs to that row, past its last rune, because the blank
+  the break dropped separates the two. Without the distinction `↑` from the row
+  below would land on a position that reads as being on the row below again,
+  and the motion would never arrive. Where a row was cut at the width the two
+  rows touch, and the position is the next row's first cell — a real cell, and
+  unambiguous.
+- **The window follows the caret.** Past the 8-row cap the rows scroll under
+  the caret's row, so editing a stage 20 rows into a program keeps it on
+  screen. The rendering, the click mapping and the completion popup's anchor
+  all read one layout (`jqQueryWindow`), so the row drawn, the row clicked and
+  the row the popup hangs under can never disagree.
+- **The popup follows too**: with the view up, the completion list opens under
+  the caret's row at the partial's column in it, not under the header's first
+  row.
+
+**Line breaks stay a display and editing device — the program is always one
+line.** The wrap is recomputed from the program on every render, nothing about
+it is stored, and a break is never a rune: the history (`↑`/`↓`), the
+seeded last-valid program per file (#1982), the saved filters (#1995) and the
+`.http` client's `# @capture` expressions all keep speaking about one-line jq
+programs, and a program written across rows here can be pasted anywhere a jq
+one-liner goes. A multi-line **paste** is still flattened into the line
+(`ui.PasteText`) for the same reason. The alternative — carrying real newlines
+— would have bought nothing the pipe-aware wrap does not already give (a
+pipeline reads stage per row either way) and would have leaked into every store
+that holds a program.
+
+None of these keys is a keymap binding: they are the mode's own, like `tab`,
+`enter` and the history arrows before them. Only the *toggle* is a command
+(`json.jqQueryView`), because only a toggle is worth reaching from the palette
+or rebinding.
 
 ## Folding the result
 
@@ -381,9 +444,11 @@ above win):
 | *(typing)* | edit the program; each change re-evaluates, debounced, and re-filters or opens the completion popup |
 | `ctrl+space` | open the completion popup explicitly (the full builtin list on an empty line) |
 | `enter` | record the program in the history and run it now |
-| `↑` / `↓` | walk the session program history (`↓` past the newest restores the draft) |
+| `↑` / `↓` | walk the session program history (`↓` past the newest restores the draft) — the program's rows in the [multi-line view](#editing-across-the-rows) |
+| `alt+↑` / `alt+↓` | walk the history from any row of the multi-line view |
+| `home` / `end` | ends of the program — of the caret's **row** in the multi-line view |
 | `tab` | move the keyboard into the result buffer |
-| `ctrl+alt+e` | toggle the [full-query view](#the-full-query-view) (`json.jqQueryView`) |
+| `ctrl+alt+e` | toggle the [multi-line view](#the-multi-line-view) (`json.jqQueryView`) |
 | `pgup` / `pgdn` | page the result buffer without leaving the query line |
 | `ctrl+s` | save the program as a **named filter** (`json.jqSaveFilter`) |
 | `ctrl+l` | open the **saved-filter picker** (`json.jqFilters`) |

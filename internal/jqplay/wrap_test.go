@@ -103,3 +103,65 @@ func TestLineAt(t *testing.T) {
 		}
 	}
 }
+
+// TestRowColAndPosAt (#2038): the caret's coordinates in the wrapped program
+// and the position they resolve back to — the pair a vertical motion is made
+// of. The caret on a row's end stays on that row (the blank the pipe break
+// dropped separates it from the next one), and a column past a short row's end
+// clamps to it without being forgotten by the caller.
+func TestRowColAndPosAt(t *testing.T) {
+	program := ".aaaa | .bb | .cccccc"
+	lines := Wrap(program, 8)
+	if len(lines) != 3 {
+		t.Fatalf("setup: got %d rows, want 3: %+v", len(lines), lines)
+	}
+	cases := []struct{ pos, row, col int }{
+		{0, 0, 0},
+		{7, 0, 7},                    // the caret past the first row's `|`
+		{8, 1, 0},                    // the next row's first cell
+		{13, 1, 5},                   // that row's own end
+		{14, 2, 0},                   // and on to the last
+		{len([]rune(program)), 2, 7}, // the end of the program
+	}
+	for _, c := range cases {
+		row, col := RowCol(lines, c.pos)
+		if row != c.row || col != c.col {
+			t.Errorf("RowCol(%d) = (%d,%d), want (%d,%d)", c.pos, row, col, c.row, c.col)
+		}
+		if got := PosAt(lines, row, col); got != c.pos {
+			t.Errorf("PosAt(%d,%d) = %d, want %d", row, col, got, c.pos)
+		}
+	}
+	// A goal column past a row's end clamps into the row, and the column
+	// itself is the caller's to keep — stepping on lands back where it was.
+	if got, want := PosAt(lines, 1, 99), lines[1].End; got != want {
+		t.Errorf("PosAt past the row's end = %d, want %d", got, want)
+	}
+	// Out-of-range rows resolve into the program rather than panicking.
+	if got := PosAt(lines, -3, 2); got != lines[0].Start+2 {
+		t.Errorf("PosAt on a negative row = %d, want the first row's cell", got)
+	}
+	if got := PosAt(lines, 99, 0); got != lines[2].Start {
+		t.Errorf("PosAt past the last row = %d, want the last row's start", got)
+	}
+	if got := PosAt(nil, 0, 0); got != 0 {
+		t.Errorf("PosAt with no rows = %d, want 0", got)
+	}
+}
+
+// TestRowColHardSplitTouchesTheNextRow (#2038): a row cut at the width has no
+// blank between it and the next, so the position where they meet is the next
+// row's first cell — the caret can be there, and a motion off it is not
+// ambiguous.
+func TestRowColHardSplitTouchesTheNextRow(t *testing.T) {
+	lines := Wrap(strings.Repeat("a", 25), 10)
+	if len(lines) != 3 {
+		t.Fatalf("setup: got %d rows, want 3: %+v", len(lines), lines)
+	}
+	if row, col := RowCol(lines, 10); row != 1 || col != 0 {
+		t.Errorf("RowCol at the cut = (%d,%d), want (1,0)", row, col)
+	}
+	if row, col := RowCol(lines, 25); row != 2 || col != 5 {
+		t.Errorf("RowCol at the program's end = (%d,%d), want (2,5)", row, col)
+	}
+}

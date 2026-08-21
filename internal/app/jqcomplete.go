@@ -208,8 +208,9 @@ func (m Model) compositeJQCompletion(base string) string {
 	}
 	w, h := lipgloss.Width(view), lipgloss.Height(view)
 	queryY := r.Y + paneContentY // breadcrumbs are suppressed while the mode owns the pane
-	x := r.X + paneContentX + jqQueryPrefixCells + m.jqCompAnchorCol(r.W-paneChromeW)
-	y := queryY + 1
+	col, row := m.jqCompAnchor(r.W - paneChromeW)
+	x := r.X + paneContentX + jqQueryPrefixCells + col
+	y := queryY + row + 1
 	if maxX := m.width - w; x > maxX {
 		x = maxX
 	}
@@ -217,7 +218,7 @@ func (m Model) compositeJQCompletion(base string) string {
 		x = 0
 	}
 	if y+h > m.height {
-		y = queryY - h
+		y = queryY + row - h
 	}
 	if y < 0 {
 		y = 0
@@ -225,25 +226,31 @@ func (m Model) compositeJQCompletion(base string) string {
 	return overlay.Place(base, view, x, y, m.width, m.height)
 }
 
-// jqCompAnchorCol is the partial's column within the rendered query row,
-// mirroring jqHighlighted's cursor-window math (the window start and its
-// leading ellipsis cell).
-func (m Model) jqCompAnchorCol(paneW int) int {
+// jqCompAnchor is where the popup hangs: the partial's column within the
+// rendered query row, and that row's index in the query header. The one-line
+// view mirrors jqHighlighted's cursor-window math (the window start and its
+// leading ellipsis cell) on row 0; the multi-line view (#2038) anchors on the
+// **cursor's** row instead, so the list still opens under the word it
+// completes when the program is several rows deep.
+func (m Model) jqCompAnchor(paneW int) (col, row int) {
 	s := m.jqPlay
-	avail := paneW - 8
-	if avail < 10 {
-		avail = 10
+	avail := m.jqQueryWidth(paneW)
+	lines, rows, start := m.jqQueryWindow(paneW)
+	if rows <= 1 {
+		ws := 0
+		if s.pos >= avail {
+			ws = s.pos - avail + 1
+		}
+		col = s.comp.start - ws
+		if ws > 0 {
+			col++
+		}
+		return max(col, 0), 0
 	}
-	ws := 0
-	if s.pos >= avail {
-		ws = s.pos - avail + 1
+	cur, _ := jqplay.RowCol(lines, s.pos)
+	col = s.comp.start - lines[cur].Start
+	if cur == start && start > 0 {
+		col++ // the windowed first row opens on the `…` marker
 	}
-	col := s.comp.start - ws
-	if ws > 0 {
-		col++
-	}
-	if col < 0 {
-		col = 0
-	}
-	return col
+	return max(col, 0), cur - start
 }

@@ -97,7 +97,7 @@ Every single-line text input in `internal/`, and what it uses.
 | Save-layout prompt | `internal/app/layouts_ui.go` | shared |
 | Bookmark prompt | `internal/app/bookmarks_store.go` | shared |
 | Regex tester (pattern + test text) | `internal/app/regextester.go` | shared (#1937) |
-| jq playground query | `internal/app/jqplayground.go` | shared (#1936) |
+| jq playground query | `internal/app/jqplayground.go` | shared (#1936); vertical motion over the wrapped rows on top (#2038) |
 | File rename prompt | `internal/app/fileops.go` | **migrated (#2002)** |
 | Symbol rename prompt (LSP) | `internal/app/lsprename.go` | **migrated (#2002)** |
 | JetBrains keymap import path | `internal/app/jbimport_prompt.go` | **migrated (#2002)** |
