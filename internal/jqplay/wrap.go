@@ -15,7 +15,9 @@ package jqplay
 // The result is expressed in *rune* index ranges into the program, not in
 // substrings: the renderer colors and cursors rune by rune (highlight.go's
 // tokens are rune-indexed too), so handing it strings would only mean
-// converting the indices back.
+// converting the indices back. The same ranges carry the caret across the rows
+// once the view is editable (#2038) — RowCol/PosAt are the coordinate pair a
+// vertical motion is made of.
 
 // Line is one visual row of a wrapped program: the rune range [Start, End) of
 // the program it shows. Ranges are ordered and never overlap; the blanks that
@@ -127,4 +129,62 @@ func pipeSegments(program string, r []rune) []Line {
 		out = append(out, Line{Start: start, End: len(r)})
 	}
 	return out
+}
+
+// RowCol resolves rune position pos into the row that holds it and the column
+// within that row — the *caret's* coordinates in the expanded query view
+// (#2038), which is what a vertical motion has to work in.
+//
+// It differs from LineAt in one case, and that case is the whole reason it
+// exists: a caret standing on the end of a row the wrap broke at a pipe
+// belongs to **that** row, past its last rune, not to the row below. LineAt
+// answers by containment and hands such a position to the following row, which
+// would make ↑ from the row below land on a position that reads as being on
+// the row below again — a motion that never arrives. The distinction is safe
+// exactly where the wrap dropped a blank between the two rows; a row cut at
+// the width touches the next one, and there the position is the next row's
+// first cell, which is a real cell and unambiguous.
+//
+// A position inside a dropped blank run answers column 0 of the row that
+// follows it, the cell the renderer draws the caret on.
+func RowCol(lines []Line, pos int) (row, col int) {
+	row = LineAt(lines, pos)
+	if row >= len(lines) {
+		return row, 0
+	}
+	if row > 0 && pos == lines[row-1].End && lines[row-1].End < lines[row].Start {
+		row--
+	}
+	col = pos - lines[row].Start
+	if col < 0 {
+		col = 0
+	}
+	if w := lines[row].End - lines[row].Start; col > w {
+		col = w
+	}
+	return row, col
+}
+
+// PosAt is the inverse of RowCol: the rune position at column col of row,
+// clamped into the row and into the program. A vertical motion keeps its goal
+// column through short rows this way — the column is remembered, the position
+// it resolves to is not.
+func PosAt(lines []Line, row, col int) int {
+	if len(lines) == 0 {
+		return 0
+	}
+	if row < 0 {
+		row = 0
+	}
+	if row >= len(lines) {
+		row = len(lines) - 1
+	}
+	if col < 0 {
+		col = 0
+	}
+	pos := lines[row].Start + col
+	if pos > lines[row].End {
+		pos = lines[row].End
+	}
+	return pos
 }

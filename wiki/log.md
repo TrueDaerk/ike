@@ -1,5 +1,49 @@
 # Log
 
+## 2026-08-21 (jq playground: editing the query across its rows, #2038)
+
+- **The multi-line view is now an editor** (`internal/app/jqplayground.go`):
+  the rows `json.jqQueryView` (`ctrl+alt+e`) lays a program out over (#2032)
+  take the caret. `↑`/`↓` move it row by row keeping a **goal column**
+  (`jqPlayState.qgoal`, cleared by every other key), `home`/`end` are
+  row-local, `ctrl+home`/`ctrl+end` stay the whole program's ends, and a click
+  on any query row puts the caret on the clicked cell. Highlighting,
+  completion and the debounced live run are the one-line query line's,
+  unchanged — it is one query line with more rows.
+- **The history moves to `alt+↑`/`alt+↓`** there, and a plain `↑` on the first
+  row (or `↓` on the last) still hands over to it, the way a multi-line shell
+  prompt does. The info row's hints say which meaning the arrows have in the
+  view that is up.
+- **`jqplay.RowCol` / `jqplay.PosAt`** (`internal/jqplay/wrap.go`): the caret's
+  coordinates in a wrapped program and back. `RowCol` differs from `LineAt` in
+  the one case that matters — a caret on the end of a row the wrap broke at a
+  pipe belongs to *that* row, past its last rune, because the break dropped a
+  blank between the two; without it `↑` from the row below would land on a
+  position that reads as being on the row below again and the motion would
+  never arrive.
+- **One layout for everything** (`jqQueryWindow`): the rendering, the click
+  mapping and the completion popup's anchor read the same wrapped rows and the
+  same window start, so the row drawn, the row clicked and the row the popup
+  hangs under cannot disagree. The popup now anchors on the **caret's** row,
+  and a caret standing in the blanks a stage break dropped is drawn on its
+  row's first cell instead of vanishing.
+- **The program stays one line.** Breaks are display and editing only, never
+  runes: the history, the per-file last-valid program (#1982), the saved
+  filters (#1995) and `.http` `# @capture` expressions keep speaking about
+  one-line jq programs, and a multi-line paste is still flattened. The
+  decision is written down in the concept doc.
+- **Tests**: `internal/jqplay/wrap_test.go` (`RowCol`/`PosAt` round trip, the
+  row-end rule, hard splits); `internal/app/jqplayground_test.go` (row walking
+  with the goal column, row-local home/end plus an edit several rows up that
+  runs live, the history keys, click-to-place, the window following the caret
+  past the cap, the program staying one line through history and saved
+  filters, the hints); `internal/app/jqcomplete_test.go` (the popup anchored on
+  the caret's row).
+- **Wiki**: `architecture/jq-playground.md`'s "The full-query view" becomes
+  "The multi-line view" and gains "Editing across the rows" with the key table
+  and the one-line decision; `architecture/text-input.md`'s site table notes
+  the vertical motion.
+
 ## 2026-08-21 (Intentions: every entry audited for real applicability, #2026)
 
 - **The rule** (`wiki/architecture/intention-actions.md`): an intention entry
