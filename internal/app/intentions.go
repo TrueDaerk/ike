@@ -107,6 +107,7 @@ func (m Model) fillHTTPIntentions(cx *intention.Context) {
 		cx.HTTPResponseBody = p.HasBodyText()
 		cx.HTTPResponseHeaders = p.HasHeadersText()
 		cx.HTTPResendable = p.CurrentRequest() != nil
+		cx.HTTPResponseSaveable = p.HasRawBody()
 	}
 	source := m.httpPickerSource()
 	if source == "" {

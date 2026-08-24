@@ -171,12 +171,28 @@ line runs that test (see /architecture/run-configurations.md).
   Ghostty binds `super+c` to `copy_to_clipboard:mixed` by default, so a
   terminal-side selection wins over `Cmd+C`; `keybind = super+c=unbind` in
   `~/.config/ghostty/config` hands it back to IKE.
-  Every yank/delete also feeds a bounded 20-entry **history** (#57,
-  `Store.History`, consecutive duplicates collapse); `editor.pasteFromHistory`
-  (`cmd+shift+v`, Edit menu) opens a palette picker over it — first line +
-  size per row, fuzzy filter — and the chosen entry becomes the current
-  clipboard and pastes with exact Cmd+V semantics (JetBrains Paste from
-  History). Saves
+  Every yank/delete also feeds the **clipboard history** (#57,
+  `Store.History`), newest first: re-copying text already in the ring moves it
+  to the front instead of adding a second row (#2061), so the picker never
+  lists the same payload twice. `editor.pasteFromHistory` (`cmd+shift+v`, Edit
+  menu) opens a palette picker over it — first line + size per row, fuzzy
+  filter — and the chosen entry becomes the current clipboard and pastes with
+  exact Cmd+V semantics (JetBrains Paste from History).
+  **Host-side copies join the ring (#2061).** Pane copy actions never touch a
+  register — the HTTP response viewer, the DOM tree, the data viewer and CSV
+  column profiles, path/reference copies, the terminal's mouse selection, the
+  timeline's commit hash, the perf-HUD snapshot, curl export, the regex
+  pattern, a screenshot path — so `Model.copyToClipboard` writes the system
+  clipboard *and* pushes `Store.PushHistory` (trailing newline ⇒ linewise).
+  Only internal copies are tracked; the external system clipboard is never
+  polled. The ring is **in-memory only** — a restart starts it empty, matching
+  the register set itself (deliberate: yanked text is often secret-adjacent,
+  and there is no store to expire).
+  `editor.clipboard_history_size` (default **20**, JetBrains' size, clamped to
+  1–200 in both `config.validate` and the settings form) sizes it: any
+  configured editor applies it to the app-wide store on `Configure`, and the
+  root model applies it once at startup so copies before the first editor are
+  bounded too. Shrinking drops the oldest entries immediately. Saves
   report on the ex line (#261): `"file" written` on success, `E: <error>`
   on failure (read-only file, no file name) — a failed write keeps the
   buffer dirty and aborts `:wq`.
@@ -371,7 +387,16 @@ line runs that test (see /architecture/run-configurations.md).
   highlight, the current match additionally underlined; a normal-mode Esc
   clears the highlights (`:noh`-style) and `/`, `n`/`N`, `*`/`#` re-arm them.
   `cmd+f` (`editor.find`) opens the same `/` line — one engine, no divergent
-  find UI. The `/` `?` and `:` lines share the single-line editing helper
+  find UI. With an open **single-line visual selection**, `cmd+f` prefills the
+  query with the selected text instead of opening empty (#2063, JetBrains-style):
+  the text arrives **preselected** (rendered on the selection colors), the
+  incremental preview jumps to it immediately, and the first typed character
+  replaces it wholesale — mirroring the find-in-path query's own reopen
+  preselection above. Backspace/Delete clear the preselected text without a
+  second keystroke; any other key (arrows, history recall, `ctrl+c`) just drops
+  the mark and edits normally. A selection spanning more than one line has no
+  single-line text to offer, so `cmd+f` opens empty, same as with no selection
+  at all. The `/` `?` and `:` lines share the single-line editing helper
   (`internal/ui.EditKey`, #763, #1110): left/right move the cursor, typing
   inserts at it, alt+backspace deletes the previous word, cmd+backspace
   clears the line, and the incremental preview keeps tracking mid-query

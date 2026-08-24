@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Usages Tool Window
-description: Singleton bottom-split pane holding the latest find-references result persistently — grouped by file, line:col + preview rows, enter/double-click jumps, 'r' re-runs the search; filled by lsp.referencesPanel while lsp.references keeps the quick palette (#1155).
+description: Singleton bottom-split pane holding the latest find-references result persistently — grouped by file, line:col + preview rows, enter/double-click jumps, 'r' re-runs the search; filled by lsp.referencesPanel while lsp.references keeps the quick palette (#1155), and by the palette overlays' Open in Find window hand-off (#2055).
 resource: internal/usages/usages.go
 tags: [architecture, lsp, references, find-usages, tool-window, pane]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 
 # Usages Tool Window (#1155)
@@ -68,6 +68,28 @@ order, within-file order untouched); each reference row shows 1-based
 
 The editor context menu (#1020) offers "Find Usages (Panel)" alongside the
 quick "Find Usages" entry.
+
+## Handed-over result sets (#2055)
+
+The pane is also the target of "Open in Find Window": from the
+search-everywhere overlay or the transient find-usages popup, `cmd+enter` /
+`ctrl+enter` (`find.openInPanel`, `palette` context) tips the currently listed
+hits in here and closes the overlay — see the [command
+palette](./command-palette.md) for the seam that reads the rows.
+
+The Usages pane is reused rather than a second "Find Results" pane added: both
+list locations grouped by file with "enter jumps there", and one singleton
+keeps the layout persistence, the toggle state machine, the mouse handling and
+the tool-window menu entry single-sourced. What differs is the heading, so the
+two sources stay distinguishable:
+
+- `Set(symbol, refs, refresh)` — a find-references run: `Usages: Foo — …`.
+- `SetTitled(title, refs)` — a handed-over set: the caller's heading
+  (`Find: foo`, `Usages`) and **no** refresh continuation, since there is no
+  stored origin position to re-run; the empty state reads `(no results)`.
+
+A second hand-off replaces the content, the way JetBrains' Find tool window
+reuses its tab. Entries navigate exactly like reference rows.
 
 ## Persistence
 

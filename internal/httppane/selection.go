@@ -327,6 +327,15 @@ func (m *Model) HeadersText() string {
 // against "".
 func (m *Model) HasBodyText() bool { return m.hasTextRow(kindBody) }
 
+// HasRawBody reports whether the shown response carries body bytes to write
+// to a file (#2059). It deliberately does not go through the composed rows:
+// a binary body renders as a notice rather than as text, and saving it is
+// precisely what the file export is for.
+func (m *Model) HasRawBody() bool {
+	resp := m.CurrentResponse()
+	return resp != nil && len(resp.Body) > 0
+}
+
 // HasHeadersText mirrors HasBodyText for the status/headers block.
 func (m *Model) HasHeadersText() bool { return m.hasTextRow(kindStatus) || m.hasTextRow(kindHeader) }
 

@@ -255,8 +255,37 @@ func (m *Model) copyHTTPRequestAsCurl() tea.Cmd {
 	// resolves "@path" against the working directory, so the exported command
 	// carries the path from the file's directory.
 	resolved.BodyFile = curlBodyPath(ed.Path(), resolved.BodyFile)
-	clipboardWrite(httpfile.ExportCurl(resolved))
+	m.copyToClipboard(httpfile.ExportCurl(resolved))
 	m.host.Notify(host.Info, "copied "+requestLabel(req)+" as curl")
+	return nil
+}
+
+// HTTPCopyShownAsCurlMsg runs http.copyShownAsCurl (#2059): the request
+// behind the *shown response* to the clipboard as a curl command.
+type HTTPCopyShownAsCurlMsg struct{}
+
+// copyShownHTTPRequestAsCurl runs http.copyShownAsCurl ("C" in the focused
+// response viewer, #2059). Where http.copyAsCurl exports the block under the
+// caret, this exports the as-sent snapshot (#1832) behind the response on
+// show: the values that actually went out, for the very exchange being looked
+// at, even when the .http file has changed since or the request came from a
+// re-send. Secrets are exported as they were sent, exactly as in the
+// editor-side export.
+func (m *Model) copyShownHTTPRequestAsCurl() tea.Cmd {
+	p := m.httpPanel()
+	if p == nil {
+		m.host.Notify(host.Info, "http: no response pane open")
+		return nil
+	}
+	snap := p.CurrentRequest()
+	if snap == nil {
+		// A legacy history entry (stored before the snapshot existed) or a
+		// live stream — say which, never fail silently, as re-send does.
+		m.host.Notify(host.Info, "http: this response has no stored request — copy the block as curl with http.copyAsCurl")
+		return nil
+	}
+	m.copyToClipboard(snap.Curl())
+	m.host.Notify(host.Info, "copied "+snap.Label()+" as curl")
 	return nil
 }
 

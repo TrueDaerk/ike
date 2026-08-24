@@ -122,7 +122,7 @@ func (m Model) copyPerfSnapshot() (tea.Model, tea.Cmd) {
 	if !ok || !perfhud.Enabled() {
 		s = perfhud.Collect(m.armedTimers())
 	}
-	clipboardWrite(perfhud.SnapshotText(s, perfhud.History()))
+	m.copyToClipboard(perfhud.SnapshotText(s, perfhud.History()))
 	if s.Live {
 		m.host.Notify(host.Info, "performance snapshot copied to the clipboard")
 	} else {

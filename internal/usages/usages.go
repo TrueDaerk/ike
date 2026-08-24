@@ -41,6 +41,10 @@ type Model struct {
 	// pane before the first search.
 	symbol string
 	loaded bool
+	// label overrides the "Usages" heading for a result set handed over from
+	// somewhere else (#2055) — the finder overlays tip their hits in as
+	// "Find: <query>". Empty keeps the find-references default.
+	label string
 	// refresh is the bridge-built continuation re-running the request at the
 	// origin position it was created for ('r'). Best-effort after edits: the
 	// stored position re-resolves as-is.
@@ -98,6 +102,7 @@ func (m *Model) Cursor() int { return m.cursor }
 // order = first appearance, within-file order untouched), and the refresh
 // continuation 'r' re-runs.
 func (m *Model) Set(symbol string, refs []ilsp.Reference, refresh tea.Cmd) {
+	m.label = ""
 	m.symbol = symbol
 	m.refresh = refresh
 	m.loaded = true
@@ -123,6 +128,15 @@ func (m *Model) Set(symbol string, refs []ilsp.Reference, refresh tea.Cmd) {
 		m.cursor = 1 // start on the first reference, not its file header
 	}
 	m.clampScroll()
+}
+
+// SetTitled replaces the pane content like Set, but with a caller-chosen
+// heading and without a refresh continuation (#2055): the palette overlays
+// hand their current hit list over, and re-running their query is not a
+// stored origin position the pane could repeat.
+func (m *Model) SetTitled(title string, refs []ilsp.Reference) {
+	m.Set("", refs, nil)
+	m.label = title
 }
 
 // Update handles one message while the pane exists; only key presses reach
@@ -182,13 +196,24 @@ func (m *Model) View() string {
 	return b.String()
 }
 
-// Title is the pane header text: the searched symbol plus the totals —
-// "Usages: Foo — 12 in 4 files" (#1155).
-func (m *Model) Title() string {
-	t := "Usages"
+// heading is the pane's name without the totals: the "Usages" default plus
+// the searched symbol, or the caller-chosen label of a handed-over result set
+// (#2055).
+func (m *Model) heading() string {
+	t := m.label
+	if t == "" {
+		t = "Usages"
+	}
 	if m.symbol != "" {
 		t += ": " + m.symbol
 	}
+	return t
+}
+
+// Title is the pane header text: the searched symbol plus the totals —
+// "Usages: Foo — 12 in 4 files" (#1155).
+func (m *Model) Title() string {
+	t := m.heading()
 	if m.loaded {
 		unit := " files"
 		if m.files == 1 {
@@ -201,10 +226,7 @@ func (m *Model) Title() string {
 
 // headerLine renders the title accented, totals faint.
 func (m *Model) headerLine(pal *theme.Palette) string {
-	t := "Usages"
-	if m.symbol != "" {
-		t += ": " + m.symbol
-	}
+	t := m.heading()
 	head := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" " + t)
 	if m.loaded {
 		unit := " files"
@@ -238,6 +260,9 @@ func (m *Model) renderRows(pal *theme.Palette, height int) string {
 // emptyText explains the empty pane per state.
 func (m *Model) emptyText() string {
 	if m.loaded {
+		if m.label != "" {
+			return "(no results)"
+		}
 		return "(no usages found)"
 	}
 	return "(no search yet — run Find Usages (Panel) from an editor)"

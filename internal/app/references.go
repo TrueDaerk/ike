@@ -82,6 +82,16 @@ func (r *refsMode) Prefix() rune { return refsPrefix }
 // rows and shows where the selected usage sits before one jumps to it.
 func (r *refsMode) CodePreview() bool { return true }
 
+// PanelTitle implements palette.PanelMode (#2055): the transient usages popup
+// tips its hits into the persistent panel, narrowed by the filter query when
+// one is typed.
+func (r *refsMode) PanelTitle(query string) string {
+	if query == "" {
+		return "Usages"
+	}
+	return "Usages: " + query
+}
+
 // Placeholder implements palette.Mode.
 func (r *refsMode) Placeholder() string {
 	if r.placeholder != "" {

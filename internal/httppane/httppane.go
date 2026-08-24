@@ -207,6 +207,18 @@ type HistoryItem struct {
 // reach the clipboard (CopyMsg).
 type ResendMsg struct{}
 
+// CopyCurlMsg asks the host to put the shown entry's request on the clipboard
+// as a runnable curl command (#2059), "C" in the focused viewer. The pane
+// holds the snapshot (CurrentRequest) but neither the clipboard nor the
+// notification channel, so the host does the copying — the CopyMsg
+// arrangement, one step further.
+type CopyCurlMsg struct{}
+
+// SaveBodyMsg asks the host to write the shown response's raw body to a file
+// (#2059), "S" in the focused viewer. The host owns the path prompt and the
+// filesystem; the pane only names the moment.
+type SaveBodyMsg struct{}
+
 // DiffHistoryMsg asks the host to compare the shown stored response with
 // another one of the same request (#1992), "D" in the focused viewer. The
 // pane knows neither the history store nor the diff viewer, so the host opens
@@ -228,6 +240,17 @@ func (m *Model) CurrentRequest() *httpclient.RequestSnapshot {
 		return nil
 	}
 	return resp.Request
+}
+
+// CurrentResponse returns the response on show (#2059), or nil when there is
+// none — a live stream or an empty pane. Callers that need the *raw* body
+// (saving it to a file) go through it rather than through BodyText, which is
+// the pretty-printed, folded view of the same bytes.
+func (m *Model) CurrentResponse() *httpclient.Response {
+	if m.streaming || m.histIdx < 0 || m.histIdx >= len(m.hist) {
+		return nil
+	}
+	return m.hist[m.histIdx].Resp
 }
 
 // CanResend reports whether the shown entry can be re-sent — the gate for the
@@ -510,6 +533,15 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Cancel the in-flight dispatch (#1272). ctrl+c is taken by copy
 		// (#1266), so the abort key is its own.
 		return func() tea.Msg { return CancelMsg{} }
+	case "C":
+		// Copy the shown entry's request as a curl command (#2059).
+		// Uppercase: "c" would be one keystroke away from the copy keys and
+		// the export is the rarer, deliberate action.
+		return func() tea.Msg { return CopyCurlMsg{} }
+	case "S":
+		// Write the raw response body to a file (#2059). Uppercase because
+		// "s" is the keep-scroll toggle (#1493).
+		return func() tea.Msg { return SaveBodyMsg{} }
 	case "ctrl+r":
 		// Re-send the shown entry's stored request (#1832). The message goes
 		// out even without a snapshot — the host says why nothing happened
@@ -1006,6 +1038,12 @@ func (m *Model) footerText() string {
 	// The fold hint only appears when the body actually has ranges (#1330).
 	if len(m.folds) > 0 {
 		s += " · za/zM/zR fold"
+	}
+	// The curl export and the file save (#2059) need an entry on show; a
+	// live stream has neither a snapshot nor a finished body. They sit last:
+	// they are the rarest actions, and the footer truncates from the right.
+	if !m.streaming && len(m.hist) > 0 {
+		s += " · C curl · S save"
 	}
 	return s
 }

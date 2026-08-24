@@ -91,8 +91,12 @@ func httpProvider() Provider {
 			if cx.HTTPResponseHeaders {
 				items = append(items, Item{Title: "Copy Response Headers", Kind: "http", CommandID: "http.copyHeaders"})
 			}
+			if cx.HTTPResponseSaveable {
+				items = append(items, Item{Title: "Save Response Body to File", Kind: "http", CommandID: "http.saveResponse"})
+			}
 			if cx.HTTPResendable {
 				items = append(items, Item{Title: "Re-send Stored Request", Kind: "http", CommandID: "http.resend"})
+				items = append(items, Item{Title: "Copy Shown Request as curl", Kind: "http", CommandID: "http.copyShownAsCurl"})
 			}
 			if cx.HTTPEnvironments {
 				items = append(items, Item{Title: "Select Environment", Kind: "http", CommandID: "http.selectEnvironment"})

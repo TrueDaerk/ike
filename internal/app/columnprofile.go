@@ -24,6 +24,7 @@ import (
 
 	"ike/internal/datasrc"
 	"ike/internal/dataview"
+	"ike/internal/editor/register"
 	"ike/internal/host"
 	"ike/internal/pane"
 	"ike/internal/ui"
@@ -84,7 +85,7 @@ func (m *Model) showCSVProfile(msg csvProfileMsg) tea.Cmd {
 		m.host.Notify(host.Warn, "column profile: "+msg.err.Error())
 		return nil
 	}
-	m.csvProfile = &csvProfileContent{profile: msg.profile}
+	m.csvProfile = &csvProfileContent{profile: msg.profile, regs: m.regs}
 	m.shell.SetContent(m.csvProfile)
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -96,6 +97,9 @@ func (m *Model) showCSVProfile(msg csvProfileMsg) tea.Cmd {
 type csvProfileContent struct {
 	profile datasrc.Profile
 	copied  bool
+	// regs is the app-wide register store, so the copy key can record the
+	// profile in the clipboard history (#2061) without a Model reference.
+	regs *register.Store
 }
 
 // Title implements ui.Content.
@@ -117,7 +121,9 @@ func (c *csvProfileContent) HandleKey(key string) bool {
 	if key != "y" && key != "c" {
 		return false
 	}
-	clipboardWrite(c.profile.Text())
+	text := c.profile.Text()
+	clipboardWrite(text)
+	recordClipboardHistory(c.regs, text)
 	c.copied = true
 	return true
 }

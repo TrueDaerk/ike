@@ -671,11 +671,11 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 		m.searchNextRepeat(true, count)
 	case "/":
 		m.collapseCarets() // the command line and search are single-caret (#145)
-		m.beginSearch(search.Forward)
+		m.beginSearch(search.Forward, "")
 		return m, nil
 	case "?":
 		m.collapseCarets()
-		m.beginSearch(search.Backward)
+		m.beginSearch(search.Backward, "")
 		return m, nil
 	case ":":
 		m.collapseCarets()
