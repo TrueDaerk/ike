@@ -1126,6 +1126,19 @@ choosing a row each notify instead of opening something wrong; the footer
 advertises `D diff` once a second entry exists, and the pane-local help group
 lists the key.
 
+**Diffing against the previous run directly** (#2060): the picker above
+answers "compare with *which* run?"; most of the time the answer is simply
+"the one before this". `P` in the focused pane emits
+`httppane.DiffPreviousRunMsg`, the palette pendant is `http.diffPreviousRun`
+("Diff HTTP Response Against Previous Run"); both land in
+`Model.openHTTPPreviousRunDiff` (`internal/app/http_diff.go`), which re-reads
+the store, resolves the run right after the shown one in the newest-first list
+(`shown+1` — the same direction `h`/`←` steps in) and hands the pair straight
+to `diffHTTPEntries`, skipping the picker entirely. No pane, no stored
+response or no earlier run to compare against each notify instead of opening
+something wrong; the footer advertises `P diff prev` once an earlier entry
+exists below the one on show.
+
 **Normalizing what is compared** (`internal/httpdiff`, #1992): comparing two
 responses byte for byte drowns the real difference in serialization noise —
 key order, indentation, a minified answer against a pretty-printed one.

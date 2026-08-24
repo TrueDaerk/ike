@@ -233,3 +233,116 @@ func TestHTTPDiffKeyInHelp(t *testing.T) {
 		t.Errorf("the diff key must appear in the pane help group: %+v", g.Entries)
 	}
 }
+
+// TestHTTPDiffPreviousRunKeyRoutes: "P" in the focused viewer asks the host to
+// diff directly against the previous run (#2060) — no picker in between.
+func TestHTTPDiffPreviousRunKeyRoutes(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseMsg{Source: "/p/req.http", Request: "one", Resp: sampleResponse("one")})
+	m = out.(Model)
+	m.setFocus(pane.HTTPKey)
+
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'P', Text: "P", Mod: tea.ModShift})
+	if cmd == nil {
+		t.Fatal("P must emit a command")
+	}
+	if _, ok := cmd().(httppane.DiffPreviousRunMsg); !ok {
+		t.Fatalf("message type: %T", cmd())
+	}
+}
+
+// TestHTTPDiffPreviousRunOpensDirectly: with several stored responses, the
+// shortcut opens the shown one against the run right before it, skipping the
+// picker entirely (#2060).
+func TestHTTPDiffPreviousRunOpensDirectly(t *testing.T) {
+	m := httpApp(t)
+	path := httpPickerFile(t)
+	seedHTTPBodies(t, path, "first", `{"n":1}`, `{"n":2}`, `{"n":3}`)
+	m = showStored(t, m, path, "first")
+
+	out, _ := m.Update(httppane.DiffPreviousRunMsg{})
+	m = out.(Model)
+	if m.palette.IsOpen() {
+		t.Error("the direct shortcut must not open the picker")
+	}
+	inst, _, _, ok := m.diffSlot()
+	if !ok {
+		t.Fatal("P must open the diff viewer directly")
+	}
+	left, right := inst.Diff().Titles()
+	// Shown is index 0 ({"n":3}); the previous run is index 1 ({"n":2}).
+	if !strings.HasPrefix(left, "first 2/3") || !strings.HasPrefix(right, "first 1/3") {
+		t.Fatalf("titles: %q vs %q, want the previous run on the left", left, right)
+	}
+	if inst.Diff().HunkCount() == 0 {
+		t.Fatal("two different bodies must diff to at least one hunk")
+	}
+}
+
+// TestHTTPDiffPreviousRunAtOldestExplains: the oldest stored response has no
+// earlier run to compare against — say so instead of diffing nothing (#2060).
+func TestHTTPDiffPreviousRunAtOldestExplains(t *testing.T) {
+	m := httpApp(t)
+	path := httpPickerFile(t)
+	seedHTTPBodies(t, path, "first", `{"n":1}`, `{"n":2}`)
+	m = showStored(t, m, path, "first")
+
+	m.setFocus(pane.HTTPKey)
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'h', Text: "h"})
+	m = out.(Model)
+	if idx, n := m.httpPanel().HistoryIndex(); idx != n-1 {
+		t.Fatalf("history index: %d/%d, want the oldest entry on show", idx, n)
+	}
+
+	out, _ = m.Update(httppane.DiffPreviousRunMsg{})
+	m = out.(Model)
+	if _, _, _, ok := m.diffSlot(); ok {
+		t.Error("the oldest run must not open a diff pane")
+	}
+}
+
+// TestHTTPDiffPreviousRunSingleEntryExplains: one stored response has no
+// previous run to compare against (#2060).
+func TestHTTPDiffPreviousRunSingleEntryExplains(t *testing.T) {
+	m := httpApp(t)
+	path := httpPickerFile(t)
+	seedHTTPBodies(t, path, "first", `{"n":1}`)
+	m = showStored(t, m, path, "first")
+
+	out, _ := m.Update(httppane.DiffPreviousRunMsg{})
+	m = out.(Model)
+	if _, _, _, ok := m.diffSlot(); ok {
+		t.Error("a single stored response must not open a diff pane")
+	}
+}
+
+// TestHTTPDiffPreviousRunWithoutPaneExplains: the command is reachable from
+// the palette at any time, so it has to survive being run with no response
+// pane open (#2060).
+func TestHTTPDiffPreviousRunWithoutPaneExplains(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPDiffPreviousRunMsg{})
+	m = out.(Model)
+	if _, _, _, ok := m.diffSlot(); ok {
+		t.Error("no response pane must not open a diff pane")
+	}
+}
+
+// TestHTTPDiffPreviousRunKeyInHelp: the pane-local action is listed in the
+// cheatsheet (#2060) — it belongs to no registry command.
+func TestHTTPDiffPreviousRunKeyInHelp(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
+	m = out.(Model)
+	m.setFocus(pane.HTTPKey)
+	g := m.paneKeysHelpGroup()
+	var found bool
+	for _, e := range g.Entries {
+		if e.Shortcut == "P" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the diff-previous-run key must appear in the pane help group: %+v", g.Entries)
+	}
+}

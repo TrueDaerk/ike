@@ -660,6 +660,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `file.move` | `f6` | delivered | `—` | live |
 | `file.rename` | `shift+f6` | delivered | `—` | live |
 | `find.openInPanel` | `cmd+enter` | fragile | `ctrl+enter` | live via ctrl+enter |
+| `http.diffPreviousRun` | `cmd+shift+d` | fragile | `palette` | live via palette |
 | `http.run` | `ctrl+f9` | fragile | `palette` | live via palette |
 | `http.showResponse` | `cmd+shift+enter` | fragile | `ctrl+shift+f9` | live via ctrl+shift+f9 |
 | `json.jqQueryView` | `ctrl+alt+e` | fragile | `palette / Tools menu` | live via palette / Tools menu |

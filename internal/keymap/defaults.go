@@ -322,6 +322,14 @@ var jetbrainsRows = []row{
 	// the request.
 	{"cmd+shift+enter", "http.showResponse", "Show stored HTTP response", Editor, "HTTP client (0450)"},
 	{"ctrl+shift+f9", "http.showResponse", "Show stored HTTP response", Editor, "HTTP client (0450)"},
+	// http.diffPreviousRun default keybinding (#2060): "d" for diff, mirroring
+	// the response pane's own "D" single-key story one level up. Both chords
+	// are Fragile (ctrl+shift+letter collapses without the Kitty protocol,
+	// Cmd needs it outright) like several other letter-mnemonic commands
+	// above; the palette is the documented, always-delivered fallback
+	// (reachableAlternatives in matrix.go).
+	{"cmd+shift+d", "http.diffPreviousRun", "Diff HTTP response against previous run", Editor, "HTTP client (0450)"},
+	{"ctrl+shift+d", "http.diffPreviousRun", "Diff HTTP response against previous run", Editor, "HTTP client (0450)"},
 	// Rerun and Stop (#1048, #1374): JetBrains' macOS Rerun (cmd+r) is taken by
 	// editor.replace, so rerun keeps the Windows-scheme F5 position with a cmd
 	// primary on darwin; stop's cmd+f2 is the macOS keymap verbatim. The ctrl
