@@ -8,6 +8,7 @@ import (
 
 	"ike/internal/lang"
 	"ike/internal/palette"
+	"ike/internal/scratch"
 )
 
 func init() {
@@ -100,6 +101,40 @@ func TestNewScratchOpensLanguagePicker(t *testing.T) {
 	got := scratchNewMode{}.Results("sctest", palette.Context{})
 	if len(got) != 1 || got[0].Title != "Sctest" {
 		t.Fatalf("query must filter to the language, got %+v", got)
+	}
+}
+
+// TestScratchEntriesTitleAndLang covers #2057: the picker's rows carry the
+// scratch's first content line (or the empty placeholder) as title and the
+// resolved language as the Detail chip.
+func TestScratchEntriesTitleAndLang(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+
+	seeded, err := scratch.Create("sct")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(seeded, []byte("\n  first line  \nsecond\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	empty, err := scratch.Create("txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	entries := scratchEntries()
+	if len(entries) != 2 {
+		t.Fatalf("want 2 entries, got %d: %+v", len(entries), entries)
+	}
+	byPath := map[string]palette.ScratchEntry{}
+	for _, e := range entries {
+		byPath[e.Path] = e
+	}
+	if got := byPath[seeded]; got.Title != "first line" || got.Lang != "Sctest" {
+		t.Fatalf("seeded entry = %+v", got)
+	}
+	if got := byPath[empty]; got.Title != scratchEmptyTitle || got.Lang != "Plain Text" {
+		t.Fatalf("empty entry = %+v", got)
 	}
 }
 
