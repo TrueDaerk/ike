@@ -413,7 +413,12 @@ type Editor struct {
 	// `clipboard=unnamed`: named registers and deletes/changes never sync.
 	// On by default; false keeps yanks internal, leaving Cmd+C as the only
 	// route to the system clipboard.
-	ClipboardSync          bool `toml:"clipboard_sync"`
+	ClipboardSync bool `toml:"clipboard_sync"`
+	// ClipboardHistorySize bounds the clipboard history the paste-from-history
+	// picker lists (#2061, cmd+shift+v): the newest N yanks, deletes and
+	// pane-side copies, duplicates collapsed. Clamped to [1, 200]; the ring is
+	// in-memory only and starts empty after a restart.
+	ClipboardHistorySize   int  `toml:"clipboard_history_size"`
 	AutoIndent             bool `toml:"auto_indent"`
 	AutoClosePairs         bool `toml:"auto_close_pairs"`
 	TrimTrailingWhitespace bool `toml:"trim_trailing_whitespace"`

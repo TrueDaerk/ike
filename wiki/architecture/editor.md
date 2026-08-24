@@ -171,12 +171,28 @@ line runs that test (see /architecture/run-configurations.md).
   Ghostty binds `super+c` to `copy_to_clipboard:mixed` by default, so a
   terminal-side selection wins over `Cmd+C`; `keybind = super+c=unbind` in
   `~/.config/ghostty/config` hands it back to IKE.
-  Every yank/delete also feeds a bounded 20-entry **history** (#57,
-  `Store.History`, consecutive duplicates collapse); `editor.pasteFromHistory`
-  (`cmd+shift+v`, Edit menu) opens a palette picker over it — first line +
-  size per row, fuzzy filter — and the chosen entry becomes the current
-  clipboard and pastes with exact Cmd+V semantics (JetBrains Paste from
-  History). Saves
+  Every yank/delete also feeds the **clipboard history** (#57,
+  `Store.History`), newest first: re-copying text already in the ring moves it
+  to the front instead of adding a second row (#2061), so the picker never
+  lists the same payload twice. `editor.pasteFromHistory` (`cmd+shift+v`, Edit
+  menu) opens a palette picker over it — first line + size per row, fuzzy
+  filter — and the chosen entry becomes the current clipboard and pastes with
+  exact Cmd+V semantics (JetBrains Paste from History).
+  **Host-side copies join the ring (#2061).** Pane copy actions never touch a
+  register — the HTTP response viewer, the DOM tree, the data viewer and CSV
+  column profiles, path/reference copies, the terminal's mouse selection, the
+  timeline's commit hash, the perf-HUD snapshot, curl export, the regex
+  pattern, a screenshot path — so `Model.copyToClipboard` writes the system
+  clipboard *and* pushes `Store.PushHistory` (trailing newline ⇒ linewise).
+  Only internal copies are tracked; the external system clipboard is never
+  polled. The ring is **in-memory only** — a restart starts it empty, matching
+  the register set itself (deliberate: yanked text is often secret-adjacent,
+  and there is no store to expire).
+  `editor.clipboard_history_size` (default **20**, JetBrains' size, clamped to
+  1–200 in both `config.validate` and the settings form) sizes it: any
+  configured editor applies it to the app-wide store on `Configure`, and the
+  root model applies it once at startup so copies before the first editor are
+  bounded too. Shrinking drops the oldest entries immediately. Saves
   report on the ex line (#261): `"file" written` on success, `E: <error>`
   on failure (read-only file, no file name) — a failed write keeps the
   buffer dirty and aborts `:wq`.
