@@ -1,5 +1,46 @@
 # Log
 
+## 2026-08-24 (Open in Find window, #2055)
+
+- **A popup's hits can now be kept.** `cmd+enter` / `ctrl+enter` in the
+  search-everywhere overlay or the transient find-usages popup tips the
+  currently listed hits into the persistent Usages bottom panel and closes the
+  overlay — JetBrains' "Open in Find Window". The panel keeps them until it is
+  closed, so a result set can be worked through entry by entry instead of
+  vanishing on the first jump.
+- **One panel, two sources.** The Usages tool window is reused rather than a
+  second results pane added: same "locations grouped by file, enter jumps
+  there", and one singleton keeps the layout persistence, the toggle state
+  machine and the mouse handling single-sourced. Only the heading differs —
+  `Find: <query>` vs `Usages: Foo` (`usages.Model.SetTitled`).
+- **Two small seams.** `palette.PanelMode` (opt-in per mode, names the panel)
+  plus `Palette.PanelResults()`, which reports the filtered rows without
+  closing the overlay; `internal/app/find_panel.go` converts rows to locations
+  by their activation message and drops the ones that have none (commands).
+- **A Palette-context binding.** The overlay owns the keyboard, so the keymap
+  layer never sees the key: the overlay branch looks the chord up in the
+  `palette` context itself and runs it only for an allowlisted command
+  (`find.openInPanel`), leaving query typing untouched. It shows in the
+  cheatsheet like any other binding.
+
+## 2026-08-24 (clipboard history: pane copies, a configurable ring, #2061)
+
+- **Pane copies reach Paste from History**: every host-side copy — the HTTP
+  response viewer, the DOM tree, the data viewer and CSV column profiles,
+  path/reference copies, the terminal's mouse selection, the timeline's commit
+  hash, the perf-HUD snapshot, curl export, the regex pattern, a screenshot
+  path — now goes through `Model.copyToClipboard`, which writes the system
+  clipboard *and* pushes the text onto the app-wide history ring
+  (`register.Store.PushHistory`). `cmd+shift+v` offers them next to the
+  editor's yanks and deletes; the external clipboard is still never polled.
+- **Duplicates collapse anywhere in the ring**: re-copying text already in the
+  history moves it to the front instead of adding a second row — before, only
+  an exact repeat of the *newest* entry was dropped.
+- **The ring size is a setting**: `editor.clipboard_history_size` (default 20,
+  clamped to 1–200) replaces the hard-coded cap, configurable in Settings →
+  Editor. Shrinking trims oldest-first immediately. The ring stays in-memory
+  only — a restart starts it empty, like the register set itself.
+
 ## 2026-08-24 (autocomplete follows the buffer language, #2048)
 
 - **A file-less buffer given a language now completes like a file of it.**

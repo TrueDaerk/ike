@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"ike/internal/domview"
 	"ike/internal/editor"
 	"ike/internal/editor/register"
 	"ike/internal/palette"
@@ -97,6 +98,58 @@ func TestPasteFromHistoryEmptyIsToastNoPalette(t *testing.T) {
 	m = dispatch(t, m, ShowPasteHistoryMsg{})
 	if m.palette.IsOpen() {
 		t.Fatal("empty history must not open the picker")
+	}
+}
+
+// TestPaneCopiesReachHistory (#2061): a pane's copy action goes through the
+// host's copy path, so it lands in the same ring the picker lists and pastes
+// like any yank.
+func TestPaneCopiesReachHistory(t *testing.T) {
+	orig := clipboardWrite
+	copied := ""
+	clipboardWrite = func(s string) { copied = s }
+	t.Cleanup(func() { clipboardWrite = orig })
+
+	dir := t.TempDir()
+	a := writeTemp(t, dir, "a.txt", "one\n")
+	m := openApp(t, a)
+	m = dispatch(t, m, domview.CopyMsg{Text: "div > span", What: "CSS selector"})
+	if copied != "div > span" {
+		t.Fatalf("the copy must still reach the system clipboard, got %q", copied)
+	}
+
+	ed := m.activeWS().Panes.FocusedInstance().Editor()
+	if h := ed.RegisterHistory(); len(h) != 1 || h[0].Text != "div > span" {
+		t.Fatalf("pane copy must reach the clipboard history, got %v", h)
+	}
+	// It pastes like any other entry.
+	m = dispatch(t, m, PasteHistoryEntryMsg{Index: 0})
+	if got := m.activeWS().Panes.FocusedInstance().Editor().Text(); !strings.Contains(got, "div > span") {
+		t.Fatalf("pane copy must paste from the picker, text = %q", got)
+	}
+}
+
+// TestClipboardHistorySizeSetting (#2061): editor.clipboard_history_size sizes
+// the app-wide ring, so the picker lists at most N entries.
+func TestClipboardHistorySizeSetting(t *testing.T) {
+	orig := clipboardWrite
+	clipboardWrite = func(string) {}
+	t.Cleanup(func() { clipboardWrite = orig })
+
+	dir := t.TempDir()
+	a := writeTemp(t, dir, "a.txt", "one\n")
+	m := openApp(t, a)
+	m.regs.SetHistoryCap(2)
+	for _, text := range []string{"first", "second", "third"} {
+		m = dispatch(t, m, domview.CopyMsg{Text: text, What: "node"})
+	}
+	h := m.activeWS().Panes.FocusedInstance().Editor().RegisterHistory()
+	if len(h) != 2 || h[0].Text != "third" || h[1].Text != "second" {
+		t.Fatalf("ring must hold the newest two, got %v", h)
+	}
+	m.pasteHist.Set(h)
+	if rows := m.pasteHist.Results("", palette.Context{}); len(rows) != 2 {
+		t.Fatalf("picker must list the bounded ring, got %d rows", len(rows))
 	}
 }
 

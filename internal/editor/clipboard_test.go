@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/editor/register"
 	"ike/internal/host"
 )
 
@@ -163,6 +164,23 @@ func TestYankSyncDisabled(t *testing.T) {
 	// The register itself is still filled — only the mirroring is off.
 	if got := m.regs.Get(0).Text; got != "foo bar\n" {
 		t.Fatalf("unnamed register = %q, want the yanked line", got)
+	}
+}
+
+// TestClipboardHistorySizeConfigured (#2061): editor.clipboard_history_size
+// sizes the ring the paste-from-history picker lists, and a missing key leaves
+// the store's default in place.
+func TestClipboardHistorySizeConfigured(t *testing.T) {
+	m, _ := loadedWith(t, host.MapConfig{"editor.clipboard_history_size": "2"}, "f.txt", "one\ntwo\nthree\n")
+	m = typeKeys(m, "yyjyyjyy")
+	h := m.RegisterHistory()
+	if len(h) != 2 || h[0].Text != "three\n" || h[1].Text != "two\n" {
+		t.Fatalf("a size of 2 must keep the newest two yanks, got %v", h)
+	}
+
+	plain, _ := loaded(t, "one\n")
+	if got := plain.regs.HistoryCap(); got != register.DefaultHistoryCap {
+		t.Fatalf("without the key the default cap must stand, got %d", got)
 	}
 }
 

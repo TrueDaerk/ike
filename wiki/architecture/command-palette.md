@@ -466,6 +466,34 @@ sees where a usage sits before jumping to it.
   shared two-column seam, used by the [find-in-path
   overlay](/architecture/search.md) too.
 
+## Open in Find window (#2055)
+
+A second optional `Mode` extension, `PanelMode`, lets a transient result list
+be tipped into the persistent [Usages tool window](./usages.md) — JetBrains'
+"Open in Find Window". `cmd+enter` (JetBrains-macOS primary) and `ctrl+enter`
+(delivered everywhere) run `find.openInPanel` while the overlay is up; the
+hits move into the bottom panel, the overlay closes, and the panel keeps them
+until it is closed.
+
+- **Opt-in per mode.** `PanelTitle(query) string` names the resulting panel:
+  the search-everywhere mode answers `Find: <query>`, the find-usages popup
+  `Usages` (plus the filter query when one is typed). Modes without it — the
+  command palette, the pickers — leave the chord inert and stay open.
+- **Reading the rows.** `Palette.PanelResults()` reports the heading and the
+  rows *currently listed* (the filtered set, in display order) without closing
+  the overlay; the root model closes it once it has taken them over. A side
+  column holding the focus (recent **projects**) and an empty list decline.
+- **Rows to locations.** `internal/app/find_panel.go` converts rows by their
+  activation message: `ilsp.DefinitionMsg` / `ilsp.PeekDefinitionMsg` keep
+  line and column, `palette.OpenFileMsg` opens the file at its top, everything
+  else (commands, project switches) is dropped — a list with no location at
+  all leaves the overlay open and says so.
+- **Binding seam.** The overlay owns the keyboard, so the keymap layer never
+  sees the key; the palette branch of the key dispatch looks the chord up in
+  the `palette` context itself (`paletteBindingCmd`) and runs it only when it
+  resolves to a command on the small overlay allowlist — see
+  [Keybindings](./keybindings.md).
+
 ## Configuration
 
 `[palette]` config (read once at construction, flattened through `host.Config`):

@@ -1039,6 +1039,14 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	winSizesAll := ui.LoadWinSizes(globalWinSizeFile())
 	wsMgr := wsManager(mgr, resumed, root, panes) // hoisted: the palette's recent-projects sources read it (#820)
 	wsMgr.SetRegisters(regs)                      // first start: the manager adopts the store (#1540); a switch hands back its own
+	// Clipboard-history ring size (#2061). Editors re-apply it on Configure;
+	// setting it here means host-side copies are bounded correctly even before
+	// the first editor is built.
+	if v, ok := cfg.Get("editor.clipboard_history_size"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			regs.SetHistoryCap(n)
+		}
+	}
 	m := Model{
 		cmdUsage:        cmdUsage,
 		fileUsage:       fileUsage,
@@ -4165,7 +4173,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case httppane.CopyMsg:
 		// The response viewer asks the host for the clipboard (#1266) — the
 		// pane never touches globals itself.
-		clipboardWrite(msg.Text)
+		m.copyToClipboard(msg.Text)
 		m.host.Notify(host.Info, "copied "+msg.What)
 		return m, nil
 
@@ -4509,6 +4517,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// usages.toggle (#1155): same state machine for the Usages pane.
 		m.toggleUsagesPanel()
 		return m, nil
+	case OpenInFindPanelMsg:
+		// find.openInPanel (#2055): tip the open overlay's hits into the
+		// persistent panel — "Open in Find Window".
+		m.openInFindPanel()
+		return m, nil
 	case StructureToggleMsg:
 		// structure.toggle (#1025): same state machine for the Structure
 		// tool window; the Update wrapper's sync issues the first refresh.
@@ -4567,7 +4580,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case domview.CopyMsg:
 		// Copy actions on a DOM node (#1929): selector path or outer HTML.
-		clipboardWrite(msg.Text)
+		m.copyToClipboard(msg.Text)
 		m.host.Notify(host.Info, "copied "+msg.What)
 		return m, nil
 
@@ -5157,7 +5170,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dataview.CopyMsg:
 		// y in the data viewer's column profile popup (#1940).
-		clipboardWrite(msg.Text)
+		m.copyToClipboard(msg.Text)
 		m.host.Notify(host.Info, "copied "+msg.What)
 		return m, nil
 
@@ -6178,6 +6191,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.typehier.Update(msg)
 		}
 		if m.palette.IsOpen() {
+			// Palette-context bindings (#2055) resolve here: the overlay
+			// owns the keyboard, so the keymap layer further down never
+			// sees the key.
+			if cmd, handled := m.paletteBindingCmd(msg); handled {
+				return m, cmd
+			}
 			cmd := m.palette.Update(msg)
 			if !m.palette.IsOpen() && cmd == nil && m.diffPick != 0 {
 				// The picker was dismissed mid diff.files flow (#60): abandon
@@ -9839,7 +9858,7 @@ func (m *Model) copyPath(kind int) tea.Cmd {
 			out += ":" + strconv.Itoa(line)
 		}
 	}
-	clipboardWrite(out)
+	m.copyToClipboard(out)
 	m.host.Notify(host.Info, "copied "+out)
 	return nil
 }
@@ -9850,6 +9869,25 @@ var clipboardWrite = func(text string) {
 	if c := clipboard.System(); c != nil {
 		_ = c.Write(text)
 	}
+}
+
+// copyToClipboard is the host-side copy path (#2061): every pane copy action
+// — the response viewer, the DOM tree, the data viewer, path/hash/curl copies
+// — goes to the system clipboard *and* onto the app-wide clipboard history,
+// so cmd+shift+v offers it next to the editor's yanks and deletes.
+func (m Model) copyToClipboard(text string) {
+	clipboardWrite(text)
+	recordClipboardHistory(m.regs, text)
+}
+
+// recordClipboardHistory pushes a copy onto the shared history ring. A
+// trailing newline marks the entry linewise, matching how the register store
+// classifies system-clipboard reads, so pasting a copied line opens a line.
+func recordClipboardHistory(regs *register.Store, text string) {
+	if regs == nil {
+		return
+	}
+	regs.PushHistory(register.Entry{Text: text, Linewise: strings.HasSuffix(text, "\n")})
 }
 
 // clipboardRead is the matching read-side seam (#727).
@@ -9865,7 +9903,7 @@ var clipboardRead = func() string {
 // copyTerminalSelection writes the terminal's mouse selection to the system
 // clipboard and drops the highlight (#227).
 func (m *Model) copyTerminalSelection(term *terminal.Model) {
-	clipboardWrite(term.SelectionText())
+	m.copyToClipboard(term.SelectionText())
 	term.ClearSelection()
 }
 

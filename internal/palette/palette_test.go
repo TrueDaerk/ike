@@ -990,3 +990,55 @@ func TestSingleResultNavigationStaysPut(t *testing.T) {
 		}
 	}
 }
+
+// panelStub is a stubMode supporting the Find-panel hand-off (#2055).
+type panelStub struct{ stubMode }
+
+func (panelStub) PanelTitle(query string) string { return "Find: " + query }
+
+// TestPanelResultsReportsListedRows covers the hand-off seam: a PanelMode
+// reports its heading plus the rows currently listed, and reading them leaves
+// the overlay open — the caller closes it once it has taken them over.
+func TestPanelResultsReportsListedRows(t *testing.T) {
+	mode := panelStub{stubMode{prefix: '&', items: []Item{
+		{Title: "a.go:3"}, {Title: "b.go:9"},
+	}}}
+	p := New(Config{}, mode)
+	p.SetSize(100, 40)
+	p.OpenLocked(Context{Root: "."}, '&')
+	p.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+
+	title, items, ok := p.PanelResults()
+	if !ok {
+		t.Fatal("a PanelMode with rows must offer the hand-off")
+	}
+	if title != "Find: x" {
+		t.Fatalf("title = %q, want the mode's heading for the query body", title)
+	}
+	if len(items) != 2 || items[0].Title != "a.go:3" {
+		t.Fatalf("items = %+v, want the listed rows in order", items)
+	}
+	if !p.IsOpen() {
+		t.Fatal("reading the rows must not close the overlay")
+	}
+}
+
+// TestPanelResultsDeclinesPlainModes: a mode without PanelMode, and an empty
+// list, both decline — the binding stays inert there.
+func TestPanelResultsDeclinesPlainModes(t *testing.T) {
+	plain := stubMode{prefix: ':', items: []Item{{Title: "Save All"}}}
+	p := New(Config{}, plain)
+	p.SetSize(100, 40)
+	p.OpenLocked(Context{Root: "."}, ':')
+	if _, _, ok := p.PanelResults(); ok {
+		t.Fatal("a mode without PanelMode must decline the hand-off")
+	}
+
+	empty := panelStub{stubMode{prefix: '&'}}
+	q := New(Config{}, empty)
+	q.SetSize(100, 40)
+	q.OpenLocked(Context{Root: "."}, '&')
+	if _, _, ok := q.PanelResults(); ok {
+		t.Fatal("an empty list must decline the hand-off")
+	}
+}

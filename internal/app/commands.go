@@ -534,6 +534,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("dom.toggle", "DOM Inspector", DOMToggleMsg{}),
 			appCommand("scratch.panel", "Scratch Files", ScratchSectionFocusMsg{}),
 			appCommand("usages.toggle", "Usages", UsagesToggleMsg{}),
+			appCommand(findPanelCommand, "Open Results in Find Window", OpenInFindPanelMsg{}),
 			appCommand("tests.toggle", "Test Results", TestsToggleMsg{}),
 			appCommand("issues.toggle", "GitHub Issues", IssuesToggleMsg{}),
 			paneCommand("data.columnProfile", "Data: Column Profile", "data", DataColumnProfileMsg{}),

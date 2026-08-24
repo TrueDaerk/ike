@@ -255,7 +255,7 @@ func (m *Model) copyHTTPRequestAsCurl() tea.Cmd {
 	// resolves "@path" against the working directory, so the exported command
 	// carries the path from the file's directory.
 	resolved.BodyFile = curlBodyPath(ed.Path(), resolved.BodyFile)
-	clipboardWrite(httpfile.ExportCurl(resolved))
+	m.copyToClipboard(httpfile.ExportCurl(resolved))
 	m.host.Notify(host.Info, "copied "+requestLabel(req)+" as curl")
 	return nil
 }

@@ -250,6 +250,24 @@ func (p *Palette) Query() string { return p.query }
 // Close hides the palette without side effects.
 func (p *Palette) Close() { p.open = false }
 
+// PanelResults reports the rows currently listed plus the panel heading of
+// the active mode, for the Find-panel hand-off (#2055). It reads state only —
+// the caller closes the overlay once it has taken the rows over — and reports
+// false when the mode does not support the hand-off (no PanelMode), when the
+// side column holds the focus (its rows are projects, not hits), or when
+// nothing is listed.
+func (p *Palette) PanelResults() (title string, items []Item, ok bool) {
+	if !p.open || p.sideFocus || len(p.items) == 0 {
+		return "", nil, false
+	}
+	m, body := p.mode()
+	pm, isPanel := m.(PanelMode)
+	if !isPanel {
+		return "", nil, false
+	}
+	return pm.PanelTitle(body), append([]Item(nil), p.items...), true
+}
+
 // SetSize records the terminal size used to size the centered box.
 func (p *Palette) SetSize(width, height int) { p.width, p.height = width, height }
 

@@ -314,7 +314,7 @@ func (m Model) updateTimeline(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Info, "no commit hash on a local-history snapshot")
 			return m, nil
 		}
-		clipboardWrite(sel.Hash)
+		m.copyToClipboard(sel.Hash)
 		m.host.Notify(host.Info, "copied "+sel.ShortHash)
 		return m, nil
 	}

@@ -834,6 +834,11 @@ func (m *Model) applyConfig() {
 	m.useSpaces = boolOr(m.cfg, "editor.use_spaces", m.useSpaces)
 	// Yank → system clipboard mirroring (#1256), vim's clipboard=unnamed.
 	m.regs.SetClipboardSync(boolOr(m.cfg, "editor.clipboard_sync", m.regs.ClipboardSync()))
+	// Paste-from-history ring size (#2061). The store is app-wide, so any
+	// configured editor sizes the ring every picker sees.
+	if v, ok := m.cfg.Get("editor.clipboard_history_size"); ok {
+		m.regs.SetHistoryCap(atoi(v, m.regs.HistoryCap()))
+	}
 	m.autoIndent = boolOr(m.cfg, "editor.auto_indent", m.autoIndent)
 	m.autoClosePairs = boolOr(m.cfg, "editor.auto_close_pairs", m.autoClosePairs)
 	m.spaceAfterPunct = boolOr(m.cfg, "editor.typing.space_after_punctuation", m.spaceAfterPunct)
