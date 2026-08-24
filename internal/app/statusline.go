@@ -49,6 +49,7 @@ var statusLeft = []statusSegment{
 	{id: "lsp", render: func(m Model, ed *editor.Model) string { return m.focusedLangStatus(ed) }},
 	{id: "toolchain", render: func(m Model, ed *editor.Model) string { return m.toolchainSegment(ed) }},
 	{id: "notifications", render: func(m Model, _ *editor.Model) string { return m.notifSegment() }},
+	{id: "forge", render: func(m Model, _ *editor.Model) string { return m.forgeBadgeSegment() }},
 	{id: "todo", render: func(m Model, _ *editor.Model) string { return m.todoSegment() }},
 	{id: "http", render: func(m Model, _ *editor.Model) string { return m.httpFlightSegment() }},
 }
@@ -425,6 +426,11 @@ func (m Model) statusLine() string {
 		if s := m.notifSegment(); s != "" {
 			left += " │ " + s
 		}
+		// The forge unread badge (#2086) is persistent state, not an editor
+		// detail: it stays visible while a terminal or tool pane is focused.
+		if s := m.forgeBadgeSegment(); s != "" {
+			left += " │ " + s
+		}
 		return style.Render(left)
 	}
 
@@ -504,7 +510,7 @@ func renderParts(m Model, ed *editor.Model, segs []statusSegment) []renderedSeg 
 // (already shrunken) file segment and the cursor never drop.
 var statusDropOrder = []string{
 	"hint", "eol", "encoding", "indent", "svcolumn", "docpath", "logspan", "toolchain", "todo",
-	"host", "notifications", "macro", "branch", "buflang", "diagnostics", "lsp",
+	"host", "notifications", "macro", "branch", "buflang", "forge", "diagnostics", "lsp",
 }
 
 // statusFileMin is the narrowest the file segment shrinks to before other
@@ -639,6 +645,8 @@ var statusSegmentCommands = map[string]string{
 	"todo":          "todo.list",
 	"notifications": "notifications.history",
 	"lsp":           "lsp.showLog",
+	// The forge unread badge (#2086) opens what it announces.
+	"forge": "issues.toggle",
 }
 
 // statusSegmentAt returns the id of the segment rendered at cell x of the

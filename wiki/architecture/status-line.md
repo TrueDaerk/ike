@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Status Line Segments
-description: Extensible left/right slot model behind the bottom status bar — mode, file, buffer language, diagnostics, host/LSP status, toolchain interpreter, csv column, json/yaml path, notification counter.
+description: Extensible left/right slot model behind the bottom status bar — mode, file, buffer language, diagnostics, host/LSP status, toolchain interpreter, csv column, json/yaml path, notification counter, forge unread badge.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
 timestamp: 2026-08-21T13:00:00Z
@@ -37,10 +37,12 @@ segments.
 | `lsp` | focused buffer's language server state (#380) | no tracked state |
 | `toolchain` | effective interpreter, see below | not resolvable |
 | `notifications` | `● N` unseen notification count, see below | count is 0 |
+| `forge` | `● 2 new issues` unread forge events (#2086), see [Notifications](/architecture/notifications.md) | nothing unread |
 
 The drag hint and the non-editor focus branches (terminal/explorer, #381) keep
-their dedicated rendering; the terminal/explorer line appends the host status
-and the notification counter.
+their dedicated rendering; the terminal/explorer line appends the host status,
+the notification counter and the forge unread badge — the badge is persistent
+state, so it must stay visible wherever the focus is.
 
 The rendered bar is clamped to the terminal width (#659): lipgloss pads but
 does not clip, so without the guard an over-wide segment set would wrap the
@@ -49,7 +51,7 @@ priority-aware (#471, `composeStatus`): first the file segment shortens by
 exactly the overflow with a JetBrains-style middle ellipsis (floor 16
 cells), then low-priority segments drop in a defined order (hint, eol,
 encoding, indent, svcolumn, docpath, toolchain, todo, host, notifications, macro,
-branch, buflang, diagnostics, lsp — mode, file and the cursor never drop), and only as a
+branch, buflang, forge, diagnostics, lsp — mode, file and the cursor never drop), and only as a
 last resort the bar hard-clips on the right.
 
 ## Mode badge (#1323)
@@ -112,6 +114,7 @@ router dispatches a left press through `statusSegmentCommands`:
 | `buflang` (chosen buffer language) | `editor.setBufferLanguage` |
 | `todo` (TODO count) | `todo.list` |
 | `notifications` (`● N` counter) | `notifications.history` |
+| `forge` (unread forge events) | `issues.toggle` |
 | `lsp` (server state) | `lsp.showLog` |
 
 Only segments with one clear, obvious target are wired; every other press on

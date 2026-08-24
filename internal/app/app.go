@@ -517,6 +517,18 @@ type Model struct {
 	// issuesReturnFocus is the same dance for the GitHub Issues tool window
 	// (#1934).
 	issuesReturnFocus string
+	// The prominent forge event surface (#2086, forgenotify.go): forgeQueue
+	// are the events the single open dialog shows (forgeCursor selects one),
+	// forgeUnread are the events behind the status line's persistent badge —
+	// badge-style ones plus the dialogs the typing guard held back.
+	// forgeReveal is an issue number waiting for the next issues fetch to
+	// jump to, and lastInputAt is the guard's "user is typing" stamp.
+	forgeQueue  []forge.Event
+	forgeUnread []forge.Event
+	forgeCursor int
+	forgeDialog bool
+	forgeReveal int
+	lastInputAt time.Time
 	// doctorReturnFocus is the same dance for the Xdebug Doctor tool window
 	// (#1991); doctorLog is its app-owned listener/connection trace, fed from
 	// the bridge's ike.listenState / ike.debugConn events and surviving the
@@ -4613,9 +4625,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.toggleIssuesPanel()
 
 	case forge.IssuesMsg:
-		// A finished issue/PR fetch (#1934) lands in the pane.
+		// A finished issue/PR fetch (#1934) lands in the pane; a reveal the
+		// forge event dialog asked for (#2086) runs on the fresh listing.
 		m.fillIssuesPanel(msg)
+		m.applyForgeReveal()
 		return m, nil
+
+	case forge.EventsMsg:
+		// Snapshot-diff events from the forge poller (#2085) reach their
+		// surface: dialog, status-line badge, toast, or history only (#2086).
+		return m, m.handleForgeEvents(msg)
 
 	case ghissues.StartWorkRequestMsg:
 		// The pane's 's' action (#1934): branch issue/<n>-<slug> off an
@@ -6258,6 +6277,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// for keys the app consumes before the editor's own dismissHover
 		// would see them.
 		m.cancelMouseHover()
+		// Keys landing in an editor or terminal stamp the do-not-interrupt
+		// guard (#2086): a forge event dialog never lands mid-word.
+		m.noteTypingInput()
 		// The keymap doctor (#2080) outranks everything: probing only means
 		// anything if the overlay sees the raw key before any other consumer
 		// — toast dismissal, overlay paste, keymap resolution — touches it.
@@ -6351,6 +6373,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// same way: space toggles, enter installs, esc skips.
 		if m.onboardingOpen() {
 			return m.updateOnboarding(msg)
+		}
+		// The forge event dialog (#2086) owns the keyboard the same way:
+		// enter opens the issue, d/esc dismisses, a dismisses all.
+		if m.forgeDialogOpen() {
+			return m.updateForgeDialog(msg)
 		}
 		// The post-tour setup dialogs (#713) own the keyboard the same way.
 		if m.themePickOpen() {

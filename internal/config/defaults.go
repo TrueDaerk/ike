@@ -282,5 +282,19 @@ func defaults() *Config {
 			// project, so nothing has to be gitignored (#2001).
 			Directory: "",
 		},
+		Forge: Forge{
+			// A new issue is the event the user must not miss (#2086), so it
+			// gets the dialog; failing checks are actionable but rarely
+			// urgent enough to interrupt typing, so they take the badge.
+			// Everything else stays an ordinary toast.
+			Notify: ForgeNotify{
+				IssueOpened:     "dialog",
+				IssueClosed:     "toast",
+				PROpened:        "toast",
+				PRMerged:        "toast",
+				PRClosed:        "toast",
+				PRChecksFailing: "badge",
+			},
+		},
 	}
 }

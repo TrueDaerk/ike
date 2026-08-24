@@ -355,6 +355,37 @@ func (m *Model) openDetail() {
 	m.detailTop = 0
 }
 
+// Reveal jumps straight to the issue with this number and opens its detail
+// view (#2086): the forge event dialog's "open" action lands the user on the
+// issue that was announced, not on whatever row the cursor happened to sit on.
+// Active filters are dropped first — an issue hidden by a filter must still be
+// reachable. False when the listing does not (yet) carry the number, so the
+// caller can leave the pane as it is.
+func (m *Model) Reveal(number int) bool {
+	idx := -1
+	for i := range m.issues {
+		if m.issues[i].Number == number {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return false
+	}
+	m.fEditing, m.fInput, m.fCur = false, "", 0
+	m.labelSel = -1
+	m.applyFilter()
+	for pos, i := range m.visible {
+		if i == idx {
+			m.cursor = pos
+			break
+		}
+	}
+	m.clampScroll()
+	m.openDetail()
+	return true
+}
+
 // startWork asks the app to branch off for the selected issue.
 func (m *Model) startWork() tea.Cmd {
 	is := m.Selected()

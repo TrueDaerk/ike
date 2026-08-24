@@ -154,6 +154,10 @@ func InsertAfter(pages []Page, after string, page Page) []Page {
 	return append(pages, page)
 }
 
+// forgeNotifyStyles are the options every forge.notify.* entry offers (#2086),
+// in escalating prominence order so cycling with enter reads naturally.
+var forgeNotifyStyles = []string{"off", "toast", "badge", "dialog"}
+
 // BasePages returns the built-in core pages (#92). themes is the registry's
 // theme-name list for the Appearance enum (live preview: writing theme.name
 // hot-reloads through the normal pipeline); lightThemes/darkThemes are its
@@ -348,6 +352,14 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 		{Title: "Notifications", Description: "Toasts and the notification history: how long they stay and which severities are worth interrupting for.", Entries: []Entry{
 			{Key: "notifications.timeout_seconds", Type: Int, Title: "Notification timeout", Description: "Seconds before info/warn toasts expire", Scope: config.UserScope, Min: 1, Max: 300},
 			{Key: "notifications.min_severity", Type: Enum, Title: "Notification severity floor", Description: "Below this severity notifications go to the history only", Scope: config.UserScope, Options: []string{"info", "warn", "error"}},
+		}},
+		{Title: "Forge Notifications", Description: "How prominently each kind of forge event (#2086) announces itself: dialog is a centered, dismissable dialog over the workspace, badge only marks the status line unread, toast is the ordinary bottom-right notice, off records the event in the notification history alone. While you are typing, a dialog is held back and shows as the badge instead.", Entries: []Entry{
+			{Key: "forge.notify.issue_opened", Type: Enum, Title: "New issue", Description: "Notification style when an issue appears on the forge", Scope: config.UserScope, Options: forgeNotifyStyles},
+			{Key: "forge.notify.issue_closed", Type: Enum, Title: "Issue closed", Description: "Notification style when an issue disappears from the open listing", Scope: config.UserScope, Options: forgeNotifyStyles},
+			{Key: "forge.notify.pr_opened", Type: Enum, Title: "New pull request", Description: "Notification style when a pull request is opened", Scope: config.UserScope, Options: forgeNotifyStyles},
+			{Key: "forge.notify.pr_merged", Type: Enum, Title: "Pull request merged", Description: "Notification style when a pull request is merged", Scope: config.UserScope, Options: forgeNotifyStyles},
+			{Key: "forge.notify.pr_closed", Type: Enum, Title: "Pull request closed", Description: "Notification style when a pull request is closed without merging", Scope: config.UserScope, Options: forgeNotifyStyles},
+			{Key: "forge.notify.pr_checks_failing", Type: Enum, Title: "Checks failing", Description: "Notification style when an open pull request's CI rollup turns failing", Scope: config.UserScope, Options: forgeNotifyStyles},
 		}},
 		{Title: "TODO Index", Description: "The project-wide comment-tag index behind the TODO tool window.", Entries: []Entry{
 			{Key: "todo.patterns", Type: List, Title: "Tag words", Description: "Comment tag words the project scan matches as whole words, case-insensitively (TODO, FIXME, HACK, XXX); entries are literals, not regexes", Scope: config.UserScope},

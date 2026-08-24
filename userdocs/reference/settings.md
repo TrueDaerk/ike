@@ -267,6 +267,17 @@ secrets — are documented together, with screenshots, in
 | Notification timeout | `notifications.timeout_seconds` | integer (1–300) | `4` | user | Seconds before info/warn toasts expire |
 | Notification severity floor | `notifications.min_severity` | enum: `info`, `warn`, `error` | `info` | user | Below this severity notifications go to the history only |
 
+### Forge Notifications
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| New issue | `forge.notify.issue_opened` | enum: `off`, `toast`, `badge`, `dialog` | `dialog` | user | Notification style when an issue appears on the forge |
+| Issue closed | `forge.notify.issue_closed` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when an issue disappears from the open listing |
+| New pull request | `forge.notify.pr_opened` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is opened |
+| Pull request merged | `forge.notify.pr_merged` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is merged |
+| Pull request closed | `forge.notify.pr_closed` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is closed without merging |
+| Checks failing | `forge.notify.pr_checks_failing` | enum: `off`, `toast`, `badge`, `dialog` | `badge` | user | Notification style when an open pull request's CI rollup turns failing |
+
 ### TODO Index
 
 | Setting | Key | Type | Default | Scope | Description |

@@ -188,6 +188,31 @@ func TestNotificationsSection(t *testing.T) {
 	}
 }
 
+// TestForgeNotifySection guards the per-event notification styles (#2086):
+// defaults, the fallback for an unknown style, and the flat keys the settings
+// page edits.
+func TestForgeNotifySection(t *testing.T) {
+	c, _ := Load(Options{})
+	if c.Forge.Notify.IssueOpened != "dialog" || c.Forge.Notify.PRChecksFailing != "badge" {
+		t.Fatalf("unexpected defaults: %+v", c.Forge.Notify)
+	}
+
+	proj := writeProject(t, "[forge.notify]\nissue_opened = \"shout\"\npr_opened = \"badge\"\n")
+	c, diags := Load(Options{ProjectRoot: proj})
+	if c.Forge.Notify.IssueOpened != "dialog" {
+		t.Errorf("unknown style should fall back to the default, got %q", c.Forge.Notify.IssueOpened)
+	}
+	if c.Forge.Notify.PROpened != "badge" {
+		t.Errorf("valid style must survive, got %q", c.Forge.Notify.PROpened)
+	}
+	if len(diags) != 1 {
+		t.Errorf("expected 1 diagnostic, got %v", diags)
+	}
+	if flat := c.Flat(); flat["forge.notify.issue_opened"] != "dialog" || flat["forge.notify.pr_opened"] != "badge" {
+		t.Errorf("forge.notify keys missing from Flat: %v", flat)
+	}
+}
+
 func TestHistoryTruncatedToMax(t *testing.T) {
 	proj := writeProject(t, "[project]\nmax_history = 2\n[[project.history]]\npath = \"/a\"\n[[project.history]]\npath = \"/b\"\n[[project.history]]\npath = \"/c\"\n[[project.history]]\npath = \"/d\"\n")
 	c, diags := Load(Options{ProjectRoot: proj})
