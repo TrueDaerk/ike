@@ -55,6 +55,7 @@ func (m Model) intentionContext() (intention.Context, bool) {
 		HasSelection:      hasSel,
 		ReadOnly:          ed.ReadOnly(),
 		Fileless:          !ed.HasFile(),
+		LangExt:           strings.TrimPrefix(filepath.Ext(ed.LangPath()), "."),
 		DiagnosticAtCaret: ed.DiagnosticOnCaretLine(),
 		HunkAtCaret:       ed.HunkAtCursor(),
 		ConflictAtCaret:   ed.ConflictAtCursor(),

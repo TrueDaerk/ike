@@ -1,5 +1,33 @@
 # Log
 
+## 2026-08-24 (playground and materialize for typed buffers, #2056)
+
+- **A typed file-less buffer reaches the playgrounds.** alt+enter in a buffer
+  treated as JSON or YAML (#2033) now offers **"Open in jq Playground"** /
+  **"Open in yq Playground"** (`json.jqPlayground` / `yaml.yqPlayground`),
+  dispatching the dialect the buffer's language names. The playground already
+  queried the focused editor's text, file or not — the entry is what makes it
+  discoverable in the popup where the type was chosen, so a pasted JSON blob
+  is queryable without saving it first. It is gated on the buffer actually
+  holding text, because an empty input is all the playground can refuse.
+- **"Materialize to File"** (`editor.materializeBuffer`, View menu and
+  palette) closes the LSP gap the override left open: the buffer is written to
+  a `scratch-N.<ext>` carrying its language's extension and bound to it
+  through the same `bindUntitled` wiring "Save As" uses, so the file-opened
+  hooks (`lsp.didopen`), watcher tracking, MRU and a reparse all run and
+  diagnostics, completion and navigation start working. The override is
+  dropped in the process — the file name classifies the buffer from then on —
+  and `:w path` / "Save As" still moves it under a real name afterwards.
+- **The materialized file lands in the scratch store** (`~/.ike/scratches`,
+  `$IKE_CONFIG_DIR/scratches`), not in a second temp location: the scratch
+  panel already lists, renames and deletes exactly this kind of throwaway
+  file, so cleaning up is deleting it there. A refused materialize leaves
+  nothing behind, and the command refuses with a reason on a buffer that has a
+  file, one with no chosen type, and a type recognized by base name only
+  (Dockerfile), which has no extension to write a file under.
+- `intention.Context` grew one precomputed fact, `LangExt`, and the
+  `hasText()` probe both entries gate on.
+
 ## 2026-08-24 (a generic code-preview column for every position picker, #2053)
 
 - **Four more pickers show where they lead**: the **symbol picker** (cmd+o,

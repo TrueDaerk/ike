@@ -237,9 +237,51 @@ func TestCatalogApplicability(t *testing.T) {
 			wantNot: []string{"editor.setBufferLanguage"},
 		},
 		{
+			// #2056: a typed file-less JSON buffer reaches the jq playground
+			// with its own text as the input, and can be materialized to a
+			// file so LSP applies.
+			name: "typed fileless json buffer offers playground and materialize",
+			cx:   Context{Fileless: true, LangID: "json", LangExt: "json", LineText: `{"a": 1}`},
+			want: []string{"editor.setBufferLanguage", "json.jqPlayground", "editor.materializeBuffer"},
+		},
+		{
+			name:    "typed fileless yaml buffer offers the yq playground",
+			cx:      Context{Fileless: true, LangID: "yaml", LangExt: "yaml", LineText: "a: 1"},
+			want:    []string{"yaml.yqPlayground", "editor.materializeBuffer"},
+			wantNot: []string{"json.jqPlayground"},
+		},
+		{
+			// The playground refuses an empty input, so an entry that could
+			// only answer "no JSON buffer to query" is not offered (#2026).
+			name:    "empty fileless json buffer offers no playground",
+			cx:      Context{Fileless: true, LangID: "json", LangExt: "json", LineText: "   "},
+			want:    []string{"editor.materializeBuffer"},
+			wantNot: []string{"json.jqPlayground"},
+		},
+		{
+			// Dockerfile is recognized by base name, so there is no
+			// extension to write the materialized file under.
+			name:    "fileless buffer of an extensionless language cannot be materialized",
+			cx:      Context{Fileless: true, LangID: "dockerfile", LineText: "FROM alpine"},
+			want:    []string{"editor.setBufferLanguage"},
+			wantNot: []string{"editor.materializeBuffer"},
+		},
+		{
+			name:    "untyped fileless buffer offers neither follow-up",
+			cx:      Context{Fileless: true, LineText: `{"a": 1}`},
+			wantNot: []string{"json.jqPlayground", "yaml.yqPlayground", "editor.materializeBuffer"},
+		},
+		{
+			// A saved file is classified by its name; both follow-ups are
+			// about a buffer that has none.
+			name:    "json file offers neither follow-up",
+			cx:      Context{Path: "/proj/a.json", LangID: "json", LangExt: "json", LineText: `{"a": 1}`},
+			wantNot: []string{"json.jqPlayground", "editor.materializeBuffer"},
+		},
+		{
 			name:    "empty context offers nothing",
 			cx:      Context{},
-			wantNot: []string{"editor.toggleValue", "diff.compareWithClipboard", "vcs.blameLine", "editor.setBufferLanguage"},
+			wantNot: []string{"editor.toggleValue", "diff.compareWithClipboard", "vcs.blameLine", "editor.setBufferLanguage", "editor.materializeBuffer"},
 		},
 	}
 	for _, tc := range cases {

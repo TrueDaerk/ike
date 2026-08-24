@@ -4,12 +4,12 @@ title: Intention Actions
 description: The alt+enter popup — LSP code actions merged with built-in caret-dependent intention actions through a plugin-registered provider seam, opened anchored at the caret.
 resource: internal/intention
 tags: [architecture, intentions, code-actions, palette, plugins, shortcuts]
-timestamp: 2026-08-21T16:00:00Z
+timestamp: 2026-08-24T12:00:00Z
 ---
 
 # Intention Actions
 
-Issues #2020, #2025, #2026, #2033. IntelliJ's alt+enter mixes server fixes with IDE intentions; IKE
+Issues #2020, #2025, #2026, #2033, #2056. IntelliJ's alt+enter mixes server fixes with IDE intentions; IKE
 does the same: one caret-anchored popup that merges **LSP code actions**
 ([lsp](./lsp.md), #8) with **built-in intention actions** whose applicability
 is decided from the caret context. Before this slice the popup was
@@ -110,6 +110,19 @@ buffer's *type* (`isHTTPBuffer`), a file-less buffer treated as HTTP offers the
 full request block list — Run Request included — with the dispatch attributed
 to the synthetic `buffer.http` source.
 
+Once a type is chosen, two follow-up entries ride on it (#2056), both from the
+same provider and both about the buffer rather than the caret:
+
+| Entry | Gate | Command |
+|---|---|---|
+| "Open in jq Playground" / "Open in yq Playground" | `docpath.IsLang(LangID)` — the dialect follows the language — plus `Context.hasText()`, because the playground refuses an empty input | `json.jqPlayground` / `yaml.yqPlayground` |
+| "Materialize to File" | `Context.LangExt != ""` — a language recognized by base name only (Dockerfile) has no extension to write a file under | `editor.materializeBuffer` |
+
+`LangExt` is the new precomputed fact (the extension of the buffer's
+`langPath()`), added rather than probed in the provider like every other
+`Context` field. What materializing does — and where the file lands — is in
+[Language Registry](./languages.md#language-tools-from-a-typed-buffer-2056).
+
 ## Digit shortcuts
 
 Issue #2023. The common case is "pop the list, run the first or second
@@ -171,6 +184,7 @@ Each entry delegates to the existing command; applicability per caret:
 | test at/above caret (`lang.HasTests` + `NearestTestAt`) | `run.testAtCursor`; `debug.testAtCursor` only with a debug adapter and no running session |
 | togglable caret word (writable buffer) / selection + non-empty clipboard | `editor.toggleValue`; `diff.compareWithClipboard` |
 | buffer with no file (`Fileless`, #2033) | `editor.setBufferLanguage` — "Treat Buffer as …", naming the current type |
+| typed file-less buffer (`Fileless` + a language, #2056) | `json.jqPlayground` / `yaml.yqPlayground` over the buffer's own text (JSON/YAML with text in it); `editor.materializeBuffer` (a type with an extension) |
 
 The LSP plugin adds "Rename Symbol" (`lsp.rename`), gated **twice** (#2025):
 the attached server must declare rename at all (`Manager.RenameSupported`) and
