@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strconv"
+
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/forge"
@@ -75,32 +77,15 @@ func (m *Model) openIssuesPanel() tea.Cmd {
 	p := m.activeWS().Panes.Get(key).Issues()
 	p.SetRefresh(forge.RefreshFactory("."))
 	p.SetTimeline(forge.TimelineFactory("."))
+	p.SetMutate(forge.MutateFactory("."))
+	p.SetMeta(forge.MetaFactory("."))
 	m.setFocus(key)
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
-	// The capability probe (#2087) runs once per opened pane: the edit
-	// actions stay hidden until it answers, so nothing is offered that the
-	// authenticated user could not actually push.
-	caps := forge.CapabilitiesCmd(".")
 	if !p.Loaded() {
-		return tea.Batch(p.Refresh(), caps)
+		return p.Refresh()
 	}
-	return caps
-}
-
-// issuesCapabilitiesCmd probes the repository permissions when the open pane
-// has no answer yet (#2087). It runs off every landed listing, which is what
-// arms a session-restored pane too — that one is rebuilt without the on-open
-// probe, and its edit actions would otherwise stay hidden forever.
-func (m *Model) issuesCapabilitiesCmd() tea.Cmd {
-	p := m.issuesPanel()
-	if p == nil {
-		return nil
-	}
-	if _, probed := p.Capabilities(); probed {
-		return nil
-	}
-	return forge.CapabilitiesCmd(".")
+	return nil
 }
 
 // fillIssuesPanel routes one finished fetch into the pane, if it still exists.
@@ -115,6 +100,30 @@ func (m *Model) fillIssuesTimeline(msg forge.TimelineMsg) {
 	if p := m.issuesPanel(); p != nil {
 		p.SetTimelineResult(msg)
 	}
+}
+
+// fillIssuesMeta routes one repository-metadata probe into the pane (#2088):
+// the capability gate in front of the mutation actions plus the label and
+// user sets their pickers list.
+func (m *Model) fillIssuesMeta(msg forge.RepoMetaMsg) {
+	if p := m.issuesPanel(); p != nil {
+		p.SetRepoMeta(msg)
+	}
+}
+
+// finishIssueMutation routes one finished mutation into the pane (#2088),
+// which rolls its optimistic state back on a rejection and refetches on
+// success; a rejection is toasted too, so it is not missed while the pane is
+// unfocused.
+func (m *Model) finishIssueMutation(msg forge.MutationMsg) tea.Cmd {
+	p := m.issuesPanel()
+	if p == nil {
+		return nil
+	}
+	if msg.Err != nil {
+		m.host.Notify(host.Error, "issue #"+strconv.Itoa(msg.Issue)+": "+msg.Kind+" change failed: "+msg.Err.Error())
+	}
+	return p.SetMutationResult(msg)
 }
 
 // finishStartWork reports the start-work outcome (#1934) and lets the VCS

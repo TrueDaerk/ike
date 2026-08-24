@@ -1740,11 +1740,16 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 		}
 		if id := ids[key]; id.Kind == "issues" {
 			// The GitHub Issues panel restores empty in its saved slot
-			// (#1934) with its refresh and its timeline fetch armed (#2084);
-			// 'r' re-fetches the listing.
+			// (#1934) with the same factories openIssuesPanel injects —
+			// refresh, timeline (#2084), mutations (#2088) and the metadata
+			// probe the edit gating reads (#2087). Without them a restored
+			// pane would come back read-only; 'r' re-fetches the listing and
+			// runs the probe.
 			p := panes.Get(panes.AddIssues()).Issues()
 			p.SetRefresh(forge.RefreshFactory("."))
 			p.SetTimeline(forge.TimelineFactory("."))
+			p.SetMutate(forge.MutateFactory("."))
+			p.SetMeta(forge.MetaFactory("."))
 			continue
 		}
 		if id := ids[key]; id.Kind == "http" {
@@ -4646,12 +4651,23 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// forge event dialog asked for (#2086) runs on the fresh listing and
 		// may need the revealed issue's timeline (#2084).
 		m.fillIssuesPanel(msg)
-		return m, tea.Batch(m.applyForgeReveal(), m.issuesCapabilitiesCmd())
+		return m, m.applyForgeReveal()
 
 	case forge.TimelineMsg:
 		// One fetched issue-timeline page (#2084) lands in the open detail.
 		m.fillIssuesTimeline(msg)
 		return m, nil
+
+	case forge.RepoMetaMsg:
+		// Capabilities plus the repository's labels and assignable users
+		// (#2088): the gate in front of the mutation actions.
+		m.fillIssuesMeta(msg)
+		return m, nil
+
+	case forge.MutationMsg:
+		// One finished label/assignee/state write (#2088): the pane rolls
+		// back on a rejection and refetches on success.
+		return m, m.finishIssueMutation(msg)
 
 	case forge.EventsMsg:
 		// Snapshot-diff events from the forge poller (#2085) reach their
@@ -4669,14 +4685,6 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ghissues.OpenURLMsg:
 		// The pane's 'o' action (#1934): the issue page in the browser.
 		return m, m.openIssueURL(msg.URL)
-
-	case forge.CapabilitiesMsg:
-		// The probed repository permissions and the authenticated login
-		// (#2087): the pane gates its edit actions on them.
-		if p := m.issuesPanel(); p != nil {
-			p.SetCapabilities(msg)
-		}
-		return m, nil
 
 	case ghissues.EditTextRequestMsg:
 		// The pane's 'e'/'c' actions (#2087): open a markdown buffer bound to

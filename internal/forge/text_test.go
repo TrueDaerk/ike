@@ -9,51 +9,11 @@ import (
 // text_test.go covers the editable-text layer (#2087): the target vocabulary,
 // the normalization the stale check and the push agree on, the dispatch onto
 // the three mutations, the check-then-push order including the stale verdict,
-// and the two shared parsing helpers both bindings decode a forge text with.
-
-// stubForge is a Forge whose text operations are recorded rather than sent.
-// Every other method is an unimplemented stub — this file only exercises the
-// text half of the interface.
-type stubForge struct {
-	issueBody   string
-	commentBody string
-	readErr     error
-	pushErr     error
-
-	// what the last push did, so the dispatch can be asserted.
-	editedIssue   int
-	editedBody    string
-	editedComment string
-	createdOn     int
-}
-
-func (s *stubForge) Issues(IssueState) ([]Issue, error) { return nil, nil }
-func (s *stubForge) PRs() ([]PR, error)                 { return nil, nil }
-func (s *stubForge) Timeline(int, int) ([]TimelineEntry, bool, error) {
-	return nil, false, nil
-}
-func (s *stubForge) CreateComment(issue int, body string) error {
-	s.createdOn, s.editedBody = issue, body
-	return s.pushErr
-}
-func (s *stubForge) EditComment(id string, body string) error {
-	s.editedComment, s.editedBody = id, body
-	return s.pushErr
-}
-func (s *stubForge) EditIssueBody(issue int, body string) error {
-	s.editedIssue, s.editedBody = issue, body
-	return s.pushErr
-}
-func (s *stubForge) IssueBody(int) (string, error)       { return s.issueBody, s.readErr }
-func (s *stubForge) CommentBody(string) (string, error)  { return s.commentBody, s.readErr }
-func (s *stubForge) AddLabels(int, []string) error       { return nil }
-func (s *stubForge) RemoveLabels(int, []string) error    { return nil }
-func (s *stubForge) SetAssignees(int, []string) error    { return nil }
-func (s *stubForge) CloseIssue(int) error                { return nil }
-func (s *stubForge) ReopenIssue(int) error               { return nil }
-func (s *stubForge) MergePR(int) error                   { return nil }
-func (s *stubForge) ClosePR(int) error                   { return nil }
-func (s *stubForge) Capabilities() (Capabilities, error) { return Capabilities{}, nil }
+// and the request/parse helpers both bindings decode a forge text with.
+//
+// The stub is mutate_test.go's fakeForge: it already implements the whole
+// interface for the mutation tests, and recording the text calls in the same
+// place keeps one fake in the package.
 
 func TestTextTargetLabelAndSlug(t *testing.T) {
 	cases := []struct {
@@ -91,29 +51,24 @@ func TestNormalizeText(t *testing.T) {
 }
 
 func TestPushTextDispatch(t *testing.T) {
-	f := &stubForge{}
-	if err := PushText(f, TextTarget{Kind: TextIssueBody, Issue: 7}, "body"); err != nil {
-		t.Fatal(err)
+	f := &fakeForge{}
+	for _, target := range []TextTarget{
+		{Kind: TextIssueBody, Issue: 7},
+		{Kind: TextComment, Issue: 7, ID: "42"},
+		{Kind: TextNewComment, Issue: 7},
+	} {
+		if err := PushText(f, target, "text"); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if f.editedIssue != 7 || f.editedBody != "body" {
-		t.Fatalf("issue body push = %d/%q", f.editedIssue, f.editedBody)
-	}
-	if err := PushText(f, TextTarget{Kind: TextComment, Issue: 7, ID: "42"}, "edited"); err != nil {
-		t.Fatal(err)
-	}
-	if f.editedComment != "42" || f.editedBody != "edited" {
-		t.Fatalf("comment push = %q/%q", f.editedComment, f.editedBody)
-	}
-	if err := PushText(f, TextTarget{Kind: TextNewComment, Issue: 7}, "fresh"); err != nil {
-		t.Fatal(err)
-	}
-	if f.createdOn != 7 || f.editedBody != "fresh" {
-		t.Fatalf("create push = %d/%q", f.createdOn, f.editedBody)
+	want := []string{"editbody:text", "editcomment:42:text", "comment:text"}
+	if len(f.calls) != 3 || f.calls[0] != want[0] || f.calls[1] != want[1] || f.calls[2] != want[2] {
+		t.Fatalf("dispatch = %v, want %v", f.calls, want)
 	}
 }
 
 func TestFetchTextDispatch(t *testing.T) {
-	f := &stubForge{issueBody: "the body", commentBody: "the comment"}
+	f := &fakeForge{issueBody: "the body", commentBody: "the comment"}
 	if got, _ := FetchText(f, TextTarget{Kind: TextIssueBody, Issue: 1}); got != "the body" {
 		t.Fatalf("issue body = %q", got)
 	}
@@ -130,18 +85,18 @@ func TestFetchTextDispatch(t *testing.T) {
 func TestSaveTextPushesWhenBaseMatches(t *testing.T) {
 	// The buffer's trailing newline differs from the server text; that is not
 	// a concurrent edit, and the push must go through with it trimmed.
-	f := &stubForge{issueBody: "before"}
+	f := &fakeForge{issueBody: "before"}
 	msg := saveText(f, "/tmp/b.md", TextTarget{Kind: TextIssueBody, Issue: 9}, "before", "after\n", false)
 	if msg.Err != nil || msg.Stale {
 		t.Fatalf("msg = %+v", msg)
 	}
-	if f.editedIssue != 9 || f.editedBody != "after" {
-		t.Fatalf("pushed %d/%q", f.editedIssue, f.editedBody)
+	if len(f.calls) != 1 || f.calls[0] != "editbody:after" {
+		t.Fatalf("pushed %v", f.calls)
 	}
 }
 
 func TestSaveTextReportsStaleBaseWithoutPushing(t *testing.T) {
-	f := &stubForge{issueBody: "someone else's text"}
+	f := &fakeForge{issueBody: "someone else's text"}
 	msg := saveText(f, "/tmp/b.md", TextTarget{Kind: TextIssueBody, Issue: 9}, "what I opened", "mine", false)
 	if !msg.Stale {
 		t.Fatalf("a moved server text must be reported stale: %+v", msg)
@@ -149,51 +104,51 @@ func TestSaveTextReportsStaleBaseWithoutPushing(t *testing.T) {
 	if msg.Current != "someone else's text" {
 		t.Fatalf("current = %q", msg.Current)
 	}
-	if f.editedBody != "" {
-		t.Fatalf("nothing may be written on a stale base, wrote %q", f.editedBody)
+	if len(f.calls) != 0 {
+		t.Fatalf("nothing may be written on a stale base, wrote %v", f.calls)
 	}
 }
 
 func TestSaveTextForceOverwritesWithoutReading(t *testing.T) {
 	// force is the user's answer to the stale dialog: no second read, and the
 	// push happens even though the server moved.
-	f := &stubForge{issueBody: "moved", readErr: errors.New("must not be read")}
+	f := &fakeForge{issueBody: "moved", readErr: errors.New("must not be read")}
 	msg := saveText(f, "/tmp/b.md", TextTarget{Kind: TextIssueBody, Issue: 9}, "base", "mine", true)
 	if msg.Err != nil || msg.Stale {
 		t.Fatalf("msg = %+v", msg)
 	}
-	if f.editedBody != "mine" {
-		t.Fatalf("pushed %q", f.editedBody)
+	if len(f.calls) != 1 || f.calls[0] != "editbody:mine" {
+		t.Fatalf("pushed %v", f.calls)
 	}
 }
 
 func TestSaveTextFailedBaseReadIsAnError(t *testing.T) {
 	// A base check that cannot run must not be assumed safe.
-	f := &stubForge{readErr: errors.New("offline")}
+	f := &fakeForge{readErr: errors.New("offline")}
 	msg := saveText(f, "/tmp/b.md", TextTarget{Kind: TextComment, Issue: 9, ID: "3"}, "base", "mine", false)
 	if msg.Err == nil || msg.Stale {
 		t.Fatalf("msg = %+v", msg)
 	}
-	if f.editedBody != "" {
-		t.Fatalf("nothing may be written after a failed check, wrote %q", f.editedBody)
+	if len(f.calls) != 0 {
+		t.Fatalf("nothing may be written after a failed check, wrote %v", f.calls)
 	}
 }
 
 func TestSaveTextNewCommentSkipsTheStaleCheck(t *testing.T) {
-	f := &stubForge{readErr: errors.New("must not be read")}
+	f := &fakeForge{readErr: errors.New("must not be read")}
 	msg := saveText(f, "/tmp/b.md", TextTarget{Kind: TextNewComment, Issue: 4}, "", "hello", false)
 	if msg.Err != nil || msg.Stale {
 		t.Fatalf("msg = %+v", msg)
 	}
-	if f.createdOn != 4 || f.editedBody != "hello" {
-		t.Fatalf("created %d/%q", f.createdOn, f.editedBody)
+	if len(f.calls) != 1 || f.calls[0] != "comment:hello" {
+		t.Fatalf("created %v", f.calls)
 	}
 }
 
 func TestSaveTextPushErrorSurfaces(t *testing.T) {
-	f := &stubForge{issueBody: "base", pushErr: errors.New("gh: 403")}
+	f := &fakeForge{issueBody: "base", fail: "editbody:mine"}
 	msg := saveText(f, "/tmp/b.md", TextTarget{Kind: TextIssueBody, Issue: 9}, "base", "mine", false)
-	if msg.Err == nil || !strings.Contains(msg.Err.Error(), "403") {
+	if msg.Err == nil || !strings.Contains(msg.Err.Error(), "boom") {
 		t.Fatalf("msg = %+v", msg)
 	}
 	if msg.Body != "mine" {
@@ -212,14 +167,18 @@ func TestNumericIDRefusesNonDigits(t *testing.T) {
 	}
 }
 
-func TestJSONBodyAndParseBodyField(t *testing.T) {
-	// Round trip: the request document a mutation sends decodes back through
-	// the same field both forges answer with.
-	payload, err := jsonBody("line one\n\"quoted\"\n")
-	if err != nil {
-		t.Fatal(err)
+func TestCommentEditRequestRoundTrips(t *testing.T) {
+	// The PATCH document gh sends decodes back through the same field both
+	// forges answer with, arbitrary markdown included.
+	args, payload := ghCommentEditRequest("771122", "line one\n\"quoted\"\n")
+	want := []string{"api", "--method", "PATCH",
+		"repos/{owner}/{repo}/issues/comments/771122", "--input", "-"}
+	for i := range want {
+		if i >= len(args) || args[i] != want[i] {
+			t.Fatalf("args = %v, want %v", args, want)
+		}
 	}
-	body, err := parseBodyField([]byte(payload))
+	body, err := parseBodyField(payload)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,5 +187,15 @@ func TestJSONBodyAndParseBodyField(t *testing.T) {
 	}
 	if _, err := parseBodyField([]byte("gh: not logged in")); err == nil {
 		t.Fatal("non-JSON must error, not parse")
+	}
+}
+
+func TestGHBodyArgs(t *testing.T) {
+	want := []string{"issue", "edit", "2087", "--body-file", "-"}
+	got := ghBodyArgs(2087)
+	for i := range want {
+		if i >= len(got) || got[i] != want[i] {
+			t.Fatalf("body args = %v, want %v", got, want)
+		}
 	}
 }

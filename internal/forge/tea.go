@@ -6,7 +6,8 @@ package forge
 // the capability probe call the Gitea REST API directly: tea's own
 // `--output json` runs through its table layer, which flattens labels to
 // comma-joined names and drops their colors — not enough for the pane. The
-// REST responses are the same stable JSON both Gitea and Forgejo serve.
+// REST responses are the same stable JSON both Gitea and Forgejo serve, and
+// the write side (#2088) posts, patches and deletes against the same API.
 // Like every other call in this package, nothing here runs from Update; the
 // HTTP client carries the same deadline as the CLI subprocesses.
 
@@ -96,13 +97,30 @@ func tokenFromTeaConfig(raw []byte, name, loginURL string) string {
 // returns the response body. Non-2xx responses become errors carrying the
 // status — the body is never parsed as prose.
 func (t *teaForge) apiGet(path string, query url.Values) ([]byte, error) {
+	return t.apiDo(http.MethodGet, path, query, nil)
+}
+
+// apiDo is apiGet for any method, with an optional JSON request body — the
+// write side (#2088) posts, patches and deletes through it.
+func (t *teaForge) apiDo(method, path string, query url.Values, payload any) ([]byte, error) {
 	u := t.baseURL + "/api/v1" + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}
-	req, err := http.NewRequest(http.MethodGet, u, nil)
+	var reqBody io.Reader
+	if payload != nil {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+		reqBody = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequest(method, u, reqBody)
 	if err != nil {
 		return nil, err
+	}
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Authorization", "token "+t.token)
 	req.Header.Set("Accept", "application/json")
@@ -120,35 +138,6 @@ func (t *teaForge) apiGet(path string, query url.Values) ([]byte, error) {
 		return nil, fmt.Errorf("gitea: %s (%s)", resp.Status, path)
 	}
 	return body, nil
-}
-
-// apiSend performs one authenticated request carrying a JSON document — the
-// write half of apiGet (#2087) — and discards the response body on success.
-// Non-2xx responses become errors carrying the status; the body is never
-// parsed as prose.
-func (t *teaForge) apiSend(method, path string, payload any) error {
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequest(method, t.baseURL+"/api/v1"+path, bytes.NewReader(raw))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "token "+t.token)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: ghTimeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("gitea: %s (%s)", resp.Status, path)
-	}
-	return nil
 }
 
 // repoPath is the API path prefix of the bound repository.
@@ -272,34 +261,87 @@ func (t *teaForge) userLogin() string {
 	return t.login
 }
 
-// CreateComment posts a new comment on an issue (#2087). Gitea's comment
-// endpoints are the same on Forgejo, and the body travels as JSON — no CLI,
-// no quoting.
-func (t *teaForge) CreateComment(issue int, body string) error {
-	return t.apiSend(http.MethodPost, t.repoPath()+"/issues/"+itoa(issue)+"/comments",
-		map[string]string{"body": body})
+// RepoLabels lists the repository's whole label set (#2088).
+func (t *teaForge) RepoLabels() ([]Label, error) {
+	raw, err := t.giteaLabels()
+	if err != nil {
+		return nil, err
+	}
+	labels := make([]Label, 0, len(raw))
+	for _, l := range raw {
+		labels = append(labels, Label{Name: l.Name, Color: strings.TrimPrefix(l.Color, "#")})
+	}
+	return labels, nil
 }
 
-// EditComment replaces an existing comment's body by its forge ID.
+// giteaLabels fetches the repository's labels with their IDs, which the
+// label mutations address them by.
+func (t *teaForge) giteaLabels() ([]giteaLabel, error) {
+	q := url.Values{}
+	q.Set("limit", itoa(issueLimit))
+	out, err := t.apiGet(t.repoPath()+"/labels", q)
+	if err != nil {
+		return nil, err
+	}
+	return parseGiteaLabels(out)
+}
+
+// Collaborators lists the logins an issue can be assigned to. Gitea's
+// collaborator listing omits the repository owner, who can always be
+// assigned, so the owner is folded in (#2088).
+func (t *teaForge) Collaborators() ([]string, error) {
+	out, err := t.apiGet(t.repoPath()+"/collaborators", nil)
+	if err != nil {
+		return nil, err
+	}
+	logins, err := parseGiteaLogins(out)
+	if err != nil {
+		return nil, err
+	}
+	return withOwner(logins, t.owner), nil
+}
+
+// withOwner prepends the repository owner to a collaborator listing unless it
+// is already in there.
+func withOwner(logins []string, owner string) []string {
+	if owner == "" {
+		return logins
+	}
+	for _, l := range logins {
+		if strings.EqualFold(l, owner) {
+			return logins
+		}
+	}
+	return append([]string{owner}, logins...)
+}
+
+// CreateComment posts a comment on an issue (#2088).
+func (t *teaForge) CreateComment(issue int, body string) error {
+	_, err := t.apiDo(http.MethodPost, t.issuePath(issue)+"/comments", nil,
+		map[string]string{"body": body})
+	return err
+}
+
+// EditComment replaces an existing comment's body by its forge ID (#2087).
 func (t *teaForge) EditComment(commentID string, body string) error {
 	id, err := numericID(commentID)
 	if err != nil {
 		return err
 	}
-	return t.apiSend(http.MethodPatch, t.repoPath()+"/issues/comments/"+id,
-		map[string]string{"body": body})
+	_, err = t.apiDo(http.MethodPatch, t.commentPath(id), nil, map[string]string{"body": body})
+	return err
 }
 
-// EditIssueBody replaces an issue's body text.
+// EditIssueBody replaces an issue's body text (#2087).
 func (t *teaForge) EditIssueBody(issue int, body string) error {
-	return t.apiSend(http.MethodPatch, t.repoPath()+"/issues/"+itoa(issue),
-		map[string]string{"body": body})
+	_, err := t.apiDo(http.MethodPatch, t.issuePath(issue), nil, map[string]string{"body": body})
+	return err
 }
 
 // IssueBody reads an issue's current body — the read half of the stale-base
-// check.
+// check (#2087).
 func (t *teaForge) IssueBody(issue int) (string, error) {
-	out, err := t.apiGet(t.repoPath()+"/issues/"+itoa(issue), nil)
+	out, err := t.apiGet(t.issuePath(issue), nil)
 	if err != nil {
 		return "", err
 	}
@@ -312,25 +354,143 @@ func (t *teaForge) CommentBody(commentID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out, err := t.apiGet(t.repoPath()+"/issues/comments/"+id, nil)
+	out, err := t.apiGet(t.commentPath(id), nil)
 	if err != nil {
 		return "", err
 	}
 	return parseBodyField(out)
 }
+
+// AddLabels attaches labels by ID: Gitea's label endpoints address labels by
+// their numeric ID, so the names the picker works in are resolved against the
+// repository's label set first.
 func (t *teaForge) AddLabels(issue int, labels []string) error {
-	return unsupported("tea", "add labels")
+	if len(labels) == 0 {
+		return nil
+	}
+	ids, err := t.labelIDs(labels)
+	if err != nil {
+		return err
+	}
+	_, err = t.apiDo(http.MethodPost, t.issuePath(issue)+"/labels", nil,
+		map[string][]int64{"labels": ids})
+	return err
 }
+
+// RemoveLabels detaches labels one by one — Gitea's removal endpoint takes a
+// single label ID per call.
 func (t *teaForge) RemoveLabels(issue int, labels []string) error {
-	return unsupported("tea", "remove labels")
+	if len(labels) == 0 {
+		return nil
+	}
+	ids, err := t.labelIDs(labels)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if _, err := t.apiDo(http.MethodDelete,
+			t.issuePath(issue)+"/labels/"+strconv.FormatInt(id, 10), nil, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
+
+// SetAssignees replaces an issue's assignee set through the issue PATCH.
 func (t *teaForge) SetAssignees(issue int, assignees []string) error {
-	return unsupported("tea", "set assignees")
+	if assignees == nil {
+		assignees = []string{}
+	}
+	_, err := t.apiDo(http.MethodPatch, t.issuePath(issue), nil,
+		map[string][]string{"assignees": assignees})
+	return err
 }
-func (t *teaForge) CloseIssue(issue int) error  { return unsupported("tea", "close issue") }
-func (t *teaForge) ReopenIssue(issue int) error { return unsupported("tea", "reopen issue") }
-func (t *teaForge) MergePR(pr int) error        { return unsupported("tea", "merge PR") }
-func (t *teaForge) ClosePR(pr int) error        { return unsupported("tea", "close PR") }
+
+// CloseIssue / ReopenIssue set the issue's state through the same PATCH;
+// Gitea spells the states "closed" and "open".
+func (t *teaForge) CloseIssue(issue int) error  { return t.setState(issue, "closed") }
+func (t *teaForge) ReopenIssue(issue int) error { return t.setState(issue, "open") }
+
+func (t *teaForge) setState(issue int, state string) error {
+	_, err := t.apiDo(http.MethodPatch, t.issuePath(issue), nil,
+		map[string]string{"state": state})
+	return err
+}
+
+func (t *teaForge) MergePR(pr int) error { return unsupported("tea", "merge PR") }
+func (t *teaForge) ClosePR(pr int) error { return unsupported("tea", "close PR") }
+
+// issuePath is the API path of one issue of the bound repository.
+func (t *teaForge) issuePath(issue int) string {
+	return t.repoPath() + "/issues/" + itoa(issue)
+}
+
+// commentPath is the API path of one comment; the caller has already checked
+// that id is digits (#2087), so it never widens the request path.
+func (t *teaForge) commentPath(id string) string {
+	return t.repoPath() + "/issues/comments/" + id
+}
+
+// labelIDs resolves label names to the repository's label IDs, erroring on a
+// name the repository does not have — a mutation must never silently drop
+// part of what the user picked.
+func (t *teaForge) labelIDs(names []string) ([]int64, error) {
+	labels, err := t.giteaLabels()
+	if err != nil {
+		return nil, err
+	}
+	return resolveLabelIDs(labels, names)
+}
+
+// giteaLabel is one entry of Gitea's repository label listing.
+type giteaLabel struct {
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
+// parseGiteaLabels decodes the repository's label listing.
+func parseGiteaLabels(out []byte) ([]giteaLabel, error) {
+	var raw []giteaLabel
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+
+// parseGiteaLogins decodes a Gitea user array into logins.
+func parseGiteaLogins(out []byte) ([]string, error) {
+	var raw []struct {
+		Login string `json:"login"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, err
+	}
+	logins := make([]string, 0, len(raw))
+	for _, u := range raw {
+		if u.Login != "" {
+			logins = append(logins, u.Login)
+		}
+	}
+	return logins, nil
+}
+
+// resolveLabelIDs maps label names onto the repository's label IDs.
+func resolveLabelIDs(labels []giteaLabel, names []string) ([]int64, error) {
+	byName := make(map[string]int64, len(labels))
+	for _, l := range labels {
+		byName[l.Name] = l.ID
+	}
+	ids := make([]int64, 0, len(names))
+	for _, name := range names {
+		id, ok := byName[name]
+		if !ok {
+			return nil, errors.New("no label named " + name + " in this repository")
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
 
 // giteaIssue mirrors the fields the pane needs from Gitea's issue listing.
 type giteaIssue struct {

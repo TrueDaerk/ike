@@ -1,12 +1,14 @@
 package forge
 
 // gh.go is the GitHub binding of the Forge interface: the issue/PR listing,
-// the issue timeline (#2084), the editable-text reads and mutations (#2087)
-// and the capability probe through `gh ... --json` / `gh api`, whose output
-// is stable JSON — never the human rendering. Detection (gh on PATH, a GitHub
-// remote) lives in detect.go; the operations later 0470 sub-issues bring
-// (label/assignee/state mutations, PR actions) are ErrUnsupported stubs here
-// until those land.
+// the issue timeline (#2084) and the capability probe through
+// `gh ... --json` / `gh api`, whose output is stable JSON — never the human
+// rendering, plus the issue mutations (#2088) through `gh issue edit`,
+// `gh issue close|reopen` and one `gh api` PATCH, and the editable texts
+// (#2087) — issue body and comments — read back through the REST endpoints
+// and written with their body on stdin. Detection (gh on PATH, a GitHub
+// remote) lives in detect.go; the PR actions a later 0470 sub-issue brings
+// are ErrUnsupported stubs here until those land.
 
 import (
 	"bytes"
@@ -48,20 +50,21 @@ type ghForge struct {
 // runCLI executes one forge-CLI command in dir under the given deadline.
 // Interactive prompts are disabled — no terminal is attached.
 func runCLI(dir, tool string, timeout time.Duration, args ...string) ([]byte, error) {
-	return runCLIStdin(dir, tool, "", timeout, args...)
+	return runCLIStdin(dir, tool, timeout, nil, args...)
 }
 
-// runCLIStdin is runCLI with stdin fed from a string — the route every text
-// mutation takes (#2087). A comment body can hold anything, newlines and
-// quotes included, so it must never travel as an argv element or through a
-// shell; gh reads it from standard input (`--body-file -`, `--input -`).
-func runCLIStdin(dir, tool, stdin string, timeout time.Duration, args ...string) ([]byte, error) {
+// runCLIStdin is runCLI with a request body piped in — how `gh api --input -`
+// takes a JSON payload, which is the only way to send an *empty* array (a
+// cleared assignee set) through the CLI, and how every editable text (#2087)
+// travels: markdown can hold anything, so it must never become an argv
+// element (`--body-file -`, `--input -`).
+func runCLIStdin(dir, tool string, timeout time.Duration, stdin []byte, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, tool, args...)
 	cmd.Dir = dir
-	if stdin != "" {
-		cmd.Stdin = strings.NewReader(stdin)
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
 	}
 	cmd.Env = append(os.Environ(), "GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1", "CLICOLOR=0", "NO_COLOR=1")
 	var stdout, stderr bytes.Buffer
@@ -81,9 +84,9 @@ func runGH(dir string, args ...string) ([]byte, error) {
 	return runCLI(dir, "gh", ghTimeout, args...)
 }
 
-// runGHStdin is runGH with a text mutation's body on standard input.
-func runGHStdin(dir, stdin string, args ...string) ([]byte, error) {
-	return runCLIStdin(dir, "gh", stdin, ghTimeout, args...)
+// runGHStdin is runGH with a request body on standard input.
+func runGHStdin(dir string, stdin []byte, args ...string) ([]byte, error) {
+	return runCLIStdin(dir, "gh", ghTimeout, stdin, args...)
 }
 
 // Issues lists the repository's issues in the given state via
@@ -156,10 +159,32 @@ func (g *ghForge) userLogin() string {
 	return g.login
 }
 
-// CreateComment posts a new comment via `gh issue comment --body-file -`
-// (#2087); the body travels on stdin, never as an argument.
+// RepoLabels lists the repository's whole label set via
+// `gh label list --json name,color` (#2088).
+func (g *ghForge) RepoLabels() ([]Label, error) {
+	out, err := runGH(g.dir, ghRepoLabelArgs()...)
+	if err != nil {
+		return nil, err
+	}
+	return parseGHLabels(out)
+}
+
+// Collaborators lists the logins an issue can be assigned to via GitHub's
+// assignees endpoint — the set the API itself accepts, so the picker can
+// never offer a login the mutation would reject (#2088).
+func (g *ghForge) Collaborators() ([]string, error) {
+	out, err := runGH(g.dir, ghAssigneeListArgs()...)
+	if err != nil {
+		return nil, err
+	}
+	return parseGHLogins(out)
+}
+
+// CreateComment posts a comment via `gh issue comment --body-file -` (#2088's
+// close-with-comment flow and #2087's compose buffer share it). The body goes
+// on stdin: a composed comment is arbitrary markdown, not an argv element.
 func (g *ghForge) CreateComment(issue int, body string) error {
-	_, err := runGHStdin(g.dir, body, "issue", "comment", itoa(issue), "--body-file", "-")
+	_, err := runGHStdin(g.dir, []byte(body), ghCommentArgs(issue)...)
 	return err
 }
 
@@ -172,18 +197,14 @@ func (g *ghForge) EditComment(commentID string, body string) error {
 	if err != nil {
 		return err
 	}
-	payload, err := jsonBody(body)
-	if err != nil {
-		return err
-	}
-	_, err = runGHStdin(g.dir, payload, "api", "--method", "PATCH",
-		"repos/{owner}/{repo}/issues/comments/"+id, "--input", "-")
+	args, payload := ghCommentEditRequest(id, body)
+	_, err = runGHStdin(g.dir, payload, args...)
 	return err
 }
 
 // EditIssueBody replaces an issue's body via `gh issue edit --body-file -`.
 func (g *ghForge) EditIssueBody(issue int, body string) error {
-	_, err := runGHStdin(g.dir, body, "issue", "edit", itoa(issue), "--body-file", "-")
+	_, err := runGHStdin(g.dir, []byte(body), ghBodyArgs(issue)...)
 	return err
 }
 
@@ -211,19 +232,144 @@ func (g *ghForge) CommentBody(commentID string) (string, error) {
 	}
 	return parseBodyField(out)
 }
+
+// AddLabels / RemoveLabels apply one side of a label diff through
+// `gh issue edit --add-label/--remove-label`, which takes a comma-separated
+// list (#2088).
 func (g *ghForge) AddLabels(issue int, labels []string) error {
-	return unsupported("gh", "add labels")
+	if len(labels) == 0 {
+		return nil
+	}
+	_, err := runGH(g.dir, ghLabelArgs(issue, "--add-label", labels)...)
+	return err
 }
+
 func (g *ghForge) RemoveLabels(issue int, labels []string) error {
-	return unsupported("gh", "remove labels")
+	if len(labels) == 0 {
+		return nil
+	}
+	_, err := runGH(g.dir, ghLabelArgs(issue, "--remove-label", labels)...)
+	return err
 }
+
+// SetAssignees replaces the assignee set. `gh issue edit` only adds and
+// removes, and would need the current set to diff against; GitHub's issue
+// PATCH replaces it in one call, and the payload travels on stdin because
+// that is the only way to send the empty array of a cleared set.
 func (g *ghForge) SetAssignees(issue int, assignees []string) error {
-	return unsupported("gh", "set assignees")
+	args, body := ghAssigneesRequest(issue, assignees)
+	_, err := runGHStdin(g.dir, body, args...)
+	return err
 }
-func (g *ghForge) CloseIssue(issue int) error  { return unsupported("gh", "close issue") }
-func (g *ghForge) ReopenIssue(issue int) error { return unsupported("gh", "reopen issue") }
-func (g *ghForge) MergePR(pr int) error        { return unsupported("gh", "merge PR") }
-func (g *ghForge) ClosePR(pr int) error        { return unsupported("gh", "close PR") }
+
+// CloseIssue / ReopenIssue run `gh issue close` / `gh issue reopen`.
+func (g *ghForge) CloseIssue(issue int) error {
+	_, err := runGH(g.dir, ghStateArgs(issue, "close")...)
+	return err
+}
+
+func (g *ghForge) ReopenIssue(issue int) error {
+	_, err := runGH(g.dir, ghStateArgs(issue, "reopen")...)
+	return err
+}
+
+func (g *ghForge) MergePR(pr int) error { return unsupported("gh", "merge PR") }
+func (g *ghForge) ClosePR(pr int) error { return unsupported("gh", "close PR") }
+
+// The argument builders below are pure so the wiring is unit-testable
+// without a gh on PATH (#2088).
+
+// ghLabelArgs builds `gh issue edit <n> <flag> a,b`.
+func ghLabelArgs(issue int, flag string, labels []string) []string {
+	return []string{"issue", "edit", itoa(issue), flag, strings.Join(labels, ",")}
+}
+
+// ghStateArgs builds `gh issue close|reopen <n>`.
+func ghStateArgs(issue int, verb string) []string {
+	return []string{"issue", verb, itoa(issue)}
+}
+
+// ghCommentArgs builds `gh issue comment <n> --body-file -`; the body is
+// piped in by the caller.
+func ghCommentArgs(issue int) []string {
+	return []string{"issue", "comment", itoa(issue), "--body-file", "-"}
+}
+
+// ghBodyArgs builds `gh issue edit <n> --body-file -` (#2087), the issue-body
+// counterpart of ghCommentArgs.
+func ghBodyArgs(issue int) []string {
+	return []string{"issue", "edit", itoa(issue), "--body-file", "-"}
+}
+
+// ghCommentEditRequest builds the comment-editing PATCH and its JSON body
+// (#2087). gh has no comment-edit command, so this goes through `gh api`; the
+// document travels on stdin like the assignee replacement's does.
+func ghCommentEditRequest(id, body string) ([]string, []byte) {
+	payload, err := json.Marshal(map[string]string{"body": body})
+	if err != nil { // unreachable for a string map
+		payload = []byte(`{"body":""}`)
+	}
+	return []string{"api", "--method", "PATCH",
+		"repos/{owner}/{repo}/issues/comments/" + id, "--input", "-"}, payload
+}
+
+// ghAssigneesRequest builds the assignee-replacing PATCH and its JSON body.
+// A nil set is normalised to an empty array — "no assignees", not "leave as
+// is", which is what an emptied picker means.
+func ghAssigneesRequest(issue int, assignees []string) ([]string, []byte) {
+	if assignees == nil {
+		assignees = []string{}
+	}
+	body, err := json.Marshal(map[string][]string{"assignees": assignees})
+	if err != nil { // unreachable for a string slice
+		body = []byte(`{"assignees":[]}`)
+	}
+	return []string{"api", "--method", "PATCH",
+		"repos/{owner}/{repo}/issues/" + itoa(issue), "--input", "-"}, body
+}
+
+// ghRepoLabelArgs builds the repository label listing.
+func ghRepoLabelArgs() []string {
+	return []string{"label", "list", "--limit", itoa(issueLimit), "--json", "name,color"}
+}
+
+// ghAssigneeListArgs builds the assignable-users listing.
+func ghAssigneeListArgs() []string {
+	return []string{"api", "repos/{owner}/{repo}/assignees?per_page=100"}
+}
+
+// parseGHLabels decodes `gh label list --json name,color`.
+func parseGHLabels(out []byte) ([]Label, error) {
+	var raw []Label
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, err
+	}
+	labels := make([]Label, 0, len(raw))
+	for _, l := range raw {
+		if l.Name == "" {
+			continue
+		}
+		labels = append(labels, Label{Name: l.Name, Color: strings.TrimPrefix(l.Color, "#")})
+	}
+	return labels, nil
+}
+
+// parseGHLogins decodes a GitHub user array into logins.
+func parseGHLogins(out []byte) ([]string, error) {
+	var raw []struct {
+		Login string `json:"login"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, err
+	}
+	logins := make([]string, 0, len(raw))
+	for _, u := range raw {
+		if u.Login != "" {
+			logins = append(logins, u.Login)
+		}
+	}
+	return logins, nil
+}
 
 // numericID guards a forge comment ID before it is pasted into a REST path:
 // both bindings hand it straight to the API, so anything but digits — a
@@ -237,16 +383,6 @@ func numericID(id string) (string, error) {
 		return "", fmt.Errorf("forge: invalid comment id %q", id)
 	}
 	return id, nil
-}
-
-// jsonBody encodes one {"body": …} request document, the payload shape both
-// forges' issue and comment mutation endpoints take.
-func jsonBody(body string) (string, error) {
-	raw, err := json.Marshal(map[string]string{"body": body})
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
 }
 
 // parseBodyField reads the "body" field out of one issue or comment document

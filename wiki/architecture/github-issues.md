@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Issues Tool Window
-description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, fuzzy filter, label multi-picker, open/closed/all state filter, sort orders and label grouping, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), editing your own texts and composing comments in markdown buffers, an action menu, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2087).
+description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, fuzzy filter, label multi-picker, open/closed/all state filter, sort orders and label grouping, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), an action menu, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane]
 timestamp: 2026-08-25T00:00:00Z
 ---
 
-# Issues Tool Window (#1934, #2090, #2084, #2087)
+# Issues Tool Window (#1934, #2090, #2084, #2088, #2087)
 
 Development in this repository is issue-driven (see
 [Change Workflow](/process/change-workflow.md)); this pane brings that loop
@@ -54,10 +54,13 @@ its own concept: [Forge Layer](/architecture/forge.md). What the pane sees:
   kinds outside the vocabulary; `More` reports whether another page follows,
   so long histories are never fetched whole. The message echoes issue and
   page, letting the pane drop a stale answer.
-- `forge.CapabilitiesCmd(dir)` → `CapabilitiesMsg` (#2087): the repository
-  permissions plus the authenticated login, probed once when the pane opens
-  and again off the first listing a session-restored pane receives. It is what
-  the edit actions are gated on.
+- `forge.MutateCmd(dir, mutation)` → `MutationMsg` and `forge.RepoMetaCmd(dir)`
+  → `RepoMetaMsg` (#2088), injected as `forge.MutateFactory(dir)` and
+  `forge.MetaFactory(dir)`: one neutral `Mutation` value carries a label diff,
+  an assignee set, a state change and an optional comment, applied in that
+  reading order; the metadata probe delivers the capabilities — including the
+  authenticated login the #2087 ownership checks read — plus, only when they
+  allow triage, the repository's label set and assignable users.
 - `forge.SaveTextCmd(dir, path, target, base, body, force)` → `SaveTextMsg`
   (#2087): the push a saved edit buffer runs, with the stale-base check in
   front of it. The pane never calls it — the app does, for the buffer it owns.
@@ -171,17 +174,53 @@ refetches the listing *and* the open issue's timeline. A `TimelineMsg` for an
 issue the pane no longer waits on is dropped; entry IDs and the own-comment
 flag are carried in the model for the comment-editing sub-issue.
 
+### Mutations (#2088)
+
+With **triage permission** the pane writes as well as reads. The keys work
+from the issue list and from the detail view alike, and they stay QWERTZ-safe:
+
+| Key | Action |
+| --- | --- |
+| `e` | **label picker** — the repository's whole label set as colored chips, the issue's own labels preselected; `space` toggles, `backspace` clears, `enter` applies the **diff** (only what changed is written), `esc` drops it |
+| `u` | **assignee picker** — the repository's assignable users, same keys; `enter` replaces the assignee set (an emptied picker clears it explicitly) |
+| `c` | **close** the issue, or **reopen** it when it is closed — footer and menu word themselves after the selected issue's state |
+| `C` | the same **with a comment**: a one-line prompt whose text is posted *before* the state change, so the timeline reads in order |
+
+Both pickers list what `forge.RepoMetaCmd` fetched **once** per session
+(retried by `r` after a failure). When that probe could not read them — a
+token without the scope — the pickers fall back to the labels and assignees
+the *listing* carries, so an issue's labels can still be removed.
+
+**Capability gating.** Without triage permission the four actions are not
+offered: the footer drops them and the action menu still lists them, greyed
+and with the reason spelled out (`needs triage permission`,
+`checking permissions…`) — pressing the key writes the same reason into the
+filter row rather than doing nothing. Without a forge backend at all they are
+absent entirely.
+
+**Optimistic, with rollback.** A write is applied to the row immediately (the
+chips, the assignees, the state glyph change at once) and the pre-mutation
+issue is kept. A forge rejection restores it and shows the forge's own error
+in the filter row (`label change failed: HTTP 403 …`), toasted as well so it
+is not missed while the pane is unfocused (`esc` on the list dismisses it, as
+it clears every other narrowing). A success drops the snapshot and
+**refetches** the listing — and the open issue's timeline — because the pane
+must show forge truth, not its own guess. While a write is in flight the same
+row reads `applying the change…`.
+
 ### Editing your own texts (#2087)
 
 The timeline is not read-only for texts that are yours. In the detail view:
 
-- **`e`** edits. With exactly one editable text it opens straight away; with
-  several it raises the **edit picker**, a centered overlay listing the issue
-  body first, then each of your own comments by its first line.
-- **`c`** composes a new comment on the open issue.
+- **`E`** edits. With exactly one editable text it opens straight away; with
+  several it raises the **text-edit picker**, a centered overlay listing the
+  issue body first, then each of your own comments by its first line. (Plain
+  `e` is #2088's label picker; the shifted key keeps the two apart.)
+- **`n`** composes a new comment on the open issue.
 
-**What is offered** is decided by `edit.go` against the probed
-`Capabilities` — never guessed, and empty until the probe answered:
+**What is offered** is decided by `textedit.go` against the same probed
+`Capabilities` the mutations read — never guessed, and empty until the probe
+answered:
 
 | Text | Offered when |
 | --- | --- |
@@ -189,8 +228,10 @@ The timeline is not read-only for texts that are yours. In the detail view:
 | a comment | it carries the timeline's own-comment flag (#2084) |
 | new comment | the login resolved — commenting needs no repository permission |
 
-An unavailable action is **absent**, not greyed out: it is missing from the
-footer, from the action menu, and its key does nothing. A failed capability
+An unavailable action is **absent**, not greyed out the way the mutation
+actions are: it is missing from the footer, from the action menu, and its key
+does nothing. "You may not edit someone else's comment" is not a permission
+the user can go and fix, so there is nothing to explain. A failed capability
 probe hides all of them.
 
 **The editor is a real buffer.** The pane emits `EditTextRequestMsg` naming
@@ -220,7 +261,9 @@ the save just wrote. Three outcomes:
 
 An empty new-comment buffer is never posted — opening one and changing your
 mind costs nothing. A second edit request for a text that is already open
-focuses that buffer instead of racing it with a second one.
+focuses that buffer instead of racing it with a second one. A push outcome
+never steals an open overlay: with one on screen it is announced instead, and
+the next save re-runs the whole check.
 
 ### Discoverability
 

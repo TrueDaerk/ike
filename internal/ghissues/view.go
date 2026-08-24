@@ -152,6 +152,14 @@ func (m *Model) filterRow(pal *theme.Palette) string {
 		hint := lipgloss.NewStyle().Faint(true).Render("  (enter keeps · esc clears)")
 		return prefix + ui.CursorView(m.fInput, m.fCur) + hint
 	}
+	// A forge rejection (#2088) takes the row over: it is the one thing the
+	// user must read, and it stays until the next mutation clears it.
+	if m.mutErr != "" {
+		return lipgloss.NewStyle().Foreground(pal.Error).Render(m.clip(" ⚠ " + m.mutErr))
+	}
+	if m.mutBusy > 0 {
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" applying the change…"))
+	}
 	return lipgloss.NewStyle().Foreground(pal.Warning).Render(m.clip(" " + m.filterSummary()))
 }
 
@@ -474,14 +482,25 @@ func (m *Model) footer(pal *theme.Palette) string {
 	if m.ov == ovLabels {
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggle · backspace clear · enter apply · esc cancel"))
 	}
+	if m.ov == ovLabelEdit || m.ov == ovAssignEdit {
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggle · backspace clear · enter writes the change · esc cancel"))
+	}
+	if m.ov == ovComment {
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" type the comment · enter posts and " + m.stateVerb() + "s · esc cancel"))
+	}
 	if m.ov == ovActions {
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter run · esc close"))
 	}
-	if m.ov == ovEdit {
+	if m.ov == ovTextEdit {
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter edit · esc cancel"))
 	}
 	var parts []string
 	for _, a := range m.actions() {
+		// An action the permissions forbid stays in the menu (with its
+		// reason) but is not advertised in the footer (#2088).
+		if a.disabled {
+			continue
+		}
 		parts = append(parts, a.key+" "+a.hint)
 	}
 	parts = append(parts, "m menu")
@@ -676,6 +695,46 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 			lines = append(lines, style.Render(text))
 		}
 		return "Filter by label", lines
+	case ovLabelEdit, ovAssignEdit:
+		rows := m.editRows()
+		chips := map[string]forge.Label{}
+		for _, l := range m.pickerLabels() {
+			chips[l.Name] = l
+		}
+		for k := 0; k < h; k++ {
+			i := m.ovTop + k
+			if i >= len(rows) {
+				break
+			}
+			mark := "[ ] "
+			if m.editSel[rows[i]] {
+				mark = "[x] "
+			}
+			style := plain
+			if i == m.ovCursor {
+				style = sel
+			}
+			text := rows[i]
+			if m.ov == ovAssignEdit {
+				text = "@" + text
+			}
+			line := style.Render(mark + text)
+			// The label rows carry the forge's own chip, so the picker looks
+			// like the list it edits.
+			if m.ov == ovLabelEdit {
+				if l, ok := chips[rows[i]]; ok {
+					line = style.Render(mark) + chip(l)
+				}
+			}
+			lines = append(lines, line)
+		}
+		return m.editorTitle(), lines
+	case ovComment:
+		verb := m.stateVerb()
+		lines = append(lines,
+			plain.Render("comment: ")+ui.CursorView(m.cmInput, m.cmCur),
+			lipgloss.NewStyle().Faint(true).Render("enter posts it and "+verb+"s · esc cancels"))
+		return capitalize(verb) + " #" + strconv.Itoa(m.editFor) + " with a comment", lines
 	case ovActions:
 		acts := m.actions()
 		width := 0
@@ -684,6 +743,7 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 				width = w
 			}
 		}
+		off := lipgloss.NewStyle().Foreground(pal.Foreground).Faint(true)
 		for k := 0; k < h; k++ {
 			i := m.ovTop + k
 			if i >= len(acts) {
@@ -691,14 +751,17 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 			}
 			key := acts[i].key + strings.Repeat(" ", width-len([]rune(acts[i].key)))
 			style := plain
+			if acts[i].disabled {
+				style = off
+			}
 			if i == m.ovCursor {
 				style = sel
 			}
 			lines = append(lines, style.Render(key+"  "+acts[i].label))
 		}
 		return "Actions — " + m.viewName(), lines
-	case ovEdit:
-		targets := m.editTargets()
+	case ovTextEdit:
+		targets := m.textTargets()
 		for k := 0; k < h; k++ {
 			i := m.ovTop + k
 			if i >= len(targets) {
@@ -713,6 +776,15 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 		return "Edit which text?", lines
 	}
 	return "", nil
+}
+
+// editorTitle names the open mutation picker and the issue it edits.
+func (m *Model) editorTitle() string {
+	what := "Labels"
+	if m.ov == ovAssignEdit {
+		what = "Assignees"
+	}
+	return what + " of #" + strconv.Itoa(m.editFor)
 }
 
 // viewName names the view the action menu lists the actions of.

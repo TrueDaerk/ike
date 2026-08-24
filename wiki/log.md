@@ -2,14 +2,14 @@
 
 ## 2026-08-25 (edit own issue texts and compose comments, #2087)
 
-- **The issue timeline is writable now.** In the detail view `e` edits — the
+- **The issue timeline is writable now.** In the detail view `E` edits — the
   issue body or one of your own comments, straight away when only one text
-  qualifies, through a centered picker when several do — and `c` composes a
-  new comment. Every action is gated on the probed capabilities and on
-  ownership: your own issue (or write access) for the body, the timeline's
-  own-comment flag for a comment, a resolved login for a new one. Anything
-  else is *absent* — no footer entry, no menu row, an inert key — and a failed
-  capability probe hides all of them.
+  qualifies, through a centered picker when several do — and `n` composes a
+  new comment. Both are gated on the probed capabilities *and* on ownership:
+  your own issue (or write access) for the body, the timeline's own-comment
+  flag for a comment, a resolved login for a new one. Anything else is
+  *absent* — no footer entry, no menu row, an inert key — because "not your
+  text" is not a permission to fix, unlike #2088's greyed mutation actions.
 - **Editing happens in a real markdown buffer**, not an inline mini-editor:
   the app creates a scratch file named after what it edits
   (`issue-2087-comment-77.md`), seeded with the current text and opened
@@ -25,14 +25,39 @@
   unchanged text never reads as a conflict). A mismatch writes nothing and
   raises a warning offering `[o]` overwrite, `[l]` load the forge's version
   into the buffer, `[esc]` decide later.
-- **Both bindings implement the three mutations and their read halves.** gh
-  sends bodies on stdin (`gh issue edit/comment --body-file -`, `gh api
+- **Both bindings implement the text mutations and their read halves.** gh
+  sends every body on stdin (`gh issue edit/comment --body-file -`, `gh api
   --method PATCH issues/comments/{id} --input -`), tea sends JSON to the Gitea
   endpoints; comment IDs are validated as digits before reaching a request
   path, and `Capabilities` now carries the authenticated login the ownership
   check needs. Unit tests cover the target vocabulary, the check-then-push
   order with its stale verdict, the binding fixtures, the pane's gate and
   picker, and the buffer save chain end to end. Concept docs updated:
+  [Forge Layer](/architecture/forge.md),
+  [Issues Tool Window](/architecture/github-issues.md).
+
+## 2026-08-25 (label, assignee and state mutations, #2088)
+
+- **The issues window writes now.** With triage permission: `e` opens a label
+  picker over the repository's whole label set (colored chips, the issue's own
+  labels preselected) and applies only the diff; `u` does the same for the
+  assignees and replaces the set; `c` closes or reopens the selected issue,
+  `C` the same with a comment that is posted first. All four work from the
+  list and from the detail view.
+- **Mutations are optimistic and roll back.** The row changes immediately, the
+  pre-mutation issue is kept, and a forge rejection restores it and shows the
+  forge's own error (filter row + toast). A success refetches the listing and
+  the open issue's timeline, so the UI shows forge truth rather than a guess.
+- **Capability gating.** Without triage the four actions vanish from the
+  footer and stay in the action menu greyed, naming the reason; pressing the
+  key explains instead of doing nothing.
+- **Both bindings implement the mutations** — gh via `gh issue edit
+  --add-label/--remove-label`, `gh issue close|reopen`, `gh issue comment` and
+  an assignee-replacing `gh api --method PATCH … --input -`; tea/Gitea via the
+  REST label, assignee, state and comment endpoints (label names resolved to
+  Gitea's numeric IDs). New: `Forge.RepoLabels`/`Collaborators`,
+  `forge.Mutation`/`MutateCmd` and the one-shot `RepoMetaCmd` probe. Argument
+  and payload construction is unit-tested on fixtures. Concept docs updated:
   [Forge Layer](/architecture/forge.md),
   [Issues Tool Window](/architecture/github-issues.md).
 

@@ -1,6 +1,6 @@
 package ghissues
 
-// edit_test.go covers the ownership/permission gate and the edit picker
+// textedit_test.go covers the ownership/permission gate and the text-edit picker
 // (#2087): which texts the detail view offers to edit, that nothing is
 // offered without a capability answer, and that choosing one emits the
 // request the app opens a markdown buffer from.
@@ -24,7 +24,7 @@ func editableWith(t *testing.T, caps forge.Capabilities, probed, own bool) *Mode
 	stub := &timelineStub{}
 	stub.inject(m)
 	if probed {
-		m.SetCapabilities(forge.CapabilitiesMsg{Caps: caps})
+		m.SetRepoMeta(forge.RepoMetaMsg{Caps: caps})
 	}
 	m.Update(key("enter"))
 	entries := []forge.TimelineEntry{
@@ -58,23 +58,23 @@ func runMsg(t *testing.T, cmd tea.Cmd) tea.Msg {
 
 func TestEditActionsHiddenWithoutACapabilityAnswer(t *testing.T) {
 	m := editable(t, forge.Capabilities{}, false)
-	if m.canEditAnything() || m.canComment() {
+	if m.canEditText() || m.canComment() {
 		t.Fatal("nothing may be editable before the probe answers")
 	}
-	if labels := m.EditTargetLabels(); len(labels) != 0 {
+	if labels := m.TextTargetLabels(); len(labels) != 0 {
 		t.Fatalf("targets = %v", labels)
 	}
 	for _, a := range m.Actions() {
-		if a[0] == "e" || a[0] == "c" {
+		if a[0] == "E" || a[0] == "n" {
 			t.Fatalf("unpermitted action offered: %v", a)
 		}
 	}
 	// The keys stay inert too, not just the menu.
-	if cmd := m.Update(key("e")); cmd != nil {
-		t.Fatal("'e' must do nothing without a capability answer")
+	if cmd := m.Update(key("E")); cmd != nil {
+		t.Fatal("'E' must do nothing without a capability answer")
 	}
-	if cmd := m.Update(key("c")); cmd != nil {
-		t.Fatal("'c' must do nothing without a capability answer")
+	if cmd := m.Update(key("n")); cmd != nil {
+		t.Fatal("'n' must do nothing without a capability answer")
 	}
 }
 
@@ -82,7 +82,7 @@ func TestOwnCommentIsEditableForeignIsNot(t *testing.T) {
 	// A login with no write access on someone else's issue: only the own
 	// comment is offered — not the body, not the foreign comment.
 	m := editable(t, forge.Capabilities{Login: "me"}, true)
-	labels := m.EditTargetLabels()
+	labels := m.TextTargetLabels()
 	if len(labels) != 1 {
 		t.Fatalf("targets = %v, want only the own comment", labels)
 	}
@@ -113,7 +113,7 @@ func TestIssueBodyEditableWithWriteAccess(t *testing.T) {
 	if !m.canEditBody(m.Selected()) {
 		t.Fatal("write access must allow editing a foreign issue body")
 	}
-	labels := m.EditTargetLabels()
+	labels := m.TextTargetLabels()
 	if len(labels) != 1 || labels[0] != "Issue body" {
 		// The maintainer authored no comment here, so the body is the only
 		// target — write access does not make foreign comments editable.
@@ -124,12 +124,12 @@ func TestIssueBodyEditableWithWriteAccess(t *testing.T) {
 func TestSingleTargetEditsWithoutThePicker(t *testing.T) {
 	m := editable(t, forge.Capabilities{Login: "me"}, true)
 	// Only the own comment qualifies, so 'e' opens it straight away.
-	msg := runMsg(t, m.Update(key("e")))
+	msg := runMsg(t, m.Update(key("E")))
 	req, ok := msg.(EditTextRequestMsg)
 	if !ok {
 		t.Fatalf("msg = %T", msg)
 	}
-	if m.EditPickerOpen() {
+	if m.TextPickerOpen() {
 		t.Fatal("a single target must not raise the picker")
 	}
 	if req.Target.Kind != forge.TextComment || req.Target.ID != "2" || req.Target.Issue != 2 {
@@ -143,13 +143,13 @@ func TestSingleTargetEditsWithoutThePicker(t *testing.T) {
 func TestSeveralTargetsRaiseThePicker(t *testing.T) {
 	// bo authored the issue *and* a comment: two targets, so 'e' asks which.
 	m := editable(t, forge.Capabilities{Login: "bo", Push: true}, true)
-	if cmd := m.Update(key("e")); cmd != nil {
+	if cmd := m.Update(key("E")); cmd != nil {
 		t.Fatal("the picker must open instead of editing immediately")
 	}
-	if !m.EditPickerOpen() {
-		t.Fatal("'e' with several targets must raise the picker")
+	if !m.TextPickerOpen() {
+		t.Fatal("'E' with several targets must raise the picker")
 	}
-	if labels := m.EditTargetLabels(); len(labels) != 2 || labels[0] != "Issue body" {
+	if labels := m.TextTargetLabels(); len(labels) != 2 || labels[0] != "Issue body" {
 		t.Fatalf("targets = %v", labels)
 	}
 	if !strings.Contains(m.View(), "Edit which text?") {
@@ -165,28 +165,28 @@ func TestSeveralTargetsRaiseThePicker(t *testing.T) {
 	if req.Target.Kind != forge.TextComment || req.Target.ID != "2" {
 		t.Fatalf("target = %+v", req.Target)
 	}
-	if m.EditPickerOpen() {
+	if m.TextPickerOpen() {
 		t.Fatal("the picker must close after a choice")
 	}
 }
 
 func TestEditPickerEscapeOpensNothing(t *testing.T) {
 	m := editable(t, forge.Capabilities{Login: "bo", Push: true}, true)
-	m.Update(key("e"))
+	m.Update(key("E"))
 	if cmd := m.Update(key("esc")); cmd != nil {
 		t.Fatal("esc must not open a buffer")
 	}
-	if m.EditPickerOpen() {
+	if m.TextPickerOpen() {
 		t.Fatal("esc must close the picker")
 	}
 }
 
 func TestNewCommentNeedsOnlyALogin(t *testing.T) {
 	m := editableWith(t, forge.Capabilities{Login: "stranger"}, true, false)
-	if m.canEditAnything() {
+	if m.canEditText() {
 		t.Fatal("a stranger may edit nothing here")
 	}
-	msg := runMsg(t, m.Update(key("c")))
+	msg := runMsg(t, m.Update(key("n")))
 	req, ok := msg.(EditTextRequestMsg)
 	if !ok {
 		t.Fatalf("msg = %T", msg)
@@ -200,8 +200,8 @@ func TestNewCommentNeedsOnlyALogin(t *testing.T) {
 	// The action is discoverable in the menu, the edit action is not.
 	var hasComment, hasEdit bool
 	for _, a := range m.Actions() {
-		hasComment = hasComment || a[0] == "c"
-		hasEdit = hasEdit || a[0] == "e"
+		hasComment = hasComment || a[0] == "n"
+		hasEdit = hasEdit || a[0] == "E"
 	}
 	if !hasComment || hasEdit {
 		t.Fatalf("actions = %v", m.Actions())
@@ -209,16 +209,15 @@ func TestNewCommentNeedsOnlyALogin(t *testing.T) {
 }
 
 func TestFailedProbeHidesEverything(t *testing.T) {
-	m := editable(t, forge.Capabilities{Login: "bo", Push: true}, true)
-	if !m.canEditAnything() {
-		t.Fatal("precondition: bo may edit")
-	}
-	m.SetCapabilities(forge.CapabilitiesMsg{Err: errTest})
-	if m.canEditAnything() || m.canComment() {
-		t.Fatal("a failed probe must hide every edit action")
-	}
+	// The probe answers with nothing but an error: no capabilities arrived,
+	// so the gate stays shut. ('r' retries it — #2088's startMeta.)
+	m := editableWith(t, forge.Capabilities{}, false, true)
+	m.SetRepoMeta(forge.RepoMetaMsg{Err: errTest})
 	if _, probed := m.Capabilities(); probed {
 		t.Fatal("a failed probe is not an answer")
+	}
+	if m.canEditText() || m.canComment() {
+		t.Fatal("a failed probe must hide every edit action")
 	}
 }
 
@@ -232,15 +231,15 @@ func (errTestType) Error() string { return "probe failed" }
 func TestEditActionsAreListOnlyInTheDetail(t *testing.T) {
 	m := filled(t)
 	m.SetSize(90, 40)
-	m.SetCapabilities(forge.CapabilitiesMsg{Caps: forge.Capabilities{Login: "bo", Push: true}})
+	m.SetRepoMeta(forge.RepoMetaMsg{Caps: forge.Capabilities{Login: "bo", Push: true}})
 	// On the list — no detail open — nothing is editable and the keys keep
 	// their list meanings.
-	if m.canEditAnything() {
+	if m.canEditText() {
 		t.Fatal("the list view offers no edit targets")
 	}
 	for _, a := range m.Actions() {
-		if a[0] == "e" || a[0] == "c" {
-			t.Fatalf("the list must not carry the detail's edit actions: %v", a)
+		if a[0] == "E" || a[0] == "n" {
+			t.Fatalf("the list must not carry the detail's text-edit actions: %v", a)
 		}
 	}
 }

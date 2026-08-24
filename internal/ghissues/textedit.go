@@ -1,10 +1,13 @@
 package ghissues
 
-// edit.go is the pane's half of "edit my own issue texts" (#2087). The pane
+// textedit.go is the pane's half of "edit my own issue texts" (#2087). The pane
 // itself never talks to a forge and never opens a buffer: it decides *what*
 // may be edited — the capability + ownership gate — and emits one
 // EditTextRequestMsg naming the target and its current text. The app answers
 // by opening a markdown buffer bound to that target (internal/app/forgeedit.go).
+//
+// Not to be confused with mutations.go's label/assignee *editors*: those change
+// an issue's metadata through the forge's mutation API, this changes prose.
 //
 // Which texts are offered:
 //
@@ -15,8 +18,9 @@ package ghissues
 //   - a new comment, which needs no more than a resolved login — anyone who
 //     can authenticate against the forge may comment.
 //
-// Without a successful capability probe nothing is offered: an action that
-// fails on push would be worse than an absent one.
+// Without a successful capability probe (#2088's one-shot repository metadata
+// fetch, which carries the login too) nothing is offered: an action that fails
+// on push would be worse than an absent one.
 
 import (
 	"strings"
@@ -37,21 +41,6 @@ type EditTextRequestMsg struct {
 	Title  string
 }
 
-// SetCapabilities applies one finished capability probe (#2087). A failed
-// probe leaves the pane with no capabilities at all, which is exactly the
-// state that hides every edit action.
-func (m *Model) SetCapabilities(msg forge.CapabilitiesMsg) {
-	if msg.Err != nil {
-		m.caps, m.capsOK = forge.Capabilities{}, false
-		return
-	}
-	m.caps, m.capsOK = msg.Caps, true
-}
-
-// Capabilities returns the probed permissions and whether a probe succeeded
-// (tests).
-func (m *Model) Capabilities() (forge.Capabilities, bool) { return m.caps, m.capsOK }
-
 // canComment reports whether the "new comment" action applies: a resolved
 // login is enough — commenting needs no repository permission.
 func (m *Model) canComment() bool { return m.capsOK && m.caps.Login != "" }
@@ -68,27 +57,27 @@ func (m *Model) canEditBody(is *forge.Issue) bool {
 	return m.caps.Login != "" && is.Author == m.caps.Login
 }
 
-// editTarget is one row of the edit picker: the forge text, the text it
+// textTarget is one row of the edit picker: the forge text, the text it
 // currently holds, and the label the overlay lists it under.
-type editTarget struct {
+type textTarget struct {
 	target forge.TextTarget
 	base   string
 	label  string
 }
 
-// editTargets lists what the open detail offers to edit, in reading order:
+// textTargets lists what the open detail offers to edit, in reading order:
 // the issue body first, then the own comments of the loaded timeline in
 // timeline order. It is empty when nothing is editable — the action then
 // never appears — and always empty before the capability probe answered: a
 // permission the pane could not read is never guessed at.
-func (m *Model) editTargets() []editTarget {
+func (m *Model) textTargets() []textTarget {
 	is := m.Selected()
 	if is == nil || !m.detail || m.tab != TabIssues || !m.capsOK {
 		return nil
 	}
-	var out []editTarget
+	var out []textTarget
 	if m.canEditBody(is) {
-		out = append(out, editTarget{
+		out = append(out, textTarget{
 			target: forge.TextTarget{Kind: forge.TextIssueBody, Issue: is.Number},
 			base:   is.Body,
 			label:  "Issue body",
@@ -101,7 +90,7 @@ func (m *Model) editTargets() []editTarget {
 		if e.Kind != forge.TimelineComment || !e.Own || e.ID == "" {
 			continue
 		}
-		out = append(out, editTarget{
+		out = append(out, textTarget{
 			target: forge.TextTarget{Kind: forge.TextComment, Issue: is.Number, ID: e.ID},
 			base:   e.Body,
 			label:  "Your comment — " + summarize(e.Body),
@@ -134,26 +123,42 @@ func summarize(body string) string {
 	return line
 }
 
-// canEditAnything reports whether the edit action ('e') applies at all.
-func (m *Model) canEditAnything() bool { return len(m.editTargets()) > 0 }
+// canEditText reports whether the text-edit action ('E') applies at all.
+func (m *Model) canEditText() bool { return len(m.textTargets()) > 0 }
 
-// startEdit is the detail view's 'e': with a single editable text it opens
+// textEditActions are the detail view's editing entries (#2087), appended to
+// the action table only when they apply. Unlike the mutation actions (#2088),
+// which stay listed and explain a closed permission gate, these are absent:
+// "you may not edit someone else's comment" is not a permission to fix, it is
+// simply not your text.
+func (m *Model) textEditActions() []action {
+	var acts []action
+	if m.canEditText() {
+		acts = append(acts, act("E", "edit text", "Edit the issue body or one of your comments", (*Model).startTextEdit))
+	}
+	if m.canComment() {
+		acts = append(acts, act("n", "new comment", "Write a new comment", (*Model).startComment))
+	}
+	return acts
+}
+
+// startTextEdit is the detail view's 'E': with a single editable text it opens
 // straight away, with several it raises the picker. Choosing from a list of
 // one would be a keystroke that never carries information.
-func (m *Model) startEdit() tea.Cmd {
-	targets := m.editTargets()
+func (m *Model) startTextEdit() tea.Cmd {
+	targets := m.textTargets()
 	switch len(targets) {
 	case 0:
 		return nil
 	case 1:
-		return m.requestEdit(targets[0])
+		return m.requestTextEdit(targets[0])
 	}
-	m.ov, m.ovCursor, m.ovTop = ovEdit, 0, 0
+	m.ov, m.ovCursor, m.ovTop = ovTextEdit, 0, 0
 	m.clampOverlay()
 	return nil
 }
 
-// startComment is the detail view's 'c': compose a new comment on the open
+// startComment is the detail view's 'n': compose a new comment on the open
 // issue. The buffer starts empty — there is no text to prefill — and the
 // stale-base check does not apply to a text that does not exist yet.
 func (m *Model) startComment() tea.Cmd {
@@ -161,13 +166,13 @@ func (m *Model) startComment() tea.Cmd {
 	if is == nil || !m.canComment() {
 		return nil
 	}
-	return m.requestEdit(editTarget{
+	return m.requestTextEdit(textTarget{
 		target: forge.TextTarget{Kind: forge.TextNewComment, Issue: is.Number},
 	})
 }
 
-// requestEdit emits the app's open-buffer request for one target.
-func (m *Model) requestEdit(t editTarget) tea.Cmd {
+// requestTextEdit emits the app's open-buffer request for one target.
+func (m *Model) requestTextEdit(t textTarget) tea.Cmd {
 	title := ""
 	if is := m.Selected(); is != nil {
 		title = is.Title
@@ -176,29 +181,29 @@ func (m *Model) requestEdit(t editTarget) tea.Cmd {
 	return func() tea.Msg { return msg }
 }
 
-// editPickerKey handles the edit picker overlay: enter opens the selected
+// textPickerKey handles the edit picker overlay: enter opens the selected
 // text, esc closes without opening anything.
-func (m *Model) editPickerKey(key string) tea.Cmd {
+func (m *Model) textPickerKey(key string) tea.Cmd {
 	switch key {
 	case "enter":
-		targets := m.editTargets()
+		targets := m.textTargets()
 		if m.ovCursor < 0 || m.ovCursor >= len(targets) {
 			m.closeOverlay()
 			return nil
 		}
 		t := targets[m.ovCursor]
 		m.closeOverlay()
-		return m.requestEdit(t)
-	case "esc", "q", "e":
+		return m.requestTextEdit(t)
+	case "esc", "q", "E":
 		m.closeOverlay()
 	}
 	return nil
 }
 
-// EditTargetLabels lists the picker's rows (tests, and the proof that the
+// TextTargetLabels lists the picker's rows (tests, and the proof that the
 // gate and the overlay read the same table).
-func (m *Model) EditTargetLabels() []string {
-	targets := m.editTargets()
+func (m *Model) TextTargetLabels() []string {
+	targets := m.textTargets()
 	out := make([]string, 0, len(targets))
 	for _, t := range targets {
 		out = append(out, t.label)
@@ -206,8 +211,8 @@ func (m *Model) EditTargetLabels() []string {
 	return out
 }
 
-// EditPickerOpen reports whether the edit picker owns the keyboard (tests).
-func (m *Model) EditPickerOpen() bool { return m.ov == ovEdit }
+// TextPickerOpen reports whether the edit picker owns the keyboard (tests).
+func (m *Model) TextPickerOpen() bool { return m.ov == ovTextEdit }
 
 // RefreshAfterSave re-fetches what a successful push changed (#2087): the
 // listing — an edited body lives in the issue listing, not in the timeline —

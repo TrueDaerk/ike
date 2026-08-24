@@ -7,8 +7,10 @@ package forge
 // interface (EditIssueBody / EditComment / CreateComment) so each binding
 // spells them in its own dialect; everything neutral is here.
 //
-// Package rule unchanged: nothing runs from Update — SaveTextCmd and
-// CapabilitiesCmd wrap the calls, and both resolve to one message.
+// Package rule unchanged: nothing runs from Update — SaveTextCmd wraps the
+// calls and resolves to one message. The permissions the edit gating reads
+// come from #2088's one-shot repository-metadata probe (mutate.go), which
+// already carries Capabilities.
 
 import (
 	"errors"
@@ -161,30 +163,4 @@ func saveText(f Forge, path string, target TextTarget, base, body string, force 
 		msg.Err = err
 	}
 	return msg
-}
-
-// CapabilitiesMsg carries the probed repository permissions and the
-// authenticated login back into Update (#2087): the issues window gates its
-// edit actions on them. A failed probe resolves to Err and leaves every
-// mutating action hidden — the pane never guesses a permission it could not
-// read.
-type CapabilitiesMsg struct {
-	Caps Capabilities
-	Err  error
-}
-
-// CapabilitiesCmd probes the repository's permissions once, resolving to one
-// CapabilitiesMsg.
-func CapabilitiesCmd(dir string) tea.Cmd {
-	return func() tea.Msg {
-		f, setup := Detect(dir)
-		if setup != "" {
-			return CapabilitiesMsg{Err: errors.New(setup)}
-		}
-		caps, err := f.Capabilities()
-		if err != nil {
-			return CapabilitiesMsg{Err: err}
-		}
-		return CapabilitiesMsg{Caps: caps}
-	}
 }
