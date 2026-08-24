@@ -38,6 +38,18 @@ type Item struct {
 	// keeps the history entry — are visually distinct. Single-cell glyphs
 	// only; "" renders the default.
 	AuxGlyph string
+	// Preview points the row at a source location (#2047). In a PreviewMode
+	// open the palette renders a file excerpt around it beside the list, so
+	// one sees where activating the row leads before jumping. The zero value
+	// (empty Path) renders an empty preview column.
+	Preview PreviewTarget
+}
+
+// PreviewTarget is a row's source location for the palette's code-preview
+// column (#2047): Line is 1-based, matching what the excerpt renderer expects.
+type PreviewTarget struct {
+	Path string
+	Line int
 }
 
 // Mode is a palette sub-mode selected by a single leading prefix rune. It turns
@@ -79,6 +91,18 @@ type Completer interface {
 // returning false leaves the tab press inert as before.
 type ItemCompleter interface {
 	CompleteItem(query string, sel Item) (string, bool)
+}
+
+// PreviewMode is an optional Mode extension (#2047): a locked mode whose rows
+// carry a source location (Item.Preview). The palette then splits its box —
+// result list on the left, a code excerpt of the selected row's target on the
+// right, separated by a vertical rule — and bounds the result window to
+// [ui.MinResultRows, ui.MaxResultRows], so the popup neither collapses on two
+// hits nor grows past forty. The find-usages list enables it; every other mode
+// keeps the single-column layout.
+type PreviewMode interface {
+	// CodePreview reports whether the preview column is active for this open.
+	CodePreview() bool
 }
 
 // DigitPicker is an optional Mode extension (#2023): a locked mode whose

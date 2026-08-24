@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/codepreview"
 	"ike/internal/theme"
 	"ike/internal/ui"
 )
@@ -80,6 +81,10 @@ type Palette struct {
 	maxResults int
 	accent     string         // config override; "" follows the theme
 	pal        *theme.Palette // active theme (Roadmap 0110); nil = default
+
+	// prev caches the code-preview window of a PreviewMode open (#2047), so
+	// walking the result list re-reads a file only when the target moves.
+	prev codepreview.Cache
 }
 
 // SetPalette threads the active theme palette in (Roadmap 0110); chrome colors
@@ -274,10 +279,27 @@ func (p *Palette) AdjustSize(ddw, ddh int) {
 }
 
 // visibleRows is the effective result-window height: the configured
-// maxResults plus the user's stored resize delta, floored at 3 (#774).
+// maxResults plus the user's stored resize delta, floored at 3 (#774). A
+// preview open (#2047) re-bounds it to [ui.MinResultRows, ui.MaxResultRows] —
+// the popup keeps eleven rows on two hits and stops growing at forty.
 func (p *Palette) visibleRows() int {
 	_, dh := p.sizes.Get(winKind)
-	return ui.ClampDelta(p.maxResults, dh, 3, 99)
+	n := ui.ClampDelta(p.maxResults, dh, 3, 99)
+	if p.previewing() {
+		n = ui.ClampResultRows(n)
+	}
+	return n
+}
+
+// previewing reports whether this open renders the code-preview column
+// (#2047): a locked, centered PreviewMode that says so, and no side column —
+// the two-column layouts are mutually exclusive.
+func (p *Palette) previewing() bool {
+	if p.anchored || len(p.sideItems) > 0 {
+		return false
+	}
+	pm, ok := p.locked.(PreviewMode)
+	return ok && pm.CodePreview()
 }
 
 // Paste inserts a pasted block into the query at the cursor and returns any
@@ -610,6 +632,16 @@ func (p *Palette) Click(x, y int) tea.Cmd {
 			return nil // the divider strip
 		}
 	}
+	if p.previewing() {
+		// Right of the result column lies the code preview (#2047), which is
+		// inert — a press there must not activate the row behind it.
+		if listW, previewW := previewSplit(inner); previewW > 0 {
+			if x >= listW {
+				return nil
+			}
+			mainW = listW
+		}
+	}
 	idx := p.top + (y - 2)
 	if idx < 0 || idx >= len(p.items) {
 		return nil
@@ -622,6 +654,44 @@ func (p *Palette) Click(x, y int) tea.Cmd {
 		return p.auxCmd()
 	}
 	return p.activate()
+}
+
+// Code-preview geometry (#2047), shared by the renderer and the click
+// mapping: below minPreviewSplit the box is too narrow to carry two columns
+// and the list keeps the whole width; otherwise the preview takes two fifths,
+// capped so a wide terminal spends the extra cells on the result rows. The
+// divider plus its two spaces cost three more cells.
+const (
+	minPreviewSplit = 64
+	maxPreviewWidth = 60
+	minPreviewWidth = 20
+)
+
+// previewSplit divides the inner content width into the result column and the
+// code-preview column; previewW is 0 when the box is too narrow to split.
+func previewSplit(inner int) (listW, previewW int) {
+	if inner < minPreviewSplit {
+		return inner, 0
+	}
+	previewW = inner * 2 / 5
+	if previewW > maxPreviewWidth {
+		previewW = maxPreviewWidth
+	}
+	if previewW < minPreviewWidth {
+		previewW = minPreviewWidth
+	}
+	return inner - previewW - 3, previewW
+}
+
+// previewRows renders the code excerpt around the selected row's target
+// (#2047). A row without a location — or a file that cannot be read — renders
+// an empty column or a dim notice rather than failing the frame.
+func (p *Palette) previewRows(width, height int) []string {
+	var target PreviewTarget
+	if p.selected >= 0 && p.selected < len(p.items) {
+		target = p.items[p.selected].Preview
+	}
+	return p.prev.Render(target.Path, target.Line, width, height, p.theme())
 }
 
 // sideWidth is the left column's width for an inner content width (#778),
@@ -764,6 +834,19 @@ func (p *Palette) View() string {
 	prompt := dim.Render(p.promptGlyph()) + " " + p.queryView(inner-2)
 	sep := dim.Render(strings.Repeat("─", inner))
 	rows := p.list(inner, true)
+	// A PreviewMode open (#2047) renders the code excerpt of the selected
+	// row's target beside the list, separated by the same dim rule. The list
+	// is padded to the full result window, so the popup keeps its height with
+	// no matches at all.
+	if p.previewing() {
+		listW, previewW := previewSplit(inner)
+		if previewW > 0 {
+			h := p.visibleRows()
+			left := ui.PadRows(strings.Split(p.list(listW, true), "\n"), h)
+			rule := dim.Render("│")
+			rows = ui.JoinColumns(left, listW, rule, p.previewRows(previewW, h))
+		}
+	}
 	// A SideMode open (#778) renders the left column (e.g. Recent Projects)
 	// beside the main list, separated by a dim rule. The accent selection
 	// marker follows the column focus (#1532): the unfocused column keeps its
@@ -1112,6 +1195,11 @@ func (p *Palette) boxWidth() int {
 		w, floor, room = p.anchorW, minAnchorWidth, p.width-p.anchorX
 	} else {
 		w, floor, room = p.width/2, minBoxWidth, p.width-4
+		if p.previewing() {
+			// Two columns need more than half the terminal (#2047); the
+			// popup_max_width cap below still bounds it.
+			w = p.width * 3 / 4
+		}
 		// Width cap (#932): the default width stops growing at maxWidth on
 		// large terminals; extra width just adds margin around the box.
 		if p.maxWidth > 0 && w > p.maxWidth {

@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-08-21T00:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 
 # Command Palette
@@ -434,6 +434,37 @@ floor (`minAnchorWidth`). Each result row shows the highlighted title on the lef
 and the command's key binding as a **highlighted chip pinned to the right** (a
 key-cap style, distinct from the dim matched-character accent). The title is
 truncated first, so the binding chip is never dropped on a narrow box.
+
+## Code preview column (#2047)
+
+An optional `Mode` extension, `PreviewMode`, turns a locked, centered open
+into a **two-column** box: the result list on the left, a source excerpt of
+the selected row's target on the right, separated by a dim vertical rule. The
+find-usages popup (`internal/app/references.go`) is its first consumer, so one
+sees where a usage sits before jumping to it.
+
+- **Opt-in per mode.** `CodePreview() bool` enables it; rows carry their target
+  in `Item.Preview` (`PreviewTarget{Path, Line}`, `Line` 1-based). A row
+  without a target renders an empty column. It is mutually exclusive with the
+  `SideMode` left column and off for anchored opens.
+- **Height bounds.** A preview open re-bounds `visibleRows()` to
+  `[ui.MinResultRows, ui.MaxResultRows]` = **11 to 40**: the box keeps eleven
+  rows with two (or zero) results and stops growing at forty, the list
+  scrolling inside it. The list block is blank-padded to that height, so the
+  popup's size no longer flickers with the result count.
+- **Geometry.** The centered box takes three quarters of the terminal instead
+  of half (`ui.popup_max_width` still caps it); `previewSplit` gives the
+  excerpt two fifths of the content width (capped at 60 cells) and drops the
+  column entirely below 64 cells of content. Presses in the excerpt are inert
+  — `Click` rejects `x` past the list column so the row behind it never fires.
+- **Rendering.** `internal/codepreview` reads only the window it needs (never
+  the whole file), caches the last one so walking the list re-reads only when
+  the target moves, centers the target line — clamped at the file's head —
+  highlights it, and returns exactly the requested number of rows. An
+  unreadable, deleted, or directory target renders a dim `preview unavailable`
+  notice instead of failing the frame. `ui.JoinColumns` / `ui.PadRows` are the
+  shared two-column seam, used by the [find-in-path
+  overlay](/architecture/search.md) too.
 
 ## Configuration
 

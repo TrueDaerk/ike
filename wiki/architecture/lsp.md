@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-08-21T12:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -384,7 +384,14 @@ which also supplies a trimmed preview line — and sends `ReferencesMsg`. The ap
 routes by count: none → info toast, one → navigate directly, more → the palette
 opened locked to a references mode (`internal/app/references.go`) listing
 `path:line` + preview, fuzzy-filterable; activating an entry emits the same
-`DefinitionMsg` the go-to-definition path navigates with. The location→
+`DefinitionMsg` the go-to-definition path navigates with. That popup carries
+the palette's **code-preview column** (#2047): the references mode implements
+`palette.PreviewMode` and puts each row's target into `Item.Preview`, so the
+box splits into the result list and — behind a vertical rule — an excerpt of
+the selected usage's file, following the selection as it moves. The result
+window is bounded to eleven rows minimum and forty maximum, so two usages do
+not collapse the box and three hundred scroll inside it instead of growing it
+(see [Command palette § code preview](./command-palette.md)). The location→
 reference conversion is shared (`locationsToRefs`), and go-to-definition
 reuses it for the **multi-target picker** (#279): more than one definition
 site (interface implementations, build-tag variants) opens the same palette

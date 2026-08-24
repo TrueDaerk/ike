@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/codepreview"
 	"ike/internal/histories"
 	"ike/internal/locations"
 	"ike/internal/search"
@@ -103,6 +104,10 @@ type Model struct {
 	errText   string
 
 	list locations.List
+
+	// prev caches the code-preview window rendered beside the list (#2047),
+	// so following the cursor re-reads the file only when the target moves.
+	prev codepreview.Cache
 
 	// lay records, during View, which content rows the mouse can hit; Click
 	// hit-tests against it.
@@ -395,6 +400,76 @@ func (m *Model) setFocus(f field) {
 type layoutInfo struct {
 	query, replace, toggles, include, exclude int
 	listTop, listRows                         int
+	// listW is the result column's width (#2047): a press right of it lands
+	// in the code preview, which is not clickable.
+	listW int
+}
+
+// maxBoxWidth caps the centered overlay. It went from 100 to 120 with the
+// code-preview column (#2047): two columns want more room, and on a narrower
+// terminal the width-12 margin still decides.
+const maxBoxWidth = 120
+
+// boxWidth is the overlay's outer width: the terminal minus a margin, capped
+// and floored to stay readable.
+func (m *Model) boxWidth() int {
+	w := m.width - 12
+	if w > maxBoxWidth {
+		w = maxBoxWidth
+	}
+	if w < 40 {
+		w = min(40, m.width-2)
+	}
+	return w
+}
+
+// Preview-column geometry (#2047). Below minSplitWidth the overlay is too
+// narrow to carry two columns and renders the list alone; otherwise the
+// preview takes two fifths of the content width, capped so a wide terminal
+// spends the extra cells on the match rows.
+const (
+	minSplitWidth   = 64
+	maxPreviewWidth = 60
+	minPreviewWidth = 20
+)
+
+// splitWidths divides the overlay's content width into the result column and
+// the code-preview column; previewW is 0 when the box is too narrow to split
+// (the divider plus its two spaces cost three more cells).
+func splitWidths(innerW int) (listW, previewW int) {
+	if innerW < minSplitWidth {
+		return innerW, 0
+	}
+	previewW = innerW * 2 / 5
+	if previewW > maxPreviewWidth {
+		previewW = maxPreviewWidth
+	}
+	if previewW < minPreviewWidth {
+		previewW = minPreviewWidth
+	}
+	return innerW - previewW - 3, previewW
+}
+
+// resultsBody renders the fixed-height results block: the match list on the
+// left, padded to listH rows so the overlay keeps its size with few or no
+// matches (#2047), and — when there is room — the selected match's file
+// excerpt on the right, separated by a vertical rule.
+func (m *Model) resultsBody(listW, previewW, listH int, pal *theme.Palette) string {
+	var left []string
+	if body := m.list.Render(listW, listH, pal, m.displayPath); body != "" {
+		left = strings.Split(body, "\n")
+	}
+	left = ui.PadRows(left, listH)
+	if previewW <= 0 {
+		return strings.Join(left, "\n")
+	}
+	path, line := "", 0
+	if it, ok := m.list.Current(); ok {
+		path, line = it.Path, it.Line
+	}
+	right := m.prev.Render(path, line, previewW, listH, pal)
+	rule := lipgloss.NewStyle().Foreground(pal.Border).Render("│")
+	return ui.JoinColumns(left, listW, rule, right)
 }
 
 // toggleSpans mirrors togglesRow's layout: the half-open x range of each
@@ -451,7 +526,8 @@ func (m *Model) Click(x, y int) tea.Cmd {
 			break
 		}
 	}
-	if m.lay.listTop >= 0 && cy >= m.lay.listTop && cy < m.lay.listTop+m.lay.listRows {
+	inList := m.lay.listW <= 0 || cx < m.lay.listW // right of it lies the preview (#2047)
+	if inList && m.lay.listTop >= 0 && cy >= m.lay.listTop && cy < m.lay.listTop+m.lay.listRows {
 		if idx, ok := m.list.ItemAt(cy - m.lay.listTop); ok {
 			if idx == m.list.Cursor() {
 				return m.openCurrent()
@@ -576,13 +652,7 @@ func (m *Model) View() string {
 		return ""
 	}
 	pal := m.theme()
-	boxW := m.width - 12
-	if boxW > 100 {
-		boxW = 100
-	}
-	if boxW < 40 {
-		boxW = min(40, m.width-2)
-	}
+	boxW := m.boxWidth()
 	// The box renders boxW-2 TOTAL cells including its border (lipgloss
 	// counts the border inside Width), minus 2 border and 2 padding cells:
 	// rows wider than boxW-6 soft-wrap onto a second line (#971).
@@ -609,15 +679,12 @@ func (m *Model) View() string {
 	rows = append(rows, m.inputRow("Exclude", m.exclude, fieldExclude, innerW))
 	rows = append(rows, "")
 
-	listH := m.height/2 - 9
-	if listH < 4 {
-		listH = 4
-	}
-	if body := m.list.Render(innerW, listH, pal, m.displayPath); body != "" {
-		lay.listTop = len(rows)
-		lay.listRows = strings.Count(body, "\n") + 1
-		rows = append(rows, body)
-	}
+	listH := ui.ClampResultRows(m.height/2 - 9)
+	listW, previewW := splitWidths(innerW)
+	lay.listTop = len(rows)
+	lay.listRows = listH
+	lay.listW = listW
+	rows = append(rows, m.resultsBody(listW, previewW, listH, pal))
 	m.lay = lay
 	if pre := m.previewRows(innerW); len(pre) > 0 {
 		rows = append(rows, "")
