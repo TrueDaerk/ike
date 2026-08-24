@@ -162,6 +162,26 @@ func TestAdvanceWorksAfterClose(t *testing.T) {
 	}
 }
 
+// TestReopenRestoresCursor guards #2054: closing and reopening the overlay
+// within the same session restores the result cursor to the same match, not
+// just the query — the rescan the reopen triggers would otherwise reset it.
+func TestReopenRestoresCursor(t *testing.T) {
+	m := opened(t)
+	typeText(m, "needle")
+	feed(m, match("a.go", 3), match("b.go", 7))
+	m.Update(key("down")) // select b.go
+	if it, _ := m.list.Current(); it.Path != "b.go" {
+		t.Fatalf("setup: cursor on %q, want b.go", it.Path)
+	}
+	m.Update(key("esc"))
+
+	m.Open(t.TempDir())
+	feed(m, match("a.go", 3), match("b.go", 7)) // reopen rescans
+	if it, ok := m.list.Current(); !ok || it.Path != "b.go" {
+		t.Fatalf("cursor after reopen = %+v, want b.go", it)
+	}
+}
+
 func TestTogglesRescan(t *testing.T) {
 	m := opened(t)
 	typeText(m, "needle")

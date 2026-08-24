@@ -7,6 +7,10 @@
 // query), so no debounce is needed. Mirroring the marks-store trade-off
 // (#1151): failing to persist must never disrupt editing, so errors are
 // swallowed and a malformed file simply reads as empty.
+//
+// The same file also carries the find-in-path overlay's last full search
+// state (#2054: query, toggles, globs, result cursor) alongside the recall
+// buckets — see FindState.
 package histories
 
 import (
@@ -34,17 +38,35 @@ const (
 	FindInPath = "findInPath"
 )
 
-// envelope is the on-disk schema: named buckets, newest entry first.
+// FindState is the find-in-path overlay's last full search state (#2054):
+// query, match-mode toggles, include/exclude globs, and the selected result's
+// index. Persisting it lets reopening the overlay — even after a restart —
+// resume the last search instead of starting blank, mirroring JetBrains'
+// "resume last search" behavior.
+type FindState struct {
+	Query         string `json:"query"`
+	Include       string `json:"include"`
+	Exclude       string `json:"exclude"`
+	CaseSensitive bool   `json:"caseSensitive"`
+	WholeWord     bool   `json:"wholeWord"`
+	Regex         bool   `json:"regex"`
+	Cursor        int    `json:"cursor"`
+}
+
+// envelope is the on-disk schema: named buckets, newest entry first, plus the
+// find-in-path overlay's last state.
 type envelope struct {
-	Version int                 `json:"version"`
-	Buckets map[string][]string `json:"buckets"`
+	Version   int                 `json:"version"`
+	Buckets   map[string][]string `json:"buckets"`
+	FindState *FindState          `json:"findState,omitempty"`
 }
 
 // Store holds the recall buckets. The zero value is ready to use; the file is
 // read on first access.
 type Store struct {
-	loaded  bool
-	buckets map[string][]string
+	loaded    bool
+	buckets   map[string][]string
+	findState *FindState
 	// file overrides the on-disk location (tests); empty means the default.
 	file string
 }
@@ -91,16 +113,17 @@ func (s *Store) ensure() {
 			s.buckets[name] = clean
 		}
 	}
+	s.findState = env.FindState
 }
 
 // save writes the current buckets; errors are swallowed (see package comment).
 func (s *Store) save() {
 	file := s.path()
-	if len(s.buckets) == 0 {
+	if len(s.buckets) == 0 && s.findState == nil {
 		_ = os.Remove(file)
 		return
 	}
-	data, err := json.Marshal(envelope{Version: version, Buckets: s.buckets})
+	data, err := json.Marshal(envelope{Version: version, Buckets: s.buckets, FindState: s.findState})
 	if err != nil {
 		return
 	}
@@ -137,4 +160,22 @@ func (s *Store) Push(bucket, q string) {
 func (s *Store) All(bucket string) []string {
 	s.ensure()
 	return append([]string(nil), s.buckets[bucket]...)
+}
+
+// SaveFindState persists the find-in-path overlay's last state (#2054),
+// replacing whatever was there before, and persists.
+func (s *Store) SaveFindState(st FindState) {
+	s.ensure()
+	cp := st
+	s.findState = &cp
+	s.save()
+}
+
+// LoadFindState returns the persisted find-in-path state, if any.
+func (s *Store) LoadFindState() (FindState, bool) {
+	s.ensure()
+	if s.findState == nil {
+		return FindState{}, false
+	}
+	return *s.findState, true
 }

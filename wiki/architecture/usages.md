@@ -60,6 +60,10 @@ order, within-file order untouched); each reference row shows 1-based
 - Mouse mirrors the siblings (#514): click selects, double-click within
   400 ms activates, wheel scrolls dragging the cursor along; the unfocused
   cursor row renders muted (#1034).
+- `y` (or `cmd+c`/`super+c`) **copies the marked row** (#2071): a reference
+  as `path:line:col  preview` (path project-relative), a file header as its
+  path. The pane emits `usages.CopyMsg`; the root model writes it through the
+  shared `copyToClipboard` seam and toasts "copied usage".
 - `r` **refreshes**: it dispatches the carried `Refresh` continuation, which
   re-runs the references request for the stored `(path, position)` the
   result was created from. Best-effort by design: after edits the stored

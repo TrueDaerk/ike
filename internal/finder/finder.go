@@ -103,6 +103,13 @@ type Model struct {
 	truncated bool
 	errText   string
 
+	// pendingCursor is the result index to restore once the running scan
+	// completes (#2054): set by Open when reopening — either from the
+	// in-memory list's cursor (same session) or the persisted state (a
+	// fresh session) — and consumed, then reset to -1, in Apply's DoneMsg.
+	// -1 means nothing to restore.
+	pendingCursor int
+
 	list locations.List
 
 	// prev caches the code-preview window rendered beside the list (#2047),
@@ -123,7 +130,7 @@ type Model struct {
 
 // New returns a closed finder driving svc.
 func New(svc *search.Service) *Model {
-	return &Model{svc: svc, histIdx: -1}
+	return &Model{svc: svc, histIdx: -1, pendingCursor: -1}
 }
 
 // SetPalette threads the active theme in.
@@ -140,12 +147,32 @@ func (m *Model) SetSize(w, h int) { m.width, m.height = w, h }
 
 // Open shows the finder rooted at root, keeping the previous query and
 // toggles (JetBrains re-opens with the last search) but clearing results.
+//
+// The result cursor is restored too (#2054): on a fresh session (histStore
+// injected, first Open) it comes from the persisted find state, which also
+// seeds the query, toggles and globs; on any later reopen within the same
+// session it comes from wherever the in-memory list's cursor already sat.
+// Either way the target lands once the reopened scan's results are in (see
+// Apply's DoneMsg case).
 func (m *Model) Open(root string) {
+	restoreCursor := -1
 	if m.histStore != nil && !m.histLoaded {
-		// Seed the recall list from the persisted bucket once (#1171);
-		// afterwards the in-memory list is authoritative for this session.
+		// Seed the recall list and last search state from the persisted
+		// store once (#1171, #2054); afterwards the in-memory state is
+		// authoritative for this session.
 		m.hist = m.histStore.All(histories.FindInPath)
+		if st, ok := m.histStore.LoadFindState(); ok {
+			m.query = st.Query
+			m.include = st.Include
+			m.exclude = st.Exclude
+			m.caseSensitive = st.CaseSensitive
+			m.wholeWord = st.WholeWord
+			m.regex = st.Regex
+			restoreCursor = st.Cursor
+		}
 		m.histLoaded = true
+	} else if m.list.Total() > 0 {
+		restoreCursor = m.list.Cursor()
 	}
 	m.open = true
 	m.replaceMode = false
@@ -156,6 +183,7 @@ func (m *Model) Open(root string) {
 	m.errText = ""
 	m.preselect = m.query != ""
 	m.rescan()
+	m.pendingCursor = restoreCursor
 }
 
 // OpenReplace shows the finder in replace mode (#86): find-in-path plus the
@@ -165,11 +193,24 @@ func (m *Model) OpenReplace(root string) {
 	m.replaceMode = true
 }
 
-// Close hides the overlay. Results are kept for next/prev-match.
+// Close hides the overlay. Results are kept for next/prev-match, and the
+// current search state persists (#2054) so the next Open — even in a later
+// session — resumes it.
 func (m *Model) Close() {
 	m.open = false
 	m.svc.Cancel()
 	m.scanning = false
+	if m.histStore != nil {
+		m.histStore.SaveFindState(histories.FindState{
+			Query:         m.query,
+			Include:       m.include,
+			Exclude:       m.exclude,
+			CaseSensitive: m.caseSensitive,
+			WholeWord:     m.wholeWord,
+			Regex:         m.regex,
+			Cursor:        m.list.Cursor(),
+		})
+	}
 }
 
 // IsOpen reports whether the overlay is shown.
@@ -220,13 +261,20 @@ func (m *Model) Apply(msg tea.Msg) {
 		if msg.Err != nil {
 			m.errText = msg.Err.Error()
 		}
+		if m.pendingCursor >= 0 {
+			m.list.SetCursor(m.pendingCursor)
+			m.pendingCursor = -1
+		}
 	}
 }
 
 // rescan restarts the scan for the current inputs (or clears on an empty
-// query).
+// query). It always drops any pending cursor restore — Open re-arms it right
+// after calling rescan (see there); every other caller is a user-driven edit
+// that invalidates whatever restore target was still pending.
 func (m *Model) rescan() {
 	m.list.Reset()
+	m.pendingCursor = -1
 	m.truncated = false
 	m.errText = ""
 	if strings.TrimSpace(m.query) == "" {

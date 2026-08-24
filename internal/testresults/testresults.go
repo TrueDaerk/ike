@@ -47,6 +47,14 @@ type RerunMsg struct {
 	ID     string
 }
 
+// CopyMsg asks the root model to put Text on the system clipboard; What names
+// the payload for the confirmation toast ("test result"). The panel emits it
+// instead of writing itself, the seam every pane copy action uses (#2071).
+type CopyMsg struct {
+	Text string
+	What string
+}
+
 // node is one result-tree node; res is nil for synthesized parents (groups,
 // a subtest's container that never reported itself).
 type node struct {
@@ -294,6 +302,13 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			return emit(RerunMsg{ID: r.RerunID})
 		}
 		return nil
+	case "y":
+		// vim's yank on the marked row (#2071); the tree row is the copy
+		// target in both columns — the detail text scrolls, it is not marked.
+		return m.copyRow(m.cursor)
+	}
+	if ui.CopyChord(msg.String()) {
+		return m.copyRow(m.cursor)
 	}
 	if m.detailFocus {
 		m.detailKey(msg.String())
@@ -388,6 +403,41 @@ func (m *Model) activate(i int) tea.Cmd {
 		return emit(LocateTestMsg{RerunID: r.RerunID})
 	}
 	return nil
+}
+
+// copyRow puts the marked row on the clipboard through a CopyMsg (#2071):
+// the outcome, the test's full tree path, its duration and — when the parser
+// found one — the failure location. An empty tree copies nothing.
+func (m *Model) copyRow(i int) tea.Cmd {
+	if i < 0 || i >= len(m.rows) {
+		return nil
+	}
+	n := m.rows[i].n
+	text := statusWord(n.status()) + " " + nodePath(n)
+	if r := n.res; r != nil {
+		if r.Elapsed > 0 {
+			text += "  " + formatSecs(r.Elapsed)
+		}
+		if r.File != "" && r.Line > 0 {
+			path := r.File
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(m.dir, path)
+			}
+			text += "  " + path + ":" + strconv.Itoa(r.Line)
+		}
+	}
+	return emit(CopyMsg{Text: text, What: "test result"})
+}
+
+// statusWord names an outcome in copied text, where glyphs read poorly.
+func statusWord(s lang.TestStatus) string {
+	switch s {
+	case lang.TestFail:
+		return "FAIL"
+	case lang.TestSkip:
+		return "SKIP"
+	}
+	return "PASS"
 }
 
 // emit wraps a message into the deferred command shape the pane layer expects.
@@ -541,7 +591,7 @@ func (m *Model) footer(pal *theme.Palette) string {
 	if m.rawMode {
 		mode = "raw"
 	}
-	return lipgloss.NewStyle().Faint(true).Render(clipTo(" enter open · r rerun · f rerun failed · t rerun test · o "+mode+" · tab pane", m.width))
+	return lipgloss.NewStyle().Faint(true).Render(clipTo(" enter open · y copy · r rerun · f rerun failed · t rerun test · o "+mode+" · tab pane", m.width))
 }
 
 // statusGlyph maps an outcome to its marker.

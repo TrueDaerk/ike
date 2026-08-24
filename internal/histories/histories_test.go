@@ -113,6 +113,37 @@ func TestPersistRoundTrip(t *testing.T) {
 	}
 }
 
+// SaveFindState persists alongside the recall buckets; a fresh store at the
+// same file reads it back, and an absent state reports ok = false (#2054).
+func TestFindStateRoundTrip(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "histories.json")
+	s := NewAt(file)
+	if _, ok := s.LoadFindState(); ok {
+		t.Fatal("no state saved yet, LoadFindState must report false")
+	}
+	s.Push(Search, "unrelated") // buckets and find state coexist in one file
+	want := FindState{
+		Query: "needle", Include: "*.go", Exclude: "vendor",
+		CaseSensitive: true, WholeWord: true, Regex: false, Cursor: 2,
+	}
+	s.SaveFindState(want)
+
+	fresh := NewAt(file)
+	got, ok := fresh.LoadFindState()
+	if !ok || got != want {
+		t.Fatalf("LoadFindState = %+v, %v, want %+v, true", got, ok, want)
+	}
+	if all := fresh.All(Search); len(all) != 1 || all[0] != "unrelated" {
+		t.Fatalf("bucket alongside find state = %v", all)
+	}
+
+	// A later save replaces the previous state wholesale.
+	s.SaveFindState(FindState{Query: "other"})
+	if got, _ := NewAt(file).LoadFindState(); got.Query != "other" || got.Include != "" {
+		t.Fatalf("save must replace, got %+v", got)
+	}
+}
+
 // A malformed file reads as empty and never errors.
 func TestMalformedFile(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "histories.json")

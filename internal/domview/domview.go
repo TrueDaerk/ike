@@ -328,13 +328,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 // deliberately absent: the tree has no text selection to protect, so the key
 // keeps its global quit meaning here (#2062) — unlike in the response pane,
 // where a live selection claims it.
-func copyChord(key tea.KeyPressMsg) bool {
-	switch key.String() {
-	case "cmd+c", "super+c":
-		return true
-	}
-	return false
-}
+func copyChord(key tea.KeyPressMsg) bool { return ui.CopyChord(key.String()) }
 
 // selectorKey edits the selector input; every change re-matches live.
 func (m *Model) selectorKey(key tea.KeyPressMsg) tea.Cmd {
