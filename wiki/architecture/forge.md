@@ -97,9 +97,25 @@ both, bare triage sets only `Triage`. Gitea reports `{admin, push, pull}` —
 no triage tier — so push-or-admin sets both. Later sub-issues consume this to
 hide or explain unavailable actions.
 
+## Event types (#2086)
+
+`events.go` fixes the vocabulary of the snapshot-diff events the background
+poller (#2085) emits: `EventKind` (`IssueOpened`, `IssueClosed`, `PROpened`,
+`PRMerged`, `PRClosed`, `PRChecksFailing`), the `Event` payload (number, title,
+author, labels, url) and `EventsMsg`, which carries one poll round's events plus
+the workspace root they were diffed for. Each kind names its own config leaf
+(`EventKind.ConfigKey()` → `forge.notify.<kind>`), which is what the prominent
+notification surface reads to decide between dialog, badge, toast and off — see
+[Notifications](/architecture/notifications.md). The types are producer- and
+consumer-agnostic: nothing in this file talks to a forge.
+
 ## Consumers
 
 The [GitHub Issues tool window](/architecture/github-issues.md) is the one
 consumer today: it injects `RefreshCmd` and routes `IssuesMsg`; through
 detection it now lists Gitea/Forgejo repositories too, unchanged. The
 start-work flow (`StartWorkCmd`) is pure git and backend-independent.
+
+The forge event surface (`internal/app/forgenotify.go`) is the second consumer:
+it routes `EventsMsg` onto the dialog, the status-line unread badge, a toast or
+the notification history alone.

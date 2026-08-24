@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-24 (prominent forge notifications: dialog + unread badge, #2086)
+
+- **`internal/forge/events.go`** fixes the typed snapshot-diff events the
+  poller (#2085) emits: `EventKind` (issue opened/closed, PR opened/merged/
+  closed, checks failing), the `Event` payload and `EventsMsg`. Each kind names
+  its own `forge.notify.<kind>` config leaf.
+- **`internal/app/forgenotify.go`** is the surface: a centered, dismissable
+  dialog over the workspace (number, title, author, labels; enter opens the
+  issue in the issues window, `d`/`esc` dismisses, `a` dismisses all), with
+  several pending events collapsing into **one** dialog carrying a count — no
+  dialog stacking. A do-not-interrupt guard defers the dialog to a persistent
+  status-line unread badge (`● 2 new issues`) while the user is typing in an
+  editor or terminal, or while another overlay owns the shell; the badge stays
+  until the events are viewed (opening the issues window or the dialog clears
+  it, as does a click on the segment). Every event lands in the notification
+  history ring exactly once.
+- **Per-event-type style setting** `[forge.notify]` (`dialog` / `badge` /
+  `toast` / `off`; `issue_opened` defaults to `dialog`, `pr_checks_failing` to
+  `badge`, the rest to `toast`), validated with a fallback-to-default
+  diagnostic and editable in Settings → Forge Notifications.
+- **`ghissues.Reveal(number)`** jumps to an issue's detail view past active
+  filters; a reveal for an issue the listing does not carry yet runs on the
+  next fetch.
+
 ## 2026-08-24 (forge backend abstraction + Gitea/Forgejo binding, #2083)
 
 - **`internal/forge` grew the `Forge` interface** covering the whole 0470

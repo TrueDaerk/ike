@@ -30,6 +30,9 @@ func (m *Model) toggleIssuesPanel() tea.Cmd {
 	if m.activeWS().Panes.Focused() != pane.IssuesKey {
 		m.issuesReturnFocus = m.activeWS().Panes.Focused()
 		m.setFocus(pane.IssuesKey)
+		// Looking at the issues window counts as viewing the pending forge
+		// events (#2086): the unread badge clears.
+		m.clearForgeUnread()
 		return nil
 	}
 	target := m.issuesReturnFocus
@@ -67,6 +70,8 @@ func (m *Model) openIssuesPanel() tea.Cmd {
 		m.activeWS().Panes.Close(key)
 		return nil
 	}
+	// Opening the window views the pending forge events (#2086).
+	m.clearForgeUnread()
 	p := m.activeWS().Panes.Get(key).Issues()
 	refresh := forge.RefreshCmd(".")
 	p.SetRefresh(refresh)
