@@ -15,6 +15,7 @@ import (
 
 	"ike/internal/complete/mru"
 	"ike/internal/concealfilter"
+	"ike/internal/coverage"
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/history"
 	"ike/internal/editor/mode"
@@ -567,6 +568,14 @@ type Model struct {
 	// line: ↑ implements/overrides, ↓ has implementations. Pushed by the LSP
 	// bridge per document, so positions may briefly lag an edit like gitMarks.
 	inheritMarks map[int]int
+	// covMarks are the gutter test-coverage marks (#2081), keyed by 0-based
+	// line; pushed by the app after a coverage run. covDocVersion pins the
+	// document version the marks belong to — an edit makes them stale without
+	// any push; covStale carries the app's store-level staleness. See
+	// covermarks.go.
+	covMarks      map[int]lang.CoverKind
+	covStale      bool
+	covDocVersion int
 	// Vim marks (#1151): marks are this view's local marks (m{a-z}),
 	// per-session like the caret set; markLines is the last observed line
 	// count for the edit-shift delta (the bpLines pattern). The gm* hooks
@@ -1512,6 +1521,13 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 		// that raced an edit, so a path match is the whole staleness check.
 		if msg.Path == m.path {
 			m.setInheritanceMarks(msg.Marks)
+		}
+		return m, nil
+	case coverage.MarksMsg:
+		// Test-coverage gutter marks (#2081); nil marks clear (the display
+		// toggle hiding them).
+		if msg.Path == m.path {
+			m.setCoverageMarks(msg.Marks, msg.Stale)
 		}
 		return m, nil
 	case vcs.MarksMsg:

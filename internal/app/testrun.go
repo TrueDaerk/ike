@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/coverage"
 	"ike/internal/host"
 	"ike/internal/lang"
 	"ike/internal/run"
@@ -32,9 +33,13 @@ type TestRunDoneMsg struct {
 }
 
 // testRunState remembers the last captured run for the re-run actions.
+// coverProfile is the temp file a coverage run (#2081) writes its coverage
+// data to; "" for a plain run, and consumed (reset) once parsed so a plain
+// re-run never re-reads a stale profile.
 type testRunState struct {
-	cfg  run.Config
-	root string
+	cfg          run.Config
+	root         string
+	coverProfile string
 }
 
 // launchTestRun runs cfg captured when the structured path applies, reporting
@@ -57,6 +62,39 @@ func (m *Model) launchTestRun(root string, store run.Store, cfg *run.Config, cre
 	cmd := m.startCapturedRun(cfg, argv, cfg.Dir(root))
 	m.notifyRun(cfg, created, argv)
 	return cmd, true
+}
+
+// launchCoverageRun is launchTestRun for a run-with-coverage (#2081): the
+// structured argv is extended by the language's coverage arguments writing a
+// profile to a temp file, remembered on testRunState so finishTestRun parses
+// it into the coverage store. Coverage needs the captured-run path — with
+// tests.results_window off or a language without coverage support the run is
+// refused with a notice rather than silently degrading to a plain run.
+func (m *Model) launchCoverageRun(root string, store run.Store, cfg *run.Config, created bool) tea.Cmd {
+	if !cfg.Tests || !config.Get().Tests.ResultsWindow {
+		m.host.Notify(host.Info, "coverage: requires the Test Results window (tests.results_window)")
+		return nil
+	}
+	profile, err := os.CreateTemp("", "ike-cover-*.out")
+	if err != nil {
+		m.host.Notify(host.Error, "coverage: "+err.Error())
+		return nil
+	}
+	profile.Close()
+	argv, ok := run.CoverageArgv(root, *cfg, m.explicitInterpreter(cfg.Lang), profile.Name())
+	if !ok {
+		os.Remove(profile.Name())
+		m.host.Notify(host.Info, "coverage: "+cfg.Lang+" declares no coverage support")
+		return nil
+	}
+	store.Touch(cfg.Name)
+	if err := run.Save(store); err != nil {
+		m.host.Notify(host.Warn, "run: config not saved: "+err.Error())
+	}
+	m.lastTestRun = &testRunState{cfg: *cfg, root: root, coverProfile: profile.Name()}
+	cmd := m.startCapturedRun(cfg, argv, cfg.Dir(root))
+	m.notifyRun(cfg, created, argv)
+	return cmd
 }
 
 // rerunTests handles the panel's re-run actions: every test (zero msg), the
@@ -124,9 +162,12 @@ func (m *Model) startCapturedRun(cfg *run.Config, argv []string, dir string) tea
 
 // finishTestRun parses a completed captured run and fills the pane; stale
 // completions (an older run finishing after a newer one started) are dropped.
-func (m *Model) finishTestRun(msg TestRunDoneMsg) {
+// A coverage run (#2081) additionally parses its profile into the coverage
+// store, stamps the run-wide percentage onto the panel and pushes gutter
+// marks to every open editor of a covered file — the returned commands.
+func (m *Model) finishTestRun(msg TestRunDoneMsg) tea.Cmd {
 	if msg.Seq != m.testRunSeq || m.lastTestRun == nil {
-		return
+		return nil
 	}
 	var results []lang.TestResult
 	if parse, ok := lang.TestParser(m.lastTestRun.cfg.Lang); ok {
@@ -135,6 +176,54 @@ func (m *Model) finishTestRun(msg TestRunDoneMsg) {
 	if p := m.testsPanel(); p != nil {
 		p.FinishRun(results, msg.Output)
 	}
+	return m.finishCoverage()
+}
+
+// finishCoverage consumes the last run's coverage profile, if any: parse
+// through the language seam, replace the store, surface the percentage and
+// fan the marks out to open editors. The profile temp file is removed either
+// way — a failed parse must not accumulate temp files.
+func (m *Model) finishCoverage() tea.Cmd {
+	st := m.lastTestRun
+	if st.coverProfile == "" {
+		return nil
+	}
+	profile := st.coverProfile
+	st.coverProfile = ""
+	defer os.Remove(profile)
+	parse, ok := lang.CoverParser(st.cfg.Lang)
+	if !ok {
+		return nil
+	}
+	files, err := parse(profile, st.cfg.Dir(st.root))
+	if err != nil {
+		m.host.Notify(host.Warn, "coverage: "+err.Error())
+		return nil
+	}
+	m.coverage.SetRun(files)
+	m.coverageShown = true
+	if p := m.testsPanel(); p != nil {
+		if pct, ok := m.coverage.Percent(); ok {
+			p.SetCoverage(pct)
+		}
+	}
+	return m.pushCoverageMarks()
+}
+
+// pushCoverageMarks sends every covered file's current marks (or a clear when
+// the display is hidden) to its open editor views.
+func (m *Model) pushCoverageMarks() tea.Cmd {
+	var cmds []tea.Cmd
+	for _, path := range m.coverage.Paths() {
+		msg := coverage.MarksMsg{Path: path}
+		if m.coverageShown {
+			msg.Marks, msg.Stale, _ = m.coverage.Marks(path)
+		}
+		if cmd := m.routeToEditor(path, msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+	return tea.Batch(cmds...)
 }
 
 // locateTest jumps to the source declaration of the test named by id: the

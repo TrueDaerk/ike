@@ -696,6 +696,10 @@ type Marks struct {
 	// Inheritance gates the gutter ↑/↓ inheritance arrows (#1453) and the LSP
 	// probe traffic computing them.
 	Inheritance bool `toml:"inheritance"`
+	// Coverage gates the per-line test-coverage bars a coverage run paints in
+	// the gutter (#2081); the coverage.toggle command hides them per session
+	// on top of this.
+	Coverage bool `toml:"coverage"`
 }
 
 // Tabs holds editor-tab behaviour (Roadmap 0190). AlwaysShow renders the

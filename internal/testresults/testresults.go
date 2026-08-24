@@ -94,6 +94,10 @@ type Model struct {
 	// pass/fail/skip/elapsed memoize the summary line, maintained on rebuild.
 	passed, failed, skipped int
 	elapsed                 float64
+	// coverage is the run-wide line-coverage percentage of a coverage run
+	// (#2081); hasCoverage gates it — a plain run shows none.
+	coverage    float64
+	hasCoverage bool
 
 	// rawMode shows the whole run's raw output in the detail column instead
 	// of the selected test's buffered output ('o' toggles).
@@ -141,6 +145,14 @@ func (m *Model) StartRun(configName, dir string) {
 	m.configName = configName
 	m.dir = dir
 	m.running = true
+	m.hasCoverage = false
+}
+
+// SetCoverage stamps the run-wide coverage percentage onto the summary
+// (#2081); StartRun resets it, so only a coverage run shows one.
+func (m *Model) SetCoverage(pct float64) {
+	m.coverage = pct
+	m.hasCoverage = true
 }
 
 // FinishRun installs a completed run's parsed results and raw output and
@@ -486,6 +498,9 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 		state = strings.Join(parts, " · ")
 		if m.elapsed > 0 {
 			state += " · " + formatSecs(m.elapsed)
+		}
+		if m.hasCoverage {
+			state += " · " + strconv.FormatFloat(m.coverage, 'f', 1, 64) + "% coverage"
 		}
 	}
 	head := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(title)

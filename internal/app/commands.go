@@ -217,6 +217,14 @@ type (
 	RunTestsInFileMsg  struct{}
 )
 
+// RunTestsWithCoverageMsg is RunTestsInFileMsg with per-line coverage
+// collection (#2081); CoverageToggleMsg hides/shows the resulting editor
+// gutter marks without dropping the run's data.
+type (
+	RunTestsWithCoverageMsg struct{}
+	CoverageToggleMsg       struct{}
+)
+
 // TerminalToggleMsg drives the JetBrains alt+f12 state machine (#97): no
 // terminal → create one; unfocused → focus it; focused → return focus to the
 // previously focused pane. Dispatched by terminal.toggle.
@@ -472,6 +480,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("run.rerun", "Rerun Last", RunRerunMsg{}),
 			appCommand("run.testAtCursor", "Run Test at Cursor", RunTestAtCursorMsg{}),
 			appCommand("run.testsInFile", "Run Tests in File", RunTestsInFileMsg{}),
+			appCommand("run.testsWithCoverage", "Run Tests in File with Coverage", RunTestsWithCoverageMsg{}),
+			appCommand("coverage.toggle", "Toggle Coverage Marks", CoverageToggleMsg{}),
 			appCommand("run.select", "Run/Debug Configurations…", RunSelectMsg{}),
 			appCommand("run.task", "Run Task…", TaskSelectMsg{}),
 			appCommand("run.taskPromote", "Promote Task to Run Configuration…", TaskPromoteMsg{}),

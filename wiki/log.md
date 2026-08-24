@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-25 (run tests with coverage + coverage gutter, #2081)
+
+- **Run with coverage.** `run.testsWithCoverage` (palette) runs the active
+  file's test scope through the captured Test Results path with coverage
+  collection; the run summary line gains a `n% coverage` figure.
+- **Editor coverage gutter.** Covered/uncovered/partial lines draw a `▎` bar
+  in the sign column (success/error/warning tones), JetBrains-style, below
+  the informational glyphs and above the diagnostic/git tints. Editing a file
+  turns its marks stale — still visible, but faint in the info tone — via
+  document-version comparison in the view plus a store-level flag for later
+  opens. `coverage.toggle` hides/shows the marks; the new
+  `editor.marks.coverage` setting (Settings → Diagnostics-page marks block)
+  is the persistent gate.
+- **A neutral language seam.** `lang.TestSpec` grew `CoverArgs(profile)` and
+  `ParseCover(profile, dir)`; the per-run store (`internal/coverage`) and the
+  gutter only ever see the neutral `lang.FileCoverage` model, so coverage.py
+  or phpunit clover can register without engine changes. Go implements the
+  seam (`-coverprofile` + cover-profile parsing with import-path resolution
+  against the module root). The store is separate from the test-result
+  parsing, so re-run / re-run-failed never invalidate coverage of untouched
+  files. Concept docs updated:
+  [Test Results Tool Window](/architecture/test-results.md),
+  [Editor](/architecture/editor.md).
+
 ## 2026-08-25 (label, assignee and state mutations, #2088)
 
 - **The issues window writes now.** With triage permission: `e` opens a label
