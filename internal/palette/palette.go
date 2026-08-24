@@ -653,7 +653,7 @@ func (p *Palette) Click(x, y int) tea.Cmd {
 	if p.previewing() {
 		// Right of the result column lies the code preview (#2047), which is
 		// inert — a press there must not activate the row behind it.
-		if listW, previewW := previewSplit(inner); previewW > 0 {
+		if listW, previewW := codepreview.Split(inner); previewW > 0 {
 			if x >= listW {
 				return nil
 			}
@@ -674,42 +674,13 @@ func (p *Palette) Click(x, y int) tea.Cmd {
 	return p.activate()
 }
 
-// Code-preview geometry (#2047), shared by the renderer and the click
-// mapping: below minPreviewSplit the box is too narrow to carry two columns
-// and the list keeps the whole width; otherwise the preview takes two fifths,
-// capped so a wide terminal spends the extra cells on the result rows. The
-// divider plus its two spaces cost three more cells.
-const (
-	minPreviewSplit = 64
-	maxPreviewWidth = 60
-	minPreviewWidth = 20
-)
-
-// previewSplit divides the inner content width into the result column and the
-// code-preview column; previewW is 0 when the box is too narrow to split.
-func previewSplit(inner int) (listW, previewW int) {
-	if inner < minPreviewSplit {
-		return inner, 0
+// previewTarget is the selected row's source location, the zero Target when
+// nothing is selected — a row without one renders an empty preview column.
+func (p *Palette) previewTarget() PreviewTarget {
+	if p.selected < 0 || p.selected >= len(p.items) {
+		return PreviewTarget{}
 	}
-	previewW = inner * 2 / 5
-	if previewW > maxPreviewWidth {
-		previewW = maxPreviewWidth
-	}
-	if previewW < minPreviewWidth {
-		previewW = minPreviewWidth
-	}
-	return inner - previewW - 3, previewW
-}
-
-// previewRows renders the code excerpt around the selected row's target
-// (#2047). A row without a location — or a file that cannot be read — renders
-// an empty column or a dim notice rather than failing the frame.
-func (p *Palette) previewRows(width, height int) []string {
-	var target PreviewTarget
-	if p.selected >= 0 && p.selected < len(p.items) {
-		target = p.items[p.selected].Preview
-	}
-	return p.prev.Render(target.Path, target.Line, width, height, p.theme())
+	return p.items[p.selected].Preview
 }
 
 // sideWidth is the left column's width for an inner content width (#778),
@@ -857,12 +828,11 @@ func (p *Palette) View() string {
 	// is padded to the full result window, so the popup keeps its height with
 	// no matches at all.
 	if p.previewing() {
-		listW, previewW := previewSplit(inner)
+		listW, previewW := codepreview.Split(inner)
 		if previewW > 0 {
 			h := p.visibleRows()
-			left := ui.PadRows(strings.Split(p.list(listW, true), "\n"), h)
-			rule := dim.Render("│")
-			rows = ui.JoinColumns(left, listW, rule, p.previewRows(previewW, h))
+			left := strings.Split(p.list(listW, true), "\n")
+			rows = p.prev.Columns(left, listW, previewW, h, p.previewTarget(), p.theme())
 		}
 	}
 	// A SideMode open (#778) renders the left column (e.g. Recent Projects)

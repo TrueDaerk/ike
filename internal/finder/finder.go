@@ -423,53 +423,21 @@ func (m *Model) boxWidth() int {
 	return w
 }
 
-// Preview-column geometry (#2047). Below minSplitWidth the overlay is too
-// narrow to carry two columns and renders the list alone; otherwise the
-// preview takes two fifths of the content width, capped so a wide terminal
-// spends the extra cells on the match rows.
-const (
-	minSplitWidth   = 64
-	maxPreviewWidth = 60
-	minPreviewWidth = 20
-)
-
-// splitWidths divides the overlay's content width into the result column and
-// the code-preview column; previewW is 0 when the box is too narrow to split
-// (the divider plus its two spaces cost three more cells).
-func splitWidths(innerW int) (listW, previewW int) {
-	if innerW < minSplitWidth {
-		return innerW, 0
-	}
-	previewW = innerW * 2 / 5
-	if previewW > maxPreviewWidth {
-		previewW = maxPreviewWidth
-	}
-	if previewW < minPreviewWidth {
-		previewW = minPreviewWidth
-	}
-	return innerW - previewW - 3, previewW
-}
-
 // resultsBody renders the fixed-height results block: the match list on the
 // left, padded to listH rows so the overlay keeps its size with few or no
 // matches (#2047), and — when there is room — the selected match's file
-// excerpt on the right, separated by a vertical rule.
+// excerpt on the right, separated by a vertical rule. Both halves come from
+// the shared preview component (#2053).
 func (m *Model) resultsBody(listW, previewW, listH int, pal *theme.Palette) string {
 	var left []string
 	if body := m.list.Render(listW, listH, pal, m.displayPath); body != "" {
 		left = strings.Split(body, "\n")
 	}
-	left = ui.PadRows(left, listH)
-	if previewW <= 0 {
-		return strings.Join(left, "\n")
-	}
-	path, line := "", 0
+	var target codepreview.Target
 	if it, ok := m.list.Current(); ok {
-		path, line = it.Path, it.Line
+		target = codepreview.Target{Path: it.Path, Line: it.Line}
 	}
-	right := m.prev.Render(path, line, previewW, listH, pal)
-	rule := lipgloss.NewStyle().Foreground(pal.Border).Render("│")
-	return ui.JoinColumns(left, listW, rule, right)
+	return m.prev.Columns(left, listW, previewW, listH, target, pal)
 }
 
 // toggleSpans mirrors togglesRow's layout: the half-open x range of each
@@ -680,7 +648,7 @@ func (m *Model) View() string {
 	rows = append(rows, "")
 
 	listH := ui.ClampResultRows(m.height/2 - 9)
-	listW, previewW := splitWidths(innerW)
+	listW, previewW := codepreview.Split(innerW)
 	lay.listTop = len(rows)
 	lay.listRows = listH
 	lay.listW = listW

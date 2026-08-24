@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/codepreview"
 	"ike/internal/locations"
 	"ike/internal/search"
 	"ike/internal/ui"
@@ -98,7 +99,7 @@ func TestPreviewFollowsCursor(t *testing.T) {
 		{Path: path, Line: 10, Text: "row 10"},
 		{Path: path, Line: 100, Text: "row 100"},
 	})
-	listW, previewW := splitWidths(m.boxWidth() - 6)
+	listW, previewW := codepreview.Split(m.boxWidth() - 6)
 	if previewW <= 0 {
 		t.Fatalf("no preview column at width %d", m.width)
 	}
@@ -142,10 +143,10 @@ func TestPreviewMissingFile(t *testing.T) {
 // TestNarrowOverlayDropsPreview keeps the single-column layout on terminals
 // too narrow to split.
 func TestNarrowOverlayDropsPreview(t *testing.T) {
-	if _, previewW := splitWidths(minSplitWidth - 1); previewW != 0 {
+	if _, previewW := codepreview.Split(codepreview.MinSplitWidth - 1); previewW != 0 {
 		t.Fatalf("narrow overlay kept a %d-cell preview", previewW)
 	}
-	listW, previewW := splitWidths(94)
+	listW, previewW := codepreview.Split(94)
 	if previewW == 0 || listW+previewW+3 != 94 {
 		t.Fatalf("split of 94 = %d + %d, does not add up", listW, previewW)
 	}

@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-24T12:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -419,6 +419,18 @@ shared `DefinitionMsg` path — a caller row jumps to the call site
 not on a callable, or the server lacks `callHierarchyProvider`) is an info
 toast.
 
+Beside the tree the overlay renders the shared **code-preview column**
+(#2053, `internal/codepreview`): an excerpt of the selected entry's file
+around its line, behind a dim vertical rule, following the cursor as one walks
+the tree — so a caller's context is readable without jumping into it. The tree
+block is blank-padded to the window height so the box no longer resizes as
+children load, `codepreview.Split` gives the excerpt two fifths of the content
+width (dropped entirely below 64 cells, where the tree keeps the full width),
+and the box may grow to 120 columns to carry both. A deleted or unreadable
+target degrades to a dim `preview unavailable` notice. Same component, same
+geometry as the [palette pickers](./command-palette.md) and the
+[find-in-path overlay](/architecture/search.md).
+
 **Inheritance analysis & navigation (0480, #1448).** Rides on two request
 families added M1-style beside call hierarchy: `textDocument/implementation`
 (decoded like definition — `Location | [] | LocationLink[]`) and
@@ -459,7 +471,11 @@ fanned out by the manager to every running server advertising
 `workspaceSymbolProvider` and merged (capped at 200). Rows lead with the
 symbol name (location + declaration preview as the detail chip), stale
 replies are dropped by query, and activation navigates via the shared
-`DefinitionMsg` path. Ranking is tiered (#377): symbols located inside the
+`DefinitionMsg` path. The picker carries the palette's **code-preview column**
+(#2053): the mode implements `palette.PreviewMode` and each cached row stores
+its declaration in `Item.Preview`, so the selected symbol's source — its
+signature, receiver and neighbours — sits beside the list. The class category
+is a kind-filtered view of the same cache, so its rows inherit the targets. Ranking is tiered (#377): symbols located inside the
 project root always sort above dependency/stdlib symbols (a large score
 malus on non-project rows), and an exact name match earns a bonus so the
 project's own symbol is the top hit; the adjusted score is stored on the

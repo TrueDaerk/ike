@@ -74,6 +74,13 @@ func (f *FileMode) SetScratchList(list func() []string) { f.scratchList = list }
 // Prefix implements Mode.
 func (f *FileMode) Prefix() rune { return '@' }
 
+// CodePreview implements PreviewMode (#2053): the centered file picker
+// (project.goToFile) shows the head of the selected file beside the list, so
+// one can tell two same-named files apart before opening either. Only a
+// locked, centered open splits — the anchored "@" finder over an editor pane
+// and the file rows composed into Search Everywhere keep one column.
+func (f *FileMode) CodePreview() bool { return true }
+
 // Placeholder implements Mode.
 func (f *FileMode) Placeholder() string { return "Find a file… (tab completes; /, ~/ any path)" }
 
@@ -125,10 +132,11 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 		abs := filepath.Join(cx.Root, s.path)
 		seen[expandedAbs(abs)] = true
 		items[i] = Item{
-			Title: s.path,
-			Spans: s.spans,
-			Score: s.score,
-			Msg:   OpenFileMsg{Path: abs},
+			Title:   s.path,
+			Spans:   s.spans,
+			Score:   s.score,
+			Msg:     OpenFileMsg{Path: abs},
+			Preview: PreviewTarget{Path: abs, Line: 1},
 		}
 	}
 	if q := strings.TrimSpace(query); q != "" {
@@ -158,9 +166,10 @@ func (f *FileMode) scratchItems(query string) []Item {
 	items := make([]Item, 0, len(paths))
 	for _, p := range paths {
 		items = append(items, Item{
-			Title:  filepath.Base(p),
-			Detail: "scratch",
-			Msg:    OpenFileMsg{Path: p},
+			Title:   filepath.Base(p),
+			Detail:  "scratch",
+			Msg:     OpenFileMsg{Path: p},
+			Preview: PreviewTarget{Path: p, Line: 1},
 		})
 	}
 	return items
@@ -247,7 +256,7 @@ func fsCandidates(input, home string, seen map[string]bool) []Item {
 			items = append(items, Item{Title: title, Msg: OpenPathDescendMsg{Query: title, Prefix: '@'}})
 			continue
 		}
-		items = append(items, Item{Title: title, Msg: OpenFileMsg{Path: abs}})
+		items = append(items, Item{Title: title, Msg: OpenFileMsg{Path: abs}, Preview: PreviewTarget{Path: abs, Line: 1}})
 	}
 	return items
 }

@@ -1,5 +1,30 @@
 # Log
 
+## 2026-08-24 (a generic code-preview column for every position picker, #2053)
+
+- **Four more pickers show where they lead**: the **symbol picker** (cmd+o,
+  and with it the class category), the **file picker** (`project.goToFile`),
+  the **bookmarks picker** (`nav.bookmarks` — vim marks, global marks and
+  project bookmarks alike) and the **call-hierarchy overlay** now render the
+  selected row's source beside the list, behind the same vertical rule the
+  find-in-path and find-usages popups got in #2047. The excerpt follows the
+  cursor; a row without a position (a directory candidate, a scratch buffer's
+  mark) leaves the column blank, and a deleted file still degrades to the dim
+  `preview unavailable` notice.
+- **One component, no per-picker copies**: `internal/codepreview` grew the two
+  pieces each consumer had duplicated — `Split` (the column geometry, formerly
+  `finder.splitWidths` *and* `palette.previewSplit`) and `Cache.Columns` (the
+  finished list-rule-excerpt body) — beside the existing `Cache.Render`. The
+  palette's `PreviewTarget` is now an alias of `codepreview.Target`, and the
+  #2047 consumers were moved onto the shared calls, so the geometry lives in
+  exactly one place.
+- **Opting in is one method**: a palette mode implements
+  `CodePreview() bool` and puts a `Target` on each row. Modes whose rows are
+  not file positions — commands, recent projects, Search Everywhere's mixed
+  list — are untouched, as are anchored opens, where there is no room to split.
+  The call-hierarchy overlay, not a palette mode, calls `Split`/`Columns`
+  directly and grew its width cap from 100 to 120 columns to carry both.
+
 ## 2026-08-24 (copy-consistency audit across selectable panes, #2062)
 
 - **The audit.** #2051 fixed one instance of a general shape: a state that

@@ -100,6 +100,12 @@ func (s *symbolMode) SetHits(query string, hits []ilsp.SymbolHit) {
 				// glance (#1849); unknown kinds render no badge.
 				Badge: ilsp.SymbolKindLabel(h.Kind),
 				Msg:   ilsp.DefinitionMsg{Path: h.Ref.Path, Line: h.Ref.Line, Col: h.Ref.Col},
+				// The code column beside the list (#2053) shows the
+				// symbol in its surroundings — its signature, receiver
+				// and neighbours — which the one-line Detail chip cannot.
+				// The class category (classes.go) is a filtered view of
+				// this same cache, so its rows carry the target too.
+				Preview: palette.PreviewTarget{Path: h.Ref.Path, Line: h.Ref.Line + 1},
 			},
 			kind:    h.Kind,
 			project: insideProject(h.Ref.Path),
@@ -124,6 +130,11 @@ func insideProject(path string) bool {
 
 // Prefix implements palette.Mode.
 func (s *symbolMode) Prefix() rune { return symbolsPrefix }
+
+// CodePreview implements palette.PreviewMode (#2053): the locked symbol
+// picker (project.goToClass) always carries the code column, so one reads the
+// selected symbol's declaration before jumping to it.
+func (s *symbolMode) CodePreview() bool { return true }
 
 // Refresh implements palette.Refresher: a fresh palette open forgets which
 // query was last sent, so re-typing the same query re-queries the workspace

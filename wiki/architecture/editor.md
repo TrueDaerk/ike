@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-24T12:00:00Z
 ---
 
 # Editor
@@ -831,8 +831,14 @@ The **bookmarks picker** (`nav.bookmarks`, `cmd+f3`) lists the focused
 editor's local marks plus all globals as `'x  path:line  preview` rows and
 the project's line bookmarks (see below) as `⚑[digit]  path:line` rows; enter
 jumps (everything with a path through the open funnel), shift+delete or the
-`✕` zone removes the entry (the #842/#1113 prune pattern). See
-`internal/app/bookmarks.go`.
+`✕` zone removes the entry (the #842/#1113 prune pattern). Beside the list the
+picker renders the shared **code-preview column** (#2053): an excerpt of the
+selected mark's file around its line, following the cursor, so the marked
+line's surroundings are visible — which the one-line detail chip (or a
+bookmark's note, which replaces it) cannot show. A mark in a pathless scratch
+buffer has no target and leaves the column blank; a deleted file degrades to a
+dim `preview unavailable` notice. See `internal/app/bookmarks.go` and
+[Command palette § code preview](./command-palette.md).
 
 ## Project bookmarks (#55)
 
