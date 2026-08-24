@@ -7,6 +7,7 @@ import (
 
 	"ike/internal/host"
 	"ike/internal/lang"
+	"ike/internal/palette"
 	"ike/internal/plugin"
 	"ike/internal/scratch"
 )
@@ -55,15 +56,46 @@ func langTitle(id string) string {
 	return strings.ToUpper(id[:1]) + id[1:]
 }
 
-// scratchList adapts scratch.List for the palette's injected source: a store
-// error just lists nothing (the palette shows its empty hint), matching how
-// the MRU list degrades.
+// scratchList adapts scratch.List for the '@' finder's injected source: a
+// store error just lists nothing (the palette shows its empty hint), matching
+// how the MRU list degrades.
 func scratchList() []string {
 	paths, err := scratch.List()
 	if err != nil {
 		return nil
 	}
 	return paths
+}
+
+// scratchEmptyTitle is the row title for a scratch with no content yet (or
+// none within FirstLine's scan cap) — the empty-scratch placeholder AC of
+// #2057.
+const scratchEmptyTitle = "Empty scratch"
+
+// scratchEntries adapts scratch.Entries for scratch.list's palette source
+// (#2057): each row's title is the scratch's first non-empty content line —
+// read lazily by scratch.FirstLine, never a full load — falling back to
+// scratchEmptyTitle, and its Detail chip names the language resolved from the
+// path, falling back to "Plain Text" for an unregistered extension. A store
+// error just lists nothing, matching how the MRU list degrades.
+func scratchEntries() []palette.ScratchEntry {
+	entries, err := scratch.Entries()
+	if err != nil {
+		return nil
+	}
+	out := make([]palette.ScratchEntry, len(entries))
+	for i, e := range entries {
+		title := scratch.FirstLine(e.Path)
+		if title == "" {
+			title = scratchEmptyTitle
+		}
+		langName := "Plain Text"
+		if l, ok := lang.ByPath(e.Path); ok {
+			langName = langTitle(l.ID)
+		}
+		out[i] = palette.ScratchEntry{Path: e.Path, Title: title, Lang: langName}
+	}
+	return out
 }
 
 // newScratch creates a scratch with the requested extension and opens it
