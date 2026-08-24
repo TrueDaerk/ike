@@ -8,6 +8,7 @@ import (
 
 	"ike/internal/locations"
 	"ike/internal/search"
+	"ike/internal/ui"
 )
 
 // TestViewNeverWrapsRows guards #971: the box renders boxW-2 total cells
@@ -28,9 +29,12 @@ func TestViewNeverWrapsRows(t *testing.T) {
 			t.Errorf("line %d width %d > terminal", i, w)
 		}
 	}
-	// title, blank, search, toggles, include, exclude, blank, group header,
-	// item, blank, status + 2 border rows = 13; a wrapped row adds a 14th.
-	if len(lines) != 13 {
-		t.Fatalf("view has %d lines, want 13 (a row wrapped)", len(lines))
+	// title, blank, search, toggles, include, exclude, blank, the
+	// fixed-height results block (#2047: ui.MinResultRows here, the floor for
+	// a 40-row terminal), blank, status + 2 border rows; a wrapped row adds
+	// one more.
+	want := 9 + ui.MinResultRows + 2
+	if len(lines) != want {
+		t.Fatalf("view has %d lines, want %d (a row wrapped)", len(lines), want)
 	}
 }

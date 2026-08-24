@@ -66,12 +66,21 @@ func (r *refsMode) set(refs []ilsp.Reference, peek bool) {
 			Title:  displayPath(ref.Path) + ":" + strconv.Itoa(ref.Line+1),
 			Detail: preview,
 			Msg:    msg,
+			// The code column beside the list (#2047) reads the target file
+			// itself, so it shows the surrounding lines the one-line Detail
+			// chip cannot.
+			Preview: palette.PreviewTarget{Path: ref.Path, Line: ref.Line + 1},
 		}
 	}
 }
 
 // Prefix implements palette.Mode.
 func (r *refsMode) Prefix() rune { return refsPrefix }
+
+// CodePreview implements palette.PreviewMode (#2047): the usages popup always
+// carries the code column, so its box keeps a stable eleven-to-forty result
+// rows and shows where the selected usage sits before one jumps to it.
+func (r *refsMode) CodePreview() bool { return true }
 
 // Placeholder implements palette.Mode.
 func (r *refsMode) Placeholder() string {

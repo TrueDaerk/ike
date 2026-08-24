@@ -22,6 +22,24 @@
 - **Out of scope, deliberately**: LSP (needs a real `file://` document) and the
   ES console's query source (its index name comes from the file name).
 
+## 2026-08-24 (bounded result popups with a code preview, #2047)
+
+- **Find in Path and Find Usages got a code column**: both popups now render
+  the selected hit's file around its line to the right of the result list,
+  separated by a vertical rule, so one sees where enter lands before pressing
+  it. The excerpt follows the list cursor and degrades to a dim
+  `preview unavailable` notice for deleted or unreadable targets.
+- **Stable popup height**: the result region of both is clamped to
+  `ui.MinResultRows`…`ui.MaxResultRows` (**11 to 40** rows) and blank-padded to
+  it. No more box that collapses onto two hits or grows without bound while a
+  scan streams in — past forty rows the list scrolls inside the popup.
+- **New shared pieces**: `internal/codepreview` (windowed, cached file-excerpt
+  renderer — reads only the lines it shows) and `ui.JoinColumns` / `ui.PadRows`
+  / `ui.ClampResultRows`. The palette side is an opt-in `PreviewMode` Mode
+  extension plus `Item.Preview`, so only the references mode splits its box;
+  every other mode renders exactly as before. Presses in the excerpt column are
+  inert in both popups.
+
 ## 2026-08-21 (yq playground on the shared playground base, #2039)
 
 - **A yq playground**: YAML buffers get the playground the jq one has had since
