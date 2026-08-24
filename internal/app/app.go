@@ -98,6 +98,7 @@ import (
 	"ike/internal/ui"
 	"ike/internal/undotree"
 	"ike/internal/unidiff"
+	"ike/internal/usages"
 	"ike/internal/vcs"
 	"ike/internal/vcspanel"
 	"ike/internal/wasm"
@@ -3522,6 +3523,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A passed test has no failure location: scan the run's test files
 		// for the declaration, like the gutter markers do.
 		return m.locateTest(msg.RerunID)
+
+	case problems.CopyMsg:
+		// "y"/cmd+c on a Problems row (#2071): the marked line goes to the
+		// clipboard through the shared copy path, with a toast.
+		return m.copyPanelRow(msg.Text, msg.What)
+
+	case usages.CopyMsg:
+		return m.copyPanelRow(msg.Text, msg.What)
+
+	case breakpanel.CopyMsg:
+		return m.copyPanelRow(msg.Text, msg.What)
+
+	case testresults.CopyMsg:
+		return m.copyPanelRow(msg.Text, msg.What)
 
 	case testresults.RerunMsg:
 		// The panel's re-run actions (#1911): all, failed only, or one test.
@@ -9942,6 +9957,15 @@ var clipboardWrite = func(text string) {
 	if c := clipboard.System(); c != nil {
 		_ = c.Write(text)
 	}
+}
+
+// copyPanelRow is the shared handler behind the list panels' CopyMsg (#2071):
+// the marked row's text goes through the same clipboard seam every pane copy
+// uses, confirmed by a toast naming what was copied.
+func (m Model) copyPanelRow(text, what string) (tea.Model, tea.Cmd) {
+	m.copyToClipboard(text)
+	m.host.Notify(host.Info, "copied "+what)
+	return m, nil
 }
 
 // copyToClipboard is the host-side copy path (#2061): every pane copy action

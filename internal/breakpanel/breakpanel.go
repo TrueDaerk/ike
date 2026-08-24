@@ -45,6 +45,14 @@ type RemoveMsg struct {
 // RemoveAllMsg asks the root model to delete every breakpoint.
 type RemoveAllMsg struct{}
 
+// CopyMsg asks the root model to put Text on the system clipboard; What names
+// the payload for the confirmation toast ("breakpoint", "file"). The panel
+// emits it instead of writing itself, the seam every pane copy uses (#2071).
+type CopyMsg struct {
+	Text string
+	What string
+}
+
 // row is one rendered line: a file header or one breakpoint under it.
 type row struct {
 	header  bool
@@ -208,9 +216,52 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		if len(m.rows) > 0 {
 			return func() tea.Msg { return RemoveAllMsg{} }
 		}
+	case "y":
+		// vim's yank on the marked row (#2071); "c" is taken by the
+		// condition editor here, so only the chord aliases it.
+		return m.copyRow(m.cursor)
+	}
+	if ui.CopyChord(msg.String()) {
+		return m.copyRow(m.cursor)
 	}
 	m.clampScroll()
 	return nil
+}
+
+// copyRow puts the marked row on the clipboard through a CopyMsg (#2071): a
+// breakpoint as "path:line" plus the source preview and its refinements, a
+// file header as its path. An empty list copies nothing.
+func (m *Model) copyRow(i int) tea.Cmd {
+	if i < 0 || i >= len(m.rows) {
+		return nil
+	}
+	r := m.rows[i]
+	if r.header {
+		return copyCmd(m.shorten(r.path), "file")
+	}
+	text := m.shorten(r.path) + ":" + strconv.Itoa(r.line+1)
+	if p := strings.TrimSpace(r.preview); p != "" {
+		text += "  " + p
+	}
+	if r.meta.Condition != "" {
+		text += "  if " + r.meta.Condition
+	}
+	if r.meta.HitCondition != "" {
+		text += "  hit " + r.meta.HitCondition
+	}
+	if r.meta.LogMessage != "" {
+		text += "  log \"" + r.meta.LogMessage + "\""
+	}
+	return copyCmd(text, "breakpoint")
+}
+
+// copyCmd wraps text in a CopyMsg command, or nil when there is nothing to
+// copy — the shape the response pane's copy actions use.
+func copyCmd(text, what string) tea.Cmd {
+	if text == "" {
+		return nil
+	}
+	return func() tea.Msg { return CopyMsg{Text: text, What: what} }
 }
 
 // selected returns the breakpoint row under the cursor, ok=false on a file
@@ -371,7 +422,7 @@ func (m *Model) renderEditRow(pal *theme.Palette, r row) string {
 // footer shows the key hints; while the refinement editor is open it explains
 // that editor instead.
 func (m *Model) footer(pal *theme.Palette) string {
-	hints := " enter jump · space enable/disable · c condition · n hit count · l log message · d delete · D delete all"
+	hints := " enter jump · space enable/disable · y copy · c condition · n hit count · l log message · d delete · D delete all"
 	if m.editing {
 		hints = " enter apply (empty clears) · esc cancel"
 	}

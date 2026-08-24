@@ -19,6 +19,14 @@ import (
 	"ike/internal/ui"
 )
 
+// CopyMsg asks the root model to put Text on the system clipboard; What names
+// the payload for the confirmation toast ("usage", "file"). The pane emits it
+// instead of writing itself, the seam every pane copy action uses (#2071).
+type CopyMsg struct {
+	Text string
+	What string
+}
+
 // row is one rendered line: a file header or one reference under it.
 type row struct {
 	header bool
@@ -161,9 +169,43 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.refresh
 	case "enter":
 		return m.activate(m.cursor)
+	case "y":
+		// vim's yank on the marked row (#2071): the hit's location plus its
+		// source line, the thing one wants to paste into a message.
+		return m.copyRow(m.cursor)
+	}
+	if ui.CopyChord(msg.String()) {
+		return m.copyRow(m.cursor)
 	}
 	m.clampScroll()
 	return nil
+}
+
+// copyRow puts the marked row on the clipboard through a CopyMsg (#2071): a
+// reference as "path:line:col  preview", a file header as its path. An empty
+// pane copies nothing.
+func (m *Model) copyRow(i int) tea.Cmd {
+	if i < 0 || i >= len(m.rows) {
+		return nil
+	}
+	r := m.rows[i]
+	if r.header {
+		return copyCmd(m.shorten(r.path), "file")
+	}
+	text := m.shorten(r.ref.Path) + ":" + strconv.Itoa(r.ref.Line+1) + ":" + strconv.Itoa(r.ref.Col+1)
+	if p := strings.TrimSpace(r.ref.Preview); p != "" {
+		text += "  " + p
+	}
+	return copyCmd(text, "usage")
+}
+
+// copyCmd wraps text in a CopyMsg command, or nil when there is nothing to
+// copy — the shape the response pane's copy actions use.
+func copyCmd(text, what string) tea.Cmd {
+	if text == "" {
+		return nil
+	}
+	return func() tea.Msg { return CopyMsg{Text: text, What: what} }
 }
 
 // activate opens the reference under row i through the same navigation path
@@ -294,7 +336,7 @@ func (m *Model) renderRow(pal *theme.Palette, base, header lipgloss.Style, i int
 
 // footer shows the key hints.
 func (m *Model) footer(pal *theme.Palette) string {
-	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open · r refresh · j/k move"))
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open · y copy · r refresh · j/k move"))
 }
 
 // shorten renders a path project-relative when the app injected a shortener.

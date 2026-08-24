@@ -118,6 +118,11 @@ Diagnostics are shown three ways at once:
 | In the scrollbar | A mark per diagnostic, so off-screen ones are still visible |
 | In the Problems window (++cmd+8++) | Every diagnostic in the project, grouped by file, errors first |
 
+In the Problems window, `y` (or ++cmd+c++) **copies the marked row** —
+a diagnostic as `path:line:col: message`, a file header as its path — ready
+to paste into a search box or a message. The Usages, Breakpoints and Test
+Results windows copy their marked row with the same key.
+
 Too strict? `lsp.diagnostics_severity` remaps what a rule counts as: each
 entry names a diagnostic rule and the severity you want — for example
 `reportArgumentType warning` turns pyright's argument-type errors into

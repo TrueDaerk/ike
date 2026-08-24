@@ -83,6 +83,13 @@ gutter. A refresh keeps the cursor on the same diagnostic where possible.
   go-to-definition uses (0-based coordinates).
 - Mouse mirrors the VCS panel (#514): click selects, double-click within
   400 ms activates, wheel scrolls dragging the cursor along.
+- `y` (or `cmd+c`/`super+c`) **copies the marked row** (#2071): a diagnostic
+  as the line renders it — `path:line:col: message (code)`, the path
+  project-relative — a file header as its path. The panel only emits
+  `problems.CopyMsg`; the root model writes it through the shared
+  `copyToClipboard` seam (system clipboard + clipboard history, #2061) and
+  confirms with a "copied problem" toast. `ctrl+c` stays the global quit: the
+  list has no text selection that could claim it (#2062).
 - `f` toggles **current file** vs **project** scope (named in the footer).
   The active path tracks the focused editor via `syncProblemsActive`, hooked
   into `setFocus` and tab switching like the explorer's active-file accent.
