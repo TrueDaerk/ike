@@ -786,6 +786,20 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if s.bufFocus {
 		return m.updatePlayBufferKey(msg)
 	}
+	// The copy chord reaches the result buffer's selection even while the
+	// query line owns the keyboard (#2062): a drag in the result selects and
+	// tab (or a click on the query header) moves the focus back with the
+	// selection still on screen, so swallowing the chord here would strand a
+	// visible selection — the same shape as the response pane's search prompt
+	// in #2051. The chord is no valid query input, and without a selection it
+	// falls through to the query line unchanged.
+	if m.playCopyChord(msg) {
+		if _, has := s.resultEd.SelectionText(); has {
+			var cmd tea.Cmd
+			*s.resultEd, cmd = s.resultEd.Update(editor.ActionMsg{Action: "copy"})
+			return m, cmd
+		}
+	}
 	// The open completion popup (#1979) owns its keys first: arrows step it,
 	// enter/tab accept, esc dismisses — the query line's own meaning of those
 	// keys comes back the moment it closes. Typing falls through and

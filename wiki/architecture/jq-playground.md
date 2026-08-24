@@ -615,6 +615,13 @@ buffer rather than the pane's hidden document while the pane is focused. The
 pane border signals the buffer's input mode (#1353) while it holds the
 keyboard.
 
+The same chord works **from the query line** (#2062). A selection in the
+result survives the focus moving back — `tab`, or a click on the query header
+— and stays highlighted, so `updatePlaygroundKey` reserves the chord ahead of
+the query input whenever the result buffer holds one. Without a selection the
+chord falls through to the query line unchanged, so nothing about typing a
+program changes.
+
 The spatial focus keys (default ctrl+arrows) work from both the query line and
 the result buffer: they move the focus out of the pane with the playground
 still mounted (#1980).

@@ -852,6 +852,16 @@ For a recognized stream:
   it emits `httppane.CopyMsg` and the app writes it through the same
   `clipboardWrite` seam as the editor and terminal, then confirms with a
   notification. A new response or history entry drops a stale selection.
+- **The copy chord outranks every capturing state** (#2051, #2062): the `/`
+  prompt and a half-typed `z` fold sequence both consume the keys they see,
+  and the shell's `ctrl+c` quit binding sits ahead of pane dispatch — three
+  ways a visible selection used to become uncopyable. `ctrl+c`/`cmd+c`/
+  `super+c` are now reserved in front of all three (`copyChord` +
+  `copyKeyCmd` in `httppane.go`, `paneSelectionCopy` in `app.go`, the latter
+  only over a live selection so `ctrl+c` keeps quitting otherwise). Bare `y`
+  cannot be reserved the same way — inside the prompt it is query text — so
+  it stays with whatever owns the keyboard, and `zy` keeps copying the target
+  fold.
 - **Body highlighting depends on the build** (#1270): `contentTag` maps the
   Content-Type onto a fence tag (charset parameters and `+json`/`+xml`
   vendor suffixes stripped) and `highlight.HighlightFenced` resolves that tag
