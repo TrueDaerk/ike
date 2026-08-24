@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results.
 resource: internal/search
 tags: [architecture, search, find-in-path]
-timestamp: 2026-07-25T00:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -99,6 +99,18 @@ the palette):
   streaming, `(truncated)` at the result bound, and scan errors. The
   component is consumer-agnostic: the Problems window (#33) and TODO index
   (#61) are its planned next hosts.
+- **Layout (#2047):** the results block is a **fixed-height** region between
+  `ui.MinResultRows` and `ui.MaxResultRows` (**11 to 40** rows, headers
+  included): eleven rows even with no matches at all — so the overlay stops
+  resizing under the cursor while a scan streams in — and forty at most, past
+  which the list scrolls instead of growing. Beside it, separated by a dim
+  vertical rule, a **code preview** shows the selected match's file around its
+  line (`internal/codepreview`, shared with the [find-usages
+  popup](/architecture/command-palette.md)); it follows the list cursor and
+  degrades to a dim `preview unavailable` notice when the file is gone or
+  unreadable. The preview takes two fifths of the content width (capped at 60
+  cells) and is dropped below 64 cells, where the list keeps the full width;
+  the box itself may now grow to 120 columns to carry both.
 - **Navigation:** `enter` opens the file at the match via the
   definition-jump path (`openPathAt`) and closes the overlay; the results
   survive closing, so `search.nextMatch` / `search.prevMatch` (f3/shift+f3,
@@ -116,8 +128,9 @@ the palette):
   clicks inside never leak to the panes below (#116). Inside: a click on an
   input row focuses that field, on a toggle flips it (and rescans), on a
   result row selects the match — a second press on the selected match opens
-  it (the settings panel's press-again-to-activate semantics, #127). The
-  wheel scrolls the result list. `View` records the row layout in a
+  it (the settings panel's press-again-to-activate semantics, #127). Presses
+  in the code-preview column are inert — `layoutInfo.listW` bounds the
+  clickable region (#2047). The wheel scrolls the result list. `View` records the row layout in a
   `layoutInfo` each render; `Click` maps panel-local coordinates through it
   and `locations.List.ItemAt` (window-relative row → item index).
 
