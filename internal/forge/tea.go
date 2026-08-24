@@ -19,7 +19,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -32,6 +34,12 @@ type teaForge struct {
 	owner   string
 	repo    string
 	token   string
+	user    string // the login's user, for the timeline's own-comment flag
+
+	// Lazy /user probe backing userLogin when the tea login did not name its
+	// user.
+	loginOnce sync.Once
+	login     string
 }
 
 // giteaPageSize is one REST page; Gitea servers cap the limit parameter
@@ -187,8 +195,44 @@ func (t *teaForge) Capabilities() (Capabilities, error) {
 	return parseGiteaPermissions(out)
 }
 
-func (t *teaForge) Timeline(issue int) ([]TimelineEntry, error) {
-	return nil, unsupported("tea", "issue timeline")
+// Timeline fetches one page of an issue's timeline via Gitea's timeline
+// endpoint (#2084), which serves comments and label/state/assignee changes
+// oldest first as typed comment objects.
+func (t *teaForge) Timeline(issue, page int) ([]TimelineEntry, bool, error) {
+	q := url.Values{}
+	q.Set("limit", itoa(timelinePageSize))
+	q.Set("page", itoa(page))
+	out, err := t.apiGet(t.repoPath()+"/issues/"+itoa(issue)+"/timeline", q)
+	if err != nil {
+		return nil, false, err
+	}
+	entries, raw, err := parseGiteaTimeline(out, t.userLogin())
+	if err != nil {
+		return nil, false, err
+	}
+	return entries, raw == timelinePageSize, nil
+}
+
+// userLogin is the authenticated user's login for the own-comment flag: the
+// tea login's user when it names one, otherwise one lazy /user probe; "" when
+// both fail — Own then just stays false.
+func (t *teaForge) userLogin() string {
+	if t.user != "" {
+		return t.user
+	}
+	t.loginOnce.Do(func() {
+		out, err := t.apiGet("/user", nil)
+		if err != nil {
+			return
+		}
+		var u struct {
+			Login string `json:"login"`
+		}
+		if json.Unmarshal(out, &u) == nil {
+			t.login = u.Login
+		}
+	})
+	return t.login
 }
 func (t *teaForge) CreateComment(issue int, body string) error {
 	return unsupported("tea", "create comment")
@@ -302,6 +346,77 @@ func parseGiteaPRs(out []byte) ([]PR, error) {
 		})
 	}
 	return prs, nil
+}
+
+// giteaTimelineItem mirrors the fields the pane needs from one entry of
+// Gitea's issue timeline: a typed comment object. type "comment" carries the
+// body; "label" a label plus body "1" (added) or "" (removed); "assignees" an
+// assignee plus the removed flag; "close"/"reopen" only actor and time.
+type giteaTimelineItem struct {
+	ID   int64  `json:"id"`
+	Type string `json:"type"`
+	Body string `json:"body"`
+	User struct {
+		Login string `json:"login"`
+	} `json:"user"`
+	CreatedAt string `json:"created_at"`
+	Label     *struct {
+		Name  string `json:"name"`
+		Color string `json:"color"`
+	} `json:"label"`
+	Assignee *struct {
+		Login string `json:"login"`
+	} `json:"assignee"`
+	RemovedAssignee bool `json:"removed_assignee"`
+}
+
+// parseGiteaTimeline decodes one Gitea timeline page into the neutral
+// vocabulary, dropping event types outside it. It returns the raw event count
+// too — the pagination flag counts what the forge sent, not what survived the
+// mapping. login marks own comments.
+func parseGiteaTimeline(out []byte, login string) ([]TimelineEntry, int, error) {
+	var raw []giteaTimelineItem
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, 0, err
+	}
+	var entries []TimelineEntry
+	for _, r := range raw {
+		e := TimelineEntry{Actor: r.User.Login, Time: parseTime(r.CreatedAt)}
+		switch r.Type {
+		case "comment":
+			e.Kind = TimelineComment
+			e.Body = r.Body
+			e.ID = strconv.FormatInt(r.ID, 10)
+			e.Own = login != "" && r.User.Login == login
+		case "label":
+			if r.Label == nil {
+				continue
+			}
+			e.Kind = TimelineUnlabeled
+			if r.Body == "1" {
+				e.Kind = TimelineLabeled
+			}
+			e.Body = r.Label.Name
+			e.LabelColor = strings.TrimPrefix(r.Label.Color, "#")
+		case "close":
+			e.Kind = TimelineClosed
+		case "reopen":
+			e.Kind = TimelineReopened
+		case "assignees":
+			if r.Assignee == nil {
+				continue
+			}
+			e.Kind = TimelineAssigned
+			if r.RemovedAssignee {
+				e.Kind = TimelineUnassigned
+			}
+			e.Body = r.Assignee.Login
+		default:
+			continue
+		}
+		entries = append(entries, e)
+	}
+	return entries, len(raw), nil
 }
 
 // parseGiteaPermissions folds the repo endpoint's permissions object

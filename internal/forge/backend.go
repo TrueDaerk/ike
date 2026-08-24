@@ -9,6 +9,7 @@ package forge
 // bindings without touching the interface.
 
 import (
+	"errors"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -36,17 +37,39 @@ type Capabilities struct {
 	Push bool
 }
 
-// TimelineEntry is one event of an issue's timeline: a comment, a label or
-// assignee change, a state change, a cross-reference. Kind names the event
-// ("comment", "labeled", "closed", …) in the forge's own vocabulary; Body
-// carries the comment text (or the label/assignee name); ID is the
-// forge-assigned identifier a comment edit needs.
+// Timeline event kinds (#2084): the neutral vocabulary both bindings map
+// their forge's timeline onto. Events of any other kind are dropped by the
+// parsers — the set is extensible by adding a constant and teaching the
+// parsers and the renderer about it.
+const (
+	// TimelineComment is a comment with a markdown body.
+	TimelineComment = "comment"
+	// TimelineLabeled / TimelineUnlabeled are label additions and removals;
+	// Body carries the label name, LabelColor its color.
+	TimelineLabeled   = "labeled"
+	TimelineUnlabeled = "unlabeled"
+	// TimelineClosed / TimelineReopened are issue state changes.
+	TimelineClosed   = "closed"
+	TimelineReopened = "reopened"
+	// TimelineAssigned / TimelineUnassigned are assignee changes; Body carries
+	// the assignee's login.
+	TimelineAssigned   = "assigned"
+	TimelineUnassigned = "unassigned"
+)
+
+// TimelineEntry is one event of an issue's timeline (#2084) in the neutral
+// vocabulary above. Body carries the comment's markdown (or the
+// label/assignee name); ID is the forge-assigned comment identifier a later
+// comment edit needs, and Own marks a comment authored by the authenticated
+// user — both only set for comments.
 type TimelineEntry struct {
-	Kind  string
-	Actor string
-	Time  time.Time
-	Body  string
-	ID    string
+	Kind       string
+	Actor      string
+	Time       time.Time
+	Body       string
+	LabelColor string // bare rrggbb of a labeled/unlabeled event's label
+	ID         string
+	Own        bool
 }
 
 // Forge is one backend bound to a repository: every method operates on the
@@ -59,8 +82,10 @@ type Forge interface {
 	Issues(state IssueState) ([]Issue, error)
 	// PRs lists the repository's pull requests in every state.
 	PRs() ([]PR, error)
-	// Timeline fetches one issue's timeline, oldest first.
-	Timeline(issue int) ([]TimelineEntry, error)
+	// Timeline fetches one page (1-based) of an issue's timeline, oldest
+	// first, and reports whether more pages follow. Long histories are never
+	// fetched whole — the pane asks for the next page on demand (#2084).
+	Timeline(issue, page int) ([]TimelineEntry, bool, error)
 	// CreateComment adds a comment to an issue.
 	CreateComment(issue int, body string) error
 	// EditComment replaces the body of an existing comment by its forge ID.
@@ -139,4 +164,41 @@ func RefreshStateCmd(dir string, state IssueState) tea.Cmd {
 // filter stays a pane concern and the pane stays subprocess-free.
 func RefreshFactory(dir string) func(IssueState) tea.Cmd {
 	return func(state IssueState) tea.Cmd { return RefreshStateCmd(dir, state) }
+}
+
+// TimelineMsg carries one fetched timeline page back into Update (#2084).
+// Issue and Page echo the request so the pane can drop an answer for an issue
+// it no longer shows; More reports whether another page follows.
+type TimelineMsg struct {
+	Issue   int
+	Page    int
+	Entries []TimelineEntry
+	More    bool
+	Err     error
+}
+
+// TimelineCmd fetches one page of an issue's timeline, resolving to one
+// TimelineMsg. An unavailable backend resolves to Err — the pane only asks
+// once a listing arrived, so the setup state was already shown there.
+func TimelineCmd(dir string, issue, page int) tea.Cmd {
+	if page < 1 {
+		page = 1
+	}
+	return func() tea.Msg {
+		f, setup := Detect(dir)
+		if setup != "" {
+			return TimelineMsg{Issue: issue, Page: page, Err: errors.New(setup)}
+		}
+		entries, more, err := f.Timeline(issue, page)
+		if err != nil {
+			return TimelineMsg{Issue: issue, Page: page, Err: err}
+		}
+		return TimelineMsg{Issue: issue, Page: page, Entries: entries, More: more}
+	}
+}
+
+// TimelineFactory is the per-issue/page fetch factory the issues window is
+// injected with, mirroring RefreshFactory.
+func TimelineFactory(dir string) func(issue, page int) tea.Cmd {
+	return func(issue, page int) tea.Cmd { return TimelineCmd(dir, issue, page) }
 }

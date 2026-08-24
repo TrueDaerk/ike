@@ -24,13 +24,27 @@ responses — never on a human rendering.
 ## The interface
 
 `Forge` covers the whole 0470 stream: `Issues(state)` (open/closed listing
-with labels + assignees), `PRs()` (every state), `Timeline(issue)`,
+with labels + assignees), `PRs()` (every state), `Timeline(issue, page)`,
 `CreateComment` / `EditComment` / `EditIssueBody`, `AddLabels` /
 `RemoveLabels` / `SetAssignees` / `CloseIssue` / `ReopenIssue`, `MergePR` /
 `ClosePR`, and `Capabilities()`. The interface ships complete; operations a
 binding has not implemented yet return a typed `*ErrUnsupported` (backend +
-operation), so later sub-issues only fill in bindings. In #2083 both bindings
-implement the listings and `Capabilities()`; the rest are stubs.
+operation), so later sub-issues only fill in bindings. #2083 brought the
+listings and `Capabilities()`; #2084 the timeline; the rest are stubs.
+
+`Timeline(issue, page)` (#2084) fetches one 30-entry page of an issue's
+history, oldest first, and reports whether more pages follow — long
+histories are never fetched whole. Entries use the neutral kind vocabulary
+(`comment`, `labeled`/`unlabeled`, `closed`/`reopened`,
+`assigned`/`unassigned`; anything else is dropped by the parsers): a comment
+carries its markdown body, the stable forge comment ID a later edit needs,
+and an own-comment flag matched against the authenticated user's login (gh:
+one cached `gh api user` probe; tea: the login's user, falling back to one
+`/user` probe). The gh binding reads GitHub's `issues/{n}/timeline` endpoint
+(comments arrive inline as `commented` events); the tea binding reads
+Gitea's typed timeline comments, where a label event's body distinguishes
+add (`"1"`) from remove. `TimelineCmd(dir, issue, page)` wraps it into a
+`TimelineMsg` echoing issue and page.
 
 `RefreshCmd(dir)` is the listing `tea.Cmd`: detect the backend, fetch open
 issues + all PRs, resolve to one `IssuesMsg` (`Setup` when no backend

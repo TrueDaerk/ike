@@ -1,5 +1,24 @@
 # Log
 
+## 2026-08-24 (issue timeline in the detail view, #2084)
+
+- **The issue detail shows the full history now.** Under the rendered body,
+  behind an `── activity ──` divider: comments as glamour-rendered markdown
+  blocks (accented author, `(you)` on own comments, relative age),
+  label/state/assignee changes as compact one-line events with colored label
+  chips. Fetched lazily on open, page by page (30 entries): `L` loads the
+  next page without moving the scroll, `r` refetches, and loading / error /
+  empty states each render visibly.
+- **`forge.Timeline(issue, page)` is implemented on both bindings** — GitHub
+  via `gh api issues/{n}/timeline`, Gitea via its typed timeline comments —
+  mapping onto the neutral `TimelineEntry` vocabulary (comment, labeled,
+  unlabeled, closed, reopened, assigned, unassigned; unknown kinds dropped).
+  Comments carry stable forge IDs and an own-comment flag (authenticated
+  login probed once per backend) for the upcoming comment editing. Parser
+  unit tests run on fixture JSON for both forges. Concept docs updated:
+  [Forge Layer](/architecture/forge.md),
+  [Issues Tool Window](/architecture/github-issues.md).
+
 ## 2026-08-24 (issues window UX overhaul, #2090)
 
 - **The issues window became two tabbed full-area views.** A tab bar

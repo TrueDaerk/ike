@@ -318,7 +318,8 @@ func (m *Model) openForgeEvent(e forge.Event) tea.Cmd {
 	}
 	cmd := m.showIssuesPanel()
 	if p := m.issuesPanel(); p != nil && p.Reveal(e.Number) {
-		return cmd
+		// The reveal opened the issue's detail: fetch its timeline (#2084).
+		return tea.Batch(cmd, p.PendingTimelineCmd())
 	}
 	// The listing does not carry the issue yet (the pane just opened, or its
 	// snapshot predates the event): reveal as soon as the fetch lands.
@@ -340,19 +341,22 @@ func (m *Model) showIssuesPanel() tea.Cmd {
 	return nil
 }
 
-// applyForgeReveal runs a pending reveal after a fetch landed in the pane.
-func (m *Model) applyForgeReveal() {
+// applyForgeReveal runs a pending reveal after a fetch landed in the pane,
+// returning the revealed issue's timeline fetch (#2084) when it succeeded.
+func (m *Model) applyForgeReveal() tea.Cmd {
 	if m.forgeReveal == 0 {
-		return
+		return nil
 	}
 	p := m.issuesPanel()
 	if p == nil {
 		m.forgeReveal = 0
-		return
+		return nil
 	}
 	if p.Reveal(m.forgeReveal) {
 		m.forgeReveal = 0
+		return p.PendingTimelineCmd()
 	}
+	return nil
 }
 
 // clearForgeUnread drops the badge: the events behind it have been viewed.
