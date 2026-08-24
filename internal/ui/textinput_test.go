@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func key(code rune, mod tea.KeyMod) tea.KeyPressMsg {
@@ -91,6 +92,21 @@ func TestCursorView(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("mid cursor lost %q: %q", want, got)
 		}
+	}
+}
+
+func TestCursorViewSel(t *testing.T) {
+	sel := lipgloss.NewStyle().Reverse(true) // any non-default style is enough to detect it rendered
+	// A selected range renders every rune and the reversed cursor cell.
+	got := CursorViewSel("bar", 3, 0, 3, sel)
+	for _, want := range []string{"b", "a", "r"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("selected text lost %q: %q", want, got)
+		}
+	}
+	// No selection (selStart >= selEnd) falls back to the plain cursor view.
+	if got, want := CursorViewSel("abc", 1, 0, 0, sel), CursorView("abc", 1); got != want {
+		t.Fatalf("no selection: got %q want %q", got, want)
 	}
 }
 

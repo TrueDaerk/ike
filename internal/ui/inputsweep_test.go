@@ -38,6 +38,7 @@ var allowed = map[string]string{
 	// ui.EditKey below.
 	"internal/explorer/fileops.go":     "preselect replace-on-type, EditKey does the insert",
 	"internal/editor/replace_panel.go": "preselect replace-on-type, EditKey does the insert",
+	"internal/editor/keys_command.go":  "preselect replace-on-type, EditKey does the insert",
 }
 
 func TestNoHandRolledTextInputs(t *testing.T) {

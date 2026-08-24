@@ -20,18 +20,44 @@ import (
 type SearchCommittedMsg struct{}
 
 // beginSearch enters the command line in search mode for "/" or "?", capturing
-// the cursor and viewport so an Esc restores them exactly (#255).
-func (m *Model) beginSearch(dir search.Direction) {
+// the cursor and viewport so an Esc restores them exactly (#255). prefill
+// seeds the query line already selected (#2063), so the first typed key
+// replaces it and the incremental preview jumps to it immediately; "" leaves
+// the line empty as before.
+func (m *Model) beginSearch(dir search.Direction, prefill string) {
 	m.collapseCarets() // search is single-caret (#145)
 	m.mode = Command
 	m.searching = true
 	m.searchDir = dir
-	m.cmdline = ""
-	m.cmdCur = 0
+	m.cmdline = prefill
+	m.cmdCur = len([]rune(prefill))
+	m.cmdSelStart, m.cmdSelEnd = 0, m.cmdCur
 	m.cmdHistIdx = -1 // a fresh line starts outside history recall (#1171)
 	m.preview = search.Query{}
 	m.searchOrigin = m.cursor
 	m.searchOrigTop, m.searchOrigLft = m.view.Top, m.view.Left
+	if prefill != "" {
+		m.searchPreview()
+	}
+}
+
+// visualSearchPrefill returns the text an open visual selection should seed
+// "/" search with (#2063), mirroring JetBrains: a single-line selection (any
+// visual variant, as long as it doesn't span lines) becomes the query; a
+// selection spanning multiple lines returns "" and search opens empty, since
+// the query language has no line-spanning match to offer instead.
+func (m *Model) visualSearchPrefill() string {
+	if !m.mode.IsVisual() {
+		return ""
+	}
+	t := m.visualSelection()
+	if t.Range.Start.Line != t.Range.End.Line {
+		return ""
+	}
+	if t.Linewise {
+		return m.buf.Line(t.Range.Start.Line)
+	}
+	return m.buf.Slice(t.Range)
 }
 
 // searchNextRepeat repeats the active search for n/N. reverse flips the stored
@@ -96,6 +122,34 @@ func opposite(d search.Direction) search.Direction {
 // inputs; every text change reruns the incremental preview (search) or the
 // path-suggest refresh (ex line).
 func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
+	if m.cmdSelStart < m.cmdSelEnd {
+		// A preselected range (a search prefilled from the visual selection,
+		// #2063): typing replaces it, Backspace/Delete remove it, and any
+		// other key just drops the selection and falls through to the normal
+		// handling below.
+		switch {
+		case key.Code == tea.KeyBackspace || key.Code == tea.KeyDelete:
+			r := []rune(m.cmdline)
+			m.cmdline = string(append(r[:m.cmdSelStart:m.cmdSelStart], r[m.cmdSelEnd:]...))
+			m.cmdCur = m.cmdSelStart
+			m.cmdSelStart, m.cmdSelEnd = 0, 0
+			if m.searching {
+				m.searchPreview()
+			}
+			return m, nil
+		case key.Code == tea.KeyEnter || key.Code == tea.KeyEscape:
+			m.cmdSelStart, m.cmdSelEnd = 0, 0 // accept/cancel act on the full text
+		case key.Text != "" && key.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper|tea.ModMeta) == 0:
+			// Typing replaces the selection: drop it here, then fall through
+			// to the shared editor below, which inserts at the new cursor.
+			r := []rune(m.cmdline)
+			m.cmdline = string(append(r[:m.cmdSelStart:m.cmdSelStart], r[m.cmdSelEnd:]...))
+			m.cmdCur = m.cmdSelStart
+			m.cmdSelStart, m.cmdSelEnd = 0, 0
+		default:
+			m.cmdSelStart, m.cmdSelEnd = 0, 0
+		}
+	}
 	switch {
 	case key.Code == tea.KeyEscape:
 		if m.searching {

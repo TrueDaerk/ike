@@ -708,7 +708,12 @@ func (m Model) commandLineRow() string {
 	}
 	// cl is the prefix rune (":", "/" or "?") plus the typed line; render the
 	// line through the shared cursor view so the movable cursor (#1110) shows.
-	return cl[:1] + ui.CursorView(m.cmdline, m.cmdCur) + m.searchCounter() + m.suggestRow()
+	line := ui.CursorView(m.cmdline, m.cmdCur)
+	if m.cmdSelStart < m.cmdSelEnd {
+		selStyle := lipgloss.NewStyle().Background(m.theme().Selection).Foreground(m.theme().SelectionText)
+		line = ui.CursorViewSel(m.cmdline, m.cmdCur, m.cmdSelStart, m.cmdSelEnd, selStyle)
+	}
+	return cl[:1] + line + m.searchCounter() + m.suggestRow()
 }
 
 // suggestRow renders the path-completion hint after the ":"-line cursor

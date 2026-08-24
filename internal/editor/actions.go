@@ -697,7 +697,8 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		if m.insert.active {
 			m.commitInsert()
 		}
-		m.beginSearch(search.Forward)
+		prefill := m.visualSearchPrefill()
+		m.beginSearch(search.Forward, prefill)
 	case "replace":
 		if m.insert.active {
 			m.commitInsert()

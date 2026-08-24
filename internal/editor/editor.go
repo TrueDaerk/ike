@@ -156,6 +156,12 @@ type Model struct {
 	cmdline    string
 	cmdCur     int      // rune cursor within cmdline (#1110)
 	cmdSuggest []string // path completion candidates on the ":" line (#543)
+	// cmdSelStart/cmdSelEnd mark a preselected rune range (selStart < selEnd)
+	// on the command line, used by "/" to preselect a single-line visual
+	// selection JetBrains-style (#2063): the first printable key replaces the
+	// whole range, Backspace/Delete remove it, and any other key drops the
+	// selection and edits normally. Zero/zero outside that case.
+	cmdSelStart, cmdSelEnd int
 	// Query-history recall (#1171): histStore is the app-owned persistent
 	// store (nil disables recall), cmdHistIdx the recall position on the
 	// open command line (-1 = editing live, otherwise an index into the

@@ -387,7 +387,16 @@ line runs that test (see /architecture/run-configurations.md).
   highlight, the current match additionally underlined; a normal-mode Esc
   clears the highlights (`:noh`-style) and `/`, `n`/`N`, `*`/`#` re-arm them.
   `cmd+f` (`editor.find`) opens the same `/` line — one engine, no divergent
-  find UI. The `/` `?` and `:` lines share the single-line editing helper
+  find UI. With an open **single-line visual selection**, `cmd+f` prefills the
+  query with the selected text instead of opening empty (#2063, JetBrains-style):
+  the text arrives **preselected** (rendered on the selection colors), the
+  incremental preview jumps to it immediately, and the first typed character
+  replaces it wholesale — mirroring the find-in-path query's own reopen
+  preselection above. Backspace/Delete clear the preselected text without a
+  second keystroke; any other key (arrows, history recall, `ctrl+c`) just drops
+  the mark and edits normally. A selection spanning more than one line has no
+  single-line text to offer, so `cmd+f` opens empty, same as with no selection
+  at all. The `/` `?` and `:` lines share the single-line editing helper
   (`internal/ui.EditKey`, #763, #1110): left/right move the cursor, typing
   inserts at it, alt+backspace deletes the previous word, cmd+backspace
   clears the line, and the incremental preview keeps tracking mid-query
