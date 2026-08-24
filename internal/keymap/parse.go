@@ -6,13 +6,21 @@ import (
 )
 
 // modAlias maps the modifier tokens an author may write to a logical Mod. Cmd,
-// command, meta and super all fold to ModMeta (platform.go decides its concrete
-// mapping); option/opt alias Alt; control aliases Ctrl.
+// command, meta, super, win and hyper all fold to ModMeta (platform.go decides
+// its concrete mapping); option/opt alias Alt; control aliases Ctrl.
+//
+// The OS-class modifiers collapse onto the single ModMeta bit on purpose: the
+// Kitty keyboard protocol can report meta, super *and* hyper (macOS terminals
+// send Cmd as super, the legacy CSI encoding calls the same bit meta), and IKE
+// models exactly one Cmd-class modifier. Folding them keeps every keystroke
+// bubbletea can produce parseable — an unknown token would make FromKeyMsg
+// drop the event outright (#2064).
 var modAlias = map[string]Mod{
 	"cmd":     ModMeta,
 	"command": ModMeta,
 	"meta":    ModMeta,
 	"super":   ModMeta,
+	"hyper":   ModMeta,
 	"win":     ModMeta,
 	"ctrl":    ModCtrl,
 	"control": ModCtrl,

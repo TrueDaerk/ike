@@ -541,6 +541,87 @@ protocol):
   terminals without the protocol swallow them.
 - plain keys, `ctrl+letter`, `f1/f6/f10`, `shift+f6` — delivered.
 
+## macOS: the Option key as Alt (#2064)
+
+`alt+*` is the largest fragile family in the default set (`alt+f7` find usages,
+`alt+1…9` tab select, `alt+enter` intentions, `ctrl+alt+h`, `cmd+alt+b`, …), and
+on a Mac the Option key is where it either works or silently does nothing. What
+arrives depends entirely on how the terminal is configured to treat Option.
+
+### What the wire carries
+
+| Mode | Terminals | opt+b on the wire | What bubbletea reports |
+|---|---|---|---|
+| **ESC-prefix (meta)** | Terminal.app "Use Option as Meta Key", iTerm2 "Esc+", tmux forwarding | `ESC b` — the whole sequence is prefixed, so `opt+F7` is `ESC ESC [ 18 ~` | `alt+b` / `alt+f7`, `Key.Text` empty |
+| **CSI-parameter (legacy)** | every mainstream terminal, for arrows / F-keys / nav keys | `CSI 18;3~` (bitset shift=1, alt=2, ctrl=4, meta=8, offset by 1) | `alt+f7` |
+| **Kitty keyboard protocol** | kitty, Ghostty, WezTerm, tmux 3.4+ passthrough | `CSI 98;3u` | `alt+b`; Cmd rides along as the protocol's *super* bit (`CSI 98;11u` = `cmd+alt+b`) |
+| **xterm modifyOtherKeys** | xterm and clones | `CSI 27;3;98~` | `alt+b` |
+| **composed (macOS default)** | Terminal.app / iTerm2 "Normal" / kitty & Ghostty with option-as-alt off | `∫` (UTF-8, three bytes) | the rune `∫`, **`Mod` empty** |
+
+bubbletea always requests basic key disambiguation (Kitty flag 1) — `View()`
+deliberately leaves `ReportEventTypes` off (#622) — so on a Kitty-protocol
+terminal the modifier set arrives explicitly and no configuration beyond
+option-as-alt is needed.
+
+### What IKE hardens
+
+`FromKeyMsg` (`fromkeymsg.go`) reads bubbletea's string form, but **which**
+string form matters. `Key.String()` returns `Key.Text` — the characters the
+terminal produced — whenever it is non-empty, which is right for plain typing
+(`?` rather than `shift+/`) and wrong for a chord: with the Kitty protocol's
+report-associated-text flag, or on the Windows Console API, a modified key
+carries both the modifiers *and* the text, and `String()` hands back a bare
+`"b"` for `opt+b`. Since #2064 any press carrying a chord modifier
+(ctrl/alt/meta/super/hyper) is read through `Keystroke()` instead, which always
+spells the modifiers out; shift-only presses keep the textual form.
+
+The Cmd-class modifiers all fold onto the single `ModMeta` bit
+(`modAlias` in `parse.go`): the Kitty protocol can report `meta`, `super` *and*
+`hyper` for what IKE calls Cmd, and an unrecognised token would make
+`ParseKey` fail and the event be dropped outright rather than resolved. Lock
+states (caps lock, num lock) never reach the chord — bubbletea's `Keystroke()`
+omits them.
+
+`internal/keymap/optkey_test.go` pins all of this from raw bytes: every
+sequence in the table above is decoded with ultraviolet's real `EventDecoder`,
+adapted through `FromKeyMsg`, and — for the default alt chords — looked up in
+the darwin binding table, so "opt+F7 fires Find usages" is a test, not a claim.
+
+### Troubleshooting: `alt+…` does nothing on my Mac
+
+The composed row of the table is **not fixable in IKE**. macOS applies the
+Option layer of the keyboard layout before any escape sequence exists, so
+`opt+b` reaches the program as the literal rune `∫` with an empty modifier
+set — indistinguishable from typing `∫`. IKE cannot recover the modifier, and
+guessing it back from the glyph would break typing those characters. The fix is
+one terminal setting:
+
+| Terminal | Setting |
+|---|---|
+| **Terminal.app** | Settings → Profiles → *Keyboard* → **Use Option as Meta Key** |
+| **iTerm2** | Settings → Profiles → *Keys* → Left/Right Option key → **Esc+** (*not* "Meta": that mode sets the 8th bit, which is ambiguous with UTF-8 and decodes as garbage) |
+| **kitty** | `macos_option_as_alt yes` (or `left` / `right`) |
+| **Ghostty** | `macos-option-as-alt = true` (or `left` / `right`) |
+| **WezTerm** | `send_composed_key_when_left_alt_is_pressed = false` (and the `right` twin) |
+| **Alacritty** | `[window] option_as_alt = "Both"` (or `OnlyLeft` / `OnlyRight`) |
+
+The trade is real and worth stating: with option-as-alt on, the Option layer
+stops producing `∫ ƒ å …`, so anyone who types those characters wants the
+one-sided (`left`/`right`) variant. Everything bound to `alt+*` also stays
+reachable from the command palette, the universal escape hatch — and
+`cmd/keyprobe` answers "does this chord actually arrive?" for a given terminal
+before anyone changes a binding.
+
+Two further macOS notes:
+
+- **`alt+f3`** (toggle bookmark with mnemonic) is encoded `CSI 1;3R`, which
+  collides with the cursor-position report. ultraviolet resolves the ambiguity
+  by emitting *both* events, so the chord still fires; the stray
+  `CursorPositionMsg` is ignored.
+- **Cmd chords** (`cmd+alt+b`, `cmd+alt+f7`, …) need a Kitty-protocol terminal
+  on top of option-as-alt — Terminal.app and iTerm2 never forward Cmd. That is
+  the `Fragile` class above, not an Option-key problem.
+
 ## Modifier-chord policy (#711)
 
 The leader layer (space/`ctrl+k` mnemonics, 0081/30) is **retired**: every

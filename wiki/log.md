@@ -27,6 +27,34 @@
   (Dockerfile), which has no extension to write a file under.
 - `intention.Context` grew one precomputed fact, `LangExt`, and the
   `hasText()` probe both entries gate on.
+## 2026-08-24 (opt as alt on macOS: alt chords survive the terminal, #2064)
+
+- **The modifier can no longer be masked by the text.** bubbletea's
+  `Key.String()` returns `Key.Text` whenever the terminal reported the
+  characters a key produced — right for typing (`?`, not `shift+/`), wrong for
+  a chord: with the Kitty protocol's report-associated-text flag (and on the
+  Windows Console API) a modified key carries the modifiers *and* the text, so
+  `opt+b` arrived as a bare `"b"` and no `alt+b` binding could match.
+  `FromKeyMsg` now reads `Keystroke()` — which always spells the modifiers out
+  — for any press carrying ctrl/alt/meta/super/hyper, and keeps the textual
+  form for shift-only presses.
+- **No keystroke bubbletea can produce is unparseable any more.** The Kitty
+  protocol reports `hyper` alongside `meta`/`super`; the unknown token made
+  `ParseKey` fail and the event be dropped outright. All three OS-class
+  modifiers now fold onto IKE's single Cmd-class `ModMeta` bit.
+- **Ground truth, from raw bytes.** `internal/keymap/optkey_test.go` drives
+  every encoding a macOS terminal can produce for `opt+<key>` — ESC-prefix
+  (Terminal.app "Use Option as Meta Key", iTerm2 "Esc+", tmux), legacy
+  CSI-parameter, Kitty CSI-u, xterm modifyOtherKeys — through ultraviolet's
+  real decoder and `FromKeyMsg`, and looks the default alt chords up in the
+  darwin table, so "opt+F7 fires Find usages" is a test rather than a claim.
+- **The unfixable case is delimited, not papered over.** With Option left in
+  its default macOS role the layout composes `opt+b` into `∫` before any escape
+  sequence exists; the modifier is simply gone and guessing it back from the
+  glyph would break typing those characters. The keybindings wiki gained a
+  macOS Option section with the wire-format matrix and a troubleshooting table
+  naming the concrete setting per terminal (Terminal.app, iTerm2 — "Esc+", not
+  "Meta" — kitty, Ghostty, WezTerm, Alacritty).
 
 ## 2026-08-24 (a generic code-preview column for every position picker, #2053)
 
