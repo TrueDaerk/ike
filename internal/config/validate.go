@@ -78,6 +78,8 @@ var (
 	whitespaceModes = map[string]bool{"none": true, "trailing": true, "all": true}
 	// timelineSources are the history.timeline_source values (#1916).
 	timelineSources = map[string]bool{"both": true, "local": true, "git": true}
+	// forgeNotifyStyles are the forge.notify.* values (#2086).
+	forgeNotifyStyles = map[string]bool{"dialog": true, "badge": true, "toast": true, "off": true}
 )
 
 // whichKeyMaxDelayMs caps keymap.which_key_delay_ms (#1909); the settings
@@ -232,6 +234,29 @@ func validate(c *Config) []Diagnostic {
 	if c.Keymap.WhichKeyDelayMs > whichKeyMaxDelayMs {
 		diags = append(diags, Diagnostic{Field: "keymap.which_key_delay_ms", Message: fmt.Sprintf("%d above maximum %d, using %d", c.Keymap.WhichKeyDelayMs, whichKeyMaxDelayMs, whichKeyMaxDelayMs)})
 		c.Keymap.WhichKeyDelayMs = whichKeyMaxDelayMs
+	}
+	// Forge event notification styles (#2086): an unknown style falls back to
+	// the built-in default of that event kind, so one typo never silences an
+	// event entirely.
+	defs := defaults().Forge.Notify
+	styles := []struct {
+		field string
+		val   *string
+		def   string
+	}{
+		{"forge.notify.issue_opened", &c.Forge.Notify.IssueOpened, defs.IssueOpened},
+		{"forge.notify.issue_closed", &c.Forge.Notify.IssueClosed, defs.IssueClosed},
+		{"forge.notify.pr_opened", &c.Forge.Notify.PROpened, defs.PROpened},
+		{"forge.notify.pr_merged", &c.Forge.Notify.PRMerged, defs.PRMerged},
+		{"forge.notify.pr_closed", &c.Forge.Notify.PRClosed, defs.PRClosed},
+		{"forge.notify.pr_checks_failing", &c.Forge.Notify.PRChecksFailing, defs.PRChecksFailing},
+	}
+	for _, s := range styles {
+		if forgeNotifyStyles[*s.val] {
+			continue
+		}
+		diags = append(diags, Diagnostic{Field: s.field, Message: fmt.Sprintf("unknown notification style %q, using %q", *s.val, s.def)})
+		*s.val = s.def
 	}
 	if !severities[c.Notifications.MinSeverity] {
 		diags = append(diags, Diagnostic{Field: "notifications.min_severity", Message: fmt.Sprintf("unknown severity %q, using \"info\"", c.Notifications.MinSeverity)})

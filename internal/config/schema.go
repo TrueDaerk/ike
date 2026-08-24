@@ -73,6 +73,29 @@ type Config struct {
 	Remote Remote `toml:"remote"`
 	// Screenshot holds the in-IDE PNG export's behaviour (#2001).
 	Screenshot Screenshot `toml:"screenshot"`
+	// Forge holds code-forge behaviour (#2086): how prominently each kind of
+	// forge event announces itself.
+	Forge Forge `toml:"forge"`
+}
+
+// Forge holds the code-forge settings (#2086). Notify is the per-event-type
+// notification style of the forge event surface.
+type Forge struct {
+	Notify ForgeNotify `toml:"notify"`
+}
+
+// ForgeNotify is the notification style per forge event kind (#2086). Each
+// field takes "dialog" (centered, dismissable dialog over the workspace),
+// "badge" (status-line unread badge only), "toast" (the ordinary bottom-right
+// toast) or "off" (history only). The field names mirror
+// forge.EventKind.Name(), so a new kind adds one field and one entry.
+type ForgeNotify struct {
+	IssueOpened     string `toml:"issue_opened"`
+	IssueClosed     string `toml:"issue_closed"`
+	PROpened        string `toml:"pr_opened"`
+	PRMerged        string `toml:"pr_merged"`
+	PRClosed        string `toml:"pr_closed"`
+	PRChecksFailing string `toml:"pr_checks_failing"`
 }
 
 // Screenshot holds the in-IDE screenshot export settings (#2001). Directory

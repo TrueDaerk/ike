@@ -166,7 +166,23 @@ clamped with a diagnostic when a config file names something else.
   snapshot); `o` emits `OpenURLMsg` (platform browser); `r` re-runs the
   injected refresh for the current state filter. All three work from the
   list and the detail.
+- **Reveal** — `Reveal(number)` jumps straight to one issue's detail view,
+  dropping the active filters first so a filtered-out issue stays reachable.
+  It is what the forge event dialog's open action calls (#2086); when the
+  listing does not carry the number yet, the app retries the reveal on the
+  next `forge.IssuesMsg`.
 - **States** — fetching, setup-missing (explanatory, never a hang: every
   subprocess is deadline-bounded), fetch-failed (last listing kept, `r`
   retries), no issues in the selected state, and nothing-matches-the-filter
   each render a distinct empty text.
+
+## Prominent forge event notifications (#2086)
+
+New forge events (the poller's `forge.EventsMsg`) do not settle for a toast:
+`internal/app/forgenotify.go` gives each event kind its own style — a centered
+dialog, a persistent status-line unread badge, a toast, or history only — with
+a do-not-interrupt guard that turns a dialog into the badge while the user is
+typing. Opening this tool window views the pending events and clears the badge;
+the dialog's open action reveals the announced issue's detail view here. The
+surface, its queueing rules and the `[forge.notify]` settings are documented in
+[Notifications](/architecture/notifications.md).

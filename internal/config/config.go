@@ -293,6 +293,14 @@ func (c *Config) Flat() map[string]string {
 	put("remote.max_fetch_mb", c.Remote.MaxFetchMB)
 	put("screenshot.directory", c.Screenshot.Directory)
 
+	// Per-event-type forge notification styles (#2086).
+	put("forge.notify.issue_opened", c.Forge.Notify.IssueOpened)
+	put("forge.notify.issue_closed", c.Forge.Notify.IssueClosed)
+	put("forge.notify.pr_opened", c.Forge.Notify.PROpened)
+	put("forge.notify.pr_merged", c.Forge.Notify.PRMerged)
+	put("forge.notify.pr_closed", c.Forge.Notify.PRClosed)
+	put("forge.notify.pr_checks_failing", c.Forge.Notify.PRChecksFailing)
+
 	put("debug.inline_values", c.Debug.InlineValues)
 	put("debug.php.port", c.Debug.PHP.Port)
 	put("debug.php.hostname", c.Debug.PHP.Hostname)

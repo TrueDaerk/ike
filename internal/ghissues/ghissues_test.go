@@ -660,3 +660,34 @@ func TestPasteFeedsTheFilterLine(t *testing.T) {
 		t.Fatalf("paste must narrow live (filter=%q visible=%d)", m.Filter(), m.Visible())
 	}
 }
+
+// TestRevealJumpsToIssueDetail: the forge event dialog's open action (#2086)
+// lands on the announced issue's detail view, even past active filters.
+func TestRevealJumpsToIssueDetail(t *testing.T) {
+	m := filled(t)
+	m.Update(key("/"))
+	for _, r := range "markdown" {
+		m.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+	}
+	if m.Visible() != 1 {
+		t.Fatalf("precondition: filter narrows to 1, have %d", m.Visible())
+	}
+	if !m.Reveal(3) {
+		t.Fatal("Reveal must find a listed issue hidden by the filter")
+	}
+	if m.Filter() != "" || len(m.LabelFilter()) != 0 {
+		t.Fatal("Reveal drops the filters so the issue is reachable")
+	}
+	if m.ActiveTab() != TabIssues {
+		t.Fatal("Reveal switches back to the issue view")
+	}
+	if !m.DetailOpen() {
+		t.Fatal("Reveal opens the detail view")
+	}
+	if is := m.Selected(); is == nil || is.Number != 3 {
+		t.Fatalf("selected = %v want #3", is)
+	}
+	if m.Reveal(999) {
+		t.Fatal("an unlisted number must not reveal")
+	}
+}
