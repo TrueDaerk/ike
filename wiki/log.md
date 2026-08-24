@@ -1,5 +1,32 @@
 # Log
 
+## 2026-08-24 (issues window UX overhaul, #2090)
+
+- **The issues window became two tabbed full-area views.** A tab bar
+  (`Issues n │ PRs n`) tops the pane; `tab`/`shift+tab`, the delivered
+  `ctrl+pgup`/`ctrl+pgdown` chords and a click on a label switch views, and
+  each view keeps its own cursor and scroll. Pull requests moved out of the
+  cryptic one-glyph markers under the issue rows into a full-width list of
+  their own — number, title, head branch, review decision, CI rollup, age.
+- **The detail is a real view now.** `enter` opens the issue full area under
+  an `issue x/y` header; `esc` restores the list's cursor and scroll exactly;
+  `ctrl+j`/`ctrl+k` walk to the next/previous issue without going back.
+- **Filtering became reachable and visible.** The fuzzy filter starts on `f`
+  (QWERTZ-friendly, `/` kept as an alias) and a persistent filter row spells
+  out every narrowing in force. `l` opens a multi-select label picker
+  (replacing the old `l` cycling, and an OR filter now), `t` cycles an
+  open/closed/all state filter that refetches through the #2083 listing
+  extension, `a` cycles the sort order (relevance/newest/oldest/updated/
+  number), `g` groups the list by label, and `esc` clears everything.
+- **Rows carry age and author columns**, shrinking in tiers before the title
+  truncates; `forge.Issue`/`forge.PR` gained state, author, review decision
+  and timestamps for them, on both the gh and the Gitea binding.
+- **Nothing hides any more:** one table backs the footer and a new action
+  menu (`m`, `?`), listing every action of the current view with its key.
+- **New settings** `issues.default_tab` and `issues.default_sort`, wired on
+  the Settings UI's *Issues Window* page. Concept doc rewritten:
+  [Issues Tool Window](/architecture/github-issues.md).
+
 ## 2026-08-24 (forge backend abstraction + Gitea/Forgejo binding, #2083)
 
 - **`internal/forge` grew the `Forge` interface** covering the whole 0470

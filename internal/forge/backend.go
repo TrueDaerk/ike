@@ -22,6 +22,9 @@ const (
 	IssuesOpen IssueState = "open"
 	// IssuesClosed lists the closed issues.
 	IssuesClosed IssueState = "closed"
+	// IssuesAll lists open and closed issues together; both bindings accept
+	// it verbatim (gh's --state all, Gitea's state=all).
+	IssuesAll IssueState = "all"
 )
 
 // Capabilities reports what the authenticated user may do to the repository,
@@ -100,24 +103,40 @@ func unsupported(backend, op string) error {
 }
 
 // RefreshCmd fetches the open issues and the pull requests of the repository
-// containing dir, resolving to one IssuesMsg. An unavailable backend (no
-// forge CLI, no matching remote or login) resolves to the Setup state; a
-// failing fetch to Err. A failing PR listing keeps the issues and drops only
-// the PR states — the list is still useful without them.
-func RefreshCmd(dir string) tea.Cmd {
+// containing dir, resolving to one IssuesMsg.
+func RefreshCmd(dir string) tea.Cmd { return RefreshStateCmd(dir, IssuesOpen) }
+
+// RefreshStateCmd is RefreshCmd for an explicit issue state — the issues
+// window's open/closed/all filter refetches through it (#2090). An
+// unavailable backend (no forge CLI, no matching remote or login) resolves to
+// the Setup state; a failing fetch to Err. A failing PR listing keeps the
+// issues and drops only the PR states — the list is still useful without
+// them. Pull requests are always fetched in every state and split client-side,
+// so switching the issue state never re-costs the PR tab.
+func RefreshStateCmd(dir string, state IssueState) tea.Cmd {
+	if state == "" {
+		state = IssuesOpen
+	}
 	return func() tea.Msg {
 		f, setup := Detect(dir)
 		if setup != "" {
-			return IssuesMsg{Setup: setup}
+			return IssuesMsg{State: state, Setup: setup}
 		}
-		issues, err := f.Issues(IssuesOpen)
+		issues, err := f.Issues(state)
 		if err != nil {
-			return IssuesMsg{Err: err}
+			return IssuesMsg{State: state, Err: err}
 		}
-		msg := IssuesMsg{Issues: issues}
+		msg := IssuesMsg{State: state, Issues: issues}
 		if prs, err := f.PRs(); err == nil {
 			msg.PRs = prs
 		}
 		return msg
 	}
+}
+
+// RefreshFactory is the per-state fetch factory the issues window is injected
+// with: the pane calls it with whatever its state filter selects, so the
+// filter stays a pane concern and the pane stays subprocess-free.
+func RefreshFactory(dir string) func(IssueState) tea.Cmd {
+	return func(state IssueState) tea.Cmd { return RefreshStateCmd(dir, state) }
 }

@@ -21,6 +21,7 @@ package forge
 import (
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Label is one issue label: its name and the forge-assigned color as a bare
@@ -30,12 +31,21 @@ type Label struct {
 	Color string `json:"color"`
 }
 
-// Issue is one open issue of the repository.
+// Issue is one issue of the repository. State carries the forge's own
+// vocabulary folded to upper case ("OPEN"/"CLOSED") so a listing fetched with
+// IssuesAll can still be split per state in the pane; Author is the login
+// that opened it, and the two timestamps back the issues window's age column
+// and its sort orders (#2090). Backends that do not report a field leave it
+// zero — every consumer degrades to hiding the column.
 type Issue struct {
 	Number    int
 	Title     string
 	Body      string
 	URL       string
+	State     string
+	Author    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 	Labels    []Label
 	Assignees []string
 }
@@ -55,14 +65,22 @@ const (
 )
 
 // PR is one pull request, reduced to what the issues window shows: its state
-// (OPEN/MERGED/CLOSED), the branch it comes from, and the CI rollup.
+// (OPEN/MERGED/CLOSED), the branch it comes from, the CI rollup, and — for
+// the PR tab's own list (#2090) — author, review decision and timestamps.
+// Review is the forge's review rollup in upper case ("APPROVED",
+// "CHANGES_REQUESTED", "REVIEW_REQUIRED"); backends that do not report one
+// leave it empty and the column stays blank.
 type PR struct {
-	Number  int
-	Title   string
-	State   string
-	URL     string
-	HeadRef string
-	Checks  CheckState
+	Number    int
+	Title     string
+	State     string
+	URL       string
+	HeadRef   string
+	Author    string
+	Review    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Checks    CheckState
 }
 
 // IssuesMsg carries one refreshed issue/PR listing back into Update.
@@ -74,8 +92,12 @@ type PR struct {
 type IssuesMsg struct {
 	Issues []Issue
 	PRs    []PR
-	Setup  string
-	Err    error
+	// State is the issue state the listing was fetched for, echoed back so
+	// the pane can tell a stale answer from the one its current state filter
+	// asked for (#2090).
+	State IssueState
+	Setup string
+	Err   error
 }
 
 // StartWorkDoneMsg reports a finished start-work flow: the branch that was

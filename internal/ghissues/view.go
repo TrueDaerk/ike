@@ -1,8 +1,10 @@
 package ghissues
 
-// view.go renders the pane: the list with label chips and PR markers, the
-// filter line, and the glamour-rendered detail view (the markdown pipeline
-// the preview pane uses, #62).
+// view.go renders the pane (#2090): the tab bar, the filter row, the active
+// full-area view — the issue list with its age/author columns and optional
+// label groups, the PR list, or the glamour-rendered issue detail with its
+// position header — the footer of the current view's actions, and the two
+// modals composited over the body.
 
 import (
 	"fmt"
@@ -16,56 +18,167 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/forge"
+	"ike/internal/overlay"
 	"ike/internal/theme"
 	"ike/internal/ui"
 )
 
-// View renders the title header, the body (list or detail), and the footer.
+// Column widths of the list's right-hand metadata. Both are dropped whole
+// when the pane is too narrow to keep the title readable.
+const (
+	authorColW = 10
+	ageColW    = 4
+	branchColW = 22
+)
+
+// View renders the tab bar, the filter row, the body (list, PR list or
+// detail) with any modal composited on it, and the footer.
 func (m *Model) View() string {
 	pal := m.theme()
 	var b strings.Builder
-	b.WriteString(m.headerLine(pal))
+	b.WriteString(m.tabBar(pal))
 	b.WriteString("\n")
-	if m.detail {
-		b.WriteString(m.renderDetail(pal, m.bodyHeight()))
-	} else {
-		b.WriteString(m.renderRows(pal, m.bodyHeight()))
+	if m.filterRowShown() {
+		b.WriteString(m.filterRow(pal))
+		b.WriteString("\n")
 	}
+	height := m.bodyHeight()
+	var body string
+	switch {
+	case m.detail && m.tab == TabIssues:
+		b.WriteString(m.detailHeader(pal))
+		b.WriteString("\n")
+		body = m.renderDetail(pal, height)
+	case m.tab == TabPRs:
+		body = m.renderPRRows(pal, height)
+	default:
+		body = m.renderRows(pal, height)
+	}
+	if m.ov != ovNone {
+		body = overlay.Center(strings.TrimRight(body, "\n"), m.overlayBox(pal), m.width, height)
+		body = padLines(body, height)
+	}
+	b.WriteString(body)
 	b.WriteString(m.footer(pal))
 	return b.String()
 }
 
-// headerLine renders the title accented, the counts and active filters faint.
-func (m *Model) headerLine(pal *theme.Palette) string {
-	head := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" " + m.Title())
-	var notes []string
-	if lf := m.LabelFilter(); lf != "" {
-		notes = append(notes, "label: "+lf)
+// padLines makes sure a body block occupies exactly height rows, so the
+// footer never rides up after compositing.
+func padLines(body string, height int) string {
+	lines := strings.Split(strings.TrimRight(body, "\n"), "\n")
+	var b strings.Builder
+	for k := 0; k < height; k++ {
+		if k < len(lines) {
+			b.WriteString(lines[k])
+		}
+		b.WriteString("\n")
 	}
-	if m.fInput != "" && !m.fEditing {
-		notes = append(notes, "filter: "+m.fInput)
-	}
-	if len(notes) > 0 {
-		head += lipgloss.NewStyle().Foreground(pal.Warning).Render("   " + strings.Join(notes, " · "))
-	}
-	return head
+	return b.String()
 }
 
-// renderRows draws the filtered list scrolled around the cursor.
+// tabLabels are the tab bar's two entries with their filtered counts.
+func (m *Model) tabLabels() []string {
+	issues, prs := "Issues", "PRs"
+	if m.loaded {
+		issues += " " + strconv.Itoa(len(m.visible))
+		prs += " " + strconv.Itoa(len(m.prVisible))
+	}
+	return []string{issues, prs}
+}
+
+// tabBar renders the pane's first row: the two view labels, the active one
+// accented, separated like the editor's tab bar, with the fetch state noted
+// right-aligned.
+func (m *Model) tabBar(pal *theme.Palette) string {
+	active := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
+	idle := lipgloss.NewStyle().Foreground(pal.Foreground).Faint(true)
+	frame := lipgloss.NewStyle().Foreground(pal.Border)
+	var b strings.Builder
+	for i, label := range m.tabLabels() {
+		if i > 0 {
+			b.WriteString(frame.Render("│"))
+		}
+		style := idle
+		if Tab(i) == m.tab {
+			style = active
+		}
+		b.WriteString(style.Render(" " + label + " "))
+	}
+	line := b.String()
+	if note := m.stateNote(); note != "" {
+		noted := lipgloss.NewStyle().Foreground(pal.Warning).Render(note + " ")
+		if pad := m.width - lipgloss.Width(line) - lipgloss.Width(noted); pad > 0 {
+			line += strings.Repeat(" ", pad) + noted
+		}
+	}
+	return line
+}
+
+// tabBarSpans returns the [start, end) column range of each tab label, so a
+// click on the bar resolves to the view it drew.
+func (m *Model) tabBarSpans() [][2]int {
+	spans := make([][2]int, 0, 2)
+	x := 0
+	for i, label := range m.tabLabels() {
+		if i > 0 {
+			x++ // the │ separator
+		}
+		w := lipgloss.Width(label) + 2 // the label's padding spaces
+		spans = append(spans, [2]int{x, x + w})
+		x += w
+	}
+	return spans
+}
+
+// stateNote is the short right-aligned fetch state on the tab bar.
+func (m *Model) stateNote() string {
+	switch {
+	case m.loading:
+		return "fetching…"
+	case m.setup != "":
+		return "unavailable"
+	case m.errMsg != "":
+		return "fetch failed"
+	}
+	return ""
+}
+
+// filterRow renders the persistent filter line: the editable input while the
+// filter is open, otherwise every narrowing and ordering in force.
+func (m *Model) filterRow(pal *theme.Palette) string {
+	if m.fEditing {
+		prefix := lipgloss.NewStyle().Foreground(pal.Accent).Render(" filter: ")
+		hint := lipgloss.NewStyle().Faint(true).Render("  (enter keeps · esc clears)")
+		return prefix + ui.CursorView(m.fInput, m.fCur) + hint
+	}
+	return lipgloss.NewStyle().Foreground(pal.Warning).Render(m.clip(" " + m.filterSummary()))
+}
+
+// renderRows draws the filtered issue list scrolled around the cursor.
 func (m *Model) renderRows(pal *theme.Palette, height int) string {
-	if len(m.visible) == 0 {
+	if len(m.rows) == 0 {
 		return lipgloss.NewStyle().Faint(true).Render(" "+m.emptyText()) + strings.Repeat("\n", height)
 	}
 	m.clampScroll()
 	var b strings.Builder
 	for k := 0; k < height; k++ {
 		i := m.top + k
-		if i < len(m.visible) {
-			b.WriteString(m.renderRow(pal, i))
+		if i < len(m.rows) {
+			if h := m.rows[i].header; h != "" {
+				b.WriteString(m.renderGroupHeader(pal, h))
+			} else {
+				b.WriteString(m.renderRow(pal, i))
+			}
 		}
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// renderGroupHeader draws one "group by label" divider row.
+func (m *Model) renderGroupHeader(pal *theme.Palette, text string) string {
+	return lipgloss.NewStyle().Foreground(pal.Accent).Bold(true).Render(m.clip(" ▸ " + text))
 }
 
 // emptyText explains the empty pane per state.
@@ -78,19 +191,34 @@ func (m *Model) emptyText() string {
 	case m.errMsg != "":
 		return "(fetch failed: " + m.errMsg + " — r retries)"
 	case m.loaded && len(m.issues) == 0:
-		return "(no open issues)"
+		return "(no " + m.state.String() + " issues)"
 	case m.loaded:
-		return "(no issues match the filter)"
+		return "(no issues match the filter — esc clears it)"
 	default:
 		return "(press r to fetch the issue list)"
 	}
 }
 
-// renderRow draws one issue line: number accented, title, label chips in the
-// forge's colors, assignee and the linked PR's state.
-func (m *Model) renderRow(pal *theme.Palette, i int) string {
-	is := &m.issues[m.visible[i]]
-	selected := i == m.cursor
+// emptyPRText is emptyText for the PR view.
+func (m *Model) emptyPRText() string {
+	switch {
+	case m.setup != "":
+		return m.setup
+	case m.loading:
+		return "(fetching pull requests…)"
+	case m.errMsg != "":
+		return "(fetch failed: " + m.errMsg + " — r retries)"
+	case m.loaded && len(m.prs) == 0:
+		return "(no pull requests)"
+	case m.loaded:
+		return "(no pull requests match the filter — esc clears it)"
+	default:
+		return "(press r to fetch the listing)"
+	}
+}
+
+// rowStyles resolves the base and number styles of one row by selection.
+func (m *Model) rowStyles(pal *theme.Palette, selected bool) (lipgloss.Style, lipgloss.Style) {
 	base := lipgloss.NewStyle().Foreground(pal.Foreground)
 	num := lipgloss.NewStyle().Foreground(pal.Accent)
 	if selected {
@@ -101,40 +229,80 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 		base = base.Background(bg).Bold(m.focused)
 		num = num.Background(bg)
 	}
+	return base, num
+}
 
-	meta := m.rowMeta(pal, is)
-	numText := " #" + strconv.Itoa(is.Number) + " "
-	budget := m.width - lipgloss.Width(meta) - lipgloss.Width(numText)
-	if budget < 12 {
-		meta = ""
+// composeRow lays a row out as number + title + right-aligned metadata,
+// shrinking the metadata in tiers before it truncates the title.
+func (m *Model) composeRow(base, num lipgloss.Style, numText string, title string, meta func(tier int) string) string {
+	metaText := ""
+	for tier := 0; tier < 4; tier++ {
+		metaText = meta(tier)
+		if m.width-lipgloss.Width(metaText)-lipgloss.Width(numText) >= 16 || tier == 3 {
+			break
+		}
+	}
+	budget := m.width - lipgloss.Width(metaText) - lipgloss.Width(numText)
+	if budget < 8 {
+		metaText = ""
 		budget = m.width - lipgloss.Width(numText)
 	}
-	title := is.Title
 	if r := []rune(title); budget > 1 && len(r) > budget {
 		title = string(r[:budget-1]) + "…"
 	}
 	line := num.Render(numText) + base.Render(title)
-	if meta != "" {
-		pad := m.width - lipgloss.Width(line) - lipgloss.Width(meta)
-		if pad > 0 {
+	if metaText != "" {
+		if pad := m.width - lipgloss.Width(line) - lipgloss.Width(metaText); pad > 0 {
 			line += base.Render(strings.Repeat(" ", pad))
 		}
-		line += meta
+		line += metaText
 	}
 	return line
 }
 
-// rowMeta renders the right-aligned metadata: chips, assignee, PR state.
-func (m *Model) rowMeta(pal *theme.Palette, is *forge.Issue) string {
+// renderRow draws one issue row: number accented, title, then the metadata
+// columns — label chips in the forge's colors, assignee, author and age.
+func (m *Model) renderRow(pal *theme.Palette, i int) string {
+	is := &m.issues[m.rows[i].idx]
+	base, num := m.rowStyles(pal, i == m.cursor)
+	numText := " " + m.stateGlyph(pal, is) + "#" + strconv.Itoa(is.Number) + " "
+	return m.composeRow(base, num, numText, is.Title, func(tier int) string {
+		return m.rowMeta(pal, is, tier)
+	})
+}
+
+// stateGlyph marks a closed issue while the state filter shows more than the
+// open ones; with the default filter every row is open and the glyph is noise.
+func (m *Model) stateGlyph(pal *theme.Palette, is *forge.Issue) string {
+	if m.state == FilterOpen || is.State == "" {
+		return ""
+	}
+	if is.State == "CLOSED" {
+		return "✔ "
+	}
+	return "● "
+}
+
+// rowMeta renders the right-aligned metadata at one shrink tier: 0 is
+// everything, 1 drops the label chips, 2 keeps only the age, 3 nothing.
+func (m *Model) rowMeta(pal *theme.Palette, is *forge.Issue, tier int) string {
+	if tier >= 3 {
+		return ""
+	}
 	var parts []string
-	for _, l := range is.Labels {
-		parts = append(parts, chip(l))
+	if tier == 0 {
+		for _, l := range is.Labels {
+			parts = append(parts, chip(l))
+		}
+		if len(is.Assignees) > 0 {
+			parts = append(parts, lipgloss.NewStyle().Faint(true).Render("@"+strings.Join(is.Assignees, ",")))
+		}
 	}
-	if len(is.Assignees) > 0 {
-		parts = append(parts, lipgloss.NewStyle().Faint(true).Render("@"+strings.Join(is.Assignees, ",")))
+	if tier <= 1 && is.Author != "" {
+		parts = append(parts, lipgloss.NewStyle().Foreground(pal.Info).Render(padLeft(truncate(is.Author, authorColW), authorColW)))
 	}
-	if pr := forge.PRForIssue(m.prs, is.Number); pr != nil {
-		parts = append(parts, m.prMarker(pal, pr))
+	if age := ui.ShortAge(is.CreatedAt, m.clock()); age != "" {
+		parts = append(parts, lipgloss.NewStyle().Faint(true).Render(padLeft(age, ageColW)))
 	}
 	if len(parts) == 0 {
 		return ""
@@ -142,10 +310,91 @@ func (m *Model) rowMeta(pal *theme.Palette, is *forge.Issue) string {
 	return strings.Join(parts, " ") + " "
 }
 
-// prMarker renders the linked PR compactly: number plus state/CI glyph.
-func (m *Model) prMarker(pal *theme.Palette, pr *forge.PR) string {
+// renderPRRows draws the pull-request list full width.
+func (m *Model) renderPRRows(pal *theme.Palette, height int) string {
+	if len(m.prRows) == 0 {
+		return lipgloss.NewStyle().Faint(true).Render(" "+m.emptyPRText()) + strings.Repeat("\n", height)
+	}
+	m.clampScroll()
+	var b strings.Builder
+	for k := 0; k < height; k++ {
+		i := m.prTop + k
+		if i < len(m.prRows) {
+			b.WriteString(m.renderPRRow(pal, i))
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// renderPRRow draws one pull-request row: number with its state color, title,
+// then head branch, CI rollup, review decision and age.
+func (m *Model) renderPRRow(pal *theme.Palette, i int) string {
+	pr := &m.prs[m.prRows[i].idx]
+	base, num := m.rowStyles(pal, i == m.prCursor)
 	glyph, col := prGlyph(pal, pr)
-	return lipgloss.NewStyle().Foreground(col).Render("PR#" + strconv.Itoa(pr.Number) + glyph)
+	numText := " #" + strconv.Itoa(pr.Number) + " "
+	line := m.composeRow(base, num.Foreground(col), numText, pr.Title, func(tier int) string {
+		return m.prRowMeta(pal, pr, glyph, col, tier)
+	})
+	return line
+}
+
+// prRowMeta renders the PR row's metadata at one shrink tier: 0 is head
+// branch, checks, review and age; 1 drops the branch; 2 keeps checks and age.
+func (m *Model) prRowMeta(pal *theme.Palette, pr *forge.PR, glyph string, col color.Color, tier int) string {
+	if tier >= 3 {
+		return ""
+	}
+	var parts []string
+	if tier == 0 && pr.HeadRef != "" {
+		parts = append(parts, lipgloss.NewStyle().Faint(true).Render(truncate(pr.HeadRef, branchColW)))
+	}
+	if tier <= 1 {
+		if text, rcol := reviewLabel(pal, pr); text != "" {
+			parts = append(parts, lipgloss.NewStyle().Foreground(rcol).Render(text))
+		}
+	}
+	state := strings.ToLower(pr.State)
+	if state == "" {
+		state = "open"
+	}
+	parts = append(parts, lipgloss.NewStyle().Foreground(col).Render(state+glyph))
+	if age := ui.ShortAge(pr.UpdatedAt, m.clock()); age != "" {
+		parts = append(parts, lipgloss.NewStyle().Faint(true).Render(padLeft(age, ageColW)))
+	}
+	return strings.Join(parts, " ") + " "
+}
+
+// reviewLabel renders a PR's review decision compactly, "" when the backend
+// reports none (Gitea has no equivalent field).
+func reviewLabel(pal *theme.Palette, pr *forge.PR) (string, color.Color) {
+	switch pr.Review {
+	case "APPROVED":
+		return "approved", pal.Success
+	case "CHANGES_REQUESTED":
+		return "changes", pal.Error
+	case "REVIEW_REQUIRED":
+		return "review", pal.Warning
+	}
+	return "", pal.Foreground
+}
+
+// truncate cuts s to n cells with an ellipsis; a short string passes through.
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if n < 1 || len(r) <= n {
+		return s
+	}
+	return string(r[:n-1]) + "…"
+}
+
+// padLeft right-aligns s in a field of n cells.
+func padLeft(s string, n int) string {
+	if pad := n - len([]rune(s)); pad > 0 {
+		return strings.Repeat(" ", pad) + s
+	}
+	return s
 }
 
 // prGlyph maps a PR to its one-glyph state: merged/closed first, then the CI
@@ -153,17 +402,17 @@ func (m *Model) prMarker(pal *theme.Palette, pr *forge.PR) string {
 func prGlyph(pal *theme.Palette, pr *forge.PR) (string, color.Color) {
 	switch strings.ToUpper(pr.State) {
 	case "MERGED":
-		return "⇌", pal.Info
+		return " ⇌", pal.Info
 	case "CLOSED":
-		return "×", pal.Error
+		return " ×", pal.Error
 	}
 	switch pr.Checks {
 	case forge.ChecksFailing:
-		return "✗", pal.Error
+		return " ✗", pal.Error
 	case forge.ChecksPending:
-		return "…", pal.Warning
+		return " …", pal.Warning
 	case forge.ChecksPassing:
-		return "✓", pal.Success
+		return " ✓", pal.Success
 	default:
 		return "", pal.Info
 	}
@@ -219,17 +468,41 @@ func luminance(c color.RGBA) int {
 	return (299*int(c.R) + 587*int(c.G) + 114*int(c.B)) / 1000
 }
 
-// footer shows the key hints, or the open filter line in their place.
+// footer lists the current view's actions with their keys, always ending in
+// the action menu that shows the same table in full.
 func (m *Model) footer(pal *theme.Palette) string {
-	if m.fEditing {
-		prefix := lipgloss.NewStyle().Faint(true).Render(" filter: ")
-		return prefix + ui.CursorView(m.fInput, m.fCur)
+	if m.ov == ovLabels {
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggle · backspace clear · enter apply · esc cancel"))
 	}
-	hints := " enter detail · s start work · o browser · / filter · l label · r refresh"
-	if m.detail {
-		hints = " esc back · s start work · o browser · j/k scroll · r refresh"
+	if m.ov == ovActions {
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter run · esc close"))
 	}
-	return lipgloss.NewStyle().Faint(true).Render(m.clip(hints))
+	var parts []string
+	for _, a := range m.actions() {
+		parts = append(parts, a.key+" "+a.hint)
+	}
+	parts = append(parts, "m menu")
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(" " + strings.Join(parts, " · ")))
+}
+
+// detailHeader is the detail view's context line: the issue on screen and its
+// place in the filtered listing, so opening one never loses the list.
+func (m *Model) detailHeader(pal *theme.Palette) string {
+	is := m.Selected()
+	if is == nil {
+		return ""
+	}
+	title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true).
+		Render(" #" + strconv.Itoa(is.Number) + " ")
+	pos, total := m.Position()
+	note := lipgloss.NewStyle().Faint(true).
+		Render(fmt.Sprintf("issue %d/%d — ctrl+j/ctrl+k walk ", pos, total))
+	line := title + lipgloss.NewStyle().Foreground(pal.Foreground).Render(is.Title)
+	if pad := m.width - lipgloss.Width(line) - lipgloss.Width(note); pad > 0 {
+		return line + strings.Repeat(" ", pad) + note
+	}
+	return m.clip(lipgloss.NewStyle().Foreground(pal.Accent).Bold(true).
+		Render(" #"+strconv.Itoa(is.Number)+" ") + is.Title)
 }
 
 // renderDetail draws the selected issue's rendered body, scrolled.
@@ -259,7 +532,12 @@ func (m *Model) ensureDetail(is *forge.Issue) {
 	}
 	m.detailFor, m.detailW = is.Number, m.width
 	m.detailTop = 0
-	head := "# #" + strconv.Itoa(is.Number) + " " + is.Title + "\n\n"
+	// No title heading: the position header above the body already names the
+	// issue, in the pane's own accent rather than glamour's.
+	head := ""
+	if meta := m.detailMeta(is); meta != "" {
+		head += meta + "\n\n"
+	}
 	if pr := forge.PRForIssue(m.prs, is.Number); pr != nil {
 		head += "**" + m.prLine(pr) + "**\n\n"
 	}
@@ -272,6 +550,28 @@ func (m *Model) ensureDetail(is *forge.Issue) {
 		out = head + body
 	}
 	m.detailLines = strings.Split(strings.TrimRight(out, "\n"), "\n")
+}
+
+// detailMeta is the author/age/state line above an issue's body, "" when the
+// backend reported none of it.
+func (m *Model) detailMeta(is *forge.Issue) string {
+	var parts []string
+	if is.Author != "" {
+		parts = append(parts, "@"+is.Author)
+	}
+	if age := ui.RelTime(is.CreatedAt, m.clock()); age != "" {
+		parts = append(parts, "opened "+age)
+	}
+	if age := ui.RelTime(is.UpdatedAt, m.clock()); age != "" {
+		parts = append(parts, "updated "+age)
+	}
+	if is.State != "" {
+		parts = append(parts, strings.ToLower(is.State))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "*" + strings.Join(parts, " · ") + "*"
 }
 
 // renderMarkdown renders through a fresh width- and theme-bound glamour
@@ -310,4 +610,106 @@ func hexColor(c color.Color) string {
 	}
 	r, g, b, _ := c.RGBA()
 	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
+}
+
+// overlayBox renders the open modal as a bordered, self-sized box the View
+// composites centered over the body.
+func (m *Model) overlayBox(pal *theme.Palette) string {
+	title, lines := m.overlayContent(pal)
+	if len(lines) == 0 {
+		return ""
+	}
+	inner := lipgloss.Width(title)
+	for _, l := range lines {
+		if w := lipgloss.Width(l); w > inner {
+			inner = w
+		}
+	}
+	if maxW := m.width - 4; maxW > 0 && inner > maxW {
+		inner = maxW
+	}
+	var b strings.Builder
+	b.WriteString(lipgloss.NewStyle().Foreground(pal.Accent).Bold(true).Render(fitCells(title, inner)))
+	for _, l := range lines {
+		b.WriteString("\n" + fitCells(l, inner))
+	}
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(pal.Border).
+		Background(pal.Background).
+		Padding(0, 1).
+		Render(b.String())
+}
+
+// overlayContent is the open modal's heading and its visible rows.
+func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
+	sel := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
+	plain := lipgloss.NewStyle().Foreground(pal.Foreground)
+	m.clampOverlay()
+	h := m.overlayHeight()
+	var lines []string
+	switch m.ov {
+	case ovLabels:
+		for k := 0; k < h; k++ {
+			i := m.ovTop + k
+			if i >= len(m.labels) {
+				break
+			}
+			mark := "[ ] "
+			if m.labelSel[m.labels[i]] {
+				mark = "[x] "
+			}
+			text := mark + m.labels[i] + "  " + strconv.Itoa(m.labelCount(m.labels[i]))
+			style := plain
+			if i == m.ovCursor {
+				style = sel
+			}
+			lines = append(lines, style.Render(text))
+		}
+		return "Filter by label", lines
+	case ovActions:
+		acts := m.actions()
+		width := 0
+		for _, a := range acts {
+			if w := len([]rune(a.key)); w > width {
+				width = w
+			}
+		}
+		for k := 0; k < h; k++ {
+			i := m.ovTop + k
+			if i >= len(acts) {
+				break
+			}
+			key := acts[i].key + strings.Repeat(" ", width-len([]rune(acts[i].key)))
+			style := plain
+			if i == m.ovCursor {
+				style = sel
+			}
+			lines = append(lines, style.Render(key+"  "+acts[i].label))
+		}
+		return "Actions — " + m.viewName(), lines
+	}
+	return "", nil
+}
+
+// viewName names the view the action menu lists the actions of.
+func (m *Model) viewName() string {
+	switch {
+	case m.detail && m.tab == TabIssues:
+		return "issue detail"
+	case m.tab == TabPRs:
+		return "pull requests"
+	default:
+		return "issues"
+	}
+}
+
+// fitCells pads or truncates one modal row to exactly n cells so the border
+// stays rectangular whatever the row contains.
+func fitCells(s string, n int) string {
+	w := lipgloss.Width(s)
+	if w > n {
+		return truncate(s, n)
+	}
+	return s + strings.Repeat(" ", n-w)
 }

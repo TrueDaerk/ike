@@ -1715,7 +1715,7 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 		if id := ids[key]; id.Kind == "issues" {
 			// The GitHub Issues panel restores empty in its saved slot
 			// (#1934) with its refresh armed; 'r' re-fetches the listing.
-			panes.Get(panes.AddIssues()).Issues().SetRefresh(forge.RefreshCmd("."))
+			panes.Get(panes.AddIssues()).Issues().SetRefresh(forge.RefreshFactory("."))
 			continue
 		}
 		if id := ids[key]; id.Kind == "http" {
@@ -9824,8 +9824,9 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 			return m, inst.Tests().Click(localX, localY)
 		}
 	case pane.KindIssues:
-		// Issue-list clicks (#1934): a click selects, a double-click opens
-		// the issue's detail view.
+		// Issues-window clicks (#1934, #2090): a click on the tab bar
+		// switches the view, a body click selects, a double-click opens the
+		// issue's detail (or the pull request's page).
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Issues().Click(localX, localY)
 		}

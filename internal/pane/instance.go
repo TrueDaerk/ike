@@ -1449,6 +1449,8 @@ func (i *Instance) configure(cfg host.Config) {
 		i.term.SetScrollbackLines(scrollbackLines(cfg))
 	case KindMerge:
 		i.mg.Editor().Configure(cfg)
+	case KindIssues:
+		i.gi.Configure(cfg)
 	}
 }
 
