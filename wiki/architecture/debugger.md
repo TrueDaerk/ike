@@ -430,7 +430,11 @@ cmd+shift+F8 dialog as an adaptive split of the active editor (`auxZone`,
 (palette, Run menu, cmd+shift+f8). It lists every breakpoint grouped by file
 with a source-line preview and is a **pure consumer** of the store: enter (or
 double-click) jumps through the standard open funnel, space (or a click on
-the glyph cell) toggles enable/disable, `d` deletes, `D` deletes all — each
+the glyph cell) toggles enable/disable, `y` (or `cmd+c`/`super+c`) copies the
+marked row — `path:line` plus preview and refinements, a header its path,
+via `breakpanel.CopyMsg` and the shared `copyToClipboard` seam (#2071; `c` is
+the condition editor here, so only the chord aliases `y`) — `d` deletes,
+`D` deletes all — each
 action is a message the root model handles (`handleBreakpanelMsg`), which
 mutates the store, saves, refreshes the panel and syncs a live session, so
 gutter, list, persistence and adapter never disagree. Gutter toggles call

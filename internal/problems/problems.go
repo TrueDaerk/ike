@@ -8,9 +8,9 @@ package problems
 
 import (
 	"image/color"
+	"path/filepath"
 	"sort"
 	"strconv"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,6 +28,14 @@ type OpenLocationMsg struct {
 	Path string
 	Line int
 	Col  int
+}
+
+// CopyMsg asks the root model to put Text on the system clipboard; What names
+// the payload for the confirmation toast ("problem", "file"). The panel emits
+// it instead of writing itself, the seam every pane copy action uses (#2071).
+type CopyMsg struct {
+	Text string
+	What string
 }
 
 // Store is the app-level per-file diagnostics store: the latest published set
@@ -389,9 +397,50 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.Refresh()
 	case "enter":
 		return m.activate(m.cursor)
+	case "y":
+		// vim's yank on the marked row (#2071), the panel counterpart of the
+		// response viewer's "y".
+		return m.copyRow(m.cursor)
+	}
+	if ui.CopyChord(msg.String()) {
+		return m.copyRow(m.cursor)
 	}
 	m.clampScroll()
 	return nil
+}
+
+// copyRow puts the marked row on the clipboard through a CopyMsg (#2071): a
+// diagnostic as the line renders it — "path:line:col: message (code)" — a
+// file header as its path. An empty list copies nothing.
+func (m *Model) copyRow(i int) tea.Cmd {
+	if i < 0 || i >= len(m.rows) {
+		return nil
+	}
+	r := m.rows[i]
+	if r.header {
+		return copyCmd(m.shorten(r.path), "file")
+	}
+	return copyCmd(m.rowText(r), "problem")
+}
+
+// rowText renders one diagnostic as copyable text: position, message and the
+// code the row shows, all on one line.
+func (m *Model) rowText(r row) string {
+	pos := strconv.Itoa(r.d.Range.Start.Line+1) + ":" + strconv.Itoa(r.d.Range.Start.Col+1)
+	text := m.shorten(r.path) + ":" + pos + ": " + strings.TrimRight(r.d.Message, "\n")
+	if r.d.Code != "" {
+		text += " (" + r.d.Code + ")"
+	}
+	return text
+}
+
+// copyCmd wraps text in a CopyMsg command, or nil when there is nothing to
+// copy — the shape the response pane's copy actions use.
+func copyCmd(text, what string) tea.Cmd {
+	if text == "" {
+		return nil
+	}
+	return func() tea.Msg { return CopyMsg{Text: text, What: what} }
 }
 
 // activate opens the diagnostic under row i; a file header opens the file at
@@ -543,7 +592,7 @@ func (m *Model) footer(pal *theme.Palette) string {
 	if m.fileOnly {
 		scope = "project"
 	}
-	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open · f " + scope + " · j/k move"))
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open · y copy · f " + scope + " · j/k move"))
 }
 
 // sevGlyph maps a severity to its marker, unspecified counting as error.

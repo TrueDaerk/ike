@@ -123,6 +123,12 @@ two-column render (tree │ detail) is the debug panel's row-wise join.
   source declaration — the app re-scans the run's test files through the
   language's detection pattern (`testresults.LocateTestMsg`). A group row
   opens its first failing descendant.
+- `y` (or `cmd+c`/`super+c`) **copies the marked tree row** (#2071):
+  `PASS|FAIL|SKIP <group/test path>`, plus the duration and the parsed failure
+  location when there is one. The panel emits `testresults.CopyMsg`; the root
+  model writes it through the shared `copyToClipboard` seam and toasts
+  "copied test result". It copies the marked row in both columns — the detail
+  text scrolls, it is not marked.
 - `r` re-runs everything, `f` only the failed set, `t` the selected test.
 - `o` toggles the detail column between the selected test's output and the
   whole run's raw output.

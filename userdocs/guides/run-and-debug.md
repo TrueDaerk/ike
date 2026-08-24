@@ -101,6 +101,9 @@ project in `.ike/breakpoints.json` and survive restarts — the count in the
 status line tells you how many are armed. The screenshot uses the
 `monokai-pro` theme.
 
+`y` (or ++cmd+c++) copies the marked row — `path:line` plus the source
+preview and any refinements, a file header its path.
+
 ### Conditions, hit counts and logpoints
 
 The Breakpoints window (++cmd+shift+f8++) edits more than the on/off state:
