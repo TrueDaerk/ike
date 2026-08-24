@@ -1,5 +1,23 @@
 # Log
 
+## 2026-08-24 (forge backend abstraction + Gitea/Forgejo binding, #2083)
+
+- **`internal/forge` grew the `Forge` interface** covering the whole 0470
+  stream (listings, timeline, comments, label/assignee/state mutations,
+  merge/close PR, `Capabilities()`); unimplemented operations return a typed
+  `*ErrUnsupported` until their sub-issues land. The #1934 gh code moved
+  behind it with no behavior change to the issues window.
+- **Gitea/Forgejo repositories now get the issues + PR listing** through a
+  tea binding: the tea CLI's login (matched against the remote host) supplies
+  authentication, the listings and the permission probe call the Gitea REST
+  API directly — tea's `--output json` flattens labels and drops their
+  colors. Detection (gh for github.*, tea for everything else, explanatory
+  setup message otherwise) is cached per workspace root; failures are not
+  cached. New concept doc: [Forge Layer](/architecture/forge.md).
+- **`Capabilities()`** reports the triage/push tiers on both bindings
+  (GitHub: `gh api repos/{owner}/{repo} --jq .permissions`; Gitea: the repo
+  endpoint's permissions object).
+
 ## 2026-08-24 (playground and materialize for typed buffers, #2056)
 
 - **A typed file-less buffer reaches the playgrounds.** alt+enter in a buffer

@@ -1,15 +1,21 @@
-// Package forge talks to the project's code forge (#1934) — GitHub through
-// the gh CLI, the way internal/vcs shells out to git. It fetches the open
-// issues and pull requests of the current repository, derives issue branch
-// names, and drives the "start work on an issue" flow of the change workflow
-// (branch issue/<number>-<slug> off an up-to-date default branch).
+// Package forge talks to the project's code forge (#1934, #2083). It fetches
+// the issues and pull requests of the current repository, derives issue
+// branch names, and drives the "start work on an issue" flow of the change
+// workflow (branch issue/<number>-<slug> off an up-to-date default branch).
 //
-// Like internal/vcs, nothing here runs from Update: every subprocess call is
-// wrapped in a tea.Cmd with a timeout, resolving to a message carrying the
-// result or the error. Parsing works on gh's --json output, never on its
-// human-readable rendering. The types are forge-agnostic so another forge
-// (Gitea via tea, say) can produce them later; the gh binding is the one
-// implementation shipped.
+// The operation surface is the Forge interface (backend.go), with one
+// binding per forge: GitHub through the gh CLI (gh.go), Gitea/Forgejo
+// through the tea CLI's login plus the Gitea REST API (tea.go). detect.go
+// picks the binding by the origin remote's host and caches the result per
+// workspace root; a repository neither binding serves resolves to an
+// explanatory setup message.
+//
+// Like internal/vcs, nothing here runs from Update: every subprocess (and
+// HTTP) call is wrapped in a tea.Cmd with a timeout, resolving to a message
+// carrying the result or the error. Parsing works on JSON output only —
+// gh's --json, the Gitea REST responses — never on a human-readable
+// rendering. The types are forge-agnostic; each binding maps its forge's
+// shapes onto them.
 package forge
 
 import (
