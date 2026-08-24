@@ -89,6 +89,11 @@ const whichKeyMaxDelayMs = 5000
 // frame-ish; above 10 s follow mode stops feeling live.
 const followPollMaxMs = 10000
 
+// clipboardHistoryMax caps editor.clipboard_history_size (#2061); the settings
+// form uses the same bound. The ring feeds a picker, not an archive — past a
+// couple of hundred entries scrolling it beats re-copying.
+const clipboardHistoryMax = 200
+
 // validate clamps c in place against the baseline rules and returns one
 // diagnostic per correction. Extension validators run after the built-in checks.
 func validate(c *Config) []Diagnostic {
@@ -192,6 +197,11 @@ func validate(c *Config) []Diagnostic {
 		c.Explorer.Sort = "name"
 	}
 	clampMin("editor.auto_save_idle_ms", &c.Editor.AutoSaveIdleMs, 100)
+	clampMin("editor.clipboard_history_size", &c.Editor.ClipboardHistorySize, 1)
+	if c.Editor.ClipboardHistorySize > clipboardHistoryMax {
+		diags = append(diags, Diagnostic{Field: "editor.clipboard_history_size", Message: fmt.Sprintf("%d above maximum %d, using %d", c.Editor.ClipboardHistorySize, clipboardHistoryMax, clipboardHistoryMax)})
+		c.Editor.ClipboardHistorySize = clipboardHistoryMax
+	}
 	clampMin("editor.follow_poll_ms", &c.Editor.FollowPollMs, 100)
 	if c.Editor.FollowPollMs > followPollMaxMs {
 		diags = append(diags, Diagnostic{Field: "editor.follow_poll_ms", Message: fmt.Sprintf("%d above maximum %d, using %d", c.Editor.FollowPollMs, followPollMaxMs, followPollMaxMs)})

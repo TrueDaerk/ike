@@ -29,18 +29,23 @@ type nopClipboard struct{}
 func (nopClipboard) Read() (string, error) { return "", nil }
 func (nopClipboard) Write(string) error    { return nil }
 
-// historyCap bounds the yank/delete history (#57): JetBrains keeps ~20
-// clipboard entries; the ring exists for the paste-from-history picker, not
-// as an archive.
-const historyCap = 20
+// DefaultHistoryCap bounds the clipboard history (#57) until a host sets its
+// own size: JetBrains keeps ~20 clipboard entries; the ring exists for the
+// paste-from-history picker, not as an archive. The size is configurable via
+// editor.clipboard_history_size (#2061).
+const DefaultHistoryCap = 20
 
 // Store holds every register.
 type Store struct {
 	regs map[rune]Entry
 	clip Clipboard
-	// hist is the bounded yank/delete history, newest first (#57). Every
-	// Yank/Delete pushes; consecutive duplicates collapse.
+	// hist is the bounded clipboard history, newest first (#57). Every
+	// Yank/Delete pushes, as do host-side copies (#2061); a repeat of text
+	// already in the ring moves to the front instead of adding a row.
 	hist []Entry
+	// histCap bounds hist (#2061, editor.clipboard_history_size). Zero means
+	// DefaultHistoryCap so the zero value and New() behave alike.
+	histCap int
 	// clipErr holds the most recent system-clipboard failure until a caller
 	// takes it (#1255). Clipboard writes used to be dropped with `_ =`, so a
 	// broken bridge looked exactly like a working one.
@@ -52,7 +57,32 @@ type Store struct {
 }
 
 // New returns an empty register store backed by a no-op clipboard.
-func New() *Store { return &Store{regs: map[rune]Entry{}, clip: nopClipboard{}} }
+func New() *Store {
+	return &Store{regs: map[rune]Entry{}, clip: nopClipboard{}, histCap: DefaultHistoryCap}
+}
+
+// SetHistoryCap resizes the clipboard-history ring (#2061,
+// editor.clipboard_history_size). A cap below 1 is ignored — the ring exists
+// for the picker, and an empty one would make cmd+shift+v useless. Shrinking
+// drops the oldest entries immediately, so the picker never shows more than
+// the configured N.
+func (s *Store) SetHistoryCap(n int) {
+	if n < 1 {
+		return
+	}
+	s.histCap = n
+	if len(s.hist) > n {
+		s.hist = s.hist[:n]
+	}
+}
+
+// HistoryCap reports the clipboard-history ring size.
+func (s *Store) HistoryCap() int {
+	if s.histCap < 1 {
+		return DefaultHistoryCap
+	}
+	return s.histCap
+}
 
 // SetClipboard injects the system-clipboard implementation for `"+`/`"*`.
 func (s *Store) SetClipboard(c Clipboard) {
@@ -164,19 +194,28 @@ func (s *Store) History() []Entry {
 	return out
 }
 
-// pushHistory records e at the front of the bounded history. Empty text and
-// an exact repeat of the newest entry are dropped — re-yanking the same span
-// must not flood the picker.
+// PushHistory records a host-side copy in the clipboard history (#2061):
+// pane copy actions (the response viewer, the DOM tree, the data viewer, path
+// copies…) never touch a register, but the paste-from-history picker should
+// still offer them. Same collapsing rules as a yank.
+func (s *Store) PushHistory(e Entry) { s.pushHistory(e) }
+
+// pushHistory records e at the front of the bounded history. Empty text is
+// dropped, and text already in the ring moves to the front rather than adding
+// a second row (#2061) — re-copying the same span must not flood the picker.
 func (s *Store) pushHistory(e Entry) {
 	if e.Text == "" {
 		return
 	}
-	if len(s.hist) > 0 && s.hist[0] == e {
-		return
+	rest := s.hist[:0:0]
+	for _, h := range s.hist {
+		if h.Text != e.Text {
+			rest = append(rest, h)
+		}
 	}
-	s.hist = append([]Entry{e}, s.hist...)
-	if len(s.hist) > historyCap {
-		s.hist = s.hist[:historyCap]
+	s.hist = append([]Entry{e}, rest...)
+	if limit := s.HistoryCap(); len(s.hist) > limit {
+		s.hist = s.hist[:limit]
 	}
 }
 
