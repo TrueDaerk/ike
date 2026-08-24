@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Forge Layer
-description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, the capability model (triage vs push) both bindings probe, and the issue mutations (labels, assignees, state, comments) behind it (#2083, #2088).
+description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, the capability model (triage vs push, plus the authenticated login) both bindings probe, the issue mutations (labels, assignees, state, comments), and the editable-text layer with its stale-base check (#2083, #2088, #2087).
 resource: internal/forge/backend.go
 tags: [architecture, vcs, forge, github, gitea, forgejo, issues]
 timestamp: 2026-08-25T00:00:00Z
 ---
 
-# Forge Layer (#1934, #2083, #2088)
+# Forge Layer (#1934, #2083, #2088, #2087)
 
 `internal/forge` talks to the project's code forge. Since #2083 the operation
 surface is the **`Forge` interface** (`backend.go`), so everything later in
@@ -25,15 +25,15 @@ responses — never on a human rendering.
 
 `Forge` covers the whole 0470 stream: `Issues(state)` (open/closed listing
 with labels + assignees), `PRs()` (every state), `Timeline(issue, page)`,
-`CreateComment` / `EditComment` / `EditIssueBody`, `AddLabels` /
-`RemoveLabels` / `SetAssignees` / `CloseIssue` / `ReopenIssue`,
-`RepoLabels` / `Collaborators`, `MergePR` / `ClosePR`, and `Capabilities()`.
-The interface ships complete; operations a binding has not implemented yet
-return a typed `*ErrUnsupported` (backend + operation), so later sub-issues
-only fill in bindings. #2083 brought the listings and `Capabilities()`; #2084
-the timeline; #2088 the issue mutations (labels, assignees, state, comment
-creation) plus the two metadata listings; comment/body *editing* and the PR
-actions are still stubs.
+`CreateComment` / `EditComment` / `EditIssueBody` with their read halves
+`IssueBody` / `CommentBody`, `AddLabels` / `RemoveLabels` / `SetAssignees` /
+`CloseIssue` / `ReopenIssue`, `RepoLabels` / `Collaborators`, `MergePR` /
+`ClosePR`, and `Capabilities()`. The interface ships complete; operations a
+binding has not implemented yet return a typed `*ErrUnsupported` (backend +
+operation), so later sub-issues only fill in bindings. #2083 brought the
+listings and `Capabilities()`; #2084 the timeline; #2088 the issue mutations
+(labels, assignees, state, comment creation) plus the two metadata listings;
+#2087 the editable texts and their reads; the PR actions are still stubs.
 
 `Timeline(issue, page)` (#2084) fetches one 30-entry page of an issue's
 history, oldest first, and reports whether more pages follow — long
@@ -48,6 +48,43 @@ one cached `gh api user` probe; tea: the login's user, falling back to one
 Gitea's typed timeline comments, where a label event's body distinguishes
 add (`"1"`) from remove. `TimelineCmd(dir, issue, page)` wraps it into a
 `TimelineMsg` echoing issue and page.
+
+## Editable texts (#2087)
+
+`text.go` is the neutral half of "edit my own issue texts": a **`TextTarget`**
+— `TextIssueBody`, `TextComment` (with the forge comment ID), `TextNewComment`
+— plus `FetchText` / `PushText`, which dispatch it onto the three interface
+mutations, and `Label()` / `Slug()` for the human phrasing and the buffer
+name. Nothing above this layer branches on the forge.
+
+`SaveTextCmd(dir, path, target, base, body, force)` → `SaveTextMsg` is what a
+saved edit buffer runs. Its order is **check, then push**:
+
+1. Unless `force` is set (and unless the target is a new comment, which has no
+   server text), it re-reads the current text through `FetchText` and compares
+   it against `base` — the text the buffer was opened with.
+2. A mismatch resolves to `Stale` with `Current` carrying the forge's version,
+   and **nothing is written**: a concurrently changed text is never silently
+   clobbered. The user answers by overwriting (`force`) or reloading.
+3. A base read that *fails* is an ordinary `Err`, not an assumed-safe push.
+
+Comparison and push both run through **`NormalizeText`** (CRLF → LF, trailing
+blank space trimmed). An editor writes a trailing newline the forge never had,
+so the raw text would report a conflict — and churn the forge — on every save
+that changed nothing.
+
+The permissions and the login the gating reads come from #2088's one-shot
+`RepoMetaCmd` probe — no second capability call was added for this.
+
+On the bindings: gh sends every body on **stdin** (`gh issue edit
+--body-file -`, `gh issue comment --body-file -`, and `gh api --method PATCH
+issues/comments/{id} --input -` for the comment edit gh has no command for) —
+markdown must never travel as an argv element. tea sends JSON documents to the
+Gitea endpoints (`PATCH issues/{n}`, `POST issues/{n}/comments`, `PATCH
+issues/comments/{id}`). Both read their base text from the issue/comment
+endpoint and decode the shared `body` field, rather than through `--jq`, whose
+re-encoding would break a character-for-character comparison. A comment ID is
+validated as digits before it reaches a request path.
 
 ## Mutations (`mutate.go`, #2088)
 
@@ -117,7 +154,8 @@ The #1934 code moved behind the interface unchanged: `gh issue list --json` /
 folded into one `CheckState` (failing beats pending beats passing beats
 none). `Capabilities()` runs `gh api repos/{owner}/{repo} --jq .permissions`
 (gh fills the placeholders from the remote) and folds GitHub's five-tier
-permissions object.
+permissions object, with the login from the cached `gh api user` probe folded
+in for the ownership checks (#2087).
 
 ## The tea binding (`tea.go`)
 
@@ -137,16 +175,24 @@ ranking works identically.
 
 ## Capability model
 
-`Capabilities` has two tiers, matching what the stream's actions need:
+`Capabilities` has two tiers, matching what the stream's actions need, plus
+the identity the ownership checks need:
 
 - **Triage** — mutate labels, assignees and issue state.
-- **Push** — write access: merge pull requests.
+- **Push** — write access: merge pull requests, edit foreign issue texts.
+- **Login** — the authenticated user's login, `""` when it could not be
+  resolved. It rides along on the probe (which is cached per backend anyway),
+  because "may I edit this?" is as much a question of *whose text it is* as of
+  permissions.
 
 GitHub reports `{admin, maintain, push, triage, pull}`: push-or-better sets
-both, bare triage sets only `Triage`. Gitea reports `{admin, push, pull}` —
-no triage tier — so push-or-admin sets both. The issues window consumes
-`Triage` (#2088) to gate its mutation actions: without it they stay in the
-action menu, greyed and naming the reason, and are dropped from the footer.
+both tiers, bare triage sets only `Triage`. Gitea reports `{admin, push,
+pull}` — no triage tier — so push-or-admin sets both. The issues window
+consumes `Triage` (#2088) to gate its mutation actions: without it they stay
+in the action menu, greyed and naming the reason, and are dropped from the
+footer. `Push` and `Login` gate the text editing (#2087), where an
+unpermitted action is *absent* instead — "not your comment" is not a
+permission the user can go and fix.
 
 ## Event types (#2086)
 
@@ -162,10 +208,16 @@ consumer-agnostic: nothing in this file talks to a forge.
 
 ## Consumers
 
-The [GitHub Issues tool window](/architecture/github-issues.md) is the one
-consumer today: it injects `RefreshCmd` and routes `IssuesMsg`; through
-detection it now lists Gitea/Forgejo repositories too, unchanged. The
-start-work flow (`StartWorkCmd`) is pure git and backend-independent.
+The [GitHub Issues tool window](/architecture/github-issues.md) is the main
+consumer: it injects `RefreshCmd`/`TimelineCmd` and routes `IssuesMsg`,
+`TimelineMsg` and `CapabilitiesMsg`; through detection it now lists
+Gitea/Forgejo repositories too, unchanged. The start-work flow
+(`StartWorkCmd`) is pure git and backend-independent.
+
+The **forge edit buffers** (`internal/app/forgeedit.go`, #2087) consume the
+editable-text layer: a markdown scratch buffer bound to a `TextTarget` runs
+`SaveTextCmd` when it is saved and answers `SaveTextMsg` — documented with the
+tool window.
 
 The forge event surface (`internal/app/forgenotify.go`) is the second consumer:
 it routes `EventsMsg` onto the dialog, the status-line unread badge, a toast or

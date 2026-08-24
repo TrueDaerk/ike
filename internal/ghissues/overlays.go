@@ -1,10 +1,12 @@
 package ghissues
 
-// overlays.go holds the two modals the pane composites over its body (#2090):
-// the label multi-picker that replaced the old 'l' cycling, and the action
-// menu that makes every key of the current view discoverable. Both own the
-// keyboard while open, navigate with the shared list semantics, and are
-// dismissed with esc.
+// overlays.go holds the modals the pane composites over its body: the label
+// multi-picker that replaced the old 'l' cycling (#2090), the action menu that
+// makes every key of the current view discoverable (#2090), and the
+// text-edit picker that chooses which of the issue's texts a markdown buffer
+// opens (#2087, textedit.go). The mutation pickers and the comment prompt
+// (#2088) live in mutations.go. All own the keyboard while open, navigate with
+// the shared list semantics, and are dismissed with esc.
 
 import (
 	"strings"
@@ -50,6 +52,7 @@ func (m *Model) actions() []action {
 			acts = append(acts, action{key: "L", hint: "more", label: "Load more activity", run: (*Model).loadMoreTimeline})
 		}
 		acts = append(acts, m.mutationActions()...)
+		acts = append(acts, m.textEditActions()...)
 		return append(acts,
 			action{key: "s", hint: "start work", label: "Start work (create the branch)", run: (*Model).startWork},
 			action{key: "o", hint: "browser", label: "Open in browser", run: (*Model).openInBrowser},
@@ -173,6 +176,8 @@ func (m *Model) overlayItems() int {
 		return len(m.editRows())
 	case ovComment:
 		return 2 // the input line and its hint
+	case ovTextEdit:
+		return len(m.textTargets())
 	}
 	return 0
 }
@@ -233,6 +238,8 @@ func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.actionMenuKey(key)
 	case ovLabelEdit, ovAssignEdit:
 		return m.editorKey(key)
+	case ovTextEdit:
+		return m.textPickerKey(key)
 	}
 	return nil
 }

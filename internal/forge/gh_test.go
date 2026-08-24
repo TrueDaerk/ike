@@ -214,3 +214,37 @@ func TestPRForIssuePrefersOpen(t *testing.T) {
 		t.Fatalf("pr = %+v, want the open one", pr)
 	}
 }
+
+// issueDocFixture is one `gh api repos/{owner}/{repo}/issues/{n}` document,
+// cut to what the stale-base check reads (#2087).
+const issueDocFixture = `{
+  "number": 2087,
+  "title": "edit own issue texts",
+  "body": "## Context\nThe timeline shows bodies read-only.\n",
+  "updated_at": "2026-08-25T09:12:00Z"
+}`
+
+// commentDocFixture is one `gh api repos/{owner}/{repo}/issues/comments/{id}`
+// document.
+const commentDocFixture = `{
+  "id": 771122,
+  "body": "Looks good \u2014 one nit.",
+  "user": {"login": "TrueDaerk"}
+}`
+
+func TestParseBodyFieldOnGitHubDocuments(t *testing.T) {
+	body, err := parseBodyField([]byte(issueDocFixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body != "## Context\nThe timeline shows bodies read-only.\n" {
+		t.Fatalf("issue body = %q", body)
+	}
+	body, err = parseBodyField([]byte(commentDocFixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body != "Looks good \u2014 one nit." {
+		t.Fatalf("comment body = %q", body)
+	}
+}

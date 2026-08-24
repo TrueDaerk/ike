@@ -31,8 +31,9 @@ func TestGHStateAndCommentArgs(t *testing.T) {
 	if got := ghStateArgs(12, "reopen"); !reflect.DeepEqual(got, []string{"issue", "reopen", "12"}) {
 		t.Fatalf("reopen args = %v", got)
 	}
-	want := []string{"issue", "comment", "12", "--body", "done in #13"}
-	if got := ghCommentArgs(12, "done in #13"); !reflect.DeepEqual(got, want) {
+	// The body is piped in (#2087), so it is not part of the argv.
+	want := []string{"issue", "comment", "12", "--body-file", "-"}
+	if got := ghCommentArgs(12); !reflect.DeepEqual(got, want) {
 		t.Fatalf("comment args = %v, want %v", got, want)
 	}
 }
@@ -119,10 +120,15 @@ func TestGiteaLoginsAndOwner(t *testing.T) {
 	}
 }
 
-// fakeForge records the calls applyMutation makes, in order.
+// fakeForge records the calls applyMutation (#2088) and saveText (#2087)
+// make, in order, and answers the text reads from its two body fields.
 type fakeForge struct {
 	calls []string
 	fail  string // the call that returns an error
+
+	issueBody   string
+	commentBody string
+	readErr     error
 }
 
 func (f *fakeForge) record(name string) error {
@@ -139,8 +145,12 @@ func (f *fakeForge) Timeline(int, int) ([]TimelineEntry, bool, error) {
 	return nil, false, nil
 }
 func (f *fakeForge) CreateComment(_ int, body string) error { return f.record("comment:" + body) }
-func (f *fakeForge) EditComment(string, string) error       { return f.record("editcomment") }
-func (f *fakeForge) EditIssueBody(int, string) error        { return f.record("editbody") }
+func (f *fakeForge) EditComment(id, body string) error {
+	return f.record("editcomment:" + id + ":" + body)
+}
+func (f *fakeForge) EditIssueBody(_ int, body string) error { return f.record("editbody:" + body) }
+func (f *fakeForge) IssueBody(int) (string, error)          { return f.issueBody, f.readErr }
+func (f *fakeForge) CommentBody(string) (string, error)     { return f.commentBody, f.readErr }
 func (f *fakeForge) AddLabels(_ int, labels []string) error {
 	return f.record("add:" + strings.Join(labels, ","))
 }
