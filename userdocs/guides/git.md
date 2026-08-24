@@ -64,6 +64,7 @@ diffs any two files against each other. Inside a diff pane:
 | `h` / `l`, ++left++ / ++right++ | Scroll sideways by one column |
 | ++shift+left++ / ++shift+right++ | Scroll sideways by half a column |
 | `0` / `$` | Jump to the first / last column |
+| `y`, ++ctrl+c++ / ++cmd+c++ | Copy the selection — or, without one, the current change as a patch |
 
 ![The diff viewer side by side with the editor](../screenshots/features/diff-viewer.png)
 
@@ -76,6 +77,15 @@ Long lines are never wrapped — they are clipped at the edge of their column an
 you scroll sideways instead, with both sides moving together so the two
 versions of a line always stay on the same row. The horizontal wheel (or
 ++shift++ + wheel) does the same as the keys above.
+
+Text can be selected with the mouse, just like in the terminal and the HTTP
+response viewer: drag to select, double-click a word, triple-click a line —
+dragging then extends by that unit. In side-by-side layout a selection stays
+in the column you started it in. `y`, ++ctrl+c++ or ++cmd+c++ copy the
+selection to the clipboard; a selection across a `··· N unchanged lines ···`
+separator copies the hidden lines themselves, not the placeholder. Without a
+selection the same keys copy the current change as a small unified patch. The
+same works in the merge view's read-only *Ours*/*Theirs* columns.
 
 ## The changes tool window
 

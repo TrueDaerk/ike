@@ -801,18 +801,20 @@ type editorScroll struct {
 type dragKind int
 
 const (
-	dragResize     dragKind = iota // dragging a divider to change a split ratio
-	dragMove                       // dragging a pane title bar to relocate or spawn
-	dragTab                        // dragging one tab label to move just that file (#305)
-	dragTermSelect                 // dragging a text selection inside a terminal pane (#227)
-	dragEditSelect                 // dragging a text selection inside an editor pane (#977)
-	dragEditScroll                 // dragging the editor scrollbar thumb (#1022)
-	dragExplScroll                 // dragging the explorer scrollbar thumb (#1036)
-	dragScratchDiv                 // dragging the explorer's Scratches divider (#1963)
-	dragDebugDiv                   // dragging a column separator inside the debug panel (#691)
-	dragHTTPSelect                 // dragging a text selection in the HTTP response pane (#1266)
-	dragHTTPScroll                 // dragging the HTTP response scrollbar thumb (#1367)
-	dragTermScroll                 // dragging the terminal scrollback scrollbar thumb (#1368)
+	dragResize      dragKind = iota // dragging a divider to change a split ratio
+	dragMove                        // dragging a pane title bar to relocate or spawn
+	dragTab                         // dragging one tab label to move just that file (#305)
+	dragTermSelect                  // dragging a text selection inside a terminal pane (#227)
+	dragEditSelect                  // dragging a text selection inside an editor pane (#977)
+	dragEditScroll                  // dragging the editor scrollbar thumb (#1022)
+	dragExplScroll                  // dragging the explorer scrollbar thumb (#1036)
+	dragScratchDiv                  // dragging the explorer's Scratches divider (#1963)
+	dragDebugDiv                    // dragging a column separator inside the debug panel (#691)
+	dragHTTPSelect                  // dragging a text selection in the HTTP response pane (#1266)
+	dragHTTPScroll                  // dragging the HTTP response scrollbar thumb (#1367)
+	dragTermScroll                  // dragging the terminal scrollback scrollbar thumb (#1368)
+	dragDiffSelect                  // dragging a text selection in a diff pane (#2070)
+	dragMergeSelect                 // dragging a text selection in a merge view's side column (#2070)
 )
 
 // dragState holds the in-flight mouse gesture. For a resize it carries the
@@ -4221,6 +4223,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.host.Notify(host.Info, "copied "+msg.What)
 		return m, nil
 
+	case diff.CopyMsg:
+		// The diff and merge views ask the host for the clipboard the same
+		// way (#2070): a mouse selection or the current hunk as a patch.
+		m.copyToClipboard(msg.Text)
+		m.host.Notify(host.Info, "copied "+msg.What)
+		return m, nil
+
 	case DebugToggleBreakpointMsg:
 		// debug.toggleBreakpoint (ctrl+f8 / Run menu / palette, #577).
 		m.toggleBreakpointAtCursor()
@@ -7277,16 +7286,27 @@ func (m Model) dataPaneFocused() bool {
 // paneSelectionCopy reports whether the focused pane holds a live text
 // selection its own copy key would put on the clipboard (#2062), so a chord
 // the shell would otherwise claim has to be routed into the pane instead.
-// Only the HTTP response pane (#1266) qualifies here: the editor reaches
-// editor.copy through the keymap layer above, and a focused terminal — the
-// other selectable surface — is handled before the shell dispatch ever runs.
+// The HTTP response pane (#1266), the diff viewer and the merge view's side
+// columns (#2070) qualify: the editor reaches editor.copy through the keymap
+// layer above, and a focused terminal — the other selectable surface — is
+// handled before the shell dispatch ever runs.
 func (m Model) paneSelectionCopy() bool {
 	inst := m.focusedContent()
-	if inst == nil || inst.Kind() != pane.KindHTTP {
+	if inst == nil {
 		return false
 	}
-	p := inst.HTTP()
-	return p != nil && p.HasSelection()
+	switch inst.Kind() {
+	case pane.KindHTTP:
+		p := inst.HTTP()
+		return p != nil && p.HasSelection()
+	case pane.KindDiff:
+		d := inst.Diff()
+		return d != nil && d.HasSelection()
+	case pane.KindMerge:
+		mg := inst.Merge()
+		return mg != nil && mg.HasSelection()
+	}
+	return false
 }
 
 // explorerPromptOpen reports whether the focused explorer has a modal prompt
@@ -8952,6 +8972,18 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					term.ScrollbarDrag(ly)
 				}
 			}
+		case dragDiffSelect:
+			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.bodyContent(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDiff {
+					inst.Diff().MouseDrag(lx, ly)
+				}
+			}
+		case dragMergeSelect:
+			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindMerge {
+					inst.Merge().MouseDrag(lx, ly)
+				}
+			}
 		}
 	case mouseRelease:
 		if m.drag == nil {
@@ -8995,6 +9027,18 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case dragHTTPSelect:
 			if inst := m.bodyContent(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindHTTP {
 				inst.HTTP().MouseRelease()
+			}
+			m.drag = nil
+			return m, nil // a selection drag never moved the layout
+		case dragDiffSelect:
+			if inst := m.bodyContent(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDiff {
+				inst.Diff().MouseRelease()
+			}
+			m.drag = nil
+			return m, nil // a selection drag never moved the layout
+		case dragMergeSelect:
+			if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindMerge {
+				inst.Merge().MouseRelease()
 			}
 			m.drag = nil
 			return m, nil // a selection drag never moved the layout
@@ -9772,6 +9816,22 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 			inst.HTTP().MousePress(localX, localY)
 			m.drag = &dragState{kind: dragHTTPSelect, srcPane: key, curX: msg.X, curY: msg.Y}
+		}
+	case pane.KindDiff:
+		// Diff-viewer clicks (#2070): a left press anchors a text selection
+		// over the rendered rows, like the HTTP response pane. Edit mode's
+		// embedded editor owns the pane then (#496) and the model ignores
+		// presses, so no drag is armed.
+		if msg.Button == tea.MouseLeft && !inst.Diff().EditMode() {
+			inst.Diff().MousePress(localX, localY)
+			m.drag = &dragState{kind: dragDiffSelect, srcPane: key, curX: msg.X, curY: msg.Y}
+		}
+	case pane.KindMerge:
+		// Merge-view clicks (#2070): a press in a read-only side column
+		// anchors a text selection; the middle result column stays the
+		// embedded editor's ground.
+		if msg.Button == tea.MouseLeft && inst.Merge().MousePress(localX, localY) {
+			m.drag = &dragState{kind: dragMergeSelect, srcPane: key, curX: msg.X, curY: msg.Y}
 		}
 	case pane.KindDebug:
 		// Debug-panel clicks (#626): select a frame/variable, double-click to

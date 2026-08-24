@@ -20,6 +20,7 @@ import (
 
 	"ike/internal/diff"
 	"ike/internal/editor"
+	"ike/internal/textsel"
 	"ike/internal/theme"
 )
 
@@ -38,6 +39,11 @@ type Model struct {
 	ours   []string      // left column, read-only
 	theirs []string      // right column, read-only
 	total  int           // conflict blocks at load time
+
+	// Mouse text selection over the read-only side columns (#2070); the
+	// result editor owns its own. selTheirs pins the selection to one column.
+	sel       textsel.Selection
+	selTheirs bool
 }
 
 // New builds a merge view over path with ed as the result editor.
@@ -50,6 +56,7 @@ func New(key, path string, ed *editor.Model, pal *theme.Palette) Model {
 func (m *Model) SetContents(base, ours, theirs string) {
 	m.ours = splitDoc(ours)
 	m.theirs = splitDoc(theirs)
+	m.sel.Clear()
 	merged, conflicts := diff.Merge3(base, ours, theirs)
 	m.total = conflicts
 	m.ed.RestoreText(merged)
@@ -118,8 +125,15 @@ func (m Model) colWidths() (left, mid, right int) {
 
 const sepWidth = 3 // " │ "
 
-// Update forwards a message to the result editor.
+// Update forwards a message to the result editor. A live side-column
+// selection intercepts the copy chords first (#2070) — the audit rule from
+// #2062: the copy must work even though the editor otherwise owns the keys.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
+	if k, ok := msg.(tea.KeyPressMsg); ok {
+		if cmd, consumed := m.selKey(k); consumed {
+			return cmd
+		}
+	}
 	ed, cmd := m.ed.Update(msg)
 	*m.ed = ed
 	return cmd
@@ -152,12 +166,14 @@ func (m Model) View() string {
 	sepStyle := lipgloss.NewStyle().Foreground(pal.Border)
 	sep := sepStyle.Render(" │ ")
 	faint := lipgloss.NewStyle().Faint(true)
+	selSt := lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText)
 
 	var b strings.Builder
 	b.WriteString(m.header(pal, left, mid, right))
 	for r := 0; r < rows; r++ {
 		b.WriteByte('\n')
-		b.WriteString(sideCell(m.ours, top+r, left, faint))
+		la, lb := m.selCols(top+r, false)
+		b.WriteString(sideCell(m.ours, top+r, left, faint, la, lb, selSt))
 		b.WriteString(sep)
 		mcell := ""
 		if r < len(edLines) {
@@ -165,7 +181,8 @@ func (m Model) View() string {
 		}
 		b.WriteString(padCell(mcell, mid))
 		b.WriteString(sep)
-		b.WriteString(sideCell(m.theirs, top+r, right, faint))
+		ra, rb := m.selCols(top+r, true)
+		b.WriteString(sideCell(m.theirs, top+r, right, faint, ra, rb, selSt))
 	}
 	return b.String()
 }
@@ -194,11 +211,21 @@ func (m Model) pathBase() string {
 }
 
 // sideCell renders line i of a read-only column, clipped and padded to w.
-func sideCell(lines []string, i, w int, style lipgloss.Style) string {
+// [selA, selB) is the mouse selection's covered display-column interval
+// (#2070); covered runes take sel over the column style.
+func sideCell(lines []string, i, w int, style lipgloss.Style, selA, selB int, sel lipgloss.Style) string {
 	if i < 0 || i >= len(lines) {
 		return strings.Repeat(" ", w)
 	}
-	return padCell(style.Render(expandTabs(lines[i])), w)
+	text := expandTabs(lines[i])
+	if selA < selB {
+		runes := []rune(text)
+		a := min(selA, len(runes))
+		b := min(selB, len(runes))
+		return padCell(style.Render(string(runes[:a]))+sel.Render(string(runes[a:b]))+
+			style.Render(string(runes[b:])), w)
+	}
+	return padCell(style.Render(text), w)
 }
 
 // padCell truncates s to w display cells and pads with spaces.
