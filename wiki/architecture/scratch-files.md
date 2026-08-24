@@ -27,6 +27,7 @@ func Dir() (string, error)        // $IKE_CONFIG_DIR/scratches, else ~/.ike/scra
 func Create(ext string) (string, error) // next free scratch-N.<ext>, seeded with the language template
 func List() ([]string, error)     // existing scratches, newest-first (mod time)
 func Entries() ([]Entry, error)   // the same order, with each file's mod time
+func FirstLine(path string) string // first non-empty line, capped read, "" if empty/blank/unreadable
 func Delete(path string) error    // remove one scratch; refuses anything outside the dir
 func Rename(path, name string) (string, error) // rename inside the dir; both ends guarded
 ```
@@ -80,14 +81,33 @@ with the project's resolved interpreter, so a Python scratch runs under the
 project's virtualenv and a PHP scratch under its configured `php`. See
 [run configurations](./run-configurations.md).
 
-## Listing (#352)
+## Listing (#352, #2057)
 
 `scratch.list` ("Open Scratch File…", palette + File menu) opens the palette
 locked to `ScratchMode` (`internal/palette/scratch_mode.go`, prefix `~`, the
-recent-files pattern): file names newest-first from the injected
-`scratch.List`, fuzzy-filtered by the query, enter opens through the standard
-funnel (`OpenFileMsg`). An empty store renders one inert hint row pointing at
-"New Scratch File".
+recent-files pattern): rows newest-first, fuzzy-filtered by the query, enter
+opens through the standard funnel (`OpenFileMsg`). An empty store renders one
+inert hint row pointing at "New Scratch File".
+
+The palette owns no store or language knowledge — it is injected a
+`[]palette.ScratchEntry{Path, Title, Lang}` per query (`scratchEntries` in
+`internal/app/scratch_cmd.go`), built over `scratch.Entries` (newest-first,
+mod time). Each row's **title is its first non-empty content line** — read
+lazily by `scratch.FirstLine`, capped at 64KiB rather than loading the whole
+file, so a large scratch still resolves a title cheaply — trimmed of
+whitespace, falling back to the placeholder "Empty scratch" when the file is
+empty or blank within the cap. This is the JetBrains scratch-view convention:
+a scratch reads by what it contains, not by its allocated `scratch-N.<ext>`
+name. The **Detail chip carries the language**, resolved via `lang.ByPath`
+and rendered with the same acronym-or-capitalize heuristic as the `scratch.new`
+language picker (`langTitle`), falling back to "Plain Text" for an
+unregistered extension. Fuzzy matching runs against the title, so typing part
+of a scratch's content finds it.
+
+Deleting a scratch from this picker is a deliberate non-goal: the explorer's
+Scratches section below already deletes (with the confirm dialog) and renames
+scratches through the same store, so the picker stays a pure finder rather
+than duplicating that flow.
 
 **Reachable from the `@` file finder too (#1812).** A query that fuzzy-matches
 the word "scratch" surfaces the same `scratch.List` rows, newest-first, inline

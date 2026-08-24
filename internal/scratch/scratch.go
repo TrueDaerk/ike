@@ -8,7 +8,9 @@
 package scratch
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -131,6 +133,32 @@ func Entries() ([]Entry, error) {
 		return out[i].Path < out[j].Path // stable order for equal times
 	})
 	return out, nil
+}
+
+// firstLineScanCap bounds how much of a scratch FirstLine reads before giving
+// up: a large scratch (a pasted log, a JSON export) yields a title from its
+// head without paying for a full read, matching the picker's "don't load the
+// whole file" requirement (#2057).
+const firstLineScanCap = 64 * 1024
+
+// FirstLine returns path's first non-empty, whitespace-trimmed line — the
+// scratch picker's title source (#2057), read lazily and capped at
+// firstLineScanCap bytes rather than loading the whole file. "" when the file
+// is empty, all-whitespace within the cap, or unreadable; callers render
+// that as a placeholder.
+func FirstLine(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(io.LimitReader(f, firstLineScanCap))
+	for sc.Scan() {
+		if line := strings.TrimSpace(sc.Text()); line != "" {
+			return line
+		}
+	}
+	return ""
 }
 
 // Delete removes one scratch file (#1932). The path must name a file directly

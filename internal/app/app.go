@@ -2372,7 +2372,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 		}
 		return items
 	})
-	scr := palette.NewScratchMode(scratchList)
+	scr := palette.NewScratchMode(scratchEntries)
 	scrNew := scratchNewMode{}
 	bufLang := bufferLangMode{} // "Treat Buffer as …" language picker (#2033)
 	// Classes are their own search-everywhere category (#1849), ranked right

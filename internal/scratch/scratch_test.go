@@ -226,6 +226,49 @@ func TestRenameRenamesInPlace(t *testing.T) {
 	}
 }
 
+// TestFirstLineSkipsLeadingBlankLines covers the picker's title source
+// (#2057): FirstLine returns the first non-empty, trimmed line, skipping
+// leading blank ones.
+func TestFirstLineSkipsLeadingBlankLines(t *testing.T) {
+	sandbox(t)
+	path, err := Create("txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("\n  \n  hello world  \nsecond line\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := FirstLine(path); got != "hello world" {
+		t.Fatalf("FirstLine = %q, want %q", got, "hello world")
+	}
+}
+
+// TestFirstLineEmptyOrMissing covers the picker's placeholder trigger: an
+// empty file, an all-blank file and a vanished path all yield "".
+func TestFirstLineEmptyOrMissing(t *testing.T) {
+	dir := sandbox(t)
+	empty, err := Create("txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := FirstLine(empty); got != "" {
+		t.Fatalf("FirstLine(empty) = %q, want \"\"", got)
+	}
+	blank, err := Create("txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(blank, []byte("\n\n   \n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := FirstLine(blank); got != "" {
+		t.Fatalf("FirstLine(blank) = %q, want \"\"", got)
+	}
+	if got := FirstLine(filepath.Join(dir, "missing.txt")); got != "" {
+		t.Fatalf("FirstLine(missing) = %q, want \"\"", got)
+	}
+}
+
 // TestRenameGuards is the boundary rail: Rename refuses paths outside the
 // store, pathy or traversal names, and existing targets.
 func TestRenameGuards(t *testing.T) {

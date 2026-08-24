@@ -1,7 +1,6 @@
 package palette
 
 import (
-	"path/filepath"
 	"sort"
 
 	"ike/internal/fuzzy"
@@ -12,16 +11,28 @@ import (
 // needs typing; it only has to be unique among modes.
 const ScratchPrefix = '~'
 
-// ScratchMode lists the scratch store: file names newest-first (the store's
-// order), fuzzy-filtered by the query, enter opens. The palette owns no store
-// — the list func is injected by the root model over internal/scratch.List.
+// ScratchEntry is one row source for ScratchMode (#2057): a scratch's path,
+// the title to render for it — the first non-empty content line, or a
+// placeholder for an empty file, JetBrains' scratch-view convention — and its
+// language for the Detail chip. The app builds these lazily over
+// internal/scratch + internal/lang so this package stays free of both.
+type ScratchEntry struct {
+	Path  string
+	Title string
+	Lang  string
+}
+
+// ScratchMode lists the scratch store: entries newest-first (the store's
+// order), fuzzy-filtered by title on the query, enter opens. The palette owns
+// no store — the list func is injected by the root model over
+// internal/scratch.Entries.
 type ScratchMode struct {
-	// list returns the scratch paths newest-first. Injected by the app.
-	list func() []string
+	// list returns the scratch rows newest-first. Injected by the app.
+	list func() []ScratchEntry
 }
 
 // NewScratchMode builds the scratch-files mode over the injected store.
-func NewScratchMode(list func() []string) *ScratchMode {
+func NewScratchMode(list func() []ScratchEntry) *ScratchMode {
 	return &ScratchMode{list: list}
 }
 
@@ -31,9 +42,10 @@ func (s *ScratchMode) Prefix() rune { return ScratchPrefix }
 // Placeholder implements Mode.
 func (s *ScratchMode) Placeholder() string { return "Scratch files…" }
 
-// Results implements Mode. The query fuzzy-matches the file name; equal
-// scores keep the store's newest-first order. An empty store renders one
-// inert hint row (nil Msg: enter just closes the palette).
+// Results implements Mode. The query fuzzy-matches the title (the scratch's
+// first content line, or its empty placeholder); equal scores keep the
+// store's newest-first order. An empty store renders one inert hint row (nil
+// Msg: enter just closes the palette).
 func (s *ScratchMode) Results(query string, cx Context) []Item {
 	if s.list == nil {
 		return nil
@@ -43,14 +55,13 @@ func (s *ScratchMode) Results(query string, cx Context) []Item {
 		score int
 	}
 	var out []scored
-	for _, p := range s.list() {
-		title := filepath.Base(p)
-		m, ok := fuzzy.Match(query, title)
+	for _, e := range s.list() {
+		m, ok := fuzzy.Match(query, e.Title)
 		if !ok {
 			continue
 		}
 		out = append(out, scored{
-			item:  Item{Title: title, Spans: m.Positions, Score: m.Score, Msg: OpenFileMsg{Path: p}},
+			item:  Item{Title: e.Title, Detail: e.Lang, Spans: m.Positions, Score: m.Score, Msg: OpenFileMsg{Path: e.Path}},
 			score: m.Score,
 		})
 	}

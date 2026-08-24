@@ -41,6 +41,25 @@
   pane's is a feature, not an audit fix), and the Problems/Usages list panels
   cannot copy their highlighted row.
 
+## 2026-08-24 (scratch picker shows language and first content line, #2057)
+
+- **The scratch picker (`~`, `scratch.list`) reads by content, not by
+  allocation name.** Each row's title is now its first non-empty content
+  line — `scratch.FirstLine`, a lazy read capped at 64KiB so a large scratch
+  still resolves cheaply — falling back to "Empty scratch" for a blank file,
+  the JetBrains scratch-view convention. Fuzzy filtering runs against that
+  title, so typing part of a scratch's content finds it.
+- **A Detail chip names the language**, resolved via `lang.ByPath` with the
+  same acronym-or-capitalize heuristic as the `scratch.new` language picker,
+  falling back to "Plain Text".
+- **The palette stays store- and language-agnostic**: `ScratchMode` now takes
+  an injected `[]palette.ScratchEntry{Path, Title, Lang}`
+  (`scratchEntries` in `internal/app/scratch_cmd.go`) instead of a bare path
+  list.
+- **Deleting from the picker is a deliberate non-goal**: the explorer's
+  Scratches section (#1932/#1963) already deletes and renames scratches with
+  a confirm dialog, so the picker stays a pure finder.
+
 ## 2026-08-24 (HTTP: copy as curl, save response body, #2059)
 
 - **The shown exchange has two exits now.** `C` in the response pane (or
