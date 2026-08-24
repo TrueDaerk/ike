@@ -11,6 +11,7 @@ package forge
 // HTTP client carries the same deadline as the CLI subprocesses.
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -121,6 +122,35 @@ func (t *teaForge) apiGet(path string, query url.Values) ([]byte, error) {
 	return body, nil
 }
 
+// apiSend performs one authenticated request carrying a JSON document — the
+// write half of apiGet (#2087) — and discards the response body on success.
+// Non-2xx responses become errors carrying the status; the body is never
+// parsed as prose.
+func (t *teaForge) apiSend(method, path string, payload any) error {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(method, t.baseURL+"/api/v1"+path, bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "token "+t.token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: ghTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("gitea: %s (%s)", resp.Status, path)
+	}
+	return nil
+}
+
 // repoPath is the API path prefix of the bound repository.
 func (t *teaForge) repoPath() string {
 	return "/repos/" + url.PathEscape(t.owner) + "/" + url.PathEscape(t.repo)
@@ -192,7 +222,14 @@ func (t *teaForge) Capabilities() (Capabilities, error) {
 	if err != nil {
 		return Capabilities{}, err
 	}
-	return parseGiteaPermissions(out)
+	caps, err := parseGiteaPermissions(out)
+	if err != nil {
+		return Capabilities{}, err
+	}
+	// The login rides along for the edit gating (#2087), exactly as in the gh
+	// binding; it is already resolved for the timeline's own-comment flag.
+	caps.Login = t.userLogin()
+	return caps, nil
 }
 
 // Timeline fetches one page of an issue's timeline via Gitea's timeline
@@ -234,14 +271,52 @@ func (t *teaForge) userLogin() string {
 	})
 	return t.login
 }
+
+// CreateComment posts a new comment on an issue (#2087). Gitea's comment
+// endpoints are the same on Forgejo, and the body travels as JSON — no CLI,
+// no quoting.
 func (t *teaForge) CreateComment(issue int, body string) error {
-	return unsupported("tea", "create comment")
+	return t.apiSend(http.MethodPost, t.repoPath()+"/issues/"+itoa(issue)+"/comments",
+		map[string]string{"body": body})
 }
+
+// EditComment replaces an existing comment's body by its forge ID.
 func (t *teaForge) EditComment(commentID string, body string) error {
-	return unsupported("tea", "edit comment")
+	id, err := numericID(commentID)
+	if err != nil {
+		return err
+	}
+	return t.apiSend(http.MethodPatch, t.repoPath()+"/issues/comments/"+id,
+		map[string]string{"body": body})
 }
+
+// EditIssueBody replaces an issue's body text.
 func (t *teaForge) EditIssueBody(issue int, body string) error {
-	return unsupported("tea", "edit issue body")
+	return t.apiSend(http.MethodPatch, t.repoPath()+"/issues/"+itoa(issue),
+		map[string]string{"body": body})
+}
+
+// IssueBody reads an issue's current body — the read half of the stale-base
+// check.
+func (t *teaForge) IssueBody(issue int) (string, error) {
+	out, err := t.apiGet(t.repoPath()+"/issues/"+itoa(issue), nil)
+	if err != nil {
+		return "", err
+	}
+	return parseBodyField(out)
+}
+
+// CommentBody reads one comment's current body, the comment half of it.
+func (t *teaForge) CommentBody(commentID string) (string, error) {
+	id, err := numericID(commentID)
+	if err != nil {
+		return "", err
+	}
+	out, err := t.apiGet(t.repoPath()+"/issues/comments/"+id, nil)
+	if err != nil {
+		return "", err
+	}
+	return parseBodyField(out)
 }
 func (t *teaForge) AddLabels(issue int, labels []string) error {
 	return unsupported("tea", "add labels")

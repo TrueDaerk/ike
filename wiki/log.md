@@ -1,5 +1,41 @@
 # Log
 
+## 2026-08-25 (edit own issue texts and compose comments, #2087)
+
+- **The issue timeline is writable now.** In the detail view `e` edits — the
+  issue body or one of your own comments, straight away when only one text
+  qualifies, through a centered picker when several do — and `c` composes a
+  new comment. Every action is gated on the probed capabilities and on
+  ownership: your own issue (or write access) for the body, the timeline's
+  own-comment flag for a comment, a resolved login for a new one. Anything
+  else is *absent* — no footer entry, no menu row, an inert key — and a failed
+  capability probe hides all of them.
+- **Editing happens in a real markdown buffer**, not an inline mini-editor:
+  the app creates a scratch file named after what it edits
+  (`issue-2087-comment-77.md`), seeded with the current text and opened
+  through the ordinary funnel, so the edit gets vim motions, markdown
+  highlighting, the preview pane, undo, autosave and crash recovery for free.
+  Saving the buffer pushes it: on success the scratch is removed, the buffer
+  closes and the issues window refetches the listing and the timeline; on
+  failure the buffer and every character in it stay put and a dialog shows the
+  error with `[r]` to retry.
+- **A concurrently changed text is never silently clobbered.** Before writing,
+  the save re-reads the forge's current text and compares it with the base the
+  buffer opened with (trailing newline and CRLF normalized away, so an
+  unchanged text never reads as a conflict). A mismatch writes nothing and
+  raises a warning offering `[o]` overwrite, `[l]` load the forge's version
+  into the buffer, `[esc]` decide later.
+- **Both bindings implement the three mutations and their read halves.** gh
+  sends bodies on stdin (`gh issue edit/comment --body-file -`, `gh api
+  --method PATCH issues/comments/{id} --input -`), tea sends JSON to the Gitea
+  endpoints; comment IDs are validated as digits before reaching a request
+  path, and `Capabilities` now carries the authenticated login the ownership
+  check needs. Unit tests cover the target vocabulary, the check-then-push
+  order with its stale verdict, the binding fixtures, the pane's gate and
+  picker, and the buffer save chain end to end. Concept docs updated:
+  [Forge Layer](/architecture/forge.md),
+  [Issues Tool Window](/architecture/github-issues.md).
+
 ## 2026-08-24 (issue timeline in the detail view, #2084)
 
 - **The issue detail shows the full history now.** Under the rendered body,

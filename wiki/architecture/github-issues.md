@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Issues Tool Window
-description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, fuzzy filter, label multi-picker, open/closed/all state filter, sort orders and label grouping, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), an action menu, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084).
+description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, fuzzy filter, label multi-picker, open/closed/all state filter, sort orders and label grouping, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), editing your own texts and composing comments in markdown buffers, an action menu, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2087).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
-# Issues Tool Window (#1934, #2090, #2084)
+# Issues Tool Window (#1934, #2090, #2084, #2087)
 
 Development in this repository is issue-driven (see
 [Change Workflow](/process/change-workflow.md)); this pane brings that loop
@@ -54,6 +54,13 @@ its own concept: [Forge Layer](/architecture/forge.md). What the pane sees:
   kinds outside the vocabulary; `More` reports whether another page follows,
   so long histories are never fetched whole. The message echoes issue and
   page, letting the pane drop a stale answer.
+- `forge.CapabilitiesCmd(dir)` → `CapabilitiesMsg` (#2087): the repository
+  permissions plus the authenticated login, probed once when the pane opens
+  and again off the first listing a session-restored pane receives. It is what
+  the edit actions are gated on.
+- `forge.SaveTextCmd(dir, path, target, base, body, force)` → `SaveTextMsg`
+  (#2087): the push a saved edit buffer runs, with the stale-base check in
+  front of it. The pane never calls it — the app does, for the buffer it owns.
 - `forge.PRForIssue(prs, n)` joins PRs to issues by the branch convention:
   head `issue/<n>` or `issue/<n>-…`, preferring open over merged over closed.
   Each PR's `statusCheckRollup` (CheckRun and StatusContext shapes both)
@@ -164,6 +171,57 @@ refetches the listing *and* the open issue's timeline. A `TimelineMsg` for an
 issue the pane no longer waits on is dropped; entry IDs and the own-comment
 flag are carried in the model for the comment-editing sub-issue.
 
+### Editing your own texts (#2087)
+
+The timeline is not read-only for texts that are yours. In the detail view:
+
+- **`e`** edits. With exactly one editable text it opens straight away; with
+  several it raises the **edit picker**, a centered overlay listing the issue
+  body first, then each of your own comments by its first line.
+- **`c`** composes a new comment on the open issue.
+
+**What is offered** is decided by `edit.go` against the probed
+`Capabilities` — never guessed, and empty until the probe answered:
+
+| Text | Offered when |
+| --- | --- |
+| issue body | you opened the issue, **or** you have write access |
+| a comment | it carries the timeline's own-comment flag (#2084) |
+| new comment | the login resolved — commenting needs no repository permission |
+
+An unavailable action is **absent**, not greyed out: it is missing from the
+footer, from the action menu, and its key does nothing. A failed capability
+probe hides all of them.
+
+**The editor is a real buffer.** The pane emits `EditTextRequestMsg` naming
+the target and its current text; `internal/app/forgeedit.go` answers by
+creating a **markdown scratch file** — the same store "Treat Buffer as …"
+materializes into (#2056) — named after what it edits
+(`issue-2087-comment-77.md`), seeded with the current text, and opened through
+the ordinary funnel. The edit therefore gets the whole editor: vim motions,
+markdown highlighting, the preview pane, undo, autosave, crash recovery. The
+only thing on top is a binding, keyed by path, holding the target and the base
+text.
+
+**Saving pushes.** Writing the buffer (`:w`, Save All, autosave) fires
+`editor.EventSave`; a bound path dispatches `forge.SaveTextCmd` with the file
+the save just wrote. Three outcomes:
+
+- **pushed** — the scratch file is deleted, its buffer closes, and the pane
+  refetches the listing *and* the open issue's timeline, so the new text
+  appears where it was written.
+- **changed on the forge** — the stale-base check found the server text moved
+  since the buffer opened. Nothing was written; a centered dialog offers
+  `[o]` overwrite, `[l]` load the forge's version into the buffer (re-basing
+  the binding), `[esc]` decide later.
+- **failed** — the buffer and every character in it stay exactly as they are,
+  and the error is shown in a dialog, not a toast: `[r]` retries the push,
+  `[esc]` keeps editing and saves again whenever you want.
+
+An empty new-comment buffer is never posted — opening one and changing your
+mind costs nothing. A second edit request for a text that is already open
+focuses that buffer instead of racing it with a second one.
+
 ### Discoverability
 
 One table backs both the **footer** (`enter detail · s start work · o browser
@@ -190,7 +248,8 @@ clamped with a diagnostic when a config file names something else.
 
 ### Actions and states
 
-- **Actions** — `s` emits `StartWorkRequestMsg` (the app answers with
+- **Actions** — `e`/`c` emit `EditTextRequestMsg` (#2087, detail view only);
+  `s` emits `StartWorkRequestMsg` (the app answers with
   `forge.StartWorkCmd`, toasts the outcome and invalidates the VCS
   snapshot); `o` emits `OpenURLMsg` (platform browser); `r` re-runs the
   injected refresh for the current state filter. All three work from the

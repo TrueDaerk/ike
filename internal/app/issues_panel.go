@@ -78,10 +78,29 @@ func (m *Model) openIssuesPanel() tea.Cmd {
 	m.setFocus(key)
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	// The capability probe (#2087) runs once per opened pane: the edit
+	// actions stay hidden until it answers, so nothing is offered that the
+	// authenticated user could not actually push.
+	caps := forge.CapabilitiesCmd(".")
 	if !p.Loaded() {
-		return p.Refresh()
+		return tea.Batch(p.Refresh(), caps)
 	}
-	return nil
+	return caps
+}
+
+// issuesCapabilitiesCmd probes the repository permissions when the open pane
+// has no answer yet (#2087). It runs off every landed listing, which is what
+// arms a session-restored pane too — that one is rebuilt without the on-open
+// probe, and its edit actions would otherwise stay hidden forever.
+func (m *Model) issuesCapabilitiesCmd() tea.Cmd {
+	p := m.issuesPanel()
+	if p == nil {
+		return nil
+	}
+	if _, probed := p.Capabilities(); probed {
+		return nil
+	}
+	return forge.CapabilitiesCmd(".")
 }
 
 // fillIssuesPanel routes one finished fetch into the pane, if it still exists.

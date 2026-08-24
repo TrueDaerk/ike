@@ -1,10 +1,11 @@
 package ghissues
 
-// overlays.go holds the two modals the pane composites over its body (#2090):
-// the label multi-picker that replaced the old 'l' cycling, and the action
-// menu that makes every key of the current view discoverable. Both own the
-// keyboard while open, navigate with the shared list semantics, and are
-// dismissed with esc.
+// overlays.go holds the modals the pane composites over its body: the label
+// multi-picker that replaced the old 'l' cycling (#2090), the action menu
+// that makes every key of the current view discoverable (#2090), and the edit
+// picker that chooses which of the issue's texts a markdown buffer opens
+// (#2087, edit.go). All own the keyboard while open, navigate with the shared
+// list semantics, and are dismissed with esc.
 
 import (
 	tea "charm.land/bubbletea/v2"
@@ -34,6 +35,15 @@ func (m *Model) actions() []action {
 		}
 		if m.tlMore {
 			acts = append(acts, action{"L", "more", "Load more activity", (*Model).loadMoreTimeline})
+		}
+		// The editing actions (#2087) appear only on texts the authenticated
+		// user may actually change — an action that fails on push would be
+		// worse than an absent one.
+		if m.canEditAnything() {
+			acts = append(acts, action{"e", "edit", "Edit a text of this issue", (*Model).startEdit})
+		}
+		if m.canComment() {
+			acts = append(acts, action{"c", "comment", "Write a new comment", (*Model).startComment})
 		}
 		return append(acts,
 			action{"s", "start work", "Start work (create the branch)", (*Model).startWork},
@@ -117,6 +127,8 @@ func (m *Model) overlayItems() int {
 		return len(m.labels)
 	case ovActions:
 		return len(m.actions())
+	case ovEdit:
+		return len(m.editTargets())
 	}
 	return 0
 }
@@ -170,6 +182,8 @@ func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.labelPickerKey(key)
 	case ovActions:
 		return m.actionMenuKey(key)
+	case ovEdit:
+		return m.editPickerKey(key)
 	}
 	return nil
 }

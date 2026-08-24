@@ -1,16 +1,19 @@
 package forge
 
 // gh.go is the GitHub binding of the Forge interface: the issue/PR listing,
-// the issue timeline (#2084) and the capability probe through
-// `gh ... --json` / `gh api`, whose output is stable JSON — never the human
-// rendering. Detection (gh on PATH, a GitHub remote) lives in detect.go; the
-// operations later 0470 sub-issues bring (mutations, PR actions) are
-// ErrUnsupported stubs here until those land.
+// the issue timeline (#2084), the editable-text reads and mutations (#2087)
+// and the capability probe through `gh ... --json` / `gh api`, whose output
+// is stable JSON — never the human rendering. Detection (gh on PATH, a GitHub
+// remote) lives in detect.go; the operations later 0470 sub-issues bring
+// (label/assignee/state mutations, PR actions) are ErrUnsupported stubs here
+// until those land.
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
@@ -45,10 +48,21 @@ type ghForge struct {
 // runCLI executes one forge-CLI command in dir under the given deadline.
 // Interactive prompts are disabled — no terminal is attached.
 func runCLI(dir, tool string, timeout time.Duration, args ...string) ([]byte, error) {
+	return runCLIStdin(dir, tool, "", timeout, args...)
+}
+
+// runCLIStdin is runCLI with stdin fed from a string — the route every text
+// mutation takes (#2087). A comment body can hold anything, newlines and
+// quotes included, so it must never travel as an argv element or through a
+// shell; gh reads it from standard input (`--body-file -`, `--input -`).
+func runCLIStdin(dir, tool, stdin string, timeout time.Duration, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, tool, args...)
 	cmd.Dir = dir
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
 	cmd.Env = append(os.Environ(), "GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1", "CLICOLOR=0", "NO_COLOR=1")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -65,6 +79,11 @@ func runCLI(dir, tool string, timeout time.Duration, args ...string) ([]byte, er
 // runGH executes one gh command in dir with the package timeout.
 func runGH(dir string, args ...string) ([]byte, error) {
 	return runCLI(dir, "gh", ghTimeout, args...)
+}
+
+// runGHStdin is runGH with a text mutation's body on standard input.
+func runGHStdin(dir, stdin string, args ...string) ([]byte, error) {
+	return runCLIStdin(dir, "gh", stdin, ghTimeout, args...)
 }
 
 // Issues lists the repository's issues in the given state via
@@ -99,7 +118,14 @@ func (g *ghForge) Capabilities() (Capabilities, error) {
 	if err != nil {
 		return Capabilities{}, err
 	}
-	return parseGHPermissions(out)
+	caps, err := parseGHPermissions(out)
+	if err != nil {
+		return Capabilities{}, err
+	}
+	// The login rides along: the edit gating (#2087) has to know whose texts
+	// these are, and the probe behind it is cached per backend anyway.
+	caps.Login = g.userLogin()
+	return caps, nil
 }
 
 // Timeline fetches one page of an issue's timeline via
@@ -129,14 +155,61 @@ func (g *ghForge) userLogin() string {
 	})
 	return g.login
 }
+
+// CreateComment posts a new comment via `gh issue comment --body-file -`
+// (#2087); the body travels on stdin, never as an argument.
 func (g *ghForge) CreateComment(issue int, body string) error {
-	return unsupported("gh", "create comment")
+	_, err := runGHStdin(g.dir, body, "issue", "comment", itoa(issue), "--body-file", "-")
+	return err
 }
+
+// EditComment replaces an existing comment's body. gh has no comment-edit
+// command, so this is a REST PATCH on issues/comments/{id} through `gh api`
+// with the JSON request document on stdin (`--input -`) — the one shape that
+// survives arbitrary markdown.
 func (g *ghForge) EditComment(commentID string, body string) error {
-	return unsupported("gh", "edit comment")
+	id, err := numericID(commentID)
+	if err != nil {
+		return err
+	}
+	payload, err := jsonBody(body)
+	if err != nil {
+		return err
+	}
+	_, err = runGHStdin(g.dir, payload, "api", "--method", "PATCH",
+		"repos/{owner}/{repo}/issues/comments/"+id, "--input", "-")
+	return err
 }
+
+// EditIssueBody replaces an issue's body via `gh issue edit --body-file -`.
 func (g *ghForge) EditIssueBody(issue int, body string) error {
-	return unsupported("gh", "edit issue body")
+	_, err := runGHStdin(g.dir, body, "issue", "edit", itoa(issue), "--body-file", "-")
+	return err
+}
+
+// IssueBody reads an issue's current body through the REST endpoint rather
+// than through `--jq .body`: jq re-encodes the text (a trailing newline,
+// escapes) and the stale-base check compares it character for character.
+func (g *ghForge) IssueBody(issue int) (string, error) {
+	out, err := runGH(g.dir, "api", "repos/{owner}/{repo}/issues/"+itoa(issue))
+	if err != nil {
+		return "", err
+	}
+	return parseBodyField(out)
+}
+
+// CommentBody reads one comment's current body, the comment half of the same
+// check.
+func (g *ghForge) CommentBody(commentID string) (string, error) {
+	id, err := numericID(commentID)
+	if err != nil {
+		return "", err
+	}
+	out, err := runGH(g.dir, "api", "repos/{owner}/{repo}/issues/comments/"+id)
+	if err != nil {
+		return "", err
+	}
+	return parseBodyField(out)
 }
 func (g *ghForge) AddLabels(issue int, labels []string) error {
 	return unsupported("gh", "add labels")
@@ -151,6 +224,42 @@ func (g *ghForge) CloseIssue(issue int) error  { return unsupported("gh", "close
 func (g *ghForge) ReopenIssue(issue int) error { return unsupported("gh", "reopen issue") }
 func (g *ghForge) MergePR(pr int) error        { return unsupported("gh", "merge PR") }
 func (g *ghForge) ClosePR(pr int) error        { return unsupported("gh", "close PR") }
+
+// numericID guards a forge comment ID before it is pasted into a REST path:
+// both bindings hand it straight to the API, so anything but digits — a
+// crafted timeline payload, a bug upstream — is refused rather than turned
+// into an arbitrary request path.
+func numericID(id string) (string, error) {
+	if id == "" {
+		return "", errors.New("forge: missing comment id")
+	}
+	if _, err := strconv.ParseUint(id, 10, 64); err != nil {
+		return "", fmt.Errorf("forge: invalid comment id %q", id)
+	}
+	return id, nil
+}
+
+// jsonBody encodes one {"body": …} request document, the payload shape both
+// forges' issue and comment mutation endpoints take.
+func jsonBody(body string) (string, error) {
+	raw, err := json.Marshal(map[string]string{"body": body})
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// parseBodyField reads the "body" field out of one issue or comment document
+// — the field name GitHub and Gitea share, so both bindings decode with it.
+func parseBodyField(out []byte) (string, error) {
+	var doc struct {
+		Body string `json:"body"`
+	}
+	if err := json.Unmarshal(out, &doc); err != nil {
+		return "", err
+	}
+	return doc.Body, nil
+}
 
 // parseGHPermissions folds GitHub's permissions object
 // ({admin, maintain, push, triage, pull}) into Capabilities: push (or

@@ -7,14 +7,18 @@
 // that keeps the list's cursor and scroll and can walk to the next/previous
 // issue without going back. The detail shows the issue's timeline under the
 // body (#2084): comments rendered as markdown, label/state/assignee changes
-// as compact events, fetched lazily page by page. The PR view lists the pull
+// as compact events, fetched lazily page by page. Texts that are the user's
+// own can be edited from there (#2087, edit.go): 'e' picks the issue body or
+// one of your comments, 'c' composes a new one, and the app opens each in a
+// markdown buffer that pushes when it is saved. The PR view lists the pull
 // requests full width
 // (number, title, head branch, CI rollup, review decision). Every action is
 // discoverable through the footer and the action menu.
 //
 // It stays a pure consumer of internal/forge messages: the app injects the
 // per-state fetch factory and routes forge.IssuesMsg results in; the pane
-// itself never runs a subprocess.
+// itself never runs a subprocess — the edit actions emit a request message
+// too, they do not talk to a forge.
 package ghissues
 
 import (
@@ -147,14 +151,17 @@ func (s StateFilter) issueState() forge.IssueState {
 }
 
 // overlayKind is the modal that owns the keyboard on top of a view: the label
-// multi-picker or the action menu. Both render as a centered box over the
-// body and are dismissed with esc.
+// multi-picker, the action menu, or the edit picker. All render as a centered
+// box over the body and are dismissed with esc.
 type overlayKind int
 
 const (
 	ovNone overlayKind = iota
 	ovLabels
 	ovActions
+	// ovEdit is the edit picker (#2087): which of the issue's texts — the
+	// body, one of your comments — the markdown edit buffer should open.
+	ovEdit
 )
 
 // listRow is one rendered row of a view: either a group header (header set,
@@ -251,6 +258,13 @@ type Model struct {
 	tlLoading bool
 	tlErr     string
 	tlRev     int
+
+	// Capabilities (#2087): the probed repository permissions plus the
+	// authenticated login, injected by the app once per opened pane. capsOK
+	// separates "probed, no permissions" from "never probed" — both hide the
+	// edit actions, but only the first is a settled answer.
+	caps   forge.Capabilities
+	capsOK bool
 
 	// Config defaults apply only while the user has not overridden them in
 	// this session, so a live config reload never yanks the view away.
@@ -686,6 +700,10 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.stepIssue(-1)
 	case "L":
 		return m.loadMoreTimeline()
+	case "e":
+		return m.startEdit()
+	case "c":
+		return m.startComment()
 	case "j", "down":
 		m.detailTop++
 	case "k", "up":

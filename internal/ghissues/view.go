@@ -477,6 +477,9 @@ func (m *Model) footer(pal *theme.Palette) string {
 	if m.ov == ovActions {
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter run · esc close"))
 	}
+	if m.ov == ovEdit {
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter edit · esc cancel"))
+	}
 	var parts []string
 	for _, a := range m.actions() {
 		parts = append(parts, a.key+" "+a.hint)
@@ -694,6 +697,20 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 			lines = append(lines, style.Render(key+"  "+acts[i].label))
 		}
 		return "Actions — " + m.viewName(), lines
+	case ovEdit:
+		targets := m.editTargets()
+		for k := 0; k < h; k++ {
+			i := m.ovTop + k
+			if i >= len(targets) {
+				break
+			}
+			style := plain
+			if i == m.ovCursor {
+				style = sel
+			}
+			lines = append(lines, style.Render(targets[i].label))
+		}
+		return "Edit which text?", lines
 	}
 	return "", nil
 }

@@ -525,10 +525,20 @@ type Model struct {
 	// jump to, and lastInputAt is the guard's "user is typing" stamp.
 	forgeQueue  []forge.Event
 	forgeUnread []forge.Event
-	forgeCursor int
-	forgeDialog bool
-	forgeReveal int
-	lastInputAt time.Time
+
+	// Forge edit buffers (#2087, forgeedit.go): markdown scratch buffers
+	// bound to a forge text, keyed by path; forgeEditKey names the buffer the
+	// open push dialog belongs to, forgeEditConflict tells the stale-base
+	// warning from the failed-push error, and forgeEditStale carries the
+	// forge's current text the reload answer writes back.
+	forgeEdits        map[string]*forgeEdit
+	forgeEditKey      string
+	forgeEditConflict bool
+	forgeEditStale    string
+	forgeCursor       int
+	forgeDialog       bool
+	forgeReveal       int
+	lastInputAt       time.Time
 	// doctorReturnFocus is the same dance for the Xdebug Doctor tool window
 	// (#1991); doctorLog is its app-owned listener/connection trace, fed from
 	// the bridge's ike.listenState / ike.debugConn events and surviving the
@@ -1409,6 +1419,10 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		// IKE's own writes are watcher-suppressed (MarkSaved above), so this
 		// is the only refresh trigger for in-IDE saves.
 		go e.host.Send(vcsInvalidateMsg{})
+		// A buffer bound to a forge text pushes on save (#2087). The emitter
+		// cannot know which paths are bound, so every save reports and the
+		// handler drops the ones that are not.
+		go e.host.Send(forgeEditSavedMsg{path: ev.Path})
 	}
 	if ev.Kind == editor.EventCursorMove && ev.Path != "" {
 		// Markdown previews follow the cursor (#62). Same goroutine indirection
@@ -1726,8 +1740,11 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 		}
 		if id := ids[key]; id.Kind == "issues" {
 			// The GitHub Issues panel restores empty in its saved slot
-			// (#1934) with its refresh armed; 'r' re-fetches the listing.
-			panes.Get(panes.AddIssues()).Issues().SetRefresh(forge.RefreshFactory("."))
+			// (#1934) with its refresh and its timeline fetch armed (#2084);
+			// 'r' re-fetches the listing.
+			p := panes.Get(panes.AddIssues()).Issues()
+			p.SetRefresh(forge.RefreshFactory("."))
+			p.SetTimeline(forge.TimelineFactory("."))
 			continue
 		}
 		if id := ids[key]; id.Kind == "http" {
@@ -4629,7 +4646,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// forge event dialog asked for (#2086) runs on the fresh listing and
 		// may need the revealed issue's timeline (#2084).
 		m.fillIssuesPanel(msg)
-		return m, m.applyForgeReveal()
+		return m, tea.Batch(m.applyForgeReveal(), m.issuesCapabilitiesCmd())
 
 	case forge.TimelineMsg:
 		// One fetched issue-timeline page (#2084) lands in the open detail.
@@ -4652,6 +4669,29 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ghissues.OpenURLMsg:
 		// The pane's 'o' action (#1934): the issue page in the browser.
 		return m, m.openIssueURL(msg.URL)
+
+	case forge.CapabilitiesMsg:
+		// The probed repository permissions and the authenticated login
+		// (#2087): the pane gates its edit actions on them.
+		if p := m.issuesPanel(); p != nil {
+			p.SetCapabilities(msg)
+		}
+		return m, nil
+
+	case ghissues.EditTextRequestMsg:
+		// The pane's 'e'/'c' actions (#2087): open a markdown buffer bound to
+		// the forge text, prefilled with what the pane knows it holds.
+		return m.openForgeEdit(msg)
+
+	case forgeEditSavedMsg:
+		// A saved buffer bound to a forge text pushes it (#2087); an unbound
+		// path is the ordinary case and resolves to nil.
+		return m, m.pushForgeEdit(msg.path, false)
+
+	case forge.SaveTextMsg:
+		// One finished push (#2087): closed and refreshed on success, kept
+		// with a dialog on a stale base or an error.
+		return m, m.finishForgeEdit(msg)
 
 	case BreakpointsToggleMsg:
 		// debug.breakpoints (#1377): same state machine for the Breakpoints
@@ -6383,6 +6423,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// enter opens the issue, d/esc dismisses, a dismisses all.
 		if m.forgeDialogOpen() {
 			return m.updateForgeDialog(msg)
+		}
+		// The forge edit dialogs (#2087) — failed push, stale base — own the
+		// keyboard the same way: r retries, o overwrites, l loads, esc keeps
+		// the buffer.
+		if m.forgeEditDialogOpen() {
+			return m.updateForgeEditDialog(msg)
 		}
 		// The post-tour setup dialogs (#713) own the keyboard the same way.
 		if m.themePickOpen() {
