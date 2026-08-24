@@ -102,6 +102,39 @@ type EditorEvent struct {
 	// CompletionID carries the selected item's reply index on
 	// EditorCompletionSelect (#847), for completionItem/resolve.
 	CompletionID int
+	// Key identifies the emitting buffer where Path cannot (#2048): a buffer
+	// with no file has an empty Path, so per-buffer state keyed by it — the
+	// word index's text store, the completion route back to the view — would
+	// collapse every file-less buffer into one entry. It mirrors
+	// editor.ParseKey: the file path when there is one, else the view's own
+	// tag. Empty means "same as Path"; read it through BufKey.
+	Key string
+	// LangPath is the path language resolution keys on (#2048). It differs
+	// from Path only for a file-less buffer given a language through "Treat
+	// Buffer as …" (#2033), where it is that language's synthetic name
+	// ("buffer.go") — never a path to read or write. Empty means "same as
+	// Path"; read it through LangName.
+	LangPath string
+}
+
+// BufKey is the event's buffer identity: Key when the emitter set one, else
+// Path. Sources keying per-buffer state use it instead of Path so a buffer
+// with no file gets its own entry rather than sharing the empty one (#2048).
+func (e EditorEvent) BufKey() string {
+	if e.Key != "" {
+		return e.Key
+	}
+	return e.Path
+}
+
+// LangName is the name language lookups resolve for this event: LangPath when
+// the emitter set one, else Path. It is a name for classification only, never
+// a path to open (#2048).
+func (e EditorEvent) LangName() string {
+	if e.LangPath != "" {
+		return e.LangPath
+	}
+	return e.Path
 }
 
 // EditorEvent selection kinds (mirrors editor.SelKind).

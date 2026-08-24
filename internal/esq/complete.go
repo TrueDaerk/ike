@@ -93,16 +93,19 @@ func (s *CompletionSource) TriggerChar(ch string) bool { return ch == "\"" || ch
 // Observe stashes the buffer text of query files — on the UI goroutine, so
 // stash-and-return only; extraction happens in Complete.
 func (s *CompletionSource) Observe(ev host.EditorEvent) {
+	// Gated on the real path, not the language name: a query buffer's index
+	// is encoded in its file name (QueryRef), so a file-less buffer merely
+	// *treated* as one has nothing to complete against (#2048).
 	if ev.Kind != host.EditorChange || !IsQueryPath(ev.Path) {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ev.Large || ev.Text == "" {
-		delete(s.lines, ev.Path)
+		delete(s.lines, ev.BufKey())
 		return
 	}
-	s.lines[ev.Path] = strings.Split(ev.Text, "\n")
+	s.lines[ev.BufKey()] = strings.Split(ev.Text, "\n")
 }
 
 // PrimeFields seeds the mapping cache from outside — the console pane fetches
@@ -128,7 +131,7 @@ func (s *CompletionSource) Complete(ctx context.Context, req complete.Request) (
 	if !ok {
 		return nil, nil
 	}
-	line, ok := s.lineAt(req.Path, req.Line)
+	line, ok := s.lineAt(req.BufKey(), req.Line)
 	if !ok {
 		return nil, nil
 	}

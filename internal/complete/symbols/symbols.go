@@ -75,9 +75,13 @@ type fileIndex struct {
 }
 
 // doc is one observed open buffer; its extraction overrides the on-disk scan
-// for the same path.
+// for the same path. lang is the name extraction resolves the buffer's
+// grammar by — the file path, or the synthetic name of a file-less buffer's
+// chosen language (#2048), which is why it is stored instead of re-derived
+// from the map key.
 type doc struct {
 	text  string
+	lang  string
 	idx   fileIndex
 	dirty bool
 }
@@ -118,13 +122,18 @@ func (s *Source) Observe(ev host.EditorEvent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ev.Large {
-		delete(s.buffers, ev.Path)
+		delete(s.buffers, ev.BufKey())
 		return
 	}
-	d := s.buffers[ev.Path]
+	d := s.buffers[ev.BufKey()]
 	if d == nil {
 		d = &doc{}
-		s.buffers[ev.Path] = d
+		s.buffers[ev.BufKey()] = d
+	}
+	if d.lang != ev.LangName() {
+		// "Treat Buffer as …" switched the language under the buffer
+		// (#2048): the stashed index belongs to the old grammar.
+		d.lang, d.idx = ev.LangName(), fileIndex{}
 	}
 	d.text, d.dirty = ev.Text, true
 }
@@ -153,25 +162,25 @@ func (s *Source) InvalidateFile(path string) {
 // current file first.
 func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.CompletionItem, error) {
 	s.mu.Lock()
-	cur := s.buffers[req.Path]
+	cur := s.buffers[req.BufKey()]
 	line := ""
 	if cur != nil {
-		cur.extract(req.Path)
+		cur.extract()
 		line = lineAt(cur.text, req.Line)
 	}
-	for path, d := range s.buffers {
-		d.extract(path)
+	for _, d := range s.buffers {
+		d.extract()
 	}
 	s.mu.Unlock()
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if isHTML(req.Path) {
+	if isHTML(req.LangName()) {
 		if attr, ok := htmlAttrContext(line, req.Col); ok {
 			return s.cssItems(attr, cssPrefix(line, req.Col)), nil
 		}
 	}
-	return s.symbolItems(req.Path, identifierPrefix(line, req.Col)), nil
+	return s.symbolItems(req.BufKey(), identifierPrefix(line, req.Col)), nil
 }
 
 // symbolItems collects prefix-matched symbols, current file tiered first.
@@ -259,12 +268,13 @@ func (s *Source) cssItems(attr, prefix string) []ilsp.CompletionItem {
 
 // --- extraction ---
 
-// extract refreshes a dirty buffer.
-func (d *doc) extract(path string) {
+// extract refreshes a dirty buffer, classified by the buffer's own language
+// name rather than its store key (#2048).
+func (d *doc) extract() {
 	if !d.dirty {
 		return
 	}
-	d.idx = extractText(path, d.text)
+	d.idx = extractText(d.lang, d.text)
 	d.dirty = false
 }
 

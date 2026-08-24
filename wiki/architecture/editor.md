@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-21T16:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 
 # Editor
@@ -1316,7 +1316,13 @@ Switching the language invalidates the version-keyed rendering caches along
 with the highlight state, so the new type shows on the next frame instead of
 after the next edit. The parse result finds its way back through
 `ParseKey()` — the file path, or a unique per-view tag when there is none —
-because routing by path skipped every path-less buffer. The user-facing picker, the alt+enter entry and the
+because routing by path skipped every path-less buffer. Completion travels
+the same two names (#2048): every emitted `Event` carries `Key` (the
+`ParseKey`) and `LangPath` (the `langPath()`), so the local sources index the
+buffer under its own identity, gate on its language, and route their answer
+batch back to this view — see
+[Completion Engine](/architecture/completion.md#buffer-identity-and-language-2048).
+The user-facing picker, the alt+enter entry and the
 status-line marker are described in
 [Language Registry](/architecture/languages.md#buffer-language-override--treat-buffer-as--2033)
 and [Intention Actions](/architecture/intention-actions.md#treat-buffer-as--2033).
