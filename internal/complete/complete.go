@@ -27,6 +27,35 @@ type Request struct {
 	Line int
 	Col  int
 	Char string
+	// Key identifies the requesting buffer where Path cannot (#2048): a
+	// buffer with no file has no path, so sources keying per-buffer text by
+	// Path alone would fold every file-less buffer into one entry. Empty
+	// means "same as Path"; read it through BufKey.
+	Key string
+	// LangPath is the name language lookups resolve for this buffer (#2048):
+	// the file path, or the synthetic name of a language chosen with "Treat
+	// Buffer as …" (#2033), so a file-less Go buffer gets the sources a .go
+	// file gets. Empty means "same as Path"; read it through LangName.
+	LangPath string
+}
+
+// BufKey is the request's buffer identity: Key when set, else Path. Sources
+// keying observed buffer text use it, so a file-less buffer's own text is
+// found instead of whatever else answered to the empty path (#2048).
+func (r Request) BufKey() string {
+	if r.Key != "" {
+		return r.Key
+	}
+	return r.Path
+}
+
+// LangName is the name a source resolves the buffer's language by: LangPath
+// when set, else Path. It classifies only — never open it (#2048).
+func (r Request) LangName() string {
+	if r.LangPath != "" {
+		return r.LangPath
+	}
+	return r.Path
 }
 
 // Source is one asynchronous completion provider. Complete runs off the UI
@@ -42,7 +71,9 @@ type Source interface {
 }
 
 // ExclusiveSource is an optional Source extension (#1302): a language source
-// that fully owns completion for its own files declares it here. While a source
+// that fully owns completion for its own files declares it here. The engine
+// hands it the request's LangName, so a file-less buffer switched to the
+// source's language is claimed like a real file of it (#2048). While a source
 // claims a path, the engine dispatches only claiming sources for it — a `.http`
 // header line offers header names, never the buffer's random identifiers, and a
 // request body offers nothing rather than every word in the file. The LSP bridge
@@ -161,12 +192,19 @@ func (e *Engine) Emit(ev host.EditorEvent) {
 		// A punctuation trigger reaches only the sources claiming it (#1913),
 		// and never past an exclusive claim on the path (#1302) — a source
 		// owning the buffer keeps owning it after a ".".
-		sources = charTriggered(ev.Char, exclusiveFor(ev.Path, sources))
+		sources = charTriggered(ev.Char, exclusiveFor(ev.LangName(), sources))
 		if len(sources) == 0 {
 			return
 		}
 	}
-	e.dispatch(Request{Path: ev.Path, Line: ev.Line, Col: ev.Col, Char: ev.Char}, sources)
+	e.dispatch(Request{
+		Path:     ev.Path,
+		Key:      ev.BufKey(),
+		LangPath: ev.LangName(),
+		Line:     ev.Line,
+		Col:      ev.Col,
+		Char:     ev.Char,
+	}, sources)
 }
 
 // charTriggered narrows sources to the ones claiming ch as their own trigger
@@ -191,13 +229,14 @@ func localTrigger(ch string) bool {
 	return len(r) == 1 && (r[0] == '_' || unicode.IsLetter(r[0]) || unicode.IsDigit(r[0]))
 }
 
-// exclusiveFor narrows sources to the ones claiming path exclusively (#1302).
+// exclusiveFor narrows sources to the ones claiming name — a request's
+// LangName — exclusively (#1302).
 // With no claim the full set runs, which is the normal case. Applying it twice
 // is a no-op, so Emit may pre-filter before the trigger-character narrowing.
-func exclusiveFor(path string, sources []Source) []Source {
+func exclusiveFor(name string, sources []Source) []Source {
 	var claimed []Source
 	for _, s := range sources {
-		if x, ok := s.(ExclusiveSource); ok && x.Exclusive(path) {
+		if x, ok := s.(ExclusiveSource); ok && x.Exclusive(name) {
 			claimed = append(claimed, s)
 		}
 	}
@@ -219,7 +258,7 @@ func (e *Engine) dispatch(req Request, sources []Source) {
 	ctx, cancel := context.WithTimeout(context.Background(), e.Timeout)
 	e.cancel = cancel
 	e.mu.Unlock()
-	sources = exclusiveFor(req.Path, sources)
+	sources = exclusiveFor(req.LangName(), sources)
 	for _, s := range sources {
 		go func(s Source) {
 			items, err := s.Complete(ctx, req)
@@ -231,6 +270,7 @@ func (e *Engine) dispatch(req Request, sources []Source) {
 			}
 			e.send(ilsp.CompletionMsg{
 				Path:           req.Path,
+				Key:            req.BufKey(),
 				Line:           req.Line,
 				Col:            req.Col,
 				Items:          items,

@@ -1432,7 +1432,10 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case ilsp.CompletionMsg:
-		if msg.Path == m.path {
+		// Matched by route key, not path: a buffer with no file has no path
+		// to be matched by, so a batch for it travels under this view's
+		// ParseKey (#2048).
+		if msg.RouteKey() == m.ParseKey() {
 			m.openCompletion(msg)
 		}
 		return m, nil

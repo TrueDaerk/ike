@@ -77,10 +77,10 @@ func (s *Source) Observe(ev host.EditorEvent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ev.Large {
-		delete(s.texts, ev.Path)
+		delete(s.texts, ev.BufKey())
 		return
 	}
-	s.texts[ev.Path] = ev.Text
+	s.texts[ev.BufKey()] = ev.Text
 }
 
 // Complete implements complete.Source: with a `<expr>.<word>` shape before the
@@ -91,18 +91,18 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 	if s.enabled != nil && !s.enabled() {
 		return nil, nil
 	}
-	templates, exprNodes := lang.PostfixFor(req.Path)
+	templates, exprNodes := lang.PostfixFor(req.LangName())
 	if len(templates) == 0 {
 		return nil, nil
 	}
 	s.mu.RLock()
-	text := s.texts[req.Path]
+	text := s.texts[req.BufKey()]
 	s.mu.RUnlock()
 	if text == "" {
 		return nil, nil
 	}
 	lines := strings.Split(text, "\n")
-	expr, _, ok := ExpressionBefore(req.Path, lines, req.Line, req.Col, exprNodes)
+	expr, _, ok := ExpressionBefore(req.LangName(), lines, req.Line, req.Col, exprNodes)
 	if !ok {
 		return nil, nil
 	}

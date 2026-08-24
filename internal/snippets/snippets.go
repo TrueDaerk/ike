@@ -116,7 +116,7 @@ func (Source) Priority() int { return ilsp.PrioritySnippets }
 // language (plus globals) is returned; the popup's fuzzy prefix filter
 // narrows the list as the user types.
 func (Source) Complete(_ context.Context, req complete.Request) ([]ilsp.CompletionItem, error) {
-	entries := For(req.Path)
+	entries := For(req.LangName())
 	items := make([]ilsp.CompletionItem, 0, len(entries))
 	for _, e := range entries {
 		items = append(items, ilsp.CompletionItem{

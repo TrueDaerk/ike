@@ -18,6 +18,28 @@
   Editor. Shrinking trims oldest-first immediately. The ring stays in-memory
   only — a restart starts it empty, like the register set itself.
 
+## 2026-08-24 (autocomplete follows the buffer language, #2048)
+
+- **A file-less buffer given a language now completes like a file of it.**
+  Since #2033 "Treat Buffer as …" makes an untitled buffer Go or Markdown for
+  highlighting, concealing and intentions; completion did not follow, because
+  every source resolved the language from a *path* the buffer does not have.
+- **Two names beside the path.** Editor events and `complete.Request` carry
+  `Key` (the view's `editor.ParseKey` — the buffer's identity) and `LangPath`
+  (its `langPath()` — the language's synthetic name), read through
+  `BufKey()` / `LangName()`. Sources index buffer text by identity, so two
+  file-less buffers no longer share one entry, and gate on the language name,
+  so live templates, Emmet, postfix, the symbol index's grammar extraction and
+  exclusive claims all answer. Both fields are empty for a file buffer and
+  fall back to `Path`.
+- **The answer routes back by key.** A batch carries `CompletionMsg.Key` and
+  the app delivers it through `routeToEditorKey` →
+  `pane.Instance.UpdateForParseKey` (the async-parse route), so a popup can
+  open in a buffer no path route could find. The LSP bridge sets no key and
+  keeps routing by path.
+- **Out of scope, deliberately**: LSP (needs a real `file://` document) and the
+  ES console's query source (its index name comes from the file name).
+
 ## 2026-08-24 (bounded result popups with a code preview, #2047)
 
 - **Find in Path and Find Usages got a code column**: both popups now render

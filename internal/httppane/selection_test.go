@@ -241,3 +241,52 @@ func TestCtrlCCopies(t *testing.T) {
 		t.Errorf("ctrl+c copy: %+v", msg)
 	}
 }
+
+// TestCopySelectionWhileSearching covers #2051: a selection made while the
+// "/" prompt is open must still copy on ctrl+c, and the search itself must
+// keep working around it.
+func TestCopySelectionWhileSearching(t *testing.T) {
+	m := selViewer(t)
+	fixedClock(t)
+	r := bodyRow(m, "alpha beta")
+	press(m, r, 0)
+	drag(m, r, 5)
+	m.handleKey(keyPress("/"))
+	if !m.searching {
+		t.Fatal("/ must open the search prompt")
+	}
+
+	cmd := m.handleKey(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if cmd == nil {
+		t.Fatal("ctrl+c with a selection must copy while searching")
+	}
+	msg, ok := cmd().(CopyMsg)
+	if !ok {
+		t.Fatalf("message type: %T", cmd())
+	}
+	if msg.Text != "alpha" || msg.What != "selection" {
+		t.Errorf("copy message: %+v", msg)
+	}
+	if m.HasSelection() {
+		t.Error("copying must clear the selection")
+	}
+	if !m.searching {
+		t.Error("copying must not close the search prompt")
+	}
+
+	// Typing still reaches the query, and "y" — a valid copy chord outside
+	// search — types normally instead of being stolen.
+	m.handleKey(keyPress("y"))
+	m.handleKey(keyPress("e"))
+	if q, _ := m.SearchQuery(); q != "ye" {
+		t.Errorf("query after typing: %q", q)
+	}
+
+	// ctrl+c without a selection is a no-op, not a crash or a stray notice.
+	if cmd := m.handleKey(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}); cmd != nil {
+		t.Errorf("ctrl+c without a selection must not copy: %+v", cmd())
+	}
+	if !m.searching {
+		t.Error("ctrl+c without a selection must leave the prompt open")
+	}
+}

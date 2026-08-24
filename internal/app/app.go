@@ -1393,6 +1393,8 @@ func (e editorEmitter) Emit(ev editor.Event) {
 	e.host.EmitEditor(host.EditorEvent{
 		Kind:         int(ev.Kind),
 		Path:         ev.Path,
+		Key:          ev.Key,
+		LangPath:     ev.LangPath,
 		Line:         ev.Line,
 		Col:          ev.Col,
 		Text:         ev.Text,
@@ -5467,7 +5469,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// open editors and the Settings UI lists it like a hand-written entry.
 		return m, m.writeConcealRule(msg)
 	case ilsp.CompletionMsg:
-		return m, m.routeToEditor(msg.Path, msg)
+		// Routed by key, not path: a buffer with no file is reachable only by
+		// its view's ParseKey, and that is what the local engine stamps on a
+		// batch (#2048). For a file the key *is* the path, so every view of a
+		// shared document is still served.
+		return m, m.routeToEditorKey(msg.RouteKey(), msg)
 	case ilsp.HoverMsg:
 		return m, m.routeToEditor(msg.Path, msg)
 	case ilsp.SignatureHelpMsg:
@@ -7687,13 +7693,21 @@ func (m *Model) routeToEditor(path string, msg tea.Msg) tea.Cmd {
 // background panes and shared-document views included — or the view's own tag
 // for a buffer with no file, which a path route could never find (#2033).
 func (m *Model) routeParse(msg highlight.SpansMsg) tea.Cmd {
+	return m.routeToEditorKey(msg.Path, msg)
+}
+
+// routeToEditorKey delivers a message to every editor tab answering to an
+// editor.ParseKey — the file path, or a file-less view's own tag. It is the
+// route for everything a path-keyed one would drop on a buffer with no file:
+// async parses (#2033) and local completion batches (#2048).
+func (m *Model) routeToEditorKey(key string, msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
-	for _, key := range m.activeWS().Panes.Keys() {
-		inst := m.activeWS().Panes.Get(key)
+	for _, paneKey := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(paneKey)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
-		if cmd := inst.UpdateForParseKey(msg.Path, msg); cmd != nil {
+		if cmd := inst.UpdateForParseKey(key, msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}

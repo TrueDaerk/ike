@@ -4,7 +4,7 @@ title: Completion Engine
 description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection.
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources, postfix]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 
 # Completion Engine
@@ -68,6 +68,8 @@ its own files implements the optional extension
 type ExclusiveSource interface{ Exclusive(path string) bool }
 ```
 
+The engine hands it the request's `LangName()` (below), so a file-less buffer
+switched to the source's language is claimed like a real file of it (#2048).
 While a source claims a path, the engine dispatches **only claiming sources**
 for it. Without it every source answers every buffer: a `.http` header line
 offered `Content-Type` next to `contentYOff` and every other identifier the
@@ -77,6 +79,58 @@ keeps the full merged popup; the LSP bridge is not a `Source` and is unaffected.
 The ES console's query buffers (#1927) use the same claim: `esq.CompletionSource`
 owns `*.es.json` outright and offers Query-DSL keys plus the index mapping's
 field names (see [Elasticsearch Console](/architecture/elasticsearch-console.md)).
+
+## Buffer identity and language (#2048)
+
+A `Request` carries three names, not one:
+
+```go
+type Request struct {
+    Path     string // the file; empty for a buffer with no file
+    Key      string // buffer identity — editor.ParseKey
+    LangPath string // the name language lookups resolve
+    ...
+}
+```
+
+`Path` alone was enough while every completing buffer was a file. A **buffer
+with no file** — a fresh tab, a split, a paste target — has no path at all, so
+it had neither: every language-gated source (snippets, Emmet, postfix, the
+symbol index's grammar extraction) resolved "no language", every path-keyed
+text store folded all such buffers into the single empty key, and the answer
+batch was routed to "every editor showing the path ''", which is no editor at
+all. Since #2033 those buffers *do* have a language — the alt+enter intention
+**"Treat Buffer as …"** — and completion has to follow it.
+
+The two extra names split the two jobs `Path` was doing:
+
+- **`Key` — identity.** `editor.ParseKey`: the file path, or the view's own
+  tag (`\x00buffer/<n>`) when it has none. Sources key observed buffer text by
+  `req.BufKey()` / `ev.BufKey()`, so two file-less buffers keep separate
+  indexes, and the engine stamps it on every batch as `CompletionMsg.Key`.
+  The app routes a batch by `RouteKey()` (`routeToEditorKey` →
+  `pane.Instance.UpdateForParseKey`, the same route an async parse takes) and
+  the editor accepts one only under its own `ParseKey`. For a file the key
+  *is* the path, so every view of a shared document is still served.
+- **`LangPath` — classification.** The buffer's `langPath()`: the file path,
+  or the chosen language's **synthetic name** (`buffer.go`, `buffer.md`,
+  `Dockerfile`). Sources resolve the language through `req.LangName()`, so a
+  file-less buffer treated as Go is offered the Go templates and postfix
+  transformations, the symbol index extracts it with the Go grammar, Emmet
+  answers in a buffer treated as HTML, and an `ExclusiveSource` claims it the
+  way it claims one of its files. Back on **Plain Text** the name is empty and
+  every language-gated source falls silent again.
+
+Both fields are empty for an ordinary file buffer and both accessors then
+answer with `Path`, so no source needed a behaviour change for files. The
+synthetic name is a *classification* name only — never opened, never written.
+
+**Deliberately out of scope: LSP.** The bridge (`plugins/lsp`) speaks
+`file://` URIs to a real server and needs a document that exists on disk; it
+keeps reading `Path` and stays silent on a file-less buffer, exactly as
+before. The ES console's query source is gated the same way for the same
+reason: a query buffer's index name is encoded in its *file name*
+(`esq.QueryRef`), which a synthetic name cannot supply.
 
 ## Editor-side merge (`internal/editor/lsp_state.go`)
 

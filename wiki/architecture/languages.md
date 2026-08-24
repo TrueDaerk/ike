@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-08-21T16:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 
 # Language Registry
@@ -212,6 +212,16 @@ closes that gap without growing a second, id-shaped resolution seam:
   `pane.Instance.UpdateForParseKey`). The Problems store stays path-keyed: a
   view-tagged result feeds it under the empty path, exactly as a path-less
   buffer's Unicode findings (#1654) always did.
+- **Completion follows the type too (#2048).** Every editor event now carries
+  the view's `ParseKey` *and* its `langPath()` alongside `Path`, and the
+  completion engine passes both on (`Request.BufKey()` / `LangName()`). The
+  language-gated sources — live templates, Emmet, postfix, the symbol index's
+  grammar extraction, exclusive claims — resolve the synthetic name, so a
+  file-less Go buffer completes like a `.go` file and a Plain Text one is
+  silent again; the per-buffer text stores key by identity, so two file-less
+  buffers no longer share one index; and the answer batch routes back by key
+  the way a parse result does. LSP stays out, as above — see
+  [Completion Engine](/architecture/completion.md#buffer-identity-and-language-2048).
 
 The user-facing door is the alt+enter intention **"Treat Buffer as …"**
 (`editor.setBufferLanguage`), offered in file-less buffers only — see

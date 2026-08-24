@@ -76,6 +76,16 @@ type Event struct {
 	// CompletionID carries the selected item's reply index on
 	// EventCompletionSelect (#847).
 	CompletionID int
+	// Key identifies the emitting view where Path cannot (#2048): it is
+	// ParseKey — the file path, or this view's tag for a buffer with no file.
+	// Consumers keying per-buffer state (the completion sources) and the
+	// route back to the view use it, so two file-less buffers stay apart.
+	Key string
+	// LangPath is the name language lookups resolve for this buffer (#2048):
+	// the file path, or the synthetic name of a language chosen with "Treat
+	// Buffer as …" (#2033). Never a path to read or write — Path stays the
+	// only one of those.
+	LangPath string
 }
 
 // Emitter receives editor events. Implementations must not block.
@@ -106,6 +116,8 @@ func (m *Model) emitCompletionSelect(id int) {
 	m.emitter.Emit(Event{
 		Kind:         EventCompletionSelect,
 		Path:         m.path,
+		Key:          m.ParseKey(),
+		LangPath:     m.langPath(),
 		Line:         m.cursor.Line,
 		Col:          m.cursor.Col,
 		Mode:         m.mode,
@@ -134,12 +146,14 @@ func (m *Model) emitChar(kind EventKind, ch string) {
 		return
 	}
 	ev := Event{
-		Kind: kind,
-		Path: m.path,
-		Line: m.cursor.Line,
-		Col:  m.cursor.Col,
-		Mode: m.mode,
-		Char: ch,
+		Kind:     kind,
+		Path:     m.path,
+		Key:      m.ParseKey(),
+		LangPath: m.langPath(),
+		Line:     m.cursor.Line,
+		Col:      m.cursor.Col,
+		Mode:     m.mode,
+		Char:     ch,
 	}
 	if m.mode.IsVisual() {
 		ev.Sel = SelChar
