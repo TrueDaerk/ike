@@ -51,11 +51,6 @@ func runGitQuick(dir string, args ...string) ([]byte, error) {
 	return runGitTimeout(dir, gitQuickTimeout, args...)
 }
 
-// ghError shapes a gh failure like cliError shapes git's.
-func ghError(err error, stderr string) error {
-	return cliError("gh", err, stderr)
-}
-
 // cliError reduces a subprocess failure to its first stderr line, mirroring
 // internal/vcs.gitError: the first line names the problem, the rest is usage.
 func cliError(tool string, err error, stderr string) error {

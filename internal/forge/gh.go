@@ -1,8 +1,11 @@
 package forge
 
-// gh.go is the GitHub binding: availability detection (gh on PATH, a GitHub
-// remote on the repository) and the issue/PR listing through `gh ... --json`,
-// whose output is stable JSON — never the human rendering.
+// gh.go is the GitHub binding of the Forge interface: the issue/PR listing
+// and the capability probe through `gh ... --json` / `gh api`, whose output
+// is stable JSON — never the human rendering. Detection (gh on PATH, a
+// GitHub remote) lives in detect.go; the operations later 0470 sub-issues
+// bring (timeline, mutations, PR actions) are ErrUnsupported stubs here
+// until those land.
 
 import (
 	"bytes"
@@ -12,25 +15,28 @@ import (
 	"os/exec"
 	"strings"
 	"time"
-
-	tea "charm.land/bubbletea/v2"
 )
 
-// ghTimeout bounds every gh subprocess. gh talks to the network, so it gets
-// more room than the local git calls, but a hung call must never block a
-// refresh forever.
+// ghTimeout bounds every forge-CLI subprocess. gh and tea talk to the
+// network, so they get more room than the local git calls, but a hung call
+// must never block a refresh forever.
 const ghTimeout = 30 * time.Second
 
 // issueLimit caps one listing fetch; repositories with more open issues show
 // the newest ones, which is what a work-picker needs.
 const issueLimit = 200
 
-// runGH executes one gh command in dir with the package timeout. Interactive
-// prompts are disabled — no terminal is attached.
-func runGH(dir string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), ghTimeout)
+// ghForge is the GitHub backend, bound to the repository containing dir.
+type ghForge struct {
+	dir string
+}
+
+// runCLI executes one forge-CLI command in dir under the given deadline.
+// Interactive prompts are disabled — no terminal is attached.
+func runCLI(dir, tool string, timeout time.Duration, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "gh", args...)
+	cmd := exec.CommandContext(ctx, tool, args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1", "CLICOLOR=0", "NO_COLOR=1")
 	var stdout, stderr bytes.Buffer
@@ -40,59 +46,92 @@ func runGH(dir string, args ...string) ([]byte, error) {
 		if ctx.Err() != nil {
 			return nil, errTimeout
 		}
-		return nil, ghError(err, stderr.String())
+		return nil, cliError(tool, err, stderr.String())
 	}
 	return stdout.Bytes(), nil
 }
 
-// setupProblem reports why the issues window cannot work here at all, or ""
-// when gh and a GitHub remote are both present. These are states the user
-// fixes outside the pane, distinct from transient fetch errors.
-func setupProblem(dir string) string {
-	if _, err := exec.LookPath("gh"); err != nil {
-		return "GitHub CLI (gh) not found — install it to browse issues"
-	}
-	out, err := runGitQuick(dir, "remote", "get-url", "origin")
-	if err != nil {
-		return "no git remote — the issues window needs a GitHub repository"
-	}
-	url := strings.TrimSpace(string(out))
-	if !strings.Contains(strings.ToLower(url), "github.") {
-		return "origin is not a GitHub remote (" + url + ")"
-	}
-	return ""
+// runGH executes one gh command in dir with the package timeout.
+func runGH(dir string, args ...string) ([]byte, error) {
+	return runCLI(dir, "gh", ghTimeout, args...)
 }
 
-// RefreshCmd fetches the open issues and the pull requests of the repository
-// containing dir, resolving to one IssuesMsg. A missing gh or a non-GitHub
-// remote resolves to the Setup state; a failing fetch to Err. A failing PR
-// listing keeps the issues and drops only the PR states — the list is still
-// useful without them.
-func RefreshCmd(dir string) tea.Cmd {
-	return func() tea.Msg {
-		if setup := setupProblem(dir); setup != "" {
-			return IssuesMsg{Setup: setup}
-		}
-		out, err := runGH(dir, "issue", "list", "--state", "open",
-			"--limit", itoa(issueLimit),
-			"--json", "number,title,body,url,labels,assignees")
-		if err != nil {
-			return IssuesMsg{Err: err}
-		}
-		issues, err := parseIssues(out)
-		if err != nil {
-			return IssuesMsg{Err: err}
-		}
-		msg := IssuesMsg{Issues: issues}
-		if out, err := runGH(dir, "pr", "list", "--state", "all",
-			"--limit", itoa(issueLimit),
-			"--json", "number,title,state,url,headRefName,statusCheckRollup"); err == nil {
-			if prs, err := parsePRs(out); err == nil {
-				msg.PRs = prs
-			}
-		}
-		return msg
+// Issues lists the repository's issues in the given state via
+// `gh issue list --json`.
+func (g *ghForge) Issues(state IssueState) ([]Issue, error) {
+	out, err := runGH(g.dir, "issue", "list", "--state", string(state),
+		"--limit", itoa(issueLimit),
+		"--json", "number,title,body,url,labels,assignees")
+	if err != nil {
+		return nil, err
 	}
+	return parseIssues(out)
+}
+
+// PRs lists the repository's pull requests in every state via
+// `gh pr list --json`, folding each check rollup into one CheckState.
+func (g *ghForge) PRs() ([]PR, error) {
+	out, err := runGH(g.dir, "pr", "list", "--state", "all",
+		"--limit", itoa(issueLimit),
+		"--json", "number,title,state,url,headRefName,statusCheckRollup")
+	if err != nil {
+		return nil, err
+	}
+	return parsePRs(out)
+}
+
+// Capabilities probes the authenticated user's repository permissions via
+// `gh api repos/{owner}/{repo}` (gh fills the placeholders from the remote),
+// cut to the permissions object with --jq — still JSON, never prose.
+func (g *ghForge) Capabilities() (Capabilities, error) {
+	out, err := runGH(g.dir, "api", "repos/{owner}/{repo}", "--jq", ".permissions")
+	if err != nil {
+		return Capabilities{}, err
+	}
+	return parseGHPermissions(out)
+}
+
+func (g *ghForge) Timeline(issue int) ([]TimelineEntry, error) {
+	return nil, unsupported("gh", "issue timeline")
+}
+func (g *ghForge) CreateComment(issue int, body string) error {
+	return unsupported("gh", "create comment")
+}
+func (g *ghForge) EditComment(commentID string, body string) error {
+	return unsupported("gh", "edit comment")
+}
+func (g *ghForge) EditIssueBody(issue int, body string) error {
+	return unsupported("gh", "edit issue body")
+}
+func (g *ghForge) AddLabels(issue int, labels []string) error {
+	return unsupported("gh", "add labels")
+}
+func (g *ghForge) RemoveLabels(issue int, labels []string) error {
+	return unsupported("gh", "remove labels")
+}
+func (g *ghForge) SetAssignees(issue int, assignees []string) error {
+	return unsupported("gh", "set assignees")
+}
+func (g *ghForge) CloseIssue(issue int) error  { return unsupported("gh", "close issue") }
+func (g *ghForge) ReopenIssue(issue int) error { return unsupported("gh", "reopen issue") }
+func (g *ghForge) MergePR(pr int) error        { return unsupported("gh", "merge PR") }
+func (g *ghForge) ClosePR(pr int) error        { return unsupported("gh", "close PR") }
+
+// parseGHPermissions folds GitHub's permissions object
+// ({admin, maintain, push, triage, pull}) into Capabilities: push (or
+// better) merges, triage (or better) mutates labels/assignees/state.
+func parseGHPermissions(out []byte) (Capabilities, error) {
+	var p struct {
+		Admin    bool `json:"admin"`
+		Maintain bool `json:"maintain"`
+		Push     bool `json:"push"`
+		Triage   bool `json:"triage"`
+	}
+	if err := json.Unmarshal(out, &p); err != nil {
+		return Capabilities{}, err
+	}
+	push := p.Admin || p.Maintain || p.Push
+	return Capabilities{Push: push, Triage: push || p.Triage}, nil
 }
 
 // ghIssue mirrors the fields requested from `gh issue list --json`.

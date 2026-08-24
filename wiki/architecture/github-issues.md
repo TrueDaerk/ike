@@ -4,7 +4,7 @@ title: GitHub Issues Tool Window
 description: Singleton pane listing the repository's open issues via the gh CLI — colored label chips, fuzzy + label filter, glamour-rendered detail view, linked-PR state, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, issues, forge, tool-window, pane]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 
 # GitHub Issues Tool Window (#1934)
@@ -24,19 +24,21 @@ assignable as `issues`, hidden by `window.hideAllTools`, persisted as
 ## The forge layer (`internal/forge`)
 
 The subprocess side mirrors `internal/vcs`: nothing runs from `Update`, every
-call lives in a `tea.Cmd` with a timeout, results come back as messages. The
-types (`Issue`, `Label`, `PR`, `CheckState`) are forge-agnostic — a Gitea
-binding via `tea` can produce them later — while the shipped implementation
-shells out to the **gh CLI** with `--json`, never scraping human output:
+call lives in a `tea.Cmd` with a timeout, results come back as messages.
+Since #2083 the operations sit behind the **`Forge` interface** with two
+bindings — gh for GitHub, tea + Gitea REST for Gitea/Forgejo — selected by
+the origin remote's host; the full backend, detection and capability model is
+its own concept: [Forge Layer](/architecture/forge.md). What the pane sees:
 
-- `forge.RefreshCmd(dir)` → `IssuesMsg`. It first checks the setup: no `gh`
-  on PATH, no git remote, or a non-GitHub origin resolve to an explanatory
-  `Setup` string (a state the user fixes outside the pane); a failing fetch
-  resolves to `Err` (transient — the pane keeps its last listing). Otherwise
-  `gh issue list --state open --json …` (number, title, body, url, labels,
-  assignees; limit 200) and `gh pr list --state all --json …` (state,
-  headRefName, statusCheckRollup) fill the message; a failing PR listing
-  drops only the PR states.
+- `forge.RefreshCmd(dir)` → `IssuesMsg`. It first detects the backend: no
+  usable backend (missing CLI, no git remote, no matching tea login)
+  resolves to an explanatory `Setup` string (a state the user fixes outside
+  the pane); a failing fetch resolves to `Err` (transient — the pane keeps
+  its last listing). Otherwise the backend's issue listing (number, title,
+  body, url, labels, assignees; limit 200) and PR listing (state, head
+  branch, check rollup) fill the message; a failing PR listing drops only
+  the PR states. Through detection the pane lists Gitea/Forgejo
+  repositories the same way, unchanged.
 - `forge.PRForIssue(prs, n)` joins PRs to issues by the branch convention:
   head `issue/<n>` or `issue/<n>-…`, preferring open over merged over closed.
   Each PR's `statusCheckRollup` (CheckRun and StatusContext shapes both)
