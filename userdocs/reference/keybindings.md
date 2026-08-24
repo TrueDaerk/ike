@@ -132,6 +132,8 @@ Active when an editor pane has focus.
 | Cut | `cmd+x` | `ctrl+x` | `editor.cut` |
 | Diagnostic under caret | `cmd+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
 | Diagnostic under caret | `ctrl+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
+| Diff HTTP response against previous run | `cmd+shift+d` | `ctrl+shift+d` | `http.diffPreviousRun` |
+| Diff HTTP response against previous run | `ctrl+shift+d` | `ctrl+shift+d` | `http.diffPreviousRun` |
 | Duplicate line(s) | `cmd+d` | `ctrl+d` | `editor.duplicateLine` |
 | Extend selection | `alt+up` | `alt+up` | `editor.selection.extend` |
 | File structure | `cmd+f12` | `ctrl+f12` | `lsp.documentSymbols` |

@@ -56,6 +56,7 @@ bring their own.
 | DOM Inspector | `dom.toggle` | — | — | everywhere |
 | Close Tab | `editor.closeTab` | `cmd+w` | — | everywhere |
 | Force Code Insight (Large File) | `editor.forceCodeInsight` | — | — | everywhere |
+| Materialize Buffer to File | `editor.materializeBuffer` | — | — | everywhere |
 | Paste from History | `editor.pasteFromHistory` | `cmd+shift+v` | — | everywhere |
 | Save All | `editor.saveAll` | `cmd+shift+s` | — | everywhere |
 | Treat Buffer as… | `editor.setBufferLanguage` | — | — | everywhere |
@@ -97,6 +98,7 @@ bring their own.
 | Copy Folded Range (HTTP Response) | `http.copyFold` | — | — | everywhere |
 | Copy HTTP Response Headers | `http.copyHeaders` | — | — | everywhere |
 | Copy Shown HTTP Request as curl | `http.copyShownAsCurl` | — | — | everywhere |
+| Diff HTTP Response Against Previous Run | `http.diffPreviousRun` | `cmd+shift+d` | — | everywhere |
 | Compare Stored HTTP Responses | `http.diffResponses` | — | — | everywhere |
 | Import curl Command… | `http.importCurl` | — | — | everywhere |
 | Import OpenAPI Spec… | `http.importOpenAPI` | — | — | everywhere |

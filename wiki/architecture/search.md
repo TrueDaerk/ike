@@ -87,6 +87,22 @@ the palette):
   file reads as empty), and the first `Open` of a session seeds the recall
   list from it. The editor's `/` and `:` lines keep sibling buckets in the
   same file (see [Editor § search](/architecture/editor.md)).
+- **Resume last search (#2054):** `Close` saves the *full* current state —
+  query, the three toggles, both glob fields, and the selected result's index
+  — as `histories.FindState` in the same `histories.json` (one struct, not a
+  recall bucket). Re-opening always keeps this state in memory already (see
+  preselect above); what `FindState` adds is carrying it across a restart:
+  the first `Open` of a fresh session (empty in-memory model, store injected)
+  loads it and seeds the query/toggles/globs the same way. Either way — a
+  same-session reopen or a fresh session — the remembered result index is
+  restored once the reopened scan's `DoneMsg` lands (`Model.pendingCursor`,
+  clamped by `locations.List.SetCursor`), so the cursor lands back on the
+  same match rather than resetting to the first hit. There is no separate
+  command or keybind for this: it is unconditional, same as the query
+  preselect it extends — the simplest option that stays consistent with
+  #277's existing behavior. A query edit (typed, pasted, or history-recalled)
+  invalidates any pending restore, same as it always invalidated the old
+  result set.
 - **Results:** the reusable `internal/locations` list — items grouped by
   file (headers show per-file counts), match ranges highlighted, cursor row
   selected, scrolled into view; **one row per file:line**, so a line the
