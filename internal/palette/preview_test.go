@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/codepreview"
 	"ike/internal/ui"
 )
 
@@ -116,7 +117,7 @@ func TestUsagesPopupMaxHeight(t *testing.T) {
 
 // listWidth is the result column's width for the current box.
 func listWidth(p *Palette) (listW, previewW int) {
-	return previewSplit(p.boxWidth() - 4)
+	return codepreview.Split(p.boxWidth() - 4)
 }
 
 // previewColumn returns the text right of the vertical rule, asserting the
@@ -184,19 +185,95 @@ func TestPreviewClickIgnoresCodeColumn(t *testing.T) {
 	}
 }
 
-// TestPlainModeKeepsSingleColumn makes sure the split is opt-in: a mode that
-// is not a PreviewMode renders exactly as before.
+// TestPlainModeKeepsSingleColumn makes sure the split stays opt-in and
+// locked-only: the default centered palette — even when its file mode is a
+// PreviewMode (#2053) — renders exactly as before.
 func TestPlainModeKeepsSingleColumn(t *testing.T) {
 	p := New(Config{MaxResults: 5}, fileMode(numberedFiles(3)...))
 	p.SetSize(160, 50)
 	p.Open(Context{Root: "."})
 	if p.previewing() {
-		t.Fatal("a plain mode should not preview")
+		t.Fatal("an unlocked open should not preview")
 	}
 	if got := p.visibleRows(); got != 5 {
 		t.Fatalf("visibleRows = %d, want the configured 5", got)
 	}
 	if strings.Contains(ansi.Strip(p.View()), "row 1") {
 		t.Fatal("a plain mode rendered a code preview")
+	}
+}
+
+// filePickerDir writes n numbered files whose first line names them, and
+// returns the directory plus a palette locked to an "@" file picker over it.
+func filePickerDir(t *testing.T, n int) (*Palette, string) {
+	t.Helper()
+	dir := t.TempDir()
+	names := make([]string, n)
+	for i := range n {
+		names[i] = fmt.Sprintf("file%02d.go", i)
+		body := fmt.Sprintf("// head of %s\n", names[i]) + strings.Repeat("filler\n", 30)
+		if err := os.WriteFile(filepath.Join(dir, names[i]), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := New(Config{MaxResults: 5}, fileMode(names...))
+	p.SetSize(160, 50)
+	p.OpenLocked(Context{Root: dir}, '@')
+	return p, dir
+}
+
+// TestFilePickerPreviewsSelectedFile is the file-picker half of #2053: the
+// locked "@" picker shows the head of the highlighted file, and the excerpt
+// follows the cursor down the list.
+func TestFilePickerPreviewsSelectedFile(t *testing.T) {
+	p, _ := filePickerDir(t, 3)
+	if !p.previewing() {
+		t.Fatal("the locked file picker must render the code column")
+	}
+	if col := previewColumn(t, p); !strings.Contains(col, "head of file00.go") {
+		t.Fatalf("preview column = %q, want the first file's head", col)
+	}
+	p.move(1)
+	if col := previewColumn(t, p); !strings.Contains(col, "head of file01.go") {
+		t.Fatalf("preview column after moving = %q, want the second file's head", col)
+	}
+}
+
+// TestFilePickerRowsCarryTargets: every row that opens a file points the
+// preview at it; a directory row (which only descends) carries no target, so
+// its column stays blank rather than claiming the file is unreadable.
+func TestFilePickerRowsCarryTargets(t *testing.T) {
+	_, dir := filePickerDir(t, 2)
+	f := fileMode("file00.go", "file01.go")
+	for _, it := range f.Results("", Context{Root: dir}) {
+		open, ok := it.Msg.(OpenFileMsg)
+		if !ok {
+			continue
+		}
+		if it.Preview.Path != open.Path || it.Preview.Line != 1 {
+			t.Fatalf("row %q preview = %+v, want %s:1", it.Title, it.Preview, open.Path)
+		}
+	}
+	sub := filepath.Join(dir, "pkg")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range f.Results("pkg", Context{Root: dir}) {
+		if _, ok := it.Msg.(OpenPathDescendMsg); ok && it.Preview.Path != "" {
+			t.Fatalf("directory row %q carries a preview target %+v", it.Title, it.Preview)
+		}
+	}
+}
+
+// TestAnchoredFilePickerKeepsSingleColumn: the "@" finder floated over an
+// editor pane is too small for two columns and stays one, as before (#2053).
+func TestAnchoredFilePickerKeepsSingleColumn(t *testing.T) {
+	p, dir := filePickerDir(t, 3)
+	p.OpenAnchored(Context{Root: dir}, '@', 4, 2, 60)
+	if p.previewing() {
+		t.Fatal("an anchored open must not split into two columns")
+	}
+	if strings.Contains(ansi.Strip(p.View()), "head of file00.go") {
+		t.Fatal("the anchored finder rendered a code preview")
 	}
 }

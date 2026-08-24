@@ -1,7 +1,14 @@
-// Package codepreview renders a small source excerpt around a target line —
-// the code column the find-in-path overlay (internal/finder) and the
-// find-usages popup (the palette's references mode) show next to their result
-// list (#2047), so one sees where a selection leads before jumping there.
+// Package codepreview is the shared code-preview column: the source excerpt a
+// picker shows next to its result list, so one sees where the selection leads
+// before jumping there. It arrived with the find-in-path overlay and the
+// find-usages popup (#2047) and is now the single implementation every picker
+// pointing at file positions uses (#2053) — the symbol and class pickers, the
+// '@' file finder, the bookmarks list and the call-hierarchy overlay.
+//
+// Three pieces make up the component: Target, the per-row source location a
+// picker stores; Split, the column geometry both the renderer and the click
+// mapping read; and Cache, which renders the excerpt — Render for the raw
+// rows, Columns for the whole two-column body (list, vertical rule, excerpt).
 //
 // It is the plain-text sibling of internal/preview, which is the live markdown
 // preview pane; nothing is shared between the two.
@@ -21,6 +28,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // maxLineBytes caps one scanned line; longer lines are cut rather than
@@ -145,4 +153,61 @@ func (c *Cache) Render(path string, line, width, height int, pal *theme.Palette)
 		rows = append(rows, ansi.Truncate(dim.Render(prefix)+body, width, "…"))
 	}
 	return pad(rows)
+}
+
+// Target is a source location a preview column points at. Line is 1-based,
+// matching what Render expects; the zero value (empty Path) renders an empty
+// column. It is the row-side half of the component: every picker that offers
+// a preview stores one per row and hands the selected one to Render.
+type Target struct {
+	Path string
+	Line int
+}
+
+// Column geometry, shared by every picker that carries the preview (#2053).
+// Below MinSplitWidth the box is too narrow to hold two columns and the list
+// keeps the whole width; otherwise the excerpt takes two fifths, capped at
+// MaxColumnWidth so a wide terminal spends the extra cells on the list rows
+// and floored at MinColumnWidth so the excerpt stays readable.
+const (
+	MinSplitWidth  = 64
+	MaxColumnWidth = 60
+	MinColumnWidth = 20
+)
+
+// dividerWidth is what the vertical rule plus its two spaces of air cost.
+const dividerWidth = 3
+
+// Split divides an inner content width into the list column and the preview
+// column. previewW is 0 when the box is too narrow to split, in which case
+// listW is the whole width and the caller renders its list alone.
+func Split(inner int) (listW, previewW int) {
+	if inner < MinSplitWidth {
+		return inner, 0
+	}
+	previewW = inner * 2 / 5
+	if previewW > MaxColumnWidth {
+		previewW = MaxColumnWidth
+	}
+	if previewW < MinColumnWidth {
+		previewW = MinColumnWidth
+	}
+	return inner - previewW - dividerWidth, previewW
+}
+
+// Columns is the whole two-column body of a picker (#2053): the list rows
+// blank-padded to height on the left, a dim vertical rule, and the excerpt of
+// t on the right. A previewW of 0 (a box too narrow to split, see Split)
+// returns the padded list alone, so a caller can pass Split's output straight
+// through without branching.
+func (c *Cache) Columns(left []string, listW, previewW, height int, t Target, pal *theme.Palette) string {
+	left = ui.PadRows(left, height)
+	if previewW <= 0 {
+		return strings.Join(left, "\n")
+	}
+	if pal == nil {
+		pal = theme.DefaultPalette()
+	}
+	rule := lipgloss.NewStyle().Foreground(pal.Border).Render("│")
+	return ui.JoinColumns(left, listW, rule, c.Render(t.Path, t.Line, previewW, height, pal))
 }

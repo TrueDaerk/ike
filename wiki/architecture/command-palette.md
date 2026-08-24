@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-24T12:00:00Z
 ---
 
 # Command Palette
@@ -435,36 +435,52 @@ and the command's key binding as a **highlighted chip pinned to the right** (a
 key-cap style, distinct from the dim matched-character accent). The title is
 truncated first, so the binding chip is never dropped on a narrow box.
 
-## Code preview column (#2047)
+## Code preview column (#2047, generalised in #2053)
 
 An optional `Mode` extension, `PreviewMode`, turns a locked, centered open
 into a **two-column** box: the result list on the left, a source excerpt of
-the selected row's target on the right, separated by a dim vertical rule. The
-find-usages popup (`internal/app/references.go`) is its first consumer, so one
-sees where a usage sits before jumping to it.
+the selected row's target on the right, separated by a dim vertical rule — so
+one sees where a row leads before activating it.
+
+**Consumers.** Every palette picker whose rows are file positions carries the
+column: the find-usages / definition-candidates popup
+(`internal/app/references.go`, the first one, #2047), the **symbol picker**
+(`internal/app/symbols.go`, cmd+o — and with it the class category, which is a
+filtered view of the same cache), the **file picker** (`FileMode` opened
+locked by `project.goToFile`, pointed at line 1 of each candidate) and the
+**bookmarks picker** (`internal/app/bookmarks.go`: local marks, global marks
+and project bookmarks alike). Modes whose rows are not positions — commands,
+recent projects, layouts — do not implement it and render exactly as before;
+so does Search Everywhere, whose composed list mixes both kinds.
 
 - **Opt-in per mode.** `CodePreview() bool` enables it; rows carry their target
-  in `Item.Preview` (`PreviewTarget{Path, Line}`, `Line` 1-based). A row
-  without a target renders an empty column. It is mutually exclusive with the
-  `SideMode` left column and off for anchored opens.
+  in `Item.Preview` (`PreviewTarget{Path, Line}`, `Line` 1-based — an alias of
+  `codepreview.Target`). A row without a target renders an empty column, so a
+  mode may mix positioned and positionless rows (a directory candidate in the
+  file picker, a scratch buffer's local mark). It is mutually exclusive with
+  the `SideMode` left column and off for anchored opens — the "@" finder
+  floated over an editor pane has no room for two columns.
 - **Height bounds.** A preview open re-bounds `visibleRows()` to
   `[ui.MinResultRows, ui.MaxResultRows]` = **11 to 40**: the box keeps eleven
   rows with two (or zero) results and stops growing at forty, the list
   scrolling inside it. The list block is blank-padded to that height, so the
   popup's size no longer flickers with the result count.
 - **Geometry.** The centered box takes three quarters of the terminal instead
-  of half (`ui.popup_max_width` still caps it); `previewSplit` gives the
+  of half (`ui.popup_max_width` still caps it); `codepreview.Split` gives the
   excerpt two fifths of the content width (capped at 60 cells) and drops the
   column entirely below 64 cells of content. Presses in the excerpt are inert
   — `Click` rejects `x` past the list column so the row behind it never fires.
-- **Rendering.** `internal/codepreview` reads only the window it needs (never
+- **Rendering.** `internal/codepreview` is the whole component: `Target` (the
+  per-row location), `Split` (the geometry both the renderer and the click
+  mapping read) and `Cache` (`Render` for the excerpt rows, `Columns` for the
+  finished list-rule-excerpt body). It reads only the window it needs (never
   the whole file), caches the last one so walking the list re-reads only when
   the target moves, centers the target line — clamped at the file's head —
   highlights it, and returns exactly the requested number of rows. An
   unreadable, deleted, or directory target renders a dim `preview unavailable`
-  notice instead of failing the frame. `ui.JoinColumns` / `ui.PadRows` are the
-  shared two-column seam, used by the [find-in-path
-  overlay](/architecture/search.md) too.
+  notice instead of failing the frame. The same component backs the
+  [find-in-path overlay](/architecture/search.md) and the call-hierarchy
+  overlay ([LSP](./lsp.md)), which are not palette modes.
 
 ## Open in Find window (#2055)
 

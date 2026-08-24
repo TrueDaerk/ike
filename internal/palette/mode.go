@@ -1,6 +1,10 @@
 package palette
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/codepreview"
+)
 
 // Item is one ranked result row produced by a Mode. Title is the primary label
 // the palette renders and highlights; Spans are the rune indices within Title
@@ -41,16 +45,17 @@ type Item struct {
 	// Preview points the row at a source location (#2047). In a PreviewMode
 	// open the palette renders a file excerpt around it beside the list, so
 	// one sees where activating the row leads before jumping. The zero value
-	// (empty Path) renders an empty preview column.
+	// (empty Path) renders an empty preview column, so a mode may mix
+	// positioned rows with positionless ones (#2053) — the file picker's
+	// directory candidates, a scratch buffer's local mark.
 	Preview PreviewTarget
 }
 
 // PreviewTarget is a row's source location for the palette's code-preview
 // column (#2047): Line is 1-based, matching what the excerpt renderer expects.
-type PreviewTarget struct {
-	Path string
-	Line int
-}
+// It is an alias of the shared component's Target (#2053), so a mode can pass
+// a location straight through without a conversion hop.
+type PreviewTarget = codepreview.Target
 
 // Mode is a palette sub-mode selected by a single leading prefix rune. It turns
 // a query (already stripped of the prefix) into ranked Items for the current
@@ -98,8 +103,11 @@ type ItemCompleter interface {
 // result list on the left, a code excerpt of the selected row's target on the
 // right, separated by a vertical rule — and bounds the result window to
 // [ui.MinResultRows, ui.MaxResultRows], so the popup neither collapses on two
-// hits nor grows past forty. The find-usages list enables it; every other mode
-// keeps the single-column layout.
+// hits nor grows past forty. Every picker whose rows are file positions
+// enables it (#2053): find-usages, the symbol and class pickers, the file
+// picker and the bookmarks list. Modes whose rows are not positions —
+// commands, recent projects, the mixed Search Everywhere list — keep the
+// single-column layout, as do anchored opens.
 type PreviewMode interface {
 	// CodePreview reports whether the preview column is active for this open.
 	CodePreview() bool

@@ -67,16 +67,20 @@ func (b *bookmarksMode) Set(ed *editor.Model, store *marks.Store, bmarks *bookma
 				Detail: markPreview(ed.LineText(lm.Line)),
 				Msg:    BookmarkJumpMsg{Local: true, Letter: lm.Letter, Line: lm.Line, Col: lm.Col},
 				Aux:    BookmarkRemoveMsg{Local: true, Letter: lm.Letter},
+				// A local mark of a scratch buffer has no file to read;
+				// the empty target renders a blank column (#2053).
+				Preview: markTarget(ed.Path(), lm.Line),
 			})
 		}
 	}
 	if store != nil {
 		for _, e := range store.All() {
 			b.items = append(b.items, palette.Item{
-				Title:  markTitle(e.Letter, e.Path, e.Line),
-				Detail: markPreview(fileLine(e.Path, e.Line)),
-				Msg:    BookmarkJumpMsg{Letter: e.Letter, Path: e.Path, Line: e.Line, Col: e.Col},
-				Aux:    BookmarkRemoveMsg{Letter: e.Letter},
+				Title:   markTitle(e.Letter, e.Path, e.Line),
+				Detail:  markPreview(fileLine(e.Path, e.Line)),
+				Msg:     BookmarkJumpMsg{Letter: e.Letter, Path: e.Path, Line: e.Line, Col: e.Col},
+				Aux:     BookmarkRemoveMsg{Letter: e.Letter},
+				Preview: markTarget(e.Path, e.Line),
 			})
 		}
 	}
@@ -85,10 +89,11 @@ func (b *bookmarksMode) Set(ed *editor.Model, store *marks.Store, bmarks *bookma
 		for _, bm := range bmarks.All() {
 			path := bookmarkPath(bm.Path)
 			b.items = append(b.items, palette.Item{
-				Title:  bookmarkTitle(bm, path),
-				Detail: bookmarkDetail(bm, ed, path),
-				Msg:    BookmarkJumpMsg{Path: path, Line: bm.Line},
-				Aux:    BookmarkRemoveMsg{Project: true, Path: bm.Path, Line: bm.Line},
+				Title:   bookmarkTitle(bm, path),
+				Detail:  bookmarkDetail(bm, ed, path),
+				Msg:     BookmarkJumpMsg{Path: path, Line: bm.Line},
+				Aux:     BookmarkRemoveMsg{Project: true, Path: bm.Path, Line: bm.Line},
+				Preview: markTarget(path, bm.Line),
 			})
 		}
 	}
@@ -125,6 +130,16 @@ func markTitle(letter rune, path string, line int) string {
 		t += "  " + displayPath(path) + ":" + strconv.Itoa(line+1)
 	}
 	return t
+}
+
+// markTarget is a row's code-preview location (#2053): the marked file at the
+// 1-based line. A pathless mark (a scratch buffer's local mark) has nothing to
+// read, so it yields the zero target and the column stays blank.
+func markTarget(path string, line int) palette.PreviewTarget {
+	if path == "" {
+		return palette.PreviewTarget{}
+	}
+	return palette.PreviewTarget{Path: path, Line: line + 1}
 }
 
 // markPreview compacts a marked line for the row's detail chip, the
@@ -164,6 +179,11 @@ func (b *bookmarksMode) Prefix() rune { return bookmarksPrefix }
 
 // Placeholder implements palette.Mode.
 func (b *bookmarksMode) Placeholder() string { return "Jump to bookmark…" }
+
+// CodePreview implements palette.PreviewMode (#2053): the picker's rows are
+// all file positions, so the code column shows the marked line in its context
+// — what a one-line Detail chip or a bare note cannot convey.
+func (b *bookmarksMode) CodePreview() bool { return true }
 
 // Results implements palette.Mode: the snapshot fuzzy-matched on the row
 // title; an empty query lists all, letters sorted.

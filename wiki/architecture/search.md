@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results.
 resource: internal/search
 tags: [architecture, search, find-in-path]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-24T12:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -105,12 +105,16 @@ the palette):
   resizing under the cursor while a scan streams in — and forty at most, past
   which the list scrolls instead of growing. Beside it, separated by a dim
   vertical rule, a **code preview** shows the selected match's file around its
-  line (`internal/codepreview`, shared with the [find-usages
-  popup](/architecture/command-palette.md)); it follows the list cursor and
-  degrades to a dim `preview unavailable` notice when the file is gone or
-  unreadable. The preview takes two fifths of the content width (capped at 60
-  cells) and is dropped below 64 cells, where the list keeps the full width;
-  the box itself may now grow to 120 columns to carry both.
+  line; it follows the list cursor and degrades to a dim `preview unavailable`
+  notice when the file is gone or unreadable. The geometry comes from
+  `codepreview.Split` and the body from `Cache.Columns`: the preview takes two
+  fifths of the content width (capped at 60 cells) and is dropped below 64
+  cells, where the list keeps the full width; the box itself may now grow to
+  120 columns to carry both. `internal/codepreview` is the shared component
+  behind every picker with a preview column (#2053) — the [palette
+  pickers](/architecture/command-palette.md) (usages, symbols, files,
+  bookmarks) and the call-hierarchy overlay use the same three pieces
+  (`Target`, `Split`, `Cache`), so the columns line up and behave alike.
 - **Navigation:** `enter` opens the file at the match via the
   definition-jump path (`openPathAt`) and closes the overlay; the results
   survive closing, so `search.nextMatch` / `search.prevMatch` (f3/shift+f3,

@@ -4,6 +4,8 @@
 // the roots and supplies a Fetch continuation; expanding a node runs it and
 // the resulting CallHierarchyCallsMsg fills that node's children. Selecting a
 // row navigates through the same DefinitionMsg path go-to-definition uses.
+// Beside the tree it carries the shared code-preview column (#2053), so the
+// selected caller's source is visible before one jumps into it.
 package callhier
 
 import (
@@ -13,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"ike/internal/codepreview"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/protocol"
 	"ike/internal/theme"
@@ -53,6 +56,10 @@ type Model struct {
 	width, height int
 	pal           *theme.Palette
 	displayPath   func(string) string
+
+	// prev caches the code-preview window (#2053), so moving the cursor
+	// through the tree re-reads a file only when the target actually moves.
+	prev codepreview.Cache
 }
 
 // New returns a closed overlay.
@@ -240,8 +247,10 @@ func (m *Model) View() string {
 	}
 	pal := m.theme()
 	boxW := m.width - 12
-	if boxW > 100 {
-		boxW = 100
+	// Two columns need the extra width the single-column tree did not (#2053),
+	// the find-in-path overlay's 120-cell cap.
+	if boxW > 120 {
+		boxW = 120
 	}
 	if boxW < 40 {
 		boxW = min(40, m.width-2)
@@ -255,7 +264,7 @@ func (m *Model) View() string {
 	title := lipgloss.NewStyle().Bold(true).Underline(true).Render(heading)
 	rows := []string{title, ""}
 
-	rows = append(rows, m.renderRows(innerW, m.listHeight(), pal)...)
+	rows = append(rows, strings.Split(m.body(innerW, pal), "\n")...)
 	rows = append(rows, "", lipgloss.NewStyle().Faint(true).Render(
 		"enter jumps · space expands · tab callers/callees · esc closes"))
 
@@ -265,6 +274,25 @@ func (m *Model) View() string {
 		Padding(0, 1).
 		Width(boxW - 2)
 	return box.Render(strings.Join(rows, "\n"))
+}
+
+// body renders the overlay's two-column content (#2053): the call tree on the
+// left, blank-padded to a stable height, and — when the box is wide enough to
+// split — an excerpt of the selected entry's file behind a vertical rule.
+func (m *Model) body(innerW int, pal *theme.Palette) string {
+	listW, previewW := codepreview.Split(innerW)
+	h := m.listHeight()
+	return m.prev.Columns(m.renderRows(listW, h, pal), listW, previewW, h, m.target(), pal)
+}
+
+// target is the selected row's source location, the zero Target when the tree
+// is empty — which renders a blank column instead of an excerpt.
+func (m *Model) target() codepreview.Target {
+	n := m.current(m.visible())
+	if n == nil {
+		return codepreview.Target{}
+	}
+	return codepreview.Target{Path: n.entry.Path, Line: n.entry.Line + 1}
 }
 
 // renderRows lays the visible tree out to width×height, scrolled so the
