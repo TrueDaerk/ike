@@ -130,3 +130,29 @@ func TestSourceCompleteItems(t *testing.T) {
 		t.Fatal("builtin iferr missing from the source items")
 	}
 }
+
+// TestSourceCompleteFollowsBufferLanguage guards #2048: a file-less buffer
+// treated as Go (no path, a synthetic language name) is offered the Go
+// templates, and offers only the globals again once it is Plain Text.
+func TestSourceCompleteFollowsBufferLanguage(t *testing.T) {
+	regLang(t, "go", "go")
+	withConfig(t, nil)
+	has := func(req complete.Request) bool {
+		items, err := NewSource().Complete(context.Background(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, it := range items {
+			if it.Label == "iferr" {
+				return true
+			}
+		}
+		return false
+	}
+	if !has(complete.Request{Key: "\x00buffer/1", LangPath: "buffer.go"}) {
+		t.Error("a buffer treated as Go must be offered the Go templates")
+	}
+	if has(complete.Request{Key: "\x00buffer/1"}) {
+		t.Error("back on Plain Text the Go templates must be gone")
+	}
+}

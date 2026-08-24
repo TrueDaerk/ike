@@ -75,6 +75,22 @@ type CompletionMsg struct {
 	// SourcePriority orders sources in the merged popup and decides de-dup
 	// winners (#851): higher wins. See the Priority* constants.
 	SourcePriority int
+	// Key routes the batch back to the requesting view (#2048). Path finds a
+	// file's every view, but a buffer with no file has none — its batch
+	// travels under the view's editor.ParseKey instead, the same route an
+	// async parse takes (#2033). Empty means "route by Path"; read it through
+	// RouteKey.
+	Key string
+}
+
+// RouteKey is the identity this batch is delivered by: Key when the producer
+// set one, else Path. The LSP bridge only ever answers for real files, so it
+// leaves Key empty and keeps routing by path (#2048).
+func (m CompletionMsg) RouteKey() string {
+	if m.Key != "" {
+		return m.Key
+	}
+	return m.Path
 }
 
 // Completion source names and priorities (#851). The LSP server outranks the

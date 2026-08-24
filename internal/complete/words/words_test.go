@@ -111,3 +111,26 @@ func TestLargeFileDropsBuffer(t *testing.T) {
 		t.Fatalf("large-file buffer must drop its words, got %v", got)
 	}
 }
+
+// TestFilelessBuffersKeepSeparateIndexes guards #2048: two buffers with no
+// file share the empty path, so the index keys them by their view key
+// instead — otherwise the second one's text would overwrite the first's and
+// the "current buffer" tier would answer for the wrong buffer.
+func TestFilelessBuffersKeepSeparateIndexes(t *testing.T) {
+	s := New("")
+	buf := func(key, text string) host.EditorEvent {
+		return host.EditorEvent{Kind: host.EditorChange, Key: key, Text: text}
+	}
+	s.Observe(buf("\x00buffer/1", "alpha alphabet\nalp"))
+	s.Observe(buf("\x00buffer/2", "alpine\nalp"))
+
+	got := labels(t, s, complete.Request{Key: "\x00buffer/1", Line: 1, Col: 3})
+	if len(got) != 3 || got[0] != "alpha" || got[1] != "alphabet" || got[2] != "alpine" {
+		t.Fatalf("got %v, want this buffer's words first, then the other buffer's", got)
+	}
+	// The other buffer answers with its own word first.
+	got = labels(t, s, complete.Request{Key: "\x00buffer/2", Line: 1, Col: 3})
+	if len(got) == 0 || got[0] != "alpine" {
+		t.Fatalf("got %v, want alpine first for the second buffer", got)
+	}
+}

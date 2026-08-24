@@ -88,13 +88,13 @@ func (s *Source) Observe(ev host.EditorEvent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ev.Large {
-		delete(s.buffers, ev.Path)
+		delete(s.buffers, ev.BufKey())
 		return
 	}
-	b := s.buffers[ev.Path]
+	b := s.buffers[ev.BufKey()]
 	if b == nil {
 		b = &buffer{}
-		s.buffers[ev.Path] = b
+		s.buffers[ev.BufKey()] = b
 	}
 	b.text, b.dirty = ev.Text, true
 }
@@ -106,7 +106,7 @@ func (s *Source) Observe(ev host.EditorEvent) {
 // locality tier, so the merged popup lists nearer words first.
 func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.CompletionItem, error) {
 	s.mu.Lock()
-	cur := s.buffers[req.Path]
+	cur := s.buffers[req.BufKey()]
 	prefix := ""
 	if cur != nil {
 		prefix = identifierPrefix(cur.text, req.Line, req.Col)
@@ -146,8 +146,8 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 	if cur != nil {
 		add(cur.words, 0)
 	}
-	for path, b := range s.buffers {
-		if path == req.Path {
+	for key, b := range s.buffers {
+		if key == req.BufKey() {
 			continue
 		}
 		add(b.words, 1)

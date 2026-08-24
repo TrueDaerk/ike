@@ -87,12 +87,12 @@ func (s *Source) Observe(ev host.EditorEvent) { s.texts.observe(ev) }
 
 // Complete implements complete.Source.
 func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.CompletionItem, error) {
-	line := s.texts.lineAt(req.Path, req.Line)
+	line := s.texts.lineAt(req.BufKey(), req.Line)
 	abbrev := identifierPrefix(line, req.Col)
 	if abbrev == "" {
 		return nil, nil
 	}
-	switch strings.ToLower(filepath.Ext(req.Path)) {
+	switch strings.ToLower(filepath.Ext(req.LangName())) {
 	case ".css", ".scss", ".less":
 		return cssItems(abbrev), nil
 	case ".html", ".htm", ".xhtml":
@@ -187,10 +187,10 @@ func (t *textStore) observe(ev host.EditorEvent) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if ev.Large {
-		delete(t.texts, ev.Path)
+		delete(t.texts, ev.BufKey())
 		return
 	}
-	t.texts[ev.Path] = ev.Text
+	t.texts[ev.BufKey()] = ev.Text
 }
 
 func (t *textStore) lineAt(path string, line int) string {
