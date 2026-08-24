@@ -96,6 +96,7 @@ bring their own.
 | Copy HTTP Response Body | `http.copyBody` | — | — | everywhere |
 | Copy Folded Range (HTTP Response) | `http.copyFold` | — | — | everywhere |
 | Copy HTTP Response Headers | `http.copyHeaders` | — | — | everywhere |
+| Copy Shown HTTP Request as curl | `http.copyShownAsCurl` | — | — | everywhere |
 | Compare Stored HTTP Responses | `http.diffResponses` | — | — | everywhere |
 | Import curl Command… | `http.importCurl` | — | — | everywhere |
 | Import OpenAPI Spec… | `http.importOpenAPI` | — | — | everywhere |
@@ -103,6 +104,7 @@ bring their own.
 | Re-send Stored HTTP Request | `http.resend` | — | — | everywhere |
 | Browse HTTP Response History | `http.responseHistory` | — | — | everywhere |
 | Run HTTP Request | `http.run` | `ctrl+f9` | — | everywhere |
+| Save HTTP Response Body to File… | `http.saveResponse` | — | — | everywhere |
 | Select HTTP Environment | `http.selectEnvironment` | — | — | everywhere |
 | Show Stored HTTP Response | `http.showResponse` | `ctrl+shift+f9` | — | everywhere |
 | GitHub Issues | `issues.toggle` | — | — | everywhere |

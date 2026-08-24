@@ -401,6 +401,8 @@ highlighted, binary bodies collapsed to a notice.
 | `Y` | Copy the status line plus headers |
 | `h` / `l`, ++left++ / ++right++ | Older / newer response for this request |
 | ++ctrl+r++ | Send this response's request again, unchanged |
+| `C` | Copy this response's request as a curl command |
+| `S` | Save the raw response body to a file |
 | `x` | Cancel the request that is running |
 | `za` / `zc` / `zo` | Toggle / close / open the fold at the top of the view |
 | `zM` / `zR` | Collapse every fold / open them all |
@@ -423,6 +425,30 @@ double click for a word (ids and dotted tokens select whole), triple click for
 a line. What gets copied is what you see, so a pretty-printed JSON body pastes
 as it reads. **Copy HTTP Response Body** and **Copy HTTP Response Headers** do
 the same from the palette.
+
+### Copying the shown request as curl
+
+`C` in the pane (or **Copy Shown HTTP Request as curl**, `http.copyShownAsCurl`)
+exports the request *behind the response you are looking at* — the stored
+snapshot, with the values that actually went out. It is the response-side
+pendant of **Copy HTTP Request as curl**, which exports the block under the
+cursor: use this one when the file has changed since, when the response came
+from a re-send, or when you are browsing an older entry. Headers and body are
+shell-quoted, an `Authorization: Basic` header becomes `-u`, and a binary body
+is piped in through `base64 -d` so the command stays runnable. Nothing is
+masked — a token that went out is a token in the exported command.
+
+### Saving the body to a file
+
+`S` in the pane (or **Save HTTP Response Body to File…**, `http.saveResponse`)
+writes the **raw** body — the bytes as they arrived, not the pretty-printed
+view — to a path you type. The prompt proposes a name built from the request
+URL and the `Content-Type` (`/things/42` + `application/json` → `42.json`),
+++tab++ completes paths, a relative path is resolved against the project root,
+and a directory receives the proposed name. Binary bodies (an image, a PDF, a
+zip) save correctly; that is what the command is for, since they have no text
+to copy. The notification names the file and its size, and says so when the
+body had been truncated on receipt.
 
 ## History
 
@@ -512,6 +538,8 @@ once and the entry after that is re-sendable.
 | Select HTTP Environment | `http.selectEnvironment` | — |
 | Copy HTTP Response Body | `http.copyBody` | — |
 | Copy HTTP Response Headers | `http.copyHeaders` | — |
+| Copy Shown HTTP Request as curl | `http.copyShownAsCurl` | — |
+| Save HTTP Response Body to File… | `http.saveResponse` | — |
 | Browse HTTP Response History | `http.responseHistory` | — |
 | Show Stored HTTP Response | `http.showResponse` | — |
 | Re-send Stored HTTP Request | `http.resend` | — |

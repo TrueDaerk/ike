@@ -464,6 +464,8 @@ var httpPaneKeys = []struct{ Key, Title string }{
 	{"y", "Copy selection (or the whole body)"},
 	{"Y", "Copy status line and headers"},
 	{"ctrl+r", "Re-send this response's request unchanged (or click ⟳ re-send)"},
+	{"C", "Copy this response's request as a curl command"},
+	{"S", "Save the raw response body to a file"},
 	{"x", "Cancel the running request"},
 	{"esc", "Clear search and selection"},
 }

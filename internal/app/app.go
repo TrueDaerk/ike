@@ -477,6 +477,11 @@ type Model struct {
 	curlImportOpen  bool
 	curlImportInput string
 	curlImportPos   int
+	// httpSaveOpen marks the response-body save prompt (#2059) while the
+	// shell shows it; httpSaveInput/httpSavePos are the typed path and cursor.
+	httpSaveOpen  bool
+	httpSaveInput string
+	httpSavePos   int
 	// lspRename is the open symbol-rename prompt (Roadmap 0100, #6); nil when
 	// no rename is in flight.
 	lspRename *lspRenameState
@@ -4106,6 +4111,27 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// http.copyHeaders (palette, #1266): status line plus headers.
 		return m, m.copyHTTPResponse(true)
 
+	case HTTPCopyShownAsCurlMsg:
+		// http.copyShownAsCurl (palette, #2059): the shown response's as-sent
+		// request as a runnable curl command.
+		return m, m.copyShownHTTPRequestAsCurl()
+
+	case httppane.CopyCurlMsg:
+		// "C" in the response pane (#2059): the pane holds the snapshot, the
+		// host renders and copies it.
+		return m, m.copyShownHTTPRequestAsCurl()
+
+	case HTTPSaveResponseMsg:
+		// http.saveResponse (palette, #2059): prompt for a path, then write
+		// the raw body there.
+		m.startHTTPSaveResponse()
+		return m, nil
+
+	case httppane.SaveBodyMsg:
+		// "S" in the response pane (#2059): the same prompt, pane-local entry.
+		m.startHTTPSaveResponse()
+		return m, nil
+
 	case HTTPCopyAsCurlMsg:
 		// http.copyAsCurl (palette, #1994): the request under the caret, with
 		// its variables substituted, as a runnable curl command.
@@ -6469,6 +6495,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The curl import prompt (#1994) likewise — one line, enter/esc.
 		if m.curlImportPromptOpen() {
 			return m.updateCurlImportPrompt(msg)
+		}
+		// The response-body save prompt (#2059) mirrors the JetBrains import:
+		// one path line with tab completion.
+		if m.httpSavePromptOpen() {
+			return m.updateHTTPSavePrompt(msg)
 		}
 		// The symbol-rename prompt (0100, #6) mirrors it.
 		if m.lspRenameOpen() {

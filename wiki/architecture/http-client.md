@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, curl export and raw-body file save for the shown exchange.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-20T21:00:00Z
+timestamp: 2026-08-24T12:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -21,6 +21,10 @@ from an OpenAPI 3.x document — a file or a URL (#1939, #2009, see
 and `http.importCurl` / `http.copyAsCurl` convert single requests to and from
 curl commands (#1994, see
 [curl import and export](#curl-import-and-export-internalhttpfilecurlgo-1994)).
+The response side has the same two exits (#2059): `http.copyShownAsCurl`
+exports the *shown* exchange's stored request as curl and `http.saveResponse`
+writes the raw response body to a file (see
+[exporting the shown exchange](#exporting-the-shown-exchange-2059)).
 
 ## File format
 
@@ -861,6 +865,68 @@ For a recognized stream:
   text)` above the body. An unrecognized content type stays plain without a
   notice — there is nothing to highlight by design.
 
+## Exporting the shown exchange (#2059)
+
+The response pane is where a finished exchange is looked at, so it is also
+where it leaves the tool — as a curl command for someone else's shell, or as a
+file on disk. Both actions read the entry currently on show, history browsing
+(#1251) included, and both exist twice: as a pane-local key and as a palette
+command, the arrangement every response action uses. The pane itself neither
+writes files nor touches the clipboard: `C` emits `httppane.CopyCurlMsg` and
+`S` emits `httppane.SaveBodyMsg`, the host does the work — same seam as
+`CopyMsg` (#1266) and `ResendMsg` (#1832).
+
+**Copy as curl** — `C` / `http.copyShownAsCurl` ("Copy Shown HTTP Request as
+curl") renders the entry's [as-sent snapshot](#as-sent-request-snapshot-1832)
+through `RequestSnapshot.Curl` (`internal/httpclient/curlexport.go`). The
+serialization is `httpfile.ExportCurl`'s, reached by mapping the snapshot onto
+an `httpfile.Request`, so both curl exports share one set of rules — shell
+quoting, `Authorization: Basic` → `-u`, an inline multipart body → one `-F`
+per part. Header names are **sorted** before the mapping: Go's map iteration
+is random and the same request must always export the same command. A body
+that is not text (invalid UTF-8 or a NUL, the viewer's own rule) cannot live
+inside a shell word, so it is exported as a base64 heredoc piped into
+`curl --data-binary @-` — byte-exact and still runnable.
+
+This is the response-side pendant of `http.copyAsCurl` (#1994), which exports
+the *block under the caret* and re-resolves its variables. The two answer
+different questions: the caret version exports what a dispatch *would* send,
+this one what a dispatch *did* send — which is the only correct answer for a
+re-sent request, an older history entry, or a `.http` file edited since.
+Nothing is masked here either (same reasoning as the stored snapshot's), and
+a snapshot-less entry (a pre-#1832 history file, a live stream) reports that
+instead of copying a half command.
+
+**Save the body to a file** — `S` / `http.saveResponse` ("Save HTTP Response
+Body to File…", `internal/app/http_save.go`) writes `Response.Body`
+**verbatim**: the raw bytes as received, not `BodyText`'s pretty-printed,
+folded, text-only view. That is the whole point — a PDF, an image or a
+fixture cannot go through the clipboard at all, and `HasRawBody` gates the
+action on the raw bytes rather than on the composed rows so a binary body
+qualifies where the copy actions do not.
+
+The path comes from a one-line shell prompt with `pathcomplete` tab
+completion, the JetBrains-import prompt's shape (#677). It is prefilled with
+`httpResponseFileName`: the last path segment of the snapshot's URL (query and
+fragment dropped, percent-escapes decoded, path-hostile characters replaced),
+extended by the `Content-Type`'s extension when the URL carries none —
+`/things/42` + `application/json` → `42.json`, a bare host → `response.json`.
+The common web types are spelled out because the system mime database is not
+guaranteed to carry them (and answers `text/plain` with `.asc` where it does);
+`+json`/`+xml` suffix types follow their base format, anything else falls back
+to `mime.ExtensionsByType`. On confirm the path is resolved — `~` expands, a
+relative path is project-relative, a directory receives the proposed name —
+and the write reports both outcomes, naming the file, its size, and a body
+that had been truncated on receipt (the file is short too, and only the pane
+says so otherwise). The response is re-read at that moment rather than
+captured when the prompt opened, so what lands in the file is what is on show
+when the path is confirmed.
+
+Both actions also ride the intention popup (#2026) on their own precomputed
+facts: `HTTPResendable` offers the curl export (it needs the snapshot),
+`HTTPResponseSaveable` the save (it needs raw bytes) — the caret sitting in a
+request block says nothing about either.
+
 ## Body highlighting by Content-Type (#1303)
 
 A request body is highlighted as **its own language**: `Content-Type:
@@ -987,7 +1053,7 @@ palette carries `http.responseHistory` ("Browse HTTP Response History"),
 which focuses the viewer and reports how many responses are stored; and the
 help overlay gains an `http response pane` group listing the pane-local keys
 (`h/l ←/→`, `r`, `s`, `D`, `j/k`, `shift+←/→`, `0/$`, `g/G`, `/`, `n/N`, `za…`,
-`zy`, `y`, `Y`, `ctrl+r`, `x`, `esc`) — they belong to no
+`zy`, `y`, `Y`, `ctrl+r`, `C`, `S`, `x`, `esc`) — they belong to no
 registry command, so nothing else would document them. `help.SetExtra` takes
 several groups for that.
 

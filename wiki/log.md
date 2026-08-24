@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-24 (HTTP: copy as curl, save response body, #2059)
+
+- **The shown exchange has two exits now.** `C` in the response pane (or
+  `http.copyShownAsCurl`) copies the entry's as-sent request as a runnable
+  curl command; `S` (or `http.saveResponse`) writes the **raw** response body
+  to a file. Both act on the entry on show, history browsing included, and
+  both are also intention-popup entries.
+- **One curl serializer, two directions.** `RequestSnapshot.Curl` maps the
+  snapshot onto an `httpfile.Request` and hands it to the existing
+  `ExportCurl`, so quoting, `-u` for basic auth and `-F` for multipart follow
+  the same rules as `http.copyAsCurl`. Header names are sorted so a request
+  always exports the same command, and a binary body goes out as a base64
+  heredoc piped into `curl --data-binary @-` instead of being pasted raw.
+  Unlike the caret-side export, this one exports what *was* sent — the right
+  answer for a re-send, an older entry, or an edited `.http` file.
+- **Saving writes bytes, not the view.** The file gets `Response.Body`
+  verbatim, so an image or a PDF survives — the clipboard actions cannot carry
+  those at all. The path prompt (tab completion, project-relative, a directory
+  takes the proposed name) is prefilled from the URL's last segment plus the
+  `Content-Type`'s extension: `/things/42` + `application/json` → `42.json`.
+
 ## 2026-08-24 (Open in Find window, #2055)
 
 - **A popup's hits can now be kept.** `cmd+enter` / `ctrl+enter` in the
