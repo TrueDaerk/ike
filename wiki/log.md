@@ -1,5 +1,30 @@
 # Log
 
+## 2026-08-25 (label, assignee and state mutations, #2088)
+
+- **The issues window writes now.** With triage permission: `e` opens a label
+  picker over the repository's whole label set (colored chips, the issue's own
+  labels preselected) and applies only the diff; `u` does the same for the
+  assignees and replaces the set; `c` closes or reopens the selected issue,
+  `C` the same with a comment that is posted first. All four work from the
+  list and from the detail view.
+- **Mutations are optimistic and roll back.** The row changes immediately, the
+  pre-mutation issue is kept, and a forge rejection restores it and shows the
+  forge's own error (filter row + toast). A success refetches the listing and
+  the open issue's timeline, so the UI shows forge truth rather than a guess.
+- **Capability gating.** Without triage the four actions vanish from the
+  footer and stay in the action menu greyed, naming the reason; pressing the
+  key explains instead of doing nothing.
+- **Both bindings implement the mutations** — gh via `gh issue edit
+  --add-label/--remove-label`, `gh issue close|reopen`, `gh issue comment` and
+  an assignee-replacing `gh api --method PATCH … --input -`; tea/Gitea via the
+  REST label, assignee, state and comment endpoints (label names resolved to
+  Gitea's numeric IDs). New: `Forge.RepoLabels`/`Collaborators`,
+  `forge.Mutation`/`MutateCmd` and the one-shot `RepoMetaCmd` probe. Argument
+  and payload construction is unit-tested on fixtures. Concept docs updated:
+  [Forge Layer](/architecture/forge.md),
+  [Issues Tool Window](/architecture/github-issues.md).
+
 ## 2026-08-24 (issue timeline in the detail view, #2084)
 
 - **The issue detail shows the full history now.** Under the rendered body,

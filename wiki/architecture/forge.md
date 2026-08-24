@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Forge Layer
-description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, and the capability model (triage vs push) both bindings probe (#2083).
+description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, the capability model (triage vs push) both bindings probe, and the issue mutations (labels, assignees, state, comments) behind it (#2083, #2088).
 resource: internal/forge/backend.go
 tags: [architecture, vcs, forge, github, gitea, forgejo, issues]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
-# Forge Layer (#1934, #2083)
+# Forge Layer (#1934, #2083, #2088)
 
 `internal/forge` talks to the project's code forge. Since #2083 the operation
 surface is the **`Forge` interface** (`backend.go`), so everything later in
@@ -26,11 +26,14 @@ responses — never on a human rendering.
 `Forge` covers the whole 0470 stream: `Issues(state)` (open/closed listing
 with labels + assignees), `PRs()` (every state), `Timeline(issue, page)`,
 `CreateComment` / `EditComment` / `EditIssueBody`, `AddLabels` /
-`RemoveLabels` / `SetAssignees` / `CloseIssue` / `ReopenIssue`, `MergePR` /
-`ClosePR`, and `Capabilities()`. The interface ships complete; operations a
-binding has not implemented yet return a typed `*ErrUnsupported` (backend +
-operation), so later sub-issues only fill in bindings. #2083 brought the
-listings and `Capabilities()`; #2084 the timeline; the rest are stubs.
+`RemoveLabels` / `SetAssignees` / `CloseIssue` / `ReopenIssue`,
+`RepoLabels` / `Collaborators`, `MergePR` / `ClosePR`, and `Capabilities()`.
+The interface ships complete; operations a binding has not implemented yet
+return a typed `*ErrUnsupported` (backend + operation), so later sub-issues
+only fill in bindings. #2083 brought the listings and `Capabilities()`; #2084
+the timeline; #2088 the issue mutations (labels, assignees, state, comment
+creation) plus the two metadata listings; comment/body *editing* and the PR
+actions are still stubs.
 
 `Timeline(issue, page)` (#2084) fetches one 30-entry page of an issue's
 history, oldest first, and reports whether more pages follow — long
@@ -45,6 +48,39 @@ one cached `gh api user` probe; tea: the login's user, falling back to one
 Gitea's typed timeline comments, where a label event's body distinguishes
 add (`"1"`) from remove. `TimelineCmd(dir, issue, page)` wraps it into a
 `TimelineMsg` echoing issue and page.
+
+## Mutations (`mutate.go`, #2088)
+
+The write side is one neutral **`Mutation`** value — issue number, a label
+`AddLabels`/`RemoveLabels` diff, an `Assignees` set behind an explicit
+`SetAssignees` flag (so "nobody" and "do not touch" stay distinct), a
+`State` (`"closed"`/`"open"`) and a `Comment`. `MutateCmd(dir, mut)` applies
+its parts **in the order the user means them** — comment first (so
+close-with-comment posts before the state change and the timeline reads
+right), then the label removals and additions, then the assignees, then the
+state — and stops at the first failure, so the caller's rollback covers a
+half-applied write. It resolves to a `MutationMsg` echoing issue and kind.
+
+`RepoMetaCmd(dir)` → `RepoMetaMsg` is the one-shot metadata probe behind the
+pickers: `Capabilities()` first and, only when they allow triage, the
+repository's `RepoLabels()` and `Collaborators()` — a token without the scope
+must not spend two calls on listings it may not read anyway. A failing label
+or user listing is not fatal: the capabilities still travel and `Err` names
+what was missed. `MutateFactory(dir)` and `MetaFactory(dir)` are the closures
+the issues window is injected with, mirroring `RefreshFactory`.
+
+Bindings: gh runs `gh issue edit <n> --add-label/--remove-label a,b`,
+`gh issue close|reopen <n>`, `gh issue comment <n> --body …`,
+`gh label list --json name,color` and `gh api repos/{owner}/{repo}/assignees`.
+The assignee *set* goes through `gh api --method PATCH .../issues/<n>
+--input -` with a JSON body on stdin — `gh issue edit` only adds and removes
+(it would need the current set to diff against), and stdin is the only way to
+send the empty array of a cleared set. tea/Gitea uses the REST API throughout
+(`POST`/`DELETE .../issues/<n>/labels`, `PATCH .../issues/<n>` for assignees
+and state, `POST .../issues/<n>/comments`); Gitea addresses labels by numeric
+ID, so names are resolved against the repository's label set first and an
+unknown name errors rather than being dropped silently. Its collaborator
+listing omits the repository owner, who is folded back in.
 
 `RefreshCmd(dir)` is the listing `tea.Cmd`: detect the backend, fetch open
 issues + all PRs, resolve to one `IssuesMsg` (`Setup` when no backend
@@ -108,8 +144,9 @@ ranking works identically.
 
 GitHub reports `{admin, maintain, push, triage, pull}`: push-or-better sets
 both, bare triage sets only `Triage`. Gitea reports `{admin, push, pull}` —
-no triage tier — so push-or-admin sets both. Later sub-issues consume this to
-hide or explain unavailable actions.
+no triage tier — so push-or-admin sets both. The issues window consumes
+`Triage` (#2088) to gate its mutation actions: without it they stay in the
+action menu, greyed and naming the reason, and are dropped from the footer.
 
 ## Event types (#2086)
 

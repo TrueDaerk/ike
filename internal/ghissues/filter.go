@@ -236,8 +236,10 @@ func (m *Model) filterSummary() string {
 }
 
 // filterRowShown reports whether the pane spends a row on the filter status.
+// The same row carries a mutation's in-flight and error states (#2088), so it
+// also shows for those.
 func (m *Model) filterRowShown() bool {
-	return m.fEditing || m.filterSummary() != ""
+	return m.fEditing || m.mutErr != "" || m.mutBusy > 0 || m.filterSummary() != ""
 }
 
 // joinParts renders the filter row's segments separated by a middle dot.

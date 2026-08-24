@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Issues Tool Window
-description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, fuzzy filter, label multi-picker, open/closed/all state filter, sort orders and label grouping, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), an action menu, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084).
+description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, fuzzy filter, label multi-picker, open/closed/all state filter, sort orders and label grouping, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), an action menu, permission-gated label/assignee/state mutations with optimistic rollback, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
-# Issues Tool Window (#1934, #2090, #2084)
+# Issues Tool Window (#1934, #2090, #2084, #2088)
 
 Development in this repository is issue-driven (see
 [Change Workflow](/process/change-workflow.md)); this pane brings that loop
@@ -54,6 +54,12 @@ its own concept: [Forge Layer](/architecture/forge.md). What the pane sees:
   kinds outside the vocabulary; `More` reports whether another page follows,
   so long histories are never fetched whole. The message echoes issue and
   page, letting the pane drop a stale answer.
+- `forge.MutateCmd(dir, mutation)` → `MutationMsg` and `forge.RepoMetaCmd(dir)`
+  → `RepoMetaMsg` (#2088), injected as `forge.MutateFactory(dir)` and
+  `forge.MetaFactory(dir)`: one neutral `Mutation` value carries a label diff,
+  an assignee set, a state change and an optional comment, applied in that
+  reading order; the metadata probe delivers the capabilities plus — only when
+  they allow triage — the repository's label set and assignable users.
 - `forge.PRForIssue(prs, n)` joins PRs to issues by the branch convention:
   head `issue/<n>` or `issue/<n>-…`, preferring open over merged over closed.
   Each PR's `statusCheckRollup` (CheckRun and StatusContext shapes both)
@@ -163,6 +169,40 @@ more pages follow — `L` appends the next page without moving the scroll — an
 refetches the listing *and* the open issue's timeline. A `TimelineMsg` for an
 issue the pane no longer waits on is dropped; entry IDs and the own-comment
 flag are carried in the model for the comment-editing sub-issue.
+
+### Mutations (#2088)
+
+With **triage permission** the pane writes as well as reads. The keys work
+from the issue list and from the detail view alike, and they stay QWERTZ-safe:
+
+| Key | Action |
+| --- | --- |
+| `e` | **label picker** — the repository's whole label set as colored chips, the issue's own labels preselected; `space` toggles, `backspace` clears, `enter` applies the **diff** (only what changed is written), `esc` drops it |
+| `u` | **assignee picker** — the repository's assignable users, same keys; `enter` replaces the assignee set (an emptied picker clears it explicitly) |
+| `c` | **close** the issue, or **reopen** it when it is closed — footer and menu word themselves after the selected issue's state |
+| `C` | the same **with a comment**: a one-line prompt whose text is posted *before* the state change, so the timeline reads in order |
+
+Both pickers list what `forge.RepoMetaCmd` fetched **once** per session
+(retried by `r` after a failure). When that probe could not read them — a
+token without the scope — the pickers fall back to the labels and assignees
+the *listing* carries, so an issue's labels can still be removed.
+
+**Capability gating.** Without triage permission the four actions are not
+offered: the footer drops them and the action menu still lists them, greyed
+and with the reason spelled out (`needs triage permission`,
+`checking permissions…`) — pressing the key writes the same reason into the
+filter row rather than doing nothing. Without a forge backend at all they are
+absent entirely.
+
+**Optimistic, with rollback.** A write is applied to the row immediately (the
+chips, the assignees, the state glyph change at once) and the pre-mutation
+issue is kept. A forge rejection restores it and shows the forge's own error
+in the filter row (`label change failed: HTTP 403 …`), toasted as well so it
+is not missed while the pane is unfocused (`esc` on the list dismisses it, as
+it clears every other narrowing). A success drops the snapshot and
+**refetches** the listing — and the open issue's timeline — because the pane
+must show forge truth, not its own guess. While a write is in flight the same
+row reads `applying the change…`.
 
 ### Discoverability
 

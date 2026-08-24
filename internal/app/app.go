@@ -4636,6 +4636,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fillIssuesTimeline(msg)
 		return m, nil
 
+	case forge.RepoMetaMsg:
+		// Capabilities plus the repository's labels and assignable users
+		// (#2088): the gate in front of the mutation actions.
+		m.fillIssuesMeta(msg)
+		return m, nil
+
+	case forge.MutationMsg:
+		// One finished label/assignee/state write (#2088): the pane rolls
+		// back on a rejection and refetches on success.
+		return m, m.finishIssueMutation(msg)
+
 	case forge.EventsMsg:
 		// Snapshot-diff events from the forge poller (#2085) reach their
 		// surface: dialog, status-line badge, toast, or history only (#2086).

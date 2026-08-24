@@ -102,6 +102,13 @@ type Forge interface {
 	CloseIssue(issue int) error
 	// ReopenIssue reopens a closed issue.
 	ReopenIssue(issue int) error
+	// RepoLabels lists the repository's whole label set with its colors —
+	// the label picker's rows, which are not limited to what the current
+	// listing happens to carry (#2088).
+	RepoLabels() ([]Label, error)
+	// Collaborators lists the logins an issue can be assigned to — the
+	// assignee picker's rows (#2088).
+	Collaborators() ([]string, error)
 	// MergePR merges an open pull request.
 	MergePR(pr int) error
 	// ClosePR closes an open pull request without merging.
