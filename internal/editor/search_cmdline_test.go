@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/editor/buffer"
 	"ike/internal/editor/search"
 	"ike/internal/host"
 )
@@ -108,6 +109,83 @@ func TestExLineCursorEditing(t *testing.T) {
 	m = typeKeys(m, "s")
 	if m.cmdline != "se" || m.cmdCur != 1 {
 		t.Fatalf("ex mid insert: cmdline=%q cmdCur=%d want %q 1", m.cmdline, m.cmdCur, "se")
+	}
+}
+
+// --- #2063: prefill "/" from an open visual selection -----------------------
+
+func TestFindActionPrefillsFromSingleLineSelection(t *testing.T) {
+	m, _ := loaded(t, "foo bar baz\n")
+	m.cursor = buffer.Position{Line: 0, Col: 4}
+	m.enterVisual(Visual)
+	m.cursor = buffer.Position{Line: 0, Col: 6} // selects "bar"
+	m, _ = m.Update(ActionMsg{Action: "find"})
+	if m.cmdline != "bar" || m.cmdCur != 3 {
+		t.Fatalf("cmdline=%q cmdCur=%d want %q 3", m.cmdline, m.cmdCur, "bar")
+	}
+	if m.cmdSelStart != 0 || m.cmdSelEnd != 3 {
+		t.Fatalf("selection=[%d,%d) want [0,3)", m.cmdSelStart, m.cmdSelEnd)
+	}
+	// Matches for the prefilled pattern are highlighted immediately, without
+	// having to type anything.
+	if m.preview.Pattern != "bar" || len(m.preview.AllMatches(m.buf)) != 1 {
+		t.Fatalf("preview=%q matches=%d want %q 1", m.preview.Pattern, len(m.preview.AllMatches(m.buf)), "bar")
+	}
+	// Visual mode is left behind — search opens like a normal command line.
+	if m.mode.IsVisual() {
+		t.Fatal("find must leave visual mode")
+	}
+}
+
+func TestFindActionPrefillOverwritableByTyping(t *testing.T) {
+	m, _ := loaded(t, "foo bar baz\n")
+	m.cursor = buffer.Position{Line: 0, Col: 4}
+	m.enterVisual(Visual)
+	m.cursor = buffer.Position{Line: 0, Col: 6}
+	m, _ = m.Update(ActionMsg{Action: "find"})
+	m = typeKeys(m, "x") // typing over the preselected "bar" replaces it, not appends
+	if m.cmdline != "x" {
+		t.Fatalf("cmdline=%q want %q after typing over the selection", m.cmdline, "x")
+	}
+	if m.cmdSelStart != 0 || m.cmdSelEnd != 0 {
+		t.Fatalf("selection must be dropped after typing, got [%d,%d)", m.cmdSelStart, m.cmdSelEnd)
+	}
+}
+
+func TestFindActionWithoutSelectionBehavesAsBefore(t *testing.T) {
+	m, _ := loaded(t, "foo\n")
+	m, _ = m.Update(ActionMsg{Action: "find"})
+	if m.cmdline != "" || m.cmdSelStart != 0 || m.cmdSelEnd != 0 {
+		t.Fatalf("cmdline=%q selection=[%d,%d) want empty, no selection", m.cmdline, m.cmdSelStart, m.cmdSelEnd)
+	}
+}
+
+func TestFindActionMultilineSelectionOpensEmpty(t *testing.T) {
+	m, _ := loaded(t, "foo\nbar\n")
+	m.cursor = buffer.Position{Line: 0, Col: 0}
+	m.enterVisual(Visual)
+	m.cursor = buffer.Position{Line: 1, Col: 1}
+	m, _ = m.Update(ActionMsg{Action: "find"})
+	if m.cmdline != "" || m.cmdSelStart != 0 || m.cmdSelEnd != 0 {
+		t.Fatalf("multiline selection: cmdline=%q selection=[%d,%d) want empty", m.cmdline, m.cmdSelStart, m.cmdSelEnd)
+	}
+	if !m.searching {
+		t.Fatal("multiline selection must still open the search line")
+	}
+}
+
+func TestFindActionPrefillBackspaceClearsSelection(t *testing.T) {
+	m, _ := loaded(t, "foo bar baz\n")
+	m.cursor = buffer.Position{Line: 0, Col: 4}
+	m.enterVisual(Visual)
+	m.cursor = buffer.Position{Line: 0, Col: 6}
+	m, _ = m.Update(ActionMsg{Action: "find"})
+	m = send(m, special(tea.KeyBackspace))
+	if m.cmdline != "" || m.cmdCur != 0 {
+		t.Fatalf("backspace on preselection: cmdline=%q cmdCur=%d want empty at 0", m.cmdline, m.cmdCur)
+	}
+	if m.cmdSelStart != 0 || m.cmdSelEnd != 0 {
+		t.Fatalf("selection must be cleared, got [%d,%d)", m.cmdSelStart, m.cmdSelEnd)
 	}
 }
 

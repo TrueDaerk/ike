@@ -159,6 +159,34 @@ func CursorView(text string, cur int) string {
 	return string(r[:cur]) + rev.Render(string(r[cur])) + string(r[cur+1:])
 }
 
+// CursorViewSel renders text like CursorView, but first paints the rune range
+// [selStart, selEnd) in selStyle — a preselected range (e.g. a search line
+// prefilled from a visual selection, #2063) that the reverse-video cursor
+// still lands inside, so the replace-on-type affordance stays visible. The
+// cursor is clamped to sit at or after selEnd, matching how callers seed such
+// a selection (cursor at the end of the preselected text).
+func CursorViewSel(text string, cur, selStart, selEnd int, selStyle lipgloss.Style) string {
+	r := []rune(text)
+	if selStart < 0 {
+		selStart = 0
+	}
+	if selEnd > len(r) {
+		selEnd = len(r)
+	}
+	if selStart >= selEnd {
+		return CursorView(text, cur)
+	}
+	if cur < selEnd {
+		cur = selEnd
+	}
+	rev := lipgloss.NewStyle().Reverse(true)
+	before := string(r[:selStart]) + selStyle.Render(string(r[selStart:selEnd])) + string(r[selEnd:cur])
+	if cur >= len(r) {
+		return before + rev.Render(" ")
+	}
+	return before + rev.Render(string(r[cur])) + string(r[cur+1:])
+}
+
 // wordLeft finds the start of the word before cur: skip non-word runes,
 // then the word-rune run. Word runes are letters, digits and underscore.
 func wordLeft(r []rune, cur int) int {
