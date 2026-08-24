@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/highlight"
+	"ike/internal/textsel"
 	"ike/internal/theme"
 )
 
@@ -97,6 +98,13 @@ type Model struct {
 	leftIx    highlight.Index
 	rightIx   highlight.Index
 	rightText string
+
+	// Mouse text selection (#2070): the shared click-streak engine over the
+	// rendered visual lines. vrows maps each visual line back onto its row
+	// and side; selRight pins a side-by-side selection to one column.
+	sel      textsel.Selection
+	selRight bool
+	vrows    []vrow
 }
 
 // EditRequestMsg asks the root model to start edit mode on the diff pane Key
@@ -231,6 +239,7 @@ func (m *Model) SetContents(left, right string) {
 	m.cur = -1
 	m.top = 0
 	m.hoff = 0
+	m.clearSelection()
 	m.gaps = computeGaps(m.res, m.ctx)
 	m.buildRightRow()
 	m.rehighlight(true, true)
@@ -278,8 +287,10 @@ func (m *Model) SetEditMode(on bool) {
 	m.editModeOn = on
 	if on {
 		// The embedded editor owns the right column's horizontal view; the
-		// read-only left column starts at column 0 beside it (#1700).
+		// read-only left column starts at column 0 beside it (#1700). It also
+		// brings its own selection (#2070), so the pane's drops.
 		m.hoff = 0
+		m.clearSelection()
 	}
 	if !on {
 		m.rehighlight(false, true)
@@ -295,6 +306,7 @@ func (m Model) EditMode() bool { return m.editModeOn }
 func (m *Model) Rediff(right string) {
 	m.rightText = right
 	m.res = Compute(m.leftText, right)
+	m.clearSelection()
 	if m.cur >= len(m.res.Hunks) {
 		m.cur = len(m.res.Hunks) - 1
 	}
@@ -323,6 +335,7 @@ func (m *Model) buildRightRow() {
 func (m *Model) SetContext(n int) {
 	m.ctx = n
 	m.gaps = computeGaps(m.res, m.ctx)
+	m.clearSelection() // the visual-line map the selection lives in changed
 	m.render()
 }
 
@@ -368,6 +381,7 @@ func (m *Model) SetUnified(u bool) {
 		return
 	}
 	m.unified = u
+	m.clearSelection() // positions are layout-specific
 	m.render()
 	m.scrollToHunk(m.cur)
 }
@@ -417,10 +431,16 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "c":
 		// Toggle collapsed context (#494); the current hunk stays in view.
 		m.collapsed = !m.collapsed
+		m.clearSelection()
 		m.render()
 		m.scrollToHunk(m.cur)
 	case "o":
 		m.expandNearestGap()
+	case "y", "ctrl+c", "cmd+c", "super+c":
+		// Copy (#2070): the selection, else the current hunk as a patch.
+		return m.copyKey()
+	case "esc":
+		m.ClearSelection()
 	case "e":
 		// Edit mode (#496): the root model validates and mounts the editor.
 		key, path := m.key, m.rightPath
@@ -464,7 +484,7 @@ func (m *Model) RenderEditSplit(edLines []string, topLine, height int) string {
 			left = m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, st) +
 				renderSegment(expand(row.Left), row.Kind == RowAdded, m.hoff, colL,
 					st.base(row.Kind, false), st.span, expandSpans(row.Left, row.LeftSpans),
-					sideCaps(m.leftIx, row.LeftNo, row.Left), hl)
+					sideCaps(m.leftIx, row.LeftNo, row.Left), hl, 0, 0, st.sel)
 		}
 		b.WriteString(left)
 		b.WriteString(sep)
@@ -496,6 +516,7 @@ func (m *Model) expandNearestGap() {
 		return
 	}
 	m.gaps[best].expanded = true
+	m.clearSelection() // the visual-line map shifts under the selection
 	m.render()
 }
 
@@ -657,6 +678,7 @@ func (m *Model) render() {
 		return
 	}
 	items := m.displayItems()
+	m.buildVRows(items)
 	m.measure(items)
 	if m.unified {
 		m.renderUnified(items)
@@ -697,7 +719,8 @@ func (m Model) columnWidths() (colL, colR int) {
 }
 
 // emitSeparator renders one collapsed-gap row and stamps the hidden rows'
-// rowStarts onto it.
+// rowStarts onto it. A selection covering part of the label highlights it —
+// and copies the gap's hidden rows in full (#2070).
 func (m *Model) emitSeparator(gi int, st styles) {
 	g := m.gaps[gi]
 	line := len(m.lines)
@@ -705,11 +728,26 @@ func (m *Model) emitSeparator(gi int, st styles) {
 	for r := g.start; r < g.end; r++ {
 		m.rowStarts[r] = line
 	}
+	label := m.sepLabel(gi)
+	rendered := st.gutter.Render(label)
+	runes := []rune(label)
+	if a, b := m.sel.LineRange(line, len(runes)); m.sel.Active() && a < b {
+		a = clamp(a, 0, len(runes))
+		rendered = st.gutter.Render(string(runes[:a])) + st.sel.Render(string(runes[a:b])) +
+			st.gutter.Render(string(runes[b:]))
+	}
+	m.lines = append(m.lines, rendered)
+}
+
+// sepLabel is the placeholder text of one collapsed gap, centering padding
+// included — selection column math and the render agree on the same runes.
+func (m *Model) sepLabel(gi int) string {
+	g := m.gaps[gi]
 	label := fmt.Sprintf("··· %d unchanged lines (o expands, c shows all) ···", g.end-g.start)
 	if pad := (m.w - len([]rune(label))) / 2; pad > 0 {
 		label = strings.Repeat(" ", pad) + label
 	}
-	m.lines = append(m.lines, st.gutter.Render(label))
+	return label
 }
 
 // styles bundles the resolved lipgloss styles one render pass reuses.
@@ -719,6 +757,7 @@ type styles struct {
 	added   lipgloss.Style
 	removed lipgloss.Style
 	span    lipgloss.Style
+	sel     lipgloss.Style
 }
 
 func (m Model) styles() styles {
@@ -732,6 +771,7 @@ func (m Model) styles() styles {
 		added:   lipgloss.NewStyle().Background(pal.DiffAdded),
 		removed: lipgloss.NewStyle().Background(pal.DiffRemoved),
 		span:    lipgloss.NewStyle().Background(pal.DiffChanged),
+		sel:     lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText),
 	}
 }
 
@@ -768,17 +808,22 @@ func (m *Model) renderSideBySide(items []displayItem) {
 		}
 		ri := it.row
 		row := m.res.Rows[ri]
-		m.rowStarts[ri] = len(m.lines)
+		line := len(m.lines)
+		m.rowStarts[ri] = line
 		capsL := sideCaps(m.leftIx, row.LeftNo, row.Left)
 		capsR := sideCaps(m.rightIx, row.RightNo, row.Right)
+		selL0, selL1 := m.selCols(line, false)
+		selR0, selR1 := m.selCols(line, true)
 		var b strings.Builder
 		b.WriteString(m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, st))
 		b.WriteString(renderSegment(expand(row.Left), row.Kind == RowAdded, m.hoff, colL,
-			st.base(row.Kind, false), st.span, expandSpans(row.Left, row.LeftSpans), capsL, hl))
+			st.base(row.Kind, false), st.span, expandSpans(row.Left, row.LeftSpans), capsL, hl,
+			selL0, selL1, st.sel))
 		b.WriteString(sep)
 		b.WriteString(m.gutterCell(row.RightNo, rw, row.Kind != RowRemoved, st))
 		b.WriteString(renderSegment(expand(row.Right), row.Kind == RowRemoved, m.hoff, colR,
-			st.base(row.Kind, true), st.span, expandSpans(row.Right, row.RightSpans), capsR, hl))
+			st.base(row.Kind, true), st.span, expandSpans(row.Right, row.RightSpans), capsR, hl,
+			selR0, selR1, st.sel))
 		m.lines = append(m.lines, b.String())
 	}
 }
@@ -792,10 +837,12 @@ func (m *Model) renderUnified(items []displayItem) {
 	lw, rw := m.gutterWidths()
 	col := max(1, m.w-(lw+1)-(rw+1))
 	emit := func(text string, leftNo, rightNo int, base lipgloss.Style, spans []Span, caps []string) {
+		sel0, sel1 := m.selCols(len(m.lines), false)
 		var b strings.Builder
 		b.WriteString(m.gutterCell(leftNo, lw, true, st))
 		b.WriteString(m.gutterCell(rightNo, rw, true, st))
-		b.WriteString(renderSegment(expand(text), false, m.hoff, col, base, st.span, expandSpans(text, spans), caps, hl))
+		b.WriteString(renderSegment(expand(text), false, m.hoff, col, base, st.span, expandSpans(text, spans), caps, hl,
+			sel0, sel1, st.sel))
 		m.lines = append(m.lines, b.String())
 	}
 	for _, it := range items {
@@ -850,8 +897,10 @@ func (m Model) gutterCell(no, width int, present bool, st styles) string {
 // survive inside an emphasized range. Spans and captures are indexed in
 // absolute display columns, so intra-line emphasis stays on the right runes at
 // any horizontal offset. gap renders the empty counterpart of a one-sided row
-// (blank, unstyled) rather than an empty styled line.
-func renderSegment(runes []rune, gap bool, hoff, width int, base, span lipgloss.Style, spans []Span, caps []string, hl *highlight.Theme) string {
+// (blank, unstyled) rather than an empty styled line. [selA, selB) is the
+// mouse selection's covered column interval (#2070); selected cells take selSt
+// whole — the selection outranks emphasis and syntax while it lives.
+func renderSegment(runes []rune, gap bool, hoff, width int, base, span lipgloss.Style, spans []Span, caps []string, hl *highlight.Theme, selA, selB int, selSt lipgloss.Style) string {
 	if gap {
 		return strings.Repeat(" ", width)
 	}
@@ -862,8 +911,10 @@ func renderSegment(runes []rune, gap bool, hoff, width int, base, span lipgloss.
 	for col < end {
 		emph := inSpan(spans, col)
 		cname := capAt(caps, col)
+		selOn := col >= selA && col < selB
 		e := col + 1
-		for e < end && inSpan(spans, e) == emph && capAt(caps, e) == cname {
+		for e < end && inSpan(spans, e) == emph && capAt(caps, e) == cname &&
+			(e >= selA && e < selB) == selOn {
 			e++
 		}
 		st := base
@@ -874,6 +925,9 @@ func renderSegment(runes []rune, gap bool, hoff, width int, base, span lipgloss.
 			if cs, ok := hl.Style(cname); ok {
 				st = st.Foreground(cs.GetForeground())
 			}
+		}
+		if selOn {
+			st = selSt
 		}
 		b.WriteString(st.Render(string(runes[col:e])))
 		col = e

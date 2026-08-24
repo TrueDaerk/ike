@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Diff Viewer
-description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, side-by-side or unified rendering with theme diff slots and per-side tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), diff.files palette command, layout persistence."
+description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, side-by-side or unified rendering with theme diff slots and per-side tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070), diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
 timestamp: 2026-08-07T00:00:00Z
@@ -80,6 +80,45 @@ dispatches `diff.JumpMsg` and the root model opens the right-hand file with
 the cursor on the hunk's first line. The view is read-only; hunk-level "take
 left/right" staging is a later increment for #28. The status line shows
 `DIFF │ left ⇄ right │ hunk i/n`.
+
+## Text selection & copy (#2070)
+
+`selection.go` gives the viewer mouse text selection with the shared
+click-streak gestures the terminal (#227/#951) and HTTP response viewer
+(#1266) established, via the extracted engine in `internal/textsel`: a drag
+selects by character, a double click a word, a triple click a line, drags
+extend by the streak's unit, and `y`/`ctrl+c`/`cmd+c` copy. Selection
+positions are (visual line, display column) pairs over the *content* cells —
+gutters and the separator are not selectable — recorded per render in a
+`vrows` map (row index + side per visual line; a unified changed pair
+occupies two entries). In side-by-side layout the pressed column pins the
+selection (`selRight`): a drag past the other column clamps to the line end
+instead of mixing sides. Extraction (`SelectionText`) maps display columns
+back onto the raw row text (`textsel.RawSlice` undoes the tab expansion), and
+a selection touching a collapsed-context separator copies the gap's hidden
+rows in full — never the placeholder label (the fold-copy rule from #1741). A
+covered separator label and content cells render with the theme's
+`Selection`/`SelectionText` colours, outranking diff backgrounds and syntax.
+
+The copy chords without a selection copy the current hunk (the first before
+any `n`/`N`) as a minimal unified patch (`HunkPatchText`), analog to the
+response pane's "no selection → whole body". Copying clears the selection;
+`esc` clears it too. The selection drops whenever the visual-line map shifts
+(new contents, re-diff, layout toggle, context change, collapse toggle or gap
+expansion) and when edit mode starts — the embedded editor (#496) brings its
+own selection and the two never overlay. The pane cannot reach the clipboard
+itself: it emits `diff.CopyMsg` and the root model writes the clipboard and
+notifies, like `httppane.CopyMsg`. The root also routes the ctrl+c quit chord
+into the pane while a selection lives (`paneSelectionCopy`, the audit rule
+from #2062), and the mouse press/drag/release arrive via the app's
+`dragDiffSelect` gesture — presses are ignored in edit mode.
+
+The merge view's read-only side columns get the same treatment
+(`internal/merge/selection.go`, `dragMergeSelect`): a press in ours/theirs
+anchors a side-pinned selection, the copy chords intercept in
+`merge.Model.Update` before the result editor (bare `y` stays with a
+capturing editor — insert-mode typing is never stolen), and the middle
+column's presses are left to the editor entirely.
 
 ## diff.files command
 
