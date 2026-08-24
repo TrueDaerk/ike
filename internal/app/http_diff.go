@@ -139,6 +139,36 @@ func (m *Model) openHTTPResponseDiff() {
 	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, httpEntriesPrefix)
 }
 
+// openHTTPPreviousRunDiff diffs the shown response directly against the run
+// before it (#2060) — the same request identity httphistory already groups
+// by, no picker. It shares openHTTPResponseDiff's "explain, don't crash"
+// checks and hands off to diffHTTPEntries once the pair is known.
+func (m *Model) openHTTPPreviousRunDiff() {
+	p := m.httpPanel()
+	if p == nil {
+		m.host.Notify(host.Info, "http: no response pane open — run an .http request, or show a stored one with http.showResponse")
+		return
+	}
+	source, key := p.Source(), p.Request()
+	if source == "" || key == "" {
+		m.host.Notify(host.Info, "http: no stored response to compare — run a request first")
+		return
+	}
+	shown, _ := p.HistoryIndex()
+	entries := httphistory.New(httpHistoryDir()).List(source, key)
+	if shown < 0 || shown >= len(entries) {
+		shown = 0
+	}
+	// The list is newest first, so the run before the shown one sits at the
+	// next index — same direction "h" (older) already steps in.
+	prev := shown + 1
+	if prev >= len(entries) {
+		m.host.Notify(host.Info, "http: no earlier run of "+key+" to compare it with")
+		return
+	}
+	m.diffHTTPEntries(DiffHTTPEntriesMsg{Source: source, Request: key, Shown: shown, Other: prev})
+}
+
 // diffHTTPEntries opens the chosen pair in the reusable diff pane (#1992):
 // the older response on the left, the newer on the right — the reading
 // direction of every other diff in the IDE — with both sides normalized by

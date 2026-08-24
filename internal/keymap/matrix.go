@@ -109,6 +109,7 @@ var reachableAlternatives = map[string]string{
 	"editor.tab.select8":       "palette",
 	"editor.tab.select9":       "palette",
 	"pane.maximize":            "palette",
+	"http.diffPreviousRun":     "palette",
 	"debug.breakpoints":        "palette / Run menu",
 	"lsp.goToSuper":            "palette / Navigate menu / context menu",
 	"lsp.implementations":      "palette / Navigate menu / context menu",
