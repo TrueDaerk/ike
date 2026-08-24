@@ -37,6 +37,7 @@ func Defaults() []Menu {
 			{Title: "Hide All Tool Windows", Command: "window.hideAllTools"},
 			{Title: "External Changes", Command: "watch.changeFeed"},
 			{Title: "Treat Buffer as…", Command: "editor.setBufferLanguage"},
+			{Title: "Materialize Buffer to File", Command: "editor.materializeBuffer"},
 			{Title: "Export Screenshot (Pane)", Command: "view.exportScreenshot"},
 			{Title: "Export Screenshot (Window)", Command: "view.exportWindowScreenshot"},
 			{Title: "Performance HUD", Command: "perf.hud"},

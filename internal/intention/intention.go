@@ -15,6 +15,8 @@
 // probes.
 package intention
 
+import "strings"
+
 // Context describes the caret the intention popup opens on. Position and
 // line access mirror what the LSP bridge tracks for its requests; the
 // remaining fields are caret facts the app precomputes from state the
@@ -50,6 +52,13 @@ type Context struct {
 	// case too, but a zero Context must offer nothing, so the fact is
 	// carried explicitly rather than inferred from the empty path.
 	Fileless bool
+	// LangExt is the extension, without the dot, the buffer's language
+	// resolves under ("json" for a JSON buffer) — "" with no language, and
+	// for one recognized by base name only (Dockerfile), which has no
+	// extension to write a file under. It gates "Materialize to File"
+	// (#2056), whose whole job is producing a file the path-keyed
+	// subsystems classify the same way.
+	LangExt string
 
 	// DocPath reports that the caret sits on a JSON/YAML value with a
 	// non-root document path (the status-line breadcrumb, #1660).
@@ -116,6 +125,28 @@ func (c Context) lineAt(i int) string {
 		return c.LineText
 	}
 	return ""
+}
+
+// textProbeLines bounds hasText: an intention gate must stay a cheap probe,
+// and a buffer whose first hundred lines are all blank is empty enough that
+// treating it as such costs nothing real.
+const textProbeLines = 100
+
+// hasText reports whether the buffer holds non-whitespace text within the
+// first textProbeLines lines — the precondition of every entry that hands the
+// buffer's own content to a tool (#2056: the playgrounds refuse an empty
+// input).
+func (c Context) hasText() bool {
+	n := c.lineCount()
+	if n > textProbeLines {
+		n = textProbeLines
+	}
+	for i := 0; i < n; i++ {
+		if strings.TrimSpace(c.lineAt(i)) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // lineCount is LineCount with the single-line fallback lineAt implies.

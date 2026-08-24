@@ -4,7 +4,7 @@ title: Scratch Files
 description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette, listed as the explorer's Scratches section with the explorer's own open/rename/delete semantics, surviving restarts as ordinary files.
 resource: internal/scratch
 tags: [architecture, scratch, palette, languages, explorer]
-timestamp: 2026-08-18T14:00:00Z
+timestamp: 2026-08-24T12:00:00Z
 ---
 
 # Scratch Files
@@ -39,6 +39,14 @@ through the winning handle, so the content belongs to the allocation that won
 the race and a PHP scratch is runnable as created; the extension is
 dot-optional, empty means `txt`. A missing directory lists as empty, not as an
 error.
+
+The store has a **second producer** since #2056: "Materialize to File"
+(`editor.materializeBuffer`) allocates a `scratch-N.<ext>` here for a file-less
+buffer that was given a language, and binds the buffer to it, so LSP and every
+other path-keyed feature apply. A materialized buffer is a scratch like any
+other from then on — listed, renameable and deletable in the Scratches section
+— which is exactly why it does not get a temp store of its own; see
+[Language Registry](./languages.md#language-tools-from-a-typed-buffer-2056).
 
 `Delete` (#1932) and `Rename` (#1963) are the mutation half, and they are
 deliberately narrow: the path must name a file lying **directly** in the

@@ -1,5 +1,62 @@
 # Log
 
+## 2026-08-24 (playground and materialize for typed buffers, #2056)
+
+- **A typed file-less buffer reaches the playgrounds.** alt+enter in a buffer
+  treated as JSON or YAML (#2033) now offers **"Open in jq Playground"** /
+  **"Open in yq Playground"** (`json.jqPlayground` / `yaml.yqPlayground`),
+  dispatching the dialect the buffer's language names. The playground already
+  queried the focused editor's text, file or not — the entry is what makes it
+  discoverable in the popup where the type was chosen, so a pasted JSON blob
+  is queryable without saving it first. It is gated on the buffer actually
+  holding text, because an empty input is all the playground can refuse.
+- **"Materialize to File"** (`editor.materializeBuffer`, View menu and
+  palette) closes the LSP gap the override left open: the buffer is written to
+  a `scratch-N.<ext>` carrying its language's extension and bound to it
+  through the same `bindUntitled` wiring "Save As" uses, so the file-opened
+  hooks (`lsp.didopen`), watcher tracking, MRU and a reparse all run and
+  diagnostics, completion and navigation start working. The override is
+  dropped in the process — the file name classifies the buffer from then on —
+  and `:w path` / "Save As" still moves it under a real name afterwards.
+- **The materialized file lands in the scratch store** (`~/.ike/scratches`,
+  `$IKE_CONFIG_DIR/scratches`), not in a second temp location: the scratch
+  panel already lists, renames and deletes exactly this kind of throwaway
+  file, so cleaning up is deleting it there. A refused materialize leaves
+  nothing behind, and the command refuses with a reason on a buffer that has a
+  file, one with no chosen type, and a type recognized by base name only
+  (Dockerfile), which has no extension to write a file under.
+- `intention.Context` grew one precomputed fact, `LangExt`, and the
+  `hasText()` probe both entries gate on.
+
+## 2026-08-24 (opt as alt on macOS: alt chords survive the terminal, #2064)
+
+- **The modifier can no longer be masked by the text.** bubbletea's
+  `Key.String()` returns `Key.Text` whenever the terminal reported the
+  characters a key produced — right for typing (`?`, not `shift+/`), wrong for
+  a chord: with the Kitty protocol's report-associated-text flag (and on the
+  Windows Console API) a modified key carries the modifiers *and* the text, so
+  `opt+b` arrived as a bare `"b"` and no `alt+b` binding could match.
+  `FromKeyMsg` now reads `Keystroke()` — which always spells the modifiers out
+  — for any press carrying ctrl/alt/meta/super/hyper, and keeps the textual
+  form for shift-only presses.
+- **No keystroke bubbletea can produce is unparseable any more.** The Kitty
+  protocol reports `hyper` alongside `meta`/`super`; the unknown token made
+  `ParseKey` fail and the event be dropped outright. All three OS-class
+  modifiers now fold onto IKE's single Cmd-class `ModMeta` bit.
+- **Ground truth, from raw bytes.** `internal/keymap/optkey_test.go` drives
+  every encoding a macOS terminal can produce for `opt+<key>` — ESC-prefix
+  (Terminal.app "Use Option as Meta Key", iTerm2 "Esc+", tmux), legacy
+  CSI-parameter, Kitty CSI-u, xterm modifyOtherKeys — through ultraviolet's
+  real decoder and `FromKeyMsg`, and looks the default alt chords up in the
+  darwin table, so "opt+F7 fires Find usages" is a test rather than a claim.
+- **The unfixable case is delimited, not papered over.** With Option left in
+  its default macOS role the layout composes `opt+b` into `∫` before any escape
+  sequence exists; the modifier is simply gone and guessing it back from the
+  glyph would break typing those characters. The keybindings wiki gained a
+  macOS Option section with the wire-format matrix and a troubleshooting table
+  naming the concrete setting per terminal (Terminal.app, iTerm2 — "Esc+", not
+  "Meta" — kitty, Ghostty, WezTerm, Alacritty).
+
 ## 2026-08-24 (a generic code-preview column for every position picker, #2053)
 
 - **Four more pickers show where they lead**: the **symbol picker** (cmd+o,

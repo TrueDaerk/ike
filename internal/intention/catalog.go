@@ -279,12 +279,27 @@ func editProvider() Provider {
 	}
 }
 
-// bufferLangProvider offers the buffer-level language pick (#2033) — the only
-// entry that is about the *buffer* rather than the caret, which is why it
-// lists last. It appears in a buffer with no file only: a saved file is
-// classified by its name, so offering the pick there would advertise a choice
-// the editor deliberately refuses. The current type rides in the title, so the
-// popup both shows what the buffer is treated as and changes it.
+// bufferLangProvider offers what a buffer with no file can do about its
+// *type* — the entries that are about the buffer rather than the caret, which
+// is why they list last. All of them appear in a buffer with no file only: a
+// saved file is classified by its name, so offering the pick there would
+// advertise a choice the editor deliberately refuses.
+//
+// The pick itself (#2033) is always offered — that is what makes the popup
+// never empty in a file-less buffer — and its title names the current type,
+// so the popup both shows what the buffer is treated as and changes it. The
+// two follow-ups of #2056 ride on a chosen type:
+//
+//   - the **playground** of the buffer's dialect, over the buffer's own text:
+//     a pasted JSON or YAML blob is queryable without saving it first. The
+//     entry needs text to query — the playground refuses an empty input with
+//     "no JSON buffer to query", and an entry that can only answer that is no
+//     intention (#2026).
+//   - **Materialize to File**, which writes the buffer to a real file of the
+//     chosen extension so the path-keyed subsystems that stayed out of #2033
+//     — LSP above all — start working on it. It needs an extension: a
+//     language recognized by base name only (Dockerfile) has none to
+//     materialize under, and the command refuses it.
 func bufferLangProvider() Provider {
 	return Provider{
 		ID: "app.bufferlang",
@@ -296,7 +311,18 @@ func bufferLangProvider() Provider {
 			if cx.LangID != "" {
 				title += " (now " + cx.LangID + ")"
 			}
-			return []Item{{Title: title, Kind: "buffer", CommandID: "editor.setBufferLanguage"}}
+			items := []Item{{Title: title, Kind: "buffer", CommandID: "editor.setBufferLanguage"}}
+			if docpath.IsLang(cx.LangID) && cx.hasText() {
+				if docpath.IsYAML(cx.LangID) {
+					items = append(items, Item{Title: "Open in yq Playground", Kind: "yq", CommandID: "yaml.yqPlayground"})
+				} else {
+					items = append(items, Item{Title: "Open in jq Playground", Kind: "jq", CommandID: "json.jqPlayground"})
+				}
+			}
+			if cx.LangExt != "" {
+				items = append(items, Item{Title: "Materialize to File", Kind: "buffer", CommandID: "editor.materializeBuffer"})
+			}
+			return items
 		},
 	}
 }
