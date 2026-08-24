@@ -3943,6 +3943,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (#2033); the returned command reparses under the new type.
 		return m, m.setBufferLang(msg)
 
+	case MaterializeBufferMsg:
+		// editor.materializeBuffer (alt+enter intention / palette / View
+		// menu, #2056): write the typed file-less buffer to a scratch file of
+		// its extension and bind it there, so LSP and friends apply.
+		return m, m.materializeBuffer()
+
 	case ShowNewScratchMsg:
 		// scratch.new (cmd+shift+n / File menu, #1223): pick the language
 		// first, locked to the picker mode; the chosen row runs the matching

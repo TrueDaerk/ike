@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-24T12:00:00Z
 ---
 
 # Language Registry
@@ -231,6 +231,45 @@ listing "Plain Text" plus every language a path lookup could match
 `buflang` segment (`as Markdown`, clickable to change it) and the intention
 entry names it (`Treat Buffer as… (now markdown)`). Picking "Plain Text"
 clears the type again.
+
+#### Language tools from a typed buffer (#2056)
+
+The override is display-only by construction, which left two things a typed
+buffer could not reach. Both are follow-up entries in the same alt+enter
+popup, offered in a file-less buffer that has a type:
+
+- **"Open in jq/yq Playground"** (`json.jqPlayground` / `yaml.yqPlayground`)
+  — the playground already queries whatever document is at hand, the editor's
+  own text included, so a pasted JSON or YAML blob is queryable without saving
+  it anywhere first. The entry only makes it discoverable where the type was
+  chosen, and it dispatches the dialect the buffer's language names (JSON →
+  jq, YAML → yq, the `docpath` kinds). It needs text: the playground refuses
+  an empty input, so an entry that could only answer "no JSON buffer to
+  query" is not offered.
+- **"Materialize to File"** (`editor.materializeBuffer`,
+  `internal/app/materialize.go`) — the answer for everything that needs a real
+  path rather than a name: LSP above all, whose servers are handed a `file://`
+  URI and read it. The command writes the buffer to a file carrying the
+  chosen language's extension and binds the buffer to it through the same
+  `bindUntitled` wiring "Save As" uses, so watcher tracking, MRU, the
+  file-opened hooks (`lsp.didopen`) and a reparse all run and diagnostics,
+  completion and navigation start working on the buffer as on any opened file.
+
+**Where the file lands, and cleaning up.** Materialized buffers are created in
+the **scratch store** — `~/.ike/scratches`, or `$IKE_CONFIG_DIR/scratches` —
+as `scratch-N.<ext>`, never in the project tree. That is deliberately the
+existing throwaway-file location rather than a second one: the scratch panel
+lists them, renames them and deletes them, and they survive restarts through
+the ordinary session mechanics. Deleting the file there is the reset. Nothing
+is left behind by a refused materialize (the allocated name is removed again),
+and materializing is not a one-way door: the buffer is an ordinary file buffer
+afterwards, so `:w path` / "Save As" moves it under a real name in the
+project.
+
+The command refuses, with the reason, wherever it cannot apply: a buffer that
+already has a file, a buffer with no chosen type, and a type recognized by
+**base name only** (Dockerfile, Makefile) — there is no `scratch-N.<ext>` name
+that would classify the same way, so the entry is not offered either.
 
 ### Content detection on paste (#2037)
 
