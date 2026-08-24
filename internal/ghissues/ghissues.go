@@ -7,7 +7,10 @@
 // that keeps the list's cursor and scroll and can walk to the next/previous
 // issue without going back. The detail shows the issue's timeline under the
 // body (#2084): comments rendered as markdown, label/state/assignee changes
-// as compact events, fetched lazily page by page. The PR view lists the pull
+// as compact events, fetched lazily page by page, and — with triage
+// permission (#2088) — label, assignee and close/reopen mutations through two
+// pickers and a comment prompt, applied optimistically and rolled back on a
+// forge rejection. The PR view lists the pull
 // requests full width
 // (number, title, head branch, CI rollup, review decision). Every action is
 // discoverable through the footer and the action menu.
@@ -155,6 +158,14 @@ const (
 	ovNone overlayKind = iota
 	ovLabels
 	ovActions
+	// ovLabelEdit and ovAssignEdit are the mutation pickers (#2088): the
+	// repository's labels / assignable users toggled against the selected
+	// issue's current set, applied as a diff on enter.
+	ovLabelEdit
+	ovAssignEdit
+	// ovComment is the one-line prompt of the close/reopen-with-comment
+	// action (#2088).
+	ovComment
 )
 
 // listRow is one rendered row of a view: either a group header (header set,
@@ -251,6 +262,32 @@ type Model struct {
 	tlLoading bool
 	tlErr     string
 	tlRev     int
+
+	// Mutations (#2088): the app-injected write factory and the one-shot
+	// repository metadata probe behind the label/assignee pickers and the
+	// capability gate.
+	mutate  func(forge.Mutation) tea.Cmd
+	meta    func() tea.Cmd
+	caps    forge.Capabilities
+	capsOK  bool // a capability probe answered
+	metaRun bool // the probe was started (and not retried unless it failed)
+
+	repoLabels []forge.Label // the repository's whole label set
+	repoUsers  []string      // the assignable logins
+
+	// editSel is the working set of the open mutation picker; editFor is the
+	// issue it edits. mutBusy counts the writes in flight, mutErr is the last
+	// forge rejection, and rollback holds the pre-mutation issues an optimistic
+	// update has to be undone to when one fails.
+	editSel  map[string]bool
+	editFor  int
+	mutBusy  int
+	mutErr   string
+	rollback map[int]forge.Issue
+
+	// The close/reopen-with-comment prompt's buffer and cursor.
+	cmInput string
+	cmCur   int
 
 	// Config defaults apply only while the user has not overridden them in
 	// this session, so a live config reload never yanks the view away.
@@ -545,6 +582,27 @@ func (m *Model) listKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "o":
 		return m.openInBrowser()
 	}
+	return m.mutationKey(key)
+}
+
+// mutationKey routes the write keys (#2088), which the list and the detail
+// view share: 'e' labels, 'u' assignees, 'c' close/reopen, 'C' the same with
+// a comment. Each checks the capability gate itself, so a key without
+// permission explains rather than doing nothing.
+func (m *Model) mutationKey(key string) tea.Cmd {
+	if m.mutate == nil || m.tab != TabIssues {
+		return nil
+	}
+	switch key {
+	case "e":
+		return m.openLabelEditor()
+	case "u":
+		return m.openAssigneeEditor()
+	case "c":
+		return m.toggleIssueState()
+	case "C":
+		return m.openCommentPrompt()
+	}
 	return nil
 }
 
@@ -710,6 +768,10 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.startWork()
 	case "o":
 		return m.openInBrowser()
+	default:
+		if cmd := m.mutationKey(msg.String()); cmd != nil {
+			return cmd
+		}
 	}
 	m.clampDetail()
 	return nil
@@ -745,13 +807,16 @@ func (m *Model) stepIssue(delta int) tea.Cmd {
 	return m.PendingTimelineCmd()
 }
 
-// startRefresh re-runs the injected fetch for the current state filter.
+// startRefresh re-runs the injected fetch for the current state filter, plus
+// the repository-metadata probe (#2088) while it is still owed — a capability
+// probe that failed is retried by the same 'r' that retries the listing.
 func (m *Model) startRefresh() tea.Cmd {
+	meta := m.startMeta()
 	if m.refresh == nil {
-		return nil
+		return meta
 	}
 	m.loading = true
-	return m.refresh(m.state.issueState())
+	return tea.Batch(m.refresh(m.state.issueState()), meta)
 }
 
 // cycleState advances the open/closed/all filter. Closed issues are not part
@@ -784,6 +849,8 @@ func (m *Model) toggleGroup() {
 // is folded into the caller's refresh through startRefresh.
 func (m *Model) clearFilters() tea.Cmd {
 	refetch := m.state != FilterOpen
+	// esc also dismisses a mutation error the filter row is holding (#2088).
+	m.mutErr = ""
 	m.fInput, m.fCur = "", 0
 	m.labelSel = map[string]bool{}
 	m.state = FilterOpen
