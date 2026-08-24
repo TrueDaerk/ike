@@ -51,10 +51,14 @@ var reachabilityOverrides = map[string]Reachability{
 // one of them (the "shift shift" double-tap) needs key-up events.
 var bareModifiers = map[string]bool{"shift": true, "ctrl": true, "alt": true, "cmd": true, "meta": true}
 
-// Classify reports the reachability class of a chord under the documented
-// terminal rules and the probe's overrides. Multi-step chords take the worst
+// Classify reports the reachability class of a chord: an installed probe
+// verdict for this terminal (#2080) beats the documented terminal rules and
+// the static overrides — probed truth wins. Multi-step chords take the worst
 // class of their steps (a chord is only as reachable as its weakest key).
 func Classify(c Chord) Reachability {
+	if r, ok := probeVerdicts[c.String()]; ok {
+		return probedClass(r)
+	}
 	if r, ok := reachabilityOverrides[c.String()]; ok {
 		return r
 	}
@@ -67,10 +71,23 @@ func Classify(c Chord) Reachability {
 	return worst
 }
 
+// probedClass maps a probe verdict to a class: an arriving chord is
+// Delivered here whatever the static table fears; a missing one is Fragile —
+// it demonstrably does not reach this terminal's TUI.
+func probedClass(r ProbeResult) Reachability {
+	if r.Delivered {
+		return Delivered
+	}
+	return Fragile
+}
+
 // classifyKey applies the single-key rules.
 func classifyKey(k Key) Reachability {
 	if bareModifiers[k.Base] {
 		return Undetectable
+	}
+	if r, ok := probeVerdicts[k.String()]; ok {
+		return probedClass(r)
 	}
 	if r, ok := reachabilityOverrides[k.String()]; ok {
 		return r
@@ -130,11 +147,22 @@ func isFunctionKey(base string) bool {
 }
 
 // ReachabilityNote explains a non-delivered class in one phrase, for honest
-// labelling (#15) and the status matrix (#16).
+// labelling (#15) and the status matrix (#16). Probe verdicts (#2080) win:
+// a chord that probed missing says so (with the collapse evidence), and a
+// chord that probed delivered gets no warning however the static rules
+// classify it.
 func ReachabilityNote(c Chord) string {
+	if got, missing := ChordProbedMissing(c); missing {
+		if got != "" {
+			return "probed missing in this terminal (arrives as " + got + ")"
+		}
+		return "probed missing in this terminal"
+	}
 	switch {
 	case Classify(c) == Undetectable:
 		return "needs key-up events (bare modifier tap)"
+	case Classify(c) == Delivered:
+		return ""
 	case c.String() == "ctrl+tab":
 		return "terminal-eaten (tmux and friends never forward it)"
 	}

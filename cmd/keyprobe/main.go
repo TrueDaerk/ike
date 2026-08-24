@@ -2,7 +2,9 @@
 // terminal, press the listed chords, and quit with ctrl+d (delivered
 // everywhere). On exit it prints one machine-parseable PROBE line per target
 // chord — delivered or missing, with the actually-received key when it
-// differs — feeding the reachability table in internal/keymap.
+// differs — feeding the reachability table in internal/keymap. The matching
+// itself lives in keymap.ProbeSession, shared with the in-app keymap doctor
+// (#2080), whose store can import a captured run of this binary.
 package main
 
 import (
@@ -16,10 +18,7 @@ import (
 )
 
 type model struct {
-	targets []string
-	hit     map[string]string // chord -> what arrived ("" until seen)
-	last    string
-	done    bool
+	sess *keymap.ProbeSession
 }
 
 func (m model) Init() tea.Cmd { return nil }
@@ -31,10 +30,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// mouse targets always reported "missing", regardless of the terminal.
 	if click, isClick := msg.(tea.MouseClickMsg); isClick {
 		if k, isNav := keymap.FromMouseButton(click.Button); isNav {
-			m.last = k.String()
-			if _, want := m.hit[m.last]; want {
-				m.hit[m.last] = m.last
-			}
+			m.sess.HandleKey(k)
 		}
 		return m, nil
 	}
@@ -43,24 +39,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if key.String() == "ctrl+d" {
-		m.done = true
 		return m, tea.Quit
 	}
-	k, ok := keymap.FromKeyMsg(key)
-	if !ok {
-		return m, nil
-	}
-	m.last = k.String()
-	if _, want := m.hit[m.last]; want {
-		m.hit[m.last] = m.last
-	}
-	// Collapse evidence: a shifted chord arriving as its unshifted twin (the
-	// classic ctrl+shift+z → ctrl+z) is recorded against the shifted target —
-	// in addition to any direct hit, since the receiver cannot tell them apart.
-	for _, t := range m.targets {
-		if t != m.last && m.hit[t] == "" && strings.Replace(t, "shift+", "", 1) == m.last {
-			m.hit[t] = m.last
-		}
+	if k, ok := keymap.FromKeyMsg(key); ok {
+		m.sess.HandleKey(k)
 	}
 	return m, nil
 }
@@ -68,9 +50,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() tea.View {
 	var b strings.Builder
 	b.WriteString("ike key probe — press each chord (mouse-back/mouse-forward: click the button); ctrl+d finishes\n\n")
-	for _, t := range m.targets {
+	for _, t := range m.sess.Targets() {
 		mark := "  ·  "
-		switch got := m.hit[t]; {
+		switch got := m.sess.Hit(t); {
 		case got == t:
 			mark = "  ✓  "
 		case got != "":
@@ -78,7 +60,7 @@ func (m model) View() tea.View {
 		}
 		b.WriteString(mark + t + "\n")
 	}
-	b.WriteString("\nlast key: " + m.last + "\n")
+	b.WriteString("\nlast key: " + m.sess.Last() + "\n")
 	v := tea.NewView(b.String())
 	v.KeyboardEnhancements.ReportEventTypes = true
 	// Mouse reporting on (same mode the editor uses), so the mouse-back /
@@ -88,22 +70,12 @@ func (m model) View() tea.View {
 }
 
 func main() {
-	targets := keymap.ProbeTargets()
-	m := model{targets: targets, hit: map[string]string{}}
-	for _, t := range targets {
-		m.hit[t] = ""
-	}
-	out, err := tea.NewProgram(m).Run()
-	if err != nil {
+	m := model{sess: keymap.NewProbeSession(keymap.ProbeTargets())}
+	if _, err := tea.NewProgram(m).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "keyprobe:", err)
 		os.Exit(1)
 	}
-	final := out.(model)
-	for _, t := range final.targets {
-		r := keymap.ProbeResult{Chord: t, Delivered: final.hit[t] == t}
-		if got := final.hit[t]; got != "" && got != t {
-			r.Got = got
-		}
+	for _, r := range m.sess.Results() {
 		fmt.Println(keymap.FormatProbeResult(r))
 	}
 }

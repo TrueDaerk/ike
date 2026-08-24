@@ -41,6 +41,9 @@ type KeymapPage struct {
 
 	sel       int
 	host      SubPanelHost
+	// doctorLaunch dispatches keymap.doctor in the app (#2080); the doctor
+	// sub-panel's Run Probe button is hidden while it is nil.
+	doctorLaunch func() tea.Cmd
 	off       int // list scroll offset (#537)
 	filter    string
 	filterCur int  // rune cursor inside filter (#2002)
@@ -92,6 +95,10 @@ func (k *KeymapPage) SetPalette(p *theme.Palette) { k.pal = p }
 
 // SetSubPanelHost implements the hostAware injection seam (#883).
 func (k *KeymapPage) SetSubPanelHost(h SubPanelHost) { k.host = h }
+
+// SetDoctorLaunch injects the command that opens the keymap doctor overlay
+// (#2080) — the app closes the settings panel and runs the probe.
+func (k *KeymapPage) SetDoctorLaunch(f func() tea.Cmd) { k.doctorLaunch = f }
 
 // Capturing implements PageModel: while a rebind capture (or its conflict
 // confirmation) or the filter input (#531) is active the page needs every key
@@ -279,6 +286,12 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		// is open every printable key is filter text, so terms containing the
 		// action letters (u/r/j/k) type instead of firing actions.
 		k.filtering = true
+	case "p":
+		// Keymap doctor (#2080): stored per-terminal probe runs, viewable
+		// and clearable, plus the launcher for a fresh probe.
+		if k.host != nil {
+			k.host.Push(newProbePanel(k, k.host, k.doctorLaunch))
+		}
 	case "i":
 		// JetBrains keymap import (#677): inline path input with completion.
 		if k.host != nil {
@@ -399,20 +412,13 @@ func (k *KeymapPage) commitRebindChord(b keymapRow, chord keymap.Chord, byContex
 	}
 }
 
-// fragileWarning flags chords terminals/OSes commonly intercept (the 0081
-// honesty rule): cmd-modified keys rarely reach a macOS terminal, and ctrl+tab
-// is fragile in most emulators.
+// fragileWarning phrases the honesty warning for a chord (the 0081 honesty
+// rule). It delegates to the reachability table's own wording — which prefers
+// this terminal's probe verdicts (#2080) over the static rules, so a chord
+// that demonstrably arrives raises no warning and one that probed missing
+// says exactly that.
 func fragileWarning(c keymap.Chord) string {
-	for _, s := range c.Steps {
-		str := s.String()
-		if strings.HasPrefix(str, "cmd+") {
-			return "cmd chords may be intercepted by the terminal/OS"
-		}
-		if str == "ctrl+tab" || str == "ctrl+i" || str == "ctrl+m" {
-			return str + " is fragile in many terminals"
-		}
-	}
-	return ""
+	return keymap.ReachabilityNote(c)
 }
 
 // theme returns the active palette, defaulting when none was threaded in.
@@ -573,7 +579,12 @@ func (k *KeymapPage) renderRow(b keymapRow, selected bool, w int) string {
 	case b.Layer != keymap.LayerDefault:
 		style = style.Foreground(pal.Info)
 	}
-	if b.Fragile {
+	// A default whose chord probed missing in this terminal (#2080) is dead,
+	// not merely fragile — flag it prominently, ahead of the generic ⚠.
+	switch _, probedMissing := keymap.ChordProbedMissing(b.Chord); {
+	case probedMissing && !b.unbound && !b.nobind:
+		label += "  ✗ probed missing"
+	case b.Fragile:
 		label += "  ⚠"
 	}
 	return style.Render(label)
@@ -601,7 +612,7 @@ func (k *KeymapPage) detailLine(b keymapRow) footerLine {
 		}
 	default:
 		return footerLine{
-			text:  "   " + b.Command + " — enter rebind · u unbind · r reset to preset · i import JetBrains XML",
+			text:  "   " + b.Command + " — enter rebind · u unbind · r reset to preset · i import JetBrains XML · p keymap doctor",
 			style: lipgloss.NewStyle().Foreground(pal.Secondary),
 		}
 	}

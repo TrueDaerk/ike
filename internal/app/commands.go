@@ -66,6 +66,11 @@ type ForceCodeInsightMsg struct{}
 // the same view the hardcoded "?" opens. Dispatched by palette.keymapHelp.
 type ShowKeymapHelpMsg struct{}
 
+// KeymapDoctorMsg asks the root model to open the keymap doctor (#2080): the
+// terminal reality probe run inside the session, whose saved verdicts become
+// this terminal's reachability overrides. Dispatched by keymap.doctor.
+type KeymapDoctorMsg struct{}
+
 // CyclePaneFocusMsg asks the root model to move focus to the next pane, the
 // same behavior as the hardcoded tab. Dispatched by pane.switcher.
 type CyclePaneFocusMsg struct{}
@@ -506,6 +511,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("settings.open", "Settings", OpenSettingsMsg{}),
 			appCommand("python.newEnvironment", "New Python Environment…", OpenPythonEnvWizardMsg{}),
 			appCommand("keymap.importJetBrains", "Import JetBrains Keymap XML…", ImportJetBrainsKeymapMsg{}),
+			appCommand("keymap.doctor", "Keymap Doctor: Probe Chord Delivery", KeymapDoctorMsg{}),
 			appCommand("pane.splitDown", "Split Down", SplitFocusedMsg{Zone: layout.ZoneBottom}),
 			appCommand("pane.splitUp", "Split Up", SplitFocusedMsg{Zone: layout.ZoneTop}),
 			appCommand("pane.splitRight", "Split Right", SplitFocusedMsg{Zone: layout.ZoneRight}),
