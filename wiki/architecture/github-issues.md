@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Issues Tool Window
-description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, fuzzy filter, label multi-picker, open/closed/all state filter, sort orders and label grouping, a full-area issue detail that keeps the list context, an action menu, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090).
+description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, fuzzy filter, label multi-picker, open/closed/all state filter, sort orders and label grouping, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), an action menu, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane]
 timestamp: 2026-08-24T00:00:00Z
 ---
 
-# Issues Tool Window (#1934, #2090)
+# Issues Tool Window (#1934, #2090, #2084)
 
 Development in this repository is issue-driven (see
 [Change Workflow](/process/change-workflow.md)); this pane brings that loop
@@ -43,6 +43,17 @@ its own concept: [Forge Layer](/architecture/forge.md). What the pane sees:
   fetched in **every** state and split client-side, so cycling the issue
   state never re-costs the PR tab. A failing PR listing drops only the PR
   states. `IssuesMsg.State` echoes what was asked for.
+- `forge.TimelineCmd(dir, issue, page)` → `TimelineMsg` (#2084), injected as
+  the `forge.TimelineFactory(dir)` closure: one page (30 entries, oldest
+  first) of an issue's history in the neutral `TimelineEntry` vocabulary —
+  `comment` (markdown body, stable forge comment ID, an *own-comment* flag
+  matched against the authenticated user's login), `labeled`/`unlabeled`
+  (label name + color), `closed`/`reopened`, `assigned`/`unassigned`. Both
+  bindings map their forge's timeline onto it (GitHub's
+  `issues/{n}/timeline`, Gitea's typed timeline comments) and drop event
+  kinds outside the vocabulary; `More` reports whether another page follows,
+  so long histories are never fetched whole. The message echoes issue and
+  page, letting the pane drop a stale answer.
 - `forge.PRForIssue(prs, n)` joins PRs to issues by the branch convention:
   head `issue/<n>` or `issue/<n>-…`, preferring open over merged over closed.
   Each PR's `statusCheckRollup` (CheckRun and StatusContext shapes both)
@@ -132,8 +143,26 @@ to exactly the row it left. `ctrl+j`/`ctrl+k` walk to the next/previous issue
 without going back through the list, moving the list cursor with them; `j/k`
 and the page keys scroll the body. The body itself is the issue's markdown
 rendered through glamour with the preview pane's theme mapping (#62), under
-an author/age/state line and — when one exists — the linked PR's state. The
-richer timeline content is #2084's scope.
+an author/age/state line and — when one exists — the linked PR's state.
+
+### Timeline (#2084)
+
+Under the body, behind an `── activity ──` divider, the detail shows the
+issue's history. Opening a detail (enter, the walking chords, `Reveal`) lazily
+asks for page one through the injected `forge.TimelineFactory` — every path
+funnels through `PendingTimelineCmd`, which only fetches when the shown issue
+has no timeline yet. **Comments** render as markdown blocks through the same
+glamour pipeline, headed by the accented author, a `(you)` marker on own
+comments, and the relative age; everything else is one compact faint line —
+actor, action, the label as a colored chip or the assignee, age
+(self-assignments collapse to "self-assigned this"). The states are visible
+and keyboard-reachable: a loading row while a fetch is in flight, an error row
+(`r` retries) that keeps what already loaded, `(L loads more activity)` while
+more pages follow — `L` appends the next page without moving the scroll — and
+`(no activity yet)` on an empty finished history. `r` inside the detail
+refetches the listing *and* the open issue's timeline. A `TimelineMsg` for an
+issue the pane no longer waits on is dropped; entry IDs and the own-comment
+flag are carried in the model for the comment-editing sub-issue.
 
 ### Discoverability
 

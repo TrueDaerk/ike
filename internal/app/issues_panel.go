@@ -74,6 +74,7 @@ func (m *Model) openIssuesPanel() tea.Cmd {
 	m.clearForgeUnread()
 	p := m.activeWS().Panes.Get(key).Issues()
 	p.SetRefresh(forge.RefreshFactory("."))
+	p.SetTimeline(forge.TimelineFactory("."))
 	m.setFocus(key)
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
@@ -87,6 +88,13 @@ func (m *Model) openIssuesPanel() tea.Cmd {
 func (m *Model) fillIssuesPanel(msg forge.IssuesMsg) {
 	if p := m.issuesPanel(); p != nil {
 		p.SetResult(msg)
+	}
+}
+
+// fillIssuesTimeline routes one fetched timeline page into the pane (#2084).
+func (m *Model) fillIssuesTimeline(msg forge.TimelineMsg) {
+	if p := m.issuesPanel(); p != nil {
+		p.SetTimelineResult(msg)
 	}
 }
 

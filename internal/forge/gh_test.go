@@ -137,6 +137,73 @@ func TestPRForIssue(t *testing.T) {
 	}
 }
 
+// timelineFixture is one GitHub timeline page (#2084): a comment, label
+// changes, state changes, assignments, and events outside the neutral
+// vocabulary that the parser must drop.
+const timelineFixture = `[
+  {"event": "commented", "id": 555001, "user": {"login": "TrueDaerk"},
+   "body": "Looks **good** to me.", "created_at": "2026-08-20T10:00:00Z"},
+  {"event": "labeled", "actor": {"login": "ada"},
+   "label": {"name": "bug", "color": "d73a4a"}, "created_at": "2026-08-20T11:00:00Z"},
+  {"event": "unlabeled", "actor": {"login": "ada"},
+   "label": {"name": "wip", "color": "#ededed"}, "created_at": "2026-08-20T12:00:00Z"},
+  {"event": "closed", "actor": {"login": "bo"}, "created_at": "2026-08-21T09:00:00Z"},
+  {"event": "reopened", "actor": {"login": "bo"}, "created_at": "2026-08-21T10:00:00Z"},
+  {"event": "assigned", "actor": {"login": "ada"},
+   "assignee": {"login": "cy"}, "created_at": "2026-08-21T11:00:00Z"},
+  {"event": "unassigned", "actor": {"login": "ada"},
+   "assignee": {"login": "cy"}, "created_at": "2026-08-21T12:00:00Z"},
+  {"event": "cross-referenced", "actor": {"login": "ada"}, "created_at": "2026-08-21T13:00:00Z"},
+  {"event": "committed", "created_at": "2026-08-21T14:00:00Z"},
+  {"event": "commented", "id": 555002, "user": {"login": "ada"},
+   "body": "Someone else.", "created_at": "2026-08-22T10:00:00Z"}
+]`
+
+func TestParseGHTimeline(t *testing.T) {
+	entries, raw, err := parseGHTimeline([]byte(timelineFixture), "TrueDaerk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw != 10 {
+		t.Fatalf("raw = %d, want every fixture event counted", raw)
+	}
+	kinds := []string{TimelineComment, TimelineLabeled, TimelineUnlabeled, TimelineClosed,
+		TimelineReopened, TimelineAssigned, TimelineUnassigned, TimelineComment}
+	if len(entries) != len(kinds) {
+		t.Fatalf("entries = %d, want %d (unknown events dropped)", len(entries), len(kinds))
+	}
+	for i, k := range kinds {
+		if entries[i].Kind != k {
+			t.Fatalf("entry %d kind = %q, want %q", i, entries[i].Kind, k)
+		}
+	}
+	c := entries[0]
+	if c.Actor != "TrueDaerk" || c.Body != "Looks **good** to me." || c.ID != "555001" || !c.Own {
+		t.Fatalf("comment = %+v, want the authenticated user's own comment with a stable ID", c)
+	}
+	if entries[7].Own || entries[7].ID != "555002" {
+		t.Fatalf("other comment = %+v, want Own false", entries[7])
+	}
+	if entries[1].Body != "bug" || entries[1].LabelColor != "d73a4a" || entries[1].Actor != "ada" {
+		t.Fatalf("labeled = %+v", entries[1])
+	}
+	if entries[2].LabelColor != "ededed" {
+		t.Fatalf("label color = %q, want the # stripped", entries[2].LabelColor)
+	}
+	if entries[5].Body != "cy" {
+		t.Fatalf("assigned = %+v, want the assignee in Body", entries[5])
+	}
+	if entries[0].Time.IsZero() {
+		t.Fatal("timestamps must parse")
+	}
+}
+
+func TestParseGHTimelineBadJSON(t *testing.T) {
+	if _, _, err := parseGHTimeline([]byte("gh: HTTP 404"), ""); err == nil {
+		t.Fatal("non-JSON must error, not parse")
+	}
+}
+
 func TestPRForIssuePrefersOpen(t *testing.T) {
 	prs := []PR{
 		{Number: 1, State: "CLOSED", HeadRef: "issue/7-first-try"},

@@ -505,14 +505,15 @@ func (m *Model) detailHeader(pal *theme.Palette) string {
 		Render(" #"+strconv.Itoa(is.Number)+" ") + is.Title)
 }
 
-// renderDetail draws the selected issue's rendered body, scrolled.
+// renderDetail draws the selected issue's rendered body and timeline,
+// scrolled.
 func (m *Model) renderDetail(pal *theme.Palette, height int) string {
 	is := m.Selected()
 	if is == nil {
 		m.detail = false
 		return m.renderRows(pal, height)
 	}
-	m.ensureDetail(is)
+	m.ensureDetail(pal, is)
 	m.clampDetail()
 	var b strings.Builder
 	for k := 0; k < height; k++ {
@@ -525,13 +526,17 @@ func (m *Model) renderDetail(pal *theme.Palette, height int) string {
 	return b.String()
 }
 
-// ensureDetail (re)renders the detail lines when the issue or width changed.
-func (m *Model) ensureDetail(is *forge.Issue) {
-	if m.detailFor == is.Number && m.detailW == m.width && m.detailLines != nil {
+// ensureDetail (re)renders the detail lines when the issue, the width or the
+// timeline changed. The scroll only resets on an issue change — a timeline
+// page landing under the reader must not yank the view back to the top.
+func (m *Model) ensureDetail(pal *theme.Palette, is *forge.Issue) {
+	if m.detailFor == is.Number && m.detailW == m.width && m.detailRev == m.tlRev && m.detailLines != nil {
 		return
 	}
-	m.detailFor, m.detailW = is.Number, m.width
-	m.detailTop = 0
+	if m.detailFor != is.Number {
+		m.detailTop = 0
+	}
+	m.detailFor, m.detailW, m.detailRev = is.Number, m.width, m.tlRev
 	// No title heading: the position header above the body already names the
 	// issue, in the pane's own accent rather than glamour's.
 	head := ""
@@ -550,6 +555,7 @@ func (m *Model) ensureDetail(is *forge.Issue) {
 		out = head + body
 	}
 	m.detailLines = strings.Split(strings.TrimRight(out, "\n"), "\n")
+	m.detailLines = append(m.detailLines, m.timelineLines(pal, is)...)
 }
 
 // detailMeta is the author/age/state line above an issue's body, "" when the

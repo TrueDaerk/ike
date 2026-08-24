@@ -82,7 +82,7 @@ func detect(dir string) (Forge, string) {
 	if err != nil {
 		return nil, "no token for the tea login " + login.Name + " (" + err.Error() + ")"
 	}
-	return &teaForge{dir: dir, baseURL: strings.TrimRight(login.URL, "/"), owner: owner, repo: repo, token: token}, ""
+	return &teaForge{dir: dir, baseURL: strings.TrimRight(login.URL, "/"), owner: owner, repo: repo, token: token, user: login.User}, ""
 }
 
 // ResetDetection drops the cached backend for dir (tests, or a changed

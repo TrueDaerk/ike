@@ -1,11 +1,11 @@
 package forge
 
-// gh.go is the GitHub binding of the Forge interface: the issue/PR listing
-// and the capability probe through `gh ... --json` / `gh api`, whose output
-// is stable JSON — never the human rendering. Detection (gh on PATH, a
-// GitHub remote) lives in detect.go; the operations later 0470 sub-issues
-// bring (timeline, mutations, PR actions) are ErrUnsupported stubs here
-// until those land.
+// gh.go is the GitHub binding of the Forge interface: the issue/PR listing,
+// the issue timeline (#2084) and the capability probe through
+// `gh ... --json` / `gh api`, whose output is stable JSON — never the human
+// rendering. Detection (gh on PATH, a GitHub remote) lives in detect.go; the
+// operations later 0470 sub-issues bring (mutations, PR actions) are
+// ErrUnsupported stubs here until those land.
 
 import (
 	"bytes"
@@ -13,7 +13,9 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,9 +28,18 @@ const ghTimeout = 30 * time.Second
 // the newest ones, which is what a work-picker needs.
 const issueLimit = 200
 
+// timelinePageSize is one timeline page (#2084); both bindings use it, so the
+// pane's "load more" row behaves the same whatever the forge.
+const timelinePageSize = 30
+
 // ghForge is the GitHub backend, bound to the repository containing dir.
 type ghForge struct {
 	dir string
+
+	// The authenticated user's login, fetched once for the timeline's
+	// own-comment flag; an empty login (probe failed) just leaves Own false.
+	loginOnce sync.Once
+	login     string
 }
 
 // runCLI executes one forge-CLI command in dir under the given deadline.
@@ -91,8 +102,32 @@ func (g *ghForge) Capabilities() (Capabilities, error) {
 	return parseGHPermissions(out)
 }
 
-func (g *ghForge) Timeline(issue int) ([]TimelineEntry, error) {
-	return nil, unsupported("gh", "issue timeline")
+// Timeline fetches one page of an issue's timeline via
+// `gh api repos/{owner}/{repo}/issues/{n}/timeline` (#2084). GitHub serves
+// the timeline oldest first; comments arrive inline as "commented" events, so
+// one endpoint covers the whole history.
+func (g *ghForge) Timeline(issue, page int) ([]TimelineEntry, bool, error) {
+	out, err := runGH(g.dir, "api",
+		"repos/{owner}/{repo}/issues/"+itoa(issue)+"/timeline?per_page="+itoa(timelinePageSize)+"&page="+itoa(page))
+	if err != nil {
+		return nil, false, err
+	}
+	entries, raw, err := parseGHTimeline(out, g.userLogin())
+	if err != nil {
+		return nil, false, err
+	}
+	return entries, raw == timelinePageSize, nil
+}
+
+// userLogin resolves the authenticated user's login once, "" when the probe
+// fails — the own-comment flag then just stays false.
+func (g *ghForge) userLogin() string {
+	g.loginOnce.Do(func() {
+		if out, err := runGH(g.dir, "api", "user", "--jq", ".login"); err == nil {
+			g.login = strings.TrimSpace(string(out))
+		}
+	})
+	return g.login
 }
 func (g *ghForge) CreateComment(issue int, body string) error {
 	return unsupported("gh", "create comment")
@@ -259,6 +294,65 @@ func checkOutcome(status, conclusion, state string) CheckState {
 	default:
 		return ChecksFailing
 	}
+}
+
+// ghTimelineItem mirrors the fields the pane needs from one GitHub timeline
+// event. "commented" events carry user/body/id; label events a label object;
+// assignment events an assignee; every event an actor and a timestamp.
+type ghTimelineItem struct {
+	Event string `json:"event"`
+	Actor struct {
+		Login string `json:"login"`
+	} `json:"actor"`
+	User struct {
+		Login string `json:"login"`
+	} `json:"user"`
+	Body  string `json:"body"`
+	Label struct {
+		Name  string `json:"name"`
+		Color string `json:"color"`
+	} `json:"label"`
+	Assignee struct {
+		Login string `json:"login"`
+	} `json:"assignee"`
+	CreatedAt string `json:"created_at"`
+	ID        int64  `json:"id"`
+}
+
+// parseGHTimeline decodes one GitHub timeline page into the neutral
+// vocabulary, dropping events outside it (commits, cross-references, …). It
+// returns the raw event count too — the pagination flag counts what the forge
+// sent, not what survived the mapping. login marks own comments.
+func parseGHTimeline(out []byte, login string) ([]TimelineEntry, int, error) {
+	var raw []ghTimelineItem
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, 0, err
+	}
+	var entries []TimelineEntry
+	for _, r := range raw {
+		e := TimelineEntry{Actor: r.Actor.Login, Time: parseTime(r.CreatedAt)}
+		switch r.Event {
+		case "commented":
+			e.Kind = TimelineComment
+			e.Actor = r.User.Login
+			e.Body = r.Body
+			e.ID = strconv.FormatInt(r.ID, 10)
+			e.Own = login != "" && r.User.Login == login
+		case "labeled", "unlabeled":
+			e.Kind = r.Event
+			e.Body = r.Label.Name
+			e.LabelColor = strings.TrimPrefix(r.Label.Color, "#")
+		case "closed", "reopened":
+			e.Kind = r.Event
+		case "assigned", "unassigned":
+			e.Kind = r.Event
+			e.Body = r.Assignee.Login
+		default:
+			continue
+		}
+		entries = append(entries, e)
+	}
+	return entries, len(raw), nil
 }
 
 // worseChecks folds two check states, keeping the more alarming one:

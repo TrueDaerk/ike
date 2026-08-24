@@ -26,16 +26,21 @@ type action struct {
 // from the other.
 func (m *Model) actions() []action {
 	if m.detail && m.tab == TabIssues {
-		return []action{
+		acts := []action{
 			{"esc", "back", "Back to the list", func(m *Model) tea.Cmd { m.detail = false; return nil }},
-			{"ctrl+j", "next issue", "Next issue", func(m *Model) tea.Cmd { m.stepIssue(1); return nil }},
-			{"ctrl+k", "prev issue", "Previous issue", func(m *Model) tea.Cmd { m.stepIssue(-1); return nil }},
+			{"ctrl+j", "next issue", "Next issue", (*Model).nextIssue},
+			{"ctrl+k", "prev issue", "Previous issue", (*Model).prevIssue},
 			{"j/k", "scroll", "Scroll the body", nil},
-			{"s", "start work", "Start work (create the branch)", (*Model).startWork},
-			{"o", "browser", "Open in browser", (*Model).openInBrowser},
-			{"tab", "view", "Switch view (Issues / PRs)", func(m *Model) tea.Cmd { m.switchTab(1); return nil }},
-			{"r", "refresh", "Refresh the listing", (*Model).startRefresh},
 		}
+		if m.tlMore {
+			acts = append(acts, action{"L", "more", "Load more activity", (*Model).loadMoreTimeline})
+		}
+		return append(acts,
+			action{"s", "start work", "Start work (create the branch)", (*Model).startWork},
+			action{"o", "browser", "Open in browser", (*Model).openInBrowser},
+			action{"tab", "view", "Switch view (Issues / PRs)", func(m *Model) tea.Cmd { m.switchTab(1); return nil }},
+			action{"r", "refresh", "Refresh the issue and its activity", (*Model).refreshDetail},
+		)
 	}
 	if m.tab == TabPRs {
 		return []action{

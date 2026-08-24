@@ -5,7 +5,10 @@
 // multi-select label picker, an open/closed/all state filter, sort orders and
 // an optional grouping by label; enter opens the issue as a full-area detail
 // that keeps the list's cursor and scroll and can walk to the next/previous
-// issue without going back. The PR view lists the pull requests full width
+// issue without going back. The detail shows the issue's timeline under the
+// body (#2084): comments rendered as markdown, label/state/assignee changes
+// as compact events, fetched lazily page by page. The PR view lists the pull
+// requests full width
 // (number, title, head branch, CI rollup, review decision). Every action is
 // discoverable through the footer and the action menu.
 //
@@ -227,13 +230,27 @@ type Model struct {
 	ovSaved  map[string]bool
 
 	// Detail view: the selected issue's body rendered through glamour,
-	// re-rendered lazily when the issue or the width changes. The list cursor
-	// and scroll are untouched while it is open, so esc restores them exactly.
+	// re-rendered lazily when the issue, the width or the timeline changes.
+	// The list cursor and scroll are untouched while it is open, so esc
+	// restores them exactly.
 	detail      bool
 	detailFor   int // issue number the lines were rendered for
 	detailW     int // width they were rendered at
+	detailRev   int // tlRev the lines were rendered at
 	detailLines []string
 	detailTop   int
+
+	// Timeline (#2084): the open issue's history, fetched page by page
+	// through the app-injected factory; tlRev bumps on every state change and
+	// invalidates the rendered detail lines.
+	timeline  func(issue, page int) tea.Cmd
+	tl        []forge.TimelineEntry
+	tlFor     int // issue number the entries belong to; 0 = none fetched
+	tlPage    int // last fetched page; 0 = page one still loading (or unfetched)
+	tlMore    bool
+	tlLoading bool
+	tlErr     string
+	tlRev     int
 
 	// Config defaults apply only while the user has not overridden them in
 	// this session, so a live config reload never yanks the view away.
@@ -664,9 +681,11 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "esc", "q", "backspace":
 		m.detail = false
 	case "ctrl+j":
-		m.stepIssue(1)
+		return m.stepIssue(1)
 	case "ctrl+k":
-		m.stepIssue(-1)
+		return m.stepIssue(-1)
+	case "L":
+		return m.loadMoreTimeline()
 	case "j", "down":
 		m.detailTop++
 	case "k", "up":
@@ -686,7 +705,7 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "shift+tab", "ctrl+pgup":
 		m.switchTab(-1)
 	case "r":
-		return m.startRefresh()
+		return m.refreshDetail()
 	case "s":
 		return m.startWork()
 	case "o":
@@ -696,11 +715,22 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// refreshDetail is 'r' inside the detail view: refetch the listing and the
+// open issue's timeline together (#2084).
+func (m *Model) refreshDetail() tea.Cmd {
+	return tea.Batch(m.startRefresh(), m.refetchTimeline())
+}
+
+// nextIssue / prevIssue are the action-menu spellings of the walking chords.
+func (m *Model) nextIssue() tea.Cmd { return m.stepIssue(1) }
+func (m *Model) prevIssue() tea.Cmd { return m.stepIssue(-1) }
+
 // stepIssue walks to the next/previous issue from inside the detail view,
 // moving the list cursor with it so esc still returns to the issue on screen.
-func (m *Model) stepIssue(delta int) {
+// It returns the timeline fetch the newly shown issue needs.
+func (m *Model) stepIssue(delta int) tea.Cmd {
 	if len(m.rows) == 0 {
-		return
+		return nil
 	}
 	cur := m.cursor
 	for i := 0; i < len(m.rows); i++ {
@@ -712,6 +742,7 @@ func (m *Model) stepIssue(delta int) {
 	m.cursor = cur
 	m.clampScroll()
 	m.detailTop = 0
+	return m.PendingTimelineCmd()
 }
 
 // startRefresh re-runs the injected fetch for the current state filter.
@@ -771,14 +802,15 @@ func (m *Model) resetCursors() {
 	m.prCursor, m.prTop = 0, 0
 }
 
-// activate runs the enter action of the active view: the issue detail, or —
-// until #2089 brings the PR detail — the PR's page in the browser.
+// activate runs the enter action of the active view: the issue detail (with
+// its lazy timeline fetch, #2084), or — until #2089 brings the PR detail —
+// the PR's page in the browser.
 func (m *Model) activate() tea.Cmd {
 	if m.tab == TabPRs {
 		return m.openInBrowser()
 	}
 	m.openDetail()
-	return nil
+	return m.PendingTimelineCmd()
 }
 
 // openDetail flips into the detail view for the selected issue.

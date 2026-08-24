@@ -171,3 +171,66 @@ func TestUnsupportedStubs(t *testing.T) {
 		}
 	}
 }
+
+// giteaTimelineFixture is one Gitea timeline page (#2084): typed comment
+// objects — a comment, label add/remove (body "1" / ""), close/reopen,
+// assignment add/remove, and types outside the vocabulary the parser drops.
+const giteaTimelineFixture = `[
+  {"id": 9001, "type": "comment", "body": "First!", "user": {"login": "dev"},
+   "created_at": "2026-08-20T10:00:00Z"},
+  {"id": 9002, "type": "label", "body": "1", "user": {"login": "dev"},
+   "label": {"name": "bug", "color": "ee0701"}, "created_at": "2026-08-20T11:00:00Z"},
+  {"id": 9003, "type": "label", "body": "", "user": {"login": "dev"},
+   "label": {"name": "wip", "color": "#cccccc"}, "created_at": "2026-08-20T12:00:00Z"},
+  {"id": 9004, "type": "close", "user": {"login": "boss"}, "created_at": "2026-08-21T09:00:00Z"},
+  {"id": 9005, "type": "reopen", "user": {"login": "boss"}, "created_at": "2026-08-21T10:00:00Z"},
+  {"id": 9006, "type": "assignees", "user": {"login": "boss"},
+   "assignee": {"login": "dev"}, "created_at": "2026-08-21T11:00:00Z"},
+  {"id": 9007, "type": "assignees", "user": {"login": "boss"},
+   "assignee": {"login": "dev"}, "removed_assignee": true, "created_at": "2026-08-21T12:00:00Z"},
+  {"id": 9008, "type": "commit_ref", "user": {"login": "dev"}, "created_at": "2026-08-21T13:00:00Z"},
+  {"id": 9009, "type": "comment", "body": "By someone else.", "user": {"login": "other"},
+   "created_at": "2026-08-22T10:00:00Z"}
+]`
+
+func TestParseGiteaTimeline(t *testing.T) {
+	entries, raw, err := parseGiteaTimeline([]byte(giteaTimelineFixture), "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw != 9 {
+		t.Fatalf("raw = %d, want every fixture event counted", raw)
+	}
+	kinds := []string{TimelineComment, TimelineLabeled, TimelineUnlabeled, TimelineClosed,
+		TimelineReopened, TimelineAssigned, TimelineUnassigned, TimelineComment}
+	if len(entries) != len(kinds) {
+		t.Fatalf("entries = %d, want %d (unknown types dropped)", len(entries), len(kinds))
+	}
+	for i, k := range kinds {
+		if entries[i].Kind != k {
+			t.Fatalf("entry %d kind = %q, want %q", i, entries[i].Kind, k)
+		}
+	}
+	c := entries[0]
+	if c.Actor != "dev" || c.Body != "First!" || c.ID != "9001" || !c.Own {
+		t.Fatalf("comment = %+v, want the authenticated user's own comment with a stable ID", c)
+	}
+	if entries[7].Own {
+		t.Fatalf("other comment = %+v, want Own false", entries[7])
+	}
+	if entries[1].Body != "bug" || entries[1].LabelColor != "ee0701" {
+		t.Fatalf("labeled = %+v", entries[1])
+	}
+	if entries[2].LabelColor != "cccccc" {
+		t.Fatalf("label color = %q, want the # stripped", entries[2].LabelColor)
+	}
+	if entries[5].Body != "dev" || entries[6].Body != "dev" {
+		t.Fatalf("assignments = %+v / %+v, want the assignee in Body", entries[5], entries[6])
+	}
+}
+
+func TestParseGiteaTimelineBadJSON(t *testing.T) {
+	if _, _, err := parseGiteaTimeline([]byte("<html>login</html>"), ""); err == nil {
+		t.Fatal("non-JSON must error, not parse")
+	}
+}

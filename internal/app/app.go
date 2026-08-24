@@ -4626,9 +4626,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case forge.IssuesMsg:
 		// A finished issue/PR fetch (#1934) lands in the pane; a reveal the
-		// forge event dialog asked for (#2086) runs on the fresh listing.
+		// forge event dialog asked for (#2086) runs on the fresh listing and
+		// may need the revealed issue's timeline (#2084).
 		m.fillIssuesPanel(msg)
-		m.applyForgeReveal()
+		return m, m.applyForgeReveal()
+
+	case forge.TimelineMsg:
+		// One fetched issue-timeline page (#2084) lands in the open detail.
+		m.fillIssuesTimeline(msg)
 		return m, nil
 
 	case forge.EventsMsg:
