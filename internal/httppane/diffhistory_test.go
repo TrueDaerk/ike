@@ -44,3 +44,42 @@ func TestFooterAdvertisesDiff(t *testing.T) {
 		t.Errorf("footer must advertise the diff once two responses are stored:\n%s", view)
 	}
 }
+
+// TestDiffPreviousRunKeyEmitsMsg: "P" asks the host to diff the shown stored
+// response directly against the previous run (#2060) — a shortcut around
+// DiffHistoryMsg's picker.
+func TestDiffPreviousRunKeyEmitsMsg(t *testing.T) {
+	m := New(nil)
+	m.SetSize(80, 20)
+	m.Set("create", sample())
+
+	cmd := m.Update(tea.KeyPressMsg{Code: 'P', Text: "P", Mod: tea.ModShift})
+	if cmd == nil {
+		t.Fatal("P must emit a command")
+	}
+	if _, ok := cmd().(DiffPreviousRunMsg); !ok {
+		t.Fatalf("message type: %T", cmd())
+	}
+}
+
+// TestFooterAdvertisesDiffPreviousRun: the direct shortcut's hint only
+// appears while an earlier run actually exists below the one on show (#2060)
+// — offering it while browsing the oldest entry would open nothing.
+func TestFooterAdvertisesDiffPreviousRun(t *testing.T) {
+	m := New(nil)
+	m.SetSize(160, 20)
+	now := time.Now()
+	m.Set("create", sample())
+	m.SetHistory([]HistoryItem{
+		{Resp: sample(), At: now},
+		{Resp: sample(), At: now.Add(-time.Minute)},
+	})
+	if view := m.View(); !strings.Contains(view, "P diff prev") {
+		t.Errorf("footer must advertise the previous-run diff while a newer entry is shown:\n%s", view)
+	}
+
+	m.showHistory(m.histIdx + 1)
+	if view := m.View(); strings.Contains(view, "P diff prev") {
+		t.Errorf("the oldest entry has no previous run to diff against:\n%s", view)
+	}
+}

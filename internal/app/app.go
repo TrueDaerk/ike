@@ -4165,6 +4165,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openHTTPResponseDiff()
 		return m, nil
 
+	case HTTPDiffPreviousRunMsg:
+		// http.diffPreviousRun (palette, #2060): skip the picker and diff the
+		// shown response directly against the run before it.
+		m.openHTTPPreviousRunDiff()
+		return m, nil
+
+	case httppane.DiffPreviousRunMsg:
+		// "P" in the response pane (#2060): same direct diff, reached without
+		// knowing the command.
+		m.openHTTPPreviousRunDiff()
+		return m, nil
+
 	case DiffHTTPEntriesMsg:
 		// A row of that picker was chosen (#1992): the two stored responses
 		// open in the reusable diff pane, JSON-normalized.

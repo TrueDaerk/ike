@@ -19,6 +19,7 @@ var noCounterpart = map[string]string{
 	"find.openInPanel":      "JetBrains' Open in Find Window is a popup-local chord, not a keymap action",
 	"http.run":              "JetBrains HTTP client runs via context Run, no dedicated keymap action",
 	"http.showResponse":     "IKE-only concept (stored response without dispatch), no JetBrains equivalent",
+	"http.diffPreviousRun":  "IKE-only concept (response history diff, #2060), no JetBrains equivalent",
 	"editor.copyDocPath":    "JetBrains copies file references, not a path inside a JSON/YAML document",
 	"json.jqQueryView":      "IKE-only concept (#2032): the inline jq playground has no JetBrains equivalent",
 	"markdown.preview":      "no default JetBrains keymap action",

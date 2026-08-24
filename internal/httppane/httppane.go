@@ -225,6 +225,14 @@ type SaveBodyMsg struct{}
 // the entry picker on its behalf — the PickRequestMsg arrangement.
 type DiffHistoryMsg struct{}
 
+// DiffPreviousRunMsg asks the host to compare the shown stored response with
+// the one immediately before it in time (#2060), "P" in the focused viewer —
+// a direct shortcut around DiffHistoryMsg's picker for the common case of
+// "what changed since last time". The pane knows neither the history store
+// nor the diff viewer, so the host resolves the previous run and opens the
+// diff on its behalf.
+type DiffPreviousRunMsg struct{}
+
 // resendLabel is the clickable re-send affordance in the pane header (#1832).
 const resendLabel = "⟳ re-send"
 
@@ -578,6 +586,11 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Compare this stored response with another one of the same request
 		// (#1992). Uppercase: "d" is the page-down key.
 		return func() tea.Msg { return DiffHistoryMsg{} }
+	case "P":
+		// Compare this stored response with the previous run of the same
+		// request, no picker (#2060). Uppercase: "p" is unclaimed but the
+		// pane's other diff/copy/save actions are all uppercase single keys.
+		return func() tea.Msg { return DiffPreviousRunMsg{} }
 	case "s":
 		// Keep the scroll position while stepping through history (#1493),
 		// per request; the footer anchor marks the active state.
@@ -1042,9 +1055,14 @@ func (m *Model) footerText() string {
 		} else if len(m.hist) > 1 {
 			s += " · s keep pos"
 		}
-		// Diffing needs a second entry to compare against (#1992).
+		// Diffing needs a second entry to compare against (#1992). The direct
+		// previous-run shortcut (#2060) only makes sense while an earlier
+		// entry actually exists below the shown one.
 		if len(m.hist) > 1 {
 			s += " · D diff"
+			if m.histIdx < len(m.hist)-1 {
+				s += " · P diff prev"
+			}
 		}
 		s += " ·"
 	}
