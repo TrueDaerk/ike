@@ -208,3 +208,28 @@ func TestNavigationOnEmptyPane(t *testing.T) {
 		t.Fatalf("cursor = %d, want 0", m.Cursor())
 	}
 }
+
+// TestSetTitledOverridesHeading covers the #2055 hand-off: a result set tipped
+// in from a palette overlay renders under the caller's heading, and a later
+// find-references run restores the default one.
+func TestSetTitledOverridesHeading(t *testing.T) {
+	m := New(nil)
+	m.SetSize(120, 10)
+	m.SetTitled("Find: foo", []ilsp.Reference{ref("/proj/a.go", 2, 0, "foo()")})
+	if got := m.Title(); !strings.Contains(got, "Find: foo") || !strings.Contains(got, "1 in 1 file") {
+		t.Fatalf("title = %q, want the handed-over heading plus totals", got)
+	}
+	if !strings.Contains(m.View(), "Find: foo") {
+		t.Fatalf("view misses the heading:\n%s", m.View())
+	}
+	// An empty hand-off does not claim "no usages found" — nothing was
+	// searched for.
+	m.SetTitled("Find: none", nil)
+	if v := m.View(); !strings.Contains(v, "(no results)") {
+		t.Fatalf("empty hand-off view:\n%s", v)
+	}
+	m.Set("Foo", []ilsp.Reference{ref("/proj/a.go", 2, 0, "Foo()")}, nil)
+	if got := m.Title(); !strings.Contains(got, "Usages: Foo") {
+		t.Fatalf("title = %q, want the find-references heading back", got)
+	}
+}

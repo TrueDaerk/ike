@@ -350,6 +350,13 @@ var jetbrainsRows = []row{
 	// cmd+alt+f7 is JetBrains' Show Usages; the persistent panel variant of
 	// the alt+f7 popup above.
 	{"cmd+alt+f7", "lsp.referencesPanel", "Find usages (panel)", Editor, "LSP (#1155)"},
+	// JetBrains' "Open in Find Window" (#2055): from search everywhere or the
+	// find-usages popup the current hits move into the persistent bottom
+	// panel. Palette-scoped — the overlay owns the keyboard while it is up —
+	// with cmd+enter as the JetBrains-macOS primary and ctrl+enter as the
+	// chord delivered everywhere (both fold together off macOS).
+	{"cmd+enter", "find.openInPanel", "Open results in Find window", Palette, "Find panel (#2055)"},
+	{"ctrl+enter", "find.openInPanel", "Open results in Find window", Palette, "Find panel (#2055)"},
 	// JetBrains' run-context-configuration chord from the Windows scheme
 	// (ctrl+shift+f10); the macOS ctrl+shift+r would collide with
 	// project.replaceInPath's cmd+shift+r once folded onto Ctrl off macOS.

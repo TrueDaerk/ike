@@ -60,6 +60,15 @@ func (s *SearchAllMode) Prefix() rune { return SearchAllPrefix }
 // Placeholder implements Mode.
 func (s *SearchAllMode) Placeholder() string { return "Search everywhere…" }
 
+// PanelTitle implements PanelMode (#2055): the search-everywhere hits tip into
+// the Find panel under the query that produced them.
+func (s *SearchAllMode) PanelTitle(query string) string {
+	if query == "" {
+		return "Find"
+	}
+	return "Find: " + query
+}
+
 // Results implements Mode. Each source is queried and capped, then the union
 // is ordered by (score band, source tier, score): scores quantised to
 // searchAllScoreBand rank first, the source's position in s.sources breaks

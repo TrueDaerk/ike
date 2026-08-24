@@ -116,6 +116,15 @@ type DigitPicker interface {
 	DigitShortcuts() bool
 }
 
+// PanelMode is an optional Mode extension (#2055): a mode whose listed rows
+// can be tipped out of the transient overlay into the persistent Find panel
+// ("Open in Find Window" in JetBrains). Implementing it enables the
+// find.openInPanel binding while the mode is active; PanelTitle names the
+// resulting panel for the current query body.
+type PanelMode interface {
+	PanelTitle(query string) string
+}
+
 // RunCommandMsg is emitted when a command-mode item is activated. The root model
 // resolves the id against the registry and runs it, keeping the palette free of
 // any command store of its own.

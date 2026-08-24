@@ -1,5 +1,28 @@
 # Log
 
+## 2026-08-24 (Open in Find window, #2055)
+
+- **A popup's hits can now be kept.** `cmd+enter` / `ctrl+enter` in the
+  search-everywhere overlay or the transient find-usages popup tips the
+  currently listed hits into the persistent Usages bottom panel and closes the
+  overlay — JetBrains' "Open in Find Window". The panel keeps them until it is
+  closed, so a result set can be worked through entry by entry instead of
+  vanishing on the first jump.
+- **One panel, two sources.** The Usages tool window is reused rather than a
+  second results pane added: same "locations grouped by file, enter jumps
+  there", and one singleton keeps the layout persistence, the toggle state
+  machine and the mouse handling single-sourced. Only the heading differs —
+  `Find: <query>` vs `Usages: Foo` (`usages.Model.SetTitled`).
+- **Two small seams.** `palette.PanelMode` (opt-in per mode, names the panel)
+  plus `Palette.PanelResults()`, which reports the filtered rows without
+  closing the overlay; `internal/app/find_panel.go` converts rows to locations
+  by their activation message and drops the ones that have none (commands).
+- **A Palette-context binding.** The overlay owns the keyboard, so the keymap
+  layer never sees the key: the overlay branch looks the chord up in the
+  `palette` context itself and runs it only for an allowlisted command
+  (`find.openInPanel`), leaving query typing untouched. It shows in the
+  cheatsheet like any other binding.
+
 ## 2026-08-24 (clipboard history: pane copies, a configurable ring, #2061)
 
 - **Pane copies reach Paste from History**: every host-side copy — the HTTP

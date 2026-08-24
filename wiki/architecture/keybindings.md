@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-08-21T12:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -65,6 +65,16 @@ a different command **per context** without any conflict: the shipped example
 is `ctrl+t`, a new terminal tab (`terminal.newTab`) in the `terminal` context
 and a new empty editor tab (`editor.tab.new`) in the `editor` context, unbound
 everywhere else.
+
+The `palette` context is a special case (#2055): the palette overlay owns the
+keyboard, so a key never reaches the resolver above. The overlay branch of the
+root model's key dispatch therefore looks the chord up in the `palette`
+context itself (`paletteBindingCmd`, `internal/app/find_panel.go`) and runs it
+only when it resolves to a command on a small allowlist — today just
+`find.openInPanel` ("Open in Find window", `cmd+enter` / `ctrl+enter`).
+Everything else falls through to the overlay's own editing keys, so a
+Palette-context binding can never swallow query typing. The bindings appear in
+the cheatsheet like any other context group.
 
 ### Cross-context shadow detection (#1875)
 
@@ -649,6 +659,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `explorer.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
 | `file.move` | `f6` | delivered | `—` | live |
 | `file.rename` | `shift+f6` | delivered | `—` | live |
+| `find.openInPanel` | `cmd+enter` | fragile | `ctrl+enter` | live via ctrl+enter |
 | `http.run` | `ctrl+f9` | fragile | `palette` | live via palette |
 | `http.showResponse` | `cmd+shift+enter` | fragile | `ctrl+shift+f9` | live via ctrl+shift+f9 |
 | `json.jqQueryView` | `ctrl+alt+e` | fragile | `palette / Tools menu` | live via palette / Tools menu |
