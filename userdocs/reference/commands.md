@@ -56,6 +56,7 @@ bring their own.
 | DOM Inspector | `dom.toggle` | — | — | everywhere |
 | Close Tab | `editor.closeTab` | `cmd+w` | — | everywhere |
 | Force Code Insight (Large File) | `editor.forceCodeInsight` | — | — | everywhere |
+| Materialize Buffer to File | `editor.materializeBuffer` | — | — | everywhere |
 | Paste from History | `editor.pasteFromHistory` | `cmd+shift+v` | — | everywhere |
 | Save All | `editor.saveAll` | `cmd+shift+s` | — | everywhere |
 | Treat Buffer as… | `editor.setBufferLanguage` | — | — | everywhere |
