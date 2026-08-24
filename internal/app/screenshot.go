@@ -176,6 +176,6 @@ func (m *Model) screenshotDone(msg screenshotDoneMsg) {
 		m.host.Notify(host.Warn, "screenshot failed: "+msg.Err.Error())
 		return
 	}
-	clipboardWrite(msg.Path)
+	m.copyToClipboard(msg.Path)
 	m.host.Notify(host.Info, "screenshot saved: "+msg.Path+" (path copied)")
 }

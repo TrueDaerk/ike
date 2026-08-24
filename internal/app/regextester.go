@@ -270,7 +270,7 @@ func (m *Model) copyRegexPattern() {
 		return
 	}
 	quoted := regextest.Quote(s.pattern, s.quote)
-	clipboardWrite(quoted)
+	m.copyToClipboard(quoted)
 	s.status = "copied " + s.quote.String() + ": " + quoted
 	m.host.Notify(host.Info, "copied regex as "+s.quote.String()+" literal")
 }

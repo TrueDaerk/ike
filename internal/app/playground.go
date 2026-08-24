@@ -1151,7 +1151,7 @@ func (m *Model) copyPlayResult() {
 		s.status = "nothing to copy — the result is empty"
 		return
 	}
-	clipboardWrite(text)
+	m.copyToClipboard(text)
 	s.status = "copied the result (" + strconv.Itoa(len(s.result.Outputs)) + " value(s))"
 	m.host.Notify(host.Info, "copied the "+s.dialect.Name()+" result")
 }
