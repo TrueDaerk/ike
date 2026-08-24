@@ -467,6 +467,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.searching {
+		if cmd := m.searchCopyKey(msg); cmd != nil {
+			return cmd
+		}
 		m.searchKey(msg)
 		return nil
 	}
@@ -599,6 +602,27 @@ func (m *Model) research() {
 	if m.cur >= len(m.matches) {
 		m.cur = 0
 	}
+}
+
+// searchCopyKey intercepts the copy chord while the "/" prompt is open
+// (#2051): the prompt otherwise swallows every key before the normal copy
+// case in handleKey gets a turn, so a mouse selection made while searching
+// could never reach the clipboard. ctrl+c/cmd+c/super+c are never valid
+// query input, so stealing them here changes nothing about typing; "y"
+// stays a plain query character since it *is* valid input. Returns nil
+// (deferring to searchKey as before) unless a selection exists to copy.
+func (m *Model) searchCopyKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "ctrl+c", "cmd+c", "super+c":
+	default:
+		return nil
+	}
+	if !m.sel.on {
+		return nil
+	}
+	text := m.SelectionText()
+	m.ClearSelection()
+	return copyCmd(text, "selection")
 }
 
 // searchKey handles one key while the "/" prompt is open. esc/enter are
