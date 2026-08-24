@@ -238,6 +238,13 @@ secrets — are documented together, with screenshots, in
 | Scratches section height | `scratch.section_height` | integer (1–30) | `5` | user | Rows the Scratches section shows when expanded (it never grows past its content). Dragging the divider resizes it afterwards, and that height persists with the explorer's session state |
 | Scratches sort order | `scratch.sort` | enum: `name`, `modified` | `name` | user | How the Scratches section orders its rows: by name like the file tree, or by modification time newest first |
 
+### Issues Window
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Default view | `issues.default_tab` | enum: `issues`, `prs` | `issues` | user | Which of the pane's two views the issues window opens on: the issue list, or the pull-request list. tab and shift+tab (and a click on the tab bar) switch between them either way |
+| Default sort order | `issues.default_sort` | enum: `relevance`, `newest`, `oldest`, `updated`, `number` | `relevance` | user | Order both lists open in: "relevance" ranks by fuzzy score while a filter pattern is typed and falls back to newest without one, "newest"/"oldest" order by creation time, "updated" by last activity, "number" by issue number ascending. The a key cycles the order for the open pane without changing this default |
+
 ### Tool Layout
 
 | Setting | Key | Type | Default | Scope | Description |

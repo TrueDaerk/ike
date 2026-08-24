@@ -73,14 +73,12 @@ func (m *Model) openIssuesPanel() tea.Cmd {
 	// Opening the window views the pending forge events (#2086).
 	m.clearForgeUnread()
 	p := m.activeWS().Panes.Get(key).Issues()
-	refresh := forge.RefreshCmd(".")
-	p.SetRefresh(refresh)
+	p.SetRefresh(forge.RefreshFactory("."))
 	m.setFocus(key)
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	if !p.Loaded() {
-		p.MarkLoading()
-		return refresh
+		return p.Refresh()
 	}
 	return nil
 }

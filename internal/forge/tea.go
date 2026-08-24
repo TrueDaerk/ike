@@ -219,7 +219,13 @@ type giteaIssue struct {
 	Title  string `json:"title"`
 	Body   string `json:"body"`
 	URL    string `json:"html_url"`
-	Labels []struct {
+	State  string `json:"state"`
+	User   struct {
+		Login string `json:"login"`
+	} `json:"user"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+	Labels    []struct {
 		Name  string `json:"name"`
 		Color string `json:"color"`
 	} `json:"labels"`
@@ -237,7 +243,13 @@ func parseGiteaIssues(out []byte) ([]Issue, error) {
 	}
 	issues := make([]Issue, 0, len(raw))
 	for _, r := range raw {
-		is := Issue{Number: r.Number, Title: r.Title, Body: r.Body, URL: r.URL}
+		is := Issue{
+			Number: r.Number, Title: r.Title, Body: r.Body, URL: r.URL,
+			State:     strings.ToUpper(r.State),
+			Author:    r.User.Login,
+			CreatedAt: parseTime(r.CreatedAt),
+			UpdatedAt: parseTime(r.UpdatedAt),
+		}
 		for _, l := range r.Labels {
 			is.Labels = append(is.Labels, Label{Name: l.Name, Color: strings.TrimPrefix(l.Color, "#")})
 		}
@@ -259,7 +271,12 @@ type giteaPR struct {
 	Merged   bool   `json:"merged"`
 	MergedAt string `json:"merged_at"`
 	URL      string `json:"html_url"`
-	Head     struct {
+	User     struct {
+		Login string `json:"login"`
+	} `json:"user"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+	Head      struct {
 		Ref string `json:"ref"`
 	} `json:"head"`
 }
@@ -277,7 +294,12 @@ func parseGiteaPRs(out []byte) ([]PR, error) {
 		if r.Merged || (r.MergedAt != "" && r.MergedAt != "null") {
 			state = "MERGED"
 		}
-		prs = append(prs, PR{Number: r.Number, Title: r.Title, State: state, URL: r.URL, HeadRef: r.Head.Ref})
+		prs = append(prs, PR{
+			Number: r.Number, Title: r.Title, State: state, URL: r.URL, HeadRef: r.Head.Ref,
+			Author:    r.User.Login,
+			CreatedAt: parseTime(r.CreatedAt),
+			UpdatedAt: parseTime(r.UpdatedAt),
+		})
 	}
 	return prs, nil
 }

@@ -61,7 +61,7 @@ func runGH(dir string, args ...string) ([]byte, error) {
 func (g *ghForge) Issues(state IssueState) ([]Issue, error) {
 	out, err := runGH(g.dir, "issue", "list", "--state", string(state),
 		"--limit", itoa(issueLimit),
-		"--json", "number,title,body,url,labels,assignees")
+		"--json", "number,title,body,url,state,author,createdAt,updatedAt,labels,assignees")
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (g *ghForge) Issues(state IssueState) ([]Issue, error) {
 func (g *ghForge) PRs() ([]PR, error) {
 	out, err := runGH(g.dir, "pr", "list", "--state", "all",
 		"--limit", itoa(issueLimit),
-		"--json", "number,title,state,url,headRefName,statusCheckRollup")
+		"--json", "number,title,state,url,headRefName,author,reviewDecision,createdAt,updatedAt,statusCheckRollup")
 	if err != nil {
 		return nil, err
 	}
@@ -136,14 +136,34 @@ func parseGHPermissions(out []byte) (Capabilities, error) {
 
 // ghIssue mirrors the fields requested from `gh issue list --json`.
 type ghIssue struct {
-	Number    int     `json:"number"`
-	Title     string  `json:"title"`
-	Body      string  `json:"body"`
-	URL       string  `json:"url"`
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	Body   string `json:"body"`
+	URL    string `json:"url"`
+	State  string `json:"state"`
+	Author struct {
+		Login string `json:"login"`
+	} `json:"author"`
+	CreatedAt string  `json:"createdAt"`
+	UpdatedAt string  `json:"updatedAt"`
 	Labels    []Label `json:"labels"`
 	Assignees []struct {
 		Login string `json:"login"`
 	} `json:"assignees"`
+}
+
+// parseTime reads one RFC 3339 timestamp, the shape both gh's --json output
+// and the Gitea REST responses use; anything unparsable (or absent) yields
+// the zero time, which every consumer renders as an empty age.
+func parseTime(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 // parseIssues decodes one `gh issue list --json` document.
@@ -154,7 +174,14 @@ func parseIssues(out []byte) ([]Issue, error) {
 	}
 	issues := make([]Issue, 0, len(raw))
 	for _, r := range raw {
-		is := Issue{Number: r.Number, Title: r.Title, Body: r.Body, URL: r.URL, Labels: r.Labels}
+		is := Issue{
+			Number: r.Number, Title: r.Title, Body: r.Body, URL: r.URL,
+			State:     strings.ToUpper(r.State),
+			Author:    r.Author.Login,
+			CreatedAt: parseTime(r.CreatedAt),
+			UpdatedAt: parseTime(r.UpdatedAt),
+			Labels:    r.Labels,
+		}
 		for _, a := range r.Assignees {
 			if a.Login != "" {
 				is.Assignees = append(is.Assignees, a.Login)
@@ -174,7 +201,13 @@ type ghPR struct {
 	State   string `json:"state"`
 	URL     string `json:"url"`
 	HeadRef string `json:"headRefName"`
-	Rollup  []struct {
+	Author  struct {
+		Login string `json:"login"`
+	} `json:"author"`
+	Review    string `json:"reviewDecision"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+	Rollup    []struct {
 		Status     string `json:"status"`
 		Conclusion string `json:"conclusion"`
 		State      string `json:"state"`
@@ -190,7 +223,13 @@ func parsePRs(out []byte) ([]PR, error) {
 	}
 	prs := make([]PR, 0, len(raw))
 	for _, r := range raw {
-		pr := PR{Number: r.Number, Title: r.Title, State: r.State, URL: r.URL, HeadRef: r.HeadRef}
+		pr := PR{
+			Number: r.Number, Title: r.Title, State: r.State, URL: r.URL, HeadRef: r.HeadRef,
+			Author:    r.Author.Login,
+			Review:    strings.ToUpper(r.Review),
+			CreatedAt: parseTime(r.CreatedAt),
+			UpdatedAt: parseTime(r.UpdatedAt),
+		}
 		for _, c := range r.Rollup {
 			pr.Checks = worseChecks(pr.Checks, checkOutcome(c.Status, c.Conclusion, c.State))
 		}

@@ -322,6 +322,20 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "scratch.sort", Message: fmt.Sprintf("unknown sort %q, using \"name\"", c.Scratch.Sort)})
 		c.Scratch.Sort = "name"
 	}
+	// Issues window (#2090): both defaults are fixed vocabularies; an unknown
+	// value falls back rather than opening the pane in an undefined state.
+	switch c.Issues.DefaultTab {
+	case "issues", "prs":
+	default:
+		diags = append(diags, Diagnostic{Field: "issues.default_tab", Message: fmt.Sprintf("unknown tab %q, using \"issues\"", c.Issues.DefaultTab)})
+		c.Issues.DefaultTab = "issues"
+	}
+	switch c.Issues.DefaultSort {
+	case "relevance", "newest", "oldest", "updated", "number":
+	default:
+		diags = append(diags, Diagnostic{Field: "issues.default_sort", Message: fmt.Sprintf("unknown sort %q, using \"relevance\"", c.Issues.DefaultSort)})
+		c.Issues.DefaultSort = "relevance"
+	}
 	// Performance HUD (#1999): the refresh interval is also the HUD's own
 	// wake rate, so the lower bound keeps a diagnostic overlay from becoming
 	// the regression it is there to find.

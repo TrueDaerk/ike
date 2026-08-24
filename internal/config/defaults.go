@@ -258,6 +258,14 @@ func defaults() *Config {
 			SectionHeight: 5,
 			Sort:          "name",
 		},
+		Issues: Issues{
+			// The issues window opens on its issue list, ordered the way the
+			// forge listing arrives (newest first) and re-ranked by fuzzy
+			// score while a filter pattern is typed — the pane's behaviour
+			// before the #2090 restructure made the order configurable.
+			DefaultTab:  "issues",
+			DefaultSort: "relevance",
+		},
 		Debug: Debug{
 			InlineValues: true, // paused locals annotate their lines (#1914)
 			PHP: DebugPHP{

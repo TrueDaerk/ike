@@ -829,7 +829,7 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		if ok {
 			// A restored pane re-arms its refresh so 'r' works before any
 			// open-path injection (#1934).
-			reg.Get(key).Issues().SetRefresh(forge.RefreshCmd("."))
+			reg.Get(key).Issues().SetRefresh(forge.RefreshFactory("."))
 		}
 		return key, ok
 	case "usages":

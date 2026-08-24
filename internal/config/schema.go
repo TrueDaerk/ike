@@ -46,6 +46,8 @@ type Config struct {
 	Tests Tests `toml:"tests"`
 	// Scratch holds Scratch Files tool-window behaviour (#1932).
 	Scratch Scratch `toml:"scratch"`
+	// Issues holds the forge Issues tool-window's defaults (#2090).
+	Issues Issues `toml:"issues"`
 	// Debug holds debugger behaviour (0360, #823).
 	Debug Debug `toml:"debug"`
 	// Tools holds user-defined TUI tool panes (#741).
@@ -324,6 +326,18 @@ type Scratch struct {
 	Sort          string `toml:"sort"`
 	Panel         bool   `toml:"panel"`
 	PanelHeight   int    `toml:"panel_height"`
+}
+
+// Issues holds the forge Issues tool window's opening defaults (#2090).
+// DefaultTab selects which of the pane's two views it opens on ("issues" or
+// "prs"); DefaultSort is the list order both views start in ("relevance" —
+// best fuzzy match while filtering, newest otherwise — "newest", "oldest",
+// "updated" or "number"). Both only seed a freshly opened pane: switching the
+// tab or the sort order by hand wins for the rest of the session, so a live
+// config reload never yanks the view away.
+type Issues struct {
+	DefaultTab  string `toml:"default_tab"`
+	DefaultSort string `toml:"default_sort"`
 }
 
 // Todo holds the comment-tag index settings (#61). Patterns is the list of tag

@@ -282,6 +282,8 @@ func (c *Config) Flat() map[string]string {
 	put("scratch.section", c.Scratch.Section)
 	put("scratch.section_height", c.Scratch.SectionHeight)
 	put("scratch.sort", c.Scratch.Sort)
+	put("issues.default_tab", c.Issues.DefaultTab)
+	put("issues.default_sort", c.Issues.DefaultSort)
 
 	put("tools.layout.template", strings.Join(c.Tools.Layout.Template, ","))
 	put("tools.layout.assign", strings.Join(c.Tools.Layout.Assign, ","))
