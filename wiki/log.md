@@ -27,6 +27,7 @@
   (Dockerfile), which has no extension to write a file under.
 - `intention.Context` grew one precomputed fact, `LangExt`, and the
   `hasText()` probe both entries gate on.
+
 ## 2026-08-24 (opt as alt on macOS: alt chords survive the terminal, #2064)
 
 - **The modifier can no longer be masked by the text.** bubbletea's
