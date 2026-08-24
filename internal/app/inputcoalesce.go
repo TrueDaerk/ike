@@ -194,7 +194,7 @@ func (c *MouseCoalescer) flush() {
 // keyboard right now — mirroring the guard chain in the KeyPressMsg handler. When
 // true, a paste is not routed into the (hidden) editor/terminal below.
 func (m Model) overlayCapturesKeyboard() bool {
-	return m.settings.IsOpen() || (m.menuEnabled() && m.menu.IsOpen()) ||
+	return m.settings.IsOpen() || m.keyDoctor.IsOpen() || (m.menuEnabled() && m.menu.IsOpen()) ||
 		m.finder.IsOpen() || m.todo.IsOpen() || m.undoTree.IsOpen() ||
 		m.callhier.IsOpen() || m.typehier.IsOpen() || m.palette.IsOpen() ||
 		m.floats.IsOpen() || m.recoveryOpen() || m.onboardingOpen() ||

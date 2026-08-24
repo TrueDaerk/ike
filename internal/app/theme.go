@@ -139,6 +139,7 @@ func (m *Model) applyTheme(p *theme.Palette) {
 	}
 	m.palette.SetPalette(p)
 	m.finder.SetPalette(p)
+	m.keyDoctor.SetPalette(p)
 	m.floats.SetPalette(p)
 	m.help.SetPalette(p)
 	m.menu.SetPalette(p)

@@ -527,6 +527,47 @@ also enables mouse reporting (#816), so the `mouse-back` / `mouse-forward`
 targets are answered by clicking those buttons — a terminal that does not
 report SGR extended buttons 4/5 leaves them `missing`.
 
+### In-app keymap doctor (#2080)
+
+The probe also runs inside a live session: the `keymap.doctor` command
+(palette, or `p` on the settings Keymap page) opens a full-screen overlay
+(`internal/keydoctor`) over the same target set. The matching engine is
+shared with the binary (`keymap.ProbeSession` in
+`internal/keymap/probesession.go`): direct hits, the shifted-chord collapse
+rule, mouse nav buttons via `FromMouseButton`. While the overlay is open the
+root model hands it every raw `tea.KeyPressMsg` (and mouse press) **before**
+toast dismissal, overlay paste and keymap resolution — first guard in the
+key arm — so probing sees exactly what the terminal delivers. Unlike
+`cmd/keyprobe`, the in-app run must not flip
+`KeyboardEnhancements.ReportEventTypes` on the app view (#622,
+`TestViewDoesNotRequestEventTypes`); it probes whatever the app's normal
+keyboard mode receives, which is precisely the reality the bindings live in.
+
+Controls: a computed free `ctrl+letter` (normally `ctrl+n` — picked to never
+collide with a target) skips the highlighted pending chord (skipped chords
+get **no verdict**), `ctrl+d`/`esc` end probing into a summary, where
+`enter`/`y` saves, `d`/`n` discards without touching the store, and `esc`
+resumes probing.
+
+A saved run persists as a **per-terminal override set** in
+`keyprobe.json` under the config dir (`$IKE_CONFIG_DIR`, else `~/.ike`) —
+`keymap.ProbeStore` in `internal/keymap/probestore.go`, keyed by
+`keymap.TerminalID`: `tmux` when `$TMUX` is set (tmux's chord rewriting is
+its own reality, whatever emulator hosts it), else `$TERM_PROGRAM`, else
+`$TERM`. On startup the running terminal's verdicts install via
+`SetProbeVerdicts` before the first table build; `Classify`,
+`classifyKey` and `ReachabilityNote` consult them **ahead of** the static
+rules and the hand-pinned overrides — a chord that probed delivered
+classifies delivered however the table fears, one that probed missing
+classifies fragile with the note "probed missing in this terminal
+(arrives as `<got>`)". Since `Defaults` derives every binding's `Fragile`
+flag from `Classify`, the config reload a save triggers re-derives the
+settings-list ⚠ marks and the help cheatsheet from probed truth. A default
+whose chord probed missing is flagged `✗ probed missing` in the keymap
+settings list. Stored runs are viewable and clearable in the Keymap page's
+"Keymap Doctor" sub-panel; a `cmd/keyprobe` capture can feed the same store
+through `ParseProbeReport`.
+
 Ground truth recorded 2026-07 (tmux 3.x on macOS, client announcing the Kitty
 protocol):
 

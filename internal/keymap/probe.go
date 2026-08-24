@@ -13,13 +13,14 @@ import (
 // chord, and ParseProbeReport reads them back so a captured run can be turned
 // into reachability overrides (or asserted in tests).
 
-// ProbeResult is one chord's outcome in a probe run.
+// ProbeResult is one chord's outcome in a probe run. The JSON tags are the
+// probe store's on-disk shape (#2080).
 type ProbeResult struct {
-	Chord     string
-	Delivered bool
+	Chord     string `json:"chord"`
+	Delivered bool   `json:"delivered"`
 	// Got is what the terminal actually sent when it differs from the chord
 	// (e.g. ctrl+shift+z arriving as ctrl+z) — the collapse evidence.
-	Got string
+	Got string `json:"got,omitempty"`
 }
 
 // probePrefix marks report lines; anything else in the output is UI noise.

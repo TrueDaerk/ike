@@ -49,6 +49,7 @@ import (
 	"ike/internal/esq"
 	"ike/internal/explorer"
 	"ike/internal/finder"
+	"ike/internal/keydoctor"
 	"ike/internal/forge"
 	"ike/internal/format"
 	"ike/internal/ghissues"
@@ -611,6 +612,9 @@ type Model struct {
 	// streaming scan service it drives.
 	finder   *finder.Model
 	searcher *search.Service
+	// keyDoctor is the in-app keymap doctor overlay (#2080): the terminal
+	// reality probe run inside the session, ahead of keymap resolution.
+	keyDoctor *keydoctor.Model
 	// todo is the TODO/FIXME index overlay (#61); todoSearch is its own scan
 	// service — separate from searcher so the index and the finder never cancel
 	// each other, with results wrapped in todoindex.ScanMsg so the finder can
@@ -1055,6 +1059,10 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 			regs.SetHistoryCap(n)
 		}
 	}
+	// Per-terminal probe verdicts (#2080) install before the first
+	// buildKeymap below: Defaults derives every binding's Fragile flag from
+	// Classify at table-build time, so probed truth has to be in place first.
+	keymap.SetProbeVerdicts(keymap.LoadProbeStore(keymap.ProbeStorePath()).Results(keymap.TerminalID(os.Getenv)))
 	m := Model{
 		cmdUsage:        cmdUsage,
 		fileUsage:       fileUsage,
@@ -1132,6 +1140,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.searcher = search.New(m.host.Send)
 	m.finder = finder.New(m.searcher)
 	m.finder.SetPalette(themePal)
+	m.keyDoctor = keydoctor.New()
+	m.keyDoctor.SetPalette(themePal)
 	m.finder.SetHistories(m.qhist) // persistent query recall (#1171)
 	m.finder.SetDisplayPath(displayPath)
 	m.probStore = problems.NewStore()
@@ -1165,7 +1175,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		Title:  "File Associations",
 		Custom: settings.NewAssocPage(m.cfgOpts),
 	})
-	pages = append(pages, settings.Page{Section: "TOOLS", Title: "Keymap", Custom: settings.NewKeymapPage(m.cfgOpts, func(id string) bool {
+	keymapPage := settings.NewKeymapPage(m.cfgOpts, func(id string) bool {
 		_, ok := reg.Command(id)
 		return ok
 	}, func() []settings.CommandEntry {
@@ -1178,7 +1188,14 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 			out[i] = settings.CommandEntry{ID: c.ID, Title: c.Title}
 		}
 		return out
-	})})
+	})
+	// The keymap doctor launcher (#2080): the page's sub-panel dispatches
+	// keymap.doctor; the handler closes the settings panel and opens the
+	// full-screen probe overlay.
+	keymapPage.SetDoctorLaunch(func() tea.Cmd {
+		return func() tea.Msg { return KeymapDoctorMsg{} }
+	})
+	pages = append(pages, settings.Page{Section: "TOOLS", Title: "Keymap", Custom: keymapPage})
 	// The [[tools.custom]] list editor (#755): custom TUI tool panes (#741).
 	pages = append(pages, settings.Page{Title: "Tools", Custom: settings.NewToolsPage(m.cfgOpts)})
 	// The [[debug.php.path_mappings]] list editor (#832): the PHP listen
@@ -3374,6 +3391,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.floats.SetSize(m.width, m.height)
 		m.palette.SetSize(m.width, m.height)
 		m.finder.SetSize(m.width, m.height)
+		m.keyDoctor.SetSize(m.width, m.height)
 		m.todo.SetSize(m.width, m.height)
 		m.callhier.SetSize(m.width, m.height)
 		m.typehier.SetSize(m.width, m.height)
@@ -3400,6 +3418,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.keys.Reset()
 			m.clearWhichKey()
 		}
+		// The keymap doctor (#2080) probes the mouse nav buttons like chords;
+		// every other press is swallowed — the panes below are hidden.
+		if m.keyDoctor.IsOpen() {
+			if k, isNav := keymap.FromMouseButton(msg.Button); isNav {
+				m.keyDoctor.RecordKey(k)
+			}
+			return m, nil
+		}
 		// The dedicated back/forward buttons (#816) resolve through the
 		// keymap as synthetic chords — rebindable like keys, default
 		// nav.back / nav.forward — regardless of the hovered pane. Unbound
@@ -3422,6 +3448,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mousePress})
 	case tea.MouseReleaseMsg:
+		if m.keyDoctor.IsOpen() {
+			return m, nil // the press was probe evidence; nothing below may react
+		}
 		if _, isNav := mouseChordKey(msg.Button); isNav {
 			return m, nil // the press acted; the release must not leak into panes
 		}
@@ -3756,6 +3785,39 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// palette.keymapHelp (f1, cmd+k cmd+s / palette): the cheatsheet overlay.
 		m.openHelp()
 		return m, nil
+
+	case KeymapDoctorMsg:
+		// keymap.doctor (palette / settings): the in-app probe overlay
+		// (#2080). The settings panel closes first — the doctor is
+		// full-screen and must own every raw key.
+		if m.settings.IsOpen() {
+			m.settings.Close()
+		}
+		m.keyDoctor.SetSize(m.width, m.height)
+		m.keyDoctor.Open(keymap.TerminalID(os.Getenv))
+		return m, nil
+
+	case keydoctor.ResultMsg:
+		// A finished doctor run (#2080): a saved run becomes this terminal's
+		// stored override set and installs immediately; the config reload
+		// rebuilds the binding table so every Fragile flag re-derives from
+		// the probed truth. A discarded run changes nothing.
+		if !msg.Save {
+			return m, nil
+		}
+		store := keymap.LoadProbeStore(keymap.ProbeStorePath())
+		store.Set(msg.Terminal, time.Now().UTC().Format(time.RFC3339), msg.Results)
+		if err := store.Save(keymap.ProbeStorePath()); err != nil {
+			m.host.Notify(host.Warn, "keymap doctor: saving probe results: "+err.Error())
+			return m, nil
+		}
+		keymap.SetProbeVerdicts(store.Results(keymap.TerminalID(os.Getenv)))
+		m.host.Notify(host.Info, "keymap doctor: saved probe results for "+msg.Terminal)
+		opts := m.cfgOpts
+		return m, func() tea.Msg {
+			cfg, diags := config.Load(opts)
+			return config.ConfigReloadedMsg{Config: cfg, Diags: diags}
+		}
 
 	case ShowWelcomeTourMsg:
 		// help.welcomeTour (palette): the paged welcome tour (#657).
@@ -6196,6 +6258,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// for keys the app consumes before the editor's own dismissHover
 		// would see them.
 		m.cancelMouseHover()
+		// The keymap doctor (#2080) outranks everything: probing only means
+		// anything if the overlay sees the raw key before any other consumer
+		// — toast dismissal, overlay paste, keymap resolution — touches it.
+		if m.keyDoctor.IsOpen() {
+			return m, m.keyDoctor.Update(msg)
+		}
 		// Esc dismisses persistent error toasts but keeps its normal meaning
 		// (pass-through) so it never costs an extra press elsewhere.
 		if msg.Code == tea.KeyEscape {
@@ -10313,6 +10381,8 @@ func (m Model) render() string {
 	}
 	result := base
 	switch {
+	case m.keyDoctor.IsOpen():
+		result = overlay.Center(base, m.keyDoctor.View(), m.width, m.height)
 	case m.finder.IsOpen():
 		result = overlay.Center(base, m.finder.View(), m.width, m.height)
 	case m.todo.IsOpen():

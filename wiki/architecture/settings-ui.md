@@ -284,7 +284,13 @@ every key while focused — verbatim during chord capture and while the `/`
 filter input is open, #531). See
 [Keybindings](./keybindings.md) for the full editor behavior: effective-table
 listing with layer badges and blocked/fragile flags, capture-based rebinding
-with conflict confirmation, unbind and reset-to-preset.
+with conflict confirmation, unbind and reset-to-preset. `p` opens the
+**Keymap Doctor** sub-panel (#2080): stored per-terminal probe runs are
+listed (missing chords with their collapse evidence) and clearable, and
+"Run Probe" launches the full-screen probe overlay — the settings panel
+closes first, since the doctor must own every raw key. A default whose
+chord probed missing in this terminal reads `✗ probed missing` in the list,
+ahead of the generic fragility ⚠.
 
 ## Toolchain page (#94)
 
