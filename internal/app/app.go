@@ -6597,6 +6597,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch keys {
 		case "ctrl+c":
+			// A live selection in the focused pane outranks the quit chord
+			// (#2062). The response pane advertises ctrl+c as its copy key
+			// (#1266), and on a platform without a Cmd key that is the only
+			// copy chord it has — quitting the IDE instead is the worst
+			// possible reading of the key. Without a selection ctrl+c keeps
+			// its global meaning.
+			if m.paneSelectionCopy() {
+				return m.routeKey(msg)
+			}
 			// Quit routes through the unsaved-changes guard (#287) so a
 			// dirty buffer prompts instead of being dropped.
 			return m.guardedQuit()
@@ -7245,6 +7254,21 @@ func (m Model) explorerCapturing() bool {
 func (m Model) dataPaneFocused() bool {
 	inst := m.focusedContent()
 	return inst != nil && (inst.Kind() == pane.KindData || inst.Kind() == pane.KindES)
+}
+
+// paneSelectionCopy reports whether the focused pane holds a live text
+// selection its own copy key would put on the clipboard (#2062), so a chord
+// the shell would otherwise claim has to be routed into the pane instead.
+// Only the HTTP response pane (#1266) qualifies here: the editor reaches
+// editor.copy through the keymap layer above, and a focused terminal — the
+// other selectable surface — is handled before the shell dispatch ever runs.
+func (m Model) paneSelectionCopy() bool {
+	inst := m.focusedContent()
+	if inst == nil || inst.Kind() != pane.KindHTTP {
+		return false
+	}
+	p := inst.HTTP()
+	return p != nil && p.HasSelection()
 }
 
 // explorerPromptOpen reports whether the focused explorer has a modal prompt

@@ -1,5 +1,46 @@
 # Log
 
+## 2026-08-24 (copy-consistency audit across selectable panes, #2062)
+
+- **The audit.** #2051 fixed one instance of a general shape: a state that
+  captures keys sits in front of the copy key, so a selection the user can
+  see cannot be copied. Every surface where text can be selected was walked
+  state by state — the editor (mouse and visual selections, in insert mode,
+  on the `/` line, under the find/replace panel, the peek popup, the `:s///c`
+  confirmation), the terminal pane in all four of its shapes (live, finished,
+  popup box, floating panel) with its scrollback search open, the response
+  pane, and the playground's substitute result buffer.
+- **Editor and terminal came out clean, for structural reasons worth
+  naming.** The editor never loses the chord because `cmd+c` is a *modified*
+  chord: the keymap layer runs ahead of pane dispatch for those even while an
+  editor captures text, and it dispatches `editor.copy` as an `ActionMsg`,
+  which bypasses the prompt handlers inside the editor entirely. The terminal
+  never loses it because the app reserves `cmd+c` over a live selection
+  *before* routing into the pane, so its all-consuming scrollback search
+  cannot see the key. Both are now pinned by tests rather than left implicit.
+- **Three real gaps, all the #2051 shape.** `ctrl+c` over a selection in the
+  response pane hit the shell's quit binding and quit the IDE — the worst of
+  the three, and on a platform without a Cmd key it meant the pane's
+  advertised copy key was *only* reachable as a quit. A half-typed `z` fold
+  sequence in the same pane swallowed the chord for one keystroke. And the
+  playground's query line swallowed it while a selection sat visible in the
+  result buffer above.
+- **One rule, applied three times.** Reserve the modified chord ahead of the
+  capturing state, gated on there actually being something to copy, and leave
+  the bare keys alone — `y` is query text inside a prompt, `zy` is the fold
+  copy, and `ctrl+c` still quits when no selection is live. `httppane` grew
+  `copyChord`/`copyKeyCmd` so every state that catches the chord means the
+  same thing by it.
+- **The DOM inspector got the chord it never had.** Its copy actions are the
+  bare `c`/`Y`, both valid selector input, so the selector prompt swallowed
+  them with the target node still highlighted. `cmd+c` now aliases `c` and is
+  the one key that prompt does not consume. `ctrl+c` deliberately stays the
+  global quit there: the tree has no text selection to protect.
+- **Left for their own issues.** The diff and merge views have no text
+  selection and no copy key at all (a selection model like the response
+  pane's is a feature, not an audit fix), and the Problems/Usages list panels
+  cannot copy their highlighted row.
+
 ## 2026-08-24 (HTTP: copy as curl, save response body, #2059)
 
 - **The shown exchange has two exits now.** `C` in the response pane (or

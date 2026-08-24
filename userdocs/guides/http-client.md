@@ -397,7 +397,7 @@ highlighted, binary bodies collapsed to a notice.
 | `$` | Jump to the right edge |
 | `/`, ++ctrl+f++ / ++cmd+f++ | Search the whole view — status line, headers and body |
 | `n` / `N` | Next / previous match, wrapping |
-| `y` | Copy the selection, or the whole body when there is none |
+| `y`, ++ctrl+c++ / ++cmd+c++ | Copy the selection, or the whole body when there is none |
 | `Y` | Copy the status line plus headers |
 | `h` / `l`, ++left++ / ++right++ | Older / newer response for this request |
 | ++ctrl+r++ | Send this response's request again, unchanged |
@@ -425,6 +425,11 @@ double click for a word (ids and dotted tokens select whole), triple click for
 a line. What gets copied is what you see, so a pretty-printed JSON body pastes
 as it reads. **Copy HTTP Response Body** and **Copy HTTP Response Headers** do
 the same from the palette.
+
+The copy chord always works, whatever else the pane is in the middle of: with
+the search prompt open, after a `z` that is waiting for its fold key, and —
+over a live selection — instead of ++ctrl+c++'s usual "quit IKE". `y` is the
+exception, because inside the search prompt it is just a letter you typed.
 
 ### Copying the shown request as curl
 

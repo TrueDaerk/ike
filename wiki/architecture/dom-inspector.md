@@ -56,7 +56,11 @@ re-matches on every keystroke: match rows highlight, the header shows
 instead of matches. `n`/`N` step the current match (wrapping), select its row
 and jump the editor. `c` copies the node's `SelectorPath`, `Y` its outer
 HTML — both via `CopyMsg`, which the root model puts on the system clipboard
-with a toast.
+with a toast. `cmd+c` aliases `c`, and it is the one key the selector line
+does *not* swallow (#2062): the node the copy acts on stays highlighted
+behind the prompt, while `c`/`Y` remain plain selector input there. `ctrl+c`
+is deliberately not an alias — the tree has no text selection to protect, so
+that chord keeps its global quit meaning.
 
 ## App wiring (internal/app/dom_panel.go)
 

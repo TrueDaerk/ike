@@ -281,6 +281,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	if m.selEditing {
+		// The copy chord outranks the selector prompt (#2062): the node the
+		// copy acts on stays highlighted behind the prompt, so swallowing
+		// the chord would put a visible target out of reach — the response
+		// pane's #2051. The bare keys cannot be reserved the same way: "c"
+		// and "Y" are valid selector input, the chord never is.
+		if copyChord(key) {
+			return m.copySelectorPath()
+		}
 		return m.selectorKey(key)
 	}
 	// Shared list semantics (#1666): steps wrap, page jumps clamp.
@@ -308,7 +316,24 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case "Y":
 		return m.copyOuterHTML()
 	}
+	if copyChord(key) {
+		// The muscle-memory copy chord aliases "c" (#2062), so the pane
+		// answers the shortcut every other selectable surface answers.
+		return m.copySelectorPath()
+	}
 	return nil
+}
+
+// copyChord reports whether key is the pane's modified copy chord. ctrl+c is
+// deliberately absent: the tree has no text selection to protect, so the key
+// keeps its global quit meaning here (#2062) — unlike in the response pane,
+// where a live selection claims it.
+func copyChord(key tea.KeyPressMsg) bool {
+	switch key.String() {
+	case "cmd+c", "super+c":
+		return true
+	}
+	return false
 }
 
 // selectorKey edits the selector input; every change re-matches live.

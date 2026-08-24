@@ -498,6 +498,14 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if m.pendingZ {
 		m.pendingZ = false
+		// The copy chord outranks a half-typed fold sequence (#2062): "z"
+		// followed by cmd+c is no fold command, so swallowing it would drop
+		// a live selection for a keystroke the user never meant as a fold.
+		// Bare "y" stays with foldKey — "zy" copies the target fold (#1787),
+		// a copy either way.
+		if copyChord(msg) {
+			return m.copyKeyCmd()
+		}
 		return m.foldKey(msg.String())
 	}
 	switch msg.String() {
@@ -519,14 +527,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.clearSearch()
 		m.ClearSelection()
 	case "y", "ctrl+c", "cmd+c", "super+c":
-		// Copy the selection, or the whole body when nothing is selected —
-		// the common case is "give me this response" (#1266).
-		if m.sel.on {
-			text := m.SelectionText()
-			m.ClearSelection()
-			return copyCmd(text, "selection")
-		}
-		return copyCmd(m.BodyText(), "response body")
+		return m.copyKeyCmd()
 	case "Y":
 		return copyCmd(m.HeadersText(), "response headers")
 	case "x":
@@ -644,17 +645,35 @@ func (m *Model) research() {
 // stays a plain query character since it *is* valid input. Returns nil
 // (deferring to searchKey as before) unless a selection exists to copy.
 func (m *Model) searchCopyKey(msg tea.KeyPressMsg) tea.Cmd {
+	if !copyChord(msg) || !m.sel.on {
+		return nil
+	}
+	return m.copyKeyCmd()
+}
+
+// copyChord reports whether msg is one of the pane's copy chords. Bare "y" is
+// deliberately not one of them: it is the copy *key* at rest but valid text
+// input inside a prompt, so only the modified chords can be reserved ahead of
+// a capturing state (#2051, #2062).
+func copyChord(msg tea.KeyPressMsg) bool {
 	switch msg.String() {
 	case "ctrl+c", "cmd+c", "super+c":
-	default:
-		return nil
+		return true
 	}
-	if !m.sel.on {
-		return nil
+	return false
+}
+
+// copyKeyCmd is what the copy key does: the selection when there is one, else
+// the whole body — the common case is "give me this response" (#1266). Every
+// state that reserves the chord shares it, so the key means the same thing
+// wherever it is caught.
+func (m *Model) copyKeyCmd() tea.Cmd {
+	if m.sel.on {
+		text := m.SelectionText()
+		m.ClearSelection()
+		return copyCmd(text, "selection")
 	}
-	text := m.SelectionText()
-	m.ClearSelection()
-	return copyCmd(text, "selection")
+	return copyCmd(m.BodyText(), "response body")
 }
 
 // searchKey handles one key while the "/" prompt is open. esc/enter are
