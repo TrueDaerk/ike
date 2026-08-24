@@ -481,6 +481,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.importOpenAPI", "Import OpenAPI Spec…", ImportOpenAPIMsg{}),
 			appCommand("http.importCurl", "Import curl Command…", ImportCurlMsg{}),
 			appCommand("http.copyAsCurl", "Copy HTTP Request as curl", HTTPCopyAsCurlMsg{}),
+			appCommand("http.copyShownAsCurl", "Copy Shown HTTP Request as curl", HTTPCopyShownAsCurlMsg{}),
+			appCommand("http.saveResponse", "Save HTTP Response Body to File…", HTTPSaveResponseMsg{}),
 			appCommand("http.insertCurlAsRequest", "Insert curl as HTTP Request", InsertCurlAsRequestMsg{}),
 			appCommand("http.cancel", "Cancel Running HTTP Request", HTTPCancelMsg{}),
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),

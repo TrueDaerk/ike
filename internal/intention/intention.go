@@ -66,6 +66,10 @@ type Context struct {
 	HTTPResponseBody    bool
 	HTTPResponseHeaders bool
 	HTTPResendable      bool
+	// HTTPResponseSaveable reports that the shown response has raw body bytes
+	// to write to a file (#2059) — true for a binary body too, which has no
+	// text to copy but is the very case the file export exists for.
+	HTTPResponseSaveable bool
 	// HTTPEnvironments reports that an http-client.env.json (or its private
 	// twin) next to the buffer defines at least one environment, which is
 	// all http.selectEnvironment has to offer.
