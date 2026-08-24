@@ -4509,6 +4509,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// usages.toggle (#1155): same state machine for the Usages pane.
 		m.toggleUsagesPanel()
 		return m, nil
+	case OpenInFindPanelMsg:
+		// find.openInPanel (#2055): tip the open overlay's hits into the
+		// persistent panel — "Open in Find Window".
+		m.openInFindPanel()
+		return m, nil
 	case StructureToggleMsg:
 		// structure.toggle (#1025): same state machine for the Structure
 		// tool window; the Update wrapper's sync issues the first refresh.
@@ -6178,6 +6183,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.typehier.Update(msg)
 		}
 		if m.palette.IsOpen() {
+			// Palette-context bindings (#2055) resolve here: the overlay
+			// owns the keyboard, so the keymap layer further down never
+			// sees the key.
+			if cmd, handled := m.paletteBindingCmd(msg); handled {
+				return m, cmd
+			}
 			cmd := m.palette.Update(msg)
 			if !m.palette.IsOpen() && cmd == nil && m.diffPick != 0 {
 				// The picker was dismissed mid diff.files flow (#60): abandon
