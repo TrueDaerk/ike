@@ -201,6 +201,15 @@ Active when a diff pane has focus.
 | Next change (diff) | `f7` | `f7` | `diff.nextChange` |
 | Previous change (diff) | `shift+f7` | `shift+f7` | `diff.prevChange` |
 
+## Palette
+
+Active while the command palette is open.
+
+| Action | macOS | Linux / Windows | Command |
+|---|---|---|---|
+| Open results in Find window | `cmd+enter` | `ctrl+enter` | `find.openInPanel` |
+| Open results in Find window | `ctrl+enter` | `ctrl+enter` | `find.openInPanel` |
+
 ## Rebinding
 
 Bindings live under `[keymap.bindings]` in `settings.toml`, keyed by chord;

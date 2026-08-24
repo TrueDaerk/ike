@@ -89,6 +89,7 @@ bring their own.
 | Open File… | `file.openPath` | — | — | everywhere |
 | Rename File | `file.rename` | `shift+f6` | — | everywhere |
 | Show Timeline | `file.timeline` | — | — | everywhere |
+| Open Results in Find Window | `find.openInPanel` | `cmd+enter` | — | everywhere |
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
 | Cancel Running HTTP Request | `http.cancel` | — | — | everywhere |
 | Copy HTTP Request as curl | `http.copyAsCurl` | — | — | everywhere |
