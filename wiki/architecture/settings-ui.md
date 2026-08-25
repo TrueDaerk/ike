@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -216,6 +216,13 @@ any entry whose key the typed schema does not expose (no dead keys).
 - **Backup** — crash recovery on/off (`backup.enable`; disabling purges existing
   snapshots), snapshot debounce (`backup.debounce_ms`), snapshot max age
   (`backup.max_age_days`) (#167, see [crash recovery](./crash-recovery.md)).
+- **Forge** (#2085) — `forge.poll_interval_seconds`, how often the code forge
+  is re-read in the background (default 20s, `0` off). Its valid set has a
+  hole — 0, then 10 and up — so it carries the `Entry.ValidateInt` hook: a
+  typed value inside the hole is **rejected in the form** naming the floor
+  (the config validator has to be lenient and snaps instead), while the
+  steppers jump the hole rather than stopping in it. See
+  [Forge Layer](./forge.md).
 - **Terminal** — the shell override (#1663), command auto-suggest, scrollback.
 - **Notifications** — toast timeout, severity floor.
 - **TODO Index** (#1663) — `todo.patterns`, the tag words the project scan

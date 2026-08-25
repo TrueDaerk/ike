@@ -249,6 +249,10 @@ type Model struct {
 	// refresh scheduling, shared by pointer across value-model copies. A nil
 	// snapshot means "not a git repository".
 	vcs *vcsState
+	// forgePoll is the background forge poll service (#2085): one poller per
+	// workspace root, shared by pointer across value-model copies like vcs.
+	// Nil in bare test models — every accessor is nil-safe.
+	forgePoll *forgePollState
 	// watcher is the external-file-change service (Roadmap 0140). It is
 	// constructed with the model (so save epochs record from the start) but
 	// only started by main.go via StartWatcher, keeping tests watcher-free.
@@ -1078,6 +1082,10 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
 	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
 	winSizesAll := ui.LoadWinSizes(globalWinSizeFile())
+	// Background forge polling (#2085) is anchored to the project root the
+	// process just chdir'd into: a switch rebuilds the model, and with it a
+	// poller that seeds the new project's snapshot silently.
+	forgeSt := &forgePollState{poller: forge.NewPoller(root, forgePollInterval(cfg))}
 	wsMgr := wsManager(mgr, resumed, root, panes) // hoisted: the palette's recent-projects sources read it (#820)
 	wsMgr.SetRegisters(regs)                      // first start: the manager adopts the store (#1540); a switch hands back its own
 	// Clipboard-history ring size (#2061). Editors re-apply it on Configure;
@@ -1123,6 +1131,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:            help.New(reg, bindings, helpMinCol(cfg)),
 		shell:           ui.New(shellConfig(cfg)),
 		vcs:             vcsSt,
+		forgePoll:       forgeSt,
 		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, sshPicker, remotePicker, playFilters),
 		layoutsPicker:   layoutsPicker,
 		httpRequests:    httpRequests,
@@ -3358,6 +3367,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if reveal := mm.explorer().PendingRevealCmd(); reveal != nil {
 		cmd = tea.Batch(cmd, reveal)
 	}
+	// Background forge polling (#2085) reopens its chain here when a config
+	// reload turned it back on — the one edge the self-sustaining chain cannot
+	// cover itself, since reloadConfig has no command to return. On every
+	// other pass this is a flag check and nothing else: arming unconditionally
+	// would mean no Update pass ever settles without a pending tick.
+	if poll := mm.armForgePoll(); poll != nil {
+		cmd = tea.Batch(cmd, poll)
+	}
 	return mm, cmd
 }
 
@@ -4666,11 +4683,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.toggleIssuesPanel()
 
 	case forge.IssuesMsg:
-		// A finished issue/PR fetch (#1934) lands in the pane; a reveal the
-		// forge event dialog asked for (#2086) runs on the fresh listing and
-		// may need the revealed issue's timeline (#2084).
-		m.fillIssuesPanel(msg)
-		return m, m.applyForgeReveal()
+		// A finished issue/PR fetch (#1934) lands in the pane; a background
+		// poll's result (#2085) also folds into the poll service, which turns
+		// it into snapshot events, backoff and the degrade/recover toasts. A
+		// reveal the forge event dialog asked for (#2086) then runs on the
+		// fresh listing and may need the revealed issue's timeline (#2084).
+		listing := m.applyForgeListing(msg)
+		return m, tea.Batch(listing, m.applyForgeReveal())
+
+	case forge.PollTickMsg:
+		// One background poll deadline (#2085). The handler only dispatches
+		// the fetch command — the Update loop never waits on the forge.
+		return m, m.forgePollTick(msg)
 
 	case forge.TimelineMsg:
 		// One fetched issue-timeline page (#2084) lands in the open detail.

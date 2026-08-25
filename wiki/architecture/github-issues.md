@@ -306,6 +306,18 @@ clamped with a diagnostic when a config file names something else.
   subprocess is deadline-bounded), fetch-failed (last listing kept, `r`
   retries), no issues in the selected state, and nothing-matches-the-filter
   each render a distinct empty text.
+- **Background refresh** (#2085) — the app's poll service pushes a fresh
+  listing in every `forge.poll_interval_seconds` (default 20s, `0` off), so
+  the content stays current without pressing `r`. A poll result is applied so
+  it cannot fight a user mid-interaction: the **selection is restored by
+  issue number** (a newer issue appearing above the cursor does not move it),
+  the `/` filter line, its pattern and the label filter survive untouched,
+  the open detail view stays open at the offset it was scrolled to (its
+  rendered body cache is dropped only when the body actually changed on the
+  forge, and the re-render keeps that offset), a partial result keeps the last
+  known linked-PR states, and a poll landing mid-`r` leaves the manual refresh
+  pending. The polling lifecycle itself — interval, backoff, snapshot events —
+  is in [Forge Layer](/architecture/forge.md).
 
 ## Prominent forge event notifications (#2086)
 

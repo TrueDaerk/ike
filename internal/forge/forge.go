@@ -89,6 +89,17 @@ type PR struct {
 // installed, or the repository has no GitHub remote — a condition the user
 // fixes outside the pane, not a transient failure. Err is a transient fetch
 // error (offline, gh auth); the pane keeps whatever it showed before.
+//
+// PRErr reports the partial failure: the issues arrived, only the pull
+// request listing failed. The listing is still useful without PR states, so
+// this is not an Err — but consumers holding PR state (the pane's linked-PR
+// column, the poll snapshot, #2085) must keep what they had rather than read
+// the empty PRs as "every pull request disappeared".
+//
+// Poll marks a background poll result (#2085) as opposed to a foreground
+// refresh, so the consumers can tell "the user asked for this" from "the
+// timer did": a poll must not clear a pending loading state or move anyone's
+// cursor.
 type IssuesMsg struct {
 	Issues []Issue
 	PRs    []PR
@@ -98,6 +109,8 @@ type IssuesMsg struct {
 	State IssueState
 	Setup string
 	Err   error
+	PRErr error
+	Poll  bool
 }
 
 // StartWorkDoneMsg reports a finished start-work flow: the branch that was

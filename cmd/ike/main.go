@@ -193,6 +193,10 @@ func main() {
 	// Watch the project root for external file changes (Roadmap 0140); events
 	// arrive through the host's Send as watch.EventMsg.
 	m.StartWatcher(".")
+	// Background forge polling (#2085) starts on the same lifecycle, so the
+	// issues window keeps up with the forge without a manual refresh.
+	// forge.poll_interval_seconds = 0 opts out.
+	m.StartForgePoll()
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "ike: %v\n", err)
 		os.Exit(1)

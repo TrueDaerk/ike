@@ -293,6 +293,7 @@ func (c *Config) Flat() map[string]string {
 	put("perf.hud_history_seconds", c.Perf.HUDHistorySeconds)
 	put("remote.max_fetch_mb", c.Remote.MaxFetchMB)
 	put("screenshot.directory", c.Screenshot.Directory)
+	put("forge.poll_interval_seconds", c.Forge.PollIntervalSeconds)
 
 	// Per-event-type forge notification styles (#2086).
 	put("forge.notify.issue_opened", c.Forge.Notify.IssueOpened)

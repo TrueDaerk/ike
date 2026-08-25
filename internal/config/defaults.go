@@ -292,6 +292,11 @@ func defaults() *Config {
 			Directory: "",
 		},
 		Forge: Forge{
+			// 20s is the window #2085 asks for — a new issue shows up within
+			// the time it takes to switch back to the IDE — while staying
+			// cheap: one issue and one PR listing per poll, skipped whenever
+			// the previous fetch is still running.
+			PollIntervalSeconds: 20,
 			// A new issue is the event the user must not miss (#2086), so it
 			// gets the dialog; failing checks are actionable but rarely
 			// urgent enough to interrupt typing, so they take the badge.

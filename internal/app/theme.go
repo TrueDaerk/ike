@@ -216,6 +216,10 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// editor.auto_save edits too: an idle-interval change re-arms, leaving
 	// idle mode drops pending marks (#731).
 	m.reconfigureAutosaveIdle(hcfg)
+	// [forge] edits apply live too (#2085): a new poll interval takes effect
+	// on the next deadline, 0 stops the chain, and re-enabling it is picked
+	// up by the arm call on Update's settled pass.
+	m.reconfigureForgePoll(hcfg)
 	// Rebuild the key resolver so keymap.bindings.* edits (the settings keymap
 	// page, #93) re-resolve live, like every other config change.
 	m.keys = buildKeymap(hcfg, m.bindings)
