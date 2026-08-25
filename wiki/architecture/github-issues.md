@@ -299,10 +299,26 @@ degrade at narrow widths: below 24 columns the bar falls back to a plain
 indent, and a rule that cannot hold its label is drawn plain across the pane.
 The states are visible and keyboard-reachable: a loading row while a fetch is
 in flight, an error row
-(`r` retries) that keeps what already loaded, `(p loads more activity)` while
+(`r` retries) that keeps what already loaded,
+`(scroll or p loads more activity)` while
 more pages follow — `p` appends the next page without moving the scroll — and
-`(no activity yet)` on an empty finished history. `r` inside the detail
-refetches the listing *and* the open issue's timeline. A `TimelineMsg` for an
+`(no activity yet)` on an empty finished history.
+
+**Pagination follows the scroll (#2113).** `p` stays the explicit key, but
+scrolling the detail (`j`, page down, `G`/`end`, the wheel) onto its last
+window fetches the next page on its own, so the history keeps coming without
+knowing about the key. Only the *downward* scroll paths ask, and only when no
+fetch is in flight, so one page arrives per scroll to the end — never a
+cascade that pulls the whole history at once; each new page pushes the end
+away again, so the next page waits for the next scroll.
+
+**A refresh keeps the loaded depth (#2113).** `r` inside the detail refetches
+the listing *and* the open issue's timeline, restarting at page one — but it
+remembers how many pages were loaded (`tlWant`) and, as each answer arrives,
+chains the next fetch until that depth is back, so a refresh never drops the
+history the user had already paged through. A failed page stops the chain and
+settles on the error row; `SetTimelineResult` returns that follow-up command,
+which the app routes back into the Update loop. A `TimelineMsg` for an
 issue the pane no longer waits on is dropped; entry IDs and the own-comment
 flag are carried in the model for the comment-editing sub-issue.
 

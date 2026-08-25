@@ -279,3 +279,111 @@ func TestTimelineEmptyState(t *testing.T) {
 		t.Fatal("an empty finished timeline must say so")
 	}
 }
+
+// renderDetail draws the detail once so the scroll bounds know how many lines
+// it has — the auto-pagination reads them (#2113).
+func renderDetail(m *Model) { _ = m.View() }
+
+func TestTimelineAutoLoadsOnScrollToEnd(t *testing.T) {
+	m := filled(t)
+	m.SetSize(90, 40)
+	stub := &timelineStub{}
+	stub.inject(m)
+	m.Update(key("enter"))
+	m.SetTimelineResult(forge.TimelineMsg{Issue: 2, Page: 1, More: true, Entries: []forge.TimelineEntry{
+		{Kind: forge.TimelineClosed, Actor: "bo", Time: fixedNow},
+	}})
+	renderDetail(m)
+	// Scrolling up, away from the end, must not fetch anything.
+	if cmd := m.Update(key("k")); cmd != nil || stub.calls != 1 {
+		t.Fatalf("scrolling up must not paginate, calls = %d", stub.calls)
+	}
+	if cmd := m.Update(key("G")); cmd == nil || stub.calls != 2 || stub.page != 2 || !m.TimelineLoading() {
+		t.Fatalf("reaching the end must fetch page 2 without a keypress, calls=%d page=%d", stub.calls, stub.page)
+	}
+	// One page per scroll to the end: while the fetch is in flight another
+	// scroll must not pile a second request on top.
+	if cmd := m.Update(key("j")); cmd != nil || stub.calls != 2 {
+		t.Fatalf("an in-flight fetch must not be duplicated, calls = %d", stub.calls)
+	}
+	m.SetTimelineResult(forge.TimelineMsg{Issue: 2, Page: 2, Entries: []forge.TimelineEntry{
+		{Kind: forge.TimelineReopened, Actor: "bo", Time: fixedNow},
+	}})
+	renderDetail(m)
+	if cmd := m.Update(key("G")); cmd != nil || stub.calls != 2 {
+		t.Fatalf("the last page must not trigger another fetch, calls = %d", stub.calls)
+	}
+}
+
+func TestTimelineWheelAutoLoadsAtEnd(t *testing.T) {
+	m := filled(t)
+	m.SetSize(90, 40)
+	stub := &timelineStub{}
+	stub.inject(m)
+	m.Update(key("enter"))
+	m.SetTimelineResult(forge.TimelineMsg{Issue: 2, Page: 1, More: true, Entries: []forge.TimelineEntry{
+		{Kind: forge.TimelineClosed, Actor: "bo", Time: fixedNow},
+	}})
+	renderDetail(m)
+	if cmd := m.Wheel(-3); cmd != nil || stub.calls != 1 {
+		t.Fatalf("wheeling up must not paginate, calls = %d", stub.calls)
+	}
+	if cmd := m.Wheel(200); cmd == nil || stub.calls != 2 || stub.page != 2 {
+		t.Fatalf("wheeling to the end must fetch page 2, calls=%d page=%d", stub.calls, stub.page)
+	}
+}
+
+func TestTimelineRefetchKeepsLoadedDepth(t *testing.T) {
+	m := filled(t)
+	m.SetSize(90, 40)
+	stub := &timelineStub{}
+	stub.inject(m)
+	m.Update(key("enter"))
+	m.SetTimelineResult(forge.TimelineMsg{Issue: 2, Page: 1, More: true, Entries: []forge.TimelineEntry{
+		{Kind: forge.TimelineClosed, Actor: "bo", Time: fixedNow},
+	}})
+	m.Update(key("p"))
+	m.SetTimelineResult(forge.TimelineMsg{Issue: 2, Page: 2, More: true, Entries: []forge.TimelineEntry{
+		{Kind: forge.TimelineReopened, Actor: "bo", Time: fixedNow},
+	}})
+	if m.TimelineCount() != 2 {
+		t.Fatalf("two pages must be loaded, count = %d", m.TimelineCount())
+	}
+	// 'r' restarts at page one but owes the second page again.
+	if cmd := m.Update(key("r")); cmd == nil || stub.page != 1 {
+		t.Fatalf("r must refetch page one, page = %d", stub.page)
+	}
+	cmd := m.SetTimelineResult(forge.TimelineMsg{Issue: 2, Page: 1, More: true, Entries: []forge.TimelineEntry{
+		{Kind: forge.TimelineClosed, Actor: "bo", Time: fixedNow},
+	}})
+	if cmd == nil || stub.page != 2 || !m.TimelineLoading() {
+		t.Fatalf("the refetch must walk back to page 2, page = %d loading = %v", stub.page, m.TimelineLoading())
+	}
+	if next := m.SetTimelineResult(forge.TimelineMsg{Issue: 2, Page: 2, More: true, Entries: []forge.TimelineEntry{
+		{Kind: forge.TimelineReopened, Actor: "bo", Time: fixedNow},
+	}}); next != nil {
+		t.Fatal("the restored depth must stop the chain, not keep fetching")
+	}
+	if m.TimelineCount() != 2 || m.TimelineLoading() {
+		t.Fatalf("r must keep the loaded depth, count = %d loading = %v", m.TimelineCount(), m.TimelineLoading())
+	}
+}
+
+func TestTimelineRefetchStopsOnError(t *testing.T) {
+	m := filled(t)
+	m.SetSize(90, 40)
+	stub := &timelineStub{}
+	stub.inject(m)
+	m.Update(key("enter"))
+	m.SetTimelineResult(forge.TimelineMsg{Issue: 2, Page: 1, More: true})
+	m.Update(key("p"))
+	m.SetTimelineResult(forge.TimelineMsg{Issue: 2, Page: 2, More: true})
+	m.Update(key("r"))
+	calls := stub.calls
+	if cmd := m.SetTimelineResult(forge.TimelineMsg{Issue: 2, Page: 1, Err: errFake("offline")}); cmd != nil {
+		t.Fatal("a failed page must not chain the depth restore")
+	}
+	if stub.calls != calls || m.TimelineError() == "" || m.TimelineLoading() {
+		t.Fatalf("the error state must settle, calls = %d err = %q", stub.calls, m.TimelineError())
+	}
+}

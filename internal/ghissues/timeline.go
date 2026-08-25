@@ -6,7 +6,9 @@ package ghissues
 // the app injects the per-issue/page fetch factory, opening a detail asks for
 // page one, 'p' loads the next page (#2114 — 'L' before the key-map
 // consolidation reserved the l family for labels), 'r' refetches, and results
-// arrive as forge.TimelineMsg.
+// arrive as forge.TimelineMsg. Scrolling the detail to the end of what is
+// loaded fetches the next page on its own, and 'r' restores the depth the
+// user had already paged to instead of dropping back to page one (#2113).
 
 import (
 	"strings"
@@ -34,21 +36,29 @@ func (m *Model) PendingTimelineCmd() tea.Cmd {
 	if is == nil || m.tlFor == is.Number {
 		return nil
 	}
-	m.startTimeline(is.Number)
+	m.startTimeline(is.Number, 1)
 	return m.timeline(is.Number, 1)
 }
 
-// startTimeline flips into the loading state for one issue's first page.
-func (m *Model) startTimeline(number int) {
+// startTimeline flips into the loading state for one issue's first page,
+// asking for want pages in total: one on a fresh open, the previously loaded
+// depth on a refetch (#2113).
+func (m *Model) startTimeline(number, want int) {
+	if want < 1 {
+		want = 1
+	}
 	m.tlFor = number
 	m.tl = nil
 	m.tlPage, m.tlMore = 0, false
+	m.tlWant = want
 	m.tlLoading, m.tlErr = true, ""
 	m.tlRev++
 }
 
-// refetchTimeline drops the fetched history and re-asks for page one ('r' in
-// the detail view).
+// refetchTimeline re-asks for the open issue's history from page one ('r' in
+// the detail view), keeping the depth the user had already paged to (#2113):
+// the pages that follow are refetched and re-appended as their answers
+// arrive, so a refresh never silently drops loaded history.
 func (m *Model) refetchTimeline() tea.Cmd {
 	if !m.detail || m.timeline == nil {
 		return nil
@@ -57,7 +67,11 @@ func (m *Model) refetchTimeline() tea.Cmd {
 	if is == nil {
 		return nil
 	}
-	m.startTimeline(is.Number)
+	want := 1
+	if is.Number == m.tlFor {
+		want = m.tlPage
+	}
+	m.startTimeline(is.Number, want)
 	return m.timeline(is.Number, 1)
 }
 
@@ -69,21 +83,46 @@ func (m *Model) loadMoreTimeline() tea.Cmd {
 	}
 	m.tlLoading, m.tlErr = true, ""
 	m.tlRev++
+	if m.tlPage+1 > m.tlWant {
+		m.tlWant = m.tlPage + 1
+	}
 	return m.timeline(m.tlFor, m.tlPage+1)
+}
+
+// autoLoadTimeline is the scroll-driven half of the pagination (#2113):
+// reaching the end of the loaded detail asks for the next page, so history
+// keeps coming without the user having to know about 'p'. Only the scroll
+// paths call it, so one page arrives per scroll to the end — never a cascade
+// that pulls the whole history in one go.
+func (m *Model) autoLoadTimeline() tea.Cmd {
+	if !m.detail || m.tab != TabIssues || len(m.detailLines) == 0 || !m.detailAtEnd() {
+		return nil
+	}
+	return m.loadMoreTimeline()
+}
+
+// detailAtEnd reports whether the detail scroll sits on its last window.
+func (m *Model) detailAtEnd() bool {
+	end := len(m.detailLines) - m.bodyHeight()
+	if end < 0 {
+		end = 0
+	}
+	return m.detailTop >= end
 }
 
 // SetTimelineResult applies one fetched timeline page. An answer for an issue
 // the pane no longer waits on is dropped; page one replaces, later pages
-// append.
-func (m *Model) SetTimelineResult(msg forge.TimelineMsg) {
+// append. It returns the follow-up fetch a depth-restoring refetch still owes
+// (#2113), nil otherwise.
+func (m *Model) SetTimelineResult(msg forge.TimelineMsg) tea.Cmd {
 	if msg.Issue != m.tlFor {
-		return
+		return nil
 	}
 	m.tlLoading = false
 	m.tlRev++
 	if msg.Err != nil {
 		m.tlErr = msg.Err.Error()
-		return
+		return nil
 	}
 	m.tlErr = ""
 	if msg.Page <= 1 {
@@ -92,6 +131,12 @@ func (m *Model) SetTimelineResult(msg forge.TimelineMsg) {
 		m.tl = append(m.tl, msg.Entries...)
 	}
 	m.tlPage, m.tlMore = msg.Page, msg.More
+	if m.tlMore && m.tlPage < m.tlWant && m.timeline != nil {
+		// A refetch is still walking back to the depth the user had loaded.
+		m.tlLoading = true
+		return m.timeline(m.tlFor, m.tlPage+1)
+	}
+	return nil
 }
 
 // TimelineCount reports how many timeline entries are loaded (tests).
@@ -149,7 +194,7 @@ func (m *Model) timelineLines(pal *theme.Palette, is *forge.Issue) []string {
 	case m.tlErr != "":
 		lines = append(lines, "", lipgloss.NewStyle().Foreground(pal.Error).Render(m.clip(" (activity fetch failed: "+m.tlErr+" — r retries)")))
 	case m.tlMore:
-		lines = append(lines, "", faint.Render(" (p loads more activity)"))
+		lines = append(lines, "", faint.Render(" (scroll or p loads more activity)"))
 	case m.tlPage > 0 && len(m.tl) == 0:
 		lines = append(lines, "", faint.Render(" (no activity yet)"))
 	}

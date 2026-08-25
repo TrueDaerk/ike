@@ -4719,9 +4719,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.forgePollTick(msg)
 
 	case forge.TimelineMsg:
-		// One fetched issue-timeline page (#2084) lands in the open detail.
-		m.fillIssuesTimeline(msg)
-		return m, nil
+		// One fetched issue-timeline page (#2084) lands in the open detail,
+		// which may owe another page while 'r' restores the loaded depth
+		// (#2113).
+		return m, m.fillIssuesTimeline(msg)
 
 	case forge.RepoMetaMsg:
 		// Capabilities plus the repository's labels and assignable users
@@ -8916,12 +8917,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				inst.Tests().Wheel(lines)
 			}
 		case pane.KindIssues:
-			// The wheel scrolls the issue list or detail view (#1934).
+			// The wheel scrolls the issue list or detail view (#1934);
+			// scrolling to the end of the detail pulls the next timeline
+			// page (#2113).
 			switch msg.Button {
 			case tea.MouseWheelUp:
-				inst.Issues().Wheel(-lines)
+				return m, inst.Issues().Wheel(-lines)
 			case tea.MouseWheelDown:
-				inst.Issues().Wheel(lines)
+				return m, inst.Issues().Wheel(lines)
 			}
 		case pane.KindData:
 			// The wheel scrolls the data viewer's focused region (#1788) —
