@@ -37,6 +37,7 @@ import (
 	"ike/internal/complete/symbols"
 	"ike/internal/complete/words"
 	"ike/internal/config"
+	"ike/internal/coverage"
 	"ike/internal/dataview"
 	"ike/internal/debug"
 	"ike/internal/debugdoctor"
@@ -556,6 +557,12 @@ type Model struct {
 	domHLRev       int
 	lastTestRun    *testRunState
 	testRunSeq     int
+	// coverage is the last coverage run's per-file line marks (#2081), fed by
+	// finishTestRun through the language's ParseCover seam and pushed to
+	// editors as gutter marks; coverageShown is the coverage.toggle display
+	// state (data survives a hide, it just stops being pushed/rendered).
+	coverage      *coverage.Store
+	coverageShown bool
 	// rawDiags caches each path's last published, unfiltered diagnostic set;
 	// diagIgnore/diagIgnoreRaw are the compiled lsp.diagnostics_ignore rules
 	// and their source strings (#1259). Publishes filter through the rules
@@ -1106,6 +1113,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		playLastProgram: map[string]string{}, // per-file last valid program (#1982)
 		compMRU:         mru.Load(mru.DefaultFile()),
 		bpts:            debug.Load(),
+		coverage:        coverage.NewStore(), // per-run test coverage (#2081)
+		coverageShown:   true,
 		doctorLog:       debugdoctor.NewLog(),
 		host:            h,
 		reg:             reg,
@@ -3608,9 +3617,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.rerunTests(msg)
 
 	case TestRunDoneMsg:
-		// A captured test run finished off-loop: parse and fill the pane.
-		m.finishTestRun(msg)
-		return m, nil
+		// A captured test run finished off-loop: parse and fill the pane; a
+		// coverage run (#2081) also pushes fresh gutter marks.
+		return m, m.finishTestRun(msg)
 
 	case editor.OpenUndoTreeMsg:
 		// editor.undoTree (palette): the undo-tree overlay (#59) over the
@@ -4162,6 +4171,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RunTestsInFileMsg:
 		// run.testsInFile (Run menu / palette, #1150): the file's package tests.
 		return m, m.runTestsInFile()
+
+	case RunTestsWithCoverageMsg:
+		// run.testsWithCoverage (palette, #2081): the file's package tests
+		// with per-line coverage collection.
+		return m, m.runTestsWithCoverage()
+
+	case CoverageToggleMsg:
+		// coverage.toggle (palette, #2081): hide/show the coverage gutter
+		// marks; the data survives a hide.
+		return m, m.toggleCoverageMarks()
 
 	case HTTPRunMsg:
 		// http.run (Run menu / palette / cmd+enter, #1250): dispatch the
@@ -5576,6 +5595,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.routeParse(msg)
 
 	case editor.SyncMsg:
+		// Any buffer change also outdates the file's stored coverage (#2081):
+		// the flag makes later opens of the file show the marks as stale
+		// (each live view detects its own edits by document version).
+		m.coverage.MarkStale(msg.Path)
 		// A shared document changed in one pane (#142): every other view of the
 		// same file re-clamps and mirrors the flags. Dirty/stale are read from
 		// the originating pane *now* (not at emit time), so late or reordered
@@ -6092,6 +6115,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case vcs.MarksMsg:
 		// Recomputed gutter diff markers (#464): to every view of the path.
+		return m, m.routeToEditor(msg.Path, msg)
+
+	case coverage.MarksMsg:
+		// Coverage gutter marks (#2081): to every view of the path.
 		return m, m.routeToEditor(msg.Path, msg)
 
 	case vcspanel.OpenDiffMsg:
@@ -6918,6 +6945,10 @@ func (m Model) openPathWith(path string, newPane bool) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.activeWS().Panes.Get(key).Editor().Reparse())
 			// Gutter diff markers for the fresh buffer (Roadmap 0320, #464).
 			cmds = append(cmds, m.vcsMarksCmd(m.activeWS().Panes.Get(key).Editor()))
+			// Stored coverage marks for the fresh buffer (#2081).
+			if cmd := m.coverageMarksCmd(path); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 	}
 	cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)

@@ -289,6 +289,22 @@ func StructuredArgv(root string, cfg Config, explicit string) ([]string, bool) {
 	return lang.TestStructuredArgv(root, file, t, explicit)
 }
 
+// CoverageArgv is StructuredArgv plus the language's coverage arguments
+// (#2081): the captured test run additionally writes its coverage data to
+// profile. ok=false for non-test configurations and for languages without
+// coverage support.
+func CoverageArgv(root string, cfg Config, explicit, profile string) ([]string, bool) {
+	if !cfg.Tests {
+		return nil, false
+	}
+	file := absTo(root, cfg.File)
+	var t *lang.TestMatch
+	if cfg.TestName != "" {
+		t = &lang.TestMatch{Name: cfg.TestName, Kind: cfg.TestKind}
+	}
+	return lang.TestCoverageArgv(root, file, t, explicit, profile)
+}
+
 // FailedArgv synthesizes the command line re-running exactly the tests named
 // by ids (their parser-assigned RerunIDs) in cfg's scope (#1911) — the
 // re-run-failed and re-run-single-test actions of the Test Results tool.

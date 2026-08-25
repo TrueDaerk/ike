@@ -57,6 +57,12 @@ tone — vim marks and project bookmarks, see "Vim marks & bookmarks") > test `�
 LSP-pushed arrows on symbols that implement/override a super declaration or
 have implementations; `inheritmarks.go`, per-line map like `gitMarks`, gated by
 the `editor.marks.inheritance` toggle which also stops the probe traffic) >
+coverage bar `▎` (#2081, `covermarks.go` — per-line covered/uncovered/partial
+bars in success/error/warning tones pushed by the app after a
+run-with-coverage; stale data — the buffer changed since the run, detected by
+document version or the app's store flag — draws faint in the info tone;
+gated by `editor.marks.coverage` and cleared/re-pushed by the
+`coverage.toggle` command) >
 diagnostic/git colouring. A single-cell sign column means a line that is both
 a test and an overriding method shows only the test marker. A plain gutter
 click still toggles the breakpoint on every line; ctrl/cmd+click on a marker

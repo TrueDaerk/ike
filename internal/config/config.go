@@ -178,6 +178,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.marks.git_changed", c.Editor.Marks.GitChanged)
 	put("editor.marks.git_deleted", c.Editor.Marks.GitDeleted)
 	put("editor.marks.inheritance", c.Editor.Marks.Inheritance)
+	put("editor.marks.coverage", c.Editor.Marks.Coverage)
 
 	put("explorer.show_hidden", c.Explorer.ShowHidden)
 	put("explorer.git_status", c.Explorer.GitStatus)
