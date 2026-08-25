@@ -275,6 +275,11 @@ type Model struct {
 	ov       overlayKind
 	ovCursor int
 	ovTop    int
+	// ovSearch is the open picker's type-ahead (#2111): printable keys
+	// narrow the visible rows live, esc clears the query before it closes
+	// the modal. Reset whenever a modal opens, so one picker never inherits
+	// the previous one's query.
+	ovSearch ui.SpeedSearch
 
 	// Detail view: the selected issue's body rendered through glamour,
 	// re-rendered lazily when the issue, the width or the timeline changes.

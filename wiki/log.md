@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-25 (ui: speed search in the issues window's pickers, #2111)
+
+- **The issues window's pickers narrow as you type.** The label and assignee
+  mutation pickers, the filter overlay's label section and the action menu all
+  got JetBrains-style speed search: printable keys filter the visible rows
+  live, `space` stays the toggle, `backspace` peels the query one rune at a
+  time before falling back to the picker's own "clear the set", and `esc`
+  clears the query before it closes the modal. The running query renders in
+  the modal's heading and the footer says what typing does; a query that
+  matches nothing shows a placeholder row instead of an empty box.
+- The semantics live in the reusable **`ui.SpeedSearch`**
+  (`internal/ui/speedsearch.go`) with `Narrow`/`NarrowStrings`, so the IDE's
+  other modal pickers can adopt them unchanged. The match is a
+  case-insensitive **substring**, not the fuzzy subsequence the palette uses —
+  a type-ahead is read as literal typing.
+- Two key changes fall out of it: the searchable overlays run on
+  `ui.NavDefault` instead of `NavFull` (`j`/`k`/`g`/`G` are query runes now,
+  so arrows, page keys, `ctrl+n`/`ctrl+p` and `home`/`end` do the walking),
+  and the action menu's `q`/`m`/`?` close aliases are gone — `esc` is its one
+  exit. The narrowing is a view, not an edit: `enter` in a mutation picker
+  still writes the full diff, so a label the query hid is never removed.
+- New concept doc [Picker Speed Search](/architecture/speed-search.md); the
+  Issues Tool Window and Selection-List Navigation docs link to it.
+
 ## 2026-08-25 (forge: tea OAuth logins without a plaintext token, #2118)
 
 - **Gitea/Forgejo repositories work with an OAuth tea login.** Since tea 0.14

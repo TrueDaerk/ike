@@ -471,8 +471,9 @@ func TestActionMenuListsEveryKey(t *testing.T) {
 		}
 	}
 	// A table taller than the box scrolls rather than dropping entries.
+	// Arrows, not j/k: the letters are the menu's type-ahead (#2111).
 	for i := 0; i < len(m.Actions())-1; i++ {
-		m.Update(key("j"))
+		m.Update(key("down"))
 	}
 	if v := m.View(); !strings.Contains(v, "Group by label") {
 		t.Fatalf("the menu must scroll to its last entries:\n%s", v)

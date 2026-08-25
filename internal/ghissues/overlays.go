@@ -177,9 +177,17 @@ func (m *Model) Actions() [][2]string {
 	return out
 }
 
+// viewActions is what the action menu renders and navigates: actions()
+// narrowed by the type-ahead (#2111), matched against key and label together
+// so both "browser" and "o" find "Open in browser".
+func (m *Model) viewActions() []action {
+	return ui.Narrow(&m.ovSearch, m.actions(), func(a action) string { return a.key + " " + a.label })
+}
+
 // openActionMenu opens the action list of the current view.
 func (m *Model) openActionMenu() {
 	m.ov, m.ovCursor, m.ovTop = ovActions, 0, 0
+	m.ovSearch.Reset()
 }
 
 // closeOverlay drops the modal without touching what it changed.
@@ -190,11 +198,11 @@ func (m *Model) closeOverlay() { m.ov = ovNone }
 func (m *Model) overlayItems() int {
 	switch m.ov {
 	case ovFilter:
-		return m.fovFixedRows() + len(m.filterLabels())
+		return m.fovFixedRows() + m.fovLabelRows()
 	case ovActions:
-		return len(m.actions())
+		return len(m.viewActions())
 	case ovLabelEdit, ovAssignEdit:
-		return len(m.editRows())
+		return len(m.editViewRows())
 	case ovComment:
 		return 2 // the input line and its hint
 	case ovPRAct, ovCleanup:
@@ -263,15 +271,23 @@ func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.ov == ovFilter {
 		return m.filterOvKey(msg)
 	}
-	if ui.ListNav(key, &m.ovCursor, m.overlayItems(), m.overlayHeight(), ui.NavFull) {
+	// The speed-searchable pickers (#2111) own every printable key, so they
+	// only get the navigation aliases that are not letters — j/k/g/G would
+	// eat the type-ahead's first rune.
+	nav := ui.NavFull
+	switch m.ov {
+	case ovActions, ovLabelEdit, ovAssignEdit:
+		nav = ui.NavDefault
+	}
+	if ui.ListNav(key, &m.ovCursor, m.overlayItems(), m.overlayHeight(), nav) {
 		m.clampOverlay()
 		return nil
 	}
 	switch m.ov {
 	case ovActions:
-		return m.actionMenuKey(key)
+		return m.actionMenuKey(msg)
 	case ovLabelEdit, ovAssignEdit:
-		return m.editorKey(key)
+		return m.editorKey(msg)
 	case ovTextEdit:
 		return m.textPickerKey(key)
 	}
@@ -279,12 +295,13 @@ func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // actionMenuKey handles the action list: enter runs the selected action (and
-// closes first, so an action that opens another modal wins), anything
-// dismissive closes.
-func (m *Model) actionMenuKey(key string) tea.Cmd {
-	switch key {
+// closes first, so an action that opens another modal wins), esc peels the
+// type-ahead (#2111) before it closes. Printable keys narrow the list, which
+// is why 'q'/'m'/'?' no longer double as close aliases — esc is the one exit.
+func (m *Model) actionMenuKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
 	case "enter":
-		acts := m.actions()
+		acts := m.viewActions()
 		if m.ovCursor < 0 || m.ovCursor >= len(acts) {
 			m.closeOverlay()
 			return nil
@@ -295,8 +312,17 @@ func (m *Model) actionMenuKey(key string) tea.Cmd {
 			return nil
 		}
 		return run(m)
-	case "esc", "q", "m", "?":
+	case "esc":
+		if m.ovSearch.EscClears() {
+			m.clampOverlay()
+			return nil
+		}
 		m.closeOverlay()
+		return nil
+	}
+	if handled, changed := m.ovSearch.Key(msg); handled && changed {
+		m.ovCursor, m.ovTop = 0, 0
+		m.clampOverlay()
 	}
 	return nil
 }
