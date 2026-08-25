@@ -36,7 +36,7 @@ func (m *Model) applyIssueFilter() {
 		if !stateAllows(m.state, is.State) {
 			continue
 		}
-		if len(labels) > 0 && !hasAnyLabel(is, labels) {
+		if len(labels) > 0 && !m.matchesLabels(is, labels) {
 			continue
 		}
 		score, ok := m.fuzzyGate(matchText(is))
@@ -105,8 +105,29 @@ func prStateAllows(f StateFilter, state string) bool {
 	}
 }
 
+// matchesLabels applies the selection with the active semantics (#2112):
+// any-of by default, all-of once the overlay's mode row is switched.
+func (m *Model) matchesLabels(is *forge.Issue, labels []string) bool {
+	if m.labelAll {
+		return hasAllLabels(is, labels)
+	}
+	return hasAnyLabel(is, labels)
+}
+
+// hasAllLabels reports whether the issue carries every selected label — the
+// all-of (AND) mode, where selecting "bug" and "feature" narrows to their
+// intersection.
+func hasAllLabels(is *forge.Issue, labels []string) bool {
+	for _, name := range labels {
+		if !hasLabel(is, name) {
+			return false
+		}
+	}
+	return true
+}
+
 // hasAnyLabel reports whether the issue carries at least one selected label —
-// the picker is an OR filter, so selecting "bug" and "feature" widens rather
+// the any-of (OR) mode, where selecting "bug" and "feature" widens rather
 // than narrowing to their intersection.
 func hasAnyLabel(is *forge.Issue, labels []string) bool {
 	for _, name := range labels {

@@ -12,6 +12,7 @@ package ghissues
 
 import (
 	"sort"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -26,16 +27,20 @@ const (
 	fovState = 1
 	fovSort  = 2
 	fovGroup = 3
+	// fovMode is the label section's any-of/all-of switch (#2112); it sits
+	// directly above the labels it governs, on the issue tab only.
+	fovMode = 4
 )
 
 // filterSnapshot is what esc restores: every dimension the overlay edits.
 type filterSnapshot struct {
-	input  string
-	cur    int
-	labels map[string]bool
-	state  StateFilter
-	sort   SortOrder
-	group  bool
+	input    string
+	cur      int
+	labels   map[string]bool
+	labelAll bool
+	state    StateFilter
+	sort     SortOrder
+	group    bool
 }
 
 // snapshotFilters copies the live filter state for the overlay's esc-revert.
@@ -45,7 +50,7 @@ func (m *Model) snapshotFilters() filterSnapshot {
 		labels[k] = v
 	}
 	return filterSnapshot{input: m.fInput, cur: m.fCur, labels: labels,
-		state: m.state, sort: m.sort, group: m.group}
+		labelAll: m.labelAll, state: m.state, sort: m.sort, group: m.group}
 }
 
 // fovFixedRows is how many non-label rows the overlay has on the active tab —
@@ -54,7 +59,7 @@ func (m *Model) fovFixedRows() int {
 	if m.tab == TabPRs {
 		return 3 // match, state, sort
 	}
-	return 4
+	return 5 // + grouping, label mode
 }
 
 // filterLabels is the label section's row set: the repository's labels (the
@@ -292,6 +297,15 @@ func (m *Model) sectionRowKey(msg tea.KeyPressMsg) tea.Cmd {
 				m.toggleGroup()
 			}
 		}
+	case fovMode:
+		switch key {
+		case "space", " ", "x", "right", "left", "h", "l":
+			m.toggleLabelMode()
+		case "backspace", "delete":
+			if m.labelAll {
+				m.toggleLabelMode()
+			}
+		}
 	}
 	return nil
 }
@@ -345,6 +359,7 @@ func (m *Model) revertFilters() tea.Cmd {
 	if m.labelSel == nil {
 		m.labelSel = map[string]bool{}
 	}
+	m.labelAll = s.labelAll
 	m.sort, m.group = s.sort, s.group
 	if s.state != m.state {
 		return m.setState(s.state)
@@ -422,6 +437,12 @@ func (m *Model) filterChips() []filterChip {
 	if m.fInput != "" {
 		chips = append(chips, filterChip{text: "match: " + m.fInput,
 			clear: func(m *Model) tea.Cmd { m.fInput, m.fCur = "", 0; m.keepSelection(); return nil }})
+	}
+	if names := m.LabelFilter(); m.labelAll && len(names) > 0 {
+		// The mode reads once, ahead of the labels it governs; clearing it
+		// widens back to any-of instead of dropping the selection.
+		chips = append(chips, filterChip{text: "labels: " + strings.Join(names, "+") + " (all)",
+			clear: func(m *Model) tea.Cmd { m.labelAll = false; m.keepSelection(); return nil }})
 	}
 	for _, name := range m.LabelFilter() {
 		name := name

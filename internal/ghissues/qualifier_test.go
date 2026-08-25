@@ -104,7 +104,8 @@ func TestQualifiersEqualSections(t *testing.T) {
 	press(b, "f", "down", "space", "space") // state row: open → closed → all
 	press(b, "down", "space", "space", "space")
 	// sort row: relevance → newest → oldest → updated
-	press(b, "down", "down", "down", "space") // grouping row, then label "feature"
+	press(b, "down", "down", "down", "down", "space")
+	// grouping row, label-mode row (#2112), then label "feature"
 	press(b, "enter")
 	press(b, "f") // reopen on the match row for the pattern
 	typeText(b, "x ")

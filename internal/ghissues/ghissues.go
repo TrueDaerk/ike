@@ -266,10 +266,13 @@ type Model struct {
 	fetched forge.IssueState
 
 	// labels are the distinct label names across the listing; labelSel is the
-	// multi-select set the label picker edits (an issue passes when it
-	// carries *any* selected label).
+	// multi-select set the label picker edits. labelAll switches the
+	// selection's semantics (#2112): off it is an OR filter (an issue passes
+	// when it carries *any* selected label), on it is an AND filter (it must
+	// carry *all* of them).
 	labels   []string
 	labelSel map[string]bool
+	labelAll bool
 
 	state StateFilter
 	sort  SortOrder
@@ -303,6 +306,7 @@ type Model struct {
 	tl        []forge.TimelineEntry
 	tlFor     int // issue number the entries belong to; 0 = none fetched
 	tlPage    int // last fetched page; 0 = page one still loading (or unfetched)
+	tlWant    int // pages the current fetch run owes (depth kept across 'r', #2113)
 	tlMore    bool
 	tlLoading bool
 	tlErr     string
@@ -611,6 +615,17 @@ func (m *Model) LabelFilter() []string {
 	return out
 }
 
+// LabelMatchAll reports whether the label filter is in all-of (AND) mode
+// (tests).
+func (m *Model) LabelMatchAll() bool { return m.labelAll }
+
+// toggleLabelMode flips the label filter between any-of and all-of (#2112),
+// keeping the cursor on its entry.
+func (m *Model) toggleLabelMode() {
+	m.labelAll = !m.labelAll
+	m.keepSelection()
+}
+
 // StateFilter returns the active open/closed/all gate (tests).
 func (m *Model) StateFilter() StateFilter { return m.state }
 
@@ -905,6 +920,9 @@ func (m *Model) SetTab(t Tab) {
 // meaningful with an issue on screen.
 func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 	page := m.bodyHeight()
+	// A scroll that lands on the end of the loaded detail pulls the next
+	// timeline page on its own (#2113).
+	scrolled := false
 	switch msg.String() {
 	case "esc", "q", "backspace":
 		m.detail = false
@@ -920,16 +938,19 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.startComment()
 	case "j", "down":
 		m.detailTop++
+		scrolled = true
 	case "k", "up":
 		m.detailTop--
 	case "pgdown", "ctrl+d", "space":
 		m.detailTop += page
+		scrolled = true
 	case "pgup", "ctrl+u":
 		m.detailTop -= page
 	case "g", "home":
 		m.detailTop = 0
 	case "G", "end":
 		m.detailTop = len(m.detailLines) - page
+		scrolled = true
 	case "m", "?":
 		m.openActionMenu()
 	case "tab", "ctrl+pgdown":
@@ -948,6 +969,9 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	m.clampDetail()
+	if scrolled {
+		return m.autoLoadTimeline()
+	}
 	return nil
 }
 
@@ -1060,6 +1084,7 @@ func (m *Model) clearFilters() tea.Cmd {
 		m.keepSelection()
 	case len(m.LabelFilter()) > 0:
 		m.labelSel = map[string]bool{}
+		m.labelAll = false
 		m.keepSelection()
 	case m.state != FilterOpen:
 		return m.setState(FilterOpen)
@@ -1115,6 +1140,7 @@ func (m *Model) Reveal(number int) bool {
 	m.prDetail = false
 	m.fInput, m.fCur = "", 0
 	m.labelSel = map[string]bool{}
+	m.labelAll = false
 	// The issue is already in the listing, so widening the state gate needs no
 	// refetch — and a closed issue announced by an event must still be shown.
 	if !stateAllows(m.state, m.issues[idx].State) {
