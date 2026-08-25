@@ -1,5 +1,39 @@
 # Log
 
+## 2026-08-25 (settings: Conceal & Hints control center page, #2133)
+
+- **A dedicated Conceal & Hints settings page** is now the single surface for
+  the conceal suite: every registered family grouped by what it does
+  (rendering layers, decoders, value hints, secrets & field units, file rules,
+  coloring layers), each row showing its state and the config layer the value
+  comes from, plus an informational row for JWT decoding, which has no toggle.
+  The twenty-six keys left the generic **Editor** page; the keys themselves are
+  unchanged, so no migration is needed.
+- **The schema entries stayed.** `settings.AttachCustom` installs a `PageModel`
+  on a page that keeps its `Entries` — the panel renders the model, docgen keeps
+  rendering the key table, and the no-dead-keys and coverage guards keep
+  covering the keys. The page's rows are built *from* those entries, so titles,
+  descriptions and bounds have one definition.
+- **Structured list editing** for `conceal_include`, `conceal_exclude`,
+  `conceal_file_rules`, `number_hint_units` and `secret_masking_keys`: the
+  element grammar becomes form fields (family · include|exclude · glob;
+  pattern · unit; mask|exempt · key pattern), and the composed element is
+  validated with the loader's own checks (`concealfilter.Invalid`,
+  `numhint.EntryError`) — a typo is refused in the form instead of dropped with
+  a diagnostic after the write. Elements reorder with `shift+↑/↓`, because the
+  first match decides a key in both pattern maps.
+- **A live preview** draws the selected family's sample line raw and as the
+  family renders it, marking the state the toggle currently picks, through the
+  same packages the editor renders with (`epochtime`, `numhint`, `cronhint`,
+  `permhint`, `nethint`, `secret`). The glob and rule lists preview as
+  draws/blocked verdicts on sample paths instead, since they decide *where*
+  rather than *what*.
+- The page edits **config defaults**; a per-view toggle still wins in its
+  buffer, which the footer says on every frame.
+- Fixed along the way: `cmd/docgen` did not emit the language-scoped binding
+  section of `keybindings.md` (#1876 edited the generated file directly), so
+  regenerating deleted it. The prose now lives in the generator.
+
 ## 2026-08-25 (http: form/multipart/graphql body highlighting + {{var}} completion, #2135)
 
 - **Form-urlencoded, multipart and GraphQL request bodies highlight now.**

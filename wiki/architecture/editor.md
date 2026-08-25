@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-24T12:00:00Z
+timestamp: 2026-08-25T12:00:00Z
 ---
 
 # Editor
@@ -1487,7 +1487,7 @@ explicitly out of scope — this mode is the cheap 90%.
 ## Markdown rich rendering (#881)
 
 Vim-conceal-style semi-preview for Markdown, display-only (`markdown.go`) and
-toggled by `editor.markdown_rendering` (default on, in Settings → Editor) or
+toggled by `editor.markdown_rendering` (default on, in Settings → Conceal & Hints) or
 per view by the `view.toggleMarkdownRendering` palette command (#1599, a
 sticky override like the #64 view toggles; it also gates the `markup.*` text
 attributes in `styleAt`):
@@ -1620,7 +1620,7 @@ attributes in `styleAt`):
 ## Separator-delimited table rendering (#1589)
 
 Csv/tsv/psv buffers render table-like, display-only (`svtable.go`), toggled
-by `editor.csv_rendering` (default on, Settings → Editor):
+by `editor.csv_rendering` (default on, Settings → Conceal & Hints):
 
 - **Rainbow columns**: the csv language plugin (`plugins/languages/csv`, no
   grammar) emits one span per field through the Go span seam
@@ -1768,7 +1768,7 @@ caches and renders it.
 ## Log-file rendering (#1621)
 
 `.log` buffers render readable, display-only, toggled by
-`editor.log_rendering` (default on, Settings → Editor) or per view by the
+`editor.log_rendering` (default on, Settings → Conceal & Hints) or per view by the
 `view.toggleLogRendering` palette command (an override that sticks like
 `mdRenderSet`). The log language plugin (`plugins/languages/log`, no grammar)
 emits everything through the Go span seam (#1585); the parsing lives in
@@ -1990,7 +1990,7 @@ format is line oriented and stateful, so all structure is Go-computed in
 ## Inline epoch-timestamp decoding (#1618)
 
 Numeric Unix timestamps render as their UTC form in place, display-only,
-toggled by `editor.timestamp_decoding` (default on, Settings → Editor) or per
+toggled by `editor.timestamp_decoding` (default on, Settings → Conceal & Hints) or per
 view by the `view.toggleTimestampDecoding` palette command (a sticky override
 like `mdRenderSet`). Detection lives in `internal/epochtime`, the editor half
 in `timestamps.go`:
@@ -2116,7 +2116,7 @@ All toggles default on and stick per view like the #64 toggles.
 
 A cron expression draws with its English reading appended — `*/5 * * * *`
 renders as `*/5 * * * *  every 5 min`, `0 3 * * 1` as `0 3 * * 1  Mon 03:00` —
-display-only, toggled by `editor.cron_hints` (default on, Settings → Editor)
+display-only, toggled by `editor.cron_hints` (default on, Settings → Conceal & Hints)
 or per view by `view.toggleCronHints`. Parsing, rendering and context
 detection live in `internal/cronhint`:
 
@@ -2222,7 +2222,7 @@ channel and `decodeOn` gates it, exactly like the decode families (#1620).
 - **Field-unit mapping** (#1685) is the escape hatch from the heuristics,
   which are ambiguous by nature: `size` is not necessarily bytes, a
   `duration` is counted in seconds as often as in milliseconds.
-  `editor.number_hint_units` (Settings → Editor, a list, empty by default) maps
+  `editor.number_hint_units` (Settings → Conceal & Hints, a list, empty by default) maps
   field names to units, each entry written `pattern=unit`:
 
   ```toml
@@ -2421,7 +2421,7 @@ mode: '1777'                  → 1777  rwxrwxrwt
 ```
 
 One family, one capture (`perm.mode`), one toggle: `editor.permission_hints`
-(default on, Settings → Editor) or per view `view.togglePermissionHints`.
+(default on, Settings → Conceal & Hints) or per view `view.togglePermissionHints`.
 Decoding and the context scan live in `internal/permhint`, a leaf package of
 plain Go over `lang.Span`; `concealSplit` routes the capture into its own
 `m.decodes` channel and `decodeOn` gates it, exactly like the decode families
@@ -2565,7 +2565,7 @@ base64:
 -----BEGIN CERTIFICATE-----  certificate  CN=example.com  expires in 12d  2026-07-08→2027-06-03  issuer=Example CA  RSA-2048  SAN=example.com, www.example.com
 ```
 
-Toggled by `editor.pem_summary` (default on, Settings → Editor) or per view by
+Toggled by `editor.pem_summary` (default on, Settings → Conceal & Hints) or per view by
 `view.togglePemSummary`. Decoding lives in `internal/peminfo` (a leaf package
 over the standard library); the editor half is `pemsummary.go`.
 
@@ -2753,7 +2753,14 @@ The gate applies where a family is **read**, not where its toggle is resolved.
 accessors (`mdRenderOn`, `svRenderOn`, `logRenderOn`, `pemSummaryOn`). Keeping
 the toggle fields unfiltered is what makes the dimensions independent: neither
 can strand the other in a state it cannot come back from, and `Settings →
-Editor` keeps reading as the family's own state.
+Conceal & Hints` keeps reading as the family's own state.
+
+Since #2133 the three settings are edited as **structured lists** on that page
+rather than as raw comma-separated text: a rule is a family field, an
+include/exclude choice and a glob, composed into the `family=pattern` element
+and validated with `concealfilter.Invalid` before it is written. The page's
+preview reports the verdict on three sample paths, so a rule is read as what it
+does rather than as what it says.
 
 Two consequences are deliberate. A **per-view toggle bypasses the filter** —
 that is the `set` flag in `concealGate` — because a pattern list states a
@@ -2803,7 +2810,7 @@ masking or exempting entry to `editor.secret_masking_keys`. The editor writes
 no config itself — it emits `editor.ConcealRuleMsg` and `app`
 (`conceal_rule.go`) persists through `config.WriteAndReload`, so the ordinary
 `ConfigReloadedMsg` path re-installs the mapping and re-parses the open
-editors, and the new entry is listed and editable in `Settings → Editor` like a
+editors, and the new entry is listed and editable in `Settings → Conceal & Hints` like a
 hand-written one. A rule for a pattern that already has an entry **replaces**
 it: both stores resolve by first match, so appending would leave the
 reclassification shadowed by the reading it was meant to correct.
@@ -2832,7 +2839,7 @@ channel in a terminal cell).
   `accent = "#ff8800"` and `accent: #ff8800` light up, while the fragment of
   `https://example.com/p#ff8800` or a `abc#ff8800` suffix stays plain.
 - **Toggles**: the `editor.color_preview` config default (default on,
-  Settings → Editor) plus the per-view `view.toggleColorPreview` palette
+  Settings → Conceal & Hints) plus the per-view `view.toggleColorPreview` palette
   action, which sticks like the #64 view toggles (`applyConfig` stops tracking
   the config value once toggled).
 

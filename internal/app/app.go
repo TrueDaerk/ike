@@ -1213,6 +1213,10 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		Title:  "Syntax Colors",
 		Custom: settings.NewColorsPage(m.cfgOpts),
 	})
+	// The conceal/hint control center (#2133) renders the page whose schema
+	// entries stay the documented key list: the model replaces the generic
+	// form, the entries keep feeding docgen and the no-dead-keys test.
+	pages = settings.AttachCustom(pages, settings.ConcealPageTitle, settings.NewConcealPage(m.cfgOpts))
 	// The [files.associations] editor (#1365) belongs with the file settings.
 	pages = settings.InsertAfter(pages, "Files & Session", settings.Page{
 		Title:  "File Associations",
