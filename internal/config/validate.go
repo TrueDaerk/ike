@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"ike/internal/concealfilter"
+	"ike/internal/issuefilter"
 	"ike/internal/layout"
 	"ike/internal/matcher"
 	"ike/internal/theme"
@@ -359,6 +360,33 @@ func validate(c *Config) []Diagnostic {
 	default:
 		diags = append(diags, Diagnostic{Field: "issues.default_sort", Message: fmt.Sprintf("unknown sort %q, using \"relevance\"", c.Issues.DefaultSort)})
 		c.Issues.DefaultSort = "relevance"
+	}
+	// The default filter and the saved filters share one expression syntax
+	// (#2115). An expression that does not parse is dropped rather than half
+	// applied — a pane seeded from a broken filter would show a listing
+	// nobody asked for.
+	if c.Issues.DefaultFilter != "" {
+		if _, err := issuefilter.Parse(c.Issues.DefaultFilter); err != nil {
+			diags = append(diags, Diagnostic{Field: "issues.default_filter", Message: fmt.Sprintf("%s, ignoring the default filter", err)})
+			c.Issues.DefaultFilter = ""
+		}
+	}
+	if len(c.Issues.SavedFilters) > 0 {
+		kept := make([]string, 0, len(c.Issues.SavedFilters))
+		seen := map[string]bool{}
+		for _, entry := range c.Issues.SavedFilters {
+			name, _, err := issuefilter.ParseSaved(entry)
+			switch {
+			case err != nil:
+				diags = append(diags, Diagnostic{Field: "issues.saved_filters", Message: fmt.Sprintf("%q: %s, dropping it", entry, err)})
+			case seen[name]:
+				diags = append(diags, Diagnostic{Field: "issues.saved_filters", Message: fmt.Sprintf("duplicate saved filter %q, keeping the first", name)})
+			default:
+				seen[name] = true
+				kept = append(kept, entry)
+			}
+		}
+		c.Issues.SavedFilters = kept
 	}
 	// Performance HUD (#1999): the refresh interval is also the HUD's own
 	// wake rate, so the lower bound keeps a diagnostic overlay from becoming

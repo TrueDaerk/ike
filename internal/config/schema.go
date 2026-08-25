@@ -339,16 +339,23 @@ type Scratch struct {
 	PanelHeight   int    `toml:"panel_height"`
 }
 
-// Issues holds the forge Issues tool window's opening defaults (#2090).
+// Issues holds the forge Issues tool window's opening defaults (#2090, #2115).
 // DefaultTab selects which of the pane's two views it opens on ("issues" or
 // "prs"); DefaultSort is the list order both views start in ("relevance" —
 // best fuzzy match while filtering, newest otherwise — "newest", "oldest",
-// "updated" or "number"). Both only seed a freshly opened pane: switching the
-// tab or the sort order by hand wins for the rest of the session, so a live
-// config reload never yanks the view away.
+// "updated" or "number"); DefaultFilter is the narrowing a freshly opened
+// pane starts with, written in the same qualifier syntax the filter overlay's
+// match input accepts ("is:open label:bug crash", internal/issuefilter).
+// SavedFilters are named filters in that syntax ("triage=is:open label:bug"),
+// offered on the filter overlay's saved row. All only seed a freshly opened
+// pane: switching the
+// tab, the sort order or a filter by hand wins for the rest of the session,
+// so a live config reload never yanks the view away.
 type Issues struct {
-	DefaultTab  string `toml:"default_tab"`
-	DefaultSort string `toml:"default_sort"`
+	DefaultTab    string   `toml:"default_tab"`
+	DefaultSort   string   `toml:"default_sort"`
+	DefaultFilter string   `toml:"default_filter"`
+	SavedFilters  []string `toml:"saved_filters"`
 }
 
 // Todo holds the comment-tag index settings (#61). Patterns is the list of tag

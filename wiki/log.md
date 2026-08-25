@@ -1,5 +1,39 @@
 # Log
 
+## 2026-08-25 (ui: saved filters and an issues default filter, #2115)
+
+- **`issues.default_filter` seeds a freshly opened issues pane** with a state
+  gate, a label selection and a match pattern, following the seed rule
+  `issues.default_tab`/`issues.default_sort` already have: the first filter
+  change by hand wins for the rest of the session, so a live config reload
+  never re-narrows a list somebody is working in.
+- **`issues.saved_filters` names recurring filters** (`"triage=is:open
+  label:bug"`). The filter overlay gained a **saved row** — present only
+  while any is configured — cycling over `(none)` plus the configured names;
+  picking one replaces every narrowing at once, so switching between two
+  never leaves the previous one's labels behind, and `(none)` clears them
+  again. The row's name is *derived* from the live filter rather than
+  remembered, so it can never go stale. Reachable from the action menu too.
+- Both are written in **#2110's qualifier syntax** — the one the match input
+  already accepts — so an expression can be typed in the overlay and pasted
+  into the config unchanged: `is:` (alias `state:`), a repeated `label:`
+  (OR'd, `label:"good first issue"` for a name with spaces), `sort:`, and
+  anything else as match text. A `sort:` qualifier is the more specific
+  setting and wins over `issues.default_sort`. Commas separate nothing — the
+  settings UI edits the saved list comma-separated.
+- The strict reader is the new leaf package **`internal/issuefilter`**: the
+  config layer cannot import the pane, so it is a second implementation, and
+  `ghissues/qualifier_conformance_test.go` pins the two to each other
+  (vocabularies and per-expression results). The one intended difference is
+  strictness — in the live input an unknown token stays literal fuzzy text
+  with a note, in a config value it is an error.
+- Settings UI: both entries sit on the **Issues Window** page, the filter as
+  validated free text and the saved list as a validated list. The `String`
+  editor gained a `ValidateString` hook, so a typo is refused in the form
+  with the parser's own message instead of being silently ignored when the
+  pane opens; a config file naming a broken expression drops it with a
+  diagnostic (the whole default filter, or just the offending saved entry).
+
 ## 2026-08-25 (ui: structured qualifiers in the issues filter match input, #2110)
 
 - **The filter overlay's match input accepts structured qualifiers** the way
