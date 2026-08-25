@@ -135,9 +135,27 @@ func (t *teaForge) apiDo(method, path string, query url.Values, payload any) ([]
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		// The error document's message is the forge's own reason (a merge
+		// conflict, unmet branch protection) — surface it rather than the
+		// bare status (#2089).
+		if msg := giteaErrorMessage(body); msg != "" {
+			return nil, fmt.Errorf("gitea: %s (%s)", msg, resp.Status)
+		}
 		return nil, fmt.Errorf("gitea: %s (%s)", resp.Status, path)
 	}
 	return body, nil
+}
+
+// giteaErrorMessage reads the message field of one Gitea error document, ""
+// when the body is not one.
+func giteaErrorMessage(body []byte) string {
+	var doc struct {
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(body, &doc) != nil {
+		return ""
+	}
+	return strings.TrimSpace(doc.Message)
 }
 
 // repoPath is the API path prefix of the bound repository.
@@ -417,8 +435,56 @@ func (t *teaForge) setState(issue int, state string) error {
 	return err
 }
 
-func (t *teaForge) MergePR(pr int) error { return unsupported("tea", "merge PR") }
-func (t *teaForge) ClosePR(pr int) error { return unsupported("tea", "close PR") }
+// PRDetail fetches one pull request in full (#2089): the PR endpoint, the
+// repository's default merge style, and the head commit's combined status for
+// the per-check list Gitea's PR listing does not carry. The two extra probes
+// are best-effort — a repository without CI must still show its PRs.
+func (t *teaForge) PRDetail(pr int) (PRDetail, error) {
+	out, err := t.apiGet(t.repoPath()+"/pulls/"+itoa(pr), nil)
+	if err != nil {
+		return PRDetail{}, err
+	}
+	d, sha, err := parseGiteaPRDetail(out)
+	if err != nil {
+		return PRDetail{}, err
+	}
+	if repo, err := t.apiGet(t.repoPath(), nil); err == nil {
+		if style := parseGiteaMergeStyle(repo); style != "" {
+			d.MergeMethod = style
+		}
+	}
+	if sha != "" {
+		if status, err := t.apiGet(t.repoPath()+"/commits/"+url.PathEscape(sha)+"/status", nil); err == nil {
+			if runs, state, ok := parseGiteaCommitStatus(status); ok {
+				d.CheckRuns, d.Checks = runs, state
+			}
+		}
+	}
+	return d, nil
+}
+
+// CommentPR posts a comment on a pull request. Gitea serves PR comments
+// through the issue comment endpoint, so this is CreateComment verbatim.
+func (t *teaForge) CommentPR(pr int, body string) error { return t.CreateComment(pr, body) }
+
+// MergePR merges an open pull request through the merge endpoint. A refusal —
+// merge conflicts, unmet branch protection — comes back as the endpoint's
+// message, which apiDo surfaces verbatim.
+func (t *teaForge) MergePR(pr int, method string) error {
+	if method == "" {
+		method = "merge"
+	}
+	_, err := t.apiDo(http.MethodPost, t.repoPath()+"/pulls/"+itoa(pr)+"/merge", nil,
+		map[string]string{"Do": method})
+	return err
+}
+
+// ClosePR closes an open pull request without merging through the PR PATCH.
+func (t *teaForge) ClosePR(pr int) error {
+	_, err := t.apiDo(http.MethodPatch, t.repoPath()+"/pulls/"+itoa(pr), nil,
+		map[string]string{"state": "closed"})
+	return err
+}
 
 // issuePath is the API path of one issue of the bound repository.
 func (t *teaForge) issuePath(issue int) string {
@@ -652,6 +718,107 @@ func parseGiteaTimeline(out []byte, login string) ([]TimelineEntry, int, error) 
 		entries = append(entries, e)
 	}
 	return entries, len(raw), nil
+}
+
+// giteaPRDetail mirrors the fields the detail view needs from Gitea's PR
+// endpoint (#2089) on top of the listing's shape.
+type giteaPRDetail struct {
+	giteaPR
+	Body string `json:"body"`
+	Base struct {
+		Ref string `json:"ref"`
+	} `json:"base"`
+	HeadFull struct {
+		Ref string `json:"ref"`
+		SHA string `json:"sha"`
+	} `json:"head"`
+	Mergeable *bool `json:"mergeable"`
+}
+
+// parseGiteaPRDetail decodes one Gitea PR document into the neutral PRDetail
+// plus the head SHA the commit-status probe needs.
+func parseGiteaPRDetail(out []byte) (PRDetail, string, error) {
+	var raw giteaPRDetail
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return PRDetail{}, "", err
+	}
+	state := strings.ToUpper(raw.State)
+	if raw.Merged || (raw.MergedAt != "" && raw.MergedAt != "null") {
+		state = "MERGED"
+	}
+	d := PRDetail{
+		PR: PR{
+			Number: raw.Number, Title: raw.Title, State: state, URL: raw.URL,
+			HeadRef:   raw.HeadFull.Ref,
+			Author:    raw.User.Login,
+			CreatedAt: parseTime(raw.CreatedAt),
+			UpdatedAt: parseTime(raw.UpdatedAt),
+		},
+		Body:        raw.Body,
+		BaseRef:     raw.Base.Ref,
+		MergeMethod: "merge",
+	}
+	if raw.Mergeable != nil {
+		if *raw.Mergeable {
+			d.Mergeable = "mergeable"
+		} else {
+			d.Mergeable = "conflicting"
+		}
+	}
+	return d, raw.HeadFull.SHA, nil
+}
+
+// parseGiteaMergeStyle reads the repository's default merge style, "" when
+// the document does not carry one.
+func parseGiteaMergeStyle(out []byte) string {
+	var repo struct {
+		Style string `json:"default_merge_style"`
+	}
+	if json.Unmarshal(out, &repo) != nil {
+		return ""
+	}
+	return repo.Style
+}
+
+// parseGiteaCommitStatus decodes one combined commit status into the
+// per-check list and its folded rollup; ok is false on an unreadable
+// document, so the caller keeps the detail without checks.
+func parseGiteaCommitStatus(out []byte) ([]CheckRun, CheckState, bool) {
+	var combined struct {
+		Statuses []struct {
+			Context string `json:"context"`
+			Status  string `json:"status"`
+		} `json:"statuses"`
+	}
+	if json.Unmarshal(out, &combined) != nil {
+		return nil, ChecksNone, false
+	}
+	var runs []CheckRun
+	rollup := ChecksNone
+	for _, s := range combined.Statuses {
+		name := s.Context
+		if name == "" {
+			name = "check"
+		}
+		state := giteaStatusState(s.Status)
+		runs = append(runs, CheckRun{Name: name, State: state})
+		rollup = worseChecks(rollup, state)
+	}
+	return runs, rollup, true
+}
+
+// giteaStatusState maps one Gitea commit-status state onto CheckState.
+func giteaStatusState(s string) CheckState {
+	switch strings.ToLower(s) {
+	case "success":
+		return ChecksPassing
+	case "pending":
+		return ChecksPending
+	case "":
+		return ChecksNone
+	default: // error, failure, warning
+		return ChecksFailing
+	}
 }
 
 // parseGiteaPermissions folds the repo endpoint's permissions object

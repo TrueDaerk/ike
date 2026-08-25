@@ -13,10 +13,13 @@
 // forge rejection. Texts that are the user's own can be edited from there too
 // (#2087, edit.go): 'e' picks the issue body or one of your comments, 'c'
 // composes a new one, and the app opens each in a markdown buffer that pushes
-// when it is saved. The PR view lists the pull
-// requests full width
-// (number, title, head branch, CI rollup, review decision). Every action is
-// discoverable through the footer and the action menu.
+// when it is saved. The PR view lists the pull requests full width (number,
+// title, head branch, CI rollup, review decision); enter opens a full-area PR
+// detail (#2089, prdetail.go) — markdown description, per-check CI status,
+// the linked Closes-#N issue — and, with push permission, the merge- and
+// close-with-comment actions behind a confirm dialog, followed by an offered
+// (never automatic) post-merge branch cleanup. Every action is discoverable
+// through the footer and the action menu.
 //
 // It stays a pure consumer of internal/forge messages: the app injects the
 // per-state fetch factory and routes forge.IssuesMsg results in; the pane
@@ -60,8 +63,8 @@ type Tab int
 const (
 	// TabIssues is the issue list, the pane's default view.
 	TabIssues Tab = iota
-	// TabPRs is the pull-request list, full width. The PR *detail* is #2089's
-	// scope; here enter opens the PR in the browser.
+	// TabPRs is the pull-request list, full width; enter opens the full-area
+	// PR detail (#2089).
 	TabPRs
 )
 
@@ -173,6 +176,13 @@ const (
 	// ovTextEdit is the text-edit picker (#2087): which of the issue's texts
 	// — the body, one of your comments — the markdown edit buffer opens.
 	ovTextEdit
+	// ovPRAct is the merge/close-with-comment dialog (#2089): an optional
+	// comment stage followed by an explicit confirm naming PR, branches and
+	// merge method — the action is irreversible.
+	ovPRAct
+	// ovCleanup is the post-merge offer of the change-workflow branch cleanup
+	// (#2089) — offered, never automatic.
+	ovCleanup
 )
 
 // listRow is one rendered row of a view: either a group header (header set,
@@ -269,6 +279,36 @@ type Model struct {
 	tlLoading bool
 	tlErr     string
 	tlRev     int
+
+	// PR detail (#2089): the app-injected per-PR fetch and write factories,
+	// the open detail's fetched data, its rendered lines and scroll, and the
+	// merge/close dialog's state. prdRev bumps on every data change and
+	// invalidates the rendered lines, mirroring the issue detail.
+	prFetch  func(pr int) tea.Cmd
+	prAction func(forge.PRAction) tea.Cmd
+
+	prDetail   bool
+	prd        *forge.PRDetail
+	prdFor     int // PR number the fetch belongs to; 0 = none
+	prdLoading bool
+	prdErr     string
+	prdRev     int
+
+	prdRenderFor int // PR number the lines were rendered for
+	prdW         int // width they were rendered at
+	prdRenderRev int // prdRev they were rendered at
+	prdLines     []string
+	prdTop       int
+
+	// The merge/close dialog: which action, its two stages (comment, then
+	// confirm), and — after a successful merge — the head branch the cleanup
+	// offer names.
+	prActKind     string
+	prActStage    int
+	prActFor      int
+	prActHead     string
+	prActBase     string
+	cleanupBranch string
 
 	// Mutations (#2088): the app-injected write factory and the one-shot
 	// repository metadata probe behind the label/assignee pickers and the
@@ -588,8 +628,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case m.ov != ovNone:
 		return m.overlayKey(msg)
-	case m.detail:
+	case m.detail && m.tab == TabIssues:
 		return m.detailKey(msg)
+	case m.prDetail && m.tab == TabPRs:
+		return m.prDetailKey(msg)
 	default:
 		return m.listKey(msg)
 	}
@@ -636,7 +678,10 @@ func (m *Model) listKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "o":
 		return m.openInBrowser()
 	}
-	return m.mutationKey(key)
+	if cmd := m.mutationKey(key); cmd != nil {
+		return cmd
+	}
+	return m.prActionKey(key)
 }
 
 // mutationKey routes the write keys (#2088), which the list and the detail
@@ -740,6 +785,7 @@ func (m *Model) setTop(v int) {
 // lands on the list.
 func (m *Model) switchTab(delta int) {
 	m.detail = false
+	m.prDetail = false
 	m.tabTouched = true
 	next := (int(m.tab) + delta + 2) % 2
 	m.tab = Tab(next)
@@ -752,6 +798,7 @@ func (m *Model) SetTab(t Tab) {
 		return
 	}
 	m.detail = false
+	m.prDetail = false
 	m.tabTouched = true
 	m.tab = t
 	m.clampScroll()
@@ -928,11 +975,11 @@ func (m *Model) resetCursors() {
 }
 
 // activate runs the enter action of the active view: the issue detail (with
-// its lazy timeline fetch, #2084), or — until #2089 brings the PR detail —
-// the PR's page in the browser.
+// its lazy timeline fetch, #2084) or the PR detail (with its full fetch,
+// #2089).
 func (m *Model) activate() tea.Cmd {
 	if m.tab == TabPRs {
-		return m.openInBrowser()
+		return m.openPRDetail()
 	}
 	m.openDetail()
 	return m.PendingTimelineCmd()
@@ -965,6 +1012,7 @@ func (m *Model) Reveal(number int) bool {
 		return false
 	}
 	m.tab, m.ov, m.ovSaved = TabIssues, ovNone, nil
+	m.prDetail = false
 	m.fEditing, m.fInput, m.fCur = false, "", 0
 	m.labelSel = map[string]bool{}
 	// The issue is already in the listing, so widening the state gate needs no
@@ -1018,10 +1066,16 @@ func (m *Model) chromeRows() int {
 	if m.filterRowShown() {
 		n++
 	}
-	if m.detail && m.tab == TabIssues {
+	if m.detailShown() {
 		n++
 	}
 	return n
+}
+
+// detailShown reports whether a full-area detail (issue or PR) is on screen,
+// which costs the position-header row.
+func (m *Model) detailShown() bool {
+	return (m.detail && m.tab == TabIssues) || (m.prDetail && m.tab == TabPRs)
 }
 
 // bodyHeight is the room the list or the detail body gets.
@@ -1039,7 +1093,7 @@ func (m *Model) bodyTop() int {
 	if m.filterRowShown() {
 		n++
 	}
-	if m.detail && m.tab == TabIssues {
+	if m.detailShown() {
 		n++
 	}
 	return n

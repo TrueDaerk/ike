@@ -13,6 +13,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/forge"
 	"ike/internal/ui"
 )
 
@@ -60,16 +61,36 @@ func (m *Model) actions() []action {
 			action{key: "r", hint: "refresh", label: "Refresh the issue and its activity", run: (*Model).refreshDetail},
 		)
 	}
+	if m.prDetail && m.tab == TabPRs {
+		acts := []action{
+			act("esc", "back", "Back to the list", func(m *Model) tea.Cmd { m.prDetail = false; return nil }),
+			act("ctrl+j", "next PR", "Next pull request", func(m *Model) tea.Cmd { return m.stepPR(1) }),
+			act("ctrl+k", "prev PR", "Previous pull request", func(m *Model) tea.Cmd { return m.stepPR(-1) }),
+			act("j/k", "scroll", "Scroll the body", nil),
+		}
+		acts = append(acts, m.prActionActions()...)
+		return append(acts,
+			act("o", "browser", "Open in browser", (*Model).openInBrowser),
+			act("tab", "view", "Switch view (Issues / PRs)", func(m *Model) tea.Cmd { m.switchTab(1); return nil }),
+			act("r", "refresh", "Refresh the pull request", func(m *Model) tea.Cmd {
+				return tea.Batch(m.startRefresh(), m.fetchPRDetail(m.prdFor))
+			}),
+		)
+	}
 	if m.tab == TabPRs {
-		return []action{
-			act("enter", "open PR", "Open the pull request in the browser", (*Model).openInBrowser),
+		acts := []action{
+			act("enter", "detail", "Open the pull request detail", (*Model).openPRDetail),
+			act("o", "browser", "Open in browser", (*Model).openInBrowser),
+		}
+		acts = append(acts, m.prActionActions()...)
+		return append(acts,
 			act("f", "filter", "Filter pull requests", func(m *Model) tea.Cmd { m.openFilter(); return nil }),
 			act("t", "state", "State filter (open / closed / all)", (*Model).cycleState),
 			act("a", "sort", "Sort order ("+m.sort.String()+")", func(m *Model) tea.Cmd { m.cycleSort(); return nil }),
 			act("esc", "clear filters", "Clear the filters", (*Model).clearFilters),
 			act("tab", "view", "Switch view (Issues / PRs)", func(m *Model) tea.Cmd { m.switchTab(-1); return nil }),
 			act("r", "refresh", "Refresh the listing", (*Model).startRefresh),
-		}
+		)
 	}
 	acts := []action{
 		act("enter", "detail", "Open the issue detail", func(m *Model) tea.Cmd { m.openDetail(); return nil }),
@@ -106,6 +127,29 @@ func (m *Model) mutationActions() []action {
 		act("C", verb+"+comment", capitalize(verb)+" the issue with a comment", (*Model).openCommentPrompt),
 	}
 	if reason := m.mutateReason(); reason != "" {
+		for i := range acts {
+			acts[i].disabled, acts[i].reason = true, reason
+			acts[i].label += " — " + reason
+		}
+	}
+	return acts
+}
+
+// prActionActions are the write actions of the PR views (#2089): merge with
+// a comment and close with a comment, both behind the confirm dialog. Only
+// listed once a forge backend is bound; without push permission each is
+// disabled and names why, mirroring the issue mutations.
+func (m *Model) prActionActions() []action {
+	if m.prAction == nil {
+		return nil
+	}
+	acts := []action{
+		act("M", "merge", "Merge the pull request (with an optional comment)",
+			func(m *Model) tea.Cmd { return m.openPRActionDialog(forge.PRMerge) }),
+		act("c", "close", "Close the pull request (with an optional comment)",
+			func(m *Model) tea.Cmd { return m.openPRActionDialog(forge.PRClose) }),
+	}
+	if reason := m.prActReason(); reason != "" {
 		for i := range acts {
 			acts[i].disabled, acts[i].reason = true, reason
 			acts[i].label += " — " + reason
@@ -176,6 +220,8 @@ func (m *Model) overlayItems() int {
 		return len(m.editRows())
 	case ovComment:
 		return 2 // the input line and its hint
+	case ovPRAct, ovCleanup:
+		return 3 // fixed dialog rows, not navigable — they only size the box
 	case ovTextEdit:
 		return len(m.textTargets())
 	}
@@ -226,6 +272,14 @@ func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 	// so it never sees the list navigation.
 	if m.ov == ovComment {
 		return m.commentPromptKey(msg)
+	}
+	// The PR dialogs are text/confirm surfaces too (#2089): every key is
+	// theirs, never the list navigation.
+	if m.ov == ovPRAct {
+		return m.prActionDialogKey(msg)
+	}
+	if m.ov == ovCleanup {
+		return m.cleanupOfferKey(msg)
 	}
 	if ui.ListNav(key, &m.ovCursor, m.overlayItems(), m.overlayHeight(), ui.NavFull) {
 		m.clampOverlay()

@@ -273,8 +273,47 @@ func (g *ghForge) ReopenIssue(issue int) error {
 	return err
 }
 
-func (g *ghForge) MergePR(pr int) error { return unsupported("gh", "merge PR") }
-func (g *ghForge) ClosePR(pr int) error { return unsupported("gh", "close PR") }
+// PRDetail fetches one pull request in full (#2089) via `gh pr view --json`,
+// plus a best-effort repository probe for the merge method a merge would use
+// — an unreadable repo document leaves the "merge" default rather than
+// failing the view.
+func (g *ghForge) PRDetail(pr int) (PRDetail, error) {
+	out, err := runGH(g.dir, ghPRViewArgs(pr)...)
+	if err != nil {
+		return PRDetail{}, err
+	}
+	d, err := parseGHPRDetail(out)
+	if err != nil {
+		return PRDetail{}, err
+	}
+	if repo, err := runGH(g.dir, "api", "repos/{owner}/{repo}"); err == nil {
+		if method := parseGHMergeMethod(repo); method != "" {
+			d.MergeMethod = method
+		}
+	}
+	return d, nil
+}
+
+// CommentPR posts a comment on a pull request via `gh pr comment
+// --body-file -`; like every editable text the body goes on stdin (#2087).
+func (g *ghForge) CommentPR(pr int, body string) error {
+	_, err := runGHStdin(g.dir, []byte(body), ghPRCommentArgs(pr)...)
+	return err
+}
+
+// MergePR merges an open pull request via `gh pr merge` with the method flag.
+// gh's stderr carries the forge's own refusal (merge conflicts, branch
+// protection), which cliError surfaces verbatim.
+func (g *ghForge) MergePR(pr int, method string) error {
+	_, err := runGH(g.dir, ghMergeArgs(pr, method)...)
+	return err
+}
+
+// ClosePR closes an open pull request without merging via `gh pr close`.
+func (g *ghForge) ClosePR(pr int) error {
+	_, err := runGH(g.dir, "pr", "close", itoa(pr))
+	return err
+}
 
 // The argument builders below are pure so the wiring is unit-testable
 // without a gh on PATH (#2088).
@@ -326,6 +365,56 @@ func ghAssigneesRequest(issue int, assignees []string) ([]string, []byte) {
 	}
 	return []string{"api", "--method", "PATCH",
 		"repos/{owner}/{repo}/issues/" + itoa(issue), "--input", "-"}, body
+}
+
+// ghPRViewArgs builds the full PR fetch (#2089): everything the listing asks
+// for plus body, base branch, mergeability and the rollup entries' names.
+func ghPRViewArgs(pr int) []string {
+	return []string{"pr", "view", itoa(pr),
+		"--json", "number,title,body,url,state,author,headRefName,baseRefName,reviewDecision,mergeable,createdAt,updatedAt,statusCheckRollup"}
+}
+
+// ghPRCommentArgs builds `gh pr comment <n> --body-file -`; the body is piped
+// in by the caller.
+func ghPRCommentArgs(pr int) []string {
+	return []string{"pr", "comment", itoa(pr), "--body-file", "-"}
+}
+
+// ghMergeArgs builds `gh pr merge <n> --merge|--squash|--rebase`. An unknown
+// or empty method falls back to a plain merge commit — never to gh's
+// interactive prompt, which cannot run here.
+func ghMergeArgs(pr int, method string) []string {
+	flag := "--merge"
+	switch method {
+	case "squash":
+		flag = "--squash"
+	case "rebase":
+		flag = "--rebase"
+	}
+	return []string{"pr", "merge", itoa(pr), flag}
+}
+
+// parseGHMergeMethod picks the merge method out of the repository document:
+// the first allowed of merge commit, squash, rebase — GitHub has no default
+// beyond what it allows. "" when the document is unreadable.
+func parseGHMergeMethod(out []byte) string {
+	var repo struct {
+		Merge  *bool `json:"allow_merge_commit"`
+		Squash *bool `json:"allow_squash_merge"`
+		Rebase *bool `json:"allow_rebase_merge"`
+	}
+	if err := json.Unmarshal(out, &repo); err != nil {
+		return ""
+	}
+	switch {
+	case repo.Merge != nil && *repo.Merge:
+		return "merge"
+	case repo.Squash != nil && *repo.Squash:
+		return "squash"
+	case repo.Rebase != nil && *repo.Rebase:
+		return "rebase"
+	}
+	return ""
 }
 
 // ghRepoLabelArgs builds the repository label listing.
@@ -516,6 +605,61 @@ func parsePRs(out []byte) ([]PR, error) {
 		prs = append(prs, pr)
 	}
 	return prs, nil
+}
+
+// ghPRDetail mirrors the fields requested from `gh pr view --json` (#2089).
+// The rollup entries carry their identity too: a CheckRun's name, a
+// StatusContext's context.
+type ghPRDetail struct {
+	ghPR
+	Body    string `json:"body"`
+	BaseRef string `json:"baseRefName"`
+	// Mergeable is GitHub's verdict: MERGEABLE, CONFLICTING or UNKNOWN.
+	Mergeable string `json:"mergeable"`
+	Rollup    []struct {
+		Name       string `json:"name"`
+		Context    string `json:"context"`
+		Status     string `json:"status"`
+		Conclusion string `json:"conclusion"`
+		State      string `json:"state"`
+	} `json:"statusCheckRollup"`
+}
+
+// parseGHPRDetail decodes one `gh pr view --json` document into the neutral
+// PRDetail, folding the rollup into both the per-check list and the summary
+// CheckState.
+func parseGHPRDetail(out []byte) (PRDetail, error) {
+	var raw ghPRDetail
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return PRDetail{}, err
+	}
+	d := PRDetail{
+		PR: PR{
+			Number: raw.Number, Title: raw.Title, State: strings.ToUpper(raw.State),
+			URL: raw.URL, HeadRef: raw.HeadRef,
+			Author:    raw.Author.Login,
+			Review:    strings.ToUpper(raw.Review),
+			CreatedAt: parseTime(raw.CreatedAt),
+			UpdatedAt: parseTime(raw.UpdatedAt),
+		},
+		Body:        raw.Body,
+		BaseRef:     raw.BaseRef,
+		Mergeable:   strings.ToLower(raw.Mergeable),
+		MergeMethod: "merge",
+	}
+	for _, c := range raw.Rollup {
+		name := c.Name
+		if name == "" {
+			name = c.Context
+		}
+		if name == "" {
+			name = "check"
+		}
+		state := checkOutcome(c.Status, c.Conclusion, c.State)
+		d.CheckRuns = append(d.CheckRuns, CheckRun{Name: name, State: state})
+		d.Checks = worseChecks(d.Checks, state)
+	}
+	return d, nil
 }
 
 // checkOutcome classifies one rollup entry. A CheckRun still running carries

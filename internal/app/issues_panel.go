@@ -79,6 +79,8 @@ func (m *Model) openIssuesPanel() tea.Cmd {
 	p.SetTimeline(forge.TimelineFactory("."))
 	p.SetMutate(forge.MutateFactory("."))
 	p.SetMeta(forge.MetaFactory("."))
+	p.SetPRDetailFetch(forge.PRDetailFactory("."))
+	p.SetPRAction(forge.PRActionFactory("."))
 	m.setFocus(key)
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
@@ -124,6 +126,42 @@ func (m *Model) finishIssueMutation(msg forge.MutationMsg) tea.Cmd {
 		m.host.Notify(host.Error, "issue #"+strconv.Itoa(msg.Issue)+": "+msg.Kind+" change failed: "+msg.Err.Error())
 	}
 	return p.SetMutationResult(msg)
+}
+
+// fillPRDetail routes one fetched PR detail into the pane (#2089).
+func (m *Model) fillPRDetail(msg forge.PRDetailMsg) {
+	if p := m.issuesPanel(); p != nil {
+		p.SetPRDetailResult(msg)
+	}
+}
+
+// finishPRAction routes one finished merge/close into the pane (#2089), which
+// surfaces the forge's own reason on a rejection and refetches on success; a
+// rejection is toasted too, so it is not missed while the pane is unfocused.
+func (m *Model) finishPRAction(msg forge.PRActionMsg) tea.Cmd {
+	p := m.issuesPanel()
+	if p == nil {
+		return nil
+	}
+	if msg.Err != nil {
+		m.host.Notify(host.Error, "PR #"+strconv.Itoa(msg.PR)+": "+msg.Kind+" failed: "+msg.Err.Error())
+	}
+	return p.SetPRActionResult(msg)
+}
+
+// finishBranchCleanup reports the post-merge cleanup outcome (#2089) and lets
+// the VCS layer re-read the switched worktree, mirroring finishStartWork.
+func (m *Model) finishBranchCleanup(msg forge.CleanupDoneMsg) tea.Cmd {
+	if msg.Err != nil {
+		m.host.Notify(host.Error, "branch cleanup failed: "+msg.Err.Error())
+		return nil
+	}
+	if msg.Warning != "" {
+		m.host.Notify(host.Warn, "cleaned up "+msg.Branch+" — "+msg.Warning)
+	} else {
+		m.host.Notify(host.Info, "cleaned up "+msg.Branch)
+	}
+	return m.scheduleVCSRefresh()
 }
 
 // finishStartWork reports the start-work outcome (#1934) and lets the VCS

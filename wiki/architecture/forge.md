@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Forge Layer
-description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, the capability model (triage vs push, plus the authenticated login) both bindings probe, the issue mutations (labels, assignees, state, comments), the editable-text layer with its stale-base check, and the background poll service that diffs snapshots into typed events (#2083, #2088, #2087, #2085).
+description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, the capability model (triage vs push, plus the authenticated login) both bindings probe, the issue mutations (labels, assignees, state, comments), the editable-text layer with its stale-base check, the PR detail/action layer (full PR fetch with per-check CI, merge/close with a comment, post-merge branch cleanup), and the background poll service that diffs snapshots into typed events (#2083, #2088, #2087, #2089, #2085).
 resource: internal/forge/backend.go
 tags: [architecture, vcs, forge, github, gitea, forgejo, issues]
 timestamp: 2026-08-25T00:00:00Z
@@ -27,13 +27,14 @@ responses — never on a human rendering.
 with labels + assignees), `PRs()` (every state), `Timeline(issue, page)`,
 `CreateComment` / `EditComment` / `EditIssueBody` with their read halves
 `IssueBody` / `CommentBody`, `AddLabels` / `RemoveLabels` / `SetAssignees` /
-`CloseIssue` / `ReopenIssue`, `RepoLabels` / `Collaborators`, `MergePR` /
-`ClosePR`, and `Capabilities()`. The interface ships complete; operations a
-binding has not implemented yet return a typed `*ErrUnsupported` (backend +
-operation), so later sub-issues only fill in bindings. #2083 brought the
-listings and `Capabilities()`; #2084 the timeline; #2088 the issue mutations
-(labels, assignees, state, comment creation) plus the two metadata listings;
-#2087 the editable texts and their reads; the PR actions are still stubs.
+`CloseIssue` / `ReopenIssue`, `RepoLabels` / `Collaborators`, `PRDetail` /
+`CommentPR` / `MergePR(pr, method)` / `ClosePR`, and `Capabilities()`. The
+interface ships complete; operations a binding has not implemented yet return
+a typed `*ErrUnsupported` (backend + operation), so later sub-issues only
+fill in bindings. #2083 brought the listings and `Capabilities()`; #2084 the
+timeline; #2088 the issue mutations (labels, assignees, state, comment
+creation) plus the two metadata listings; #2087 the editable texts and their
+reads; #2089 the PR detail and the merge/close actions.
 
 `Timeline(issue, page)` (#2084) fetches one 30-entry page of an issue's
 history, oldest first, and reports whether more pages follow — long
@@ -125,6 +126,50 @@ applies, `Err` on a transient failure, `PRErr` when only the PR listing
 failed — the issues are still worth showing). `PollCmd(dir)` is the same
 fetch tagged `Poll: true` for the background poll service below; the tag is
 what lets the consumers tell "the user asked for this" from "the timer did".
+
+## PR detail and actions (`pr.go`, #2089)
+
+`PRDetail(pr)` fetches one pull request in full: the neutral **`PRDetail`**
+embeds the listing's `PR` and adds the markdown body, the base branch, a
+mergeability verdict (`mergeable` / `conflicting` / `unknown` / `""`), the
+merge method a merge would use, and the per-check CI results as `CheckRun`
+rows (name + folded `CheckState`) — the listing only carries the rollup.
+`PRDetailCmd(dir, pr)` → `PRDetailMsg` wraps it, injected as
+`PRDetailFactory(dir)`.
+
+The write side is one neutral **`PRAction`** — PR number, kind (`PRMerge` /
+`PRClose`), merge method, optional comment. `PRActionCmd` applies the comment
+**first** (so the timeline reads in the user's order) and stops on its
+failure before the irreversible half; it resolves to a `PRActionMsg` whose
+`Err` carries the **forge's own reason** — a merge conflict, an unmet branch
+protection — not a generic failure. `PRActionFactory(dir)` is the injected
+closure.
+
+Bindings: gh reads `gh pr view --json` (body, `baseRefName`, `mergeable`,
+`statusCheckRollup` with each entry's `name`/`context`) plus a best-effort
+`gh api repos/{owner}/{repo}` probe folding the `allow_*` flags into the
+method (merge commit first, then squash, then rebase); it writes with
+`gh pr comment --body-file -`, `gh pr merge --merge|--squash|--rebase` and
+`gh pr close` — gh's stderr carries GitHub's refusal, which `cliError`
+surfaces. tea/Gitea reads `GET /pulls/{n}` (mergeable bool), the repo
+endpoint's `default_merge_style` and the head commit's combined status for
+the per-check list (both best-effort); it writes with
+`POST /pulls/{n}/merge {"Do": method}`, `PATCH /pulls/{n}` (close) and the
+issue comment endpoint (Gitea serves PR comments there). Non-2xx responses
+now surface the error document's `message` — the forge's reason — instead of
+the bare status.
+
+`LinkedIssue(body)` derives the issue a PR body claims to close (`Closes #N`
+and the fix/resolve keyword variants), the detail view's link back into the
+issues tab.
+
+`CleanupBranchCmd(dir, branch)` → `CleanupDoneMsg` is the post-merge
+change-workflow cleanup: refuse a dirty worktree and the default branch
+itself, `checkout` the default branch, `pull --ff-only`, delete the issue
+branch locally (`-D` — a squash/rebase merge leaves it unmerged in local
+history) and on origin. The pull and the remote deletion degrade to warnings
+(forges often auto-delete merged branches). It runs **only** on the user's
+explicit confirmation of the pane's offer.
 
 ## Backend detection (`detect.go`)
 

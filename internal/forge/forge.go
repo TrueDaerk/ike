@@ -83,6 +83,35 @@ type PR struct {
 	Checks    CheckState
 }
 
+// CheckRun is one named CI check of a pull request with its folded state —
+// the per-check row the PR detail view lists (#2089), where the listing only
+// carries the rollup.
+type CheckRun struct {
+	Name  string
+	State CheckState
+}
+
+// PRDetail is one pull request in full (#2089): everything the listing's PR
+// carries plus the description, the base branch, the per-check CI results,
+// the mergeability and the merge method the forge would use. Backends that do
+// not report a field leave it zero; the view degrades to hiding the line.
+type PRDetail struct {
+	PR
+	// Body is the PR's description in markdown.
+	Body string
+	// BaseRef is the branch the PR merges into.
+	BaseRef string
+	// Mergeable is the forge's mergeability verdict in a neutral vocabulary:
+	// "mergeable", "conflicting", "unknown", or "" when not reported.
+	Mergeable string
+	// MergeMethod is the method a merge would use, from the repository's
+	// default/allowed settings: "merge", "squash", "rebase" (Gitea also
+	// "rebase-merge"). Defaults to "merge" when the probe cannot tell.
+	MergeMethod string
+	// CheckRuns are the individual CI checks of the head commit.
+	CheckRuns []CheckRun
+}
+
 // IssuesMsg carries one refreshed issue/PR listing back into Update.
 //
 // Setup, when non-empty, is the explanatory unavailable state: gh is not

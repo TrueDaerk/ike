@@ -1768,6 +1768,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			p.SetTimeline(forge.TimelineFactory("."))
 			p.SetMutate(forge.MutateFactory("."))
 			p.SetMeta(forge.MetaFactory("."))
+			p.SetPRDetailFetch(forge.PRDetailFactory("."))
+			p.SetPRAction(forge.PRActionFactory("."))
 			continue
 		}
 		if id := ids[key]; id.Kind == "http" {
@@ -4711,6 +4713,24 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// One finished label/assignee/state write (#2088): the pane rolls
 		// back on a rejection and refetches on success.
 		return m, m.finishIssueMutation(msg)
+
+	case forge.PRDetailMsg:
+		// One fetched full pull request (#2089) lands in the open PR detail.
+		m.fillPRDetail(msg)
+		return m, nil
+
+	case forge.PRActionMsg:
+		// One finished PR merge/close (#2089): the pane surfaces the forge's
+		// reason on a rejection and refetches on success.
+		return m, m.finishPRAction(msg)
+
+	case ghissues.CleanupRequestMsg:
+		// The accepted post-merge cleanup offer (#2089): delete the issue
+		// branch locally and on origin, back to an up-to-date default branch.
+		return m, forge.CleanupBranchCmd(".", msg.Branch)
+
+	case forge.CleanupDoneMsg:
+		return m, m.finishBranchCleanup(msg)
 
 	case forge.EventsMsg:
 		// Snapshot-diff events from the forge poller (#2085) reach their

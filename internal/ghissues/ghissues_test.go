@@ -366,16 +366,32 @@ func TestPRTabKeepsItsOwnCursor(t *testing.T) {
 	}
 }
 
-func TestPREnterOpensBrowser(t *testing.T) {
+func TestPREnterOpensDetail(t *testing.T) {
 	m := filled(t)
+	fetched := 0
+	m.SetPRDetailFetch(func(pr int) tea.Cmd {
+		fetched = pr
+		return func() tea.Msg { return nil }
+	})
 	m.Update(key("tab"))
 	cmd := m.Update(key("enter"))
-	if cmd == nil {
-		t.Fatal("enter on a PR must emit the open-URL request")
+	if !m.PRDetailOpen() {
+		t.Fatal("enter on a PR must open the detail view (#2089)")
 	}
-	msg, ok := cmd().(OpenURLMsg)
-	if !ok || msg.URL != "https://e/pr/9" {
+	if cmd == nil || fetched != 9 {
+		t.Fatalf("the detail must fetch the selected PR, fetched=%d", fetched)
+	}
+	// 'o' still opens the browser from the detail.
+	ocmd := m.Update(key("o"))
+	if ocmd == nil {
+		t.Fatal("o must emit the open-URL request")
+	}
+	if msg, ok := ocmd().(OpenURLMsg); !ok || msg.URL != "https://e/pr/9" {
 		t.Fatalf("msg = %#v", msg)
+	}
+	press(m, "esc")
+	if m.PRDetailOpen() {
+		t.Fatal("esc must return to the PR list")
 	}
 }
 
