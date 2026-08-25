@@ -13,9 +13,11 @@
 // permission (#2088) — label, assignee and close/reopen mutations through two
 // pickers and a comment prompt, applied optimistically and rolled back on a
 // forge rejection. Texts that are the user's own can be edited from there too
-// (#2087, edit.go): 'e' picks the issue body or one of your comments, 'c'
-// composes a new one, and the app opens each in a markdown buffer that pushes
-// when it is saved. The PR view lists the pull requests full width (number,
+// (#2087, textedit.go), and the app opens each in a markdown buffer that
+// pushes when it is saved. Since #2114 every editing surface sits behind one
+// key: 'e' raises the unified edit picker (labels, assignees, the body, your
+// comments, a new comment), 'n' composes a comment directly, 'c'/'C'
+// close/reopen (with a comment). The PR view lists the pull requests full width (number,
 // title, head branch, CI rollup, review decision); enter opens a full-area PR
 // detail (#2089, prdetail.go) — markdown description, per-check CI status,
 // the linked Closes-#N issue — and, with push permission, the merge- and
@@ -179,9 +181,11 @@ const (
 	// ovComment is the one-line prompt of the close/reopen-with-comment
 	// action (#2088).
 	ovComment
-	// ovTextEdit is the text-edit picker (#2087): which of the issue's texts
-	// — the body, one of your comments — the markdown edit buffer opens.
-	ovTextEdit
+	// ovEdit is the unified edit picker (#2087, consolidated in #2114): what
+	// 'e' edits — the label and assignee pickers, the issue's own texts (the
+	// body, one of your comments) opening as markdown edit buffers, a new
+	// comment.
+	ovEdit
 	// ovPRAct is the merge/close-with-comment dialog (#2089): an optional
 	// comment stage followed by an explicit confirm naming PR, branches and
 	// merge method — the action is irreversible.
@@ -741,9 +745,11 @@ func (m *Model) listKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.switchTab(-1)
 		return nil
 	}
-	// Shared list semantics (#1666) minus the g/G extremes: the pane spends
-	// 'g' on the grouping toggle, home/end still jump. Group headers are
-	// skipped in the direction the key moved.
+	// The full shared list semantics (#1666), g/G extremes included: since
+	// #2114 the grouping toggle no longer sits on 'g' (it lives in the filter
+	// overlay and the action menu), so the letter means "jump to the extremes"
+	// here exactly as it does in the detail views. Group headers are skipped
+	// in the direction the key moved.
 	if m.navList(key) {
 		return nil
 	}
@@ -758,8 +764,8 @@ func (m *Model) listKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.cycleState()
 	case "a":
 		m.cycleSort()
-	case "g":
-		m.toggleGroup()
+	case "e", "E":
+		return m.startEdit()
 	case "m", "?":
 		m.openActionMenu()
 	case "esc":
@@ -777,19 +783,16 @@ func (m *Model) listKey(msg tea.KeyPressMsg) tea.Cmd {
 	return m.prActionKey(key)
 }
 
-// mutationKey routes the write keys (#2088), which the list and the detail
-// view share: 'e' labels, 'u' assignees, 'c' close/reopen, 'C' the same with
-// a comment. Each checks the capability gate itself, so a key without
-// permission explains rather than doing nothing.
+// mutationKey routes the state-write keys (#2088), which the list and the
+// detail view share: 'c' close/reopen, 'C' the same with a comment. Each
+// checks the capability gate itself, so a key without permission explains
+// rather than doing nothing. The label and assignee pickers moved behind the
+// unified 'e' edit picker (#2114).
 func (m *Model) mutationKey(key string) tea.Cmd {
 	if m.mutate == nil || m.tab != TabIssues {
 		return nil
 	}
 	switch key {
-	case "e":
-		return m.openLabelEditor()
-	case "u":
-		return m.openAssigneeEditor()
 	case "c":
 		return m.toggleIssueState()
 	case "C":
@@ -802,7 +805,7 @@ func (m *Model) mutationKey(key string) tea.Cmd {
 // reports whether it consumed it, snapping off a group header afterwards.
 func (m *Model) navList(key string) bool {
 	rows, cur := m.rowsOf(m.tab), m.Cursor()
-	if !ui.ListNav(key, &cur, len(rows), m.bodyHeight(), ui.NavDefault|ui.NavVim) {
+	if !ui.ListNav(key, &cur, len(rows), m.bodyHeight(), ui.NavFull) {
 		return false
 	}
 	m.setCursor(snapRow(rows, cur, navDir(key)))
@@ -815,7 +818,7 @@ func (m *Model) navList(key string) bool {
 // unreliable, so the key itself decides.
 func navDir(key string) int {
 	switch key {
-	case "up", "k", "ctrl+p", "pgup", "end":
+	case "up", "k", "ctrl+p", "pgup", "end", "G":
 		return -1
 	}
 	return 1
@@ -909,10 +912,10 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.stepIssue(1)
 	case "ctrl+k":
 		return m.stepIssue(-1)
-	case "L":
+	case "p":
 		return m.loadMoreTimeline()
-	case "E":
-		return m.startTextEdit()
+	case "e", "E":
+		return m.startEdit()
 	case "n":
 		return m.startComment()
 	case "j", "down":

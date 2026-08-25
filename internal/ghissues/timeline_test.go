@@ -85,12 +85,12 @@ func TestTimelinePagination(t *testing.T) {
 	m.SetTimelineResult(forge.TimelineMsg{Issue: 2, Page: 1, More: true, Entries: []forge.TimelineEntry{
 		{Kind: forge.TimelineClosed, Actor: "bo", Time: fixedNow},
 	}})
-	if !m.TimelineMore() || !strings.Contains(m.View(), "L loads more") {
+	if !m.TimelineMore() || !strings.Contains(m.View(), "p loads more") {
 		t.Fatal("the load-more row must show while more pages follow")
 	}
-	cmd := m.Update(tea.KeyPressMsg{Code: 'l', Text: "L", Mod: tea.ModShift})
+	cmd := m.Update(key("p"))
 	if cmd == nil || stub.page != 2 || !m.TimelineLoading() {
-		t.Fatalf("L must fetch page 2, got page=%d", stub.page)
+		t.Fatalf("p must fetch page 2, got page=%d", stub.page)
 	}
 	m.SetTimelineResult(forge.TimelineMsg{Issue: 2, Page: 2, Entries: []forge.TimelineEntry{
 		{Kind: forge.TimelineReopened, Actor: "bo", Time: fixedNow},
@@ -98,7 +98,7 @@ func TestTimelinePagination(t *testing.T) {
 	if m.TimelineCount() != 2 || m.TimelineMore() {
 		t.Fatalf("page 2 must append, count = %d more = %v", m.TimelineCount(), m.TimelineMore())
 	}
-	if strings.Contains(m.View(), "L loads more") {
+	if strings.Contains(m.View(), "p loads more") {
 		t.Fatal("the load-more row must disappear on the last page")
 	}
 }

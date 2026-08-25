@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Issues Tool Window
-description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select) with a permanent chip row whose chips clear individually, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111).
+description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select) with a permanent chip row whose chips clear individually, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, a consolidated key table with one meaning per letter family across all modes, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111, #2114).
 resource: internal/ghissues/ghissues.go
-tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane]
-timestamp: 2026-08-25T18:00:00Z
+tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane, keymap]
+timestamp: 2026-08-25T21:00:00Z
 ---
 
-# Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104, #2111)
+# Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104, #2111, #2114)
 
 Development in this repository is issue-driven (see
 [Change Workflow](/process/change-workflow.md)); this pane brings that loop
@@ -94,6 +94,45 @@ A pure consumer in the Usages mold (value model, pointer-receiver mutators,
 `forge.IssuesMsg` in; the pane never runs a subprocess. Its chrome is four
 regions — tab bar, optional filter row, full-area body, footer.
 
+### The key table (#2114)
+
+Every letter family carries **one meaning across all four modes** (issue
+list, issue detail, PR list, PR detail) — the #2114 consolidation of the
+per-mode drift the earlier sub-issues had accumulated ('e' labels vs 'E'
+texts, 'l' labels vs 'L' load-more, 'g' grouping vs 'g' top). All keys stay
+QWERTZ-safe (#48): plain letters and delivered `ctrl+letter` chords only.
+
+| Key | Meaning | Where |
+| --- | --- | --- |
+| `enter` | open the selected row's detail | lists |
+| `esc` | back off one level: close overlay → leave detail → peel one filter | everywhere |
+| `tab` / `shift+tab` | switch the Issues/PRs view | everywhere |
+| `j`/`k`, arrows, paging | shared list navigation / detail scrolling (#1666) | everywhere |
+| `g` / `G` | jump to the first / last row (list) or top / bottom (detail) | everywhere |
+| `ctrl+j` / `ctrl+k` | walk to the next / previous issue or PR | details |
+| `r` | refresh (the listing, plus the open detail's data) | everywhere |
+| `f` (alias `/`) | the filter overlay, on the match input | lists |
+| `l` | the filter overlay's **label** section | issue list |
+| `t` | cycle the state filter (open / closed / all) | lists |
+| `a` | cycle the sort order | lists |
+| `e` (alias `E`) | **edit** — the unified edit picker: labels, assignees, the issue body, your comments | issue views |
+| `n` | compose a new comment | issue detail |
+| `c` | **close** (or reopen) the selected issue / pull request | everywhere |
+| `C` | the same close, **with a comment** (on the PR views an alias of `c` — the PR dialog always carries its comment stage) | everywhere |
+| `M` | merge the pull request (with a comment, behind the confirm) | PR views |
+| `p` | load the next activity **page** of the timeline | issue detail |
+| `s` | start work (create the issue branch) | issue views |
+| `o` | open in the browser | everywhere |
+| `m` (alias `?`) | the action menu | everywhere |
+
+Two deliberate consequences. **Grouping by label lost its direct key** ('g'
+now navigates in every mode, restoring the full #1666 semantics to the
+lists); the toggle lives in the filter overlay's grouping row and as a
+menu-only entry in the action menu (an action with no key is skipped by the
+footer). And the pre-#2114 spellings `u` (assignees), `E` (edit text as a
+separate action) and `L` (load more) are retired: `u`/`L` are inert, `E`
+aliases `e`.
+
 ### Tabbed views
 
 Row 0 is the **tab bar**: `Issues n │ PRs n` with the filtered counts, the
@@ -158,13 +197,13 @@ and clear with `backspace`.
   `oldest`, `updated`, `number`. Every comparator is stable, so entries the
   order cannot separate (missing timestamps, equal scores) keep the listing
   order.
-- **`g`** toggles **grouping by label**: each issue is filed under its
-  alphabetically first label (unlabelled ones under `(no label)`, sorted
-  last), so it appears exactly once however many labels it carries. Group
-  headers are rows the cursor never rests on — key and wheel navigation snap
-  off them in the direction of travel. Because `g` is spent here, the list
-  runs on `ui.NavDefault|ui.NavVim` rather than `NavFull`; `home`/`end` still
-  jump to the extremes.
+- **Grouping by label** (the filter overlay's grouping row, and a menu-only
+  action-menu entry — its direct key went to navigation in #2114): each issue
+  is filed under its alphabetically first label (unlabelled ones under
+  `(no label)`, sorted last), so it appears exactly once however many labels
+  it carries. Group headers are rows the cursor never rests on — key and
+  wheel navigation snap off them in the direction of travel. The lists run on
+  the full `ui.NavFull` semantics, `g`/`G` extremes included.
 - **`esc`** on a list **peels one narrowing at a time** — a mutation error
   first, then the match text, then the label selection, then the state gate —
   so one keypress can never nuke a carefully built filter.
@@ -249,8 +288,8 @@ degrade at narrow widths: below 24 columns the bar falls back to a plain
 indent, and a rule that cannot hold its label is drawn plain across the pane.
 The states are visible and keyboard-reachable: a loading row while a fetch is
 in flight, an error row
-(`r` retries) that keeps what already loaded, `(L loads more activity)` while
-more pages follow — `L` appends the next page without moving the scroll — and
+(`r` retries) that keeps what already loaded, `(p loads more activity)` while
+more pages follow — `p` appends the next page without moving the scroll — and
 `(no activity yet)` on an empty finished history. `r` inside the detail
 refetches the listing *and* the open issue's timeline. A `TimelineMsg` for an
 issue the pane no longer waits on is dropped; entry IDs and the own-comment
@@ -271,7 +310,8 @@ show the rollup. `o` opens the browser; `r` refetches the listing *and* the
 open PR; `esc` returns to the list with cursor and scroll untouched.
 
 **Merge and close, with a comment.** With **push permission** (`M` merge,
-`c` close — offered on the PR list and the detail alike) a two-stage dialog
+`c` close with `C` as an alias — offered on the PR list and the detail
+alike) a two-stage dialog
 opens: first an **optional comment** (posted *before* the action, so the
 timeline reads in order), then — because a merge is irreversible — an
 explicit **confirm** naming the PR, its branches and the merge method
@@ -303,10 +343,13 @@ from the issue list and from the detail view alike, and they stay QWERTZ-safe:
 
 | Key | Action |
 | --- | --- |
-| `e` | **label picker** — the repository's whole label set as colored chips, the issue's own labels preselected; `space` toggles, `backspace` clears, `enter` applies the **diff** (only what changed is written), `esc` drops it |
-| `u` | **assignee picker** — the repository's assignable users, same keys; `enter` replaces the assignee set (an emptied picker clears it explicitly) |
+| `e` → Labels… | **label picker** — the repository's whole label set as colored chips, the issue's own labels preselected; `space` toggles, `backspace` clears, `enter` applies the **diff** (only what changed is written), `esc` drops it |
+| `e` → Assignees… | **assignee picker** — the repository's assignable users, same keys; `enter` replaces the assignee set (an emptied picker clears it explicitly) |
 | `c` | **close** the issue, or **reopen** it when it is closed — footer and menu word themselves after the selected issue's state |
 | `C` | the same **with a comment**: a one-line prompt whose text is posted *before* the state change, so the timeline reads in order |
+
+Both pickers sit behind the unified **`e` edit picker** (#2114) — with a
+single available target `e` skips the picker and opens it straight away.
 
 Both pickers list what `forge.RepoMetaCmd` fetched **once** per session
 (retried by `r` after a failure). When that probe could not read them — a
@@ -334,11 +377,12 @@ row reads `applying the change…`.
 
 The timeline is not read-only for texts that are yours. In the detail view:
 
-- **`E`** edits. With exactly one editable text it opens straight away; with
-  several it raises the **text-edit picker**, a centered overlay listing the
-  issue body first, then each of your own comments by its first line. (Plain
-  `e` is #2088's label picker; the shifted key keeps the two apart.)
-- **`n`** composes a new comment on the open issue.
+- **`e`** edits (with `E` as an alias since the #2114 consolidation). The
+  unified edit picker lists the metadata pickers first, then the issue body,
+  then each of your own comments by its first line; with exactly one
+  available target it opens straight away.
+- **`n`** composes a new comment on the open issue — composing is not an
+  edit, so it keeps its own key.
 
 **What is offered** is decided by `textedit.go` against the same probed
 `Capabilities` the mutations read — never guessed, and empty until the probe
@@ -421,7 +465,8 @@ with the [forge layer](/architecture/forge.md).
 
 ### Actions and states
 
-- **Actions** — `e`/`c` emit `EditTextRequestMsg` (#2087, detail view only);
+- **Actions** — the edit picker's text entries and `n` emit
+  `EditTextRequestMsg` (#2087, detail view only);
   `s` emits `StartWorkRequestMsg` (the app answers with
   `forge.StartWorkCmd`, toasts the outcome and invalidates the VCS
   snapshot); `o` emits `OpenURLMsg` (platform browser); `r` re-runs the

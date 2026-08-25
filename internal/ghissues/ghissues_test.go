@@ -292,9 +292,15 @@ func TestSortOrdersCycle(t *testing.T) {
 
 func TestGroupingByLabel(t *testing.T) {
 	m := filled(t)
+	// Since #2114 'g' is list navigation (jump to the top) in every mode; the
+	// grouping toggle lives in the filter overlay and the action menu.
 	m.Update(key("g"))
+	if m.Grouped() {
+		t.Fatal("g must navigate, not toggle the grouping (#2114)")
+	}
+	m.toggleGroup()
 	if !m.Grouped() {
-		t.Fatal("g must toggle the grouping on")
+		t.Fatal("the grouping toggle must switch the grouping on")
 	}
 	headers := 0
 	for _, r := range m.rows {
@@ -327,9 +333,9 @@ func TestGroupingByLabel(t *testing.T) {
 			t.Fatalf("k landed on a header at row %d", m.Cursor())
 		}
 	}
-	m.Update(key("g"))
+	m.toggleGroup()
 	if m.Grouped() || len(m.rows) != 3 {
-		t.Fatalf("g must toggle back to the flat list, rows = %d", len(m.rows))
+		t.Fatalf("the toggle must switch back to the flat list, rows = %d", len(m.rows))
 	}
 }
 
@@ -483,7 +489,7 @@ func TestActionMenuListsEveryKey(t *testing.T) {
 	for _, a := range m.Actions() {
 		keys[a[0]] = true
 	}
-	for _, want := range []string{"enter", "s", "o", "f", "l", "t", "a", "g", "esc", "tab", "r"} {
+	for _, want := range []string{"enter", "s", "o", "f", "l", "t", "a", "esc", "tab", "r"} {
 		if !keys[want] {
 			t.Fatalf("action table is missing %q: %v", want, m.Actions())
 		}
@@ -514,7 +520,7 @@ func TestActionMenuFollowsTheView(t *testing.T) {
 		t.Fatalf("the menu must name the view it lists:\n%s", m.View())
 	}
 	for _, a := range m.Actions() {
-		if a[0] == "g" {
+		if strings.Contains(a[1], "Group by label") {
 			t.Fatal("the PR view has no grouping action to offer")
 		}
 	}
@@ -635,7 +641,7 @@ func TestTabBarClickSwitchesView(t *testing.T) {
 
 func TestWheelSkipsGroupHeaders(t *testing.T) {
 	m := filled(t)
-	m.Update(key("g"))
+	m.toggleGroup()
 	for i := 0; i < len(m.rows)+2; i++ {
 		m.Wheel(1)
 		if m.Selected() == nil {

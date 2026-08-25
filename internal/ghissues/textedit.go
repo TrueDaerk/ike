@@ -123,37 +123,72 @@ func summarize(body string) string {
 	return line
 }
 
-// canEditText reports whether the text-edit action ('E') applies at all.
-func (m *Model) canEditText() bool { return len(m.textTargets()) > 0 }
-
-// textEditActions are the detail view's editing entries (#2087), appended to
-// the action table only when they apply. Unlike the mutation actions (#2088),
-// which stay listed and explain a closed permission gate, these are absent:
-// "you may not edit someone else's comment" is not a permission to fix, it is
-// simply not your text.
-func (m *Model) textEditActions() []action {
-	var acts []action
-	if m.canEditText() {
-		acts = append(acts, act("E", "edit text", "Edit the issue body or one of your comments", (*Model).startTextEdit))
-	}
-	if m.canComment() {
-		acts = append(acts, act("n", "new comment", "Write a new comment", (*Model).startComment))
-	}
-	return acts
+// editEntry is one row of the unified edit picker (#2114): what it is called
+// there and what enter runs. The picker is the single meaning of 'e' across
+// the issue views — metadata (labels, assignees) and prose (body, own
+// comments, a new comment) behind one key instead of the pre-#2114
+// e/u/E/n islands.
+type editEntry struct {
+	label string
+	run   func(*Model) tea.Cmd
 }
 
-// startTextEdit is the detail view's 'E': with a single editable text it opens
-// straight away, with several it raises the picker. Choosing from a list of
-// one would be a keystroke that never carries information.
-func (m *Model) startTextEdit() tea.Cmd {
-	targets := m.textTargets()
-	switch len(targets) {
+// editEntries lists what 'e' can edit right now, in reading order: the
+// metadata pickers first (they exist wherever a forge backend is bound — the
+// capability gate explains itself when it is closed, #2088), then the texts
+// that are the user's own (#2087). Composing a *new* comment is not an edit
+// and keeps its own key ('n'). Empty on the PR views and on an empty list.
+func (m *Model) editEntries() []editEntry {
+	if m.tab != TabIssues || m.Selected() == nil {
+		return nil
+	}
+	var out []editEntry
+	if m.mutate != nil {
+		out = append(out,
+			editEntry{label: "Labels…", run: (*Model).openLabelEditor},
+			editEntry{label: "Assignees…", run: (*Model).openAssigneeEditor})
+	}
+	for _, t := range m.textTargets() {
+		t := t
+		out = append(out, editEntry{label: t.label,
+			run: func(m *Model) tea.Cmd { return m.requestTextEdit(t) }})
+	}
+	return out
+}
+
+// commentAction is the detail view's direct 'n' (#2087), appended to the
+// action table only when it applies. Unlike the mutation actions (#2088),
+// which stay listed and explain a closed permission gate, it is absent: the
+// login simply has not resolved.
+func (m *Model) commentAction() []action {
+	if !m.canComment() {
+		return nil
+	}
+	return []action{act("n", "new comment", "Write a new comment", (*Model).startComment)}
+}
+
+// editAction is the 'e' entry of the action table, absent while nothing is
+// editable (no forge backend, an empty list, the PR views).
+func (m *Model) editAction() []action {
+	if len(m.editEntries()) == 0 {
+		return nil
+	}
+	return []action{act("e", "edit", "Edit… (labels / assignees / texts)", (*Model).startEdit)}
+}
+
+// startEdit is 'e' on the issue views (#2114): with a single editable target
+// it runs straight away, with several it raises the unified edit picker.
+// Choosing from a list of one would be a keystroke that never carries
+// information.
+func (m *Model) startEdit() tea.Cmd {
+	entries := m.editEntries()
+	switch len(entries) {
 	case 0:
 		return nil
 	case 1:
-		return m.requestTextEdit(targets[0])
+		return entries[0].run(m)
 	}
-	m.ov, m.ovCursor, m.ovTop = ovTextEdit, 0, 0
+	m.ov, m.ovCursor, m.ovTop = ovEdit, 0, 0
 	m.clampOverlay()
 	return nil
 }
@@ -181,38 +216,40 @@ func (m *Model) requestTextEdit(t textTarget) tea.Cmd {
 	return func() tea.Msg { return msg }
 }
 
-// textPickerKey handles the edit picker overlay: enter opens the selected
-// text, esc closes without opening anything.
-func (m *Model) textPickerKey(key string) tea.Cmd {
+// editPickerKey handles the unified edit picker overlay: enter runs the
+// selected entry (closing first, so an entry that opens another modal wins),
+// esc closes without touching anything.
+func (m *Model) editPickerKey(key string) tea.Cmd {
 	switch key {
 	case "enter":
-		targets := m.textTargets()
-		if m.ovCursor < 0 || m.ovCursor >= len(targets) {
+		entries := m.editEntries()
+		if m.ovCursor < 0 || m.ovCursor >= len(entries) {
 			m.closeOverlay()
 			return nil
 		}
-		t := targets[m.ovCursor]
+		run := entries[m.ovCursor].run
 		m.closeOverlay()
-		return m.requestTextEdit(t)
-	case "esc", "q", "E":
+		return run(m)
+	case "esc", "q":
 		m.closeOverlay()
 	}
 	return nil
 }
 
-// TextTargetLabels lists the picker's rows (tests, and the proof that the
+// EditEntryLabels lists the edit picker's rows (tests, and the proof that the
 // gate and the overlay read the same table).
-func (m *Model) TextTargetLabels() []string {
-	targets := m.textTargets()
-	out := make([]string, 0, len(targets))
-	for _, t := range targets {
-		out = append(out, t.label)
+func (m *Model) EditEntryLabels() []string {
+	entries := m.editEntries()
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, e.label)
 	}
 	return out
 }
 
-// TextPickerOpen reports whether the edit picker owns the keyboard (tests).
-func (m *Model) TextPickerOpen() bool { return m.ov == ovTextEdit }
+// EditPickerOpen reports whether the unified edit picker owns the keyboard
+// (tests).
+func (m *Model) EditPickerOpen() bool { return m.ov == ovEdit }
 
 // RefreshAfterSave re-fetches what a successful push changed (#2087): the
 // listing — an edited body lives in the issue listing, not in the timeline —

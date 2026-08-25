@@ -760,14 +760,15 @@ func (m *Model) footer(pal *theme.Palette) string {
 	if m.ov == ovCleanup {
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter cleans up · esc keeps the branch"))
 	}
-	if m.ov == ovTextEdit {
+	if m.ov == ovEdit {
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter edit · esc cancel"))
 	}
 	var parts []string
 	for _, a := range m.actions() {
 		// An action the permissions forbid stays in the menu (with its
-		// reason) but is not advertised in the footer (#2088).
-		if a.disabled {
+		// reason) but is not advertised in the footer (#2088); an action
+		// without a direct key (grouping since #2114) is menu-only.
+		if a.disabled || a.key == "" {
 			continue
 		}
 		parts = append(parts, a.key+" "+a.hint)
@@ -1097,20 +1098,20 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 			plain.Render("switch to the default branch and pull"),
 			lipgloss.NewStyle().Faint(true).Render("enter runs it · esc keeps the branch"))
 		return "Merged — clean up the branch?", lines
-	case ovTextEdit:
-		targets := m.textTargets()
+	case ovEdit:
+		entries := m.editEntries()
 		for k := 0; k < h; k++ {
 			i := m.ovTop + k
-			if i >= len(targets) {
+			if i >= len(entries) {
 				break
 			}
 			style := plain
 			if i == m.ovCursor {
 				style = sel
 			}
-			lines = append(lines, style.Render(targets[i].label))
+			lines = append(lines, style.Render(entries[i].label))
 		}
-		return "Edit which text?", lines
+		return "Edit what?", lines
 	}
 	return "", nil
 }

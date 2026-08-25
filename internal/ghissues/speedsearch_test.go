@@ -35,9 +35,9 @@ func manyLabels(t *testing.T) (*Model, *[]forge.Mutation) {
 func TestLabelPickerNarrowsOnTyping(t *testing.T) {
 	m, _ := manyLabels(t)
 	selectIssue(t, m, 1)
-	press(m, "e")
+	press(m, "e", "enter") // the edit picker's first entry is Labels (#2114)
 	if !m.LabelEditorOpen() {
-		t.Fatal("'e' must open the label picker")
+		t.Fatal("the edit picker's labels entry must open the label picker")
 	}
 	if got := len(m.EditVisible()); got != 6 {
 		t.Fatalf("the picker must start with every label, got %d", got)
@@ -60,7 +60,7 @@ func TestLabelPickerNarrowsOnTyping(t *testing.T) {
 func TestPickerTypeAheadIsVisibleInTheHeading(t *testing.T) {
 	m, _ := manyLabels(t)
 	selectIssue(t, m, 1)
-	press(m, "e", "b", "u")
+	press(m, "e", "enter", "b", "u")
 	if v := m.View(); !strings.Contains(v, "/bu") {
 		t.Fatalf("the running query must be rendered:\n%s", v)
 	}
@@ -69,7 +69,7 @@ func TestPickerTypeAheadIsVisibleInTheHeading(t *testing.T) {
 func TestPickerBackspacePeelsTheQueryBeforeClearingTheSet(t *testing.T) {
 	m, _ := manyLabels(t)
 	selectIssue(t, m, 1) // #1 carries "bug"
-	press(m, "e")
+	press(m, "e", "enter")
 	before := len(m.EditSelection())
 	if before == 0 {
 		t.Fatal("the fixture issue must open with a ticked label")
@@ -92,7 +92,7 @@ func TestPickerBackspacePeelsTheQueryBeforeClearingTheSet(t *testing.T) {
 func TestPickerEscClearsTheQueryThenCloses(t *testing.T) {
 	m, _ := manyLabels(t)
 	selectIssue(t, m, 1)
-	press(m, "e", "b", "u")
+	press(m, "e", "enter", "b", "u")
 	press(m, "esc")
 	if !m.LabelEditorOpen() {
 		t.Fatal("the first esc must only clear the type-ahead")
@@ -114,7 +114,7 @@ func TestPickerEscClearsTheQueryThenCloses(t *testing.T) {
 func TestNarrowedPickerWritesTheFullDiff(t *testing.T) {
 	m, sent := manyLabels(t)
 	selectIssue(t, m, 1)         // #1 carries "bug"
-	press(m, "e", "e", "n", "h") // narrows to "enhancement"
+	press(m, "e", "enter", "e", "n", "h") // narrows to "enhancement"
 	press(m, "space", "enter")
 	if len(*sent) != 1 {
 		t.Fatalf("the picker must send one mutation, got %v", *sent)
@@ -131,9 +131,9 @@ func TestNarrowedPickerWritesTheFullDiff(t *testing.T) {
 func TestAssigneePickerNarrowsOnTyping(t *testing.T) {
 	m, sent := manyLabels(t)
 	selectIssue(t, m, 2) // #2 has no assignee
-	press(m, "u")
+	press(m, "e", "down", "enter")
 	if !m.AssigneeEditorOpen() {
-		t.Fatal("'u' must open the assignee picker")
+		t.Fatal("the edit picker's assignee entry must open the assignee picker")
 	}
 	press(m, "w", "h")
 	if got := m.EditVisible(); len(got) != 1 || got[0] != "wheatley" {
@@ -148,7 +148,7 @@ func TestAssigneePickerNarrowsOnTyping(t *testing.T) {
 func TestPickerTypeAheadWithNoMatchExplainsItself(t *testing.T) {
 	m, _ := manyLabels(t)
 	selectIssue(t, m, 1)
-	press(m, "e", "z", "z", "z")
+	press(m, "e", "enter", "z", "z", "z")
 	if got := m.EditVisible(); len(got) != 0 {
 		t.Fatalf("a fruitless query must narrow to nothing, got %v", got)
 	}
@@ -287,8 +287,8 @@ func TestActionMenuTypeAheadMatchesTheKey(t *testing.T) {
 func TestOpeningAPickerResetsTheSearch(t *testing.T) {
 	m, _ := manyLabels(t)
 	selectIssue(t, m, 1)
-	press(m, "e", "b", "u", "esc", "esc")
-	press(m, "u")
+	press(m, "e", "enter", "b", "u", "esc", "esc")
+	press(m, "e", "down", "enter")
 	if m.SpeedSearchQuery() != "" {
 		t.Fatalf("the assignee picker must open idle, got %q", m.SpeedSearchQuery())
 	}
