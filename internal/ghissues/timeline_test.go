@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/forge"
 )
@@ -141,6 +143,128 @@ func TestTimelineStaleResultDropped(t *testing.T) {
 	}})
 	if m.TimelineCount() != 0 || !m.TimelineLoading() {
 		t.Fatal("an answer for another issue must be dropped")
+	}
+}
+
+// timelineRendered opens issue 2's detail, applies the entries and returns the
+// timeline's rendered lines at the given pane width (#2106).
+func timelineRendered(t *testing.T, w int, entries []forge.TimelineEntry) []string {
+	t.Helper()
+	m := filled(t)
+	m.SetSize(w, 40)
+	(&timelineStub{}).inject(m)
+	m.Update(key("enter"))
+	m.SetTimelineResult(forge.TimelineMsg{Issue: 2, Page: 1, Entries: entries})
+	return m.timelineLines(m.theme(), m.Selected())
+}
+
+// twoComments is the recurring fixture: two consecutive comments (the second
+// one own) followed by a compact event.
+func twoComments() []forge.TimelineEntry {
+	return []forge.TimelineEntry{
+		{Kind: forge.TimelineComment, Actor: "ada", Body: "Please add *tables* too.", ID: "77", Time: fixedNow.Add(-2 * 3600e9)},
+		{Kind: forge.TimelineComment, Actor: "me", Body: "On it.", ID: "78", Own: true, Time: fixedNow.Add(-3600e9)},
+		{Kind: forge.TimelineClosed, Actor: "bo", Time: fixedNow.Add(-900e9)},
+	}
+}
+
+func TestTimelineDividerSpansPaneWidth(t *testing.T) {
+	const w = 90
+	lines := timelineRendered(t, w, twoComments())
+	var rule string
+	for _, l := range lines {
+		if strings.Contains(ansi.Strip(l), "activity") && strings.Contains(l, "─") {
+			rule = l
+			break
+		}
+	}
+	if rule == "" {
+		t.Fatalf("no activity divider in:\n%s", strings.Join(lines, "\n"))
+	}
+	if got := lipgloss.Width(rule); got != w {
+		t.Fatalf("divider width = %d, want the full pane width %d: %q", got, w, ansi.Strip(rule))
+	}
+}
+
+func TestTimelineDividerDegradesOnNarrowPanes(t *testing.T) {
+	const w = 12
+	lines := timelineRendered(t, w, twoComments())
+	rule := ""
+	for _, l := range lines {
+		if strings.Contains(l, "─") {
+			rule = l
+			break
+		}
+	}
+	if rule == "" {
+		t.Fatal("a narrow pane must still draw the divider")
+	}
+	if got := lipgloss.Width(rule); got > w || got < w-1 {
+		t.Fatalf("narrow divider width = %d, want ~%d: %q", got, w, ansi.Strip(rule))
+	}
+	if strings.Contains(ansi.Strip(rule), "activity") {
+		t.Fatalf("the narrow divider must drop its label: %q", ansi.Strip(rule))
+	}
+}
+
+func TestTimelineCommentBlocksCarryGutter(t *testing.T) {
+	lines := timelineRendered(t, 90, twoComments())
+	// Every line of a comment block — header, body, the blank ones inside —
+	// carries the bar, so the two comments read as separate blocks.
+	var heads []int
+	for i, l := range lines {
+		s := ansi.Strip(l)
+		if strings.HasPrefix(s, "▌ @") && strings.Contains(s, "commented") {
+			heads = append(heads, i)
+		}
+	}
+	if len(heads) != 2 {
+		t.Fatalf("want 2 gutter-barred comment headers, got %d:\n%s", len(heads), ansi.Strip(strings.Join(lines, "\n")))
+	}
+	// The first block runs unbroken from its header up to the second header.
+	for i := heads[0]; i < heads[1]-1; i++ {
+		if !strings.HasPrefix(ansi.Strip(lines[i]), "▌") {
+			t.Fatalf("comment line %d lost its gutter: %q", i, ansi.Strip(lines[i]))
+		}
+	}
+	if !strings.Contains(ansi.Strip(lines[heads[1]]), "(you)") {
+		t.Fatal("the own comment must keep its (you) marker")
+	}
+	// The event stays a compact, gutter-free line, one blank line clear of the
+	// comment block above it.
+	ev, blank := -1, false
+	for i, l := range lines {
+		if strings.Contains(ansi.Strip(l), "closed this") {
+			ev, blank = i, strings.TrimSpace(ansi.Strip(lines[i-1])) == ""
+			break
+		}
+	}
+	if ev < 0 || !blank {
+		t.Fatalf("the event row must follow a blank line (index %d):\n%s", ev, ansi.Strip(strings.Join(lines, "\n")))
+	}
+	if strings.Contains(ansi.Strip(lines[ev]), "▌") {
+		t.Fatalf("event rows must stay gutter-free: %q", ansi.Strip(lines[ev]))
+	}
+}
+
+func TestTimelineCommentGutterDropsOnNarrowPanes(t *testing.T) {
+	lines := timelineRendered(t, 16, twoComments())
+	for i, l := range lines {
+		if strings.Contains(ansi.Strip(l), "▌") {
+			t.Fatalf("line %d must drop the gutter on a narrow pane: %q", i, ansi.Strip(l))
+		}
+	}
+	if !strings.Contains(ansi.Strip(strings.Join(lines, "\n")), "@ada") {
+		t.Fatal("the narrow rendering must still show the comment author")
+	}
+}
+
+func TestTimelineOwnCommentGutterUsesItsOwnRole(t *testing.T) {
+	m := filled(t)
+	m.SetSize(90, 40)
+	pal := m.theme()
+	if m.commentGutter(pal, true) == m.commentGutter(pal, false) {
+		t.Fatal("own comments must take a distinct gutter role")
 	}
 }
 

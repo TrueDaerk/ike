@@ -34,6 +34,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/forge"
 	"ike/internal/fuzzy"
@@ -1256,10 +1257,12 @@ func (m *Model) clampDetail() {
 	}
 }
 
-// clip bounds one rendered line to the pane width (plain text only).
+// clip bounds one rendered line to the pane width, measuring display cells
+// rather than bytes so styled lines are not cut short by their escape
+// sequences (#2106).
 func (m *Model) clip(s string) string {
-	if m.width > 0 && len([]rune(s)) > m.width {
-		return string([]rune(s)[:m.width-1]) + "…"
+	if m.width > 0 && ansi.StringWidth(s) > m.width {
+		return ansi.Truncate(s, m.width-1, "…")
 	}
 	return s
 }
