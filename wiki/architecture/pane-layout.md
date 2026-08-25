@@ -416,9 +416,22 @@ slot-template rewrite.
   its longer axis. A tool pane is never a merge target and is never converted
   to a tab host by an apply (the pre-#1577 behavior merged surplus shells as
   tabs into the last terminal slot, tool panes included). Plain terminal
-  slots reuse live shells in order, then spawn fresh ones; per-project panels
+  slots reuse live shells in order, then a live shell hosted as a tab
+  detaches into the slot (#2124), then a fresh one spawns; per-project panels
   (problems, usages, VCS, debug, structure) restore empty exactly as they do
   on project restore.
+- **A live tool is always reused, never duplicated (#2124):** a slot demanding
+  a tool kind adopts a live session of that tool **across pane shapes** before
+  restarting one (`adoptToolSession`). A dedicated `tool` slot drains the
+  queue of dedicated tool panes first, then detaches a matching tool tab out
+  of a live tab host or content pane and wraps it as the slot's dedicated pane
+  (a host drained of its sole tab closes). Symmetrically, a `tools` host slot
+  whose saved tool has no live tab (`restoreMissingToolTabs` /
+  `restartToolTabs`) adopts a live dedicated pane's session — or a tab from
+  another queued pane — as the tab before falling back to a restart. Before
+  #2124 each slot kind only matched its own pane shape, so a tool open in the
+  "wrong" shape (e.g. tab-hosted after a home-dock open) grafted into the
+  flexible region while the slot restarted a second instance.
 - **Selective layouts (#1568):** deselecting panes in the save step stores
   only the selected ones. The deselected leaves are pruned from the snapshot
   tree and the **largest deselected region** survives as a single flexible

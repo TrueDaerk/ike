@@ -855,12 +855,24 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 			st.shells = st.shells[1:]
 			return key, true
 		}
+		if term, ok := m.adoptToolSession(st, ""); ok {
+			// A live shell hosted as a tab re-slots as the dedicated terminal
+			// pane (#2124) instead of a second shell spawning next to it.
+			return reg.AddTerminalPaneFrom(term), true
+		}
 		return m.spawnShellPane(), true
 	case "tool":
 		if q := st.tools[id.Tool]; len(q) > 0 {
 			key := q[0]
 			st.tools[id.Tool] = q[1:]
 			return key, true
+		}
+		if term, ok := m.adoptToolSession(st, id.Tool); ok {
+			// The tool is live but tab-hosted (#2124): its session re-slots as
+			// the dedicated pane the layout demands. Before this fallback the
+			// slot restarted a second instance while the live one grafted into
+			// the flexible region — the duplicate the restore must never make.
+			return reg.AddTerminalPaneFrom(term), true
 		}
 		if id.Tool == runToolName {
 			// The Run tool (#1905) is session state: with no live one to
@@ -893,11 +905,11 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		// tabs of a fresh host. The content queue is never consumed — the
 		// layout's editor slots keep their panes.
 		if key := takeBestHost(reg, st, id.Tools); key != "" {
-			m.restoreMissingToolTabs(reg, key, id.Tools)
+			m.restoreMissingToolTabs(reg, st, key, id.Tools)
 			return key, true
 		}
 		key := reg.AddEditor()
-		m.restartToolTabs(reg, key, id.Tools)
+		m.restartToolTabs(reg, st, key, id.Tools)
 		return key, true
 	case "editor", "":
 		if len(id.Tools) > 0 && len(st.hosts) > 0 {
@@ -906,7 +918,7 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 			// pane is consumed, so the tools pane never swaps places with an
 			// editor.
 			if key := takeBestHost(reg, st, id.Tools); key != "" {
-				m.restoreMissingToolTabs(reg, key, id.Tools)
+				m.restoreMissingToolTabs(reg, st, key, id.Tools)
 				return key, true
 			}
 		}
@@ -920,11 +932,62 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		// as tabs (#1277), mirroring the startup restore of id.Tools; a live
 		// content pane re-slotted above keeps its own tabs instead.
 		if len(id.Tools) > 0 {
-			m.restartToolTabs(reg, key, id.Tools)
+			m.restartToolTabs(reg, st, key, id.Tools)
 		}
 		return key, true
 	}
 	return "", false
+}
+
+// adoptToolSession takes one live session of the named tool ("" for a plain
+// shell) out of the apply queues (#2124): a dedicated pane is drained first
+// (its session-less husk closes harmlessly, the DetachTerminal pattern), else
+// a matching tab detaches from a queued pure tool-tab host or content pane.
+// The layout demands this tool kind, so re-slotting the live session must
+// always beat restarting a second instance while the old one grafts into the
+// flexible region — the duplicate-on-restore bug. A host drained of its sole
+// tab closes too: a scratch tab covers DetachTerminalTab's last-tab refusal
+// (the #1901 pattern) and closes with the husk.
+func (m *Model) adoptToolSession(st *applyState, tool string) (terminal.Model, bool) {
+	reg := m.activeWS().Panes
+	if q := st.tools[tool]; len(q) > 0 {
+		key := q[0]
+		st.tools[tool] = q[1:]
+		if inst := reg.Get(key); inst != nil {
+			if term, ok := inst.DetachTerminal(); ok {
+				reg.Close(key)
+				return term, true
+			}
+		}
+	}
+	for _, queue := range []*[]string{&st.hosts, &st.content} {
+		for i, key := range *queue {
+			inst := reg.Get(key)
+			if inst == nil || inst.Kind() != pane.KindEditor {
+				continue
+			}
+			for tab := 0; tab < inst.TabCount(); tab++ {
+				tt := inst.TabTerminal(tab)
+				if tt == nil || tt.Tool() != tool {
+					continue
+				}
+				sole := inst.TabCount() == 1
+				if sole {
+					inst.AddTab()
+				}
+				term, ok := inst.DetachTerminalTab(tab)
+				if !ok {
+					continue
+				}
+				if sole {
+					*queue = append((*queue)[:i], (*queue)[i+1:]...)
+					reg.Close(key)
+				}
+				return term, true
+			}
+		}
+	}
+	return terminal.Model{}, false
 }
 
 // takeBestHost dequeues the live tool-tab host whose hosted tool names best
@@ -974,10 +1037,11 @@ func takeBestHost(reg *pane.Registry, st *applyState, saved []string) string {
 }
 
 // restoreMissingToolTabs appends the saved tools a re-slotted live host no
-// longer hosts (#2042) — a parked global session re-attaches, anything else
-// restarts — so a multi-tool pane restores with exactly its saved tab set.
-// Tabs beyond the saved set are kept: an apply never kills a session.
-func (m *Model) restoreMissingToolTabs(reg *pane.Registry, key string, saved []string) {
+// longer hosts (#2042) — a live session elsewhere in the workspace re-slots
+// (#2124), a parked global session re-attaches, anything else restarts — so a
+// multi-tool pane restores with exactly its saved tab set. Tabs beyond the
+// saved set are kept: an apply never kills a session.
+func (m *Model) restoreMissingToolTabs(reg *pane.Registry, st *applyState, key string, saved []string) {
 	inst := reg.Get(key)
 	if inst == nil {
 		return
@@ -991,6 +1055,10 @@ func (m *Model) restoreMissingToolTabs(reg *pane.Registry, key string, saved []s
 	for _, tool := range saved {
 		if have[tool] > 0 {
 			have[tool]--
+			continue
+		}
+		if term, ok := m.adoptToolSession(st, tool); ok {
+			inst.AddTerminalTab(term)
 			continue
 		}
 		entry, ok := toolEntry(tool)
@@ -1007,11 +1075,18 @@ func (m *Model) restoreMissingToolTabs(reg *pane.Registry, key string, saved []s
 // restartToolTabs restarts the snapshot's tool sessions as terminal tabs of
 // the fresh editor-kind pane key (#1277), dropping the placeholder scratch
 // tab once at least one tool spawned — shared by the "tools" (#1989) and
-// legacy "editor"+Tools slot resolutions.
-func (m *Model) restartToolTabs(reg *pane.Registry, key string, tools []string) {
+// legacy "editor"+Tools slot resolutions. A session live elsewhere in the
+// workspace re-slots as the tab instead of restarting (#2124): a tool open as
+// a dedicated pane when the layout hosts it as a tab moves, never duplicates.
+func (m *Model) restartToolTabs(reg *pane.Registry, st *applyState, key string, tools []string) {
 	inst := reg.Get(key)
 	spawned := 0
 	for _, tool := range tools {
+		if term, ok := m.adoptToolSession(st, tool); ok {
+			inst.AddTerminalTab(term)
+			spawned++
+			continue
+		}
 		entry, ok := toolEntry(tool)
 		if !ok {
 			continue // tool no longer configured: restores as nothing
