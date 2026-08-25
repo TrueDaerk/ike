@@ -200,7 +200,7 @@ func (m Model) overlayCapturesKeyboard() bool {
 		m.floats.IsOpen() || m.recoveryOpen() || m.onboardingOpen() ||
 		m.conflictOpen() || m.revertPromptOpen() || m.depEditPromptOpen() ||
 		m.switchPromptOpen() || m.closePromptOpen() || m.renameOpen() ||
-		m.clonePromptOpen() || m.newProjectPromptOpen() || m.saveAsOpen() ||
+		m.clonePromptOpen() || m.newProjectPromptOpen() || m.generateScratchOpen() || m.saveAsOpen() ||
 		m.regexTesterOpen() || m.playFocused() || m.playNamePromptOpen() ||
 		m.layoutSavePromptOpen() || m.jbImportPromptOpen() ||
 		m.openAPIImportPromptOpen() || m.curlImportPromptOpen() ||

@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-25 (scratch: test-data generator, #2134)
+
+- **`scratch.generate` writes synthetic sample files** into the scratch store,
+  in nine formats — CSV, TSV, JSON, NDJSON, XML, YAML, TOML, SQL inserts and
+  logfmt log lines — so exercising the CSV table, the data grid, the log
+  timeline or the jq/yq playgrounds no longer needs a hand-made file. Nine
+  no-prompt `scratch.generate.<format>` commands mirror `scratch.new.<lang>`.
+- **The spec is a field list**: a name, one of 26 catalog kinds and an optional
+  parameter per field, plus a row count, a seed and a table name. `email`,
+  `url` and `hostname` take a **domain** that constrains every generated value
+  to it; `int`/`float` take `min..max` and `date` takes `from..to`.
+- **Seeded and reproducible.** Values come from `gofakeit/v7` through an
+  *instance* faker seeded from the spec, and nothing in the catalog reads the
+  wall clock — so the same seed and spec produce a byte-identical file. Seed 0
+  is the documented "draw a fresh seed" spelling.
+- **Writers stream** (begin / row / end over a 64 KiB buffer) and escape for
+  their own grammar; each is round-tripped in tests through the real parser,
+  SQL included — the generated `INSERT`s are executed against an in-memory
+  SQLite. The row count is capped at 1 000 000 by a constant, not a setting.
+- **`scratch.CreateWithContent`** is the new store entry point behind it: the
+  same race-free allocation, seeded with the caller's bytes instead of the
+  language template. Specs are remembered per format in `~/.ike/testdata.json`
+  and validated on read, so a stale preset falls back to the default.
+
 ## 2026-08-25 (settings: Conceal & Hints control center page, #2133)
 
 - **A dedicated Conceal & Hints settings page** is now the single surface for

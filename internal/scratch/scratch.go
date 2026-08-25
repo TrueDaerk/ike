@@ -43,7 +43,23 @@ func Dir() (string, error) {
 // file template (#1223: a PHP scratch opens with "<?php", so it is runnable
 // as created), and returns the absolute path. Languages without a template
 // yield an empty file. The extension is dot-optional; empty means "txt".
-func Create(ext string) (string, error) {
+func Create(ext string) (string, error) { return create(ext, nil) }
+
+// CreateWithContent allocates a scratch like Create but seeds it with content
+// instead of the language template (#2134: the test-data generator writes a
+// finished CSV/JSON/… document). Allocation stays race-free and the content is
+// still written through the winning handle, so a generated scratch can never
+// land in a file another creator got first. A nil content is Create.
+func CreateWithContent(ext string, content []byte) (string, error) {
+	if content == nil {
+		content = []byte{}
+	}
+	return create(ext, content)
+}
+
+// create is the single allocation path behind Create and CreateWithContent:
+// a nil seed means "use the language template".
+func create(ext string, seed []byte) (string, error) {
 	dir, err := Dir()
 	if err != nil {
 		return "", err
@@ -60,12 +76,16 @@ func Create(ext string) (string, error) {
 		// O_EXCL makes allocation race-free: the first creator wins.
 		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if err == nil {
-			// The template is written through the winning handle, so the
-			// content belongs to the allocation that won the O_EXCL race.
-			if tpl := lang.TemplateFor(path); tpl != "" {
-				if _, err := f.WriteString(tpl); err != nil {
+			// The seed is written through the winning handle, so the content
+			// belongs to the allocation that won the O_EXCL race.
+			data := seed
+			if data == nil {
+				data = []byte(lang.TemplateFor(path))
+			}
+			if len(data) > 0 {
+				if _, err := f.Write(data); err != nil {
 					f.Close()
-					return "", fmt.Errorf("seeding scratch template: %w", err)
+					return "", fmt.Errorf("seeding scratch content: %w", err)
 				}
 			}
 			f.Close()
