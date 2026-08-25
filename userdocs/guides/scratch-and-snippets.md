@@ -61,6 +61,54 @@ longer than the section, the cursor and the mouse wheel scroll it. Click the
 divider to collapse the section, or drag it to resize; both stick across
 restarts.
 
+### Generating test data
+
+Sometimes what you want in a scratch is not your own text but a *file to try
+something on* — 2000 rows of CSV for the table view, a deep JSON document to
+fold and query, a log file to scroll. **Generate Test Data…** builds one.
+
+It asks four things in turn:
+
+1. **The format** — CSV, TSV, JSON, NDJSON, XML, YAML, TOML, SQL inserts, or
+   logfmt log lines.
+2. **Rows, seed and table name.** The seed is what makes a generated file
+   *reproducible*: the same seed and the same fields give you a byte-identical
+   file every time, so a bug you find in row 1732 is still there tomorrow.
+   Leave the seed at `0` for fresh random data on every run. The table name is
+   used by the SQL and XML formats. Row counts run from 1 to 1 000 000.
+3. **The field list** — ++a++ adds a field, ++e++ edits the selected one, ++d++
+   deletes it, ++enter++ generates. A fresh list starts as `id`, `first_name`,
+   `last_name`, `email`.
+4. **A field** — its name, its kind, and the kind's parameter. On the **Kind**
+   row, ++up++ and ++down++ walk the catalog, so you never have to
+   remember a name.
+
+The catalog covers the usual sample-data shapes: `id` (the row number),
+`uuid`, `first_name`, `last_name`, `full_name`, `email`, `url`, `hostname`,
+`domain`, `ipv4`, `ipv6`, `mac`, `phone`, `street`, `city`, `country`,
+`company`, `job_title`, `sentence`, `paragraph`, `int`, `float`, `bool`,
+`date`, `hex_color` and `user_agent`.
+
+Four kinds take a parameter:
+
+| Kind | Parameter | Example |
+| --- | --- | --- |
+| `email`, `url`, `hostname` | a domain — every value stays inside it | `example.com` |
+| `int` | `min..max` | `1..99` |
+| `float` | `min..max` | `0..1.5` |
+| `date` | `from..to` | `2020-01-01..2024-12-31` |
+
+The finished file lands in the scratch store like any other scratch, opens in a
+tab with the right highlighting, and shows up in the explorer's Scratches
+section. Anything the form cannot use — a row count of zero, an empty field
+list, a kind you mistyped — is refused in the dialog with the reason, so you fix
+it in place.
+
+Your last setup is remembered **per format**, so the next CSV starts from the
+fields of your previous CSV. Once you have one you like, the palette's
+per-format commands (**Generate Test Data: CSV**, **Generate Test Data: JSON**,
+…) skip the dialog entirely and generate straight from it.
+
 ## Snippets
 
 Type a trigger word, press ++tab++ with the cursor right after it, and it

@@ -380,6 +380,9 @@ type Model struct {
 	// newProj is the open new-project wizard (#1718); nil when it is closed.
 	newProj *newProjState
 
+	// tdGen is the open test-data wizard (#2134); nil when it is closed.
+	tdGen *tdGenState
+
 	// csvProfile is the open csv column profile (#1940); nil when it is
 	// closed. The data viewer's profile lives in its own pane, not here.
 	csvProfile *csvProfileContent
@@ -5359,6 +5362,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The scaffold finished: open the project or show the error.
 		return m.finishNewProject(msg)
 
+	case GenerateScratchMsg:
+		// scratch.generate (#2134): the wizard, or — for the per-format
+		// commands — a straight generation from that format's preset.
+		if msg.Format != "" {
+			return m.startPresetGenerate(msg.Format)
+		}
+		m.startGenerateScratch()
+		return m, nil
+
+	case scratchGenDoneMsg:
+		// The generation finished: open the scratch or show the error.
+		return m.finishGenerateScratch(msg)
+
 	case project.PickedMsg:
 		// Picker selection: validate off the Update loop; the result comes
 		// back as SwitchProjectMsg or SwitchFailedMsg.
@@ -6756,6 +6772,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// by enter/esc.
 		if m.newProjectPromptOpen() {
 			return m.updateNewProjectPrompt(msg)
+		}
+		// The test-data wizard (#2134) mirrors it, with four steps walked by
+		// enter/esc.
+		if m.generateScratchOpen() {
+			return m.updateGenerateScratch(msg)
 		}
 		// The untitled save-as prompt (#730) mirrors it.
 		if m.saveAsOpen() {

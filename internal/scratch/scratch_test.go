@@ -303,3 +303,55 @@ func TestRenameGuards(t *testing.T) {
 		t.Fatalf("the target must survive: %v", err)
 	}
 }
+
+// TestCreateWithContentSeedsGeneratedFile covers the content-accepting
+// creation path (#2134): the generator's document lands in the file instead of
+// the language template, and allocation still counts up.
+func TestCreateWithContentSeedsGeneratedFile(t *testing.T) {
+	dir := sandbox(t)
+	lang.Register(lang.Language{ID: "gentpl", Extensions: []string{"gtp"}, Template: "TEMPLATE\n"})
+
+	body := []byte("id,name\n1,ada\n")
+	first, err := CreateWithContent("gtp", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, "scratch-1.gtp"); first != want {
+		t.Fatalf("first = %q, want %q", first, want)
+	}
+	got, err := os.ReadFile(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(body) {
+		t.Fatalf("content = %q, want the generated document (not the template)", got)
+	}
+
+	// The next allocation counts up, and a plain Create still gets the
+	// template — the content path must disturb neither.
+	second, err := Create("gtp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, "scratch-2.gtp"); second != want {
+		t.Fatalf("second = %q, want %q", second, want)
+	}
+	if data, err := os.ReadFile(second); err != nil || string(data) != "TEMPLATE\n" {
+		t.Fatalf("template scratch = %q, %v; want the language template", data, err)
+	}
+}
+
+// TestCreateWithContentEmptyStaysEmpty pins that an empty (non-nil) content
+// means "empty file", not "fall back to the template".
+func TestCreateWithContentEmptyStaysEmpty(t *testing.T) {
+	sandbox(t)
+	lang.Register(lang.Language{ID: "emptpl", Extensions: []string{"etp"}, Template: "TEMPLATE\n"})
+
+	path, err := CreateWithContent("etp", []byte{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(path); err != nil || len(data) != 0 {
+		t.Fatalf("content = %q, %v; want an empty file", data, err)
+	}
+}

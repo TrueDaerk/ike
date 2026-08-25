@@ -32,6 +32,9 @@ func scratchCommands() []plugin.Command {
 		appCommand(scratchTextCommandID, "New Scratch File: Plain Text", NewScratchMsg{Ext: "txt"}),
 		appCommand("scratch.list", "Open Scratch File…", ShowScratchFilesMsg{}),
 	}
+	// The test-data generator (#2134) is a scratch producer too, so its
+	// command family is built alongside the creators.
+	cmds = append(cmds, generateCommands()...)
 	for _, l := range lang.All() {
 		if len(l.Extensions) == 0 {
 			continue

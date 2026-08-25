@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Scratch Files
-description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette, listed as the explorer's Scratches section with the explorer's own open/rename/delete semantics, surviving restarts as ordinary files.
+description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette or generated as synthetic test data in nine formats, listed as the explorer's Scratches section with the explorer's own open/rename/delete semantics, surviving restarts as ordinary files.
 resource: internal/scratch
-tags: [architecture, scratch, palette, languages, explorer]
-timestamp: 2026-08-24T12:00:00Z
+tags: [architecture, scratch, palette, languages, explorer, testdata]
+timestamp: 2026-08-25T12:00:00Z
 ---
 
 # Scratch Files
@@ -25,6 +25,7 @@ scratch paths itself:
 ```go
 func Dir() (string, error)        // $IKE_CONFIG_DIR/scratches, else ~/.ike/scratches
 func Create(ext string) (string, error) // next free scratch-N.<ext>, seeded with the language template
+func CreateWithContent(ext string, content []byte) (string, error) // …seeded with content instead
 func List() ([]string, error)     // existing scratches, newest-first (mod time)
 func Entries() ([]Entry, error)   // the same order, with each file's mod time
 func FirstLine(path string) string // first non-empty line, capped read, "" if empty/blank/unreadable
@@ -39,6 +40,14 @@ through the winning handle, so the content belongs to the allocation that won
 the race and a PHP scratch is runnable as created; the extension is
 dot-optional, empty means `txt`. A missing directory lists as empty, not as an
 error.
+
+`CreateWithContent` (#2134) is the same allocation with a different seed: the
+caller's bytes instead of the language template, still written through the
+handle that won the `O_EXCL` race. It exists so the [test-data
+generator](#test-data-generator-2134) has no path assembly and no naming logic
+of its own — a generated CSV is a scratch like every other. A nil content is
+`Create`; an empty (non-nil) one means an empty file, not "fall back to the
+template".
 
 The store has a **second producer** since #2056: "Materialize to File"
 (`editor.materializeBuffer`) allocates a `scratch-N.<ext>` here for a file-less
@@ -78,6 +87,110 @@ late-registered languages appear without ordering constraints:
 The handler creates via the store and opens through the standard funnel
 (`openPath`, absolute path): the new scratch lands as a focused tab with
 highlighting/LSP live.
+
+## Test-data generator (#2134)
+
+Exercising the CSV table, the [data viewer](./data-viewer.md), the
+[log timeline](./log-timeline.md) or the
+[jq/yq playgrounds](./jq-playground.md) used to need a hand-made sample file —
+in practice, asking an external agent for "a 2000-row CSV" and pasting it in.
+`internal/testdata` generates one instead, and drops it into the scratch store.
+
+**The spec is the whole model.** A generation is a list of named fields, each
+with a catalog *kind* and an optional parameter, plus a row count, a seed and a
+table name:
+
+```go
+type Field struct{ Name string; Kind Kind; Param string }
+type Spec  struct{ Format Format; Rows int; Seed uint64; Table string; Fields []Field }
+```
+
+`Spec.Validate` is the single definition of "valid" — the wizard, the quick
+commands and `Write` all run it, so a hand-edited preset cannot slip past the
+form's checks. It refuses a row count below 1 or above `MaxRows` (1 000 000),
+an empty field list, an empty or duplicate field name, an unknown kind, and a
+parameter that does not match its kind's grammar (or is given to a kind that
+takes none). The cap is a **constant, not a setting**: it exists to catch a
+typo in the row field, not to be tuned.
+
+**Values ride [gofakeit](https://github.com/brianvoe/gofakeit) v7**, always
+through an *instance* faker seeded from the spec — never the package global —
+which is what makes "same seed + same spec → byte-identical output" hold even
+when two generations interleave. For the same reason nothing in the catalog
+reads the wall clock: the `date` kind defaults to a fixed 2000–2030 window and
+generated log timestamps start at a fixed epoch. **Seed 0 means "draw a fresh
+random seed"**; any other seed repeats.
+
+The catalog (`testdata.Catalog()`, the wizard's reference and the docs' table):
+`id` (the 1-based row number, not random), `uuid`, `first_name`, `last_name`,
+`full_name`, `email`, `url`, `hostname`, `domain`, `ipv4`, `ipv6`, `mac`,
+`phone`, `street`, `city`, `country`, `company`, `job_title`, `sentence`,
+`paragraph`, `int`, `float`, `bool`, `date`, `hex_color`, `user_agent`. Four
+take a parameter: `email`/`url`/`hostname` a **domain**, which constrains every
+generated value to it (`https://example.com/…`, `srv12.example.com`),
+`int`/`float` a `min..max` range and `date` a `from..to` range (`YYYY-MM-DD` or
+RFC3339).
+
+**Writers stream.** Each format is a `begin` / one call per row / `end` encoder
+over a 64 KiB buffer, so a million-row CSV never materializes as a million rows
+in memory. Values stay typed (`string`, `int64`, `float64`, `bool`,
+`time.Time`) all the way into the writer, so each format renders them in its
+own idiom rather than re-parsing pre-formatted text:
+
+| format | ext | shape |
+| --- | --- | --- |
+| CSV / TSV | `.csv` `.tsv` | header row, `encoding/csv` quoting |
+| JSON | `.json` | indented array of objects (folds and jq nicely) |
+| NDJSON | `.ndjson` | one compact object per line |
+| XML | `.xml` | `<Table>` root, one `<row>` per row, names sanitized to legal XML names |
+| YAML | `.yaml` | list of maps; strings always double-quoted (JSON escape rules) |
+| TOML | `.toml` | `[[Table]]` array of tables, dates as native datetimes |
+| SQL | `.sql` | one `INSERT INTO "Table" (…) VALUES (…);` per row |
+| Log | `.log` | logfmt `ts=… level=… msg=…` plus the spec's fields as extra pairs |
+
+Escaping is hand-rolled per grammar (a document encoder would want the whole
+file in memory first), which is why every writer is **round-tripped in tests
+through the real parser** — `encoding/csv`, `encoding/json`, `encoding/xml`,
+`yaml.v3`, `BurntSushi/toml`, and for SQL an actual in-memory SQLite that
+executes the generated statements — against a spec whose field names carry a
+space, a double quote and a leading digit.
+
+The log writer draws its `ts`/`level`/`msg` from the same faker as the row
+values. Levels follow a service-log distribution (≈55 % info, 20 % debug, 15 %
+warn, 8 % error, 2 % fatal) and timestamps only ever move forward, so the
+generated file reads as a stream.
+
+### Commands and the wizard
+
+- **`scratch.generate` ("Generate Test Data…", palette + File menu)** opens a
+  four-step shell dialog (`internal/app/scratch_generate.go`), modelled on the
+  [new-project wizard](./project-switching.md) rather than a settings form, so
+  it needs no page host: **format** (↑↓, enter) → **rows / seed / table** (tab
+  between fields) → **field list** (`a` add, `e` edit, `d` delete, enter
+  generates) → **field editor** (name / kind / param; ↑↓ on the Kind row cycle
+  the catalog, so 26 kinds need no typing). Every accept validates through
+  `Spec.Validate`, and a failure keeps the dialog open with the reason on its
+  error line. `esc` walks the steps backwards and closes on the first.
+- **`scratch.generate.<format>`** — one per format, mirroring
+  `scratch.new.<lang>`: no prompt at all, generated straight from that format's
+  stored preset.
+
+Generation runs as a `tea.Cmd`, never on the update loop — `MaxRows` worth of
+faker calls has no business blocking the UI. The finished document is written
+with `scratch.CreateWithContent`, the explorer's Scratches section is refreshed
+and the file opens through the standard funnel, so it lands as a focused tab
+with the right language.
+
+### Presets (`~/.ike/testdata.json`)
+
+The spec that produced a file is remembered **per format**, in a user-level
+store following the same `IKE_CONFIG_DIR` seam as the layout store
+(`internal/app/layouts.go`) — a test-data shape is a habit, not a property of a
+project. Picking a format in the wizard loads that format's preset; a format
+with none starts from the stock default (100 rows; `id`, `first_name`,
+`last_name`, `email`). The store is validated **on read**: a hand-edited or
+stale entry falls back to the default instead of putting an unusable spec into
+the dialog, and a failed generation never overwrites a working preset.
 
 ## Running a scratch (#1223)
 
