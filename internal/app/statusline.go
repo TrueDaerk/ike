@@ -33,6 +33,7 @@ type statusSegment struct {
 // point for future plugin segments.
 var statusLeft = []statusSegment{
 	{id: "mode", render: modeSegment},
+	{id: "peek", render: peekSegment},
 	{id: "macro", render: macroSegment},
 	{id: "follow", render: followSegment},
 	{id: "file", render: fileSegment},

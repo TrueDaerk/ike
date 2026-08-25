@@ -255,6 +255,15 @@ its right-pinned `✕` zone emits `RemoveRecentFileMsg{Path}` — the root model
 removes the entry from the MRU, persists the session immediately and
 refreshes the still-open palette.
 
+### Alternate activation (#2136)
+
+`Item.Alt` is a second, optional activation msg: `alt+enter` on the focused
+row (main list or side column) emits it and closes the palette, exactly like
+`enter` emits `Msg`. A row without one falls back to the primary activation,
+so the chord never goes dead. The project picker uses it for the quick-peek
+switch — `enter` switches, `alt+enter` peeks — and the `project.peek` picker
+flavour inverts the pair.
+
 ### Row layout: the right-aligned time column (#1114)
 
 `Item.Time` is a generic palette field: rows render `marker + title (+ badge)

@@ -28,6 +28,11 @@ type PickedMsg struct{ Path string }
 // opens the palette locked to it, so the rune has no user-facing prefix story.
 const PickerPrefix = '#'
 
+// PeekPickerPrefix selects the picker's peek flavour (#2136): the same list,
+// but plain activation peeks instead of switching. Locked-open only, like
+// PickerPrefix.
+const PeekPickerPrefix = '_'
+
 // PickerMode is the palette Mode listing recent projects. history is
 // injectable for tests; by default it reads the process-wide config.
 type PickerMode struct {
@@ -41,6 +46,10 @@ type PickerMode struct {
 	// projectsDir overrides ProjectsDir(), the base relative path browsing
 	// and completion resolve against (#1808); tests only.
 	projectsDir func() (string, error)
+	// peek flips the mode into its peek flavour (#2136): plain activation
+	// emits PeekPickedMsg and alt+enter falls back to the normal switch —
+	// the exact inverse of the default mode's primary/alternate pair.
+	peek bool
 }
 
 // SetOpen installs the in-memory check (#820); the app injects the workspace
@@ -64,6 +73,24 @@ func NewPickerMode(history func() []Entry) *PickerMode {
 	return &PickerMode{history: history, projectsDir: ProjectsDir}
 }
 
+// NewPeekPickerMode builds the picker's peek flavour (#2136) behind
+// project.peek: identical list and completion, inverted activation.
+func NewPeekPickerMode(history func() []Entry) *PickerMode {
+	m := NewPickerMode(history)
+	m.peek = true
+	return m
+}
+
+// activation returns the primary and alternate msgs for path, swapped in the
+// peek flavour (#2136): the default mode switches on enter and peeks on
+// alt+enter, the peek mode the other way round.
+func (m *PickerMode) activation(path string) (msg, alt any) {
+	if m.peek {
+		return PeekPickedMsg{Path: path}, PickedMsg{Path: path}
+	}
+	return PickedMsg{Path: path}, PeekPickedMsg{Path: path}
+}
+
 // projectsBase resolves the configured projects directory that relative path
 // input browses and completes against (#1808), falling back to "" — the
 // process working directory, the pre-#1808 behavior — when it cannot be
@@ -77,10 +104,20 @@ func (m *PickerMode) projectsBase() string {
 }
 
 // Prefix implements palette.Mode.
-func (m *PickerMode) Prefix() rune { return PickerPrefix }
+func (m *PickerMode) Prefix() rune {
+	if m.peek {
+		return PeekPickerPrefix
+	}
+	return PickerPrefix
+}
 
 // Placeholder implements palette.Mode.
-func (m *PickerMode) Placeholder() string { return "Switch project — recent name or path…" }
+func (m *PickerMode) Placeholder() string {
+	if m.peek {
+		return "Peek project — open temporarily, one key back…"
+	}
+	return "Switch project — recent name or path…"
+}
 
 // Results implements palette.Mode: history entries fuzzy-matched on display
 // name and path (an empty query lists all, newest first), followed by an
@@ -110,12 +147,16 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 	items := make([]palette.Item, 0, len(out)+1)
 	now := m.clock()
 	for _, s := range out {
+		msg, alt := m.activation(s.entry.Path)
 		it := palette.Item{
 			Title:  s.entry.Name,
 			Detail: CompactPath(s.entry.Path),
 			Spans:  s.spans,
 			Score:  s.score,
-			Msg:    PickedMsg{Path: s.entry.Path},
+			Msg:    msg,
+			// The other activation flavour rides on alt+enter (#2136): peek
+			// from the switch picker, full switch from the peek picker.
+			Alt: alt,
 			// The last-opened time (#842), right-aligned in its own column
 			// since #1114; "" for legacy entries without a timestamp.
 			Time: RelTime(s.entry.LastOpened, now),
@@ -141,14 +182,18 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 		// directory rather than the process working directory.
 		base := m.projectsBase()
 		for _, c := range pathcomplete.DirsFrom(base, q).Candidates {
+			msg, alt := m.activation(resolveAgainstBase(base, c))
 			items = append(items, palette.Item{
 				Title: "Open " + c,
-				Msg:   PickedMsg{Path: resolveAgainstBase(base, c)},
+				Msg:   msg,
+				Alt:   alt,
 			})
 		}
+		msg, alt := m.activation(resolveAgainstBase(base, q))
 		items = append(items, palette.Item{
 			Title: "Open \"" + q + "\"…",
-			Msg:   PickedMsg{Path: resolveAgainstBase(base, q)},
+			Msg:   msg,
+			Alt:   alt,
 		})
 	}
 	return items

@@ -32,6 +32,11 @@ type Item struct {
 	// palette, e.g. closing a background workspace from the recent-projects
 	// list. Nil hides the affordance.
 	Aux tea.Msg
+	// Alt is an optional alternate activation (#2136): alt+enter on the
+	// selected row emits it instead of Msg and closes the palette — the
+	// project picker peeks the row's project this way. Nil falls back to the
+	// primary activation, so alt+enter never goes dead on rows without one.
+	Alt tea.Msg
 	// Hint is an optional leading shortcut label (#2023): the intention
 	// popup numbers its first nine rows "1"…"9" so a digit runs that action
 	// directly. It is rendered dim in front of the title and does not shift

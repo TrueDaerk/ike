@@ -268,12 +268,27 @@ func isContentHostKey(key string) bool {
 // saveLayout persists the tree plus the identity table built from the registry.
 // Errors are swallowed: failing to persist layout must never disrupt the session.
 func saveLayout(root layout.Node, reg *pane.Registry) {
-	if root == nil {
+	data, ok := encodeLayoutState(root, reg)
+	if !ok {
 		return
+	}
+	path := layoutFile()
+	if dir := filepath.Dir(path); dir != "." {
+		_ = os.MkdirAll(dir, 0o755)
+	}
+	_ = os.WriteFile(path, data, 0o644)
+}
+
+// encodeLayoutState marshals the layout store's on-disk payload without
+// writing it — the peek return's unchanged check (#2136) compares this against
+// the peek-enter snapshot before deciding whether to persist at all.
+func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
+	if root == nil {
+		return nil, false
 	}
 	treeData, err := layout.Encode(root)
 	if err != nil {
-		return
+		return nil, false
 	}
 	ids := map[string]paneIdentity{}
 	for _, key := range reg.Keys() {
@@ -424,11 +439,7 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 	}
 	data, err := json.Marshal(persistedLayout{Tree: treeData, Panes: ids})
 	if err != nil {
-		return
+		return nil, false
 	}
-	path := layoutFile()
-	if dir := filepath.Dir(path); dir != "." {
-		_ = os.MkdirAll(dir, 0o755)
-	}
-	_ = os.WriteFile(path, data, 0o644)
+	return data, true
 }

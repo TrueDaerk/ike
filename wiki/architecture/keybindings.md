@@ -876,6 +876,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `project.findInPath` | `cmd+shift+f` | fragile | `palette` | live via palette |
 | `project.goToClass` | `cmd+o` | fragile | `palette` | live via palette |
 | `project.goToFile` | `cmd+shift+o` | fragile | `palette` | live via palette |
+| `project.peek.return` | `cmd+shift+b` | fragile | `palette` | live via palette |
 | `project.replaceInPath` | `cmd+shift+r` | fragile | `palette` | live via palette |
 | `project.switch` | `cmd+shift+p` | fragile | `palette` | live via palette |
 | `run.file` | `shift+f10` | delivered | `—` | live |

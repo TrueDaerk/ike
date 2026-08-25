@@ -614,6 +614,14 @@ type Model struct {
 	// projectClosePending is the busy close-current guard state (#1355): the
 	// MRU background root to resume once the user confirms the close.
 	projectClosePending *pendingProjectClose
+	// peek marks the active workspace as a quick-peek (#2136): the origin
+	// root project.peek.return goes back to, plus the state snapshot the
+	// return's unchanged check compares against. Nil while not peeking; a
+	// peek never survives the process (restart restores the origin normally).
+	peek *peekState
+	// peekReturnPending is the busy peek-return guard state (#2136): the
+	// activity the drop would kill, awaiting the user's answer.
+	peekReturnPending *pendingPeekReturn
 
 	// closePending is the close request awaiting the unsaved-changes guard
 	// (#259); nil when no guard is open.
@@ -2427,6 +2435,10 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	// and closable in place via the aux action (#820).
 	openInMemory := func(path string) bool { return wsMgr != nil && wsMgr.Peek(path) != nil }
 	proj.SetOpen(openInMemory)
+	// The peek flavour behind project.peek (#2136): same list, activation
+	// peeks; alt+enter still switches for real.
+	projPeek := project.NewPeekPickerMode(nil)
+	projPeek.SetOpen(openInMemory)
 	mru.SetProjects(func() []palette.Item {
 		cur, _ := os.Getwd()
 		var items []palette.Item
@@ -2466,7 +2478,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, ssh, remoteHosts, playFilters, bufLang)
+	return palette.New(pcfg, cmd, file, dir, proj, projPeek, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, ssh, remoteHosts, playFilters, bufLang)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -2732,6 +2744,9 @@ var terminalGlobalCommands = map[string]bool{
 	"palette.recentFiles":      true,
 	"project.switch":           true,
 	"project.close":            true,
+	// #2136: the one-key way back from a peek must work with a terminal
+	// focused too — a peek often ends while looking at a shell.
+	"project.peek.return": true,
 	// #973: IDE-level chords the shell can never meaningfully use.
 	"settings.open":         true,
 	"project.goToFile":      true,
@@ -5264,6 +5279,27 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, project.PickerPrefix)
 		return m, nil
 
+	case project.OpenPeekPickerMsg:
+		// project.peek (#2136): the same recent-projects list, locked to the
+		// peek flavour — plain activation peeks, alt+enter switches for real.
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, project.PeekPickerPrefix)
+		return m, nil
+
+	case project.PeekPickedMsg:
+		// Peek activation (#2136): validate off the Update loop; the result
+		// comes back as PeekProjectMsg or SwitchFailedMsg.
+		return m, project.PeekTo(msg.Path)
+
+	case project.PeekProjectMsg:
+		return m.handlePeekProject(msg)
+
+	case project.PeekReturnMsg:
+		return m.handlePeekReturn()
+
+	case project.PeekKeepMsg:
+		return m.handlePeekKeep()
+
 	case project.OpenCloneMsg:
 		// project.clone (palette / File menu): the two-field clone dialog.
 		m.startClonePrompt()
@@ -5415,6 +5451,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case project.SwitchedMsg:
+		// A peek-enter announces itself with the way back (#2136); the marker
+		// is already set — the fresh model carried it out of the transaction.
+		if m.peek != nil && m.activeWS().Root == msg.Root {
+			m.host.Notify(host.Info, "peeking "+msg.Root+" — "+peekReturnChord(m)+" returns")
+			return m, nil
+		}
 		m.host.Notify(host.Info, "switched to "+msg.Root)
 		return m, nil
 
@@ -6610,6 +6652,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The busy close-current-project guard (#1355): s / d / esc answer it.
 		if m.projectClosePromptOpen() {
 			return m.updateProjectClosePrompt(msg)
+		}
+		// The busy peek-return guard (#2136): s / d / esc answer it.
+		if m.peekReturnPromptOpen() {
+			return m.updatePeekReturnPrompt(msg)
 		}
 		// The PHP path-mapping suggestion (#832): m / esc answer it.
 		if m.debugMapPromptOpen() {

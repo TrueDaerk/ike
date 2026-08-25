@@ -351,6 +351,13 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		p.scrollSideToSelected()
 		return nil
 	}
+	// The alternate activation (#2136): alt+enter emits the focused row's Alt
+	// msg — e.g. peek a project instead of switching — and closes the palette;
+	// rows without one activate normally. Checked ahead of the side-column and
+	// main enter cases, which match on Code alone and would swallow the chord.
+	if msg.Code == tea.KeyEnter && msg.Mod == tea.ModAlt {
+		return p.altActivate()
+	}
 	// Column focus for a SideMode open (#778): tab toggles between the left
 	// (projects) and right (files) columns; on an empty query the plain
 	// arrows switch too (with text present they stay cursor keys).
@@ -542,6 +549,25 @@ func (p *Palette) activate() tea.Cmd {
 	if msg == nil {
 		return nil
 	}
+	return func() tea.Msg { return msg }
+}
+
+// altActivate emits the focused row's Alt msg (#2136) and closes the palette.
+// A row without an Alt action activates normally — the chord degrades to
+// enter instead of going dead — and no selection is a no-op like activate.
+func (p *Palette) altActivate() tea.Cmd {
+	it, ok := p.focusedItem()
+	if !ok {
+		return nil
+	}
+	if it.Alt == nil {
+		if p.sideFocus {
+			return p.activateSide()
+		}
+		return p.activate()
+	}
+	msg := it.Alt
+	p.Close()
 	return func() tea.Msg { return msg }
 }
 

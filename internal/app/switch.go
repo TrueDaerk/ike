@@ -137,6 +137,27 @@ func (m *Model) saveAllDirty() []tea.Cmd {
 	return cmds
 }
 
+// switchOpts tunes performSwitchOpts for the peek flavours (#2136); the
+// zero value plus record=true is the plain seamless switch.
+type switchOpts struct {
+	// record appends the target open to project.history after the switch;
+	// off for a peek-enter, so a quick look-up neither enters the history
+	// nor becomes the startup restore head.
+	record bool
+	// escalatePeek records the *departing* root too when it is a peek (#2136
+	// escalation): a normal switch away from a peek converts it into a
+	// normal workspace. Off on peek-enter/-return and on a close, where the
+	// departing workspace is being discarded, not kept.
+	escalatePeek bool
+	// peekEnter marks the fresh model as a peek of the departing root and
+	// snapshots the target's session/layout state for the unchanged check.
+	peekEnter bool
+	// skipUnchangedPeekSave skips persisting the departing peeked project's
+	// session/layout when nothing changed since peek-enter, so a ten-second
+	// look-up never plants a .ike directory in a repo it only read.
+	skipUnchangedPeekSave bool
+}
+
 // performSwitch is the seamless project switch (#777). The old project's
 // session and layout persist first, then the process chdirs and the live
 // workspace — panes, split tree, running terminals, run panes and the debug
@@ -150,9 +171,22 @@ func (m *Model) saveAllDirty() []tea.Cmd {
 // breakpoints) re-resolves against the new root. Nothing is mutated when the
 // chdir fails.
 func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
-	saveSession(m.snapshotSession())
-	if m.activeWS().Tree != nil {
-		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	return m.performSwitchOpts(root, switchOpts{record: true, escalatePeek: true})
+}
+
+// performSwitchOpts is performSwitch's tunable core (#2136): the peek flavours
+// reuse the whole transaction and only vary history recording, the peek
+// marker, and the departing state save.
+func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.Cmd) {
+	departing := m.activeWS().Root
+	// The departing peeked project's state stays unwritten when the peek
+	// changed nothing (#2136): a never-visited project keeps no .ike residue
+	// from a quick look-up.
+	if !(opts.skipUnchangedPeekSave && m.peek != nil && !m.peekStateChanged()) {
+		saveSession(m.snapshotSession())
+		if m.activeWS().Tree != nil {
+			saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+		}
 	}
 	if err := os.Chdir(root); err != nil {
 		return m, func() tea.Msg { return project.SwitchFailedMsg{Path: root, Err: err} }
@@ -297,6 +331,29 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// Hold the background set to project.max_workspaces (#780): idle LRU
 	// workspaces drop silently, a busy one asks first.
 	capCmd := sized.enforceWorkspaceCap()
+	// Entering a peek (#2136): mark the fresh model and snapshot its restored
+	// session/layout, so the return can tell an untouched peek from one the
+	// user edited and skip the state write for the former.
+	if opts.peekEnter {
+		sized.peek = &peekState{origin: departing}
+		sized.peek.enterSession, sized.peek.enterLayout = sized.peekStateSnapshot()
+	}
+	// History recording (success only — we are past every failure point): a
+	// peek-enter records nothing, a normal switch away from a peek records the
+	// peeked root first (escalation, #2136) — sequentially in one cmd, two
+	// concurrent RecordOpenCmds would race on the config write.
+	var recordCmd tea.Cmd
+	switch {
+	case opts.record && opts.escalatePeek && m.peek != nil:
+		peeked := departing
+		recordCmd = func() tea.Msg {
+			cfgOpts := config.Discover(".")
+			_ = project.RecordOpen(cfgOpts, peeked, time.Now())
+			return project.RecordedMsg{Root: root, Err: project.RecordOpen(cfgOpts, root, time.Now())}
+		}
+	case opts.record:
+		recordCmd = project.RecordOpenCmd(config.Discover("."), root, time.Now())
+	}
 	return sized, tea.Batch(
 		fresh.Init(),
 		sizeCmd,
@@ -305,7 +362,7 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 		reconcile,
 		resync,
 		idleCmd,
-		project.RecordOpenCmd(config.Discover("."), root, time.Now()),
+		recordCmd,
 		func() tea.Msg { return project.SwitchedMsg{Root: root} },
 	)
 }

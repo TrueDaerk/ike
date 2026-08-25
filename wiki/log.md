@@ -1,5 +1,24 @@
 # Log
 
+## 2026-08-25 (project: quick-peek switch with one-key return, #2136)
+
+- **Peek a project instead of switching**: `alt+enter` on any project-picker
+  row (a new palette-wide `Item.Alt` alternate-activation seam), or the new
+  `project.peek` command's picker flavour, opens the project through the
+  normal seamless-switch transaction but marked as a peek — the open is not
+  recorded into `project.history`, so a ten-second look-up never becomes the
+  startup restore head.
+- **One key back**: `project.peek.return` (`cmd+shift+b`, `ctrl+shift+b`
+  secondary; palette fallback in the matrix) switches back to the origin and
+  drops + tears down the peeked workspace in the same action, behind the
+  existing busy guard when dirty buffers or running processes would die. An
+  untouched peek writes no session/layout on the way out, so it plants no
+  `.ike` directory in a repo it only read. A status-line segment
+  (`peek ⇢ <origin> (<chord>)`) keeps the way back visible.
+- **Staying converts the peek**: `project.peek.keep` — or a plain switch
+  elsewhere — records the peeked root into the history and clears the marker.
+  Peek state deliberately does not survive a restart.
+
 ## 2026-08-25 (settings: Conceal & Hints control center page, #2133)
 
 - **A dedicated Conceal & Hints settings page** is now the single surface for
