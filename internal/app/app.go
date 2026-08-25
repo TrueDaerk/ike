@@ -2281,7 +2281,7 @@ type whichKeyDelayMsg struct{ gen int }
 // per pending-prefix change (delay expiry, or a narrowing key while the popup
 // is already up), never per render.
 func (m *Model) showWhichKey() {
-	prefix, conts := m.keys.PendingContinuations(keymap.Context(m.focusContext()))
+	prefix, conts := m.keys.PendingContinuations(m.keyContext())
 	if prefix == "" {
 		m.whichKey = nil
 		return
@@ -2307,13 +2307,13 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 	// never doubles as an esc for the focused pane (leaving insert mode,
 	// closing a popup). Unmodified esc only — cmd+k esc could be bound.
 	if m.keys.Pending() && k.Base == "esc" && k.Mods == 0 {
-		if !m.keys.Continues(k, keymap.Context(m.focusContext())) {
+		if !m.keys.Continues(k, m.keyContext()) {
 			m.keys.Reset()
 			m.clearWhichKey()
 			return nil, true
 		}
 	}
-	res := m.keys.Feed(k, keymap.Context(m.focusContext()))
+	res := m.keys.Feed(k, m.keyContext())
 	switch res.Status {
 	case keymap.Pending:
 		// Hold the partial chord and arm the resolver timeout; swallow the key
@@ -2820,7 +2820,7 @@ func (m *Model) terminalGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if terminalShellChords[chord.String()] {
 			return false, nil
 		}
-		if b, found := table.Lookup(chord, keymap.Context(m.focusContext())); found && terminalGlobalCommands[b.Command] {
+		if b, found := table.Lookup(chord, m.keyContext()); found && terminalGlobalCommands[b.Command] {
 			if c, okc := m.reg.Command(b.Command); okc {
 				return true, m.dispatchCommand(b.Command, c)
 			}
@@ -6395,7 +6395,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// sequence family) survives (#1482): the resolver keeps the chord and
 		// the which-key overlay stays until a continuation, a non-matching
 		// key, or a mouse click ends it.
-		switch res := m.keys.Timeout(keymap.Context(m.focusContext())); res.Status {
+		switch res := m.keys.Timeout(m.keyContext()); res.Status {
 		case keymap.Resolved:
 			m.clearWhichKey()
 			if c, ok := m.reg.Command(res.Command); ok {
@@ -7465,6 +7465,24 @@ func (m Model) focusContext() string {
 		return inst.ContextID()
 	}
 	return ctxExplorer
+}
+
+// keyContext is focusContext for the keymap layer (#1876): the focused pane's
+// context, narrowed to the buffer's language id when the focus is an editor
+// showing a classified buffer — so language-scoped bindings (editor[http])
+// resolve and shadow only there. Every other consumer of the context id
+// (palette scoping, registry, help snapshot) keeps the plain focusContext.
+func (m Model) keyContext() keymap.Context {
+	ctx := keymap.Context(m.focusContext())
+	if ctx != keymap.Editor || m.popupLayerOpen() {
+		return ctx
+	}
+	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil {
+		if ed := inst.Editor(); ed != nil {
+			ctx = keymap.WithLang(ctx, ed.LangID())
+		}
+	}
+	return ctx
 }
 
 // isCoreKey reports whether keys is handled by a core binding in the current

@@ -10,6 +10,7 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/keymap"
+	"ike/internal/lang"
 )
 
 // migrated_panels.go completes the sub-panel migrations (0420, #892): the
@@ -32,6 +33,12 @@ type keymapCapture struct {
 	// other is the colliding binding behind conflict (0460, #1312): its
 	// context decides whether "keep both, resolve by context" is possible.
 	other keymap.Binding
+	// langMode is the "keep both, limit to file type" input (#1876): the typed
+	// language id scopes the new binding to editor[<lang>], leaving the
+	// colliding command in charge everywhere else.
+	langMode  bool
+	langField textField
+	langErr   string
 }
 
 func newKeymapCapture(page *KeymapPage, host SubPanelHost, row keymapRow) *keymapCapture {
@@ -42,13 +49,24 @@ func (c *keymapCapture) Title() string   { return "Rebind " + c.row.Command }
 func (c *keymapCapture) Capturing() bool { return true }
 
 func (c *keymapCapture) Buttons() []Button {
+	if c.langMode {
+		return []Button{
+			{Label: "Apply", Key: "enter", Do: c.commitLang},
+			{Label: "Back", Do: func() tea.Cmd { c.leaveLangMode(); return nil }},
+			{Label: "Cancel", Do: func() tea.Cmd { c.host.Pop(); return nil }},
+		}
+	}
 	if c.conflict != "" {
 		// A collision is a decision, not a yes/no (#1298): take the chord
 		// from the other command, keep both when their panes never overlap
-		// (#1312), or go back and record a different one.
+		// (#1312) or when one file type suffices (#1876), or go back and
+		// record a different one.
 		btns := []Button{{Label: "Replace & unbind other", Key: "enter", Do: c.commit}}
 		if c.canKeepBoth() {
 			btns = append(btns, Button{Label: "Keep both, resolve by context", Key: "b", Do: c.keepBoth})
+		}
+		if c.canKeepByLang() {
+			btns = append(btns, Button{Label: "Keep both, limit to file type", Key: "l", Do: c.enterLangMode})
 		}
 		return append(btns,
 			Button{Label: "Pick a different chord", Key: "p", Do: func() tea.Cmd {
@@ -66,9 +84,37 @@ func (c *keymapCapture) Buttons() []Button {
 
 func (c *keymapCapture) chord() keymap.Chord { return keymap.Chord{Steps: c.steps} }
 
+// Paste inserts into the language-id input while it is open (#1876); the
+// chord capture itself has nothing to paste into.
+func (c *keymapCapture) Paste(text string) bool {
+	if !c.langMode {
+		return false
+	}
+	if !c.langField.Paste(text) {
+		return false
+	}
+	c.langErr = ""
+	return true
+}
+
 func (c *keymapCapture) Update(key tea.KeyPressMsg) tea.Cmd {
+	// The language input (#1876) is a text field: enter applies, esc returns
+	// to the conflict decision, everything else edits the typed id.
+	if c.langMode {
+		switch key.Code {
+		case tea.KeyEscape:
+			c.leaveLangMode()
+			return nil
+		case tea.KeyEnter:
+			return c.commitLang()
+		}
+		c.langField.Handle(key)
+		c.langErr = ""
+		return nil
+	}
 	// A pending conflict waits for an explicit decision (#1298): enter takes
-	// the chord, "p" records a different one, esc abandons the rebind.
+	// the chord, "b"/"l" keep both, "p" records a different one, esc abandons
+	// the rebind.
 	if c.conflict != "" {
 		switch key.String() {
 		case "enter":
@@ -76,6 +122,10 @@ func (c *keymapCapture) Update(key tea.KeyPressMsg) tea.Cmd {
 		case "b":
 			if c.canKeepBoth() {
 				return c.keepBoth()
+			}
+		case "l":
+			if c.canKeepByLang() {
+				return c.enterLangMode()
 			}
 		case "p":
 			c.steps, c.conflict, c.warn, c.other = nil, "", "", keymap.Binding{}
@@ -135,6 +185,46 @@ func (c *keymapCapture) canKeepBoth() bool {
 	return c.conflict != "" && separableContexts(c.row.Context, c.other.Context)
 }
 
+// canKeepByLang reports whether the collision can be narrowed to one file type
+// (#1876): the rebound command must be able to live under editor[<lang>] — its
+// row is Global or editor-scoped and not language-scoped already. The other
+// binding stays put; in editors of the chosen language it is shadowed (the
+// point of the narrowing), everywhere else it keeps the chord.
+func (c *keymapCapture) canKeepByLang() bool {
+	base := c.row.Context.Base()
+	return c.conflict != "" && c.row.Context.Lang() == "" &&
+		(base == keymap.Global || base == keymap.Editor)
+}
+
+// enterLangMode opens the language-id input for "keep both, limit to file type".
+func (c *keymapCapture) enterLangMode() tea.Cmd {
+	c.langMode, c.langField, c.langErr = true, newTextField(""), ""
+	return nil
+}
+
+// leaveLangMode returns to the conflict decision without writing anything.
+func (c *keymapCapture) leaveLangMode() {
+	c.langMode, c.langErr = false, ""
+}
+
+// commitLang validates the typed language id and writes the chord as an
+// editor[<lang>]-scoped override (#1876). Bad input stays in the panel with a
+// clear message: the id must have the qualifier shape and name a registered
+// language, or the binding could never match a buffer.
+func (c *keymapCapture) commitLang() tea.Cmd {
+	id := strings.TrimSpace(c.langField.text)
+	if !keymap.ValidLangQualifier(id) {
+		c.langErr = "language id: lowercase letters, digits and -_+# only"
+		return nil
+	}
+	if _, ok := lang.ByID(id); !ok {
+		c.langErr = "unknown language id " + strconv.Quote(id)
+		return nil
+	}
+	c.host.Pop()
+	return c.page.commitRebindLang(c.row, c.chord(), id)
+}
+
 func (c *keymapCapture) commit() tea.Cmd {
 	c.host.Pop()
 	return c.page.commitRebindChord(c.row, c.chord(), false)
@@ -152,6 +242,18 @@ func (c *keymapCapture) View(w, h int) string {
 	pal := c.page.theme()
 	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
 	warn := lipgloss.NewStyle().Foreground(pal.Error)
+	if c.langMode {
+		lines := []string{
+			sec.Render(" Limit " + c.row.Command + " on " + c.chord().String() + " to one file type."),
+			sec.Render(" Language id (e.g. http, go, markdown):"),
+			" " + c.langField.View(),
+		}
+		if c.langErr != "" {
+			lines = append(lines, warn.Render(" ✗ "+c.langErr))
+		}
+		lines = append(lines, sec.Render(" enter apply · esc back"))
+		return strings.Join(lines, "\n")
+	}
 	shown := c.chord().String()
 	if shown == "" {
 		shown = "…"
@@ -171,6 +273,14 @@ func (c *keymapCapture) View(w, h int) string {
 			lines = append(lines, sec.Render(" b keeps both: "+c.row.Command+" in "+
 				keymap.ContextName(c.row.Context)+", "+c.conflict+" in "+keymap.ContextName(c.other.Context)))
 			hint = " enter replace · b keep both by context · p different chord · esc cancel"
+		}
+		if c.canKeepByLang() {
+			lines = append(lines, sec.Render(" l keeps both, limiting "+c.row.Command+" to one file type (editor[lang])"))
+			if c.canKeepBoth() {
+				hint = " enter replace · b by context · l by file type · p different chord · esc cancel"
+			} else {
+				hint = " enter replace · l keep both by file type · p different chord · esc cancel"
+			}
 		}
 		lines = append(lines, sec.Render(hint))
 		if free := c.page.suggestChords(2); len(free) > 0 {

@@ -240,5 +240,28 @@ context; the bare form applies wherever the chord is bound:
 The keymap settings page offers this as **keep both, resolve by context** when a
 captured chord collides with a command in another pane.
 
+### Limiting a binding to one file type
+
+The `editor` qualifier can name a language in brackets — `editor[<lang>]` —
+so a chord runs a command only in editors whose buffer has that file type,
+and keeps its usual meaning everywhere else:
+
+```toml
+[keymap.bindings]
+# cmd+e picks the HTTP environment in .http files only;
+# every other editor keeps the default (recent files).
+"editor[http].cmd+e" = "http.selectEnvironment"
+```
+
+`<lang>` is a language id as shown in Settings → Languages (`http`, `go`,
+`markdown`, …). Precedence goes from narrow to broad: `editor[<lang>]` wins
+over `editor`, which wins over an unqualified/global binding. A
+language-qualified `= ""` removes a language-scoped binding again (the chord
+then falls back to the broader levels).
+
+The keymap settings page offers this as **keep both, limit to file type** when
+a captured chord collides: press `l`, type the language id, and the page
+writes the `editor[<lang>]` form for you.
+
 The [Commands reference](commands.md) lists every command ID, including the
 ones with no default chord.

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Keybindings & Shortcuts
-description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
+description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -59,12 +59,35 @@ share the advertised `preview` id), `vcs`, `debug`, `problems`, `structure`,
 `usages`, `http`, `breakpoints`, `archive` and `data`. A chord resolves
 against the **active** focus context, preferring the most specific match: a
 pane-scoped binding shadows a `Global` one for the same chord while that pane
-is focused. The specificity order has exactly two levels — `Global` below
-every pane context, pane contexts mutually disjoint — so one chord may carry
-a different command **per context** without any conflict: the shipped example
-is `ctrl+t`, a new terminal tab (`terminal.newTab`) in the `terminal` context
-and a new empty editor tab (`editor.tab.new`) in the `editor` context, unbound
-everywhere else.
+is focused. The specificity order has three levels (#1876) —
+`editor[lang]` above `editor` above `Global`; contexts on the same level are
+mutually disjoint — so one chord may carry a different command **per context**
+without any conflict: the shipped example is `ctrl+t`, a new terminal tab
+(`terminal.newTab`) in the `terminal` context and a new empty editor tab
+(`editor.tab.new`) in the `editor` context, unbound everywhere else.
+
+### Language-scoped editor bindings (#1876)
+
+The `editor` context can carry a **language qualifier**: `editor[http]` (the
+value `keymap.WithLang(Editor, "http")`) scopes a binding to editors whose
+buffer is classified as the language id `http` — by file name through
+`internal/lang`, or by the buffer-level override (#2033). `Context.Split`
+takes a context apart into pane base and language; `Matches` requires the
+active context to carry the same language when the binding side names one.
+The **active** context is where the language enters: the root model's
+`keyContext()` (`internal/app`) is `focusContext()` narrowed to
+`editor[<LangID>]` when the focus is an editor showing a classified buffer,
+and it is what every resolver call (`Feed`, `Continues`, `Timeout`,
+`PendingContinuations`, the terminal-branch `Lookup`) is fed. Every other
+consumer of the context id — palette scoping, registry, help snapshot — keeps
+the plain `focusContext()`. A buffer with no registered language leaves the
+active context at plain `editor`, so language-scoped bindings simply never
+match there.
+
+The motivating case: `"editor[http].cmd+e" = "http.selectEnvironment"` runs
+the environment picker only in `.http` buffers; every other editor keeps the
+global default `cmd+e` → `palette.recentFiles`. Before #1876 the narrowest
+available scope was `editor.cmd+e`, which took the chord in **every** editor.
 
 The `palette` context is a special case (#2055): the palette overlay owns the
 keyboard, so a key never reaches the resolver above. The overlay branch of the
@@ -76,16 +99,21 @@ Everything else falls through to the overlay's own editing keys, so a
 Palette-context binding can never swallow query typing. The bindings appear in
 the cheatsheet like any other context group.
 
-### Cross-context shadow detection (#1875)
+### Cross-context shadow detection (#1875, #1876)
 
 That layering is a feature — but it must never happen wordlessly. `shadow.go`
-scans the effective (post-conflict) table for a pane-scoped binding and a
-`Global` binding sharing a chord while naming **different** commands: a
-`Shadow` records the winner (pane-scoped, wins while its pane has focus) and
-the hidden binding (unreachable there, still winning everywhere else). The
-motivating case: a user override `editor.cmd+e = http.selectEnvironment`
-silently swallowed the global default `cmd+e` → `palette.recentFiles` in every
-editor.
+scans the effective (post-conflict) table for two bindings sharing a chord
+while naming **different** commands, where one context can hide the other
+(`Context.Shadows`): a pane context over `Global`, and — the #1876 level — a
+language-scoped `editor[lang]` over both plain `editor` and `Global`, in its
+narrower scope only. A `Shadow` records the winner (wins while its scope has
+focus) and the hidden binding (unreachable there, still winning everywhere
+else). Sibling scopes (`editor[http]` vs `editor[go]`, or two different
+panes) never both match a focus and are no shadow. The motivating case: a
+user override `editor.cmd+e = http.selectEnvironment` silently swallowed the
+global default `cmd+e` → `palette.recentFiles` in every editor — with #1876
+the right spelling is `editor[http].cmd+e`, which shadows the default only in
+`.http` buffers (and is still reported, naming exactly that scope).
 
 - **Same command = no shadow** — the dual-chord/fallback pattern
   (`editor.write` on both `cmd+s` and `ctrl+s`, `editor.undo` bound per pane)
@@ -109,9 +137,6 @@ editor.
   detail column spells out the direction (`⊘ hides … while editor is focused` /
   `⊘ hidden by …`) plus the resolution.
 
-The contexts carry no file-type scope, so a binding meant for one language
-(`.http` files) necessarily hits every editor — language-scoped bindings
-(`editor[http].cmd+e`) are #1876.
 
 ## Platform normalisation
 
@@ -130,7 +155,7 @@ clashes: it keeps the highest-`Layer` binding and surfaces the rest as non-fatal
 diagnostics — never a silent shadow. Unparseable override keys are skipped as
 diagnostics too.
 
-### Binding keys: bare and context-qualified (0460, #1312)
+### Binding keys: bare, context-qualified, language-qualified (0460, #1312, #1876)
 
 `override.go` parses the map keys. A key is either
 
@@ -146,14 +171,26 @@ diagnostics too.
   than the bare form: it binds in the `Global` context and leaves pane-scoped
   bindings of the same chord alone. Old override files predate the wider set
   unchanged — a bare chord still applies wherever the chord is bound, and the
-  original five qualifiers kept their meaning.
+  original five qualifiers kept their meaning; or
+- a **language-qualified chord** — `"editor[http].cmd+e"` (#1876) — the editor
+  qualifier narrowed to one language id. The bracket form is accepted on
+  `editor` only; the id must have the registered-language-id shape
+  (`ValidLangQualifier`: lowercase letters, digits, `-_+#` — no dots, since
+  the grammar splits at the first dot). A malformed qualifier is not a
+  context, so the key falls back to chord parsing and surfaces as an ignored
+  key diagnostic; the language itself is deliberately **not** checked against
+  the runtime registry at parse time (plugins register lazily). Bracket
+  chords (`cmd+[`) are unaffected — `editor[http` without the closing bracket
+  is not a qualifier.
 
-Qualified keys are applied **after** bare ones (both in sorted order), so the
-narrower statement wins regardless of Go's map iteration order. Because
-conflict detection groups by chord *and* context, two qualified bindings in
-different panes are not a conflict at all — the resolver simply picks the one
-whose pane has focus. That is the config spelling behind the keymap page's
-"keep both, resolve by context".
+Qualified keys are applied **after** bare ones (both in sorted order, which
+also puts `editor.<chord>` before `editor[<lang>].<chord>`), so the narrower
+statement wins regardless of Go's map iteration order. Because conflict
+detection groups by chord *and* context — and `editor[http]` is its own
+context slot — qualified bindings in different scopes are not a conflict at
+all: the resolver simply picks the most specific one matching the focus. That
+is the config spelling behind the keymap page's "keep both, resolve by
+context" and "keep both, limit to file type".
 
 TOML's own grammar invites writing a dotted map key as a sub-table, so both
 spellings are accepted and mean the same entry (the config package flattens
@@ -414,12 +451,22 @@ override and would take the chord in every context silently. The dialog offers:
 |---|---|---|
 | Replace & unbind other | `enter` | `keymap.bindings.<chord> = <command>` (the other binding loses the chord) |
 | Keep both, resolve by context | `b` | `keymap.bindings.<context>.<chord> = <command>` — both bindings survive |
+| Keep both, limit to file type | `l` | `keymap.bindings.editor[<lang>].<chord> = <command>` — the rebound command runs only in editors of that language (#1876) |
 | Pick a different chord | `p` | nothing; capture restarts |
 | Cancel | `esc` | nothing |
 
-"Keep both" is offered only when `separableContexts` holds: both commands are
-pane-scoped and the panes differ. A `Global` binding matches in every pane, so
-keeping both would just shadow one of them and the option is hidden.
+"Keep both, resolve by context" is offered only when `separableContexts`
+holds: the two scopes never both match a focus — different panes, or (#1876)
+two different language scopes on the editor. A `Global` binding matches in
+every pane, so keeping both by context would just shadow one of them and the
+option is hidden. "Keep both, limit to file type" is offered when the rebound
+command can live under `editor[<lang>]` — its row is `Global` or
+editor-scoped and not language-scoped already. `l` opens a language-id input;
+the id is validated for shape (`ValidLangQualifier`) **and** against the
+language registry (`lang.ByID`), rejecting bad input with a message. Unlike
+the by-context option this one shadows deliberately — the colliding command
+stays bound and merely loses the chord inside the chosen file type; the
+shadow diagnostic names exactly that scope.
 
 Two consequences for the other page keys:
 
