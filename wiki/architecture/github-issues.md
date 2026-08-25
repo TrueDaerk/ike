@@ -165,7 +165,9 @@ Every narrowing lives in **one mechanism**: the **filter overlay**
 (`filterov.go`), a centered modal whose sections are the fuzzy **match**
 input, the **state** radio (open / closed / all, the active option marked so
 cycling is never blind), the **sort** cycle, the **grouping** toggle, the label
-filter's **any-of/all-of** switch and one row per **label**. Changes apply to the list behind it live; `enter` keeps
+filter's **any-of/all-of** switch, the **saved** filter cycle (#2115, only
+while `issues.saved_filters` names any) and one row per **label**. Changes
+apply to the list behind it live; `enter` keeps
 and closes, `esc` restores every section to what the overlay opened with.
 `up`/`down` (and `tab`/`shift+tab`) walk the sections; the match row owns
 every printable key, the other rows toggle with `space` (or `left`/`right`)
@@ -214,6 +216,9 @@ and clear with `backspace`.
   it carries. Group headers are rows the cursor never rests on — key and
   wheel navigation snap off them in the direction of travel. The lists run on
   the full `ui.NavFull` semantics, `g`/`G` extremes included.
+- **Saved filters** (the overlay's saved row, and a menu-only action-menu
+  entry) cycle over `(none)` plus the names in `issues.saved_filters` and
+  apply what the row lands on — see [Settings](#settings) for the syntax.
 - **`esc`** on a list **peels one narrowing at a time** — a mutation error
   first, then the match text, then the label selection, then the state gate —
   so one keypress can never nuke a carefully built filter.
@@ -503,16 +508,65 @@ work too.
 
 ### Settings
 
-Two keys seed a freshly opened pane; switching by hand wins for the rest of
-the session, so a live config reload never yanks the view away.
+Three keys seed a freshly opened pane; switching by hand wins for the rest of
+the session, so a live config reload never yanks the view away. A fourth is
+not a default but a menu.
 
 | Key | Values | Meaning |
 | --- | --- | --- |
 | `issues.default_tab` | `issues`, `prs` | which view the pane opens on |
 | `issues.default_sort` | `relevance`, `newest`, `oldest`, `updated`, `number` | the order both lists start in |
+| `issues.default_filter` | a filter expression | the narrowing the pane opens with (#2115) |
+| `issues.saved_filters` | `name=expression` entries | named filters the overlay's `saved` row applies (#2115) |
 
-Both are `Enum` entries on the Settings UI's **Issues Window** page and are
-clamped with a diagnostic when a config file names something else.
+All four live on the Settings UI's **Issues Window** page — the first two as
+`Enum` entries clamped with a diagnostic, the filter as free text and the
+saved filters as a list, both refused in the form (and dropped with a
+diagnostic in a config file) when they do not parse.
+
+#### Filter expressions
+
+`issues.default_filter` and every `issues.saved_filters` entry are written in
+**the qualifier syntax of the match input** (#2110) — one syntax, two readers,
+so an expression can be typed in the overlay and pasted into the config
+unchanged:
+
+```toml
+[issues]
+default_filter = 'is:open label:bug crash'
+saved_filters = ["triage=is:open label:bug", "stale=is:all sort:oldest flaky"]
+```
+
+- `is:` (alias `state:`) takes `open`, `closed` or `all`; `label:` is repeated
+  once per label (they are OR'd, exactly as the label picker's any-of mode);
+  `sort:` names a list order; everything else is the fuzzy pattern, so a bare
+  word means "match this".
+- A value with spaces is double-quoted — `label:"good first issue"` — and a
+  quoted word is never read as a qualifier.
+- Commas separate nothing: the settings UI edits `saved_filters` as a
+  comma-separated list, so neither a name nor an expression may contain one.
+- A `sort:` qualifier is the more specific setting and **wins over
+  `issues.default_sort`**. Grouping is not part of an expression.
+- The one difference from the live input is strictness: there an unknown token
+  stays literal fuzzy text (you are mid-typing and see the note), while a
+  config value has no reader to correct it — so here it is an error the
+  settings form and the config diagnostics name. `internal/issuefilter` is the
+  strict reader; `ghissues/qualifier_conformance_test.go` pins the two
+  implementations to each other, since the config layer cannot import the pane.
+
+A saved filter is applied from the filter overlay's `saved` row — present
+only while any is configured, cycling over `(none)` plus the configured names
+— or from the action menu. Applying one replaces every narrowing at once
+(state, labels, label mode, match), so switching between two saved filters
+never leaves the previous one's labels behind, and `(none)` clears them again.
+The sort order is the exception: it only moves when the expression names one,
+because an order is not a narrowing and the user's own `a` should survive a
+filter switch. Applying counts as a hand change: the configured default no
+longer re-seeds the pane afterwards.
+
+Which saved filter the row shows is **derived from the live filter**, never
+remembered — narrow the match text by hand after picking `triage` and the row
+falls back to `(none)`, because the filter on screen is no longer triage.
 
 A third key affects the pane without living on its page: `forge.cache`
 (Settings → Forge, #2108). With it on — the default — a pane that has not

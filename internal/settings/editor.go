@@ -504,9 +504,10 @@ func (n *intEditor) View(w, h int) []string {
 // textEditor is the free-text fallback: the last resort for values without a
 // domain to pick from.
 type textEditor struct {
-	m  *Model
-	e  Entry
-	tf textField
+	m   *Model
+	e   Entry
+	tf  textField
+	err string // the entry's ValidateString message, shown until the value parses
 }
 
 func (t *textEditor) Value() any             { return t.tf.text }
@@ -518,9 +519,20 @@ func (t *textEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	switch key.Code {
 	case tea.KeyEscape:
 		t.tf = newTextField(t.m.value(t.e.Key))
+		t.err = ""
 		t.m.leaveEditor()
 		return nil
 	case tea.KeyEnter:
+		// A value with its own grammar (#2115: the issues default filter) is
+		// refused with the parser's message rather than written half-broken —
+		// the user is editing interactively and can fix it in place.
+		if t.e.ValidateString != nil {
+			if msg := t.e.ValidateString(t.tf.text); msg != "" {
+				t.err = msg
+				return nil
+			}
+		}
+		t.err = ""
 		return t.m.writeValue(t.e, t.tf.text)
 	}
 	t.tf.Handle(key)
@@ -528,12 +540,17 @@ func (t *textEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 }
 
 func (t *textEditor) View(w, h int) []string {
+	pal := t.m.theme()
 	clip := lipgloss.NewStyle().MaxWidth(w)
-	dim := lipgloss.NewStyle().Foreground(t.m.theme().Secondary)
-	return []string{
+	dim := lipgloss.NewStyle().Foreground(pal.Secondary)
+	out := []string{
 		clip.Render(" ✎ " + t.tf.View()),
 		clip.Render(dim.Render(" enter apply · esc cancel")),
 	}
+	if t.err != "" {
+		out = append(out, clip.Render(lipgloss.NewStyle().Foreground(pal.Error).Render(" ✗ "+t.err)))
+	}
+	return out
 }
 
 // --- path ---
