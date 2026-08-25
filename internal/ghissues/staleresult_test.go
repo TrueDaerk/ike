@@ -26,7 +26,7 @@ type fetchReq struct {
 // answers land.
 func recordFetches(m *Model) *[]fetchReq {
 	log := &[]fetchReq{}
-	m.SetRefresh(func(state forge.IssueState, gen int) tea.Cmd {
+	m.SetRefresh(func(state forge.IssueState, gen int, _ bool) tea.Cmd {
 		*log = append(*log, fetchReq{state: state, gen: gen})
 		return func() tea.Msg { return nil }
 	})

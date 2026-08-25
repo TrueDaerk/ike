@@ -1,5 +1,54 @@
 # Log
 
+## 2026-08-25 (forge: persistent issue cache with incremental refresh, #2108)
+
+- **The issues window opens instantly after a restart.** Every successful
+  open listing is persisted per project (`.ike/forgecache.json`, keyed to the
+  origin remote); a pane that has not loaded yet renders the snapshot
+  immediately, marked `cached · updating…`, until the real fetch or the first
+  background poll replaces it. While the snapshot is younger than 30 minutes,
+  polls and the on-open fetch ask the forge only for issues **updated since**
+  it (GitHub's REST `since`, Gitea's `since`) and merge them in; manual `r`,
+  every other user-driven refetch, older snapshots, incremental errors and
+  possibly truncated pages all resync fully — the rule that also re-converges
+  drift from deleted or transferred issues. Repository/backend switches
+  invalidate the snapshot, corrupt files read as "no cache", and the
+  `forge.cache` toggle (Settings → Forge, default on) switches the whole
+  mechanism off. Details: [forge layer](/architecture/forge.md).
+
+## 2026-08-25 (issue timeline: visible divider, boxed comments, #2106)
+
+- **The activity divider spans the pane now.** The old ` ── activity ──`
+  fragment in the barely-visible `Border` role is a full-width rule in
+  `Secondary` with the label in `Accent` — the body/activity boundary is
+  obvious at a glance in every theme.
+- **Each comment is a closed block.** Every line of a comment — header,
+  markdown body, the blank lines inside it — carries a colored `▌` left gutter
+  bar, so two consecutive comments no longer flow into each other while
+  scrolling. Own comments take `Info`, everyone else's `Accent`; the `(you)`
+  marker is unchanged. Comment markdown is wrapped two columns short to pay
+  for the gutter (`renderMarkdownWrap`).
+- **Events stay compact.** Non-comment rows remain single faint lines, but a
+  blank line is inserted where a comment block ends so they never read as its
+  last line.
+- **Narrow panes degrade.** Below 24 columns the gutter falls back to a plain
+  indent, and a rule with no room for its label is drawn plain across the
+  width.
+- `clip` measures display cells (`ansi.StringWidth`/`ansi.Truncate`) instead of
+  raw runes — styled lines were being cut short by their own escape sequences.
+
+## 2026-08-25 (markdown: hanging indent for wrapped list items, #2105)
+
+- **Wrapped list items keep their shape.** A bullet or numbered item longer
+  than the pane width used to wrap back under its own marker, so the
+  continuation lost the item's indent. Glamour cannot do this itself — its
+  `List.Indent`/`LevelIndent`/`Margin` knobs are block level and shift the
+  marker along with the text — so `ui.HangingIndent` post-processes the
+  rendered output: it re-joins each item's lines and re-wraps them at the
+  width the marker leaves, aligning continuations under the text (past the
+  number for ordered lists) per nesting level. Used by both the markdown
+  preview pane and the GitHub issues detail/timeline rendering.
+
 ## 2026-08-25 (issues window: superseded listing fetches are dropped, #2107)
 
 - **Rapid `t t` no longer lands the wrong listing.** Cycling the state filter

@@ -138,6 +138,10 @@ func (m *Model) tabBarSpans() [][2]int {
 // stateNote is the short right-aligned fetch state on the tab bar.
 func (m *Model) stateNote() string {
 	switch {
+	case m.cached:
+		// The listing is the persisted snapshot (#2108): usable, but stale
+		// until the fetch (or the next background poll) replaces it.
+		return "cached · updating…"
 	case m.loading:
 		return "fetching…"
 	case m.setup != "":
@@ -866,14 +870,26 @@ func (m *Model) detailMeta(is *forge.Issue) string {
 // renderMarkdown renders through a fresh width- and theme-bound glamour
 // renderer, the preview pane's pattern (#62).
 func (m *Model) renderMarkdown(src string) (string, error) {
+	return m.renderMarkdownWrap(src, m.width-2)
+}
+
+// renderMarkdownWrap is renderMarkdown at an explicit wrap width — the
+// timeline's comment blocks reserve columns for their gutter bar (#2106).
+func (m *Model) renderMarkdownWrap(src string, wrap int) (string, error) {
+	wrap = max(10, wrap)
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStyles(m.styleConfig()),
-		glamour.WithWordWrap(max(10, m.width-2)),
+		glamour.WithWordWrap(wrap),
 	)
 	if err != nil {
 		return "", err
 	}
-	return r.Render(src)
+	out, err := r.Render(src)
+	if err != nil {
+		return "", err
+	}
+	// Glamour cannot hang-indent wrapped list items itself (#2105).
+	return ui.HangingIndent(out, wrap), nil
 }
 
 // styleConfig picks the stock glamour style off the palette's dark flag and

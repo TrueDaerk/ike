@@ -61,6 +61,16 @@ func forgePollInterval(cfg host.Config) time.Duration {
 	return time.Duration(secs) * time.Second
 }
 
+// forgeCacheEnabled reads forge.cache (#2108) from the live config: the
+// persistent listing cache is on unless it is explicitly switched off.
+func forgeCacheEnabled(cfg host.Config) bool {
+	if cfg == nil {
+		return true
+	}
+	v, ok := cfg.Get("forge.cache")
+	return !ok || v != "false"
+}
+
 // forgePoller resolves the active poller, nil in models built without one
 // (bare test literals).
 func (m Model) forgePoller() *forge.Poller {
@@ -175,6 +185,9 @@ func (m *Model) applyForgeListing(msg forge.IssuesMsg) tea.Cmd {
 // on does: the chain has no deadline left to continue from, so the settled
 // pass is asked to reopen it.
 func (m *Model) reconfigureForgePoll(cfg host.Config) {
+	// The cache toggle (#2108) rides the same reload: the forge package reads
+	// it at fetch time, so the next listing honors the new value immediately.
+	forge.SetCacheEnabled(forgeCacheEnabled(cfg))
 	p := m.forgePoller()
 	if p == nil {
 		return

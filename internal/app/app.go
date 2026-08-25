@@ -1086,6 +1086,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// process just chdir'd into: a switch rebuilds the model, and with it a
 	// poller that seeds the new project's snapshot silently.
 	forgeSt := &forgePollState{poller: forge.NewPoller(root, forgePollInterval(cfg))}
+	// The persistent listing cache's toggle (#2108) is pushed into the forge
+	// package here and on every config reload (reconfigureForgePoll).
+	forge.SetCacheEnabled(forgeCacheEnabled(cfg))
 	wsMgr := wsManager(mgr, resumed, root, panes) // hoisted: the palette's recent-projects sources read it (#820)
 	wsMgr.SetRegisters(regs)                      // first start: the manager adopts the store (#1540); a switch hands back its own
 	// Clipboard-history ring size (#2061). Editors re-apply it on Configure;
@@ -3280,6 +3283,14 @@ func (m Model) Init() tea.Cmd {
 	cmds = append(cmds, m.initDataPanes()...)
 	// Restored ES consoles reconnect to their clusters the same way (#1927).
 	cmds = append(cmds, m.initESPanes()...)
+	// A restored issues pane shows the persisted listing snapshot instantly
+	// (#2108), marked stale until the first background poll replaces it. The
+	// command reads a file (and one git call for the remote key) and resolves
+	// to nothing when there is no usable cache — cheap enough for Init, whose
+	// commands the test helpers drain synchronously.
+	if p := m.issuesPanel(); p != nil && !p.Loaded() {
+		cmds = append(cmds, forge.LoadCacheCmd("."))
+	}
 	cmds = append(cmds, m.initRemotePanes()...)
 	// Highlight any files restored from the previous session at startup, before
 	// the user edits them, and announce each to the plugin hooks (#332): the
@@ -4692,6 +4703,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// fresh listing and may need the revealed issue's timeline (#2084).
 		listing := m.applyForgeListing(msg)
 		return m, tea.Batch(listing, m.applyForgeReveal())
+
+	case forge.CachedListingMsg:
+		// The persisted listing snapshot (#2108): seeds a not-yet-loaded
+		// issues pane so it renders instantly, marked stale, while the real
+		// fetch runs. A pane that already holds a fetched listing ignores it.
+		if p := m.issuesPanel(); p != nil {
+			p.SetCached(msg.Issues, msg.PRs)
+		}
+		return m, nil
 
 	case forge.PollTickMsg:
 		// One background poll deadline (#2085). The handler only dispatches

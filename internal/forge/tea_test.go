@@ -2,6 +2,7 @@ package forge
 
 import (
 	"testing"
+	"time"
 )
 
 // tea_test.go covers the Gitea/Forgejo binding's parsers on fixture JSON
@@ -259,5 +260,23 @@ func TestParseBodyFieldOnGiteaDocuments(t *testing.T) {
 	}
 	if body != "a comment on the instance" {
 		t.Fatalf("comment body = %q", body)
+	}
+}
+
+func TestGiteaSinceQuery(t *testing.T) {
+	// The incremental fetch (#2108) reuses the ordinary listing endpoint with
+	// the since filter, in every state — a cached open issue that closed must
+	// arrive as closed so the merge can drop it.
+	q := giteaSinceQuery(time.Date(2026, 8, 25, 9, 30, 0, 0, time.UTC), 2)
+	for key, want := range map[string]string{
+		"type":  "issues",
+		"state": "all",
+		"since": "2026-08-25T09:30:00Z",
+		"limit": itoa(giteaPageSize),
+		"page":  "2",
+	} {
+		if got := q.Get(key); got != want {
+			t.Errorf("%s = %q, want %q", key, got, want)
+		}
 	}
 }

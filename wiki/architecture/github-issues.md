@@ -4,7 +4,7 @@ title: Issues Tool Window
 description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select) with a permanent chip row whose chips clear individually, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane]
-timestamp: 2026-08-25T12:00:00Z
+timestamp: 2026-08-25T14:00:00Z
 ---
 
 # Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104)
@@ -188,21 +188,32 @@ The list's cursor and scroll are untouched while it is open, so `esc` returns
 to exactly the row it left. `ctrl+j`/`ctrl+k` walk to the next/previous issue
 without going back through the list, moving the list cursor with them; `j/k`
 and the page keys scroll the body. The body itself is the issue's markdown
-rendered through glamour with the preview pane's theme mapping (#62), under
+rendered through glamour with the preview pane's theme mapping (#62) and its
+hanging indent for wrapped list items (`ui.HangingIndent`, #2105), under
 an author/age/state line and — when one exists — the linked PR's state.
 
 ### Timeline (#2084)
 
-Under the body, behind an `── activity ──` divider, the detail shows the
-issue's history. Opening a detail (enter, the walking chords, `Reveal`) lazily
+Under the body, behind a **full-width `── activity ───…` rule** (the pane's
+`Secondary` role, the label in `Accent`), the detail shows the issue's
+history. Opening a detail (enter, the walking chords, `Reveal`) lazily
 asks for page one through the injected `forge.TimelineFactory` — every path
 funnels through `PendingTimelineCmd`, which only fetches when the shown issue
 has no timeline yet. **Comments** render as markdown blocks through the same
 glamour pipeline, headed by the accented author, a `(you)` marker on own
-comments, and the relative age; everything else is one compact faint line —
-actor, action, the label as a colored chip or the assignee, age
-(self-assignments collapse to "self-assigned this"). The states are visible
-and keyboard-reachable: a loading row while a fetch is in flight, an error row
+comments, and the relative age. Every line of a comment — the header, each
+markdown line and the blank ones between them — carries a colored `▌` **left
+gutter bar** (#2106), so two consecutive comments read as two closed blocks
+instead of running into each other; the bar takes `Info` on your own comments
+and `Accent` on everyone else's, and the body is wrapped two columns short to
+pay for it. Everything else is one compact faint line — actor, action, the
+label as a colored chip or the assignee, age (self-assignments collapse to
+"self-assigned this") — with one blank line where a comment block ends, so
+events never read as a block's last line. Both the rule and the gutter
+degrade at narrow widths: below 24 columns the bar falls back to a plain
+indent, and a rule that cannot hold its label is drawn plain across the pane.
+The states are visible and keyboard-reachable: a loading row while a fetch is
+in flight, an error row
 (`r` retries) that keeps what already loaded, `(L loads more activity)` while
 more pages follow — `L` appends the next page without moving the scroll — and
 `(no activity yet)` on an empty finished history. `r` inside the detail
@@ -364,6 +375,14 @@ the session, so a live config reload never yanks the view away.
 
 Both are `Enum` entries on the Settings UI's **Issues Window** page and are
 clamped with a diagnostic when a config file names something else.
+
+A third key affects the pane without living on its page: `forge.cache`
+(Settings → Forge, #2108). With it on — the default — a pane that has not
+loaded yet is seeded with the persisted listing snapshot and renders
+instantly, marked `cached · updating…` on the tab bar until the real fetch
+(or the first background poll) replaces it; `r` remains a full resync. The
+cache lifecycle and the incremental-merge consistency rule are documented
+with the [forge layer](/architecture/forge.md).
 
 ### Actions and states
 
