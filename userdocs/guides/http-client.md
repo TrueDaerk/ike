@@ -349,6 +349,11 @@ download cannot freeze the UI.
 - **file paths** after `< ` (and `<@ `) on a body-file directive line —
   whole-body or inside a multipart part — relative to the `.http` file;
   accepting a directory and completing again descends into it;
+- **variable names** right after an unclosed `{{` — in the request line, a
+  header value or a body — from your file's own `@name=value` definitions and
+  the active environment's variables (whichever `http-client.env.json`
+  environment you selected, or its only one); accepting closes the braces for
+  you;
 - **nothing** else inside bodies, comments or `###` lines — deliberately, so
   a JSON body does not offer you every word in the file.
 
@@ -363,9 +368,15 @@ is. `application/json` makes the body JSON, `text/xml` makes it XML, and
 pressing enter after a `{` in a JSON body indents like JSON while the request
 and header lines above keep their own rules. Parameters (`; charset=utf-8`),
 `x-` prefixes and `+json`/`+xml` suffixes are handled, so
-`application/vnd.api+json` is JSON.
+`application/vnd.api+json` is JSON, and `application/graphql` highlights as
+GraphQL when your build links that language.
 
-A media type that maps to no language keeps plain styling rather than a guess.
+A media type that maps to no language keeps plain styling rather than a guess
+— with two exceptions that get their own treatment instead of a language's:
+an `application/x-www-form-urlencoded` body gets the same key/value
+highlighting as a request URL's query string, and a `multipart/form-data`
+body gets its `--boundary` lines and each part's own header block (but not a
+part's body — it could be text, JSON, or a file's raw bytes) styled.
 
 Bodies **fold** by their own structure too: `zc` on a JSON object or array line
 collapses it behind a placeholder with the hidden-line count, `zo` reopens it,

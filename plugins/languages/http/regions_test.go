@@ -20,6 +20,7 @@ func TestBodyLanguageFromContentType(t *testing.T) {
 	registerFake(t, "html", "html")
 	registerFake(t, "yaml", "yaml")
 	registerFake(t, "typescript", "ts", "js")
+	registerFake(t, "graphql", "graphql", "gql")
 
 	for _, tc := range []struct {
 		ct   string
@@ -35,6 +36,8 @@ func TestBodyLanguageFromContentType(t *testing.T) {
 		{"text/html;charset=iso-8859-1", "html"},
 		{"application/x-yaml", "yaml"},
 		{"application/javascript", "typescript"},
+		{"application/graphql", "graphql"},
+		{"application/graphql; charset=utf-8", "graphql"},
 	} {
 		got, ok := bodyLanguage(tc.ct)
 		if !ok || got != tc.want {

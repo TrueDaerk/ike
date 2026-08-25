@@ -67,6 +67,11 @@ func querySpans(lines []string) []lang.Span {
 	// after the JWT/network passes so a JWT-shaped definition value keeps
 	// its own dimmed signature instead of reading as one flat string.
 	out = append(out, variableDefinitionSpans(lines)...)
+	// Multipart boundaries and per-part headers (#2135): claimed here, right
+	// after the definitions, so a placeholder inside a part header
+	// ("Content-Disposition: form-data; name=\"{{field}}\"") still reads as
+	// a placeholder first — placeholderSpans ran before it in this slice.
+	out = append(out, multipartSpans(lines)...)
 	// The value ranges collected along the way, for the number hints below
 	// (#1684). Every entry is a stretch of a line that holds values rather
 	// than structure: a query string, a header value, an inline body line.

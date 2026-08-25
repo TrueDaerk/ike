@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, curl export and raw-body file save for the shown exchange.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-24T12:00:00Z
+timestamp: 2026-08-25T12:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -686,7 +686,22 @@ For a recognized stream:
     after the space, resolved against the `.http` file's own directory
     (`pathcomplete.CompleteFrom`), directories with a trailing separator so
     accepting one descends. Everything else in bodies, comments, `###` lines
-    and folded query continuation lines completes nothing.
+    and folded query continuation lines completes nothing — except for an
+    unclosed `{{`, below.
+  - **placeholders** (#2135): an unclosed `{{` — the caret has passed the
+    opening braces but not yet typed `}}` — completes **variable names**
+    wherever a placeholder can sit: the request line, a header value or a
+    body, regardless of the body's `Content-Type`. The list is the file's own
+    `@name=value` definitions (#1867) plus, when a sibling
+    `http-client.env.json` exists, the *active* environment's variables — the
+    persisted selection `http.selectEnvironment` writes to
+    `.ike/httpenv.json`, or the file's only environment when there is no
+    choice to make. A language plugin has no business importing
+    `internal/app` for one JSON file, so `envselect.go` reads the store
+    directly, mirroring the read-only-store pattern every other subsystem
+    under `internal/` already follows for its own `IKE_CONFIG_DIR`-scoped
+    file. Accepting an item inserts the closing `}}` too, so the edit leaves
+    one closed placeholder rather than two.
 
   Matching is a case-insensitive **subsequence** (`internal/fuzzy`), not a
   prefix (#1292): `Cen` reaches `Content-Encoding`, `ctype` reaches
@@ -961,9 +976,25 @@ lang.Language{ID: "http", …, Regions: bodyRegions}
 `internal/httpfile` — whose `Request` now carries `BodyStart`/`BodyEnd` line
 numbers — and reports one `lang.Region` per body whose media type maps to a
 registered language. The mapping handles parameters (`; charset=utf-8`),
-`x-` prefixes and structured suffixes, so `application/vnd.api+json` is JSON;
-media types with no mapping (`application/octet-stream`, `multipart/form-data`)
-leave the body with the host's own styling rather than guessing.
+`x-` prefixes and structured suffixes, so `application/vnd.api+json` is JSON
+and `application/graphql` is `graphql` when a build links that language;
+media types with no mapping (`application/octet-stream`) leave the body with
+the host's own styling rather than guessing.
+
+Two media types (#2135) are deliberately absent from that map, because
+neither is a language a grammar could own — both get a Go-produced span
+overlay instead, the same family `spans.go`'s query/placeholder producers
+belong to:
+
+- `application/x-www-form-urlencoded` gets the request-target's own
+  key/value/`&`/`=` span treatment (above) applied to the body's lines too.
+- `multipart/form-data` gets its `--boundary`/`--boundary--` delimiter lines
+  styled like the grammar's own `###` separators (`comment`), and each part's
+  header block (`Name: value` lines up to the next blank line) styled like
+  the grammar's own headers (name `constant`, `:` `punctuation`, value
+  `property`) — `multipartSpans` in `plugins/languages/http/multipart.go`. A
+  part's own body is left plain; it may be text, JSON, or a binary file's
+  bytes with no way to tell from the boundary structure alone.
 
 `internal/highlight` consults a host's `Regions` before its `injections.scm`,
 and `lang.RegionAt` answers "which language is this line" for consumers that
