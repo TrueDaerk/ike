@@ -165,7 +165,18 @@ func RefreshCmd(dir string) tea.Cmd { return RefreshStateCmd(dir, IssuesOpen) }
 // states. Pull requests are always fetched in every state and split
 // client-side, so switching the issue state never re-costs the PR tab.
 func RefreshStateCmd(dir string, state IssueState) tea.Cmd {
-	return func() tea.Msg { return fetchListing(dir, state) }
+	return RefreshGenCmd(dir, state, 0)
+}
+
+// RefreshGenCmd is RefreshStateCmd carrying the requester's generation
+// counter, echoed back on the IssuesMsg so a superseded answer can be dropped
+// (#2107). The fetch itself is identical — the tag never reaches a forge.
+func RefreshGenCmd(dir string, state IssueState, gen int) tea.Cmd {
+	return func() tea.Msg {
+		msg := fetchListing(dir, state)
+		msg.Gen = gen
+		return msg
+	}
 }
 
 // PollCmd is RefreshCmd tagged as a background poll (#2085). The background
@@ -206,9 +217,11 @@ func fetchListing(dir string, state IssueState) IssuesMsg {
 
 // RefreshFactory is the per-state fetch factory the issues window is injected
 // with: the pane calls it with whatever its state filter selects, so the
-// filter stays a pane concern and the pane stays subprocess-free.
-func RefreshFactory(dir string) func(IssueState) tea.Cmd {
-	return func(state IssueState) tea.Cmd { return RefreshStateCmd(dir, state) }
+// filter stays a pane concern and the pane stays subprocess-free. The second
+// argument is the pane's request generation (#2107), carried through to the
+// result so the pane can recognise its own newest request.
+func RefreshFactory(dir string) func(IssueState, int) tea.Cmd {
+	return func(state IssueState, gen int) tea.Cmd { return RefreshGenCmd(dir, state, gen) }
 }
 
 // TimelineMsg carries one fetched timeline page back into Update (#2084).

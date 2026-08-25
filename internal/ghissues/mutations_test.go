@@ -264,7 +264,7 @@ func TestFailedMutationRollsBack(t *testing.T) {
 func TestSuccessfulMutationRefetches(t *testing.T) {
 	m, _ := mutable(t)
 	refetched := 0
-	m.SetRefresh(func(forge.IssueState) tea.Cmd {
+	m.SetRefresh(func(forge.IssueState, int) tea.Cmd {
 		refetched++
 		return nil
 	})

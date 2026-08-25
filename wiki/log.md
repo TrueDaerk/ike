@@ -1,5 +1,24 @@
 # Log
 
+## 2026-08-25 (issues window: superseded listing fetches are dropped, #2107)
+
+- **Rapid `t t` no longer lands the wrong listing.** Cycling the state filter
+  twice in quick succession left two listing fetches in flight, and whichever
+  the network finished last won — so an open-only listing could overwrite the
+  view while the filter said "closed", and the client-side state gate then hid
+  those rows one by one. Every fetch now carries the pane's request generation
+  through `IssuesMsg.Gen` (`forge.RefreshGenCmd`, `RefreshFactory`), and the
+  pane applies only its newest one.
+- **Background polls respect the filter.** A poll always fetches the *open*
+  listing, so it is applied exactly while the pane's own filter is open and
+  dropped otherwise; the next round lands normally once the filter is back.
+- **Deliberate loading presentation.** A state-changing refetch clears the
+  issue list and shows `(fetching issues…)` rather than keeping rows that were
+  fetched for the previous filter. The PR list is untouched — it is fetched in
+  every state and split client-side.
+- A dropped answer still records its `Setup`/`Err`, but never clears the
+  pending fetch's loading state.
+
 ## 2026-08-25 (0470 forge workflow complete — 0.5.0, #2082)
 
 - **The change loop no longer leaves the IDE.** Epic 0470 closes with all

@@ -136,6 +136,14 @@ type IssuesMsg struct {
 	// the pane can tell a stale answer from the one its current state filter
 	// asked for (#2090).
 	State IssueState
+	// Gen is the requester's generation counter at the moment the fetch was
+	// started, echoed back untouched (#2107). Cycling the state filter twice
+	// in quick succession leaves two fetches in flight and whichever the
+	// network finishes last would otherwise win; tagging each request lets
+	// the consumer apply only the newest one. Zero means untagged — a
+	// background poll, or a caller that does not count its requests — and is
+	// never treated as stale.
+	Gen   int
 	Setup string
 	Err   error
 	PRErr error
