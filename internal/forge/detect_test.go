@@ -147,3 +147,31 @@ func TestDetectCachesSuccess(t *testing.T) {
 		t.Fatal("ResetDetection must drop the cached backend")
 	}
 }
+
+// teaOAuthConfigFixture is a tea ≥ 0.14 config whose login authenticates by
+// OAuth: no token: field at all, because the access token lives in tea's
+// credential store (#2118).
+const teaOAuthConfigFixture = `
+logins:
+    - name: gregory
+      url: https://goofy.007ac9.net
+      user: gregory
+      auth_method: oauth
+      token_expiry: 1787654321
+      created: 1780000000
+`
+
+func TestTokenFromTeaConfigOAuthLogin(t *testing.T) {
+	// The login matches — by name and by URL — and still yields no token.
+	// That is not a failure: detect.go binds the `tea api` transport for it.
+	if tok := tokenFromTeaConfig([]byte(teaOAuthConfigFixture), "gregory", ""); tok != "" {
+		t.Fatalf("an OAuth login has no plaintext token, got %q", tok)
+	}
+	if tok := tokenFromTeaConfig([]byte(teaOAuthConfigFixture), "", "https://goofy.007ac9.net"); tok != "" {
+		t.Fatalf("an OAuth login has no plaintext token, got %q", tok)
+	}
+	// A token login in the same document is untouched by the OAuth support.
+	if tok := tokenFromTeaConfig([]byte(teaConfigFixture), "codeberg", ""); tok != "cb-token-123" {
+		t.Fatalf("token login = %q", tok)
+	}
+}

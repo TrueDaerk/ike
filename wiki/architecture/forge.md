@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Forge Layer
-description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, the capability model (triage vs push, plus the authenticated login) both bindings probe, the issue mutations (labels, assignees, state, comments), the editable-text layer with its stale-base check, the PR detail/action layer (full PR fetch with per-check CI, merge/close with a comment, post-merge branch cleanup), and the background poll service that diffs snapshots into typed events, plus the persistent listing cache with incremental updated-since refresh (#2083, #2088, #2087, #2089, #2085, #2108).
+description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, the capability model (triage vs push, plus the authenticated login) both bindings probe, the issue mutations (labels, assignees, state, comments), the editable-text layer with its stale-base check, the PR detail/action layer (full PR fetch with per-check CI, merge/close with a comment, post-merge branch cleanup), and the background poll service that diffs snapshots into typed events, plus the persistent listing cache with incremental updated-since refresh, and the tea binding's two transports (direct REST for a token login, `tea api` for an OAuth one) (#2083, #2088, #2087, #2089, #2085, #2108, #2118).
 resource: internal/forge/backend.go
-tags: [architecture, vcs, forge, github, gitea, forgejo, issues]
-timestamp: 2026-08-25T14:00:00Z
+tags: [architecture, vcs, forge, github, gitea, forgejo, issues, oauth]
+timestamp: 2026-08-25T18:00:00Z
 ---
 
 # Forge Layer (#1934, #2083, #2088, #2087, #2085)
@@ -192,8 +192,9 @@ explicit confirmation of the pane's offer.
   the host; the login's API token is then read from tea's config file
   (`os.UserConfigDir()/tea/config.yml`, falling back to
   `~/.config/tea/config.yml`), because the login listing does not print
-  tokens. Each missing piece — tea itself, a matching login, the token —
-  resolves to a setup message naming exactly it.
+  tokens. A login with **no** token there is not a failure (#2118) — see the
+  two transports below. Each genuinely missing piece — tea itself, a matching
+  login — resolves to a setup message naming exactly it.
 - **No remote / unparsable remote** → a setup message.
 
 A **successful** detection is cached per workspace root (absolute path), so
@@ -222,6 +223,34 @@ own `--output json` runs through its table layer, which flattens labels to
 comma-joined names and drops their colors — not enough for the pane's label
 chips. The tea CLI still owns authentication: detection matches its login
 list, the token comes from its config. Forgejo serves the same API.
+
+### Two transports (#2118)
+
+Every call funnels through one `apiDo`, which marshals the payload, hands the
+request to a **transport** and owns the shared answer handling (2xx check,
+the forge's `message` as the error text). There are two transports, chosen
+once at detection by whether the login has a plaintext token:
+
+- **`restCall`** — the direct HTTP request above, `Authorization: token …`.
+  The path for every ordinary token login; nothing about it changed.
+- **`cliCall`** — `tea api --login <name> --include --method <M> [--data @-]
+  <endpoint>`. Since tea 0.14 a login can authenticate by **OAuth**, and then
+  `config.yml` has no `token:` field at all: the access token lives in tea's
+  own credential store (an AES-GCM `credentials.json.enc` whose master key
+  sits in the OS keyring), which only tea can open. `tea api` is tea's raw
+  API passthrough — it resolves that store, refreshes an expired OAuth token,
+  and returns the forge's **unprocessed** JSON, so every parser in the file
+  reads a CLI answer exactly as it reads a REST one, label colors included.
+  It is not the table layer the decision above rejects.
+
+`--include` puts the response's status line on standard error while the body
+goes to stdout — that is how a non-2xx is recognised, because `tea api` exits
+0 on a 4xx. A request body travels on **stdin** (`--data @-`), never as an
+argv element, for the same reason gh's bodies do (#2087). If no status line
+arrives (a tea too old for `--include`), a Gitea error document in the body
+is still treated as the failure it is. A tea without the `api` command at all
+(pre-0.12) is the one case that stays a setup message, and it names the
+workaround: `tea login add --token …`.
 
 Listings page in 50s up to the shared 200 cap. Gitea's PR listing carries no
 check rollup, so `Checks` stays `ChecksNone` for now (a later sub-issue can

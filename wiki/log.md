@@ -24,6 +24,25 @@
 - New concept doc [Picker Speed Search](/architecture/speed-search.md); the
   Issues Tool Window and Selection-List Navigation docs link to it.
 
+## 2026-08-25 (forge: tea OAuth logins without a plaintext token, #2118)
+
+- **Gitea/Forgejo repositories work with an OAuth tea login.** Since tea 0.14
+  a login can authenticate by OAuth, and then `config.yml` carries no
+  `token:` field — the access token sits in tea's own credential store. The
+  issues window used to give up on that with *"no token for the tea login …"*
+  even though `tea` itself worked fine in the terminal. The tea binding now
+  picks a transport per login: a token login keeps the direct REST call it
+  always had, and a login without one routes the same requests through
+  **`tea api`**, tea's raw API passthrough, which opens that store (and
+  refreshes an expired token) itself. `tea api` returns the forge's
+  unprocessed JSON, so label colors and everything else survive — unlike
+  `tea issues list --output json`, which is why the binding never used the
+  CLI before. Bodies still travel on stdin, and the response status comes
+  from `--include` because `tea api` exits 0 on a 4xx.
+- Only a tea too old for the `api` command (pre-0.12) still fails, and the
+  setup message now names the cause and the fix: `tea login add --token …`.
+  Details: [forge layer](/architecture/forge.md).
+
 ## 2026-08-25 (forge: persistent issue cache with incremental refresh, #2108)
 
 - **The issues window opens instantly after a restart.** Every successful

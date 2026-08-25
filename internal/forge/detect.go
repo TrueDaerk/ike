@@ -78,11 +78,28 @@ func detect(dir string) (Forge, string) {
 	if login == nil {
 		return nil, "no tea login for " + host + " — run `tea login add` for it"
 	}
-	token, err := teaToken(login.Name, login.URL)
-	if err != nil {
-		return nil, "no token for the tea login " + login.Name + " (" + err.Error() + ")"
+	// A login authenticating by OAuth (tea ≥ 0.14) has no token: field in
+	// config.yml — the access token sits in tea's own credential store. Such
+	// a login is not broken: the binding routes its calls through `tea api`
+	// instead, which opens and refreshes that store itself (#2118). Only a
+	// tea too old for the `api` command leaves nothing to fall back on.
+	token := teaToken(login.Name, login.URL)
+	if token == "" && !teaSupportsAPI(dir) {
+		return nil, "the tea login " + login.Name + " has no token in tea's config.yml " +
+			"(an OAuth login keeps it in tea's credential store) and this tea has no `tea api` " +
+			"command to read it — upgrade tea to 0.12 or newer, or add a token login with " +
+			"`tea login add --token …`"
 	}
-	return &teaForge{dir: dir, baseURL: strings.TrimRight(login.URL, "/"), owner: owner, repo: repo, token: token, user: login.User}, ""
+	return &teaForge{dir: dir, baseURL: strings.TrimRight(login.URL, "/"), owner: owner, repo: repo,
+		token: token, name: login.Name, user: login.User}, ""
+}
+
+// teaSupportsAPI reports whether this tea has the `api` passthrough command
+// (tea 0.12+), the transport an OAuth login depends on. The probe stays
+// local — `--help` is answered before any command action runs.
+func teaSupportsAPI(dir string) bool {
+	_, err := runTea(dir, "api", "--help")
+	return err == nil
 }
 
 // ResetDetection drops the cached backend for dir (tests, or a changed
