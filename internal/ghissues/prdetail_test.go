@@ -172,7 +172,7 @@ func TestPRActionRejectionShowsForgeReason(t *testing.T) {
 func TestMergeSuccessRefreshesAndOffersCleanup(t *testing.T) {
 	m, _ := prActive(t)
 	refreshed := 0
-	m.SetRefresh(func(forge.IssueState) tea.Cmd {
+	m.SetRefresh(func(forge.IssueState, int) tea.Cmd {
 		refreshed++
 		return func() tea.Msg { return nil }
 	})
@@ -213,7 +213,7 @@ func TestCleanupOfferDeclined(t *testing.T) {
 
 func TestCloseSuccessDoesNotOfferCleanup(t *testing.T) {
 	m, _ := prActive(t)
-	m.SetRefresh(func(forge.IssueState) tea.Cmd { return func() tea.Msg { return nil } })
+	m.SetRefresh(func(forge.IssueState, int) tea.Cmd { return func() tea.Msg { return nil } })
 	press(m, "c", "enter", "enter")
 	m.SetPRActionResult(forge.PRActionMsg{PR: 9, Kind: forge.PRClose})
 	if m.CleanupOfferOpen() {

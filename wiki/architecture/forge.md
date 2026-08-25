@@ -4,7 +4,7 @@ title: Forge Layer
 description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, the capability model (triage vs push, plus the authenticated login) both bindings probe, the issue mutations (labels, assignees, state, comments), the editable-text layer with its stale-base check, the PR detail/action layer (full PR fetch with per-check CI, merge/close with a comment, post-merge branch cleanup), and the background poll service that diffs snapshots into typed events (#2083, #2088, #2087, #2089, #2085).
 resource: internal/forge/backend.go
 tags: [architecture, vcs, forge, github, gitea, forgejo, issues]
-timestamp: 2026-08-25T00:00:00Z
+timestamp: 2026-08-25T12:00:00Z
 ---
 
 # Forge Layer (#1934, #2083, #2088, #2087, #2085)
@@ -126,6 +126,15 @@ applies, `Err` on a transient failure, `PRErr` when only the PR listing
 failed — the issues are still worth showing). `PollCmd(dir)` is the same
 fetch tagged `Poll: true` for the background poll service below; the tag is
 what lets the consumers tell "the user asked for this" from "the timer did".
+
+**Request tagging** (#2107). Fetches resolve off the Update loop, so several
+can be in flight at once and they can finish in any order. `IssuesMsg.Gen`
+echoes the requester's generation counter back untouched, and
+`RefreshGenCmd(dir, state, gen)` — what `RefreshFactory(dir)` closes over — is
+the tagging listing command. `Gen: 0` means *untagged*: a background poll, or
+a caller that does not count its requests. Nothing in this package interprets
+the tag; it exists so the consumer can recognise its own newest request and
+drop the rest (the issues window does, see below).
 
 ## PR detail and actions (`pr.go`, #2089)
 
@@ -353,8 +362,10 @@ poll's fresh listing, so its content stays current without `r` — and a poll
 result is applied without fighting the user: the selection is restored by
 issue number, the filters survive, the open detail view keeps its scroll
 offset across a re-render, and a poll never clears a manual refresh's pending
-state. The start-work flow (`StartWorkCmd`) is pure git and
-backend-independent.
+state. Since #2107 it also *drops* answers it has superseded: it counts its
+fetches into `Gen` and applies only the newest one, and it ignores a poll's
+open listing while its own filter shows closed or all. The start-work flow
+(`StartWorkCmd`) is pure git and backend-independent.
 
 The **forge edit buffers** (`internal/app/forgeedit.go`, #2087) consume the
 editable-text layer: a markdown scratch buffer bound to a `TextTarget` runs

@@ -196,7 +196,7 @@ func TestLabelPickerClearsWithBackspace(t *testing.T) {
 func TestStateFilterCyclesAndRefetches(t *testing.T) {
 	m := filled(t)
 	var asked []forge.IssueState
-	m.SetRefresh(func(st forge.IssueState) tea.Cmd {
+	m.SetRefresh(func(st forge.IssueState, _ int) tea.Cmd {
 		asked = append(asked, st)
 		return func() tea.Msg { return nil }
 	})
@@ -553,7 +553,7 @@ func TestOpenInBrowserEmitsURL(t *testing.T) {
 func TestRefreshRunsInjectedCmd(t *testing.T) {
 	m := filled(t)
 	ran := false
-	m.SetRefresh(func(forge.IssueState) tea.Cmd {
+	m.SetRefresh(func(forge.IssueState, int) tea.Cmd {
 		return func() tea.Msg { ran = true; return nil }
 	})
 	if cmd := m.Update(key("r")); cmd != nil {

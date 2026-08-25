@@ -204,8 +204,17 @@ type Model struct {
 
 	// refresh is the app-injected per-state fetch factory
 	// (forge.RefreshFactory at the workspace root); 'r' and every state-filter
-	// change re-run it, and the pane stays subprocess-free.
-	refresh func(forge.IssueState) tea.Cmd
+	// change re-run it, and the pane stays subprocess-free. It takes the
+	// generation the request is dispatched at (#2107) and echoes it back on
+	// the result.
+	refresh func(forge.IssueState, int) tea.Cmd
+
+	// gen counts the listing fetches the pane has started (#2107). Fetches
+	// resolve off the Update loop and out of order, so two rapid 't' presses
+	// leave two in flight; only the answer tagged with the newest generation
+	// may write the listing — the older one was asked for a state filter the
+	// pane no longer shows.
+	gen int
 
 	loading bool
 	loaded  bool
@@ -363,7 +372,7 @@ func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 
 // SetRefresh injects the per-state fetch factory 'r' and the state filter
 // re-run.
-func (m *Model) SetRefresh(fn func(forge.IssueState) tea.Cmd) { m.refresh = fn }
+func (m *Model) SetRefresh(fn func(forge.IssueState, int) tea.Cmd) { m.refresh = fn }
 
 // Configure applies the pane's settings (#2090): issues.default_tab and
 // issues.default_sort. Both only seed the session — once the user switched
@@ -404,7 +413,23 @@ func (m *Model) Refresh() tea.Cmd { return m.startRefresh() }
 // the swap, so a newer issue appearing above the cursor leaves it on the
 // issue it was on. The filter line, the label filter and the detail view are
 // untouched either way — they are derived from state SetResult never writes.
+//
+// A result the pane has since superseded (#2107) never reaches the listing at
+// all — see staleResult. Only its Setup/Err is surfaced, because those
+// describe the forge rather than the request: a missing CLI or a dead network
+// is worth saying whichever state filter asked.
 func (m *Model) SetResult(msg forge.IssuesMsg) {
+	if m.staleResult(msg) {
+		if msg.Setup != "" {
+			m.setup = msg.Setup
+		} else if msg.Err != nil {
+			m.errMsg = msg.Err.Error()
+		}
+		// The loading flag belongs to the request still in flight, so it
+		// stays set: the indicator must keep standing in for the listing
+		// until the answer the active filter asked for arrives.
+		return
+	}
 	if !msg.Poll {
 		m.loading = false
 	}
@@ -442,6 +467,34 @@ func (m *Model) SetResult(msg forge.IssuesMsg) {
 			m.detailLines = nil
 		}
 	}
+}
+
+// staleResult reports whether an arriving listing answers a request the pane
+// has since superseded (#2107) — the fix for the rapid 't t' race, where two
+// fetches are in flight and the one that lands last used to win no matter
+// which state filter it was started for.
+//
+// A foreground fetch carries the generation startRefresh dispatched it at, so
+// only the newest one may write the listing. Untagged foreground results
+// (Gen 0 — a caller that does not count its requests, and the pane's own
+// tests) are always accepted: the counter can only invalidate fetches the
+// pane itself started.
+//
+// A background poll carries no generation and always asks for the *open*
+// listing (#2085), so it is an answer for the pane exactly while the pane's
+// own filter is open. Landing after a switch to closed/all it would replace
+// the listing with a differently-scoped one — drop it; the state change's own
+// refetch is already on its way, and the next poll round lands normally once
+// the filter is back on open.
+func (m *Model) staleResult(msg forge.IssuesMsg) bool {
+	if msg.Poll {
+		state := msg.State
+		if state == "" {
+			state = forge.IssuesOpen
+		}
+		return state != m.state.issueState()
+	}
+	return msg.Gen != 0 && msg.Gen != m.gen
 }
 
 // restoreCursor puts the cursor back on the issue numbered n after a listing
@@ -921,16 +974,43 @@ func (m *Model) startRefresh() tea.Cmd {
 		return meta
 	}
 	m.loading = true
-	return tea.Batch(m.refresh(m.state.issueState()), meta)
+	// Each request carries the generation it was started at, so SetResult can
+	// recognise its own newest one and drop everything older (#2107).
+	m.gen++
+	return tea.Batch(m.refresh(m.state.issueState(), m.gen), meta)
 }
 
 // cycleState advances the open/closed/all filter. Closed issues are not part
 // of an open listing, so the change also refetches (#2083).
 func (m *Model) cycleState() tea.Cmd {
 	m.state = StateFilter((int(m.state) + 1) % 3)
+	m.dropListingForRefetch()
 	m.resetCursors()
 	m.applyFilter()
 	return m.startRefresh()
+}
+
+// dropListingForRefetch clears the issue listing ahead of the refetch a state
+// filter change forces (#2107).
+//
+// This is the deliberate loading presentation of a state-changing refetch:
+// clear plus the loading indicator, not "keep the old rows". What is on
+// screen was fetched for the *previous* filter, so keeping it would show an
+// open-only set under a "closed" filter — and applyFilter's client-side state
+// gate would then hide those rows one by one, which is exactly the
+// half-empty, mis-scrolled list the race produced. An honest "(fetching
+// issues…)" for the width of one fetch beats rows that lie about the filter.
+//
+// The pull requests are *not* dropped: they are always fetched in every state
+// and split purely client-side, so the new filter is already correct for them
+// and blanking the PR tab would be a regression, not a fix. Nothing is
+// cleared when no fetch factory is injected either — that would leave a bare
+// pane empty with nothing on its way to refill it.
+func (m *Model) dropListingForRefetch() {
+	if m.refresh == nil {
+		return
+	}
+	m.issues = nil
 }
 
 // cycleSort advances the list order.
@@ -959,6 +1039,9 @@ func (m *Model) clearFilters() tea.Cmd {
 	m.fInput, m.fCur = "", 0
 	m.labelSel = map[string]bool{}
 	m.state = FilterOpen
+	if refetch {
+		m.dropListingForRefetch()
+	}
 	m.resetCursors()
 	m.applyFilter()
 	if refetch {
