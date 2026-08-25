@@ -1,9 +1,9 @@
 package forge
 
 // poll.go is the background polling half of the forge layer (#2085): the
-// snapshot IKE keeps of a repository's issues and pull requests, the typed
-// events one fresh listing produces against the previous snapshot, and the
-// Poller state machine driving the app's tick chain.
+// snapshot IKE keeps of a repository's issues and pull requests, the diff that
+// turns one fresh listing into the typed events of events.go, and the Poller
+// state machine driving the app's tick chain.
 //
 // Package rule (unchanged): nothing here runs a subprocess from Update. The
 // Poller only *decides* — should this tick dispatch a fetch, how long until
@@ -32,61 +32,6 @@ const (
 	MaxPollBackoff = 5 * time.Minute
 )
 
-// EventKind names one change a poll observed between two snapshots.
-type EventKind int
-
-const (
-	// IssueOpened: an issue the previous open listing did not have.
-	IssueOpened EventKind = iota
-	// IssueClosed: an issue that left the open listing.
-	IssueClosed
-	// PROpened: a pull request that is open now and was not before.
-	PROpened
-	// PRMerged: a pull request that reached the merged state.
-	PRMerged
-	// PRClosed: a pull request closed without merging.
-	PRClosed
-	// PRChecksFailing: an open pull request whose CI rollup turned red.
-	PRChecksFailing
-)
-
-// String is the event's stable name, used in notification text and tests.
-func (k EventKind) String() string {
-	switch k {
-	case IssueOpened:
-		return "IssueOpened"
-	case IssueClosed:
-		return "IssueClosed"
-	case PROpened:
-		return "PROpened"
-	case PRMerged:
-		return "PRMerged"
-	case PRClosed:
-		return "PRClosed"
-	case PRChecksFailing:
-		return "PRChecksFailing"
-	}
-	return "Unknown"
-}
-
-// Event is one snapshot difference, carrying enough to render a notification
-// and open the thing it is about.
-type Event struct {
-	Kind   EventKind
-	Number int
-	Title  string
-	URL    string
-}
-
-// EventsMsg carries one poll's diff into Update for any consumer (#2085 ships
-// the events; the prominent notification surface is its own sub-issue). Root
-// is the workspace root the poll ran for, so a message arriving after a
-// project switch is recognisably stale.
-type EventsMsg struct {
-	Root   string
-	Events []Event
-}
-
 // Snapshot is one observed listing state: the open issues and every pull
 // request, exactly as one IssuesMsg carried them.
 type Snapshot struct {
@@ -96,6 +41,18 @@ type Snapshot struct {
 
 // prState normalizes a forge's state vocabulary ("open"/"OPEN"/"MERGED").
 func prState(pr PR) string { return strings.ToUpper(pr.State) }
+
+// issueEvent builds one issue event, carrying the author and labels the
+// notification dialog (#2086) shows besides the title. A backend that does
+// not report them leaves them zero and the dialog hides those rows.
+func issueEvent(k EventKind, is Issue) Event {
+	return Event{Kind: k, Number: is.Number, Title: is.Title, Author: is.Author, Labels: is.Labels, URL: is.URL}
+}
+
+// prEvent is issueEvent for a pull request; PR listings carry no labels.
+func prEvent(k EventKind, pr PR) Event {
+	return Event{Kind: k, Number: pr.Number, Title: pr.Title, Author: pr.Author, URL: pr.URL}
+}
 
 // Diff reports what changed between prev and next, in a deterministic order:
 // issues first (opened before closed, in listing order), then pull requests
@@ -114,14 +71,14 @@ func Diff(prev, next Snapshot) []Event {
 	}
 	for _, is := range next.Issues {
 		if !before[is.Number] {
-			out = append(out, Event{Kind: IssueOpened, Number: is.Number, Title: is.Title, URL: is.URL})
+			out = append(out, issueEvent(IssueOpened, is))
 		}
 	}
 	// The listing is open issues only, so an issue that vanished from it was
 	// closed — the one shape "closed" can take here.
 	for _, is := range prev.Issues {
 		if !after[is.Number] {
-			out = append(out, Event{Kind: IssueClosed, Number: is.Number, Title: is.Title, URL: is.URL})
+			out = append(out, issueEvent(IssueClosed, is))
 		}
 	}
 
@@ -139,18 +96,18 @@ func Diff(prev, next Snapshot) []Event {
 			// wants to hear.
 			switch state {
 			case "OPEN":
-				out = append(out, Event{Kind: PROpened, Number: pr.Number, Title: pr.Title, URL: pr.URL})
+				out = append(out, prEvent(PROpened, pr))
 			case "MERGED":
-				out = append(out, Event{Kind: PRMerged, Number: pr.Number, Title: pr.Title, URL: pr.URL})
+				out = append(out, prEvent(PRMerged, pr))
 			default:
-				out = append(out, Event{Kind: PRClosed, Number: pr.Number, Title: pr.Title, URL: pr.URL})
+				out = append(out, prEvent(PRClosed, pr))
 			}
 		}
 		// A red CI rollup is its own event, independent of the state move: it
 		// is the one PR change that happens without the PR changing at all.
 		// Only the transition counts, so a PR that stays red is reported once.
 		if state == "OPEN" && pr.Checks == ChecksFailing && (!seen || old.Checks != ChecksFailing) {
-			out = append(out, Event{Kind: PRChecksFailing, Number: pr.Number, Title: pr.Title, URL: pr.URL})
+			out = append(out, prEvent(PRChecksFailing, pr))
 		}
 	}
 	return out

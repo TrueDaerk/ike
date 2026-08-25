@@ -107,6 +107,7 @@ secrets — are documented together, with screenshots, in
 | Git changed marks | `editor.marks.git_changed` | boolean | `true` | user | Mark changed lines in the gutter and scrollbar |
 | Git deleted marks | `editor.marks.git_deleted` | boolean | `true` | user | Mark deletions in the gutter and scrollbar |
 | Inheritance marks | `editor.marks.inheritance` | boolean | `true` | user | Show ↑/↓ gutter arrows on symbols that implement/override a super declaration or have implementations; also gates the LSP probes computing them |
+| Coverage marks | `editor.marks.coverage` | boolean | `true` | user | Show per-line test-coverage bars in the gutter after a run-with-coverage (green covered, red uncovered, yellow partial); the coverage.toggle command hides them per session on top of this |
 | Ignored diagnostics | `lsp.diagnostics_ignore` | list | `source=intelephense code=P1006 msg=*Found 'null'*,source=intelephense code=P1006 msg=*Found 'unset'*` | project | Suppression rules dropped everywhere (editor and Problems window): each rule combines source=<glob> code=<glob> and a trailing msg=<glob>; a bare token means code=. The editor's Ignore Diagnostic Under Caret command appends here |
 | Diagnostic severity overrides | `lsp.diagnostics_severity` | list | *(empty)* | project | Remap rules applied everywhere (editor and Problems window): the ignore-rule conditions plus a trailing error/warning/info/hint/off — e.g. 'reportArgumentType warning'. First match wins, off drops the diagnostic; syntax errors (codeless diagnostics) always stay errors. The 'partial' keyword restricts a rule to union-partial type mismatches ('str | None' passed where 'str' is expected) — combine with source=, the parsed phrasing is server-specific. Exact-code rules also pass through to servers with native overrides (pyright) |
 
@@ -244,6 +245,13 @@ secrets — are documented together, with screenshots, in
 | Scratches section height | `scratch.section_height` | integer (1–30) | `5` | user | Rows the Scratches section shows when expanded (it never grows past its content). Dragging the divider resizes it afterwards, and that height persists with the explorer's session state |
 | Scratches sort order | `scratch.sort` | enum: `name`, `modified` | `name` | user | How the Scratches section orders its rows: by name like the file tree, or by modification time newest first |
 
+### Issues Window
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Default view | `issues.default_tab` | enum: `issues`, `prs` | `issues` | user | Which of the pane's two views the issues window opens on: the issue list, or the pull-request list. tab and shift+tab (and a click on the tab bar) switch between them either way |
+| Default sort order | `issues.default_sort` | enum: `relevance`, `newest`, `oldest`, `updated`, `number` | `relevance` | user | Order both lists open in: "relevance" ranks by fuzzy score while a filter pattern is typed and falls back to newest without one, "newest"/"oldest" order by creation time, "updated" by last activity, "number" by issue number ascending. The a key cycles the order for the open pane without changing this default |
+
 ### Tool Layout
 
 | Setting | Key | Type | Default | Scope | Description |
@@ -272,6 +280,17 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Notification timeout | `notifications.timeout_seconds` | integer (1–300) | `4` | user | Seconds before info/warn toasts expire |
 | Notification severity floor | `notifications.min_severity` | enum: `info`, `warn`, `error` | `info` | user | Below this severity notifications go to the history only |
+
+### Forge Notifications
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| New issue | `forge.notify.issue_opened` | enum: `off`, `toast`, `badge`, `dialog` | `dialog` | user | Notification style when an issue appears on the forge |
+| Issue closed | `forge.notify.issue_closed` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when an issue disappears from the open listing |
+| New pull request | `forge.notify.pr_opened` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is opened |
+| Pull request merged | `forge.notify.pr_merged` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is merged |
+| Pull request closed | `forge.notify.pr_closed` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is closed without merging |
+| Checks failing | `forge.notify.pr_checks_failing` | enum: `off`, `toast`, `badge`, `dialog` | `badge` | user | Notification style when an open pull request's CI rollup turns failing |
 
 ### TODO Index
 

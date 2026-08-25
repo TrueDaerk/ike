@@ -67,6 +67,22 @@ type TestSpec struct {
 	// element-per-id expansion.
 	NamesJoin string
 
+	// Coverage support (#2081) — both optional; a language declaring neither
+	// has no run-with-coverage mode. The seam is deliberately neutral: the
+	// engine only hands over a profile path and receives the per-file line
+	// model back, so coverage.py or phpunit's clover XML plug in without
+	// engine edits.
+	//
+	// CoverArgs returns the extra argv elements making the test run write its
+	// coverage data to profile (Go: "-coverprofile=<profile>"). Appended after
+	// StructuredArgs; must not change which tests run.
+	CoverArgs func(profile string) []string
+	// ParseCover parses the coverage data the run wrote to profile into the
+	// neutral per-file line-coverage model. dir is the run's working
+	// directory, for resolving relative or import-qualified paths in the
+	// profile to absolute file paths.
+	ParseCover func(profile, dir string) ([]FileCoverage, error)
+
 	// Project-rooted runs (#1926) — both optional.
 	//
 	// RunAtRoot runs the language's tests with cwd = the project root

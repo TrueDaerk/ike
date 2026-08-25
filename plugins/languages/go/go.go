@@ -110,6 +110,10 @@ func init() {
 			ParseOutput:    parseTestJSON,
 			FailedArgv:     []string{"{interpreter}", "test", "-run", "^({names})$"},
 			NamesJoin:      "|",
+			// Coverage (#2081): -coverprofile writes the per-statement block
+			// profile parseCoverProfile maps to per-line covered/uncovered.
+			CoverArgs:  coverArgs,
+			ParseCover: parseCoverProfile,
 		},
 	})
 

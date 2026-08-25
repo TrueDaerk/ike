@@ -13,6 +13,7 @@ import (
 	"ike/internal/editor/search"
 	"ike/internal/editor/textobject"
 	"ike/internal/editor/viewport"
+	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 	"ike/internal/theme"
 	"ike/internal/ui"
@@ -580,6 +581,23 @@ func (m Model) View() string {
 			// actionable marker, above the colour-only diagnostic/git tints.
 			sign = inheritSign(kind)
 			signStyle = lipgloss.NewStyle().Foreground(m.theme().Info)
+		} else if ck, stale, ok := m.coverMarkAt(i); ok {
+			// Coverage marks (#2081): a JetBrains-style covered/uncovered bar
+			// in the sign column — green covered, red uncovered, yellow
+			// partial — below the informational glyphs, above the colour-only
+			// tints. Stale data (the buffer changed since the run) draws
+			// faint in the neutral info tone so it never reads as current.
+			sign = "▎"
+			switch {
+			case stale:
+				signStyle = lipgloss.NewStyle().Foreground(m.theme().Info).Faint(true)
+			case ck == lang.CoverUncovered:
+				signStyle = lipgloss.NewStyle().Foreground(m.theme().Error)
+			case ck == lang.CoverPartial:
+				signStyle = lipgloss.NewStyle().Foreground(m.theme().Warning)
+			default:
+				signStyle = lipgloss.NewStyle().Foreground(m.theme().Success)
+			}
 		} else if sev, ok := m.worstSeverityOnLine(i); ok {
 			gs = lipgloss.NewStyle().Foreground(m.diagColor(sev))
 		} else if mk, ok := m.gitMarks[i]; ok && m.gitVisible(mk) {

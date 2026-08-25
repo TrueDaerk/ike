@@ -46,6 +46,8 @@ type Config struct {
 	Tests Tests `toml:"tests"`
 	// Scratch holds Scratch Files tool-window behaviour (#1932).
 	Scratch Scratch `toml:"scratch"`
+	// Issues holds the forge Issues tool-window's defaults (#2090).
+	Issues Issues `toml:"issues"`
 	// Debug holds debugger behaviour (0360, #823).
 	Debug Debug `toml:"debug"`
 	// Tools holds user-defined TUI tool panes (#741).
@@ -71,18 +73,36 @@ type Config struct {
 	Remote Remote `toml:"remote"`
 	// Screenshot holds the in-IDE PNG export's behaviour (#2001).
 	Screenshot Screenshot `toml:"screenshot"`
-	// Forge holds the code-forge integration's behaviour (#2085).
+	// Forge holds code-forge behaviour: how often IKE re-reads the forge in
+	// the background (#2085) and how prominently each kind of forge event
+	// announces itself (#2086).
 	Forge Forge `toml:"forge"`
 }
 
-// Forge holds the code-forge integration settings (#2085). PollIntervalSeconds
-// is how often IKE re-fetches the repository's issues and pull requests in the
+// Forge holds the code-forge settings (#2085, #2086). PollIntervalSeconds is
+// how often IKE re-fetches the repository's issues and pull requests in the
 // background so new issues, closed issues and PR state changes surface without
-// a manual refresh. 0 turns polling off entirely; anything between 1 and the
-// floor below is raised to it, so a mistyped interval cannot hammer the forge
-// (every poll is a CLI/API round trip).
+// a manual refresh; 0 turns polling off entirely, and anything between 1 and
+// the floor is raised to it, so a mistyped interval cannot hammer the forge
+// (every poll is a CLI/API round trip). Notify is the per-event-type
+// notification style of the forge event surface those polls feed.
 type Forge struct {
-	PollIntervalSeconds int `toml:"poll_interval_seconds"`
+	PollIntervalSeconds int         `toml:"poll_interval_seconds"`
+	Notify              ForgeNotify `toml:"notify"`
+}
+
+// ForgeNotify is the notification style per forge event kind (#2086). Each
+// field takes "dialog" (centered, dismissable dialog over the workspace),
+// "badge" (status-line unread badge only), "toast" (the ordinary bottom-right
+// toast) or "off" (history only). The field names mirror
+// forge.EventKind.Name(), so a new kind adds one field and one entry.
+type ForgeNotify struct {
+	IssueOpened     string `toml:"issue_opened"`
+	IssueClosed     string `toml:"issue_closed"`
+	PROpened        string `toml:"pr_opened"`
+	PRMerged        string `toml:"pr_merged"`
+	PRClosed        string `toml:"pr_closed"`
+	PRChecksFailing string `toml:"pr_checks_failing"`
 }
 
 // Screenshot holds the in-IDE screenshot export settings (#2001). Directory
@@ -313,6 +333,18 @@ type Scratch struct {
 	Sort          string `toml:"sort"`
 	Panel         bool   `toml:"panel"`
 	PanelHeight   int    `toml:"panel_height"`
+}
+
+// Issues holds the forge Issues tool window's opening defaults (#2090).
+// DefaultTab selects which of the pane's two views it opens on ("issues" or
+// "prs"); DefaultSort is the list order both views start in ("relevance" —
+// best fuzzy match while filtering, newest otherwise — "newest", "oldest",
+// "updated" or "number"). Both only seed a freshly opened pane: switching the
+// tab or the sort order by hand wins for the rest of the session, so a live
+// config reload never yanks the view away.
+type Issues struct {
+	DefaultTab  string `toml:"default_tab"`
+	DefaultSort string `toml:"default_sort"`
 }
 
 // Todo holds the comment-tag index settings (#61). Patterns is the list of tag
@@ -671,6 +703,10 @@ type Marks struct {
 	// Inheritance gates the gutter ↑/↓ inheritance arrows (#1453) and the LSP
 	// probe traffic computing them.
 	Inheritance bool `toml:"inheritance"`
+	// Coverage gates the per-line test-coverage bars a coverage run paints in
+	// the gutter (#2081); the coverage.toggle command hides them per session
+	// on top of this.
+	Coverage bool `toml:"coverage"`
 }
 
 // Tabs holds editor-tab behaviour (Roadmap 0190). AlwaysShow renders the

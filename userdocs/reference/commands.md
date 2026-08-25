@@ -34,6 +34,7 @@ bring their own.
 | Previous Bookmark | `bookmark.previous` | `ctrl+shift+f11` | — | everywhere |
 | Toggle Bookmark | `bookmark.toggle` | `f11` | — | everywhere |
 | Toggle Bookmark with Mnemonic | `bookmark.toggleMnemonic` | `alt+f3` | — | everywhere |
+| Toggle Coverage Marks | `coverage.toggle` | — | — | everywhere |
 | CSV: Column Profile | `csv.columnProfile` | — | — | `editor` pane |
 | Data: Column Profile | `data.columnProfile` | — | — | `data` pane |
 | Breakpoints | `debug.breakpoints` | `cmd+shift+f8` | — | everywhere |
@@ -159,6 +160,7 @@ bring their own.
 | Promote Task to Run Configuration… | `run.taskPromote` | — | — | everywhere |
 | Run Test at Cursor | `run.testAtCursor` | `ctrl+shift+f10` | — | everywhere |
 | Run Tests in File | `run.testsInFile` | — | — | everywhere |
+| Run Tests in File with Coverage | `run.testsWithCoverage` | — | — | everywhere |
 | Open Scratch File… | `scratch.list` | — | — | everywhere |
 | New Scratch File… | `scratch.new` | `cmd+shift+n` | — | everywhere |
 | New Scratch File: CSS | `scratch.new.css` | — | — | everywhere |

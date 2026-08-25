@@ -178,6 +178,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.marks.git_changed", c.Editor.Marks.GitChanged)
 	put("editor.marks.git_deleted", c.Editor.Marks.GitDeleted)
 	put("editor.marks.inheritance", c.Editor.Marks.Inheritance)
+	put("editor.marks.coverage", c.Editor.Marks.Coverage)
 
 	put("explorer.show_hidden", c.Explorer.ShowHidden)
 	put("explorer.git_status", c.Explorer.GitStatus)
@@ -282,6 +283,8 @@ func (c *Config) Flat() map[string]string {
 	put("scratch.section", c.Scratch.Section)
 	put("scratch.section_height", c.Scratch.SectionHeight)
 	put("scratch.sort", c.Scratch.Sort)
+	put("issues.default_tab", c.Issues.DefaultTab)
+	put("issues.default_sort", c.Issues.DefaultSort)
 
 	put("tools.layout.template", strings.Join(c.Tools.Layout.Template, ","))
 	put("tools.layout.assign", strings.Join(c.Tools.Layout.Assign, ","))
@@ -291,6 +294,14 @@ func (c *Config) Flat() map[string]string {
 	put("remote.max_fetch_mb", c.Remote.MaxFetchMB)
 	put("screenshot.directory", c.Screenshot.Directory)
 	put("forge.poll_interval_seconds", c.Forge.PollIntervalSeconds)
+
+	// Per-event-type forge notification styles (#2086).
+	put("forge.notify.issue_opened", c.Forge.Notify.IssueOpened)
+	put("forge.notify.issue_closed", c.Forge.Notify.IssueClosed)
+	put("forge.notify.pr_opened", c.Forge.Notify.PROpened)
+	put("forge.notify.pr_merged", c.Forge.Notify.PRMerged)
+	put("forge.notify.pr_closed", c.Forge.Notify.PRClosed)
+	put("forge.notify.pr_checks_failing", c.Forge.Notify.PRChecksFailing)
 
 	put("debug.inline_values", c.Debug.InlineValues)
 	put("debug.php.port", c.Debug.PHP.Port)

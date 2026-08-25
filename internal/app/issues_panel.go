@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strconv"
+
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/forge"
@@ -30,6 +32,9 @@ func (m *Model) toggleIssuesPanel() tea.Cmd {
 	if m.activeWS().Panes.Focused() != pane.IssuesKey {
 		m.issuesReturnFocus = m.activeWS().Panes.Focused()
 		m.setFocus(pane.IssuesKey)
+		// Looking at the issues window counts as viewing the pending forge
+		// events (#2086): the unread badge clears.
+		m.clearForgeUnread()
 		return nil
 	}
 	target := m.issuesReturnFocus
@@ -67,15 +72,18 @@ func (m *Model) openIssuesPanel() tea.Cmd {
 		m.activeWS().Panes.Close(key)
 		return nil
 	}
+	// Opening the window views the pending forge events (#2086).
+	m.clearForgeUnread()
 	p := m.activeWS().Panes.Get(key).Issues()
-	refresh := forge.RefreshCmd(".")
-	p.SetRefresh(refresh)
+	p.SetRefresh(forge.RefreshFactory("."))
+	p.SetTimeline(forge.TimelineFactory("."))
+	p.SetMutate(forge.MutateFactory("."))
+	p.SetMeta(forge.MetaFactory("."))
 	m.setFocus(key)
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	if !p.Loaded() {
-		p.MarkLoading()
-		return refresh
+		return p.Refresh()
 	}
 	return nil
 }
@@ -85,6 +93,37 @@ func (m *Model) fillIssuesPanel(msg forge.IssuesMsg) {
 	if p := m.issuesPanel(); p != nil {
 		p.SetResult(msg)
 	}
+}
+
+// fillIssuesTimeline routes one fetched timeline page into the pane (#2084).
+func (m *Model) fillIssuesTimeline(msg forge.TimelineMsg) {
+	if p := m.issuesPanel(); p != nil {
+		p.SetTimelineResult(msg)
+	}
+}
+
+// fillIssuesMeta routes one repository-metadata probe into the pane (#2088):
+// the capability gate in front of the mutation actions plus the label and
+// user sets their pickers list.
+func (m *Model) fillIssuesMeta(msg forge.RepoMetaMsg) {
+	if p := m.issuesPanel(); p != nil {
+		p.SetRepoMeta(msg)
+	}
+}
+
+// finishIssueMutation routes one finished mutation into the pane (#2088),
+// which rolls its optimistic state back on a rejection and refetches on
+// success; a rejection is toasted too, so it is not missed while the pane is
+// unfocused.
+func (m *Model) finishIssueMutation(msg forge.MutationMsg) tea.Cmd {
+	p := m.issuesPanel()
+	if p == nil {
+		return nil
+	}
+	if msg.Err != nil {
+		m.host.Notify(host.Error, "issue #"+strconv.Itoa(msg.Issue)+": "+msg.Kind+" change failed: "+msg.Err.Error())
+	}
+	return p.SetMutationResult(msg)
 }
 
 // finishStartWork reports the start-work outcome (#1934) and lets the VCS

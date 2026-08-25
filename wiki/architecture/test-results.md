@@ -146,3 +146,29 @@ the Tools menu and `tests.toggle` bindings deliver it.
 Settings (Settings → Tests): `tests.results_window` (off = every test run
 stays in the raw Run tool terminal) and `tests.auto_open` (off = a captured
 run only updates an already open pane).
+
+## Run with coverage (#2081)
+
+**run.testsWithCoverage** (palette) is run.testsInFile through the same
+captured path with coverage collection: `lang.TestSpec` grew two more optional
+hooks — `CoverArgs(profile)` returns the extra argv elements writing coverage
+data to a temp profile (Go: `-coverprofile=<tmp>`), `ParseCover(profile, dir)`
+parses that data into the neutral per-file line model
+(`lang.FileCoverage`, covered / uncovered / partial per 1-based line) — so a
+non-Go plugin (coverage.py, phpunit clover) registers coverage without engine
+changes. `finishTestRun` consumes the profile: the parsed files replace the
+app's per-run store (`internal/coverage.Store`, deliberately separate from the
+result parsing so a plain re-run or re-run-failed — which produce no profile —
+never invalidates coverage of untouched files), the run summary line gains a
+`n% coverage` figure (executed lines over tracked lines, `SetCoverage`), and
+every open editor of a covered file receives its gutter marks
+(`coverage.MarksMsg`; files opened later are seeded from the store in
+openPath). Go resolves the profile's import-qualified paths against the
+module root found by walking up from the run directory to `go.mod`
+(`plugins/languages/go/coverage.go`).
+
+**coverage.toggle** (palette) hides/shows the marks without dropping the data;
+the `editor.marks.coverage` setting is the persistent gate underneath. Editing
+a file marks its coverage stale — visible but neutralized — in the store (for
+later opens) and instantly in every live view by document version (see
+/architecture/editor.md).

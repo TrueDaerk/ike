@@ -9,6 +9,7 @@ package forge
 // bindings without touching the interface.
 
 import (
+	"errors"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -22,28 +23,59 @@ const (
 	IssuesOpen IssueState = "open"
 	// IssuesClosed lists the closed issues.
 	IssuesClosed IssueState = "closed"
+	// IssuesAll lists open and closed issues together; both bindings accept
+	// it verbatim (gh's --state all, Gitea's state=all).
+	IssuesAll IssueState = "all"
 )
 
 // Capabilities reports what the authenticated user may do to the repository,
-// split along the two permission tiers the stream's actions need.
+// split along the two permission tiers the stream's actions need, plus who
+// that user is.
 type Capabilities struct {
 	// Triage: mutate labels, assignees and issue state (close/reopen).
 	Triage bool
-	// Push: write access — merge pull requests.
+	// Push: write access — merge pull requests, edit foreign issue texts.
 	Push bool
+	// Login is the authenticated user's login, "" when the backend could not
+	// resolve it. The edit gating (#2087) matches it against an issue's
+	// author to decide whether the body is the user's own text; comments
+	// carry their own TimelineEntry.Own flag.
+	Login string
 }
 
-// TimelineEntry is one event of an issue's timeline: a comment, a label or
-// assignee change, a state change, a cross-reference. Kind names the event
-// ("comment", "labeled", "closed", …) in the forge's own vocabulary; Body
-// carries the comment text (or the label/assignee name); ID is the
-// forge-assigned identifier a comment edit needs.
+// Timeline event kinds (#2084): the neutral vocabulary both bindings map
+// their forge's timeline onto. Events of any other kind are dropped by the
+// parsers — the set is extensible by adding a constant and teaching the
+// parsers and the renderer about it.
+const (
+	// TimelineComment is a comment with a markdown body.
+	TimelineComment = "comment"
+	// TimelineLabeled / TimelineUnlabeled are label additions and removals;
+	// Body carries the label name, LabelColor its color.
+	TimelineLabeled   = "labeled"
+	TimelineUnlabeled = "unlabeled"
+	// TimelineClosed / TimelineReopened are issue state changes.
+	TimelineClosed   = "closed"
+	TimelineReopened = "reopened"
+	// TimelineAssigned / TimelineUnassigned are assignee changes; Body carries
+	// the assignee's login.
+	TimelineAssigned   = "assigned"
+	TimelineUnassigned = "unassigned"
+)
+
+// TimelineEntry is one event of an issue's timeline (#2084) in the neutral
+// vocabulary above. Body carries the comment's markdown (or the
+// label/assignee name); ID is the forge-assigned comment identifier a later
+// comment edit needs, and Own marks a comment authored by the authenticated
+// user — both only set for comments.
 type TimelineEntry struct {
-	Kind  string
-	Actor string
-	Time  time.Time
-	Body  string
-	ID    string
+	Kind       string
+	Actor      string
+	Time       time.Time
+	Body       string
+	LabelColor string // bare rrggbb of a labeled/unlabeled event's label
+	ID         string
+	Own        bool
 }
 
 // Forge is one backend bound to a repository: every method operates on the
@@ -56,14 +88,22 @@ type Forge interface {
 	Issues(state IssueState) ([]Issue, error)
 	// PRs lists the repository's pull requests in every state.
 	PRs() ([]PR, error)
-	// Timeline fetches one issue's timeline, oldest first.
-	Timeline(issue int) ([]TimelineEntry, error)
+	// Timeline fetches one page (1-based) of an issue's timeline, oldest
+	// first, and reports whether more pages follow. Long histories are never
+	// fetched whole — the pane asks for the next page on demand (#2084).
+	Timeline(issue, page int) ([]TimelineEntry, bool, error)
 	// CreateComment adds a comment to an issue.
 	CreateComment(issue int, body string) error
 	// EditComment replaces the body of an existing comment by its forge ID.
 	EditComment(commentID string, body string) error
 	// EditIssueBody replaces an issue's body text.
 	EditIssueBody(issue int, body string) error
+	// IssueBody reads an issue's current body text — the read half of the
+	// stale-base check an edit runs before it overwrites (#2087).
+	IssueBody(issue int) (string, error)
+	// CommentBody reads a comment's current body text by its forge ID, the
+	// same stale-base check for comments.
+	CommentBody(commentID string) (string, error)
 	// AddLabels attaches the named labels to an issue.
 	AddLabels(issue int, labels []string) error
 	// RemoveLabels detaches the named labels from an issue.
@@ -74,6 +114,13 @@ type Forge interface {
 	CloseIssue(issue int) error
 	// ReopenIssue reopens a closed issue.
 	ReopenIssue(issue int) error
+	// RepoLabels lists the repository's whole label set with its colors —
+	// the label picker's rows, which are not limited to what the current
+	// listing happens to carry (#2088).
+	RepoLabels() ([]Label, error)
+	// Collaborators lists the logins an issue can be assigned to — the
+	// assignee picker's rows (#2088).
+	Collaborators() ([]string, error)
 	// MergePR merges an open pull request.
 	MergePR(pr int) error
 	// ClosePR closes an open pull request without merging.
@@ -100,41 +147,96 @@ func unsupported(backend, op string) error {
 }
 
 // RefreshCmd fetches the open issues and the pull requests of the repository
-// containing dir, resolving to one IssuesMsg. An unavailable backend (no
-// forge CLI, no matching remote or login) resolves to the Setup state; a
-// failing fetch to Err. A failing PR listing keeps the issues and reports
-// only PRErr — the list is still useful without the PR states.
-func RefreshCmd(dir string) tea.Cmd {
-	return func() tea.Msg { return fetchListing(dir) }
+// containing dir, resolving to one IssuesMsg.
+func RefreshCmd(dir string) tea.Cmd { return RefreshStateCmd(dir, IssuesOpen) }
+
+// RefreshStateCmd is RefreshCmd for an explicit issue state — the issues
+// window's open/closed/all filter refetches through it (#2090). An
+// unavailable backend (no forge CLI, no matching remote or login) resolves to
+// the Setup state; a failing fetch to Err. A failing PR listing keeps the
+// issues and reports only PRErr — the list is still useful without the PR
+// states. Pull requests are always fetched in every state and split
+// client-side, so switching the issue state never re-costs the PR tab.
+func RefreshStateCmd(dir string, state IssueState) tea.Cmd {
+	return func() tea.Msg { return fetchListing(dir, state) }
 }
 
 // PollCmd is RefreshCmd tagged as a background poll (#2085). The background
 // poll service dispatches it from a tick handler and never waits on it; the
-// tag lets the consumers tell it from a refresh the user asked for.
+// tag lets the consumers tell it from a refresh the user asked for. It polls
+// the open listing: the snapshot diff is defined against it, and a poll must
+// not depend on whichever state filter the pane happens to be showing.
 func PollCmd(dir string) tea.Cmd {
 	return func() tea.Msg {
-		msg := fetchListing(dir)
+		msg := fetchListing(dir, IssuesOpen)
 		msg.Poll = true
 		return msg
 	}
 }
 
-// fetchListing runs one detection + listing pass off the Update loop. Both
-// commands above resolve to it; only the Poll tag differs.
-func fetchListing(dir string) IssuesMsg {
+// fetchListing runs one detection + listing pass off the Update loop. Every
+// command above resolves to it; only the state and the Poll tag differ.
+func fetchListing(dir string, state IssueState) IssuesMsg {
+	if state == "" {
+		state = IssuesOpen
+	}
 	f, setup := Detect(dir)
 	if setup != "" {
-		return IssuesMsg{Setup: setup}
+		return IssuesMsg{State: state, Setup: setup}
 	}
-	issues, err := f.Issues(IssuesOpen)
+	issues, err := f.Issues(state)
 	if err != nil {
-		return IssuesMsg{Err: err}
+		return IssuesMsg{State: state, Err: err}
 	}
-	msg := IssuesMsg{Issues: issues}
+	msg := IssuesMsg{State: state, Issues: issues}
 	if prs, err := f.PRs(); err != nil {
 		msg.PRErr = err
 	} else {
 		msg.PRs = prs
 	}
 	return msg
+}
+
+// RefreshFactory is the per-state fetch factory the issues window is injected
+// with: the pane calls it with whatever its state filter selects, so the
+// filter stays a pane concern and the pane stays subprocess-free.
+func RefreshFactory(dir string) func(IssueState) tea.Cmd {
+	return func(state IssueState) tea.Cmd { return RefreshStateCmd(dir, state) }
+}
+
+// TimelineMsg carries one fetched timeline page back into Update (#2084).
+// Issue and Page echo the request so the pane can drop an answer for an issue
+// it no longer shows; More reports whether another page follows.
+type TimelineMsg struct {
+	Issue   int
+	Page    int
+	Entries []TimelineEntry
+	More    bool
+	Err     error
+}
+
+// TimelineCmd fetches one page of an issue's timeline, resolving to one
+// TimelineMsg. An unavailable backend resolves to Err — the pane only asks
+// once a listing arrived, so the setup state was already shown there.
+func TimelineCmd(dir string, issue, page int) tea.Cmd {
+	if page < 1 {
+		page = 1
+	}
+	return func() tea.Msg {
+		f, setup := Detect(dir)
+		if setup != "" {
+			return TimelineMsg{Issue: issue, Page: page, Err: errors.New(setup)}
+		}
+		entries, more, err := f.Timeline(issue, page)
+		if err != nil {
+			return TimelineMsg{Issue: issue, Page: page, Err: err}
+		}
+		return TimelineMsg{Issue: issue, Page: page, Entries: entries, More: more}
+	}
+}
+
+// TimelineFactory is the per-issue/page fetch factory the issues window is
+// injected with, mirroring RefreshFactory.
+func TimelineFactory(dir string) func(issue, page int) tea.Cmd {
+	return func(issue, page int) tea.Cmd { return TimelineCmd(dir, issue, page) }
 }

@@ -681,6 +681,7 @@ func (r *Registry) AddIssues() string {
 	}
 	inst := &Instance{key: IssuesKey, kind: KindIssues, cfg: r.cfg, pal: r.pal}
 	inst.gi = ghissues.New(r.pal)
+	inst.gi.Configure(r.cfg)
 	r.put(inst)
 	return IssuesKey
 }

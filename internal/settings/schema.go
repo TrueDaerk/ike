@@ -162,6 +162,10 @@ func InsertAfter(pages []Page, after string, page Page) []Page {
 	return append(pages, page)
 }
 
+// forgeNotifyStyles are the options every forge.notify.* entry offers (#2086),
+// in escalating prominence order so cycling with enter reads naturally.
+var forgeNotifyStyles = []string{"off", "toast", "badge", "dialog"}
+
 // BasePages returns the built-in core pages (#92). themes is the registry's
 // theme-name list for the Appearance enum (live preview: writing theme.name
 // hot-reloads through the normal pipeline); lightThemes/darkThemes are its
@@ -251,6 +255,7 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "editor.marks.git_changed", Type: Bool, Title: "Git changed marks", Description: "Mark changed lines in the gutter and scrollbar", Scope: config.UserScope},
 			{Key: "editor.marks.git_deleted", Type: Bool, Title: "Git deleted marks", Description: "Mark deletions in the gutter and scrollbar", Scope: config.UserScope},
 			{Key: "editor.marks.inheritance", Type: Bool, Title: "Inheritance marks", Description: "Show ↑/↓ gutter arrows on symbols that implement/override a super declaration or have implementations; also gates the LSP probes computing them", Scope: config.UserScope},
+			{Key: "editor.marks.coverage", Type: Bool, Title: "Coverage marks", Description: "Show per-line test-coverage bars in the gutter after a run-with-coverage (green covered, red uncovered, yellow partial); the coverage.toggle command hides them per session on top of this", Scope: config.UserScope},
 			{Key: "lsp.diagnostics_ignore", Type: List, Title: "Ignored diagnostics", Description: "Suppression rules dropped everywhere (editor and Problems window): each rule combines source=<glob> code=<glob> and a trailing msg=<glob>; a bare token means code=. The editor's Ignore Diagnostic Under Caret command appends here", Scope: config.ProjectScope},
 			{Key: "lsp.diagnostics_severity", Type: List, Title: "Diagnostic severity overrides", Description: "Remap rules applied everywhere (editor and Problems window): the ignore-rule conditions plus a trailing error/warning/info/hint/off — e.g. 'reportArgumentType warning'. First match wins, off drops the diagnostic; syntax errors (codeless diagnostics) always stay errors. The 'partial' keyword restricts a rule to union-partial type mismatches ('str | None' passed where 'str' is expected) — combine with source=, the parsed phrasing is server-specific. Exact-code rules also pass through to servers with native overrides (pyright)", Scope: config.ProjectScope},
 		}},
@@ -343,6 +348,10 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "scratch.section_height", Type: Int, Title: "Scratches section height", Description: "Rows the Scratches section shows when expanded (it never grows past its content). Dragging the divider resizes it afterwards, and that height persists with the explorer's session state", Scope: config.UserScope, Min: 1, Max: 30},
 			{Key: "scratch.sort", Type: Enum, Title: "Scratches sort order", Description: "How the Scratches section orders its rows: by name like the file tree, or by modification time newest first", Scope: config.UserScope, Options: []string{"name", "modified"}},
 		}},
+		{Title: "Issues Window", Description: "The forge Issues tool window (#2090): two full-area tabbed views — the issue list and the pull-request list — with a fuzzy filter, a label picker, an open/closed/all state filter, sort orders and a grouping toggle. These two settings decide only what a freshly opened pane starts with; switching the tab or the order by hand wins for the rest of the session.", Entries: []Entry{
+			{Key: "issues.default_tab", Type: Enum, Title: "Default view", Description: "Which of the pane's two views the issues window opens on: the issue list, or the pull-request list. tab and shift+tab (and a click on the tab bar) switch between them either way", Scope: config.UserScope, Options: []string{"issues", "prs"}},
+			{Key: "issues.default_sort", Type: Enum, Title: "Default sort order", Description: "Order both lists open in: \"relevance\" ranks by fuzzy score while a filter pattern is typed and falls back to newest without one, \"newest\"/\"oldest\" order by creation time, \"updated\" by last activity, \"number\" by issue number ascending. The a key cycles the order for the open pane without changing this default", Scope: config.UserScope, Options: []string{"relevance", "newest", "oldest", "updated", "number"}},
+		}},
 		{Title: "Tool Layout", Description: "Named slot template pinning tool windows to exact layout positions (#1897). The template is an ASCII grid: each row is one entry, every cell names a slot by a single letter, E is the editor region. Assigned tools always open at their slot; unassigned ones keep their home position or the adaptive split.", Entries: []Entry{
 			{Key: "tools.layout.template", Type: List, Title: "Slot template rows", Description: "Grid rows, one entry per row (\"XEEH, XEEH, TTZZ\"): every cell names a slot by a single letter, E is the editor region, each slot's cells must form a solid rectangle, and row/column counts set the proportions. Empty disables slot placement; a template that cannot be split into straight cuts is rejected with a config diagnostic", Scope: config.UserScope, EntryHints: templateHints},
 			{Key: "tools.layout.assign", Type: List, Title: "Slot assignments", Description: "SLOT=tool entries pinning tools to template slots (\"X=explorer, T=lazygit\"): the tool is a custom tool's name or a built-in id (explorer, vcs, debug, problems, structure, usages, http, breakpoints, run, tests, issues, dom, terminal). \"terminal\" pins fresh terminal panes (not the popup overlay); run and debug place independently. Several tools may share a slot — the first open materializes the pane, later ones join it as tabs; each tool takes at most one slot. While typing, the valid slot letters and tool ids are listed under the input", Scope: config.UserScope, EntryHints: assignHints, ValidateEntry: assignValidate},
@@ -359,6 +368,14 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 		{Title: "Notifications", Description: "Toasts and the notification history: how long they stay and which severities are worth interrupting for.", Entries: []Entry{
 			{Key: "notifications.timeout_seconds", Type: Int, Title: "Notification timeout", Description: "Seconds before info/warn toasts expire", Scope: config.UserScope, Min: 1, Max: 300},
 			{Key: "notifications.min_severity", Type: Enum, Title: "Notification severity floor", Description: "Below this severity notifications go to the history only", Scope: config.UserScope, Options: []string{"info", "warn", "error"}},
+		}},
+		{Title: "Forge Notifications", Description: "How prominently each kind of forge event (#2086) announces itself: dialog is a centered, dismissable dialog over the workspace, badge only marks the status line unread, toast is the ordinary bottom-right notice, off records the event in the notification history alone. While you are typing, a dialog is held back and shows as the badge instead.", Entries: []Entry{
+			{Key: "forge.notify.issue_opened", Type: Enum, Title: "New issue", Description: "Notification style when an issue appears on the forge", Scope: config.UserScope, Options: forgeNotifyStyles},
+			{Key: "forge.notify.issue_closed", Type: Enum, Title: "Issue closed", Description: "Notification style when an issue disappears from the open listing", Scope: config.UserScope, Options: forgeNotifyStyles},
+			{Key: "forge.notify.pr_opened", Type: Enum, Title: "New pull request", Description: "Notification style when a pull request is opened", Scope: config.UserScope, Options: forgeNotifyStyles},
+			{Key: "forge.notify.pr_merged", Type: Enum, Title: "Pull request merged", Description: "Notification style when a pull request is merged", Scope: config.UserScope, Options: forgeNotifyStyles},
+			{Key: "forge.notify.pr_closed", Type: Enum, Title: "Pull request closed", Description: "Notification style when a pull request is closed without merging", Scope: config.UserScope, Options: forgeNotifyStyles},
+			{Key: "forge.notify.pr_checks_failing", Type: Enum, Title: "Checks failing", Description: "Notification style when an open pull request's CI rollup turns failing", Scope: config.UserScope, Options: forgeNotifyStyles},
 		}},
 		{Title: "TODO Index", Description: "The project-wide comment-tag index behind the TODO tool window.", Entries: []Entry{
 			{Key: "todo.patterns", Type: List, Title: "Tag words", Description: "Comment tag words the project scan matches as whole words, case-insensitively (TODO, FIXME, HACK, XXX); entries are literals, not regexes", Scope: config.UserScope},

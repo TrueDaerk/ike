@@ -170,8 +170,12 @@ var reachableAlternatives = map[string]string{
 	"debug.stop":             "palette / Run menu",
 	"debug.toggleBreakpoint": "palette / Run menu",
 	"run.rerun":              "palette / Run menu",
-	"lsp.diagnosticInfo":     "palette",
-	"http.run":               "palette",
+	// #2081: coverage runs and the mark toggle are palette-only — the run
+	// family's chord budget is spent and coverage is an occasional action.
+	"run.testsWithCoverage": "palette",
+	"coverage.toggle":       "palette",
+	"lsp.diagnosticInfo":    "palette",
+	"http.run":              "palette",
 }
 
 // StatusMatrix builds the ledger over the default table. commandExists

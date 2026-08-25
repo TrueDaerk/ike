@@ -1,6 +1,6 @@
 # Log
 
-## 2026-08-24 (background forge polling with snapshot diff events, #2085)
+## 2026-08-25 (background forge polling with snapshot diff events, #2085)
 
 - **IKE now notices forge changes on its own.** A `forge.Poller` per workspace
   root drives a tick chain whose handler *only dispatches* the fetch `tea.Cmd`,
@@ -20,8 +20,9 @@
   **silently**, so neither startup nor a project switch replays a backlog as
   "new" — and the PR half seeds separately, since a seeding fetch whose PR
   listing failed leaves an empty stand-in that must not read as "every pull
-  request opened just now" one interval later. The prominent notification
-  surface consuming the events is its own sub-issue.
+  request opened just now" one interval later. The event types themselves live
+  in `forge/events.go`, landed with the notification surface (#2086) that
+  consumes them; `Diff` fills in the author and labels its dialog shows.
 - **Poll results never fight the user.** The pane restores its selection by
   issue number across a refresh, keeps the `/` filter line, its pattern and the
   label filter, leaves the open detail view open *at its scroll offset* (the
@@ -42,6 +43,159 @@
 - Docs: [Forge Layer](/architecture/forge.md) gained the polling lifecycle and
   the event table; the issues window, settings UI, config and the performance
   idle rules (the forge poll is their one documented repeating tick) follow.
+
+## 2026-08-25 (run tests with coverage + coverage gutter, #2081)
+
+- **Run with coverage.** `run.testsWithCoverage` (palette) runs the active
+  file's test scope through the captured Test Results path with coverage
+  collection; the run summary line gains a `n% coverage` figure.
+- **Editor coverage gutter.** Covered/uncovered/partial lines draw a `▎` bar
+  in the sign column (success/error/warning tones), JetBrains-style, below
+  the informational glyphs and above the diagnostic/git tints. Editing a file
+  turns its marks stale — still visible, but faint in the info tone — via
+  document-version comparison in the view plus a store-level flag for later
+  opens. `coverage.toggle` hides/shows the marks; the new
+  `editor.marks.coverage` setting (Settings → Diagnostics-page marks block)
+  is the persistent gate.
+- **A neutral language seam.** `lang.TestSpec` grew `CoverArgs(profile)` and
+  `ParseCover(profile, dir)`; the per-run store (`internal/coverage`) and the
+  gutter only ever see the neutral `lang.FileCoverage` model, so coverage.py
+  or phpunit clover can register without engine changes. Go implements the
+  seam (`-coverprofile` + cover-profile parsing with import-path resolution
+  against the module root). The store is separate from the test-result
+  parsing, so re-run / re-run-failed never invalidate coverage of untouched
+  files. Concept docs updated:
+  [Test Results Tool Window](/architecture/test-results.md),
+  [Editor](/architecture/editor.md).
+## 2026-08-25 (edit own issue texts and compose comments, #2087)
+
+- **The issue timeline is writable now.** In the detail view `E` edits — the
+  issue body or one of your own comments, straight away when only one text
+  qualifies, through a centered picker when several do — and `n` composes a
+  new comment. Both are gated on the probed capabilities *and* on ownership:
+  your own issue (or write access) for the body, the timeline's own-comment
+  flag for a comment, a resolved login for a new one. Anything else is
+  *absent* — no footer entry, no menu row, an inert key — because "not your
+  text" is not a permission to fix, unlike #2088's greyed mutation actions.
+- **Editing happens in a real markdown buffer**, not an inline mini-editor:
+  the app creates a scratch file named after what it edits
+  (`issue-2087-comment-77.md`), seeded with the current text and opened
+  through the ordinary funnel, so the edit gets vim motions, markdown
+  highlighting, the preview pane, undo, autosave and crash recovery for free.
+  Saving the buffer pushes it: on success the scratch is removed, the buffer
+  closes and the issues window refetches the listing and the timeline; on
+  failure the buffer and every character in it stay put and a dialog shows the
+  error with `[r]` to retry.
+- **A concurrently changed text is never silently clobbered.** Before writing,
+  the save re-reads the forge's current text and compares it with the base the
+  buffer opened with (trailing newline and CRLF normalized away, so an
+  unchanged text never reads as a conflict). A mismatch writes nothing and
+  raises a warning offering `[o]` overwrite, `[l]` load the forge's version
+  into the buffer, `[esc]` decide later.
+- **Both bindings implement the text mutations and their read halves.** gh
+  sends every body on stdin (`gh issue edit/comment --body-file -`, `gh api
+  --method PATCH issues/comments/{id} --input -`), tea sends JSON to the Gitea
+  endpoints; comment IDs are validated as digits before reaching a request
+  path, and `Capabilities` now carries the authenticated login the ownership
+  check needs. Unit tests cover the target vocabulary, the check-then-push
+  order with its stale verdict, the binding fixtures, the pane's gate and
+  picker, and the buffer save chain end to end. Concept docs updated:
+  [Forge Layer](/architecture/forge.md),
+  [Issues Tool Window](/architecture/github-issues.md).
+
+## 2026-08-25 (label, assignee and state mutations, #2088)
+
+- **The issues window writes now.** With triage permission: `e` opens a label
+  picker over the repository's whole label set (colored chips, the issue's own
+  labels preselected) and applies only the diff; `u` does the same for the
+  assignees and replaces the set; `c` closes or reopens the selected issue,
+  `C` the same with a comment that is posted first. All four work from the
+  list and from the detail view.
+- **Mutations are optimistic and roll back.** The row changes immediately, the
+  pre-mutation issue is kept, and a forge rejection restores it and shows the
+  forge's own error (filter row + toast). A success refetches the listing and
+  the open issue's timeline, so the UI shows forge truth rather than a guess.
+- **Capability gating.** Without triage the four actions vanish from the
+  footer and stay in the action menu greyed, naming the reason; pressing the
+  key explains instead of doing nothing.
+- **Both bindings implement the mutations** — gh via `gh issue edit
+  --add-label/--remove-label`, `gh issue close|reopen`, `gh issue comment` and
+  an assignee-replacing `gh api --method PATCH … --input -`; tea/Gitea via the
+  REST label, assignee, state and comment endpoints (label names resolved to
+  Gitea's numeric IDs). New: `Forge.RepoLabels`/`Collaborators`,
+  `forge.Mutation`/`MutateCmd` and the one-shot `RepoMetaCmd` probe. Argument
+  and payload construction is unit-tested on fixtures. Concept docs updated:
+  [Forge Layer](/architecture/forge.md),
+  [Issues Tool Window](/architecture/github-issues.md).
+
+## 2026-08-24 (issue timeline in the detail view, #2084)
+
+- **The issue detail shows the full history now.** Under the rendered body,
+  behind an `── activity ──` divider: comments as glamour-rendered markdown
+  blocks (accented author, `(you)` on own comments, relative age),
+  label/state/assignee changes as compact one-line events with colored label
+  chips. Fetched lazily on open, page by page (30 entries): `L` loads the
+  next page without moving the scroll, `r` refetches, and loading / error /
+  empty states each render visibly.
+- **`forge.Timeline(issue, page)` is implemented on both bindings** — GitHub
+  via `gh api issues/{n}/timeline`, Gitea via its typed timeline comments —
+  mapping onto the neutral `TimelineEntry` vocabulary (comment, labeled,
+  unlabeled, closed, reopened, assigned, unassigned; unknown kinds dropped).
+  Comments carry stable forge IDs and an own-comment flag (authenticated
+  login probed once per backend) for the upcoming comment editing. Parser
+  unit tests run on fixture JSON for both forges. Concept docs updated:
+  [Forge Layer](/architecture/forge.md),
+  [Issues Tool Window](/architecture/github-issues.md).
+
+## 2026-08-24 (issues window UX overhaul, #2090)
+
+- **The issues window became two tabbed full-area views.** A tab bar
+  (`Issues n │ PRs n`) tops the pane; `tab`/`shift+tab`, the delivered
+  `ctrl+pgup`/`ctrl+pgdown` chords and a click on a label switch views, and
+  each view keeps its own cursor and scroll. Pull requests moved out of the
+  cryptic one-glyph markers under the issue rows into a full-width list of
+  their own — number, title, head branch, review decision, CI rollup, age.
+- **The detail is a real view now.** `enter` opens the issue full area under
+  an `issue x/y` header; `esc` restores the list's cursor and scroll exactly;
+  `ctrl+j`/`ctrl+k` walk to the next/previous issue without going back.
+- **Filtering became reachable and visible.** The fuzzy filter starts on `f`
+  (QWERTZ-friendly, `/` kept as an alias) and a persistent filter row spells
+  out every narrowing in force. `l` opens a multi-select label picker
+  (replacing the old `l` cycling, and an OR filter now), `t` cycles an
+  open/closed/all state filter that refetches through the #2083 listing
+  extension, `a` cycles the sort order (relevance/newest/oldest/updated/
+  number), `g` groups the list by label, and `esc` clears everything.
+- **Rows carry age and author columns**, shrinking in tiers before the title
+  truncates; `forge.Issue`/`forge.PR` gained state, author, review decision
+  and timestamps for them, on both the gh and the Gitea binding.
+- **Nothing hides any more:** one table backs the footer and a new action
+  menu (`m`, `?`), listing every action of the current view with its key.
+- **New settings** `issues.default_tab` and `issues.default_sort`, wired on
+  the Settings UI's *Issues Window* page. Concept doc rewritten:
+  [Issues Tool Window](/architecture/github-issues.md).
+## 2026-08-24 (prominent forge notifications: dialog + unread badge, #2086)
+
+- **`internal/forge/events.go`** fixes the typed snapshot-diff events the
+  poller (#2085) emits: `EventKind` (issue opened/closed, PR opened/merged/
+  closed, checks failing), the `Event` payload and `EventsMsg`. Each kind names
+  its own `forge.notify.<kind>` config leaf.
+- **`internal/app/forgenotify.go`** is the surface: a centered, dismissable
+  dialog over the workspace (number, title, author, labels; enter opens the
+  issue in the issues window, `d`/`esc` dismisses, `a` dismisses all), with
+  several pending events collapsing into **one** dialog carrying a count — no
+  dialog stacking. A do-not-interrupt guard defers the dialog to a persistent
+  status-line unread badge (`● 2 new issues`) while the user is typing in an
+  editor or terminal, or while another overlay owns the shell; the badge stays
+  until the events are viewed (opening the issues window or the dialog clears
+  it, as does a click on the segment). Every event lands in the notification
+  history ring exactly once.
+- **Per-event-type style setting** `[forge.notify]` (`dialog` / `badge` /
+  `toast` / `off`; `issue_opened` defaults to `dialog`, `pr_checks_failing` to
+  `badge`, the rest to `toast`), validated with a fallback-to-default
+  diagnostic and editable in Settings → Forge Notifications.
+- **`ghissues.Reveal(number)`** jumps to an issue's detail view past active
+  filters; a reveal for an issue the listing does not carry yet runs on the
+  next fetch.
 
 ## 2026-08-24 (forge backend abstraction + Gitea/Forgejo binding, #2083)
 

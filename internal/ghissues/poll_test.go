@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"ike/internal/forge"
 )
@@ -12,84 +13,82 @@ import (
 // user mid-interaction: move the cursor, drop the filters, blank the
 // linked-PR column over a partial failure, or clear a pending manual refresh.
 
-// baseIssues is the listing filled(t) seeded, re-delivered unchanged.
-func baseIssues() []forge.Issue {
-	return []forge.Issue{
-		{Number: 1, Title: "explorer crash on rename", URL: "https://e/1",
-			Labels: []forge.Label{{Name: "bug", Color: "d73a4a"}}, Assignees: []string{"dev"}},
-		{Number: 2, Title: "add markdown preview", URL: "https://e/2",
-			Labels: []forge.Label{{Name: "feature", Color: "a2eeef"}}, Body: "## Task\nRender it."},
-		{Number: 3, Title: "explorer icons", URL: "https://e/3",
-			Labels: []forge.Label{{Name: "feature", Color: "a2eeef"}}},
-	}
+// pollResult wraps a listing as one background poll would deliver it. The
+// state is echoed the way a real fetch echoes it, so the pane does not read
+// the result as an answer to a different state filter.
+func pollResult(issues []forge.Issue, prs []forge.PR) forge.IssuesMsg {
+	return forge.IssuesMsg{State: forge.IssuesOpen, Issues: issues, PRs: prs, Poll: true}
 }
 
-// pollResult wraps a listing as one background poll would deliver it.
-func pollResult(issues []forge.Issue, prs []forge.PR) forge.IssuesMsg {
-	return forge.IssuesMsg{Issues: issues, PRs: prs, Poll: true}
+// issuesOf is filled(t)'s three issues, re-delivered with their sort keys
+// intact so the default created-desc order is stable across a poll. Any issue
+// passed in is appended, letting one test add a newer one.
+func issuesOf(extra ...forge.Issue) []forge.Issue {
+	base := []forge.Issue{
+		{Number: 1, Title: "explorer crash on rename", URL: "https://e/1", State: "OPEN",
+			Author: "ada", CreatedAt: fixedNow.Add(-72 * time.Hour), UpdatedAt: fixedNow.Add(-time.Hour),
+			Labels: []forge.Label{{Name: "bug", Color: "d73a4a"}}, Assignees: []string{"dev"}},
+		{Number: 2, Title: "add markdown preview", URL: "https://e/2", State: "OPEN",
+			Author: "bo", CreatedAt: fixedNow.Add(-24 * time.Hour), UpdatedAt: fixedNow.Add(-48 * time.Hour),
+			Labels: []forge.Label{{Name: "feature", Color: "a2eeef"}}, Body: "## Task\nRender it."},
+		{Number: 3, Title: "explorer icons", URL: "https://e/3", State: "OPEN",
+			Author: "cy", CreatedAt: fixedNow.Add(-240 * time.Hour), UpdatedAt: fixedNow.Add(-240 * time.Hour),
+			Labels: []forge.Label{{Name: "feature", Color: "a2eeef"}}},
+	}
+	return append(base, extra...)
 }
 
 func TestPollKeepsCursorOnTheSelectedIssue(t *testing.T) {
 	m := filled(t)
-	m.Update(key("j")) // cursor on issue 2
-	if m.Cursor() != 1 || m.Selected().Number != 2 {
-		t.Fatalf("setup: cursor=%d issue=%d, want row 1 / issue 2", m.Cursor(), m.Selected().Number)
-	}
-	// A newer issue lands at the top of the listing, shifting every row down.
-	m.SetResult(pollResult([]forge.Issue{
-		{Number: 4, Title: "brand new"},
-		{Number: 1, Title: "explorer crash on rename"},
-		{Number: 2, Title: "add markdown preview"},
-		{Number: 3, Title: "explorer icons"},
-	}, nil))
+	selectIssue(t, m, 2)
+	before := m.Cursor()
+	// A newer issue lands above the selection in the created-desc order,
+	// shifting every row below it down.
+	m.SetResult(pollResult(issuesOf(forge.Issue{
+		Number: 4, Title: "brand new", State: "OPEN",
+		CreatedAt: fixedNow.Add(-time.Hour), UpdatedAt: fixedNow.Add(-time.Hour),
+	}), nil))
 	if m.Selected() == nil || m.Selected().Number != 2 {
 		t.Fatalf("selection = %v, want issue 2 to survive the refresh", m.Selected())
 	}
-	if m.Cursor() != 2 {
-		t.Errorf("cursor = %d, want row 2 (issue 2 moved down by one)", m.Cursor())
+	if m.Cursor() != before+1 {
+		t.Errorf("cursor = %d, want %d — the row moved down, so a cursor kept by index would show the wrong issue", m.Cursor(), before+1)
 	}
 }
 
 func TestPollKeepsFuzzyAndLabelFilters(t *testing.T) {
 	m := filled(t)
-	m.Update(key("l")) // first label: "bug"
-	if m.LabelFilter() != "bug" {
-		t.Fatalf("setup: label filter = %q, want bug", m.LabelFilter())
-	}
+	m.labelSel["bug"] = true
+	m.applyFilter()
 	m.Update(key("/"))
 	m.Update(key("e"))
 	if !m.Filtering() || m.Filter() != "e" {
 		t.Fatalf("setup: filtering=%v pattern=%q", m.Filtering(), m.Filter())
 	}
-	m.SetResult(pollResult([]forge.Issue{
-		{Number: 4, Title: "brand new", Labels: []forge.Label{{Name: "bug"}}},
-		{Number: 1, Title: "explorer crash on rename", Labels: []forge.Label{{Name: "bug"}}},
-		{Number: 2, Title: "add markdown preview", Labels: []forge.Label{{Name: "feature"}}},
-	}, nil))
+	visible := m.Visible()
+	m.SetResult(pollResult(issuesOf(), nil))
 	if !m.Filtering() {
 		t.Error("the open filter line must survive a background refresh")
 	}
 	if m.Filter() != "e" {
 		t.Errorf("pattern = %q, want it kept", m.Filter())
 	}
-	if m.LabelFilter() != "bug" {
-		t.Errorf("label filter = %q, want bug kept", m.LabelFilter())
+	if got := m.LabelFilter(); len(got) != 1 || got[0] != "bug" {
+		t.Errorf("label filter = %q, want [bug] kept", got)
 	}
-	// Both filters still gate: the "feature" issue is out on the label, and
-	// only the two "bug" ones with an "e" survive the pattern.
-	if m.Visible() != 2 {
-		t.Errorf("visible = %d, want the 2 bug issues matching \"e\"", m.Visible())
+	if m.Visible() != visible {
+		t.Errorf("visible = %d, want the %d both filters gated before the poll", m.Visible(), visible)
 	}
 }
 
 func TestPollDoesNotClearAPendingManualRefresh(t *testing.T) {
 	m := filled(t)
 	m.MarkLoading()
-	m.SetResult(pollResult([]forge.Issue{{Number: 1, Title: "one"}}, nil))
+	m.SetResult(pollResult(issuesOf(), nil))
 	if !m.loading {
 		t.Error("a poll landing mid-'r' must leave the manual refresh pending")
 	}
-	m.SetResult(forge.IssuesMsg{Issues: []forge.Issue{{Number: 1, Title: "one"}}})
+	m.SetResult(forge.IssuesMsg{State: forge.IssuesOpen, Issues: issuesOf()})
 	if m.loading {
 		t.Error("the foreground result should clear the loading state")
 	}
@@ -97,32 +96,32 @@ func TestPollDoesNotClearAPendingManualRefresh(t *testing.T) {
 
 func TestPartialFailureKeepsThePRColumn(t *testing.T) {
 	m := filled(t)
-	if len(m.prs) != 1 {
-		t.Fatalf("setup: %d PRs, want 1", len(m.prs))
+	before := len(m.prs)
+	if before == 0 {
+		t.Fatal("setup: the fixture should carry pull requests")
 	}
 	m.SetResult(forge.IssuesMsg{
-		Issues: []forge.Issue{{Number: 1, Title: "explorer crash on rename"}},
+		State:  forge.IssuesOpen,
+		Issues: issuesOf(),
 		PRErr:  errors.New("gh pr list failed"),
 		Poll:   true,
 	})
-	if len(m.prs) != 1 {
-		t.Errorf("PRs = %d, want the last known listing kept over a PR-listing blip", len(m.prs))
+	if len(m.prs) != before {
+		t.Errorf("PRs = %d, want the last known listing (%d) kept over a PR-listing blip", len(m.prs), before)
 	}
 }
 
 func TestPollDropsTheDetailCacheOfTheOpenIssue(t *testing.T) {
 	m := filled(t)
-	m.Update(key("j")) // issue 2, the one with a body
-	m.Update(key("enter"))
+	selectIssue(t, m, 2)
+	m.openDetail()
 	if !m.DetailOpen() {
 		t.Fatal("setup: detail view should be open")
 	}
 	m.detailFor, m.detailLines = 2, []string{"stale"}
-	m.SetResult(pollResult([]forge.Issue{
-		{Number: 1, Title: "explorer crash on rename"},
-		{Number: 2, Title: "add markdown preview", Body: "## Task\nEdited on the forge."},
-		{Number: 3, Title: "explorer icons"},
-	}, nil))
+	edited := issuesOf()
+	edited[1].Body = "## Task\nEdited on the forge."
+	m.SetResult(pollResult(edited, nil))
 	if !m.DetailOpen() {
 		t.Error("the detail view must stay open across a background refresh")
 	}
@@ -136,10 +135,10 @@ func TestPollDropsTheDetailCacheOfTheOpenIssue(t *testing.T) {
 
 func TestPollKeepsTheDetailCacheOfAnUnchangedBody(t *testing.T) {
 	m := filled(t)
-	m.Update(key("j")) // issue 2, the one with a body
-	m.Update(key("enter"))
-	m.detailLines = []string{"rendered"}
-	m.SetResult(pollResult(baseIssues(), nil))
+	selectIssue(t, m, 2)
+	m.openDetail()
+	m.detailFor, m.detailLines = 2, []string{"rendered"}
+	m.SetResult(pollResult(issuesOf(), nil))
 	if m.detailLines == nil {
 		t.Error("an unchanged body must not be re-rendered every poll")
 	}
@@ -147,23 +146,19 @@ func TestPollKeepsTheDetailCacheOfAnUnchangedBody(t *testing.T) {
 
 func TestPollKeepsTheDetailScrollOffset(t *testing.T) {
 	m := filled(t)
-	m.Update(key("j")) // issue 2
-	m.Update(key("enter"))
+	selectIssue(t, m, 2)
+	m.openDetail()
 	body := strings.Repeat("a long line of prose\n", 60)
-	m.SetResult(pollResult([]forge.Issue{
-		{Number: 1, Title: "explorer crash on rename"},
-		{Number: 2, Title: "add markdown preview", Body: body},
-		{Number: 3, Title: "explorer icons"},
-	}, nil))
+	long := issuesOf()
+	long[1].Body = body
+	m.SetResult(pollResult(long, nil))
 	m.View() // render the detail once so there are lines to scroll
 	m.detailTop = 5
 	// A poll bringing an edited body re-renders it — the offset must survive,
 	// or a long issue would jump back to line one every interval.
-	m.SetResult(pollResult([]forge.Issue{
-		{Number: 1, Title: "explorer crash on rename"},
-		{Number: 2, Title: "add markdown preview", Body: body + "one more paragraph.\n"},
-		{Number: 3, Title: "explorer icons"},
-	}, nil))
+	edited := issuesOf()
+	edited[1].Body = body + "one more paragraph.\n"
+	m.SetResult(pollResult(edited, nil))
 	m.View()
 	if m.detailTop != 5 {
 		t.Errorf("detailTop = %d after a background re-render, want the 5 the user scrolled to", m.detailTop)
@@ -172,13 +167,9 @@ func TestPollKeepsTheDetailScrollOffset(t *testing.T) {
 
 func TestClosedIssueLeavesTheCursorClamped(t *testing.T) {
 	m := filled(t)
-	m.Update(key("j"))
-	m.Update(key("j")) // issue 3, the last row
-	if m.Selected().Number != 3 {
-		t.Fatalf("setup: selected %d, want 3", m.Selected().Number)
-	}
-	m.SetResult(pollResult([]forge.Issue{{Number: 1, Title: "explorer crash on rename"}}, nil))
-	if m.Cursor() != 0 || m.Selected().Number != 1 {
+	selectIssue(t, m, 3)
+	m.SetResult(pollResult(issuesOf()[:1], nil))
+	if m.Cursor() != 0 || m.Selected() == nil || m.Selected().Number != 1 {
 		t.Errorf("cursor=%d selected=%v, want the clamped first row", m.Cursor(), m.Selected())
 	}
 }

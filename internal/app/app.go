@@ -37,6 +37,7 @@ import (
 	"ike/internal/complete/symbols"
 	"ike/internal/complete/words"
 	"ike/internal/config"
+	"ike/internal/coverage"
 	"ike/internal/dataview"
 	"ike/internal/debug"
 	"ike/internal/debugdoctor"
@@ -521,6 +522,28 @@ type Model struct {
 	// issuesReturnFocus is the same dance for the GitHub Issues tool window
 	// (#1934).
 	issuesReturnFocus string
+	// The prominent forge event surface (#2086, forgenotify.go): forgeQueue
+	// are the events the single open dialog shows (forgeCursor selects one),
+	// forgeUnread are the events behind the status line's persistent badge —
+	// badge-style ones plus the dialogs the typing guard held back.
+	// forgeReveal is an issue number waiting for the next issues fetch to
+	// jump to, and lastInputAt is the guard's "user is typing" stamp.
+	forgeQueue  []forge.Event
+	forgeUnread []forge.Event
+
+	// Forge edit buffers (#2087, forgeedit.go): markdown scratch buffers
+	// bound to a forge text, keyed by path; forgeEditKey names the buffer the
+	// open push dialog belongs to, forgeEditConflict tells the stale-base
+	// warning from the failed-push error, and forgeEditStale carries the
+	// forge's current text the reload answer writes back.
+	forgeEdits        map[string]*forgeEdit
+	forgeEditKey      string
+	forgeEditConflict bool
+	forgeEditStale    string
+	forgeCursor       int
+	forgeDialog       bool
+	forgeReveal       int
+	lastInputAt       time.Time
 	// doctorReturnFocus is the same dance for the Xdebug Doctor tool window
 	// (#1991); doctorLog is its app-owned listener/connection trace, fed from
 	// the bridge's ike.listenState / ike.debugConn events and surviving the
@@ -538,6 +561,12 @@ type Model struct {
 	domHLRev       int
 	lastTestRun    *testRunState
 	testRunSeq     int
+	// coverage is the last coverage run's per-file line marks (#2081), fed by
+	// finishTestRun through the language's ParseCover seam and pushed to
+	// editors as gutter marks; coverageShown is the coverage.toggle display
+	// state (data survives a hide, it just stops being pushed/rendered).
+	coverage      *coverage.Store
+	coverageShown bool
 	// rawDiags caches each path's last published, unfiltered diagnostic set;
 	// diagIgnore/diagIgnoreRaw are the compiled lsp.diagnostics_ignore rules
 	// and their source strings (#1259). Publishes filter through the rules
@@ -1092,6 +1121,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		playLastProgram: map[string]string{}, // per-file last valid program (#1982)
 		compMRU:         mru.Load(mru.DefaultFile()),
 		bpts:            debug.Load(),
+		coverage:        coverage.NewStore(), // per-run test coverage (#2081)
+		coverageShown:   true,
 		doctorLog:       debugdoctor.NewLog(),
 		host:            h,
 		reg:             reg,
@@ -1406,6 +1437,10 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		// IKE's own writes are watcher-suppressed (MarkSaved above), so this
 		// is the only refresh trigger for in-IDE saves.
 		go e.host.Send(vcsInvalidateMsg{})
+		// A buffer bound to a forge text pushes on save (#2087). The emitter
+		// cannot know which paths are bound, so every save reports and the
+		// handler drops the ones that are not.
+		go e.host.Send(forgeEditSavedMsg{path: ev.Path})
 	}
 	if ev.Kind == editor.EventCursorMove && ev.Path != "" {
 		// Markdown previews follow the cursor (#62). Same goroutine indirection
@@ -1723,8 +1758,16 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 		}
 		if id := ids[key]; id.Kind == "issues" {
 			// The GitHub Issues panel restores empty in its saved slot
-			// (#1934) with its refresh armed; 'r' re-fetches the listing.
-			panes.Get(panes.AddIssues()).Issues().SetRefresh(forge.RefreshCmd("."))
+			// (#1934) with the same factories openIssuesPanel injects —
+			// refresh, timeline (#2084), mutations (#2088) and the metadata
+			// probe the edit gating reads (#2087). Without them a restored
+			// pane would come back read-only; 'r' re-fetches the listing and
+			// runs the probe.
+			p := panes.Get(panes.AddIssues()).Issues()
+			p.SetRefresh(forge.RefreshFactory("."))
+			p.SetTimeline(forge.TimelineFactory("."))
+			p.SetMutate(forge.MutateFactory("."))
+			p.SetMeta(forge.MetaFactory("."))
 			continue
 		}
 		if id := ids[key]; id.Kind == "http" {
@@ -3591,9 +3634,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.rerunTests(msg)
 
 	case TestRunDoneMsg:
-		// A captured test run finished off-loop: parse and fill the pane.
-		m.finishTestRun(msg)
-		return m, nil
+		// A captured test run finished off-loop: parse and fill the pane; a
+		// coverage run (#2081) also pushes fresh gutter marks.
+		return m, m.finishTestRun(msg)
 
 	case editor.OpenUndoTreeMsg:
 		// editor.undoTree (palette): the undo-tree overlay (#59) over the
@@ -4146,6 +4189,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// run.testsInFile (Run menu / palette, #1150): the file's package tests.
 		return m, m.runTestsInFile()
 
+	case RunTestsWithCoverageMsg:
+		// run.testsWithCoverage (palette, #2081): the file's package tests
+		// with per-line coverage collection.
+		return m, m.runTestsWithCoverage()
+
+	case CoverageToggleMsg:
+		// coverage.toggle (palette, #2081): hide/show the coverage gutter
+		// marks; the data survives a hide.
+		return m, m.toggleCoverageMarks()
+
 	case HTTPRunMsg:
 		// http.run (Run menu / palette / cmd+enter, #1250): dispatch the
 		// .http request under the cursor off-loop.
@@ -4632,21 +4685,37 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case forge.IssuesMsg:
 		// A finished issue/PR fetch (#1934) lands in the pane; a background
 		// poll's result (#2085) also folds into the poll service, which turns
-		// it into snapshot events, backoff and the degrade/recover toasts.
-		return m, m.applyForgeListing(msg)
+		// it into snapshot events, backoff and the degrade/recover toasts. A
+		// reveal the forge event dialog asked for (#2086) then runs on the
+		// fresh listing and may need the revealed issue's timeline (#2084).
+		listing := m.applyForgeListing(msg)
+		return m, tea.Batch(listing, m.applyForgeReveal())
 
 	case forge.PollTickMsg:
 		// One background poll deadline (#2085). The handler only dispatches
 		// the fetch command — the Update loop never waits on the forge.
 		return m, m.forgePollTick(msg)
 
-	case forge.EventsMsg:
-		// The snapshot diff of one poll (#2085): issues opened/closed, PRs
-		// opened/merged/closed, CI turning red. The prominent notification
-		// surface consuming them is its own sub-issue; publishing the typed
-		// message is this one's contract, and it must not fall through to the
-		// focused pane in the meantime.
+	case forge.TimelineMsg:
+		// One fetched issue-timeline page (#2084) lands in the open detail.
+		m.fillIssuesTimeline(msg)
 		return m, nil
+
+	case forge.RepoMetaMsg:
+		// Capabilities plus the repository's labels and assignable users
+		// (#2088): the gate in front of the mutation actions.
+		m.fillIssuesMeta(msg)
+		return m, nil
+
+	case forge.MutationMsg:
+		// One finished label/assignee/state write (#2088): the pane rolls
+		// back on a rejection and refetches on success.
+		return m, m.finishIssueMutation(msg)
+
+	case forge.EventsMsg:
+		// Snapshot-diff events from the forge poller (#2085) reach their
+		// surface: dialog, status-line badge, toast, or history only (#2086).
+		return m, m.handleForgeEvents(msg)
 
 	case ghissues.StartWorkRequestMsg:
 		// The pane's 's' action (#1934): branch issue/<n>-<slug> off an
@@ -4659,6 +4728,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ghissues.OpenURLMsg:
 		// The pane's 'o' action (#1934): the issue page in the browser.
 		return m, m.openIssueURL(msg.URL)
+
+	case ghissues.EditTextRequestMsg:
+		// The pane's 'e'/'c' actions (#2087): open a markdown buffer bound to
+		// the forge text, prefilled with what the pane knows it holds.
+		return m.openForgeEdit(msg)
+
+	case forgeEditSavedMsg:
+		// A saved buffer bound to a forge text pushes it (#2087); an unbound
+		// path is the ordinary case and resolves to nil.
+		return m, m.pushForgeEdit(msg.path, false)
+
+	case forge.SaveTextMsg:
+		// One finished push (#2087): closed and refreshed on success, kept
+		// with a dialog on a stale base or an error.
+		return m, m.finishForgeEdit(msg)
 
 	case BreakpointsToggleMsg:
 		// debug.breakpoints (#1377): same state machine for the Breakpoints
@@ -5535,6 +5619,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.routeParse(msg)
 
 	case editor.SyncMsg:
+		// Any buffer change also outdates the file's stored coverage (#2081):
+		// the flag makes later opens of the file show the marks as stale
+		// (each live view detects its own edits by document version).
+		m.coverage.MarkStale(msg.Path)
 		// A shared document changed in one pane (#142): every other view of the
 		// same file re-clamps and mirrors the flags. Dirty/stale are read from
 		// the originating pane *now* (not at emit time), so late or reordered
@@ -6053,6 +6141,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Recomputed gutter diff markers (#464): to every view of the path.
 		return m, m.routeToEditor(msg.Path, msg)
 
+	case coverage.MarksMsg:
+		// Coverage gutter marks (#2081): to every view of the path.
+		return m, m.routeToEditor(msg.Path, msg)
+
 	case vcspanel.OpenDiffMsg:
 		// enter on a changes row (#483): the file's diff against HEAD. Rows
 		// carry repo-relative paths; untracked files have no HEAD side.
@@ -6289,6 +6381,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// for keys the app consumes before the editor's own dismissHover
 		// would see them.
 		m.cancelMouseHover()
+		// Keys landing in an editor or terminal stamp the do-not-interrupt
+		// guard (#2086): a forge event dialog never lands mid-word.
+		m.noteTypingInput()
 		// The keymap doctor (#2080) outranks everything: probing only means
 		// anything if the overlay sees the raw key before any other consumer
 		// — toast dismissal, overlay paste, keymap resolution — touches it.
@@ -6382,6 +6477,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// same way: space toggles, enter installs, esc skips.
 		if m.onboardingOpen() {
 			return m.updateOnboarding(msg)
+		}
+		// The forge event dialog (#2086) owns the keyboard the same way:
+		// enter opens the issue, d/esc dismisses, a dismisses all.
+		if m.forgeDialogOpen() {
+			return m.updateForgeDialog(msg)
+		}
+		// The forge edit dialogs (#2087) — failed push, stale base — own the
+		// keyboard the same way: r retries, o overwrites, l loads, esc keeps
+		// the buffer.
+		if m.forgeEditDialogOpen() {
+			return m.updateForgeEditDialog(msg)
 		}
 		// The post-tour setup dialogs (#713) own the keyboard the same way.
 		if m.themePickOpen() {
@@ -6863,6 +6969,10 @@ func (m Model) openPathWith(path string, newPane bool) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.activeWS().Panes.Get(key).Editor().Reparse())
 			// Gutter diff markers for the fresh buffer (Roadmap 0320, #464).
 			cmds = append(cmds, m.vcsMarksCmd(m.activeWS().Panes.Get(key).Editor()))
+			// Stored coverage marks for the fresh buffer (#2081).
+			if cmd := m.coverageMarksCmd(path); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 	}
 	cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
@@ -9855,8 +9965,9 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 			return m, inst.Tests().Click(localX, localY)
 		}
 	case pane.KindIssues:
-		// Issue-list clicks (#1934): a click selects, a double-click opens
-		// the issue's detail view.
+		// Issues-window clicks (#1934, #2090): a click on the tab bar
+		// switches the view, a body click selects, a double-click opens the
+		// issue's detail (or the pull request's page).
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Issues().Click(localX, localY)
 		}

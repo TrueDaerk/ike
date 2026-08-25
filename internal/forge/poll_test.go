@@ -307,20 +307,29 @@ func TestPollerNilIsSafe(t *testing.T) {
 	}
 }
 
-func TestEventKindNames(t *testing.T) {
-	for k, want := range map[EventKind]string{
-		IssueOpened:     "IssueOpened",
-		IssueClosed:     "IssueClosed",
-		PROpened:        "PROpened",
-		PRMerged:        "PRMerged",
-		PRClosed:        "PRClosed",
-		PRChecksFailing: "PRChecksFailing",
-	} {
-		if got := k.String(); got != want {
-			t.Errorf("String() = %q, want %q", got, want)
-		}
+// TestDiffCarriesTheDialogFields checks the fields the notification dialog
+// (#2086) renders besides the title actually survive the diff — an event that
+// lost its author or labels on the way out would show a blank dialog.
+func TestDiffCarriesTheDialogFields(t *testing.T) {
+	next := Snapshot{Issues: []Issue{{
+		Number: 7, Title: "seven", URL: "https://e/7",
+		Author: "ada", Labels: []Label{{Name: "bug"}},
+	}}}
+	evs := Diff(Snapshot{}, next)
+	if len(evs) != 1 {
+		t.Fatalf("events = %v, want one IssueOpened", kinds(evs))
 	}
-	if got := EventKind(99).String(); got != "Unknown" {
-		t.Errorf("unknown kind = %q, want Unknown", got)
+	e := evs[0]
+	if e.Author != "ada" || len(e.Labels) != 1 || e.Labels[0].Name != "bug" {
+		t.Errorf("event = %+v, want the author and labels carried through", e)
+	}
+	if e.URL != "https://e/7" || e.Title != "seven" {
+		t.Errorf("event = %+v, want title and URL carried through", e)
+	}
+
+	prs := Snapshot{PRs: []PR{{Number: 9, Title: "nine", State: "MERGED", URL: "https://e/pr/9", Author: "bo"}}}
+	evs = Diff(Snapshot{PRs: []PR{{Number: 9, Title: "nine", State: "OPEN"}}}, prs)
+	if len(evs) != 1 || evs[0].Author != "bo" {
+		t.Errorf("pr events = %+v, want the author carried through", evs)
 	}
 }

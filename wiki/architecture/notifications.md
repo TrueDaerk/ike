@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Notifications
-description: Toast notifications — host.Notify severities, expiry, stacking, Esc dismissal; SetStatus stays for persistent status segments.
+description: Toast notifications — host.Notify severities, expiry, stacking, Esc dismissal; the prominent forge event dialog, the status-line unread badge and the per-event-kind style setting; SetStatus stays for persistent status segments.
 resource: internal/app/notifications.go
-tags: [architecture, notifications, host, ui]
-timestamp: 2026-07-19T00:00:00Z
+tags: [architecture, notifications, host, ui, forge]
+timestamp: 2026-08-24T00:00:00Z
 ---
 
 # Notifications
@@ -62,6 +62,49 @@ re-feeds the host's config view on `ConfigReloadedMsg`):
 - `notifications.timeout_seconds` (default 4, min 1) — info/warn toast lifetime.
 - `notifications.min_severity` (`info` | `warn` | `error`, default `info`) —
   the toast floor: notifications below it go to the history only, never toast.
+
+## Prominent forge events (#2086)
+
+A toast is the wrong surface for something as actionable as a new issue
+appearing on the forge — it stacks bottom-right and expires. The forge poller's
+typed events (`forge.EventsMsg`, see
+[Forge Layer](/architecture/forge.md)) therefore pick their surface per event
+kind, in `internal/app/forgenotify.go`:
+
+- **dialog** — a centered, bordered, dismissable dialog over the workspace,
+  hosted in the floating shell like the other app dialogs. It shows the number,
+  title, author and labels, and answers to `enter` (open in the issues window),
+  `d`/`esc` (dismiss), `j`/`k` (walk the queue) and `a` (dismiss all).
+- **badge** — a persistent `● 2 new issues` segment in the status line. Unlike
+  a toast it never expires: it stays until the events are viewed.
+- **toast** — the ordinary notification above.
+- **off** — the history entry only.
+
+**One dialog, never a stack.** Pending events collapse into a single dialog
+whose heading carries the count (`Forge events (3)`); an event arriving while
+it is open grows the queue instead of opening a second dialog.
+
+**Do-not-interrupt guard.** A key press landing in an editor or terminal stamps
+`lastInputAt`; within `forgeTypingWindow` (3 s) a dialog would land mid-word, so
+it is held back and shown as the badge instead. The same holds when another
+overlay owns the floating shell or the keyboard — an event never steals an open
+help view or prompt. Opening the issues window, or the dialog itself, counts as
+viewing: the badge clears and its events join the one dialog.
+
+**Nothing is lost.** Every event is recorded in the history ring exactly once —
+directly for the dialog/badge/off styles, through `Notify` for the toast style —
+so a dismissed dialog is still reviewable in `notifications.history`.
+
+The dialog's open action jumps straight to the issue's **detail view** in the
+issues tool window (`ghissues.Reveal`, filters dropped); when the pane's listing
+does not carry the issue yet, the reveal runs on the next fetch. A pull-request
+event has no pane of its own and opens in the browser.
+
+Config (typed section `[forge.notify]`, one key per event kind, all editable in
+Settings → Forge Notifications): `issue_opened` (default `dialog`),
+`issue_closed`, `pr_opened`, `pr_merged`, `pr_closed` (default `toast`) and
+`pr_checks_failing` (default `badge`). An unknown value falls back to that
+kind's default with a config diagnostic.
 
 ## Call-site migration (#79)
 

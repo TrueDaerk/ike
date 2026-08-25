@@ -128,6 +128,7 @@ func defaults() *Config {
 				GitChanged:  true,
 				GitDeleted:  true,
 				Inheritance: true,
+				Coverage:    true,
 			},
 		},
 		Explorer: Explorer{
@@ -258,6 +259,14 @@ func defaults() *Config {
 			SectionHeight: 5,
 			Sort:          "name",
 		},
+		Issues: Issues{
+			// The issues window opens on its issue list, ordered the way the
+			// forge listing arrives (newest first) and re-ranked by fuzzy
+			// score while a filter pattern is typed — the pane's behaviour
+			// before the #2090 restructure made the order configurable.
+			DefaultTab:  "issues",
+			DefaultSort: "relevance",
+		},
 		Debug: Debug{
 			InlineValues: true, // paused locals annotate their lines (#1914)
 			PHP: DebugPHP{
@@ -288,6 +297,18 @@ func defaults() *Config {
 			// cheap: one issue and one PR listing per poll, skipped whenever
 			// the previous fetch is still running.
 			PollIntervalSeconds: 20,
+			// A new issue is the event the user must not miss (#2086), so it
+			// gets the dialog; failing checks are actionable but rarely
+			// urgent enough to interrupt typing, so they take the badge.
+			// Everything else stays an ordinary toast.
+			Notify: ForgeNotify{
+				IssueOpened:     "dialog",
+				IssueClosed:     "toast",
+				PROpened:        "toast",
+				PRMerged:        "toast",
+				PRClosed:        "toast",
+				PRChecksFailing: "badge",
+			},
 		},
 	}
 }
