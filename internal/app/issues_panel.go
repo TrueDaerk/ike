@@ -101,11 +101,13 @@ func (m *Model) fillIssuesPanel(msg forge.IssuesMsg) {
 	}
 }
 
-// fillIssuesTimeline routes one fetched timeline page into the pane (#2084).
-func (m *Model) fillIssuesTimeline(msg forge.TimelineMsg) {
+// fillIssuesTimeline routes one fetched timeline page into the pane (#2084)
+// and returns the follow-up page a depth-restoring refetch still owes (#2113).
+func (m *Model) fillIssuesTimeline(msg forge.TimelineMsg) tea.Cmd {
 	if p := m.issuesPanel(); p != nil {
-		p.SetTimelineResult(msg)
+		return p.SetTimelineResult(msg)
 	}
+	return nil
 }
 
 // fillIssuesMeta routes one repository-metadata probe into the pane (#2088):

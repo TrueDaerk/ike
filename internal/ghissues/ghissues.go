@@ -303,6 +303,7 @@ type Model struct {
 	tl        []forge.TimelineEntry
 	tlFor     int // issue number the entries belong to; 0 = none fetched
 	tlPage    int // last fetched page; 0 = page one still loading (or unfetched)
+	tlWant    int // pages the current fetch run owes (depth kept across 'r', #2113)
 	tlMore    bool
 	tlLoading bool
 	tlErr     string
@@ -905,6 +906,9 @@ func (m *Model) SetTab(t Tab) {
 // meaningful with an issue on screen.
 func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 	page := m.bodyHeight()
+	// A scroll that lands on the end of the loaded detail pulls the next
+	// timeline page on its own (#2113).
+	scrolled := false
 	switch msg.String() {
 	case "esc", "q", "backspace":
 		m.detail = false
@@ -920,16 +924,19 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.startComment()
 	case "j", "down":
 		m.detailTop++
+		scrolled = true
 	case "k", "up":
 		m.detailTop--
 	case "pgdown", "ctrl+d", "space":
 		m.detailTop += page
+		scrolled = true
 	case "pgup", "ctrl+u":
 		m.detailTop -= page
 	case "g", "home":
 		m.detailTop = 0
 	case "G", "end":
 		m.detailTop = len(m.detailLines) - page
+		scrolled = true
 	case "m", "?":
 		m.openActionMenu()
 	case "tab", "ctrl+pgdown":
@@ -948,6 +955,9 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	m.clampDetail()
+	if scrolled {
+		return m.autoLoadTimeline()
+	}
 	return nil
 }
 
