@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Issues Tool Window
-description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, fuzzy filter, label multi-picker, open/closed/all state filter, sort orders and label grouping, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089).
+description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select) with a permanent chip row whose chips clear individually, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane]
 timestamp: 2026-08-25T14:00:00Z
 ---
 
-# Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089)
+# Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104)
 
 Development in this repository is issue-driven (see
 [Change Workflow](/process/change-workflow.md)); this pane brings that loop
@@ -117,27 +117,39 @@ forth never loses the place.
   `×` closed, `✓`/`…`/`✗` rollup) and the age. `enter` opens the full-area
   PR detail (#2089); `o` opens the pull request in the browser.
 
-### Filtering, sorting, grouping
+### Filtering, sorting, grouping (#2104)
 
 The keys are QWERTZ-safe throughout (#48, #2064): plain letters and delivered
 `ctrl+letter` chords only — no symbol that needs Shift or AltGr.
 
-- **`f`** (with **`/`** kept as an alias) opens the filter line, the dataview
-  pattern (#1777): the line owns the keyboard, esc clears + closes, enter
-  keeps. It narrows live via `internal/fuzzy` over number, title, labels,
+Every narrowing lives in **one mechanism**: the **filter overlay**
+(`filterov.go`), a centered modal whose sections are the fuzzy **match**
+input, the **state** radio (open / closed / all, the active option marked so
+cycling is never blind), the **sort** cycle, the **grouping** toggle and one
+row per **label**. Changes apply to the list behind it live; `enter` keeps
+and closes, `esc` restores every section to what the overlay opened with.
+`up`/`down` (and `tab`/`shift+tab`) walk the sections; the match row owns
+every printable key, the other rows toggle with `space` (or `left`/`right`)
+and clear with `backspace`.
+
+- **`f`** (with **`/`** kept as an alias) opens the overlay on the match
+  input, which narrows live via `internal/fuzzy` over number, title, labels,
   assignees and author (head branch on the PR tab).
-- **`l`** opens the **label multi-picker**, a centered overlay listing every
-  distinct label with its issue count: `space` toggles and re-narrows live,
-  `backspace` clears the selection, `enter` keeps it, `esc` restores what the
-  picker opened with. The selection is an **OR** filter — picking `bug` and
-  `feature` widens to both.
-- **`t`** cycles the **state filter** open → closed → all. Closed issues are
-  not part of an open listing, so the change refetches through the injected
-  factory; the PR tab re-splits its already-fetched listing (open / merged +
-  closed / everything). The issue list is **cleared** for the width of that
-  refetch and shows `(fetching issues…)`: the rows on screen were fetched for
-  the *previous* filter, so keeping them would render an open-only set under a
-  "closed" heading (#2107). The PR list is not cleared — it is fetched in
+- **`l`** opens the same overlay scrolled to the **label section** — the
+  repository's label set (the mutation pickers' source, falling back to the
+  listing) with per-label issue counts and chips. The selection is an **OR**
+  filter (the footer says "labels match any selected") and it is **sticky**:
+  a refetch that no longer carries a selected label keeps the selection, so
+  its chip stays visible and clearable instead of vanishing silently.
+- **`t`** cycles the **state filter** open → closed → all — a one-key
+  accelerator of the overlay's state row. A change only refetches when the
+  current listing cannot answer the new gate (a listing fetched as `all`
+  already covers `open` and `closed` client-side); the PR tab always
+  re-splits its already-fetched listing (open / merged + closed /
+  everything). When a refetch is owed, the issue list is **cleared** for its
+  width and shows `(fetching issues…)`: the rows on screen were fetched for
+  the *previous* filter, so keeping them would render an open-only set under
+  a "closed" heading (#2107). The PR list is never cleared — it is fetched in
   every state and split purely client-side, so the new filter is already
   correct for it.
 - **`a`** cycles the **sort order**: `relevance` (fuzzy score while a pattern
@@ -152,12 +164,21 @@ The keys are QWERTZ-safe throughout (#48, #2064): plain letters and delivered
   off them in the direction of travel. Because `g` is spent here, the list
   runs on `ui.NavDefault|ui.NavVim` rather than `NavFull`; `home`/`end` still
   jump to the extremes.
-- **`esc`** on a list clears every narrowing at once.
+- **`esc`** on a list **peels one narrowing at a time** — a mutation error
+  first, then the match text, then the label selection, then the state gate —
+  so one keypress can never nuke a carefully built filter.
 
-Whenever any of these differs from the pane's defaults — or while the filter
-line is open — a **filter row** below the tab bar spells the state out
-(`match: expl · labels: bug, feature · state: all · sort: number · grouped
-by label`), so a narrowed list can never look like an empty repository.
+A filter or sort change keeps the cursor **on the issue it was on** (the
+selection is restored by number after the rows rebuild); only editing the
+match pattern sends it to the top, where the best fuzzy score now sits.
+
+Below the tab bar a **permanent filter row** renders every active narrowing
+as a **chip** (`[match: expl ⌫] [bug ⌫] [state: all ⌫]` — one chip per label),
+so a narrowed list can never look like an empty repository and a chip
+appearing never shifts the body by a line. A **click on a chip clears exactly
+that narrowing**; a mutation's in-flight and error states (#2088) render
+beside the chips, not instead of them. With nothing active the row shows a
+faint `(f filters the list)` hint.
 
 ### Detail as a real view
 
@@ -267,9 +288,9 @@ absent entirely.
 **Optimistic, with rollback.** A write is applied to the row immediately (the
 chips, the assignees, the state glyph change at once) and the pre-mutation
 issue is kept. A forge rejection restores it and shows the forge's own error
-in the filter row (`label change failed: HTTP 403 …`), toasted as well so it
-is not missed while the pane is unfocused (`esc` on the list dismisses it, as
-it clears every other narrowing). A success drops the snapshot and
+in the filter row beside the chips (`label change failed: HTTP 403 …`),
+toasted as well so it is not missed while the pane is unfocused (`esc` on the
+list dismisses it before it peels any filter). A success drops the snapshot and
 **refetches** the listing — and the open issue's timeline — because the pane
 must show forge truth, not its own guess. While a write is in flight the same
 row reads `applying the change…`.
@@ -385,7 +406,7 @@ with the [forge layer](/architecture/forge.md).
   the content stays current without pressing `r`. A poll result is applied so
   it cannot fight a user mid-interaction: the **selection is restored by
   issue number** (a newer issue appearing above the cursor does not move it),
-  the `/` filter line, its pattern and the label filter survive untouched,
+  the match pattern and the label filter survive untouched,
   the open detail view stays open at the offset it was scrolled to (its
   rendered body cache is dropped only when the body actually changed on the
   forge, and the re-render keeps that offset), a partial result keeps the last

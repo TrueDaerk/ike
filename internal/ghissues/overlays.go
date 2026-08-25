@@ -1,12 +1,12 @@
 package ghissues
 
-// overlays.go holds the modals the pane composites over its body: the label
-// multi-picker that replaced the old 'l' cycling (#2090), the action menu that
-// makes every key of the current view discoverable (#2090), and the
+// overlays.go holds the modals the pane composites over its body: the action
+// menu that makes every key of the current view discoverable (#2090) and the
 // text-edit picker that chooses which of the issue's texts a markdown buffer
-// opens (#2087, textedit.go). The mutation pickers and the comment prompt
-// (#2088) live in mutations.go. All own the keyboard while open, navigate with
-// the shared list semantics, and are dismissed with esc.
+// opens (#2087, textedit.go). The unified filter overlay (#2104) lives in
+// filterov.go, the mutation pickers and the comment prompt (#2088) in
+// mutations.go. All own the keyboard while open, navigate with the shared
+// list semantics, and are dismissed with esc.
 
 import (
 	"strings"
@@ -84,7 +84,7 @@ func (m *Model) actions() []action {
 		}
 		acts = append(acts, m.prActionActions()...)
 		return append(acts,
-			act("f", "filter", "Filter pull requests", func(m *Model) tea.Cmd { m.openFilter(); return nil }),
+			act("f", "filter", "Filter (match / state / sort)", func(m *Model) tea.Cmd { m.openFilterOverlay(fovMatch); return nil }),
 			act("t", "state", "State filter (open / closed / all)", (*Model).cycleState),
 			act("a", "sort", "Sort order ("+m.sort.String()+")", func(m *Model) tea.Cmd { m.cycleSort(); return nil }),
 			act("esc", "clear filters", "Clear the filters", (*Model).clearFilters),
@@ -99,12 +99,12 @@ func (m *Model) actions() []action {
 	}
 	acts = append(acts, m.mutationActions()...)
 	return append(acts,
-		act("f", "filter", "Filter issues", func(m *Model) tea.Cmd { m.openFilter(); return nil }),
-		act("l", "labels", "Label picker", func(m *Model) tea.Cmd { m.openLabelPicker(); return nil }),
+		act("f", "filter", "Filter (match / state / labels)", func(m *Model) tea.Cmd { m.openFilterOverlay(fovMatch); return nil }),
+		act("l", "labels", "Filter by label (the filter's label section)", func(m *Model) tea.Cmd { m.openLabelSection(); return nil }),
 		act("t", "state", "State filter (open / closed / all)", (*Model).cycleState),
 		act("a", "sort", "Sort order ("+m.sort.String()+")", func(m *Model) tea.Cmd { m.cycleSort(); return nil }),
 		act("g", "group", "Group by label", func(m *Model) tea.Cmd { m.toggleGroup(); return nil }),
-		act("esc", "clear filters", "Clear the filters", (*Model).clearFilters),
+		act("esc", "clear filter", "Clear a filter (peels one at a time)", (*Model).clearFilters),
 		act("tab", "view", "Switch view (Issues / PRs)", func(m *Model) tea.Cmd { m.switchTab(1); return nil }),
 		act("r", "refresh", "Refresh the listing", (*Model).startRefresh),
 	)
@@ -177,43 +177,20 @@ func (m *Model) Actions() [][2]string {
 	return out
 }
 
-// openLabelPicker opens the multi-select label overlay, remembering the
-// current selection so esc can put it back.
-func (m *Model) openLabelPicker() {
-	if len(m.labels) == 0 {
-		return
-	}
-	if m.labelSel == nil {
-		m.labelSel = map[string]bool{}
-	}
-	m.ovSaved = map[string]bool{}
-	for k, v := range m.labelSel {
-		m.ovSaved[k] = v
-	}
-	m.ov, m.ovCursor, m.ovTop = ovLabels, 0, 0
-	for i, name := range m.labels {
-		if m.labelSel[name] {
-			m.ovCursor = i
-			break
-		}
-	}
-	m.clampOverlay()
-}
-
 // openActionMenu opens the action list of the current view.
 func (m *Model) openActionMenu() {
 	m.ov, m.ovCursor, m.ovTop = ovActions, 0, 0
 }
 
 // closeOverlay drops the modal without touching what it changed.
-func (m *Model) closeOverlay() { m.ov, m.ovSaved = ovNone, nil }
+func (m *Model) closeOverlay() { m.ov = ovNone }
 
 // overlayItems is how many rows the open modal lists — the comment prompt's
 // two rows are not navigable, they only size its box.
 func (m *Model) overlayItems() int {
 	switch m.ov {
-	case ovLabels:
-		return len(m.labels)
+	case ovFilter:
+		return m.fovFixedRows() + len(m.filterLabels())
 	case ovActions:
 		return len(m.actions())
 	case ovLabelEdit, ovAssignEdit:
@@ -281,53 +258,22 @@ func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.ov == ovCleanup {
 		return m.cleanupOfferKey(msg)
 	}
+	// The filter overlay's match row is a text input: it routes its own keys
+	// (#2104), so the shared list navigation never eats a printable.
+	if m.ov == ovFilter {
+		return m.filterOvKey(msg)
+	}
 	if ui.ListNav(key, &m.ovCursor, m.overlayItems(), m.overlayHeight(), ui.NavFull) {
 		m.clampOverlay()
 		return nil
 	}
 	switch m.ov {
-	case ovLabels:
-		return m.labelPickerKey(key)
 	case ovActions:
 		return m.actionMenuKey(key)
 	case ovLabelEdit, ovAssignEdit:
 		return m.editorKey(key)
 	case ovTextEdit:
 		return m.textPickerKey(key)
-	}
-	return nil
-}
-
-// labelPickerKey handles the multi-select overlay: space toggles the label
-// under the cursor and re-narrows live, backspace clears the whole selection,
-// enter keeps it, esc restores what the picker opened with.
-func (m *Model) labelPickerKey(key string) tea.Cmd {
-	switch key {
-	case "space", " ", "x":
-		if m.ovCursor >= 0 && m.ovCursor < len(m.labels) {
-			name := m.labels[m.ovCursor]
-			if m.labelSel[name] {
-				delete(m.labelSel, name)
-			} else {
-				m.labelSel[name] = true
-			}
-			m.resetCursors()
-			m.applyFilter()
-		}
-	case "backspace", "delete":
-		m.labelSel = map[string]bool{}
-		m.resetCursors()
-		m.applyFilter()
-	case "enter":
-		m.closeOverlay()
-	case "esc", "q", "l":
-		m.labelSel = m.ovSaved
-		if m.labelSel == nil {
-			m.labelSel = map[string]bool{}
-		}
-		m.closeOverlay()
-		m.resetCursors()
-		m.applyFilter()
 	}
 	return nil
 }

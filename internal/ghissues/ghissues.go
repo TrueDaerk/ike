@@ -1,9 +1,11 @@
 // Package ghissues is the forge Issues tool window (#1934, restructured in
 // #2090): a singleton pane with two full-area tabbed views — Issues and Pull
 // Requests — over the current repository's listing. The issues view lists
-// number, title, label chips, assignee, author and age with a fuzzy filter, a
-// multi-select label picker, an open/closed/all state filter, sort orders and
-// an optional grouping by label; enter opens the issue as a full-area detail
+// number, title, label chips, assignee, author and age; every narrowing —
+// fuzzy match, open/closed/all state, sort order, label multi-select and an
+// optional grouping by label — lives in one filter overlay (#2104,
+// filterov.go), with the active filters rendered as individually clearable
+// chips in a permanent status row; enter opens the issue as a full-area detail
 // that keeps the list's cursor and scroll and can walk to the next/previous
 // issue without going back. The detail shows the issue's timeline under the
 // body (#2084): comments rendered as markdown, label/state/assignee changes
@@ -157,14 +159,17 @@ func (s StateFilter) issueState() forge.IssueState {
 	}
 }
 
-// overlayKind is the modal that owns the keyboard on top of a view: the label
-// multi-picker, the action menu, or the edit picker. All render as a centered
-// box over the body and are dismissed with esc.
+// overlayKind is the modal that owns the keyboard on top of a view: the
+// unified filter overlay, the action menu, or the edit picker. All render as
+// a centered box over the body and are dismissed with esc.
 type overlayKind int
 
 const (
 	ovNone overlayKind = iota
-	ovLabels
+	// ovFilter is the unified filter overlay (#2104, filterov.go): match
+	// text, state gate, sort order, grouping and the label multi-select in
+	// one modal, applied live.
+	ovFilter
 	ovActions
 	// ovLabelEdit and ovAssignEdit are the mutation pickers (#2088): the
 	// repository's labels / assignable users toggled against the selected
@@ -245,13 +250,16 @@ type Model struct {
 	prCursor  int
 	prTop     int
 
-	// The filter line, the dataview pattern (#1777): while open it owns the
-	// keyboard and the match set narrows live. It starts on 'f' — the '/' of
-	// other tools needs Shift on a QWERTZ layout (#48) — with '/' kept as an
-	// alias for muscle memory.
-	fEditing bool
-	fInput   string
-	fCur     int
+	// The fuzzy match pattern, edited on the filter overlay's match row
+	// (#2104, filterov.go). It starts on 'f' — the '/' of other tools needs
+	// Shift on a QWERTZ layout (#48) — with '/' kept as an alias.
+	fInput string
+	fCur   int
+	// fSaved is what esc inside the filter overlay restores; fetched is the
+	// state the current listing was fetched for, so a state-filter change
+	// only refetches when the listing cannot answer it.
+	fSaved  filterSnapshot
+	fetched forge.IssueState
 
 	// labels are the distinct label names across the listing; labelSel is the
 	// multi-select set the label picker edits (an issue passes when it
@@ -263,12 +271,10 @@ type Model struct {
 	sort  SortOrder
 	group bool // group the issue list by label
 
-	// Overlay state: which modal owns the keyboard, its cursor, and the
-	// label selection esc restores.
+	// Overlay state: which modal owns the keyboard and its cursor.
 	ov       overlayKind
 	ovCursor int
 	ovTop    int
-	ovSaved  map[string]bool
 
 	// Detail view: the selected issue's body rendered through glamour,
 	// re-rendered lazily when the issue, the width or the timeline changes.
@@ -469,6 +475,9 @@ func (m *Model) SetResult(msg forge.IssuesMsg) {
 	}
 	m.errMsg = ""
 	m.loaded = true
+	if msg.State != "" {
+		m.fetched = msg.State
+	}
 	// A real listing replaces the persisted snapshot seed (#2108) — the
 	// "cached · updating…" marker comes down with it.
 	m.cached = false
@@ -534,8 +543,8 @@ func (m *Model) restoreCursor(n int) {
 	if n == 0 {
 		return
 	}
-	for i, idx := range m.visible {
-		if m.issues[idx].Number == n {
+	for i, r := range m.rows {
+		if r.idx >= 0 && m.issues[r.idx].Number == n {
 			m.cursor = i
 			m.clampScroll()
 			return
@@ -575,17 +584,21 @@ func (m *Model) ActiveTab() Tab { return m.tab }
 // Filter returns the fuzzy pattern, "" when unfiltered (tests).
 func (m *Model) Filter() string { return m.fInput }
 
-// Filtering reports whether the filter line is open (tests).
-func (m *Model) Filtering() bool { return m.fEditing }
+// Filtering reports whether the filter overlay is open with its match row
+// focused — the mode where typing edits the pattern (tests, paste routing).
+func (m *Model) Filtering() bool { return m.ov == ovFilter && m.ovCursor == fovMatch }
 
-// LabelFilter returns the selected labels in listing order (tests).
+// LabelFilter returns the selected labels sorted by name. The selection is
+// sticky (#2104): a label that left the listing keeps filtering — and keeps
+// its chip — until it is cleared.
 func (m *Model) LabelFilter() []string {
 	var out []string
-	for _, name := range m.labels {
-		if m.labelSel[name] {
+	for name, on := range m.labelSel {
+		if on {
 			out = append(out, name)
 		}
 	}
+	sort.Strings(out)
 	return out
 }
 
@@ -601,8 +614,8 @@ func (m *Model) Grouped() bool { return m.group }
 // DetailOpen reports whether the detail view is showing (tests).
 func (m *Model) DetailOpen() bool { return m.detail }
 
-// PickerOpen reports whether the label picker owns the keyboard (tests).
-func (m *Model) PickerOpen() bool { return m.ov == ovLabels }
+// PickerOpen reports whether the filter overlay owns the keyboard (tests).
+func (m *Model) PickerOpen() bool { return m.ov == ovFilter }
 
 // ActionMenuOpen reports whether the action menu is showing (tests).
 func (m *Model) ActionMenuOpen() bool { return m.ov == ovActions }
@@ -650,8 +663,9 @@ func (m *Model) Position() (int, int) {
 	return 0, total
 }
 
-// rebuildLabels recomputes the distinct label names, dropping selections of
-// labels the new listing no longer has.
+// rebuildLabels recomputes the distinct label names the listing carries. The
+// selection is left alone (#2104): a state-filter refetch must not silently
+// drop an active label chip.
 func (m *Model) rebuildLabels() {
 	seen := map[string]bool{}
 	m.labels = nil
@@ -664,11 +678,6 @@ func (m *Model) rebuildLabels() {
 		}
 	}
 	sort.Strings(m.labels)
-	for name := range m.labelSel {
-		if !seen[name] {
-			delete(m.labelSel, name)
-		}
-	}
 }
 
 // labelCount is how many issues carry the named label, shown in the picker.
@@ -701,13 +710,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// handleKey routes one key to whichever layer owns the keyboard: the filter
-// line first, then an open overlay, then the detail view, then the list.
+// handleKey routes one key to whichever layer owns the keyboard: an open
+// overlay first, then the detail view, then the list.
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case m.fEditing:
-		m.filterKey(msg)
-		return nil
 	case m.ov != ovNone:
 		return m.overlayKey(msg)
 	case m.detail && m.tab == TabIssues:
@@ -740,9 +746,9 @@ func (m *Model) listKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "r":
 		return m.startRefresh()
 	case "f", "/":
-		m.openFilter()
+		m.openFilterOverlay(fovMatch)
 	case "l":
-		m.openLabelPicker()
+		m.openLabelSection()
 	case "t":
 		return m.cycleState()
 	case "a":
@@ -886,33 +892,6 @@ func (m *Model) SetTab(t Tab) {
 	m.clampScroll()
 }
 
-// openFilter opens the filter line with the cursor at the end of the pattern.
-func (m *Model) openFilter() {
-	m.fEditing = true
-	m.fCur = len([]rune(m.fInput))
-}
-
-// filterKey feeds one key to the open filter line, which owns the keyboard:
-// esc clears and closes, enter keeps the filter and closes, everything else
-// edits and re-narrows live.
-func (m *Model) filterKey(msg tea.KeyPressMsg) {
-	switch msg.String() {
-	case "esc":
-		m.fEditing, m.fInput, m.fCur = false, "", 0
-		m.applyFilter()
-	case "enter":
-		m.fEditing = false
-	default:
-		if out, ncur, handled, changed := ui.EditKey(msg, m.fInput, m.fCur); handled {
-			m.fInput, m.fCur = out, ncur
-			if changed {
-				m.resetCursors()
-				m.applyFilter()
-			}
-		}
-	}
-}
-
 // detailKey handles the full-area detail view: scroll, back to the list with
 // the cursor untouched, the issue-walking chords, and the actions that stay
 // meaningful with an issue on screen.
@@ -1015,14 +994,12 @@ func (m *Model) startFetch(full bool) tea.Cmd {
 	return tea.Batch(m.refresh(m.state.issueState(), m.gen, full), meta)
 }
 
-// cycleState advances the open/closed/all filter. Closed issues are not part
-// of an open listing, so the change also refetches (#2083).
+// cycleState advances the open/closed/all filter ('t', the one-key
+// accelerator of the overlay's state row). Closed issues are not part of an
+// open listing, so widening may refetch — setState skips the fetch when the
+// listing already covers the new gate (#2104).
 func (m *Model) cycleState() tea.Cmd {
-	m.state = StateFilter((int(m.state) + 1) % 3)
-	m.dropListingForRefetch()
-	m.resetCursors()
-	m.applyFilter()
-	return m.startRefresh()
+	return m.setState(StateFilter((int(m.state) + 1) % 3))
 }
 
 // dropListingForRefetch clears the issue listing ahead of the refetch a state
@@ -1048,39 +1025,36 @@ func (m *Model) dropListingForRefetch() {
 	m.issues = nil
 }
 
-// cycleSort advances the list order.
+// cycleSort advances the list order, keeping the cursor on its entry.
 func (m *Model) cycleSort() {
 	m.sortTouched = true
 	m.sort = SortOrder((int(m.sort) + 1) % len(sortOrders))
-	m.resetCursors()
-	m.applyFilter()
+	m.keepSelection()
 }
 
 // toggleGroup flips the issue list's grouping by label.
 func (m *Model) toggleGroup() {
 	m.group = !m.group
-	m.resetCursors()
-	m.applyFilter()
+	m.keepSelection()
 }
 
-// clearFilters drops every narrowing the list carries (esc on the list): the
-// fuzzy pattern, the label selection and a non-open state filter. It returns
-// nothing to run — the state filter change alone would need a refetch, so it
-// is folded into the caller's refresh through startRefresh.
+// clearFilters is esc on a list (#2104): it peels one narrowing at a time
+// instead of nuking a carefully built filter in one keypress — first a
+// mutation error the filter row holds (#2088), then the match text, then the
+// label selection, then the state gate. Each press clears the next layer;
+// clicking a chip clears any one directly.
 func (m *Model) clearFilters() tea.Cmd {
-	refetch := m.state != FilterOpen
-	// esc also dismisses a mutation error the filter row is holding (#2088).
-	m.mutErr = ""
-	m.fInput, m.fCur = "", 0
-	m.labelSel = map[string]bool{}
-	m.state = FilterOpen
-	if refetch {
-		m.dropListingForRefetch()
-	}
-	m.resetCursors()
-	m.applyFilter()
-	if refetch {
-		return m.startRefresh()
+	switch {
+	case m.mutErr != "":
+		m.mutErr = ""
+	case m.fInput != "":
+		m.fInput, m.fCur = "", 0
+		m.keepSelection()
+	case len(m.LabelFilter()) > 0:
+		m.labelSel = map[string]bool{}
+		m.keepSelection()
+	case m.state != FilterOpen:
+		return m.setState(FilterOpen)
 	}
 	return nil
 }
@@ -1129,9 +1103,9 @@ func (m *Model) Reveal(number int) bool {
 	if idx < 0 {
 		return false
 	}
-	m.tab, m.ov, m.ovSaved = TabIssues, ovNone, nil
+	m.tab, m.ov = TabIssues, ovNone
 	m.prDetail = false
-	m.fEditing, m.fInput, m.fCur = false, "", 0
+	m.fInput, m.fCur = "", 0
 	m.labelSel = map[string]bool{}
 	// The issue is already in the listing, so widening the state gate needs no
 	// refetch — and a closed issue announced by an event must still be shown.
@@ -1283,10 +1257,10 @@ func (m *Model) clock() time.Time {
 	return m.now()
 }
 
-// PasteText inserts a pasted block into the open filter line at its cursor
-// (#2002) and re-narrows the list, exactly like typing there does.
+// PasteText inserts a pasted block into the filter overlay's match input at
+// its cursor (#2002) and re-narrows the list, exactly like typing there does.
 func (m *Model) PasteText(text string) bool {
-	if !m.fEditing {
+	if !m.Filtering() {
 		return false
 	}
 	out, ncur, changed := ui.PasteText(m.fInput, m.fCur, text)
