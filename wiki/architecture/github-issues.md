@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Issues Tool Window
-description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select with an any-of/all-of switch) with a permanent chip row whose chips clear individually, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, a consolidated key table with one meaning per letter family across all modes, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111, #2114, #2112).
+description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select with an any-of/all-of switch) with a permanent chip row whose chips clear individually and a structured qualifier layer in the match input (label:/is:/sort: with inline tab completion) writing the same filter model, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, a consolidated key table with one meaning per letter family across all modes, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111, #2114, #2112, #2110).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane, keymap]
 timestamp: 2026-08-25T22:00:00Z
 ---
 
-# Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104, #2111, #2112, #2114)
+# Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104, #2110, #2111, #2112, #2114)
 
 Development in this repository is issue-driven (see
 [Change Workflow](/process/change-workflow.md)); this pane brings that loop
@@ -230,6 +230,38 @@ appearing never shifts the body by a line. A **click on a chip clears exactly
 that narrowing**; a mutation's in-flight and error states (#2088) render
 beside the chips, not instead of them. With nothing active the row shows a
 faint `(f filters the list)` hint.
+
+### Structured qualifiers in the match input (#2110)
+
+The match input additionally accepts **qualifiers**, the way the JetBrains PR
+tool window's search field does — a power layer that lets one line express a
+whole filter (`qualifier.go`):
+
+- **`label:<name>`** — repeatable, adding to the label selection (combined
+  per the section's any-of/all-of mode row, #2112); a name with spaces is
+  quoted (`label:"help wanted"`).
+- **`is:open|closed|all`** (alias **`state:`**) — the state radio.
+- **`sort:relevance|newest|oldest|updated|number`** — the sort cycle.
+
+A qualifier is recognized once **terminated** — by the space after it, or by
+the `enter` that closes the overlay. It is then **extracted from the input and
+written into the same filter model the sections edit**: the chip appears, the
+section row updates, `esc` reverts it with everything else, and a state
+qualifier refetches exactly when the state row would. Whatever the line keeps
+stays the fuzzy pattern, so `label:bug crash` reads "label bug, pattern
+crash". A token that merely looks like a qualifier — an unknown name
+(`author:bo`) or a bad value (`is:banana`) — **stays literal fuzzy text** and
+the match row says why in a faint note (`unknown qualifier "author:" —
+matched literally`), so an ignored token is never silent.
+
+The input **completes inline**: with the cursor at the end of the line the
+first matching candidate renders as a faint ghost after it — qualifier names
+(`la` → `label:`), label names from the label section's own source, state and
+sort values — and **`tab` accepts** it (falling back to its usual row
+navigation without a ghost). A completed value ends in the terminating space,
+so accepting it applies immediately. Since `:` needs Shift on QWERTZ (#48),
+qualifiers are an **optional** layer: every dimension keeps its section row
+and one-key accelerator as the symbol-free path.
 
 ### Speed search in the pickers (#2111)
 

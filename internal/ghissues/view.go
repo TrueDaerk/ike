@@ -205,7 +205,21 @@ func (m *Model) filterOvRows(pal *theme.Palette) []string {
 	}
 	var rows []string
 	if m.ovCursor == fovMatch {
-		rows = append(rows, sel.Render("match: ")+ui.CursorView(m.fInput, m.fCur))
+		line := sel.Render("match: ")
+		faint := lipgloss.NewStyle().Faint(true)
+		if ghost := m.matchCompletion(); ghost != "" {
+			// The inline completion (#2110): the cursor sits on the ghost's
+			// first rune, tab accepts the rest.
+			g := []rune(ghost)
+			line += m.fInput + lipgloss.NewStyle().Reverse(true).Faint(true).Render(string(g[0])) +
+				faint.Render(string(g[1:]))
+		} else {
+			line += ui.CursorView(m.fInput, m.fCur)
+			if note := qualNote(m.fInput); note != "" {
+				line += faint.Render("  (" + note + ")")
+			}
+		}
+		rows = append(rows, line)
 	} else if m.fInput == "" {
 		rows = append(rows, plain.Render("match: ")+lipgloss.NewStyle().Faint(true).Render("(type on this row)"))
 	} else {
@@ -747,7 +761,7 @@ func (m *Model) footer(pal *theme.Palette) string {
 			return lipgloss.NewStyle().Faint(true).Render(m.clip(" typing narrows the labels · space toggles · backspace deletes · enter keeps · esc clears the search"))
 		}
 		if m.ovCursor == fovMatch {
-			return lipgloss.NewStyle().Faint(true).Render(m.clip(" type to match · ↓ more filters · enter keeps · esc reverts"))
+			return lipgloss.NewStyle().Faint(true).Render(m.clip(" type to match · label:/is:/sort: qualify · tab completes · ↓ more filters · enter keeps · esc reverts"))
 		}
 		if m.tab != TabPRs && m.ovCursor >= m.fovFixedRows() {
 			return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggles · type to narrow · backspace clears the row · enter keeps · esc reverts"))

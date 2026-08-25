@@ -150,11 +150,23 @@ func (m *Model) filterOvKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.ovSearch.Active() {
 		return m.searchingFilterKey(msg)
 	}
+	// On the match row tab first tries the qualifier completion (#2110); it
+	// only falls through to row navigation when there is no ghost to accept.
+	if m.ovCursor == fovMatch && msg.String() == "tab" {
+		if cmd, ok := m.acceptCompletion(); ok {
+			return cmd
+		}
+	}
 	n := m.fovFixedRows() + m.fovLabelRows()
 	switch msg.String() {
 	case "enter":
+		var cmd tea.Cmd
+		if m.ovCursor == fovMatch {
+			// Enter terminates a trailing qualifier the space never did.
+			cmd = m.applyMatchQualifiers(true)
+		}
 		m.closeOverlay()
-		return nil
+		return cmd
 	case "esc":
 		return m.revertFilters()
 	case "down", "tab", "ctrl+n":
@@ -217,12 +229,16 @@ func (m *Model) searchingFilterKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // matchRowKey feeds one key to the match input; edits re-narrow live and send
 // the cursor to the top — with a fuzzy pattern the best match belongs first.
+// Each edit also extracts any qualifier the keystroke just terminated (#2110):
+// "is:closed " becomes the state gate, not fuzzy text.
 func (m *Model) matchRowKey(msg tea.KeyPressMsg) tea.Cmd {
 	if out, ncur, handled, changed := ui.EditKey(msg, m.fInput, m.fCur); handled {
 		m.fInput, m.fCur = out, ncur
 		if changed {
+			cmd := m.applyMatchQualifiers(false)
 			m.resetCursors()
 			m.applyFilter()
+			return cmd
 		}
 	}
 	return nil
