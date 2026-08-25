@@ -102,22 +102,39 @@ func unsupported(backend, op string) error {
 // RefreshCmd fetches the open issues and the pull requests of the repository
 // containing dir, resolving to one IssuesMsg. An unavailable backend (no
 // forge CLI, no matching remote or login) resolves to the Setup state; a
-// failing fetch to Err. A failing PR listing keeps the issues and drops only
-// the PR states — the list is still useful without them.
+// failing fetch to Err. A failing PR listing keeps the issues and reports
+// only PRErr — the list is still useful without the PR states.
 func RefreshCmd(dir string) tea.Cmd {
+	return func() tea.Msg { return fetchListing(dir) }
+}
+
+// PollCmd is RefreshCmd tagged as a background poll (#2085). The background
+// poll service dispatches it from a tick handler and never waits on it; the
+// tag lets the consumers tell it from a refresh the user asked for.
+func PollCmd(dir string) tea.Cmd {
 	return func() tea.Msg {
-		f, setup := Detect(dir)
-		if setup != "" {
-			return IssuesMsg{Setup: setup}
-		}
-		issues, err := f.Issues(IssuesOpen)
-		if err != nil {
-			return IssuesMsg{Err: err}
-		}
-		msg := IssuesMsg{Issues: issues}
-		if prs, err := f.PRs(); err == nil {
-			msg.PRs = prs
-		}
+		msg := fetchListing(dir)
+		msg.Poll = true
 		return msg
 	}
+}
+
+// fetchListing runs one detection + listing pass off the Update loop. Both
+// commands above resolve to it; only the Poll tag differs.
+func fetchListing(dir string) IssuesMsg {
+	f, setup := Detect(dir)
+	if setup != "" {
+		return IssuesMsg{Setup: setup}
+	}
+	issues, err := f.Issues(IssuesOpen)
+	if err != nil {
+		return IssuesMsg{Err: err}
+	}
+	msg := IssuesMsg{Issues: issues}
+	if prs, err := f.PRs(); err != nil {
+		msg.PRErr = err
+	} else {
+		msg.PRs = prs
+	}
+	return msg
 }

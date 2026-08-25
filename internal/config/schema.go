@@ -71,6 +71,18 @@ type Config struct {
 	Remote Remote `toml:"remote"`
 	// Screenshot holds the in-IDE PNG export's behaviour (#2001).
 	Screenshot Screenshot `toml:"screenshot"`
+	// Forge holds the code-forge integration's behaviour (#2085).
+	Forge Forge `toml:"forge"`
+}
+
+// Forge holds the code-forge integration settings (#2085). PollIntervalSeconds
+// is how often IKE re-fetches the repository's issues and pull requests in the
+// background so new issues, closed issues and PR state changes surface without
+// a manual refresh. 0 turns polling off entirely; anything between 1 and the
+// floor below is raised to it, so a mistyped interval cannot hammer the forge
+// (every poll is a CLI/API round trip).
+type Forge struct {
+	PollIntervalSeconds int `toml:"poll_interval_seconds"`
 }
 
 // Screenshot holds the in-IDE screenshot export settings (#2001). Directory

@@ -257,8 +257,14 @@ func (m *Model) ensureDetail(is *forge.Issue) {
 	if m.detailFor == is.Number && m.detailW == m.width && m.detailLines != nil {
 		return
 	}
+	if m.detailFor != is.Number {
+		// Opening a different issue starts at the top. Re-rendering the one
+		// already shown — a width change, or a background poll (#2085) that
+		// brought a fresh body — must keep the offset the user scrolled to,
+		// or every poll would yank a long issue back to line one.
+		m.detailTop = 0
+	}
 	m.detailFor, m.detailW = is.Number, m.width
-	m.detailTop = 0
 	head := "# #" + strconv.Itoa(is.Number) + " " + is.Title + "\n\n"
 	if pr := forge.PRForIssue(m.prs, is.Number); pr != nil {
 		head += "**" + m.prLine(pr) + "**\n\n"
@@ -272,6 +278,8 @@ func (m *Model) ensureDetail(is *forge.Issue) {
 		out = head + body
 	}
 	m.detailLines = strings.Split(strings.TrimRight(out, "\n"), "\n")
+	// A shorter body may leave the kept offset past the end.
+	m.clampDetail()
 }
 
 // renderMarkdown renders through a fresh width- and theme-bound glamour

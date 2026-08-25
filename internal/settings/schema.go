@@ -9,6 +9,7 @@ package settings
 
 import (
 	"image/color"
+	"strconv"
 
 	"ike/internal/config"
 	"ike/internal/theme"
@@ -73,6 +74,13 @@ type Entry struct {
 	// ValidateEntry rejects a committed List element with a message naming the
 	// valid values; "" accepts (#1946). Same lookup as EntryHints.
 	ValidateEntry func(lookup func(key string) string, text string) string
+	// ValidateInt rejects a committed Int value with a message naming the
+	// valid range; "" accepts (#2085). It exists for the entries whose valid
+	// set is not one interval — forge.poll_interval_seconds takes 0 (polling
+	// off) or ten seconds and up, never the gap between them. The steppers
+	// jump such a gap instead of stopping inside it, so the hook only has to
+	// answer for typed values.
+	ValidateInt func(v int) string
 }
 
 // Page is one category: a titled list of entries, or — when Custom is set — a
@@ -327,6 +335,9 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "tests.results_window", Type: Bool, Title: "Structured test results", Description: "Parse test runs into the Test Results tool window (result tree, re-run failed, jump to failure) when the language declares an output parser; off keeps every test run in the raw Run tool terminal", Scope: config.UserScope},
 			{Key: "tests.auto_open", Type: Bool, Title: "Open on test run", Description: "Open the Test Results tool window when a captured test run starts; off only updates an already open pane", Scope: config.UserScope},
 		}},
+		{Title: "Forge", Description: "The code forge behind the Issues tool window (GitHub through gh, Gitea/Forgejo through tea): how often IKE re-reads it in the background.", Entries: []Entry{
+			{Key: "forge.poll_interval_seconds", Type: Int, Title: "Background poll interval", Description: "Seconds between background re-fetches of the repository's issues and pull requests, so new issues, closed issues and PR state changes surface without pressing r. The fetch runs off the UI loop and a tick arriving while the previous one is still running is skipped, so a slow forge never stalls IKE; consecutive failures back off exponentially (up to 5 minutes) and an unavailable forge — no CLI, no matching remote or login — stops polling until a manual refresh succeeds. 0 turns polling off entirely; the lowest interval is 10 seconds", Scope: config.UserScope, Min: 0, Max: config.ForgePollMaxSeconds, ValidateInt: forgePollValidate},
+		}},
 		{Title: "Scratch Files", Description: "The explorer's Scratches section (#1963): the scratch store listed below the file tree behind a divider, opened, renamed and deleted with the explorer's own keys and dialogs.", Entries: []Entry{
 			{Key: "scratch.section", Type: Bool, Title: "Show Scratches section", Description: "List the scratch store as a divider-separated section at the bottom of the explorer; off removes the section entirely (scratches stay reachable through the \"Open Scratch File…\" command)", Scope: config.UserScope},
 			{Key: "scratch.section_height", Type: Int, Title: "Scratches section height", Description: "Rows the Scratches section shows when expanded (it never grows past its content). Dragging the divider resizes it afterwards, and that height persists with the explorer's session state", Scope: config.UserScope, Min: 1, Max: 30},
@@ -356,4 +367,15 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "marketplace.catalog_url", Type: String, Title: "Catalog URL", Description: "HTTPS location of the marketplace index.json; empty falls back to the built-in default, which may itself be empty — then the marketplace stays disabled", Scope: config.UserScope},
 		}},
 	}
+}
+
+// forgePollValidate is the strict form check for forge.poll_interval_seconds
+// (#2085): the config validator has to be lenient with a file on disk and
+// snaps a too-small interval up to the floor, but a value typed here can be
+// refused outright with the rule spelled out.
+func forgePollValidate(v int) string {
+	if v > 0 && v < config.ForgePollMinSeconds {
+		return "0 disables polling; the lowest interval is " + strconv.Itoa(config.ForgePollMinSeconds) + "s"
+	}
+	return ""
 }

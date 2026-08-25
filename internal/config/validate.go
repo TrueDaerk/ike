@@ -94,6 +94,16 @@ const followPollMaxMs = 10000
 // couple of hundred entries scrolling it beats re-copying.
 const clipboardHistoryMax = 200
 
+// ForgePollMinSeconds is the floor forge.poll_interval_seconds is raised to
+// (#2085); the settings form uses the same bound. 0 stays 0 and turns polling
+// off — the floor only guards the range between "off" and "sane", where every
+// tick is a CLI/API round trip against the forge. ForgePollMaxSeconds caps it
+// at an hour, past which "background polling" is indistinguishable from off.
+const (
+	ForgePollMinSeconds = 10
+	ForgePollMaxSeconds = 3600
+)
+
 // validate clamps c in place against the baseline rules and returns one
 // diagnostic per correction. Extension validators run after the built-in checks.
 func validate(c *Config) []Diagnostic {
@@ -206,6 +216,20 @@ func validate(c *Config) []Diagnostic {
 	if c.Editor.FollowPollMs > followPollMaxMs {
 		diags = append(diags, Diagnostic{Field: "editor.follow_poll_ms", Message: fmt.Sprintf("%d above maximum %d, using %d", c.Editor.FollowPollMs, followPollMaxMs, followPollMaxMs)})
 		c.Editor.FollowPollMs = followPollMaxMs
+	}
+	// forge.poll_interval_seconds (#2085) is not a plain interval: 0 is a
+	// meaningful value (polling off), so a bad number is snapped to whichever
+	// end of the hole it fell in rather than clamped to a single minimum.
+	switch iv := c.Forge.PollIntervalSeconds; {
+	case iv < 0:
+		diags = append(diags, Diagnostic{Field: "forge.poll_interval_seconds", Message: fmt.Sprintf("%d is negative, background forge polling disabled", iv)})
+		c.Forge.PollIntervalSeconds = 0
+	case iv > 0 && iv < ForgePollMinSeconds:
+		diags = append(diags, Diagnostic{Field: "forge.poll_interval_seconds", Message: fmt.Sprintf("%d below minimum %d, using %d (0 disables polling)", iv, ForgePollMinSeconds, ForgePollMinSeconds)})
+		c.Forge.PollIntervalSeconds = ForgePollMinSeconds
+	case iv > ForgePollMaxSeconds:
+		diags = append(diags, Diagnostic{Field: "forge.poll_interval_seconds", Message: fmt.Sprintf("%d above maximum %d, using %d", iv, ForgePollMaxSeconds, ForgePollMaxSeconds)})
+		c.Forge.PollIntervalSeconds = ForgePollMaxSeconds
 	}
 	clampMin("backup.debounce_ms", &c.Backup.DebounceMs, 100)
 	clampMin("backup.max_age_days", &c.Backup.MaxAgeDays, 1)

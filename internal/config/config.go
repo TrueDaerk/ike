@@ -290,6 +290,7 @@ func (c *Config) Flat() map[string]string {
 	put("perf.hud_history_seconds", c.Perf.HUDHistorySeconds)
 	put("remote.max_fetch_mb", c.Remote.MaxFetchMB)
 	put("screenshot.directory", c.Screenshot.Directory)
+	put("forge.poll_interval_seconds", c.Forge.PollIntervalSeconds)
 
 	put("debug.inline_values", c.Debug.InlineValues)
 	put("debug.php.port", c.Debug.PHP.Port)

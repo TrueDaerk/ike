@@ -282,5 +282,12 @@ func defaults() *Config {
 			// project, so nothing has to be gitignored (#2001).
 			Directory: "",
 		},
+		Forge: Forge{
+			// 20s is the window #2085 asks for — a new issue shows up within
+			// the time it takes to switch back to the IDE — while staying
+			// cheap: one issue and one PR listing per poll, skipped whenever
+			// the previous fetch is still running.
+			PollIntervalSeconds: 20,
+		},
 	}
 }

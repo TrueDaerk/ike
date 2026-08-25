@@ -230,6 +230,12 @@ secrets — are documented together, with screenshots, in
 | Structured test results | `tests.results_window` | boolean | `true` | user | Parse test runs into the Test Results tool window (result tree, re-run failed, jump to failure) when the language declares an output parser; off keeps every test run in the raw Run tool terminal |
 | Open on test run | `tests.auto_open` | boolean | `true` | user | Open the Test Results tool window when a captured test run starts; off only updates an already open pane |
 
+### Forge
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Background poll interval | `forge.poll_interval_seconds` | integer (0–3600) | `20` | user | Seconds between background re-fetches of the repository's issues and pull requests, so new issues, closed issues and PR state changes surface without pressing r. The fetch runs off the UI loop and a tick arriving while the previous one is still running is skipped, so a slow forge never stalls IKE; consecutive failures back off exponentially (up to 5 minutes) and an unavailable forge — no CLI, no matching remote or login — stops polling until a manual refresh succeeds. 0 turns polling off entirely; the lowest interval is 10 seconds |
+
 ### Scratch Files
 
 | Setting | Key | Type | Default | Scope | Description |

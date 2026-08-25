@@ -784,7 +784,7 @@ func (m *Model) stepInt(delta int) tea.Cmd {
 	if err != nil {
 		n = 0
 	}
-	next := n + delta
+	next := snapInt(e, n+delta, delta)
 	if e.Min != 0 || e.Max != 0 {
 		clamped := clamp(next, e.Min, e.Max)
 		if clamped != next {

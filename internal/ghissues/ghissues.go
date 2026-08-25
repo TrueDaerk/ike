@@ -107,8 +107,17 @@ func (m *Model) SetRefresh(cmd tea.Cmd) { m.refresh = cmd }
 func (m *Model) MarkLoading() { m.loading = true }
 
 // SetResult applies one finished fetch.
+//
+// A background poll (#2085) lands here exactly like a manual refresh, minus
+// the parts that would fight the user: it does not clear a pending loading
+// state a fresh 'r' set, and the selection is restored by issue number after
+// the swap, so a newer issue appearing above the cursor leaves it on the
+// issue it was on. The filter line, the label filter and the detail view are
+// untouched either way — they are derived from state SetResult never writes.
 func (m *Model) SetResult(msg forge.IssuesMsg) {
-	m.loading = false
+	if !msg.Poll {
+		m.loading = false
+	}
 	m.setup = msg.Setup
 	if msg.Setup != "" {
 		return
@@ -119,10 +128,48 @@ func (m *Model) SetResult(msg forge.IssuesMsg) {
 	}
 	m.errMsg = ""
 	m.loaded = true
+	selected, selectedBody := 0, ""
+	if is := m.Selected(); is != nil {
+		selected, selectedBody = is.Number, is.Body
+	}
 	m.issues = msg.Issues
-	m.prs = msg.PRs
+	if msg.PRErr == nil {
+		// A failed PR listing (PRErr) is a partial result: keeping the last
+		// known PR states beats blanking the linked-PR column over a blip.
+		m.prs = msg.PRs
+	}
 	m.rebuildLabels()
 	m.applyFilter()
+	m.restoreCursor(selected)
+	if m.detail && m.detailFor == selected {
+		// The body may have been edited on the forge since it was rendered.
+		// Only an actual edit drops the cache — re-rendering an unchanged
+		// body every poll would be pure work — and the cache is dropped by
+		// clearing the lines rather than the issue number, so the re-render
+		// keeps the offset the user scrolled to (ensureDetail only rewinds
+		// when the issue itself changes).
+		if is := m.Selected(); is != nil && is.Body != selectedBody {
+			m.detailLines = nil
+		}
+	}
+}
+
+// restoreCursor puts the cursor back on the issue numbered n after a listing
+// swap, keeping the scroll window around it. An issue that left the listing
+// (closed since the last poll) leaves the cursor at its old row, clamped —
+// the same place a manual refresh would have left it.
+func (m *Model) restoreCursor(n int) {
+	if n == 0 {
+		return
+	}
+	for i, idx := range m.visible {
+		if m.issues[idx].Number == n {
+			m.cursor = i
+			m.clampScroll()
+			return
+		}
+	}
+	m.clampScroll()
 }
 
 // Loaded reports whether a listing ever arrived (tests).

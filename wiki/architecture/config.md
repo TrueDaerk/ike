@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-08-17T18:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 
 # Configuration System
@@ -113,6 +113,11 @@ Sections and their default-bearing slots (`schema.go`):
   0090); config only fixes the persisted shape.
 - `[backup]` — `enable`, `debounce_ms`, `max_age_days` for crash-recovery
   snapshots (Roadmap 0210, see [crash recovery](./crash-recovery.md)).
+- `[forge]` — `poll_interval_seconds` (#2085): how often the code forge is
+  re-read in the background, default 20, floor 10, ceiling 3600, **`0` off**.
+  The floor is a snap rather than a clamp — 0 is a meaningful value, so a
+  too-small number is raised to the floor and a negative one read as "off",
+  each with a diagnostic (see [Forge Layer](./forge.md)).
 - `[files]` — `watch`, `auto_reload` (`clean|never`), the large-file
   thresholds `large_file_kb` / `large_file_lines` (#149), `persistent_undo`
   (#148), plus the `[files.associations]` slot (#1365): a slot map of file
