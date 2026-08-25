@@ -1,5 +1,23 @@
 # Log
 
+## 2026-08-25 (http: form/multipart/graphql body highlighting + {{var}} completion, #2135)
+
+- **Form-urlencoded, multipart and GraphQL request bodies highlight now.**
+  `application/graphql` maps to the `graphql` language like any other body
+  (`bodyLanguages`, `regions.go`) when a build links it; the other two do not
+  fit the "whole body is one language" region model, so they get a
+  Go-produced span overlay instead: `application/x-www-form-urlencoded`
+  reuses the request-target's own key/value/`&`/`=` styling on the body's
+  lines, and `multipart/form-data` gets its `--boundary`/`--boundary--`
+  delimiter lines and each part's header block styled like the grammar's own
+  headers (`multipart.go`) — a part's own body stays plain.
+- **Typing `{{` now completes variable names.** In a request line, a header
+  value or a body, an unclosed `{{` offers the file's own `@name=value`
+  definitions plus the active `http-client.env.json` environment's
+  variables — the persisted `http.selectEnvironment` choice, read directly
+  from `.ike/httpenv.json` (`envselect.go`) rather than importing
+  `internal/app`. Accepting an item inserts the closing `}}` too.
+
 ## 2026-08-25 (ui: structured qualifiers in the issues filter match input, #2110)
 
 - **The filter overlay's match input accepts structured qualifiers** the way
