@@ -1,5 +1,17 @@
 # Log
 
+## 2026-08-25 (markdown: hanging indent for wrapped list items, #2105)
+
+- **Wrapped list items keep their shape.** A bullet or numbered item longer
+  than the pane width used to wrap back under its own marker, so the
+  continuation lost the item's indent. Glamour cannot do this itself — its
+  `List.Indent`/`LevelIndent`/`Margin` knobs are block level and shift the
+  marker along with the text — so `ui.HangingIndent` post-processes the
+  rendered output: it re-joins each item's lines and re-wraps them at the
+  width the marker leaves, aligning continuations under the text (past the
+  number for ordered lists) per nesting level. Used by both the markdown
+  preview pane and the GitHub issues detail/timeline rendering.
+
 ## 2026-08-25 (issues window: superseded listing fetches are dropped, #2107)
 
 - **Rapid `t t` no longer lands the wrong listing.** Cycling the state filter
