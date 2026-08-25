@@ -51,7 +51,12 @@ the pane interior width — a resize re-renders. The style config is picked off
 `theme.Palette.Dark` (glamour's stock dark/light styles) with heading and link
 colors mapped onto the palette's `Accent`/`Info` slots, so the preview follows
 the IDE theme, live on theme switch (`SetPalette` re-renders). Code blocks get
-glamour's chroma highlighting. Inline images degrade to their alt-text links
+glamour's chroma highlighting. Wrapped **list items** get a hanging indent
+(`ui.HangingIndent`, #2105): glamour word-wraps a list item's continuation
+lines back under its bullet, because its only indentation knobs are block
+level and shift the marker along with the text, so the rendered output is
+post-processed — each item's lines are re-joined and re-wrapped at the width
+its marker leaves, per nesting level. Inline images degrade to their alt-text links
 — but image *files* opened from the explorer/editor render for real via the
 [image preview](./image-preview.md) (#1479).
 

@@ -167,7 +167,8 @@ The list's cursor and scroll are untouched while it is open, so `esc` returns
 to exactly the row it left. `ctrl+j`/`ctrl+k` walk to the next/previous issue
 without going back through the list, moving the list cursor with them; `j/k`
 and the page keys scroll the body. The body itself is the issue's markdown
-rendered through glamour with the preview pane's theme mapping (#62), under
+rendered through glamour with the preview pane's theme mapping (#62) and its
+hanging indent for wrapped list items (`ui.HangingIndent`, #2105), under
 an author/age/state line and — when one exists — the linked PR's state.
 
 ### Timeline (#2084)
@@ -190,8 +191,8 @@ label as a colored chip or the assignee, age (self-assignments collapse to
 events never read as a block's last line. Both the rule and the gutter
 degrade at narrow widths: below 24 columns the bar falls back to a plain
 indent, and a rule that cannot hold its label is drawn plain across the pane.
-The states are visible
-and keyboard-reachable: a loading row while a fetch is in flight, an error row
+The states are visible and keyboard-reachable: a loading row while a fetch is
+in flight, an error row
 (`r` retries) that keeps what already loaded, `(L loads more activity)` while
 more pages follow — `L` appends the next page without moving the scroll — and
 `(no activity yet)` on an empty finished history. `r` inside the detail
