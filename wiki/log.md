@@ -1,5 +1,35 @@
 # Log
 
+## 2026-08-25 (0470 forge workflow complete — 0.5.0, #2082)
+
+- **The change loop no longer leaves the IDE.** Epic 0470 closes with all
+  eight sub-issues merged: the forge backend abstraction (#2083), the tabbed
+  issues window (#2090), the issue timeline (#2084), background polling
+  (#2085), prominent event notifications (#2086), editing your own texts
+  (#2087), label/assignee/state mutations (#2088) and the PR view with
+  merge-with-comment and close-with-comment actions (#2089).
+- **What the stream delivered.** One `forge.Forge` interface with two bindings
+  — `gh` on `github.com`, `tea`/REST on Gitea/Forgejo — chosen by the remote's
+  host; a capability probe that gates every mutation instead of a hard-coded
+  permission; a neutral `forge.TimelineEvent` union rendered as a vertical
+  activity timeline under the issue body; own bodies and comments edited in
+  real editor buffers whose save hook writes back and refetches; a
+  per-workspace poll loop whose tick only *schedules* the fetch, so the Update
+  loop never waits on the network; and snapshot diffing into typed events
+  surfaced per event kind as a centered dialog, a status-line unread badge or
+  a plain toast.
+- **0.5.0, a minor bump rather than a patch.** The stream added the whole
+  `[forge]` config section — `poll_interval_seconds` plus six `notify.*`
+  styles — and new default bindings in the issues pane. That is additive but
+  visible in a settings file and a keymap, which is what
+  [Versioning](/architecture/versioning.md) calls a minor.
+- Concept docs for the stream: [Forge Layer](/architecture/forge.md),
+  [Issues Tool Window](/architecture/github-issues.md) and the prominent-event
+  section of [Notifications](/architecture/notifications.md).
+- Deliberately still out of scope, for later streams: review threads and
+  inline PR code comments (they need a diff-anchored UI), cross-repository
+  dashboards, and creating an issue from inside IKE.
+
 ## 2026-08-25 (PR detail view with merge/close-with-comment, #2089)
 
 - **A real PR view.** `enter` on the issues window's PR tab now opens a
