@@ -46,15 +46,15 @@ func TestIssuesDefaultFilterEntry(t *testing.T) {
 	if msg := e.ValidateString(""); msg != "" {
 		t.Errorf("the empty filter was rejected with %q, want it accepted", msg)
 	}
-	if msg := e.ValidateString(`state:open label:"good first issue" match:crash`); msg != "" {
+	if msg := e.ValidateString(`is:open label:"good first issue" crash`); msg != "" {
 		t.Errorf("a valid expression was rejected with %q", msg)
 	}
 	// The message has to name what is wrong — the form shows it verbatim.
 	msg := e.ValidateString("author:me")
-	if !strings.Contains(msg, "unknown qualifier") || !strings.Contains(msg, "state:") {
+	if !strings.Contains(msg, "unknown qualifier") || !strings.Contains(msg, "is:") {
 		t.Errorf("rejection = %q, want it to name the valid qualifiers", msg)
 	}
-	if !strings.Contains(e.Description, "state:open") {
+	if !strings.Contains(e.Description, "is:open") {
 		t.Errorf("the description must document the syntax: %q", e.Description)
 	}
 }
@@ -64,10 +64,10 @@ func TestIssuesSavedFiltersEntry(t *testing.T) {
 	if e.Type != List || e.ValidateEntry == nil {
 		t.Fatalf("entry = %+v, want a List with element validation", e)
 	}
-	if msg := e.ValidateEntry(nil, "triage=state:open label:bug"); msg != "" {
+	if msg := e.ValidateEntry(nil, "triage=is:open label:bug"); msg != "" {
 		t.Errorf("a valid saved filter was rejected with %q", msg)
 	}
-	for _, bad := range []string{"triage", "=state:open", "triage=", "triage=state:merged"} {
+	for _, bad := range []string{"triage", "=is:open", "triage=", "triage=is:merged"} {
 		if msg := e.ValidateEntry(nil, bad); msg == "" {
 			t.Errorf("%q accepted, want a rejection message", bad)
 		}
@@ -95,13 +95,13 @@ func TestDefaultFilterRejectsABadExpression(t *testing.T) {
 func TestDefaultFilterCommits(t *testing.T) {
 	m := issuesFilterPanel(t)
 	ed := m.editor.(*textEditor)
-	ed.tf.Set("state:all label:bug match:crash")
+	ed.tf.Set("is:all label:bug crash")
 	m.Update(key("enter"))
 	if ed.err != "" {
 		t.Fatalf("a valid expression was refused: %s", ed.err)
 	}
 	commit(t, m)
-	if got := config.Get().Issues.DefaultFilter; got != "state:all label:bug match:crash" {
+	if got := config.Get().Issues.DefaultFilter; got != "is:all label:bug crash" {
 		t.Fatalf("committed = %q", got)
 	}
 }

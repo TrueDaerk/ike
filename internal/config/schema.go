@@ -344,10 +344,11 @@ type Scratch struct {
 // "prs"); DefaultSort is the list order both views start in ("relevance" —
 // best fuzzy match while filtering, newest otherwise — "newest", "oldest",
 // "updated" or "number"); DefaultFilter is the narrowing a freshly opened
-// pane starts with, written in the issuefilter expression syntax
-// ("state:open label:bug match:crash"). SavedFilters are named filters in the
-// same syntax ("triage=state:open label:bug"), offered on the filter
-// overlay's saved row. All only seed a freshly opened pane: switching the
+// pane starts with, written in the same qualifier syntax the filter overlay's
+// match input accepts ("is:open label:bug crash", internal/issuefilter).
+// SavedFilters are named filters in that syntax ("triage=is:open label:bug"),
+// offered on the filter overlay's saved row. All only seed a freshly opened
+// pane: switching the
 // tab, the sort order or a filter by hand wins for the rest of the session,
 // so a live config reload never yanks the view away.
 type Issues struct {

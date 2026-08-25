@@ -12,6 +12,7 @@ package ghissues
 
 import (
 	"sort"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -30,17 +31,23 @@ const (
 	fovState = 1
 	fovSort  = 2
 	fovGroup = 3
-	fovSaved = 4
+	// fovMode is the label section's any-of/all-of switch (#2112); it sits
+	// directly above the labels it governs, on the issue tab only.
+	fovMode = 4
+	// fovSaved is the saved filter cycle (#2115); it only exists while
+	// issues.saved_filters names a filter to pick.
+	fovSaved = 5
 )
 
 // filterSnapshot is what esc restores: every dimension the overlay edits.
 type filterSnapshot struct {
-	input  string
-	cur    int
-	labels map[string]bool
-	state  StateFilter
-	sort   SortOrder
-	group  bool
+	input    string
+	cur      int
+	labels   map[string]bool
+	labelAll bool
+	state    StateFilter
+	sort     SortOrder
+	group    bool
 }
 
 // snapshotFilters copies the live filter state for the overlay's esc-revert.
@@ -50,7 +57,7 @@ func (m *Model) snapshotFilters() filterSnapshot {
 		labels[k] = v
 	}
 	return filterSnapshot{input: m.fInput, cur: m.fCur, labels: labels,
-		state: m.state, sort: m.sort, group: m.group}
+		labelAll: m.labelAll, state: m.state, sort: m.sort, group: m.group}
 }
 
 // fovRows is the overlay's non-label rows in render order for the active tab:
@@ -59,7 +66,7 @@ func (m *Model) snapshotFilters() filterSnapshot {
 func (m *Model) fovRows() []int {
 	rows := []int{fovMatch, fovState, fovSort}
 	if m.tab != TabPRs {
-		rows = append(rows, fovGroup)
+		rows = append(rows, fovGroup, fovMode)
 	}
 	if len(m.saved) > 0 {
 		rows = append(rows, fovSaved)
@@ -168,11 +175,23 @@ func (m *Model) filterOvKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.ovSearch.Active() {
 		return m.searchingFilterKey(msg)
 	}
+	// On the match row tab first tries the qualifier completion (#2110); it
+	// only falls through to row navigation when there is no ghost to accept.
+	if m.ovCursor == fovMatch && msg.String() == "tab" {
+		if cmd, ok := m.acceptCompletion(); ok {
+			return cmd
+		}
+	}
 	n := m.fovFixedRows() + m.fovLabelRows()
 	switch msg.String() {
 	case "enter":
+		var cmd tea.Cmd
+		if m.ovCursor == fovMatch {
+			// Enter terminates a trailing qualifier the space never did.
+			cmd = m.applyMatchQualifiers(true)
+		}
 		m.closeOverlay()
-		return nil
+		return cmd
 	case "esc":
 		return m.revertFilters()
 	case "down", "tab", "ctrl+n":
@@ -235,13 +254,17 @@ func (m *Model) searchingFilterKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // matchRowKey feeds one key to the match input; edits re-narrow live and send
 // the cursor to the top — with a fuzzy pattern the best match belongs first.
+// Each edit also extracts any qualifier the keystroke just terminated (#2110):
+// "is:closed " becomes the state gate, not fuzzy text.
 func (m *Model) matchRowKey(msg tea.KeyPressMsg) tea.Cmd {
 	if out, ncur, handled, changed := ui.EditKey(msg, m.fInput, m.fCur); handled {
 		m.fInput, m.fCur = out, ncur
 		if changed {
 			m.filterTouched = true
+			cmd := m.applyMatchQualifiers(false)
 			m.resetCursors()
 			m.applyFilter()
+			return cmd
 		}
 	}
 	return nil
@@ -298,6 +321,15 @@ func (m *Model) sectionRowKey(msg tea.KeyPressMsg) tea.Cmd {
 		case "backspace", "delete":
 			if m.group {
 				m.toggleGroup()
+			}
+		}
+	case fovMode:
+		switch key {
+		case "space", " ", "x", "right", "left", "h", "l":
+			m.toggleLabelMode()
+		case "backspace", "delete":
+			if m.labelAll {
+				m.toggleLabelMode()
 			}
 		}
 	case fovSaved:
@@ -364,6 +396,7 @@ func (m *Model) revertFilters() tea.Cmd {
 	if m.labelSel == nil {
 		m.labelSel = map[string]bool{}
 	}
+	m.labelAll = s.labelAll
 	m.sort, m.group = s.sort, s.group
 	if s.state != m.state {
 		return m.setState(s.state)
@@ -447,6 +480,12 @@ func (m *Model) filterChips() []filterChip {
 				m.keepSelection()
 				return nil
 			}})
+	}
+	if names := m.LabelFilter(); m.labelAll && len(names) > 0 {
+		// The mode reads once, ahead of the labels it governs; clearing it
+		// widens back to any-of instead of dropping the selection.
+		chips = append(chips, filterChip{text: "labels: " + strings.Join(names, "+") + " (all)",
+			clear: func(m *Model) tea.Cmd { m.labelAll = false; m.keepSelection(); return nil }})
 	}
 	for _, name := range m.LabelFilter() {
 		name := name

@@ -7,24 +7,59 @@
   `issues.default_tab`/`issues.default_sort` already have: the first filter
   change by hand wins for the rest of the session, so a live config reload
   never re-narrows a list somebody is working in.
-- **`issues.saved_filters` names recurring filters** (`"triage=state:open
+- **`issues.saved_filters` names recurring filters** (`"triage=is:open
   label:bug"`). The filter overlay gained a **saved row** — present only
   while any is configured — cycling over `(none)` plus the configured names;
-  picking one replaces all three dimensions at once, so switching between two
+  picking one replaces every narrowing at once, so switching between two
   never leaves the previous one's labels behind, and `(none)` clears them
-  again. It is reachable from the action menu too.
-- Both are written in one small qualifier syntax in the new leaf package
-  **`internal/issuefilter`**: `state:` (open/closed/all), a repeated `label:`
-  (OR'd, `label:"good first issue"` for a name with spaces) and `match:`,
-  with a bare word reading as match text. Commas separate nothing — the
-  settings UI edits the saved list comma-separated. Sort order and grouping
-  stay out of an expression; they keep their own settings.
+  again. The row's name is *derived* from the live filter rather than
+  remembered, so it can never go stale. Reachable from the action menu too.
+- Both are written in **#2110's qualifier syntax** — the one the match input
+  already accepts — so an expression can be typed in the overlay and pasted
+  into the config unchanged: `is:` (alias `state:`), a repeated `label:`
+  (OR'd, `label:"good first issue"` for a name with spaces), `sort:`, and
+  anything else as match text. A `sort:` qualifier is the more specific
+  setting and wins over `issues.default_sort`. Commas separate nothing — the
+  settings UI edits the saved list comma-separated.
+- The strict reader is the new leaf package **`internal/issuefilter`**: the
+  config layer cannot import the pane, so it is a second implementation, and
+  `ghissues/qualifier_conformance_test.go` pins the two to each other
+  (vocabularies and per-expression results). The one intended difference is
+  strictness — in the live input an unknown token stays literal fuzzy text
+  with a note, in a config value it is an error.
 - Settings UI: both entries sit on the **Issues Window** page, the filter as
   validated free text and the saved list as a validated list. The `String`
   editor gained a `ValidateString` hook, so a typo is refused in the form
   with the parser's own message instead of being silently ignored when the
   pane opens; a config file naming a broken expression drops it with a
   diagnostic (the whole default filter, or just the offending saved entry).
+
+## 2026-08-25 (ui: structured qualifiers in the issues filter match input, #2110)
+
+- **The filter overlay's match input accepts structured qualifiers** the way
+  the JetBrains PR tool window's search field does: `label:<name>`
+  (repeatable, OR, quotable for spaced names), `is:open|closed|all` (alias
+  `state:`) and `sort:<order>`, with the rest of the line staying the fuzzy
+  pattern. A qualifier terminated by a space (or the closing `enter`) is
+  extracted from the input and **written into the same filter model the
+  overlay sections edit** — chips appear, `esc` reverts, a state qualifier
+  refetches exactly like the state row. Inline ghost completion for
+  qualifier names, label names and values; `tab` accepts, and falls back to
+  row navigation without a ghost. Unknown names and bad values stay literal
+  fuzzy text with a faint note on the match row explaining why. An optional
+  power layer only (`:` needs Shift on QWERTZ, #48) — every dimension keeps
+  its section row and accelerator key.
+
+## 2026-08-25 (ui: and/or toggle for the issues label filter, #2112)
+
+- **The issues window's label filter can now match _all_ selected labels.**
+  The filter overlay gained a `labels: ● any of ○ all of` row directly above
+  the label section: any-of keeps the previous OR semantics, all-of narrows
+  to the intersection (`hasAllLabels`). The mode reads in the overlay row,
+  the overlay footer ("labels match any/all selected") and the chip row,
+  which leads with a `[labels: bug+feature (all) ⌫]` chip whose clear widens
+  back to any-of without dropping the labels. It reverts with `esc` in the
+  overlay and clears with the label selection on the list.
 
 ## 2026-08-25 (ui: issues window key-map consolidation across modes, #2114)
 

@@ -9,15 +9,20 @@ import "fmt"
 // context layering is also a feature ("keep both, resolve by context", #1312).
 // A Shadow makes that overlap visible without breaking the feature: it is a
 // non-fatal diagnostic, and deliberate default-set layerings are allowlisted.
+// Since #1876 the same detection covers the language level: an editor[http]
+// binding shadows editor and Global bindings of the chord, but only inside
+// its narrower scope (http buffers) — Context.Shadows encodes which pairs can
+// actually overlap.
 
-// Shadow records a pane-scoped binding hiding a less specific binding of a
-// different command on the same chord: while Winner's pane has focus the chord
-// runs Winner.Command and Hidden.Command is unreachable there; everywhere else
-// Hidden still wins.
+// Shadow records a more specific binding hiding a less specific one of a
+// different command on the same chord: while Winner's scope has focus (its
+// pane, and for a language-qualified winner a buffer of its language) the
+// chord runs Winner.Command and Hidden.Command is unreachable there;
+// everywhere else Hidden still wins.
 type Shadow struct {
 	Chord  string
-	Winner Binding // pane-scoped; wins while its pane has focus
-	Hidden Binding // Global; unreachable in Winner's context
+	Winner Binding // more specific; wins while its scope has focus
+	Hidden Binding // Global or Winner's pane base; unreachable in Winner's scope
 }
 
 // String renders the shadow for a diagnostic line, naming which command wins
@@ -59,11 +64,12 @@ var intentionalDefaultShadows = map[string]string{
 }
 
 // detectShadows scans the effective (post-conflict) binding set for
-// cross-context shadowing: a pane-scoped binding and a Global binding sharing
-// a chord but naming different commands. Same-command overlaps are the
-// dual-chord/fallback pattern, not a shadow. Allowlisted pairs where both
-// sides are shipped defaults are skipped. Input order is preserved so the
-// result is deterministic.
+// cross-context shadowing: two bindings sharing a chord but naming different
+// commands, where one context can hide the other (Context.Shadows — pane over
+// Global, and since #1876 editor[lang] over editor and Global). Same-command
+// overlaps are the dual-chord/fallback pattern, not a shadow. Allowlisted
+// pairs where both sides are shipped defaults are skipped. Input order is
+// preserved so the result is deterministic.
 func detectShadows(bindings []Binding) []Shadow {
 	var out []Shadow
 	for _, w := range bindings {
@@ -71,7 +77,7 @@ func detectShadows(bindings []Binding) []Shadow {
 			continue
 		}
 		for _, h := range bindings {
-			if h.Context != Global || h.Chord.String() != w.Chord.String() || h.Command == w.Command {
+			if !w.Context.Shadows(h.Context) || h.Chord.String() != w.Chord.String() || h.Command == w.Command {
 				continue
 			}
 			if w.Layer == LayerDefault && h.Layer == LayerDefault {

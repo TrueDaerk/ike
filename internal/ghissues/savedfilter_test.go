@@ -9,7 +9,7 @@ import (
 // The default filter seeds all three dimensions of a freshly opened pane.
 func TestDefaultFilterSeedsThePane(t *testing.T) {
 	m := filled(t)
-	m.Configure(fakeConfig{"issues.default_filter": `state:all label:feature match:explorer`})
+	m.Configure(fakeConfig{"issues.default_filter": `is:all label:feature explorer`})
 	if m.Filter() != "explorer" {
 		t.Fatalf("match = %q, want explorer", m.Filter())
 	}
@@ -29,7 +29,7 @@ func TestDefaultFilterSeedsThePane(t *testing.T) {
 // the session — the seed rule issues.default_tab/default_sort already follow.
 func TestDefaultFilterYieldsToAHandChange(t *testing.T) {
 	m := filled(t)
-	cfg := fakeConfig{"issues.default_filter": "match:explorer"}
+	cfg := fakeConfig{"issues.default_filter": "explorer"}
 	m.Configure(cfg)
 	m.Update(key("f"))
 	for _, r := range "markdown" {
@@ -51,7 +51,7 @@ func TestDefaultFilterYieldsToAHandChange(t *testing.T) {
 // silently re-narrow itself on the next reload.
 func TestClearingTheFilterYieldsTheSeed(t *testing.T) {
 	m := filled(t)
-	cfg := fakeConfig{"issues.default_filter": "match:explorer"}
+	cfg := fakeConfig{"issues.default_filter": "explorer"}
 	m.Configure(cfg)
 	m.Update(key("esc")) // peels the match text
 	if m.Filter() != "" {
@@ -60,6 +60,29 @@ func TestClearingTheFilterYieldsTheSeed(t *testing.T) {
 	m.Configure(cfg)
 	if m.Filter() != "" {
 		t.Fatalf("a reload must not re-seed a filter the user cleared, got %q", m.Filter())
+	}
+}
+
+// The expression shares #2110's qualifiers, so it can also name the sort
+// order — and being the more specific setting, it wins over
+// issues.default_sort whichever order Configure reads them in.
+func TestDefaultFilterSortWinsOverDefaultSort(t *testing.T) {
+	m := filled(t)
+	m.Configure(fakeConfig{
+		"issues.default_sort":   "number",
+		"issues.default_filter": "sort:oldest label:bug",
+	})
+	if m.SortOrder() != SortOldest {
+		t.Fatalf("sort = %v, want oldest — the filter's sort: is the more specific setting", m.SortOrder())
+	}
+	// Without a sort: qualifier the plain default still applies.
+	m2 := filled(t)
+	m2.Configure(fakeConfig{
+		"issues.default_sort":   "number",
+		"issues.default_filter": "label:bug",
+	})
+	if m2.SortOrder() != SortNumber {
+		t.Fatalf("sort = %v, want number — the filter names no order", m2.SortOrder())
 	}
 }
 
@@ -74,7 +97,7 @@ func TestBrokenDefaultFilterIsIgnored(t *testing.T) {
 
 func TestSavedFiltersApplyFromTheOverlay(t *testing.T) {
 	m := filled(t)
-	m.Configure(fakeConfig{"issues.saved_filters": "triage=label:bug,stale=state:all match:markdown"})
+	m.Configure(fakeConfig{"issues.saved_filters": "triage=label:bug,stale=is:all markdown"})
 	if got := m.SavedFilters(); !reflect.DeepEqual(got, []string{"triage", "stale"}) {
 		t.Fatalf("saved filters = %v, want [triage stale]", got)
 	}
@@ -82,7 +105,7 @@ func TestSavedFiltersApplyFromTheOverlay(t *testing.T) {
 		t.Fatalf("a fresh pane must sit on %s, got %q", savedNone, m.SavedFilter())
 	}
 	m.Update(key("f"))
-	// match, state, sort, group, saved — the saved row is the last fixed one.
+	// match, state, sort, group, label mode, saved — the saved row is last.
 	saved := m.fovFixedRows() - 1
 	if m.fovKind(saved) != fovSaved {
 		t.Fatalf("row %d is not the saved row", saved)
@@ -153,8 +176,9 @@ func TestNoSavedRowWithoutSavedFilters(t *testing.T) {
 			t.Fatal("the saved row must stay hidden while no saved filter is configured")
 		}
 	}
-	if m.fovFixedRows() != 4 {
-		t.Fatalf("the issue tab has 4 fixed rows without saved filters, got %d", m.fovFixedRows())
+	// match, state, sort, grouping, label mode — no saved row.
+	if m.fovFixedRows() != 5 {
+		t.Fatalf("the issue tab has 5 fixed rows without saved filters, got %d", m.fovFixedRows())
 	}
 }
 

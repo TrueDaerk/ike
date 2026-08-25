@@ -523,10 +523,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// the app — editor find, terminal scrollback search (#1504) — since
 		// plain "/" alone doesn't match user expectations (#1830).
 		m.searching = true
-		m.query = ""
-		m.qcur = 0
-		m.matches = nil
+		m.query = m.selectionSearchPrefill()
+		m.qcur = len([]rune(m.query))
 		m.cur = 0
+		m.research()
 	case "n":
 		m.step(1)
 	case "N":

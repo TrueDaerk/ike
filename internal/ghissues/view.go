@@ -191,11 +191,12 @@ func (m *Model) filterRow(pal *theme.Palette) string {
 }
 
 // filterOvRows renders the filter overlay's rows (#2104): the match input,
-// the state radio, the sort cycle, the grouping toggle, the saved filter
-// cycle (#2115, only when any is configured) and — on the issue view — one
-// row per label with its chip and count. The fixed rows come from fovRows, so
-// the render order and the cursor's row kinds cannot drift apart. The row
-// under the cursor is accented, exactly like every other overlay.
+// the state radio, the sort cycle, the grouping toggle, the label any-of /
+// all-of switch (#2112), the saved filter cycle (#2115, only when any is
+// configured) and — on the issue view — one row per label with its chip and
+// count. The fixed rows come from fovRows, so the render order and the
+// cursor's row kinds cannot drift apart. The row under the cursor is accented,
+// exactly like every other overlay.
 func (m *Model) filterOvRows(pal *theme.Palette) []string {
 	sel := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
 	plain := lipgloss.NewStyle().Foreground(pal.Foreground)
@@ -209,14 +210,7 @@ func (m *Model) filterOvRows(pal *theme.Palette) []string {
 	for i, kind := range m.fovRows() {
 		switch kind {
 		case fovMatch:
-			switch {
-			case m.ovCursor == fovMatch:
-				rows = append(rows, sel.Render("match: ")+ui.CursorView(m.fInput, m.fCur))
-			case m.fInput == "":
-				rows = append(rows, plain.Render("match: ")+lipgloss.NewStyle().Faint(true).Render("(type on this row)"))
-			default:
-				rows = append(rows, plain.Render("match: "+m.fInput))
-			}
+			rows = append(rows, m.matchRow(sel, plain))
 		case fovState:
 			rows = append(rows, style(i).Render("state: "+stateRadio(m.state)))
 		case fovSort:
@@ -227,6 +221,8 @@ func (m *Model) filterOvRows(pal *theme.Palette) []string {
 				mark = "[x]"
 			}
 			rows = append(rows, style(i).Render(mark+" group by label"))
+		case fovMode:
+			rows = append(rows, style(i).Render("labels: "+labelModeRadio(m.labelAll)))
 		case fovSaved:
 			rows = append(rows, style(i).Render("saved: ‹ "+m.SavedFilter()+" ›"))
 		}
@@ -250,6 +246,50 @@ func (m *Model) filterOvRows(pal *theme.Palette) []string {
 		rows = append(rows, st.Render(mark)+chip(l)+st.Render("  "+strconv.Itoa(m.labelCount(l.Name))))
 	}
 	return rows
+}
+
+// labelModeWord is the footer's word for the active label semantics.
+func (m *Model) labelModeWord() string {
+	if m.labelAll {
+		return "all"
+	}
+	return "any"
+}
+
+// labelModeRadio renders the label section's any-of/all-of switch (#2112)
+// with the active semantics marked, so the filter never narrows silently.
+func labelModeRadio(all bool) string {
+	if all {
+		return "○ any of  ● all of"
+	}
+	return "● any of  ○ all of"
+}
+
+// matchRow renders the overlay's match input: the typed pattern with the
+// cursor, the inline qualifier completion's ghost (#2110) when there is one,
+// and otherwise the note explaining a token that reads like a qualifier but
+// is not.
+func (m *Model) matchRow(sel, plain lipgloss.Style) string {
+	faint := lipgloss.NewStyle().Faint(true)
+	if m.ovCursor != fovMatch {
+		if m.fInput == "" {
+			return plain.Render("match: ") + faint.Render("(type on this row)")
+		}
+		return plain.Render("match: " + m.fInput)
+	}
+	line := sel.Render("match: ")
+	if ghost := m.matchCompletion(); ghost != "" {
+		// The inline completion (#2110): the cursor sits on the ghost's first
+		// rune, tab accepts the rest.
+		g := []rune(ghost)
+		return line + m.fInput + lipgloss.NewStyle().Reverse(true).Faint(true).Render(string(g[0])) +
+			faint.Render(string(g[1:]))
+	}
+	line += ui.CursorView(m.fInput, m.fCur)
+	if note := qualNote(m.fInput); note != "" {
+		line += faint.Render("  (" + note + ")")
+	}
+	return line
 }
 
 // stateRadio renders the state row's three options with the active one
@@ -742,12 +782,12 @@ func (m *Model) footer(pal *theme.Palette) string {
 			return lipgloss.NewStyle().Faint(true).Render(m.clip(" typing narrows the labels · space toggles · backspace deletes · enter keeps · esc clears the search"))
 		}
 		if m.ovCursor == fovMatch {
-			return lipgloss.NewStyle().Faint(true).Render(m.clip(" type to match · ↓ more filters · enter keeps · esc reverts"))
+			return lipgloss.NewStyle().Faint(true).Render(m.clip(" type to match · label:/is:/sort: qualify · tab completes · ↓ more filters · enter keeps · esc reverts"))
 		}
 		if m.tab != TabPRs && m.ovCursor >= m.fovFixedRows() {
 			return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggles · type to narrow · backspace clears the row · enter keeps · esc reverts"))
 		}
-		return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggles · labels match any selected · backspace clears the row · enter keeps · esc reverts"))
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggles · labels match " + m.labelModeWord() + " selected · backspace clears the row · enter keeps · esc reverts"))
 	}
 	if m.ov == ovLabelEdit || m.ov == ovAssignEdit {
 		if m.ovSearch.Active() {

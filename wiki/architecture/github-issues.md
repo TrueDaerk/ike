@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Issues Tool Window
-description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select) with a permanent chip row whose chips clear individually, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, a consolidated key table with one meaning per letter family across all modes, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111, #2114).
+description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select with an any-of/all-of switch) with a permanent chip row whose chips clear individually and a structured qualifier layer in the match input (label:/is:/sort: with inline tab completion) writing the same filter model, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, a consolidated key table with one meaning per letter family across all modes, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111, #2114, #2112, #2110).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane, keymap]
-timestamp: 2026-08-25T21:00:00Z
+timestamp: 2026-08-25T22:00:00Z
 ---
 
-# Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104, #2111, #2114)
+# Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104, #2110, #2111, #2112, #2114)
 
 Development in this repository is issue-driven (see
 [Change Workflow](/process/change-workflow.md)); this pane brings that loop
@@ -164,9 +164,10 @@ The keys are QWERTZ-safe throughout (#48, #2064): plain letters and delivered
 Every narrowing lives in **one mechanism**: the **filter overlay**
 (`filterov.go`), a centered modal whose sections are the fuzzy **match**
 input, the **state** radio (open / closed / all, the active option marked so
-cycling is never blind), the **sort** cycle, the **grouping** toggle, the
-**saved** filter cycle (#2115, only while `issues.saved_filters` names any)
-and one row per **label**. Changes apply to the list behind it live; `enter` keeps
+cycling is never blind), the **sort** cycle, the **grouping** toggle, the label
+filter's **any-of/all-of** switch, the **saved** filter cycle (#2115, only
+while `issues.saved_filters` names any) and one row per **label**. Changes
+apply to the list behind it live; `enter` keeps
 and closes, `esc` restores every section to what the overlay opened with.
 `up`/`down` (and `tab`/`shift+tab`) walk the sections; the match row owns
 every printable key, the other rows toggle with `space` (or `left`/`right`)
@@ -177,11 +178,21 @@ and clear with `backspace`.
   assignees and author (head branch on the PR tab).
 - **`l`** opens the same overlay scrolled to the **label section** — the
   repository's label set (the mutation pickers' source, falling back to the
-  listing) with per-label issue counts and chips. The selection is an **OR**
-  filter (the footer says "labels match any selected") and it is **sticky**:
+  listing) with per-label issue counts and chips. The selection is **sticky**:
   a refetch that no longer carries a selected label keeps the selection, so
   its chip stays visible and clearable instead of vanishing silently. The
   section **narrows as you type** (#2111, below).
+- **The `labels: ● any of ○ all of` row** directly above the label section
+  switches the selection's semantics (#2112). *Any of* (the default) is an
+  **OR** filter — "bug" plus "feature" widens to every issue carrying either;
+  *all of* is an **AND** filter — it narrows to their intersection, the
+  behaviour GitHub and JetBrains users expect. `space` (or `left`/`right`)
+  toggles the row, `backspace` returns it to *any of*, and the footer follows
+  along ("labels match any/all selected"). In all-of mode the chip row leads
+  with a `[labels: bug+feature (all) ⌫]` chip ahead of the per-label chips;
+  clearing that chip widens back to any-of **without** dropping the labels.
+  The mode reverts with `esc` inside the overlay like every other section,
+  and `esc` on the list clears it together with the label selection.
 - **`t`** cycles the **state filter** open → closed → all — a one-key
   accelerator of the overlay's state row. A change only refetches when the
   current listing cannot answer the new gate (a listing fetched as `all`
@@ -217,12 +228,45 @@ selection is restored by number after the rows rebuild); only editing the
 match pattern sends it to the top, where the best fuzzy score now sits.
 
 Below the tab bar a **permanent filter row** renders every active narrowing
-as a **chip** (`[match: expl ⌫] [bug ⌫] [state: all ⌫]` — one chip per label),
+as a **chip** (`[match: expl ⌫] [bug ⌫] [state: all ⌫]` — one chip per label,
+preceded by the `labels: … (all)` mode chip while the filter is all-of),
 so a narrowed list can never look like an empty repository and a chip
 appearing never shifts the body by a line. A **click on a chip clears exactly
 that narrowing**; a mutation's in-flight and error states (#2088) render
 beside the chips, not instead of them. With nothing active the row shows a
 faint `(f filters the list)` hint.
+
+### Structured qualifiers in the match input (#2110)
+
+The match input additionally accepts **qualifiers**, the way the JetBrains PR
+tool window's search field does — a power layer that lets one line express a
+whole filter (`qualifier.go`):
+
+- **`label:<name>`** — repeatable, adding to the label selection (combined
+  per the section's any-of/all-of mode row, #2112); a name with spaces is
+  quoted (`label:"help wanted"`).
+- **`is:open|closed|all`** (alias **`state:`**) — the state radio.
+- **`sort:relevance|newest|oldest|updated|number`** — the sort cycle.
+
+A qualifier is recognized once **terminated** — by the space after it, or by
+the `enter` that closes the overlay. It is then **extracted from the input and
+written into the same filter model the sections edit**: the chip appears, the
+section row updates, `esc` reverts it with everything else, and a state
+qualifier refetches exactly when the state row would. Whatever the line keeps
+stays the fuzzy pattern, so `label:bug crash` reads "label bug, pattern
+crash". A token that merely looks like a qualifier — an unknown name
+(`author:bo`) or a bad value (`is:banana`) — **stays literal fuzzy text** and
+the match row says why in a faint note (`unknown qualifier "author:" —
+matched literally`), so an ignored token is never silent.
+
+The input **completes inline**: with the cursor at the end of the line the
+first matching candidate renders as a faint ghost after it — qualifier names
+(`la` → `label:`), label names from the label section's own source, state and
+sort values — and **`tab` accepts** it (falling back to its usual row
+navigation without a ghost). A completed value ends in the terminating space,
+so accepting it applies immediately. Since `:` needs Shift on QWERTZ (#48),
+qualifiers are an **optional** layer: every dimension keeps its section row
+and one-key accelerator as the symbol-free path.
 
 ### Speed search in the pickers (#2111)
 
@@ -292,10 +336,26 @@ degrade at narrow widths: below 24 columns the bar falls back to a plain
 indent, and a rule that cannot hold its label is drawn plain across the pane.
 The states are visible and keyboard-reachable: a loading row while a fetch is
 in flight, an error row
-(`r` retries) that keeps what already loaded, `(p loads more activity)` while
+(`r` retries) that keeps what already loaded,
+`(scroll or p loads more activity)` while
 more pages follow — `p` appends the next page without moving the scroll — and
-`(no activity yet)` on an empty finished history. `r` inside the detail
-refetches the listing *and* the open issue's timeline. A `TimelineMsg` for an
+`(no activity yet)` on an empty finished history.
+
+**Pagination follows the scroll (#2113).** `p` stays the explicit key, but
+scrolling the detail (`j`, page down, `G`/`end`, the wheel) onto its last
+window fetches the next page on its own, so the history keeps coming without
+knowing about the key. Only the *downward* scroll paths ask, and only when no
+fetch is in flight, so one page arrives per scroll to the end — never a
+cascade that pulls the whole history at once; each new page pushes the end
+away again, so the next page waits for the next scroll.
+
+**A refresh keeps the loaded depth (#2113).** `r` inside the detail refetches
+the listing *and* the open issue's timeline, restarting at page one — but it
+remembers how many pages were loaded (`tlWant`) and, as each answer arrives,
+chains the next fetch until that depth is back, so a refresh never drops the
+history the user had already paged through. A failed page stops the chain and
+settles on the error row; `SetTimelineResult` returns that follow-up command,
+which the app routes back into the Update loop. A `TimelineMsg` for an
 issue the pane no longer waits on is dropped; entry IDs and the own-comment
 flag are carried in the model for the comment-editing sub-issue.
 
@@ -467,32 +527,42 @@ diagnostic in a config file) when they do not parse.
 #### Filter expressions
 
 `issues.default_filter` and every `issues.saved_filters` entry are written in
-one small qualifier syntax (`internal/issuefilter`), covering exactly the
-three dimensions a filter narrows by:
+**the qualifier syntax of the match input** (#2110) — one syntax, two readers,
+so an expression can be typed in the overlay and pasted into the config
+unchanged:
 
 ```toml
 [issues]
-default_filter = 'state:open label:bug match:crash'
-saved_filters = ["triage=state:open label:bug", "stale=state:all match:flaky"]
+default_filter = 'is:open label:bug crash'
+saved_filters = ["triage=is:open label:bug", "stale=is:all sort:oldest flaky"]
 ```
 
-- `state:` takes `open`, `closed` or `all`; `label:` is repeated once per
-  label (they are OR'd, exactly as the label picker does); `match:` is the
-  fuzzy pattern, and a bare word is match text too, so `crash` means
-  `match:crash`.
+- `is:` (alias `state:`) takes `open`, `closed` or `all`; `label:` is repeated
+  once per label (they are OR'd, exactly as the label picker's any-of mode);
+  `sort:` names a list order; everything else is the fuzzy pattern, so a bare
+  word means "match this".
 - A value with spaces is double-quoted — `label:"good first issue"` — and a
   quoted word is never read as a qualifier.
 - Commas separate nothing: the settings UI edits `saved_filters` as a
   comma-separated list, so neither a name nor an expression may contain one.
-- The sort order and the grouping are *not* part of an expression; they keep
-  `issues.default_sort` and their own toggle.
+- A `sort:` qualifier is the more specific setting and **wins over
+  `issues.default_sort`**. Grouping is not part of an expression.
+- The one difference from the live input is strictness: there an unknown token
+  stays literal fuzzy text (you are mid-typing and see the note), while a
+  config value has no reader to correct it — so here it is an error the
+  settings form and the config diagnostics name. `internal/issuefilter` is the
+  strict reader; `ghissues/qualifier_conformance_test.go` pins the two
+  implementations to each other, since the config layer cannot import the pane.
 
 A saved filter is applied from the filter overlay's `saved` row — present
 only while any is configured, cycling over `(none)` plus the configured names
-— or from the action menu. Applying one replaces all three dimensions at
-once, so switching between two saved filters never leaves the previous one's
-labels behind, and `(none)` clears them again. Applying counts as a hand
-change: the configured default no longer re-seeds the pane afterwards.
+— or from the action menu. Applying one replaces every narrowing at once
+(state, labels, label mode, match), so switching between two saved filters
+never leaves the previous one's labels behind, and `(none)` clears them again.
+The sort order is the exception: it only moves when the expression names one,
+because an order is not a narrowing and the user's own `a` should survive a
+filter switch. Applying counts as a hand change: the configured default no
+longer re-seeds the pane afterwards.
 
 Which saved filter the row shows is **derived from the live filter**, never
 remembered — narrow the match text by hand after picking `triage` and the row

@@ -31,17 +31,17 @@ type savedFilter struct {
 // again, so a saved filter is never a one-way door.
 const savedNone = "(none)"
 
-// parseStateFilter maps a state qualifier onto the pane's gate. An expression
-// that names no state leaves the gate alone, which is why the second result
-// exists.
+// parseStateFilter maps an is:/state: qualifier onto the pane's gate. An
+// expression that names no state leaves the gate alone, which is why the
+// second result exists. The mapping itself is parseStateName's (#2110).
 func parseStateFilter(s string) (StateFilter, bool) {
-	switch s {
-	case "open":
-		return FilterOpen, true
-	case "closed":
-		return FilterClosed, true
-	case "all":
-		return FilterAll, true
+	if s == "" {
+		return FilterOpen, false
+	}
+	for _, name := range issuefilter.States {
+		if name == s {
+			return parseStateName(s), true
+		}
 	}
 	return FilterOpen, false
 }
@@ -60,11 +60,18 @@ func (m *Model) seedFilter(expr string) {
 	}
 	m.fInput, m.fCur = spec.Match, len([]rune(spec.Match))
 	m.labelSel = map[string]bool{}
+	m.labelAll = false // an expression's labels are any-of (#2112)
 	for _, name := range spec.Labels {
 		m.labelSel[name] = true
 	}
 	if state, ok := parseStateFilter(spec.State); ok {
 		m.state = state
+	}
+	if spec.Sort != "" {
+		// A sort: qualifier is the more specific setting, so it wins over
+		// issues.default_sort — and it seeds under the same rule, since
+		// Configure only reaches here while nothing was touched by hand.
+		m.sort = parseSort(spec.Sort)
 	}
 }
 
@@ -119,19 +126,23 @@ func (m *Model) savedIndex() int {
 	return 0
 }
 
-// matchesSpec reports whether the pane's three filter dimensions are exactly
-// what spec asks for. A spec naming no state means the pane's default gate,
-// which is what applying it produces.
+// matchesSpec reports whether the pane's filter is exactly what spec asks
+// for. A spec naming no state means the pane's default gate, which is what
+// applying it produces; a spec naming no sort order says nothing about the
+// order, so the order is not compared then. The labels are read any-of,
+// because that is how an expression's labels are defined (#2112).
 func (m *Model) matchesSpec(spec issuefilter.Spec) bool {
 	state, ok := parseStateFilter(spec.State)
 	if !ok {
 		state = FilterOpen
 	}
-	if m.state != state || m.fInput != spec.Match {
+	if m.state != state || m.fInput != spec.Match || m.labelAll {
 		return false
 	}
-	labels := m.LabelFilter()
-	if len(labels) != len(spec.Labels) {
+	if spec.Sort != "" && m.sort != parseSort(spec.Sort) {
+		return false
+	}
+	if len(m.LabelFilter()) != len(spec.Labels) {
 		return false
 	}
 	for _, name := range spec.Labels {
@@ -165,10 +176,12 @@ func (m *Model) cycleSaved(delta int) tea.Cmd {
 	return m.applySaved(((m.savedIndex()+delta)%n + n) % n)
 }
 
-// applySaved writes the saved filter at position i (0 = "(none)") over the
-// filter's three dimensions — all of them, so switching between two saved
-// filters never leaves the leftovers of the previous one behind, and
-// "(none)" is the empty filter.
+// applySaved writes the saved filter at position i (0 = "(none)") over every
+// narrowing dimension — all of them, so switching between two saved filters
+// never leaves the leftovers of the previous one behind, and "(none)" is the
+// empty filter. The sort order is the exception: it only moves when the
+// expression names one, because an order is not a narrowing and the user's
+// own 'a' should survive a filter switch.
 func (m *Model) applySaved(i int) tea.Cmd {
 	var spec issuefilter.Spec
 	if i > 0 && i <= len(m.saved) {
@@ -177,8 +190,13 @@ func (m *Model) applySaved(i int) tea.Cmd {
 	m.filterTouched = true
 	m.fInput, m.fCur = spec.Match, len([]rune(spec.Match))
 	m.labelSel = map[string]bool{}
+	m.labelAll = false // an expression's labels are any-of (#2112)
 	for _, name := range spec.Labels {
 		m.labelSel[name] = true
+	}
+	if spec.Sort != "" {
+		m.sortTouched = true
+		m.sort = parseSort(spec.Sort)
 	}
 	state, ok := parseStateFilter(spec.State)
 	if !ok {

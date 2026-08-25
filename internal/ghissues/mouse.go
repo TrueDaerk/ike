@@ -16,7 +16,9 @@ import (
 const doubleClickWindow = 400 * time.Millisecond
 
 // Wheel scrolls the active view (or the open modal / detail) by delta rows.
-func (m *Model) Wheel(delta int) {
+// It returns the timeline page a scroll to the end of the issue detail pulls
+// in (#2113), nil otherwise.
+func (m *Model) Wheel(delta int) tea.Cmd {
 	switch {
 	case m.ov != ovNone:
 		m.ovCursor += delta
@@ -24,6 +26,9 @@ func (m *Model) Wheel(delta int) {
 	case m.detail && m.tab == TabIssues:
 		m.detailTop += delta
 		m.clampDetail()
+		if delta > 0 {
+			return m.autoLoadTimeline()
+		}
 	case m.prDetail && m.tab == TabPRs:
 		m.prdTop += delta
 		m.clampPRDetail()
@@ -32,6 +37,7 @@ func (m *Model) Wheel(delta int) {
 		m.setCursor(snapRow(rows, m.Cursor()+delta, sign(delta)))
 		m.clampScroll()
 	}
+	return nil
 }
 
 // sign is the step direction a wheel delta implies, used to skip group
