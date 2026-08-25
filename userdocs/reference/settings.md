@@ -236,6 +236,7 @@ secrets — are documented together, with screenshots, in
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Background poll interval | `forge.poll_interval_seconds` | integer (0–3600) | `20` | user | Seconds between background re-fetches of the repository's issues and pull requests, so new issues, closed issues and PR state changes surface without pressing r. The fetch runs off the UI loop and a tick arriving while the previous one is still running is skipped, so a slow forge never stalls IKE; consecutive failures back off exponentially (up to 5 minutes) and an unavailable forge — no CLI, no matching remote or login — stops polling until a manual refresh succeeds. 0 turns polling off entirely; the lowest interval is 10 seconds |
+| Persistent listing cache | `forge.cache` | boolean | `true` | user | Keep the last successful issue/PR listing in the project's `.ike/forgecache.json`: a freshly started IKE shows it instantly, marked "cached · updating…" until the real fetch lands, and background polls only ask the forge for issues updated since the snapshot instead of re-listing everything. Manual `r` always performs a full resync; a repository or backend switch invalidates the snapshot; off never reads or writes the file |
 
 ### Scratch Files
 

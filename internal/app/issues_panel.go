@@ -85,7 +85,11 @@ func (m *Model) openIssuesPanel() tea.Cmd {
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	if !p.Loaded() {
-		return p.Refresh()
+		// The persisted snapshot (#2108) renders while the fetch runs: the
+		// seed resolves off the Update loop (it reads a file and the remote
+		// key) and lands as a forge.CachedListingMsg; SetCached drops it if
+		// the fetch happens to win the race.
+		return tea.Batch(forge.LoadCacheCmd("."), p.Refresh())
 	}
 	return nil
 }

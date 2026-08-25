@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -190,6 +191,40 @@ func (t *teaForge) Issues(state IssueState) ([]Issue, error) {
 		issues = issues[:issueLimit]
 	}
 	return issues, nil
+}
+
+// IssuesSince lists the issues updated at or after since, in every state,
+// through the same listing endpoint with Gitea's since filter (#2108),
+// paging like Issues. An answer that fills issueLimit may have lost updates
+// behind the cap, so it reports incomplete and the caller resyncs fully.
+func (t *teaForge) IssuesSince(since time.Time) ([]Issue, bool, error) {
+	var issues []Issue
+	for page := 1; len(issues) < issueLimit; page++ {
+		out, err := t.apiGet(t.repoPath()+"/issues", giteaSinceQuery(since, page))
+		if err != nil {
+			return nil, false, err
+		}
+		batch, err := parseGiteaIssues(out)
+		if err != nil {
+			return nil, false, err
+		}
+		issues = append(issues, batch...)
+		if len(batch) < giteaPageSize {
+			return issues, true, nil
+		}
+	}
+	return issues[:issueLimit], false, nil
+}
+
+// giteaSinceQuery builds one updated-since listing page (pure, testable).
+func giteaSinceQuery(since time.Time, page int) url.Values {
+	q := url.Values{}
+	q.Set("type", "issues")
+	q.Set("state", "all")
+	q.Set("since", since.UTC().Format(time.RFC3339))
+	q.Set("limit", itoa(giteaPageSize))
+	q.Set("page", itoa(page))
+	return q
 }
 
 // PRs lists the repository's pull requests in every state, paging like

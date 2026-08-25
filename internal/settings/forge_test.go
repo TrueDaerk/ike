@@ -75,6 +75,51 @@ func forgePanel(t *testing.T) *Model {
 	return m
 }
 
+func TestForgePageExposesTheCacheToggle(t *testing.T) {
+	// The persistent listing cache (#2108) ships with its Settings UI switch
+	// in the same change (project rule): a Bool on the Forge page.
+	pages := forgePages()
+	if len(pages) != 1 {
+		t.Fatal("the settings schema has no Forge page")
+	}
+	var e *Entry
+	for i := range pages[0].Entries {
+		if pages[0].Entries[i].Key == "forge.cache" {
+			e = &pages[0].Entries[i]
+		}
+	}
+	if e == nil {
+		t.Fatal("the Forge page has no forge.cache entry")
+	}
+	if e.Type != Bool {
+		t.Errorf("type = %v, want Bool", e.Type)
+	}
+	if !strings.Contains(e.Description, "full resync") {
+		t.Errorf("the description must document the r = full resync rule: %q", e.Description)
+	}
+}
+
+func TestForgeCacheToggleCommits(t *testing.T) {
+	restoreConfig(t)
+	m := New(forgePages(), testOpts(t))
+	m.SetSize(90, 20)
+	m.Open()
+	m.focus = formColumn
+	for i, r := range m.rows() {
+		if r.kind == rowEntry && r.entry.Key == "forge.cache" {
+			m.sel = i
+		}
+	}
+	if !config.Get().Forge.Cache {
+		t.Fatal("forge.cache must default on")
+	}
+	m.Update(key("enter")) // a Bool flips in place and stages the change
+	commit(t, m)
+	if config.Get().Forge.Cache {
+		t.Fatal("committed = on, want the toggle flipped off and persisted")
+	}
+}
+
 func TestForgeIntervalCommits(t *testing.T) {
 	m := forgePanel(t)
 	m.editor.(*intEditor).tf.Set("45")

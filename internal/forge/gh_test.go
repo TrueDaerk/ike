@@ -1,6 +1,9 @@
 package forge
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // gh_test.go covers the gh --json parsing on fixture documents (#1934): the
 // issue listing with labels and assignees, and the PR listing with the mixed
@@ -246,5 +249,49 @@ func TestParseBodyFieldOnGitHubDocuments(t *testing.T) {
 	}
 	if body != "Looks good \u2014 one nit." {
 		t.Fatalf("comment body = %q", body)
+	}
+}
+
+func TestParseGHAPIIssuesSkipsPullRequests(t *testing.T) {
+	// The REST issues endpoint the incremental fetch uses (#2108) mixes pull
+	// requests into the answer; the parser drops them but the raw count keeps
+	// them, so the truncation check sees what GitHub actually sent.
+	out := []byte(`[
+	 {"number": 7, "title": "an issue", "html_url": "https://e/7", "state": "open",
+	  "user": {"login": "ada"}, "created_at": "2026-08-20T10:00:00Z",
+	  "updated_at": "2026-08-25T09:00:00Z",
+	  "labels": [{"name": "bug", "color": "d73a4a"}],
+	  "assignees": [{"login": "dev"}]},
+	 {"number": 8, "title": "a pull request", "state": "open",
+	  "pull_request": {"url": "https://e/pulls/8"}},
+	 {"number": 9, "title": "closed issue", "state": "closed"}
+	]`)
+	issues, raw, err := parseGHAPIIssues(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw != 3 {
+		t.Errorf("raw = %d, want 3 (the PR counts toward truncation)", raw)
+	}
+	if len(issues) != 2 {
+		t.Fatalf("issues = %+v, want the PR dropped", issues)
+	}
+	is := issues[0]
+	if is.Number != 7 || is.Author != "ada" || is.State != "OPEN" ||
+		len(is.Labels) != 1 || is.Labels[0].Name != "bug" ||
+		len(is.Assignees) != 1 || is.Assignees[0] != "dev" || is.UpdatedAt.IsZero() {
+		t.Errorf("issue = %+v, want the REST fields mapped", is)
+	}
+	if issues[1].State != "CLOSED" {
+		t.Errorf("state = %q, want CLOSED folded to upper case", issues[1].State)
+	}
+}
+
+func TestGHSincePathEncodesTheCutoff(t *testing.T) {
+	since := time.Date(2026, 8, 25, 9, 30, 0, 0, time.UTC)
+	path := ghSincePath(since)
+	want := "repos/{owner}/{repo}/issues?state=all&sort=updated&direction=desc&per_page=100&since=2026-08-25T09%3A30%3A00Z"
+	if path != want {
+		t.Errorf("path = %q, want %q", path, want)
 	}
 }
