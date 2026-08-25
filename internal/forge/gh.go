@@ -60,6 +60,15 @@ func runCLI(dir, tool string, timeout time.Duration, args ...string) ([]byte, er
 // travels: markdown can hold anything, so it must never become an argv
 // element (`--body-file -`, `--input -`).
 func runCLIStdin(dir, tool string, timeout time.Duration, stdin []byte, args ...string) ([]byte, error) {
+	stdout, _, err := runCLICapture(dir, tool, timeout, stdin, args...)
+	return stdout, err
+}
+
+// runCLICapture is runCLIStdin handing back the standard error stream as
+// well. Only `tea api` needs it: with --include the response's status line
+// and headers go to stderr while the body goes to stdout (#2118); every
+// other call discards stderr unless the command failed.
+func runCLICapture(dir, tool string, timeout time.Duration, stdin []byte, args ...string) ([]byte, []byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, tool, args...)
@@ -73,11 +82,11 @@ func runCLIStdin(dir, tool string, timeout time.Duration, stdin []byte, args ...
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return nil, errTimeout
+			return nil, nil, errTimeout
 		}
-		return nil, cliError(tool, err, stderr.String())
+		return nil, nil, cliError(tool, err, stderr.String())
 	}
-	return stdout.Bytes(), nil
+	return stdout.Bytes(), stderr.Bytes(), nil
 }
 
 // runGH executes one gh command in dir with the package timeout.

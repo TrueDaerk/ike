@@ -10,6 +10,15 @@ package forge
 // the write side (#2088) posts, patches and deletes against the same API.
 // Like every other call in this package, nothing here runs from Update; the
 // HTTP client carries the same deadline as the CLI subprocesses.
+//
+// Since tea 0.14 a login can authenticate by OAuth, and then config.yml has
+// no token: field at all — tea keeps the access token in its own credential
+// store (an AES-GCM `credentials.json.enc` whose master key lives in the OS
+// keyring). Such a login has no token to put in an Authorization header, so
+// its requests take the second transport below: `tea api`, which resolves
+// the credential store and refreshes an expired OAuth token itself and
+// hands back the forge's *raw* response — the table layer that made
+// `tea issues list --output json` unusable is not in that path (#2118).
 
 import (
 	"bytes"
@@ -36,7 +45,8 @@ type teaForge struct {
 	baseURL string // instance root from the tea login, no trailing slash
 	owner   string
 	repo    string
-	token   string
+	token   string // "" for an OAuth login: requests go through `tea api`
+	name    string // the tea login's name, what `tea api --login` selects
 	user    string // the login's user, for the timeline's own-comment flag
 
 	// Lazy /user probe backing userLogin when the tea login did not name its
@@ -49,10 +59,16 @@ type teaForge struct {
 // (default 50), so the listing pages until issueLimit or the last page.
 const giteaPageSize = 50
 
-// teaToken finds the API token of the named tea login in tea's config file
-// (the login listing does not print tokens). tea stores its config under the
-// user config dir; both the platform-native and the XDG location are tried.
-func teaToken(name, loginURL string) (string, error) {
+// teaToken finds the plaintext API token of the named tea login in tea's
+// config file (the login listing does not print tokens). tea stores its
+// config under the user config dir; both the platform-native and the XDG
+// location are tried.
+//
+// Since #2118 a missing token is not an error: an OAuth login (tea ≥ 0.14)
+// legitimately has none — it keeps its access token in tea's credential
+// store — and detect.go binds the `tea api` transport for it instead. The
+// empty string simply means "no header token available".
+func teaToken(name, loginURL string) string {
 	var paths []string
 	if dir, err := os.UserConfigDir(); err == nil {
 		paths = append(paths, filepath.Join(dir, "tea", "config.yml"))
@@ -66,14 +82,15 @@ func teaToken(name, loginURL string) (string, error) {
 			continue
 		}
 		if tok := tokenFromTeaConfig(raw, name, loginURL); tok != "" {
-			return tok, nil
+			return tok
 		}
 	}
-	return "", errors.New("token not found in tea's config")
+	return ""
 }
 
 // tokenFromTeaConfig picks the token of the login matching name or URL out
-// of one tea config document.
+// of one tea config document. An OAuth login has no token: field, so the
+// match yields "" — see teaToken.
 func tokenFromTeaConfig(raw []byte, name, loginURL string) string {
 	var cfg struct {
 		Logins []struct {
@@ -102,25 +119,78 @@ func (t *teaForge) apiGet(path string, query url.Values) ([]byte, error) {
 }
 
 // apiDo is apiGet for any method, with an optional JSON request body — the
-// write side (#2088) posts, patches and deletes through it.
+// write side (#2088) posts, patches and deletes through it. It marshals the
+// payload, hands the request to whichever transport the login supports, and
+// owns the shared answer handling; the transports only carry bytes.
 func (t *teaForge) apiDo(method, path string, query url.Values, payload any) ([]byte, error) {
-	u := t.baseURL + "/api/v1" + path
-	if len(query) > 0 {
-		u += "?" + query.Encode()
-	}
-	var reqBody io.Reader
+	var reqBody []byte
 	if payload != nil {
 		raw, err := json.Marshal(payload)
 		if err != nil {
 			return nil, err
 		}
-		reqBody = bytes.NewReader(raw)
+		reqBody = raw
 	}
-	req, err := http.NewRequest(method, u, reqBody)
+	var (
+		resp teaResponse
+		err  error
+	)
+	if t.token != "" {
+		resp, err = t.restCall(method, path, query, reqBody)
+	} else {
+		resp, err = t.cliCall(method, path, query, reqBody)
+	}
 	if err != nil {
 		return nil, err
 	}
-	if payload != nil {
+	if resp.status >= 200 && resp.status <= 299 {
+		return resp.body, nil
+	}
+	// The error document's message is the forge's own reason (a merge
+	// conflict, unmet branch protection) — surface it rather than the bare
+	// status (#2089).
+	msg := giteaErrorMessage(resp.body)
+	switch {
+	case msg != "" && resp.reason != "":
+		return nil, fmt.Errorf("gitea: %s (%s)", msg, resp.reason)
+	case msg != "":
+		// A status of 0 means the transport could not report one — an older
+		// tea whose `api --include` prints no status line. The error
+		// document is then the only signal that the request failed (#2118).
+		return nil, fmt.Errorf("gitea: %s (%s)", msg, path)
+	case resp.status == 0:
+		// Neither a status nor an error document: take the body at face
+		// value and let the parser judge it.
+		return resp.body, nil
+	default:
+		return nil, fmt.Errorf("gitea: %s (%s)", resp.reason, path)
+	}
+}
+
+// teaResponse is one API answer, whichever transport carried it. status is 0
+// and reason "" when the transport could not report the HTTP status.
+type teaResponse struct {
+	body   []byte
+	status int
+	reason string // the status without the protocol, e.g. "404 Not Found"
+}
+
+// restCall is the direct-HTTP transport: one authenticated request against
+// the instance's API, for a login whose token stands in tea's config.yml.
+func (t *teaForge) restCall(method, path string, query url.Values, body []byte) (teaResponse, error) {
+	u := t.baseURL + "/api/v1" + path
+	if len(query) > 0 {
+		u += "?" + query.Encode()
+	}
+	var reqBody io.Reader
+	if body != nil {
+		reqBody = bytes.NewReader(body)
+	}
+	req, err := http.NewRequest(method, u, reqBody)
+	if err != nil {
+		return teaResponse{}, err
+	}
+	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Authorization", "token "+t.token)
@@ -128,23 +198,63 @@ func (t *teaForge) apiDo(method, path string, query url.Values, payload any) ([]
 	client := &http.Client{Timeout: ghTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return teaResponse{}, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
-		return nil, err
+		return teaResponse{}, err
 	}
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		// The error document's message is the forge's own reason (a merge
-		// conflict, unmet branch protection) — surface it rather than the
-		// bare status (#2089).
-		if msg := giteaErrorMessage(body); msg != "" {
-			return nil, fmt.Errorf("gitea: %s (%s)", msg, resp.Status)
+	return teaResponse{body: raw, status: resp.StatusCode, reason: resp.Status}, nil
+}
+
+// cliCall is the `tea api` transport, used when the login has no plaintext
+// token — an OAuth login keeps it in tea's credential store, which only tea
+// itself can open (and refresh) (#2118). The command answers with the
+// forge's raw JSON on stdout, so every parser in this file reads it exactly
+// as it reads a direct REST answer.
+func (t *teaForge) cliCall(method, path string, query url.Values, body []byte) (teaResponse, error) {
+	stdout, stderr, err := runCLICapture(t.dir, "tea", ghTimeout, body,
+		teaAPIArgs(t.name, method, path, query, body != nil)...)
+	if err != nil {
+		return teaResponse{}, err
+	}
+	status, reason := teaStatusLine(stderr)
+	return teaResponse{body: stdout, status: status, reason: reason}, nil
+}
+
+// teaAPIArgs builds one `tea api` command line. The login is pinned so tea
+// never falls back to its default one (and never prompts), --include asks
+// for the status line, and a request body travels on standard input rather
+// than as an argv element — markdown can hold anything (#2087).
+func teaAPIArgs(login, method, path string, query url.Values, hasBody bool) []string {
+	endpoint := path
+	if len(query) > 0 {
+		endpoint += "?" + query.Encode()
+	}
+	args := []string{"api", "--login", login, "--include", "--method", method}
+	if hasBody {
+		args = append(args, "--data", "@-")
+	}
+	return append(args, endpoint)
+}
+
+// teaStatusLine reads the "HTTP/1.1 404 Not Found" line `tea api --include`
+// writes to standard error ahead of the response headers. It returns 0 when
+// there is none, so the caller can fall back to reading the body.
+func teaStatusLine(stderr []byte) (int, string) {
+	for _, line := range strings.Split(string(stderr), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || !strings.HasPrefix(fields[0], "HTTP/") {
+			continue
 		}
-		return nil, fmt.Errorf("gitea: %s (%s)", resp.Status, path)
+		code, err := strconv.Atoi(fields[1])
+		if err != nil {
+			continue
+		}
+		return code, strings.Join(fields[1:], " ")
 	}
-	return body, nil
+	return 0, ""
 }
 
 // giteaErrorMessage reads the message field of one Gitea error document, ""
