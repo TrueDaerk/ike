@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-25T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -182,7 +182,10 @@ any entry whose key the typed schema does not expose (no dead keys).
 - **Editor** — tab width, use spaces, auto indent, auto save (focus|off,
   #174), trim trailing whitespace, insert final newline, line numbers
   (+relative), scroll offset, soft wrap, show whitespace, rulers (#1663):
-  every key `applyConfig` reads live.
+  every key `applyConfig` reads live. The conceal and hint keys left this page
+  in #2133 for a page of their own.
+- **Conceal & Hints** (#2133) — every conceal family, the glob rules gating
+  them, the field→unit mapping and the secret key patterns; see below.
 - **Diagnostics** (#1259) — the per-source, per-severity decoration toggles
   (`editor.marks.lsp_*`, `editor.marks.git_*`; user scope) and the
   project-scoped `lsp.diagnostics_ignore` rule list the editor's
@@ -829,3 +832,61 @@ foreground**, memoized per name like the swatches.
   back to the panel's colors but keep the themed layout, so the marker column
   stays aligned down the whole list. Enums without `RowColors` render exactly
   as before.
+
+## Conceal & Hints control center (#2133)
+
+The conceal suite grew to seventeen gateable families plus three coloring
+layers, and all twenty-six of its keys sat interleaved with unrelated editor
+keys on the generic **Editor** page. That list said which switches exist and
+nothing else — not which are on, not what they draw, not where they are allowed
+to draw it — and the three glob lists and two pattern maps were raw
+comma-separated text whose grammar (`family=pattern`, `pattern=unit`, a `-`
+prefix meaning *exempt*) had to be known by heart.
+`internal/settings/conceal_page.go` is the single surface for all of it.
+
+**The entries stayed schema entries.** The page is registered with
+`settings.AttachCustom(pages, ConcealPageTitle, model)` — a second seam next to
+`InsertAfter`, which installs a `PageModel` on a page that *keeps* its
+`Entries`. The panel renders the model (Custom wins over Entries), while docgen
+keeps rendering the key table and the no-dead-keys and coverage guards keep
+covering the keys. `concealCatalog` then builds the page's rows *from* those
+entries, so titles, descriptions and stepper bounds have exactly one
+definition.
+
+- **Rows, grouped.** Rendering layers, decoders, value hints, secrets & field
+  units, file rules, coloring layers, and a closing informational row for JWT
+  decoding — which has no toggle at all (`internal/editor/jwt.go`) and is
+  listed rather than silently missing. Group headers are rendered but never
+  selectable. Each row shows the state (`◉ on` / `○ off`, a `‹n›` stepper, a
+  `≡n` element count) and the **config layer** the value comes from
+  (`config.Origin`), so "who set this" is on the row. `enter` toggles or opens,
+  `←/→` steps, `r` removes the user-layer override.
+- **The page edits config defaults, not view state.** A per-view toggle
+  (`view.toggleTimestampDecoding`, …) overrides the default for one buffer and
+  is deliberately absent here; the footer says so on every frame, and so does
+  the page's `KeyHelp`.
+- **Structured lists** (`conceal_list.go`). Each of the five list keys opens a
+  sub-panel with add / edit / delete and `shift+↑/↓` reorder — order is meaning
+  in both pattern maps, where the first match decides a key. The element form
+  splits the grammar into fields (family · include|exclude · glob;
+  pattern · unit; mask|exempt · key pattern), composes the element and
+  validates it with **the loader's own checks** — `concealfilter.Invalid` for a
+  rule, `numhint.EntryError` (through `numberUnitValidate`) for a mapping — so
+  a bad entry is refused while it is typed instead of being dropped with a
+  diagnostic after the write. Invalid pre-existing elements are flagged in the
+  list.
+- **Live preview** (`conceal_preview.go`). The selected family's sample line is
+  drawn twice, raw and as the family renders it, with `❯` on the state the
+  toggle currently picks; flipping the toggle moves the marker. The stand-ins
+  come from the packages the editor itself renders through — `epochtime`,
+  `numhint`, `cronhint`, `permhint`, `nethint`, `secret` — so the preview
+  cannot drift from the buffer, and the coloring layers preview as color rather
+  than as columns. The glob and rule lists preview differently, because they
+  decide *where* rather than *what*: they report draws/blocked for three sample
+  paths through `concealfilter.Compile`.
+
+Writes go straight through `config.WriteAndReload` at user scope rather than
+through the staged-apply buffer (#1296), for the reason every custom page does:
+a conceal setting is judged by looking at it, so the write is the preview. The
+ordinary `ConfigReloadedMsg` path re-installs the mapping globals and re-parses
+the open editors, so nothing here needs a restart.
