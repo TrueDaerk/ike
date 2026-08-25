@@ -55,8 +55,10 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	if m.ov != ovNone {
 		return m.clickOverlay(y)
 	}
-	if m.fEditing && y == 1 {
-		return nil // the open filter line is not a row
+	if y == 1 {
+		// The permanent filter row (#2104): a click on a chip clears exactly
+		// that narrowing.
+		return m.clearChip(x)
 	}
 	if m.detailShown() {
 		return nil

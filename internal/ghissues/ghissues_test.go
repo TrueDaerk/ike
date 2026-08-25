@@ -125,12 +125,18 @@ func TestFuzzyFilterNarrows(t *testing.T) {
 		t.Fatalf("enter must keep the filter (filtering=%v filter=%q)", m.Filtering(), m.Filter())
 	}
 	if v := m.View(); !strings.Contains(v, "match: explorer") {
-		t.Fatalf("a kept filter must show in the filter row:\n%s", v)
+		t.Fatalf("a kept filter must show as a chip in the filter row:\n%s", v)
 	}
-	m.Update(key("f"))
+	// esc inside the overlay reverts to what it opened with — the kept
+	// pattern survives; esc on the list peels it (#2104).
+	press(m, "f", "x")
+	m.Update(key("esc"))
+	if m.Filter() != "explorer" {
+		t.Fatalf("esc must revert to the pattern the overlay opened with, got %q", m.Filter())
+	}
 	m.Update(key("esc"))
 	if m.Filter() != "" || m.Visible() != 3 {
-		t.Fatalf("esc must clear the filter (filter=%q visible=%d)", m.Filter(), m.Visible())
+		t.Fatalf("esc on the list must clear the match (filter=%q visible=%d)", m.Filter(), m.Visible())
 	}
 }
 
@@ -212,9 +218,11 @@ func TestStateFilterCyclesAndRefetches(t *testing.T) {
 	if m.StateFilter() != FilterOpen {
 		t.Fatalf("state = %v, want open", m.StateFilter())
 	}
-	want := []forge.IssueState{forge.IssuesClosed, forge.IssuesAll, forge.IssuesOpen}
-	if len(asked) != 3 {
-		t.Fatalf("every state change must refetch, got %v", asked)
+	// The third change narrows back to open — the fixture's listing was
+	// fetched as open, so no refetch is owed (#2104).
+	want := []forge.IssueState{forge.IssuesClosed, forge.IssuesAll}
+	if len(asked) != 2 {
+		t.Fatalf("only the states the listing cannot answer refetch, got %v", asked)
 	}
 	for i, st := range want {
 		if asked[i] != st {
@@ -457,7 +465,7 @@ func TestActionMenuListsEveryKey(t *testing.T) {
 		t.Fatal("m must open the action menu")
 	}
 	v := m.View()
-	for _, want := range []string{"Actions — issues", "Open the issue detail", "Start work", "Label picker"} {
+	for _, want := range []string{"Actions — issues", "Open the issue detail", "Start work", "Filter by label"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("the action menu must list %q:\n%s", want, v)
 		}
@@ -519,10 +527,21 @@ func TestClearFiltersOnEscape(t *testing.T) {
 	if m.Filter() == "" || len(m.LabelFilter()) == 0 || m.StateFilter() == FilterOpen {
 		t.Fatal("the fixture must have every filter set")
 	}
+	// esc peels one narrowing at a time (#2104): match, then labels, then
+	// the state gate.
 	m.Update(key("esc"))
-	if m.Filter() != "" || len(m.LabelFilter()) != 0 || m.StateFilter() != FilterOpen {
-		t.Fatalf("esc must clear every filter (filter=%q labels=%v state=%v)",
-			m.Filter(), m.LabelFilter(), m.StateFilter())
+	if m.Filter() != "" || len(m.LabelFilter()) == 0 {
+		t.Fatalf("the first esc must clear only the match (filter=%q labels=%v)",
+			m.Filter(), m.LabelFilter())
+	}
+	m.Update(key("esc"))
+	if len(m.LabelFilter()) != 0 || m.StateFilter() == FilterOpen {
+		t.Fatalf("the second esc must clear only the labels (labels=%v state=%v)",
+			m.LabelFilter(), m.StateFilter())
+	}
+	m.Update(key("esc"))
+	if m.StateFilter() != FilterOpen {
+		t.Fatalf("the third esc must reset the state gate, got %v", m.StateFilter())
 	}
 }
 
@@ -705,5 +724,165 @@ func TestRevealJumpsToIssueDetail(t *testing.T) {
 	}
 	if m.Reveal(999) {
 		t.Fatal("an unlisted number must not reveal")
+	}
+}
+
+// TestFilterOverlaySections (#2104): the unified overlay carries the match
+// input, the state radio, the sort cycle, the grouping toggle and the label
+// rows; changes apply live and esc reverts all of them.
+func TestFilterOverlaySections(t *testing.T) {
+	m := filled(t)
+	var asked []forge.IssueState
+	m.SetRefresh(func(st forge.IssueState) tea.Cmd {
+		asked = append(asked, st)
+		return func() tea.Msg { return nil }
+	})
+	m.Update(key("f"))
+	if !m.PickerOpen() || !m.Filtering() {
+		t.Fatal("f must open the filter overlay on the match row")
+	}
+	m.Update(key("down")) // state row
+	if m.Filtering() {
+		t.Fatal("leaving the match row must stop routing printables to it")
+	}
+	m.Update(key("space")) // open → closed
+	if m.StateFilter() != FilterClosed || len(asked) != 1 {
+		t.Fatalf("space on the state row must cycle and refetch (state=%v asked=%v)",
+			m.StateFilter(), asked)
+	}
+	m.Update(key("down")) // sort row
+	m.Update(key("space"))
+	if m.SortOrder() != SortNewest {
+		t.Fatalf("space on the sort row must cycle, got %v", m.SortOrder())
+	}
+	m.Update(key("down")) // group row
+	m.Update(key("space"))
+	if !m.Grouped() {
+		t.Fatal("space on the group row must toggle the grouping")
+	}
+	m.Update(key("down")) // first label row ("bug")
+	m.Update(key("space"))
+	if got := m.LabelFilter(); len(got) != 1 || got[0] != "bug" {
+		t.Fatalf("space on a label row must toggle it, got %v", got)
+	}
+	m.Update(key("esc"))
+	if m.PickerOpen() {
+		t.Fatal("esc must close the overlay")
+	}
+	if m.StateFilter() != FilterOpen || m.SortOrder() != SortRelevance ||
+		m.Grouped() || len(m.LabelFilter()) != 0 {
+		t.Fatalf("esc must revert every section (state=%v sort=%v grouped=%v labels=%v)",
+			m.StateFilter(), m.SortOrder(), m.Grouped(), m.LabelFilter())
+	}
+}
+
+// TestLabelKeyOpensLabelSection (#2104): 'l' is a door into the same overlay,
+// landing on the label section.
+func TestLabelKeyOpensLabelSection(t *testing.T) {
+	m := filled(t)
+	m.Update(key("l"))
+	if !m.PickerOpen() || m.Filtering() {
+		t.Fatal("l must open the filter overlay past the match row")
+	}
+	m.Update(key("space")) // first label row: "bug"
+	if got := m.LabelFilter(); len(got) != 1 || got[0] != "bug" {
+		t.Fatalf("l must land on the label section, toggled %v", got)
+	}
+}
+
+// TestChipClickClearsOneFilter (#2104): every active narrowing is a chip in
+// the permanent filter row, and a click clears exactly the chip it hit.
+func TestChipClickClearsOneFilter(t *testing.T) {
+	m := filled(t)
+	press(m, "f", "e", "x", "p", "enter")
+	press(m, "l", "space", "enter") // select "bug"
+	if m.Filter() == "" || len(m.LabelFilter()) != 1 {
+		t.Fatal("fixture: match and one label set")
+	}
+	spans := m.chipSpans()
+	if len(spans) != 2 {
+		t.Fatalf("want two chips (match, bug), got %d", len(spans))
+	}
+	if cmd := m.Click(spans[1][0], 1); cmd != nil {
+		cmd()
+	}
+	if len(m.LabelFilter()) != 0 || m.Filter() != "exp" {
+		t.Fatalf("the label chip's click must clear only the label (labels=%v match=%q)",
+			m.LabelFilter(), m.Filter())
+	}
+	if cmd := m.Click(m.chipSpans()[0][0], 1); cmd != nil {
+		cmd()
+	}
+	if m.Filter() != "" {
+		t.Fatalf("the match chip's click must clear the pattern, got %q", m.Filter())
+	}
+}
+
+// TestFilterKeepsSelection (#2104): reordering or narrowing keeps the cursor
+// on the issue it was on instead of yanking the view to the top.
+func TestFilterKeepsSelection(t *testing.T) {
+	m := filled(t)
+	press(m, "j", "j") // newest order #2,#1,#3 — land on #3
+	if is := m.Selected(); is == nil || is.Number != 3 {
+		t.Fatalf("fixture: selected = %v, want #3", m.Selected())
+	}
+	press(m, "a", "a") // relevance → newest → oldest: #3 moves to row 0
+	if is := m.Selected(); is == nil || is.Number != 3 {
+		t.Fatalf("the sort cycle must keep the selection, got %v", m.Selected())
+	}
+	if m.Cursor() != 0 {
+		t.Fatalf("oldest order puts #3 first, cursor = %d", m.Cursor())
+	}
+}
+
+// TestLabelSelectionSticksAcrossListings (#2104): a refetch that no longer
+// carries a selected label keeps the selection — the chip stays visible and
+// clearable instead of vanishing silently.
+func TestLabelSelectionSticksAcrossListings(t *testing.T) {
+	m := filled(t)
+	press(m, "l", "space", "enter") // select "bug"
+	m.SetResult(forge.IssuesMsg{State: forge.IssuesOpen, Issues: []forge.Issue{
+		{Number: 7, Title: "unlabelled", State: "OPEN"},
+	}})
+	if got := m.LabelFilter(); len(got) != 1 || got[0] != "bug" {
+		t.Fatalf("the selection must survive the listing swap, got %v", got)
+	}
+	if m.Visible() != 0 {
+		t.Fatalf("the sticky label still filters, visible = %d", m.Visible())
+	}
+	if !strings.Contains(m.View(), "bug") {
+		t.Fatal("the sticky label's chip must render")
+	}
+	m.Update(key("esc"))
+	if len(m.LabelFilter()) != 0 || m.Visible() != 1 {
+		t.Fatalf("esc must peel the sticky label (labels=%v visible=%d)",
+			m.LabelFilter(), m.Visible())
+	}
+}
+
+// TestFooterKeepsMenuHint (#2104): a narrow pane drops footer segments from
+// the tail but never the action-menu hint.
+func TestFooterKeepsMenuHint(t *testing.T) {
+	m := filled(t)
+	m.SetSize(24, 12)
+	v := m.View()
+	lines := strings.Split(strings.TrimRight(v, "\n"), "\n")
+	if !strings.Contains(lines[len(lines)-1], "m menu") {
+		t.Fatalf("the footer must keep the menu hint on a narrow pane:\n%s",
+			lines[len(lines)-1])
+	}
+}
+
+// TestFilterRowIsPermanent (#2104): the status row is always there, so a chip
+// appearing never shifts the body by a line.
+func TestFilterRowIsPermanent(t *testing.T) {
+	m := filled(t)
+	if !strings.Contains(m.View(), "(f filters the list)") {
+		t.Fatal("an unfiltered pane must show the filter hint row")
+	}
+	before := strings.Count(m.View(), "\n")
+	press(m, "f", "x", "enter")
+	if after := strings.Count(m.View(), "\n"); after != before {
+		t.Fatalf("setting a filter must not change the row budget (%d != %d)", after, before)
 	}
 }

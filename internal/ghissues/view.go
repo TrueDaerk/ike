@@ -148,23 +148,99 @@ func (m *Model) stateNote() string {
 	return ""
 }
 
-// filterRow renders the persistent filter line: the editable input while the
-// filter is open, otherwise every narrowing and ordering in force.
+// filterRow renders the permanent status row under the tab bar (#2104): the
+// active-filter chips — each clearable by a click, the geometry mirrored by
+// chipSpans —, a mutation's in-flight or error state beside them rather than
+// instead of them (#2088), and a faint hint while nothing narrows.
 func (m *Model) filterRow(pal *theme.Palette) string {
-	if m.fEditing {
-		prefix := lipgloss.NewStyle().Foreground(pal.Accent).Render(" filter: ")
-		hint := lipgloss.NewStyle().Faint(true).Render("  (enter keeps · esc clears)")
-		return prefix + ui.CursorView(m.fInput, m.fCur) + hint
+	type seg struct {
+		text  string
+		style lipgloss.Style
 	}
-	// A forge rejection (#2088) takes the row over: it is the one thing the
-	// user must read, and it stays until the next mutation clears it.
-	if m.mutErr != "" {
-		return lipgloss.NewStyle().Foreground(pal.Error).Render(m.clip(" ⚠ " + m.mutErr))
+	warn := lipgloss.NewStyle().Foreground(pal.Warning)
+	var segs []seg
+	for _, c := range m.filterChips() {
+		segs = append(segs, seg{chipText(c), warn})
 	}
-	if m.mutBusy > 0 {
-		return lipgloss.NewStyle().Faint(true).Render(m.clip(" applying the change…"))
+	switch {
+	case m.mutErr != "":
+		segs = append(segs, seg{"⚠ " + m.mutErr, lipgloss.NewStyle().Foreground(pal.Error)})
+	case m.mutBusy > 0:
+		segs = append(segs, seg{"applying the change…", lipgloss.NewStyle().Faint(true)})
 	}
-	return lipgloss.NewStyle().Foreground(pal.Warning).Render(m.clip(" " + m.filterSummary()))
+	if len(segs) == 0 {
+		return lipgloss.NewStyle().Faint(true).Render(" (f filters the list)")
+	}
+	out, used := "", 0
+	for _, s := range segs {
+		text := " " + s.text
+		if m.width > 0 && used+len([]rune(text)) > m.width {
+			text = truncate(text, m.width-used)
+		}
+		out += s.style.Render(text)
+		used += len([]rune(text))
+		if m.width > 0 && used >= m.width {
+			break
+		}
+	}
+	return out
+}
+
+// filterOvRows renders the filter overlay's rows (#2104): the match input,
+// the state radio, the sort cycle, the grouping toggle and — on the issue
+// view — one row per label with its chip and count. The row under the cursor
+// is accented, exactly like every other overlay.
+func (m *Model) filterOvRows(pal *theme.Palette) []string {
+	sel := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
+	plain := lipgloss.NewStyle().Foreground(pal.Foreground)
+	style := func(i int) lipgloss.Style {
+		if i == m.ovCursor {
+			return sel
+		}
+		return plain
+	}
+	var rows []string
+	if m.ovCursor == fovMatch {
+		rows = append(rows, sel.Render("match: ")+ui.CursorView(m.fInput, m.fCur))
+	} else if m.fInput == "" {
+		rows = append(rows, plain.Render("match: ")+lipgloss.NewStyle().Faint(true).Render("(type on this row)"))
+	} else {
+		rows = append(rows, plain.Render("match: "+m.fInput))
+	}
+	rows = append(rows, style(fovState).Render("state: "+stateRadio(m.state)))
+	rows = append(rows, style(fovSort).Render("sort:  ‹ "+m.sort.String()+" ›"))
+	if m.tab == TabPRs {
+		return rows
+	}
+	mark := "[ ]"
+	if m.group {
+		mark = "[x]"
+	}
+	rows = append(rows, style(fovGroup).Render(mark+" group by label"))
+	for i, l := range m.filterLabels() {
+		mark := "[ ] "
+		if m.labelSel[l.Name] {
+			mark = "[x] "
+		}
+		st := style(m.fovFixedRows() + i)
+		rows = append(rows, st.Render(mark)+chip(l)+st.Render("  "+strconv.Itoa(m.labelCount(l.Name))))
+	}
+	return rows
+}
+
+// stateRadio renders the state row's three options with the active one
+// marked, so cycling is never blind.
+func stateRadio(s StateFilter) string {
+	names := []string{"open", "closed", "all"}
+	parts := make([]string, 0, len(names))
+	for i, n := range names {
+		mark := "○ "
+		if StateFilter(i) == s {
+			mark = "● "
+		}
+		parts = append(parts, mark+n)
+	}
+	return strings.Join(parts, "  ")
 }
 
 // renderRows draws the filtered issue list scrolled around the cursor.
@@ -637,8 +713,11 @@ func luminance(c color.RGBA) int {
 // footer lists the current view's actions with their keys, always ending in
 // the action menu that shows the same table in full.
 func (m *Model) footer(pal *theme.Palette) string {
-	if m.ov == ovLabels {
-		return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggle · backspace clear · enter apply · esc cancel"))
+	if m.ov == ovFilter {
+		if m.ovCursor == fovMatch {
+			return lipgloss.NewStyle().Faint(true).Render(m.clip(" type to match · ↓ more filters · enter keeps · esc reverts"))
+		}
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggles · labels match any selected · backspace clears the row · enter keeps · esc reverts"))
 	}
 	if m.ov == ovLabelEdit || m.ov == ovAssignEdit {
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggle · backspace clear · enter writes the change · esc cancel"))
@@ -671,7 +750,15 @@ func (m *Model) footer(pal *theme.Palette) string {
 		parts = append(parts, a.key+" "+a.hint)
 	}
 	parts = append(parts, "m menu")
-	return lipgloss.NewStyle().Faint(true).Render(m.clip(" " + strings.Join(parts, " · ")))
+	// On a narrow pane whole segments are dropped from the tail — but never
+	// "m menu", the discoverability lifeline (#2104): the menu still lists
+	// what the footer had to drop.
+	line := " " + strings.Join(parts, " · ")
+	for m.width > 0 && len([]rune(line)) > m.width && len(parts) > 1 {
+		parts = append(parts[:len(parts)-2], parts[len(parts)-1])
+		line = " " + strings.Join(parts, " · ")
+	}
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(line))
 }
 
 // detailHeader is the detail view's context line: the issue on screen and its
@@ -851,24 +938,16 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 	h := m.overlayHeight()
 	var lines []string
 	switch m.ov {
-	case ovLabels:
+	case ovFilter:
+		rows := m.filterOvRows(pal)
 		for k := 0; k < h; k++ {
 			i := m.ovTop + k
-			if i >= len(m.labels) {
+			if i >= len(rows) {
 				break
 			}
-			mark := "[ ] "
-			if m.labelSel[m.labels[i]] {
-				mark = "[x] "
-			}
-			text := mark + m.labels[i] + "  " + strconv.Itoa(m.labelCount(m.labels[i]))
-			style := plain
-			if i == m.ovCursor {
-				style = sel
-			}
-			lines = append(lines, style.Render(text))
+			lines = append(lines, rows[i])
 		}
-		return "Filter by label", lines
+		return "Filter — " + m.viewName(), lines
 	case ovLabelEdit, ovAssignEdit:
 		rows := m.editRows()
 		chips := map[string]forge.Label{}

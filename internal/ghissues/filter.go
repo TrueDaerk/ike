@@ -213,63 +213,8 @@ func groupKey(is *forge.Issue) string {
 	return best
 }
 
-// filterSummary describes every narrowing and ordering that differs from the
-// pane's defaults, "" when nothing does — the filter row shows exactly this.
-func (m *Model) filterSummary() string {
-	var parts []string
-	if m.fInput != "" {
-		parts = append(parts, "match: "+m.fInput)
-	}
-	if labels := m.LabelFilter(); len(labels) > 0 {
-		parts = append(parts, "labels: "+joinLimited(labels, 3))
-	}
-	if m.state != FilterOpen {
-		parts = append(parts, "state: "+m.state.String())
-	}
-	if m.sort != SortRelevance {
-		parts = append(parts, "sort: "+m.sort.String())
-	}
-	if m.group {
-		parts = append(parts, "grouped by label")
-	}
-	return joinParts(parts)
-}
-
 // filterRowShown reports whether the pane spends a row on the filter status.
-// The same row carries a mutation's in-flight and error states (#2088), so it
-// also shows for those.
-func (m *Model) filterRowShown() bool {
-	return m.fEditing || m.mutErr != "" || m.mutBusy > 0 || m.filterSummary() != ""
-}
-
-// joinParts renders the filter row's segments separated by a middle dot.
-func joinParts(parts []string) string {
-	out := ""
-	for i, p := range parts {
-		if i > 0 {
-			out += " · "
-		}
-		out += p
-	}
-	return out
-}
-
-// joinLimited renders at most n names, summarising the rest as "+k".
-func joinLimited(names []string, n int) string {
-	if len(names) <= n {
-		return joinComma(names)
-	}
-	return joinComma(names[:n]) + " +" + strconv.Itoa(len(names)-n)
-}
-
-// joinComma is strings.Join with ", " kept local to the rendering helpers.
-func joinComma(names []string) string {
-	out := ""
-	for i, s := range names {
-		if i > 0 {
-			out += ", "
-		}
-		out += s
-	}
-	return out
-}
+// Since #2104 the row is permanent: the chips, a mutation's in-flight and
+// error states (#2088) and the idle hint all live there, and a chip appearing
+// no longer shifts the whole body by a line.
+func (m *Model) filterRowShown() bool { return true }
