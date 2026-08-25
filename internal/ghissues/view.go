@@ -779,9 +779,15 @@ func (m *Model) detailMeta(is *forge.Issue) string {
 // renderMarkdown renders through a fresh width- and theme-bound glamour
 // renderer, the preview pane's pattern (#62).
 func (m *Model) renderMarkdown(src string) (string, error) {
+	return m.renderMarkdownWrap(src, m.width-2)
+}
+
+// renderMarkdownWrap is renderMarkdown at an explicit wrap width — the
+// timeline's comment blocks reserve columns for their gutter bar (#2106).
+func (m *Model) renderMarkdownWrap(src string, wrap int) (string, error) {
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStyles(m.styleConfig()),
-		glamour.WithWordWrap(max(10, m.width-2)),
+		glamour.WithWordWrap(max(10, wrap)),
 	)
 	if err != nil {
 		return "", err

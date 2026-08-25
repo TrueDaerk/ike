@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-25 (issue timeline: visible divider, boxed comments, #2106)
+
+- **The activity divider spans the pane now.** The old ` ── activity ──`
+  fragment in the barely-visible `Border` role is a full-width rule in
+  `Secondary` with the label in `Accent` — the body/activity boundary is
+  obvious at a glance in every theme.
+- **Each comment is a closed block.** Every line of a comment — header,
+  markdown body, the blank lines inside it — carries a colored `▌` left gutter
+  bar, so two consecutive comments no longer flow into each other while
+  scrolling. Own comments take `Info`, everyone else's `Accent`; the `(you)`
+  marker is unchanged. Comment markdown is wrapped two columns short to pay
+  for the gutter (`renderMarkdownWrap`).
+- **Events stay compact.** Non-comment rows remain single faint lines, but a
+  blank line is inserted where a comment block ends so they never read as its
+  last line.
+- **Narrow panes degrade.** Below 24 columns the gutter falls back to a plain
+  indent, and a rule with no room for its label is drawn plain across the
+  width.
+- `clip` measures display cells (`ansi.StringWidth`/`ansi.Truncate`) instead of
+  raw runes — styled lines were being cut short by their own escape sequences.
+
 ## 2026-08-25 (issues window: superseded listing fetches are dropped, #2107)
 
 - **Rapid `t t` no longer lands the wrong listing.** Cycling the state filter
