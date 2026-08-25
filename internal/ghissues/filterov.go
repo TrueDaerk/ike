@@ -70,6 +70,14 @@ func (m *Model) filterLabels() []forge.Label {
 			out = append(out, l)
 		}
 	}
+	// The cached distinct names keep the section populated while a
+	// state-change refetch has the listing dropped (#2107).
+	for _, name := range m.labels {
+		if !seen[name] {
+			seen[name] = true
+			out = append(out, forge.Label{Name: name})
+		}
+	}
 	for name, on := range m.labelSel {
 		if on && !seen[name] {
 			out = append(out, forge.Label{Name: name})
@@ -251,10 +259,18 @@ func (m *Model) setState(s StateFilter) tea.Cmd {
 		return nil
 	}
 	m.state = s
-	m.keepSelection()
 	if m.fetched == forge.IssuesAll || m.fetched == s.issueState() {
+		// The listing already covers the new gate — pure client-side split,
+		// no fetch, and the cursor stays on its entry.
+		m.keepSelection()
 		return nil
 	}
+	// A gate the listing cannot answer refetches; the stale rows are dropped
+	// first so they cannot lie about the filter while the fetch runs (#2107).
+	// The cached label names (m.labels) survive on purpose, so the filter
+	// overlay's label section does not blank out for the fetch's width.
+	m.dropListingForRefetch()
+	m.keepSelection()
 	return m.startRefresh()
 }
 

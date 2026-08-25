@@ -4,7 +4,7 @@ title: Issues Tool Window
 description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select) with a permanent chip row whose chips clear individually, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane]
-timestamp: 2026-08-25T00:00:00Z
+timestamp: 2026-08-25T12:00:00Z
 ---
 
 # Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104)
@@ -32,8 +32,9 @@ its own concept: [Forge Layer](/architecture/forge.md). What the pane sees:
 
 - `forge.RefreshStateCmd(dir, state)` → `IssuesMsg`, wrapped for the pane as
   the `forge.RefreshFactory(dir)` closure the app injects: the pane calls it
-  with whatever its state filter selects (`open`, `closed`, `all`), so the
-  state filter stays a pane concern and the pane stays subprocess-free.
+  with whatever its state filter selects (`open`, `closed`, `all`) plus its
+  request generation (#2107), so the state filter stays a pane concern and the
+  pane stays subprocess-free.
   Detection runs first: no usable backend (missing CLI, no git remote, no
   matching tea login) resolves to an explanatory `Setup` string (a state the
   user fixes outside the pane); a failing fetch resolves to `Err` (transient
@@ -42,7 +43,8 @@ its own concept: [Forge Layer](/architecture/forge.md). What the pane sees:
   limit 200) and the PR listing fill the message. Pull requests are always
   fetched in **every** state and split client-side, so cycling the issue
   state never re-costs the PR tab. A failing PR listing drops only the PR
-  states. `IssuesMsg.State` echoes what was asked for.
+  states. `IssuesMsg.State` echoes what was asked for, and `IssuesMsg.Gen`
+  echoes the request generation.
 - `forge.TimelineCmd(dir, issue, page)` → `TimelineMsg` (#2084), injected as
   the `forge.TimelineFactory(dir)` closure: one page (30 entries, oldest
   first) of an issue's history in the neutral `TimelineEntry` vocabulary —
@@ -144,7 +146,12 @@ and clear with `backspace`.
   current listing cannot answer the new gate (a listing fetched as `all`
   already covers `open` and `closed` client-side); the PR tab always
   re-splits its already-fetched listing (open / merged + closed /
-  everything).
+  everything). When a refetch is owed, the issue list is **cleared** for its
+  width and shows `(fetching issues…)`: the rows on screen were fetched for
+  the *previous* filter, so keeping them would render an open-only set under
+  a "closed" heading (#2107). The PR list is never cleared — it is fetched in
+  every state and split purely client-side, so the new filter is already
+  correct for it.
 - **`a`** cycles the **sort order**: `relevance` (fuzzy score while a pattern
   is typed, newest without one — the pane's pre-#2090 order), `newest`,
   `oldest`, `updated`, `number`. Every comparator is stable, so entries the
@@ -387,6 +394,20 @@ clamped with a diagnostic when a config file names something else.
   known linked-PR states, and a poll landing mid-`r` leaves the manual refresh
   pending. The polling lifecycle itself — interval, backoff, snapshot events —
   is in [Forge Layer](/architecture/forge.md).
+- **Superseded fetches** (#2107) — fetches resolve off the Update loop and out
+  of order, so cycling `t` twice leaves two in flight. The pane counts its
+  requests and passes the count to the injected factory, which echoes it back
+  as `IssuesMsg.Gen`; **only the newest generation may write the listing**, so
+  whichever fetch the network finishes last can no longer overwrite the list
+  with the state filter the user already left behind. A background poll is not
+  generation-tagged — it always fetches the *open* listing — so it is applied
+  exactly while the pane's own filter is open and dropped otherwise; the next
+  round lands normally once the filter is back. A dropped answer still records
+  its `Setup`/`Err` (a missing CLI or a dead network is worth saying whichever
+  filter asked), but never clears the pending fetch's loading state: the
+  indicator keeps standing in for the listing until the answer the active
+  filter asked for arrives. An **untagged** result (`Gen: 0`) is never read as
+  stale, so the single-fetch path is unchanged.
 
 ## Prominent forge event notifications (#2086)
 
