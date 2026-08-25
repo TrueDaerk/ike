@@ -164,8 +164,12 @@ func (f *fakeForge) CloseIssue(int) error             { return f.record("close")
 func (f *fakeForge) ReopenIssue(int) error            { return f.record("reopen") }
 func (f *fakeForge) RepoLabels() ([]Label, error)     { return nil, nil }
 func (f *fakeForge) Collaborators() ([]string, error) { return nil, nil }
-func (f *fakeForge) MergePR(int) error                { return f.record("merge") }
-func (f *fakeForge) ClosePR(int) error                { return f.record("closepr") }
+func (f *fakeForge) PRDetail(int) (PRDetail, error) { return PRDetail{}, nil }
+func (f *fakeForge) CommentPR(_ int, body string) error {
+	return f.record("prcomment:" + body)
+}
+func (f *fakeForge) MergePR(_ int, method string) error { return f.record("merge:" + method) }
+func (f *fakeForge) ClosePR(int) error                  { return f.record("closepr") }
 func (f *fakeForge) Capabilities() (Capabilities, error) {
 	return Capabilities{Triage: true, Push: true}, nil
 }

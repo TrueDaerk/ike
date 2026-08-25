@@ -831,6 +831,8 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 			// open-path injection (#1934).
 			reg.Get(key).Issues().SetRefresh(forge.RefreshFactory("."))
 			reg.Get(key).Issues().SetTimeline(forge.TimelineFactory("."))
+			reg.Get(key).Issues().SetPRDetailFetch(forge.PRDetailFactory("."))
+			reg.Get(key).Issues().SetPRAction(forge.PRActionFactory("."))
 		}
 		return key, ok
 	case "usages":

@@ -49,6 +49,10 @@ func (m *Model) View() string {
 		b.WriteString(m.detailHeader(pal))
 		b.WriteString("\n")
 		body = m.renderDetail(pal, height)
+	case m.prDetail && m.tab == TabPRs:
+		b.WriteString(m.prDetailHeader(pal))
+		b.WriteString("\n")
+		body = m.renderPRDetail(pal, height)
 	case m.tab == TabPRs:
 		body = m.renderPRRows(pal, height)
 	default:
@@ -443,6 +447,160 @@ func (m *Model) prLine(pr *forge.PR) string {
 	return s
 }
 
+// prDetailHeader is the PR detail view's context line, mirroring the issue
+// detail's: the pull request on screen and its place in the filtered listing.
+func (m *Model) prDetailHeader(pal *theme.Palette) string {
+	pr := m.SelectedPR()
+	if pr == nil {
+		return ""
+	}
+	title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true).
+		Render(" #" + strconv.Itoa(pr.Number) + " ")
+	pos := 0
+	for n, idx := range m.prVisible {
+		if idx == m.prRows[m.prCursor].idx {
+			pos = n + 1
+			break
+		}
+	}
+	note := lipgloss.NewStyle().Faint(true).
+		Render(fmt.Sprintf("PR %d/%d — ctrl+j/ctrl+k walk ", pos, len(m.prVisible)))
+	line := title + lipgloss.NewStyle().Foreground(pal.Foreground).Render(pr.Title)
+	if pad := m.width - lipgloss.Width(line) - lipgloss.Width(note); pad > 0 {
+		return line + strings.Repeat(" ", pad) + note
+	}
+	return m.clip(title + pr.Title)
+}
+
+// renderPRDetail draws the selected pull request's detail, scrolled.
+func (m *Model) renderPRDetail(pal *theme.Palette, height int) string {
+	pr := m.SelectedPR()
+	if pr == nil {
+		m.prDetail = false
+		return m.renderPRRows(pal, height)
+	}
+	m.ensurePRDetail(pal)
+	m.clampPRDetail()
+	var b strings.Builder
+	for k := 0; k < height; k++ {
+		i := m.prdTop + k
+		if i < len(m.prdLines) {
+			b.WriteString(m.prdLines[i])
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// ensurePRDetail (re)renders the PR detail lines when the PR, the width or
+// the fetched data changed: a markdown block (meta line, description, linked
+// issue), then the per-check list and any load/error state as styled rows.
+func (m *Model) ensurePRDetail(pal *theme.Palette) {
+	if m.prdRenderFor == m.prdFor && m.prdW == m.width && m.prdRenderRev == m.prdRev && m.prdLines != nil {
+		return
+	}
+	m.prdRenderFor, m.prdW, m.prdRenderRev = m.prdFor, m.width, m.prdRev
+	faint := lipgloss.NewStyle().Faint(true)
+	if m.prd == nil {
+		switch {
+		case m.prdLoading:
+			m.prdLines = []string{"", faint.Render(" (fetching the pull request…)")}
+		case m.prdErr != "":
+			m.prdLines = []string{"", lipgloss.NewStyle().Foreground(pal.Error).
+				Render(m.clip(" (fetch failed: " + m.prdErr + " — r retries)"))}
+		default:
+			m.prdLines = []string{""}
+		}
+		return
+	}
+	d := m.prd
+	head := ""
+	if meta := m.prDetailMeta(d); meta != "" {
+		head += meta + "\n\n"
+	}
+	if n := forge.LinkedIssue(d.Body); n > 0 {
+		link := "**Closes #" + strconv.Itoa(n)
+		if idx := m.issueIndex(n); idx >= 0 {
+			link += " — " + m.issues[idx].Title
+		}
+		head += link + "**\n\n"
+	}
+	body := d.Body
+	if strings.TrimSpace(body) == "" {
+		body = "*(no description)*"
+	}
+	out, err := m.renderMarkdown(head + body)
+	if err != nil {
+		out = head + body
+	}
+	m.prdLines = strings.Split(strings.TrimRight(out, "\n"), "\n")
+	m.prdLines = append(m.prdLines, m.prCheckLines(pal, d)...)
+	if m.prdErr != "" {
+		m.prdLines = append(m.prdLines, "", lipgloss.NewStyle().Foreground(pal.Error).
+			Render(m.clip(" (refresh failed: "+m.prdErr+" — r retries)")))
+	}
+}
+
+// prDetailMeta is the author/branches/state line above a PR's description.
+func (m *Model) prDetailMeta(d *forge.PRDetail) string {
+	var parts []string
+	if d.Author != "" {
+		parts = append(parts, "@"+d.Author)
+	}
+	if d.HeadRef != "" {
+		branches := d.HeadRef
+		if d.BaseRef != "" {
+			branches += " → " + d.BaseRef
+		}
+		parts = append(parts, branches)
+	}
+	if d.State != "" {
+		parts = append(parts, strings.ToLower(d.State))
+	}
+	if text, _ := reviewLabel(m.theme(), &d.PR); text != "" {
+		parts = append(parts, "review: "+text)
+	}
+	if d.Mergeable != "" {
+		parts = append(parts, d.Mergeable)
+	}
+	if age := ui.RelTime(d.UpdatedAt, m.clock()); age != "" {
+		parts = append(parts, "updated "+age)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "*" + strings.Join(parts, " · ") + "*"
+}
+
+// prCheckLines renders the per-check CI list under a PR's description behind
+// a divider, one glyph-and-name row per check.
+func (m *Model) prCheckLines(pal *theme.Palette, d *forge.PRDetail) []string {
+	faint := lipgloss.NewStyle().Faint(true)
+	lines := []string{"", lipgloss.NewStyle().Foreground(pal.Border).Render(" ── checks ──")}
+	if len(d.CheckRuns) == 0 {
+		return append(lines, faint.Render(" (no checks reported)"))
+	}
+	for _, c := range d.CheckRuns {
+		glyph, col := checkGlyph(pal, c.State)
+		lines = append(lines, " "+lipgloss.NewStyle().Foreground(col).Render(m.clip(glyph+" "+c.Name)))
+	}
+	return lines
+}
+
+// checkGlyph maps one check state to its glyph and color.
+func checkGlyph(pal *theme.Palette, s forge.CheckState) (string, color.Color) {
+	switch s {
+	case forge.ChecksFailing:
+		return "✗", pal.Error
+	case forge.ChecksPending:
+		return "…", pal.Warning
+	case forge.ChecksPassing:
+		return "✓", pal.Success
+	default:
+		return "·", pal.Foreground
+	}
+}
+
 // chip renders one label as a colored pill in the forge-assigned color, with
 // black/white text picked for contrast; an unparsable color degrades to a
 // plain bracketed name.
@@ -490,6 +648,15 @@ func (m *Model) footer(pal *theme.Palette) string {
 	}
 	if m.ov == ovActions {
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter run · esc close"))
+	}
+	if m.ov == ovPRAct {
+		if m.prActStage == 0 {
+			return lipgloss.NewStyle().Faint(true).Render(m.clip(" optional comment · enter continues · esc cancels"))
+		}
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter confirms the " + m.prActKind + " · backspace edits the comment · esc cancels"))
+	}
+	if m.ov == ovCleanup {
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter cleans up · esc keeps the branch"))
 	}
 	if m.ov == ovTextEdit {
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter edit · esc cancel"))
@@ -760,6 +927,47 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 			lines = append(lines, style.Render(key+"  "+acts[i].label))
 		}
 		return "Actions — " + m.viewName(), lines
+	case ovPRAct:
+		verb := capitalize(m.prActKind)
+		n := "#" + strconv.Itoa(m.prActFor)
+		if m.prActStage == 0 {
+			lines = append(lines,
+				plain.Render("comment: ")+ui.CursorView(m.cmInput, m.cmCur),
+				lipgloss.NewStyle().Faint(true).Render("optional — posted before the "+m.prActKind+" · enter continues"))
+			return verb + " " + n + " with a comment", lines
+		}
+		what := m.prActKind + " " + n
+		if m.prActHead != "" {
+			branches := m.prActHead
+			// The base branch may have arrived with the detail fetch since
+			// the dialog opened; prefer the live value.
+			base := m.prBaseRef(m.prActFor)
+			if base == "" {
+				base = m.prActBase
+			}
+			if base != "" {
+				branches += " → " + base
+			}
+			what += ": " + branches
+		}
+		if m.prActKind == forge.PRMerge {
+			what += " (method: " + m.prMergeMethod(m.prActFor) + ")"
+		}
+		lines = append(lines, plain.Render(what))
+		comment := "no comment"
+		if strings.TrimSpace(m.cmInput) != "" {
+			comment = "comment: " + truncate(strings.TrimSpace(m.cmInput), 40)
+		}
+		lines = append(lines,
+			lipgloss.NewStyle().Faint(true).Render(comment),
+			lipgloss.NewStyle().Foreground(pal.Warning).Render("this cannot be undone — enter confirms · esc cancels"))
+		return "Confirm " + m.prActKind, lines
+	case ovCleanup:
+		lines = append(lines,
+			plain.Render("delete "+m.cleanupBranch+" locally and on origin,"),
+			plain.Render("switch to the default branch and pull"),
+			lipgloss.NewStyle().Faint(true).Render("enter runs it · esc keeps the branch"))
+		return "Merged — clean up the branch?", lines
 	case ovTextEdit:
 		targets := m.textTargets()
 		for k := 0; k < h; k++ {
@@ -792,6 +1000,8 @@ func (m *Model) viewName() string {
 	switch {
 	case m.detail && m.tab == TabIssues:
 		return "issue detail"
+	case m.prDetail && m.tab == TabPRs:
+		return "pull request detail"
 	case m.tab == TabPRs:
 		return "pull requests"
 	default:

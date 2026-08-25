@@ -121,8 +121,15 @@ type Forge interface {
 	// Collaborators lists the logins an issue can be assigned to — the
 	// assignee picker's rows (#2088).
 	Collaborators() ([]string, error)
-	// MergePR merges an open pull request.
-	MergePR(pr int) error
+	// PRDetail fetches one pull request in full (#2089): body, base branch,
+	// per-check CI results, mergeability and the merge method a merge would
+	// use.
+	PRDetail(pr int) (PRDetail, error)
+	// CommentPR adds a comment to a pull request.
+	CommentPR(pr int, body string) error
+	// MergePR merges an open pull request with the given merge method
+	// ("merge", "squash", "rebase", …); "" lets the binding pick its default.
+	MergePR(pr int, method string) error
 	// ClosePR closes an open pull request without merging.
 	ClosePR(pr int) error
 	// Capabilities reports the authenticated user's permissions on the

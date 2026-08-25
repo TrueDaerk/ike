@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Issues Tool Window
-description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, fuzzy filter, label multi-picker, open/closed/all state filter, sort orders and label grouping, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), an action menu, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087).
+description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, fuzzy filter, label multi-picker, open/closed/all state filter, sort orders and label grouping, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane]
 timestamp: 2026-08-25T00:00:00Z
 ---
 
-# Issues Tool Window (#1934, #2090, #2084, #2088, #2087)
+# Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089)
 
 Development in this repository is issue-driven (see
 [Change Workflow](/process/change-workflow.md)); this pane brings that loop
@@ -61,6 +61,14 @@ its own concept: [Forge Layer](/architecture/forge.md). What the pane sees:
   reading order; the metadata probe delivers the capabilities — including the
   authenticated login the #2087 ownership checks read — plus, only when they
   allow triage, the repository's label set and assignable users.
+- `forge.PRDetailCmd(dir, pr)` → `PRDetailMsg` and `forge.PRActionCmd(dir,
+  action)` → `PRActionMsg` (#2089), injected as `forge.PRDetailFactory(dir)`
+  and `forge.PRActionFactory(dir)`: one full pull request (description, base
+  branch, mergeability, merge method, per-check CI results) and the neutral
+  merge/close-with-comment write, comment posted first. The bindings, their
+  merge-method resolution and the forge-reason error surface are documented in
+  [Forge Layer](/architecture/forge.md); `forge.CleanupBranchCmd(dir, branch)`
+  → `CleanupDoneMsg` there is what the accepted post-merge cleanup offer runs.
 - `forge.SaveTextCmd(dir, path, target, base, body, force)` → `SaveTextMsg`
   (#2087): the push a saved edit buffer runs, with the stale-base check in
   front of it. The pane never calls it — the app does, for the buffer it owns.
@@ -104,8 +112,8 @@ forth never loses the place.
 - **PRs** — the pull requests full width: `#number` in the state's color,
   title, head branch, review decision (`approved`/`changes`/`review`, blank
   on backends that report none), the state with its CI glyph (`⇌` merged,
-  `×` closed, `✓`/`…`/`✗` rollup) and the age. The PR *detail* is #2089's
-  scope; here `enter` opens the pull request in the browser.
+  `×` closed, `✓`/`…`/`✗` rollup) and the age. `enter` opens the full-area
+  PR detail (#2089); `o` opens the pull request in the browser.
 
 ### Filtering, sorting, grouping
 
@@ -173,6 +181,46 @@ more pages follow — `L` appends the next page without moving the scroll — an
 refetches the listing *and* the open issue's timeline. A `TimelineMsg` for an
 issue the pane no longer waits on is dropped; entry IDs and the own-comment
 flag are carried in the model for the comment-editing sub-issue.
+
+### PR detail and actions (#2089)
+
+`enter` (or a double-click) on the PR tab opens the selected pull request
+**full area**, under the same kind of position header (`PR 2/5`,
+`ctrl+j`/`ctrl+k` walk without going back, refetching as they move). The body
+is the PR's markdown description under a meta line — author,
+`head → base`, state, review decision, mergeability — and, when the
+description carries `Closes #N` (or a fix/resolve variant), a bold link line
+naming the issue with its title from the listing. Below the description a
+`── checks ──` divider lists **every CI check by name** with its own
+`✓`/`…`/`✗` glyph (`(no checks reported)` otherwise) — the list rows only
+show the rollup. `o` opens the browser; `r` refetches the listing *and* the
+open PR; `esc` returns to the list with cursor and scroll untouched.
+
+**Merge and close, with a comment.** With **push permission** (`M` merge,
+`c` close — offered on the PR list and the detail alike) a two-stage dialog
+opens: first an **optional comment** (posted *before* the action, so the
+timeline reads in order), then — because a merge is irreversible — an
+explicit **confirm** naming the PR, its branches and the merge method
+(`merge #12: issue/7-thing → main (method: squash)`); only `enter`/`y` there
+dispatches, `esc` cancels at either stage, `backspace` steps back to the
+comment. The method comes from the repository's settings through the detail
+fetch (GitHub's allowed methods, Gitea's `default_merge_style`), defaulting
+to a merge commit. Without push permission the two actions are dropped from
+the footer, greyed in the action menu with the reason, and their keys explain
+in the filter row — the same gating pattern as the issue mutations. A PR that
+is not open refuses with `already merged`/`already closed`.
+
+**Outcomes.** While the action runs the filter row reads
+`applying the change…`. A rejection shows the **forge's own reason** — the
+merge-conflict or branch-protection message GitHub/Gitea answered with — in
+the filter row and as an error toast, not a generic failure. A success
+refetches the whole listing (the issues too: a merged PR may have closed its
+`Closes #N` issue) and the open detail. A successful **merge** additionally
+raises the **cleanup offer**: delete the head branch locally and on origin,
+switch to the default branch and pull — the change workflow's step 6. It is
+an offer only: `enter` emits `CleanupRequestMsg` and the app runs
+`forge.CleanupBranchCmd` (outcome toasted, VCS snapshot invalidated), `esc`
+keeps the branch and nothing runs.
 
 ### Mutations (#2088)
 

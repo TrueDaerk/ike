@@ -1,7 +1,6 @@
 package forge
 
 import (
-	"errors"
 	"testing"
 )
 
@@ -159,16 +158,6 @@ func TestParseGHPermissions(t *testing.T) {
 	}
 	if _, err := parseGHPermissions([]byte("gh: HTTP 404")); err == nil {
 		t.Fatal("non-JSON must error, not parse")
-	}
-}
-
-func TestUnsupportedStubs(t *testing.T) {
-	for _, f := range []Forge{&ghForge{dir: "."}, &teaForge{dir: "."}} {
-		err := f.MergePR(1)
-		var unsup *ErrUnsupported
-		if !errors.As(err, &unsup) || unsup.Op != "merge PR" {
-			t.Fatalf("%T MergePR err = %v, want *ErrUnsupported", f, err)
-		}
 	}
 }
 

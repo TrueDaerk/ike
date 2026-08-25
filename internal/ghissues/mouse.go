@@ -24,6 +24,9 @@ func (m *Model) Wheel(delta int) {
 	case m.detail && m.tab == TabIssues:
 		m.detailTop += delta
 		m.clampDetail()
+	case m.prDetail && m.tab == TabPRs:
+		m.prdTop += delta
+		m.clampPRDetail()
 	default:
 		rows := m.rowsOf(m.tab)
 		m.setCursor(snapRow(rows, m.Cursor()+delta, sign(delta)))
@@ -42,8 +45,8 @@ func sign(delta int) int {
 
 // Click handles one left click at pane-local (x, y): the tab bar switches the
 // view, a body click selects the row, a second click on the same row within
-// the window opens its detail (the PR view has no detail yet — #2089 — so a
-// double-click there opens the pull request in the browser).
+// the window opens its detail — the issue detail or, on the PR tab, the PR
+// detail (#2089).
 func (m *Model) Click(x, y int) tea.Cmd {
 	if y == 0 {
 		m.clickTabBar(x)
@@ -55,7 +58,7 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	if m.fEditing && y == 1 {
 		return nil // the open filter line is not a row
 	}
-	if m.detail && m.tab == TabIssues {
+	if m.detailShown() {
 		return nil
 	}
 	rows := m.rowsOf(m.tab)

@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-25 (PR detail view with merge/close-with-comment, #2089)
+
+- **A real PR view.** `enter` on the issues window's PR tab now opens a
+  full-area pull-request detail: markdown description under an
+  author/branches/state/review/mergeability meta line, a `── checks ──` list
+  naming every CI check with its own glyph (both backends; Gitea reads the
+  head commit's combined status), and a link line for the `Closes #N` issue.
+  `ctrl+j`/`ctrl+k` walk PRs, `r` refetches, `o` still opens the browser.
+- **Merge and close, with a comment, behind a confirm.** With push permission
+  `M`/`c` open a two-stage dialog — optional comment (posted first), then an
+  explicit confirm naming PR, branches and merge method (from the repo's
+  allowed/default settings). Rejections surface the forge's own reason
+  (conflicts, branch protection); successes refetch listing + detail — the
+  issues too, since a merge may close its linked issue.
+- **Offered post-merge cleanup.** After a merge the pane offers — never runs —
+  the change-workflow cleanup: delete the head branch locally and on origin,
+  switch to the default branch, pull (`forge.CleanupBranchCmd`).
+- **Forge layer.** `Forge` gained `PRDetail`, `CommentPR` and a
+  `MergePR(pr, method)` signature; both bindings implement them (gh:
+  `pr view --json`/`pr merge`; tea: the pulls endpoints, error documents'
+  `message` now surfaced). Concept docs updated:
+  [Issues Tool Window](/architecture/github-issues.md),
+  [Forge Layer](/architecture/forge.md).
+
 ## 2026-08-25 (run tests with coverage + coverage gutter, #2081)
 
 - **Run with coverage.** `run.testsWithCoverage` (palette) runs the active
