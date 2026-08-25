@@ -1,12 +1,16 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/keymap"
+	"ike/internal/lang"
 	"ike/internal/plugin"
 	"ike/internal/registry"
 )
@@ -135,6 +139,76 @@ func TestKeymapBlockedBindingToasts(t *testing.T) {
 	}
 	if want := "test.blockedCmd is not available yet — unit-test dependency"; m.toasts[0].text != want {
 		t.Fatalf("toast text = %q want %q", m.toasts[0].text, want)
+	}
+}
+
+// langScopedPlugin registers the two commands of the #1876 acceptance pair.
+type langScopedPlugin struct{ fired *[]string }
+
+func (langScopedPlugin) ID() string { return "lstest" }
+func (p langScopedPlugin) Capabilities() plugin.Capabilities {
+	cmd := func(id string) plugin.Command {
+		return plugin.Command{
+			ID: id, Title: id, Scope: plugin.GlobalScope(),
+			Run: func(host.API) tea.Cmd {
+				return func() tea.Msg { *p.fired = append(*p.fired, id); return nil }
+			},
+		}
+	}
+	return plugin.Capabilities{Commands: []plugin.Command{cmd("lstest.global"), cmd("lstest.scoped")}}
+}
+
+// TestLangScopedBindingResolvesPerBuffer is the #1876 acceptance: an
+// editor[<lang>]-scoped override fires only in editors whose buffer has that
+// language; any other editor still runs the chord's global binding.
+func TestLangScopedBindingResolvesPerBuffer(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	lang.Register(lang.Language{ID: "lstest", Extensions: []string{"lstest"}})
+	var fired []string
+	reg := registry.New()
+	reg.Add(langScopedPlugin{fired: &fired})
+	cfg := host.MapConfig{
+		"keymap.bindings.ctrl+y":                "lstest.global",
+		"keymap.bindings.editor[lstest].ctrl+y": "lstest.scoped",
+	}
+	m := NewWith(reg, cfg)
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = out.(Model)
+
+	dir := t.TempDir()
+	scoped := filepath.Join(dir, "a.lstest")
+	other := filepath.Join(dir, "b.zzznolang")
+	for _, p := range []string{scoped, other} {
+		if err := os.WriteFile(p, []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	press := func() {
+		_, cmd := m.Update(tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
+		for _, msg := range cmdMsgs(cmd) {
+			_ = msg
+		}
+	}
+
+	out, _ = m.Update(explorer.OpenFileMsg{Path: scoped})
+	m = out.(Model)
+	if got := m.keyContext(); got != keymap.WithLang(keymap.Editor, "lstest") {
+		t.Fatalf("keyContext with a classified buffer = %q, want editor[lstest]", got)
+	}
+	press()
+	if len(fired) != 1 || fired[0] != "lstest.scoped" {
+		t.Fatalf("in the lstest buffer, fired = %v, want [lstest.scoped]", fired)
+	}
+
+	out, _ = m.Update(explorer.OpenFileMsg{Path: other})
+	m = out.(Model)
+	if got := m.keyContext(); got != keymap.Editor {
+		t.Fatalf("keyContext with an unclassified buffer = %q, want editor", got)
+	}
+	press()
+	if len(fired) != 2 || fired[1] != "lstest.global" {
+		t.Fatalf("in the other buffer, fired = %v, want a trailing lstest.global", fired)
 	}
 }
 

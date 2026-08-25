@@ -23,10 +23,12 @@ type BindingTable struct {
 // diagnostics (the focus_* config stopgap lives in the same map and is ignored).
 //
 // A key is either a bare chord ("ctrl+s"), which applies in every context the
-// defaults bind it in, or a context-qualified chord ("editor.ctrl+s", #1312),
-// which touches that one context only — the config spelling behind "keep both,
-// resolve by context". Unqualified keys are applied first and qualified ones
-// after, so the narrower statement wins whatever the map order was.
+// defaults bind it in, or a context-qualified chord ("editor.ctrl+s", #1312;
+// language-scoped "editor[http].ctrl+s", #1876), which touches that one
+// context only — the config spelling behind "keep both, resolve by context".
+// Unqualified keys are applied first and qualified ones after (both in sorted
+// order, which puts "editor.<chord>" before "editor[<lang>].<chord>"), so the
+// narrower statement wins whatever the map order was.
 func BuildTable(defaults []Binding, overrides map[string]string, goos string) *BindingTable {
 	var diags []string
 	// Start from normalised defaults.
@@ -97,9 +99,9 @@ func BuildTable(defaults []Binding, overrides map[string]string, goos string) *B
 	for _, c := range conflicts {
 		diags = append(diags, c.String())
 	}
-	// Cross-context shadowing (#1875): a pane-scoped binding hiding a Global
-	// one with a different command is kept — layering is a feature — but never
-	// silently.
+	// Cross-context shadowing (#1875, #1876): a more specific binding hiding a
+	// less specific one with a different command is kept — layering is a
+	// feature — but never silently.
 	shadows := detectShadows(kept)
 	for _, s := range shadows {
 		diags = append(diags, s.String())
@@ -113,17 +115,18 @@ func (t *BindingTable) Bindings() []Binding { return t.bindings }
 // Conflicts returns the detected build-time conflicts.
 func (t *BindingTable) Conflicts() []Conflict { return t.conflicts }
 
-// Shadows returns the detected cross-context shadows (#1875): pane-scoped
-// bindings hiding a Global binding of a different command on the same chord,
-// minus the allowlisted intentional default layerings.
+// Shadows returns the detected cross-context shadows (#1875, #1876): more
+// specific bindings hiding a less specific binding of a different command on
+// the same chord, minus the allowlisted intentional default layerings.
 func (t *BindingTable) Shadows() []Shadow { return t.shadows }
 
 // Diagnostics returns non-fatal messages (ignored overrides, conflicts).
 func (t *BindingTable) Diagnostics() []string { return t.diagnostics }
 
 // Lookup returns the binding whose chord equals c and is active in the focus
-// context active, preferring the most specific (pane-scoped over Global). It
-// reports ok=false when no binding's chord matches in context.
+// context active, preferring the most specific (editor[lang] over pane-scoped
+// over Global, #1876 — active carries the focused editor's language when there
+// is one). It reports ok=false when no binding's chord matches in context.
 func (t *BindingTable) Lookup(c Chord, active Context) (Binding, bool) {
 	cs := c.String()
 	var best Binding

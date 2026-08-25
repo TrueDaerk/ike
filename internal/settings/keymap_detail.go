@@ -144,9 +144,16 @@ func (k *KeymapPage) renderDetail(w, h int) string {
 
 	bound := k.bindingsFor(b.Command)
 	lines = append(lines, clip.Render(dim.Render(" bindings · "+strconv.Itoa(len(bound)))))
+	// 12 fits the longest plain context spelling ("breakpoints", #1794); a
+	// language-scoped context ("editor[markdown]", #1876) widens the column.
+	ctxW := 12
 	for _, bb := range bound {
-		// 12 fits the longest context spelling ("breakpoints", #1794) untrimmed.
-		row := " " + pad(bb.Chord.String(), 18) + pad(keymap.ContextName(bb.Context), 12) + "@" + bb.Layer.String()
+		if n := len(keymap.ContextName(bb.Context)) + 1; n > ctxW {
+			ctxW = n
+		}
+	}
+	for _, bb := range bound {
+		row := " " + pad(bb.Chord.String(), 18) + pad(keymap.ContextName(bb.Context), ctxW) + "@" + bb.Layer.String()
 		style := lipgloss.NewStyle().Foreground(pal.Foreground)
 		if bb.Layer != keymap.LayerDefault {
 			style = lipgloss.NewStyle().Foreground(pal.Info)

@@ -388,12 +388,28 @@ func (k *KeymapPage) commitImportPath(raw string) tea.Cmd {
 // "keep both, resolve by context" leaves the colliding command untouched
 // everywhere else.
 func (k *KeymapPage) commitRebindChord(b keymapRow, chord keymap.Chord, byContext bool) tea.Cmd {
+	return k.commitRebindTo(b, chord, b.Context, byContext)
+}
+
+// commitRebindLang writes the captured chord language-scoped (#1876): the
+// command binds as editor[lang].<chord>, active only in editors whose buffer
+// is classified as lang, and the colliding binding stays untouched everywhere
+// else — "keep both, resolve by file type". The old chord unbinds under the
+// row's own context, exactly like the by-context form.
+func (k *KeymapPage) commitRebindLang(b keymapRow, chord keymap.Chord, lang string) tea.Cmd {
+	return k.commitRebindTo(b, chord, keymap.WithLang(keymap.Editor, lang), true)
+}
+
+// commitRebindTo is the shared write-back: the new chord binds in newCtx (the
+// row's own context for a plain or by-context rebind, an editor[lang] scope
+// for a by-language one); the old chord unbinds under the row's context.
+func (k *KeymapPage) commitRebindTo(b keymapRow, chord keymap.Chord, newCtx keymap.Context, qualified bool) tea.Cmd {
 	if chord.Len() == 0 {
 		return nil
 	}
 	opts := k.opts
-	newKey := keymap.BindingConfigKey(b.Context, chord.String(), byContext)
-	oldKey := keymap.BindingConfigKey(b.Context, b.Chord.String(), byContext)
+	newKey := keymap.BindingConfigKey(newCtx, chord.String(), qualified)
+	oldKey := keymap.BindingConfigKey(b.Context, b.Chord.String(), qualified)
 	command := b.Command
 	sameChord := chord.Equal(b.Chord)
 	unbound := b.unbound || b.nobind
@@ -700,9 +716,18 @@ func (k *KeymapPage) unbindKeyFor(b keymapRow) string {
 }
 
 // separableContexts reports whether two bindings can share a chord without
-// shadowing each other — both are pane-scoped and the panes differ (0460,
-// #1312). A Global binding matches in every pane, so it always overlaps and
-// "keep both" is not on offer for it.
+// shadowing each other — their scopes never both match a focus (0460, #1312,
+// #1876). A Global binding matches in every pane, so it always overlaps and
+// "keep both" is not on offer for it. Two pane-scoped bindings separate when
+// the panes differ; on the same pane only two language scopes with different
+// languages separate (editor[http] vs editor[go]) — a language scope against
+// its own plain pane context (editor[http] vs editor) overlaps.
 func separableContexts(a, b keymap.Context) bool {
-	return a != keymap.Global && b != keymap.Global && a != b
+	if a == keymap.Global || b == keymap.Global || a == b {
+		return false
+	}
+	if a.Base() != b.Base() {
+		return true
+	}
+	return a.Lang() != "" && b.Lang() != "" && a.Lang() != b.Lang()
 }
