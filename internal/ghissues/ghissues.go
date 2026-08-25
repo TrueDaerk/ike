@@ -266,10 +266,13 @@ type Model struct {
 	fetched forge.IssueState
 
 	// labels are the distinct label names across the listing; labelSel is the
-	// multi-select set the label picker edits (an issue passes when it
-	// carries *any* selected label).
+	// multi-select set the label picker edits. labelAll switches the
+	// selection's semantics (#2112): off it is an OR filter (an issue passes
+	// when it carries *any* selected label), on it is an AND filter (it must
+	// carry *all* of them).
 	labels   []string
 	labelSel map[string]bool
+	labelAll bool
 
 	state StateFilter
 	sort  SortOrder
@@ -609,6 +612,17 @@ func (m *Model) LabelFilter() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// LabelMatchAll reports whether the label filter is in all-of (AND) mode
+// (tests).
+func (m *Model) LabelMatchAll() bool { return m.labelAll }
+
+// toggleLabelMode flips the label filter between any-of and all-of (#2112),
+// keeping the cursor on its entry.
+func (m *Model) toggleLabelMode() {
+	m.labelAll = !m.labelAll
+	m.keepSelection()
 }
 
 // StateFilter returns the active open/closed/all gate (tests).
@@ -1060,6 +1074,7 @@ func (m *Model) clearFilters() tea.Cmd {
 		m.keepSelection()
 	case len(m.LabelFilter()) > 0:
 		m.labelSel = map[string]bool{}
+		m.labelAll = false
 		m.keepSelection()
 	case m.state != FilterOpen:
 		return m.setState(FilterOpen)
@@ -1115,6 +1130,7 @@ func (m *Model) Reveal(number int) bool {
 	m.prDetail = false
 	m.fInput, m.fCur = "", 0
 	m.labelSel = map[string]bool{}
+	m.labelAll = false
 	// The issue is already in the listing, so widening the state gate needs no
 	// refetch — and a closed issue announced by an event must still be shown.
 	if !stateAllows(m.state, m.issues[idx].State) {

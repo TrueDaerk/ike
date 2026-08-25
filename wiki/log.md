@@ -1,5 +1,16 @@
 # Log
 
+## 2026-08-25 (ui: and/or toggle for the issues label filter, #2112)
+
+- **The issues window's label filter can now match _all_ selected labels.**
+  The filter overlay gained a `labels: ● any of ○ all of` row directly above
+  the label section: any-of keeps the previous OR semantics, all-of narrows
+  to the intersection (`hasAllLabels`). The mode reads in the overlay row,
+  the overlay footer ("labels match any/all selected") and the chip row,
+  which leads with a `[labels: bug+feature (all) ⌫]` chip whose clear widens
+  back to any-of without dropping the labels. It reverts with `esc` in the
+  overlay and clears with the label selection on the list.
+
 ## 2026-08-25 (ui: issues window key-map consolidation across modes, #2114)
 
 - **One meaning per letter family across the issues window's four modes**

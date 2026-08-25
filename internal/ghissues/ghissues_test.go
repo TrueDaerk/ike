@@ -767,7 +767,13 @@ func TestFilterOverlaySections(t *testing.T) {
 	if !m.Grouped() {
 		t.Fatal("space on the group row must toggle the grouping")
 	}
-	m.Update(key("down")) // first label row ("bug")
+	m.Update(key("down")) // label mode row
+	m.Update(key("space"))
+	if !m.LabelMatchAll() {
+		t.Fatal("space on the label mode row must switch to all-of")
+	}
+	m.Update(key("space")) // back to any-of, so the label row below still reads
+	m.Update(key("down"))  // first label row ("bug")
 	m.Update(key("space"))
 	if got := m.LabelFilter(); len(got) != 1 || got[0] != "bug" {
 		t.Fatalf("space on a label row must toggle it, got %v", got)
@@ -777,7 +783,7 @@ func TestFilterOverlaySections(t *testing.T) {
 		t.Fatal("esc must close the overlay")
 	}
 	if m.StateFilter() != FilterOpen || m.SortOrder() != SortRelevance ||
-		m.Grouped() || len(m.LabelFilter()) != 0 {
+		m.Grouped() || len(m.LabelFilter()) != 0 || m.LabelMatchAll() {
 		t.Fatalf("esc must revert every section (state=%v sort=%v grouped=%v labels=%v)",
 			m.StateFilter(), m.SortOrder(), m.Grouped(), m.LabelFilter())
 	}
