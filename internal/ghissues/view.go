@@ -221,7 +221,14 @@ func (m *Model) filterOvRows(pal *theme.Palette) []string {
 		mark = "[x]"
 	}
 	rows = append(rows, style(fovGroup).Render(mark+" group by label"))
-	for i, l := range m.filterLabels() {
+	labels := m.filterViewLabels()
+	if len(labels) == 0 && m.ovSearch.Active() {
+		// The placeholder fovLabelRows() reserves (#2111): the query is still
+		// editable, so the section says why it is empty instead of vanishing.
+		return append(rows, lipgloss.NewStyle().Faint(true).
+			Render("(no label matches "+m.ovSearch.Query()+")"))
+	}
+	for i, l := range labels {
 		mark := "[ ] "
 		if m.labelSel[l.Name] {
 			mark = "[x] "
@@ -718,19 +725,31 @@ func luminance(c color.RGBA) int {
 // the action menu that shows the same table in full.
 func (m *Model) footer(pal *theme.Palette) string {
 	if m.ov == ovFilter {
+		if m.ovSearch.Active() {
+			return lipgloss.NewStyle().Faint(true).Render(m.clip(" typing narrows the labels · space toggles · backspace deletes · enter keeps · esc clears the search"))
+		}
 		if m.ovCursor == fovMatch {
 			return lipgloss.NewStyle().Faint(true).Render(m.clip(" type to match · ↓ more filters · enter keeps · esc reverts"))
+		}
+		if m.tab != TabPRs && m.ovCursor >= m.fovFixedRows() {
+			return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggles · type to narrow · backspace clears the row · enter keeps · esc reverts"))
 		}
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggles · labels match any selected · backspace clears the row · enter keeps · esc reverts"))
 	}
 	if m.ov == ovLabelEdit || m.ov == ovAssignEdit {
-		return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggle · backspace clear · enter writes the change · esc cancel"))
+		if m.ovSearch.Active() {
+			return lipgloss.NewStyle().Faint(true).Render(m.clip(" typing narrows · space toggle · backspace deletes · enter writes the change · esc clears the search"))
+		}
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" type to narrow · space toggle · backspace clear · enter writes the change · esc cancel"))
 	}
 	if m.ov == ovComment {
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" type the comment · enter posts and " + m.stateVerb() + "s · esc cancel"))
 	}
 	if m.ov == ovActions {
-		return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter run · esc close"))
+		if m.ovSearch.Active() {
+			return lipgloss.NewStyle().Faint(true).Render(m.clip(" typing narrows · backspace deletes · enter run · esc clears the search"))
+		}
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" type to narrow · enter run · esc close"))
 	}
 	if m.ov == ovPRAct {
 		if m.prActStage == 0 {
@@ -963,9 +982,13 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 			}
 			lines = append(lines, rows[i])
 		}
-		return "Filter — " + m.viewName(), lines
+		return "Filter — " + m.viewName() + m.searchSuffix(), lines
 	case ovLabelEdit, ovAssignEdit:
-		rows := m.editRows()
+		rows := m.editViewRows()
+		if len(rows) == 0 {
+			return m.editorTitle(), []string{lipgloss.NewStyle().Faint(true).
+				Render("(nothing matches " + m.ovSearch.Query() + ")")}
+		}
 		chips := map[string]forge.Label{}
 		for _, l := range m.pickerLabels() {
 			chips[l.Name] = l
@@ -997,7 +1020,7 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 			}
 			lines = append(lines, line)
 		}
-		return m.editorTitle(), lines
+		return m.editorTitle() + m.searchSuffix(), lines
 	case ovComment:
 		verb := m.stateVerb()
 		lines = append(lines,
@@ -1005,7 +1028,11 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 			lipgloss.NewStyle().Faint(true).Render("enter posts it and "+verb+"s · esc cancels"))
 		return capitalize(verb) + " #" + strconv.Itoa(m.editFor) + " with a comment", lines
 	case ovActions:
-		acts := m.actions()
+		acts := m.viewActions()
+		if len(acts) == 0 {
+			return "Actions — " + m.viewName() + m.searchSuffix(), []string{
+				lipgloss.NewStyle().Faint(true).Render("(nothing matches " + m.ovSearch.Query() + ")")}
+		}
 		width := 0
 		for _, a := range acts {
 			if w := len([]rune(a.key)); w > width {
@@ -1028,7 +1055,7 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 			}
 			lines = append(lines, style.Render(key+"  "+acts[i].label))
 		}
-		return "Actions — " + m.viewName(), lines
+		return "Actions — " + m.viewName() + m.searchSuffix(), lines
 	case ovPRAct:
 		verb := capitalize(m.prActKind)
 		n := "#" + strconv.Itoa(m.prActFor)
@@ -1086,6 +1113,16 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 		return "Edit which text?", lines
 	}
 	return "", nil
+}
+
+// searchSuffix appends the running type-ahead to a modal's heading (#2111),
+// "" while none runs — the query has to be visible somewhere, and the heading
+// is the one line every picker already has.
+func (m *Model) searchSuffix() string {
+	if h := m.ovSearch.Hint(); h != "" {
+		return "  " + h
+	}
+	return ""
 }
 
 // editorTitle names the open mutation picker and the issue it edits.

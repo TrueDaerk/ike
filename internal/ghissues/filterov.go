@@ -87,11 +87,30 @@ func (m *Model) filterLabels() []forge.Label {
 	return out
 }
 
+// filterViewLabels is what the label section renders and navigates:
+// filterLabels() narrowed by the section's type-ahead (#2111). The fixed rows
+// above it are never narrowed — they are toggles, not a list.
+func (m *Model) filterViewLabels() []forge.Label {
+	return ui.Narrow(&m.ovSearch, m.filterLabels(), func(l forge.Label) string { return l.Name })
+}
+
+// FilterVisibleLabels lists the label section's currently visible names
+// (tests).
+func (m *Model) FilterVisibleLabels() []string {
+	labels := m.filterViewLabels()
+	out := make([]string, 0, len(labels))
+	for _, l := range labels {
+		out = append(out, l.Name)
+	}
+	return out
+}
+
 // openFilterOverlay opens the unified overlay with the cursor on row, taking
 // the snapshot esc restores.
 func (m *Model) openFilterOverlay(row int) {
 	m.fSaved = m.snapshotFilters()
 	m.ov, m.ovTop = ovFilter, 0
+	m.ovSearch.Reset()
 	m.ovCursor = row
 	if row == fovMatch {
 		m.fCur = len([]rune(m.fInput))
@@ -119,7 +138,14 @@ func (m *Model) openLabelSection() {
 // filterOvKey routes one key inside the open filter overlay. The match row
 // owns every printable key; the other rows are toggles and cycles.
 func (m *Model) filterOvKey(msg tea.KeyPressMsg) tea.Cmd {
-	n := m.fovFixedRows() + len(m.filterLabels())
+	// While the label section's type-ahead runs it owns the overlay (#2111):
+	// the cursor stays inside the narrowed labels and every printable key
+	// feeds the query, so a label named "state" is reachable even though the
+	// rows above are called state and sort.
+	if m.ovSearch.Active() {
+		return m.searchingFilterKey(msg)
+	}
+	n := m.fovFixedRows() + m.fovLabelRows()
 	switch msg.String() {
 	case "enter":
 		m.closeOverlay()
@@ -138,7 +164,50 @@ func (m *Model) filterOvKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.ovCursor == fovMatch {
 		return m.matchRowKey(msg)
 	}
-	return m.sectionRowKey(msg.String())
+	return m.sectionRowKey(msg)
+}
+
+// fovLabelRows is how many rows the label section occupies: its visible
+// labels, or the single "nothing matched" placeholder a fruitless type-ahead
+// leaves behind (#2111) so the cursor still has a row to sit on while the
+// query is edited back into something that matches.
+func (m *Model) fovLabelRows() int {
+	if n := len(m.filterViewLabels()); n > 0 {
+		return n
+	}
+	if m.tab != TabPRs && m.ovSearch.Active() {
+		return 1
+	}
+	return 0
+}
+
+// searchingFilterKey routes a key while the label section's type-ahead is
+// running: enter keeps the filters, esc peels the query, up/down walk the
+// narrowed labels only, and everything else is the query or a label toggle.
+func (m *Model) searchingFilterKey(msg tea.KeyPressMsg) tea.Cmd {
+	first, rows := m.fovFixedRows(), m.fovLabelRows()
+	if m.ovCursor < first {
+		m.ovCursor = first
+	}
+	switch msg.String() {
+	case "enter":
+		m.closeOverlay()
+		return nil
+	case "esc":
+		m.ovSearch.Reset()
+		m.ovCursor = first
+		m.clampOverlay()
+		return nil
+	case "down", "tab", "ctrl+n":
+		m.ovCursor = first + (m.ovCursor-first+1)%rows
+		m.clampOverlay()
+		return nil
+	case "up", "shift+tab", "ctrl+p":
+		m.ovCursor = first + (m.ovCursor-first-1+rows)%rows
+		m.clampOverlay()
+		return nil
+	}
+	return m.labelRowKey(msg)
 }
 
 // matchRowKey feeds one key to the match input; edits re-narrow live and send
@@ -156,9 +225,15 @@ func (m *Model) matchRowKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // sectionRowKey handles the non-input rows: space (or left/right, h/l) cycles
 // or toggles the row under the cursor, backspace clears its section, and j/k
-// stay navigation — the input does not own them here.
-func (m *Model) sectionRowKey(key string) tea.Cmd {
-	n := m.fovFixedRows() + len(m.filterLabels())
+// stay navigation — the input does not own them here. On a label row the
+// letters belong to the section's type-ahead instead (#2111), so j/k are
+// navigation only above the label section.
+func (m *Model) sectionRowKey(msg tea.KeyPressMsg) tea.Cmd {
+	key := msg.String()
+	if m.tab != TabPRs && m.ovCursor >= m.fovFixedRows() {
+		return m.labelRowKey(msg)
+	}
+	n := m.fovFixedRows() + m.fovLabelRows()
 	switch key {
 	case "j":
 		m.ovCursor = (m.ovCursor + 1) % n
@@ -168,9 +243,6 @@ func (m *Model) sectionRowKey(key string) tea.Cmd {
 		m.ovCursor = (m.ovCursor - 1 + n) % n
 		m.clampOverlay()
 		return nil
-	}
-	if m.tab != TabPRs && m.ovCursor >= m.fovFixedRows() {
-		return m.labelRowKey(key)
 	}
 	switch m.ovCursor {
 	case fovState:
@@ -210,12 +282,14 @@ func (m *Model) sectionRowKey(key string) tea.Cmd {
 
 // labelRowKey handles one label row: space toggles the label under the
 // cursor, backspace clears the whole selection. Both re-narrow live while the
-// cursor stays on the issue it was on.
-func (m *Model) labelRowKey(key string) tea.Cmd {
-	labels := m.filterLabels()
+// cursor stays on the issue it was on. Every printable key is the section's
+// type-ahead (#2111): it narrows the visible labels, and backspace peels it
+// one rune at a time before it falls back to clearing the selection.
+func (m *Model) labelRowKey(msg tea.KeyPressMsg) tea.Cmd {
+	labels := m.filterViewLabels()
 	i := m.ovCursor - m.fovFixedRows()
-	switch key {
-	case "space", " ", "x":
+	switch msg.String() {
+	case "space", " ":
 		if i >= 0 && i < len(labels) {
 			name := labels[i].Name
 			if m.labelSel[name] {
@@ -225,6 +299,18 @@ func (m *Model) labelRowKey(key string) tea.Cmd {
 			}
 			m.keepSelection()
 		}
+		return nil
+	}
+	if handled, changed := m.ovSearch.Key(msg); handled {
+		if changed {
+			// The query moved the section under the cursor: land on its first
+			// visible label so the best match reads first.
+			m.ovCursor, m.ovTop = m.fovFixedRows(), 0
+			m.clampOverlay()
+		}
+		return nil
+	}
+	switch msg.String() {
 	case "backspace", "delete":
 		m.labelSel = map[string]bool{}
 		m.keepSelection()

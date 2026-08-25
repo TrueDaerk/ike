@@ -4,7 +4,7 @@ title: Selection-List Navigation
 description: The shared cursor semantics every selectable list obeys — single steps wrap around, page keys jump one visible page and clamp, home/end go to the extremes, and the scroll window follows the selection.
 resource: internal/ui/listnav.go
 tags: [architecture, ui, lists, navigation, keys, reusable]
-timestamp: 2026-08-21T00:00:00Z
+timestamp: 2026-08-25T18:00:00Z
 ---
 
 # Selection-List Navigation
@@ -115,8 +115,17 @@ context exists but carries no default bindings. The change here unified the
 semantics, not the binding layer; making list navigation remappable is a
 separate piece of work on the keymap contexts.
 
+## Typing into a list
+
+A list that narrows as you type is a separate, composable layer:
+[Picker Speed Search](/architecture/speed-search.md) (#2111). It matters here
+because the two share the keyboard — a speed-searchable picker must run on
+`NavDefault` rather than `NavFull`, since `j`/`k`/`g`/`G` would swallow the
+query's first rune.
+
 ## See also
 
+- [Picker Speed Search](/architecture/speed-search.md)
 - [Command Palette](/architecture/command-palette.md)
 - [Floating Shell](/architecture/floating-shell.md)
 - [Settings UI & Menu Bar](/architecture/settings-ui.md)

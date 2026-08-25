@@ -95,7 +95,17 @@ func (m *Model) AssigneeEditorOpen() bool { return m.ov == ovAssignEdit }
 func (m *Model) CommentPromptOpen() bool  { return m.ov == ovComment }
 
 // EditSelection returns the open picker's working set in row order (tests).
+// It reads the full row set on purpose: a running type-ahead hides rows, it
+// never unticks them.
 func (m *Model) EditSelection() []string { return selected(m.editRows(), m.editSel) }
+
+// EditVisible returns the rows the open picker currently shows — the whole
+// row set, or what the type-ahead narrowed it to (tests).
+func (m *Model) EditVisible() []string { return m.editViewRows() }
+
+// SpeedSearchQuery returns the open picker's type-ahead text, "" when none is
+// running (tests).
+func (m *Model) SpeedSearchQuery() string { return m.ovSearch.Query() }
 
 // selected keeps the rows the picker has ticked, in row order.
 func selected(rows []string, set map[string]bool) []string {
@@ -166,6 +176,12 @@ func (m *Model) editRows() []string {
 	return nil
 }
 
+// editViewRows is what the open picker renders and navigates: editRows()
+// narrowed by the type-ahead (#2111). Cursor, row count and the space toggle
+// all index into this set; the enter that writes the change reads editRows()
+// instead, so a query never silently unticks what it merely hid.
+func (m *Model) editViewRows() []string { return ui.NarrowStrings(&m.ovSearch, m.editRows()) }
+
 // openLabelEditor opens the label picker for the selected issue, preselecting
 // the labels it carries.
 func (m *Model) openLabelEditor() tea.Cmd {
@@ -207,6 +223,7 @@ func (m *Model) openAssigneeEditor() tea.Cmd {
 // row, so an issue's own labels read first.
 func (m *Model) openEditor(kind overlayKind, number int) {
 	m.ov, m.editFor, m.ovCursor, m.ovTop = kind, number, 0, 0
+	m.ovSearch.Reset()
 	for i, name := range m.editRows() {
 		if m.editSel[name] {
 			m.ovCursor = i
@@ -232,33 +249,55 @@ func (m *Model) mutationTarget() *forge.Issue {
 	return is
 }
 
-// editorKey handles both mutation pickers: space toggles a row, backspace
-// clears the whole set, enter applies the diff, esc drops it.
-func (m *Model) editorKey(key string) tea.Cmd {
-	rows := m.editRows()
-	switch key {
-	case "space", " ", "x":
-		if m.ovCursor >= 0 && m.ovCursor < len(rows) {
-			name := rows[m.ovCursor]
+// editorKey handles both mutation pickers: space toggles the row under the
+// cursor, backspace clears the whole set, enter applies the diff, esc drops
+// it. Printable keys are the type-ahead (#2111) — they narrow the rows rather
+// than acting — so esc peels the query first and 'q' only closes while no
+// query is running.
+func (m *Model) editorKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "esc":
+		if m.ovSearch.EscClears() {
+			m.clampOverlay()
+			return nil
+		}
+		m.closeOverlay()
+		return nil
+	case "space", " ":
+		view := m.editViewRows()
+		if m.ovCursor >= 0 && m.ovCursor < len(view) {
+			name := view[m.ovCursor]
 			if m.editSel[name] {
 				delete(m.editSel, name)
 			} else {
 				m.editSel[name] = true
 			}
 		}
-	case "backspace", "delete":
-		m.editSel = map[string]bool{}
+		return nil
 	case "enter":
 		// The rows travel into the apply step: closing the modal first would
-		// take editRows() — which reads the open modal's kind — with it.
-		kind := m.ov
+		// take editRows() — which reads the open modal's kind — with it. The
+		// full set travels, not the narrowed one: a type-ahead hides rows, it
+		// must not drop them from the write.
+		rows, kind := m.editRows(), m.ov
 		m.closeOverlay()
 		if kind == ovLabelEdit {
 			return m.applyLabelDiff(rows)
 		}
 		return m.applyAssignees(rows)
-	case "esc", "q":
-		m.closeOverlay()
+	}
+	// Backspace deletes the last query rune while a type-ahead runs and only
+	// falls through to "clear the selection" once the query is empty.
+	if handled, changed := m.ovSearch.Key(msg); handled {
+		if changed {
+			m.ovCursor, m.ovTop = 0, 0
+			m.clampOverlay()
+		}
+		return nil
+	}
+	switch msg.String() {
+	case "backspace", "delete":
+		m.editSel = map[string]bool{}
 	}
 	return nil
 }

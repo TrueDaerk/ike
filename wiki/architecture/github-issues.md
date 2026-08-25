@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Issues Tool Window
-description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select) with a permanent chip row whose chips clear individually, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089).
+description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select) with a permanent chip row whose chips clear individually, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane]
-timestamp: 2026-08-25T14:00:00Z
+timestamp: 2026-08-25T18:00:00Z
 ---
 
-# Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104)
+# Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104, #2111)
 
 Development in this repository is issue-driven (see
 [Change Workflow](/process/change-workflow.md)); this pane brings that loop
@@ -140,7 +140,8 @@ and clear with `backspace`.
   listing) with per-label issue counts and chips. The selection is an **OR**
   filter (the footer says "labels match any selected") and it is **sticky**:
   a refetch that no longer carries a selected label keeps the selection, so
-  its chip stays visible and clearable instead of vanishing silently.
+  its chip stays visible and clearable instead of vanishing silently. The
+  section **narrows as you type** (#2111, below).
 - **`t`** cycles the **state filter** open → closed → all — a one-key
   accelerator of the overlay's state row. A change only refetches when the
   current listing cannot answer the new gate (a listing fetched as `all`
@@ -179,6 +180,40 @@ appearing never shifts the body by a line. A **click on a chip clears exactly
 that narrowing**; a mutation's in-flight and error states (#2088) render
 beside the chips, not instead of them. With nothing active the row shows a
 faint `(f filters the list)` hint.
+
+### Speed search in the pickers (#2111)
+
+Every list-shaped overlay of this pane **narrows as you type**, the way a
+JetBrains popup does: the label and assignee mutation pickers, the filter
+overlay's label section, and the action menu. Forty labels no longer mean
+forty arrow presses. The semantics are shared
+(`internal/ui.SpeedSearch`, [Picker Speed Search](/architecture/speed-search.md))
+so the other modal pickers in the IDE can adopt them unchanged:
+
+- printable keys are the query; `space` stays the **toggle** and `backspace`
+  peels the query one rune at a time before falling back to the picker's own
+  "clear the set";
+- `esc` **clears the query first** and only closes (or reverts) on the second
+  press;
+- the running query renders in the modal's heading (`Labels of #12  /bug▏`),
+  and the footer switches to `typing narrows · backspace deletes · … · esc
+  clears the search`;
+- a query that matches nothing renders `(nothing matches zzz)` rather than an
+  empty box, so the modal is never a dead end.
+
+Two consequences worth knowing. The searchable overlays run on
+`ui.NavDefault` instead of `NavFull` — `j`/`k`/`g`/`G` are query runes now, so
+arrows, `pgup`/`pgdn`, `ctrl+n`/`ctrl+p` and `home`/`end` do the walking — and
+the action menu's old `q`/`m`/`?` close aliases are gone with them: `esc` is
+its one exit. In the filter overlay the type-ahead belongs to the **label
+section only**; the fixed rows above it (match, state, sort, grouping) are
+toggles and keep their own keys, and while a query runs the section owns the
+overlay, so `up`/`down` wrap inside the narrowed labels.
+
+The narrowing is a **view, not an edit**: `editRows()` (every row) stays apart
+from `editViewRows()` (what the query left), and the `enter` that writes the
+mutation reads the full set — so a label the query merely hid is never removed
+behind the user's back.
 
 ### Detail as a real view
 

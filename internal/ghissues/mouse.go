@@ -100,6 +100,12 @@ func (m *Model) clickOverlay(y int) tea.Cmd {
 	if row < 0 || row >= m.overlayItems() {
 		return nil
 	}
+	// Clicking one of the filter overlay's fixed rows leaves the label
+	// section, and with it the section's type-ahead (#2111) — otherwise the
+	// next keypress would snap the cursor back into the narrowed labels.
+	if m.ov == ovFilter && row < m.fovFixedRows() {
+		m.ovSearch.Reset()
+	}
 	m.ovCursor = row
 	m.clampOverlay()
 	return nil
