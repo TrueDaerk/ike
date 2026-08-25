@@ -10,14 +10,18 @@
 // as compact events, fetched lazily page by page, and — with triage
 // permission (#2088) — label, assignee and close/reopen mutations through two
 // pickers and a comment prompt, applied optimistically and rolled back on a
-// forge rejection. The PR view lists the pull
+// forge rejection. Texts that are the user's own can be edited from there too
+// (#2087, edit.go): 'e' picks the issue body or one of your comments, 'c'
+// composes a new one, and the app opens each in a markdown buffer that pushes
+// when it is saved. The PR view lists the pull
 // requests full width
 // (number, title, head branch, CI rollup, review decision). Every action is
 // discoverable through the footer and the action menu.
 //
 // It stays a pure consumer of internal/forge messages: the app injects the
 // per-state fetch factory and routes forge.IssuesMsg results in; the pane
-// itself never runs a subprocess.
+// itself never runs a subprocess — the edit actions emit a request message
+// too, they do not talk to a forge.
 package ghissues
 
 import (
@@ -150,8 +154,8 @@ func (s StateFilter) issueState() forge.IssueState {
 }
 
 // overlayKind is the modal that owns the keyboard on top of a view: the label
-// multi-picker or the action menu. Both render as a centered box over the
-// body and are dismissed with esc.
+// multi-picker, the action menu, or the edit picker. All render as a centered
+// box over the body and are dismissed with esc.
 type overlayKind int
 
 const (
@@ -166,6 +170,9 @@ const (
 	// ovComment is the one-line prompt of the close/reopen-with-comment
 	// action (#2088).
 	ovComment
+	// ovTextEdit is the text-edit picker (#2087): which of the issue's texts
+	// — the body, one of your comments — the markdown edit buffer opens.
+	ovTextEdit
 )
 
 // listRow is one rendered row of a view: either a group header (header set,
@@ -744,6 +751,10 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.stepIssue(-1)
 	case "L":
 		return m.loadMoreTimeline()
+	case "E":
+		return m.startTextEdit()
+	case "n":
+		return m.startComment()
 	case "j", "down":
 		m.detailTop++
 	case "k", "up":

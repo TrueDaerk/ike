@@ -211,7 +211,14 @@ func (t *teaForge) Capabilities() (Capabilities, error) {
 	if err != nil {
 		return Capabilities{}, err
 	}
-	return parseGiteaPermissions(out)
+	caps, err := parseGiteaPermissions(out)
+	if err != nil {
+		return Capabilities{}, err
+	}
+	// The login rides along for the edit gating (#2087), exactly as in the gh
+	// binding; it is already resolved for the timeline's own-comment flag.
+	caps.Login = t.userLogin()
+	return caps, nil
 }
 
 // Timeline fetches one page of an issue's timeline via Gitea's timeline
@@ -315,11 +322,43 @@ func (t *teaForge) CreateComment(issue int, body string) error {
 	return err
 }
 
+// EditComment replaces an existing comment's body by its forge ID (#2087).
 func (t *teaForge) EditComment(commentID string, body string) error {
-	return unsupported("tea", "edit comment")
+	id, err := numericID(commentID)
+	if err != nil {
+		return err
+	}
+	_, err = t.apiDo(http.MethodPatch, t.commentPath(id), nil, map[string]string{"body": body})
+	return err
 }
+
+// EditIssueBody replaces an issue's body text (#2087).
 func (t *teaForge) EditIssueBody(issue int, body string) error {
-	return unsupported("tea", "edit issue body")
+	_, err := t.apiDo(http.MethodPatch, t.issuePath(issue), nil, map[string]string{"body": body})
+	return err
+}
+
+// IssueBody reads an issue's current body — the read half of the stale-base
+// check (#2087).
+func (t *teaForge) IssueBody(issue int) (string, error) {
+	out, err := t.apiGet(t.issuePath(issue), nil)
+	if err != nil {
+		return "", err
+	}
+	return parseBodyField(out)
+}
+
+// CommentBody reads one comment's current body, the comment half of it.
+func (t *teaForge) CommentBody(commentID string) (string, error) {
+	id, err := numericID(commentID)
+	if err != nil {
+		return "", err
+	}
+	out, err := t.apiGet(t.commentPath(id), nil)
+	if err != nil {
+		return "", err
+	}
+	return parseBodyField(out)
 }
 
 // AddLabels attaches labels by ID: Gitea's label endpoints address labels by
@@ -384,6 +423,12 @@ func (t *teaForge) ClosePR(pr int) error { return unsupported("tea", "close PR")
 // issuePath is the API path of one issue of the bound repository.
 func (t *teaForge) issuePath(issue int) string {
 	return t.repoPath() + "/issues/" + itoa(issue)
+}
+
+// commentPath is the API path of one comment; the caller has already checked
+// that id is digits (#2087), so it never widens the request path.
+func (t *teaForge) commentPath(id string) string {
+	return t.repoPath() + "/issues/comments/" + id
 }
 
 // labelIDs resolves label names to the repository's label IDs, erroring on a

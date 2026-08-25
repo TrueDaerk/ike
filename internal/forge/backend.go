@@ -29,12 +29,18 @@ const (
 )
 
 // Capabilities reports what the authenticated user may do to the repository,
-// split along the two permission tiers the stream's actions need.
+// split along the two permission tiers the stream's actions need, plus who
+// that user is.
 type Capabilities struct {
 	// Triage: mutate labels, assignees and issue state (close/reopen).
 	Triage bool
-	// Push: write access — merge pull requests.
+	// Push: write access — merge pull requests, edit foreign issue texts.
 	Push bool
+	// Login is the authenticated user's login, "" when the backend could not
+	// resolve it. The edit gating (#2087) matches it against an issue's
+	// author to decide whether the body is the user's own text; comments
+	// carry their own TimelineEntry.Own flag.
+	Login string
 }
 
 // Timeline event kinds (#2084): the neutral vocabulary both bindings map
@@ -92,6 +98,12 @@ type Forge interface {
 	EditComment(commentID string, body string) error
 	// EditIssueBody replaces an issue's body text.
 	EditIssueBody(issue int, body string) error
+	// IssueBody reads an issue's current body text — the read half of the
+	// stale-base check an edit runs before it overwrites (#2087).
+	IssueBody(issue int) (string, error)
+	// CommentBody reads a comment's current body text by its forge ID, the
+	// same stale-base check for comments.
+	CommentBody(commentID string) (string, error)
 	// AddLabels attaches the named labels to an issue.
 	AddLabels(issue int, labels []string) error
 	// RemoveLabels detaches the named labels from an issue.

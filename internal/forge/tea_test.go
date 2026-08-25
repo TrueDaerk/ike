@@ -234,3 +234,41 @@ func TestParseGiteaTimelineBadJSON(t *testing.T) {
 		t.Fatal("non-JSON must error, not parse")
 	}
 }
+
+// giteaIssueDocFixture and giteaCommentDocFixture are the Gitea documents the
+// stale-base check reads (#2087); the body field carries the same name as on
+// GitHub, which is why one parser serves both bindings.
+const giteaIssueDocFixture = `{
+  "number": 42,
+  "title": "gitea issue",
+  "body": "first line\r\nsecond line",
+  "updated_at": "2026-08-25T09:12:00Z"
+}`
+
+const giteaCommentDocFixture = `{
+  "id": 9001,
+  "body": "a comment on the instance",
+  "user": {"login": "wheatley"}
+}`
+
+func TestParseBodyFieldOnGiteaDocuments(t *testing.T) {
+	body, err := parseBodyField([]byte(giteaIssueDocFixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The raw text keeps its CRLF; only the comparison normalizes it, so a
+	// Windows-authored body does not read as a concurrent edit.
+	if body != "first line\r\nsecond line" {
+		t.Fatalf("issue body = %q", body)
+	}
+	if NormalizeText(body) != "first line\nsecond line" {
+		t.Fatalf("normalized = %q", NormalizeText(body))
+	}
+	body, err = parseBodyField([]byte(giteaCommentDocFixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body != "a comment on the instance" {
+		t.Fatalf("comment body = %q", body)
+	}
+}
