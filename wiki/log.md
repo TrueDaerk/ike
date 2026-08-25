@@ -1,5 +1,22 @@
 # Log
 
+## 2026-08-25 (ui: issues window key-map consolidation across modes, #2114)
+
+- **One meaning per letter family across the issues window's four modes**
+  (issue list, issue detail, PR list, PR detail), documented as a key table
+  in the Issues Tool Window doc. `e` (alias `E`) now always means **edit**
+  and raises a unified edit picker — labels, assignees, the issue body, your
+  own comments — skipping the picker when only one target is available; `u`
+  and the separate `E` text-edit action are retired. `c`/`C` mean **close**
+  (with a comment) on issues and PRs alike (`C` newly aliases the PR close
+  dialog). `l` means labels only: the timeline's load-more moved from `L`
+  to `p` (next activity page). `g`/`G` jump to the extremes in every mode —
+  the lists regained the full #1666 `ui.NavFull` semantics — and grouping by
+  label lost its direct key, staying reachable in the filter overlay's
+  grouping row and as a menu-only action-menu entry (footer skips keyless
+  actions). Footer, action menu, tests and the wiki doc updated together;
+  `keymap_test.go` pins the one-meaning-per-family table.
+
 ## 2026-08-25 (ui: speed search in the issues window's pickers, #2111)
 
 - **The issues window's pickers narrow as you type.** The label and assignee

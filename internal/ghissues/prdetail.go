@@ -165,9 +165,11 @@ func (m *Model) clampPRDetail() {
 }
 
 // prActionKey routes the PR write keys, which the PR list and the PR detail
-// share: 'M' merges with a comment, 'c' closes with a comment. Each checks
-// the capability gate itself, so a key without permission explains rather
-// than doing nothing.
+// share: 'M' merges with a comment, 'c' closes with a comment ('C' is an
+// alias — on the issue views the shifted key is the close-with-comment
+// variant, and the PR close dialog always carries its comment stage, #2114).
+// Each checks the capability gate itself, so a key without permission
+// explains rather than doing nothing.
 func (m *Model) prActionKey(key string) tea.Cmd {
 	if m.prAction == nil || m.tab != TabPRs {
 		return nil
@@ -175,7 +177,7 @@ func (m *Model) prActionKey(key string) tea.Cmd {
 	switch key {
 	case "M":
 		return m.openPRActionDialog(forge.PRMerge)
-	case "c":
+	case "c", "C":
 		return m.openPRActionDialog(forge.PRClose)
 	}
 	return nil

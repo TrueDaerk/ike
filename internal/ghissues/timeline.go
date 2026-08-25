@@ -4,8 +4,9 @@ package ghissues
 // history of the open issue — comments, label and assignee changes, state
 // changes — appended under the rendered body. The pane stays subprocess-free:
 // the app injects the per-issue/page fetch factory, opening a detail asks for
-// page one, 'L' loads the next page, 'r' refetches, and results arrive as
-// forge.TimelineMsg.
+// page one, 'p' loads the next page (#2114 — 'L' before the key-map
+// consolidation reserved the l family for labels), 'r' refetches, and results
+// arrive as forge.TimelineMsg.
 
 import (
 	"strings"
@@ -60,7 +61,7 @@ func (m *Model) refetchTimeline() tea.Cmd {
 	return m.timeline(is.Number, 1)
 }
 
-// loadMoreTimeline fetches the next page ('L'), nil when there is none or one
+// loadMoreTimeline fetches the next page ('p'), nil when there is none or one
 // is already in flight.
 func (m *Model) loadMoreTimeline() tea.Cmd {
 	if m.timeline == nil || !m.tlMore || m.tlLoading || m.tlFor == 0 {
@@ -148,7 +149,7 @@ func (m *Model) timelineLines(pal *theme.Palette, is *forge.Issue) []string {
 	case m.tlErr != "":
 		lines = append(lines, "", lipgloss.NewStyle().Foreground(pal.Error).Render(m.clip(" (activity fetch failed: "+m.tlErr+" — r retries)")))
 	case m.tlMore:
-		lines = append(lines, "", faint.Render(" (L loads more activity)"))
+		lines = append(lines, "", faint.Render(" (p loads more activity)"))
 	case m.tlPage > 0 && len(m.tl) == 0:
 		lines = append(lines, "", faint.Render(" (no activity yet)"))
 	}

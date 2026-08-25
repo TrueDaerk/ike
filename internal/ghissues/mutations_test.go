@@ -64,21 +64,22 @@ func TestMutationGateHidesActionsWithoutPermission(t *testing.T) {
 	if !hasKey("e") {
 		t.Fatal("the label action must be discoverable in the menu")
 	}
-	if strings.Contains(m.View(), "e labels±") {
+	if strings.Contains(m.View(), "c close") {
 		t.Fatal("an ungranted action must not be advertised in the footer")
 	}
 	m.SetRepoMeta(forge.RepoMetaMsg{Caps: forge.Capabilities{}})
 	var label string
 	for _, a := range m.Actions() {
-		if a[0] == "e" {
+		if a[0] == "c" {
 			label = a[1]
 		}
 	}
 	if !strings.Contains(label, "needs triage permission") {
 		t.Fatalf("the menu must name the reason, got %q", label)
 	}
-	// Pressing the key explains rather than doing nothing.
-	m.Update(key("e"))
+	// Pressing the key and choosing the labels entry explains rather than
+	// doing nothing ('e' raises the unified edit picker first, #2114).
+	press(m, "e", "enter")
 	if m.LabelEditorOpen() {
 		t.Fatal("the picker must not open without permission")
 	}
@@ -93,7 +94,7 @@ func TestMutationGateHidesActionsWithoutPermission(t *testing.T) {
 func TestMutationActionsListedWithPermission(t *testing.T) {
 	m, _ := mutable(t)
 	view := m.View()
-	for _, hint := range []string{"e labels±", "u assignees", "c close"} {
+	for _, hint := range []string{"e edit", "c close"} {
 		if !strings.Contains(view, hint) {
 			t.Fatalf("footer must advertise %q: %s", hint, view)
 		}
@@ -104,9 +105,10 @@ func TestLabelPickerAppliesDiff(t *testing.T) {
 	m, sent := mutable(t)
 	selectIssue(t, m, 1)
 	// Issue #1 carries "bug"; the rows are the repository's three labels.
-	m.Update(key("e"))
+	// 'e' raises the unified edit picker (#2114); its first entry is Labels.
+	press(m, "e", "enter")
 	if !m.LabelEditorOpen() {
-		t.Fatal("e must open the label editor")
+		t.Fatal("e + enter must open the label editor")
 	}
 	if got := m.EditSelection(); len(got) != 1 || got[0] != "bug" {
 		t.Fatalf("the issue's own labels must be preselected, got %v", got)
@@ -138,11 +140,11 @@ func TestLabelPickerAppliesDiff(t *testing.T) {
 
 func TestLabelPickerNoDiffSendsNothing(t *testing.T) {
 	m, sent := mutable(t)
-	press(m, "e", "enter")
+	press(m, "e", "enter", "enter")
 	if len(*sent) != 0 {
 		t.Fatalf("an unchanged selection must not write: %+v", *sent)
 	}
-	press(m, "e", "esc")
+	press(m, "e", "enter", "esc")
 	if len(*sent) != 0 || m.LabelEditorOpen() {
 		t.Fatalf("esc must cancel: %+v", *sent)
 	}
@@ -151,9 +153,9 @@ func TestLabelPickerNoDiffSendsNothing(t *testing.T) {
 func TestAssigneePickerReplacesTheSet(t *testing.T) {
 	m, sent := mutable(t)
 	selectIssue(t, m, 1)
-	m.Update(key("u"))
+	press(m, "e", "down", "enter")
 	if !m.AssigneeEditorOpen() {
-		t.Fatal("u must open the assignee editor")
+		t.Fatal("the edit picker's assignee entry must open the assignee editor")
 	}
 	if got := m.EditSelection(); len(got) != 1 || got[0] != "dev" {
 		t.Fatalf("current assignees must be preselected, got %v", got)
@@ -236,7 +238,7 @@ func TestFailedMutationRollsBack(t *testing.T) {
 	m, _ := mutable(t)
 	selectIssue(t, m, 1)
 	before := append([]forge.Label(nil), m.Selected().Labels...)
-	press(m, "e", "space", "enter") // remove "bug"
+	press(m, "e", "enter", "space", "enter") // remove "bug"
 	if len(m.Selected().Labels) != 0 {
 		t.Fatal("the optimistic update must apply first")
 	}
@@ -269,7 +271,7 @@ func TestSuccessfulMutationRefetches(t *testing.T) {
 		return nil
 	})
 	selectIssue(t, m, 1)
-	press(m, "e", "space", "enter")
+	press(m, "e", "enter", "space", "enter")
 	if cmd := m.SetMutationResult(forge.MutationMsg{Issue: 1, Kind: forge.MutateLabels}); cmd != nil {
 		cmd()
 	}
@@ -288,7 +290,7 @@ func TestPickerFallsBackToTheListing(t *testing.T) {
 		Caps: forge.Capabilities{Triage: true},
 		Err:  errFake("HTTP 403: labels"),
 	})
-	m.Update(key("e"))
+	press(m, "e", "enter")
 	if !m.LabelEditorOpen() {
 		t.Fatal("a failed label probe must still leave a usable picker")
 	}

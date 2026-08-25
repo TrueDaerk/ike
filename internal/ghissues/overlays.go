@@ -50,10 +50,11 @@ func (m *Model) actions() []action {
 			act("j/k", "scroll", "Scroll the body", nil),
 		}
 		if m.tlMore {
-			acts = append(acts, action{key: "L", hint: "more", label: "Load more activity", run: (*Model).loadMoreTimeline})
+			acts = append(acts, action{key: "p", hint: "more", label: "Load more activity (next page)", run: (*Model).loadMoreTimeline})
 		}
+		acts = append(acts, m.editAction()...)
 		acts = append(acts, m.mutationActions()...)
-		acts = append(acts, m.textEditActions()...)
+		acts = append(acts, m.commentAction()...)
 		return append(acts,
 			action{key: "s", hint: "start work", label: "Start work (create the branch)", run: (*Model).startWork},
 			action{key: "o", hint: "browser", label: "Open in browser", run: (*Model).openInBrowser},
@@ -97,21 +98,27 @@ func (m *Model) actions() []action {
 		act("s", "start work", "Start work (create the branch)", (*Model).startWork),
 		act("o", "browser", "Open in browser", (*Model).openInBrowser),
 	}
+	acts = append(acts, m.editAction()...)
 	acts = append(acts, m.mutationActions()...)
 	return append(acts,
 		act("f", "filter", "Filter (match / state / labels)", func(m *Model) tea.Cmd { m.openFilterOverlay(fovMatch); return nil }),
 		act("l", "labels", "Filter by label (the filter's label section)", func(m *Model) tea.Cmd { m.openLabelSection(); return nil }),
 		act("t", "state", "State filter (open / closed / all)", (*Model).cycleState),
 		act("a", "sort", "Sort order ("+m.sort.String()+")", func(m *Model) tea.Cmd { m.cycleSort(); return nil }),
-		act("g", "group", "Group by label", func(m *Model) tea.Cmd { m.toggleGroup(); return nil }),
+		// Grouping lost its direct key in the #2114 consolidation ('g' means
+		// "jump to the top" in every mode now); it stays reachable here and in
+		// the filter overlay. An empty key marks a menu-only action the footer
+		// skips.
+		act("", "", "Group by label (also in the filter overlay)", func(m *Model) tea.Cmd { m.toggleGroup(); return nil }),
 		act("esc", "clear filter", "Clear a filter (peels one at a time)", (*Model).clearFilters),
 		act("tab", "view", "Switch view (Issues / PRs)", func(m *Model) tea.Cmd { m.switchTab(1); return nil }),
 		act("r", "refresh", "Refresh the listing", (*Model).startRefresh),
 	)
 }
 
-// mutationActions are the write actions of the issue views (#2088): the label
-// and assignee pickers and the two state changes. They are only listed once a
+// mutationActions are the state-write actions of the issue views (#2088):
+// close/reopen, plain and with a comment. (The label and assignee pickers sit
+// behind the unified 'e' edit picker since #2114.) They are only listed once a
 // forge backend is bound, and they carry the capability gate — without triage
 // permission each is disabled and names why, so the user learns what is
 // missing instead of finding the keys dead.
@@ -121,8 +128,6 @@ func (m *Model) mutationActions() []action {
 	}
 	verb := m.stateVerb()
 	acts := []action{
-		act("e", "labels±", "Edit the issue's labels", (*Model).openLabelEditor),
-		act("u", "assignees", "Edit the issue's assignees", (*Model).openAssigneeEditor),
 		act("c", verb, capitalize(verb)+" the issue", (*Model).toggleIssueState),
 		act("C", verb+"+comment", capitalize(verb)+" the issue with a comment", (*Model).openCommentPrompt),
 	}
@@ -207,8 +212,8 @@ func (m *Model) overlayItems() int {
 		return 2 // the input line and its hint
 	case ovPRAct, ovCleanup:
 		return 3 // fixed dialog rows, not navigable — they only size the box
-	case ovTextEdit:
-		return len(m.textTargets())
+	case ovEdit:
+		return len(m.editEntries())
 	}
 	return 0
 }
@@ -288,8 +293,8 @@ func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.actionMenuKey(msg)
 	case ovLabelEdit, ovAssignEdit:
 		return m.editorKey(msg)
-	case ovTextEdit:
-		return m.textPickerKey(key)
+	case ovEdit:
+		return m.editPickerKey(key)
 	}
 	return nil
 }
