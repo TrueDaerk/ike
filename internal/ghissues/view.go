@@ -779,14 +779,20 @@ func (m *Model) detailMeta(is *forge.Issue) string {
 // renderMarkdown renders through a fresh width- and theme-bound glamour
 // renderer, the preview pane's pattern (#62).
 func (m *Model) renderMarkdown(src string) (string, error) {
+	wrap := max(10, m.width-2)
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStyles(m.styleConfig()),
-		glamour.WithWordWrap(max(10, m.width-2)),
+		glamour.WithWordWrap(wrap),
 	)
 	if err != nil {
 		return "", err
 	}
-	return r.Render(src)
+	out, err := r.Render(src)
+	if err != nil {
+		return "", err
+	}
+	// Glamour cannot hang-indent wrapped list items itself (#2105).
+	return ui.HangingIndent(out, wrap), nil
 }
 
 // styleConfig picks the stock glamour style off the palette's dark flag and

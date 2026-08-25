@@ -167,7 +167,8 @@ The list's cursor and scroll are untouched while it is open, so `esc` returns
 to exactly the row it left. `ctrl+j`/`ctrl+k` walk to the next/previous issue
 without going back through the list, moving the list cursor with them; `j/k`
 and the page keys scroll the body. The body itself is the issue's markdown
-rendered through glamour with the preview pane's theme mapping (#62), under
+rendered through glamour with the preview pane's theme mapping (#62) and its
+hanging indent for wrapped list items (`ui.HangingIndent`, #2105), under
 an author/age/state line and — when one exists — the linked PR's state.
 
 ### Timeline (#2084)

@@ -21,6 +21,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // Debounce is how long after the last buffer change the preview re-renders.
@@ -212,14 +213,20 @@ func (m *Model) render() {
 // renderer. Glamour renderers are cheap to build relative to a render, and a
 // fresh one per render keeps width/theme changes trivially correct.
 func (m Model) renderMarkdown() (string, error) {
+	wrap := max(10, m.w-2)
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStyles(m.styleConfig()),
-		glamour.WithWordWrap(max(10, m.w-2)),
+		glamour.WithWordWrap(wrap),
 	)
 	if err != nil {
 		return "", err
 	}
-	return r.Render(m.src)
+	out, err := r.Render(m.src)
+	if err != nil {
+		return "", err
+	}
+	// Glamour cannot hang-indent wrapped list items itself (#2105).
+	return ui.HangingIndent(out, wrap), nil
 }
 
 // styleConfig picks the stock glamour style off the palette's dark flag and
