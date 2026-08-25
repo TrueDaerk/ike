@@ -206,6 +206,29 @@ func (m *Model) SelectionText() string {
 	return b.String()
 }
 
+// selectionSearchPrefill returns the text an active mouse selection should
+// seed the "/" search with (#2122), mirroring the editor's visual-mode
+// prefill (visualSearchPrefill, #2063): a single-row selection becomes the
+// query. A selection spanning multiple rows returns "" and search opens
+// empty — there is no line-spanning query to offer instead, same reasoning
+// as the editor. Unlike the editor's visual mode, the selection itself is
+// left intact: it is independent of the search prompt here (#2051 already
+// lets it be copied while searching), so there is no mode transition that
+// would drop it.
+func (m *Model) selectionSearchPrefill() string {
+	if !m.sel.on {
+		return ""
+	}
+	start, end := m.sel.anchor, m.sel.head
+	if end.before(start) {
+		start, end = end, start
+	}
+	if start.row != end.row {
+		return ""
+	}
+	return m.SelectionText()
+}
+
 // posAt maps a pane-local cell onto a position in the composed rows. The
 // content starts one line below the title bar and one column right of the
 // leading gutter space every row renders with.

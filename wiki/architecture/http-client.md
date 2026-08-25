@@ -821,7 +821,15 @@ For a recognized stream:
   incrementally over the **whole composed view** — status line,
   headers and formatted body alike — with the editor's smartcase rule (an
   all-lowercase pattern folds case, any uppercase rune makes it exact, via
-  `internal/editor/search`). `n`/`N` step to the next/previous match with
+  `internal/editor/search`). Opening the prompt with an active mouse
+  selection (below) prefills the query with the selected text and computes
+  matches immediately (#2122), mirroring the editor's visual-mode prefill
+  (`visualSearchPrefill`): only a selection confined to one composed row
+  seeds the query, since there is no line-spanning pattern to offer for a
+  multi-row drag — search then opens empty, same as with no selection at
+  all. Unlike the editor, the selection is not cleared by the prefill: it
+  stays independently copyable while the prompt is open (#2051).
+  `n`/`N` step to the next/previous match with
   wrap-around and scroll it into view, `Enter` commits the pattern and closes
   the prompt, `Esc` clears the search. Every match renders on the muted
   selection background, the current one on the selection background plus an

@@ -242,6 +242,75 @@ func TestCtrlCCopies(t *testing.T) {
 	}
 }
 
+// TestSearchOpenPrefillsFromSelection covers #2122: opening search with a
+// single-row selection active seeds the query with the selected text, moves
+// the cursor to its end and computes matches immediately, mirroring the
+// editor's visual-selection prefill.
+func TestSearchOpenPrefillsFromSelection(t *testing.T) {
+	m := selViewer(t)
+	fixedClock(t)
+	r := bodyRow(m, "alpha beta")
+	press(m, r, 0)
+	drag(m, r, 5) // selects "alpha"
+	m.handleKey(keyPress("/"))
+
+	q, open := m.SearchQuery()
+	if !open {
+		t.Fatal("/ must open the search prompt")
+	}
+	if q != "alpha" {
+		t.Fatalf("prefilled query: %q, want %q", q, "alpha")
+	}
+	if m.qcur != len([]rune("alpha")) {
+		t.Fatalf("cursor after prefill: %d, want end of query", m.qcur)
+	}
+	if _, total := m.MatchPosition(); total == 0 {
+		t.Error("matches must be computed immediately for the prefilled query")
+	}
+}
+
+// TestSearchOpenWithoutSelectionStaysEmpty covers the no-selection branch of
+// #2122: opening search without an active selection keeps prior behavior —
+// an empty query.
+func TestSearchOpenWithoutSelectionStaysEmpty(t *testing.T) {
+	m := selViewer(t)
+	m.handleKey(keyPress("/"))
+	q, open := m.SearchQuery()
+	if !open {
+		t.Fatal("/ must open the search prompt")
+	}
+	if q != "" {
+		t.Fatalf("query without a selection: %q, want empty", q)
+	}
+	if _, total := m.MatchPosition(); total != 0 {
+		t.Errorf("matches without a query: %d, want 0", total)
+	}
+}
+
+// TestSearchOpenMultilineSelectionStaysEmpty covers the AC that a selection
+// spanning multiple rows must not break search: it simply isn't prefilled,
+// same reasoning as the editor's visualSearchPrefill for multiline visual
+// selections.
+func TestSearchOpenMultilineSelectionStaysEmpty(t *testing.T) {
+	m := selViewer(t)
+	fixedClock(t)
+	first := bodyRow(m, "alpha beta")
+	second := bodyRow(m, "gamma delta")
+	press(m, first, 0)
+	drag(m, second, 5)
+	if !m.HasSelection() {
+		t.Fatal("drag must produce a selection")
+	}
+	m.handleKey(keyPress("/"))
+	q, open := m.SearchQuery()
+	if !open {
+		t.Fatal("/ must open the search prompt")
+	}
+	if q != "" {
+		t.Fatalf("query for a multiline selection: %q, want empty", q)
+	}
+}
+
 // TestCopySelectionWhileSearching covers #2051: a selection made while the
 // "/" prompt is open must still copy on ctrl+c, and the search itself must
 // keep working around it.
@@ -274,11 +343,15 @@ func TestCopySelectionWhileSearching(t *testing.T) {
 		t.Error("copying must not close the search prompt")
 	}
 
-	// Typing still reaches the query, and "y" — a valid copy chord outside
-	// search — types normally instead of being stolen.
+	// The prompt opened prefilled with the selection text (#2122). Typing
+	// still reaches the query, and "y" — a valid copy chord outside search —
+	// types normally instead of being stolen.
+	if q, _ := m.SearchQuery(); q != "alpha" {
+		t.Errorf("prefilled query: %q", q)
+	}
 	m.handleKey(keyPress("y"))
 	m.handleKey(keyPress("e"))
-	if q, _ := m.SearchQuery(); q != "ye" {
+	if q, _ := m.SearchQuery(); q != "alphaye" {
 		t.Errorf("query after typing: %q", q)
 	}
 
