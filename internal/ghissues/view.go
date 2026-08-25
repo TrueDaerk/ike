@@ -723,6 +723,11 @@ func (m *Model) ensureDetail(pal *theme.Palette, is *forge.Issue) {
 		return
 	}
 	if m.detailFor != is.Number {
+		// Opening a different issue starts at the top. Re-rendering the one
+		// already shown — a width change, a fresh timeline page, or a
+		// background poll (#2085) that brought a fresh body — must keep the
+		// offset the user scrolled to, or every poll would yank a long issue
+		// back to line one.
 		m.detailTop = 0
 	}
 	m.detailFor, m.detailW, m.detailRev = is.Number, m.width, m.tlRev
@@ -745,6 +750,8 @@ func (m *Model) ensureDetail(pal *theme.Palette, is *forge.Issue) {
 	}
 	m.detailLines = strings.Split(strings.TrimRight(out, "\n"), "\n")
 	m.detailLines = append(m.detailLines, m.timelineLines(pal, is)...)
+	// A shorter body may leave the kept offset past the end.
+	m.clampDetail()
 }
 
 // detailMeta is the author/age/state line above an issue's body, "" when the

@@ -240,6 +240,10 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// load diagnostics like any reload (#793).
 	fresh.notifyConfigDiags(diags)
 	fresh.StartWatcher(".")
+	// The incoming project polls its own forge (#2085): `fresh` carries a new
+	// poller for the new root, so its first fetch seeds that project's
+	// snapshot silently instead of replaying its backlog as "new".
+	fresh.StartForgePoll()
 
 	// Size the fresh model like the first WindowSizeMsg would, then run its
 	// Init and the post-switch effects: record the open (success only — we are

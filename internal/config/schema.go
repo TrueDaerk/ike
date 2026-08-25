@@ -73,15 +73,22 @@ type Config struct {
 	Remote Remote `toml:"remote"`
 	// Screenshot holds the in-IDE PNG export's behaviour (#2001).
 	Screenshot Screenshot `toml:"screenshot"`
-	// Forge holds code-forge behaviour (#2086): how prominently each kind of
-	// forge event announces itself.
+	// Forge holds code-forge behaviour: how often IKE re-reads the forge in
+	// the background (#2085) and how prominently each kind of forge event
+	// announces itself (#2086).
 	Forge Forge `toml:"forge"`
 }
 
-// Forge holds the code-forge settings (#2086). Notify is the per-event-type
-// notification style of the forge event surface.
+// Forge holds the code-forge settings (#2085, #2086). PollIntervalSeconds is
+// how often IKE re-fetches the repository's issues and pull requests in the
+// background so new issues, closed issues and PR state changes surface without
+// a manual refresh; 0 turns polling off entirely, and anything between 1 and
+// the floor is raised to it, so a mistyped interval cannot hammer the forge
+// (every poll is a CLI/API round trip). Notify is the per-event-type
+// notification style of the forge event surface those polls feed.
 type Forge struct {
-	Notify ForgeNotify `toml:"notify"`
+	PollIntervalSeconds int         `toml:"poll_interval_seconds"`
+	Notify              ForgeNotify `toml:"notify"`
 }
 
 // ForgeNotify is the notification style per forge event kind (#2086). Each

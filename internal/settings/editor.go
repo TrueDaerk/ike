@@ -388,6 +388,28 @@ func (n *intEditor) Capturing() bool        { return true }
 func (n *intEditor) Dirty() bool            { return strings.TrimSpace(n.tf.text) != n.m.value(n.e.Key) }
 func (n *intEditor) Paste(text string) bool { return n.tf.Paste(text) }
 
+// snapInt walks v on in delta's direction until the entry's ValidateInt hook
+// accepts it (#2085), so a stepper jumps a hole in the valid set — 0 steps up
+// to 10 for the forge poll interval, and back down to 0 — instead of stopping
+// inside it. Entries without the hook, and a zero delta, return v unchanged;
+// the walk is bounded by the entry's own range.
+func snapInt(e Entry, v, delta int) int {
+	if e.ValidateInt == nil || delta == 0 {
+		return v
+	}
+	span := e.Max - e.Min
+	if span < 0 {
+		span = 0
+	}
+	for i := 0; i <= span && e.ValidateInt(v) != ""; i++ {
+		if v < e.Min || v > e.Max {
+			break
+		}
+		v += delta
+	}
+	return v
+}
+
 // clampToBounds applies the entry's inclusive range, noting a silent clamp.
 func (n *intEditor) clampToBounds(v int) int {
 	if n.e.Min == 0 && n.e.Max == 0 {
@@ -406,7 +428,7 @@ func (n *intEditor) step(delta int) tea.Cmd {
 	if err != nil {
 		cur, _ = strconv.Atoi(strings.TrimSpace(n.m.value(n.e.Key)))
 	}
-	next := n.clampToBounds(cur + delta)
+	next := n.clampToBounds(snapInt(n.e, cur+delta, delta))
 	n.err = ""
 	n.tf.Set(strconv.Itoa(next))
 	if next == cur {
@@ -430,8 +452,17 @@ func (n *intEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 			n.err = "not a number"
 			return nil
 		}
-		n.err = ""
 		v = n.clampToBounds(v)
+		// A typed value is refused outright rather than snapped (#2085): the
+		// user is editing interactively and can fix it, so naming the valid
+		// set beats silently writing something else.
+		if n.e.ValidateInt != nil {
+			if msg := n.e.ValidateInt(v); msg != "" {
+				n.err = msg
+				return nil
+			}
+		}
+		n.err = ""
 		n.tf.Set(strconv.Itoa(v))
 		return n.m.writeValue(n.e, v)
 	}

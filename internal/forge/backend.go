@@ -161,28 +161,47 @@ func RefreshCmd(dir string) tea.Cmd { return RefreshStateCmd(dir, IssuesOpen) }
 // window's open/closed/all filter refetches through it (#2090). An
 // unavailable backend (no forge CLI, no matching remote or login) resolves to
 // the Setup state; a failing fetch to Err. A failing PR listing keeps the
-// issues and drops only the PR states — the list is still useful without
-// them. Pull requests are always fetched in every state and split client-side,
-// so switching the issue state never re-costs the PR tab.
+// issues and reports only PRErr — the list is still useful without the PR
+// states. Pull requests are always fetched in every state and split
+// client-side, so switching the issue state never re-costs the PR tab.
 func RefreshStateCmd(dir string, state IssueState) tea.Cmd {
+	return func() tea.Msg { return fetchListing(dir, state) }
+}
+
+// PollCmd is RefreshCmd tagged as a background poll (#2085). The background
+// poll service dispatches it from a tick handler and never waits on it; the
+// tag lets the consumers tell it from a refresh the user asked for. It polls
+// the open listing: the snapshot diff is defined against it, and a poll must
+// not depend on whichever state filter the pane happens to be showing.
+func PollCmd(dir string) tea.Cmd {
+	return func() tea.Msg {
+		msg := fetchListing(dir, IssuesOpen)
+		msg.Poll = true
+		return msg
+	}
+}
+
+// fetchListing runs one detection + listing pass off the Update loop. Every
+// command above resolves to it; only the state and the Poll tag differ.
+func fetchListing(dir string, state IssueState) IssuesMsg {
 	if state == "" {
 		state = IssuesOpen
 	}
-	return func() tea.Msg {
-		f, setup := Detect(dir)
-		if setup != "" {
-			return IssuesMsg{State: state, Setup: setup}
-		}
-		issues, err := f.Issues(state)
-		if err != nil {
-			return IssuesMsg{State: state, Err: err}
-		}
-		msg := IssuesMsg{State: state, Issues: issues}
-		if prs, err := f.PRs(); err == nil {
-			msg.PRs = prs
-		}
-		return msg
+	f, setup := Detect(dir)
+	if setup != "" {
+		return IssuesMsg{State: state, Setup: setup}
 	}
+	issues, err := f.Issues(state)
+	if err != nil {
+		return IssuesMsg{State: state, Err: err}
+	}
+	msg := IssuesMsg{State: state, Issues: issues}
+	if prs, err := f.PRs(); err != nil {
+		msg.PRErr = err
+	} else {
+		msg.PRs = prs
+	}
+	return msg
 }
 
 // RefreshFactory is the per-state fetch factory the issues window is injected

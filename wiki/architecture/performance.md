@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often), the in-app performance HUD, and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -23,6 +23,13 @@ so with many panes each unnecessary wake is expensive. The standing rules:
   backup, VCS refresh, keymap chord timeout, the follow-mode poll #1928) arm
   on demand and re-arm only while work is pending (`arm*Tick` + `*TickArmed`
   flags in `internal/app`).
+- **One documented exception: the forge poll** (#2085). Watching a remote
+  forge has no change seam to arm on, so its tick repeats while
+  `forge.poll_interval_seconds` is non-zero — a standing 1 in the armed-ticker
+  count, one wake per interval (default 20s), and `0` is the opt-out. It stops
+  on its own while the forge is unavailable and backs off exponentially while
+  fetches fail. Its handler only dispatches the fetch `Cmd`, so the wake stays
+  a wake and never becomes a stall; see [Forge Layer](/architecture/forge.md).
 - **The explorer auto-refresh poll loops off-loop** (#1001): the 2s directory
   mtime comparison runs inside its own Cmd goroutine and only returns a
   `pollMsg` when something actually changed — or after `pollIdleRounds` (30)

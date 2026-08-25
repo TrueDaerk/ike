@@ -24,6 +24,50 @@
   [Issues Tool Window](/architecture/github-issues.md),
   [Forge Layer](/architecture/forge.md).
 
+## 2026-08-25 (background forge polling with snapshot diff events, #2085)
+
+- **IKE now notices forge changes on its own.** A `forge.Poller` per workspace
+  root drives a tick chain whose handler *only dispatches* the fetch `tea.Cmd`,
+  so the Update loop never waits on the network; a tick arriving while the
+  previous fetch is still running is dropped rather than queued. The Issues
+  tool window consumes the fresh listing, so its content stays current without
+  pressing `r`. The chain is opened by `StartForgePoll` on the `StartWatcher`
+  lifecycle (main.go at startup, `switch.go` per project switch) and continued
+  by each finished fetch — deliberately *not* from `Init` and *not* re-armed
+  from every settled Update pass. Both would hand a `tea.Tick` to the app test
+  helpers' synchronous command drainers, which block a full interval per
+  deadline; arming from `Init` timed the whole `internal/app` package out at
+  20 s per helper-built model.
+- **Snapshot diffing emits typed events** — `IssueOpened`, `IssueClosed`,
+  `PROpened`, `PRMerged`, `PRClosed`, `PRChecksFailing` — as one
+  `forge.EventsMsg` for any consumer. The first fetch seeds the snapshot
+  **silently**, so neither startup nor a project switch replays a backlog as
+  "new" — and the PR half seeds separately, since a seeding fetch whose PR
+  listing failed leaves an empty stand-in that must not read as "every pull
+  request opened just now" one interval later. The event types themselves live
+  in `forge/events.go`, landed with the notification surface (#2086) that
+  consumes them; `Diff` fills in the author and labels its dialog shows.
+- **Poll results never fight the user.** The pane restores its selection by
+  issue number across a refresh, keeps the `/` filter line, its pattern and the
+  label filter, leaves the open detail view open *at its scroll offset* (the
+  rendered body is only re-rendered when it actually changed on the forge, and
+  `ensureDetail` now rewinds to the top only when the issue itself changes),
+  holds the last known linked-PR states over a partial (`PRErr`) result, and
+  leaves a pending manual refresh pending.
+- **Robustness:** an unavailable forge (setup problem) stops polling until a
+  manual refresh succeeds; consecutive fetch errors back off exponentially
+  (capped at 5 minutes, never faster than the configured interval) and reset on
+  success. Exactly one toast when polling degrades and one when it recovers —
+  no per-failure spam.
+- **New setting `forge.poll_interval_seconds`** (default 20, floor 10, ceiling
+  3600, `0` = off) with its own **Forge settings page**. Its valid set has a
+  hole, so `Entry.ValidateInt` was added: the form rejects a typed value inside
+  it naming the floor, and the steppers jump the hole (0 ↔ 10) — while the
+  config validator, which must stay lenient for a file on disk, snaps instead.
+- Docs: [Forge Layer](/architecture/forge.md) gained the polling lifecycle and
+  the event table; the issues window, settings UI, config and the performance
+  idle rules (the forge poll is their one documented repeating tick) follow.
+
 ## 2026-08-25 (run tests with coverage + coverage gutter, #2081)
 
 - **Run with coverage.** `run.testsWithCoverage` (palette) runs the active

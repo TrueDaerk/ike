@@ -102,6 +102,11 @@ func (m Model) armedTimers() int {
 		m.followTickArmed,
 		m.hoverIdleTickArmed,
 		m.perfTickArmed,
+		// The forge poll (#2085) is the one deliberately repeating tick: it
+		// re-arms while polling is configured on, so it shows here as a
+		// standing 1 rather than as a stuck debounce loop.
+		// forge.poll_interval_seconds = 0 is the opt-out.
+		m.forgePoller().Armed(),
 	} {
 		if armed {
 			n++
