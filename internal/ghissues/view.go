@@ -221,6 +221,7 @@ func (m *Model) filterOvRows(pal *theme.Palette) []string {
 		mark = "[x]"
 	}
 	rows = append(rows, style(fovGroup).Render(mark+" group by label"))
+	rows = append(rows, style(fovMode).Render("labels: "+labelModeRadio(m.labelAll)))
 	labels := m.filterViewLabels()
 	if len(labels) == 0 && m.ovSearch.Active() {
 		// The placeholder fovLabelRows() reserves (#2111): the query is still
@@ -237,6 +238,23 @@ func (m *Model) filterOvRows(pal *theme.Palette) []string {
 		rows = append(rows, st.Render(mark)+chip(l)+st.Render("  "+strconv.Itoa(m.labelCount(l.Name))))
 	}
 	return rows
+}
+
+// labelModeWord is the footer's word for the active label semantics.
+func (m *Model) labelModeWord() string {
+	if m.labelAll {
+		return "all"
+	}
+	return "any"
+}
+
+// labelModeRadio renders the label section's any-of/all-of switch (#2112)
+// with the active semantics marked, so the filter never narrows silently.
+func labelModeRadio(all bool) string {
+	if all {
+		return "○ any of  ● all of"
+	}
+	return "● any of  ○ all of"
 }
 
 // stateRadio renders the state row's three options with the active one
@@ -734,7 +752,7 @@ func (m *Model) footer(pal *theme.Palette) string {
 		if m.tab != TabPRs && m.ovCursor >= m.fovFixedRows() {
 			return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggles · type to narrow · backspace clears the row · enter keeps · esc reverts"))
 		}
-		return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggles · labels match any selected · backspace clears the row · enter keeps · esc reverts"))
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" space toggles · labels match " + m.labelModeWord() + " selected · backspace clears the row · enter keeps · esc reverts"))
 	}
 	if m.ov == ovLabelEdit || m.ov == ovAssignEdit {
 		if m.ovSearch.Active() {
