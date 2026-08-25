@@ -86,6 +86,8 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Rerun last | `cmd+f5` | `ctrl+f5` | `run.rerun` |
 | Rerun last | `ctrl+f5` | `ctrl+f5` | `run.rerun` |
 | Restore default layout | `shift+f12` | `shift+f12` | `window.restoreLayout` |
+| Return from peek | `cmd+shift+b` | `ctrl+shift+b` | `project.peek.return` |
+| Return from peek | `ctrl+shift+b` | `ctrl+shift+b` | `project.peek.return` |
 | Reveal open file in explorer | `alt+f1` | `alt+f1` | `explorer.reveal` |
 | Revert file | `cmd+alt+z` | `ctrl+alt+z` | `vcs.revertFile` |
 | Run file | `shift+f10` | `shift+f10` | `run.file` |

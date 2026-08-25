@@ -22,6 +22,28 @@ type SwitchFailedMsg struct {
 	Err  error
 }
 
+// PeekPickedMsg is emitted when a picker item is activated as a peek (#2136):
+// alt+enter on a row, or plain activation in the project.peek picker. Path is
+// the candidate root, unvalidated like PickedMsg's.
+type PeekPickedMsg struct{ Path string }
+
+// PeekProjectMsg carries a validated, absolute project root the IDE should
+// peek into (#2136): the same re-root transaction as SwitchProjectMsg, but the
+// resulting workspace is marked as a peek — the open is not recorded into
+// project.history, and project.peek.return switches back to the origin and
+// unloads it again.
+type PeekProjectMsg struct{ Root string }
+
+// PeekReturnMsg asks the root model to end the current peek (#2136): switch
+// back to the origin project and drop the peeked workspace, behind the busy
+// guard when live state would die. Dispatched by project.peek.return.
+type PeekReturnMsg struct{}
+
+// PeekKeepMsg asks the root model to convert the current peek into a normal
+// workspace (#2136): record the open into project.history and clear the peek
+// marker. Dispatched by project.peek.keep.
+type PeekKeepMsg struct{}
+
 // CloseProjectMsg asks the root model to close the current project (#1355):
 // tear the active workspace down and resume the most recently used background
 // workspace; with no background workspace the request becomes an app quit.

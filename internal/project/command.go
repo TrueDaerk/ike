@@ -17,6 +17,11 @@ import (
 // locked to the recent-projects mode (picker.go). Dispatched by project.switch.
 type OpenPickerMsg struct{}
 
+// OpenPeekPickerMsg asks the root model to open the picker in its peek
+// flavour (#2136): plain activation peeks the selected project instead of
+// switching. Dispatched by project.peek.
+type OpenPeekPickerMsg struct{}
+
 // commands is the compile-in plugin exposing the project-switching entry point.
 type commands struct{}
 
@@ -37,6 +42,33 @@ func (commands) Capabilities() plugin.Capabilities {
 			Title: "Close Project",
 			Scope: plugin.GlobalScope(),
 			Run:   func(h host.API) tea.Cmd { return h.Dispatch(CloseProjectMsg{}) },
+		}, {
+			// Quick-peek (#2136): the picker where activation opens the
+			// selected project temporarily; project.peek.return switches back
+			// and unloads it again. No default chord — the normal picker
+			// (cmd+shift+p) peeks any row via alt+enter, so a second picker
+			// chord would spend budget (#711) on a duplicate entry point.
+			ID:    "project.peek",
+			Title: "Peek Project…",
+			Scope: plugin.GlobalScope(),
+			Run:   func(h host.API) tea.Cmd { return h.Dispatch(OpenPeekPickerMsg{}) },
+		}, {
+			// The one-key way back from a peek (#2136): return to the origin
+			// project and drop the peeked workspace. Default chord cmd+shift+b
+			// ("back"); free in the 0080 matrix and cmd-based per the darwin
+			// keymap constraints.
+			ID:    "project.peek.return",
+			Title: "Return From Peek",
+			Scope: plugin.GlobalScope(),
+			Run:   func(h host.API) tea.Cmd { return h.Dispatch(PeekReturnMsg{}) },
+		}, {
+			// Escalation (#2136): stay in the peeked project for real — record
+			// the open into project.history and clear the peek marker. No
+			// default chord: a deliberate, rare decision (palette-driven).
+			ID:    "project.peek.keep",
+			Title: "Keep Peeked Project",
+			Scope: plugin.GlobalScope(),
+			Run:   func(h host.API) tea.Cmd { return h.Dispatch(PeekKeepMsg{}) },
 		}, {
 			// No default chord: cloning is a rare, dialog-driven action
 			// (palette / File menu), and the chord budget is full (#711).
@@ -61,6 +93,12 @@ func (commands) Capabilities() plugin.Capabilities {
 			CommandID: "project.switch",
 			Priority:  plugin.CorePriority,
 			Action:    open,
+		}, {
+			Keys:      "cmd+shift+b",
+			Scope:     plugin.GlobalScope(),
+			CommandID: "project.peek.return",
+			Priority:  plugin.CorePriority,
+			Action:    func(h host.API) tea.Cmd { return h.Dispatch(PeekReturnMsg{}) },
 		}, {
 			Keys:      "cmd+shift+w",
 			Scope:     plugin.GlobalScope(),

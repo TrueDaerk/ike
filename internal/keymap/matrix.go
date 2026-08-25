@@ -127,6 +127,7 @@ var reachableAlternatives = map[string]string{
 	"project.goToClass":        "palette",
 	"project.switch":           "palette",
 	"project.close":            "palette / File menu",
+	"project.peek.return":      "palette",
 	"project.findInPath":       "palette",
 	"project.replaceInPath":    "palette",
 	"lsp.references":           "palette",

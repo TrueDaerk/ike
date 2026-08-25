@@ -88,6 +88,20 @@ layout as before. Consequences:
   again, the close/quit guards stop reporting a phantom session), and the
   dead session's transport is released instead of parking until resume.
 
+## Quick-peek workspaces (#2136)
+
+A workspace opened via `project.peek` runs through the same switch/park
+machinery but is marked on the **model** (`peekState` in
+`internal/app/project_peek.go`, not on `workspace.Workspace`): the marker only
+ever describes the active workspace and deliberately dies with the process.
+`project.peek.return` resumes the origin and then `Drop`s + tears down the
+peeked unit (the #820/#825 path) behind the #821-shaped busy guard; the peeked
+project's open is never recorded into `project.history`, and its
+session/layout are only written back when they changed since peek-enter. A
+peek counts toward the #780 cap like any workspace; an origin evicted while
+peeking comes back as a cold first visit. Full flow:
+[project-switching](project-switching.md).
+
 ## Background LSP idle shutdown (#1521)
 
 Language servers are the dominant per-workspace memory block and hold no

@@ -20,3 +20,16 @@ func SwitchTo(path string) tea.Cmd {
 		return SwitchProjectMsg{Root: abs}
 	}
 }
+
+// PeekTo is SwitchTo's peek twin (#2136): the same off-loop validation, but a
+// valid root yields PeekProjectMsg so the root model runs the switch as a
+// peek. Failures share SwitchFailedMsg — the error handling is identical.
+func PeekTo(path string) tea.Cmd {
+	return func() tea.Msg {
+		abs, err := Validate(path)
+		if err != nil {
+			return SwitchFailedMsg{Path: path, Err: err}
+		}
+		return PeekProjectMsg{Root: abs}
+	}
+}

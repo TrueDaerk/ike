@@ -34,6 +34,10 @@ var jetbrainsRows = []row{
 	// secondary, same pattern as project.switch above.
 	{"cmd+shift+w", "project.close", "Close project", Global, "Project (#1355)"},
 	{"ctrl+shift+w", "project.close", "Close project", Global, "Project (#1355)"},
+	// Return from a quick-peek (#2136): cmd+shift+b ("back") with the
+	// delivered ctrl secondary, same pattern as project.switch above.
+	{"cmd+shift+b", "project.peek.return", "Return from peek", Global, "Project (#2136)"},
+	{"ctrl+shift+b", "project.peek.return", "Return from peek", Global, "Project (#2136)"},
 	{"cmd+o", "project.goToClass", "Go to symbol/class", Global, "Project (09)/LSP (10)"},
 	{"cmd+e", "palette.recentFiles", "Recent files", Global, "Palette (07)"},
 	// Reconciled (#5): the LSP plugin registers find-usages as lsp.references;

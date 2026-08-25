@@ -383,6 +383,9 @@ bring their own.
 | Clone Repository… | `project.clone` | — | — | everywhere |
 | Close Project | `project.close` | `cmd+shift+w` | — | everywhere |
 | New Project… | `project.new` | — | — | everywhere |
+| Peek Project… | `project.peek` | — | — | everywhere |
+| Keep Peeked Project | `project.peek.keep` | — | — | everywhere |
+| Return From Peek | `project.peek.return` | `cmd+shift+b` | — | everywhere |
 | Switch Project… | `project.switch` | `cmd+shift+p` | — | everywhere |
 
 ## themes

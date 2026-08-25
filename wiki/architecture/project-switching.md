@@ -164,6 +164,50 @@ project.
   closing workspace) followed by `Drop` + teardown of exactly that parked
   unit — a failed switch (chdir error) parks nothing and closes nothing.
 
+## Quick-peek switch (#2136)
+
+A ten-second look-up in another project without the three-step dance (switch,
+switch back, close from the list): open a project **temporarily**, return with
+one action that also unloads it.
+
+- **Enter**: `alt+enter` on any row of the normal picker (the palette's
+  `Item.Alt` alternate activation, added for this feature), or `project.peek`
+  ("Peek Project…", no default chord — the picker is the entry point), which
+  opens the same list in a peek flavour (prefix `_`, locked-open only) where
+  plain activation peeks and `alt+enter` switches for real. Both run
+  `PeekTo(path)` — `SwitchTo`'s twin, yielding `PeekProjectMsg{Root}` — and
+  the root model performs the normal seamless switch (#777) with two
+  differences (`internal/app/project_peek.go` + `switchOpts` in `switch.go`):
+  `RecordOpenCmd` is **skipped** (the peeked project never enters
+  `project.history` and never becomes the #1000 restore head), and the fresh
+  model carries a `peekState` marker — the origin root plus a snapshot of the
+  peeked project's would-be session/layout payloads.
+- **Indicator**: while peeking, a status-line segment shows
+  `peek ⇢ <origin> (<chord>)` with the live `project.peek.return` binding
+  (resolver truth), and the switch toast reads "peeking … `<chord>` returns".
+- **Return**: `project.peek.return` ("Return From Peek", default
+  `cmd+shift+b` with the delivered `ctrl+shift+b` secondary) switches back to
+  the origin — recording the origin open like any switch-back — then drops
+  and tears down the peeked workspace (`Drop` + `closeWorkspace`, the
+  #820/#825 path: terminals, LSP, memory). The peeked project's session and
+  layout are **not written** when they still equal the peek-enter snapshot,
+  so an untouched peek plants no `.ike` directory in a repo it only read.
+  A busy peek (dirty buffers, running processes, popup/floating shells)
+  prompts first with the #821 shape (`[s]` save all then return / `[d]`
+  discard and return / `[esc]` stay); a failed switch back (origin root gone)
+  keeps the peek intact with the usual failure toast. An origin workspace
+  evicted while peeking (#780 — a peek counts toward the cap) simply resumes
+  as a cold first visit.
+- **Escalation**: deciding to stay converts the peek into a normal workspace.
+  `project.peek.keep` ("Keep Peeked Project") records the open and clears the
+  marker in place; a plain switch elsewhere from within a peek records the
+  peeked root (sequentially before the target, one cmd — two concurrent
+  history writes would race) and the marker dies with the model rebuild.
+  Peeking from within a peek escalates the current one first. `project.close`
+  from a peek discards it: the resume-MRU path runs without escalation.
+- **Lifetime**: peek state is model state, deliberately unpersisted — after a
+  quit the peeked workspace is simply gone and the origin restores normally.
+
 ## Command & picker (#12)
 
 - **`project.switch`** (`command.go`): a compile-in plugin (id `project`)
