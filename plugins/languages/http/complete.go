@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
@@ -100,6 +101,8 @@ func (s *httpSource) Complete(_ context.Context, req complete.Request) ([]ilsp.C
 		return headerValueItems(name, value), nil
 	case ctxBodyFile:
 		return bodyFileItems(req.Path, before), nil
+	case ctxPlaceholder:
+		return placeholderItems(req.Path, lines, placeholderTyped(before)), nil
 	}
 	return nil, nil
 }
@@ -114,6 +117,7 @@ const (
 	ctxHeaderName
 	ctxHeaderValue
 	ctxBodyFile
+	ctxPlaceholder
 )
 
 // classify decides what the cursor position can complete. The rules mirror
@@ -152,16 +156,27 @@ func classify(lines []string, at int, before string) ctxKind {
 			// The blank sat between the request block and this line: body.
 			// The one thing a body line completes is the file path of a
 			// `< file` directive (#1707) — the whole-body form (#1305) or a
-			// multipart part's include.
+			// multipart part's include — or, inside an unclosed "{{", a
+			// placeholder name (#2135): a JSON/XML/… body holds "{{token}}"
+			// as often as a header value does.
 			if bodyFileRE.MatchString(before) {
 				return ctxBodyFile
+			}
+			if isPlaceholderOpen(before) {
+				return ctxPlaceholder
 			}
 			return ctxNone
 		}
 		break
 	}
 	if requestLine < 0 {
-		// This line is the block's request line.
+		// This line is the block's request line. An unclosed "{{" in the
+		// target (or, in principle, past a version already typed) always
+		// means a placeholder — checked first, since "GET {{ho" would
+		// otherwise read as two fields and misclassify as ctxVersion.
+		if isPlaceholderOpen(before) {
+			return ctxPlaceholder
+		}
 		if len(strings.Fields(before)) >= 2 && endsInField(before) {
 			return ctxVersion
 		}
@@ -171,14 +186,41 @@ func classify(lines []string, at int, before string) ctxKind {
 		return ctxMethod
 	}
 	// A header field line: before the colon the name completes, after it the
-	// value. A folded query continuation line completes nothing.
+	// value — or, inside an unclosed "{{", a placeholder name (#2135). A
+	// folded query continuation line completes nothing.
 	if isFoldedQueryLine(before) {
 		return ctxNone
 	}
 	if strings.Contains(before, ":") {
+		if isPlaceholderOpen(before) {
+			return ctxPlaceholder
+		}
 		return ctxHeaderValue
 	}
 	return ctxHeaderName
+}
+
+// isPlaceholderOpen reports whether the cursor sits inside an unclosed
+// "{{...": the caret has passed a placeholder's opening braces but not yet
+// its closing "}}" (#2135). Only the text before the cursor is examined, so
+// an existing "{{host}}" the cursor merely moved into (rather than typed)
+// still counts — the closing braces the grammar already sees lie past the
+// cursor, outside `before`.
+func isPlaceholderOpen(before string) bool {
+	idx := strings.LastIndex(before, "{{")
+	if idx < 0 {
+		return false
+	}
+	return !strings.Contains(before[idx+2:], "}}")
+}
+
+// placeholderTyped is the partial name typed since the last unclosed "{{".
+func placeholderTyped(before string) string {
+	idx := strings.LastIndex(before, "{{")
+	if idx < 0 {
+		return ""
+	}
+	return before[idx+2:]
 }
 
 func isSeparator(line string) bool { return strings.HasPrefix(line, "###") }
@@ -316,6 +358,44 @@ func bodyFileItems(bufPath, before string) []ilsp.CompletionItem {
 		items = append(items, ilsp.CompletionItem{
 			Label: c, FilterText: c, InsertText: c, Detail: "file", SortText: c,
 		})
+	}
+	return items
+}
+
+// placeholderItems completes an unclosed "{{" (#2135) with the variable
+// names visible in the buffer: the file's own "@name=value" definitions
+// (#1867) and, when a sibling http-client.env.json names environments, the
+// active one's variables (env.go, envselect.go) — the same two rungs of the
+// resolution chain (internal/httpfile.Vars) that have a fixed name list to
+// offer; the captured-response and process-environment rungs do not. The
+// insert text closes the braces the user has not typed yet, so accepting an
+// item leaves one closed placeholder rather than two separate edits.
+func placeholderItems(path string, lines []string, typed string) []ilsp.CompletionItem {
+	f := httpfile.Parse(strings.Join(lines, "\n"))
+	seen := map[string]bool{}
+	var items []ilsp.CompletionItem
+	add := func(name, detail string) {
+		if name == "" || seen[name] || !matches(typed, name) {
+			return
+		}
+		seen[name] = true
+		items = append(items, ilsp.CompletionItem{
+			Label: name, FilterText: name, InsertText: name + "}}", Detail: detail, SortText: name,
+		})
+	}
+	for _, v := range f.Vars {
+		add(v.Name, "variable")
+	}
+	if envs, err := httpfile.LoadEnvironments(filepath.Dir(path)); err == nil {
+		vars := envs.Vars(activeEnvironment(filepath.Dir(path), envs))
+		names := make([]string, 0, len(vars))
+		for name := range vars {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			add(name, "environment")
+		}
 	}
 	return items
 }

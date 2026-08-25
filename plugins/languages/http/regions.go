@@ -20,6 +20,13 @@ import (
 // extension (so "js" finds whichever language owns JavaScript files). An
 // unmapped type — or one whose tag resolves to nothing in this build — leaves
 // the body with the host's own styling rather than guessing wrong.
+//
+// "application/x-www-form-urlencoded" and "multipart/form-data" (#2135) are
+// deliberately absent: neither is a language a grammar could own. The former
+// gets the same key=value&… span treatment as a request-target query string
+// (spans.go, since #1585); the latter gets its boundary lines and per-part
+// headers styled by multipartSpans (multipart.go) instead of a whole-body
+// region.
 var bodyLanguages = map[string]string{
 	"json":       "json",
 	"ndjson":     "ndjson",
@@ -33,6 +40,7 @@ var bodyLanguages = map[string]string{
 	"toml":       "toml",
 	"markdown":   "markdown",
 	"sql":        "sql",
+	"graphql":    "graphql",
 }
 
 // resolveTag maps a tag to a registered language id: id first, then file
