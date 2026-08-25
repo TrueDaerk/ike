@@ -33,6 +33,7 @@ var noCounterpart = map[string]string{
 	"pane.splitLeft":        "JetBrains has only the two editor splits, mapped to editor.splitView*",
 	"pane.splitRight":       "JetBrains has only the two editor splits, mapped to editor.splitView*",
 	"pane.splitUp":          "JetBrains has only the two editor splits, mapped to editor.splitView*",
+	"project.peek.return":   "quick-peek (#2136) is an IKE concept; JetBrains has no temporary project switch",
 	"run.testAtCursor":      "RunClass is context-sensitive in JetBrains, mapped to run.file",
 	"terminal.new":          "JetBrains new terminal tab has no default keymap action",
 	"terminal.newTab":       "JetBrains new terminal tab has no default keymap action",
