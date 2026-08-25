@@ -1,5 +1,21 @@
 # Log
 
+## 2026-08-25 (ui: structured qualifiers in the issues filter match input, #2110)
+
+- **The filter overlay's match input accepts structured qualifiers** the way
+  the JetBrains PR tool window's search field does: `label:<name>`
+  (repeatable, OR, quotable for spaced names), `is:open|closed|all` (alias
+  `state:`) and `sort:<order>`, with the rest of the line staying the fuzzy
+  pattern. A qualifier terminated by a space (or the closing `enter`) is
+  extracted from the input and **written into the same filter model the
+  overlay sections edit** — chips appear, `esc` reverts, a state qualifier
+  refetches exactly like the state row. Inline ghost completion for
+  qualifier names, label names and values; `tab` accepts, and falls back to
+  row navigation without a ghost. Unknown names and bad values stay literal
+  fuzzy text with a faint note on the match row explaining why. An optional
+  power layer only (`:` needs Shift on QWERTZ, #48) — every dimension keeps
+  its section row and accelerator key.
+
 ## 2026-08-25 (ui: issues window key-map consolidation across modes, #2114)
 
 - **One meaning per letter family across the issues window's four modes**
