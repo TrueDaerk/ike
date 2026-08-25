@@ -170,10 +170,24 @@ func RefreshStateCmd(dir string, state IssueState) tea.Cmd {
 
 // RefreshGenCmd is RefreshStateCmd carrying the requester's generation
 // counter, echoed back on the IssuesMsg so a superseded answer can be dropped
-// (#2107). The fetch itself is identical — the tag never reaches a forge.
+// (#2107). The fetch itself is identical — the tag never reaches a forge —
+// and always a full resync: every listing the user explicitly asked for
+// ('r', a mutation's refetch) re-converges the persistent cache (#2108).
 func RefreshGenCmd(dir string, state IssueState, gen int) tea.Cmd {
 	return func() tea.Msg {
-		msg := fetchListing(dir, state)
+		msg := fetchListingCached(dir, state, true)
+		msg.Gen = gen
+		return msg
+	}
+}
+
+// IncrementalRefreshCmd is RefreshGenCmd minus the full-resync guarantee
+// (#2108): while the persisted snapshot is fresh enough it fetches only the
+// issues updated since, and merges them; otherwise it is an ordinary full
+// fetch. The pane's on-open fetch runs through it — a manual 'r' never does.
+func IncrementalRefreshCmd(dir string, state IssueState, gen int) tea.Cmd {
+	return func() tea.Msg {
+		msg := fetchListingCached(dir, state, false)
 		msg.Gen = gen
 		return msg
 	}
@@ -183,13 +197,35 @@ func RefreshGenCmd(dir string, state IssueState, gen int) tea.Cmd {
 // poll service dispatches it from a tick handler and never waits on it; the
 // tag lets the consumers tell it from a refresh the user asked for. It polls
 // the open listing: the snapshot diff is defined against it, and a poll must
-// not depend on whichever state filter the pane happens to be showing.
+// not depend on whichever state filter the pane happens to be showing. Polls
+// take the incremental path (#2108), so steady-state polling costs one
+// updated-since page instead of the whole listing.
 func PollCmd(dir string) tea.Cmd {
 	return func() tea.Msg {
-		msg := fetchListing(dir, IssuesOpen)
+		msg := fetchListingCached(dir, IssuesOpen, false)
 		msg.Poll = true
 		return msg
 	}
+}
+
+// fetchListingCached is fetchListing behind the persistent cache (#2108): a
+// non-full open fetch first tries the incremental path, and every successful
+// full open listing refreshes the snapshot on disk. Non-open states pass
+// straight through — the cache only ever holds the open listing, the one
+// every poll and every freshly opened pane asks for.
+func fetchListingCached(dir string, state IssueState, full bool) IssuesMsg {
+	if state == "" {
+		state = IssuesOpen
+	}
+	if !full && state == IssuesOpen {
+		if msg, ok := fetchIncremental(dir); ok {
+			return msg
+		}
+	}
+	started := time.Now()
+	msg := fetchListing(dir, state)
+	storeCache(dir, msg, started)
+	return msg
 }
 
 // fetchListing runs one detection + listing pass off the Update loop. Every
@@ -219,9 +255,16 @@ func fetchListing(dir string, state IssueState) IssuesMsg {
 // with: the pane calls it with whatever its state filter selects, so the
 // filter stays a pane concern and the pane stays subprocess-free. The second
 // argument is the pane's request generation (#2107), carried through to the
-// result so the pane can recognise its own newest request.
-func RefreshFactory(dir string) func(IssueState, int) tea.Cmd {
-	return func(state IssueState, gen int) tea.Cmd { return RefreshGenCmd(dir, state, gen) }
+// result so the pane can recognise its own newest request. The third asks for
+// a full resync (#2108) — what 'r' means — instead of the incremental path an
+// on-open fetch may take.
+func RefreshFactory(dir string) func(IssueState, int, bool) tea.Cmd {
+	return func(state IssueState, gen int, full bool) tea.Cmd {
+		if full {
+			return RefreshGenCmd(dir, state, gen)
+		}
+		return IncrementalRefreshCmd(dir, state, gen)
+	}
 }
 
 // TimelineMsg carries one fetched timeline page back into Update (#2084).

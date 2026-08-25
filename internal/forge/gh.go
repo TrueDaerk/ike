@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -99,6 +100,34 @@ func (g *ghForge) Issues(state IssueState) ([]Issue, error) {
 		return nil, err
 	}
 	return parseIssues(out)
+}
+
+// ghSincePage is one incremental page (#2108). GitHub's issues endpoint
+// mixes pull requests into the answer, so the page is generous; a repository
+// with more updates than one page falls back to a full resync.
+const ghSincePage = 100
+
+// IssuesSince lists the issues updated at or after since, in every state, via
+// GitHub's REST issues endpoint (#2108) — `gh issue list` has no since
+// filter. The endpoint reports pull requests as issues too; the parser drops
+// them, but the truncation check counts the raw items: a full page may have
+// lost updates behind it, and then only a full resync is honest.
+func (g *ghForge) IssuesSince(since time.Time) ([]Issue, bool, error) {
+	out, err := runGH(g.dir, "api", ghSincePath(since))
+	if err != nil {
+		return nil, false, err
+	}
+	issues, raw, err := parseGHAPIIssues(out)
+	if err != nil {
+		return nil, false, err
+	}
+	return issues, raw < ghSincePage, nil
+}
+
+// ghSincePath builds the updated-since request path (pure, testable).
+func ghSincePath(since time.Time) string {
+	return "repos/{owner}/{repo}/issues?state=all&sort=updated&direction=desc&per_page=" +
+		itoa(ghSincePage) + "&since=" + url.QueryEscape(since.UTC().Format(time.RFC3339))
 }
 
 // PRs lists the repository's pull requests in every state via
@@ -533,6 +562,61 @@ func parseTime(s string) time.Time {
 		return time.Time{}
 	}
 	return t
+}
+
+// ghAPIIssue mirrors the fields the incremental fetch reads from GitHub's
+// REST issue document (#2108) — snake_case and a user object, unlike the
+// camelCase shapes `gh issue list --json` renders. PullRequest marks the
+// items that are really pull requests; the parser drops those.
+type ghAPIIssue struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	Body   string `json:"body"`
+	URL    string `json:"html_url"`
+	State  string `json:"state"`
+	User   struct {
+		Login string `json:"login"`
+	} `json:"user"`
+	CreatedAt string  `json:"created_at"`
+	UpdatedAt string  `json:"updated_at"`
+	Labels    []Label `json:"labels"`
+	Assignees []struct {
+		Login string `json:"login"`
+	} `json:"assignees"`
+	PullRequest json.RawMessage `json:"pull_request"`
+}
+
+// parseGHAPIIssues decodes one REST issues page into the neutral Issue,
+// skipping the pull requests the endpoint mixes in. The raw item count rides
+// along — the truncation check needs what GitHub sent, not what survived.
+func parseGHAPIIssues(out []byte) ([]Issue, int, error) {
+	var raw []ghAPIIssue
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, 0, err
+	}
+	issues := make([]Issue, 0, len(raw))
+	for _, r := range raw {
+		if len(r.PullRequest) > 0 {
+			continue
+		}
+		is := Issue{
+			Number: r.Number, Title: r.Title, Body: r.Body, URL: r.URL,
+			State:     strings.ToUpper(r.State),
+			Author:    r.User.Login,
+			CreatedAt: parseTime(r.CreatedAt),
+			UpdatedAt: parseTime(r.UpdatedAt),
+		}
+		for _, l := range r.Labels {
+			is.Labels = append(is.Labels, Label{Name: l.Name, Color: strings.TrimPrefix(l.Color, "#")})
+		}
+		for _, a := range r.Assignees {
+			if a.Login != "" {
+				is.Assignees = append(is.Assignees, a.Login)
+			}
+		}
+		issues = append(issues, is)
+	}
+	return issues, len(raw), nil
 }
 
 // parseIssues decodes one `gh issue list --json` document.

@@ -294,6 +294,7 @@ func (c *Config) Flat() map[string]string {
 	put("remote.max_fetch_mb", c.Remote.MaxFetchMB)
 	put("screenshot.directory", c.Screenshot.Directory)
 	put("forge.poll_interval_seconds", c.Forge.PollIntervalSeconds)
+	put("forge.cache", c.Forge.Cache)
 
 	// Per-event-type forge notification styles (#2086).
 	put("forge.notify.issue_opened", c.Forge.Notify.IssueOpened)

@@ -4,7 +4,7 @@ title: Issues Tool Window
 description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, fuzzy filter, label multi-picker, open/closed/all state filter, sort orders and label grouping, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane]
-timestamp: 2026-08-25T12:00:00Z
+timestamp: 2026-08-25T14:00:00Z
 ---
 
 # Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089)
@@ -344,6 +344,14 @@ the session, so a live config reload never yanks the view away.
 
 Both are `Enum` entries on the Settings UI's **Issues Window** page and are
 clamped with a diagnostic when a config file names something else.
+
+A third key affects the pane without living on its page: `forge.cache`
+(Settings → Forge, #2108). With it on — the default — a pane that has not
+loaded yet is seeded with the persisted listing snapshot and renders
+instantly, marked `cached · updating…` on the tab bar until the real fetch
+(or the first background poll) replaces it; `r` remains a full resync. The
+cache lifecycle and the incremental-merge consistency rule are documented
+with the [forge layer](/architecture/forge.md).
 
 ### Actions and states
 

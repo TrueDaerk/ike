@@ -85,9 +85,13 @@ type Config struct {
 // a manual refresh; 0 turns polling off entirely, and anything between 1 and
 // the floor is raised to it, so a mistyped interval cannot hammer the forge
 // (every poll is a CLI/API round trip). Notify is the per-event-type
-// notification style of the forge event surface those polls feed.
+// notification style of the forge event surface those polls feed. Cache
+// persists the last successful listing per project (#2108) so a freshly
+// started IKE shows it instantly and refreshes incrementally; off drops both
+// the snapshot file and the incremental path.
 type Forge struct {
 	PollIntervalSeconds int         `toml:"poll_interval_seconds"`
+	Cache               bool        `toml:"cache"`
 	Notify              ForgeNotify `toml:"notify"`
 }
 

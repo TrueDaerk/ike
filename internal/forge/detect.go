@@ -95,6 +95,9 @@ func ResetDetection(dir string) {
 	detectMu.Lock()
 	delete(detectCache, key)
 	detectMu.Unlock()
+	// The persistent listing cache (#2108) keys itself to the same remote a
+	// detection reads — a reset invalidates both memos together.
+	dropCachedRemote(dir)
 }
 
 // isGitHubHost reports whether host is GitHub proper or a GitHub Enterprise

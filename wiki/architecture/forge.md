@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Forge Layer
-description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, the capability model (triage vs push, plus the authenticated login) both bindings probe, the issue mutations (labels, assignees, state, comments), the editable-text layer with its stale-base check, the PR detail/action layer (full PR fetch with per-check CI, merge/close with a comment, post-merge branch cleanup), and the background poll service that diffs snapshots into typed events (#2083, #2088, #2087, #2089, #2085).
+description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, the capability model (triage vs push, plus the authenticated login) both bindings probe, the issue mutations (labels, assignees, state, comments), the editable-text layer with its stale-base check, the PR detail/action layer (full PR fetch with per-check CI, merge/close with a comment, post-merge branch cleanup), and the background poll service that diffs snapshots into typed events, plus the persistent listing cache with incremental updated-since refresh (#2083, #2088, #2087, #2089, #2085, #2108).
 resource: internal/forge/backend.go
 tags: [architecture, vcs, forge, github, gitea, forgejo, issues]
-timestamp: 2026-08-25T12:00:00Z
+timestamp: 2026-08-25T14:00:00Z
 ---
 
 # Forge Layer (#1934, #2083, #2088, #2087, #2085)
@@ -351,6 +351,55 @@ types themselves live in `events.go` next to `Issue`/`PR` (#2086), so the
 poller and the notification surface agree on one shape; `Diff` fills in the
 author and labels the dialog shows besides the title, where the listing
 carries them.
+
+## Persistent listing cache (`cache.go`, #2108)
+
+Every start used to fetch the full listing from scratch, so the issues window
+showed a loading state for seconds. The cache closes that gap twice over:
+instant content at start, and cheaper polls in steady state.
+
+**The snapshot.** Every successful *open* listing — full or incremental,
+foreground or poll — is persisted to the project's `.ike/forgecache.json`
+(`IKE_CONFIG_DIR` overrides, like every state store): issues, PRs, the moment
+the fetch *started*, the schema version and the **origin remote URL** as the
+key. Only the open listing is ever cached — it is the one every poll and
+every freshly opened pane asks for.
+
+**Seeding.** An issues pane that has not loaded yet is seeded off the Update
+loop by `LoadCacheCmd` (on open, batched with the real fetch; for a restored
+pane, from `Init`): the pane renders the snapshot immediately, marked
+`cached · updating…`, and the next real listing — the fetch or the first
+background poll — replaces it through the ordinary `SetResult` path and drops
+the marker. The seed resolves asynchronously, so `SetCached` refuses to
+overwrite a pane that already holds fetched data; combined with the #2107
+generation guard, cached content can never mask or outlive a real answer.
+
+**Incremental refresh.** While the snapshot is younger than `resyncAfter`
+(30 minutes), a background poll and the pane's on-open fetch ask the forge
+only for the issues **updated since** the snapshot's timestamp (minus a
+one-minute overlap for clock skew — the merge is idempotent) and merge them
+in: an updated open issue replaces its row or is inserted, one that is no
+longer open drops out. gh has no since filter, so the GitHub binding calls the
+REST issues endpoint (`repos/{o}/{r}/issues?state=all&sort=updated&since=…`),
+dropping the pull requests GitHub mixes in; the Gitea binding adds `since` to
+its ordinary listing pages. Pull requests have no since filter on either forge
+and are always listed in full.
+
+**Consistency rule.** An incremental merge only sees what the forge reports
+as updated — a deleted or transferred issue lingers until the next full
+resync. Full resyncs are therefore never rare: manual `r` (and every other
+user-driven refetch — state cycle, mutation, PR action) always resyncs fully,
+as does any snapshot older than `resyncAfter`, any incremental error, and any
+updated-since answer that may be truncated (a full page from GitHub, the
+`issueLimit` cap on Gitea).
+
+**Invalidation.** The cache is keyed to the origin remote: a repository or
+backend switch changes the remote and the snapshot stops matching (the memo
+is dropped alongside the detection cache in `ResetDetection`). A corrupt,
+unreadable or wrong-version file reads as "no cache" — a fresh full fetch,
+never an error. The `forge.cache` toggle (Settings → Forge, default on) is
+pushed into the package at startup and on every config reload; off, nothing
+is read or written.
 
 ## Consumers
 

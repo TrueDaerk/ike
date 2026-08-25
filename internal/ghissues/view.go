@@ -138,6 +138,10 @@ func (m *Model) tabBarSpans() [][2]int {
 // stateNote is the short right-aligned fetch state on the tab bar.
 func (m *Model) stateNote() string {
 	switch {
+	case m.cached:
+		// The listing is the persisted snapshot (#2108): usable, but stale
+		// until the fetch (or the next background poll) replaces it.
+		return "cached · updating…"
 	case m.loading:
 		return "fetching…"
 	case m.setup != "":

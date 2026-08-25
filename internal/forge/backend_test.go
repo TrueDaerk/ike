@@ -29,7 +29,7 @@ func TestRefreshGenEchoesTheRequestTag(t *testing.T) {
 
 	// The factory the pane is injected with tags the same way.
 	fetch := RefreshFactory(dir)
-	tagged := fetch(IssuesAll, 12)().(IssuesMsg)
+	tagged := fetch(IssuesAll, 12, true)().(IssuesMsg)
 	if tagged.Gen != 12 || tagged.State != IssuesAll {
 		t.Errorf("factory result = {gen %d, state %q}, want {12, all}", tagged.Gen, tagged.State)
 	}

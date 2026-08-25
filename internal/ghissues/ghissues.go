@@ -206,8 +206,10 @@ type Model struct {
 	// (forge.RefreshFactory at the workspace root); 'r' and every state-filter
 	// change re-run it, and the pane stays subprocess-free. It takes the
 	// generation the request is dispatched at (#2107) and echoes it back on
-	// the result.
-	refresh func(forge.IssueState, int) tea.Cmd
+	// the result, plus whether the fetch must be a full resync (#2108) — true
+	// for everything the user asked for, false only for the on-open fetch,
+	// which may take the incremental path.
+	refresh func(forge.IssueState, int, bool) tea.Cmd
 
 	// gen counts the listing fetches the pane has started (#2107). Fetches
 	// resolve off the Update loop and out of order, so two rapid 't' presses
@@ -218,6 +220,7 @@ type Model struct {
 
 	loading bool
 	loaded  bool
+	cached  bool   // the listing is the persisted snapshot (#2108), not a fetch
 	setup   string // unavailable state: no forge CLI, no matching remote
 	errMsg  string // transient fetch error; prior content stays
 
@@ -372,7 +375,7 @@ func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 
 // SetRefresh injects the per-state fetch factory 'r' and the state filter
 // re-run.
-func (m *Model) SetRefresh(fn func(forge.IssueState, int) tea.Cmd) { m.refresh = fn }
+func (m *Model) SetRefresh(fn func(forge.IssueState, int, bool) tea.Cmd) { m.refresh = fn }
 
 // Configure applies the pane's settings (#2090): issues.default_tab and
 // issues.default_sort. Both only seed the session — once the user switched
@@ -402,8 +405,30 @@ func (m *Model) Configure(cfg host.Config) {
 func (m *Model) MarkLoading() { m.loading = true }
 
 // Refresh marks the pane loading and returns the fetch for its current state
-// filter — the app's on-open first fetch, identical to what 'r' runs.
-func (m *Model) Refresh() tea.Cmd { return m.startRefresh() }
+// filter — the app's on-open first fetch. Unlike 'r' it does not demand a
+// full resync: with a fresh persisted snapshot the fetch may be the
+// incremental updated-since page (#2108).
+func (m *Model) Refresh() tea.Cmd { return m.startFetch(false) }
+
+// SetCached seeds the pane with the persisted snapshot (#2108): rendered
+// immediately and marked stale ("cached · updating…") until a real listing
+// lands through SetResult. A pane that already holds a fetched listing — the
+// seed resolves off the Update loop and can lose the race against a fast
+// fetch — ignores it: the cache never overwrites fresh data.
+func (m *Model) SetCached(issues []forge.Issue, prs []forge.PR) {
+	if m.loaded {
+		return
+	}
+	m.issues, m.prs = issues, prs
+	m.loaded = true
+	m.cached = true
+	m.rebuildLabels()
+	m.applyFilter()
+}
+
+// Cached reports whether the listing on show is the persisted snapshot
+// (tests, and the stale marker in the view).
+func (m *Model) Cached() bool { return m.cached }
 
 // SetResult applies one finished fetch.
 //
@@ -443,6 +468,9 @@ func (m *Model) SetResult(msg forge.IssuesMsg) {
 	}
 	m.errMsg = ""
 	m.loaded = true
+	// A real listing replaces the persisted snapshot seed (#2108) — the
+	// "cached · updating…" marker comes down with it.
+	m.cached = false
 	selected, selectedBody := 0, ""
 	if is := m.Selected(); is != nil {
 		selected, selectedBody = is.Number, is.Body
@@ -968,7 +996,13 @@ func (m *Model) stepIssue(delta int) tea.Cmd {
 // startRefresh re-runs the injected fetch for the current state filter, plus
 // the repository-metadata probe (#2088) while it is still owed — a capability
 // probe that failed is retried by the same 'r' that retries the listing.
-func (m *Model) startRefresh() tea.Cmd {
+// Every caller of this path — 'r', a state cycle, a mutation's refetch — is a
+// full resync (#2108): the user asked, so the answer must be authoritative,
+// never an incremental merge.
+func (m *Model) startRefresh() tea.Cmd { return m.startFetch(true) }
+
+// startFetch dispatches one listing fetch, full or incremental-capable.
+func (m *Model) startFetch(full bool) tea.Cmd {
 	meta := m.startMeta()
 	if m.refresh == nil {
 		return meta
@@ -977,7 +1011,7 @@ func (m *Model) startRefresh() tea.Cmd {
 	// Each request carries the generation it was started at, so SetResult can
 	// recognise its own newest one and drop everything older (#2107).
 	m.gen++
-	return tea.Batch(m.refresh(m.state.issueState(), m.gen), meta)
+	return tea.Batch(m.refresh(m.state.issueState(), m.gen, full), meta)
 }
 
 // cycleState advances the open/closed/all filter. Closed issues are not part

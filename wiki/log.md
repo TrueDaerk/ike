@@ -1,5 +1,21 @@
 # Log
 
+## 2026-08-25 (forge: persistent issue cache with incremental refresh, #2108)
+
+- **The issues window opens instantly after a restart.** Every successful
+  open listing is persisted per project (`.ike/forgecache.json`, keyed to the
+  origin remote); a pane that has not loaded yet renders the snapshot
+  immediately, marked `cached · updating…`, until the real fetch or the first
+  background poll replaces it. While the snapshot is younger than 30 minutes,
+  polls and the on-open fetch ask the forge only for issues **updated since**
+  it (GitHub's REST `since`, Gitea's `since`) and merge them in; manual `r`,
+  every other user-driven refetch, older snapshots, incremental errors and
+  possibly truncated pages all resync fully — the rule that also re-converges
+  drift from deleted or transferred issues. Repository/backend switches
+  invalidate the snapshot, corrupt files read as "no cache", and the
+  `forge.cache` toggle (Settings → Forge, default on) switches the whole
+  mechanism off. Details: [forge layer](/architecture/forge.md).
+
 ## 2026-08-25 (markdown: hanging indent for wrapped list items, #2105)
 
 - **Wrapped list items keep their shape.** A bullet or numbered item longer
