@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-25 (ui: saved filters and an issues default filter, #2115)
+
+- **`issues.default_filter` seeds a freshly opened issues pane** with a state
+  gate, a label selection and a match pattern, following the seed rule
+  `issues.default_tab`/`issues.default_sort` already have: the first filter
+  change by hand wins for the rest of the session, so a live config reload
+  never re-narrows a list somebody is working in.
+- **`issues.saved_filters` names recurring filters** (`"triage=state:open
+  label:bug"`). The filter overlay gained a **saved row** — present only
+  while any is configured — cycling over `(none)` plus the configured names;
+  picking one replaces all three dimensions at once, so switching between two
+  never leaves the previous one's labels behind, and `(none)` clears them
+  again. It is reachable from the action menu too.
+- Both are written in one small qualifier syntax in the new leaf package
+  **`internal/issuefilter`**: `state:` (open/closed/all), a repeated `label:`
+  (OR'd, `label:"good first issue"` for a name with spaces) and `match:`,
+  with a bare word reading as match text. Commas separate nothing — the
+  settings UI edits the saved list comma-separated. Sort order and grouping
+  stay out of an expression; they keep their own settings.
+- Settings UI: both entries sit on the **Issues Window** page, the filter as
+  validated free text and the saved list as a validated list. The `String`
+  editor gained a `ValidateString` hook, so a typo is refused in the form
+  with the parser's own message instead of being silently ignored when the
+  pane opens; a config file naming a broken expression drops it with a
+  diagnostic (the whole default filter, or just the offending saved entry).
+
 ## 2026-08-25 (ui: issues window key-map consolidation across modes, #2114)
 
 - **One meaning per letter family across the issues window's four modes**

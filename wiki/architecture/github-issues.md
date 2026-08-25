@@ -164,8 +164,9 @@ The keys are QWERTZ-safe throughout (#48, #2064): plain letters and delivered
 Every narrowing lives in **one mechanism**: the **filter overlay**
 (`filterov.go`), a centered modal whose sections are the fuzzy **match**
 input, the **state** radio (open / closed / all, the active option marked so
-cycling is never blind), the **sort** cycle, the **grouping** toggle and one
-row per **label**. Changes apply to the list behind it live; `enter` keeps
+cycling is never blind), the **sort** cycle, the **grouping** toggle, the
+**saved** filter cycle (#2115, only while `issues.saved_filters` names any)
+and one row per **label**. Changes apply to the list behind it live; `enter` keeps
 and closes, `esc` restores every section to what the overlay opened with.
 `up`/`down` (and `tab`/`shift+tab`) walk the sections; the match row owns
 every printable key, the other rows toggle with `space` (or `left`/`right`)
@@ -204,6 +205,9 @@ and clear with `backspace`.
   it carries. Group headers are rows the cursor never rests on — key and
   wheel navigation snap off them in the direction of travel. The lists run on
   the full `ui.NavFull` semantics, `g`/`G` extremes included.
+- **Saved filters** (the overlay's saved row, and a menu-only action-menu
+  entry) cycle over `(none)` plus the names in `issues.saved_filters` and
+  apply what the row lands on — see [Settings](#settings) for the syntax.
 - **`esc`** on a list **peels one narrowing at a time** — a mutation error
   first, then the match text, then the label selection, then the state gate —
   so one keypress can never nuke a carefully built filter.
@@ -444,16 +448,55 @@ work too.
 
 ### Settings
 
-Two keys seed a freshly opened pane; switching by hand wins for the rest of
-the session, so a live config reload never yanks the view away.
+Three keys seed a freshly opened pane; switching by hand wins for the rest of
+the session, so a live config reload never yanks the view away. A fourth is
+not a default but a menu.
 
 | Key | Values | Meaning |
 | --- | --- | --- |
 | `issues.default_tab` | `issues`, `prs` | which view the pane opens on |
 | `issues.default_sort` | `relevance`, `newest`, `oldest`, `updated`, `number` | the order both lists start in |
+| `issues.default_filter` | a filter expression | the narrowing the pane opens with (#2115) |
+| `issues.saved_filters` | `name=expression` entries | named filters the overlay's `saved` row applies (#2115) |
 
-Both are `Enum` entries on the Settings UI's **Issues Window** page and are
-clamped with a diagnostic when a config file names something else.
+All four live on the Settings UI's **Issues Window** page — the first two as
+`Enum` entries clamped with a diagnostic, the filter as free text and the
+saved filters as a list, both refused in the form (and dropped with a
+diagnostic in a config file) when they do not parse.
+
+#### Filter expressions
+
+`issues.default_filter` and every `issues.saved_filters` entry are written in
+one small qualifier syntax (`internal/issuefilter`), covering exactly the
+three dimensions a filter narrows by:
+
+```toml
+[issues]
+default_filter = 'state:open label:bug match:crash'
+saved_filters = ["triage=state:open label:bug", "stale=state:all match:flaky"]
+```
+
+- `state:` takes `open`, `closed` or `all`; `label:` is repeated once per
+  label (they are OR'd, exactly as the label picker does); `match:` is the
+  fuzzy pattern, and a bare word is match text too, so `crash` means
+  `match:crash`.
+- A value with spaces is double-quoted — `label:"good first issue"` — and a
+  quoted word is never read as a qualifier.
+- Commas separate nothing: the settings UI edits `saved_filters` as a
+  comma-separated list, so neither a name nor an expression may contain one.
+- The sort order and the grouping are *not* part of an expression; they keep
+  `issues.default_sort` and their own toggle.
+
+A saved filter is applied from the filter overlay's `saved` row — present
+only while any is configured, cycling over `(none)` plus the configured names
+— or from the action menu. Applying one replaces all three dimensions at
+once, so switching between two saved filters never leaves the previous one's
+labels behind, and `(none)` clears them again. Applying counts as a hand
+change: the configured default no longer re-seeds the pane afterwards.
+
+Which saved filter the row shows is **derived from the live filter**, never
+remembered — narrow the match text by hand after picking `triage` and the row
+falls back to `(none)`, because the filter on screen is no longer triage.
 
 A third key affects the pane without living on its page: `forge.cache`
 (Settings → Forge, #2108). With it on — the default — a pane that has not

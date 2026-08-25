@@ -364,10 +364,16 @@ type Model struct {
 	cmInput string
 	cmCur   int
 
+	// saved are the configured named filters (#2115, issues.saved_filters).
+	// Which one is "active" is derived from the live filter, not remembered —
+	// see SavedFilter.
+	saved []savedFilter
+
 	// Config defaults apply only while the user has not overridden them in
 	// this session, so a live config reload never yanks the view away.
-	tabTouched  bool
-	sortTouched bool
+	tabTouched    bool
+	sortTouched   bool
+	filterTouched bool
 
 	// Double-click detection mirrors the Usages panel (#514).
 	lastClickRow int
@@ -393,13 +399,23 @@ func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 // re-run.
 func (m *Model) SetRefresh(fn func(forge.IssueState, int, bool) tea.Cmd) { m.refresh = fn }
 
-// Configure applies the pane's settings (#2090): issues.default_tab and
-// issues.default_sort. Both only seed the session — once the user switched
-// the tab or the sort order by hand, a later config reload leaves the view
-// where it is.
+// Configure applies the pane's settings (#2090, #2115): issues.default_tab,
+// issues.default_sort, issues.default_filter and issues.saved_filters. The
+// three defaults only seed the session — once the user switched the tab, the
+// sort order or a filter by hand, a later config reload leaves the view where
+// it is. The saved filter list is not a default but a menu, so it always
+// re-reads.
 func (m *Model) Configure(cfg host.Config) {
 	if cfg == nil {
 		return
+	}
+	if v, ok := cfg.Get("issues.saved_filters"); ok {
+		m.seedSavedFilters(v)
+	}
+	if !m.filterTouched {
+		if v, ok := cfg.Get("issues.default_filter"); ok {
+			m.seedFilter(v)
+		}
 	}
 	if !m.tabTouched {
 		if v, ok := cfg.Get("issues.default_tab"); ok && v == "prs" {
@@ -1056,9 +1072,11 @@ func (m *Model) clearFilters() tea.Cmd {
 	case m.mutErr != "":
 		m.mutErr = ""
 	case m.fInput != "":
+		m.filterTouched = true
 		m.fInput, m.fCur = "", 0
 		m.keepSelection()
 	case len(m.LabelFilter()) > 0:
+		m.filterTouched = true
 		m.labelSel = map[string]bool{}
 		m.keepSelection()
 	case m.state != FilterOpen:

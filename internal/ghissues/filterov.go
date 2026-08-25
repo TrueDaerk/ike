@@ -20,12 +20,17 @@ import (
 )
 
 // The fixed rows above the label section: the match input, the state radio,
-// the sort cycle and the grouping toggle (the last one on the issue tab only).
+// the sort cycle, the grouping toggle (the issue tab only) and the saved
+// filter cycle (#2115, only when issues.saved_filters names any). They are
+// row *kinds*, not indices — which rows the overlay has depends on the tab
+// and the config, so fovRows resolves the order and fovKind reads it back.
+// Only fovMatch is also an index: the match input is always the first row.
 const (
 	fovMatch = 0
 	fovState = 1
 	fovSort  = 2
 	fovGroup = 3
+	fovSaved = 4
 )
 
 // filterSnapshot is what esc restores: every dimension the overlay edits.
@@ -48,13 +53,31 @@ func (m *Model) snapshotFilters() filterSnapshot {
 		state: m.state, sort: m.sort, group: m.group}
 }
 
-// fovFixedRows is how many non-label rows the overlay has on the active tab —
-// the PR view has no label filter and no grouping.
-func (m *Model) fovFixedRows() int {
-	if m.tab == TabPRs {
-		return 3 // match, state, sort
+// fovRows is the overlay's non-label rows in render order for the active tab:
+// the PR view has no label filter and no grouping, and the saved row only
+// exists once issues.saved_filters names a filter to pick.
+func (m *Model) fovRows() []int {
+	rows := []int{fovMatch, fovState, fovSort}
+	if m.tab != TabPRs {
+		rows = append(rows, fovGroup)
 	}
-	return 4
+	if len(m.saved) > 0 {
+		rows = append(rows, fovSaved)
+	}
+	return rows
+}
+
+// fovFixedRows is how many non-label rows the overlay has on the active tab.
+func (m *Model) fovFixedRows() int { return len(m.fovRows()) }
+
+// fovKind names the fixed row at index i, -1 when i is not one (the label
+// section, or a cursor the caller has not clamped yet).
+func (m *Model) fovKind(i int) int {
+	rows := m.fovRows()
+	if i < 0 || i >= len(rows) {
+		return -1
+	}
+	return rows[i]
 }
 
 // filterLabels is the label section's row set: the repository's labels (the
@@ -216,6 +239,7 @@ func (m *Model) matchRowKey(msg tea.KeyPressMsg) tea.Cmd {
 	if out, ncur, handled, changed := ui.EditKey(msg, m.fInput, m.fCur); handled {
 		m.fInput, m.fCur = out, ncur
 		if changed {
+			m.filterTouched = true
 			m.resetCursors()
 			m.applyFilter()
 		}
@@ -244,7 +268,7 @@ func (m *Model) sectionRowKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.clampOverlay()
 		return nil
 	}
-	switch m.ovCursor {
+	switch m.fovKind(m.ovCursor) {
 	case fovState:
 		switch key {
 		case "space", " ", "x", "right", "l":
@@ -276,6 +300,15 @@ func (m *Model) sectionRowKey(msg tea.KeyPressMsg) tea.Cmd {
 				m.toggleGroup()
 			}
 		}
+	case fovSaved:
+		switch key {
+		case "space", " ", "x", "right", "l":
+			return m.cycleSaved(1)
+		case "left", "h":
+			return m.cycleSaved(-1)
+		case "backspace", "delete":
+			return m.applySaved(0)
+		}
 	}
 	return nil
 }
@@ -291,6 +324,7 @@ func (m *Model) labelRowKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "space", " ":
 		if i >= 0 && i < len(labels) {
+			m.filterTouched = true
 			name := labels[i].Name
 			if m.labelSel[name] {
 				delete(m.labelSel, name)
@@ -312,6 +346,7 @@ func (m *Model) labelRowKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	switch msg.String() {
 	case "backspace", "delete":
+		m.filterTouched = true
 		m.labelSel = map[string]bool{}
 		m.keepSelection()
 	}
@@ -344,6 +379,7 @@ func (m *Model) setState(s StateFilter) tea.Cmd {
 	if s == m.state {
 		return nil
 	}
+	m.filterTouched = true
 	m.state = s
 	if m.fetched == forge.IssuesAll || m.fetched == s.issueState() {
 		// The listing already covers the new gate — pure client-side split,
@@ -405,12 +441,22 @@ func (m *Model) filterChips() []filterChip {
 	var chips []filterChip
 	if m.fInput != "" {
 		chips = append(chips, filterChip{text: "match: " + m.fInput,
-			clear: func(m *Model) tea.Cmd { m.fInput, m.fCur = "", 0; m.keepSelection(); return nil }})
+			clear: func(m *Model) tea.Cmd {
+				m.filterTouched = true
+				m.fInput, m.fCur = "", 0
+				m.keepSelection()
+				return nil
+			}})
 	}
 	for _, name := range m.LabelFilter() {
 		name := name
 		chips = append(chips, filterChip{text: name,
-			clear: func(m *Model) tea.Cmd { delete(m.labelSel, name); m.keepSelection(); return nil }})
+			clear: func(m *Model) tea.Cmd {
+				m.filterTouched = true
+				delete(m.labelSel, name)
+				m.keepSelection()
+				return nil
+			}})
 	}
 	if m.state != FilterOpen {
 		chips = append(chips, filterChip{text: "state: " + m.state.String(),

@@ -84,10 +84,12 @@ func (m *Model) actions() []action {
 			act("o", "browser", "Open in browser", (*Model).openInBrowser),
 		}
 		acts = append(acts, m.prActionActions()...)
-		return append(acts,
+		acts = append(acts,
 			act("f", "filter", "Filter (match / state / sort)", func(m *Model) tea.Cmd { m.openFilterOverlay(fovMatch); return nil }),
 			act("t", "state", "State filter (open / closed / all)", (*Model).cycleState),
-			act("a", "sort", "Sort order ("+m.sort.String()+")", func(m *Model) tea.Cmd { m.cycleSort(); return nil }),
+			act("a", "sort", "Sort order ("+m.sort.String()+")", func(m *Model) tea.Cmd { m.cycleSort(); return nil }))
+		acts = append(acts, m.savedFilterActions()...)
+		return append(acts,
 			act("esc", "clear filters", "Clear the filters", (*Model).clearFilters),
 			act("tab", "view", "Switch view (Issues / PRs)", func(m *Model) tea.Cmd { m.switchTab(-1); return nil }),
 			act("r", "refresh", "Refresh the listing", (*Model).startRefresh),
@@ -100,7 +102,7 @@ func (m *Model) actions() []action {
 	}
 	acts = append(acts, m.editAction()...)
 	acts = append(acts, m.mutationActions()...)
-	return append(acts,
+	acts = append(acts,
 		act("f", "filter", "Filter (match / state / labels)", func(m *Model) tea.Cmd { m.openFilterOverlay(fovMatch); return nil }),
 		act("l", "labels", "Filter by label (the filter's label section)", func(m *Model) tea.Cmd { m.openLabelSection(); return nil }),
 		act("t", "state", "State filter (open / closed / all)", (*Model).cycleState),
@@ -109,7 +111,9 @@ func (m *Model) actions() []action {
 		// "jump to the top" in every mode now); it stays reachable here and in
 		// the filter overlay. An empty key marks a menu-only action the footer
 		// skips.
-		act("", "", "Group by label (also in the filter overlay)", func(m *Model) tea.Cmd { m.toggleGroup(); return nil }),
+		act("", "", "Group by label (also in the filter overlay)", func(m *Model) tea.Cmd { m.toggleGroup(); return nil }))
+	acts = append(acts, m.savedFilterActions()...)
+	return append(acts,
 		act("esc", "clear filter", "Clear a filter (peels one at a time)", (*Model).clearFilters),
 		act("tab", "view", "Switch view (Issues / PRs)", func(m *Model) tea.Cmd { m.switchTab(1); return nil }),
 		act("r", "refresh", "Refresh the listing", (*Model).startRefresh),

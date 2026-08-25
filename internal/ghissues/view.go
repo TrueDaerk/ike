@@ -191,9 +191,11 @@ func (m *Model) filterRow(pal *theme.Palette) string {
 }
 
 // filterOvRows renders the filter overlay's rows (#2104): the match input,
-// the state radio, the sort cycle, the grouping toggle and — on the issue
-// view — one row per label with its chip and count. The row under the cursor
-// is accented, exactly like every other overlay.
+// the state radio, the sort cycle, the grouping toggle, the saved filter
+// cycle (#2115, only when any is configured) and — on the issue view — one
+// row per label with its chip and count. The fixed rows come from fovRows, so
+// the render order and the cursor's row kinds cannot drift apart. The row
+// under the cursor is accented, exactly like every other overlay.
 func (m *Model) filterOvRows(pal *theme.Palette) []string {
 	sel := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
 	plain := lipgloss.NewStyle().Foreground(pal.Foreground)
@@ -204,23 +206,34 @@ func (m *Model) filterOvRows(pal *theme.Palette) []string {
 		return plain
 	}
 	var rows []string
-	if m.ovCursor == fovMatch {
-		rows = append(rows, sel.Render("match: ")+ui.CursorView(m.fInput, m.fCur))
-	} else if m.fInput == "" {
-		rows = append(rows, plain.Render("match: ")+lipgloss.NewStyle().Faint(true).Render("(type on this row)"))
-	} else {
-		rows = append(rows, plain.Render("match: "+m.fInput))
+	for i, kind := range m.fovRows() {
+		switch kind {
+		case fovMatch:
+			switch {
+			case m.ovCursor == fovMatch:
+				rows = append(rows, sel.Render("match: ")+ui.CursorView(m.fInput, m.fCur))
+			case m.fInput == "":
+				rows = append(rows, plain.Render("match: ")+lipgloss.NewStyle().Faint(true).Render("(type on this row)"))
+			default:
+				rows = append(rows, plain.Render("match: "+m.fInput))
+			}
+		case fovState:
+			rows = append(rows, style(i).Render("state: "+stateRadio(m.state)))
+		case fovSort:
+			rows = append(rows, style(i).Render("sort:  ‹ "+m.sort.String()+" ›"))
+		case fovGroup:
+			mark := "[ ]"
+			if m.group {
+				mark = "[x]"
+			}
+			rows = append(rows, style(i).Render(mark+" group by label"))
+		case fovSaved:
+			rows = append(rows, style(i).Render("saved: ‹ "+m.SavedFilter()+" ›"))
+		}
 	}
-	rows = append(rows, style(fovState).Render("state: "+stateRadio(m.state)))
-	rows = append(rows, style(fovSort).Render("sort:  ‹ "+m.sort.String()+" ›"))
 	if m.tab == TabPRs {
 		return rows
 	}
-	mark := "[ ]"
-	if m.group {
-		mark = "[x]"
-	}
-	rows = append(rows, style(fovGroup).Render(mark+" group by label"))
 	labels := m.filterViewLabels()
 	if len(labels) == 0 && m.ovSearch.Active() {
 		// The placeholder fovLabelRows() reserves (#2111): the query is still

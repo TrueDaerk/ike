@@ -10,8 +10,10 @@ package settings
 import (
 	"image/color"
 	"strconv"
+	"strings"
 
 	"ike/internal/config"
+	"ike/internal/issuefilter"
 	"ike/internal/theme"
 )
 
@@ -81,6 +83,12 @@ type Entry struct {
 	// jump such a gap instead of stopping inside it, so the hook only has to
 	// answer for typed values.
 	ValidateInt func(v int) string
+	// ValidateString rejects a committed String value with a message naming
+	// what is valid; "" accepts (#2115). It exists for the free-text entries
+	// whose value has a grammar of its own — issues.default_filter is a
+	// filter expression, not arbitrary text, so a typo has to be caught in
+	// the form instead of silently ignored when the pane opens.
+	ValidateString func(v string) string
 }
 
 // Page is one category: a titled list of entries, or — when Custom is set — a
@@ -349,9 +357,11 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "scratch.section_height", Type: Int, Title: "Scratches section height", Description: "Rows the Scratches section shows when expanded (it never grows past its content). Dragging the divider resizes it afterwards, and that height persists with the explorer's session state", Scope: config.UserScope, Min: 1, Max: 30},
 			{Key: "scratch.sort", Type: Enum, Title: "Scratches sort order", Description: "How the Scratches section orders its rows: by name like the file tree, or by modification time newest first", Scope: config.UserScope, Options: []string{"name", "modified"}},
 		}},
-		{Title: "Issues Window", Description: "The forge Issues tool window (#2090): two full-area tabbed views — the issue list and the pull-request list — with a fuzzy filter, a label picker, an open/closed/all state filter, sort orders and a grouping toggle. These two settings decide only what a freshly opened pane starts with; switching the tab or the order by hand wins for the rest of the session.", Entries: []Entry{
+		{Title: "Issues Window", Description: "The forge Issues tool window (#2090): two full-area tabbed views — the issue list and the pull-request list — with a fuzzy filter, a label picker, an open/closed/all state filter, sort orders and a grouping toggle. These settings decide only what a freshly opened pane starts with; switching the tab, the order or a filter by hand wins for the rest of the session.", Entries: []Entry{
 			{Key: "issues.default_tab", Type: Enum, Title: "Default view", Description: "Which of the pane's two views the issues window opens on: the issue list, or the pull-request list. tab and shift+tab (and a click on the tab bar) switch between them either way", Scope: config.UserScope, Options: []string{"issues", "prs"}},
 			{Key: "issues.default_sort", Type: Enum, Title: "Default sort order", Description: "Order both lists open in: \"relevance\" ranks by fuzzy score while a filter pattern is typed and falls back to newest without one, \"newest\"/\"oldest\" order by creation time, \"updated\" by last activity, \"number\" by issue number ascending. The a key cycles the order for the open pane without changing this default", Scope: config.UserScope, Options: []string{"relevance", "newest", "oldest", "updated", "number"}},
+			{Key: "issues.default_filter", Type: String, Title: "Default filter", Description: "Narrowing a freshly opened issues pane starts with, written as space-separated qualifiers: \"state:open\" (also closed, all), \"label:bug\" repeated once per label (a name with spaces is double-quoted) and \"match:crash\" for the fuzzy pattern — a bare word is match text too. Every filter change in the pane wins for the rest of the session, so a live config reload never re-narrows a list you are working in. Empty opens the pane unfiltered", Scope: config.UserScope, ValidateString: issueFilterValidate},
+			{Key: "issues.saved_filters", Type: List, Title: "Saved filters", Description: "Named filters the filter overlay's \"saved\" row cycles through, each written \"name=expression\" in the default filter's qualifier syntax (\"triage=state:open label:bug\", \"stale=state:all match:flaky\"). Picking one replaces the pane's state, labels and match text at once; picking \"(none)\" clears them again. Names must be unique, and neither name nor expression may contain a comma — the comma separates the entries of this list", Scope: config.UserScope, ValidateEntry: savedFilterValidate},
 		}},
 		{Title: "Tool Layout", Description: "Named slot template pinning tool windows to exact layout positions (#1897). The template is an ASCII grid: each row is one entry, every cell names a slot by a single letter, E is the editor region. Assigned tools always open at their slot; unassigned ones keep their home position or the adaptive split.", Entries: []Entry{
 			{Key: "tools.layout.template", Type: List, Title: "Slot template rows", Description: "Grid rows, one entry per row (\"XEEH, XEEH, TTZZ\"): every cell names a slot by a single letter, E is the editor region, each slot's cells must form a solid rectangle, and row/column counts set the proportions. Empty disables slot placement; a template that cannot be split into straight cuts is rejected with a config diagnostic", Scope: config.UserScope, EntryHints: templateHints},
@@ -385,6 +395,33 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "marketplace.catalog_url", Type: String, Title: "Catalog URL", Description: "HTTPS location of the marketplace index.json; empty falls back to the built-in default, which may itself be empty — then the marketplace stays disabled", Scope: config.UserScope},
 		}},
 	}
+}
+
+// issueFilterValidate is the form check for issues.default_filter (#2115):
+// the expression must parse, and the parser's message already names what is
+// valid, so it is shown verbatim. An empty value is the built-in default —
+// open the pane unfiltered.
+func issueFilterValidate(v string) string {
+	if strings.TrimSpace(v) == "" {
+		return ""
+	}
+	if _, err := issuefilter.Parse(v); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// savedFilterValidate is the same check for one issues.saved_filters element,
+// which carries a name in front of the expression. The lookup seam is unused —
+// an entry stands on its own.
+func savedFilterValidate(_ func(key string) string, text string) string {
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	if _, _, err := issuefilter.ParseSaved(text); err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 // forgePollValidate is the strict form check for forge.poll_interval_seconds
