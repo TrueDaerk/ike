@@ -97,6 +97,26 @@ func TestRunTermCheckWaitsForBusyShell(t *testing.T) {
 	}
 }
 
+// TestRunTermCheckGivesUpAfterMaxRetries (#2163): a modal parked open forever
+// (a user reading the welcome tour) must not keep the 2s retry tick alive for
+// the whole session — after the cap the report is dropped.
+func TestRunTermCheckGivesUpAfterMaxRetries(t *testing.T) {
+	m := sized(t, 100, 30)
+	m.caps.kitty = false
+	m.shell.Open()
+	for i := 0; i < termCheckMaxRetries; i++ {
+		if cmd := m.runTermCheck(); cmd == nil {
+			t.Fatalf("retry %d: verdict should still re-poll", i)
+		}
+	}
+	if cmd := m.runTermCheck(); cmd != nil {
+		t.Fatal("past the cap the retry chain must end")
+	}
+	if !m.caps.done {
+		t.Fatal("giving up must mark the verdict done so nothing re-arms it")
+	}
+}
+
 // TestRunTermCheckSilentWhenCapable: no issues → no shell, no retry.
 func TestRunTermCheckSilentWhenCapable(t *testing.T) {
 	m := sized(t, 100, 30)

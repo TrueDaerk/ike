@@ -191,6 +191,12 @@ type Model struct {
 	// by source file + request key: the duplicate-dispatch guard, the
 	// statusline indicator and the cancel action all read it.
 	httpFlight map[string]*httpFlightEntry
+	// httpTickArmed guards the flight indicator's tick chain (#2163). The
+	// old "arm when the map was empty" guard raced the in-flight tick: a
+	// dispatch landing in the window between the last flight finishing and
+	// its final tick arriving armed a second chain, and both re-armed from
+	// then on — one extra 4 Hz full .http re-parse chain per race.
+	httpTickArmed bool
 	// closedFileViews collects the file paths whose editor view disappeared
 	// during the current Update pass (tab close, pane close, tab-limit
 	// eviction, drag). The Update wrapper drains it once the whole operation
@@ -4268,10 +4274,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Keep the in-flight indicator moving while dispatches run (#1272) —
 		// the statusline segment reads the flight set directly, the inline
 		// markers in the .http file are refreshed here (#1746).
+		m.httpTickArmed = false
 		m.refreshHTTPFlightMarks()
 		if len(m.httpFlight) == 0 {
 			return m, nil
 		}
+		m.httpTickArmed = true
 		return m, tea.Tick(httpFlightTick, func(time.Time) tea.Msg { return httpTickMsg{} })
 
 	case HTTPCancelMsg:
@@ -5587,6 +5595,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// recomputes so config-backed lists (recent projects, #842) reflect
 		// the reload immediately; Refresh is a no-op while closed.
 		m.reloadConfig(msg.Config)
+		// Re-arm the explorer auto-refresh poll if the reload re-enabled it
+		// (#2163) — disabling retires the chain, and without this no scan
+		// would ever restart it. A no-op on every other reload.
+		rearmPoll := m.explorer().RearmPoll()
 		// Number-hint field units (#1685) and custom secret key patterns
 		// (#1712) install before the diagnostics are worded: the entries the
 		// mapping had to skip (#2008) are part of what this reload reports,
@@ -5614,7 +5626,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, m.reparseOpenEditors()...)
 			}
 			if len(cmds) > 0 {
-				return m, tea.Batch(cmds...)
+				return m, tea.Batch(append(cmds, rearmPoll)...)
 			}
 		}
 		applyIDColorConfig() // identifier colors (#1626): no re-parse needed
@@ -5622,21 +5634,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// a literal gets, so a change only lands once the spans are produced
 		// again — re-parse every open editor when either moved.
 		if changedSecrets || changedUnits {
-			return m, tea.Batch(m.reparseOpenEditors()...)
+			return m, tea.Batch(append(m.reparseOpenEditors(), rearmPoll)...)
 		}
 		// Rainbow brackets (#789): a toggle flip re-parses every open editor
 		// so the change lands without waiting for the next edit.
 		if before := highlight.RainbowEnabled(); before != rainbowConfigured() {
 			highlight.SetRainbow(!before)
-			return m, tea.Batch(m.reparseOpenEditors()...)
+			return m, tea.Batch(append(m.reparseOpenEditors(), rearmPoll)...)
 		}
 		// Word-level diff emphasis (#1630): same deal — a toggle flip
 		// re-parses so open .diff buffers update without waiting for an edit.
 		if before := unidiff.WordHighlightEnabled(); before != diffWordsConfigured() {
 			unidiff.SetWordHighlight(!before)
-			return m, tea.Batch(m.reparseOpenEditors()...)
+			return m, tea.Batch(append(m.reparseOpenEditors(), rearmPoll)...)
 		}
-		return m, nil
+		return m, rearmPoll
 
 	case palette.RunCommandMsg:
 		// A palette-window selection — never a keybind invocation — bumps the

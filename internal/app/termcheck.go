@@ -31,6 +31,14 @@ const termCheckGrace = 3 * time.Second
 // turn instead of stealing the modal surface.
 const termCheckRetry = 2 * time.Second
 
+// termCheckMaxRetries bounds the busy-shell re-poll (#2163): a user parked in
+// the welcome tour used to keep the retry tick alive forever — one forced
+// Update/View wake every 2s for the session's whole life, invisible to the
+// armed-timers count. After ~a minute the report is dropped instead; the
+// deficiencies it would have named are static, and the palette/menu still
+// reach every action it points at.
+const termCheckMaxRetries = 30
+
 // termReportWidth caps the report body: long lines wrap here.
 const termReportWidth = 66
 
@@ -50,6 +58,8 @@ type termCaps struct {
 	scheduled bool
 	// done: the verdict fired; late reports must not re-open the shell.
 	done bool
+	// retries counts busy-shell re-polls; termCheckMaxRetries ends the chain.
+	retries int
 }
 
 // termCheckTick schedules the verdict; the retry variant re-polls a busy shell.
@@ -123,6 +133,11 @@ func (m *Model) runTermCheck() tea.Cmd {
 	}
 	if m.shell.IsOpen() || m.tourOpen() || m.recoveryOpen() || m.onboardingOpen() ||
 		m.themePickOpen() || m.toolchainInfoOpen() {
+		if m.caps.retries >= termCheckMaxRetries {
+			m.caps.done = true // give up rather than tick forever (#2163)
+			return nil
+		}
+		m.caps.retries++
 		return termCheckRetryTick()
 	}
 	m.caps.done = true

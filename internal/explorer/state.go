@@ -87,9 +87,9 @@ func (m *Model) Restore(s State) {
 		m.loadSync(n)
 	}
 
-	// The synchronous load means Init issues no scan, so no ScanDoneMsg will
-	// start the auto-refresh loop; arm it here and let Init schedule it.
-	m.polling = true
+	// The synchronous load means Init issues no scan and no ScanDoneMsg will
+	// start the auto-refresh loop; Init sees the loaded root and arms a
+	// fresh poll chain itself (#2163).
 
 	m.rebuild()
 	if s.Cursor != "" {
