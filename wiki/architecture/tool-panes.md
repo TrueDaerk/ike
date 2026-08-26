@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Custom TUI Tool Panes
-description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning runtime tool opens to exact layout positions (#1897; #1946 adds `terminal`/`run`/`debug` as assignable targets; since #2042 saved layouts win over the template on apply), global process-wide instances shared across workspaces (#1890) whose panes follow project switches grouped at their configured positions (#1903, #2042), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, and the built-in Run tool that owns run output (#1905)."
+description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning runtime tool opens to exact layout positions (#1897; #1946 adds `terminal`/`run`/`debug` as assignable targets; since #2042 saved layouts win over the template on apply), global process-wide instances shared across workspaces (#1890) whose panes follow project switches grouped at their configured positions (#1903, #2042) and return to the pane the project's saved layout recorded (#2141), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, and the built-in Run tool that owns run output (#1905)."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
 timestamp: 2026-08-21T00:00:00Z
@@ -181,7 +181,8 @@ Implemented in `internal/app/tools_global.go`:
 - **Follows the switch (#1903)** — the pane is visible in **every project
   view** while the tool is open: at the end of `performSwitch`, after the
   rebuild, `attachOpenGlobalTools` splices every session still parked into
-  the incoming workspace through the normal open path — the slot rule
+  the incoming workspace — **the project's own `layout.json` first**
+  (`savedToolHosts`, #2141), then the normal open path — the slot rule
   (#1897, tab-join when the slot pane is occupied, #1901), else the home
   placement (#1889, likewise **tab-joining** a tab-capable dock occupant,
   #2042), else **tab-joining an existing tool pane / tool-tab host**
@@ -193,6 +194,20 @@ Implemented in `internal/app/tools_global.go`:
   saved layout leaves nothing parked, so no duplicate can arise (first one
   wins). A tool the incoming project's config does not declare global stays
   parked.
+- **Saved placement wins on the way in (#2141)** — the layout the project
+  was left in decides where a returning session goes, so switch-in matches
+  the manual layout apply (whose snapshot has always been the truth). The
+  placement is read **once per attach round** — every attach re-saves
+  `layout.json`, so a per-tool read would answer from the arrangement being
+  built — and resolves in two steps: the pane key the layout recorded for
+  the tool when it is still live, else the live pane a **saved co-tenant**
+  already took (the host of a tabbed group closes with its last global tab,
+  #1901, so the group reforms around whichever member arrives first). A tool
+  the layout *did* place never falls back to `toolAreaPane` — it takes its
+  own pane rather than dissolving into an unrelated tool's tabs; a tool the
+  layout never placed keeps the #2042 grouping. `tool.<name>` is unaffected:
+  an explicit reopen is a fresh open (#1903) and follows the runtime rules
+  alone.
 - **Re-attach on demand** — `tool.<name>` in any workspace first toggles a
   locally attached instance; otherwise it takes the parked session
   (`TakeGlobalTool`) and splices it in (`attachGlobalTool`): a slot

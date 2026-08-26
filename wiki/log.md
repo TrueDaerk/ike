@@ -1,5 +1,20 @@
 # Log
 
+## 2026-08-26 (tools: saved tool-tab placement survives a project switch, #2141)
+
+- **The project's layout decides where a returning tool goes**: the switch-in
+  re-attach of a parked global session (#1903) now consults the project's own
+  `layout.json` before any runtime open rule, so a tool that was a tab of the
+  lazygit/sql/yarn pane comes back to that pane instead of piling into the
+  tool pane next door. Before this, a group whose host closed with its last
+  global tab (#1901) dissolved into whichever tool pane came first in registry
+  order — the claude pane, in the reported setup.
+- **The group reforms around its first arrival**: when the recorded host is
+  gone, a saved co-tenant's live pane stands in for it, and a tool the layout
+  *did* place never falls back to the "group with any tool pane" rule — it
+  takes its own pane. Tools the layout never placed keep the #2042 grouping,
+  and `tool.<name>` stays a fresh open that follows the slot/home rules alone.
+
 ## 2026-08-25 (project: quick-peek switch with one-key return, #2136)
 
 - **Peek a project instead of switching**: `alt+enter` on any project-picker
