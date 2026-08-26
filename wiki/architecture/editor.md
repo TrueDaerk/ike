@@ -225,7 +225,9 @@ line runs that test (see /architecture/run-configurations.md).
   #251): saving pins the current state, and undo/redo clear the dirty flag when
   they land exactly on it (vim-style), so `[+]` goes away when you undo back to
   the saved content. A crash-restored buffer marks the checkpoint unreachable —
-  no undo depth makes it read as clean.
+  no undo depth makes it read as clean. Saving from *insert* mode pins the
+  written state, not the one before the open segment (#2188): the write closes
+  the segment first, so `esc` afterwards leaves the buffer clean.
   **Insert granularity** (#1818, `insertundo.go`): an insert session commits a
   *sequence* of changes, not one — see the insert-mode section below. The store
   is untouched by this: the editor decides where a segment ends, `Recorder` and
@@ -598,6 +600,15 @@ change):
   segment as well (a correction belongs to the word it corrects) and reset the
   segment's typing state, so typing on after a correction never splits
   mid-word.
+- **A save closes the segment** (#2188). Every write path (`saveAs`, so `:w`,
+  `ctrl+s`, autosave and the save-as prompt alike) breaks the running segment
+  before it pins the save checkpoint, and a save chain breaks it again when it
+  starts. Without that the checkpoint would name the state *before* the typing
+  still sitting in the open recorder, and the commit on `esc` would re-mark a
+  buffer that equals the file on disk as modified; with a format-on-save chain
+  the tail would also commit *after* the formatter's own change and undo it at
+  stale ranges. Typing on after the save opens the next segment — the session
+  itself continues, so `.` still replays the whole insert.
 
 Normal-mode operations keep their one-change semantics (`dd`, `:%s`, and `ciw`
 together with the word typed into it: the structural edit and the first typed
