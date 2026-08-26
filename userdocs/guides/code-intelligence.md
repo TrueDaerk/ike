@@ -214,7 +214,17 @@ install/uninstall/upgrade) and `n` (the guided new-environment wizard).
 missing or failed to start. Open the **Language Servers** settings page — it
 shows the state of each server (ready, disabled, missing) — or run
 **LSP: Show Server Log** to see what the server said. **LSP: Restart Servers**
-restarts them without restarting IKE.
+restarts them without restarting IKE, and re-opens the files you have on
+screen, so features come back where you are.
+
+**The server crashed.** IKE restarts it for you: the status line shows
+`… language server restarting (attempt 1/3)` while it waits (1s, then 5s, then
+30s), and your open files are re-sent to the fresh server — nothing to reopen.
+If it dies three times in a row, the status line switches to
+`… language server failed — restart: "LSP: Restart Servers"` and a toast points
+at the same command; nothing spawns that server again until you run it, so a
+server crashing on every start cannot loop. A server that ran fine for a couple
+of minutes before dying starts over with a full set of attempts.
 
 **Some features work, others do nothing.** Servers advertise which
 capabilities they support, and IKE only offers what the server actually

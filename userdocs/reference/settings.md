@@ -281,6 +281,7 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | HUD refresh interval | `perf.hud_interval_ms` | integer (100–10000) | `1000` | user | Milliseconds between HUD samples. This is also the wake rate the open HUD costs the program, so a very short interval shows up in the numbers it reports; the HUD counts its own tick either way |
 | HUD history span | `perf.hud_history_seconds` | integer (5–600) | `60` | user | Seconds of rolling history behind the HUD's sparklines and the min/avg/max block the snapshot copies, so a spike stays readable after it passed |
+| Stall watchdog threshold | `perf.watchdog_seconds` | integer (0–600) | `15` | user | Seconds a single Update/View pass may stay in flight before the stall watchdog dumps every goroutine's stack to the state directory (.ike, or IKE_CONFIG_DIR) and notes it in debug.log, so a frozen session leaves evidence of what it was stuck on. 0 disables the watchdog |
 
 ### Notifications
 

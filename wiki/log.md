@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-26 (lsp: crash restart with exponential backoff and status feedback, #2148)
+
+- **Backoff instead of a linear retry**: a crashed language server is respawned
+  after 1s, 5s, 30s (`manager/restart.go`), and the status line carries the
+  progress — `<lang> language server restarting (attempt i/3)` — while the wait
+  runs. A server that dies instantly can no longer produce a restart storm.
+- **Give-up is a real state**: after three consecutive crashes the
+  `(language, root)` key is *disabled* — `ensureServer` refuses to spawn it, so
+  opening more files cannot restart the loop — the status line reads
+  `<lang> language server failed — restart: "LSP: Restart Servers"`, and the
+  error toast names both that command and the server log. A server that ran
+  healthily for two minutes before dying gets a fresh restart budget, so a long
+  session is not disabled by unrelated crashes.
+- **Recovery re-syncs the buffers**: a successful restart re-sends `didOpen` for
+  every tracked document and embedded fragment, drops the stale semantic-token
+  result ids and asks the host to re-pull semantic tokens, inlay hints and code
+  lenses — features resume without reopening files.
+- **`lsp.restart` restarts instead of only stopping**: the palette command, the
+  Tools menu entry and the Language Servers page now go through
+  `Manager.RestartAll` / `RestartLang` (`manager/manualrestart.go`), which
+  snapshot the open documents, stop the servers (clearing attempt counters and
+  disable blocks) and re-open the snapshot on the fresh ones.
+- Details in [LSP & Language Intelligence](architecture/lsp.md).
+
 ## 2026-08-26 (search: match counter in the status line, capped tallies, #2145)
 
 - **Status line counter**: a `search` slot on the right list shows `⌕ 3/17`

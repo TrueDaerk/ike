@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-08-24T12:00:00Z
+timestamp: 2026-08-26T12:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -855,19 +855,21 @@ server. The watched-files path closes that gap.
   advertises support; a missing capability (or a missing binary) is a graceful
   no-op with a status message, never an error popup.
 - **Crashes are recoverable.** `restart.go` detects an unexpected exit, respawns
-  with linear backoff, re-initialises, and re-opens tracked documents; after
-  repeated crashes the server is disabled. Diagnostics survive the restart
-  attempts (a successful restart republishes), but a terminal disable — and a
-  deliberate `StopLang`/`Shutdown` — clears the dead server's publishes from
-  every affected editor (`cleardiags.go`, #994): host publishes are dropped
-  and the merged set re-emitted (fragment diagnostics from servers that still
-  run survive); documents that leave the manager get an explicit empty
-  publish.
+  after an exponential backoff, re-initialises, and re-opens tracked documents;
+  after repeated crashes the server is disabled until a manual restart
+  (see [Crash recovery & restart](#crash-recovery--restart-2148)). Diagnostics
+  survive the restart attempts (a successful restart republishes), but a
+  terminal disable — and a deliberate `StopLang`/`Shutdown` — clears the dead
+  server's publishes from every affected editor (`cleardiags.go`, #994): host
+  publishes are dropped and the merged set re-emitted (fragment diagnostics
+  from servers that still run survive); documents that leave the manager get an
+  explicit empty publish.
 - **Status is classified (0130).** Every manager status carries a
-  `lsp.ServerStatusKind`: persistent server state (ready, disabled, missing
-  binary) renders as a status-line segment; transient events (crashed → warn,
-  restarted → info, launch error / disabled-after-crashes → error) surface as
-  toast notifications. See [Notifications](./notifications.md).
+  `lsp.ServerStatusKind`: persistent server state (ready, restarting with the
+  attempt counter, failed, missing binary) renders as a status-line segment;
+  transient events (crashed → warn, restarted → info, launch error /
+  disabled-after-crashes → error) surface as toast notifications. See
+  [Notifications](./notifications.md).
 - **Actions are registry commands.** Hover/definition/references/restart are plain
   `plugin.Command`s reached by the palette (07) and keybindings (08) by id — no
   parallel dispatch path.
@@ -912,8 +914,9 @@ All of this is editable in-IDE on the **Language Servers** settings page
 (0180, #130 — see [Settings UI](./settings-ui.md)): live per-server status
 (`ServerStatusMsg` now carries the language), effective command + source
 layer, per-server enable and command/args/settings overrides via write-back,
-and per-server restart (`Manager.StopLang`: stops one language's servers, all
-roots; they respawn lazily) beside the global `lsp.restart`.
+and per-server restart (`Manager.RestartLang`: stops one language's servers,
+all roots, and re-opens their documents — #2148) beside the global
+`lsp.restart` (`Manager.RestartAll`).
 
 Closing a background workspace (#825) releases its LSP footprint the same
 lazy-respawn way: the `EventWorkspaceClosed` hook (`lsp.wsclose`) has the
@@ -965,6 +968,54 @@ entirely: ask me nothing, install nothing. When the crash-recovery prompt is
 due on the same start, recovery wins the shell and onboarding follows once it
 closes.
 
+## Crash recovery & restart (#2148)
+
+A language server that dies — the process crashes, the pipe breaks, the read
+loop ends on bad framing, the jsonrpc queue overflows — must not take language
+intelligence down silently until the file is reopened. `manager/restart.go`
+owns the recovery, per `(language, root)` server key:
+
+1. **Detect.** `watchExit` waits on the client's `Done`. A deliberate stop
+   (`closing`) is silent; anything else stops the possibly-still-alive child
+   for real (#1537), extracts the decisive stderr line (#990), raises the
+   `crashed` warn toast and hands over to `restart`.
+2. **Back off.** Attempt *n* waits **1s, 5s, 30s** (`restartDelays`; later
+   attempts hold at the last value). Exponential on purpose: a server dying
+   instantly cannot become a restart storm. Tests inject a fast schedule
+   through the manager's `backoffFn`.
+3. **Report.** While the backoff runs, the status line shows
+   `<lang> language server restarting (attempt i/3)` as persistent state, and
+   the per-language log gets the same marker.
+4. **Respawn and re-sync.** After the wait — unless the world moved on
+   (shutdown, manual restart, or the last document of the server closed) —
+   `ensureServer` respawns and re-initialises, every tracked document and
+   embedded fragment is re-sent as `didOpen` (their cached semantic-token
+   result ids are dropped: the fresh server never issued them), and the host
+   is asked to re-pull `semanticTokens` / `inlayHint` / `codeLens` through the
+   `Refresh` callback (#1912). Hover, completion and diagnostics resume on the
+   open buffers with no reopening.
+5. **Give up.** After `maxRestarts` (3) consecutive crashes the key is marked
+   **disabled**: `ensureServer` refuses to spawn it (a file open returns
+   `errServerDisabled` quietly, so opening ten files cannot restart the storm),
+   the status line reads `<lang> language server failed — restart: "LSP:
+   Restart Servers"`, an error toast names both that command and
+   `"LSP: Show Server Log"`, and the dead server's diagnostics are retracted
+   (#994, #1102).
+
+A server that ran healthily for at least `restartStableRun` (2 minutes) before
+dying starts a **fresh budget** — three unrelated crashes spread over a long
+session do not disable a language, while a server that dies right after every
+spawn still reaches the give-up.
+
+**Manual restart** is the way back: `lsp.restart` ("LSP: Restart Servers",
+also on the *Tools* menu and the Language Servers settings page) calls
+`Manager.RestartAll`, and the page's per-language button calls
+`Manager.RestartLang` (`manager/manualrestart.go`). Both snapshot the open
+documents, stop the servers — which clears the attempt counters and the
+disable blocks — and re-open the snapshot against fresh servers, so features
+return on the buffers already on screen. A restart triggered by an interpreter
+change (Toolchain page, #132) goes through the same path.
+
 ## Server logs & crash diagnostics (#715)
 
 Every spawned server's **stderr is teed into a per-language log file**
@@ -1011,7 +1062,8 @@ The palette command **`lsp.showLog`** ("LSP: Show Server Log",
 `plugins/lsp/showlog.go`) opens the most recently modified log — the crashed
 server's, in the common case — in a new editor pane, and points at the logs
 directory when more exist. The disabled-after-repeated-crashes toast names
-the command. No default chord (#711 policy).
+this command and `lsp.restart` — the log for the diagnosis, the restart for
+the way out (#2148). No default chord (#711 policy).
 
 ## Testing
 
