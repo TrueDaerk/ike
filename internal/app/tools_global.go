@@ -1,6 +1,8 @@
 package app
 
 import (
+	"sort"
+
 	"ike/internal/config"
 	"ike/internal/layout"
 	"ike/internal/pane"
@@ -214,13 +216,18 @@ func (m *Model) parkGlobalTool(name string, term terminal.Model) {
 // editor area; the adaptive auxZone split is the last resort. A failed
 // splice puts the session back on the manager instead of dropping it.
 func (m *Model) attachGlobalTool(entry config.ToolEntry, term terminal.Model) {
-	m.attachGlobalToolIn(entry, term, true)
+	// An explicit tool.<name> is a fresh open (#1903), so it follows the
+	// runtime rules alone — no saved placement (that is the switch-in
+	// restore's business, #2141).
+	m.attachGlobalToolIn(entry, term, true, nil)
 }
 
-// attachGlobalToolIn is attachGlobalTool with the focus move optional: the
-// tool.<name> re-attach focuses the arriving pane like a fresh open, while
-// the switch-in auto-attach (#1903) leaves focus where the switch put it.
-func (m *Model) attachGlobalToolIn(entry config.ToolEntry, term terminal.Model, focus bool) {
+// attachGlobalToolIn is attachGlobalTool with the focus move optional and the
+// project's saved tool placement (#2141) supplied: the tool.<name> re-attach
+// focuses the arriving pane like a fresh open, while the switch-in
+// auto-attach (#1903) leaves focus where the switch put it and follows the
+// layout's record of where the tool lived.
+func (m *Model) attachGlobalToolIn(entry config.ToolEntry, term terminal.Model, focus bool, saved map[string]string) {
 	ws := m.activeWS()
 	target := m.activeEditorKey()
 	if target == "" {
@@ -251,6 +258,25 @@ func (m *Model) attachGlobalToolIn(entry config.ToolEntry, term terminal.Model, 
 		saveLayout(ws.Tree, ws.Panes)
 		return true
 	}
+	// The project's own layout record wins over every runtime rule (#2141):
+	// the pane the tool was saved in takes it back, and when that pane is
+	// gone — a tool host closes with its last global tab (#1901) — the live
+	// pane a saved co-tenant already took stands in for it, so a group of
+	// tabbed tools reforms as one pane instead of dissolving into the tool
+	// pane next door.
+	savedHost, remembered := saved[entry.Name]
+	if remembered {
+		if adoptInto(savedHost) {
+			return
+		}
+		for _, mate := range coTenantTools(saved, entry.Name, savedHost) {
+			for _, loc := range m.toolLocations(mate) {
+				if adoptInto(loc.key) {
+					return
+				}
+			}
+		}
+	}
 	tpl, slot := slotTemplate(), toolSlot(entry.Name)
 	slotted := tpl != nil && slot != "" && tpl.HasSlot(slot)
 	zone, homed := toolHomeZone(entry.Placement)
@@ -262,7 +288,9 @@ func (m *Model) attachGlobalToolIn(entry config.ToolEntry, term terminal.Model, 
 		if adoptInto(m.dockOccupant(zone)) {
 			return
 		}
-	} else if adoptInto(m.toolAreaPane()) {
+	} else if !remembered && adoptInto(m.toolAreaPane()) {
+		// A tool the layout never placed groups with the others; one it did
+		// place gets its own pane rather than joining an unrelated tool.
 		return
 	}
 	term.SetParked(false)
@@ -356,6 +384,10 @@ func (m *Model) attachOpenGlobalTools() {
 	if m.ws == nil || m.activeWS() == nil {
 		return
 	}
+	// One read for the whole round (#2141): every attach re-saves layout.json,
+	// so a per-tool read would answer from the arrangement being built rather
+	// than from the one the project was left in.
+	saved := savedToolHosts()
 	for _, name := range m.ws.GlobalToolNames() {
 		entry, ok := globalToolEntry(name)
 		if !ok {
@@ -365,9 +397,46 @@ func (m *Model) attachOpenGlobalTools() {
 			continue // an instance is already attached; first one wins
 		}
 		if term, taken := m.ws.TakeGlobalTool(name); taken {
-			m.attachGlobalToolIn(entry, term, false)
+			m.attachGlobalToolIn(entry, term, false, saved)
 		}
 	}
+}
+
+// savedToolHosts maps every tool the project's persisted layout places to the
+// pane key it was saved under (#2141) — a dedicated tool pane's own key, or
+// the key of the host whose tab list named it. The switch-in re-attach
+// consults it before any runtime open rule, so a tool detached from a tabbed
+// group comes back to that group instead of to whichever tool pane happens to
+// come first in registry order. A project without a layout file yields an
+// empty map, leaving the runtime rules in sole charge.
+func savedToolHosts() map[string]string {
+	out := map[string]string{}
+	_, ids, ok := loadLayout()
+	if !ok {
+		return out
+	}
+	for key, id := range ids {
+		if id.Kind == "tool" && id.Tool != "" {
+			out[id.Tool] = key
+		}
+		for _, tool := range id.Tools {
+			out[tool] = key
+		}
+	}
+	return out
+}
+
+// coTenantTools lists the other tools the saved placement puts in host,
+// sorted so the stand-in host a re-attach picks never depends on map order.
+func coTenantTools(saved map[string]string, tool, host string) []string {
+	var out []string
+	for name, key := range saved {
+		if name != tool && key == host {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // rememberActiveToolTabs records every global tool that is its host pane's

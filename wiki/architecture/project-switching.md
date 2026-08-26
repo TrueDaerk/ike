@@ -287,14 +287,21 @@ subsystem (it must not import editor/explorer), the root model routes:
 workspace right after the chdir (`detachGlobalTools`) — its one process-wide
 session parks on the workspace manager — and at the end of `performSwitch`,
 after the rebuild, `attachOpenGlobalTools` splices it into the incoming
-workspace through the normal open path (slot rule with tab-join, home
-placement with tab-join, tab-join into an existing tool pane/tool host, and
-only then the adaptive split) without moving focus, so the pane is visible
+workspace — the project's own saved placement first (`savedToolHosts`,
+#2141), then the normal open path (slot rule with tab-join, home placement
+with tab-join, tab-join into an existing tool pane/tool host, and only then
+the adaptive split) — without moving focus, so the pane is visible
 in every project view while the tool is open — and several arriving tools
 group at their configured position instead of scattering as separate splits
 over the editor area (#2042). A workspace whose own `layout.json` places the
 tools re-attaches them during the restore at those saved positions; the
-attach only handles what the layout left parked. A restore that already re-attached the session from the saved
+attach only handles what the layout left parked, and it too follows that
+record: the pane key the layout named for the tool, else the live pane a
+**saved co-tenant** already took — the host of a tabbed group closes with
+its last global tab (#1901), so returning to a project reforms the group
+around whichever member arrives first instead of dissolving it into the tool
+pane next door (#2141). Only a tool the layout never placed groups by the
+#2042 rule. A restore that already re-attached the session from the saved
 layout wins; explicitly closing the pane in any project ends the tool
 everywhere (no resurrection from stale layouts), and a session whose process
 exited while parked arrives showing the #810 exited overlay with
