@@ -759,10 +759,16 @@ type Model struct {
 	// wheelFlushQueued records that a wheelFlushMsg is already in flight.
 	pendingWheel     []wheelBatch
 	wheelFlushQueued bool
-	// pendingScroll holds an editor viewport offset restored from a session that
-	// must be applied once the editor has been sized (the first layout). Cleared
-	// after it is applied. It targets the focused editor at restore time.
-	pendingScroll *editorScroll
+	// pendingScroll holds the editor viewport offsets restored from a session
+	// that must be applied once the editors have been sized (the first
+	// layout). Entries are dropped as they are applied. One per editor pane
+	// (#2177): every pane's active tab restores its own framing, not just the
+	// focused one's.
+	pendingScroll []editorScroll
+	// tabViews is the session's per-tab caret/framing table (#2177), pane key
+	// → path → view. Read once at construction and consumed by the layout
+	// restore, which hands each entry to its deferred tab.
+	tabViews map[string]map[string]tabView
 	// splitZone is the default orientation SplitFocused and explorer "open in new
 	// pane" use, read once from config.
 	splitZone layout.Zone
@@ -1327,6 +1333,10 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// the project's MRU history for good.
 	if s, ok := loadSession(); ok {
 		m.recent.Set(s.RecentFiles.toEntries())
+		// The per-tab caret/framing table (#2177) is read here, before the
+		// layout restore that consumes it — the tab list itself lives in
+		// layout.json, so the two halves meet only at restore time.
+		m.tabViews = tabViewIndex(s.Panes)
 	}
 	if resumed == nil {
 		m.restoreLayout(cfg)
@@ -1642,22 +1652,13 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 	// editor per non-explorer leaf, each rebuilding its remembered tab list
 	// (#160). Files missing on disk are skipped; a pane whose every file
 	// vanished restores as a single scratch tab, like before tabs existed.
+	// Only the tab that comes back active reads its file here (#2177) — the
+	// rest restore as deferred tabs that read theirs on first activation, so
+	// a project with a hundred open tabs starts in constant time per pane.
 	panes := pane.NewRegistry(cfg, m.regs)
 	panes.AddExplorer()
-	first := map[string]*editor.Model{} // path → first restored view, for sharing
-	restoreTab := func(ed *editor.Model, path string) bool {
-		if prev, ok := first[path]; ok {
-			// The same file across several tabs or leaves restores as one
-			// shared document (#142), not divergent copies.
-			ed.ShareDocumentWith(prev)
-			return true
-		}
-		if err := ed.Load(path); err != nil {
-			return false
-		}
-		first[path] = ed
-		return true
-	}
+	load := m.deferredLoader(panes)
+	missing := 0 // files gone since the save; reported once, below
 	// The debuggee terminal pane (#1370) never resurrects — its content is
 	// session state, and restoring a shell in its place would be misleading.
 	// Its leaf is pruned; the next debug session recreates the pane beside
@@ -1903,28 +1904,46 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			pinned[n] = true
 		}
 		active := 0
+		views := m.tabViews[key] // per-tab caret and framing (#2177)
 		for i, p := range paths {
 			if p == "" {
 				continue
 			}
-			ed := inst.Editor()
-			if ed.HasFile() {
-				ed = inst.AddTab()
+			if _, err := os.Stat(p); err != nil {
+				// Gone since the save: skip the tab and count it for the one
+				// summary notice below, rather than restoring an empty slot
+				// or failing the whole pane (#2177).
+				missing++
+				continue
 			}
-			if !restoreTab(ed, p) {
-				if inst.TabCount() > 1 {
-					inst.CloseTab(inst.ActiveTab()) // missing file: drop the spare tab
-				}
+			d := pane.Deferred{Path: p}
+			if v, ok := views[p]; ok {
+				d.Line, d.Col, d.Top, d.Left = v.Line, v.Col, v.Top, v.Left
+			}
+			slot := -1
+			if inst.TabCount() == 1 && inst.TabPath(0) == "" && inst.SetTabDeferred(0, d, load) {
+				slot = 0 // fill the pane's placeholder scratch tab
+			} else if inst.AddDeferredTab(d, load) {
+				slot = inst.TabCount() - 1
+			}
+			if slot < 0 {
 				continue
 			}
 			if i == id.Active {
-				active = inst.ActiveTab()
+				active = slot
 			}
 			if pinned[i] {
 				// Pins round-trip restarts (#1172): the index convention is
 				// the persisted Tabs list, same as Active.
-				inst.SetTabPinned(inst.ActiveTab(), true)
+				inst.SetTabPinned(slot, true)
 			}
+		}
+		if v, ok := views[inst.TabPath(active)]; ok && (v.Top != 0 || v.Left != 0) {
+			// The active tab materializes below, while the pane still has no
+			// size; the first layout's SetSize would then re-derive its
+			// framing from the cursor. Defer it like the single-editor
+			// section's, which the same pane may overwrite (see #2177).
+			m.notePendingScroll(key, v.Top, v.Left)
 		}
 		// Tool sessions hosted as tabs (#836) restart their configured
 		// program in place, like dedicated tool panes (#741); a tool no
@@ -2029,6 +2048,64 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 	m.activeWS().Panes = panes
 	m.recentEditor = firstEditorKey(leaves)
 	m.activeWS().Tree = tree
+	if missing > 0 {
+		// One summary notice for the whole restore (#2177), not one per file:
+		// a deleted directory can take dozens of tabs with it.
+		m.host.Notify(host.Warn, "session restore: "+plural(missing, "file is", "files are")+" gone and did not reopen")
+	}
+	// The tabs that read their file during this restore are wired by Init,
+	// which sweeps every loaded editor anyway; dropping the record here keeps
+	// the first Update from firing a second EventFileOpened each (#2177).
+	panes.TakeLoaded()
+}
+
+// deferredLoader builds the loader installed on every deferred tab (#2177):
+// it reads the file on first activation, adopts an already-open document for
+// the same path instead of loading a divergent copy (#142), and re-applies
+// the saved caret and framing. It closes over the registry and the shared
+// lazy-load sink — never over the model, which bubbletea copies by value.
+func (m *Model) deferredLoader(reg *pane.Registry) func(*editor.Model, pane.Deferred) {
+	return func(ed *editor.Model, d pane.Deferred) {
+		switch src := loadedEditorForPath(reg, d.Path); {
+		case src != nil && src != ed:
+			ed.ShareDocumentWith(src)
+		default:
+			if err := ed.Load(d.Path); err != nil {
+				// Deleted between restore and activation: the tab stays an
+				// empty scratch slot rather than showing stale content.
+				return
+			}
+			// A freshly read document needs the wiring an explicit open
+			// gets — highlighting, VCS marks, hooks; the Update tail drains
+			// the record. A shared view needs none: the document is already
+			// wired through the view it was adopted from.
+			reg.NoteLoaded(d.Path)
+		}
+		ed.SetCursor(d.Line, d.Col)
+		ed.SetScroll(d.Top, d.Left)
+	}
+}
+
+// loadedEditorForPath finds an editor tab that already holds path anywhere in
+// reg, for the deferred loader's share check (#2177). It deliberately looks
+// only at loaded editors — Editors never materializes — so resolving one
+// deferred tab cannot cascade into reading every other pane's files.
+func loadedEditorForPath(reg *pane.Registry, path string) *editor.Model {
+	if reg == nil || path == "" {
+		return nil
+	}
+	for _, key := range reg.Keys() {
+		inst := reg.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, ed := range inst.Editors() {
+			if ed.HasFile() && ed.Path() == path {
+				return ed
+			}
+		}
+	}
+	return nil
 }
 
 // firstEditorKey returns the first editor leaf key in walk order, or "".
@@ -2081,13 +2158,27 @@ func (m *Model) restoreSession() {
 			ed := m.activeWS().Panes.Get(key).Editor()
 			ed.SetCursor(s.Editor.Line, s.Editor.Col)
 			// Defer the viewport framing until the editor is sized.
-			m.pendingScroll = &editorScroll{key: key, top: s.Editor.Top, left: s.Editor.Left}
+			m.notePendingScroll(key, s.Editor.Top, s.Editor.Left)
 			m.explorer().SetActive(s.Editor.Path)
 			m.setFocus(key)
 		}
 	}
 	m.syncExplorerOpen()
 	m.syncFocus()
+}
+
+// notePendingScroll records a restored viewport framing for pane key, to be
+// applied by the first layout that sizes it. A second record for the same
+// pane replaces the first — the session's single-editor section (the legacy
+// shape) and the per-tab table (#2177) describe the same active tab.
+func (m *Model) notePendingScroll(key string, top, left int) {
+	for n := range m.pendingScroll {
+		if m.pendingScroll[n].key == key {
+			m.pendingScroll[n] = editorScroll{key: key, top: top, left: left}
+			return
+		}
+	}
+	m.pendingScroll = append(m.pendingScroll, editorScroll{key: key, top: top, left: left})
 }
 
 // editorWithFile returns the key of an editor instance holding path in any of
@@ -2129,7 +2220,45 @@ func (m Model) snapshotSession() sessionState {
 			s.Editor = &editorSession{Path: ed.Path(), Line: line, Col: col, Top: top, Left: left}
 		}
 	}
+	s.Panes = m.snapshotTabViews()
 	return s
+}
+
+// snapshotTabViews captures every editor pane's per-tab caret and framing
+// (#2177), keyed by instance key. A tab that was never activated since the
+// restore is still deferred and has no live editor to ask — its saved view
+// carries over unchanged, so quitting without touching a tab does not reset
+// where it was. Scratch, terminal, content and read-only tabs contribute
+// nothing: they carry no restorable file either.
+func (m Model) snapshotTabViews() map[string][]tabView {
+	out := map[string][]tabView{}
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		var views []tabView
+		for i := 0; i < inst.TabCount(); i++ {
+			if d, ok := inst.TabDeferredView(i); ok {
+				views = append(views, tabView{Path: d.Path, Line: d.Line, Col: d.Col, Top: d.Top, Left: d.Left})
+				continue
+			}
+			ed := inst.TabEditor(i)
+			if ed == nil || !ed.HasFile() || ed.ReadOnly() {
+				continue
+			}
+			line, col := ed.CursorPos()
+			top, left := ed.ScrollOffset()
+			views = append(views, tabView{Path: ed.Path(), Line: line, Col: col, Top: top, Left: left})
+		}
+		if len(views) > 0 {
+			out[key] = views
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // quit persists the session and layout and returns the program-exit command.
@@ -3386,6 +3515,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// message, so only now is "no view left" decidable.
 	if closed := mm.drainClosedFileViews(); closed != nil {
 		cmd = tea.Batch(cmd, closed)
+	}
+	// A deferred tab that read its file during this pass (#2177) gets the
+	// same wiring an explicit open gives a fresh buffer — highlighting, VCS
+	// and coverage marks, watcher tracking, EventFileOpened.
+	if lazy := mm.drainLazyLoads(); lazy != nil {
+		cmd = tea.Batch(cmd, lazy)
 	}
 	// The Structure pane follows the focused buffer here (#1025), once the
 	// pass settled: cursor follow is a cheap in-place highlight, a buffer
@@ -7086,6 +7221,10 @@ func (m Model) openPathWith(path string, newPane bool) (tea.Model, tea.Cmd) {
 			key = m.spawnEditor()
 		}
 		if m.openInTab(key, path) {
+			// Opening onto a restored tab loads it through the deferred
+			// loader (#2177); the wiring below is that load's wiring, so the
+			// lazy drain must not repeat it.
+			m.forgetLazyLoad(path)
 			m.notifyLargeFile(m.activeWS().Panes.Get(key).Editor())
 			// A log file with rotated siblings offers its merged timeline
 			// (#1996) — nothing else says that the file next to this one holds
@@ -7304,9 +7443,11 @@ func (m *Model) syncExplorerOpen() {
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
-		for _, ed := range inst.Editors() {
-			if ed.HasFile() {
-				open = append(open, ed.Path())
+		for i := 0; i < inst.TabCount(); i++ {
+			// TabPath: a restored tab counts as open before it is read
+			// (#2177) — the explorer marks the file the strip holds.
+			if p := inst.TabPath(i); p != "" {
+				open = append(open, p)
 			}
 		}
 	}
@@ -7360,6 +7501,53 @@ func (m Model) fireHooks(event plugin.Event, payload any) []tea.Cmd {
 func (m *Model) noteClosedFileView(path string) {
 	if path != "" {
 		m.closedFileViews = append(m.closedFileViews, path)
+	}
+}
+
+// drainLazyLoads wires the documents that deferred tabs (#2177) read during
+// this pass: highlighting, gutter diff and coverage marks, poll-watching and
+// EventFileOpened — everything openPathAt does for a freshly opened buffer,
+// which a tab switch onto a restored tab otherwise skips.
+func (m *Model) drainLazyLoads() tea.Cmd {
+	ws := m.activeWS()
+	if ws == nil || ws.Panes == nil {
+		return nil
+	}
+	paths := ws.Panes.TakeLoaded()
+	if len(paths) == 0 {
+		return nil
+	}
+	var cmds []tea.Cmd
+	seen := map[string]bool{}
+	for _, path := range paths {
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		if m.watcher != nil {
+			m.watcher.Track(path)
+		}
+		for _, ed := range m.editorViewsForPath(path) {
+			cmds = append(cmds, ed.Reparse(), m.vcsMarksCmd(ed))
+			m.notifyLargeFile(ed)
+		}
+		if cmd := m.coverageMarksCmd(path); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
+// forgetLazyLoad drops path from the pending lazy-load wiring: the caller —
+// an explicit open that happened to land on a deferred tab (#2177) — runs the
+// same wiring itself, and firing it twice would double every hook.
+func (m *Model) forgetLazyLoad(path string) {
+	if ws := m.activeWS(); ws != nil && ws.Panes != nil {
+		ws.Panes.ForgetLoaded(path)
 	}
 }
 
@@ -8064,7 +8252,12 @@ func (m *Model) closeTab(inst *pane.Instance, idx int) {
 	if inst.TabCount() <= 1 {
 		return
 	}
-	if ed := inst.TabEditor(idx); ed != nil {
+	if d, deferred := inst.TabDeferredView(idx); deferred {
+		// Closing a tab that was never activated since the restore (#2177):
+		// there is no document to persist undo for or to drop a crash
+		// snapshot of, but the reopen ring still remembers where it was.
+		m.closedTabs = appendClosedTab(m.closedTabs, closedTab{path: d.Path, line: d.Line, col: d.Col})
+	} else if ed := inst.TabEditor(idx); ed != nil {
 		m.rememberClosedTab(ed)
 		ed.PersistUndo() // undo survives the close (#148); no-op while dirty
 		m.backupDropOnCloseTab(ed, inst.Key())
@@ -8222,12 +8415,11 @@ func (m Model) openPathAt(path string, line, col int) (tea.Model, tea.Cmd) {
 
 func (m *Model) closeEditorsForPath(path string, isDir bool) {
 	prefix := path + string(os.PathSeparator)
-	match := func(ed *editor.Model) bool {
-		if ed == nil || !ed.HasFile() {
-			return false
-		}
-		ep := ed.Path()
-		return ep == path || (isDir && strings.HasPrefix(ep, prefix))
+	// Matching by path, not by editor: a restored tab still waiting to be
+	// activated (#2177) shows the deleted file too, and must close with it
+	// instead of surviving to fail its load later.
+	match := func(ep string) bool {
+		return ep != "" && (ep == path || (isDir && strings.HasPrefix(ep, prefix)))
 	}
 	closed := false
 	for _, key := range m.activeWS().Panes.Keys() {
@@ -8238,12 +8430,12 @@ func (m *Model) closeEditorsForPath(path string, isDir bool) {
 		// Close matching tabs first (highest index first, so indexes stay
 		// valid); the pane itself goes when its last tab matches too.
 		for i := inst.TabCount() - 1; i >= 0 && inst.TabCount() > 1; i-- {
-			if match(inst.TabEditor(i)) {
+			if match(inst.TabPath(i)) {
 				m.closeTab(inst, i)
 				closed = true
 			}
 		}
-		if match(inst.Editor()) && m.closeKey(key) {
+		if match(inst.TabPath(inst.ActiveTab())) && m.closeKey(key) {
 			closed = true
 		}
 	}
@@ -8542,17 +8734,32 @@ func (m *Model) layout() {
 		// the editor panes showing it; breadcrumbRows is the shared predicate
 		// renderPane and the mouse translation (contentYOff) key off too.
 		inst.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH+m.breadcrumbRows(inst)))
-		if inst.Kind() == pane.KindEditor && m.pendingScroll != nil && m.pendingScroll.key == key {
-			if ed := inst.Editor(); ed != nil {
-				ed.SetScroll(m.pendingScroll.top, m.pendingScroll.left)
-			}
-			m.pendingScroll = nil
+		if inst.Kind() == pane.KindEditor && len(m.pendingScroll) > 0 {
+			m.applyPendingScroll(key, inst)
 		}
 	}
 	// The inline playground's result buffer (#1970) tracks its hosting
 	// pane's interior minus the query header rows.
 	m.sizePlayResult()
 	m.syncFocus()
+}
+
+// applyPendingScroll pushes the restored viewport framing of pane key into
+// its active tab, now that the pane has a size, and drops the entry — the
+// first layout's SetSize re-derives Top from the cursor, which would clobber
+// a framing applied any earlier. Deferred tabs (#2177) need none of this:
+// they materialize into an already-sized pane and frame themselves.
+func (m *Model) applyPendingScroll(key string, inst *pane.Instance) {
+	for n, ps := range m.pendingScroll {
+		if ps.key != key {
+			continue
+		}
+		if ed := inst.Editor(); ed != nil {
+			ed.SetScroll(ps.top, ps.left)
+		}
+		m.pendingScroll = append(m.pendingScroll[:n], m.pendingScroll[n+1:]...)
+		return
+	}
 }
 
 // paneInterior maps an outer pane dimension to the content area, subtracting the

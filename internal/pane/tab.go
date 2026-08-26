@@ -30,6 +30,12 @@ type Tab struct {
 	// "Close Others" (#1172); manual closes stay allowed. It persists with
 	// the layout identity.
 	pinned bool
+	// deferred marks a restored document tab whose file has not been read
+	// yet (#2177): ed is an empty editor, and the tab knows the path, caret
+	// and framing the session saved. load fills it on first activation.
+	// Both clear together, so a tab is deferred exactly once.
+	deferred *Deferred
+	load     func(*editor.Model, Deferred)
 }
 
 // newEditorTab wraps an editor model as a tab slot.
@@ -175,5 +181,33 @@ func (t *Tab) close() {
 		t.term.Close()
 	case t.inst != nil:
 		t.inst.releaseContent()
+	}
+}
+
+// Deferred is the identity of a restored document tab whose file has not been
+// read yet (#2177): the path plus the caret and viewport framing the session
+// saved for it. Session restore installs one per non-active tab, so a project
+// with a hundred open tabs starts by reading one file per pane instead of a
+// hundred; the file is read the first time the tab is activated.
+type Deferred struct {
+	Path string
+	Line int
+	Col  int
+	Top  int
+	Left int
+}
+
+// materialize reads a deferred tab's file into its editor via the installed
+// loader and clears the deferral. It is one-shot: a loader that fails (the
+// file vanished between restore and activation) leaves an empty scratch tab
+// rather than retrying on every activation.
+func (t *Tab) materialize() {
+	if t.deferred == nil {
+		return
+	}
+	d, load := *t.deferred, t.load
+	t.deferred, t.load = nil, nil
+	if load != nil && t.ed != nil {
+		load(t.ed, d)
 	}
 }

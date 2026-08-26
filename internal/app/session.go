@@ -29,6 +29,26 @@ type sessionState struct {
 	// entries carry a last-opened timestamp; the field still loads the
 	// pre-#1113 bare-path shape (see recentFileList.UnmarshalJSON).
 	RecentFiles recentFileList `json:"recent_files,omitempty"`
+	// Panes holds the per-tab view state of every editor pane (#2177), keyed
+	// by instance key: one entry per document tab with its caret and
+	// viewport framing. The tab *list* (order, active tab, pins) stays in
+	// layout.json with the rest of the pane identity — this is the "where
+	// was I inside each of those documents" half, the per-tab counterpart of
+	// the single Editor section above. Entries are matched back by path, so
+	// a layout that drifted from the session (a tab closed by another build,
+	// a file gone) simply finds no view and restores at the top.
+	Panes map[string][]tabView `json:"panes,omitempty"`
+}
+
+// tabView is one document tab's saved caret and viewport framing (#2177).
+// Top/Left are stored for the same reason the single-editor section stores
+// them: the framing is sticky during editing, not a function of the cursor.
+type tabView struct {
+	Path string `json:"path"`
+	Line int    `json:"line,omitempty"`
+	Col  int    `json:"col,omitempty"`
+	Top  int    `json:"top,omitempty"`
+	Left int    `json:"left,omitempty"`
 }
 
 // recentFileEntry is the on-disk MRU record (#1113). TS is RFC3339; the zero
@@ -98,6 +118,31 @@ type explorerSession struct {
 	// and the divider-dragged height (0 = the configured default).
 	ScratchCollapsed bool `json:"scratch_collapsed,omitempty"`
 	ScratchHeight    int  `json:"scratch_height,omitempty"`
+}
+
+// tabViewIndex turns the on-disk per-pane tab views (#2177) into the pane key
+// → path → view lookup the layout restore reads. Duplicate paths within one
+// pane keep the first entry, matching the tab the restore reaches first.
+func tabViewIndex(panes map[string][]tabView) map[string]map[string]tabView {
+	if len(panes) == 0 {
+		return nil
+	}
+	out := make(map[string]map[string]tabView, len(panes))
+	for key, views := range panes {
+		byPath := make(map[string]tabView, len(views))
+		for _, v := range views {
+			if v.Path == "" {
+				continue
+			}
+			if _, dup := byPath[v.Path]; !dup {
+				byPath[v.Path] = v
+			}
+		}
+		if len(byPath) > 0 {
+			out[key] = byPath
+		}
+	}
+	return out
 }
 
 // sessionFile mirrors layoutFile's discovery: IKE_CONFIG_DIR overrides the base

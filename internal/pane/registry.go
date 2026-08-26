@@ -128,6 +128,12 @@ type Registry struct {
 	merges    int      // count of merge views ever allocated, for key minting
 	archives  int      // count of archive viewers ever allocated, for key minting
 	datas     int      // count of data viewers ever allocated, for key minting
+	// loaded collects the files deferred tabs (#2177) read since the last
+	// drain, so the root model can give each the wiring a freshly opened
+	// buffer gets. It lives on the registry rather than the model because
+	// the tabs do: a workspace parks and resumes with its registry, while
+	// the model around it is rebuilt on every project switch.
+	loaded []string
 }
 
 // NewRegistry returns an empty registry whose new instances are configured
@@ -135,6 +141,37 @@ type Registry struct {
 // editor the registry creates (#1540); nil keeps editors on private stores.
 func NewRegistry(cfg host.Config, regs *register.Store) *Registry {
 	return &Registry{cfg: cfg, regs: regs, instances: map[string]*Instance{}}
+}
+
+// NoteLoaded records that a deferred tab just read path (#2177). The deferred
+// loader calls it; the root model drains the list once the update pass has
+// settled.
+func (r *Registry) NoteLoaded(path string) {
+	if path != "" {
+		r.loaded = append(r.loaded, path)
+	}
+}
+
+// TakeLoaded returns and clears the recorded lazy-loaded paths (#2177).
+func (r *Registry) TakeLoaded() []string {
+	if len(r.loaded) == 0 {
+		return nil
+	}
+	out := r.loaded
+	r.loaded = nil
+	return out
+}
+
+// ForgetLoaded drops path from the pending lazy-load record (#2177): the
+// caller is an explicit open that runs the post-load wiring itself.
+func (r *Registry) ForgetLoaded(path string) {
+	kept := r.loaded[:0]
+	for _, p := range r.loaded {
+		if p != path {
+			kept = append(kept, p)
+		}
+	}
+	r.loaded = kept
 }
 
 // SetPalette records the active theme palette and threads it into every

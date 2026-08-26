@@ -4,7 +4,7 @@ title: Editor Tabs
 description: The per-pane tab model — a tab-hosting pane holds an ordered tab list (documents, embedded terminals and any tabbable viewer content) with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
 tags: [architecture, panes, tabs, editors, terminals, viewers, shared-documents, close, pins]
-timestamp: 2026-08-11T13:00:00Z
+timestamp: 2026-08-26T12:00:00Z
 ---
 
 # Editor Tabs
@@ -291,10 +291,14 @@ restore the file tabs only.
 Restore (`restoreLayout`) rebuilds each pane's tab list tolerantly: identities
 without `tabs` (pre-#160 files) restore as single-tab panes; files missing on
 disk are skipped without leaving an empty tab (the saved active index maps to
-the surviving tab); a pane whose every file vanished restores as one scratch
-tab. The same file across several tabs or panes restores as one shared
-document (#142). `session.json` is unchanged — it still frames the focused
-editor's cursor/scroll, which lands on the restored active tab.
+the surviving tab), and the whole restore reports its skips in **one** summary
+notice (#2177); a pane whose every file vanished restores as one scratch tab.
+The same file across several tabs or panes restores as one shared document
+(#142). Only each pane's **active** tab is read at startup — the rest restore
+as deferred tabs that read their file when first activated, and every tab's
+caret and framing comes back with it from `session.json`; see
+[Session Restore](/architecture/session-restore.md) for the lazy-restore
+contract.
 
 ## Open ends
 
