@@ -47,7 +47,7 @@ func TestBackupDisabledPurgesAtStartup(t *testing.T) {
 
 func TestBackupPromptCloseRunsAgeGC(t *testing.T) {
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
-		old := backup.New(backup.Dir(dir), backupClock(time.Now().Add(-8*24*time.Hour)))
+		old := backup.NewAs(backup.Dir(dir), backupClock(time.Now().Add(-8*24*time.Hour)), deadSession)
 		f := filepath.Join(dir, "old.txt")
 		_ = os.WriteFile(f, []byte("x\n"), 0o644)
 		_ = old.Snapshot(backup.Doc{Key: f, Path: f, Text: "stale\n"})

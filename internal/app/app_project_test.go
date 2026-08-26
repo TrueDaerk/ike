@@ -791,7 +791,10 @@ func TestDetachWorkspaceServicesDropsEmitters(t *testing.T) {
 // the exact case backupDropOnCloseTab guards for manual tab closes.
 func TestDiscardCloseDropsParkedBackups(t *testing.T) {
 	m, root, path := busyCloseFixture(t)
-	if err := m.backupSvc.Snapshot(backup.Doc{Key: path, Path: path, Text: "discarded edits"}); err != nil {
+	// The snapshot lives in the parked project's own state dir (#2185), which
+	// is where the switch flushed it.
+	parked := backupServiceFor(root)
+	if err := parked.Snapshot(backup.Doc{Key: path, Path: path, Text: "discarded edits"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -802,7 +805,7 @@ func TestDiscardCloseDropsParkedBackups(t *testing.T) {
 	if m.ws.Peek(root) != nil {
 		t.Fatal("d must close the busy workspace")
 	}
-	snaps, err := m.backupSvc.List()
+	snaps, err := parked.List()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -813,15 +816,43 @@ func TestDiscardCloseDropsParkedBackups(t *testing.T) {
 	}
 }
 
+// TestSwitchFlushesParkedDirtyBackups (#2185): parking a workspace with a
+// dirty buffer flushes its pending snapshot into that project's own state
+// directory — the fresh model's empty debouncer would otherwise drop the mark
+// and leave the parked edits unprotected against a crash.
+func TestSwitchFlushesParkedDirtyBackups(t *testing.T) {
+	_, root, path := busyCloseFixture(t)
+	snaps, err := backupServiceFor(root).List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, s := range snaps {
+		if s.Path == path {
+			found = true
+			if !s.FromCurrentSession() {
+				t.Errorf("flushed snapshot must carry this session's token, got %q", s.Session)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("switch must flush the dirty buffer's snapshot into %s, got %+v", root, snaps)
+	}
+}
+
 // TestCleanQuitDropsParkedBackups (#1550): backupCleanShutdown covers parked
 // workspaces' editors, not only the active workspace's.
 func TestCleanQuitDropsParkedBackups(t *testing.T) {
-	m, _, path := busyCloseFixture(t)
-	if err := m.backupSvc.Snapshot(backup.Doc{Key: path, Path: path, Text: "edits"}); err != nil {
+	m, root, path := busyCloseFixture(t)
+	// Removal must reach the parked project's own state dir, not the active
+	// one's (#2185) — the snapshot key is an absolute path, but the directory
+	// it lives in follows the workspace.
+	parked := backupServiceFor(root)
+	if err := parked.Snapshot(backup.Doc{Key: path, Path: path, Text: "edits"}); err != nil {
 		t.Fatal(err)
 	}
 	m.backupCleanShutdown()
-	snaps, err := m.backupSvc.List()
+	snaps, err := parked.List()
 	if err != nil {
 		t.Fatal(err)
 	}

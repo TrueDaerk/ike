@@ -18,8 +18,11 @@ import (
 // seam (editor.SyncMsg fires on every buffer change and save) marks dirty
 // buffers on the debouncer; one armed tick snapshots the buffers that went
 // quiet, off the Update loop; save, close-with-discard and clean quit remove
-// their snapshots so leftovers at startup always mean a crash. The read side
-// (restore prompt, startup GC) lives in recovery.go.
+// their snapshots. A project switch does not remove them — the workspace only
+// parks, so its dirty buffers stay worth protecting — it flushes them instead
+// (#2185); the session token they carry keeps the switch back from mistaking
+// them for crash evidence. The read side (restore prompt, startup GC) lives in
+// recovery.go.
 
 // backupTickMsg wakes the model to snapshot the buffers whose debounce expired.
 type backupTickMsg struct{}
@@ -204,7 +207,11 @@ func (m *Model) backupDropOnCloseTab(ed *editor.Model, paneKey string) {
 // prompt belong to no open pane and stay for the next launch. Parked
 // workspaces' editors are covered too (#1550) — the quit guard already
 // settled their unsaved changes, so their snapshots must not resurface as a
-// crash-recovery prompt at the next launch.
+// crash-recovery prompt at the next launch. Each workspace is cleared from its
+// *own* project's state directory (#2185): the snapshot key is an absolute
+// path, but the directory it lives in follows the workspace, so a parked
+// project's leftovers used to be "removed" from the active project's dir and
+// survived the quit.
 func (m *Model) backupCleanShutdown() {
 	if m.backupSvc == nil {
 		return
@@ -218,21 +225,62 @@ func (m *Model) backupCleanShutdown() {
 // backupRemoveWorkspace removes the crash snapshots of every editor one
 // workspace holds, cancelling their pending backup marks.
 func (m *Model) backupRemoveWorkspace(w *workspace.Workspace) {
+	m.backupWalkWorkspace(w, func(svc *backup.Service, ed *editor.Model, bk string) {
+		m.backupCancelMark(bk)
+		_ = svc.Remove(bk)
+	})
+}
+
+// backupFlushWorkspace snapshots the dirty buffers of a workspace about to be
+// parked by a project switch (#2185). The fresh model starts with an empty
+// debouncer, so a mark that had not fired yet would be dropped and the parked
+// buffer would sit unprotected for the rest of the session: flushing turns
+// every pending mark into a snapshot on the spot. The snapshots stay on disk —
+// a crash while the workspace is parked still loses those edits otherwise —
+// and carry this session's ownership token, so the switch back does not offer
+// them as crash recovery. Clean buffers hold no snapshot and need none.
+func (m *Model) backupFlushWorkspace(w *workspace.Workspace) {
+	if !m.backupEnabled() {
+		return
+	}
+	m.backupWalkWorkspace(w, func(svc *backup.Service, ed *editor.Model, bk string) {
+		m.backupCancelMark(bk)
+		if !ed.Dirty() {
+			return
+		}
+		d := backup.Doc{Key: bk, Path: ed.Path(), Text: ed.Text()}
+		if mtime, hash, ok := backup.BaseInfo(ed.Path()); ok {
+			d.BaseMTime, d.BaseHash = mtime, hash
+		}
+		_ = svc.Snapshot(d)
+	})
+}
+
+// backupWalkWorkspace runs fn for every editor buffer in w, handing fn the
+// snapshot service of w's *own* project root — the seam that keeps a parked
+// workspace's snapshots out of the active project's state directory (#2185).
+// Cancelling the pending mark is left to fn: a buffer it skips keeps its
+// debounce.
+func (m *Model) backupWalkWorkspace(w *workspace.Workspace, fn func(*backup.Service, *editor.Model, string)) {
 	if m.backupSvc == nil || w == nil || w.Panes == nil {
 		return
 	}
+	svc := backupServiceFor(w.Root)
 	for _, key := range w.Panes.Keys() {
 		inst := w.Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
 		for _, ed := range inst.Editors() {
-			bk := backupKey(ed, key)
-			if m.backupDeb != nil {
-				m.backupDeb.Cancel(bk)
-			}
-			_ = m.backupSvc.Remove(bk)
+			fn(svc, ed, backupKey(ed, key))
 		}
+	}
+}
+
+// backupCancelMark drops a buffer's pending debounce mark, if any.
+func (m *Model) backupCancelMark(key string) {
+	if m.backupDeb != nil {
+		m.backupDeb.Cancel(key)
 	}
 }
 
@@ -243,25 +291,13 @@ func (m *Model) backupRemoveWorkspace(w *workspace.Workspace) {
 // tab closes. A document also shown in the active workspace keeps its
 // snapshot (the surviving view still owns it).
 func (m *Model) backupDropWorkspace(w *workspace.Workspace) {
-	if m.backupSvc == nil || w == nil || w.Panes == nil {
-		return
-	}
-	for _, key := range w.Panes.Keys() {
-		inst := w.Panes.Get(key)
-		if inst == nil || inst.Kind() != pane.KindEditor {
-			continue
+	m.backupWalkWorkspace(w, func(svc *backup.Service, ed *editor.Model, bk string) {
+		if ed.HasFile() && len(m.editorViewsForPath(ed.Path())) > 0 {
+			return
 		}
-		for _, ed := range inst.Editors() {
-			if ed.HasFile() && len(m.editorViewsForPath(ed.Path())) > 0 {
-				continue
-			}
-			bk := backupKey(ed, key)
-			if m.backupDeb != nil {
-				m.backupDeb.Cancel(bk)
-			}
-			_ = m.backupSvc.Remove(bk)
-		}
-	}
+		m.backupCancelMark(bk)
+		_ = svc.Remove(bk)
+	})
 }
 
 // reconfigureBackup applies [backup] changes on a live config reload: a new

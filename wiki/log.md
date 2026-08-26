@@ -1,5 +1,27 @@
 # Log
 
+## 2026-08-27 (crash recovery: no stale restore prompt on project switch, #2185)
+
+- **Root cause**: switching projects *parks* a workspace (#777) — dirty buffers
+  and all — but rebuilds the model, and `buildModel` re-runs `scanRecovery`.
+  Every leftover snapshot counted as crash evidence, so returning to a project
+  offered to "recover" the very buffers that were about to reopen dirty anyway.
+  Second seam: the snapshot directory was the *relative* `.ike/backups`, so the
+  quit path removed a parked workspace's snapshots from the active project's
+  state dir instead of its own — they survived a clean quit too.
+- **Session ownership**: every snapshot now records the process that wrote it
+  (`session:` header, `backup.CurrentSession`). Only snapshots from a session
+  that is gone are crash evidence; the restore prompt skips this session's own.
+  Snapshots without a token (older builds) stay recoverable.
+- **Per-project, absolute snapshot dirs** (`backupDirFor(root)`, symlinks
+  resolved) — the single seam quit, project switch and workspace close resolve
+  their service through, so a parked workspace is always reached in its own
+  project.
+- **Flush on park**: the departing workspace's pending debounce marks are
+  written out on the switch instead of being dropped with the old debouncer, so
+  parked dirty buffers stay crash-protected. Details in
+  [Crash Recovery](architecture/crash-recovery.md).
+
 ## 2026-08-26 (session restore: every pane's tabs with caret, framing and lazy loading, #2177)
 
 - **Per-tab view state**: `session.json` grows a `panes` section — one

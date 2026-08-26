@@ -188,6 +188,15 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 			saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 		}
 	}
+	// Settle the departing workspace's crash snapshots through the same seam
+	// the quit path uses (#2185), while the departing project is still the
+	// working directory. The fresh model below starts with an empty debouncer,
+	// so a mark that had not fired yet would simply vanish and the parked
+	// dirty buffer would sit unprotected: flush every pending mark to disk
+	// now. The snapshots are kept — a crash while the workspace is parked must
+	// still be recoverable — and carry this session's ownership token, so
+	// coming back does not offer them as crash recovery.
+	m.backupFlushWorkspace(m.activeWS())
 	if err := os.Chdir(root); err != nil {
 		return m, func() tea.Msg { return project.SwitchFailedMsg{Path: root, Err: err} }
 	}

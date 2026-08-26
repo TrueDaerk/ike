@@ -9,10 +9,17 @@
 // (pointed at a directory). The app wires the two into its event loop — marking a
 // buffer on the change seam, snapshotting due buffers off the Update loop, and
 // removing a snapshot on save / discard / clean shutdown.
+//
+// Every snapshot also records *which session wrote it* (#2185). Leftovers alone
+// no longer mean a crash: a project switch parks a whole workspace, dirty
+// buffers included, so their snapshots outlive the switch on purpose. Only a
+// snapshot whose session token is not this process's is crash evidence —
+// see Snapshot.FromCurrentSession.
 package backup
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -29,6 +36,26 @@ const (
 	ext   = ".ikebak"
 	magic = "IKEBAK1"
 )
+
+// currentSession is this process's snapshot ownership token (#2185). Every
+// snapshot records who wrote it, so the restore flow can tell crash evidence
+// (a token from a session that is gone) from a snapshot the running session
+// still owns — the case a project switch produces, where the dirty buffer is
+// merely parked in a background workspace, not lost.
+var currentSession = newSession()
+
+// CurrentSession returns this process's snapshot ownership token.
+func CurrentSession() string { return currentSession }
+
+// newSession mints a process-unique token; the pid is a good-enough fallback
+// should the entropy source ever fail.
+func newSession() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "pid" + strconv.Itoa(os.Getpid())
+	}
+	return hex.EncodeToString(b[:])
+}
 
 // Doc is a buffer to snapshot. Key is a stable per-buffer identity (the absolute
 // path for saved files, a synthetic token for untitled buffers) and determines
@@ -52,22 +79,41 @@ type Snapshot struct {
 	BaseMTime time.Time
 	BaseHash  string
 	Timestamp time.Time
+	Session   string
 	Text      string
+}
+
+// FromCurrentSession reports whether this process wrote the snapshot (#2185).
+// Such a snapshot is not crash evidence: the buffer behind it is still open —
+// active, or parked in a background workspace after a project switch — so the
+// restore flow skips it. Snapshots from older builds carry no token and never
+// match, so they stay recoverable.
+func (s Snapshot) FromCurrentSession() bool {
+	return s.Session != "" && s.Session == currentSession
 }
 
 // Service reads and writes snapshot files under a directory.
 type Service struct {
-	dir   string
-	clock func() time.Time
+	dir     string
+	clock   func() time.Time
+	session string
 }
 
-// New returns a Service writing under dir. clock supplies snapshot timestamps; a
-// nil clock defaults to time.Now.
+// New returns a Service writing under dir, stamping snapshots with this
+// process's session token. clock supplies snapshot timestamps; a nil clock
+// defaults to time.Now.
 func New(dir string, clock func() time.Time) *Service {
+	return NewAs(dir, clock, currentSession)
+}
+
+// NewAs is New with an explicit ownership token. Tests use it to forge
+// snapshots from a previous, dead session — the crash the restore flow exists
+// to catch; production code always writes as the current session.
+func NewAs(dir string, clock func() time.Time, session string) *Service {
 	if clock == nil {
 		clock = time.Now
 	}
-	return &Service{dir: dir, clock: clock}
+	return &Service{dir: dir, clock: clock, session: session}
 }
 
 // Dir returns the snapshot directory under a project state base (sibling of
@@ -86,7 +132,7 @@ func (s *Service) Snapshot(d Doc) error {
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return err
 	}
-	return writeFileAtomic(s.fileFor(d.Key), encode(d, s.clock()))
+	return writeFileAtomic(s.fileFor(d.Key), encode(d, s.clock(), s.session))
 }
 
 // Remove deletes the snapshot for key. A missing snapshot is not an error.
@@ -197,7 +243,7 @@ func BaseInfo(path string) (mtime time.Time, hash string, ok bool) {
 
 // encode renders a snapshot: a magic line, "key: value" header lines, a blank
 // line, then the full text verbatim.
-func encode(d Doc, ts time.Time) []byte {
+func encode(d Doc, ts time.Time, session string) []byte {
 	hasBase := d.Path != ""
 	var b strings.Builder
 	b.WriteString(magic + "\n")
@@ -212,6 +258,7 @@ func encode(d Doc, ts time.Time) []byte {
 		b.WriteString("base_hash: \n")
 	}
 	b.WriteString("timestamp: " + ts.UTC().Format(time.RFC3339Nano) + "\n")
+	b.WriteString("session: " + session + "\n")
 	b.WriteString("\n")
 	b.WriteString(d.Text)
 	return []byte(b.String())
@@ -253,6 +300,8 @@ func decode(file string, data []byte) (Snapshot, error) {
 			if v != "" {
 				s.Timestamp, _ = time.Parse(time.RFC3339Nano, v)
 			}
+		case "session":
+			s.Session = v
 		}
 	}
 	return s, nil
