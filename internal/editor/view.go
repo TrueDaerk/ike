@@ -1210,6 +1210,12 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				st = st.Background(m.occurrenceColor(kind))
 				styled = true
 			}
+			if m.snippetSelAt(line, col) {
+				// Pre-selected snippet placeholder (#2146): reads as a
+				// selection so the replace-on-type affordance is visible.
+				st = st.Background(m.theme().SelectionMuted)
+				styled = true
+			}
 			for _, id := range ids {
 				// Identifier colors (#1626): the hash-keyed rainbow color
 				// replaces the syntax foreground, leaving the backgrounds

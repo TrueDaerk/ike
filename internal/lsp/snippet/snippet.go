@@ -1,10 +1,11 @@
 // Package snippet expands LSP snippet syntax (#846): tabstops ($1, ${2},
 // ${3:default}, choices ${4|a,b|}, the final $0), variables ($NAME,
 // ${NAME:default}) and escapes (\$, \\, \}). Expand returns the plain text to
-// insert plus the tabstop rune offsets in visit order, so the editor can run a
-// tab/shift-tab placeholder session. Variables resolve to their default (or
-// empty) — there is no editor context here. A malformed source returns an
-// error; callers fall back to inserting the raw text.
+// insert plus the tabstop rune spans in visit order, so the editor can run a
+// tab/shift-tab placeholder session with the default text pre-selected
+// (#2146). Variables resolve to their default (or empty) — there is no editor
+// context here. A malformed source returns an error; callers fall back to
+// inserting the raw text.
 package snippet
 
 import (
@@ -13,13 +14,21 @@ import (
 	"unicode"
 )
 
+// Stop is one tabstop's rune span in the expanded text: Start..End covers the
+// placeholder's default (or first-choice) text, so the editor can pre-select
+// it on jump (#2146); a bare tabstop has Start == End.
+type Stop struct {
+	Start, End int
+}
+
 // Expand parses src and returns the expanded plain text and the tabstop rune
-// offsets into that text, in visit order: ascending tabstop number with $0
-// last; a duplicate (mirrored) number keeps its first occurrence. A placeholder
-// stop sits at the end of its default text, so tabbing on accepts the default
-// and typing appends to it. When src contains tabstops but no $0, an implicit
-// final stop at the end of the text is appended. No tabstops yields nil stops.
-func Expand(src string) (string, []int, error) {
+// spans into that text, in visit order: ascending tabstop number with $0
+// last; a duplicate (mirrored) number keeps its first occurrence. A
+// placeholder's span covers its default text, so the editor pre-selects it —
+// tabbing on accepts the default, typing replaces it (#2146). When src
+// contains tabstops but no $0, an implicit final stop at the end of the text
+// is appended. No tabstops yields nil stops.
+func Expand(src string) (string, []Stop, error) {
 	p := &parser{src: []rune(src)}
 	if err := p.parse(false); err != nil {
 		return "", nil, err
@@ -33,20 +42,20 @@ func Expand(src string) (string, []int, error) {
 		return visitKey(p.stops[i].n) < visitKey(p.stops[j].n)
 	})
 	seen := map[int]bool{}
-	var offs []int
+	var offs []Stop
 	final := false
 	for _, s := range p.stops {
 		if seen[s.n] {
 			continue
 		}
 		seen[s.n] = true
-		offs = append(offs, s.off)
+		offs = append(offs, Stop{Start: s.start, End: s.end})
 		if s.n == 0 {
 			final = true
 		}
 	}
 	if !final {
-		offs = append(offs, len(p.out))
+		offs = append(offs, Stop{Start: len(p.out), End: len(p.out)})
 	}
 	return text, offs, nil
 }
@@ -59,7 +68,7 @@ func visitKey(n int) int {
 	return n
 }
 
-type stop struct{ n, off int }
+type stop struct{ n, start, end int }
 
 type parser struct {
 	src   []rune
@@ -103,7 +112,7 @@ func (p *parser) dollar() error {
 	}
 	switch r := p.src[p.i]; {
 	case unicode.IsDigit(r):
-		p.stops = append(p.stops, stop{n: p.number(), off: len(p.out)})
+		p.stops = append(p.stops, stop{n: p.number(), start: len(p.out), end: len(p.out)})
 	case r == '{':
 		p.i++
 		return p.braced()
@@ -125,22 +134,24 @@ func (p *parser) braced() error {
 		n := p.number()
 		switch {
 		case p.at('}'):
-			p.stops = append(p.stops, stop{n: n, off: len(p.out)})
+			p.stops = append(p.stops, stop{n: n, start: len(p.out), end: len(p.out)})
 			p.i++
 			return nil
 		case p.at(':'):
 			p.i++
+			start := len(p.out)
 			if err := p.parse(true); err != nil {
 				return err
 			}
-			p.stops = append(p.stops, stop{n: n, off: len(p.out)})
+			p.stops = append(p.stops, stop{n: n, start: start, end: len(p.out)})
 			return p.expect('}')
 		case p.at('|'):
 			p.i++
+			start := len(p.out)
 			if err := p.firstChoice(); err != nil {
 				return err
 			}
-			p.stops = append(p.stops, stop{n: n, off: len(p.out)})
+			p.stops = append(p.stops, stop{n: n, start: start, end: len(p.out)})
 			return p.expect('}')
 		}
 		return errors.New("malformed tabstop")

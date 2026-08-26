@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-26T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Editor
@@ -2918,7 +2918,10 @@ trigger word replaces the word with the template body through the existing
 LSP snippet placeholder engine (`internal/lsp/snippet`), and the tabstop
 session (#846) takes over — the cursor lands on `$1`, Tab/Shift+Tab cycle
 placeholders exactly like an accepted LSP snippet completion, Esc ends the
-session. No trigger match leaves Tab to its normal indent insertion (#1137);
+session. A placeholder with default text (`${1:name}`) arrives
+**pre-selected** (#2146): the span highlights like a selection, the first
+typed rune replaces the whole default, and tabbing on keeps it — the
+JetBrains fill-in shape. No trigger match leaves Tab to its normal indent insertion (#1137);
 with secondary carets active the expansion never fires (indentation and the
 trigger word would differ per caret).
 

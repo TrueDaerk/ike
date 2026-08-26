@@ -1,5 +1,23 @@
 # Log
 
+## 2026-08-27 (completion: per-language recency + snippet placeholder pre-selection, #2146)
+
+- **Recency per language**: the recently-accepted store
+  (`internal/complete/mru`, #854) is now scoped by the buffer's resolved
+  language id — `Bump(scope, label)` / `Rank(scope, label)`, persisted as a
+  scope→labels map. An accept in a Go buffer boosts Go popups only; a
+  pre-scope flat-array store file loads into the `""` scope and keeps working
+  through a named-scope fallback. The fuzzy-dominant ranking itself
+  (`fuzzy·4 + priority + locality + MRU`) was already in place (#854) and is
+  unchanged.
+- **Placeholder pre-selection**: `snippet.Expand` returns tabstop *spans*
+  (`Stop{Start, End}`) instead of bare offsets, and the editor's tabstop
+  session pre-selects a placeholder's default text on jump — highlighted like
+  a selection, replaced wholesale by the first typed rune, kept by tabbing
+  on. Bare tabstops and plain-text items behave exactly as before. Details in
+  [Completion Engine](architecture/completion.md) and
+  [Editor](architecture/editor.md).
+
 ## 2026-08-27 (editor: saving from insert mode no longer re-dirties on esc, #2188)
 
 - **Root cause**: the insert session keeps its edits in an open `Recorder` until

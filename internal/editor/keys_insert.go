@@ -208,6 +208,12 @@ func (m *Model) writeRunes(text string) {
 		m.typedInsert(text, func() { m.replaceText(text) })
 		return
 	}
+	// A pre-selected snippet placeholder (#2146) is replaced by the first
+	// typed rune: the span is deleted first, the insert below lands in its
+	// place.
+	if m.snippetSelActive() {
+		m.snippetReplaceSelection()
+	}
 	m.typedInsert(text, func() {
 		switch {
 		case m.autoClosePairs && m.autoCloseWrite(text):
