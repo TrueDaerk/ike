@@ -4,7 +4,7 @@ title: Completion Engine
 description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection.
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources, postfix]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Completion Engine
@@ -207,7 +207,13 @@ batch's source priority scaled down (LSP 100 → +4); locality reads the item's
 stamp; MRU boosts the last-accepted labels (rank 0 → +10 fading to 0 past
 rank 10), fed by `internal/complete/mru` — a per-project, most-recent-first
 label store persisted atomically at `.ike/completion-mru.json` and bumped on
-every accept. An empty prefix ranks the same way with fuzzy 0, so a fresh
+every accept. Since #2146 the store is **scoped per language**: the editor
+bumps and ranks under the buffer's resolved language id (`lang.ByPath` over
+`langPath()`, so a file-less "Treat Buffer as …" buffer scopes like a real
+file), an accept in a Go buffer boosts Go popups only, and buffers no
+language claims share the `""` scope. A named scope with no hit falls back
+to `""`, so a pre-scope flat-array store file keeps boosting after the
+migration. An empty prefix ranks the same way with fuzzy 0, so a fresh
 popup already prefers near and recently used items. Ties stay deterministic:
 the sort is stable over the merged base order (#851).
 

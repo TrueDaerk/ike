@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func expand(t *testing.T, src string) (string, []int) {
+func expand(t *testing.T, src string) (string, []Stop) {
 	t.Helper()
 	text, stops, err := Expand(src)
 	if err != nil {
@@ -27,18 +27,19 @@ func TestBareTabstopsVisitOrderImplicitFinal(t *testing.T) {
 	if text != "f(, )" {
 		t.Fatalf("text = %q", text)
 	}
-	if want := []int{4, 2, 5}; !reflect.DeepEqual(stops, want) {
+	if want := []Stop{{4, 4}, {2, 2}, {5, 5}}; !reflect.DeepEqual(stops, want) {
 		t.Fatalf("stops = %v, want %v", stops, want)
 	}
 }
 
-func TestPlaceholderDefaultStopAtEnd(t *testing.T) {
+func TestPlaceholderDefaultSpan(t *testing.T) {
 	text, stops := expand(t, "for ${1:i} := 0$0")
 	if text != "for i := 0" {
 		t.Fatalf("text = %q", text)
 	}
-	// Stop 1 at the end of "i" (offset 5), $0 at the end.
-	if want := []int{5, 10}; !reflect.DeepEqual(stops, want) {
+	// Stop 1 spans its default "i" (4..5) so the editor pre-selects it
+	// (#2146); $0 sits at the end.
+	if want := []Stop{{4, 5}, {10, 10}}; !reflect.DeepEqual(stops, want) {
 		t.Fatalf("stops = %v, want %v", stops, want)
 	}
 }
@@ -48,9 +49,8 @@ func TestNestedPlaceholder(t *testing.T) {
 	if text != "outer inner" {
 		t.Fatalf("text = %q", text)
 	}
-	// Visit 1 (end of full default), then 2 (end of "inner" — same offset
-	// here), then $0.
-	if want := []int{11, 11, 11}; !reflect.DeepEqual(stops, want) {
+	// Visit 1 (the full default), then 2 (the "inner" span), then $0.
+	if want := []Stop{{0, 11}, {6, 11}, {11, 11}}; !reflect.DeepEqual(stops, want) {
 		t.Fatalf("stops = %v, want %v", stops, want)
 	}
 }
@@ -60,7 +60,8 @@ func TestChoiceTakesFirst(t *testing.T) {
 	if text != "public x" {
 		t.Fatalf("text = %q", text)
 	}
-	if want := []int{6, 8}; !reflect.DeepEqual(stops, want) {
+	// The choice stop spans the emitted first option, like a placeholder.
+	if want := []Stop{{0, 6}, {8, 8}}; !reflect.DeepEqual(stops, want) {
 		t.Fatalf("stops = %v, want %v", stops, want)
 	}
 }
@@ -89,7 +90,7 @@ func TestEscapes(t *testing.T) {
 
 func TestMirroredTabstopKeepsFirst(t *testing.T) {
 	_, stops := expand(t, "$1 and $1$0")
-	if want := []int{0, 5}; !reflect.DeepEqual(stops, want) {
+	if want := []Stop{{0, 0}, {5, 5}}; !reflect.DeepEqual(stops, want) {
 		t.Fatalf("stops = %v, want %v", stops, want)
 	}
 }
@@ -113,7 +114,7 @@ func TestMultiline(t *testing.T) {
 	if text != "if  {\n\t\n}" {
 		t.Fatalf("text = %q", text)
 	}
-	if want := []int{3, 7}; !reflect.DeepEqual(stops, want) {
+	if want := []Stop{{3, 3}, {7, 7}}; !reflect.DeepEqual(stops, want) {
 		t.Fatalf("stops = %v, want %v", stops, want)
 	}
 }

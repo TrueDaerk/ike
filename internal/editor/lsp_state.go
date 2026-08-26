@@ -602,7 +602,7 @@ func (m Model) completionBoost(it ilsp.CompletionItem) int {
 	if tier := it.LocalityTier; tier < 2 {
 		boost += (2 - tier) * localityStep
 	}
-	if rank := m.compMRU.Rank(it.Label); rank >= 0 && rank < mruWindow {
+	if rank := m.compMRU.Rank(m.mruScope(), it.Label); rank >= 0 && rank < mruWindow {
 		boost += mruWindow - rank
 	}
 	return boost
@@ -673,7 +673,7 @@ func (m *Model) completionAccept() {
 	}
 	m.comp = nil
 	insertText := item.InsertText
-	var stops []int
+	var stops []snippet.Stop
 	if item.IsSnippet {
 		// A live-template item (#1152) — and a postfix expansion (#1913),
 		// whose block bodies are written with the same literal tabs —
@@ -718,7 +718,7 @@ func (m *Model) completionAccept() {
 		return m.insert.rec.Apply(buffer.Edit{Range: buffer.Range{Start: start, End: pos}, Text: insertText})
 	})
 	m.dirtyFromInsert()
-	m.compMRU.Bump(item.Label) // recently-accepted ranking boost (#854)
+	m.compMRU.Bump(m.mruScope(), item.Label) // recently-accepted ranking boost (#854)
 	if len(stops) > 0 && !m.hasCarets() {
 		m.startSnippetSession(insertText, stops)
 	}
@@ -727,6 +727,17 @@ func (m *Model) completionAccept() {
 // SetCompletionMRU injects the shared recently-accepted-completions store
 // (#854); nil keeps the ranking MRU-free.
 func (m *Model) SetCompletionMRU(s *mru.Store) { m.compMRU = s }
+
+// mruScope is the recency store's scope key for this buffer (#2146): the
+// resolved language id, so an accept in a Go buffer boosts Go popups only. A
+// buffer no language claims — including a file-less one before "Treat Buffer
+// as …" — shares the "" scope.
+func (m Model) mruScope() string {
+	if l, ok := lang.ByPath(m.langPath()); ok {
+		return l.ID
+	}
+	return ""
+}
 
 // applyCompletionExtraEdits applies an accepted item's additionalTextEdits
 // (auto-import, #848) through the open insert recorder, bottom-up so earlier

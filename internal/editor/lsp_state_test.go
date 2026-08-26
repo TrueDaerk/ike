@@ -8,6 +8,7 @@ import (
 
 	"ike/internal/complete/mru"
 	"ike/internal/editor/buffer"
+	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 )
 
@@ -601,10 +602,11 @@ func TestCompletionMRUBoost(t *testing.T) {
 	if got := labels(m.filteredCompletion()); got[0] != "aaa_first" {
 		t.Fatalf("without MRU order = %v", got)
 	}
-	// Accept the second item; its label enters the MRU store.
+	// Accept the second item; its label enters the MRU store under the
+	// buffer's language scope (#2146).
 	m = send(m, special(tea.KeyDown), special(tea.KeyEnter))
-	if store.Rank("zzz_last") != 0 {
-		t.Fatalf("accept must bump the store, rank = %d", store.Rank("zzz_last"))
+	if store.Rank(m.mruScope(), "zzz_last") != 0 {
+		t.Fatalf("accept must bump the store, rank = %d", store.Rank(m.mruScope(), "zzz_last"))
 	}
 	// A fresh popup now ranks the recently accepted item first.
 	m = open()
@@ -894,5 +896,109 @@ func TestCompletionAcceptHyphenKeepsUnrelatedText(t *testing.T) {
 	m = send(m, special(tea.KeyEnter))
 	if got := line(m, 0); got != "list: no-cache" {
 		t.Fatalf("after accept line = %q, want %q", got, "list: no-cache")
+	}
+}
+
+// TestCompletionSnippetPlaceholderPreselect guards #2146: a placeholder's
+// default text is pre-selected on jump — the span highlights, the first typed
+// rune replaces it, and tabbing on keeps it.
+func TestCompletionSnippetPlaceholderPreselect(t *testing.T) {
+	m, _ := loaded(t, "\n")
+	m = insertModeAt(m, 0, 0)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Items: []ilsp.CompletionItem{
+		{Label: "f", InsertText: "f(${1:arg}, $2)", IsSnippet: true},
+	}})
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 0); got != "f(arg, )" {
+		t.Fatalf("expanded line = %q, want f(arg, )", got)
+	}
+	// Cursor at the placeholder end, its default pre-selected.
+	if m.cursor.Col != 5 {
+		t.Fatalf("cursor col = %d, want 5 (end of placeholder)", m.cursor.Col)
+	}
+	if !m.snippetSelActive() {
+		t.Fatal("placeholder must be pre-selected")
+	}
+	if !m.snippetSelAt(0, 2) || !m.snippetSelAt(0, 4) || m.snippetSelAt(0, 1) || m.snippetSelAt(0, 5) {
+		t.Fatal("selection span must cover exactly the default text")
+	}
+	// Typing replaces the whole default.
+	m = send(m, key('x'))
+	if got := line(m, 0); got != "f(x, )" {
+		t.Fatalf("after replace line = %q, want f(x, )", got)
+	}
+	if m.snippetSelActive() {
+		t.Fatal("replace must consume the selection")
+	}
+	// Tab jumps to the bare second stop; typing there inserts plainly.
+	m = send(m, special(tea.KeyTab), key('y'))
+	if got := line(m, 0); got != "f(x, y)" {
+		t.Fatalf("after second stop line = %q, want f(x, y)", got)
+	}
+	// Shift+tab returns before the replacement text, like a bare stop.
+	m = send(m, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+	if m.cursor.Col != 2 {
+		t.Fatalf("after shift+tab cursor col = %d, want 2", m.cursor.Col)
+	}
+}
+
+// TestCompletionSnippetPlaceholderTabKeepsDefault guards #2146: tabbing off a
+// pre-selected placeholder accepts its default text unchanged.
+func TestCompletionSnippetPlaceholderTabKeepsDefault(t *testing.T) {
+	m, _ := loaded(t, "\n")
+	m = insertModeAt(m, 0, 0)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Items: []ilsp.CompletionItem{
+		{Label: "for", InsertText: "for ${1:i} := 0; $2 {}", IsSnippet: true},
+	}})
+	m = send(m, special(tea.KeyEnter), special(tea.KeyTab))
+	if got := line(m, 0); got != "for i := 0;  {}" {
+		t.Fatalf("line = %q, want the default kept", got)
+	}
+	if m.cursor.Col != 12 {
+		t.Fatalf("cursor col = %d, want 12 (second stop)", m.cursor.Col)
+	}
+	// Cursor motion lapses a pre-selection without touching the text.
+	m = send(m, special(tea.KeyLeft))
+	if m.snippetSelActive() {
+		t.Fatal("moving off the stop must lapse the selection")
+	}
+}
+
+// TestCompletionMRUScopedByLanguage guards #2146: an accept boosts the label
+// for the buffer's language only — the same store leaves another language's
+// popup untouched (beyond the legacy "" fallback, which scoped bumps skip).
+func TestCompletionMRUScopedByLanguage(t *testing.T) {
+	// The editor package pulls no language plugins, so the scopes under test
+	// register here (the comment_test pattern).
+	lang.Register(lang.Language{ID: "mrutest-a", Extensions: []string{"mrua"}})
+	lang.Register(lang.Language{ID: "mrutest-b", Extensions: []string{"mrub"}})
+	store := mru.Load("")
+	open := func(ext string) Model {
+		m := loadedExt(t, ext, "\n")
+		m.SetCompletionMRU(store)
+		m = insertModeAt(m, 0, 0)
+		m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Items: []ilsp.CompletionItem{
+			{Label: "aaa_first", InsertText: "aaa_first"},
+			{Label: "zzz_last", InsertText: "zzz_last"},
+		}})
+		return m
+	}
+	// Accept zzz_last in a Go buffer.
+	m := open("mrua")
+	goScope := m.mruScope()
+	m = send(m, special(tea.KeyDown), special(tea.KeyEnter))
+	if store.Rank(goScope, "zzz_last") != 0 {
+		t.Fatalf("accept must bump the go scope, rank = %d", store.Rank(goScope, "zzz_last"))
+	}
+	// A fresh Go popup boosts it; a Python popup does not.
+	if got := labels(open("mrua").filteredCompletion()); got[0] != "zzz_last" {
+		t.Fatalf("go order = %v, want zzz_last first", got)
+	}
+	py := open("mrub")
+	if py.mruScope() == goScope {
+		t.Fatalf("test needs distinct scopes, both %q", goScope)
+	}
+	if got := labels(py.filteredCompletion()); got[0] != "aaa_first" {
+		t.Fatalf("python order = %v, want aaa_first first (no cross-language boost)", got)
 	}
 }
