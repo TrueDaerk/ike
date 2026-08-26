@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-25T12:00:00Z
+timestamp: 2026-08-26T00:00:00Z
 ---
 
 # Editor
@@ -390,8 +390,19 @@ line runs that test (see /architecture/run-configurations.md).
   viewport exactly, Enter commits (zero matches / a wrapped landing leave
   "no matches: pat" / "search wrapped" on the ex line, as do wrapping
   `n`/`N`). All matches of the active query render with a background
-  highlight, the current match additionally underlined; a normal-mode Esc
-  clears the highlights (`:noh`-style) and `/`, `n`/`N`, `*`/`#` re-arm them.
+  highlight, the current match on an accent tint and underlined; a normal-mode
+  Esc clears the highlights (`:noh`-style) and `/`, `n`/`N`, `*`/`#` re-arm
+  them. The same counter also occupies a **status line slot** (`search`,
+  `⌕ 3/17`, #2145) — it outlives the `/` line, so `n`/`N` navigation updates
+  the index in place until the highlights are cleared.
+  **Cost caps** (#2145): highlighting only ever scans the lines the viewport
+  renders, so buffer size does not enter into it, and the counter's scan is
+  bounded twice over (`search.ScanMatches`: at most `search.MaxMatches` = 999
+  matches and `search.MaxScanLines` = 20 000 lines). A count that hits either
+  budget renders as "999+". The capped match list is cached per
+  (document version, query identity) — a keystroke recompiles the query and
+  costs one bounded scan, while cursor motion (`n`/`N` and plain `j`/`k`)
+  only re-derives the index from the cached list (`editor/searchtally.go`).
   `cmd+f` (`editor.find`) opens the same `/` line — one engine, no divergent
   find UI. With an open **single-line visual selection**, `cmd+f` prefills the
   query with the selected text instead of opening empty (#2063, JetBrains-style):

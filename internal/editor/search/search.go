@@ -44,7 +44,22 @@ type Span struct {
 type Query struct {
 	Pattern string
 	Regex   bool
+	fold    bool // matching ignores case (smartcase resolved at compile time)
 	re      *regexp.Regexp
+}
+
+// ID identifies a compiled query for caching (#2145): two queries with equal
+// IDs match exactly the same text, so a tally computed for one is valid for
+// the other.
+func (q Query) ID() string {
+	flags := "l"
+	if q.Regex {
+		flags = "r"
+	}
+	if q.fold {
+		flags += "i"
+	}
+	return flags + ":" + q.Pattern
 }
 
 // Compile builds a Query. When regex is true and the pattern is invalid, it
@@ -63,6 +78,7 @@ func Compile(pattern string, regex bool, cs Case) Query {
 	}
 	insensitive := cs == CaseFold ||
 		(cs == CaseSmart && strings.IndexFunc(pattern, unicode.IsUpper) < 0)
+	q.fold = insensitive
 	if regex {
 		expr := pattern
 		if insensitive {
@@ -164,6 +180,75 @@ func (q Query) Next(b *buffer.Buffer, from buffer.Position, dir Direction, count
 	}
 	m := all[idx]
 	return buffer.Position{Line: m.Line, Col: m.Start}, true
+}
+
+// Match-tally caps (#2145). A tally must not cost a full scan of a very large
+// buffer on every keystroke of an incremental search, so counting stops once
+// either budget runs out and the result is reported as capped ("999+").
+const (
+	// MaxMatches is the largest exact total a tally reports.
+	MaxMatches = 999
+	// MaxScanLines bounds how many buffer lines one tally scans.
+	MaxScanLines = 20000
+)
+
+// Tally is a capped match count for the search counter (#2145): the 1-based
+// index of the match the cursor sits on (0 when it sits on none — before the
+// first match, or past the scan cut) over the number of matches counted.
+// Capped means the scan stopped on a budget, so Total is a lower bound and
+// renders as "Total+".
+type Tally struct {
+	Index  int
+	Total  int
+	Capped bool
+}
+
+// ScanMatches returns q's matches in reading order, spending at most
+// maxMatches matches and maxLines lines (non-positive values fall back to the
+// MaxMatches / MaxScanLines defaults). capped reports that a budget ran out,
+// so the result is a prefix of the buffer's matches rather than all of them.
+func (q Query) ScanMatches(b *buffer.Buffer, maxMatches, maxLines int) (spans []Span, capped bool) {
+	if maxMatches <= 0 {
+		maxMatches = MaxMatches
+	}
+	if maxLines <= 0 {
+		maxLines = MaxScanLines
+	}
+	if q.Empty() {
+		return nil, false
+	}
+	lines := b.LineCount()
+	if lines > maxLines {
+		lines, capped = maxLines, true
+	}
+	for i := 0; i < lines; i++ {
+		for _, s := range q.LineMatches(b, i) {
+			if len(spans) == maxMatches {
+				return spans, true
+			}
+			spans = append(spans, s)
+		}
+	}
+	return spans, capped
+}
+
+// IndexOf returns the 1-based position of the span starting at pos within
+// spans, or 0 when pos sits on none of them.
+func IndexOf(spans []Span, pos buffer.Position) int {
+	for i, s := range spans {
+		if s.Line == pos.Line && s.Start == pos.Col {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// CountMatches tallies q's matches against pos under the same budgets as
+// ScanMatches. The scan runs in reading order from the buffer start, so the
+// index is stable no matter which direction the search ran.
+func (q Query) CountMatches(b *buffer.Buffer, pos buffer.Position, maxMatches, maxLines int) Tally {
+	spans, capped := q.ScanMatches(b, maxMatches, maxLines)
+	return Tally{Index: IndexOf(spans, pos), Total: len(spans), Capped: capped}
 }
 
 // runeCol converts a byte offset within line to a rune column.
