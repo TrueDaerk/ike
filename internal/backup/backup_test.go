@@ -232,3 +232,50 @@ func TestPruneAndPurgeOnMissingDir(t *testing.T) {
 		t.Fatalf("purge on missing dir: n=%d err=%v", n, err)
 	}
 }
+
+// TestSessionOwnership (#2185): New stamps this process's token, NewAs forges
+// a foreign one, and FromCurrentSession tells them apart — the distinction the
+// restore prompt uses to skip snapshots whose buffers are merely parked.
+func TestSessionOwnership(t *testing.T) {
+	dir := t.TempDir()
+	if err := New(dir, nil).Snapshot(Doc{Key: "/proj/mine.go", Path: "/proj/mine.go", Text: "mine\n"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewAs(dir, nil, "gone").Snapshot(Doc{Key: "/proj/theirs.go", Path: "/proj/theirs.go", Text: "theirs\n"}); err != nil {
+		t.Fatal(err)
+	}
+	snaps, err := New(dir, nil).List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snaps) != 2 {
+		t.Fatalf("want 2 snapshots, got %d", len(snaps))
+	}
+	for _, s := range snaps {
+		own := filepath.Base(s.Path) == "mine.go"
+		if s.FromCurrentSession() != own {
+			t.Errorf("%s: FromCurrentSession = %v (session %q), want %v", s.Path, !own, s.Session, own)
+		}
+	}
+	if CurrentSession() == "" {
+		t.Error("CurrentSession must not be empty")
+	}
+}
+
+// TestSnapshotWithoutSessionHeaderIsForeign: snapshots written by an older
+// build carry no token and must stay recoverable.
+func TestSnapshotWithoutSessionHeaderIsForeign(t *testing.T) {
+	dir := t.TempDir()
+	body := "IKEBAK1\nkey: /proj/old.go\npath: /proj/old.go\nhas_base: false\n" +
+		"timestamp: 2026-07-09T12:00:00Z\n\nold text\n"
+	if err := os.WriteFile(filepath.Join(dir, strings.Repeat("a", 64)+".ikebak"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	snaps, err := New(dir, nil).List()
+	if err != nil || len(snaps) != 1 {
+		t.Fatalf("List = %+v, %v", snaps, err)
+	}
+	if snaps[0].FromCurrentSession() {
+		t.Error("a snapshot without a session token must count as foreign (recoverable)")
+	}
+}

@@ -12,13 +12,19 @@ import (
 	"ike/internal/backup"
 )
 
+// deadSession is the ownership token the crash-simulating seeds write under:
+// snapshots left by a session that is gone, which is what the restore flow
+// treats as crash evidence (#2185). Writing them as the *current* session
+// would model a project switch instead — the buffers would still be open.
+const deadSession = "dead-session"
+
 // recoverySeed builds a sized app whose config dir already holds the snapshots
 // written by seed — a crash simulation: the previous session left them behind.
 func recoverySeed(t *testing.T, seed func(svc *backup.Service, dir string)) Model {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
-	seed(backup.New(backup.Dir(dir), nil), dir)
+	seed(backup.NewAs(backup.Dir(dir), nil, deadSession), dir)
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return tm.(Model)

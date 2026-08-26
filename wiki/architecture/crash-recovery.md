@@ -4,7 +4,7 @@ title: Crash Recovery
 description: Vim-swapfile-style crash recovery — debounced full-text snapshots of dirty buffers, written atomically to the project state dir, restored on next launch.
 resource: internal/backup
 tags: [architecture, backup, crash-recovery, persistence]
-timestamp: 2026-07-09T22:30:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Crash Recovery
@@ -34,6 +34,7 @@ has_base: true                 # false ⇒ "no base file" (untitled/new buffer)
 base_mtime: 2026-07-01T09:00:00Z   # mtime of the on-disk base version
 base_hash: <sha256 hex>            # hash of the on-disk base version
 timestamp: 2026-07-09T12:00:00Z    # when the snapshot was taken
+session: 3f9a1c07b2e5d846          # the IKE process that wrote it (#2185)
 
 <full buffer text…>
 ```
@@ -41,6 +42,10 @@ timestamp: 2026-07-09T12:00:00Z    # when the snapshot was taken
 `BaseInfo(path)` stats and hashes the on-disk file to fill `base_mtime` /
 `base_hash`; the restore flow (#166) compares them against the file at launch to
 warn when the base changed since the snapshot was taken.
+
+`session` is a random per-process token (`backup.CurrentSession`) stamped into
+every snapshot. It answers "is this leftover crash evidence, or does the running
+session still own the buffer?" — see [Ownership](#ownership-who-wrote-the-snapshot).
 
 ## Design
 
@@ -55,7 +60,12 @@ The package splits **timing** from **I/O**, and neither holds editor state:
   marked, so nothing is written when nothing is dirty.
 - **`Service`** reads and writes snapshot files under a directory (`Dir(base)` =
   `<state dir>/backups`, a sibling of `layout.json` / `session.json`, never
-  inside the project tree — no `.swp` litter, no 0140 watcher self-events).
+  inside the project tree — no `.swp` litter, no 0140 watcher self-events). The
+  directory is **per project and always absolute** (`backupDirFor(root)` in
+  `internal/app/recovery.go`, symlinks resolved): snapshot writes and removals
+  run off the Update loop as commands and a project switch `chdir`s underneath
+  them, so a relative path would land in whichever project happened to be
+  current when the command ran.
   `Snapshot` writes **atomically** (temp file in the same dir → fsync → rename →
   best-effort dir fsync) so a reader never sees a half-written file. `Remove`
   deletes a snapshot (missing is not an error); `List` returns every readable
@@ -72,8 +82,14 @@ A snapshot's life is tied to the dirty flag:
   snapshots (unless a view in the active workspace still shows the
   document), and the tab-limit LRU eviction performs the same drop (plus
   `PersistUndo`) as a manual tab close.
-- **Leftover on startup ⇒ the previous session died**: the restore flow lists
-  them at launch and prompts per file, then age-based GC prunes the rest.
+- **Flushed, not removed, on a project switch** (#2185): the departing
+  workspace only *parks* — its dirty buffers stay in memory and stay worth
+  protecting — so `backupFlushWorkspace` turns every pending debounce mark into
+  a snapshot on the spot (the fresh model starts with an empty debouncer and
+  would otherwise drop the mark) and leaves the files on disk.
+- **Leftover from a session that is gone ⇒ that session died**: the restore
+  flow lists those at launch and prompts per file, then age-based GC prunes the
+  rest.
 
 The write side (#167, `internal/app/backup.go`) rides the shared-document sync
 seam: `editor.SyncMsg` fires on every buffer change and save, and the
@@ -84,14 +100,43 @@ buffers), clean `Cancel`s the mark and removes the snapshot. One armed
 buffers' text and writes the snapshots off the Update loop as a `tea.Cmd`,
 re-arming while marks remain. Close-with-discard removes the closing pane's
 snapshot (unless another pane still shows the shared document), and a clean
-quit removes the snapshots of every open buffer — so a leftover at startup
-always means a crash. Snapshots skipped at the restore prompt belong to no
-open pane and survive the quit.
+quit removes the snapshots of every open buffer. Snapshots skipped at the
+restore prompt belong to no open pane and survive the quit.
+
+## Ownership: who wrote the snapshot
+
+"Leftover on disk" alone does not mean a crash. Since #777 a project switch
+parks the whole workspace instead of closing it, so the departing project's
+dirty buffers — and their snapshots — survive the switch by design. `buildModel`
+re-runs `scanRecovery` on *every* switch, which used to offer those snapshots
+back as crash recovery the moment the user returned to the project: a restore
+prompt for a file that was about to reopen dirty anyway (#2185).
+
+The `session` header settles it. Each process mints one random token at startup
+(`backup.CurrentSession`) and stamps it into every snapshot it writes;
+`Snapshot.FromCurrentSession` reports whether the running session wrote it:
+
+| Snapshot written by | Meaning | Restore prompt |
+|---|---|---|
+| this session | the buffer is still open — active, or parked in a background workspace | skipped |
+| another (dead) session | nobody owns those edits any more: a crash | offered |
+| an older IKE build (no token) | unknown owner, treat as a crash | offered |
+
+Consequences worth keeping in mind:
+
+- A **clean quit** still removes every snapshot (active *and* parked
+  workspaces, each from its own project's state dir) — the token is a second
+  line of defence, not a replacement.
+- A **real crash** (`kill -9`) leaves snapshots whose token belongs to a process
+  that no longer exists, so the next launch offers them exactly as before.
+- **Two IKE processes** in the same project see each other's snapshots as
+  foreign, which is the pre-existing behaviour.
 
 ## Restore flow (#166, `internal/app/recovery.go`)
 
 At launch the root model scans the snapshot directory (`scanRecovery`, in the
-constructor). If any snapshots are found, once the window is sized it opens a
+constructor — which a project switch re-runs, hence the ownership filter above).
+If any *foreign* snapshots are found, once the window is sized it opens a
 floating prompt (`maybeOpenRecovery`) that reuses the save-conflict UX — a modal
 that owns the keyboard until dismissed. The prompt lists every recoverable file
 with a cursor and a per-file base-changed warning:

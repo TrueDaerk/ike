@@ -31,23 +31,61 @@ type recoveryState struct {
 	cursor int
 }
 
-// backupDir returns the snapshot directory, mirroring layoutFile()/sessionFile():
-// IKE_CONFIG_DIR when set, else the project's ".ike" directory.
-func backupDir() string {
-	base := ".ike"
+// backupDir returns the current project's snapshot directory, mirroring
+// layoutFile()/sessionFile(): IKE_CONFIG_DIR when set, else the project's
+// ".ike" directory.
+func backupDir() string { return backupDirFor("") }
+
+// backupDirFor returns the snapshot directory of the project rooted at root
+// ("" = the current working directory). The path is made absolute (#2185):
+// snapshot writes and removals run off the Update loop as commands, and a
+// project switch chdirs underneath them — a relative ".ike/backups" would
+// resolve against whichever project happened to be current when the command
+// finally ran, so a parked project's snapshots were removed from, or written
+// into, the wrong directory. IKE_CONFIG_DIR still wins when set: it redirects
+// every project's state to one directory (tests, sandboxes).
+func backupDirFor(root string) string {
 	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
-		base = d
+		return backup.Dir(d)
 	}
-	return backup.Dir(base)
+	if root == "" {
+		root = "."
+	}
+	// Resolve symlinks, not just Abs: the active project's directory is
+	// derived from the working directory, which the OS reports fully resolved
+	// (/var → /private/var on macOS), while a workspace Root is whatever path
+	// the user picked. Both must name the same directory, or one project's
+	// snapshots would split across two state dirs.
+	if abs, err := filepath.Abs(root); err == nil {
+		root = abs
+	}
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		root = real
+	}
+	return backup.Dir(filepath.Join(root, ".ike"))
 }
 
-// backupService returns a service pointed at the project's snapshot directory.
-func backupService() *backup.Service { return backup.New(backupDir(), nil) }
+// backupService returns a service pointed at the current project's snapshot
+// directory.
+func backupService() *backup.Service { return backupServiceFor("") }
+
+// backupServiceFor returns a service pointed at the snapshot directory of the
+// project rooted at root — the single seam every snapshot walk resolves its
+// service through, so the quit path, a project switch and a workspace close
+// all reach a *parked* workspace's own project directory instead of the
+// active project's.
+func backupServiceFor(root string) *backup.Service { return backup.New(backupDirFor(root), nil) }
 
 // scanRecovery loads any leftover snapshots at startup. They are held until the
 // first window size arrives, then shown as a prompt. With [backup] disabled the
 // subsystem is fully off: no prompt, and existing snapshots (they hold file
 // contents) are purged instead.
+//
+// buildModel runs this on every project switch too, not just at launch, so
+// only snapshots written by a *dead* session count as crash evidence (#2185):
+// this session's own snapshots belong to buffers it still holds — the parked
+// workspace of the project being re-entered — and offering to "recover" a file
+// that is about to reopen dirty anyway was the stale prompt on every switch.
 func (m *Model) scanRecovery() {
 	svc := backupService()
 	if !m.backupEnabled() {
@@ -55,10 +93,20 @@ func (m *Model) scanRecovery() {
 		return
 	}
 	snaps, err := svc.List()
-	if err != nil || len(snaps) == 0 {
+	if err != nil {
 		return
 	}
-	m.recoveryPending = snaps
+	pending := make([]backup.Snapshot, 0, len(snaps))
+	for _, s := range snaps {
+		if s.FromCurrentSession() {
+			continue
+		}
+		pending = append(pending, s)
+	}
+	if len(pending) == 0 {
+		return
+	}
+	m.recoveryPending = pending
 }
 
 // maybeOpenRecovery shows the restore prompt once the window is sized, if
