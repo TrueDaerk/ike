@@ -571,6 +571,13 @@ func (m *Model) saveAs(path string) error {
 		m.clearLangOverride() // the file name classifies the buffer now (#2033)
 		m.resolveEditorconfig()
 	}
+	// Saving from insert mode (#2188): the session's open segment holds edits
+	// that history has not seen yet, so MarkSaved would pin the state *before*
+	// the typing and the commit on Esc would re-dirty a buffer that equals the
+	// file on disk. Closing the segment here makes the marked state the one
+	// that was just written — a save is an undo boundary like a paste or a
+	// word break, and typing on after it opens the next segment.
+	m.breakInsertUndo()
 	m.dirty = false
 	m.mixedEOL = false // the write just normalized to m.eol
 	m.hist.MarkSaved()
