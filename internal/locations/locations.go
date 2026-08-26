@@ -37,6 +37,9 @@ type Item struct {
 	EndCol   int
 	Text     string
 	More     []Range
+	// Excluded toggles the item out of the apply set (replace-in-path
+	// selective apply, #2154): it renders dim and batch operations skip it.
+	Excluded bool
 }
 
 // Ranges returns every match range of the item, ordered by start column.
@@ -62,6 +65,12 @@ type List struct {
 	cursor int // index into the item sequence across groups
 	top    int // first visible *row* (headers + items) of the render window
 	viewH  int // rows of the last Render window — the page-jump size (#1666)
+
+	// Rewrite, when set, turns rows into replace previews (#2154): each match
+	// range renders struck through, followed by the text Rewrite returns for
+	// it. ok = false renders the match plainly (e.g. a template that no longer
+	// applies). The host sets it before Render; Reset clears it with the rest.
+	Rewrite func(it Item, r Range) (string, bool)
 }
 
 // Reset clears all items and state, keeping the last render height so a page
@@ -228,6 +237,140 @@ func (l *List) itemNearRow(target int) int {
 	return best
 }
 
+// ToggleExcluded flips the cursor item in or out of the apply set (#2154).
+func (l *List) ToggleExcluded() bool {
+	it := l.currentRef()
+	if it == nil {
+		return false
+	}
+	it.Excluded = !it.Excluded
+	return true
+}
+
+// ToggleExcludedGroup flips the cursor's whole file (#2154): any included
+// item excludes them all; a fully excluded file re-includes them all.
+func (l *List) ToggleExcludedGroup() {
+	g := l.currentGroupRef()
+	if g == nil {
+		return
+	}
+	exclude := false
+	for _, it := range g.items {
+		if !it.Excluded {
+			exclude = true
+			break
+		}
+	}
+	for i := range g.items {
+		g.items[i].Excluded = exclude
+	}
+}
+
+// ExcludedCount reports how many items are toggled out of the apply set.
+func (l *List) ExcludedCount() int {
+	n := 0
+	for _, g := range l.groups {
+		for _, it := range g.items {
+			if it.Excluded {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// IncludedCount reports how many items remain in the apply set.
+func (l *List) IncludedCount() int { return l.total - l.ExcludedCount() }
+
+// RemoveIncluded removes and returns every non-excluded item in display
+// order — the replace-all batch (#2154). Excluded rows stay listed so the
+// user sees what was deliberately left alone.
+func (l *List) RemoveIncluded() []Item {
+	return l.removeIncluded(nil)
+}
+
+// RemoveIncludedGroup removes and returns the cursor file's non-excluded
+// items — the replace-file batch (#2154).
+func (l *List) RemoveIncludedGroup() []Item {
+	g := l.currentGroupRef()
+	if g == nil {
+		return nil
+	}
+	return l.removeIncluded(g)
+}
+
+// removeIncluded extracts the non-excluded items of one group (or, with a
+// nil group, of every group), keeping the cursor on the nearest survivor.
+func (l *List) removeIncluded(only *group) []Item {
+	var out []Item
+	var groups []group
+	newCursor := l.cursor
+	idx := 0
+	for gi := range l.groups {
+		g := &l.groups[gi]
+		if only != nil && g != only {
+			groups = append(groups, *g)
+			idx += len(g.items)
+			continue
+		}
+		var keep []Item
+		for _, it := range g.items {
+			if it.Excluded {
+				keep = append(keep, it)
+			} else {
+				out = append(out, it)
+				if idx < l.cursor {
+					newCursor--
+				}
+			}
+			idx++
+		}
+		if len(keep) > 0 {
+			groups = append(groups, group{path: g.path, items: keep})
+		}
+	}
+	l.groups = groups
+	l.total -= len(out)
+	l.cursor = newCursor
+	l.clampCursor()
+	return out
+}
+
+// currentRef returns a pointer to the cursor's item.
+func (l *List) currentRef() *Item {
+	i := l.cursor
+	for gi := range l.groups {
+		g := &l.groups[gi]
+		if i < len(g.items) {
+			return &g.items[i]
+		}
+		i -= len(g.items)
+	}
+	return nil
+}
+
+// currentGroupRef returns a pointer to the cursor's group.
+func (l *List) currentGroupRef() *group {
+	i := l.cursor
+	for gi := range l.groups {
+		if i < len(l.groups[gi].items) {
+			return &l.groups[gi]
+		}
+		i -= len(l.groups[gi].items)
+	}
+	return nil
+}
+
+// clampCursor keeps the cursor inside the item range after removals.
+func (l *List) clampCursor() {
+	if l.cursor >= l.total {
+		l.cursor = l.total - 1
+	}
+	if l.cursor < 0 {
+		l.cursor = 0
+	}
+}
+
 // All returns every item in display order (replace-all consumes this).
 func (l *List) All() []Item {
 	out := make([]Item, 0, l.total)
@@ -339,10 +482,22 @@ func (l *List) Render(width, height int, pal *theme.Palette, displayPath func(st
 
 	header := lipgloss.NewStyle().Bold(true).Foreground(pal.BorderFocus)
 	count := lipgloss.NewStyle().Faint(true)
-	sel := lipgloss.NewStyle().Background(pal.SelectionMuted)
 	match := lipgloss.NewStyle().Foreground(pal.BorderFocus).Bold(true).Underline(true)
-	matchSel := match.Background(pal.SelectionMuted)
-	lineNo := lipgloss.NewStyle().Faint(true)
+	add := lipgloss.NewStyle().Foreground(pal.Success).Bold(true)
+	st := rowStyles{
+		sel:      lipgloss.NewStyle().Background(pal.SelectionMuted),
+		match:    match,
+		matchSel: match.Background(pal.SelectionMuted),
+		lineNo:   lipgloss.NewStyle().Faint(true),
+		// The replace preview (#2154) strikes the match and appends the
+		// replacement; an excluded row renders entirely faint.
+		strike:    match.Underline(false).Strikethrough(true),
+		strikeSel: match.Underline(false).Strikethrough(true).Background(pal.SelectionMuted),
+		add:       add,
+		addSel:    add.Background(pal.SelectionMuted),
+		exc:       lipgloss.NewStyle().Faint(true),
+		excSel:    lipgloss.NewStyle().Faint(true).Background(pal.SelectionMuted),
+	}
 
 	var out []string
 	row, item := 0, 0
@@ -361,7 +516,7 @@ func (l *List) Render(width, height int, pal *theme.Palette, displayPath func(st
 				break
 			}
 			if row >= l.top {
-				out = append(out, l.renderItem(it, item == l.cursor, width, sel, match, matchSel, lineNo))
+				out = append(out, l.renderItem(it, item == l.cursor, width, st))
 			}
 			row++
 			item++
@@ -370,12 +525,28 @@ func (l *List) Render(width, height int, pal *theme.Palette, displayPath func(st
 	return strings.Join(out, "\n")
 }
 
+// rowStyles bundles the item-row styles Render builds once per frame.
+type rowStyles struct {
+	sel, match, matchSel, lineNo   lipgloss.Style
+	strike, strikeSel, add, addSel lipgloss.Style // replace preview (#2154)
+	exc, excSel                    lipgloss.Style // excluded rows (#2154)
+}
+
 // renderItem renders one "  12: text" row with every match range on the line
 // highlighted (#1121), sliding the text window right when the first match sits
-// past the width budget.
-func (l *List) renderItem(it Item, selected bool, width int, sel, match, matchSel, lineNo lipgloss.Style) string {
+// past the width budget. With a Rewrite hook set (#2154) each match renders
+// struck through with its replacement appended; an excluded item renders
+// entirely faint with a ✗ marker and no preview.
+func (l *List) renderItem(it Item, selected bool, width int, st rowStyles) string {
+	sel, match, matchSel, lineNo := st.sel, st.match, st.matchSel, st.lineNo
 	no := strconv.Itoa(it.Line)
-	prefix := "  " + strings.Repeat(" ", max(0, 5-len(no))) + no + ": "
+	lead := "  "
+	if it.Excluded {
+		lead = "✗ "
+		match, matchSel, lineNo = st.exc, st.excSel, st.exc
+		sel = st.excSel
+	}
+	prefix := lead + strings.Repeat(" ", max(0, 5-len(no))) + no + ": "
 	budget := width - lipgloss.Width(prefix)
 	if budget < 8 {
 		budget = 8
@@ -408,6 +579,9 @@ func (l *List) renderItem(it Item, selected bool, width int, sel, match, matchSe
 		if selected {
 			return sel.Render(s)
 		}
+		if it.Excluded {
+			return st.exc.Render(s)
+		}
 		return s
 	}
 	hl := func(s string) string {
@@ -415,6 +589,19 @@ func (l *List) renderItem(it Item, selected bool, width int, sel, match, matchSe
 			return matchSel.Render(s)
 		}
 		return match.Render(s)
+	}
+	// preview returns the replacement text to append after a match range, or
+	// ok = false for a plain highlight (no hook, excluded row, stale template).
+	preview := func(r Range) (string, bool) {
+		if l.Rewrite == nil || it.Excluded {
+			return "", false
+		}
+		return l.Rewrite(it, r)
+	}
+	addStyle := st.add
+	strike, strikeSel := st.strike, st.strikeSel
+	if selected {
+		addStyle = st.addSel
 	}
 
 	var b strings.Builder
@@ -443,7 +630,16 @@ func (l *List) renderItem(it Item, selected bool, width int, sel, match, matchSe
 			writePlain(string(runes[pos:s]))
 		}
 		leading = false
-		b.WriteString(hl(string(runes[s:e])))
+		if repl, ok := preview(r); ok {
+			style := strike
+			if selected {
+				style = strikeSel
+			}
+			b.WriteString(style.Render(string(runes[s:e])))
+			b.WriteString(addStyle.Render(repl))
+		} else {
+			b.WriteString(hl(string(runes[s:e])))
+		}
 		pos = e
 	}
 	if pos < winEnd {
