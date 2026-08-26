@@ -645,13 +645,17 @@ func (m *Model) startHTTPFlight(key string, e *httpFlightEntry) tea.Cmd {
 	if m.httpFlight == nil {
 		m.httpFlight = map[string]*httpFlightEntry{}
 	}
-	first := len(m.httpFlight) == 0
 	m.httpFlight[key] = e
 	m.markHTTPPending()
 	m.refreshHTTPFlightMarks()
-	if !first {
+	// Armed-flag guard (#2163), not "was the map empty": the map empties the
+	// moment the last flight finishes, but its final tick is still in flight
+	// for up to httpFlightTick — arming on emptiness in that window built a
+	// second chain, and both re-armed forever after.
+	if m.httpTickArmed {
 		return nil // a tick loop is already running
 	}
+	m.httpTickArmed = true
 	return tea.Tick(httpFlightTick, func(time.Time) tea.Msg { return httpTickMsg{} })
 }
 

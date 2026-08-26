@@ -913,6 +913,13 @@ func TestDeadTerminalSelectionCopyKey(t *testing.T) {
 	if m.terminalFocused() {
 		t.Fatal("a finished session is not a live terminal")
 	}
+	// The feed loop drains the spool asynchronously: the process being gone
+	// does not mean its output reached the grid yet, and selecting an empty
+	// row made this test flaky under full-suite load (#2163).
+	deadline = time.Now().Add(5 * time.Second)
+	for !strings.Contains(term.View(), "dead-run-output") && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
 	term.MousePress(0, 0)
 	term.MouseDrag(8, 0)
 	term.MouseRelease(8, 0)

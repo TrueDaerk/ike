@@ -1,5 +1,34 @@
 # Log
 
+## 2026-08-26 (perf: freeze audit round two + update-loop stall watchdog, #2163)
+
+- **Stall watchdog** (`internal/diag`): `app.Update`/`app.View` stamp
+  `LoopEnter`/`LoopExit` (two atomics), and a monitor goroutine — never the
+  blocked one — dumps every goroutine's full stack to the state dir when one
+  pass overstays `perf.watchdog_seconds` (default 15s, `0` opts out, Settings
+  UI on the Performance HUD page), logs the stall and the recovery to
+  `debug.log`, one dump per episode, ten per session. The next freeze leaves
+  evidence even when nobody is around to send SIGUSR1.
+- **Busy-loop fixes from the audit**: explorer auto-refresh chains are
+  generation-tagged (a project switch/resume used to grow one permanent
+  stat-walker per switch, and disable→re-enable never restarted); LSP
+  diagnostic line ranges clamp to the buffer (a "to end of document" range of
+  2^31-1 hung the loop); the .http flight tick can no longer double-arm and
+  is counted in the HUD's armed-timers gauge; backup/autosave consume
+  past-due debounce marks even while disabled (a latent zero-delay tick
+  loop); the watch debounce flushes at least every 10 windows under
+  sustained churn; the terminal-check retry gives up after ~a minute;
+  clipboard subprocesses get a 3s deadline (osascript behind a TCC prompt
+  wedged the IDE); terminal scrollback-search matches are memoized (the full
+  10k-line scan ran per frame); follow mode re-evaluates the large-file
+  thresholds as the tail grows; the DBGp accept loop survives fd-exhaustion
+  bursts.
+- **Follow-ups filed** for the larger findings: host outbox bounding
+  (#2169), flood coalescing (#2176), terminal resize/selection costs
+  (#2184), per-frame memoizations (#2187), completion/LSP lock work
+  (#2193), tick generation stamps (#2194). Audit details in
+  [Performance & Diagnostics](architecture/performance.md).
+
 ## 2026-08-26 (tools: saved tool-tab placement survives a project switch, #2141)
 
 - **The project's layout decides where a returning tool goes**: the switch-in

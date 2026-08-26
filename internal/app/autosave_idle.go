@@ -88,10 +88,18 @@ func (m *Model) armAutosaveIdleTick() tea.Cmd {
 // buffer that changed state since its mark is a no-op; the save goes through
 // the normal path, so EventSave fires and the modified indicator clears.
 func (m *Model) saveDueIdleBuffers(now time.Time) {
-	if m.autosaveIdleDeb == nil || !m.autosaveIdle() {
+	if m.autosaveIdleDeb == nil {
 		return
 	}
-	for _, key := range m.autosaveIdleDeb.Due(now) {
+	// Consume the due marks before the mode check (#2163): Due is what
+	// clears expired deadlines, and an unconsumed past-due mark would make
+	// armAutosaveIdleTick spin a zero-delay tick per Update pass if the mode
+	// ever reads disabled while marks are pending.
+	due := m.autosaveIdleDeb.Due(now)
+	if !m.autosaveIdle() {
+		return
+	}
+	for _, key := range due {
 		for _, paneKey := range m.editorKeysForPath(key) {
 			if inst := m.activeWS().Panes.Get(paneKey); inst != nil {
 				if ed := inst.EditorForPath(key); ed != nil {

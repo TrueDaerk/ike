@@ -52,6 +52,15 @@ type EventMsg struct {
 // debounceWindow coalesces bursts (editors write + rename, git checkouts).
 const debounceWindow = 100 * time.Millisecond
 
+// maxDebounceWait caps how long the sliding debounce may keep deferring a
+// flush (#2163). A writer producing events faster than the window — a watch
+// build, npm install, an agent rewriting the tree in a loop — used to reset
+// the timer forever: no flush, an unboundedly growing pending map, and every
+// external change invisible until the writer paused. Past this ceiling the
+// pending timer is left to fire, so sustained churn still flushes at least
+// once per ceiling-plus-window.
+const maxDebounceWait = 10 * debounceWindow
+
 // suppressWindow is how long after MarkSaved events for that path are treated
 // as self-inflicted and dropped.
 const suppressWindow = 500 * time.Millisecond
@@ -64,11 +73,13 @@ type Service struct {
 	epochs  map[string]time.Time // path -> last MarkSaved
 	pending map[string]Kind      // debounced, coalesced events
 	timer   *time.Timer
+	armedAt time.Time            // when the current debounce cycle began (#2163)
 	tracked map[string]fileStamp // poll fallback set
 	w       *fsnotify.Watcher
 	root    string
 
 	debounce time.Duration
+	maxWait  time.Duration    // flush-deferral ceiling (#2163); tests shrink it
 	now      func() time.Time // injectable clock for tests
 
 	// hashLimit is the largest file (bytes) the poll fallback content-hashes
@@ -102,6 +113,7 @@ func New(send func(tea.Msg)) *Service {
 		pending:  map[string]Kind{},
 		tracked:  map[string]fileStamp{},
 		debounce: debounceWindow,
+		maxWait:  maxDebounceWait,
 		now:      time.Now,
 	}
 }
@@ -480,9 +492,13 @@ func (s *Service) note(path string, kind Kind) {
 	s.pending[path] = kind
 	if s.timer == nil {
 		s.timer = time.AfterFunc(s.debounce, s.flush)
-	} else {
+		s.armedAt = s.now()
+	} else if s.now().Sub(s.armedAt) < s.maxWait {
 		s.timer.Reset(s.debounce)
 	}
+	// Past maxWait the running timer is left alone: it fires within
+	// one window of its last reset, so sustained churn cannot defer the
+	// flush forever (#2163).
 }
 
 // mergeKinds coalesces a new raw kind onto an existing pending one: removal

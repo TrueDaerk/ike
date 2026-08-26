@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/host"
 	"ike/internal/watch"
 )
 
@@ -374,5 +375,24 @@ func TestSplitIncompleteTail(t *testing.T) {
 			t.Errorf("splitIncompleteTail(%q) = %q, %q; want %q, %q",
 				c.in, use, held, c.use, c.held)
 		}
+	}
+}
+
+// TestFollowAppendReEvaluatesLargeFileGate (#2163): the large-file flag was
+// only ever computed at load, so a small log tailed past the thresholds kept
+// shipping its whole text with every append's EventChange — an O(document)
+// join per poll, growing without bound. Crossing a threshold mid-follow must
+// flip the flag.
+func TestFollowAppendReEvaluatesLargeFileGate(t *testing.T) {
+	m, path := loaded(t, "one\n")
+	m.Configure(host.MapConfig{"files.large_file_lines": "5"})
+	m = following(t, m)
+	if m.LargeFile() {
+		t.Fatal("a small file must not start in large-file mode")
+	}
+	appendToFile(t, path, "a\nb\nc\nd\ne\nf\n")
+	m, _ = changedEvent(m, path)
+	if !m.LargeFile() {
+		t.Fatal("crossing files.large_file_lines while tailing must flag the buffer large")
 	}
 }

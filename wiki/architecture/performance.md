@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Performance & Diagnostics
-description: Idle-behavior rules (who may wake the render loop, and how often), the in-app performance HUD, and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
+description: Idle-behavior rules (who may wake the render loop, and how often), the in-app performance HUD, the always-on update-loop stall watchdog, and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
-tags: [architecture, performance, pprof, idle, diagnostics, hud]
-timestamp: 2026-08-24T00:00:00Z
+tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog]
+timestamp: 2026-08-26T00:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -134,6 +134,85 @@ HUD still open across it.
 Reach for the HUD first — it answers "what is waking me and which pane is
 expensive" in seconds. Reach for the pprof hooks below when the answer is
 "something inside one pane" and you need the stack.
+
+## The update-loop stall watchdog (`internal/diag`, #2163)
+
+A freeze reported after the fact used to leave nothing: the SIGUSR1 hook
+below only helps when someone sends the signal while the hang is live. The
+watchdog is the always-on complement. `app.Update` and `app.View` stamp
+`diag.LoopEnter`/`LoopExit` around every pass — two atomic ops, nothing else
+on the hot path — and a monitor goroutine (which by construction can never be
+the blocked one) polls the stamps. When one pass stays in flight past
+`perf.watchdog_seconds` (default 15s; `0` opts out; Settings UI on the
+Performance HUD page) it writes every goroutine's full stack (pprof
+`debug=2`, the variant that shows blocking state and wait durations) to
+`ike-watchdog-<pid>-<stamp>-goroutines.txt` next to `debug.log` in the state
+dir (`.ike/`, or `IKE_CONFIG_DIR`), with a header naming the message type the
+pass was handling, and logs the stall to `debug.log`. One dump per stall
+episode, ten per session at most, and a "recovered after Xs" line when a
+stall ends on its own — so a hard hang, a livelock and a transient multi-
+second stall all stay distinguishable and attributable afterwards. Both a
+stuck `Update` and a frame that never finishes composing are covered; the
+threshold sits far above the 200ms slow-update log line, which keeps naming
+the merely-slow passes. The monitor's own cadence is threshold-derived
+(50ms–1s) and never touches the render loop — it is a plain sleeping
+goroutine, not a `tea.Tick`.
+
+## The #2163 freeze audit
+
+The follow-up sweep after another 100%-CPU freeze. Every tick site, goroutine
+IO loop and Update/View hot path was audited; findings fixed in #2163:
+
+- **Explorer poll chains multiplied across project switches.** The
+  auto-refresh loop is a chained Cmd goroutine with no cancellation seam; a
+  project switch or workspace resume re-armed the departed model's chain into
+  a permanent duplicate stat-walker — one more per switch. Chains now carry a
+  process-wide id (`pollID`); a `pollMsg` from a chain the model does not own
+  retires silently, `Init` rotates the id so it is idempotent, and
+  disabling/re-enabling `explorer.auto_refresh` round-trips
+  (`RearmPoll` on config reload).
+- **LSP diagnostic ranges are clamped to the buffer** in `setDiagnostics`:
+  servers idiomatically express "to end of document" as line 2^31-1, and only
+  columns were clamped — the per-line index loop would have run billions of
+  iterations on the update loop.
+- **The .http flight tick could double-arm**: the "map was empty" guard raced
+  the chain's final in-flight tick; a dispatch in that window built a second
+  permanent 4 Hz re-parse chain. An explicit `httpTickArmed` flag now guards
+  it, and it is counted in the HUD's armed-timers gauge.
+- **Past-due debounce marks are always consumed** (backup, idle autosave):
+  `Due()` is the only thing clearing deadlines, and an unconsumed past-due
+  mark under a disabled feature was a zero-delay `tea.Tick` loop — 100% CPU —
+  held off only by invariant, not construction.
+- **The watch debounce has a flush ceiling** (`maxDebounceWait`, 10 windows):
+  sustained churn faster than the 100ms window used to reset the timer
+  forever — no flush, unbounded pending growth, changes invisible until the
+  writer paused.
+- **The terminal-check retry tick gives up** after ~a minute of a parked
+  modal instead of waking the program every 2s for the session's life.
+- **Clipboard subprocesses are deadline-bounded** (3s): they run on the
+  update loop, and `osascript` can hang indefinitely behind a TCC prompt —
+  previously a whole-IDE wedge with no way out.
+- **Terminal scrollback search matches are memoized** by (query, grid
+  version, line count): `searchLine` ran the full 10k-line scan — 10k
+  `gridMu` acquisitions and 20k allocations — per *frame* while the field
+  was open, pinning a core against a busy shell.
+- **Follow mode re-evaluates the large-file gate** as the tail grows: the
+  flag was load-time-only, so a small log tailed to hundreds of MB kept
+  materializing its entire text on every append's change event.
+- **The DBGp accept loop survives transient errors** (`EMFILE` under a
+  php-fpm burst) with a 100ms backoff instead of dying silently for the
+  session.
+
+Audited and left as they were (safe by construction): the forge poller
+(idempotent arm, exponential backoff, root-tagged messages), the demand-armed
+debounce ticks, the terminal read/feed/write loops (error exits, `sync.Cond`
+spool with a 16 MB cap), the jsonrpc read/write loops, the LSP restart
+backoff (capped at 3), the input coalescer, and the watcher's fsnotify loop.
+Larger flood/coalescing findings (host outbox bounding, HTTP stream chunk
+coalescing, task-problem snapshots, active-session DAP output, watcher event
+batching, completion-source locking, per-frame sticky/fold/speed-search
+memoization, tick generation stamps across model rebuilds) are split into
+follow-up issues — see the #2163 issue trail.
 
 ## Diagnostics hooks (`internal/diag`, #1001)
 

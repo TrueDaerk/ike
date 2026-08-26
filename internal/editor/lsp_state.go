@@ -98,8 +98,20 @@ func (m *Model) setDiagnostics(diags []ilsp.Diagnostic) {
 	m.diags = diags
 	m.diagsEpoch++ // invalidates the scrollbar stripe memo (#1097)
 	m.diagByLine = make(map[int][]ilsp.Diagnostic, len(diags))
+	last := m.buf.LineCount() - 1
 	for _, d := range diags {
-		for ln := d.Range.Start.Line; ln <= d.Range.End.Line; ln++ {
+		// Clamp to the buffer (#2163): servers routinely express "to end of
+		// document" as an enormous end line (2^31-1 is a common idiom), and
+		// the protocol layer only clamps columns. Iterating the raw range
+		// would hang the update loop inserting billions of map entries.
+		start, end := d.Range.Start.Line, d.Range.End.Line
+		if start < 0 {
+			start = 0
+		}
+		if end > last {
+			end = last
+		}
+		for ln := start; ln <= end; ln++ {
 			m.diagByLine[ln] = append(m.diagByLine[ln], d)
 		}
 	}

@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"ike/internal/dbgp"
@@ -502,6 +503,19 @@ func (b *bridge) acceptLoop(l net.Listener) {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
+			// A transient error — EMFILE/ENFILE under an fd-exhausting
+			// php-fpm burst — must not kill the listener for the session
+			// (#2163). The sleep also keeps a persistent error from turning
+			// this loop into a hot spin. A closed listener is permanent:
+			// shutdown owns the teardown.
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			if errors.Is(err, syscall.EMFILE) || errors.Is(err, syscall.ENFILE) {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
 			return // listener closed: shutdown owns the teardown
 		}
 		go func(conn net.Conn) {

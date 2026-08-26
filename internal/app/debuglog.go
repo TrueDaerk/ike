@@ -9,7 +9,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/config"
 	"ike/internal/debugpanel"
+	"ike/internal/diag"
 )
 
 // debuglog.go is the slow-operation diagnostic (#125), motivated by the #123
@@ -29,6 +31,19 @@ func debugLogFile() string {
 		return filepath.Join(d, "debug.log")
 	}
 	return filepath.Join(".ike", "debug.log")
+}
+
+// configureWatchdog threads perf.watchdog_seconds into the diag stall
+// watchdog (#2163): dumps land next to debug.log (the same state-dir
+// discovery, resolved at dump time so a project switch is followed), and the
+// stall/recovery lines go through logDiagnostic — a plain file append that
+// never depends on the very loop the watchdog is reporting dead.
+func configureWatchdog(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	diag.ConfigureWatchdog(cfg.Perf.WatchdogSeconds,
+		func() string { return filepath.Dir(debugLogFile()) }, logDiagnostic)
 }
 
 // logSlowUpdate appends one entry for a slow Update pass.

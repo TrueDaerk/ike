@@ -156,6 +156,7 @@ func (m Model) reloadFrom(data []byte) (Model, tea.Cmd) {
 		m.eol = eol // end_of_line keeps applying across external reloads (#63)
 	}
 	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
+	m.docBytes = int64(len(data))
 	m.hist.Reset()
 	m.diskHash = "" // re-keyed below unless large-file mode opts out (#148)
 	if !m.largeFile {

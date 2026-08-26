@@ -120,11 +120,20 @@ func (m *Model) armBackupTick() tea.Cmd {
 // and writes the snapshots off the Update loop. Buffers that went clean or
 // closed since their mark are skipped.
 func (m *Model) snapshotDueBackups(now time.Time) tea.Cmd {
-	if m.backupDeb == nil || !m.backupEnabled() {
+	if m.backupDeb == nil {
+		return nil
+	}
+	// Consume the due marks even when backups read disabled (#2163): Due is
+	// the only thing that clears expired deadlines, and a past-due mark left
+	// in place would make armBackupTick spin a zero-delay tick per Update
+	// pass — a hard busy loop — should any config path ever disable backups
+	// without dropping the debouncer.
+	due := m.backupDeb.Due(now)
+	if !m.backupEnabled() {
 		return nil
 	}
 	var docs []backup.Doc
-	for _, key := range m.backupDeb.Due(now) {
+	for _, key := range due {
 		ed := m.backupEditorFor(key)
 		if ed == nil || !ed.Dirty() {
 			continue
