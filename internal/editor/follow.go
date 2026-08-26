@@ -299,6 +299,14 @@ func (m Model) followAppend(text string) (Model, tea.Cmd) {
 	}
 	m.followTerm = endsNL
 	m.diskHash = "" // the load-time hash no longer describes the buffer
+	// Re-evaluate the large-file gate as the tail grows (#2163): the flag
+	// was only ever set at load, so a small log tailed to hundreds of MB
+	// kept shipping its entire text with every append's EventChange — an
+	// O(document) join per poll on the update loop, growing without bound.
+	m.docBytes += int64(len(text))
+	if !m.largeFile && m.limits().Exceeded(m.docBytes, m.buf.LineCount()) {
+		m.largeFile = true
+	}
 	m.emit(EventChange)
 	m.noteLogAppend(prevCount, merged)
 	if !m.followPaused {

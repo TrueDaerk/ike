@@ -44,6 +44,19 @@ type termSearch struct {
 	prevScroll int // scroll offset when the search opened; esc returns here
 	anchor     int // bottom-most visible virtual line at activation
 	cur        int // virtual line of the current match, -1 without one
+
+	// Match memo (#2163): searchMatches used to rescan the whole scrollback
+	// — 10k LineText calls, each taking gridMu and allocating twice — and
+	// searchLine runs it per *frame*. With a busy shell repainting at the
+	// coalescer's rate that pinned a core and contended the feed loop for as
+	// long as the field was open. Keyed by query, grid version and total
+	// line count, the same shape as the session's render cache; held behind
+	// the search pointer so value-model copies share it.
+	memoValid   bool
+	memoQuery   string
+	memoVersion uint64
+	memoTotal   int
+	memo        []int
 }
 
 // Searching reports whether the scrollback search field is open.
@@ -125,14 +138,23 @@ func (m Model) searchMatches() []int {
 	if s == nil || s.query == "" || m.sess == nil {
 		return nil
 	}
-	q := strings.ToLower(s.query)
 	total := m.sess.ScrollbackLen() + m.h
+	ver := m.sess.version.Load()
+	if s.memoValid && s.memoQuery == s.query && s.memoVersion == ver && s.memoTotal == total {
+		return s.memo
+	}
+	q := strings.ToLower(s.query)
 	var out []int
 	for v := 0; v < total; v++ {
 		if strings.Contains(strings.ToLower(m.sess.LineText(v)), q) {
 			out = append(out, v)
 		}
 	}
+	// The version was read before the scan: a mutation racing it bumps the
+	// live counter past ver, so the stale memo recomputes on the next call —
+	// a newer grid can never be served under an older key (the #803 render
+	// cache argument).
+	s.memoValid, s.memoQuery, s.memoVersion, s.memoTotal, s.memo = true, s.query, ver, total, out
 	return out
 }
 

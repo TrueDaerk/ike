@@ -308,6 +308,11 @@ type Model struct {
 	// via SyncMsg. editor.forceCodeInsight overrides it per path (see
 	// insightOff).
 	largeFile bool
+	// docBytes is the document's byte size as of the last load/reload/set,
+	// plus everything follow mode appended since (#2163): the largeFile
+	// verdict is re-evaluated on follow appends, and re-measuring the whole
+	// buffer per append would be the exact cost the flag avoids.
+	docBytes  int64
 	focused   bool
 	width     int
 	height    int
@@ -1012,6 +1017,7 @@ func (m *Model) Load(path string) error {
 			" — saving normalizes; file.setLineEndings converts explicitly"
 	}
 	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
+	m.docBytes = int64(len(data))
 	m.readOnly = false // a real file replaced any read-only preview (#1762)
 	// A different file in the same view stops following (#1928); the app's
 	// follow tick self-stops once no view follows. A real file also replaces
@@ -1076,6 +1082,7 @@ func (m *Model) NewFile(path string) {
 		m.enc = enc
 	}
 	m.largeFile = false // a template seed is never large
+	m.docBytes = 0
 	m.readOnly = false  // a new file is writable from its first :w (#1762)
 	// Fresh content replaces any merged rotation set the view held (#1996),
 	// whose follow source names a file this buffer has nothing to do with.
@@ -1122,6 +1129,7 @@ func (m *Model) RestoreText(text string) {
 	m.seedMarkLines()
 	m.clearLocalMarks() // recovered text is a fresh starting point (#1151)
 	m.largeFile = m.limits().Exceeded(int64(len(text)), m.buf.LineCount())
+	m.docBytes = int64(len(text))
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal

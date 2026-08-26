@@ -41,6 +41,7 @@ func (m *Model) ShowReadOnly(path, text string) {
 	m.clearLocalMarks()
 	m.eol, m.enc, m.mixedEOL = textenc.LF, textenc.UTF8, false
 	m.largeFile = m.limits().Exceeded(int64(len(text)), m.buf.LineCount())
+	m.docBytes = int64(len(text))
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal

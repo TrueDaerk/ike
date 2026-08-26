@@ -6,12 +6,29 @@
 package clipboard
 
 import (
+	"context"
 	"encoding/hex"
 	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 )
+
+// cmdTimeout bounds every clipboard subprocess (#2163). These run on the
+// bubbletea update loop (a yank with clipboard sync, a `"+p`), and the
+// fallbacks can block arbitrarily long — osascript in particular hangs when
+// the Apple Events subsystem is contended or a TCC consent prompt appears.
+// Without a deadline that wedges the whole IDE; with one, the worst case is
+// a bounded stall and a failed clipboard op. A var so tests can shrink it.
+var cmdTimeout = 3 * time.Second
+
+// command builds a deadline-bounded clipboard subprocess; the caller must
+// invoke cancel once the command finished.
+func command(name string, args ...string) (*exec.Cmd, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	return exec.CommandContext(ctx, name, args...), cancel
+}
 
 // tool is one copy/paste command pair candidate.
 type tool struct {
@@ -67,14 +84,17 @@ func probe() *Clipboard {
 
 // Write puts text on the system clipboard.
 func (c *Clipboard) Write(text string) error {
-	cmd := exec.Command(c.t.copyCmd[0], c.t.copyCmd[1:]...)
+	cmd, cancel := command(c.t.copyCmd[0], c.t.copyCmd[1:]...)
+	defer cancel()
 	cmd.Stdin = strings.NewReader(text)
 	return cmd.Run()
 }
 
 // Read returns the system clipboard's contents.
 func (c *Clipboard) Read() (string, error) {
-	out, err := exec.Command(c.t.pasteCmd[0], c.t.pasteCmd[1:]...).Output()
+	cmd, cancel := command(c.t.pasteCmd[0], c.t.pasteCmd[1:]...)
+	defer cancel()
+	out, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
@@ -102,7 +122,9 @@ var readURLFlavor = func() (string, bool) {
 		return "", false
 	}
 	// osascript renders the flavor as raw AppleScript data: «data url 68…».
-	out, err := exec.Command("osascript", "-e", "the clipboard as «class url »").Output()
+	cmd, cancel := command("osascript", "-e", "the clipboard as «class url »")
+	defer cancel()
+	out, err := cmd.Output()
 	if err != nil {
 		return "", false
 	}
