@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Status Line Segments
-description: Extensible left/right slot model behind the bottom status bar — mode, file, buffer language, diagnostics, host/LSP status, toolchain interpreter, csv column, json/yaml path, notification counter, forge unread badge.
+description: Extensible left/right slot model behind the bottom status bar — mode, file, buffer language, diagnostics, host/LSP status, toolchain interpreter, csv column, json/yaml path, search match counter, notification counter, forge unread badge.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
-timestamp: 2026-08-21T13:00:00Z
+timestamp: 2026-08-26T00:00:00Z
 ---
 
 # Status Line Segments
@@ -51,7 +51,7 @@ priority-aware (#471, `composeStatus`): first the file segment shortens by
 exactly the overflow with a JetBrains-style middle ellipsis (floor 16
 cells), then low-priority segments drop in a defined order (hint, eol,
 encoding, indent, svcolumn, docpath, toolchain, todo, host, notifications, macro,
-branch, buflang, forge, diagnostics, lsp — mode, file and the cursor never drop), and only as a
+branch, buflang, forge, diagnostics, lsp, search — mode, file and the cursor never drop), and only as a
 last resort the bar hard-clips on the right.
 
 ## Mode badge (#1323)
@@ -83,6 +83,18 @@ binary's base name (e.g. `python3.12`). Resolution stats the filesystem and
 scans PATH, so the label is **cached per language** (`Model.toolchainSeg`, a
 shared map across value copies) and the cache is dropped on every config
 reload — an interpreter change on the settings page re-resolves immediately.
+
+## Search match counter
+
+Issue #2145 adds a `search` slot to the **right** list (ahead of `branch`):
+`⌕ 3/17` — the focused buffer's current in-file match index over the total,
+`⌕ no matches` for a pattern that hits nothing. It renders off
+`editor.Model.SearchCounter()` and is live from the first character typed on
+the `/` line until the highlights are cleared, so `n`/`N` update the index in
+place after the search line has closed. The total is capped (999 matches /
+20 000 lines scanned) and renders as `999+` past the cap; the underlying match
+list is cached per document version and query, so only a real query change
+costs a scan. See [Editor](/architecture/editor.md).
 
 ## Git branch segment
 
