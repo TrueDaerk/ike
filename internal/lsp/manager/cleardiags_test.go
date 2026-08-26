@@ -119,6 +119,9 @@ func TestDisableAfterRepeatedCrashesClearsDiagnostics(t *testing.T) {
 	m := New(resolver(spec), crashingDiagConnector(), Callbacks{
 		Diagnostics: rec.record,
 	})
+	// Skip the production 1s/5s/30s backoff (#2148): this test is about the
+	// diagnostics the give-up retracts, not about the waiting.
+	m.backoffFn = func(int) time.Duration { return 5 * time.Millisecond }
 	defer m.Shutdown()
 
 	dir := t.TempDir()

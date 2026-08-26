@@ -148,6 +148,50 @@ func TestStatusLineScopesServerSegmentToBuffer(t *testing.T) {
 	}
 }
 
+// TestStatusLineShowsRestartAndFailedState guards #2148: crash recovery's
+// persistent states — restarting with the attempt counter, and the terminal
+// failure naming the manual restart command — reach the status line's server
+// segment, and the give-up toast points at that command.
+func TestStatusLineShowsRestartAndFailedState(t *testing.T) {
+	lang.Register(lang.Language{ID: "rsttest", Extensions: []string{"rst2148"}, Server: &lang.ServerSpec{Language: "rsttest", Command: "x"}})
+	m := newSized()
+	dir := t.TempDir()
+	code := filepath.Join(dir, "main.rst2148")
+	if err := os.WriteFile(code, []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm, _ := m.Update(tea.WindowSizeMsg{Width: 400, Height: 30})
+	m = tm.(Model)
+	tm, _ = m.openPath(code, false)
+	m = tm.(Model)
+
+	tm, _ = m.Update(ilsp.ServerStatusMsg{Lang: "rsttest", Text: "rsttest language server restarting (attempt 2/3)", Kind: ilsp.ServerState})
+	m = tm.(Model)
+	if line := m.statusLine(); !strings.Contains(line, "restarting (attempt 2/3)") {
+		t.Fatalf("restart progress missing from the status line: %q", line)
+	}
+
+	failed := "rsttest language server failed — restart: \"LSP: Restart Servers\""
+	tm, _ = m.Update(ilsp.ServerStatusMsg{Lang: "rsttest", Text: failed, Kind: ilsp.ServerState})
+	m = tm.(Model)
+	if line := m.statusLine(); !strings.Contains(line, "failed") {
+		t.Fatalf("terminal failure missing from the status line: %q", line)
+	}
+
+	tm, _ = m.Update(ilsp.ServerStatusMsg{
+		Lang: "rsttest",
+		Text: "rsttest language server disabled after repeated crashes — restart: \"LSP: Restart Servers\"",
+		Kind: ilsp.ServerEventError,
+	})
+	m = tm.(Model)
+	if len(m.toasts) == 0 || !strings.Contains(m.toasts[0].text, "LSP: Restart Servers") {
+		t.Fatalf("give-up toast must point at the restart command, toasts=%+v", m.toasts)
+	}
+	if line := m.statusLine(); !strings.Contains(line, "failed") {
+		t.Fatalf("the toast must not replace the persistent failed state: %q", line)
+	}
+}
+
 // TestStatusLineKeepsSegmentsWithHostStatus guards the 0130 defect fix: a
 // persistent host status renders as one more segment, never replacing the
 // mode/cursor segments.

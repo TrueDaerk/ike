@@ -1511,9 +1511,11 @@ func (b *bridge) requestDocumentHighlight(path string) {
 	b.h.Send(ilsp.DocumentHighlightsMsg{Path: path, Line: line, Col: col, Highlights: hs})
 }
 
-// restart stops every server; they respawn lazily on the next file open/edit.
+// restart stops every server and re-opens the documents they were tracking
+// (Manager.RestartAll), so language features return on the buffers already on
+// screen — and a server crash recovery gave up on (#2148) starts over.
 // The work happens inside the returned tea.Cmd: a command's Run resolves on
-// the Update goroutine, where a blocking Shutdown would stall the UI and a
+// the Update goroutine, where a blocking restart would stall the UI and a
 // host.Send would deadlock outright (bubbletea's Send writes to an unbuffered
 // channel only the — then busy — event loop drains). The status message is
 // therefore returned, never Sent.
@@ -1522,20 +1524,21 @@ func (b *bridge) restart(h host.API) tea.Cmd {
 	mgr := b.manager()
 	return func() tea.Msg {
 		if mgr != nil {
-			mgr.Shutdown()
+			mgr.RestartAll()
 		}
 		return ilsp.ServerStatusMsg{Text: "LSP servers restarted", Kind: ilsp.ServerEventInfo}
 	}
 }
 
-// restartLang stops one language's servers; they respawn lazily like the
-// global restart. Work happens inside the returned tea.Cmd (see restart) —
-// and the bridge may not be activated yet (no file opened), in which case
-// there is nothing to stop and the status message still reports the action.
+// restartLang restarts one language's servers, re-opening that language's
+// documents like the global restart. Work happens inside the returned tea.Cmd
+// (see restart) — and the bridge may not be activated yet (no file opened), in
+// which case there is nothing to restart and the status message still reports
+// the action.
 func (b *bridge) restartLang(langID string) tea.Cmd {
 	return func() tea.Msg {
 		if mgr := b.manager(); mgr != nil {
-			mgr.StopLang(langID)
+			mgr.RestartLang(langID)
 		}
 		return ilsp.ServerStatusMsg{Lang: langID, Text: langID + " language server restarted", Kind: ilsp.ServerEventInfo}
 	}
@@ -1546,7 +1549,7 @@ func (b *bridge) restartLang(langID string) tea.Cmd {
 func (b *bridge) restartAll() tea.Cmd {
 	return func() tea.Msg {
 		if mgr := b.manager(); mgr != nil {
-			mgr.Shutdown()
+			mgr.RestartAll()
 		}
 		return ilsp.ServerStatusMsg{Text: "LSP servers restarted", Kind: ilsp.ServerEventInfo}
 	}

@@ -77,6 +77,18 @@ type Manager struct {
 	servers  map[string]*server // key: lang + "\x00" + root
 	docs     map[string]*document
 	restarts map[string]int // crash-restart attempts per server key
+	// disabled marks the server keys crash recovery gave up on (#2148): the
+	// manager stops respawning them until a manual restart (lsp.restart, the
+	// Language Servers page) clears the flag, so a server that dies on every
+	// spawn cannot turn every file open into another crash-restart round.
+	disabled map[string]bool
+	// backoffFn returns the wait before crash-restart attempt n (1-based);
+	// nil means the production schedule (restart.go). Tests shorten it.
+	backoffFn func(attempt int) time.Duration
+	// stableRun is how long a server must have run for a crash to count as a
+	// fresh incident instead of a continuation of the current restart round
+	// (restart.go). Zero means restartStableRun.
+	stableRun time.Duration
 	// companionsHinted marks languages whose optional companion tools were
 	// already probed (#1067) — the missing-tool hint fires once per language
 	// per manager lifetime, not per file or per root.
@@ -118,6 +130,9 @@ type server struct {
 	stderr  func() string // captured stderr tail; nil for in-memory connectors
 	spec    lsp.ServerSpec
 	closing bool // set before a deliberate stop so watchExit does not restart
+	// startedAt is the spawn time: a crash after a long healthy run opens a
+	// fresh restart budget instead of consuming the current one (#2148).
+	startedAt time.Time
 	// watchers holds the server's dynamically registered file-watch globs
 	// (#1144), keyed by registration id so client/unregisterCapability can
 	// drop them. Guarded by the manager's mu. A server that never registers
@@ -154,6 +169,7 @@ func New(resolve func(lang string) (lsp.ServerSpec, bool), connect Connector, cb
 		servers:  make(map[string]*server),
 		docs:     make(map[string]*document),
 		restarts: make(map[string]int),
+		disabled: make(map[string]bool),
 
 		companionsHinted: make(map[string]bool),
 		frags:            make(map[string]map[int]*fragmentDoc),
@@ -218,6 +234,13 @@ func (m *Manager) Open(path, lang, text string) error {
 	root := detectRoot(path, spec.RootMarkers)
 	srv, err := m.ensureServer(srvLang, root, spec)
 	if err != nil {
+		if errors.Is(err, errServerDisabled) {
+			// Crash recovery gave up on this server (#2148). It said so once,
+			// with the restart command; repeating it per file open would be
+			// noise — only the status-line state is refreshed.
+			m.status(srvLang, disabledStateText(srvLang), lsp.ServerState)
+			return err
+		}
 		text, kind := statusForErr(spec.Command, err)
 		m.status(srvLang, text, kind)
 		return err
@@ -1048,6 +1071,7 @@ func (m *Manager) StopLang(lang string) {
 		stopped = append(stopped, srv)
 		delete(m.servers, k)
 		delete(m.restarts, k)
+		delete(m.disabled, k) // a deliberate stop clears the give-up block (#2148)
 	}
 	type clearedDoc struct {
 		path    string
@@ -1134,6 +1158,7 @@ func (m *Manager) CloseRoot(root string) {
 		stopped = append(stopped, srv)
 		delete(m.servers, k)
 		delete(m.restarts, k)
+		delete(m.disabled, k) // a deliberate stop clears the give-up block (#2148)
 	}
 	m.mu.Unlock()
 	for _, srv := range stopped {
@@ -1212,6 +1237,10 @@ func (m *Manager) Shutdown() {
 	}
 	m.servers = make(map[string]*server)
 	m.docs = make(map[string]*document)
+	// A deliberate full stop is also the reset of crash recovery (#2148):
+	// counted attempts and give-up blocks go with the servers they describe.
+	m.restarts = make(map[string]int)
+	m.disabled = make(map[string]bool)
 	m.frags = make(map[string]map[int]*fragmentDoc)
 	m.fragGen = make(map[string]int)
 	m.hostDiags = make(map[string][]protocol.Diagnostic)
@@ -1255,6 +1284,13 @@ func (m *Manager) ensureServer(lang, root string, spec lsp.ServerSpec) (*server,
 		m.mu.Unlock()
 		return srv, nil
 	}
+	if m.disabled[k] {
+		// Crash recovery gave up here (#2148): spawning again would just
+		// reproduce the crash on every file open. Only a manual restart
+		// (RestartLang/RestartAll, StopLang, Shutdown) lifts the block.
+		m.mu.Unlock()
+		return nil, errServerDisabled
+	}
 	m.mu.Unlock()
 
 	handler := jsonrpc.Handler{
@@ -1265,7 +1301,7 @@ func (m *Manager) ensureServer(lang, root string, spec lsp.ServerSpec) (*server,
 	if err != nil {
 		return nil, err
 	}
-	srv := &server{lang: lang, root: root, cl: cl, stop: stop, stderr: stderr, spec: spec}
+	srv := &server{lang: lang, root: root, cl: cl, stop: stop, stderr: stderr, spec: spec, startedAt: time.Now()}
 	// Register before Initialize: a server may issue workspace/configuration as
 	// soon as it receives our "initialized" notification (sent inside
 	// Initialize), and onRequest must find the server to answer it with the

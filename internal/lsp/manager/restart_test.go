@@ -143,6 +143,9 @@ func TestCrashAndDisableStatusNameTheError(t *testing.T) {
 	m := New(resolver(spec), crashingStderrConnector(stderr), Callbacks{
 		Status: func(lang, text string, kind lsp.ServerStatusKind) { statusCh <- text },
 	})
+	// The production schedule waits 1s+5s+30s before giving up (#2148); the
+	// message content is what this test is about, not the clock.
+	m.backoffFn = func(int) time.Duration { return 5 * time.Millisecond }
 	defer m.Shutdown()
 
 	dir := t.TempDir()
