@@ -515,6 +515,9 @@ func (i *Instance) IsEmptyEditor() bool {
 	if i.kind != KindEditor || len(i.tabs) != 1 {
 		return false
 	}
+	if i.tabs[0].deferred != nil {
+		return false // a deferred tab holds a file, only unread yet (#2177)
+	}
 	ed := i.Editor()
 	return ed != nil && ed.IsEmpty()
 }
@@ -545,22 +548,113 @@ func (i *Instance) Editors() []*editor.Model {
 	return out
 }
 
-// TabForPath returns the index of the first tab showing path, or -1.
+// TabForPath returns the index of the first tab showing path, or -1. A
+// deferred tab (#2177) counts as showing its file: the tab is the document's
+// slot in the strip whether or not the bytes are in memory yet, so opening
+// the file activates it — and thereby loads it — instead of duplicating it.
 func (i *Instance) TabForPath(path string) int {
-	for idx, t := range i.tabs {
-		if ed := t.Editor(); ed != nil && ed.HasFile() && ed.Path() == path {
+	if path == "" {
+		return -1
+	}
+	for idx := range i.tabs {
+		if i.TabPath(idx) == path {
 			return idx
 		}
 	}
 	return -1
 }
 
-// EditorForPath returns the first tab's editor model showing path, or nil.
+// EditorForPath returns the first tab's editor model showing path, or nil. A
+// deferred tab materializes first (#2177): the caller asked for the document,
+// not for the slot.
 func (i *Instance) EditorForPath(path string) *editor.Model {
 	if idx := i.TabForPath(path); idx >= 0 {
+		i.tabs[idx].materialize()
 		return i.tabs[idx].Editor()
 	}
 	return nil
+}
+
+// TabPath returns the file tab idx shows — the loaded editor's path, or a
+// deferred tab's remembered one (#2177) — and "" for scratch, terminal and
+// content tabs or an out-of-range index. Unlike TabEditor it never reads the
+// file, so tab labels, the layout save and the dirty sweeps stay lazy.
+func (i *Instance) TabPath(idx int) string {
+	t := i.Tab(idx)
+	if t == nil {
+		return ""
+	}
+	if t.deferred != nil {
+		return t.deferred.Path
+	}
+	if t.ed != nil && t.ed.HasFile() {
+		return t.ed.Path()
+	}
+	return ""
+}
+
+// TabDeferredView returns the saved caret and framing of a not-yet-loaded tab
+// (#2177); ok=false once the tab materialized (its live editor is the
+// authority then) or for any other tab.
+func (i *Instance) TabDeferredView(idx int) (Deferred, bool) {
+	t := i.Tab(idx)
+	if t == nil || t.deferred == nil {
+		return Deferred{}, false
+	}
+	return *t.deferred, true
+}
+
+// AddDeferredTab appends a document tab for d.Path without reading the file
+// (#2177) and without activating it — restore builds the strip in order and
+// activates the saved tab once at the end. load fills the editor when the tab
+// is first activated. It reports whether the tab was added.
+func (i *Instance) AddDeferredTab(d Deferred, load func(*editor.Model, Deferred)) bool {
+	if i.kind != KindEditor || d.Path == "" {
+		return false
+	}
+	ed := newEditorModel(i.cfg, i.pal, i.regs)
+	ed.SetSize(i.w, i.h)
+	t := newEditorTab(&ed)
+	t.deferred, t.load = &d, load
+	i.tabs = append(i.tabs, t)
+	return true
+}
+
+// SetTabDeferred turns the empty scratch tab at idx into a deferred document
+// tab (#2177) — the pane's placeholder first tab, which restore fills instead
+// of appending beside it. A tab that already holds a file or content refuses.
+func (i *Instance) SetTabDeferred(idx int, d Deferred, load func(*editor.Model, Deferred)) bool {
+	t := i.Tab(idx)
+	if t == nil || t.ed == nil || t.ed.HasFile() || t.deferred != nil || d.Path == "" {
+		return false
+	}
+	t.deferred, t.load = &d, load
+	return true
+}
+
+// RetargetDeferredTab points a not-yet-loaded tab at another file (#2177):
+// the document its slot stands for was renamed or moved on disk, and the tab
+// must follow, exactly as a loaded editor's path does. It reports whether the
+// tab was deferred.
+func (i *Instance) RetargetDeferredTab(idx int, path string) bool {
+	t := i.Tab(idx)
+	if t == nil || t.deferred == nil || path == "" {
+		return false
+	}
+	t.deferred.Path = path
+	return true
+}
+
+// MaterializeTab reads a deferred tab's file now (#2177), for the paths that
+// need the document without activating the tab. It reports whether the tab
+// was deferred.
+func (i *Instance) MaterializeTab(idx int) bool {
+	t := i.Tab(idx)
+	if t == nil || t.deferred == nil {
+		return false
+	}
+	t.materialize()
+	return true
 }
 
 // AddTab appends a fresh empty tab, makes it active, and returns its editor
@@ -841,6 +935,10 @@ func (i *Instance) ActivateTab(idx int) bool {
 func (i *Instance) activate(idx int) {
 	i.active = idx
 	if idx >= 0 && idx < len(i.tabs) {
+		// A restored-but-unread tab reads its file here (#2177): every path
+		// that puts a tab on screen — click, keymap, tab close, drag — runs
+		// through activate, so no deferred tab can render empty.
+		i.tabs[idx].materialize()
 		i.useSeq++
 		i.tabs[idx].lastUsed = i.useSeq
 	}

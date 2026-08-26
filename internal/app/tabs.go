@@ -180,10 +180,18 @@ func (m *Model) rememberClosedTab(ed *editor.Model) {
 		return
 	}
 	line, col := ed.CursorPos()
-	m.closedTabs = append(m.closedTabs, closedTab{path: ed.Path(), line: line, col: col})
-	if len(m.closedTabs) > closedTabRing {
-		m.closedTabs = m.closedTabs[len(m.closedTabs)-closedTabRing:]
+	m.closedTabs = appendClosedTab(m.closedTabs, closedTab{path: ed.Path(), line: line, col: col})
+}
+
+// appendClosedTab pushes one entry onto the reopen ring, trimming it to
+// closedTabRing. Deferred tabs (#2177) close through it too — they have a
+// path and a caret without ever having loaded a document.
+func appendClosedTab(ring []closedTab, entry closedTab) []closedTab {
+	ring = append(ring, entry)
+	if len(ring) > closedTabRing {
+		ring = ring[len(ring)-closedTabRing:]
 	}
+	return ring
 }
 
 // reopenClosedTab pops the reopen ring and opens the entry in the active pane,

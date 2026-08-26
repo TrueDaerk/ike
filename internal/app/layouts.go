@@ -1330,8 +1330,8 @@ func editorPaneTools(inst *pane.Instance) (tools []string, files int) {
 			}
 			continue
 		}
-		if ed := inst.TabEditor(i); ed != nil && ed.HasFile() {
-			files++
+		if inst.TabPath(i) != "" {
+			files++ // a deferred tab counts as its file, unread or not (#2177)
 		}
 	}
 	return tools, files

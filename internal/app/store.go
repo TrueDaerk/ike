@@ -407,11 +407,14 @@ func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
 					}
 					continue
 				}
-				ed := inst.TabEditor(i)
-				if ed == nil || !ed.HasFile() {
+				// TabPath, not the editor's: a restored tab never activated
+				// since (#2177) still holds its file, just unread, and must
+				// persist like any other document tab.
+				path := inst.TabPath(i)
+				if path == "" {
 					continue // scratch/terminal tabs restore as nothing
 				}
-				if ed.ReadOnly() {
+				if ed := inst.TabEditor(i); ed != nil && ed.ReadOnly() {
 					// A read-only preview's path names an archive member, not
 					// a file (#1762): restore could never re-read it, so the
 					// tab is session state like a scratch tab.
@@ -425,7 +428,7 @@ func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
 					// same convention Active uses; older builds ignore the key.
 					id.Pinned = append(id.Pinned, len(id.Tabs))
 				}
-				id.Tabs = append(id.Tabs, ed.Path())
+				id.Tabs = append(id.Tabs, path)
 			}
 			if toolTabHost(inst) {
 				// A pane holding nothing but tool tabs persists as "tools"

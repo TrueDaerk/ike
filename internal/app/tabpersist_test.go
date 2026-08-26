@@ -48,7 +48,9 @@ func TestTabListRoundTripsThroughLayout(t *testing.T) {
 		t.Fatalf("want 3 restored tabs, got %d", inst.TabCount())
 	}
 	for i, want := range []string{a, b, c} {
-		if got := inst.TabEditor(i).Path(); got != want {
+		// TabPath, not TabEditor: the inactive tabs restore deferred (#2177)
+		// and only read their file when activated.
+		if got := inst.TabPath(i); got != want {
 			t.Fatalf("tab %d = %q, want %q (order must survive)", i, got, want)
 		}
 	}
@@ -104,7 +106,7 @@ func TestMissingFilesSkippedOnRestore(t *testing.T) {
 	if inst.TabCount() != 2 {
 		t.Fatalf("the vanished file must be skipped, got %d tabs", inst.TabCount())
 	}
-	if inst.TabEditor(0).Path() != a || inst.TabEditor(1).Path() != c {
+	if inst.TabPath(0) != a || inst.TabPath(1) != c {
 		t.Fatal("surviving tabs must keep their order")
 	}
 	if inst.Editor().Path() != c {
@@ -149,6 +151,14 @@ func TestSharedDocumentRestoresAcrossTabsAndPanes(t *testing.T) {
 	m = tm.(Model)
 
 	m2 := fixedDirApp(t, conf)
+	// Both views hold a, but only the active tab of each pane read it; the
+	// other is deferred (#2177). Materializing it must adopt the document
+	// already in memory rather than loading a second, divergent copy.
+	for _, key := range m2.activeWS().Panes.Keys() {
+		if inst := m2.activeWS().Panes.Get(key); inst.Kind() == pane.KindEditor {
+			inst.EditorForPath(a)
+		}
+	}
 	views := m2.editorViewsForPath(a)
 	if len(views) != 2 {
 		t.Fatalf("want the shared file restored in 2 views, got %d", len(views))

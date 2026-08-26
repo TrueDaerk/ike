@@ -174,6 +174,21 @@ func (m *Model) followMovedFile(msg explorer.FileMovedMsg) tea.Cmd {
 			}
 			m.watcher.Track(np)
 		}
+		// Restored tabs still waiting to be activated (#2177) follow the
+		// move too — their file is the same document, just not read yet, and
+		// a stale path would fail its load once the tab is opened.
+		for idx := 0; idx < inst.TabCount(); idx++ {
+			d, ok := inst.TabDeferredView(idx)
+			if !ok {
+				continue
+			}
+			switch {
+			case d.Path == msg.Old:
+				inst.RetargetDeferredTab(idx, msg.New)
+			case msg.IsDir && strings.HasPrefix(d.Path, prefix):
+				inst.RetargetDeferredTab(idx, msg.New+d.Path[len(msg.Old):])
+			}
+		}
 	}
 	// Project bookmarks (#55) follow the file: re-key the store so a rename
 	// or move never leaves them dangling on the old path.

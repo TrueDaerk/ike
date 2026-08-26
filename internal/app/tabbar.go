@@ -77,12 +77,15 @@ func tabLabels(inst *pane.Instance) []string {
 			// the content's short title, so a preview tab of README.md is
 			// told apart from an editor tab of the same file.
 			name = contentTabGlyph(t.Content().Kind()) + t.Title()
-		} else if ed := inst.TabEditor(i); ed != nil && ed.HasFile() {
-			name = baseName(ed.Path())
+		} else if p := inst.TabPath(i); p != "" {
+			// TabPath, not the editor's path: labelling a restored tab must
+			// not read its file (#2177) — the strip renders every tab, which
+			// would undo the lazy restore on the first frame.
+			name = baseName(p)
 			// A merged rotation set (#1996) reduces to the live log's name,
 			// which is also the name of the plain file it was merged from:
 			// label it as the timeline it is.
-			if t, ok := mergedLogTitle(ed.Path()); ok {
+			if t, ok := mergedLogTitle(p); ok {
 				name = t
 			}
 		}
@@ -100,10 +103,16 @@ func tabLabels(inst *pane.Instance) []string {
 			labels[i] = label // terminal tab: no dirty/stale markers
 			continue
 		}
-		if counts[names[i]] > 1 && ed.HasFile() {
-			if dir := filepath.Dir(displayPath(ed.Path())); dir != "" && dir != "." {
+		if path := inst.TabPath(i); counts[names[i]] > 1 && path != "" {
+			if dir := filepath.Dir(displayPath(path)); dir != "" && dir != "." {
 				label += " — " + dir
 			}
+		}
+		if _, deferred := inst.TabDeferredView(i); deferred {
+			// Nothing is loaded yet (#2177), so none of the document markers
+			// below can be true — and asking would read the file.
+			labels[i] = label
+			continue
 		}
 		if ed.ReadOnly() {
 			label += " [RO]" // an archive-entry preview cannot be saved (#1762)

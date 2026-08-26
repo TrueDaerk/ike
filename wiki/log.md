@@ -1,5 +1,24 @@
 # Log
 
+## 2026-08-26 (session restore: every pane's tabs with caret, framing and lazy loading, #2177)
+
+- **Per-tab view state**: `session.json` grows a `panes` section — one
+  `{path, line, col, top, left}` entry per document tab of every editor pane,
+  matched back by path at restore. The tab list itself stays in `layout.json`;
+  quit and relaunch now returns the whole working set, each tab framed where
+  it was left, not just the focused document.
+- **Lazy restore**: only each pane's active tab is read at startup. The others
+  come back as *deferred tabs* (`pane.Deferred`) that know their path, caret
+  and framing and read the file on first activation, adopting an already-open
+  document (#142) instead of loading a copy. `Instance.activate` is the single
+  materialization point; `TabPath` gives the tab bar, layout save and dirty
+  sweeps a path without triggering a read.
+- **Missing files** are skipped with one summary notice instead of silently
+  vanishing, and a file deleted after restore leaves an empty tab rather than
+  breaking its pane. Details in
+  [Session Restore](architecture/session-restore.md) and
+  [Editor Tabs](architecture/editor-tabs.md).
+
 ## 2026-08-26 (lsp: crash restart with exponential backoff and status feedback, #2148)
 
 - **Backoff instead of a linear retry**: a crashed language server is respawned
