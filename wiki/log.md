@@ -1,5 +1,27 @@
 # Log
 
+## 2026-08-27 (editor: saving from insert mode no longer re-dirties on esc, #2188)
+
+- **Root cause**: the insert session keeps its edits in an open `Recorder` until
+  a word/paste boundary or `esc` commits them, so a save fired mid-insert pinned
+  the history's save checkpoint (`MarkSaved`) at the state *before* the typing.
+  `esc` then pushed that change on top of the checkpoint and `commitInsert` set
+  `dirty = true` — a buffer identical to the file on disk showed as modified and
+  offered a second, redundant save.
+- **Fix**: `saveAs` closes the running insert segment (`breakInsertUndo`) before
+  it clears the flag and marks the state, so the checkpoint names exactly what
+  was written. All write paths funnel through `saveAs`, so `:w`, `ctrl+s`,
+  `:w other`, the save-as prompt, autosave (focus and idle) and the chained
+  format-on-save write are covered at once; the crash-snapshot debounce follows
+  from the corrected dirty flag.
+- **Format-on-save ordering**: `beginSaveChain` breaks the segment when the
+  chain starts, so the LSP rewrite (`ApplyTextEdits`, its own change) can no
+  longer be followed by an insert tail whose inverses were recorded against the
+  pre-format text.
+- Typing on after the save opens the next undo segment as usual and `.` still
+  replays the whole insert. Details in
+  [Editor](architecture/editor.md).
+
 ## 2026-08-27 (crash recovery: no stale restore prompt on project switch, #2185)
 
 - **Root cause**: switching projects *parks* a workspace (#777) — dirty buffers
@@ -21,6 +43,7 @@
   written out on the switch instead of being dropped with the old debouncer, so
   parked dirty buffers stay crash-protected. Details in
   [Crash Recovery](architecture/crash-recovery.md).
+
 
 ## 2026-08-26 (session restore: every pane's tabs with caret, framing and lazy loading, #2177)
 

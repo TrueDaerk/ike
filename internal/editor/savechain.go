@@ -50,6 +50,11 @@ func (m *Model) beginSaveChain(closeAfter bool) tea.Cmd {
 	if cmd == nil {
 		return nil // no provider or no capable server: plain write, right now
 	}
+	// Saving from insert mode (#2188): the chain's result lands as its own
+	// history change (ApplyTextEdits), so the session's open segment has to
+	// close first — otherwise its edits, recorded against the pre-format
+	// text, would commit *after* the rewrite and undo them at stale ranges.
+	m.breakInsertUndo()
 	m.pendingSave = &pendingSave{closeAfter: closeAfter}
 	return cmd
 }
