@@ -42,6 +42,7 @@ import (
 	"ike/internal/debug"
 	"ike/internal/debugdoctor"
 	"ike/internal/debugpanel"
+	"ike/internal/diag"
 	"ike/internal/diff"
 	"ike/internal/domview"
 	"ike/internal/editor"
@@ -909,6 +910,9 @@ func New() Model {
 	cfg, diags := config.Load(config.Discover("."))
 	config.Set(cfg)
 	terminal.SetDefaultScrollbackLines(cfg.Terminal.ScrollbackLines)
+	// Arm the update-loop stall watchdog (#2163) as soon as the threshold is
+	// known — a freeze during startup should leave evidence too.
+	configureWatchdog(cfg)
 	m := NewWith(registry.Global(), host.FromConfig(cfg))
 	m.notifyConfigDiags(append(append(diags, associationDiags()...), unitMappingDiags()...))
 	m.notifyKeymapDiags()
@@ -3353,6 +3357,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if perfhud.Enabled() {
 		perfhud.Count(msg)
 	}
+	// The stall watchdog's heartbeat (#2163): a pass that never reaches
+	// LoopExit is a frozen loop, and the watchdog goroutine dumps stacks.
+	diag.LoopEnter(msg)
+	defer diag.LoopExit()
 	start := time.Now()
 	tm, cmd := m.updateMsg(msg)
 	if took := time.Since(start); took > slowUpdateThreshold {
@@ -10419,6 +10427,10 @@ func (m *Model) copyTerminalSelection(term *terminal.Model) {
 // single F8 tap stepped the debugger twice (#622). Legacy `~` keys carry no
 // event type without the flag, so leaving it off is a clean fix.
 func (m Model) View() tea.View {
+	// A frame that never finishes composing freezes the loop as surely as a
+	// stuck Update; the watchdog covers both (#2163).
+	diag.LoopEnter("view/render")
+	defer diag.LoopExit()
 	v := tea.NewView(m.render())
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion

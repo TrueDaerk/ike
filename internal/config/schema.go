@@ -133,6 +133,11 @@ type Remote struct {
 type Perf struct {
 	HUDIntervalMs     int `toml:"hud_interval_ms"`
 	HUDHistorySeconds int `toml:"hud_history_seconds"`
+	// WatchdogSeconds is the update-loop stall watchdog threshold (#2163): a
+	// single Update/View pass in flight longer than this dumps every
+	// goroutine's stack to the state dir, so a frozen session leaves
+	// evidence. 0 disables the watchdog (the opt-out).
+	WatchdogSeconds int `toml:"watchdog_seconds"`
 }
 
 // SnippetEntry is one user live template ([[snippets]], #1152). Trigger is the

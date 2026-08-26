@@ -407,6 +407,18 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "perf.hud_history_seconds", Message: fmt.Sprintf("history %d out of range, using 600", c.Perf.HUDHistorySeconds)})
 		c.Perf.HUDHistorySeconds = 600
 	}
+	// Update-loop stall watchdog (#2163): 0 is the documented opt-out; a
+	// negative value can only be a typo, and the upper bound keeps the
+	// watchdog meaningful — a threshold of an hour is indistinguishable
+	// from off.
+	if c.Perf.WatchdogSeconds < 0 {
+		diags = append(diags, Diagnostic{Field: "perf.watchdog_seconds", Message: fmt.Sprintf("threshold %d out of range, using 0 (disabled)", c.Perf.WatchdogSeconds)})
+		c.Perf.WatchdogSeconds = 0
+	}
+	if c.Perf.WatchdogSeconds > 600 {
+		diags = append(diags, Diagnostic{Field: "perf.watchdog_seconds", Message: fmt.Sprintf("threshold %d out of range, using 600", c.Perf.WatchdogSeconds)})
+		c.Perf.WatchdogSeconds = 600
+	}
 	// Remote browser download cap (#1997): the lower bound keeps the browser
 	// able to open anything at all, the upper one keeps a typo from unlocking
 	// terabyte downloads.

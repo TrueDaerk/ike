@@ -279,6 +279,11 @@ func defaults() *Config {
 			// error in the rate it reports (#1999).
 			HUDIntervalMs:     1000,
 			HUDHistorySeconds: 60,
+			// 15s stall threshold (#2163): far above any legitimate Update
+			// pass (the slow-update log line fires at 200ms), low enough
+			// that a frozen session leaves its goroutine dump within the
+			// first moments of the hang. 0 opts out.
+			WatchdogSeconds: 15,
 		},
 		Remote: Remote{
 			// 64 MiB covers logs, configs and most artifacts without letting

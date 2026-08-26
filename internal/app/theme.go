@@ -189,6 +189,9 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// New sessions anywhere (panes, popup terminal, runs, debug pipes) pick up
 	// the scrollback bound (#1545); Reconfigure below re-bounds live ones.
 	terminal.SetDefaultScrollbackLines(cfg.Terminal.ScrollbackLines)
+	// perf.watchdog_seconds edits apply live too (#2163): a new threshold or
+	// the 0 opt-out takes effect on the monitor's next check.
+	configureWatchdog(cfg)
 	hcfg := host.FromConfig(cfg)
 	m.host.SetConfig(hcfg)
 	// Re-resolve plugin toggles (#133): the palette/menu/help read the
