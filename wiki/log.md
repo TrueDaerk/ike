@@ -1,5 +1,27 @@
 # Log
 
+## 2026-08-27 (replace-in-path: per-row preview, selective apply, stale-file & encoding guards, #2154)
+
+- **Per-row preview**: in replace mode every result row now renders each match
+  struck through with its replacement appended — a `locations.List.Rewrite`
+  hook the finder installs per render, so editing the template redraws
+  without a rescan; capture groups expand through the new
+  `search.RewriteSegment` (shared with the buffer apply path).
+- **Selective apply**: `ctrl+t` toggles the selected match out of the apply
+  set (and steps on), `ctrl+g` the whole file. Excluded rows render faint
+  with a `✗`, are counted in the status row, and survive `ctrl+a`/`ctrl+f` —
+  those now apply only the non-excluded matches.
+- **Stale-file guard**: the finder records each result file's mtime as its
+  first match streams in; a disk file whose mtime moved on since the scan is
+  skipped whole and reported as a warning. The apply path refreshes the
+  shared baseline after its own write, so later batches of the same result
+  set still apply.
+- **Encoding-preserving disk writes**: unopened files decode through
+  `internal/textenc` (BOM → UTF-8 → `files.encoding` fallback) and re-encode
+  with the detected encoding + EOL flavor; undecodable or unencodable
+  content is skipped, never corrupted. Details in
+  [Project Search](architecture/search.md).
+
 ## 2026-08-27 (completion: per-language recency + snippet placeholder pre-selection, #2146)
 
 - **Recency per language**: the recently-accepted store

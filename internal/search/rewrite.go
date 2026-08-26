@@ -29,6 +29,23 @@ func RewriteRange(line string, start, end int, q Query, replacement string) (str
 	return pre + string(expanded) + post, true
 }
 
+// RewriteSegment returns only the replacement text for the [start,end) rune
+// range of line — the piece RewriteRange splices in. The buffer apply path
+// and the per-row preview (#2154) both need the segment alone: the editor
+// replaces just the match range, and the results list renders the segment
+// beside the struck-through match.
+func RewriteSegment(line string, start, end int, q Query, replacement string) (string, bool) {
+	after, ok := RewriteRange(line, start, end, q, replacement)
+	if !ok {
+		return "", false
+	}
+	runes := []rune(line)
+	start, end = clampRewrite(start, end, len(runes))
+	newRunes := []rune(after)
+	tail := len(runes) - end
+	return string(newRunes[start : len(newRunes)-tail]), true
+}
+
 // clampRewrite sanitizes a rune range against the line length.
 func clampRewrite(start, end, n int) (int, int) {
 	if start < 0 {

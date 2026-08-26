@@ -9,8 +9,10 @@
 package finder
 
 import (
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -40,6 +42,12 @@ type ReplaceRequestMsg struct {
 	Items       []locations.Item
 	Replacement string
 	Query       search.Query
+	// Mtimes carries each file's modification time as first seen during the
+	// scan (#2154): the disk apply path skips a file whose mtime moved on —
+	// changed since the search ran — and refreshes the entry after its own
+	// write, so later batches from the same scan still apply. The map is
+	// shared with the finder by reference; both sides run on the update loop.
+	Mtimes map[string]time.Time
 }
 
 // field enumerates the focusable inputs; tab cycles through them (the replace
@@ -111,6 +119,11 @@ type Model struct {
 	pendingCursor int
 
 	list locations.List
+
+	// mtimes records each result file's mtime when its first match streams in
+	// (#2154) — the freshest observation of the content the scan matched. The
+	// apply path uses it as the stale-file guard; see ReplaceRequestMsg.Mtimes.
+	mtimes map[string]time.Time
 
 	// prev caches the code-preview window rendered beside the list (#2047),
 	// so following the cursor re-reads the file only when the target moves.
@@ -241,8 +254,19 @@ func (m *Model) Apply(msg tea.Msg) {
 		if msg.Gen != m.gen {
 			return
 		}
+		if m.mtimes == nil {
+			m.mtimes = map[string]time.Time{}
+		}
 		items := make([]locations.Item, len(msg.Matches))
 		for i, hit := range msg.Matches {
+			if _, seen := m.mtimes[hit.Path]; !seen {
+				// First match of this file: record its mtime as the
+				// stale-file baseline (#2154). A stat failure simply leaves
+				// the file unguarded by mtime (the line guard still applies).
+				if fi, err := os.Stat(hit.Path); err == nil {
+					m.mtimes[hit.Path] = fi.ModTime()
+				}
+			}
 			items[i] = locations.Item{
 				Path:     hit.Path,
 				Line:     hit.Line,
@@ -277,6 +301,7 @@ func (m *Model) rescan() {
 	m.pendingCursor = -1
 	m.truncated = false
 	m.errText = ""
+	m.mtimes = map[string]time.Time{}
 	if strings.TrimSpace(m.query) == "" {
 		m.svc.Cancel()
 		m.scanning = false
@@ -356,23 +381,35 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	case "alt+enter", "ctrl+enter":
 		return m.openCurrent()
 	case "alt+f", "ctrl+f":
-		// Replace every match of the selected file.
+		// Replace the selected file's matches — the excluded ones stay (#2154).
 		if m.replaceMode {
-			if path, items := m.list.CurrentGroup(); len(items) > 0 {
+			if batch := m.list.RemoveIncludedGroup(); len(batch) > 0 {
 				m.commitHistory()
-				batch := append([]locations.Item(nil), items...)
-				m.list.RemoveGroup(path)
 				return m.replaceCmd(batch)
 			}
 		}
 		return nil
 	case "alt+a", "ctrl+a":
-		// Replace all matches.
-		if m.replaceMode && m.list.Total() > 0 {
-			m.commitHistory()
-			batch := m.list.All()
-			m.list.Reset()
-			return m.replaceCmd(batch)
+		// Replace all non-excluded matches (#2154): apply-selected when some
+		// are toggled off, apply-all otherwise. Excluded rows stay listed.
+		if m.replaceMode {
+			if batch := m.list.RemoveIncluded(); len(batch) > 0 {
+				m.commitHistory()
+				return m.replaceCmd(batch)
+			}
+		}
+		return nil
+	case "alt+t", "ctrl+t":
+		// Toggle the selected match out of (or back into) the apply set
+		// (#2154), stepping on so repeated presses triage the list.
+		if m.replaceMode && m.list.ToggleExcluded() {
+			m.list.Step(1)
+		}
+		return nil
+	case "alt+g", "ctrl+g":
+		// Toggle the selected file's matches as a group (#2154).
+		if m.replaceMode {
+			m.list.ToggleExcludedGroup()
 		}
 		return nil
 	case "tab":
@@ -572,7 +609,7 @@ func (m *Model) openCurrent() tea.Cmd {
 
 // replaceCmd dispatches an apply request for the given matches.
 func (m *Model) replaceCmd(items []locations.Item) tea.Cmd {
-	req := ReplaceRequestMsg{Items: items, Replacement: m.replace, Query: m.lastQuery}
+	req := ReplaceRequestMsg{Items: items, Replacement: m.replace, Query: m.lastQuery, Mtimes: m.mtimes}
 	return func() tea.Msg { return req }
 }
 
@@ -695,6 +732,17 @@ func (m *Model) View() string {
 	rows = append(rows, m.inputRow("Exclude", m.exclude, fieldExclude, innerW))
 	rows = append(rows, "")
 
+	// In replace mode every row previews its rewrite inline (#2154): the
+	// match struck through, the replacement beside it. The hook re-reads the
+	// live template, so editing the replacement redraws without a rescan.
+	if m.replaceMode {
+		m.list.Rewrite = func(it locations.Item, r locations.Range) (string, bool) {
+			return search.RewriteSegment(it.Text, r.Start, r.End, m.lastQuery, m.replace)
+		}
+	} else {
+		m.list.Rewrite = nil
+	}
+
 	listH := ui.ClampResultRows(m.height/2 - 9)
 	listW, previewW := codepreview.Split(innerW)
 	lay.listTop = len(rows)
@@ -809,7 +857,7 @@ func (m *Model) statusRow(width int) string {
 			ansi.Truncate("error: "+m.errText, width, "…"))
 	case strings.TrimSpace(m.query) == "":
 		if m.replaceMode {
-			return dim.Render("type to search — enter replaces match, ctrl+f file, ctrl+a all, ctrl+enter opens")
+			return dim.Render("type to search — enter replaces match, ctrl+f file, ctrl+a all, ctrl+t/g excludes, ctrl+enter opens")
 		}
 		return dim.Render("type to search — enter opens, esc closes, tab cycles fields")
 	case m.scanning && m.list.Total() == 0:
@@ -818,6 +866,9 @@ func (m *Model) statusRow(width int) string {
 		return dim.Render("no matches")
 	}
 	s := plural(m.list.Total(), "match", "matches") + " in " + plural(m.list.Files(), "file", "files")
+	if n := m.list.ExcludedCount(); n > 0 {
+		s += ", " + strconv.Itoa(n) + " excluded"
+	}
 	if m.truncated {
 		s += " (truncated)"
 	} else if m.scanning {

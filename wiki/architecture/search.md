@@ -159,9 +159,23 @@ the palette):
 `project.replaceInPath` (cmd+shift+r) opens the same overlay in replace mode:
 a replacement-template input joins the field cycle, and a before/after
 preview for the selected match renders under the results (`- old` / `+ new`).
+Every result row also previews inline (#2154): each match renders struck
+through with its replacement appended beside it (`locations.List.Rewrite`, a
+hook the finder installs per render — editing the template redraws the
+previews without a rescan; a regex range the template no longer matches
+renders plainly).
+
+**Selective apply (#2154):** `ctrl+t` toggles the selected match out of (or
+back into) the apply set and steps on; `ctrl+g` toggles the selected file as
+a group (any included item excludes them all, a fully excluded file
+re-includes). Excluded rows render faint with a `✗` marker, skip the inline
+preview, stay counted in the status row (`…, K excluded`), and survive batch
+applies — what was deliberately left alone stays visible.
+
 Apply keys: `enter` replaces the selected match (and steps on), `ctrl+f` the
-selected file's matches, `ctrl+a` everything; `ctrl+enter` navigates instead
-(alt variants remain as secondaries, #422).
+selected file's non-excluded matches, `ctrl+a` every non-excluded match —
+apply-all when nothing is toggled off, apply-selected otherwise;
+`ctrl+enter` navigates instead (alt variants remain as secondaries, #422).
 Applied matches leave the list; the overlay stays open.
 
 Application (`internal/app/replace.go`) first expands each row back into one
@@ -174,8 +188,21 @@ single row but still every occurrence to rewrite — then routes per file:
   LSP/highlight/shared-document sync as usual.
 - **Everything else:** the file is rewritten on disk. A clean open buffer
   picks the write up through the 0140 watcher path (external change →
-  auto-reload) — deliberately the same flow as any external edit.
-- **Staleness guard:** a match applies only while the line's prefix up to the
+  auto-reload) — deliberately the same flow as any external edit. The write
+  preserves the file's encoding and line-ending flavor (#2154): bytes decode
+  the way the editor would open them (`internal/textenc` — BOM, then UTF-8,
+  then the `files.encoding` fallback) and re-encode with the detected
+  flavor; an undecodable file, or a replacement the encoding cannot
+  represent, skips instead of corrupting.
+- **Stale-file guard (#2154):** the finder records each result file's mtime
+  when its first match streams in; the apply request carries the map. A disk
+  file whose mtime moved on since then — changed after the search ran — is
+  skipped whole (line numbers are no longer trusted) and reported as a
+  warning (`… (N files changed since the search, skipped)`). The apply
+  path's own write refreshes the shared baseline, so later batches from the
+  same result set still apply. Dirty buffers are exempt — the buffer content
+  is the truth there, guarded per line by `Replacement.Expect`.
+- **Stale-line guard:** a match applies only while the line's prefix up to the
   match end still reads as scanned (prefix, not whole-line, so several
   matches on one line stay valid while applying right-to-left). Skipped
   matches are counted in the summary notification
