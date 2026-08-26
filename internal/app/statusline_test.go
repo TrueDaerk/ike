@@ -152,6 +152,47 @@ func TestStatusLineDocPathSegment(t *testing.T) {
 	}
 }
 
+// TestStatusLineSearchSegment guards the in-buffer search counter (#2145): a
+// committed search shows "current/total" in the status line, n advances the
+// index in place, and clearing the highlights hides the slot again.
+func TestStatusLineSearchSegment(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hits.txt")
+	if err := os.WriteFile(path, []byte("foo one\nbar\nfoo two\nfoo three\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	tm, _ := m.Update(tea.WindowSizeMsg{Width: 400, Height: 30})
+	m = tm.(Model)
+	tm, _ = m.openPath(path, false)
+	m = tm.(Model)
+	m.setFocus(m.activeEditorKey())
+
+	press := func(m Model, ks ...tea.KeyPressMsg) Model {
+		for _, k := range ks {
+			tm, _ := m.Update(k)
+			m = tm.(Model)
+		}
+		return m
+	}
+	m = press(m, tea.KeyPressMsg{Text: "/", Code: '/'},
+		tea.KeyPressMsg{Text: "f", Code: 'f'},
+		tea.KeyPressMsg{Text: "o", Code: 'o'},
+		tea.KeyPressMsg{Text: "o", Code: 'o'},
+		tea.KeyPressMsg{Code: tea.KeyEnter})
+	if line := m.statusLine(); !strings.Contains(line, "⌕ 2/3") {
+		t.Fatalf("search segment missing after commit: %q", line)
+	}
+	m = press(m, tea.KeyPressMsg{Text: "n", Code: 'n'})
+	if line := m.statusLine(); !strings.Contains(line, "⌕ 3/3") {
+		t.Fatalf("search segment did not follow n: %q", line)
+	}
+	m = press(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if line := m.statusLine(); strings.Contains(line, "⌕") {
+		t.Fatalf("cleared highlights must hide the search segment: %q", line)
+	}
+}
+
 // TestStatusLineSegmentsExtensible guards the slot model (#101): an appended
 // segment renders without touching statusLine(), and an empty render hides
 // the slot (no dangling divider).

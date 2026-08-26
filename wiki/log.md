@@ -24,6 +24,22 @@
   disable blocks) and re-open the snapshot on the fresh ones.
 - Details in [LSP & Language Intelligence](architecture/lsp.md).
 
+## 2026-08-26 (search: match counter in the status line, capped tallies, #2145)
+
+- **Status line counter**: a `search` slot on the right list shows `⌕ 3/17`
+  (`⌕ no matches`) for the focused buffer's in-file search. Unlike the `/`
+  line's counter it outlives the search input, so `n`/`N` update the index in
+  place until a normal-mode Esc clears the highlights.
+- **Bounded tallies** (`search.ScanMatches`): counting stops at 999 matches or
+  20 000 scanned lines and renders `999+`, and the capped match list is cached
+  per (document version, query) — a keystroke costs one bounded scan, cursor
+  motion none. The command line's own counter now reads the same cache instead
+  of scanning the whole buffer per frame. Highlighting was already
+  viewport-only (matches are computed per rendered line); the current match
+  now takes an accent tint on top of its underline so it stands out among the
+  other highlights. Details in [Editor](architecture/editor.md) and
+  [Status Line Segments](architecture/status-line.md).
+
 ## 2026-08-26 (perf: freeze audit round two + update-loop stall watchdog, #2163)
 
 - **Stall watchdog** (`internal/diag`): `app.Update`/`app.View` stamp

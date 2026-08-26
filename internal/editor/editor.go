@@ -330,6 +330,11 @@ type Model struct {
 	renderEpoch uint64
 	lineCache   *lineCacheStore
 
+	// Search match tally (#2145): the capped match list of the highlighted
+	// query, cached per document version and query (pointer, shared across
+	// value copies like lineCache). See searchtally.go.
+	tally *searchTallyStore
+
 	// Test-run gutter markers (#1150): the detected test declarations, cached
 	// per document version (pointer, shared across value copies like
 	// lineCache). See testmarks.go.
@@ -740,6 +745,7 @@ func New() Model {
 		enc:                textenc.UTF8,
 		lineCache:          newLineCache(),
 		testCache:          newTestMarkStore(),
+		tally:              newSearchTally(),
 		conflictCache:      newConflictStore(),
 		mdRender:           true,
 		mdTables:           &mdTableState{},

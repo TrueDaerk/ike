@@ -749,25 +749,15 @@ func (m Model) suggestRow() string {
 }
 
 // searchCounter renders the incremental-search tally for the command-line row
-// (#255): current match index over total, or "no matches" for a pattern that
-// hits nothing. Empty outside an active search line or on an empty pattern.
+// (#255): current match index over total ("999+" past the scan cap, #2145), or
+// "no matches" for a pattern that hits nothing. Empty outside an active search
+// line or on an empty pattern; the status line keeps showing the same counter
+// after the line closes (SearchCounter, searchtally.go).
 func (m Model) searchCounter() string {
 	if !m.searching || m.preview.Empty() {
 		return ""
 	}
-	all := m.preview.AllMatches(m.buf)
-	dim := lipgloss.NewStyle().Faint(true)
-	if len(all) == 0 {
-		return dim.Render("  no matches")
-	}
-	cur := 0
-	for i, s := range all {
-		if s.Line == m.cursor.Line && s.Start == m.cursor.Col {
-			cur = i + 1
-			break
-		}
-	}
-	return dim.Render("  " + strconv.Itoa(cur) + "/" + strconv.Itoa(len(all)))
+	return lipgloss.NewStyle().Faint(true).Render("  " + m.SearchCounter())
 }
 
 // searchHLQuery returns the query whose matches the view highlights: the live
@@ -879,7 +869,11 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		matchSpans = q.LineMatches(m.buf, line)
 	}
 	matchStyle := lipgloss.NewStyle().Background(m.theme().SelectionMuted)
-	curMatchStyle := matchStyle.Underline(true)
+	// The current match takes an accent-tinted background on top of the
+	// underline (#2145) so it stays findable among the other highlights.
+	curMatchStyle := lipgloss.NewStyle().
+		Background(theme.Mix(m.theme().Accent, m.theme().Surface, 0.45)).
+		Underline(true)
 
 	// DOM inspector selector matches (#1929, dommatches.go) share the search
 	// styles: every match gets the background, the pane's current match the

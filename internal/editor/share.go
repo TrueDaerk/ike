@@ -48,6 +48,7 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	// scroll and size differ, so it must never share cached bodies (#614/#142).
 	m.lineCache = newLineCache()
 	m.testCache = newTestMarkStore()     // per-view cache like lineCache (#1150)
+	m.tally = newSearchTally()           // per-view: keyed by this view's query (#2145)
 	m.docPathCache = &docPathState{}     // keyed by the caret, so per-view too (#1660)
 	m.conflictCache = newConflictStore() // per-view cache like testCache (#1149)
 	m.renderEpoch++

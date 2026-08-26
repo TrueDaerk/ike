@@ -96,8 +96,24 @@ func (m Model) todoSegment() string {
 }
 
 var statusRight = []statusSegment{
+	{id: "search", render: searchSegment},
 	{id: "branch", render: func(m Model, _ *editor.Model) string { return m.branchSegment() }},
 	{id: "cursor", render: cursorSegment},
+}
+
+// searchSegment shows the in-buffer search match counter (#2145) — "⌕ 3/17",
+// "⌕ 12/999+" when the count hit its scan cap, or "⌕ no matches". It is live
+// from the first typed character of a "/" search until the highlights are
+// cleared, so n/N navigation updates the index in place.
+func searchSegment(_ Model, ed *editor.Model) string {
+	if ed == nil {
+		return ""
+	}
+	counter := ed.SearchCounter()
+	if counter == "" {
+		return ""
+	}
+	return "⌕ " + counter
 }
 
 // branchSegment shows the git branch (Roadmap 0320, #463) with ahead/behind
@@ -512,6 +528,9 @@ func renderParts(m Model, ed *editor.Model, segs []statusSegment) []renderedSeg 
 var statusDropOrder = []string{
 	"hint", "eol", "encoding", "indent", "svcolumn", "docpath", "logspan", "toolchain", "todo",
 	"host", "notifications", "macro", "branch", "buflang", "forge", "diagnostics", "lsp",
+	// The search counter (#2145) shows only during an active search and is
+	// what the user is watching then, so it drops last of all.
+	"search",
 }
 
 // statusFileMin is the narrowest the file segment shrinks to before other
