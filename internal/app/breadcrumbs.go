@@ -80,7 +80,20 @@ func (m Model) breadcrumbRows(inst *pane.Instance) int {
 // Every absolute→content-local mouse translation for a keyed pane goes
 // through it.
 func (m Model) contentYOff(key string) int {
-	return paneContentY + m.breadcrumbRows(m.activeWS().Panes.Get(key)) + m.playHeaderRowsFor(key)
+	inst := m.activeWS().Panes.Get(key)
+	return paneContentY + m.breadcrumbRows(inst) + m.playHeaderRowsFor(key) + debugConsoleRows(inst)
+}
+
+// debugConsoleRows is the debug area's internal tab-bar row while its console
+// view is visible (#2190): the embedded terminal's grid starts under it, so
+// every mouse translation lands terminal-local — the bar itself then arrives
+// at local y == -1. The variables view keeps the plain origin: the panel
+// resolves its own bar there.
+func debugConsoleRows(inst *pane.Instance) int {
+	if inst != nil && inst.Kind() == pane.KindDebug && inst.Debug().ConsoleActive() {
+		return 1
+	}
+	return 0
 }
 
 // symbolChain returns the chain of symbols enclosing the 0-based cursor line,

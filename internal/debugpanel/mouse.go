@@ -49,6 +49,9 @@ func (m Model) columnAt(x int) column {
 // open: then the wheel only scrolls, because moving varSel would re-anchor the
 // editor onto a different row (#627).
 func (m *Model) Wheel(delta int) {
+	if m.ConsoleActive() {
+		return // the console's wheel routes to the terminal app-side (#2190)
+	}
 	body := m.bodyHeight()
 	switch m.col {
 	case colFrames:
@@ -74,6 +77,19 @@ func (m *Model) Wheel(delta int) {
 // length guard alone would accept on long lists) and the left border/padding
 // as x < 0 (which columnAt would map onto the frames column).
 func (m *Model) Click(x, y int) tea.Cmd {
+	// The internal tab bar leads once a console exists (#2190): a click on
+	// its row switches views; body rows sit one lower.
+	if bar := m.tabBarRows(); bar > 0 {
+		if y == 0 && x >= 0 && x < m.w {
+			m.TabBarClick(x)
+			m.lastClickAt = time.Time{}
+			return nil
+		}
+		y -= bar
+		if m.tab == TabConsole {
+			return nil // terminal clicks route app-side, like a terminal pane
+		}
+	}
 	if x < 0 || x >= m.w || y < 0 || y >= m.h {
 		m.lastClickAt = time.Time{} // a border click still voids a pending double-click
 		return nil

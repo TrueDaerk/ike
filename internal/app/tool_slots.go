@@ -103,9 +103,8 @@ func (m *Model) slotResidents() map[string]string {
 		switch {
 		case inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() != "":
 			slot = toolSlot(inst.Terminal().Tool())
-		case inst.Kind() == pane.KindTerminal && !inst.IsDebugTerm():
-			// A plain shell pane occupies the "terminal" slot (#1946); the
-			// debuggee terminal belongs to the debug session, not the slot.
+		case inst.Kind() == pane.KindTerminal:
+			// A plain shell pane occupies the "terminal" slot (#1946).
 			slot = toolSlot(terminalToolID)
 		case inst.Kind() == pane.KindEditor:
 			slot = tabHostSlot(inst)

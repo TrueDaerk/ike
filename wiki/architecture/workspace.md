@@ -71,7 +71,8 @@ layout as before. Consequences:
   `*dap.Session` (#1523), so a parked debuggee's events never touch the
   active workspace's session state: output routes into the owning
   workspace's transcript (`<root>/.ike/debug-session.log`) and its parked
-  debuggee terminal — or its `pendingOut` buffer, capped at
+  debug area's console (#2190, `parkedDebugConsole`) — or its `pendingOut`
+  buffer, capped at
   `maxPendingOut` chunks — while state events (`stopped`, `continued`, …)
   are consumed without effect. The async stop/ended follow-up messages
   are session-guarded the same way. A parked session's output events also
@@ -83,7 +84,8 @@ layout as before. Consequences:
   `SetParked` batching; state events flush the buffer ahead of themselves
   and deliver individually. The exception is `terminated`/`exited`
   (#1544): a parked debuggee that ends finishes its session in place —
-  the parked pane pair flips to the finished state, `extras.dbg` clears
+  the parked debug area flips to the finished state (and closes when
+  `debug.session_end = close`, #2190), `extras.dbg` clears
   so the workspace stops counting as busy (silent LRU eviction works
   again, the close/quit guards stop reporting a phantom session), and the
   dead session's transport is released instead of parking until resume.

@@ -168,11 +168,7 @@ type Model struct {
 	// during the launching window bumps it, and the deferred post-install
 	// retry only fires when its message still carries the current generation.
 	dbgLaunchGen int
-	// dbgTermKey is the debuggee terminal pane's key (#1370), "" while none
-	// is open. It outlives the session (the output stays reviewable) and is
-	// reused by the next launch when the pane is still open.
-	dbgTermKey string
-	navSkip    bool
+	navSkip      bool
 	// ws manages the active workspace (Roadmap 0370, #776): the pane registry,
 	// the split tree and the terminal return-focus live behind it so a project
 	// switch can later swap the whole unit atomically. Focus is the registry's
@@ -1358,7 +1354,6 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		m.dbg = extras.dbg
 		m.dbgLaunching = extras.dbgLaunching
 		m.dbgLaunchGen = extras.dbgLaunchGen
-		m.dbgTermKey = extras.dbgTermKey
 		// The popup terminal comes back exactly as left (#1407) — tabs,
 		// scrollback, running processes, open state — and so do the
 		// project-owned floating panels (#1793). Palettes re-thread like the
@@ -1407,7 +1402,6 @@ type wsExtras struct {
 	dbg          *debugState
 	dbgLaunching bool
 	dbgLaunchGen int
-	dbgTermKey   string
 	popup        popupTerm    // popup terminal (#1398) is per-project state (#1407)
 	floats       []*floatTerm // project-owned floating terminal panels (#1793); global ones never park
 }
@@ -2312,6 +2306,8 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 			inst.Terminal().Close()
 		case pane.KindEditor:
 			inst.CloseTerminalTabs()
+		case pane.KindDebug:
+			inst.Debug().CloseTerm() // the embedded console session (#2190)
 		}
 	}
 	if m.dbg != nil && m.dbg.sess != nil {
@@ -2731,7 +2727,10 @@ func (m Model) terminalFocused() bool {
 	if inst == nil {
 		return false
 	}
-	if inst.Kind() != pane.KindTerminal && inst.Kind() != pane.KindEditor {
+	// KindDebug counts while its console view is visible (#2190):
+	// ActiveTerminal is the embedded debuggee terminal then.
+	if inst.Kind() != pane.KindTerminal && inst.Kind() != pane.KindEditor &&
+		inst.Kind() != pane.KindDebug {
 		return false
 	}
 	t := inst.ActiveTerminal()
@@ -2747,7 +2746,8 @@ func (m Model) focusedDeadTerminal() *terminal.Model {
 	if inst == nil {
 		return nil
 	}
-	if inst.Kind() != pane.KindTerminal && inst.Kind() != pane.KindEditor {
+	if inst.Kind() != pane.KindTerminal && inst.Kind() != pane.KindEditor &&
+		inst.Kind() != pane.KindDebug {
 		return nil
 	}
 	t := inst.ActiveTerminal()
@@ -4675,6 +4675,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.stopDebugSession(true)
 		return m, nil
 
+	case DebugConsoleMsg:
+		// debug.console (#2190): flip the combined area between its views and
+		// focus it — reachable from anywhere, PTY console included.
+		if p := m.debugPanel(); p != nil {
+			if p.ConsoleActive() {
+				p.SetTab(debugpanel.TabVariables)
+			} else if p.HasTerm() {
+				p.SetTab(debugpanel.TabConsole)
+			}
+			m.setFocus(pane.DebugKey)
+		}
+		return m, nil
+
 	case DebugListenMsg:
 		// debug.listen (palette / Run menu, #823): toggle the persistent
 		// Xdebug listener for web/request debugging through php-fpm.
@@ -4726,6 +4739,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			mm.openDebugPanel()
 			if p := mm.debugPanel(); p != nil {
 				p.SetFrames(msg.frames)
+				// A stop surfaces the variables view (#2190) unless the user
+				// picked a view themselves this session.
+				p.AutoTab(debugpanel.TabVariables)
 			}
 			mm.fetchScopes(top.ID, top.Source.Path)
 			mm.refreshWatches()
@@ -9269,7 +9285,22 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				inst.VCS().Wheel(lines)
 			}
 		case pane.KindDebug:
-			// The wheel scrolls the debug panel's focused column (#626).
+			// The console view routes the wheel like a terminal pane (#2190):
+			// mouse-reporting children get the event, a pipe/plain session
+			// pages the scrollback. The variables view scrolls the focused
+			// column (#626).
+			if term := inst.ActiveTerminal(); term != nil {
+				if r, ok := m.lay.Panes[key]; ok {
+					lx, ly := msg.X-(r.X+paneContentX), msg.Y-(r.Y+m.contentYOff(key))
+					switch msg.Button {
+					case tea.MouseWheelUp:
+						term.MouseWheel(lx, ly, lines)
+					case tea.MouseWheelDown:
+						term.MouseWheel(lx, ly, -lines)
+					}
+				}
+				break
+			}
 			switch msg.Button {
 			case tea.MouseWheelUp:
 				inst.Debug().Wheel(-lines)
@@ -10491,12 +10522,54 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 			m.drag = &dragState{kind: dragMergeSelect, srcPane: key, curX: msg.X, curY: msg.Y}
 		}
 	case pane.KindDebug:
+		// The console view takes the press like a terminal pane (#2190):
+		// scrollbar, cmd+click links, then a selection anchor. contentYOff
+		// included the internal tab-bar row, so the bar arrives at local
+		// y == -1 and terminal coordinates are grid-local.
+		if term := inst.ActiveTerminal(); term != nil {
+			if msg.Button == tea.MouseLeft {
+				if localY == -1 {
+					inst.Debug().TabBarClick(localX)
+					return m, nil
+				}
+				// A finished console's footer actions (#810 parity with the
+				// former debuggee terminal pane): restart reruns a command
+				// session in place, close removes the whole area.
+				switch term.DeadActionHit(localX, localY) {
+				case "restart":
+					term.Restart()
+					return m, nil
+				case "close":
+					m.closePane(key)
+					return m, nil
+				}
+				if term.ScrollbarHit(localX, localY) {
+					if term.ScrollbarPress(localY) {
+						m.drag = &dragState{kind: dragTermScroll, srcPane: key, curX: msg.X, curY: msg.Y}
+					}
+					return m, nil
+				}
+				if msg.Mod&(tea.ModSuper|tea.ModMeta) != 0 {
+					if p, line, col, ok := term.LinkAt(localX, localY); ok {
+						return m.openPathAt(p, line, col)
+					}
+					return m, nil
+				}
+				term.MousePress(localX, localY)
+				m.drag = &dragState{kind: dragTermSelect, srcPane: key, curX: msg.X, curY: msg.Y}
+			}
+			return m, nil
+		}
 		// Debug-panel clicks (#626): select a frame/variable, double-click to
 		// activate (frame select / variable expand); messages route like keys.
+		// The internal tab bar's row resolves inside Click (#2190).
 		if msg.Button == tea.MouseLeft {
 			// A press on the column separator starts a resize drag (#691),
 			// mirroring the layout divider gesture; it never selects a row.
-			if sep := inst.Debug().SeparatorHit(localX); sep >= 0 {
+			// The tab-bar row outranks it (#2190) — a press there switches
+			// views via Click, never resizes.
+			if sep := inst.Debug().SeparatorHit(localX); sep >= 0 &&
+				!(inst.Debug().HasTerm() && localY == 0) {
 				m.drag = &dragState{kind: dragDebugDiv, srcPane: key, sep: sep, curX: msg.X, curY: msg.Y}
 				return m, nil
 			}

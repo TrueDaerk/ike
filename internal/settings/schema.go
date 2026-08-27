@@ -397,6 +397,7 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 		}},
 		{Title: "Debug", Description: "Debugger transport settings. PHP debugging listens for incoming Xdebug connections; the hostname filter keeps foreign sessions out.", Entries: []Entry{
 			{Key: "debug.inline_values", Type: Bool, Title: "Inline variable values", Description: "While the debugger is stopped, show the paused frame's local variable values at the end of the lines that mention them; they disappear on resume", Scope: config.UserScope},
+			{Key: "debug.session_end", Type: Enum, Title: "When a session ends", Description: "What happens to the combined debug area (variables + console) when the session ends: keep leaves it open with the output reviewable until the next launch reuses it, close removes it from the layout", Scope: config.UserScope, Options: []string{"keep", "close"}},
 			{Key: "debug.php.port", Type: Int, Title: "PHP listen port", Description: "DBGp port debug.listen binds for incoming Xdebug connections (Xdebug's default is 9003)", Scope: config.UserScope, Min: 1, Max: 65535},
 			{Key: "debug.php.hostname", Type: String, Title: "PHP hostname filter", Description: "Only accept listen-mode debug sessions whose request HTTP_HOST matches (port suffix ignored); empty accepts all — per project", Scope: config.ProjectScope},
 		}},

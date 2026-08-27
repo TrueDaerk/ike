@@ -313,14 +313,13 @@ func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
 			// Path carries the session's origin dir so the restored fresh
 			// shell spawns there (#96); the process itself never resurrects.
 			// A tool pane (#741) persists its tool name instead and restarts
-			// the configured program on restore. The debuggee terminal
-			// (#1370) is pure session state: its identity is recorded so the
-			// restore can drop the leaf instead of spawning a shell there —
-			// and so is the Run tool (#1905): a program must not re-run
-			// itself at startup just because its output was on screen.
-			if inst.IsDebugTerm() {
-				ids[key] = paneIdentity{Kind: "debugTerm"}
-			} else if inst.Terminal().Tool() == runToolName {
+			// the configured program on restore. The Run tool (#1905) is
+			// session state: a program must not re-run itself at startup
+			// just because its output was on screen. (The former separate
+			// debuggee terminal pane, "debugTerm", is gone — the console
+			// lives inside the debug area since #2190; old layouts still
+			// carrying the identity prune on restore.)
+			if inst.Terminal().Tool() == runToolName {
 				ids[key] = paneIdentity{Kind: "runTool"}
 			} else if tool := inst.Terminal().Tool(); tool != "" {
 				ids[key] = paneIdentity{Kind: "tool", Tool: tool}

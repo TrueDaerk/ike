@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Debugger
-description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit (with conditions, hit counts and logpoints), paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; frames/variables panel with watch expressions, inline variable values in the editor, a real debuggee terminal pane; Python via debugpy, Go via delve (dlv dap over a socket), PHP via the in-process Xdebug/DBGp bridge.
+description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit (with conditions, hit counts and logpoints), paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; a combined debug area (frames/variables panel + debuggee console behind internal tabs) with watch expressions and inline variable values in the editor; Python via debugpy, Go via delve (dlv dap over a socket), PHP via the in-process Xdebug/DBGp bridge.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, dbgp, xdebug, delve, run, breakpoints, watches]
 timestamp: 2026-08-20T00:00:00Z
@@ -39,8 +39,8 @@ other adapter.
   rules, upserting the same test configuration, launched through
   `startDebugConfig`. `lang.RunSpec` carries `Tests`/`TestName`/`TestKind`
   for this. `console: "integratedTerminal"` puts the debuggee into the
-  debuggee terminal pane via runInTerminal (#625/#1370), so interactive and
-  TUI programs get a real tty.
+  debug area's console view via runInTerminal (#625/#1370/#2190), so
+  interactive and TUI programs get a real tty.
 - A real-delve end-to-end test (`debug_e2e_test.go`) exercises conditional
   breakpoints, logpoints, evaluate and stepping; it self-skips without dlv.
 
@@ -358,7 +358,11 @@ dead adapter is diagnosable from the notification alone.
   pending call.
 - Session state lives in a `debugState` behind a pointer on the root model:
   thread id, paused flag, the current stack frames, and the debuggee's DAP
-  `output` events (rendered by the debuggee terminal pane, #1370).
+  `output` events (rendered by the debug area's console, #1370/#2190).
+- **Session end** is configurable (`debug.session_end`, #2190): `keep` (the
+  default) leaves the area open in the finished state for review; `close`
+  removes it from the layout — `applyDebugSessionEnd` on the active
+  workspace, `applyDebugSessionEndAt` for a parked one (#1544).
 
 ## Interactive input — runInTerminal (#625)
 
@@ -376,34 +380,36 @@ instead of running it under the adapter's `/dev/null` stdin.
 - The handler runs on the read-loop goroutine and MUST hand off — it sends a
   `debugRunInTerminalMsg` onto the Update loop. There `runDebuggeeInTerminal`
   builds a command terminal (`terminal.NewCommand`, the same infra `run.file`
-  uses) and **installs it in the debuggee terminal pane** (#1370,
-  `Instance.ReplaceTerminal`, taking over the pipe placeholder's slot) — the
-  pane pair is force-opened first so the PTY has a host even when the program
-  never pauses. It answers with the child's pid (`terminal.Model.Pid`). The
+  uses) and **installs it as the debug area's console** (#1370/#2190,
+  `debugpanel.SetTerm`, taking over the pipe placeholder; the console view
+  surfaces via `AutoTab` so the tty is visible for input) — the area is
+  force-opened first so the PTY has a host even when the program never
+  pauses. It answers with the child's pid (`terminal.Model.Pid`). The
   debuggee connects back to the adapter on its own; breakpoints, stepping,
-  frames and variables all work as usual — its stdio lives in the terminal
-  pane, where the user types input. The session key is minted via
+  frames and variables all work as usual — its stdio lives in the console
+  view, where the user types input. The session key is minted via
   `Registry.MintTerminalKey` so output/exit messages route uniquely (the
   debuggee is a command session, so its `ExitedMsg` never closes the pane).
 - **Every bail-out path answers** (#638): once the reverse handler claims the
   request the adapter blocks on the response, so a gone session (the message
   carries its own `*dap.Session`), an empty argv, a missing panel host and a
   failed spawn all send an error refusal. A failed spawn installs nothing —
-  the pipe-fed terminal pane keeps showing DAP output. Malformed `runInTerminal` arguments
+  the pipe-fed console keeps showing DAP output. Malformed `runInTerminal` arguments
   are refused with a diagnostic in `Session.OnRunInTerminal` instead of being
   silently zeroed; `RunInTerminalArgs.Env` is `map[string]*string` because the
   spec allows JSON `null` values (= unset; the spawn path skips them). Other
   reverse requests are still refused "unsupported" (off the read loop — a
   synchronous write there can deadlock against a mid-write adapter).
-- **Terminal lifetime** (#638, #1370): the debuggee terminal pane deliberately
-  stays open after its process exits so the output can be reviewed; the next
-  session reuses the pane slot (`ReplaceTerminal` closes the old session).
-  Closing the pane — a normal `ctrl+w`, guarded by the busy check while the
-  debuggee runs — ends the session like any terminal pane.
+- **Terminal lifetime** (#638, #1370, #2190): the console deliberately stays
+  in the area after its process exits so the output can be reviewed
+  (`debug.session_end = keep`, the default); the next session reuses it
+  (`SetTerm` closes the old session). Closing the debug pane — guarded by the
+  busy check while the debuggee runs, since the console is the pane's
+  `ActiveTerminal` — ends the session like any terminal pane.
 - Trade-off: with `integratedTerminal` the debuggee's output goes to the PTY,
   so the DAP `output` stream and `.ike/debug-session.log` (#624) stay empty
-  for Python sessions — but the PTY renders in the debuggee terminal pane, so
-  the pane pair shows the live program anyway.
+  for Python sessions — but the PTY renders in the console view, so the area
+  shows the live program anyway.
 
 ## Stops and stepping
 
@@ -449,54 +455,78 @@ the legacy bare-map layout still loads (upgraded on the next save), and
 restores from saved layouts seeded from the persisted store (identity kind
 `breakpoints`).
 
-## Debug pane pair (#580, #1370)
+## Combined debug area (#580, #1370, #2190)
 
 `internal/debugpanel` + `pane.KindDebug` (singleton key `debug`, vcspanel
-pattern) is the frames/variables panel; the debuggee's output lives in a
-**real terminal pane** directly to its right (#1370). On session start (first
-stop, first output, or a `runInTerminal` request) the pair opens without
-stealing focus: the panel splits the active editor at the adaptive placement
+pattern) is the **combined debug area**: one pane hosting the
+frames/variables panel and the debuggee's console behind an internal tab bar
+(`Variables │ Console`, the ghissues in-pane bar pattern, #2090). The console
+is a whole `terminal.Model` embedded in the panel (`SetTerm`/`Term`), so the
+same stream the run/terminal path renders — reflow, scrollback, search,
+selection — lives inside the area, and **view switches keep the model in
+place**: scrollback offset, search and selection all survive. On session
+start (first stop, first output, or a `runInTerminal` request) the area opens
+without stealing focus, splitting the active editor at the adaptive placement
 (`layout.SplitLeaf` with `auxZone`, #1588 — below, or right of a wide
-landscape host) and the debuggee terminal splits the panel (`ZoneRight`). A
-`[tools.layout]` slot assigned to `debug` (#1897, #1946) pins the panel to
-its template position instead — independent of a slot assigned to `run`, so
-runs and debug sessions can land in different slots; the debuggee terminal
-still opens beside the panel, subdividing its slot. Both are ordinary panes:
-independently resizable, movable and
-closable through the normal windowing system.
+landscape host). A `[tools.layout]` slot assigned to `debug` (#1897, #1946)
+pins it to its template position instead — independent of a slot assigned to
+`run`. It is an ordinary pane: the whole area resizes, moves and closes as
+one unit through the normal windowing system.
 
-**Debuggee terminal pane** (#1370): a `KindTerminal` instance marked
-`debugTerm` (`Registry.AddDebugTerminalFrom`), so persistence treats it as
-session state and runs never take it over. Two feeding modes:
+**View switching** (#2190): the tab bar renders as the panel's first content
+row once a console exists. `tab`/`shift+tab` cycle the views (on a pipe
+console too — a PTY debuggee gets every raw key instead, `h`/`l` keep
+switching the panel's columns); a click on a label switches; and the
+`debug.console` command (palette) toggles + focuses the area from anywhere —
+the keyboard route that works even while a PTY debuggee owns the keys.
+`AutoTab` drives the view until the user picks one per session
+(`tabTouched`, re-armed by `ResetSession`): output before the first stop
+surfaces the console, a stop surfaces the variables, a PTY install surfaces
+the console.
+
+**Routing seams**: while the console view is visible the pane advertises the
+terminal keymap context (`Instance.ContextID`) and exposes the embedded
+terminal as `Instance.ActiveTerminal()` — so terminal keys, selection drags
+(`dragTermSelect` via `dragTerminal`), paste, scrollback search and the
+close-guard busy check all reuse the terminal pane paths. Mouse translation
+adds the tab-bar row to `contentYOff` (`debugConsoleRows`) so coordinates
+arrive terminal-local; the bar itself then sits at content-local y = −1. The
+console session parks/unparks and tears down with the workspace like any
+terminal (`setWorkspaceTerminalsParked`, `teardownWorkspace`, quit path), and
+`registry.Close` on the pane ends it (`CloseTerm`).
+
+**Console feeding modes**:
 
 - **Pipe mode** (`terminal.NewPipe` / `Session.FeedBytes`): a process-less
   terminal session — emulator, spool and feed loop without a PTY — fed with
-  the DAP `output` events (`FeedText` normalizes `\n` to `\r\n`). All the
-  real pane's behavior comes for free: width reflow (#935/#1369), scrollback
-  paging, scrollback search (#1169), selection and link decoration. Output
-  arriving before the pane opens is buffered on `debugState` (capped at 5000
-  chunks) and flushed in on open. On session end `FinishPipe` renders the
-  usual `[process exited with code N]` dead view while the session stays
-  feedable, so trailing output the adapter flushes past `terminated` still
-  lands (#637).
+  the DAP `output` events (`FeedText` normalizes `\n` to `\r\n`). Output
+  arriving before the area opens is buffered on `debugState` (capped at 5000
+  chunks) and flushed in on open (`ensureDebugConsole`). On session end
+  `FinishPipe` renders the usual `[process exited with code N]` dead view
+  while the session stays feedable, so trailing output the adapter flushes
+  past `terminated` still lands (#637).
 - **PTY mode**: a `runInTerminal` debuggee's command session replaces the
-  pipe placeholder in the same pane slot (see "Interactive input" above);
-  keys, mouse, paste and scrollback behave exactly like any terminal pane —
-  the former raw-key special case (`debugPanelTermCapturing`) is gone.
+  pipe placeholder in the same area (see "Interactive input" above); keys,
+  mouse, paste and scrollback behave exactly like a terminal pane through
+  the routing seams above.
 
-When the session ends the pair **stays open in a finished state** (#689): the
-panel's frames clear to a `finished (exit code N)` placeholder and the
-terminal keeps its scrollback reviewable; closing either is an explicit user
-action. The next launch reuses both: `ResetSession` wipes the panel, and the
-terminal pane's slot gets a fresh pipe session (`ReplaceTerminal`) — so the
-placement the user arranged survives across sessions. Every chunk is also
-appended to the per-project transcript `.ike/debug-session.log` (#624; stderr
-chunks prefixed `[stderr] `, ANSI stripped via `debugpanel.StripANSI`).
+When the session ends the area **stays open in a finished state** by default
+(#689): the panel's frames clear to a `finished (exit code N)` placeholder
+and the console keeps its scrollback reviewable; `debug.session_end = close`
+(config + Settings UI, #2190) removes the area instead. The next launch
+reuses the still-open area: `ResetSession` wipes the panel and re-arms the
+automatic view selection, and a fresh pipe session replaces the console
+(`SetTerm`) — so the placement the user arranged survives across sessions.
+Every chunk is also appended to the per-project transcript
+`.ike/debug-session.log` (#624; stderr chunks prefixed `[stderr] `, ANSI
+stripped via `debugpanel.StripANSI`).
 
-**Persistence** (#1370): `saveLayout` records the panel as `debug` (restored
-empty — session state never resurrects) and the terminal as `debugTerm`;
-restore **prunes** the `debugTerm` leaf instead of resurrecting a shell in
-its place, and the next session recreates the pane beside the panel.
+**Persistence** (#1370, #2190): `saveLayout` records the area as one `debug`
+leaf (restored empty, variables view, no console — session state never
+resurrects); its position persists per project like any pane. Layouts
+written before #2190 may still carry the separate debuggee terminal as a
+`debugTerm` leaf — restore **prunes** it instead of resurrecting a shell in
+its place.
 
 The panel's two columns are **resizable** (#691): dragging the
 frames│variables separator adjusts the widths
@@ -511,9 +541,11 @@ proportionally on panel resize, session-local like scroll state.
   (#637) — `not paused` before the first stop; while the debuggee runs a
   `running…` indicator leads and the **last stop's frames/variables stay
   visible faint as stale context** (#693). The first output event **opens the
-  pane pair** if it is closed (once per session, so panes the user closes
-  stay closed) — a program that never hits a breakpoint is still visible.
-- **Variables tree** (right, `tab`/`h`/`l` switch columns): roots are the
+  area** if it is closed (once per session, so an area the user closes stays
+  closed) — a program that never hits a breakpoint is still visible, and the
+  console view surfaces automatically until a stop arrives (#2190).
+- **Variables tree** (right, `h`/`l` switch columns — `tab` cycles the
+  area's views once a console exists, #2190): roots are the
   selected frame's scopes (Locals expands eagerly); `enter` expands/collapses
   a node — unloaded references emit `ExpandVarMsg` and the app answers with
   the adapter's `variables` response (`SetChildren`), loaded ones toggle
@@ -522,7 +554,10 @@ proportionally on panel resize, session-local like scroll state.
   `SetChildren`/`SetRunning`; the app resolves intents against the live
   session (`fetchScopes`/`fetchVariables`).
 - **Mouse** (#626, `mouse.go`, vcspanel pattern): the app routes wheel and
-  left-click over `KindDebug` to the panel. A click focuses the column under
+  left-click over `KindDebug` to the panel — while the console view is
+  visible they route to the embedded terminal instead (#2190, tab-bar row
+  excepted; a press on the bar switches views and outranks the column
+  separator). A click focuses the column under
   the cursor (x against the separator) and selects the row; a **double-click**
   (same row within 400ms) activates it, mirroring `enter`. The wheel scrolls
   the focused column. Both columns carry a scroll offset (`frameTop`/`varTop`),

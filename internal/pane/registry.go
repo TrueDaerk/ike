@@ -299,18 +299,6 @@ func (r *Registry) AddTerminalPaneFrom(term terminal.Model) string {
 	return key
 }
 
-// AddDebugTerminalFrom wraps an already-running terminal model as the
-// debuggee terminal pane (#1370): a fresh terminal instance marked debugTerm,
-// so persistence treats it as session state and runs never reuse it.
-func (r *Registry) AddDebugTerminalFrom(term terminal.Model) string {
-	key := r.MintTerminalKey()
-	inst := &Instance{key: key, kind: KindTerminal, cfg: r.cfg, pal: r.pal, debugTerm: true}
-	inst.term = term
-	inst.term.SetPalette(r.pal)
-	r.put(inst)
-	return key
-}
-
 // AddTool creates a terminal pane running argv as a custom TUI tool session
 // (#741): a command session marked with the tool name, so chrome, persistence
 // and exit handling treat it as a tool pane rather than a terminal.

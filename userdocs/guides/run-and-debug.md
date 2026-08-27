@@ -139,12 +139,23 @@ disappear the moment the program resumes. `debug.inline_values` in
 ### The debug window
 
 It opens on the first stop, without stealing focus from the paused line — you
-look at your code, not at a panel. Three resizable columns: frames, variables,
-and output.
+look at your code, not at a panel. One combined area with two views behind a
+small tab bar: **Variables** (the resizable frames and variables columns) and
+**Console** (the program's output in a real terminal — scrollback, search and
+selection included). Press ++tab++ to flip between them, click the tab bar,
+or run **Debug: Toggle Console/Variables View** from the palette; switching
+views never loses the console's scrollback or your selection. The area moves
+and resizes like any pane, and its position is remembered per project.
 
-When the session ends the panel stays open in a finished state: frames and
+If the program prints before it ever pauses, the console view comes to the
+front so the output is visible right away; the first stop brings the
+variables back (unless you picked a view yourself).
+
+When the session ends the area stays open in a finished state: frames and
 variables clear to `finished (exit code N)`, but the output stays readable.
-Close it like any pane; the next launch reuses it.
+Close it like any pane; the next launch reuses it. Prefer a tidy layout?
+Set **Settings › Debug › When a session ends** (`debug.session_end`) to
+`close` and the area disappears when the session does.
 
 ### Adapters install themselves
 

@@ -314,6 +314,7 @@ func (c *Config) Flat() map[string]string {
 	put("forge.notify.pr_checks_failing", c.Forge.Notify.PRChecksFailing)
 
 	put("debug.inline_values", c.Debug.InlineValues)
+	put("debug.session_end", c.Debug.SessionEnd)
 	put("debug.php.port", c.Debug.PHP.Port)
 	put("debug.php.hostname", c.Debug.PHP.Hostname)
 

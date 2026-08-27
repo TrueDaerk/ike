@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-27 (debugging: combined tool area — panel + console in one pane, #2190)
+
+- **Combined debug area**: the separate debuggee terminal pane (#1370,
+  `debugTerm`) is gone — the debug panel (`internal/debugpanel`) now embeds
+  the debuggee's `terminal.Model` whole behind an internal `Variables │
+  Console` tab bar (ghissues in-pane pattern). One `KindDebug` pane holds the
+  whole session surface: movable/resizable as a unit, position persisted as
+  the single `debug` leaf; legacy `debugTerm` leaves still prune on restore.
+- **Routing seams**: console view → `Instance.ActiveTerminal()` returns the
+  embedded terminal and `ContextID` flips to the terminal context, so keys,
+  selection drags, paste, search and the busy close-guard reuse the terminal
+  pane paths; `contentYOff` adds the tab-bar row (`debugConsoleRows`) so
+  mouse coordinates arrive terminal-local. Scrollback/selection survive view
+  switches — the model never moves.
+- **View switching**: `tab`/`shift+tab` cycle views (pipe console included;
+  `h`/`l` keep the column switch), tab-bar clicks, and the new
+  `debug.console` command (palette) that also works over a PTY debuggee.
+  `AutoTab` surfaces the console on pre-stop output / PTY install and the
+  variables on a stop, until the user picks a view (per session).
+- **Session end configurable**: `debug.session_end` = `keep` (default,
+  #689 behavior) / `close` (config + validation + Settings UI Debug page);
+  applies to the active workspace and parked sessions (#1544).
+- Lifecycle: the embedded console parks/unparks (#1522), tears down with the
+  workspace/quit paths, and closes with the pane (`releaseContent` →
+  `CloseTerm`). `runInTerminal` PTYs install via `debugpanel.SetTerm`.
+
 ## 2026-08-27 (LSP doctor: per-server failure diagnosis with verified fixes, #2164)
 
 - **`internal/lspdoctor`** + palette command `lsp.doctor` ("LSP: Doctor"):

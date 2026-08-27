@@ -130,8 +130,9 @@ func TestDebugEditEscDoesNotArmPalette(t *testing.T) {
 	m = tm.(Model)
 	m.setFocus(pane.DebugKey)
 	p := m.debugPanel()
-	// Drive the panel into an edit: variables column, child row, 'e'.
-	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	// Drive the panel into an edit: variables column, child row, 'e'. ('l'
+	// switches the column — tab cycles the area's views since #2190.)
+	p.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
 	p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	p.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
 	if !p.Editing() {

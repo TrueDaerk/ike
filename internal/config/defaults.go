@@ -268,7 +268,8 @@ func defaults() *Config {
 			DefaultSort: "relevance",
 		},
 		Debug: Debug{
-			InlineValues: true, // paused locals annotate their lines (#1914)
+			InlineValues: true,   // paused locals annotate their lines (#1914)
+			SessionEnd:   "keep", // the finished area stays reviewable (#689, #2190)
 			PHP: DebugPHP{
 				Port: 9003, // Xdebug's default DBGp port
 			},

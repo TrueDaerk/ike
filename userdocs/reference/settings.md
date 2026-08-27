@@ -277,6 +277,7 @@ secrets — are documented together, with screenshots, in
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Inline variable values | `debug.inline_values` | boolean | `true` | user | While the debugger is stopped, show the paused frame's local variable values at the end of the lines that mention them; they disappear on resume |
+| When a session ends | `debug.session_end` | enum: `keep`, `close` | `keep` | user | What happens to the combined debug area (variables + console) when the session ends: keep leaves it open with the output reviewable until the next launch reuses it, close removes it from the layout |
 | PHP listen port | `debug.php.port` | integer (1–65535) | `9003` | user | DBGp port debug.listen binds for incoming Xdebug connections (Xdebug's default is 9003) |
 | PHP hostname filter | `debug.php.hostname` | string | *(empty)* | project | Only accept listen-mode debug sessions whose request HTTP_HOST matches (port suffix ignored); empty accepts all — per project |
 

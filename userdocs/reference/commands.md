@@ -38,6 +38,7 @@ bring their own.
 | CSV: Column Profile | `csv.columnProfile` | — | — | `editor` pane |
 | Data: Column Profile | `data.columnProfile` | — | — | `data` pane |
 | Breakpoints | `debug.breakpoints` | `cmd+shift+f8` | — | everywhere |
+| Debug: Toggle Console/Variables View | `debug.console` | — | — | everywhere |
 | Continue | `debug.continue` | `f9` | — | everywhere |
 | Xdebug Doctor | `debug.doctor` | — | — | everywhere |
 | Listen for PHP Debug Connections | `debug.listen` | — | — | everywhere |
@@ -57,6 +58,7 @@ bring their own.
 | DOM Inspector | `dom.toggle` | — | — | everywhere |
 | Close Tab | `editor.closeTab` | `cmd+w` | — | everywhere |
 | Force Code Insight (Large File) | `editor.forceCodeInsight` | — | — | everywhere |
+| Large File Details | `editor.largeFileDetails` | — | — | everywhere |
 | Materialize Buffer to File | `editor.materializeBuffer` | — | — | everywhere |
 | Paste from History | `editor.pasteFromHistory` | `cmd+shift+v` | — | everywhere |
 | Save All | `editor.saveAll` | `cmd+shift+s` | — | everywhere |
@@ -361,6 +363,7 @@ bring their own.
 | LSP: Run Code Lens | `lsp.codeLens` | — | — | `editor` pane |
 | LSP: Go to Definition | `lsp.definition` | `f4` | — | `editor` pane |
 | LSP: Diagnostic Under Caret | `lsp.diagnosticInfo` | `cmd+f1` | — | `editor` pane |
+| LSP: Doctor | `lsp.doctor` | — | — | everywhere |
 | LSP: Document Symbols | `lsp.documentSymbols` | `cmd+f12` | — | everywhere |
 | LSP: Go to Super | `lsp.goToSuper` | `cmd+u` | — | `editor` pane |
 | LSP: Hover | `lsp.hover` | `ctrl+q` | — | `editor` pane |

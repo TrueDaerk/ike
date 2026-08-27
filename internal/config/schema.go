@@ -249,9 +249,12 @@ type ESEndpoint struct {
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen
 // mode's settings (#823). InlineValues renders the paused frame's local
-// variable values as line-end annotations while stopped (#1914).
+// variable values as line-end annotations while stopped (#1914). SessionEnd
+// picks what happens to the combined debug area when a session ends (#2190):
+// "keep" leaves it open reviewable, "close" tidies it away.
 type Debug struct {
 	InlineValues bool     `toml:"inline_values"`
+	SessionEnd   string   `toml:"session_end"`
 	PHP          DebugPHP `toml:"php"`
 }
 

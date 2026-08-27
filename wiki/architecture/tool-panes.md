@@ -293,7 +293,9 @@ What differs from a configured tool:
   assignment still wins.
 - **Not restored** — the output of a finished program is session state: the
   pane persists as `{kind: "runTool"}` and its leaf is pruned on restore
-  rather than re-running the program, like the debuggee terminal (#1370).
+  rather than re-running the program, like the debug area's embedded console
+  (#1370, #2190 — which leaves no identity of its own; only legacy
+  `debugTerm` leaves still prune).
 
 Details in [Run Configurations](/architecture/run-configurations.md).
 
@@ -349,9 +351,9 @@ Three targets beyond the tool windows (#1946):
   keeps its explicit in-pane intent.
 - **`run` / `debug`** — independently assignable, so runs and debug
   sessions can land in different slots: `run` pins the Run tool (#1905,
-  winning over `run.placement`), `debug` the debugger frames/variables
-  panel; the debuggee terminal keeps opening beside the panel, subdividing
-  its slot.
+  winning over `run.placement`), `debug` the combined debug area (#2190 —
+  variables and the debuggee's console live inside the one pane, so the
+  slot holds the whole session surface).
 
 The engine (`internal/layout/slots.go`) parses the grid into a **slot tree**
 — a binary split tree over slot names, derived by guillotine cuts, every

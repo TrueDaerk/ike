@@ -192,6 +192,11 @@ type (
 	DebugContinueMsg struct{}
 )
 
+// DebugConsoleMsg toggles the combined debug area between its variables and
+// console views and focuses it (#2190) — the keyboard route that works even
+// while a PTY debuggee owns the raw keys.
+type DebugConsoleMsg struct{}
+
 // DebugTestAtCursorMsg debugs the test at or nearest above the cursor
 // (#1914): run.testAtCursor's selection rules with a debug launch (delve's
 // test mode for Go).
@@ -519,6 +524,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("debug.stepInto", "Step Into", DebugStepIntoMsg{}),
 			appCommand("debug.stepOut", "Step Out", DebugStepOutMsg{}),
 			appCommand("debug.continue", "Continue", DebugContinueMsg{}),
+			appCommand("debug.console", "Debug: Toggle Console/Variables View", DebugConsoleMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			appCommand("terminal.popup", "Popup Terminal", TerminalPopupMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),
