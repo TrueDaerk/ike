@@ -205,10 +205,11 @@ func (m *Model) startInRunTool(cfg *run.Config, argv []string, dir string, env [
 	return true
 }
 
-// openRunTool opens the Run tool for cfg's command: the in_pane placement adds
-// it as a terminal tab in the focused editor pane, every other value goes
-// through the shared tool placement (slot assignment > home position >
-// adaptive split). Reports whether the tool materialized.
+// openRunTool opens the Run tool for cfg's command: a position the user
+// dragged the Run pane to wins (#2191), the in_pane placement adds it as a
+// terminal tab in the focused editor pane, every other value goes through the
+// shared tool placement (slot assignment > home position > adaptive split).
+// Reports whether the tool materialized.
 func (m *Model) openRunTool(cfg *run.Config, argv []string, dir string, env []string) bool {
 	sp := toolSpawn{
 		name:  runToolName,
@@ -219,18 +220,24 @@ func (m *Model) openRunTool(cfg *run.Config, argv []string, dir string, env []st
 	}
 	placement := m.runPlacement()
 	// A slot assignment (#1897) pins the Run tool like any other tool — it
-	// wins over in_pane exactly as it wins over a home position.
-	if _, slot := assignedSlot(runToolName); placement == runInPane && slot == "" {
-		if target := m.activeEditorKey(); target != "" {
-			m.activeWS().Panes.Get(target).AddTerminalTab(m.newToolTab(sp))
-			m.activeWS().ReturnFocus = m.activeWS().Panes.Focused()
-			m.setFocus(target)
-			m.rememberTool(runToolName, target)
-			m.layout()
-			saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	// wins over the position a drag recorded (#2191) and over in_pane exactly
+	// as it wins over a home position.
+	if _, slot := assignedSlot(runToolName); slot == "" {
+		if m.openRunAtRememberedHome(sp) {
 			return true
 		}
-		placement = "" // no editor pane: fall back to the adaptive split
+		if placement == runInPane {
+			if target := m.activeEditorKey(); target != "" {
+				m.activeWS().Panes.Get(target).AddTerminalTab(m.newToolTab(sp))
+				m.activeWS().ReturnFocus = m.activeWS().Panes.Focused()
+				m.setFocus(target)
+				m.rememberTool(runToolName, target)
+				m.layout()
+				saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+				return true
+			}
+			placement = "" // no editor pane: fall back to the adaptive split
+		}
 	}
 	return m.placeTool(sp, placement)
 }

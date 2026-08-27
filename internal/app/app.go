@@ -9703,11 +9703,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				m.commitPopupTabTear(d, msg.X, msg.Y)
 				return m, nil
 			}
+			// Where the Run tool sits before the commit, so a drag that
+			// relocates it records the new position as its home (#2191).
+			runBefore, hadRun := m.runHomeSpot()
 			if m.drag.kind == dragMove {
 				m.commitMove(msg.X, msg.Y)
 			} else {
 				m.commitTabMove(msg.X, msg.Y)
 			}
+			m.rememberMovedRunHome(runBefore, hadRun)
 		case dragTermSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if term := m.dragTerminal(m.drag.srcPane); term != nil {
