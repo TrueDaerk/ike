@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results.
 resource: internal/search
 tags: [architecture, search, find-in-path]
-timestamp: 2026-08-24T12:00:00Z
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -73,6 +73,27 @@ the palette):
   **preselected** (rendered inverted, #277): the first typed character
   replaces it wholesale; backspace, tab, arrows or history recall keep the
   text and drop the mark.
+- **Prefill from the active selection (#2165):** opening the overlay while a
+  text selection is live seeds the query with the selected text, JetBrains
+  style, and marks it preselected — the first typed character replaces it, no
+  extra keys. `Model.OpenPrefilled` / `OpenReplacePrefilled` take the
+  selection; the root model resolves it with `app.activeSelectionText`, which
+  asks the **focused** pane first and falls back to the last-focused editor,
+  so invoking the command from a tool pane still picks up the visual selection
+  left in the code. The selection sources it knows (the full audit — every
+  other pane has a row cursor, not a text selection) are: editor panes (vim
+  visual mode), terminal panes plus terminal tabs and the debug console
+  (`Instance.ActiveTerminal`), diff panes (side-column mouse selection and the
+  editable right side's visual mode), merge panes, and the HTTP response
+  viewer. Rules: a selection **spanning more than one line prefills nothing**
+  — the query language has no line-spanning match to offer, the same rule the
+  editor's `/` (#2063) and the HTTP viewer's search (#2122) follow — and so
+  does a blank one; a single trailing newline (a linewise selection of one
+  line) is not a span and still prefills. With **regex** mode on the prefill
+  is escaped with `regexp.QuoteMeta`, so the selected text is found literally.
+  A prefill outranks both the remembered query and the restored result cursor
+  (#2054): the reopened scan is a different search. With no selection nothing
+  changes — the remembered query and cursor resume as before.
 - **Toggles:** case (`ctrl+c`), whole word (`ctrl+w`), regex (`ctrl+x`);
   `alt+c`/`alt+w`/`alt+x` still work where terminals deliver alt (#422 —
   on macOS Option is a composition key, so ctrl is the delivered primary,

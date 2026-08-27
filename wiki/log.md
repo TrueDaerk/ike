@@ -1,5 +1,28 @@
 # Log
 
+## 2026-08-27 (Find in Path prefills the active selection, #2165)
+
+- **The gap**: Find in Path always opened on the remembered query, so
+  searching for text one had just selected meant retyping it or a manual
+  yank/paste round trip — JetBrains prefills from the selection.
+- **The seam** (`internal/app/selection.go`): `activeSelectionText` asks the
+  focused pane for its selection and falls back to the last-focused editor, so
+  the command works from a tool pane too. The audit of selection sources it
+  wires: editor panes (vim visual mode), terminal panes plus terminal tabs and
+  the debug console (`Instance.ActiveTerminal`), diff panes (side-column mouse
+  selection and the editable right side's visual mode), merge panes, and the
+  HTTP response viewer. Every other pane has a *row* cursor, not a text
+  selection, and contributes nothing.
+- **The prefill** (`finder.OpenPrefilled` / `OpenReplacePrefilled`): the
+  selected text seeds the query and arrives **preselected** (#277), so the
+  first typed character replaces it. A selection spanning more than one line
+  prefills nothing — the same rule the editor's `/` (#2063) and the HTTP
+  viewer's search (#2122) already follow, since the query language has no
+  line-spanning match to offer; a lone trailing newline is not a span. In
+  **regex** mode the prefill is `regexp.QuoteMeta`-escaped so the selection is
+  found literally. A prefill outranks the remembered query *and* the restored
+  result cursor (#2054); with no selection nothing changes.
+- Wiki: project-search concept doc updated.
 ## 2026-08-27 (Crash recovery: restore dialog with diff preview, #2160)
 
 - **The gap**: the restore offer listed file names and nothing else — the user

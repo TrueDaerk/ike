@@ -10,6 +10,7 @@ package finder
 
 import (
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -167,7 +168,20 @@ func (m *Model) SetSize(w, h int) { m.width, m.height = w, h }
 // session it comes from wherever the in-memory list's cursor already sat.
 // Either way the target lands once the reopened scan's results are in (see
 // Apply's DoneMsg case).
-func (m *Model) Open(root string) {
+func (m *Model) Open(root string) { m.openWith(root, "") }
+
+// OpenPrefilled shows the finder rooted at root with the query prefilled from
+// sel — the active text selection at the moment Find in Path was invoked
+// (#2165). JetBrains' behavior: the prefill replaces the remembered query and
+// arrives fully selected, so the first typed character overwrites it.
+//
+// A selection that spans multiple lines, or is blank, prefills nothing and
+// the remembered query survives untouched (see prefillQuery). In regex mode
+// the prefill is escaped with regexp.QuoteMeta so the selected text is
+// matched literally.
+func (m *Model) OpenPrefilled(root, sel string) { m.openWith(root, sel) }
+
+func (m *Model) openWith(root, sel string) {
 	restoreCursor := -1
 	if m.histStore != nil && !m.histLoaded {
 		// Seed the recall list and last search state from the persisted
@@ -187,6 +201,12 @@ func (m *Model) Open(root string) {
 	} else if m.list.Total() > 0 {
 		restoreCursor = m.list.Cursor()
 	}
+	if q, ok := prefillQuery(sel, m.regex); ok {
+		// A prefill outranks both the remembered query and the restored
+		// result cursor: the reopened scan is a different search.
+		m.query = q
+		restoreCursor = -1
+	}
 	m.open = true
 	m.replaceMode = false
 	m.root = root
@@ -201,9 +221,32 @@ func (m *Model) Open(root string) {
 
 // OpenReplace shows the finder in replace mode (#86): find-in-path plus the
 // replacement input, preview, and apply keys.
-func (m *Model) OpenReplace(root string) {
-	m.Open(root)
+func (m *Model) OpenReplace(root string) { m.OpenReplacePrefilled(root, "") }
+
+// OpenReplacePrefilled is OpenReplace with the query prefilled from the active
+// selection (#2165), on the same terms as OpenPrefilled.
+func (m *Model) OpenReplacePrefilled(root, sel string) {
+	m.openWith(root, sel)
 	m.replaceMode = true
+}
+
+// prefillQuery turns a selection into a query prefill. ok is false — no
+// prefill, the caller keeps whatever query it already had — when the
+// selection is blank or spans more than one line: a line-spanning selection
+// has no equivalent in the query language, so offering a truncated one would
+// search for something the user never selected. That is the rule the editor's
+// "/" search (#2063) and the HTTP viewer's (#2122) already follow. A single
+// trailing newline (a linewise selection of one line) is not a span and is
+// dropped. In regex mode the text is escaped so it matches literally.
+func prefillQuery(sel string, regex bool) (string, bool) {
+	line := strings.TrimSuffix(strings.TrimSuffix(sel, "\n"), "\r")
+	if strings.TrimSpace(line) == "" || strings.ContainsAny(line, "\n\r") {
+		return "", false
+	}
+	if regex {
+		line = regexp.QuoteMeta(line)
+	}
+	return line, true
 }
 
 // Close hides the overlay. Results are kept for next/prev-match, and the
