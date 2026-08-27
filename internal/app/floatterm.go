@@ -477,7 +477,7 @@ func (m Model) renderFloatTerm(f *floatTerm) string {
 	}
 	title := "TERMINAL"
 	if t := f.inst.Tab(f.inst.ActiveTab()); t != nil && t.IsTerminal() {
-		title = "TERMINAL — " + t.Title()
+		title = "TERMINAL — " + t.Title() + termExitedTitle(t.Terminal())
 	}
 	if bar, ok := m.tabBar(f.inst, f.w-paneChromeW-floatMarkerW); ok {
 		title = bar

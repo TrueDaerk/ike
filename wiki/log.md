@@ -24,6 +24,37 @@
   `run.placement` still matches, so a slot assignment (#1897) and an edited
   setting both still win.
 
+## 2026-08-27 (Close a finished pseudo-terminal in every placement, #2192)
+
+- **The gap**: a terminal that outlives its process — run output, a tool pane
+  (#810), a popup tab (#1398), a torn-out floating panel (#1793), the debug
+  area's console (#1370/#2190) — could not always be closed where it lived.
+  Both close requests (`requestTerminalClose`, `requestPopupTabClose`) took
+  the #986 idle arm and sent the child an **EOF**, which a finished session
+  never receives; and `terminalFocused` gated on `Session.Running()`, which a
+  pipe session keeps reporting true past `FinishPipe`. Docking the terminal
+  into a pane as a tab was the only way out — the ordinary `ctrl+w` route
+  then applied.
+- **Single predicate**: `terminal.Model.Exited()` exports the existing
+  `dead()` (no session, ended child, or a pipe past `FinishPipe`). Both close
+  requests check it ahead of the busy guard — a finished session is never
+  `Busy` — and close the tab/leaf outright: `closeFocused` for panes,
+  `closePopupTab` for the popup box and floating panels (`cmd+w` and the
+  active segment's ✕ share the path). `terminalFocused` and
+  `focusedDeadTerminal` read `Exited()` too, so the finished DAP console
+  stops swallowing its own close chord.
+- **Exited chrome**: `termExitedTitle` appends `✗ exited (code N)` to the
+  terminal, tool, popup-box, floating-panel and DEBUG pane titles;
+  `tabLabels` marks a finished terminal segment with the bare `✗` — the tab
+  bar is often the only chrome a popup-layer box shows.
+- **Audit** — every terminal host and its close path: dedicated terminal pane
+  and editor-hosted terminal tab (#573) → `closeFocused`; tool pane (#741) →
+  same, plus the #810 dialog's `Close` button; run output (#1905, a tool
+  session) → same; popup box tab (#1398) and floating panel (#1793) →
+  `closePopupTab`; debug area console (#2190) → `closePane` via the ordinary
+  key route. Parked global tools (#1890) have no host and end with
+  `closeParkedGlobalTools`.
+
 ## 2026-08-27 (Editor tabs: overflow handling + MRU tab picker, #2151)
 
 - **Tab strip overflow** (`internal/app/tabbar.go`): the window around the
@@ -43,6 +74,7 @@
   flip. Recency reads the activation stamp the tab-limit eviction already
   keeps: `pane.Instance.TabsByMRU()` / `TabLastUsed()` over `Tab.lastUsed`,
   never-activated (restored) tabs last in tab order.
+
 ## 2026-08-27 (Pane resize mode: enter once, resize with hjkl, #2150)
 
 - **Sticky keyboard resize mode** (`internal/app/resizemode.go`):

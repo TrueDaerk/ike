@@ -263,7 +263,7 @@ func TestRenderNeverExceedsTwoColumns(t *testing.T) {
 	// body packs column-major into rows = ceil(40/2) = 20 — so it stays tall and
 	// narrow rather than spreading across the budget.
 	body := h.Render(400)
-	colW := MinColumnWidth(h.allCells(h.groups), 0) + colSlack
+	colW := MinColumnWidth(h.allCells(h.flatGroups), 0) + colSlack
 	if w, limit := lipgloss.Width(body), 2*colW+gutter; w > limit {
 		t.Fatalf("body width %d exceeds two-column bound %d", w, limit)
 	}

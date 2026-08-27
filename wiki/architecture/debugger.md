@@ -4,7 +4,7 @@ title: Debugger
 description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit (with conditions, hit counts and logpoints), paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; a combined debug area (frames/variables panel + debuggee console behind internal tabs) with watch expressions and inline variable values in the editor; Python via debugpy, Go via delve (dlv dap over a socket), PHP via the in-process Xdebug/DBGp bridge.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, dbgp, xdebug, delve, run, breakpoints, watches]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Debugger (0350)
@@ -405,7 +405,12 @@ instead of running it under the adapter's `/dev/null` stdin.
   (`debug.session_end = keep`, the default); the next session reuses it
   (`SetTerm` closes the old session). Closing the debug pane — guarded by the
   busy check while the debuggee runs, since the console is the pane's
-  `ActiveTerminal` — ends the session like any terminal pane.
+  `ActiveTerminal` — ends the session like any terminal pane. A **pipe-backed
+  console** (#1370) keeps `Session.Running()` true past `FinishPipe` — the
+  emulator stays feedable for trailing output — so the app's focus predicates
+  read `terminal.Model.Exited()` instead (#2192); without that the finished
+  area counted as a live terminal and swallowed its own close chord. The pane
+  title carries the `✗ exited (code N)` marker once the debuggee ended.
 - Trade-off: with `integratedTerminal` the debuggee's output goes to the PTY,
   so the DAP `output` stream and `.ike/debug-session.log` (#624) stay empty
   for Python sessions — but the PTY renders in the console view, so the area

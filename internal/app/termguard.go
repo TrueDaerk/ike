@@ -13,7 +13,8 @@ import (
 )
 
 // requestTerminalClose handles the reserved cmd+w for the focused terminal:
-// idle → EOF to the shell, busy → confirmation prompt.
+// exited → close outright, idle → EOF to the shell, busy → confirmation
+// prompt.
 func (m *Model) requestTerminalClose() {
 	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil {
@@ -21,6 +22,13 @@ func (m *Model) requestTerminalClose() {
 	}
 	term := inst.ActiveTerminal()
 	if term == nil {
+		return
+	}
+	if term.Exited() {
+		// The child is gone (#2192): an EOF would reach nobody and the exit
+		// path already ran, so the pane/tab must be dropped here instead —
+		// closeFocused picks the tab or the whole leaf like ctrl+w does.
+		m.closeFocused()
 		return
 	}
 	if term.Busy() {

@@ -147,7 +147,8 @@ func toolPaneTitle(t *terminal.Model) string {
 	if t.Tool() == runToolName && t.Label() != "" {
 		title += " — " + t.Label()
 	}
-	return title
+	// A finished tool keeps its pane (#810); the chrome says so (#2192).
+	return title + termExitedTitle(t)
 }
 
 // toolSpawn describes one tool session about to be placed: the identity the

@@ -439,7 +439,9 @@ composited on top — `<name> exited (code N)` plus the `[ Restart (r) ]` and
 with the same directory and environment; `ctrl+w` or the close button
 removes the pane. A pane too small for the dialog falls back to a one-line
 footer with the same actions. Run command sessions keep their existing
-stay-open behavior; plain shell terminals still close on exit.
+stay-open behavior; plain shell terminals still close on exit. The pane title
+carries the finished state too (#2192) — `⚙ NAME ✗ exited (code N)` — and a
+tool hosted as a *tab* marks its segment with the bare `✗` glyph.
 
 The exited pane is a **read-only view of the finished run** (#1951), not a
 half-dead one: the output stays selectable and the copy chord (cmd+c) copies
