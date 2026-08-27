@@ -662,6 +662,20 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		// Follow mode (#1928, follow.go): returns directly — the toggle
 		// carries commands (FollowMsg to the app, the reload's parse).
 		return m.toggleFollow()
+	case "follow_filter":
+		// Live filter over the tailed stream (#2255, logfilter.go): opens the
+		// "|" line, narrowing the view as the pattern is typed.
+		if m.insert.active {
+			m.commitInsert()
+		}
+		m.beginFollowFilter(false)
+	case "follow_highlight":
+		if m.insert.active {
+			m.commitInsert()
+		}
+		m.beginFollowFilter(true)
+	case "follow_filter_clear":
+		m.clearFollowFilter()
 	case "toggle_timestamp_decoding":
 		m.toggleTimestampDecoding()
 	case "toggle_unicode_escape_decoding":

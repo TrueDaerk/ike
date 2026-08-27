@@ -136,6 +136,9 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 			if m.searching {
 				m.searchPreview()
 			}
+			if m.filtering {
+				m.followFilterPreview()
+			}
 			return m, nil
 		case key.Code == tea.KeyEnter || key.Code == tea.KeyEscape:
 			m.cmdSelStart, m.cmdSelEnd = 0, 0 // accept/cancel act on the full text
@@ -155,12 +158,15 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		if m.searching {
 			m.cancelSearch()
 		}
+		if m.filtering {
+			m.cancelFollowFilter() // #2255: the filter open before the line
+		}
 		m.mode = Normal
 		m.cmdline = ""
 		m.cmdCur = 0
 		m.cmdSuggest = nil
 		m.searching = false
-	case key.Code == tea.KeyTab && !m.searching:
+	case key.Code == tea.KeyTab && !m.searching && !m.filtering:
 		// Path completion for ":e <partial>" / ":w <partial>" (#543).
 		m.completeCmdlinePath()
 		m.cmdCur = len([]rune(m.cmdline))
@@ -171,6 +177,17 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Code == tea.KeyDown:
 		m.recallHistory(-1)
 	case key.Code == tea.KeyEnter:
+		if m.filtering {
+			// Follow filter (#2255): the pattern is already applied live, so
+			// Enter only closes the line on it — after recording it in the
+			// filter's own recall bucket.
+			m.pushCmdHistory()
+			m.commitFollowFilter()
+			m.mode = Normal
+			m.cmdline = ""
+			m.cmdCur = 0
+			return m, nil
+		}
 		if m.searching {
 			m.pushCmdHistory()
 			m.commitSearch()
@@ -184,14 +201,26 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.runExLine()
-	case key.Code == 'c' && key.Mod == tea.ModCtrl && m.searching:
+	case key.Code == 'r' && key.Mod == tea.ModCtrl && m.filtering:
+		// ctrl+r toggles the regex marker on the filter line (#2255), the way
+		// ctrl+c toggles the case marker on the search line: the "\v" prefix
+		// is the state, so the mode is always visible in the pattern itself.
+		m.toggleFilterRegex()
+	case key.Code == 'c' && key.Mod == tea.ModCtrl && (m.searching || m.filtering):
 		// ctrl+c toggles case sensitivity for the current query (#1111) by
-		// editing the visible \c / \C marker — the marker is the state.
+		// editing the visible \c / \C marker — the marker is the state. The
+		// filter line shares the markers, so it shares the toggle (#2255).
 		m.toggleSearchCase()
 	case m.cmdline == "" && (key.Code == tea.KeyBackspace || key.Code == 'h' && key.Mod == tea.ModCtrl):
-		// Backspacing an empty line leaves the command line, vim-style.
+		// Backspacing an empty line leaves the command line, vim-style. An
+		// emptied filter line keeps its cleared state (#2255): the user
+		// deleted the pattern, which is how the whole stream comes back.
 		if m.searching {
 			m.cancelSearch()
+		}
+		if m.filtering {
+			m.filtPrev = logFilter{}
+			m.filtering = false
 		}
 		m.mode = Normal
 		m.searching = false
@@ -210,9 +239,12 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 			// Editing leaves history recall: the text is the live line now,
 			// and up restarts the walk from the newest entry (#1171).
 			m.cmdHistIdx = -1
-			if m.searching {
+			switch {
+			case m.searching:
 				m.searchPreview()
-			} else {
+			case m.filtering:
+				m.followFilterPreview() // #2255: the stream narrows as typed
+			default:
 				m.refreshCmdlineSuggest()
 			}
 		}
@@ -245,6 +277,29 @@ func (m *Model) toggleSearchCase() {
 	default:
 		m.cmdline = `\c` + m.cmdline
 		m.cmdCur += 2
+	}
+	m.cmdPreview()
+}
+
+// toggleFilterRegex flips the "\v" regex marker on the open follow-filter
+// line (#2255), leaving the case markers alone.
+func (m *Model) toggleFilterRegex() {
+	if strings.HasPrefix(m.cmdline, `\v`) {
+		m.cmdline = m.cmdline[2:]
+		m.cmdCur = max(0, m.cmdCur-2)
+	} else {
+		m.cmdline = `\v` + m.cmdline
+		m.cmdCur += 2
+	}
+	m.cmdPreview()
+}
+
+// cmdPreview re-runs the open command line's live preview — the search
+// incsearch, or the follow filter (#2255).
+func (m *Model) cmdPreview() {
+	if m.filtering {
+		m.followFilterPreview()
+		return
 	}
 	m.searchPreview()
 }
@@ -344,7 +399,10 @@ func (m *Model) SetHistories(h *histories.Store) { m.histStore = h }
 // line ("/" and "?") shares one bucket, the ex line has its own — separate
 // recall lists like vim's / and : histories.
 func (m Model) cmdHistBucket() string {
-	if m.searching {
+	switch {
+	case m.filtering:
+		return histories.FollowFilter // #2255
+	case m.searching:
 		return histories.Search
 	}
 	return histories.Ex
@@ -384,9 +442,10 @@ func (m *Model) recallHistory(dir int) {
 		m.cmdline = entries[next]
 	}
 	m.cmdCur = len([]rune(m.cmdline))
-	if m.searching {
-		m.searchPreview()
-	} else {
+	switch {
+	case m.searching || m.filtering:
+		m.cmdPreview()
+	default:
 		m.refreshCmdlineSuggest()
 	}
 }

@@ -202,6 +202,9 @@ var jetbrainsRows = []row{
 	{"alt+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
 	// Follow mode (#1928): tail -f for the open file, less-F style.
 	{"alt+shift+f", "view.toggleFollow", "Toggle follow (tail -f)", Editor, "Follow mode (#1928)"},
+	// Live filter over the tailed output (#2255); highlight-only mode and the
+	// clear command stay palette-reachable.
+	{"alt+shift+g", "view.followFilter", "Filter followed output", Editor, "Follow mode (#2255)"},
 	{"alt+1", "editor.tab.select1", "Go to tab 1", Global, "Editor tabs (0190)"},
 	{"alt+2", "editor.tab.select2", "Go to tab 2", Global, "Editor tabs (0190)"},
 	{"alt+3", "editor.tab.select3", "Go to tab 3", Global, "Editor tabs (0190)"},

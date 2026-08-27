@@ -469,19 +469,29 @@ func (m *Model) ScrollXBy(delta int) {
 	m.view.Left = left
 }
 
-// CommandLine returns the text shown on the command line: ":cmd" in ex mode or
-// "/pat" / "?pat" while searching. It is "" outside command mode.
+// CommandLine returns the text shown on the command line: ":cmd" in ex mode,
+// "/pat" / "?pat" while searching, or the follow filter's "|pat" / "*pat"
+// (#2255). It is "" outside command mode.
 func (m Model) CommandLine() string {
 	if m.mode != Command {
 		return ""
 	}
-	if m.searching {
-		if m.searchDir == 0 { // search.Forward
-			return "/" + m.cmdline
-		}
-		return "?" + m.cmdline
+	return m.cmdPrefix() + m.cmdline
+}
+
+// cmdPrefix is the one-character kind marker the command line opens with.
+func (m Model) cmdPrefix() string {
+	switch {
+	case m.filtering && m.logFilt.hilite:
+		return "*" // follow highlight (#2255)
+	case m.filtering:
+		return "|" // follow filter, grep-style
+	case m.searching && m.searchDir == 0: // search.Forward
+		return "/"
+	case m.searching:
+		return "?"
 	}
-	return ":" + m.cmdline
+	return ":"
 }
 
 // View renders the buffer: a line-number gutter (when enabled), horizontally and
@@ -749,7 +759,32 @@ func (m Model) commandLineRow() string {
 		selStyle := lipgloss.NewStyle().Background(m.theme().Selection).Foreground(m.theme().SelectionText)
 		line = ui.CursorViewSel(m.cmdline, m.cmdCur, m.cmdSelStart, m.cmdSelEnd, selStyle)
 	}
-	return cl[:1] + line + m.searchCounter() + m.suggestRow()
+	return m.cmdPrefix() + line + m.searchCounter() + m.filterHint() + m.suggestRow()
+}
+
+// filterHint trails the open follow-filter line (#2255) with what the pattern
+// does right now: the number of lines it keeps, or the compile error of a
+// regex that is not valid (yet) — the inline error the filter reports instead
+// of silently matching a literal.
+func (m Model) filterHint() string {
+	if !m.filtering {
+		return ""
+	}
+	f := m.logFilt
+	switch {
+	case f.err != "":
+		return lipgloss.NewStyle().Foreground(m.theme().Error).Render("  " + f.err)
+	case !f.active():
+		return ""
+	}
+	hint := "no matches"
+	if n := m.logFilterCount(); n > 0 {
+		hint = strconv.Itoa(n) + " lines"
+		if f.hilite {
+			hint += " highlighted"
+		}
+	}
+	return lipgloss.NewStyle().Faint(true).Render("  " + hint)
 }
 
 // suggestRow renders the path-completion hint after the ":"-line cursor
@@ -897,6 +932,14 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// styles: every match gets the background, the pane's current match the
 	// underline.
 	domSpans := m.domLineSpans(line)
+
+	// Follow-filter matches (#2255, logfilter.go): the highlight half of the
+	// live filter. They take their own warning-tinted background rather than
+	// the search styles — a filter and a search are two different questions
+	// about the buffer, and the answers must stay tellable apart.
+	filterSpans := m.logFilterSpans(line)
+	filterStyle := lipgloss.NewStyle().
+		Background(theme.Mix(m.theme().Warning, m.theme().Surface, 0.40))
 
 	// Label-jump overlays (#787): a target's typed span highlights like a
 	// search match, and its label characters draw over the buffer text above
@@ -1130,6 +1173,15 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				}
 			}
 		}
+		inFilter := false
+		if !inMatch {
+			for _, s := range filterSpans {
+				if col >= s.Start && col < s.End {
+					inFilter = true
+					break
+				}
+			}
+		}
 
 		// Terminal hyperlink (#1655): the cell's own OSC 8 open/close pair,
 		// zero display cells wide, so width math and click mapping stay
@@ -1177,6 +1229,9 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 			b.WriteString(curMatchStyle.Render(cell))
 		case inMatch:
 			b.WriteString(matchStyle.Render(cell))
+		case inFilter:
+			// Below the search overlays, above the syntax colour (#2255).
+			b.WriteString(filterStyle.Render(cell))
 		default:
 			st, styled := m.styleAt(line, col)
 			if overlay != nil {

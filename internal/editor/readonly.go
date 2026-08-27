@@ -50,6 +50,8 @@ func (m *Model) ShowReadOnly(path, text string) {
 	m.cmdline = ""
 	m.cmdMsg = ""
 	m.searching = false
+	m.filtering = false
+	m.logFilt, m.filtPrev = logFilter{}, logFilter{} // #2255: per-view filter
 	m.dirty = false
 	m.stale = false
 	// Whatever the view held before is gone, a merged rotation set (#1996)

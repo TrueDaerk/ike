@@ -136,6 +136,9 @@ func (m Model) stopFollow() (Model, tea.Cmd) {
 	m.follow = false
 	m.followPaused = false
 	m.followRotated = false
+	// The live filter (#2255) is follow-mode state: leaving the tail restores
+	// the whole buffer rather than leaving it mysteriously narrowed.
+	m.logFilt, m.filtPrev = logFilter{}, logFilter{}
 	m.readOnly = m.followPrevRO
 	if m.mergedLog {
 		// A merged timeline has no file to reconcile against: its content is
@@ -159,10 +162,14 @@ func (m *Model) refreshFollowPause() {
 	}
 }
 
-// followAtBottom reports whether the view sits at the buffer's end: the
-// cursor on the last line, and the viewport showing it.
+// followAtBottom reports whether the view sits at the stream's end: the
+// cursor on the last *visible* line, and the viewport showing it. Under a
+// live filter (#2255) that is the last matching line, and the viewport test
+// counts visible rows — hidden lines let more of the buffer fit than the
+// window's height suggests, so a plain line-index comparison would read a
+// framed tail as scrolled away and pause the follow.
 func (m Model) followAtBottom() bool {
-	last := m.buf.LineCount() - 1
+	last := m.logFilterLastLine()
 	if m.cursor.Line < last {
 		return false
 	}
@@ -170,13 +177,30 @@ func (m Model) followAtBottom() bool {
 	if h <= 0 {
 		return true // unsized (headless): the cursor position alone decides
 	}
-	return last >= m.view.Top && last < m.view.Top+h
+	if last < m.view.Top {
+		return false
+	}
+	if !m.logFilterHiding() {
+		return last < m.view.Top+h
+	}
+	rows := 0
+	for i := m.view.Top; i <= last; i++ {
+		if m.logFilterHidden(i) {
+			continue
+		}
+		if rows++; rows > h {
+			return false
+		}
+	}
+	return true
 }
 
-// followToEnd moves the cursor onto the last line and frames the viewport on
-// it — the auto-scroll half of follow mode.
+// followToEnd moves the cursor onto the last line the view shows and frames
+// the viewport on it — the auto-scroll half of follow mode. Under a live
+// filter (#2255) that is the last matching line: the tail the user asked to
+// see is the filtered one.
 func (m *Model) followToEnd() {
-	m.cursor = m.buf.ClampCursor(buffer.Position{Line: m.buf.LineCount() - 1, Col: 0})
+	m.cursor = m.buf.ClampCursor(buffer.Position{Line: m.logFilterLastLine(), Col: 0})
 	m.desiredCol = 0
 	m.scroll()
 }
@@ -289,6 +313,9 @@ func (m Model) followAppend(text string) (Model, tea.Cmd) {
 	}
 	prevCount := m.buf.LineCount()
 	merged := !m.followTerm
+	// The filter's match count (#2255) must lose the continued line's old
+	// contribution before the text changes under it.
+	m.noteLogFilterAppend(prevCount, merged)
 	i := 0
 	if merged {
 		m.buf.AppendToLastLine(segs[0])
@@ -309,6 +336,7 @@ func (m Model) followAppend(text string) (Model, tea.Cmd) {
 	}
 	m.emit(EventChange)
 	m.noteLogAppend(prevCount, merged)
+	m.noteLogFilterVersion()
 	if !m.followPaused {
 		m.followToEnd()
 	}

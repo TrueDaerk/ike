@@ -30,6 +30,8 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
 | Bookmarks | `cmd+f3` | `ctrl+f3` | `nav.bookmarks` |
+| Breakpoint properties | `cmd+alt+f8` | `ctrl+alt+f8` | `debug.breakpointProperties` |
+| Breakpoint properties | `ctrl+alt+f8` | `ctrl+alt+f8` | `debug.breakpointProperties` |
 | Breakpoints | `cmd+shift+f8` | `ctrl+shift+f8` | `debug.breakpoints` |
 | Close active tab | `cmd+w` | `ctrl+w` | `editor.closeTab` |
 | Close project | `cmd+shift+w` | `ctrl+shift+w` | `project.close` |
@@ -142,6 +144,7 @@ Active when an editor pane has focus.
 | Duplicate line(s) | `cmd+d` | `ctrl+d` | `editor.duplicateLine` |
 | Extend selection | `alt+up` | `alt+up` | `editor.selection.extend` |
 | File structure | `cmd+f12` | `ctrl+f12` | `lsp.documentSymbols` |
+| Filter followed output | `alt+shift+g` | `alt+shift+g` | `view.followFilter` |
 | Find in file | `cmd+f` | `ctrl+f` | `editor.find` |
 | Find usages | `alt+f7` | `alt+f7` | `lsp.references` |
 | Find usages (panel) | `cmd+alt+f7` | `ctrl+alt+f7` | `lsp.referencesPanel` |

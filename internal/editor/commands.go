@@ -100,6 +100,11 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// Follow mode (#1928): tail -f for the open file — streams
 			// appended content, read-only, viewport stuck to the end.
 			action("view.toggleFollow", "Toggle Follow (Tail -f)", "toggle_follow", ""),
+			// Follow filter (#2255): a live pattern over the tailed stream —
+			// hiding non-matching lines, or only colouring the matches.
+			action("view.followFilter", "Filter Followed Output", "follow_filter", ""),
+			action("view.followHighlight", "Highlight in Followed Output", "follow_highlight", ""),
+			action("view.clearFollowFilter", "Clear Follow Filter", "follow_filter_clear", ""),
 			// Inline epoch-timestamp decoding (#1618): per-view toggle over
 			// the editor.timestamp_decoding config default.
 			action("view.toggleTimestampDecoding", "Toggle Timestamp Decoding", "toggle_timestamp_decoding", ""),

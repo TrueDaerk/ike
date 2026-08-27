@@ -842,6 +842,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `bookmark.previous` | `ctrl+shift+f11` | delivered | `—` | live |
 | `bookmark.toggle` | `f11` | delivered | `—` | live |
 | `bookmark.toggleMnemonic` | `alt+f3` | fragile | `palette / Navigate menu` | live via palette / Navigate menu |
+| `debug.breakpointProperties` | `cmd+alt+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.breakpoints` | `cmd+shift+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.continue` | `f9` | delivered | `—` | live |
 | `debug.evaluate` | `alt+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
@@ -969,6 +970,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `todo.list` | `cmd+6` | fragile | `palette` | live via palette |
 | `vcs.panel` | `cmd+9` | fragile | `palette` | live via palette |
 | `vcs.revertFile` | `cmd+alt+z` | fragile | `palette` | live via palette |
+| `view.followFilter` | `alt+shift+g` | fragile | `palette` | live via palette |
 | `view.toggleFollow` | `alt+shift+f` | fragile | `palette` | live via palette |
 | `view.zenMode` | `ctrl+alt+f` | fragile | `palette / View menu` | live via palette / View menu |
 | `window.hideAllTools` | `cmd+shift+f12` | fragile | `palette` | live via palette |

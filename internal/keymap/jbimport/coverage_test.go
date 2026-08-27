@@ -24,6 +24,7 @@ var noCounterpart = map[string]string{
 	"json.jqQueryView":      "IKE-only concept (#2032): the inline jq playground has no JetBrains equivalent",
 	"markdown.preview":      "no default JetBrains keymap action",
 	"view.toggleFollow":     "tail -f follow mode is an IKE concept; JetBrains consoles auto-scroll without a keymap action",
+	"view.followFilter":     "filtering a live tail (#2255) is an IKE concept; JetBrains console filtering is a tool-window control, not a keymap action",
 	"menu.open":             "JetBrains main menu is not a keymap action",
 	"nav.pins":              "PinActiveEditorTab is a per-tab toggle, not a pin list",
 	"notifications.history": "JetBrains notifications tool window has no default shortcut action",

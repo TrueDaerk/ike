@@ -37,6 +37,7 @@ bring their own.
 | Toggle Coverage Marks | `coverage.toggle` | — | — | everywhere |
 | CSV: Column Profile | `csv.columnProfile` | — | — | `editor` pane |
 | Data: Column Profile | `data.columnProfile` | — | — | `data` pane |
+| Breakpoint Properties… | `debug.breakpointProperties` | `cmd+alt+f8` | — | everywhere |
 | Breakpoints | `debug.breakpoints` | `cmd+shift+f8` | — | everywhere |
 | Debug: Toggle Console/Variables View | `debug.console` | — | — | everywhere |
 | Continue | `debug.continue` | `f9` | — | everywhere |
@@ -307,6 +308,9 @@ bring their own.
 | Merge: Previous Conflict | `merge.prevConflict` | — | — | `editor` pane |
 | Next Change (Editor) | `vcs.nextChange` | — | `]c` | `editor` pane |
 | Previous Change (Editor) | `vcs.prevChange` | — | `[c` | `editor` pane |
+| Clear Follow Filter | `view.clearFollowFilter` | — | — | `editor` pane |
+| Filter Followed Output | `view.followFilter` | `alt+shift+g` | — | `editor` pane |
+| Highlight in Followed Output | `view.followHighlight` | — | — | `editor` pane |
 | Toggle Base64 Decoding | `view.toggleBase64Decoding` | — | — | `editor` pane |
 | Toggle Byte Size Hints | `view.toggleByteSizeHints` | — | — | `editor` pane |
 | Toggle CIDR Hints | `view.toggleCIDRHints` | — | — | `editor` pane |
