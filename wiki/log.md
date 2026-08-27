@@ -28,6 +28,30 @@
   entry); `editor.sticky_scroll` still gates both sources
   (`/architecture/editor.md`, `/architecture/structure-view.md`).
 
+## 2026-08-27 (Keydoctor: dead bindings in the active keymap, #2161)
+
+- **The gap**: the reachability table knew which chord families terminals eat,
+  but nothing applied that knowledge to the keymap a user actually runs. Dead
+  bindings were discovered the way they always are — by pressing the key and
+  getting nothing.
+- **A verdict, not a class** (`TerminalEnv.Deliverability`,
+  `internal/keymap/deadchords.go`): `Fragile` covers both "needs a terminal
+  setting" and "certainly swallowed here", and only the second is worth acting
+  on. The known-dead patterns are plain `ctrl+fN` on darwin, `ctrl+tab` under
+  tmux, and `alt+<character key>` in a macOS terminal whose default composes
+  the Option layer — with probed truth overriding all of them in both
+  directions.
+- **The report** (`internal/keydoctor/report.go`, `keymap.deadBindings`, or
+  `r` from a finished probe run): every unreachable binding with its reason,
+  dead ones first, one suggested chord per finding and `tab` for the next.
+- **Suggestions are conflict-checked across the whole keymap**, not just the
+  binding's own context — the write-back is an unqualified
+  `keymap.bindings.<chord>` override, which claims the chord everywhere — and
+  no two findings in one audit offer the same chord.
+- **Applying** goes through the ordinary customization path
+  (`internal/app/deadbindings.go`): bind new, unbind old, one reload; the open
+  report re-audits on that reload, so the list shrinks as it is repaired.
+
 ## 2026-08-27 (LSP rename: preview multi-file edits before applying, #2149)
 
 - **The gap**: `lsp.rename` applied the server's `WorkspaceEdit` the moment it

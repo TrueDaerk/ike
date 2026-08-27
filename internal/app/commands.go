@@ -83,6 +83,12 @@ type ShowKeymapHelpMsg struct{}
 // this terminal's reachability overrides. Dispatched by keymap.doctor.
 type KeymapDoctorMsg struct{}
 
+// KeymapDeadBindingsMsg asks the root model to open the keymap doctor's
+// dead-binding report (#2161): the active keymap audited against this
+// platform and terminal, with a suggested rebind per unreachable chord.
+// Dispatched by keymap.deadBindings.
+type KeymapDeadBindingsMsg struct{}
+
 // CyclePaneFocusMsg asks the root model to move focus to the next pane, the
 // same behavior as the hardcoded tab. Dispatched by pane.switcher.
 type CyclePaneFocusMsg struct{}
@@ -555,6 +561,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("python.newEnvironment", "New Python Environment…", OpenPythonEnvWizardMsg{}),
 			appCommand("keymap.importJetBrains", "Import JetBrains Keymap XML…", ImportJetBrainsKeymapMsg{}),
 			appCommand("keymap.doctor", "Keymap Doctor: Probe Chord Delivery", KeymapDoctorMsg{}),
+			appCommand("keymap.deadBindings", "Keymap Doctor: Dead Bindings", KeymapDeadBindingsMsg{}),
 			appCommand("pane.splitDown", "Split Down", SplitFocusedMsg{Zone: layout.ZoneBottom}),
 			appCommand("pane.splitUp", "Split Up", SplitFocusedMsg{Zone: layout.ZoneTop}),
 			appCommand("pane.splitRight", "Split Right", SplitFocusedMsg{Zone: layout.ZoneRight}),
