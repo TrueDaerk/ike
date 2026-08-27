@@ -315,10 +315,10 @@ type Model struct {
 	// plus everything follow mode appended since (#2163): the largeFile
 	// verdict is re-evaluated on follow appends, and re-measuring the whole
 	// buffer per append would be the exact cost the flag avoids.
-	docBytes  int64
-	focused   bool
-	width     int
-	height    int
+	docBytes int64
+	focused  bool
+	width    int
+	height   int
 
 	// sbGrab is the pointer's offset within the scrollbar thumb at press time
 	// (#1022), so a thumb drag keeps the grab point under the pointer.
@@ -676,7 +676,11 @@ type Model struct {
 	// explain is the conceal/secret explain popover (#1998): why the value at
 	// the caret draws the way it does, plus the one-key overrides that persist
 	// the answer as a rule (explainconceal.go). It owns its keys while open.
-	explain   *explainState
+	explain *explainState
+	// eval is the debugger's evaluate popup (#2174): one DAP evaluate result
+	// with its structured children expandable in place (evalpopup.go). It owns
+	// its navigation keys while open.
+	eval      *evalState
 	popupMaxW int // app-set popup content-width cap (#316); 0 = pane-derived
 
 	// Editor settings, refreshed from cfg on each event so live config changes
@@ -1131,7 +1135,7 @@ func (m *Model) NewFile(path string) {
 	}
 	m.largeFile = false // a template seed is never large
 	m.docBytes = 0
-	m.readOnly = false  // a new file is writable from its first :w (#1762)
+	m.readOnly = false // a new file is writable from its first :w (#1762)
 	// Fresh content replaces any merged rotation set the view held (#1996),
 	// whose follow source names a file this buffer has nothing to do with.
 	m.mergedLog, m.followSrc, m.mergeWait = false, "", false
@@ -1680,6 +1684,13 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.scroll()
 		return m.maybeReparse(before, nil)
 	case tea.KeyPressMsg:
+		if m.eval != nil {
+			// The evaluate popup (#2174) owns move/expand/esc; any other key
+			// closes it and falls through, like peek.
+			if handled, cmd := m.evalKey(msg); handled {
+				return m, cmd
+			}
+		}
 		if m.peek != nil {
 			// The peek popup (#1154) owns esc/enter/up/down/ctrl+d/ctrl+u;
 			// any other key closes it and falls through to normal dispatch.

@@ -156,3 +156,41 @@ func TestWatchesSurviveScopeRefresh(t *testing.T) {
 		t.Fatal("SetScopes must not drop the watches section")
 	}
 }
+
+// TestWatchesEvaluateUnsupportedNotice: an adapter without evaluate keeps the
+// expressions listed — the list is per project, not per adapter — but the
+// section header says why no values follow (#2174).
+func TestWatchesEvaluateUnsupportedNotice(t *testing.T) {
+	m := New(nil)
+	m.SetSize(80, 12)
+	m.SetFrames(frames())
+	if !m.EvaluateSupported() {
+		t.Fatal("a fresh panel must assume evaluate works")
+	}
+	m.SetEvaluateSupported(false)
+	m.SetWatches([]WatchResult{{Expr: "x+1"}, {Expr: "obj"}})
+	v := m.View()
+	if !strings.Contains(v, watchesUnsupportedNote) {
+		t.Fatalf("view must carry the capability notice:\n%s", v)
+	}
+	if !strings.Contains(v, "x+1") || !strings.Contains(v, "obj") {
+		t.Fatalf("expressions must stay listed:\n%s", v)
+	}
+	if m.EvaluateSupported() {
+		t.Fatal("EvaluateSupported must mirror the setter")
+	}
+	// Adding a watch still works — the list outlives this adapter.
+	m.Update(key("tab"))
+	m.Update(key("a"))
+	if !m.Editing() {
+		t.Fatal("adding a watch must stay possible without evaluate")
+	}
+	m.Update(esc())
+
+	// A capable adapter drops the notice again.
+	m.SetEvaluateSupported(true)
+	m.SetWatches([]WatchResult{{Expr: "x+1", Value: "42"}})
+	if v := m.View(); strings.Contains(v, watchesUnsupportedNote) {
+		t.Fatalf("notice must clear once evaluate works:\n%s", v)
+	}
+}

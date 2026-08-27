@@ -114,6 +114,7 @@ for Go that is delve's test mode, so breakpoints inside the test hit.
 | ++f8++ | Step over |
 | ++f7++ | Step into |
 | ++shift+f8++ | Step out |
+| ++alt+f8++ | Evaluate expression |
 | ++ctrl+f2++ | Stop the session |
 
 ![A breakpoint on the cursor line, marked with a dot in the gutter, confirmed by a notification and counted in the status line](../screenshots/features/breakpoint-gutter.png)
@@ -147,8 +148,27 @@ The debug window's variables tree starts with a **Watches** section: in the
 variables column, `a` adds an expression, `e` edits one, `d` removes it.
 Every watch re-evaluates on each stop and when you select another frame; a
 structured result expands like any variable, and a failing expression shows
-its error in place of a value. Watches live in memory for the IDE session and
-survive debug restarts.
+its error in place of a value — the other watches, and the session, carry on.
+
+Watches are stored per project in `.ike/watches.json`, so they survive debug
+restarts *and* IDE restarts. Adding a watch works even while the program
+runs; it evaluates at the next stop.
+
+### Evaluate an expression
+
+++alt+f8++ (**Evaluate Expression** in the palette and the Run menu)
+evaluates in the frame you are paused in. Select something in the editor and
+it evaluates the selection right away; with nothing selected it asks you for
+an expression. The answer opens in a popup at the cursor: ++enter++ expands a
+structured value (its fields are fetched on demand), ++up++/++down++ or
+`j`/`k` move, ++left++ folds, ++esc++ closes — and any other key closes it and
+does what it normally does. Continuing or stepping closes the popup: the
+result describes the frame you just left.
+
+If a debug adapter does not implement evaluation at all, both features say so
+once and switch themselves off — the Watches header reads
+`evaluate unsupported` and keeps your expressions listed, so nothing is lost
+when you debug the same project with a different adapter.
 
 ### Inline variable values
 

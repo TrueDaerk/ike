@@ -215,6 +215,7 @@ var actionMap = map[string]string{
 	"StepOut":              "debug.stepOut",
 	"Resume":               "debug.continue",
 	"ViewBreakpoints":      "debug.breakpoints",
+	"EvaluateExpression":   "debug.evaluate",
 }
 
 // jbKeyName maps JetBrains keystroke key tokens (java.awt.event.KeyEvent VK_

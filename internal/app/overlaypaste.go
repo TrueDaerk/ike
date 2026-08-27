@@ -86,6 +86,8 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		return nil, m.pasteOpenAPIImportPrompt(text)
 	case m.curlImportPromptOpen():
 		return nil, m.pasteCurlImportPrompt(text)
+	case m.evalPromptOpen():
+		return nil, m.pasteEvalPrompt(text)
 	case m.httpSavePromptOpen():
 		return nil, m.pasteHTTPSavePrompt(text)
 	case m.lspRenameOpen():

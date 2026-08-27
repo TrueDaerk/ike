@@ -208,6 +208,11 @@ type (
 	DebugContinueMsg struct{}
 )
 
+// DebugEvaluateMsg evaluates the editor's selection — or an expression the
+// prompt asks for — in the paused frame and shows the result in the evaluate
+// popup (#2174).
+type DebugEvaluateMsg struct{}
+
 // DebugConsoleMsg toggles the combined debug area between its variables and
 // console views and focuses it (#2190) — the keyboard route that works even
 // while a PTY debuggee owns the raw keys.
@@ -552,6 +557,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("debug.stepOut", "Step Out", DebugStepOutMsg{}),
 			appCommand("debug.continue", "Continue", DebugContinueMsg{}),
 			appCommand("debug.console", "Debug: Toggle Console/Variables View", DebugConsoleMsg{}),
+			appCommand("debug.evaluate", "Evaluate Expression", DebugEvaluateMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			appCommand("terminal.popup", "Popup Terminal", TerminalPopupMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),

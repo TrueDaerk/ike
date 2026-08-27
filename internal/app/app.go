@@ -475,9 +475,10 @@ type Model struct {
 	// remote is the SFTP browse host picker mode (#1997), the ssh list with a
 	// browse pick.
 	remote *remoteMode
-	// watchExprs are the debugger watch expressions (#1914): in memory,
-	// surviving debug sessions; re-evaluated on every stop.
-	watchExprs []string
+	// watches is the debugger's watch-expression store (#1914/#2174):
+	// persisted per project like the breakpoints, surviving debug sessions
+	// and restarts; re-evaluated on every stop.
+	watches *debug.Watches
 	// layoutSelect is the open pane-selection mini-map preceding the name
 	// prompt (#1568); layoutSaveSel carries its confirmed selection into the
 	// prompt's save (nil = full snapshot).
@@ -508,6 +509,12 @@ type Model struct {
 	oapiChecking  bool
 	oapiCheckErr  string
 	oapiCheckDisc *openapi.Discovery
+	// evalOpen marks the debugger's evaluate-expression prompt (#2174) while
+	// the shell shows it; evalInput/evalPos hold its single line. Only opened
+	// when there is no selection to evaluate.
+	evalOpen  bool
+	evalInput string
+	evalPos   int
 	// curlImportOpen marks the curl import prompt (#1994) while the shell
 	// shows it; curlImportInput/curlImportPos are the typed command and
 	// cursor.
@@ -1213,6 +1220,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		playLastProgram: map[string]string{}, // per-file last valid program (#1982)
 		compMRU:         mru.Load(mru.DefaultFile()),
 		bpts:            debug.Load(),
+		watches:         debug.LoadWatches(), // per-project watch expressions (#2174)
 		coverage:        coverage.NewStore(), // per-run test coverage (#2081)
 		coverageShown:   true,
 		doctorLog:       debugdoctor.NewLog(),
@@ -4975,12 +4983,28 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case debugWatchesMsg:
-		// Evaluated watch results; a stale session's are dropped (#1523).
-		if m.dbg != nil && msg.sess == m.dbg.sess {
-			if p := m.debugPanel(); p != nil {
-				p.SetWatches(msg.results)
-			}
-		}
+		// Evaluated watch results; a stale session's are dropped (#1523), an
+		// adapter without evaluate falls back to the notice (#2174).
+		m.applyWatchResults(msg)
+		return m, nil
+
+	case DebugEvaluateMsg:
+		// debug.evaluate (#2174): the selection, or a typed expression.
+		m.startDebugEvaluate()
+		return m, nil
+
+	case debugEvalMsg:
+		// One finished evaluate: the popup, or the reason there is none.
+		m.applyEvalResult(msg)
+		return m, nil
+
+	case editor.EvalExpandMsg:
+		// The evaluate popup expanding a structured result (#2174).
+		m.fetchEvalChildren(msg.Ref)
+		return m, nil
+
+	case debugEvalVarsMsg:
+		m.applyEvalChildren(msg)
 		return m, nil
 
 	case debugLocalsMsg:
@@ -7283,6 +7307,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The curl import prompt (#1994) likewise — one line, enter/esc.
 		if m.curlImportPromptOpen() {
 			return m.updateCurlImportPrompt(msg)
+		}
+		// The debugger's evaluate-expression prompt (#2174) mirrors it.
+		if m.evalPromptOpen() {
+			return m.updateEvalPrompt(msg)
 		}
 		// The response-body save prompt (#2059) mirrors the JetBrains import:
 		// one path line with tab completion.
@@ -11179,6 +11207,12 @@ func (m Model) compositeLSPPopups(base string) string {
 			y = 0
 		}
 		return overlay.Place(base, view, x, y, m.width, m.height)
+	}
+	if ed.EvalOpen() {
+		// The debugger's evaluate popup (#2174): explicitly invoked and
+		// keyboard-driven, so it wins over every other popup.
+		col, line := ed.EvalAnchor()
+		return place(ed.EvalView(), col, line)
 	}
 	if ed.PeekOpen() {
 		// The peek-definition popup (#1154): explicitly invoked, so it wins

@@ -29,6 +29,10 @@ type fakeAdapter struct {
 	caps     map[string]any     // initialize response override (nil = default)
 	lastBPs  []SourceBreakpoint // arguments of the last setBreakpoints request
 	lastEval json.RawMessage    // arguments of the last evaluate request
+	// evalRefuse makes evaluate fail with this message (#2174): an adapter
+	// that does not implement the request at all.
+	evalRefuse string
+	evalCount  int
 }
 
 func (f *fakeAdapter) lastBreakpoints() []SourceBreakpoint {
@@ -163,7 +167,13 @@ func (f *fakeAdapter) serve() {
 		case "evaluate":
 			f.mu.Lock()
 			f.lastEval = append(json.RawMessage(nil), req.Arguments...)
+			f.evalCount++
+			refuse := f.evalRefuse
 			f.mu.Unlock()
+			if refuse != "" {
+				f.send(envelope{Type: typeResponse, RequestSeq: req.Seq, Command: req.Command, Success: false, Message: refuse})
+				continue
+			}
 			f.respond(req, map[string]any{"result": "42", "type": "int", "variablesReference": 0})
 		case "next", "stepIn", "stepOut", "continue":
 			f.respond(req, map[string]any{})

@@ -836,6 +836,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `bookmark.toggleMnemonic` | `alt+f3` | fragile | `palette / Navigate menu` | live via palette / Navigate menu |
 | `debug.breakpoints` | `cmd+shift+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.continue` | `f9` | delivered | `—` | live |
+| `debug.evaluate` | `alt+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.start` | `shift+f9` | delivered | `—` | live |
 | `debug.stepInto` | `f7` | delivered | `—` | live |
 | `debug.stepOut` | `shift+f8` | delivered | `—` | live |
