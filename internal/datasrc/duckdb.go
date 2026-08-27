@@ -321,14 +321,16 @@ func (s *duckSource) Page(table string, offset, limit int64) (Page, error) {
 	return page, nil
 }
 
-// PageWhere pages the table filtered by the user's clause (#1777), running it
-// inside a subquery so the pane's LIMIT/OFFSET windows the filtered result.
-// The invocation is the same `-readonly` one every other query uses, so a
-// clause cannot write; a clause carrying a second statement is refused before
-// the CLI — which would happily run a whole script from one argument — sees it.
-func (s *duckSource) PageWhere(table, clause string, offset, limit int64) (Page, error) {
+// PageWhere pages the table filtered by the user's clause (#1777) and ordered
+// by the grid's column sort (#2248), running the clause inside a subquery so
+// the pane's ORDER BY and LIMIT/OFFSET window the filtered result from
+// outside. The invocation is the same `-readonly` one every other query uses,
+// so a clause cannot write; a clause carrying a second statement is refused
+// before the CLI — which would happily run a whole script from one argument —
+// sees it.
+func (s *duckSource) PageWhere(table, clause string, sort Sort, offset, limit int64) (Page, error) {
 	clause = normalizeClause(clause)
-	if clause == "" {
+	if clause == "" && !sort.Active() {
 		return s.Page(table, offset, limit)
 	}
 	if err := checkClause(clause); err != nil {
@@ -343,7 +345,7 @@ func (s *duckSource) PageWhere(table, clause string, offset, limit int64) (Page,
 	for _, c := range cols {
 		page.Columns = append(page.Columns, c.Name)
 	}
-	out, err := s.cli.query(s.path, filteredQuery(base, clause, offset, limit))
+	out, err := s.cli.query(s.path, filteredQuery(base, clause, sort, offset, limit))
 	if err != nil {
 		return Page{}, err
 	}

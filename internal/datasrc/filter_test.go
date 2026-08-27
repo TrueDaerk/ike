@@ -47,7 +47,7 @@ func TestCheckClauseRejectsSecondStatement(t *testing.T) {
 }
 
 func TestFilteredQueryWrapsTrailingComment(t *testing.T) {
-	q := filteredQuery(`SELECT * FROM "t"`, `WHERE id > 1 -- mine`, 500, 100)
+	q := filteredQuery(`SELECT * FROM "t"`, `WHERE id > 1 -- mine`, Sort{}, 500, 100)
 	if !strings.Contains(q, "\n) AS "+filterAlias) {
 		t.Fatalf("the closing parenthesis must start a new line, got:\n%s", q)
 	}
@@ -66,7 +66,7 @@ func TestSQLitePageWhereFiltersAndPages(t *testing.T) {
 	const clause = `WHERE id % 3 = 0 ORDER BY id`
 	var seen []string
 	for offset := int64(0); ; offset += 250 {
-		page, err := src.PageWhere("users", clause, offset, 250)
+		page, err := src.PageWhere("users", clause, Sort{}, offset, 250)
 		if err != nil {
 			t.Fatalf("filtered page at %d: %v", offset, err)
 		}
@@ -102,7 +102,7 @@ func TestSQLitePageWhereUserLimitIsPagedNotFought(t *testing.T) {
 	}
 	defer src.Close()
 	// The user's own LIMIT bounds the whole result; the pane still pages it.
-	page, err := src.PageWhere("users", `ORDER BY id DESC LIMIT 10`, 0, 4)
+	page, err := src.PageWhere("users", `ORDER BY id DESC LIMIT 10`, Sort{}, 0, 4)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestSQLitePageWhereUserLimitIsPagedNotFought(t *testing.T) {
 	if len(page.Rows) != 4 || page.Rows[0][0].Text != "1200" {
 		t.Fatalf("first filtered page = %d rows starting at %q", len(page.Rows), page.Rows[0][0].Text)
 	}
-	last, err := src.PageWhere("users", `ORDER BY id DESC LIMIT 10`, 8, 4)
+	last, err := src.PageWhere("users", `ORDER BY id DESC LIMIT 10`, Sort{}, 8, 4)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestSQLitePageWhereEmptyClauseIsThePlainPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	filtered, err := src.PageWhere("users", "   ", 0, 5)
+	filtered, err := src.PageWhere("users", "   ", Sort{}, 0, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestSQLitePageWhereBrokenClauseErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer src.Close()
-	if _, err := src.PageWhere("users", `WHERE nope >`, 0, 10); err == nil {
+	if _, err := src.PageWhere("users", `WHERE nope >`, Sort{}, 0, 10); err == nil {
 		t.Fatal("a syntax error must come back as the engine's error")
 	}
 	// The grid can still page after a rejected clause: nothing was mutated.
@@ -165,7 +165,7 @@ func TestSQLitePageWhereStaysReadOnly(t *testing.T) {
 	}
 	defer src.Close()
 	// A clause carrying a second statement never reaches the engine.
-	if _, err := src.PageWhere("users", `WHERE id = 1; DROP TABLE users`, 0, 10); !errors.Is(err, ErrMultiStatement) {
+	if _, err := src.PageWhere("users", `WHERE id = 1; DROP TABLE users`, Sort{}, 0, 10); !errors.Is(err, ErrMultiStatement) {
 		t.Fatalf("a multi-statement clause = %v, want ErrMultiStatement", err)
 	}
 	// And the connection itself refuses a write even if one got through: the
@@ -212,7 +212,7 @@ func TestDuckPageWhereFiltersAndPages(t *testing.T) {
 	const clause = `WHERE id % 3 = 0 ORDER BY id`
 	var seen []string
 	for offset := int64(0); ; offset += 250 {
-		page, err := src.PageWhere("users", clause, offset, 250)
+		page, err := src.PageWhere("users", clause, Sort{}, offset, 250)
 		if err != nil {
 			t.Fatalf("filtered page at %d: %v", offset, err)
 		}
@@ -245,10 +245,10 @@ func TestDuckPageWhereRejectsAndErrors(t *testing.T) {
 	defer src.Close()
 	// The CLI runs a whole script from one argument, so the separator is
 	// refused here rather than trusted to the engine.
-	if _, err := src.PageWhere("users", `WHERE id = 1; DROP TABLE users`, 0, 10); !errors.Is(err, ErrMultiStatement) {
+	if _, err := src.PageWhere("users", `WHERE id = 1; DROP TABLE users`, Sort{}, 0, 10); !errors.Is(err, ErrMultiStatement) {
 		t.Fatalf("a multi-statement clause = %v, want ErrMultiStatement", err)
 	}
-	if _, err := src.PageWhere("users", `WHERE nope >`, 0, 10); err == nil {
+	if _, err := src.PageWhere("users", `WHERE nope >`, Sort{}, 0, 10); err == nil {
 		t.Fatal("a syntax error must come back as the engine's error")
 	}
 	// The table survived both, and the grid still pages.
@@ -277,7 +277,7 @@ func TestParquetPageWhereFiltersThroughDuckDB(t *testing.T) {
 	}
 	defer src.Close()
 	const clause = `WHERE id >= 500 ORDER BY id`
-	page, err := src.PageWhere("big.parquet", clause, 0, 60)
+	page, err := src.PageWhere("big.parquet", clause, Sort{}, 0, 60)
 	if err != nil {
 		t.Fatalf("filtered page: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestParquetPageWhereFiltersThroughDuckDB(t *testing.T) {
 	if len(page.Columns) != 3 || page.Columns[0] != "id" {
 		t.Fatalf("filtered columns = %v", page.Columns)
 	}
-	rest, err := src.PageWhere("big.parquet", clause, 60, 60)
+	rest, err := src.PageWhere("big.parquet", clause, Sort{}, 60, 60)
 	if err != nil {
 		t.Fatalf("second filtered page: %v", err)
 	}
@@ -305,10 +305,10 @@ func TestParquetPageWhereFiltersThroughDuckDB(t *testing.T) {
 	if _, err := src.Page("big.parquet", 0, 10); err != nil {
 		t.Fatalf("the reader stays usable after a filter: %v", err)
 	}
-	if _, err := src.PageWhere("big.parquet", `WHERE id = 1; DROP TABLE x`, 0, 10); !errors.Is(err, ErrMultiStatement) {
+	if _, err := src.PageWhere("big.parquet", `WHERE id = 1; DROP TABLE x`, Sort{}, 0, 10); !errors.Is(err, ErrMultiStatement) {
 		t.Fatal("a multi-statement clause must be refused before the CLI")
 	}
-	if _, err := src.PageWhere("big.parquet", `WHERE nope >`, 0, 10); err == nil {
+	if _, err := src.PageWhere("big.parquet", `WHERE nope >`, Sort{}, 0, 10); err == nil {
 		t.Fatal("a syntax error must come back as the engine's error")
 	}
 }
@@ -330,7 +330,7 @@ func TestParquetFilterWithoutDuckDBIsActionable(t *testing.T) {
 		t.Fatalf("plain paging must not need duckdb: %v", err)
 	}
 	// … only the filter does, and it says so.
-	_, err = src.PageWhere("small.parquet", `WHERE id = 1`, 0, 10)
+	_, err = src.PageWhere("small.parquet", `WHERE id = 1`, Sort{}, 0, 10)
 	var missing *MissingToolError
 	if !errors.As(err, &missing) {
 		t.Fatalf("filter without the CLI = %v, want a MissingToolError", err)
