@@ -4,10 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/config"
 	"ike/internal/editor/register"
+	ilsp "ike/internal/lsp"
 )
 
 // --- insert-mode undo granularity (#1818) ----------------------------------
@@ -281,5 +284,195 @@ func TestPersistentUndoKeepsInsertSegments(t *testing.T) {
 	restored = send(restored, key('u'))
 	if got := line(restored, 0); got != "one" {
 		t.Fatalf("restored second undo = %q, want %q", got, "one")
+	}
+}
+
+// --- finer boundaries: pause, newline, accepts (#2189) ----------------------
+
+// withTypeClock installs a fake insert clock on m and returns the advance func.
+func withTypeClock(m *Model) func(d time.Duration) {
+	now := time.Unix(1000, 0)
+	m.typeNow = func() time.Time { return now }
+	return func(d time.Duration) { now = now.Add(d) }
+}
+
+// TestInsertPauseSplitsUndo: a gap of insertPauseBreak between two typed runes
+// closes the segment, so undo peels off only what was typed since the pause —
+// even inside one uninterrupted word run — and redo mirrors the same steps.
+func TestInsertPauseSplitsUndo(t *testing.T) {
+	m, _ := loaded(t, "\n")
+	advance := withTypeClock(&m)
+	m = typeKeys(m, "iabc")
+	advance(insertPauseBreak)
+	m = typeKeys(m, "def")
+	m = send(m, esc())
+	if got := line(m, 0); got != "abcdef" {
+		t.Fatalf("typed line = %q", got)
+	}
+	m = send(m, key('u'))
+	if got := line(m, 0); got != "abc" {
+		t.Fatalf("undo landed on %q, want the pre-pause text %q", got, "abc")
+	}
+	m = send(m, key('u'))
+	if got := line(m, 0); got != "" {
+		t.Fatalf("second undo landed on %q, want empty", got)
+	}
+	for _, want := range []string{"abc", "abcdef"} {
+		m, _ = m.Update(modKey('r', tea.ModCtrl))
+		if got := line(m, 0); got != want {
+			t.Fatalf("redo landed on %q, want %q", got, want)
+		}
+	}
+}
+
+// TestInsertShortGapDoesNotSplit: a gap below the pause threshold keeps the
+// word run one unit.
+func TestInsertShortGapDoesNotSplit(t *testing.T) {
+	m, _ := loaded(t, "\n")
+	advance := withTypeClock(&m)
+	m = typeKeys(m, "iabc")
+	advance(insertPauseBreak / 2)
+	m = typeKeys(m, "def")
+	m = send(m, esc())
+	m = send(m, key('u'))
+	if got := line(m, 0); got != "" {
+		t.Fatalf("one undo must remove the whole run, got %q", got)
+	}
+}
+
+// TestInsertPauseKeepsStructuralChangeJoined: thinking before the first typed
+// rune never tears the structural edit (the `ciw` deletion) off the typing —
+// only elapsed time between typed runes of one segment counts.
+func TestInsertPauseKeepsStructuralChangeJoined(t *testing.T) {
+	m, _ := loaded(t, "hello world\n")
+	advance := withTypeClock(&m)
+	m = typeKeys(m, "ciw")
+	advance(10 * insertPauseBreak)
+	m = typeKeys(m, "bye")
+	m = send(m, esc())
+	if got := line(m, 0); got != "bye world" {
+		t.Fatalf("line = %q", got)
+	}
+	m = send(m, key('u'))
+	if got := line(m, 0); got != "hello world" {
+		t.Fatalf("one undo must revert the whole change, got %q", got)
+	}
+	if n := len(m.HistoryTree()); n != 2 {
+		t.Fatalf("cw + typing must stay one change, tree has %d nodes", n)
+	}
+}
+
+// TestInsertNewlineClosesSegment: Enter is a boundary of its own (#2189) — the
+// break rides with the text typed before it, and the next line's text undoes
+// separately.
+func TestInsertNewlineClosesSegment(t *testing.T) {
+	m, _ := loaded(t, "\n")
+	m = typeKeys(m, "ifoo")
+	m = send(m, special(tea.KeyEnter))
+	m = typeKeys(m, "bar")
+	m = send(m, esc())
+	if line(m, 0) != "foo" || line(m, 1) != "bar" {
+		t.Fatalf("buffer = %q/%q", line(m, 0), line(m, 1))
+	}
+	m = send(m, key('u'))
+	if line(m, 0) != "foo" || m.buf.LineCount() != 2 || line(m, 1) != "" {
+		t.Fatalf("first undo must remove only %q: %q/%q (%d lines)",
+			"bar", line(m, 0), line(m, 1), m.buf.LineCount())
+	}
+	m = send(m, key('u'))
+	if line(m, 0) != "" || m.buf.LineCount() != 1 {
+		t.Fatalf("second undo must remove the word and its line break: %q (%d lines)",
+			line(m, 0), m.buf.LineCount())
+	}
+}
+
+// TestCompletionAcceptIsOwnUndoStep: an accepted completion is one unit — undo
+// removes exactly the accepted text and restores the typed prefix (#2189).
+func TestCompletionAcceptIsOwnUndoStep(t *testing.T) {
+	m, _ := loaded(t, "\n")
+	m = typeKeys(m, "iPr")
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 2, Items: []ilsp.CompletionItem{
+		{Label: "Println", InsertText: "Println"},
+	}})
+	if !m.CompletionOpen() {
+		t.Fatal("completion popup should be open")
+	}
+	m = send(m, tab()) // accept
+	if got := line(m, 0); got != "Println" {
+		t.Fatalf("accepted line = %q", got)
+	}
+	m = send(m, esc())
+	m = send(m, key('u'))
+	if got := line(m, 0); got != "Pr" {
+		t.Fatalf("undo must restore the typed prefix, got %q", got)
+	}
+	m = send(m, key('u'))
+	if got := line(m, 0); got != "" {
+		t.Fatalf("second undo must remove the prefix, got %q", got)
+	}
+}
+
+// TestSnippetExpansionIsOwnUndoStep: a Tab-triggered live template is one unit —
+// undo removes the expanded body and restores the trigger word (#2189).
+func TestSnippetExpansionIsOwnUndoStep(t *testing.T) {
+	withSnippets(t, []config.SnippetEntry{{Trigger: "pair", Body: "left($1) right($2)"}})
+	m, _ := loaded(t, "\n")
+	m = typeKeys(m, "ipair")
+	m = send(m, tab())
+	if got := line(m, 0); got != "left() right()" {
+		t.Fatalf("expansion = %q", got)
+	}
+	m = send(m, esc())
+	m = send(m, key('u'))
+	if got := line(m, 0); got != "pair" {
+		t.Fatalf("undo must restore the trigger word, got %q", got)
+	}
+	m = send(m, key('u'))
+	if got := line(m, 0); got != "" {
+		t.Fatalf("second undo must remove the trigger word, got %q", got)
+	}
+}
+
+// TestMacroReplayKeepsWordWiseUnits: a replayed macro feeds keys through the
+// same typing path, so its insert splits at the same word boundaries.
+func TestMacroReplayKeepsWordWiseUnits(t *testing.T) {
+	m, _ := loaded(t, "one\ntwo\n")
+	m = typeKeys(m, "qaA1 2")
+	m = send(m, esc())
+	m = typeKeys(m, "q") // stop recording
+	m = typeKeys(m, "j@a")
+	if line(m, 0) != "one1 2" || line(m, 1) != "two1 2" {
+		t.Fatalf("buffer = %q/%q", line(m, 0), line(m, 1))
+	}
+	for _, want := range []string{"two1 ", "two", "one1 "} {
+		m = send(m, key('u'))
+		got := line(m, 1)
+		if want == "one1 " {
+			got = line(m, 0)
+		}
+		if got != want {
+			t.Fatalf("undo landed on %q, want %q", got, want)
+		}
+	}
+}
+
+// TestDotRepeatedInsertIsOneUnit: "." replays the whole insert as a single
+// change regardless of how the original session was split.
+func TestDotRepeatedInsertIsOneUnit(t *testing.T) {
+	m, _ := loaded(t, "one\ntwo\n")
+	m = typeKeys(m, "Afoo bar")
+	m = send(m, esc())
+	m = typeKeys(m, "j.")
+	if got := line(m, 1); got != "twofoo bar" {
+		t.Fatalf("dot line = %q", got)
+	}
+	m = send(m, key('u'))
+	if got := line(m, 1); got != "two" {
+		t.Fatalf("one undo must revert the whole repeat, got %q", got)
+	}
+	// The original insert keeps its word-wise steps.
+	m = send(m, key('u'))
+	if got := line(m, 0); got != "onefoo " {
+		t.Fatalf("undo landed on %q, want %q", got, "onefoo ")
 	}
 }

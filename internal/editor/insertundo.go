@@ -1,7 +1,9 @@
 package editor
 
-// insertundo.go gives the insert session its undo granularity (#1818). An
-// insert used to commit as exactly one change, so a single undo threw away
+import "time"
+
+// insertundo.go gives the insert session its undo granularity (#1818, #2189).
+// An insert used to commit as exactly one change, so a single undo threw away
 // everything typed since entering insert mode. The session now commits a
 // sequence of changes, split at the boundaries a user thinks in:
 //
@@ -15,21 +17,50 @@ package editor
 //     this issue set out to fix). Trailing whitespace rides with the word
 //     before it, so undoing `baz` leaves `foo bar ` and the caret where the
 //     next word would start.
+//   - a pause splits too (#2189): a typing keystroke arriving more than
+//     insertPauseBreak after the segment's previous one closes the segment
+//     first, so "undo the text since the last pause" works even inside one
+//     long word run. The boundary is drawn lazily at the next keystroke — no
+//     timer runs while the user thinks — which yields the same units a live
+//     debounce would. Only elapsed time between two typed runes of the *same*
+//     segment counts: a segment that holds no typed rune yet (the `cw`
+//     deletion, the line `o` opened) never pause-splits, so thinking before
+//     the first character cannot tear the structural edit off the typing.
+//   - an accepted completion and a Tab-triggered snippet expansion are their
+//     own change (#2189), like a paste: the typed prefix commits as one step,
+//     the accept (with its auto-import edits) as the next, so one undo removes
+//     exactly the accepted text and puts the typed prefix back.
 //
-// A segment that holds no word yet never splits: separators typed at the start
-// of a segment — the indent after `Enter`, the `(` that auto-closed into `()`,
-// the space `o` opened a line with — belong to the word that follows them, so
-// no undo can tear a pair or an indent off the keystroke that produced it.
+// A segment that holds no word yet never word-splits: separators typed at the
+// start of a segment — the indent after `Enter`, the `(` that auto-closed into
+// `()`, the space `o` opened a line with — belong to the word that follows
+// them, so no undo can tear a pair or an indent off the keystroke that
+// produced it.
 //
 // Everything else that edits mid-insert — backspace and the word/line kills,
-// `Tab`/`Shift+Tab`, auto-close pairs, smart indent, completion accepts —
-// joins the running segment: a correction belongs to the word it corrects.
-// Those paths clear the segment's typing state (`dirtyFromInsert`), so typing
-// on after a backspace never splits mid-word.
+// `Tab`/`Shift+Tab`, auto-close pairs, smart indent — joins the running
+// segment: a correction belongs to the word it corrects. Those paths clear the
+// segment's typing state (`dirtyFromInsert`), so typing on after a backspace
+// never splits mid-word.
 //
 // The split lives entirely in the editor: `history` stays change-based and
 // unchanged, `commitInsert` just commits the remaining tail, and normal-mode
 // operations (`dd`, `ciw`, `:%s`, …) keep their one-change semantics.
+
+// insertPauseBreak is the typing-pause undo boundary (#2189): a gap of at
+// least this long between two typed runes of one segment closes it. Fixed
+// rather than configurable — long enough that hunt-and-peck typing stays in
+// one word unit, short enough that "what I typed after stopping to think"
+// undoes on its own.
+const insertPauseBreak = 2 * time.Second
+
+// typedNow is the insert-session clock (overridable via typeNow in tests).
+func (m *Model) typedNow() time.Time {
+	if m.typeNow != nil {
+		return m.typeNow()
+	}
+	return time.Now()
+}
 
 // breakInsertUndo closes the insert session's current undo segment: the open
 // recorder commits as its own change and a fresh one takes its place, so the
@@ -53,17 +84,26 @@ func (m *Model) breakInsertUndo() {
 }
 
 // typedInsert wraps a typing keystroke (printable input, Enter, Tab) with the
-// word-wise undo split: text opens a new segment when it starts a word run
-// that follows a separator inside a segment that already holds a word. apply
-// performs the actual insert; the segment's typing state is restored across it
-// because every edit path clears it (dirtyFromInsert).
+// word-wise and pause undo splits: text opens a new segment when it starts a
+// word run that follows a separator inside a segment that already holds a
+// word, or when it arrives insertPauseBreak after the segment's previous rune
+// (#2189). apply performs the actual insert; the segment's typing state is
+// restored across it because every edit path clears it (dirtyFromInsert).
 func (m *Model) typedInsert(text string, apply func()) {
+	now := m.typedNow()
+	// last != 0 means this segment already holds a typed rune, so typeAt is
+	// its timestamp — a fresh segment (or one only holding structural edits
+	// or corrections) never pause-splits.
+	if m.insert.last != 0 && now.Sub(m.insert.typeAt) >= insertPauseBreak {
+		m.breakInsertUndo()
+	}
 	if startsWord(text) && m.insert.word && !isWordRune(m.insert.last) {
 		m.breakInsertUndo()
 	}
 	word := m.insert.word || hasWordRune(text)
 	apply()
 	m.insert.last, m.insert.word = lastRune(text), word
+	m.insert.typeAt = now
 }
 
 // startsWord reports whether text begins with a word rune (letter, digit or

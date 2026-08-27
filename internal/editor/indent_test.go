@@ -268,9 +268,17 @@ func TestEnterBlockSplitIsOneUndoUnit(t *testing.T) {
 	m := blockSplitModel(t, "itestb", "{}\n", 1)
 	m = send(m, key('i'), special(tea.KeyEnter))
 	m = send(m, keys("x")...)
+	// The line break closes its segment (#2189): the first undo removes only
+	// the "x" typed after the split, the block split stays.
 	m = send(m, special(tea.KeyEscape), key('u'))
+	if m.buf.LineCount() != 3 {
+		t.Fatalf("first undo must keep the block split: lines=%d", m.buf.LineCount())
+	}
+	// The second undo reverts the split — Enter, indent and pushed-down closer
+	// as one unit.
+	m = send(m, key('u'))
 	if got := line(m, 0); got != "{}" || m.buf.LineCount() > 2 {
-		t.Fatalf("undo must revert the whole insert: %q lines=%d", got, m.buf.LineCount())
+		t.Fatalf("undo must revert the whole split: %q lines=%d", got, m.buf.LineCount())
 	}
 }
 
