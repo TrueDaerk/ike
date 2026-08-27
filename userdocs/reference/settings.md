@@ -202,6 +202,12 @@ secrets — are documented together, with screenshots, in
 | Snapshot debounce | `backup.debounce_ms` | integer (100–60000) | `2000` | user | Milliseconds a dirty buffer must stay quiet before it is snapshotted |
 | Snapshot max age | `backup.max_age_days` | integer (1–365) | `7` | user | Days before leftover snapshots are pruned at startup (after the restore prompt) |
 
+### Usage Telemetry
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Local usage telemetry | `telemetry.enabled` | boolean | `true` | user | Record command, keybinding and layout usage events into per-session JSONL files under ~/.ike/telemetry; off writes nothing. The data stays on this machine |
+
 ### Timeline
 
 | Setting | Key | Type | Default | Scope | Description |

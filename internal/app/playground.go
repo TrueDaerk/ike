@@ -20,6 +20,7 @@ import (
 	"ike/internal/keymap"
 	"ike/internal/pane"
 	"ike/internal/scratch"
+	"ike/internal/telemetry"
 	"ike/internal/ui"
 )
 
@@ -997,7 +998,7 @@ func (m Model) playGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return false, nil
 	}
 	if c, okc := m.reg.Command(b.Command); okc {
-		return true, m.dispatchCommand(b.Command, c)
+		return true, m.dispatchCommandFrom(b.Command, c, telemetry.SourceKeybind)
 	}
 	return false, nil
 }

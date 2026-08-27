@@ -227,6 +227,13 @@ multi-step state. Each `Feed(key, context)` returns:
 - **NoMatch** — nothing; the caller lets the key fall through. An aborted prefix
   restarts the sequence from the new key rather than stranding it.
 
+The root model's `resolveKeymap` also feeds the local usage log (#2235): a
+Resolved chord records a `key` event (chord, context, command), a blocked
+default records `blocked`, and a NoMatch on a command-modified chord or
+function key records `unbound` — the expected-but-missing-keybind signal.
+Plain and shift-only presses are typing and are never recorded (see
+[usage telemetry](./usage-telemetry.md)).
+
 `fromkeymsg.go` adapts a Bubble Tea v2 `tea.KeyPressMsg` into a `Key`. It reads the
 press purely through `String()` — v2 still encodes modifiers as `ctrl+/alt+/shift+`
 tokens and names specials (`esc`, `space`, `f7`, `left`, …) — so the same code that

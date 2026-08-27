@@ -221,6 +221,10 @@ any entry whose key the typed schema does not expose (no dead keys).
 - **Backup** — crash recovery on/off (`backup.enable`; disabling purges existing
   snapshots), snapshot debounce (`backup.debounce_ms`), snapshot max age
   (`backup.max_age_days`) (#167, see [crash recovery](./crash-recovery.md)).
+- **Usage Telemetry** (#2235) — the local-only usage recorder on/off
+  (`telemetry.enabled`, default on): command/keybind/layout events as
+  per-session JSONL under `~/.ike/telemetry`, never leaving the machine (see
+  [usage telemetry](./usage-telemetry.md)).
 - **Forge** (#2085) — `forge.poll_interval_seconds`, how often the code forge
   is re-read in the background (default 20s, `0` off). Its valid set has a
   hole — 0, then 10 and up — so it carries the `Entry.ValidateInt` hook: a
