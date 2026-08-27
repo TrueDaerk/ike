@@ -1209,9 +1209,12 @@ func truncateTo(s string, max int) string {
 // newHover parses hover markdown into display rows (#379): fenced code blocks
 // lose their ``` markers and are syntax-highlighted via the language registry
 // (or fall back to an accent tint, so the signature still reads as code), and a
-// thematic break ("---") becomes a rule row. Returns nil for empty content.
+// thematic break ("---") becomes a rule row. Prose rows render their inline
+// markdown (#2147) — emphasis, inline code and links become terminal styling
+// instead of literal syntax. Returns nil for empty content.
 func (m Model) newHover(contents string) *hoverState {
 	src := strings.Split(contents, "\n")
+	st := m.hoverMDStyles()
 	var out []hoverLine
 	for i := 0; i < len(src); i++ {
 		trimmed := strings.TrimSpace(src[i])
@@ -1228,7 +1231,7 @@ func (m Model) newHover(contents string) *hoverState {
 			out = append(out, hoverLine{rule: true})
 			continue
 		}
-		out = append(out, hoverLine{text: src[i]})
+		out = append(out, hoverLine{text: renderMarkdownLine(src[i], st)})
 	}
 	if len(out) == 0 {
 		return nil
@@ -1482,6 +1485,24 @@ func (m Model) diagLines(ds []ilsp.Diagnostic) []hoverLine {
 		for _, line := range strings.Split(d.Message, "\n") {
 			out = append(out, hoverLine{text: line})
 		}
+		out = append(out, m.relatedLines(d)...)
+	}
+	return out
+}
+
+// relatedLines renders a diagnostic's linked locations (#2147) under its
+// message: one dimmed "↳ message  file:line" row per entry, the same text the
+// Problems pane offers for navigation. The popup itself is not interactive —
+// any key dismisses it — so the location is spelled out rather than hidden
+// behind a jump.
+func (m Model) relatedLines(d ilsp.Diagnostic) []hoverLine {
+	if len(d.Related) == 0 {
+		return nil
+	}
+	dim := lipgloss.NewStyle().Foreground(m.theme().Border)
+	out := make([]hoverLine, 0, len(d.Related))
+	for _, r := range d.Related {
+		out = append(out, hoverLine{text: dim.Render("↳ " + r.Label())})
 	}
 	return out
 }

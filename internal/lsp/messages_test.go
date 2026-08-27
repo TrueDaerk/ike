@@ -67,3 +67,61 @@ func TestSymbolKindLabel(t *testing.T) {
 		}
 	}
 }
+
+// TestConvertRelatedInformation guards #2147: a diagnostic's linked locations
+// survive the conversion to editor coordinates — a location in the published
+// document converts through the negotiated encoding, one in another file
+// keeps the server's position, and both carry a filesystem path.
+func TestConvertRelatedInformation(t *testing.T) {
+	lines := []string{"emoji 😀 here", "second"}
+	p := protocol.PublishDiagnosticsParams{
+		URI: protocol.PathToURI("/proj/main.go"),
+		Diagnostics: []protocol.Diagnostic{{
+			Range:   protocol.Range{Start: protocol.Position{Line: 1}, End: protocol.Position{Line: 1, Character: 6}},
+			Message: "redeclared",
+			RelatedInformation: []protocol.DiagnosticRelatedInformation{
+				{
+					// Past the surrogate pair: 10 UTF-16 units are 9 runes.
+					Location: protocol.Location{
+						URI:   protocol.PathToURI("/proj/main.go"),
+						Range: protocol.Range{Start: protocol.Position{Line: 0, Character: 10}},
+					},
+					Message: "declared here",
+				},
+				{
+					Location: protocol.Location{
+						URI:   protocol.PathToURI("/proj/other.go"),
+						Range: protocol.Range{Start: protocol.Position{Line: 41, Character: 4}},
+					},
+					Message: "and here",
+				},
+			},
+		}},
+	}
+	got := ConvertDiagnostics(p, lines, protocol.EncodingUTF16)
+	if len(got) != 1 || len(got[0].Related) != 2 {
+		t.Fatalf("converted = %+v, want one diagnostic with two related entries", got)
+	}
+	same, other := got[0].Related[0], got[0].Related[1]
+	if same.Path != "/proj/main.go" || same.Line != 0 || same.Col != 9 {
+		t.Errorf("same-file entry = %+v, want main.go 0:9 (rune column)", same)
+	}
+	if other.Path != "/proj/other.go" || other.Line != 41 || other.Col != 4 {
+		t.Errorf("cross-file entry = %+v, want other.go 41:4", other)
+	}
+	if same.Label() != "declared here  main.go:1" {
+		t.Errorf("Label = %q", same.Label())
+	}
+}
+
+// TestConvertDiagnosticsWithoutRelatedInformation: a server that sends none
+// leaves the slice nil, so nothing renders under the message.
+func TestConvertDiagnosticsWithoutRelatedInformation(t *testing.T) {
+	p := protocol.PublishDiagnosticsParams{
+		URI:         protocol.PathToURI("/proj/main.go"),
+		Diagnostics: []protocol.Diagnostic{{Message: "boom"}},
+	}
+	if got := ConvertDiagnostics(p, []string{"x"}, ""); len(got) != 1 || got[0].Related != nil {
+		t.Errorf("converted = %+v, want no related entries", got)
+	}
+}

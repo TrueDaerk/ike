@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -45,6 +46,33 @@ type Diagnostic struct {
 	// pyright's "reportGeneralTypeIssues" — the handle for looking a rule up
 	// or configuring it away; "" when the server sent none.
 	Code string
+	// Related holds the diagnostic's linked locations (#2147) — "declared
+	// here", "first defined here" — in editor coordinates; nil when the
+	// server sent none.
+	Related []RelatedInfo
+}
+
+// RelatedInfo is one of a diagnostic's linked locations (#2147): the server's
+// note plus where it points, in editor coordinates. Path is a filesystem
+// path — the popup and the Problems pane show it as "file:line" and open it
+// through the same navigation funnel go-to-definition uses.
+type RelatedInfo struct {
+	Path    string
+	Line    int
+	Col     int
+	Message string
+}
+
+// Label renders the entry as "message  file:line" (1-based line) — the shared
+// wording of the diagnostics popup and the Problems pane. An entry with no
+// message shows its location alone.
+func (r RelatedInfo) Label() string {
+	loc := filepath.Base(r.Path) + ":" + strconv.Itoa(r.Line+1)
+	msg := strings.TrimSpace(strings.ReplaceAll(r.Message, "\n", " "))
+	if msg == "" {
+		return loc
+	}
+	return msg + "  " + loc
 }
 
 // DiagnosticInfoMsg asks the focused editor to show the diagnostics under the
@@ -673,6 +701,33 @@ func ConvertDiagnostics(p protocol.PublishDiagnosticsParams, lines []string, enc
 			Message:  d.Message,
 			Source:   d.Source,
 			Code:     diagnosticCode(d.Code),
+			Related:  convertRelated(p.URI, d.RelatedInformation, lines, enc),
+		})
+	}
+	return out
+}
+
+// convertRelated maps a diagnostic's linked locations to editor coordinates
+// (#2147). Only the published document's own text is at hand, so a location
+// inside it converts through the negotiated encoding like the diagnostic
+// itself; one pointing at another file keeps the server's column, which is
+// exact for ASCII and off only by surrogate/rune accounting on the target
+// line — enough to open the file at the right line and land near the symbol.
+func convertRelated(uri string, ri []protocol.DiagnosticRelatedInformation, lines []string, enc string) []RelatedInfo {
+	if len(ri) == 0 {
+		return nil
+	}
+	out := make([]RelatedInfo, 0, len(ri))
+	for _, r := range ri {
+		pos := buffer.Position{Line: r.Location.Range.Start.Line, Col: r.Location.Range.Start.Character}
+		if r.Location.URI == uri {
+			pos = protocol.FromLSPPosition(lines, r.Location.Range.Start, enc)
+		}
+		out = append(out, RelatedInfo{
+			Path:    protocol.URIToPath(r.Location.URI),
+			Line:    pos.Line,
+			Col:     pos.Col,
+			Message: r.Message,
 		})
 	}
 	return out

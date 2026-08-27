@@ -75,6 +75,18 @@ message's first line, plus the server's rule code in parentheses when sent
 then line, then column. Unspecified severity counts as error, matching the
 gutter. A refresh keeps the cursor on the same diagnostic where possible.
 
+A diagnostic's **related information** (#2147) hangs under it as its own
+faint, indented `↳ note  file:line` row — one per entry a server attached
+("declared here", the competing branch of a type conflict), rendered from
+`ilsp.RelatedInfo.Label()`, the same wording the
+[diagnostic details popup](./lsp.md) uses. A related row carries its *own*
+location, which routinely names another file: `enter` (and double-click)
+opens *that* file at *that* position through the same
+`problems.OpenLocationMsg` funnel, and `y` copies the entry rather than its
+parent. Related rows are context, not findings — they never count toward the
+header's error/warning totals — and the refresh cursor keep matches them by
+their rendered text, since they share their parent's path and position.
+
 ## Interaction
 
 - `j`/`k`/arrows move, `g`/`G` home/end; `enter` opens the file with the

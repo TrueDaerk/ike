@@ -1,5 +1,30 @@
 # Log
 
+## 2026-08-27 (LSP: markdown in hover, diagnostic related information, #2147)
+
+- **Inline markdown in hover** (`internal/editor/hovermd.go`): the prose
+  around the already-highlighted fenced blocks (#379) no longer shows raw
+  syntax. Headings render bold, `-`/`*`/`+` items become `•` bullets, quotes
+  `│`, `**bold**`/`*italic*` become terminal attributes, `` `code` `` takes
+  the accent tint, and `[text](url)` shows its text plus the dimmed URL (a
+  popup cannot be clicked, so the address stays readable); `<autolinks>`
+  render bare, images keep their alt text. A deliberate hand-written subset:
+  `snake_case` is never emphasis, a destination with whitespace is not a link
+  (`func F[T any](v T)` keeps its brackets), unmatched markers stay literal.
+- **Diagnostic related information** (#2147): `publishDiagnostics`'
+  `relatedInformation` — advertised all along in the client capabilities —
+  is now decoded (`protocol.DiagnosticRelatedInformation`) and converted to
+  editor coordinates as `ilsp.RelatedInfo`. A location inside the published
+  document converts through the negotiated encoding; one in another file
+  keeps the server's position, which lands on the right line.
+- **Where it shows**: the diagnostic details popup (#739) lists a dimmed
+  `↳ note  file:line` row per entry under the message — the popup is
+  dismiss-on-any-key, so the location is spelled out rather than hidden
+  behind a jump. The Problems window makes them navigable: each entry is its
+  own faint child row, `enter`/double-click opens *its* file at *its*
+  position through the existing `OpenLocationMsg` funnel, `y` copies the
+  entry, and the rows never count toward the header's error/warning totals.
+
 ## 2026-08-27 (host.Send outbox: bounded and coalescing, #2169)
 
 - **Bounded outbox** (#2163 follow-up): the fire-and-forget `Send` queue
