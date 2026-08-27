@@ -188,3 +188,34 @@ func TestFilterSearchesEveryContextFromContextView(t *testing.T) {
 		t.Fatalf("filter must reach other contexts:\n%s", body)
 	}
 }
+
+// TestFocusedExtraGroupLeadsContextView (#2237): a mode that owns the keyboard
+// without owning a registry scope — the jq/yq playground — contributes its keys
+// as an extra group flagged Focused. In the context view it must *lead*, ahead
+// of the global bindings, the way a focused pane's registered scope does; in
+// the flat view the extras keep trailing, and unflagged extras trail in both.
+func TestFocusedExtraGroupLeadsContextView(t *testing.T) {
+	h := New(testRegistry(), nil, 0)
+	h.SetExtra(
+		Group{Label: "blocked (dependency not landed)", Entries: []Entry{{ID: "x", Title: "Blocked Thing"}}},
+		Group{Label: "jq playground — query line", Focused: true, Entries: []Entry{{ID: "p", Title: "Close and open the palette", Shortcut: "esc esc"}}},
+	)
+	h.Snapshot("playground")
+
+	if h.view != viewContext {
+		t.Fatalf("a Focused extra group makes a context view, got %v", h.view)
+	}
+	if h.ctxGroups[0].Label != "jq playground — query line" {
+		t.Fatalf("context view leads with %q, want the focused extra group", h.ctxGroups[0].Label)
+	}
+	last := h.ctxGroups[len(h.ctxGroups)-1].Label
+	if last != "blocked (dependency not landed)" {
+		t.Fatalf("an unflagged extra still trails, got %q last", last)
+	}
+	if h.flatGroups[0].Label == "jq playground — query line" {
+		t.Fatal("the flat sheet keeps its own ordering; extras trail there")
+	}
+	if body := ansi.Strip(h.Render(80)); !strings.Contains(body, "esc esc") {
+		t.Fatalf("the focused extra group must render:\n%s", body)
+	}
+}

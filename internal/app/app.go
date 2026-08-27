@@ -117,6 +117,11 @@ import (
 const (
 	ctxExplorer = "explorer"
 	ctxEditor   = "editor"
+	// ctxPlayground is not a pane context: the jq/yq playground is a mode
+	// mounted *inside* another pane, so no Instance advertises it. It names
+	// the playground's keyboard in the one place that has to tell the two
+	// apart — the cheatsheet (#2237, see helpContext).
+	ctxPlayground = "playground"
 )
 
 const (
@@ -8086,9 +8091,14 @@ func (m *Model) openHelp() {
 	// Honest blocked section (0081/40): bindings whose command has no owner
 	// yet appear with their dependency instead of vanishing. Built live from
 	// the effective table on every open.
-	m.help.SetExtra(m.blockedHelpGroup(), m.paneKeysHelpGroup())
+	extra := []help.Group{m.blockedHelpGroup(), m.paneKeysHelpGroup()}
+	// The jq/yq playground owns the keyboard without owning a registry scope
+	// (#2237); its keys lead the sheet as their own context while it is
+	// focused, and contribute nothing otherwise.
+	extra = append(extra, m.playgroundHelpGroups()...)
+	m.help.SetExtra(extra...)
 	m.help.SetFilter("") // each open starts unfiltered (#271)
-	m.help.Snapshot(m.focusContext())
+	m.help.Snapshot(m.helpContext())
 	m.shell.SetContent(m.help)
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -8174,6 +8184,19 @@ func (m Model) focusContext() string {
 		return inst.ContextID()
 	}
 	return ctxExplorer
+}
+
+// helpContext is focusContext for the cheatsheet (#2237): the focused pane's
+// context, except while the jq/yq playground owns the keyboard — then the
+// sheet opens on the playground's own context rather than on the bindings of
+// the pane whose component the mode has replaced, which do not apply. Only the
+// help snapshot uses it; keymap resolution, palette scoping and the mode
+// indicator keep the plain focusContext.
+func (m Model) helpContext() string {
+	if m.playFocused() {
+		return ctxPlayground
+	}
+	return m.focusContext()
 }
 
 // keyContext is focusContext for the keymap layer (#1876): the focused pane's

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: jq & yq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context, `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, yaml, jq, yq, tools, inline, editor, http, completion, folding]
-timestamp: 2026-08-21T16:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # jq & yq Playground
@@ -47,6 +47,7 @@ internal/app/
   playground.go   the inline mode: query header, result buffer, key routing, debounce and async eval
   playcomplete.go the completion popup: state, keys, rendering and compositing
   playfilters.go  the filter library's UI: the store paths, the name prompt, the palette picker
+  playhelp.go     the mode's key inventory for the cheatsheet: query line, result buffer, keymap chords (#2237)
   commands.go     json.jqPlayground / …AtPath and yaml.yqPlayground / …AtPath → the two open messages,
                   json.jqSaveFilter / {json.jq,yaml.yq}Filters / …RenameFilter → the libraries,
                   json.jqQueryView → the multi-line view toggle
@@ -595,6 +596,8 @@ above win):
 | `ctrl+y` | copy the **whole** result (not just the visible part) |
 | `ctrl+o` | open the result as a fresh scratch in the dialect's extension (`.json` / `.yaml`) |
 | `esc` | close (recording the program in the history) |
+| `esc esc` | close **and** open the command palette (#2237) |
+| `f1` | the cheatsheet, opened on the playground's own context (#2237) |
 
 `ctrl+alt+e` works from the result buffer too.
 
@@ -625,6 +628,62 @@ program changes.
 The spatial focus keys (default ctrl+arrows) work from both the query line and
 the result buffer: they move the focus out of the pane with the playground
 still mounted (#1980).
+
+### `esc esc` reaches the palette
+
+#2237. The mode's `esc` used to return straight out of the modal routing —
+which sits well above the double-esc detector in `Update` — so the first press
+left the playground and the second one found nothing armed: the palette was
+simply unreachable from the query line, and the key felt broken rather than
+scoped.
+
+`leavePlaygroundOnEsc` closes the mode **and arms the detector**, which is the
+shape the rest of the app already uses: the single `esc` keeps its immediate
+meaning (no waiting out a chord timeout on the one key pressed most), and the
+second `esc`, now landing in an ordinary focus, opens the palette. Both focuses
+go through it — the query line's `esc` and the result buffer's resting-normal
+`esc`. An `esc` the [completion popup](#completion) consumes as a dismissal
+does *not* arm it: it is that popup's key, exactly as the editor's insert-mode
+`esc` is insert mode's.
+
+### Code actions say so instead of doing nothing
+
+#2237. `alt+enter` (`lsp.codeAction`) is bound in the **editor** context, so
+the mode's routing kept it from the keymap layer and the Global fallback
+(#1983) never matched it — the key did a silent nothing, the single most
+confusing thing a key can do. There is nothing behind it worth wiring: a jq
+program in a query line and a throwaway read-only result have no language
+server, no document and no diagnostics.
+
+So the playground answers the chord instead of dropping it, from either focus:
+the info row says *no code actions in the playground* and names the two keys
+that do the nearest thing it actually has — `ctrl+space` for completion and
+`ctrl+l` for the filter library. The line renders in the status row's **warning**
+colour rather than its success green (`playState.statusWarn`); "that key does
+not apply here" is not a confirmation. Like every status it clears on the next
+key.
+
+### The cheatsheet knows the playground
+
+#2237, on top of the context-sensitive help (#2182). The playground owns the
+keyboard but advertises no pane context and its keys belong to no registered
+command, so `f1` used to open on the *editor's* bindings — none of which apply
+while the mode is up — and never mentioned the history, the completion popup or
+the filter library at all.
+
+`helpContext` reports `playground` while the mode is focused (help only — the
+keymap layer, palette scoping and the mode indicator keep the plain
+`focusContext`), and `internal/app/playhelp.go` contributes three groups:
+the query line, the result buffer, and the keymap-bound chords that still reach
+the mode, the last resolved live from the binding table so a rebind is
+reflected rather than a default advertised. All three are flagged `Focused`, so
+`help.withExtraLeading` puts them at the **head** of the context view, ahead of
+the global bindings, exactly where a focused pane's registered scope would sit.
+With the mode closed — or the focus elsewhere — they contribute nothing.
+
+The info row's hint tail ends in `f1 keys`, last so it is the first segment a
+narrow pane drops: the row can only ever name a handful of keys, and the one
+worth naming last is the one that lists all of them.
 
 **Global-scope chords keep working** (#1983): a key the playground leaves over
 resolves against the Global scope of the live binding table and dispatches its

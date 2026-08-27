@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Help Overlay
-description: Read-only command & shortcut cheat sheet — snapshots the plugin registry, leads with the focused pane's own bindings, joins bindings, packs entries into width-responsive columns with right-aligned shortcuts, hosted in the reusable floating shell.
+description: Read-only command & shortcut cheat sheet — snapshots the plugin registry, leads with the focused pane's own bindings (or a keyboard-owning mode's, via a Focused extra group), joins bindings, packs entries into width-responsive columns with right-aligned shortcuts, hosted in the reusable floating shell.
 resource: internal/help/help.go
 tags: [architecture, help, overlay, responsive, bubbletea]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Help Overlay
@@ -66,6 +66,24 @@ plain `Snapshot` ordering — there is nothing to lead with — and the view is
 skipped in the `tab` cycle. The cycle is context → flat → essentials → context;
 the responsive two-column layout is identical in every view.
 
+#### Contexts without a registry scope (#2237)
+
+Some keyboards belong to no pane and no command: a **mode** mounted inside
+another pane owns every key while it is up, yet advertises no context id and
+registers no commands, so the context view would lead with the bindings of the
+pane whose component the mode replaced — none of which apply. The
+[jq/yq playground](./jq-playground.md) is the case that forced the seam.
+
+An extra group (`SetExtra`) flagged `Focused` covers it: `withExtraLeading`
+puts such groups at the **head** of the context view instead of appending them,
+so they sit exactly where a registered focused scope would, and
+`hasContextView` counts them, so the sheet opens on that view. The flat sheet
+keeps its own ordering — extras trail there, flagged or not. The caller decides
+what "focused" means: `internal/app`'s `helpContext` reports `playground` while
+the mode owns the keyboard, and only the help snapshot reads it — keymap
+resolution, palette scoping and the mode indicator keep the plain
+`focusContext`.
+
 ### Essentials view (#656)
 
 The Essentials view is a curated set, not the full registry dump:
@@ -98,7 +116,8 @@ internal/help/
   source.go      snapshot registry Commands, join 08 resolver bindings, group by scope, deterministic sort; ContextSnapshot = focused scope first (#2182)
   essentials.go  hand-curated Essentials spec + EssentialsSnapshot join (#656)
   layout.go      width -> column count; column-major balanced packing; min-column-width; single-column fallback
-  help.go        ui.Content: Snapshot(ctxID) refresh; Title(); Render(width) -> column-packed body (max two columns)
+  help.go        ui.Content: Snapshot(ctxID) refresh; Title(); Render(width) -> column-packed body (max two columns);
+                 withExtraLeading = Focused extra groups lead the context view (#2237)
 ```
 
 The root model (`internal/app`) holds a single `*ui.Floating`. Its `openHelp`
