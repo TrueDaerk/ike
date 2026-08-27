@@ -143,6 +143,7 @@ func (m *Model) switchTab(inst *pane.Instance, idx int) {
 	// earlier position". Read from inst rather than the focused editor: a tab
 	// click can land on an unfocused pane.
 	from := navPosOfPane(inst)
+	m.usage.Layout("tab.switch", nil)
 	m.activateTab(inst, idx)
 	if to := navPosOfPane(inst); from.Path != "" && from.Path != to.Path {
 		m.recordNavFrom(from)
@@ -164,6 +165,7 @@ func (m *Model) moveTab(delta int) {
 	}
 	from := inst.ActiveTab()
 	if inst.MoveTab(from, from+delta) {
+		m.usage.Layout("tab.move", nil)
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	}
 }

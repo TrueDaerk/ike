@@ -269,6 +269,12 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	cfg, diags := config.Load(config.Discover("."))
 	config.Set(cfg)
 	fresh := buildModel(m.reg, host.FromConfig(cfg), m.host, m.ws)
+	// The usage log is session state (#2235): the recorder rides across the
+	// switch — one JSONL file per run, not per project — and the switch
+	// itself is a layout event. buildModel's fresh recorder is discarded
+	// unstarted (it opens its file lazily, so it never existed on disk).
+	fresh.usage = m.usage
+	fresh.usage.Layout("project.switch", nil)
 	// The notification history is session state, not workspace state (#1514):
 	// it rides across the switch (entries carry their project root, so the
 	// history view can label foreign ones), as does the unseen counter.

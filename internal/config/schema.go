@@ -79,6 +79,17 @@ type Config struct {
 	// the background (#2085) and how prominently each kind of forge event
 	// announces itself (#2086).
 	Forge Forge `toml:"forge"`
+	// Telemetry holds the local-only usage recording switch (#2235).
+	Telemetry Telemetry `toml:"telemetry"`
+}
+
+// Telemetry holds the local-only usage-telemetry settings (#2235). Enabled
+// switches the recording of structural usage events — command dispatches,
+// keymap resolutions, layout operations — into per-session JSONL files under
+// the user's IKE directory. Nothing ever leaves the machine and no event
+// carries content (no typed text, no clear-text paths); off writes nothing.
+type Telemetry struct {
+	Enabled bool `toml:"enabled"`
 }
 
 // HTTP holds the HTTP client's re-run/compare settings (#2247).

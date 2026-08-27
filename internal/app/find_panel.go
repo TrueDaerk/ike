@@ -8,6 +8,7 @@ import (
 	ilsp "ike/internal/lsp"
 	"ike/internal/palette"
 	"ike/internal/pane"
+	"ike/internal/telemetry"
 )
 
 // find_panel.go implements "Open in Find Window" (#2055): the hit list of a
@@ -58,7 +59,7 @@ func (m *Model) paletteBindingCmd(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if !okc {
 		return nil, false
 	}
-	return m.dispatchCommand(b.Command, c), true
+	return m.dispatchCommandFrom(b.Command, c, telemetry.SourceKeybind), true
 }
 
 // openInFindPanel moves the palette's current result rows into the panel and

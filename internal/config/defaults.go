@@ -340,5 +340,11 @@ func defaults() *Config {
 				PRChecksFailing: "badge",
 			},
 		},
+		Telemetry: Telemetry{
+			// On by default (#2235): the data never leaves the machine,
+			// carries no content, and is the only way to learn how the IDE
+			// is actually used. The settings UI switches it off.
+			Enabled: true,
+		},
 	}
 }

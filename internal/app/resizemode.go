@@ -103,6 +103,7 @@ func (m *Model) resizeFocusedPane(dir layout.Zone) {
 	}
 	d.ResizeStep(delta)
 	m.layout()
+	m.usage.Layout("resize", map[string]string{"direction": telemetryZone(dir)})
 }
 
 // resizeModeHint is the status line's mode banner (#2150): the mode has to be

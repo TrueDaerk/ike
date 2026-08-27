@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-27 (Local-only usage telemetry, #2235)
+
+- **New subsystem** `internal/telemetry`: a `Recorder` appending usage events
+  as JSONL, one file per session under `$IKE_CONFIG_DIR/telemetry` or
+  `~/.ike/telemetry`. Events carry `v` (schema version 1), `ts`, `sid`, `type`
+  (`command`/`key`/`layout`) and a structural payload — never typed text,
+  file contents or clear-text paths. Writes are asynchronous (buffered
+  channel + writer goroutine, full buffer drops); growth is bounded (5 MiB
+  per-session cap, directory pruned to the newest 20 sessions).
+- **Hooks at the existing funnels**: `dispatchCommandFrom` carries the
+  invocation source (palette/menu/keybind/mouse/internal) through the single
+  command-dispatch funnel; `resolveKeymap` records resolved/blocked/unbound
+  chords (unbound only for command-modified chords and function keys — the
+  privacy line); split, pane move/focus, resize, tab switch/move and project
+  switch record layout events. The recorder is session state: it rides across
+  project switches and closes in the quit path.
+- **Setting** `telemetry.enabled` (default on) with a Usage Telemetry
+  settings page; read live per event, off writes nothing.
+- New concept doc: [usage-telemetry](/architecture/usage-telemetry.md);
+  schema documented there as the stable analysis interface.
+
 ## 2026-08-27 (HTTP history: re-run requests and diff against the previous run, #2247)
 
 - **The gap**: the response history stored every run (#1251), the diff engine

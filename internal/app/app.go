@@ -92,6 +92,7 @@ import (
 	"ike/internal/settings"
 	"ike/internal/snippets"
 	"ike/internal/structpanel"
+	"ike/internal/telemetry"
 	"ike/internal/terminal"
 	"ike/internal/testresults"
 	"ike/internal/textenc"
@@ -753,6 +754,7 @@ type Model struct {
 	cmdUsage    *palette.Usage       // most-used command ranking (#773)
 	fileUsage   *palette.Usage       // most-used file ranking in the ranked palettes (#1419)
 	cmdFrec     *frecency.Store      // command-execution frecency boost (#2153)
+	usage       *telemetry.Recorder  // local-only usage telemetry (#2235); session state, rides across project switches
 	fileFrec    *frecency.Store      // file-open frecency ranking in the "@" finder (#2155)
 	winSizes    *ui.WinSizes         // persisted floating-window resize deltas (#774)
 	winSizesAll *ui.WinSizes         // user-scoped last-resize deltas, fallback for fresh projects (#1714)
@@ -1212,6 +1214,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		cmdUsage:        cmdUsage,
 		fileUsage:       fileUsage,
 		cmdFrec:         cmdFrec,
+		usage:           newUsageRecorder(), // local-only usage telemetry (#2235)
 		fileFrec:        fileFrec,
 		winSizes:        winSizes,
 		winSizesAll:     winSizesAll,
@@ -2419,6 +2422,9 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 			cmd()
 		}
 	}
+	// Flush and end the usage log (#2235); blocking here is as fine as the
+	// synchronous quit hooks above.
+	m.usage.Close()
 	return m, tea.Quit
 }
 
@@ -2594,18 +2600,26 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 	case keymap.Resolved:
 		m.clearWhichKey()
 		if c, ok := m.reg.Command(res.Command); ok {
-			return m.dispatchCommand(res.Command, c), true
+			m.usage.Key(res.Binding.Chord.String(), string(m.keyContext()), res.Command, "resolved")
+			return m.dispatchCommandFrom(res.Command, c, telemetry.SourceKeybind), true
 		}
 		// A documented blocked default (0081/20 ledger): consume the chord and
 		// say why it does nothing — a silent no-op is indistinguishable from a
 		// typo'd binding (#267). Unregistered commands outside the ledger keep
 		// falling through to the legacy dispatch.
 		if reason, ok := keymap.BlockedReason(res.Command); ok {
+			m.usage.Key(res.Binding.Chord.String(), string(m.keyContext()), res.Command, "blocked")
 			m.host.Notify(host.Info, res.Command+" is not available yet — "+reason)
 			return nil, true
 		}
 	default:
 		m.clearWhichKey()
+		// A press the keymap layer has no binding for (#2235): the signal for
+		// expected-but-missing keybinds. Only command-modified chords and
+		// function keys are recordable — plain typed characters never are.
+		if recordableUnbound(k) {
+			m.usage.Key(k.String(), string(m.keyContext()), "", "unbound")
+		}
 	}
 	return nil, false
 }
@@ -3084,7 +3098,7 @@ func (m *Model) terminalGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if time.Since(m.termShiftAt) < doubleTapWindow {
 			m.termShiftAt = time.Time{}
 			if c, okc := m.reg.Command("palette.searchEverywhere"); okc {
-				return true, m.dispatchCommand("palette.searchEverywhere", c)
+				return true, m.dispatchCommandFrom("palette.searchEverywhere", c, telemetry.SourceKeybind)
 			}
 		}
 		m.termShiftAt = time.Now()
@@ -3103,7 +3117,7 @@ func (m *Model) terminalGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		}
 		if b, found := table.Lookup(chord, m.keyContext()); found && terminalGlobalCommands[b.Command] {
 			if c, okc := m.reg.Command(b.Command); okc {
-				return true, m.dispatchCommand(b.Command, c)
+				return true, m.dispatchCommandFrom(b.Command, c, telemetry.SourceKeybind)
 			}
 		}
 	}
@@ -3151,7 +3165,7 @@ func (m *Model) terminalContextChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return false, nil
 	}
 	if c, okc := m.reg.Command(b.Command); okc {
-		return true, m.dispatchCommand(b.Command, c)
+		return true, m.dispatchCommandFrom(b.Command, c, telemetry.SourceKeybind)
 	}
 	return false, nil
 }
@@ -4500,7 +4514,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case menu.RunMsg:
-		return m, m.RunCommand(msg.Command)
+		return m, m.RunCommandFrom(msg.Command, telemetry.SourceMenu)
 
 	case ShowNotificationHistoryMsg:
 		// notifications.history (palette): the history ring in the floating shell.
@@ -6100,7 +6114,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A palette-window selection — never a keybind invocation — bumps the
 		// most-used counter (#773).
 		m.cmdUsage.Bump(msg.ID)
-		return m, m.RunCommand(msg.ID)
+		return m, m.RunCommandFrom(msg.ID, telemetry.SourcePalette)
 
 	case palette.OpenFileMsg:
 		// A file selection confirmed from Run a Command / Search Everywhere —
@@ -6924,7 +6938,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case keymap.Resolved:
 			m.clearWhichKey()
 			if c, ok := m.reg.Command(res.Command); ok {
-				return m, m.dispatchCommand(res.Command, c)
+				m.usage.Key(res.Binding.Chord.String(), string(m.keyContext()), res.Command, "resolved")
+				return m, m.dispatchCommandFrom(res.Command, c, telemetry.SourceKeybind)
 			}
 		case keymap.Pending:
 			return m, nil // popup stays; no timer re-arm needed
@@ -7984,19 +7999,34 @@ func (m Model) commandExecuted(id string) tea.Cmd {
 // dispatchCommand runs a registered command and emits the executed signal.
 // Every command dispatch path — palette RunCommand, keymap resolution, and
 // inline invocations — funnels through it (#679), so "command X ran" is
-// observable regardless of how it was triggered.
+// observable regardless of how it was triggered. Callers that know how the
+// command was invoked use dispatchCommandFrom; the bare form counts as an
+// internal invocation.
 func (m Model) dispatchCommand(id string, c registry.OwnedCommand) tea.Cmd {
+	return m.dispatchCommandFrom(id, c, telemetry.SourceInternal)
+}
+
+// dispatchCommandFrom is dispatchCommand carrying the invocation source —
+// palette, menu, keybind, mouse or internal — for the usage log (#2235).
+func (m Model) dispatchCommandFrom(id string, c registry.OwnedCommand, source string) tea.Cmd {
 	// Every dispatch path lands here, so this is the one place that sees the
 	// project's real command-execution history — recorded for the palette's
-	// frecency boost (#2153), unlike the palette-only #773 counter above.
+	// frecency boost (#2153), unlike the palette-only #773 counter above,
+	// and for the local usage log (#2235).
 	m.cmdFrec.Record(id)
+	m.usage.Command(id, source)
 	return tea.Batch(c.Run(m.host), m.commandExecuted(id))
 }
 
 // RunCommand looks up and runs a registered command by id.
 func (m Model) RunCommand(id string) tea.Cmd {
+	return m.RunCommandFrom(id, telemetry.SourceInternal)
+}
+
+// RunCommandFrom is RunCommand carrying the invocation source (#2235).
+func (m Model) RunCommandFrom(id, source string) tea.Cmd {
 	if c, ok := m.reg.Command(id); ok {
-		return m.dispatchCommand(id, c)
+		return m.dispatchCommandFrom(id, c, source)
 	}
 	return nil
 }
@@ -8338,6 +8368,11 @@ func (m Model) leafOrder() []string {
 
 // setFocus focuses key and remembers it as the recent editor when it is one.
 func (m *Model) setFocus(key string) {
+	// A real focus transition is a pane switch worth counting (#2235);
+	// re-asserting the same focus (splits, restores) is not.
+	if old := m.activeWS().Panes.Focused(); old != "" && old != key {
+		m.usage.Layout("pane.focus", nil)
+	}
 	m.autosaveOnBlur(key)
 	m.activeWS().Panes.SetFocused(key)
 	if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
@@ -8422,6 +8457,7 @@ func (m *Model) SplitFocused(zone layout.Zone) {
 	m.activeWS().Tree = tree
 	m.setFocus(newKey)
 	m.layout()
+	m.usage.Layout("split", map[string]string{"zone": telemetryZone(zone)})
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
@@ -9804,7 +9840,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			if msg.Button == tea.MouseLeft {
 				if id, ok := statusSegmentCommands[m.statusSegmentAt(msg.X)]; ok {
 					if c, found := m.reg.Command(id); found {
-						return m, m.dispatchCommand(id, c)
+						return m, m.dispatchCommandFrom(id, c, telemetry.SourceMouse)
 					}
 				}
 			}
@@ -9996,6 +10032,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				m.commitTabMove(msg.X, msg.Y)
 			}
 			m.rememberMovedRunHome(runBefore, hadRun)
+		case dragResize:
+			// One event per divider drag (#2235), not one per motion.
+			m.usage.Layout("resize", nil)
 		case dragTermSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if term := m.dragTerminal(m.drag.srcPane); term != nil {
@@ -10067,6 +10106,7 @@ func (m *Model) commitMove(x, y int) {
 	if zone, ok := m.dockZoneAt(x, y); ok {
 		m.activeWS().Tree = layout.Dock(m.activeWS().Tree, m.drag.srcPane, zone, m.dockRatio(m.drag.srcPane, zone))
 		m.layout()
+		m.usage.Layout("pane.move", map[string]string{"zone": telemetryZone(zone)})
 		return
 	}
 	target, ok := m.lay.PaneAt(x, y)
@@ -10110,6 +10150,7 @@ func (m *Model) commitMove(x, y int) {
 		}
 		m.activeWS().Tree = layout.Move(m.activeWS().Tree, m.drag.srcPane, target, zone)
 		m.layout()
+		m.usage.Layout("pane.move", map[string]string{"zone": telemetryZone(zone)})
 		return
 	}
 	// Dropped on the source pane: spawn a split only when near an edge.

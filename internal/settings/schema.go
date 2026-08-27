@@ -356,6 +356,9 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "backup.debounce_ms", Type: Int, Title: "Snapshot debounce", Description: "Milliseconds a dirty buffer must stay quiet before it is snapshotted", Scope: config.UserScope, Min: 100, Max: 60000},
 			{Key: "backup.max_age_days", Type: Int, Title: "Snapshot max age", Description: "Days before leftover snapshots are pruned at startup (after the restore prompt)", Scope: config.UserScope, Min: 1, Max: 365},
 		}},
+		{Title: "Usage Telemetry", Description: "Local-only usage recording (#2235): structural events — which commands ran and how they were invoked, which chords resolved (or didn't), how panes and tabs are arranged — appended as JSONL under ~/.ike/telemetry for offline analysis with jq or scripts. Nothing ever leaves the machine and no event carries content: no typed text, no file contents, no clear-text paths.", Entries: []Entry{
+			{Key: "telemetry.enabled", Type: Bool, Title: "Local usage telemetry", Description: "Record command, keybinding and layout usage events into per-session JSONL files under ~/.ike/telemetry; off writes nothing. The data stays on this machine", Scope: config.UserScope},
+		}},
 		{Title: "Timeline", Description: "The per-file Timeline (#1916): one chronological list of a file's local-history snapshots and the git commits that touched it, opened with Show Timeline.", Entries: []Entry{
 			{Key: "history.timeline_source", Type: Enum, Title: "Timeline source filter", Description: "Which histories the Timeline shows when it opens: both local-history snapshots and git commits, snapshots only, or commits only. The view's f key cycles the filter for the open list without changing this default", Scope: config.UserScope, Options: []string{"both", "local", "git"}},
 		}},
