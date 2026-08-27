@@ -1,5 +1,23 @@
 # Log
 
+## 2026-08-27 (Command palette: frecency boost from command execution history, #2153)
+
+- **Execution history** (`internal/palette/frecency.go`): a new per-project
+  store keeps the unix timestamps of recent command executions
+  (`.ike/cmdfrecency.json`, `IKE_CONFIG_DIR`-redirectable). It is written in
+  `Model.dispatchCommand` — the single funnel every dispatch path goes through
+  — so keybind and inline invocations count like palette picks, unlike the
+  palette-only most-used counter (#773) it sits beside.
+- **Frecency scoring**: `Score` sums `0.5^(age / 7d)` over a command's
+  timestamps, blending frequency with recency decay. The store is capped at 16
+  timestamps per command and 400 tracked commands (lowest-scoring pruned); a
+  missing or corrupt file loads as empty history.
+- **Ranking blend** (`internal/palette/command_mode.go`): command mode's sort
+  key is now the fuzzy score plus a query-length-damped boost — dominant on an
+  empty query (all fuzzy scores tie there), halved per typed rune, so a longer
+  query's match quality wins and history only breaks near-ties. Context tiers
+  are unchanged.
+
 ## 2026-08-27 (Run output pane: respect the tool region, remember a move, #2191)
 
 - **Tool-region placement** (`internal/layout/region.go`,

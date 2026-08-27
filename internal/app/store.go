@@ -163,6 +163,16 @@ func fileUsageFile() string {
 	return filepath.Join(".ike", "fileusage.json")
 }
 
+// cmdFrecencyFile returns the path of the per-project command-execution
+// history (#2153) backing the palette's frecency boost, following the layout
+// store's IKE_CONFIG_DIR redirection seam.
+func cmdFrecencyFile() string {
+	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, "cmdfrecency.json")
+	}
+	return filepath.Join(".ike", "cmdfrecency.json")
+}
+
 // winSizeFile returns the path of the per-project floating-window size store
 // (#774), following the layout store's IKE_CONFIG_DIR redirection seam.
 func winSizeFile() string {
