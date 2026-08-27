@@ -46,6 +46,25 @@ func (m *Model) CanToggleValueAtCaret() bool {
 	return ok
 }
 
+// ToggleValuePreview computes what editor.toggleValue would make of the caret
+// line (#2252) without touching the buffer: the line as it is and the line
+// with the token flipped, built from a copy of its runes. ok is false when
+// nothing on the line toggles — the same verdict CanToggleValueAtCaret gives,
+// so an offered entry always previews.
+func (m *Model) ToggleValuePreview() (before, after string, line int, ok bool) {
+	line = m.cursor.Line
+	if line >= m.buf.LineCount() {
+		return "", "", 0, false
+	}
+	before = m.buf.Line(line)
+	runes := []rune(before)
+	start, end, repl, ok := toggleTokenAt(runes, m.cursor.Col, m.togglePairs())
+	if !ok {
+		return "", "", 0, false
+	}
+	return before, string(runes[:start]) + repl + string(runes[end:]), line, true
+}
+
 // ConcealExplainAtCaret reports whether a conceal stand-in the explainer
 // speaks for sits under the caret (#1998), and names the concealfilter family
 // gating it. It is the read-only twin of explainConceal, narrowed to what the

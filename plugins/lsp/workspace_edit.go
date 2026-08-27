@@ -44,16 +44,18 @@ func dispatchWorkspaceEdits(h host.API, files []manager.FileEdits) (int, error) 
 	return n, firstErr
 }
 
-// renamePreviewFiles builds the confirm dialog's payload (#2149) from the
-// converted edits: one entry per file that actually changes, carrying the edit
-// count and the file's text before and after the edits so the app can diff the
-// pair without a manager or a file read of its own. The "after" text is
-// produced by the very same applyEditsToLines the apply path uses, so what the
-// preview shows is what confirming writes. A file whose content is
+// previewFiles builds a preview payload from converted edits — the rename
+// confirm dialog's (#2149) and the intention popup's action preview (#2252):
+// one entry per file that actually changes, carrying the edit count and the
+// file's text before and after the edits so the app can diff the pair without
+// a manager or a file read of its own. The "after" text is produced by the
+// very same applyEditsToLines the apply path uses, so what the preview shows
+// is what applying writes — and it is produced on a *copy* of the lines, so
+// previewing mutates neither buffer nor file. A file whose content is
 // unreachable (open document gone, unreadable on disk) is dropped from the
 // preview rather than shown as an empty rewrite.
-func renamePreviewFiles(mgr *manager.Manager, files []manager.FileEdits) []ilsp.RenamePreviewFile {
-	out := make([]ilsp.RenamePreviewFile, 0, len(files))
+func previewFiles(mgr *manager.Manager, files []manager.FileEdits) []ilsp.PreviewFile {
+	out := make([]ilsp.PreviewFile, 0, len(files))
 	for _, f := range files {
 		if len(f.Edits) == 0 {
 			continue
@@ -62,7 +64,7 @@ func renamePreviewFiles(mgr *manager.Manager, files []manager.FileEdits) []ilsp.
 		if !ok {
 			continue
 		}
-		out = append(out, ilsp.RenamePreviewFile{
+		out = append(out, ilsp.PreviewFile{
 			Path:   f.Path,
 			Open:   f.Open,
 			Edits:  len(f.Edits),
