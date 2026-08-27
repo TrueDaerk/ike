@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-27 (Crash recovery: restore dialog with diff preview, #2160)
+
+- **The gap**: the restore offer listed file names and nothing else — the user
+  had to decide "restore or discard" without seeing what the snapshot held
+  versus the file on disk, and a restore wiped the buffer's history, so there
+  was no way back.
+- **Diff preview** (`internal/app/recovery.go`): the centered floating-shell
+  dialog now shows the selected file's on-disk content against its snapshot
+  (`diff.Compute`), so the `+` side is exactly what restoring would write into
+  the buffer. It is cached per selection and recomputed on cursor moves and
+  item drops, never per frame. Equal sides, a deleted base, and an unreadable
+  or undecodable side read as text instead of an empty diff.
+- **Shared inline renderer**: the local-history panel's git-style hunk renderer
+  moved out into `miniDiffLines`, which the change feed and the recovery dialog
+  now share instead of carrying a third copy.
+- **Undoable restore**: with the base file on disk, the recovered text lands
+  through `editor.RestoreContent` — one undo step, so plain `u` brings the
+  on-disk version back. A snapshot with no base file still seeds via
+  `RestoreText` (never-saved, so it stays dirty however far undo runs).
+- **Answer for everything**: `R` restore all / `D` discard all join the per-file
+  `r`/`d`/`s`; `esc` stays a *deferral* — every undecided snapshot survives to
+  the next launch, never a silent discard.
+- Wiki: [crash-recovery](architecture/crash-recovery.md).
+
 ## 2026-08-27 (.http highlighting continues across {{variables}}, url-shaped definitions, #2218)
 
 - **Placeholder-led targets** (`plugins/languages/http/spans.go`): a request

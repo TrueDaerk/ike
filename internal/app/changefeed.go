@@ -442,29 +442,7 @@ func (m Model) renderChangeFeedDiff(width int) []string {
 		return []string{dim.Render(ansi.Truncate(
 			"no differences left — the change was already reverted or overwritten", width, "…"))}
 	}
-	added := lipgloss.NewStyle().Foreground(pal.VCSAdded)
-	removed := lipgloss.NewStyle().Foreground(pal.VCSDeleted)
-	clip := func(marker, text string) string {
-		text = strings.ReplaceAll(text, "\t", "    ")
-		return ansi.Truncate(marker+text, width, "…")
-	}
-	var out []string
-	for _, h := range mergedLocalHistoryHunks(m.cfDiff) {
-		out = append(out, dim.Render(ansi.Truncate(hunkHeader(m.cfDiff.Rows[h.Start:h.End]), width, "…")))
-		for _, row := range m.cfDiff.Rows[h.Start:h.End] {
-			switch row.Kind {
-			case diff.RowSame:
-				out = append(out, clip("  ", row.Left))
-			case diff.RowChanged:
-				out = append(out, removed.Render(clip("- ", row.Left)), added.Render(clip("+ ", row.Right)))
-			case diff.RowRemoved:
-				out = append(out, removed.Render(clip("- ", row.Left)))
-			case diff.RowAdded:
-				out = append(out, added.Render(clip("+ ", row.Right)))
-			}
-		}
-	}
-	return out
+	return miniDiffLines(pal, m.cfDiff, width)
 }
 
 // updateChangeFeed consumes every key while the panel is open: navigation (the
