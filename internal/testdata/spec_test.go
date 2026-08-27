@@ -39,6 +39,12 @@ func TestValidateRejects(t *testing.T) {
 		{"param on paramless kind", Spec{Format: FormatCSV, Rows: 1, Fields: []Field{
 			{Name: "c", Kind: KindCity, Param: "berlin"},
 		}}, "takes no parameter"},
+		{"empty from_list", Spec{Format: FormatCSV, Rows: 1, Fields: []Field{
+			{Name: "s", Kind: KindFromList},
+		}}, "at least one entry"},
+		{"blank from_list entries", Spec{Format: FormatCSV, Rows: 1, Fields: []Field{
+			{Name: "s", Kind: KindFromList, Param: " , ,"},
+		}}, "at least one entry"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -79,6 +85,8 @@ func sampleParam(k Kind) string {
 		return "1.5..2.5"
 	case KindDate:
 		return "2020-01-01..2020-12-31"
+	case KindFromList:
+		return "red, green, blue"
 	}
 	return ""
 }
@@ -91,7 +99,7 @@ func TestCatalogComplete(t *testing.T) {
 		KindDomain, KindIPv4, KindIPv6, KindUUID, KindPhone, KindStreet, KindCity,
 		KindCountry, KindCompany, KindJobTitle, KindSentence, KindParagraph,
 		KindInt, KindFloat, KindBool, KindDate, KindHexColor, KindUserAgent, KindMAC,
-		KindID,
+		KindID, KindFromList,
 	}
 	for _, k := range want {
 		info, ok := Info(k)
@@ -102,10 +110,10 @@ func TestCatalogComplete(t *testing.T) {
 			t.Fatalf("kind %q has no description", k)
 		}
 	}
-	for _, k := range []Kind{KindURL, KindHostname} {
+	for _, k := range []Kind{KindURL, KindHostname, KindFromList} {
 		info, _ := Info(k)
 		if info.Param == "" {
-			t.Fatalf("kind %q must document its domain parameter", k)
+			t.Fatalf("kind %q must document its parameter", k)
 		}
 	}
 	if got, want := len(Kinds()), len(Catalog()); got != want {

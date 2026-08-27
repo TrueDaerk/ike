@@ -9185,6 +9185,13 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			m.floats.Pop()
 			return m, nil
 		}
+		if top == m.shell && m.generateScratchOpen() && msg.action == mouseWheel {
+			// The test-data wizard (#2228) scrolls its list selections with
+			// the wheel; other shell content still ignores wheel events.
+			if out, cmd, handled := m.mouseGenerateScratch(msg, 0, 0); handled {
+				return out, cmd
+			}
+		}
 		if msg.action == mousePress && msg.Button == tea.MouseLeft {
 			v := top.View()
 			w, h := lipgloss.Width(v), lipgloss.Height(v)
@@ -9196,6 +9203,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				// and toggles that pane.
 				ox, oy := m.shell.ContentOrigin()
 				m.layoutSelectClick(msg.X-bx-ox, msg.Y-by-oy+m.shell.ScrollOffset())
+			} else if top == m.shell && m.generateScratchOpen() {
+				// The test-data wizard (#2228): the click acts on the hit
+				// region the last render recorded for that body line.
+				ox, oy := m.shell.ContentOrigin()
+				out, cmd, _ := m.mouseGenerateScratch(msg, msg.X-bx-ox, msg.Y-by-oy+m.shell.ScrollOffset())
+				return out, cmd
 			}
 		}
 		return m, nil
