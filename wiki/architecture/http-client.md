@@ -632,7 +632,12 @@ For a recognized stream:
   (`/api/users`) have no prefix and stay unchanged; placeholders inside the
   prefix keep their own overlay's captures (#1880), and the punycode/homograph
   stand-ins of `internal/nethint` (#1653) win over the authority span, since
-  the prefix spans are emitted last.
+  the prefix spans are emitted last. A target that *opens* with a placeholder
+  and has no `://` of its own (`GET {{host}}/my/path`, #2218) keeps
+  highlighting past the variable: the path starts at the first `/` outside
+  the placeholder ranges (`label`, query structure as usual), and any stretch
+  between the placeholder and the path (`{{host}}.test:8080`) reads as the
+  authority remainder in `string.special`.
 - **Placeholder and definition highlighting** (#1880, `spans.go`): the
   grammar only builds a `variable` node for a `{{name}}` placeholder in some
   contexts — a header value gets one, but the request target stays one
@@ -646,7 +651,11 @@ For a recognized stream:
   definition (#1867) already gets `@name` styled as `variable` and `=` as
   `operator` from the grammar's own query; the same producer adds the
   missing `string` capture for `value` (a placeholder inside the value, e.g.
-  `@api = {{host}}/api`, keeps its own placeholder styling instead).
+  `@api = {{host}}/api`, keeps its own placeholder styling instead). A
+  url-shaped value (`@host=http://www.example.com/base?a=1`, #2218) reads as
+  the same segments a request target does — dimmed scheme, `punctuation`
+  `://`, `string.special` authority, `label` path and the query-pass
+  structure — instead of one flat `string`.
 - **Value conceals** (#1618, #1627, #1684): the same producer collects every
   stretch it already recognises as a *value* — a query string, a folded
   query continuation line, a header value, an inline request body line — and

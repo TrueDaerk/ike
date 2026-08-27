@@ -561,3 +561,72 @@ func TestPlaceholderSpansEverywhere(t *testing.T) {
 		}
 	}
 }
+
+// TestPlaceholderTargetPath (#2218): a target opening with a placeholder and
+// no scheme of its own ("{{host}}/my/path") keeps highlighting past the
+// variable — the path reads as label, the query keeps its structure and the
+// placeholder keeps its punctuation + @variable styling.
+func TestPlaceholderTargetPath(t *testing.T) {
+	line := "GET {{host}}/my/path?x=1"
+	spans := querySpans([]string{line})
+	start := strings.Index(line, "{{host}}")
+	if got := captureAt(spans, 0, start); got != "punctuation" {
+		t.Errorf("{{host}} opening brace = %q, want punctuation", got)
+	}
+	if got := captureAt(spans, 0, start+2); got != "variable" {
+		t.Errorf("{{host}} name = %q, want variable", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "/my")); got != "label" {
+		t.Errorf("path = %q, want label", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "path")); got != "label" {
+		t.Errorf("path tail = %q, want label", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "x=")); got != "property" {
+		t.Errorf("query key = %q, want property", got)
+	}
+}
+
+// TestPlaceholderTargetAuthorityRemainder (#2218): the stretch between a
+// leading placeholder and the path ("{{host}}.test:8080/p") reads as the
+// authority remainder, matching the #1740 authority colour.
+func TestPlaceholderTargetAuthorityRemainder(t *testing.T) {
+	line := "GET {{host}}.test:8080/p"
+	spans := querySpans([]string{line})
+	if got := captureAt(spans, 0, strings.Index(line, ".test")); got != "string.special" {
+		t.Errorf("authority remainder = %q, want string.special", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "8080")); got != "string.special" {
+		t.Errorf("port = %q, want string.special", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "/p")); got != "label" {
+		t.Errorf("path = %q, want label", got)
+	}
+}
+
+// TestVariableDefinitionURLValue (#2218): a url-shaped definition value
+// ("@host=http://www.example.com/base?a=1") reads as the same segments a
+// request target does instead of one flat string.
+func TestVariableDefinitionURLValue(t *testing.T) {
+	line := "@host=http://www.example.com/base?a=1"
+	spans := querySpans([]string{line})
+	if got := captureAt(spans, 0, strings.Index(line, "@")); got != "" {
+		// The grammar styles "@host" and "="; querySpans must not overlay them.
+		t.Errorf("name = %q, want no querySpans capture", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "http")); got != "comment" {
+		t.Errorf("scheme = %q, want comment", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "://")); got != "punctuation" {
+		t.Errorf("separator = %q, want punctuation", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "www")); got != "string.special" {
+		t.Errorf("authority = %q, want string.special", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "/base")); got != "label" {
+		t.Errorf("path = %q, want label", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "a=")); got != "property" {
+		t.Errorf("query key = %q, want property", got)
+	}
+}
