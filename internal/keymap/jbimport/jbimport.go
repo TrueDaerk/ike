@@ -215,6 +215,7 @@ var actionMap = map[string]string{
 	"StepOut":              "debug.stepOut",
 	"Resume":               "debug.continue",
 	"ViewBreakpoints":      "debug.breakpoints",
+	"EditBreakpoint":       "debug.breakpointProperties",
 	"EvaluateExpression":   "debug.evaluate",
 }
 

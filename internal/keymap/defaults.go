@@ -312,6 +312,11 @@ var jetbrainsRows = []row{
 	// JetBrains Breakpoints dialog (cmd+shift+f8 on the macOS keymap),
 	// mirrored verbatim (#1377): the breakpoints list tool window.
 	{"cmd+shift+f8", "debug.breakpoints", "Breakpoints", Global, "Run (0350)"},
+	// Breakpoint properties (#2245): the toggle chord plus alt, in both the
+	// macOS and the Windows scheme like the toggle itself — condition, hit
+	// count and log message of the cursor line's breakpoint.
+	{"cmd+alt+f8", "debug.breakpointProperties", "Breakpoint properties", Global, "Run (0350)"},
+	{"ctrl+alt+f8", "debug.breakpointProperties", "Breakpoint properties", Global, "Run (0350)"},
 	// JetBrains debug chords, identical across platforms: shift+f9 debug,
 	// F8/F7/shift+F8/F9 stepping (no-ops without a paused session; the diff
 	// pane's context-scoped f7 stays more specific and wins there).

@@ -15,6 +15,17 @@ func (m *Model) SetBreakpointSource(src func(path string) []int) { m.bpSource = 
 // breakpoint stays visible without reading as armed. Nil renders all filled.
 func (m *Model) SetBreakpointDisabledSource(src func(path string) []int) { m.bpDisabledSource = src }
 
+// SetBreakpointConditionalSource injects the lookup for the conditional
+// subset (#2245): a breakpoint carrying a condition and/or a hit count draws
+// ◉ instead of ●, so a stop that may not happen is visible in the gutter.
+// Nil renders every breakpoint plain.
+func (m *Model) SetBreakpointConditionalSource(src func(path string) []int) { m.bpCondSource = src }
+
+// SetBreakpointLogpointSource injects the lookup for the logpoint subset
+// (#2245): those lines draw ◆ in the warning tone — they log instead of
+// stopping. Nil renders every breakpoint plain.
+func (m *Model) SetBreakpointLogpointSource(src func(path string) []int) { m.bpLogSource = src }
+
 // SetBreakpointAdjuster injects the callback fired after a buffer mutation
 // changed the line count, so the store can shift breakpoints like the editor
 // shifts folds (dissolveFoldsAtEdit): cursorAfter is the 0-based edit site,
@@ -78,10 +89,22 @@ func (m Model) breakpointSet() map[int]bool {
 // disabledBreakpointSet snapshots the disabled subset (#1377), empty when no
 // source is wired or the buffer has no file.
 func (m Model) disabledBreakpointSet() map[int]bool {
-	if m.bpDisabledSource == nil || !m.HasFile() {
+	return m.lineSet(m.bpDisabledSource)
+}
+
+// conditionalBreakpointSet snapshots the condition/hit-count subset (#2245).
+func (m Model) conditionalBreakpointSet() map[int]bool { return m.lineSet(m.bpCondSource) }
+
+// logpointSet snapshots the logpoint subset (#2245).
+func (m Model) logpointSet() map[int]bool { return m.lineSet(m.bpLogSource) }
+
+// lineSet turns one injected line lookup into a set, empty when the source is
+// unwired or the buffer has no file.
+func (m Model) lineSet(src func(path string) []int) map[int]bool {
+	if src == nil || !m.HasFile() {
 		return nil
 	}
-	lines := m.bpDisabledSource(m.Path())
+	lines := src(m.Path())
 	if len(lines) == 0 {
 		return nil
 	}

@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-27 (Breakpoint properties: form, glyphs, capability gate, #2245)
+
+- **Properties form** (`internal/app/breakpoint_form.go`): condition, hit
+  count and log message of one breakpoint in the shell dialog the
+  run-configuration form uses — `p` on a Breakpoints-list row and
+  `debug.breakpointProperties` (cmd/ctrl+alt+f8, palette, Run menu) on the
+  editor's cursor line, JetBrains' *Edit Breakpoint*. The list's inline
+  `c`/`n`/`l` editors stay for one-field edits.
+- **Validation next to the store** (`internal/debug/validate.go`): both
+  surfaces reject the same input with the same wording before it reaches an
+  adapter — a whitespace-only field ("empty but enabled"), a hit count that is
+  not a number optionally prefixed by `>`/`>=`/`<`/`<=`/`==`/`%`, an
+  unbalanced/empty/nested `{}` in a log message. A rejected value keeps its
+  editor open with the reason.
+- **Distinct glyphs** (`Meta.Kind`): `◉`/`◎` conditional and `◆`/`◇` logpoint
+  next to the plain `●`/`○`, in the gutter and the list alike — the editor
+  gets two more injected line sources, the paused `▶` still wins.
+- **Capability gate**: the three fields follow the live adapter's
+  `supportsConditionalBreakpoints`/`supportsHitConditionalBreakpoints`/
+  `supportsLogPoints`. A gated field is refused with a notice (list) or drawn
+  read-only as `(unsupported by adapter)` (form), and session start warns once
+  when the store holds refinements this adapter will strip. The breakpoints
+  are pushed either way — an unsupported capability never breaks a session.
+
 ## 2026-08-27 (Terminal link hints + extensionless references, #2254)
 
 - **Keyboard hints** (`internal/terminal/hints.go`): the reserved

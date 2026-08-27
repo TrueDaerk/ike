@@ -557,6 +557,13 @@ func (m *Model) handleDebugEvent(evSess *dap.Session, ev dap.Event) {
 		for file := range m.bpts.All() {
 			files[file] = dapBreakpoints(m.bpts.EnabledSpecs(file))
 		}
+		// The capabilities are known now, so the list can gate its edit
+		// actions, and a refinement this adapter will not honour is said out
+		// loud once instead of vanishing on the wire (#2245).
+		m.refreshBreakpointsPanel()
+		if notice := m.strippedRefinementNotice(sess, files); notice != "" {
+			m.host.Notify(host.Warn, notice)
+		}
 		root := dbg.root
 		go func() {
 			for file, bps := range files {
@@ -1219,6 +1226,8 @@ func (m *Model) stopDebugSession(notify bool) {
 	m.clearPausedMarker()
 	m.dbg = nil
 	m.dbgLaunching = false
+	// Refinement editing is ungated again without a session (#2245).
+	m.refreshBreakpointsPanel()
 	m.doctorSessionEnded(dbg.cfgName)
 	// By default the debug area stays open (#689): the console keeps the
 	// program's output reviewable until the user closes it or a new launch
@@ -1288,6 +1297,8 @@ func (m *Model) finishDebugSession(msg debugEndedMsg) {
 	m.clearPausedMarker()
 	m.dbg = nil
 	m.dbgLaunching = false
+	// Refinement editing is ungated again without a session (#2245).
+	m.refreshBreakpointsPanel()
 	m.doctorSessionEnded(dbg.cfgName)
 	// Keep the debug area open in a finished state (#689) so the final output
 	// — the console's scrollback — stays reviewable; debug.session_end =

@@ -191,6 +191,10 @@ type RunFileMsg struct{}
 // cursor line (0350, #577).
 type DebugToggleBreakpointMsg struct{}
 
+// DebugBreakpointPropertiesMsg opens the breakpoint-properties form on the
+// focused editor's cursor line (#2245) — condition, hit count, log message.
+type DebugBreakpointPropertiesMsg struct{}
+
 // DebugStartMsg launches the active file's configuration under the debugger
 // (0350, #579); DebugStopMsg ends the session. The step messages drive a
 // paused session: over (F8), into (F7), out (shift+F8), continue (F9).
@@ -547,6 +551,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.insertCurlAsRequest", "Insert curl as HTTP Request", InsertCurlAsRequestMsg{}),
 			appCommand("http.cancel", "Cancel Running HTTP Request", HTTPCancelMsg{}),
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
+			appCommand("debug.breakpointProperties", "Breakpoint Properties…", DebugBreakpointPropertiesMsg{}),
 			appCommand("debug.breakpoints", "Breakpoints", BreakpointsToggleMsg{}),
 			appCommand("debug.start", "Debug File", DebugStartMsg{}),
 			appCommand("debug.testAtCursor", "Debug Test at Cursor", DebugTestAtCursorMsg{}),

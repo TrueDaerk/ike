@@ -73,6 +73,7 @@ func Defaults() []Menu {
 			{Title: "Run Tests in File", Command: "run.testsInFile"},
 			{Title: "Run HTTP Request", Command: "http.run"},
 			{Title: "Toggle Breakpoint", Command: "debug.toggleBreakpoint"},
+			{Title: "Breakpoint Properties…", Command: "debug.breakpointProperties"},
 			{Title: "Breakpoints", Command: "debug.breakpoints"},
 			{Title: "Debug File", Command: "debug.start"},
 			{Title: "Debug Test at Cursor", Command: "debug.testAtCursor"},

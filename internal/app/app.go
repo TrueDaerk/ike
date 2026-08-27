@@ -396,6 +396,9 @@ type Model struct {
 	// runForm is the open run-configuration form (#2173) — the environment
 	// editor of one stored configuration; nil when it is closed.
 	runForm *runFormState
+	// bpForm is the open breakpoint-properties form (#2245) — condition, hit
+	// count and log message of one breakpoint; nil when it is closed.
+	bpForm *bpFormState
 
 	// tdGen is the open test-data wizard (#2134); nil when it is closed.
 	tdGen *tdGenState
@@ -1622,14 +1625,16 @@ func (m *Model) wireEditorEmitters() {
 // pane. It is idempotent, so re-running it after a tab is added is cheap.
 func (m *Model) installEmitter(key string) {
 	if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
-		source, disabled, adjust := breakpointHooks(m.bpts)
+		bph := breakpointHooks(m.bpts)
 		mkSet, mkLines, mkAdjust := markHooks(m.gmarks)
 		bmSigns, bmAdjust := bookmarkHooks(m.bmarks)
 		for _, ed := range inst.Editors() {
 			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key})
-			ed.SetBreakpointSource(source)
-			ed.SetBreakpointDisabledSource(disabled)
-			ed.SetBreakpointAdjuster(adjust)
+			ed.SetBreakpointSource(bph.source)
+			ed.SetBreakpointDisabledSource(bph.disabled)
+			ed.SetBreakpointConditionalSource(bph.conditional)
+			ed.SetBreakpointLogpointSource(bph.logpoints)
+			ed.SetBreakpointAdjuster(bph.adjust)
 			ed.SetMarkHooks(mkSet, mkLines, mkAdjust)
 			ed.SetBookmarkHooks(bmSigns, bmAdjust)
 			ed.SetHistories(m.qhist) // search/ex query recall (#1171)
@@ -4827,6 +4832,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toggleBreakpointAtCursor()
 		return m, nil
 
+	case DebugBreakpointPropertiesMsg:
+		// debug.breakpointProperties (cmd/ctrl+alt+f8 / palette, #2245): the
+		// condition/hit-count/log-message form for the cursor line's
+		// breakpoint.
+		m.breakpointPropertiesAtCursor()
+		return m, nil
+
 	case DebugStartMsg:
 		// debug.start (shift+f9 / Run menu / palette, #579).
 		m.startDebug()
@@ -5269,6 +5281,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// debug.breakpoints (#1377): same state machine for the Breakpoints
 		// tool window.
 		m.toggleBreakpointsPanel()
+		return m, nil
+
+	case breakpanel.EditMetaMsg:
+		// The list's `p` action (#2245): the properties form for that row.
+		m.openBreakpointForm(msg.Path, msg.Line)
+		return m, nil
+
+	case breakpanel.NoticeMsg:
+		// A gated field the panel refused to open (#2245); the panel never
+		// notifies itself.
+		m.host.Notify(host.Warn, msg.Text)
 		return m, nil
 
 	case breakpanel.OpenLocationMsg, breakpanel.ToggleEnabledMsg,
@@ -7147,6 +7170,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// lose its keys to it.
 		if m.runConfigFormOpen() {
 			return m.updateRunConfigForm(msg)
+		}
+		// The breakpoint-properties form (#2245) is the same kind of modal
+		// shell dialog and sits right next to it: opened from the Breakpoints
+		// list or the gutter chord, typically while a session runs.
+		if m.breakpointFormOpen() {
+			return m.updateBreakpointForm(msg)
 		}
 		// The pinned-files picker (#788) owns the keyboard the same way.
 		if m.pinPickerOpen() {
