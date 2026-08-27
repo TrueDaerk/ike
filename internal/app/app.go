@@ -452,6 +452,14 @@ type Model struct {
 	// directory.
 	httpEnvs *httpEnvMode
 	httpEnv  *httpEnvStore
+	// httpDiags holds the diagnostics of an .http file per producing owner
+	// (#2158, http_diag.go): failed captures and unknown variables publish
+	// through one merged set, since applyDiagnostics replaces a path's whole
+	// set. httpVarsDeb debounces the unknown-variable lint per buffer, armed
+	// off the change seam like the autosave-idle one.
+	httpDiags         map[string]map[string][]ilsp.Diagnostic
+	httpVarsDeb       *backup.Debouncer
+	httpVarsTickArmed bool
 	// runConfigs is the palette mode listing run/debug configurations
 	// (#1914); run.select fills and opens it.
 	runConfigs *runConfigsMode
@@ -1229,7 +1237,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		ssh:             sshPicker,
 		remote:          remotePicker,
 		playFilters:     playFilters,
-		httpEnv:         loadHTTPEnv(), // selected HTTP environments (#1867)
+		httpEnv:         loadHTTPEnv(),                      // selected HTTP environments (#1867)
+		httpVarsDeb:     backup.NewDebouncer(httpVarsQuiet), // unknown-variable lint (#2158)
 		refs:            refs,
 		lspStatus:       map[string]string{},
 		symbols:         symbols,
@@ -4722,9 +4731,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SelectHTTPEnvMsg:
 		// A row of that picker was chosen (#1867): persist it for the .http
-		// file's directory; the next dispatch resolves against it.
-		m.selectHTTPEnv(msg)
-		return m, nil
+		// file's directory; the next dispatch resolves against it, and the
+		// open files of that directory are re-linted against the new set of
+		// variables right away (#2158).
+		cmd := m.selectHTTPEnv(msg)
+		return m, cmd
 
 	case ShowStoredHTTPResponseMsg:
 		// A picker row was chosen (#1829): same loading path as
@@ -6158,6 +6169,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if c := m.autosaveIdleOnSync(msg.FromKey, msg.Path); c != nil {
 			cmds = append(cmds, c)
 		}
+		// An edited .http buffer is re-linted for unknown {{variables}} once
+		// it goes quiet (#2158); every other path is a cheap no-op.
+		if c := m.httpVarsOnSync(msg.Path); c != nil {
+			cmds = append(cmds, c)
+		}
 		// Deliver to every other view of the document — other panes and this
 		// pane's background tabs alike; only the originating tab is skipped.
 		for _, key := range m.editorKeysForPath(msg.Path) {
@@ -6820,6 +6836,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.autosaveIdleTickArmed = false
 		m.saveDueIdleBuffers(time.Now())
 		return m, m.armAutosaveIdleTick()
+
+	case httpVarsTickMsg:
+		// An .http buffer went quiet (#2158): re-check its `{{name}}`
+		// references against the variable chain and re-arm while marks remain.
+		cmd := m.lintDueHTTPVars(time.Now())
+		return m, cmd
 
 	case mouseHoverTickMsg:
 		// The mouse-idle hover deadline elapsed (#1129): fire the hover when

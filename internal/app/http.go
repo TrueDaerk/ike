@@ -493,6 +493,13 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
 		}
 		p.SetHistory(items)
 	}
+	// The response may just have captured a value (#1993), which defines a
+	// name that read as unknown until now — re-lint after the entry is
+	// stored, since that store is where the captured values are read from
+	// (#2158).
+	if cmd := m.lintHTTPVars(msg.Source); cmd != nil {
+		report = tea.Batch(report, cmd)
+	}
 	m.layout()
 	return report
 }

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/fuzzy"
 	"ike/internal/host"
 	"ike/internal/httpfile"
@@ -234,11 +236,15 @@ func (m *Model) openHTTPEnvPicker() {
 // selectHTTPEnv persists a picked environment (#1867). It takes effect on the
 // next dispatch; a response already shown was answered by the old one, and
 // re-sending it (#1832) repeats it verbatim regardless.
-func (m *Model) selectHTTPEnv(msg SelectHTTPEnvMsg) {
+func (m *Model) selectHTTPEnv(msg SelectHTTPEnvMsg) tea.Cmd {
 	m.httpEnv.Set(msg.Dir, msg.Name)
 	if msg.Name == "" {
 		m.host.Notify(host.Info, "http: environment cleared for "+displayPath(msg.Dir))
-		return
+	} else {
+		m.host.Notify(host.Info, fmt.Sprintf("http: environment %q selected for %s", msg.Name, displayPath(msg.Dir)))
 	}
-	m.host.Notify(host.Info, fmt.Sprintf("http: environment %q selected for %s", msg.Name, displayPath(msg.Dir)))
+	// The variable set of every request file in that directory just changed
+	// (#2158): re-lint them so the unknown-variable warnings match the
+	// environment the next dispatch will use.
+	return m.relintHTTPVarsIn(msg.Dir)
 }

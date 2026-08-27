@@ -156,6 +156,46 @@
   read back off the spool when the pane holds only the head — because a
   program against a truncated document answers the wrong question.
 
+## 2026-08-27 (HTTP client: completion for env, in-file and response variables, #2158)
+
+- **The third rung reaches completion**: `{{` completion (#2135) offered the
+  file's `@name=value` definitions and the selected environment; it now also
+  offers the values earlier responses were **captured** from (#1993,
+  `plugins/languages/http/captured.go`, read back from `.ike/http/*.json` like
+  the dispatch reads them) and the names a `# @capture` directive *declares*
+  but no response has produced yet — the promise a chain's polling request is
+  written against before the chain has ever run.
+- **Every item names its origin** — `file`, `env <name>` (the environment is
+  named: it is the one thing that changes under the author's feet), `response`,
+  `capture` — because the same name may live in several rungs and which one
+  answered is the whole question. Built on the new
+  `httpfile.Vars.Definitions()`, which lists the chain's names once, sorted,
+  tagged with the winning rung; the process environment stays out of it, since
+  its hundreds of names would drown the handful that belong to the file.
+- **The popup opens on the braces**: the http source claims `{` as a trigger
+  character (`complete.TriggerSource`), so `{{` offers the variable list
+  without waiting for a letter to follow. Which made the auto-close pair
+  interaction worth fixing: with `{{|}}` already in the buffer the item now
+  inserts the bare name instead of `name}}`. The value of an `@name=value`
+  definition completes too — `@api = {{ho` reaches `host`.
+- **Unknown references are warned about** (`internal/app/http_vars.go`): every
+  `{{name}}` no rung defines — `httpfile.References` × `Vars.Defines` — is
+  marked inline, reads in the diagnostic popup and lands in the Problems window
+  (source `http variables`). It runs after an edit goes quiet (400 ms, the
+  autosave-idle debouncer shape), after a dispatch (a capture may just have
+  defined the name) and when the environment is switched. A declared capture
+  name and the process environment count as defined; `${NAME}` /
+  `{{$env NAME}}` are never flagged, and neither is anything in a comment.
+- **Deliberately silent** while the environment file does not parse or while
+  several environments exist and none is chosen: every environment name would
+  read as unknown, and a wall of warnings caused by a JSON typo — or by an
+  unmade choice the dispatch error already names — is worse than none.
+- **Two producers, one set** (`internal/app/http_diag.go`): `applyDiagnostics`
+  replaces a path's whole set, so the capture reporter (#1993) and the variable
+  linter now publish their shares into a per-file merge, ordered by position.
+  A dispatch no longer erases the variable warnings, and a re-lint no longer
+  erases the capture markers.
+
 ## 2026-08-27 (Auto-save dirty buffers on project switch, #2186)
 
 - **The gate** (`internal/app/switch_autosave.go`): with

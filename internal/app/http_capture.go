@@ -57,11 +57,13 @@ func captureDiagnostics(results []httpclient.CaptureResult) []ilsp.Diagnostic {
 // .http file it came from. A response without any capture directive publishes
 // nothing at all (rather than an empty set): a request that never captured
 // must not clear the markers of a sibling request that did.
+//
+// The set is published as this producer's share of the file's diagnostics
+// (#2158, http_diag.go), so the unknown-variable warnings of the same file
+// survive a dispatch and the other way round.
 func (m *Model) reportHTTPCaptures(source string, resp *httpclient.Response) tea.Cmd {
 	if source == "" || resp == nil || len(resp.Captures) == 0 {
 		return nil
 	}
-	cmd := m.applyDiagnostics(source, captureDiagnostics(resp.Captures))
-	m.refreshProblemsPanel()
-	return cmd
+	return m.setHTTPDiags(source, httpCaptureSource, captureDiagnostics(resp.Captures))
 }
