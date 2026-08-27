@@ -1197,6 +1197,13 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 			regs.SetHistoryCap(n)
 		}
 	}
+	// Per-entry size cap (#2250), applied here for the same reason: a huge
+	// host-side copy before the first editor exists must not enter the ring.
+	if v, ok := cfg.Get("editor.clipboard_history_max_kb"); ok {
+		if kb, err := strconv.Atoi(v); err == nil && kb > 0 {
+			regs.SetEntryMaxBytes(kb * 1024)
+		}
+	}
 	// Per-terminal probe verdicts (#2080) install before the first
 	// buildKeymap below: Defaults derives every binding's Fragile flag from
 	// Classify at table-build time, so probed truth has to be in place first.

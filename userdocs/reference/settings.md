@@ -34,6 +34,7 @@ secrets — are documented together, with screenshots, in
 | Auto-close brackets | `editor.auto_close_pairs` | boolean | `true` | user | Insert the matching ), ] or } when typing an opening bracket |
 | Yank to system clipboard | `editor.clipboard_sync` | boolean | `true` | user | Mirror yanks (yy, y{motion}, visual y) onto the system clipboard; named registers and deletes stay internal |
 | Clipboard history size | `editor.clipboard_history_size` | integer (1–200) | `20` | user | How many recent copies Paste from History (cmd+shift+v) keeps: yanks, deletes and pane copy actions, newest first with duplicates collapsed. The ring lives in memory only and starts empty after a restart |
+| Clipboard entry limit | `editor.clipboard_history_max_kb` | integer (1–10240) | `256` | user | Largest single copy Paste from History keeps, in kilobytes. Bigger yanks, deletes and pane copies are skipped by the ring — never truncated — and still paste in full from the registers |
 | Auto save | `editor.auto_save` | enum: `focus`, `idle`, `off` | `focus` | user | Save a dirty buffer when focus leaves its pane (focus), additionally after an idle delay while editing (idle), or never (off) |
 | Auto save idle delay | `editor.auto_save_idle_ms` | integer (100–60000) | `2000` | user | Milliseconds a dirty buffer must stay quiet before idle auto save writes it (auto_save = idle) |
 | Trim trailing whitespace | `editor.trim_trailing_whitespace` | boolean | `true` | user | Strip line-end whitespace on save |

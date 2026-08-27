@@ -35,6 +35,16 @@ func (nopClipboard) Write(string) error    { return nil }
 // editor.clipboard_history_size (#2061).
 const DefaultHistoryCap = 20
 
+// DefaultEntryMaxBytes bounds a single clipboard-history entry (#2250): a yank
+// or delete larger than this is *skipped* by the ring rather than truncated
+// into it. Truncating would be worse than dropping — the picker would offer a
+// row that pastes something other than what was copied — and the register set
+// still holds the payload in full, so nothing is lost, only un-browsable. 256
+// KiB is far above any realistic line/paragraph yank while keeping the whole
+// ring (20 × 256 KiB worst case) bounded in memory. Configurable via
+// editor.clipboard_history_max_kb.
+const DefaultEntryMaxBytes = 256 * 1024
+
 // Store holds every register.
 type Store struct {
 	regs map[rune]Entry
@@ -43,6 +53,10 @@ type Store struct {
 	// Yank/Delete pushes, as do host-side copies (#2061); a repeat of text
 	// already in the ring moves to the front instead of adding a row.
 	hist []Entry
+	// entryMax bounds a single history entry in bytes (#2250,
+	// editor.clipboard_history_max_kb). Zero means DefaultEntryMaxBytes so the
+	// zero value and New() behave alike.
+	entryMax int
 	// histCap bounds hist (#2061, editor.clipboard_history_size). Zero means
 	// DefaultHistoryCap so the zero value and New() behave alike.
 	histCap int
@@ -58,7 +72,7 @@ type Store struct {
 
 // New returns an empty register store backed by a no-op clipboard.
 func New() *Store {
-	return &Store{regs: map[rune]Entry{}, clip: nopClipboard{}, histCap: DefaultHistoryCap}
+	return &Store{regs: map[rune]Entry{}, clip: nopClipboard{}, histCap: DefaultHistoryCap, entryMax: DefaultEntryMaxBytes}
 }
 
 // SetHistoryCap resizes the clipboard-history ring (#2061,
@@ -82,6 +96,25 @@ func (s *Store) HistoryCap() int {
 		return DefaultHistoryCap
 	}
 	return s.histCap
+}
+
+// SetEntryMaxBytes sets the per-entry size cap for the clipboard history
+// (#2250, editor.clipboard_history_max_kb). A cap below 1 is ignored. Entries
+// already in the ring stay: the cap governs what is admitted, and re-filtering
+// history on a settings change would silently drop rows the user can see.
+func (s *Store) SetEntryMaxBytes(n int) {
+	if n < 1 {
+		return
+	}
+	s.entryMax = n
+}
+
+// EntryMaxBytes reports the per-entry clipboard-history size cap.
+func (s *Store) EntryMaxBytes() int {
+	if s.entryMax < 1 {
+		return DefaultEntryMaxBytes
+	}
+	return s.entryMax
 }
 
 // SetClipboard injects the system-clipboard implementation for `"+`/`"*`.
@@ -205,6 +238,13 @@ func (s *Store) PushHistory(e Entry) { s.pushHistory(e) }
 // a second row (#2061) — re-copying the same span must not flood the picker.
 func (s *Store) pushHistory(e Entry) {
 	if e.Text == "" {
+		return
+	}
+	// Oversized payloads are skipped, never truncated (#2250): the register
+	// set keeps them in full, so `p` still pastes the whole thing — only the
+	// picker declines to carry a multi-megabyte row it would have to lie
+	// about.
+	if len(e.Text) > s.EntryMaxBytes() {
 		return
 	}
 	rest := s.hist[:0:0]

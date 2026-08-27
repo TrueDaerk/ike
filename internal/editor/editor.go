@@ -904,6 +904,12 @@ func (m *Model) applyConfig() {
 	if v, ok := m.cfg.Get("editor.clipboard_history_size"); ok {
 		m.regs.SetHistoryCap(atoi(v, m.regs.HistoryCap()))
 	}
+	// Per-entry size cap (#2250): oversized copies stay out of the ring.
+	if v, ok := m.cfg.Get("editor.clipboard_history_max_kb"); ok {
+		if kb := atoi(v, 0); kb > 0 {
+			m.regs.SetEntryMaxBytes(kb * 1024)
+		}
+	}
 	m.autoIndent = boolOr(m.cfg, "editor.auto_indent", m.autoIndent)
 	m.autoClosePairs = boolOr(m.cfg, "editor.auto_close_pairs", m.autoClosePairs)
 	m.spaceAfterPunct = boolOr(m.cfg, "editor.typing.space_after_punctuation", m.spaceAfterPunct)

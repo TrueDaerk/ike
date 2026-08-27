@@ -918,17 +918,29 @@ func (m *Model) clipboardNotice(verb string) tea.Cmd {
 // clipboardPaste inserts the system clipboard at the cursor (Cmd+V): it
 // replaces the selection in visual mode and, mid-insert, splices through the
 // open insert session so the paste joins the same undo unit.
-func (m *Model) clipboardPaste() {
+func (m *Model) clipboardPaste() { m.pasteRegister('+') }
+
+// pasteRegister runs the Cmd+V paste path for reg: an open editor-internal
+// input wins, a visual selection is replaced, mid-insert the text splices into
+// the open insert session, and otherwise it pastes like `p`.
+//
+// The register is a parameter because paste-from-history (#2250) needs the
+// same behaviour without the `+` read-back: `Get('+')` re-derives linewise
+// from a trailing newline in the system clipboard's text, which would turn a
+// charwise entry that happens to end in a newline into a linewise paste. The
+// picker therefore pastes from the unnamed register, which holds the ring
+// entry's own Linewise flag.
+func (m *Model) pasteRegister(reg rune) {
 	// An open editor-internal input takes the clipboard too (#1380): cmd+v on
 	// the "/" line must land in the search input, never in the buffer.
-	if m.pasteIntoPrompt(m.regs.Get('+').Text) {
+	if m.pasteIntoPrompt(m.regs.Get(reg).Text) {
 		return
 	}
 	if m.mode.IsVisual() {
-		m.visualPaste('+')
+		m.visualPaste(reg)
 		return
 	}
-	e := m.regs.Get('+')
+	e := m.regs.Get(reg)
 	if e.Text == "" {
 		return
 	}
@@ -938,7 +950,7 @@ func (m *Model) clipboardPaste() {
 		m.pasteIntoInsert(m.smartPasteInsertText(e.Text))
 		return
 	}
-	m.paste('+', false, 1, false)
+	m.paste(reg, false, 1, false)
 }
 
 // PasteText inserts external (bracketed-paste) text as a single block and one
@@ -1013,14 +1025,21 @@ func (m Model) RegisterHistory() []register.Entry { return m.regs.History() }
 // JetBrains-style: the chosen entry becomes the current clipboard (and the
 // unnamed register), then flows through the normal clipboard-paste path —
 // visual selections are replaced, a paste mid-insert joins the open insert's
-// undo unit.
+// undo unit, and the whole thing is one undo step.
+//
+// The paste reads the *unnamed* register rather than `+` (#2250) so the
+// entry's own linewise/charwise flag survives: a `+` read goes through the
+// system clipboard, which carries text only and re-derives linewise from a
+// trailing newline. `Yank('+', …)` mirrors the entry onto the system
+// clipboard and into the unnamed register, so the JetBrains "chosen entry
+// becomes the clipboard" behaviour is unchanged.
 func (m *Model) PasteHistoryEntry(i int) {
 	h := m.regs.History()
 	if i < 0 || i >= len(h) {
 		return
 	}
 	m.regs.Yank('+', h[i])
-	m.clipboardPaste()
+	m.pasteRegister(0)
 	m.scroll()
 }
 

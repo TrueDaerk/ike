@@ -508,7 +508,13 @@ type Editor struct {
 	// picker lists (#2061, cmd+shift+v): the newest N yanks, deletes and
 	// pane-side copies, duplicates collapsed. Clamped to [1, 200]; the ring is
 	// in-memory only and starts empty after a restart.
-	ClipboardHistorySize   int  `toml:"clipboard_history_size"`
+	ClipboardHistorySize int `toml:"clipboard_history_size"`
+	// ClipboardHistoryMaxKB caps a single clipboard-history entry in kilobytes
+	// (#2250). A yank, delete or pane copy larger than this is skipped by the
+	// ring — never truncated into it — so the picker never offers a row that
+	// pastes something other than what was copied; the registers still hold
+	// the payload in full. Clamped to [1, 10240].
+	ClipboardHistoryMaxKB  int  `toml:"clipboard_history_max_kb"`
 	AutoIndent             bool `toml:"auto_indent"`
 	AutoClosePairs         bool `toml:"auto_close_pairs"`
 	TrimTrailingWhitespace bool `toml:"trim_trailing_whitespace"`
