@@ -39,6 +39,7 @@ var noCounterpart = map[string]string{
 	"terminal.new":          "JetBrains new terminal tab has no default keymap action",
 	"terminal.newTab":       "JetBrains new terminal tab has no default keymap action",
 	"editor.tab.new":        "JetBrains opens editors by navigation only; no new-empty-tab action",
+	"editor.tab.picker":     "JetBrains' Switcher spans tool windows and editors, already mapped to pane.switcher; the per-pane tab list (#2151) is an IKE concept",
 	"terminal.popup":        "no JetBrains equivalent",
 	"nav.pinGoto1":          "pins are an IKE concept; GotoBookmark* toggles mnemonic bookmarks instead",
 	"nav.pinGoto2":          "pins are an IKE concept; GotoBookmark* toggles mnemonic bookmarks instead",

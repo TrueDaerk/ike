@@ -194,6 +194,10 @@ var jetbrainsRows = []row{
 	// Reopen closed tab: cmd+shift+t is the JetBrains chord; alt+shift+t stays
 	// as the secondary. (vcs.revertFile moved to JetBrains' rollback chord
 	// cmd+alt+z to free the primary, #711.)
+	// Tab picker (#2151): the pane's tabs most-recently-used first, JetBrains'
+	// Switcher role. cmd+e is taken by the recent-files palette, so the free
+	// alt+e carries it; the palette is the delivered fallback.
+	{"alt+e", "editor.tab.picker", "Switch tab (recent tabs)", Global, "Editor tabs (0190)"},
 	{"cmd+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
 	{"alt+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
 	// Follow mode (#1928): tail -f for the open file, less-F style.

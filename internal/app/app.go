@@ -454,6 +454,9 @@ type Model struct {
 	// tasks is the palette mode listing discovered build-tool tasks (#1915);
 	// run.task / run.taskPromote fill and open it.
 	tasks *tasksMode
+	// tabPicker is the palette mode listing the focused editor pane's tabs in
+	// most-recently-used order (#2151); editor.tab.picker fills and opens it.
+	tabPicker *tabPickerMode
 	// ssh is the palette mode listing the ssh_config host aliases (#1938);
 	// terminal.ssh fills and opens it.
 	ssh *sshMode
@@ -1115,6 +1118,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	httpEnvs := newHTTPEnvMode()                    // http-client.env.json picker (#1867)
 	runConfigs := newRunConfigsMode()               // run/debug configurations picker (#1914)
 	tasksPicker := newTasksMode()                   // discovered-tasks picker (#1915)
+	tabPicker := newTabPickerMode()                 // per-pane MRU tab picker (#2151)
 	sshPicker := newSSHMode()                       // ssh_config host picker (#1938)
 	remotePicker := newRemoteMode()                 // SFTP browse host picker (#1997)
 	playFilters := newPlayFiltersMode()             // named saved jq filters (#1995)
@@ -1176,13 +1180,14 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		shell:           ui.New(shellConfig(cfg)),
 		vcs:             vcsSt,
 		forgePoll:       forgeSt,
-		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, sshPicker, remotePicker, playFilters),
+		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters),
 		layoutsPicker:   layoutsPicker,
 		httpRequests:    httpRequests,
 		httpEntries:     httpEntries,
 		httpEnvs:        httpEnvs,
 		runConfigs:      runConfigs,
 		tasks:           tasksPicker,
+		tabPicker:       tabPicker,
 		ssh:             sshPicker,
 		remote:          remotePicker,
 		playFilters:     playFilters,
@@ -2571,7 +2576,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -2641,7 +2646,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, projPeek, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, ssh, remoteHosts, playFilters, bufLang)
+	return palette.New(pcfg, cmd, file, dir, proj, projPeek, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, ssh, remoteHosts, playFilters, bufLang)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -4621,6 +4626,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case DebugTestAtCursorMsg:
 		// debug.testAtCursor (Run menu / palette, #1914).
 		m.debugTestAtCursor()
+		return m, nil
+
+	case TabPickerMsg:
+		// editor.tab.picker (alt+e / palette, #2151): the pane's MRU tab list.
+		m.openTabPicker()
+		return m, nil
+
+	case TabPickedMsg:
+		// A picker row was activated (#2151): focus its pane, show its tab.
+		m.activatePickedTab(msg)
 		return m, nil
 
 	case RunSelectMsg:

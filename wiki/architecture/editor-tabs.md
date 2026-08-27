@@ -3,8 +3,8 @@ type: concept
 title: Editor Tabs
 description: The per-pane tab model — a tab-hosting pane holds an ordered tab list (documents, embedded terminals and any tabbable viewer content) with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
-tags: [architecture, panes, tabs, editors, terminals, viewers, shared-documents, close, pins]
-timestamp: 2026-08-26T12:00:00Z
+tags: [architecture, panes, tabs, editors, terminals, viewers, shared-documents, close, pins, overflow, mru, picker]
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # Editor Tabs
@@ -202,10 +202,18 @@ with a settings-page toggle) the tab list does:
   0140 — externally deleted dirty files surface the same way).
 - **Highlighting** reuses theme slots: the active tab renders `Accent` + bold,
   inactive tabs `Foreground`, separators (`│`) and end ellipses `Border`.
-- **Overflow** never wraps: `tabWindow` grows a run of tabs around the active
-  one (rightward, then leftward) while separators and end ellipses still fit;
-  hidden tabs are marked with `…` at that end, and a lone oversized active
-  label truncates.
+- **Overflow** never wraps (#2151): `tabWindow` grows a run of tabs around the
+  active one (rightward, then leftward) while separators and the end
+  indicators still fit, so **the active tab is always visible** however many
+  tabs the pane holds. The tabs hidden beyond an end are counted by a `+N`
+  indicator there (`tabEnds`/`tabOverflowMark`) instead of a bare `…`, and
+  every label is **ellipsized at `tabLabelCap` (24 cells)** so one long
+  filename can never push its neighbours off the bar. On a bar too narrow to
+  carry both an indicator and a one-cell segment the indicators drop — showing
+  the active tab beats counting what is not shown — and a lone oversized
+  active label truncates (dropping its `✕`).
+  `tabWindow`, `tabHit` and `renderTabBar` all measure the same fitted labels
+  and the same end widths, so clicks keep landing on what is drawn.
 
 ## Commands & keybindings (#158)
 
@@ -220,6 +228,7 @@ one):
 | `editor.tab.select1…9` | `alt+1`…`alt+9` | jump straight to tab N |
 | `editor.tab.moveLeft` / `editor.tab.moveRight` | `ctrl+shift+pgup/pgdown` | reorder the active tab |
 | `editor.tab.reopenClosed` | `cmd+shift+t` (JetBrains) / `alt+shift+t` | pop the reopen ring |
+| `editor.tab.picker` | `alt+e` | open the MRU tab picker (#2151) |
 | `editor.closeTab` | `cmd+w` / `ctrl+w` / `:q` | close the active tab, the pane on its last tab |
 
 Tab cycling now mirrors JetBrains' macOS keymap export: `ctrl+cmd+arrow`
@@ -234,6 +243,28 @@ The **reopen ring** keeps the last 10 closed tabs (path + caret), fed by both
 tab closes and pane closes; `editor.tab.reopenClosed` pops entries, skipping
 files deleted since, and restores the caret via the standard open flow. A
 "Reopen Closed Tab" item joins the File menu.
+
+### Tab picker (#2151)
+
+`editor.tab.picker` ("Switch Tab…" in the palette and the File menu, `alt+e`)
+opens the palette **locked to a tab-picker mode** (`internal/app/tab_picker.go`,
+the `runConfigsMode` pattern): one row per tab of the focused editor pane —
+the pane the other `editor.tab.*` commands act on — labelled exactly as the bar
+labels it, detailed with the document path, filtered by the palette's own
+speed search, `enter` activating the picked tab (`TabPickedMsg` → focus the
+pane, `switchTab`). It is the way to a tab the overflowing strip hides.
+
+Rows are ordered **most recently used first**, with the tab currently shown
+moved to the end and badged `●`: activating it would be a no-op, so the
+preselected first row is the tab used before it — the alternate-tab flip.
+Recency needs no extra bookkeeping — it reads `Tab.lastUsed`, the activation
+stamp `Instance.activate` already writes for the tab-limit LRU eviction
+(#742), through `Instance.TabsByMRU()`; tabs never activated (a layout
+restore's background tabs) sort last in tab order, so the listing is stable.
+`Results` filters without re-sorting, so typing narrows the list while the
+recency ranking survives. A pane with a single tab says so instead of opening
+a one-row list, and a row whose tab was closed while the palette was open is
+ignored rather than activating its neighbour.
 
 ## Mouse on the bar (#159, #1128)
 

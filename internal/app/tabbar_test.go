@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -139,11 +140,95 @@ func TestRenderTabBarOverflowsAroundActive(t *testing.T) {
 	if !strings.Contains(plain, "fifth.go") {
 		t.Fatalf("the active tab must stay visible, got %q", plain)
 	}
-	if !strings.HasPrefix(plain, tabEllipsis) {
-		t.Fatalf("hidden left tabs must be marked with an ellipsis, got %q", plain)
+	if !strings.HasPrefix(plain, "+4") {
+		t.Fatalf("hidden left tabs must be counted by a +N indicator, got %q", plain)
 	}
 	if strings.Contains(plain, "\n") {
 		t.Fatalf("the bar must never wrap, got %q", plain)
+	}
+}
+
+// TestTabOverflowIndicatorCountsBothEnds (#2151): with the active tab in the
+// middle of a long list, both ends carry a "+N" counting exactly the tabs
+// hidden there, and the row still fits.
+func TestTabOverflowIndicatorCountsBothEnds(t *testing.T) {
+	pal := theme.DefaultPalette()
+	labels := make([]string, 12)
+	for i := range labels {
+		labels[i] = "f" + strconv.Itoa(i) + ".go"
+	}
+	const width = 30
+	bar := renderTabBar(labels, 6, width, pal)
+	plain := ansi.Strip(bar)
+	if got := ansi.StringWidth(plain); got > width {
+		t.Fatalf("bar exceeds width: %d > %d (%q)", got, width, plain)
+	}
+	lo, hi := tabWindow(labels, 6, width)
+	if lo > 6 || hi < 6 {
+		t.Fatalf("active tab outside the window [%d,%d]", lo, hi)
+	}
+	if lo == 0 || hi == len(labels)-1 {
+		t.Fatalf("this fixture must overflow at both ends, got window [%d,%d]", lo, hi)
+	}
+	if !strings.HasPrefix(plain, "+"+strconv.Itoa(lo)) {
+		t.Fatalf("left indicator must count the %d hidden tabs, got %q", lo, plain)
+	}
+	if !strings.HasSuffix(plain, "+"+strconv.Itoa(len(labels)-1-hi)) {
+		t.Fatalf("right indicator must count the %d hidden tabs, got %q", len(labels)-1-hi, plain)
+	}
+}
+
+// TestTabWindowKeepsActiveVisible (#2151): whatever the tab count, the width
+// or the active index, the window contains the active tab and the rendered row
+// fits — the overflow contract the tab strip promises.
+func TestTabWindowKeepsActiveVisible(t *testing.T) {
+	pal := theme.DefaultPalette()
+	labels := make([]string, 40)
+	for i := range labels {
+		labels[i] = strings.Repeat("x", 1+i%30) + strconv.Itoa(i) + ".go"
+	}
+	for _, width := range []int{6, 10, 24, 40, 80, 200} {
+		for _, active := range []int{0, 1, 17, 38, 39} {
+			lo, hi := tabWindow(labels, active, width)
+			if active < lo || active > hi {
+				t.Fatalf("width %d, active %d: window [%d,%d] hides the active tab", width, active, lo, hi)
+			}
+			plain := ansi.Strip(renderTabBar(labels, active, width, pal))
+			if got := ansi.StringWidth(plain); got > width {
+				t.Fatalf("width %d, active %d: bar %d cells wide (%q)", width, active, got, plain)
+			}
+			if strings.Contains(plain, "\n") {
+				t.Fatalf("width %d, active %d: bar wrapped (%q)", width, active, plain)
+			}
+		}
+	}
+}
+
+// TestTabLabelsEllipsizeAtCap (#2151): an over-long label is cut to the cap so
+// one tab cannot crowd out every neighbour, and the hit geometry agrees with
+// what was drawn.
+func TestTabLabelsEllipsizeAtCap(t *testing.T) {
+	pal := theme.DefaultPalette()
+	long := "a-really-long-generated-file-name-v2.go"
+	labels := []string{"a.go", long, "b.go"}
+	plain := ansi.Strip(renderTabBar(labels, 1, 60, pal))
+	if strings.Contains(plain, long) {
+		t.Fatalf("an over-long label must ellipsize, got %q", plain)
+	}
+	fitted := fitTabLabels(labels)
+	if ansi.StringWidth(fitted[1]) != tabLabelCap || !strings.HasSuffix(fitted[1], tabEllipsis) {
+		t.Fatalf("label must be cut to %d cells with an ellipsis, got %q", tabLabelCap, fitted[1])
+	}
+	if !strings.Contains(plain, "a.go") || !strings.Contains(plain, "b.go") {
+		t.Fatalf("neighbours must still fit next to the capped label, got %q", plain)
+	}
+	// The ellipsized label's own cells hit-test as its tab.
+	x := strings.Index(plain, fitted[1])
+	if x < 0 {
+		t.Fatalf("capped label not found in %q", plain)
+	}
+	if idx := tabAt(labels, 1, 60, x); idx != 1 {
+		t.Fatalf("cell %d must hit tab 1, got %d", x, idx)
 	}
 }
 
