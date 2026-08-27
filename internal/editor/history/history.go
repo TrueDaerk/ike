@@ -135,6 +135,34 @@ func (h *History) Push(c Change) {
 	h.prune()
 }
 
+// Amend merges c into the change that produced the current state instead of
+// pushing a new one — the save chain's organize-imports and format steps land
+// as a single undo unit (#2253). Forwards are appended and inverses too: Undo
+// replays inverses backwards, so the merged unit reverts the later step
+// first. ok is false at the root state (nothing to merge into) and for a state
+// that already has children — their edits were recorded against it, so
+// rewriting it would invalidate those branches; callers then Push instead.
+func (h *History) Amend(c Change) bool {
+	if h.current == 0 {
+		return false
+	}
+	cur, ok := h.nodes[h.current]
+	if !ok || len(h.children[h.current]) > 0 {
+		return false
+	}
+	if h.savedSeq == h.current {
+		// The state written to disk is the one being rewritten: no state
+		// matches the file anymore, so undoing back here is not "clean".
+		h.savedSeq = -1
+	}
+	cur.Forwards = append(cur.Forwards, c.Forwards...)
+	cur.Inverses = append(cur.Inverses, c.Inverses...)
+	cur.CursorAfter = c.CursorAfter
+	h.bytes += cost(&c)
+	h.prune()
+	return true
+}
+
 // CanUndo reports whether there is a change to undo.
 func (h *History) CanUndo() bool { return h.current != 0 }
 

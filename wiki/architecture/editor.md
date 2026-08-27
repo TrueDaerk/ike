@@ -1389,6 +1389,23 @@ Guarantees:
   (no stacked chains); a `:wq` issued meanwhile latches its close intent,
   and the pane closes after the chained write. A conflict that appears
   mid-chain (external change) still yields the save-conflict prompt.
+- **One undo unit for both steps (#2253).** Each step delivers its own
+  `FormatEditsMsg`, but the format delivery sets `Amend` when the organize
+  step actually rewrote the buffer: `ApplyTextEditsAmend` then merges the
+  edits into the change the organize step pushed (`History.Amend`, which
+  appends forwards and inverses and refuses on a state that already has
+  child branches), so **one** `u` reverts the whole save-time rewrite. The
+  merge is anchored on the history seq the previous `ApplyTextEdits*` left
+  the buffer at: anything in between (a keystroke, an undo, a reload) moves
+  the anchor and the format edits simply push their own change. A
+  command-only organize action, whose edits arrive later as
+  `workspace/applyEdit`, never amends — there is no change of ours to merge.
+
+**On demand.** The same step runs without a save behind it as
+`lsp.organizeImports` ("LSP: Organize Imports", palette and the editor
+context menu, #2253) — same 2 s time box and never-block rule, but it toasts
+when no file is focused or the server does not offer the kind, because an
+explicitly invoked command that stays silent reads as broken.
 
 ## Untitled buffers & save-as (#730)
 

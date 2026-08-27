@@ -29,6 +29,22 @@ type TextEdit struct {
 // order LSP formatting results are safe to apply in; ranges are clamped by the
 // buffer. An empty slice is a no-op returning 0.
 func (m *Model) ApplyTextEdits(edits []TextEdit) int {
+	return m.applyTextEdits(edits, false)
+}
+
+// ApplyTextEditsAmend applies the edits merged into the change the previous
+// ApplyTextEdits* call pushed, so a save chain running organize-imports *and*
+// format leaves one undo unit (#2253). The merge only happens while the buffer
+// still sits exactly at that change (nothing typed, undone or reloaded in
+// between) — otherwise this behaves like ApplyTextEdits and pushes its own
+// change, which is always correct, just one undo step more.
+func (m *Model) ApplyTextEditsAmend(edits []TextEdit) int {
+	return m.applyTextEdits(edits, true)
+}
+
+// applyTextEdits is the shared implementation; amend requests the merge into
+// the preceding change described at ApplyTextEditsAmend.
+func (m *Model) applyTextEdits(edits []TextEdit, amend bool) int {
 	if len(edits) == 0 {
 		return 0
 	}
@@ -56,12 +72,19 @@ func (m *Model) ApplyTextEdits(edits []TextEdit) int {
 		inv = append(inv, inverse)
 	}
 	m.cursor = m.buf.ClampCursor(m.cursor)
-	m.pushChange(history.Change{
+	change := history.Change{
 		Forwards:     fwd,
 		Inverses:     inv,
 		CursorBefore: cursorBefore,
 		CursorAfter:  m.cursor,
-	})
+	}
+	if amend && m.textEditSeq != 0 && m.hist.CurrentSeq() == m.textEditSeq && m.hist.Amend(change) {
+		m.changePending = true
+		m.changePos = m.cursor
+	} else {
+		m.pushChange(change)
+	}
+	m.textEditSeq = m.hist.CurrentSeq()
 	m.dirty = true
 	m.scroll()
 	m.emit(EventChange)
