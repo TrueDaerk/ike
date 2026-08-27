@@ -329,13 +329,100 @@ func (m *Model) dockOccupant(zone layout.Zone) string {
 	return ""
 }
 
+// dockShareZone is how a second occupant shares a dock at zone: side docks
+// stack vertically (occupant above, newcomer below), top/bottom strips split
+// side by side.
+func dockShareZone(zone layout.Zone) layout.Zone {
+	if zone == layout.ZoneTop || zone == layout.ZoneBottom {
+		return layout.ZoneRight
+	}
+	return layout.ZoneBottom
+}
+
+// dockNewPane puts the already-registered tool pane key at its home dock
+// (#1889), the shared tail of every home-position open: beside occupant when
+// the edge slot is taken by a pane that cannot host tabs, beside the layout's
+// own tool region when the workspace edge is no slot at all (#2191), and
+// full-span against the edge when neither holds. Reports ok; the tree is
+// unchanged on failure and the caller drops the pane.
+func (m *Model) dockNewPane(key string, zone layout.Zone, occupant string) bool {
+	ws := m.activeWS()
+	if occupant == "" {
+		occupant = m.toolRegionLeaf(zone)
+	}
+	if occupant == "" {
+		ws.Tree = layout.DockNew(ws.Tree, key, zone, toolDockShare)
+		return true
+	}
+	tree, ok := layout.SplitLeaf(ws.Tree, occupant, key, dockShareZone(zone))
+	if !ok {
+		return false
+	}
+	ws.Tree = tree
+	return true
+}
+
+// toolRegionLeaf resolves the dock slot *inside* the layout when the
+// workspace edge is not one (#2191): a nested arrangement — an editor column
+// beside the explorer, an editor area inside a bigger split — keeps its tool
+// strip in the region around the editor, and "the bottom of everything" is
+// then not where tool output belongs. The editor's ancestor path is walked
+// outwards (layout.Hops) and the first sibling region on zone's side that
+// holds nothing but tool windows is the strip; its own edge leaf
+// (layout.EdgeLeafIn, so an already subdivided strip still names a
+// neighbour) is the pane the newcomer splits off. No such region — a plain
+// editor beside the editor, or none at all — falls back to the full-span
+// workspace dock. A region pane is only ever split beside, never tabbed
+// into: joining an unrelated tool's or shell's tab list is exactly what
+// #1905 forbids.
+func (m *Model) toolRegionLeaf(zone layout.Zone) string {
+	ws := m.activeWS()
+	if ws.Tree == nil {
+		return ""
+	}
+	anchor := m.activeEditorKey()
+	if anchor == "" {
+		anchor = ws.Panes.Focused()
+	}
+	for _, hop := range layout.Hops(ws.Tree, anchor) {
+		if hop.Zone != zone || !m.isToolRegion(hop.Sibling) {
+			continue
+		}
+		return layout.EdgeLeafIn(hop.Sibling, zone)
+	}
+	return ""
+}
+
+// isToolRegion reports whether every leaf of the region is a tool window —
+// a tool-kind pane or a host carrying nothing but tool tabs (#1989). One
+// editor among them makes the region editor area, not a tool strip, so a
+// tool must not dock into it.
+func (m *Model) isToolRegion(n layout.Node) bool {
+	leaves := layout.Leaves(n)
+	if len(leaves) == 0 {
+		return false
+	}
+	for _, key := range leaves {
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil {
+			return false
+		}
+		if isToolKind(inst.Kind()) || toolTabHost(inst) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 // openToolAtHome spawns the tool at its configured home position (#1889), the
-// dock slot on the workspace edge named by placement. A free slot docks a new
-// pane full-span at that edge; a slot occupied by a tab-capable pane adds the
-// tool as a focused tab there instead of forcing another split; any other
-// occupant (explorer, singleton tool windows) shares the dock via a
-// perpendicular split. The placement is intent, never state: moving the tool
-// afterwards does not rewrite it, so close + reopen returns here.
+// dock slot on the workspace edge named by placement. A slot occupied by a
+// tab-capable pane adds the tool as a focused tab there instead of forcing
+// another split; any other occupant (explorer, singleton tool windows) shares
+// the dock via a perpendicular split; a free slot docks the pane into the
+// layout's tool region, or full-span at the edge when there is none (#2191).
+// The placement is intent, never state: moving the tool afterwards does not
+// rewrite it, so close + reopen returns here.
 func (m *Model) openToolAtHome(sp toolSpawn, zone layout.Zone) bool {
 	ws := m.activeWS()
 	occupant := m.dockOccupant(zone)
@@ -350,22 +437,12 @@ func (m *Model) openToolAtHome(sp toolSpawn, zone layout.Zone) bool {
 		return true
 	}
 	key := m.addToolPane(sp)
-	if occupant != "" {
-		// A non-tabbable occupant keeps its pane; the tool stacks into the
-		// same dock: side docks split vertically (occupant above, tool
-		// below), top/bottom strips split side by side.
-		share := layout.ZoneBottom
-		if zone == layout.ZoneTop || zone == layout.ZoneBottom {
-			share = layout.ZoneRight
-		}
-		tree, ok := layout.SplitLeaf(ws.Tree, occupant, key, share)
-		if !ok {
-			ws.Panes.Close(key)
-			return false
-		}
-		ws.Tree = tree
-	} else {
-		ws.Tree = layout.DockNew(ws.Tree, key, zone, toolDockShare)
+	// A non-tabbable occupant keeps its pane and the tool stacks into the same
+	// dock; with no occupant at all the layout's own tool region takes it
+	// before the full-span workspace edge does (#2191).
+	if !m.dockNewPane(key, zone, occupant) {
+		ws.Panes.Close(key)
+		return false
 	}
 	m.setFocus(key)
 	m.rememberTool(sp.name, key)

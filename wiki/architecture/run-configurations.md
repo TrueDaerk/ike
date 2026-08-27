@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Run Configurations
-description: Work stream 0350 — named, persisted run/debug configurations synthesized into command lines through the language registry; per-project store in .ike/runconfigs.json; output in the dedicated Run tool pane (#1905); run.select picker merging .vscode/launch.json imports (#1914); literal-argv task configurations, the Run Task picker and problem matchers (#1915).
+description: Work stream 0350 — named, persisted run/debug configurations synthesized into command lines through the language registry; per-project store in .ike/runconfigs.json; output in the dedicated Run tool pane (#1905), placed in the layout's tool region rather than the outermost bottom and remembering a user-moved position per project (#2191); run.select picker merging .vscode/launch.json imports (#1914); literal-argv task configurations, the Run Task picker and problem matchers (#1915).
 resource: internal/run
 tags: [architecture, run, debug, toolchain, languages, vscode, tasks]
-timestamp: 2026-08-17T18:00:00Z
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # Run Configurations (0350)
@@ -114,7 +114,8 @@ every other tool window:
   slot assigned to `run` (#1897) overrides the setting, exactly as it does for
   a configured tool. The removed `new_terminal` value lives on as an alias for
   `bottom` — where it always put the output — and migrates silently
-  (`internal/config/validate.go`).
+  (`internal/config/validate.go`). Where the placement actually lands in a
+  nested layout, and what happens once the user moves the pane, is below.
 - **Lifecycle** — the pane closes with `ctrl+w` like any pane, and the
   program's exit leaves it open with the standard #810 overlay
   (`run exited (code N)` plus `Restart`/`Close`); `Restart` reruns the same
@@ -127,6 +128,54 @@ every other tool window:
   editor there.
 - **Reserved name** — the tool identity is `run`; a `[[tools.custom]]` entry of
   that name would be indistinguishable from the Run tool.
+
+### Where run output lands (#2191)
+
+The placement setting names an *edge*, but "bottom" only means the bottom of
+the whole workspace while the workspace is one column. In a nested layout —
+the explorer beside an editor column whose own bottom carries Problems / Test
+Results — docking at the outermost bottom re-roots the tree and stretches the
+run output under the explorer, away from the tool area the user actually
+works with. Placement therefore resolves in three steps, sharing the
+tool-pane machinery (`Model.dockNewPane`, `internal/app/tools.go`):
+
+1. **The workspace-edge dock slot**, exactly as before (`layout.EdgeLeaf`):
+   free → full-span dock, tab-capable occupant → focused tab, other occupant
+   → perpendicular split.
+2. **The layout's own tool region** (`Model.toolRegionLeaf`) when that edge is
+   no slot at all: the active editor's ancestor path is walked outwards
+   (`layout.Hops`) and the first sibling region on the placement's side that
+   holds *nothing but* tool windows — Problems, Test Results, tool panes,
+   tool-tab hosts — is the tool area. The Run pane splits **beside** that
+   region's edge leaf (`layout.EdgeLeafIn`), joining the strip instead of
+   re-rooting the tree, and never tabs into it (#1905: a tool's or shell's
+   tab list is not run output's home). This applies to every home-docked tool
+   pane, not just the Run tool. See
+   [Tool Panes](/architecture/tool-panes.md) § "Home positions".
+3. **The full-span workspace dock** when there is no tool region — an editor
+   beside the editor is editor area, not a tool strip.
+
+A **rerun never places anything**: `startInRunTool` finds the open Run tool
+first and restarts the command in its session, so runs cannot pile up splits.
+
+**A moved Run pane keeps its place** (`internal/app/runhome.go`). Once a
+layout drag relocates the Run tool, its position is recorded per project in
+`.ike/runhome.json` (`{anchor, zone, ratio, tab, root, placement}`, the
+`IKE_CONFIG_DIR` seam like every other state file) and the next run re-opens
+there — split off the recorded anchor pane at the recorded side and share, as
+a tab of it when that is where it was dragged, or as the full-span workspace
+dock (#811) it was docked to (`root`: the pane hung straight off the root
+split, so `layout.DockNew` re-docks it at its remembered share instead of
+splitting whichever leaf happened to touch it). This is deliberately
+*unlike* a configured tool, whose placement stays pure intent (#1889): run
+output reappears on every run, so where the user put it is where it belongs.
+The record is what makes the position survive both the pane's close and a
+restart — the layout's `runTool` leaf prunes on restore, so `layout.json`
+alone would forget it. It is written **only** when a drag actually moves the
+pane, and it carries the placement it overruled: a slot assignment (#1897)
+still wins, and editing `run.placement` re-asserts the setting instead of
+being shadowed by a stale drag. An anchor pane that is gone from the
+workspace is ignored, falling back to the rules above.
 
 ## Test runner (#1150)
 

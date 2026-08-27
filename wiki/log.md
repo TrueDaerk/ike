@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-27 (Run output pane: respect the tool region, remember a move, #2191)
+
+- **Tool-region placement** (`internal/layout/region.go`,
+  `Model.toolRegionLeaf`/`dockNewPane` in `internal/app/tools.go`): a home-docked
+  tool pane whose workspace edge is no dock slot — the root split runs across
+  the dock axis, e.g. the explorer column beside the editor column — now joins
+  the layout's **own tool region** instead of re-rooting the tree at the
+  outermost edge. The active editor's ancestor path is walked outwards
+  (`layout.Hops`) and the first sibling region on the placement's side holding
+  nothing but tool windows is the tool area; the new pane splits beside its
+  edge leaf (`layout.EdgeLeafIn`), never tabs into it (#1905). Regions
+  containing an editor stay editor area and keep the full-span dock. The three
+  copies of the "occupant → perpendicular split, else `DockNew`" tail
+  (`openToolAtHome`, the global-tool attach, `replaceToolPane`) collapsed into
+  `dockNewPane`; `anchorFromLayout` now rides `layout.Hops` too.
+- **A moved Run pane keeps its place** (`internal/app/runhome.go`): a layout
+  drag that relocates the Run tool records `{anchor, zone, ratio, tab, root,
+  placement}` in `.ike/runhome.json`, and the next run re-opens there — beside
+  the anchor pane, as a tab of it, or as the full-span workspace dock it was
+  dragged to (`root`) — surviving both the pane's close and a restart, where
+  the `runTool` leaf prunes on restore. Written only on an actual move and only honored while
+  `run.placement` still matches, so a slot assignment (#1897) and an edited
+  setting both still win.
+
 ## 2026-08-27 (Editor tabs: overflow handling + MRU tab picker, #2151)
 
 - **Tab strip overflow** (`internal/app/tabbar.go`): the window around the

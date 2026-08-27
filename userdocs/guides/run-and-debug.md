@@ -42,6 +42,17 @@ Assigning `run` a slot in a [tool layout template](../reference/settings.md)
 (`assign = ["Z=run"]`) overrides the setting, exactly like for any other tool.
 Configs still saying `new_terminal` keep working — it now means `bottom`.
 
+"Bottom" means the bottom of your **tool area**, not the bottom of everything:
+when your layout already has a tool strip — Problems, Test Results, a tool pane
+— next to the editor, run output joins that strip instead of stretching a new
+one across the whole window under the file tree. Only a layout with no tool
+area at all gets the full-width dock.
+
+**Drag the Run pane somewhere else and it stays there.** The new spot is
+remembered per project — closing the pane and running again, or reopening the
+project tomorrow, brings the output back where you put it. Changing
+`run.placement` (or assigning `run` a slot) takes over again.
+
 The pane stays open when the command exits — the output is the point — and
 shows the usual `Restart` / `Close` actions: `r` runs the same command again in
 place, `ctrl+w` closes the pane. The Run tool is not restored on the next
