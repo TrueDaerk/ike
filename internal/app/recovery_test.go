@@ -177,7 +177,9 @@ func TestRecoveryCursorMoveShowsInView(t *testing.T) {
 	if before == after {
 		t.Fatalf("view still marks the old row after j: %q", after)
 	}
-	if want := displayPath(m.recovery.items[1].snap.Path); !strings.Contains(after, want) {
+	// The list clips long paths from the left, so the file name is what a row
+	// is identified by (#2160).
+	if want := filepath.Base(m.recovery.items[1].snap.Path); !strings.Contains(after, want) {
 		t.Fatalf("marked row %q should be the second item %q", after, want)
 	}
 }
@@ -192,7 +194,7 @@ func TestRecoveryDropItemShowsInView(t *testing.T) {
 			_ = svc.Snapshot(backup.Doc{Key: f, Path: f, Text: "r\n"})
 		}
 	})
-	first = displayPath(m.recovery.items[0].snap.Path)
+	first = filepath.Base(m.recovery.items[0].snap.Path)
 	m = answer(m, tea.KeyPressMsg{Code: 's', Text: "s"})
 	if v := m.shell.View(); strings.Contains(v, first) {
 		t.Fatalf("skipped item %q still rendered: %q", first, v)

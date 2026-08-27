@@ -4,7 +4,7 @@ title: Crash Recovery
 description: Vim-swapfile-style crash recovery — debounced full-text snapshots of dirty buffers, written atomically to the project state dir, restored on next launch.
 resource: internal/backup
 tags: [architecture, backup, crash-recovery, persistence]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # Crash Recovery
@@ -132,28 +132,69 @@ Consequences worth keeping in mind:
 - **Two IKE processes** in the same project see each other's snapshots as
   foreign, which is the pre-existing behaviour.
 
-## Restore flow (#166, `internal/app/recovery.go`)
+## Restore dialog (#166, #2160, `internal/app/recovery.go`)
 
 At launch the root model scans the snapshot directory (`scanRecovery`, in the
 constructor — which a project switch re-runs, hence the ownership filter above).
-If any *foreign* snapshots are found, once the window is sized it opens a
-floating prompt (`maybeOpenRecovery`) that reuses the save-conflict UX — a modal
-that owns the keyboard until dismissed. The prompt lists every recoverable file
-with a cursor and a per-file base-changed warning:
+If any *foreign* snapshots are found, once the window is sized it raises the
+**centered restore dialog** (`maybeOpenRecovery`) on the shared floating shell —
+a modal that owns the keyboard until dismissed, the convention every prominent
+actionable state follows. It is a `ui.Content` (not `ModelContent`) so the body
+learns the shell's width budget:
 
-- **`r` restore** — opens the recovered text as a **dirty** buffer (`RestoreText`
-  on the editor): onto the base file for a titled buffer (Load establishes the
-  path, then the recovered text overwrites it), or into a fresh untitled editor
-  for a "no base file" snapshot. The snapshot is then removed.
+```
+ Recover unsaved changes                    (esc/?/f1/q to close)
+
+ A previous session ended with unsaved changes.
+
+ ▸ src/main.go   (changed on disk since backup!)
+   notes.md
+
+   diff for src/main.go — what restoring would change (- on disk, + recovered)
+   @@ -12,3 +12,3 @@
+     func main() {
+   -     run()
+   +     run(ctx)
+
+   [r] restore   [d] discard   [s] skip   [R] restore all   [D] discard all
+   [j/k] move   [esc] decide next launch
+```
+
+- **Diff preview** (#2160) — the selected file's **on-disk content** against its
+  **snapshot text**, so the `+` side is exactly what restoring would put into
+  the buffer. It is the `internal/diff` engine (`diff.Compute`) rendered by
+  `miniDiffLines`, the shared inline renderer behind the local-history panel and
+  the change feed: `@@` headers, three lines of context, added green / removed
+  red. The preview is cached in `recoveryState` and recomputed on every cursor
+  move and item drop — never per frame. Special cases read as text instead of a
+  diff: a snapshot equal to the file ("no differences"), a deleted base ("no
+  file on disk — restoring re-creates its content", the whole snapshot then
+  reading as added), and an unreadable or undecodable side.
+- **`r` restore** — puts the recovered text into a buffer, then removes the
+  snapshot. When the base file exists, the buffer is loaded from disk first and
+  the recovered text lands **through the undoable edit path**
+  (`editor.RestoreContent`, one undo step): plain `u` brings the on-disk version
+  back and the file is only written when the user saves. Without a base file on
+  disk (untitled snapshot, deleted base) there is nothing to undo back to, so
+  the text is seeded with `RestoreText`, which also marks the buffer
+  never-saved — it stays dirty however far undo runs.
 - **`d` discard** — deletes the snapshot without opening it.
-- **`s` skip** — leaves the snapshot for the next launch.
-- **`j`/`k`** move the cursor; **`esc`** skips all remaining (keeps them).
+- **`s` skip** — leaves that snapshot for the next launch.
+- **`R` restore all / `D` discard all** — answer for every remaining file at
+  once and close the dialog.
+- **`j`/`k`** move the cursor (the preview follows); **`esc`** *defers the whole
+  decision*: the dialog closes and every undecided snapshot survives to the next
+  launch. There is no silent discard.
+
+The file list is full width and long paths clip from the **left**
+(`clipPathLeft`), so the file name and its base-changed warning are what survive
+a narrow terminal.
 
 **Base-changed detection** (`baseChanged`) compares the on-disk file's current
 hash (mtime as a fallback) against the snapshot's `base_hash` / `base_mtime`; a
 mismatch — or a missing base file — is flagged inline so the user knows the file
-moved on under the recovered edits. A diff option joins once the diff viewer
-(#60) lands.
+moved on under the recovered edits, and the diff preview below shows exactly how
+far it moved.
 
 ## Configuration & privacy
 
