@@ -689,14 +689,18 @@ func (m *Model) completionAccept() {
 		}
 		// A malformed snippet falls back to the raw text.
 	}
+	// An accept is its own undo unit (#2189), like a paste: the segment
+	// holding the typed prefix commits first, so one undo removes exactly the
+	// accepted text and restores the prefix.
+	m.breakInsertUndo()
 	if m.insert.rec == nil {
 		m.insert.rec = m.newRecorder()
 	}
 	// Auto-import first (#848): additionalTextEdits land away from the cursor
 	// (typically the import block), so applying them before the main insert
 	// keeps the item's coordinates valid; the cursor and carets shift by the
-	// line delta of edits above them. Same recorder, so esc undoes the accept
-	// and its import as one step.
+	// line delta of edits above them. Same recorder, so one undo removes the
+	// accept and its import as one step.
 	m.applyCompletionExtraEdits(item.AdditionalEdits)
 	// Replace the partial identifier already typed before the cursor with the
 	// item's insert text — at every caret when carets are active (#145). The
@@ -722,6 +726,9 @@ func (m *Model) completionAccept() {
 	if len(stops) > 0 && !m.hasCarets() {
 		m.startSnippetSession(insertText, stops)
 	}
+	// Close the accept's segment after the tabstop session placed the caret,
+	// so the change's CursorAfter (what redo restores) is the first stop.
+	m.breakInsertUndo()
 }
 
 // SetCompletionMRU injects the shared recently-accepted-completions store

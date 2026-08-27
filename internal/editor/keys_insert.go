@@ -33,9 +33,12 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 	case (key.Code == ' ' || key.Code == '@' || key.Code == tea.KeySpace) && key.Mod == tea.ModCtrl:
 		m.emit(EventCompletionTrigger)
 	case key.Code == tea.KeyEnter:
-		// A line break is a separator like any other (#1818): it closes no undo
-		// segment by itself, the next word typed does.
+		// A line break closes the undo segment behind it (#2189): the break —
+		// with its auto-indent and block split — rides with the text typed
+		// before it, and whatever follows (indentation included) opens the
+		// next segment, belonging to the word typed there.
 		m.typedInsert("\n", m.insertNewline)
+		m.breakInsertUndo()
 	// Word/line kills (#246) come before the plain-backspace case, which
 	// matches KeyBackspace regardless of modifiers. alt+backspace mirrors the
 	// terminal pane's macOS convention (#240), ctrl+w is the vim-native twin.

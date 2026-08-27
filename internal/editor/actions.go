@@ -4,6 +4,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
@@ -40,9 +41,10 @@ type HistoryJumpMsg struct{ Seq int }
 type insertSession struct {
 	active bool
 	rec    *history.Recorder
-	typed  string // text typed so far, for "." replay
-	last   rune   // last rune typed into the open segment; 0 = none yet
-	word   bool   // the open segment already holds a word rune
+	typed  string    // text typed so far, for "." replay
+	last   rune      // last rune typed into the open segment; 0 = none yet
+	word   bool      // the open segment already holds a word rune
+	typeAt time.Time // when the segment's last rune was typed, for the pause split (#2189)
 	pre    func(m *Model, rec *history.Recorder) buffer.Position
 }
 

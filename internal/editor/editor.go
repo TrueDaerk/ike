@@ -240,9 +240,12 @@ type Model struct {
 	// Hard-wrap column for "gq" (editor.text_width, #1193).
 	textWidth int
 
-	// Insert-session recording for "." repeat.
-	insert insertSession
-	dot    *dotCommand
+	// Insert-session recording for "." repeat. typeNow is the clock behind
+	// the typing-pause undo split (#2189), overridable in tests; nil means
+	// time.Now.
+	insert  insertSession
+	dot     *dotCommand
+	typeNow func() time.Time
 
 	// Macro recording & replay (#58). Macros are keystroke lists, not text, so
 	// they live beside the register store rather than in it; like registers
