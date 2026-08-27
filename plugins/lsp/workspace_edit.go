@@ -44,6 +44,51 @@ func dispatchWorkspaceEdits(h host.API, files []manager.FileEdits) (int, error) 
 	return n, firstErr
 }
 
+// renamePreviewFiles builds the confirm dialog's payload (#2149) from the
+// converted edits: one entry per file that actually changes, carrying the edit
+// count and the file's text before and after the edits so the app can diff the
+// pair without a manager or a file read of its own. The "after" text is
+// produced by the very same applyEditsToLines the apply path uses, so what the
+// preview shows is what confirming writes. A file whose content is
+// unreachable (open document gone, unreadable on disk) is dropped from the
+// preview rather than shown as an empty rewrite.
+func renamePreviewFiles(mgr *manager.Manager, files []manager.FileEdits) []ilsp.RenamePreviewFile {
+	out := make([]ilsp.RenamePreviewFile, 0, len(files))
+	for _, f := range files {
+		if len(f.Edits) == 0 {
+			continue
+		}
+		lines, ok := previewLines(mgr, f)
+		if !ok {
+			continue
+		}
+		out = append(out, ilsp.RenamePreviewFile{
+			Path:   f.Path,
+			Open:   f.Open,
+			Edits:  len(f.Edits),
+			Before: strings.Join(lines, "\n"),
+			After:  strings.Join(applyEditsToLines(append([]string(nil), lines...), f.Edits), "\n"),
+		})
+	}
+	return out
+}
+
+// previewLines returns the current text of one edit target: an open buffer
+// from the manager's synced document, a closed file from disk — the same two
+// sources the edits were converted against.
+func previewLines(mgr *manager.Manager, f manager.FileEdits) ([]string, bool) {
+	if f.Open && mgr != nil {
+		if lines, ok := mgr.DocLines(f.Path); ok {
+			return lines, true
+		}
+	}
+	data, err := os.ReadFile(f.Path)
+	if err != nil {
+		return nil, false
+	}
+	return strings.Split(string(data), "\n"), true
+}
+
 // applyEditsToDisk rewrites one closed file: the edits are applied bottom-up
 // against the file's lines (mirroring editor.ApplyTextEdits) and the result is
 // written back preserving the original file mode.
