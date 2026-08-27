@@ -110,3 +110,78 @@ func TestTerminalCmdClickMissingFileInert(t *testing.T) {
 		t.Fatal("an inert cmd+click must not start a selection")
 	}
 }
+
+// TestTerminalLinkHintsKeyboardFlow guards #2254 end to end: the reserved
+// cmd+shift+l labels the visible references, and typing a label opens that
+// file:line through the same openPathAt funnel cmd+click uses — no mouse
+// involved.
+func TestTerminalLinkHintsKeyboardFlow(t *testing.T) {
+	m, key := openWideTerminal(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(path, []byte("package x\n\nfunc y() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	termRefRow(t, m, key, path+":3:6")
+
+	handled, out, _ := m.terminalReservedKey("cmd+shift+l")
+	if !handled {
+		t.Fatal("cmd+shift+l must be reserved while a terminal is focused (#2254)")
+	}
+	m = out.(Model)
+	term := m.activeWS().Panes.Get(key).Terminal()
+	if !term.Hinting() {
+		t.Fatal("cmd+shift+l must open link hint mode")
+	}
+	if !strings.Contains(ansi.Strip(term.View()), "type a label to open") {
+		t.Fatal("hint mode must show its prompt")
+	}
+
+	m = step(m, tea.KeyPressMsg{Code: 'a', Text: "a"})
+	if term.Hinting() {
+		t.Fatal("typing a label must close hint mode")
+	}
+	ed := m.editorForPath(path)
+	if ed == nil {
+		t.Fatal("the label must open the referenced file")
+	}
+	if line, col := ed.CursorPos(); line != 2 || col != 5 {
+		t.Fatalf("cursor = %d:%d, want 2:5 (0-based)", line, col)
+	}
+}
+
+// TestTerminalLinkHintsEscapeStaysInTerminal: esc leaves hint mode without
+// opening anything, and never reaches the shell as input.
+func TestTerminalLinkHintsEscapeStaysInTerminal(t *testing.T) {
+	m, key := openWideTerminal(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(path, []byte("package x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	termRefRow(t, m, key, path+":1")
+
+	_, out, _ := m.terminalReservedKey("cmd+shift+l")
+	m = out.(Model)
+	m = step(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.activeWS().Panes.Get(key).Terminal().Hinting() {
+		t.Fatal("esc must close hint mode")
+	}
+	if ed := m.editorForPath(path); ed != nil {
+		t.Fatal("esc must not open anything")
+	}
+}
+
+// TestTerminalLinkHintsInertWithoutReferences: with nothing to label the
+// chord is not reserved — it stays available to the shell.
+func TestTerminalLinkHintsInertWithoutReferences(t *testing.T) {
+	m, key := openWideTerminal(t)
+	termRefRow(t, m, key, "nothing to see here")
+	handled, _, _ := m.terminalReservedKey("cmd+shift+l")
+	if handled {
+		t.Fatal("without a resolvable reference the chord must stay with the shell")
+	}
+	if m.activeWS().Panes.Get(key).Terminal().Hinting() {
+		t.Fatal("hint mode must not open empty")
+	}
+}

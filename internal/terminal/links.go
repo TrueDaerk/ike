@@ -9,6 +9,8 @@ package terminal
 // underline, applied when a line is rendered: the live screen decorates inside
 // the version-keyed render cache (#803), so the cached fast path never pays a
 // second scan; scrollback rows decorate as they are windowed in.
+// The keyboard route to the same targets — hint labels over the visible
+// references — lives in hints.go (#2254).
 
 import (
 	"os"
@@ -21,14 +23,40 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// linkNames is the closed list of extensionless files that read as a
+// reference when they carry a `:line` suffix (#2254): build files, container
+// recipes and the handful of shouty repository-root files. A closed,
+// case-sensitive list is the false-positive guard the letter-led extension
+// rule gives the general shape — anything not on it still needs an
+// extension, so prose like `note:12` or a `host:port` pair stays inert.
+var linkNames = []string{
+	"GNUmakefile", "Makefile", "makefile",
+	"Dockerfile", "Containerfile", "Vagrantfile", "Jenkinsfile",
+	"Rakefile", "Gemfile", "Procfile", "Brewfile", "Justfile", "justfile",
+	"Caddyfile", "Earthfile", "Tiltfile",
+	"LICENSE", "LICENCE", "COPYING", "NOTICE", "README", "CHANGELOG",
+	"AUTHORS", "CODEOWNERS", "MAINTAINERS", "INSTALL",
+	"BUILD", "WORKSPACE",
+}
+
 // linkRe matches file references with a line (and optional column) suffix:
-// `file.go:12`, `pkg/x.go:3:14`, `./rel/path.rs:7`, `/abs/dir/mod.c:42:1`.
-// The final path component must carry a letter-led extension — that keeps
-// timestamps (`12:30`) and bare `host:port` pairs out; extensionless files
-// (Makefile:3) are deliberately not detected. The character class starts the
-// match at the token boundary itself: any preceding path-ish rune would have
-// been absorbed into the match.
-var linkRe = regexp.MustCompile(`/?[\w+.~\-]+(?:/[\w+.~\-]+)*\.[A-Za-z][A-Za-z0-9]*:(\d+)(?::(\d+))?`)
+// `file.go:12`, `pkg/x.go:3:14`, `./rel/path.rs:7`, `/abs/dir/mod.c:42:1`,
+// plus the extensionless well-known names (`Makefile:12`, `src/Dockerfile:4`,
+// #2254). The final path component must carry a letter-led extension or be
+// one of linkNames — that keeps timestamps (`12:30`) and bare `host:port`
+// pairs out.
+//
+// Group 1 is the path, 2 the line, 3 the optional column. The match opens on
+// a *consumed* left boundary — start of line or a rune that cannot belong to
+// a path — because RE2 has no lookbehind and the fixed names would otherwise
+// match inside a longer token (`foo-Makefile:3`). The boundary rune is part
+// of the match but outside group 1, so the reported span still starts at the
+// reference itself.
+var linkRe = regexp.MustCompile(
+	`(?:^|[^\w+.~\-/])(` +
+		`/?[\w+.~\-]+(?:/[\w+.~\-]+)*\.[A-Za-z][A-Za-z0-9]*` +
+		`|(?:/?[\w+.~\-]+(?:/[\w+.~\-]+)*/)?(?:` + strings.Join(linkNames, "|") + `)` +
+		`):(\d+)(?::(\d+))?`)
 
 // link is one detected reference: rune offsets [start, end) into the scanned
 // plain-text line (the full match, numbers included), the path text, and the
@@ -50,29 +78,35 @@ func scanLinks(text string) []link {
 	out := make([]link, 0, len(ms))
 	for _, m := range ms {
 		l := link{
-			start: utf8.RuneCountInString(text[:m[0]]),
+			start: utf8.RuneCountInString(text[:m[2]]), // group 1: the path
 			end:   utf8.RuneCountInString(text[:m[1]]),
-			path:  text[m[0] : m[2]-1], // up to (excluding) the first ':'
+			path:  text[m[2]:m[3]],
 		}
-		l.line, _ = strconv.Atoi(text[m[2]:m[3]])
-		if m[4] >= 0 {
-			l.col, _ = strconv.Atoi(text[m[4]:m[5]])
+		l.line, _ = strconv.Atoi(text[m[4]:m[5]])
+		if m[6] >= 0 {
+			l.col, _ = strconv.Atoi(text[m[6]:m[7]])
 		}
 		out = append(out, l)
 	}
 	return out
 }
 
+// linkStat is os.Stat behind a variable: the seam the tests count through to
+// keep the "never on a render path" posture honest.
+var linkStat = os.Stat
+
 // resolveLink turns a detected reference into an absolute file path: relative
 // paths resolve against the session's cwd, and the target must exist as a
 // regular file — the existence gate that keeps false regex positives (URLs,
-// version strings) from opening ghost buffers. Runs at click time only.
+// version strings) from opening ghost buffers. Runs at click time only — and
+// at hint-mode activation (#2254), the same kind of one-off user gesture;
+// never on a render path.
 func resolveLink(l link, cwd string) (string, bool) {
 	p := l.path
 	if !filepath.IsAbs(p) {
 		p = filepath.Join(cwd, p)
 	}
-	fi, err := os.Stat(p)
+	fi, err := linkStat(p)
 	if err != nil || fi.IsDir() {
 		return "", false
 	}

@@ -1,5 +1,23 @@
 # Log
 
+## 2026-08-27 (Terminal link hints + extensionless references, #2254)
+
+- **Keyboard hints** (`internal/terminal/hints.go`): the reserved
+  `cmd+shift+l` labels every resolvable `file:line` reference on the visible
+  rows with a single home-row character; typing one opens it through
+  `openPathAt`, esc / any unassigned key / a resize / a blur close the mode,
+  and no key reaches the shell while it is open. Labels beat next/prev
+  stepping here: a compiler run prints a screenful at once and the wanted
+  reference is rarely the newest. Reserved in the popup layer too.
+- **Extensionless names** (`linkNames`): `Makefile:12`, `src/Dockerfile:4`,
+  `LICENSE:7` … now detect, off a closed case-sensitive list. RE2 has no
+  lookbehind, so the regex consumes a left boundary outside the path capture
+  group — otherwise the fixed names would match inside longer tokens
+  (`foo-Makefile:3`). Timestamps and `host:port` stay out.
+- **Performance posture unchanged** (#1168): the existence `os.Stat` runs at
+  the user gesture (click, hint activation), never per render — `linkStat` is
+  the seam a test counts through.
+
 ## 2026-08-27 (Intention popup: diff preview of the highlighted action, #2252)
 
 - **Preview under the list**: the intention popup renders a small inline diff
