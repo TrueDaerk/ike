@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"mime"
 	"net/url"
 	"os"
@@ -61,7 +62,7 @@ func (m *Model) httpResponseToSave() (*httpclient.Response, bool) {
 		m.host.Notify(host.Info, "http: no response to save yet")
 		return nil, false
 	}
-	if len(resp.Body) == 0 {
+	if resp.BodyBytes() == 0 {
 		m.host.Notify(host.Info, "http: the response has an empty body")
 		return nil, false
 	}
@@ -153,11 +154,12 @@ func (m *Model) saveHTTPResponseBody(target string) {
 		return
 	}
 	dest := httpSavePath(target, httpResponseFileName(resp))
-	if err := os.WriteFile(dest, resp.Body, 0o644); err != nil {
+	written, err := writeResponseBody(resp, dest)
+	if err != nil {
 		m.host.Notify(host.Error, "http: save failed — "+err.Error())
 		return
 	}
-	notice := fmt.Sprintf("http: wrote %s to %s", byteCountLabel(len(resp.Body)), displayPath(dest))
+	notice := fmt.Sprintf("http: wrote %s to %s", byteCountLabel(written), displayPath(dest))
 	level := host.Info
 	if resp.Truncated {
 		// The body was cut on receipt (MaxBodyBytes), so the file is short
@@ -166,6 +168,28 @@ func (m *Model) saveHTTPResponseBody(target string) {
 		level = host.Warn
 	}
 	m.host.Notify(level, notice)
+}
+
+// writeResponseBody writes the raw body to dest and reports how many bytes
+// landed there. A spooled body (#2157) is *streamed* off its file rather than
+// read into memory first — the save exists precisely for the responses too
+// large to hold, so pulling one back in to write it out would defeat it.
+func writeResponseBody(resp *httpclient.Response, dest string) (int64, error) {
+	src, err := resp.BodyReader()
+	if err != nil {
+		return 0, err
+	}
+	defer src.Close()
+	out, err := os.Create(dest)
+	if err != nil {
+		return 0, err
+	}
+	n, copyErr := io.Copy(out, src)
+	closeErr := out.Close()
+	if copyErr != nil {
+		return n, copyErr
+	}
+	return n, closeErr
 }
 
 // httpSavePath resolves the typed target: "~" expands, a relative path is
@@ -184,7 +208,7 @@ func httpSavePath(target, fallbackName string) string {
 }
 
 // byteCountLabel renders a body size the way a notification should read.
-func byteCountLabel(n int) string {
+func byteCountLabel(n int64) string {
 	switch {
 	case n < 1024:
 		return fmt.Sprintf("%d bytes", n)

@@ -107,12 +107,16 @@ bring their own.
 | Import curl Command… | `http.importCurl` | — | — | everywhere |
 | Import OpenAPI Spec… | `http.importOpenAPI` | — | — | everywhere |
 | Insert curl as HTTP Request | `http.insertCurlAsRequest` | — | — | everywhere |
+| Open jq Playground on HTTP Response | `http.jqPlayground` | — | — | everywhere |
+| Load More of the HTTP Response Body | `http.loadMoreBody` | — | — | everywhere |
+| Open Full HTTP Response Body as File | `http.openBodyFile` | — | — | everywhere |
 | Re-send Stored HTTP Request | `http.resend` | — | — | everywhere |
 | Browse HTTP Response History | `http.responseHistory` | — | — | everywhere |
 | Run HTTP Request | `http.run` | `ctrl+f9` | — | everywhere |
 | Save HTTP Response Body to File… | `http.saveResponse` | — | — | everywhere |
 | Select HTTP Environment | `http.selectEnvironment` | — | — | everywhere |
 | Show Stored HTTP Response | `http.showResponse` | `ctrl+shift+f9` | — | everywhere |
+| Toggle Raw / Pretty HTTP Response Body | `http.toggleRawBody` | — | — | everywhere |
 | GitHub Issues | `issues.toggle` | — | — | everywhere |
 | Saved jq Filters… | `json.jqFilters` | — | — | everywhere |
 | jq Playground… | `json.jqPlayground` | — | — | everywhere |

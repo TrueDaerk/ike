@@ -1,5 +1,37 @@
 # Log
 
+## 2026-08-27 (HTTP response viewer: raw/pretty toggle, jq handoff, spooled bodies, #2157)
+
+- **Pretty stays the default, `t` toggles** (`internal/httppane/body.go`): a
+  JSON body is indented before it is composed — so folding (#1330) and
+  highlighting (#1270) have lines to attach to — and `t` /
+  `http.toggleRawBody` shows the bytes as received instead. The flag belongs
+  to the view, not the response, so history browsing keeps it; highlighting
+  stays on in raw mode, since it is the formatting that is off.
+- **Formatting is capped** (`PrettyLimit`, 2 MiB): past it a body composes as
+  plain rows — no indent, no highlight index, no fold scan — with a warning
+  row saying so. All three passes are linear in the body size and a viewer
+  that freezes on arrival has stopped being one; the cap is surfaced, never
+  silent.
+- **Large bodies never load whole** (`internal/httpclient/spool.go`): past
+  `SpoolThreshold` (1 MiB) the dispatcher streams the body to a spool file and
+  `Response.Body` keeps only the head. `FullBody`/`BodyReader`/`BodyRange` are
+  the explicit ways past it, so the full copy exists for one operation instead
+  of for the session — captures, the raw-body save (now a stream) and
+  `httpdiff` use them. `MaxBodyBytes` still caps the total at 10 MiB.
+- **The head is a window** (#2157): the pane states `(showing the first 1.0
+  MiB of 7.3 MiB — m load more · o open as file)`. `m` reads the next 1 MiB
+  window off the spool; `o` opens the whole body as an editor tab through
+  `httppane.OpenBodyFileMsg`. A missing spool degrades to the head.
+- **The history store adopts the spool**: a per-process temp file dies with
+  the process, so `Append` copies it into `.ike/http/bodies/` and prunes it
+  with its entry. `CleanupSpool` (deferred in `cmd/ike/main.go`) removes the
+  temp directory on exit; creating one sweeps directories left by a crash.
+- **One key into jq**: `q` / `http.jqPlayground` opens the playground over the
+  shown body, in the response pane itself. The input is the *whole* body —
+  read back off the spool when the pane holds only the head — because a
+  program against a truncated document answers the wrong question.
+
 ## 2026-08-27 (Auto-save dirty buffers on project switch, #2186)
 
 - **The gate** (`internal/app/switch_autosave.go`): with

@@ -283,7 +283,7 @@ func TestHTTPResponseFileNameWithoutSnapshot(t *testing.T) {
 // TestByteCountLabel: the notification reads in the unit that fits.
 func TestByteCountLabel(t *testing.T) {
 	cases := []struct {
-		n    int
+		n    int64
 		want string
 	}{{0, "0 bytes"}, {512, "512 bytes"}, {2048, "2.0 KiB"}, {3 * 1024 * 1024, "3.0 MiB"}}
 	for _, tc := range cases {

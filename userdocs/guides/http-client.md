@@ -414,6 +414,10 @@ highlighted, binary bodies collapsed to a notice.
 | ++ctrl+r++ | Send this response's request again, unchanged |
 | `C` | Copy this response's request as a curl command |
 | `S` | Save the raw response body to a file |
+| `t` | Switch between the pretty-printed and the raw body |
+| `q` | Open the jq playground on this body |
+| `m` | Load the next chunk of a large body |
+| `o` | Open the whole body as a file |
 | `x` | Cancel the request that is running |
 | `za` / `zc` / `zo` | Toggle / close / open the fold at the top of the view |
 | `zM` / `zR` | Collapse every fold / open them all |
@@ -422,6 +426,21 @@ highlighted, binary bodies collapsed to a notice.
 Search uses the editor's smartcase rule: an all-lowercase pattern ignores
 case, any uppercase letter makes it exact. The footer shows the position
 (`/token  3/17`).
+
+### Pretty or raw
+
+A JSON body arrives minified far more often than not, so the pane indents it
+before showing it — that is also what gives folding something to fold. `t`
+(or **Toggle Raw / Pretty HTTP Response Body**) switches to the bytes exactly
+as they arrived and back, for when the formatting itself is the question: a
+payload where whitespace matters, or an answer that is not quite valid JSON.
+Highlighting stays on either way. The choice sticks while you browse history,
+so you are not re-pressing it for every response.
+
+Very large bodies are shown **raw and unhighlighted** past 2 MiB, with a note
+saying so. Indenting, highlighting and scanning for folds all take time
+proportional to the body, and a pane that freezes for a second on arrival is
+worse than a plain one.
 
 A JSON, XML or HTML body **folds** like a file in the editor does: foldable
 lines carry a ▾ marker in the left column, clicking it collapses the block to a
@@ -442,6 +461,34 @@ the search prompt open, after a `z` that is waiting for its fold key, and —
 over a live selection — instead of ++ctrl+c++'s usual "quit IKE". `y` is the
 exception, because inside the search prompt it is just a letter you typed.
 
+### Very large responses
+
+A body over 1 MiB is written to a file on disk while it arrives, and the pane
+shows the **first megabyte** of it instead of holding the whole thing in
+memory. A note above the body says where you are:
+
+```
+(showing the first 1.0 MiB of 7.3 MiB — m load more · o open as file)
+```
+
+- `m` (**Load More of the HTTP Response Body**) pulls in the next megabyte.
+  Press it again for the one after that; the note disappears once the whole
+  body is on screen.
+- `o` (**Open Full HTTP Response Body as File**) opens the complete body as a
+  normal editor tab, where search, folding and everything else work as usual.
+
+`q` (below) and `S` always work on the **whole** body, never on the part you
+happen to be looking at. Responses are still capped at 10 MiB on receipt, with
+a warning when one is cut there.
+
+### Into the jq playground
+
+`q` (or **Open jq Playground on HTTP Response**) opens the jq playground right
+in the response pane, with this body as its input — no copying it out first.
+The query line appears at the top of the pane and the body below is replaced
+by the live result until you press ++esc++. For a large, partly spooled
+response the playground still gets the whole body.
+
 ### Copying the shown request as curl
 
 `C` in the pane (or **Copy Shown HTTP Request as curl**, `http.copyShownAsCurl`)
@@ -461,8 +508,9 @@ writes the **raw** body — the bytes as they arrived, not the pretty-printed
 view — to a path you type. The prompt proposes a name built from the request
 URL and the `Content-Type` (`/things/42` + `application/json` → `42.json`),
 ++tab++ completes paths, a relative path is resolved against the project root,
-and a directory receives the proposed name. Binary bodies (an image, a PDF, a
-zip) save correctly; that is what the command is for, since they have no text
+and a directory receives the proposed name. A large body is streamed from its
+spool file, so saving a 9 MiB download costs no memory. Binary bodies (an
+image, a PDF, a zip) save correctly; that is what the command is for, since they have no text
 to copy. The notification names the file and its size, and says so when the
 body had been truncated on receipt.
 
@@ -556,6 +604,10 @@ once and the entry after that is re-sendable.
 | Copy HTTP Response Headers | `http.copyHeaders` | — |
 | Copy Shown HTTP Request as curl | `http.copyShownAsCurl` | — |
 | Save HTTP Response Body to File… | `http.saveResponse` | — |
+| Toggle Raw / Pretty HTTP Response Body | `http.toggleRawBody` | — |
+| Open jq Playground on HTTP Response | `http.jqPlayground` | — |
+| Load More of the HTTP Response Body | `http.loadMoreBody` | — |
+| Open Full HTTP Response Body as File | `http.openBodyFile` | — |
 | Browse HTTP Response History | `http.responseHistory` | — |
 | Show Stored HTTP Response | `http.showResponse` | — |
 | Re-send Stored HTTP Request | `http.resend` | — |

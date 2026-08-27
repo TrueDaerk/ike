@@ -246,8 +246,24 @@ func TestDispatchTruncatesHugeBody(t *testing.T) {
 	if !resp.Truncated {
 		t.Error("want Truncated=true")
 	}
-	if len(resp.Body) != MaxBodyBytes {
-		t.Errorf("body length: %d", len(resp.Body))
+	// Past SpoolThreshold the body streams to a spool file (#2157): memory
+	// holds the head, the file holds all of it, and MaxBodyBytes still caps
+	// the total.
+	if len(resp.Body) != SpoolThreshold {
+		t.Errorf("in-memory head: %d, want %d", len(resp.Body), SpoolThreshold)
+	}
+	if resp.BodySize != MaxBodyBytes {
+		t.Errorf("body size: %d", resp.BodySize)
+	}
+	if !resp.Spooled() {
+		t.Fatal("want a spooled body")
+	}
+	full, err := resp.FullBody()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(full) != MaxBodyBytes {
+		t.Errorf("spooled body length: %d", len(full))
 	}
 	found := false
 	for _, w := range resp.Warnings {
