@@ -24,6 +24,35 @@
   when the store holds refinements this adapter will strip. The breakpoints
   are pushed either way — an unsupported capability never breaks a session.
 
+## 2026-08-27 (jq playground keyboard: esc esc, code actions, its own help context, #2237)
+
+- **`esc esc` reaches the palette from the playground.** The mode's `esc`
+  returned straight out of the modal routing, which sits above the double-esc
+  detector in `Update`: the first press left the input, the second found
+  nothing armed, and the palette was unreachable from the query line.
+  `leavePlaygroundOnEsc` closes the mode *and* arms the detector, so the single
+  `esc` keeps its immediate meaning (no chord-timeout latency on the most-pressed
+  key) and the second one opens the palette. Both focuses go through it; an
+  `esc` the completion popup consumes as a dismissal does not arm it.
+- **Code actions answer instead of doing nothing.** `alt+enter`
+  (`lsp.codeAction`) is editor-scoped, so the mode's routing kept it from the
+  keymap layer and the Global fallback never matched — a silent no-op. There is
+  no language server behind a jq program, so the playground now says so on the
+  info row, in the status line's warning colour, and names `ctrl+space` and
+  `ctrl+l` as the nearest things it does have.
+- **The cheatsheet knows the playground.** `helpContext` reports `playground`
+  while the mode owns the keyboard (help only — keymap resolution, palette
+  scoping and the mode indicator keep `focusContext`), and `playhelp.go`
+  contributes three groups: query line, result buffer, and the keymap chords
+  that still reach the mode, resolved live from the binding table.
+  `help.withExtraLeading` puts `Focused` extra groups at the head of the
+  context view, so a mode owning the keyboard without owning a registry scope
+  leads the sheet like a focused pane would.
+- **Discoverability**: the info row's hint tail ends in `f1 keys`, last so a
+  narrow pane drops it first.
+- Docs: [jq & yq playground](/architecture/jq-playground.md#keys),
+  [help overlay](/architecture/help-overlay.md#contexts-without-a-registry-scope-2237).
+
 ## 2026-08-27 (Terminal link hints + extensionless references, #2254)
 
 - **Keyboard hints** (`internal/terminal/hints.go`): the reserved
