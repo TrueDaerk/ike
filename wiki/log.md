@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-27 (Settings UI: fuzzy search across all settings, #2179)
+
+- **The gap**: the panel filter was a case-insensitive substring over page
+  titles, entry titles and keys. A setting was findable only by knowing what it
+  is called — its **description**, the one place saying what it *does*, was not
+  searched at all.
+- **Schema-driven match sources** (`internal/settings/search.go`,
+  `searchRows`): key, title, description and page title, plus a custom page's
+  `SearchItem` label and keywords. No registry — a new `Entry` is searchable
+  the moment it exists.
+- **Fuzzy, with a floor for prose**: matching goes through `internal/fuzzy`
+  (the command palette's matcher), so `edtabw` finds `editor.tab_width`. Terms
+  are ANDed. In a description a scattered one- or two-rune subsequence is
+  noise, so short patterns there must occur literally; names have no such gate.
+- **Two-level ranking**: rows stay grouped by page — the rail lists *pages with
+  hits* (#1297) and needs contiguous groups — but rows inside a page and the
+  pages themselves are ordered by score, so the strongest match is the first
+  row of the first group. A hit in a key or title outranks the same word buried
+  in someone else's description.
+- **The highlight explains the ranking**: `highlightMatch` marks each term
+  literally where it occurs and otherwise on exactly the runes the matcher hit.
+- **Landing on the field**: `tab` on a result opens its category positioned on
+  the real form row, focused with its editor live — editable with the next key.
+- **Esc is the picker's speed search** (#2111): the first press clears the
+  query, the second leaves the search.
+
 ## 2026-08-27 (Run configs: environment form and a kind-faithful rerun, #2173)
 
 - **The gap**: a run configuration's environment overlay existed in the model

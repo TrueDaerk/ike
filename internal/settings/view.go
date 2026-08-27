@@ -3,11 +3,13 @@ package settings
 import (
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/config"
+	"ike/internal/fuzzy"
 	"ike/internal/theme"
 )
 
@@ -130,6 +132,10 @@ func (m *Model) View() string {
 	if !m.open || m.width < 24 || m.height < 8 {
 		return ""
 	}
+	// The frame re-matches once (#2179): a page's searchable items may have
+	// changed while the last event was handled, and every rows() call inside
+	// this render then shares the one result list.
+	m.invalidateSearch()
 	pal := m.theme()
 	innerW := m.width - 2          // content columns inside the border (v2 sizes outer)
 	inner := m.height - chromeRows // body rows under the column headers
@@ -246,7 +252,7 @@ func (m *Model) renderHint(pal *theme.Palette) string {
 	case m.SubOpen():
 		return style.Render(" esc back · click a button")
 	case m.filtering:
-		return style.Render(" type to filter · enter keep · esc clear")
+		return style.Render(" fuzzy: key · label · description — enter keep · esc clear")
 	}
 	var segs []hintSeg
 	switch {
@@ -787,19 +793,52 @@ func (m *Model) customPagesNote() string {
 	return "   (not searched: " + strings.Join(names, ", ") + ")"
 }
 
-// highlightMatch marks the first case-insensitive occurrence of needle in
-// text. Styling only the match keeps the row readable: the eye lands on why
-// the row is in the list.
+// highlightMatch marks what the query matched in text. Styling only the match
+// keeps the row readable: the eye lands on why the row is in the list. Each
+// term of the query is marked where it occurs literally and, failing that, on
+// the runes the fuzzy matcher hit (#2179) — the same characters the scorer
+// rewarded, so the highlight explains the ranking.
 func highlightMatch(text, needle string, pal *theme.Palette) string {
-	if needle == "" {
+	if needle == "" || text == "" {
 		return text
 	}
-	i := strings.Index(strings.ToLower(text), strings.ToLower(needle))
-	if i < 0 {
+	runes := []rune(text)
+	mark := make([]bool, len(runes))
+	marked := false
+	for _, term := range strings.Fields(strings.ToLower(needle)) {
+		if i := strings.Index(strings.ToLower(text), term); i >= 0 {
+			start := utf8.RuneCountInString(text[:i])
+			for j := start; j < start+utf8.RuneCountInString(term) && j < len(runes); j++ {
+				mark[j], marked = true, true
+			}
+			continue
+		}
+		if res, ok := fuzzy.Match(term, text); ok {
+			for _, p := range res.Positions {
+				if p >= 0 && p < len(runes) {
+					mark[p], marked = true, true
+				}
+			}
+		}
+	}
+	if !marked {
 		return text
 	}
 	hit := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
-	return text[:i] + hit.Render(text[i:i+len(needle)]) + text[i+len(needle):]
+	var b strings.Builder
+	for i := 0; i < len(runes); {
+		j := i
+		for j < len(runes) && mark[j] == mark[i] {
+			j++
+		}
+		run := string(runes[i:j])
+		if mark[i] {
+			run = hit.Render(run)
+		}
+		b.WriteString(run)
+		i = j
+	}
+	return b.String()
 }
 
 // renderEntry renders one settings-column row: "Title … value marker". The

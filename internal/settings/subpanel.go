@@ -71,10 +71,11 @@ type hostAware interface {
 }
 
 // Push opens a sub-panel above the current level.
-func (m *Model) Push(sp SubPanel) { m.stack = append(m.stack, sp) }
+func (m *Model) Push(sp SubPanel) { m.invalidateSearch(); m.stack = append(m.stack, sp) }
 
 // Pop closes the top sub-panel; the level below (or the page) resumes.
 func (m *Model) Pop() {
+	m.invalidateSearch()
 	if len(m.stack) > 0 {
 		m.stack = m.stack[:len(m.stack)-1]
 	}

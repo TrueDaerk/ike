@@ -119,6 +119,9 @@ type Model struct {
 	detailBodyTop int
 	followCat     bool
 	followForm    bool
+
+	// search memoizes the filter's result rows (#2179); see searchCache.
+	search searchCache
 }
 
 // scopeSel names the panel's write-scope selector states.
@@ -205,6 +208,7 @@ func (m *Model) IsOpen() bool { return m.open }
 // Open shows the panel on the page it was last on (#890 — the panel
 // remembers across opens and, via the state file, across sessions).
 func (m *Model) Open() {
+	m.invalidateSearch()
 	m.open = true
 	m.focus = catColumn
 	m.cat = clamp(m.cat, 0, len(m.pages)-1)
@@ -220,6 +224,7 @@ func (m *Model) Open() {
 
 // Close hides the panel (and any open sub-panels), remembering the page.
 func (m *Model) Close() {
+	m.invalidateSearch()
 	m.open = false
 	m.stack = nil
 	if m.cat >= 0 && m.cat < len(m.pages) {
@@ -255,8 +260,8 @@ func (m *Model) customPage() PageModel {
 }
 
 // rows returns the visible form lines: the active page's entries, or — with a
-// filter — every matching entry across all pages. Custom pages own their rows
-// and are skipped here.
+// filter — every matching entry across all pages (searchRows, #2179). Custom
+// pages own their rows and are skipped here.
 func (m *Model) rows() []row {
 	var out []row
 	if m.filter == "" {
@@ -267,32 +272,11 @@ func (m *Model) rows() []row {
 		}
 		return out
 	}
-	needle := strings.ToLower(m.filter)
-	for pi, p := range m.pages {
-		// Category titles match as jump rows (#886).
-		if strings.Contains(strings.ToLower(p.Title), needle) {
-			out = append(out, row{page: pi, kind: rowPage, label: p.Title})
-		}
-		if p.Custom != nil {
-			// Custom pages export their items through the Searchable seam
-			// (#886); enter navigates there.
-			if sp, ok := p.Custom.(Searchable); ok {
-				for _, it := range sp.SearchItems() {
-					hay := strings.ToLower(p.Title + " " + it.Label + " " + it.Keywords)
-					if strings.Contains(hay, needle) {
-						out = append(out, row{page: pi, kind: rowItem, label: p.Title + " › " + it.Label, activate: it.Activate})
-					}
-				}
-			}
-			continue
-		}
-		for _, e := range p.Entries {
-			hay := strings.ToLower(p.Title + " " + e.Title + " " + e.Key)
-			if strings.Contains(hay, needle) {
-				out = append(out, row{page: pi, entry: e})
-			}
-		}
+	if m.search.valid && m.search.query == m.filter {
+		return m.search.rows
 	}
+	out = m.searchRows(m.filter)
+	m.search = searchCache{query: m.filter, rows: out, valid: true}
 	return out
 }
 
@@ -332,6 +316,7 @@ func (m *Model) detailX() int { return formX() + m.gridFor().formW + sepWidth }
 // it — the same semantics as enter. A press in the detail column focuses the
 // editor there.
 func (m *Model) Click(x, y int) tea.Cmd {
+	m.invalidateSearch()
 	if !m.open {
 		return nil
 	}
@@ -412,6 +397,7 @@ func (m *Model) Click(x, y int) tea.Cmd {
 // column when hovered, the form column otherwise. x/y are panel-local; y
 // picks the stacked detail band apart from the list above it (#1664).
 func (m *Model) Wheel(x, y, delta int) {
+	m.invalidateSearch()
 	if !m.open {
 		return
 	}
@@ -490,6 +476,7 @@ func (m *Model) NoteReloadDiags(diags []config.Diagnostic) {
 // steps receive their async results too. Returned commands (CmdReceiver)
 // batch back into the app's update.
 func (m *Model) Deliver(msg tea.Msg) tea.Cmd {
+	m.invalidateSearch()
 	var cmds []tea.Cmd
 	receive := func(v any) {
 		switch r := v.(type) {
@@ -513,6 +500,7 @@ func (m *Model) Deliver(msg tea.Msg) tea.Cmd {
 // Update handles one key while the panel is open. Returned commands carry
 // write-back reloads.
 func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
+	m.invalidateSearch()
 	if !m.open {
 		return nil
 	}
@@ -830,6 +818,7 @@ func (m *Model) cycleEnum(dir int) tea.Cmd {
 // then navigating, and the caller drops the paste rather than typing into a
 // list.
 func (m *Model) Paste(text string) (handled bool) {
+	m.invalidateSearch()
 	if top := m.topSub(); top != nil {
 		// A sub-panel form is the only text input on screen while it is up
 		// (#2002); the ones without a field (chord capture, pickers) simply
@@ -865,8 +854,14 @@ func (m *Model) Paste(text string) (handled bool) {
 func (m *Model) updateFilter(key tea.KeyPressMsg) tea.Cmd {
 	switch key.Code {
 	case tea.KeyEscape:
+		// Speed-search esc (#2179): the first press clears a running query
+		// (ui.SpeedSearch.EscClears), the second leaves the search — the same
+		// two steps every picker's type-ahead has.
+		if m.filter != "" {
+			m.filter, m.filterCur, m.sel = "", 0, 0
+			return nil
+		}
 		m.filtering = false
-		m.filter, m.filterCur = "", 0
 		m.sel = 0
 	case tea.KeyEnter:
 		m.filtering = false
