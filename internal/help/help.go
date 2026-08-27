@@ -28,12 +28,30 @@ type Help struct {
 	minCol int            // configured minimum column width (0 -> default)
 	pal    *theme.Palette // active theme (Roadmap 0110); nil = default
 
-	groups     []Group
+	ctxID      string  // focused pane context the snapshot was taken for
+	ctxGroups  []Group // context-first ordering (#2182): focused scope, global, rest
+	flatGroups []Group // the classic flat sheet: global first, then alphabetical
 	essentials []Group
 	extra      []Group
 	filter     string // live typed filter (#271); "" shows everything
-	showAll    bool   // false = curated Essentials view (#656); tab toggles
+	view       view   // which of the three views is showing; tab cycles
 }
+
+// view names the three cheat-sheet views the overlay cycles through with tab.
+type view int
+
+const (
+	// viewEssentials is the curated starter set (#656) — the opening view when
+	// no pane context is focused.
+	viewEssentials view = iota
+	// viewContext is the focused pane's bindings first, then global, then the
+	// remaining contexts below (#2182) — the opening view when a context is
+	// focused.
+	viewContext
+	// viewFlat is the classic flat sheet: the focused context's commands plus
+	// the global ones, global first (the behaviour before #2182).
+	viewFlat
+)
 
 // SetFilter installs the live filter typed into the floating shell (#271);
 // Filter reports it. Help implements ui.Filterable through this pair.
@@ -66,30 +84,91 @@ func New(src CommandSource, res BindingResolver, minCol int) *Help {
 // re-snapshotting picks up newly registered commands. Call it each time the
 // shell is opened so the cheat sheet reflects the current registry and focus.
 func (h *Help) Snapshot(contextID string) {
-	h.groups = Snapshot(h.src, h.res, contextID)
-	for _, g := range h.extra {
-		if len(g.Entries) > 0 {
-			h.groups = append(h.groups, g)
-		}
-	}
+	h.ctxID = contextID
+	h.ctxGroups = h.withExtra(ContextSnapshot(h.src, h.res, contextID))
+	h.flatGroups = h.withExtra(Snapshot(h.src, h.res, contextID))
 	h.essentials = EssentialsSnapshot(h.src, h.res)
-	// Every open starts on the curated Essentials view (#656); the full dump
-	// stays one tab away. Degrade to the full view when nothing curated
-	// resolved (stub registries).
-	h.showAll = len(h.essentials) == 0
+	// With a pane focused the sheet opens on its own bindings (#2182); the
+	// curated Essentials set (#656) and the flat dump stay a tab away. Without
+	// a focused context there is nothing to lead with, so Essentials opens —
+	// degrading to the flat view when nothing curated resolved (stub
+	// registries).
+	switch {
+	case h.hasContextView():
+		h.view = viewContext
+	case len(h.essentials) > 0:
+		h.view = viewEssentials
+	default:
+		h.view = viewFlat
+	}
 }
 
-// HandleKey implements ui.KeyHandler: tab toggles between the Essentials and
-// full views. The toggle is a no-op while a filter is active — the filter
-// already searches the full set, so switching views means nothing there.
+// withExtra appends the caller-supplied non-empty extra groups to a snapshot.
+func (h *Help) withExtra(groups []Group) []Group {
+	for _, g := range h.extra {
+		if len(g.Entries) > 0 {
+			groups = append(groups, g)
+		}
+	}
+	return groups
+}
+
+// hasContextView reports whether a focused-context view exists: a context is
+// focused and it actually owns bindings, so leading with it says something.
+func (h *Help) hasContextView() bool {
+	if h.ctxID == "" {
+		return false
+	}
+	for _, g := range h.ctxGroups {
+		if g.Focused && len(g.Entries) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// HandleKey implements ui.KeyHandler: tab cycles the views — the focused
+// context view (#2182), the curated Essentials view (#656), and the flat list —
+// skipping any view that has nothing to show. The toggle is a no-op while a
+// filter is active: the filter already searches the full set, so switching
+// views means nothing there.
 func (h *Help) HandleKey(key string) bool {
 	if key != "tab" {
 		return false
 	}
-	if h.filter == "" && len(h.essentials) > 0 {
-		h.showAll = !h.showAll
+	if h.filter == "" {
+		h.view = h.nextView()
 	}
 	return true
+}
+
+// nextView is the tab cycle context -> flat -> essentials -> context, with
+// unavailable views skipped. It always terminates: viewFlat is always
+// available.
+func (h *Help) nextView() view {
+	order := []view{viewContext, viewFlat, viewEssentials}
+	at := 0
+	for i, v := range order {
+		if v == h.view {
+			at = i
+		}
+	}
+	for i := 1; i <= len(order); i++ {
+		next := order[(at+i)%len(order)]
+		switch next {
+		case viewContext:
+			if h.hasContextView() {
+				return next
+			}
+		case viewEssentials:
+			if len(h.essentials) > 0 {
+				return next
+			}
+		default:
+			return next
+		}
+	}
+	return viewFlat
 }
 
 // SetExtra appends caller-supplied groups to every snapshot: the honest
@@ -106,8 +185,11 @@ func (h *Help) Title() string {
 	if h.filter != "" {
 		return "HELP — filter: " + h.filter
 	}
-	if !h.showAll {
+	switch h.view {
+	case viewEssentials:
 		return "HELP " + version.Short() + " — essentials"
+	case viewContext:
+		return "HELP " + version.Short() + " — " + groupTitle(h.ctxID) + " context"
 	}
 	return "HELP " + version.Short() + " — commands & shortcuts"
 }
@@ -139,19 +221,33 @@ func (h *Help) Render(width int) string {
 	return body
 }
 
-// footer renders the one-line view/filter legend under the body (#656).
+// footer renders the one-line view/filter legend under the body (#656, #2182).
+// It always names the view tab leads to next, so the cycle is discoverable.
 func (h *Help) footer(visible []Group) string {
-	total := countEntries(h.groups)
+	total := countEntries(h.searchGroups())
 	if h.filter != "" {
 		return strconv.Itoa(countEntries(visible)) + " of " + strconv.Itoa(total) + " matches · searching all commands"
 	}
-	if !h.showAll {
-		return strconv.Itoa(countEntries(visible)) + " of " + strconv.Itoa(total) + " commands — press tab for the full list"
+	next := h.nextView()
+	if next == h.view {
+		return ""
 	}
-	if len(h.essentials) > 0 {
-		return "press tab for essentials"
+	head := strconv.Itoa(countEntries(visible)) + " of " + strconv.Itoa(total) + " commands"
+	if h.view == viewContext {
+		head = groupTitle(h.ctxID) + " bindings first · " + strconv.Itoa(countEntries(visible)) + " commands"
 	}
-	return ""
+	return head + " — press tab for " + viewName(next, h.ctxID)
+}
+
+// viewName is how the footer refers to a view the user can tab to.
+func viewName(v view, ctxID string) string {
+	switch v {
+	case viewEssentials:
+		return "essentials"
+	case viewContext:
+		return "the " + groupTitle(ctxID) + " context"
+	}
+	return "the full list"
 }
 
 // countEntries totals the rows across groups.
@@ -170,14 +266,17 @@ func countEntries(groups []Group) int {
 // over title and shortcut; empty groups drop out.
 func (h *Help) visibleGroups() []Group {
 	if h.filter == "" {
-		if !h.showAll {
+		switch h.view {
+		case viewEssentials:
 			return h.essentials
+		case viewContext:
+			return h.ctxGroups
 		}
-		return h.groups
+		return h.flatGroups
 	}
 	needle := strings.ToLower(h.filter)
 	var out []Group
-	for _, g := range h.groups {
+	for _, g := range h.searchGroups() {
 		kept := Group{Label: g.Label}
 		for _, e := range g.Entries {
 			if strings.Contains(strings.ToLower(e.Title), needle) ||
@@ -190,6 +289,15 @@ func (h *Help) visibleGroups() []Group {
 		}
 	}
 	return out
+}
+
+// searchGroups is the widest set the sheet knows about — the context view keeps
+// every scope, so a filter typed in any view searches all of them.
+func (h *Help) searchGroups() []Group {
+	if len(h.ctxGroups) >= len(h.flatGroups) {
+		return h.ctxGroups
+	}
+	return h.flatGroups
 }
 
 // allCells renders every entry across the given groups at its natural width,
@@ -219,7 +327,7 @@ func (h *Help) renderBody(groups []Group, colW, cols int) string {
 		packed := Pack(cells, cols)
 		block := lipgloss.JoinVertical(
 			lipgloss.Left,
-			headingStyle.Render(groupTitle(g.Label)),
+			headingStyle.Render(sectionTitle(g)),
 			renderColumns(packed, colW),
 		)
 		blocks = append(blocks, block)
@@ -258,6 +366,16 @@ func (h *Help) renderEntry(e Entry, colW int) string {
 	}
 	keyStyle := lipgloss.NewStyle().Foreground(h.theme().Secondary)
 	return e.Title + strings.Repeat(" ", gap) + keyStyle.Render(e.Shortcut)
+}
+
+// sectionTitle is a group's heading: the scope title, marked as the focused
+// pane's own section when it leads the context view (#2182) so it is obvious
+// which context the sheet is showing first.
+func sectionTitle(g Group) string {
+	if g.Focused {
+		return groupTitle(g.Label) + " — focused pane"
+	}
+	return groupTitle(g.Label)
 }
 
 // groupTitle is the human-facing heading for a scope label — the full

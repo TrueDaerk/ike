@@ -112,7 +112,7 @@ func TestFilterSearchesFullSetAndDisablesTab(t *testing.T) {
 		t.Fatal("tab should be consumed while filtering")
 	}
 	h.SetFilter("")
-	if h.showAll {
+	if h.view != viewEssentials {
 		t.Fatal("tab during filter must not have toggled the view")
 	}
 
@@ -127,7 +127,7 @@ func TestSnapshotResetsToEssentials(t *testing.T) {
 	h.Snapshot("")
 	h.HandleKey("tab") // full view
 	h.Snapshot("")     // re-open
-	if h.showAll {
+	if h.view != viewEssentials {
 		t.Fatal("re-snapshot (open) must reset to the essentials view")
 	}
 }
@@ -137,7 +137,7 @@ func TestEssentialsDegradesToFullViewOnStubRegistry(t *testing.T) {
 	// fall back to the full view rather than rendering an empty pane.
 	h := New(testRegistry(), nil, 0)
 	h.Snapshot("")
-	if !h.showAll {
+	if h.view != viewFlat {
 		t.Fatal("no resolved essentials should degrade to the full view")
 	}
 	if v := ansi.Strip(h.Render(80)); !strings.Contains(v, "Quit") {

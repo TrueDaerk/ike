@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Help Overlay
-description: Read-only command & shortcut cheat sheet — snapshots the plugin registry scoped to the focused pane, joins bindings, packs entries into width-responsive columns with right-aligned shortcuts, hosted in the reusable floating shell.
+description: Read-only command & shortcut cheat sheet — snapshots the plugin registry, leads with the focused pane's own bindings, joins bindings, packs entries into width-responsive columns with right-aligned shortcuts, hosted in the reusable floating shell.
 resource: internal/help/help.go
 tags: [architecture, help, overlay, responsive, bubbletea]
 timestamp: 2026-07-18T00:00:00Z
@@ -17,9 +17,11 @@ a pure **consumer** — it owns no command or binding store, and (since roadmap
 registry (roadmap 0020) on open
 and joins each command with its shortcut from a binding resolver
 (the roadmap 0080 keymap resolver, consumed through a narrow interface so help
-builds before 08 lands). The snapshot is **scoped to the focused pane**: it
-lists the global commands plus the focused context's own group (an empty
-context id lists every scope, the degradation path). Commands handled outside
+builds before 08 lands). The snapshot is **led by the focused pane** (#2182):
+the focused context's own bindings come first in their own titled section,
+then the global ones, then the remaining contexts below; `tab` switches to the
+classic flat sheet (global commands plus the focused context's own) and to the
+curated Essentials set — see [Views](#views-656-2182). Commands handled outside
 the keymap layer (the editor's
 vim ex-commands `:w`/`:q`/`:wq` and modal keys `u`/`ctrl+r`) carry a
 documentation-only `Shortcut` hint on the `plugin.Command` that help shows when
@@ -39,42 +41,69 @@ with an active filter, `q`/`?` act as letters, `backspace` edits, and `esc`
 first clears the filter before a second `esc` closes; each open starts
 unfiltered. See [Floating Shell](/architecture/floating-shell.md).
 
-## Essentials view (#656)
+## Views (#656, #2182)
 
-The sheet opens on a curated **Essentials** view, not the full registry dump:
+The overlay has **three views**; `tab` cycles them (`Help` implements the
+shell's `ui.KeyHandler` extension), skipping any view with nothing to show, and
+the title and footer always name the view and the one `tab` leads to next.
+
+| View | Shows | Opens when |
+| --- | --- | --- |
+| **Context** | the focused pane's context first (heading `Explorer — focused pane`), then `Global`, then every other context below | a context is focused and it owns commands |
+| **Essentials** | the curated starter set, focus-independent | no focused context (the degradation path) |
+| **Flat** | the classic sheet: global commands plus the focused context's own, global first | neither of the above resolved |
+
+### Context view (#2182)
+
+`ContextSnapshot(src, res, contextID)` takes the every-scope snapshot and pulls
+the focused context's group to the front, flagging it `Focused` so its heading
+renders as `<Context> — focused pane`; `Global` follows, then the remaining
+contexts in the usual alphabetical order. Nothing is hidden — the other
+contexts sit *below* rather than being filtered out, so the sheet stays a
+complete reference while answering "what do these keys do *here*" first. An
+empty context id, `global`, or a context with no registered commands yields the
+plain `Snapshot` ordering — there is nothing to lead with — and the view is
+skipped in the `tab` cycle. The cycle is context → flat → essentials → context;
+the responsive two-column layout is identical in every view.
+
+### Essentials view (#656)
+
+The Essentials view is a curated set, not the full registry dump:
 ~25 hand-picked commands in feature groups (Get around / Edit / Panes & tabs /
 Project & tools / Customize), each group ≤6 entries so the view fits one
-screen. `tab` toggles Essentials ⇄ the full list (`Help` implements the
-shell's `ui.KeyHandler` extension); each open resets to Essentials; the title
-reflects the view (`HELP — essentials` vs `HELP — commands & shortcuts`) and a
-dim footer line shows the count and the toggle hint.
+screen. Each open resets the view; the title reflects it (`HELP — essentials`,
+`HELP — Explorer context`, `HELP — commands & shortcuts`) and a dim footer line
+shows the count and the toggle hint.
 
 Curation lives in `essentials.go` as command IDs joined against the same
 registry + resolver as the full snapshot — deliberately hand-maintained, since
 `Binding.Owner` values are internal roadmap tags unusable as user-facing
 groups. Unregistered curated IDs drop silently (stub registries degrade to the
-full view); a drift test in `internal/app` asserts every curated ID resolves
+flat view); a drift test in `internal/app` asserts every curated ID resolves
 against the real global registry. Essentials ignores the focus context — the
-starter set is the same everywhere. The caller-supplied "blocked" extra group
-(`SetExtra`) appears in the full view only.
+starter set is the same everywhere. The caller-supplied extra groups
+(`SetExtra`: the "blocked" section and the focused pane's local keys) are
+appended to the context and flat views, never to Essentials.
 
 A **non-empty filter always searches the full set** (typing means hunting for
-something specific, so the curated subset would only hide the answer); the
-footer switches to `N of M matches · searching all commands` and `tab` is a
+something specific, so the curated subset would only hide the answer — and the
+"full set" is the every-scope context snapshot, so a filter typed in one
+context still finds another context's commands); the footer switches to `N of M matches · searching all commands` and `tab` is a
 no-op until the filter clears, which restores the prior view.
 
 ## Structure
 
 ```
 internal/help/
-  source.go      snapshot registry Commands, join 08 resolver bindings, group by scope, deterministic sort
+  source.go      snapshot registry Commands, join 08 resolver bindings, group by scope, deterministic sort; ContextSnapshot = focused scope first (#2182)
   essentials.go  hand-curated Essentials spec + EssentialsSnapshot join (#656)
   layout.go      width -> column count; column-major balanced packing; min-column-width; single-column fallback
   help.go        ui.Content: Snapshot(ctxID) refresh; Title(); Render(width) -> column-packed body (max two columns)
 ```
 
 The root model (`internal/app`) holds a single `*ui.Floating`. Its `openHelp`
-calls `help.Snapshot(focusContext)`, sets the `*help.Help` as the shell's content, and opens
+calls `help.Snapshot(focusContext)` — which builds both the context-first and
+the flat orderings — sets the `*help.Help` as the shell's content, and opens
 the shell; while open the shell swallows all input and the root composites it
 centered via `overlay.Center`. It is reached three ways: the registered
 `palette.keymapHelp` command (default `f1`, also
@@ -104,7 +133,8 @@ in the shell, not in help.
 
 Entries group by **scope label** (`global`, `editor`, `explorer`) with a heading
 per group; ordering is deterministic (global first, then alphabetical; entries
-by id) so the layout never jumps between opens. Headings are set apart by weight
+by id) so the layout never jumps between opens — except in the context view,
+where the focused scope leads (see above) and its heading says so. Headings are set apart by weight
 and an underline — not colour alone — so the grouping survives on monochrome
 terminals.
 
