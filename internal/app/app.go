@@ -6492,6 +6492,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// list reuses the references rows; Enter navigates via DefinitionMsg —
 		// or peeks the chosen target when the request was a peek (#1154).
 		if msg.Peek {
+			// A peek must not leave the buffer, so a handful of candidates is
+			// picked from inside the popup itself (#2168); only an unwieldy
+			// list falls back to the filterable palette picker, which peeks
+			// the chosen target.
+			if len(msg.Refs) <= peekCandidateMax {
+				m.openPeekCandidates(msg.Refs)
+				return m, nil
+			}
 			m.refs.SetPeek(msg.Refs)
 		} else {
 			m.refs.Set(msg.Refs)

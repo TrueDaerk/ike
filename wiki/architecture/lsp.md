@@ -102,11 +102,11 @@ hover on an alias shows the anchored node's value as a highlighted `yaml`
 fence, dedented, `<<:` merge keys spliced in recursively (cycle-guarded,
 capped at 16 lines).
 
-**Peek definition** (#1154, `lsp.peekDefinition` — palette + the editor
-context menu next to Go to Definition): the same resolution as
-`lsp.definition` (local providers, server request, the #279 multi-target
-picker — with peek intent preserved, so picking a candidate peeks it), but a
-single target delivers a `PeekDefinitionMsg` instead of navigating. The app
+**Peek definition** (#1154, #2168, `lsp.peekDefinition` — `cmd+y`, palette +
+the editor context menu next to Go to Definition): the same resolution as
+`lsp.definition` (local providers, server request), but the target is shown
+instead of jumped to — a single one delivers a `PeekDefinitionMsg`, several a
+`DefinitionCandidatesMsg` with `Peek` set. The app
 (`internal/app/peek.go`) reads a **bounded excerpt** — up to 15 lines
 starting 3 above the definition line, from the **live buffer** when the
 target file is open in any tab (unsaved edits must show; disk would be
@@ -118,11 +118,25 @@ read surfaces as a notice — and opens the popup on the focused editor
 The excerpt is syntax-highlighted with the target file's language via the
 standalone `highlight.Highlight` entry point, the way hover code fences are
 (#379); no grammar renders plain. While open the popup owns a few keys:
-**esc** closes, **enter jumps for real** through the same
-`DefinitionMsg`/`openPathAt` funnel (nav history records, pane dedupe #930
-applies), up/down scroll one row and ctrl+d/ctrl+u half a window through an
-excerpt longer than its 8-row window; **any other key closes the peek and is
-handled normally** (the hover-dismiss precedent), as does a mouse click.
+**esc** closes (nothing moved, so the prior state simply stands), **enter
+jumps for real** through the same `DefinitionMsg`/`openPathAt` funnel (nav
+history records, pane dedupe #930 applies), up/down scroll one row and
+ctrl+d/ctrl+u half a window through an excerpt longer than its 8-row window;
+**any other key closes the peek and is handled normally** (the hover-dismiss
+precedent), as does a mouse click.
+
+**Several candidates are picked inside the popup** (#2168) rather than
+through the #279 modal list — a peek that opened a palette would defeat its
+own point. `openPeekCandidates` reads every candidate's excerpt up front and
+hands them to one popup: the header carries a `(2/3)` counter, the candidate
+list sits under the excerpt (a 4-row window that follows the selection,
+titles truncated from the left like the header), **tab / shift+tab** cycle
+(wrapping, each candidate starting at the top of its own excerpt) and enter
+jumps to the *selected* one. Candidates whose excerpt cannot be read are
+dropped; all of them failing notifies instead of opening an empty box. Above
+`peekCandidateMax` (12) targets the answer falls back to the palette picker
+with peek intent preserved (`refsMode.SetPeek`) — that many rows want a
+filter, and pre-reading that many excerpts is not worth it.
 
 ## Data flow
 

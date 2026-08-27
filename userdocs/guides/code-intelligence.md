@@ -84,9 +84,12 @@ Set `lsp.auto_install = false` to turn all of this off. Then
 | ++cmd+8++ | The Problems window — every diagnostic in the project |
 
 Completion appears as you type; ++enter++ accepts, ++esc++ dismisses.
-**LSP: Peek Definition** shows a definition inline without leaving the file,
-and **LSP: Find Usages (Panel)** puts the results in a tool window rather than
-a popup.
+**LSP: Peek Definition** (++cmd+y++) shows a definition inline without leaving
+the file: ++up++ / ++down++ (++ctrl+u++ / ++ctrl+d++) scroll the excerpt,
+++enter++ jumps there for real, ++esc++ closes and leaves the cursor where it
+was. When the symbol has several definitions they are listed in the popup —
+++tab++ / ++shift+tab++ switch between them. **LSP: Find Usages (Panel)** puts
+the results in a tool window rather than a popup.
 
 A few more things arrive on their own once a server runs:
 
