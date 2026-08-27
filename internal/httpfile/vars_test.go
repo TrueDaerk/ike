@@ -209,3 +209,73 @@ func TestNilVarsResolveNothing(t *testing.T) {
 		t.Errorf("got %q, %v", got, err)
 	}
 }
+
+// TestDefinitionsTagsOrigins: every rung of the chain is listed once, sorted
+// by name, and a name defined twice carries the winning rung's origin (#2158).
+func TestDefinitionsTagsOrigins(t *testing.T) {
+	v := &Vars{
+		Captured: map[string]string{"task": "n1:42"},
+		File:     map[string]string{"host": "https://file.test", "task": "none"},
+		Env:      map[string]string{"host": "https://env.test", "token": "s3cret"},
+	}
+	got := map[string]string{}
+	var order []string
+	for _, d := range v.Definitions() {
+		got[d.Name] = d.Origin
+		order = append(order, d.Name)
+	}
+	want := map[string]string{"host": OriginFile, "task": OriginResponse, "token": OriginEnv}
+	for name, origin := range want {
+		if got[name] != origin {
+			t.Errorf("%s tagged %q, want %q", name, got[name], origin)
+		}
+	}
+	if len(order) != 3 || order[0] != "host" || order[1] != "task" || order[2] != "token" {
+		t.Errorf("definitions must be sorted by name: %v", order)
+	}
+}
+
+// TestDefinitionsCarriesValues: the winning rung's value rides along, so a
+// caller can show or reuse it without walking the chain again.
+func TestDefinitionsCarriesValues(t *testing.T) {
+	v := &Vars{File: map[string]string{"host": "https://file.test"}}
+	defs := v.Definitions()
+	if len(defs) != 1 || defs[0].Value != "https://file.test" {
+		t.Fatalf("definitions: %+v", defs)
+	}
+}
+
+// TestDefinesSpansTheWholeChain: a name is known when any rung defines it —
+// the process environment included — even when its own value does not
+// resolve.
+func TestDefinesSpansTheWholeChain(t *testing.T) {
+	v := &Vars{
+		File:   map[string]string{"api": "{{missing}}/api"},
+		Env:    map[string]string{"host": "https://env.test"},
+		Lookup: func(name string) (string, bool) { return "/tmp", name == "HOME" },
+	}
+	for _, name := range []string{"api", "host", "HOME"} {
+		if !v.Defines(name) {
+			t.Errorf("%s must count as defined", name)
+		}
+	}
+	if v.Defines("nope") {
+		t.Error("an undefined name must not count as defined")
+	}
+	var none *Vars
+	if none.Defines("host") {
+		t.Error("the nil chain defines nothing")
+	}
+}
+
+// TestCaptureNamesListsDeclaredNames: the names a file's directives declare,
+// in file order, without duplicates — the promise a `{{name}}` may rely on
+// before the chain has ever run (#2158).
+func TestCaptureNamesListsDeclaredNames(t *testing.T) {
+	f := Parse("### start\n# @capture task = .task\n# @capture task = .task2\nPOST https://x.test/a\n\n" +
+		"### poll\n// @capture state = .state\nGET https://x.test/{{task}}\n")
+	got := f.CaptureNames()
+	if len(got) != 2 || got[0] != "task" || got[1] != "state" {
+		t.Errorf("capture names: %v, want [task state]", got)
+	}
+}

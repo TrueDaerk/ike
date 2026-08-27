@@ -7,7 +7,10 @@ package httpfile
 // original `{{$env NAME}}` / `${NAME}` forms keep meaning "the process
 // environment" and are unaffected by either.
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // Vars is the resolution chain of one dispatch. All fields are optional; the
 // zero value resolves nothing, which is exactly the behaviour of a file
@@ -85,4 +88,70 @@ func (v *Vars) value(name string, seen map[string]bool) (string, bool) {
 		return "", false
 	}
 	return out, true
+}
+
+// Origin names the rung of the chain a `{{name}}` value comes from (#2158):
+// what a completion item shows next to the name, and what tells apart "the
+// environment defines this" from "an earlier response captured it".
+const (
+	OriginResponse = "response" // captured out of an earlier response (#1993)
+	OriginFile     = "file"     // an `@name=value` definition of the .http file
+	OriginEnv      = "env"      // the selected environment file
+)
+
+// Definition is one defined variable: its name, its unsubstituted value and
+// the Origin* rung that wins for it.
+type Definition struct {
+	Name   string
+	Value  string
+	Origin string
+}
+
+// Definitions lists every `{{name}}` the chain defines, sorted by name, each
+// tagged with the rung that wins it — the enumerable part of the chain, and
+// the list a completion popup is built from. The process environment closing
+// the chain (Lookup) is deliberately not enumerated: it holds hundreds of
+// names that have nothing to do with the file, so offering them would drown
+// the handful that do.
+func (v *Vars) Definitions() []Definition {
+	if v == nil {
+		return nil
+	}
+	rungs := []struct {
+		vars   map[string]string
+		origin string
+	}{
+		{v.Captured, OriginResponse},
+		{v.File, OriginFile},
+		{v.Env, OriginEnv},
+	}
+	out := make([]Definition, 0, len(v.Captured)+len(v.File)+len(v.Env))
+	seen := make(map[string]bool, cap(out))
+	for _, rung := range rungs {
+		for name, value := range rung.vars {
+			if seen[name] {
+				continue // a higher rung already won the name
+			}
+			seen[name] = true
+			out = append(out, Definition{Name: name, Value: value, Origin: rung.origin})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// Defines reports whether name has a definition anywhere in the chain, the
+// process environment included. It answers "is this reference known", not
+// "does it resolve": a definition whose own placeholders are unresolved is
+// still a definition, and reporting the reference as unknown would blame the
+// line that uses it instead of the line that defines it.
+func (v *Vars) Defines(name string) bool {
+	if v == nil {
+		return false
+	}
+	if _, ok := v.raw(name); ok {
+		return true
+	}
+	_, ok := v.EnvValue(name)
+	return ok
 }

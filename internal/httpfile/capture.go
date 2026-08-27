@@ -61,3 +61,24 @@ func CaptureDirective(line string) (name, expr string, ok bool) {
 	}
 	return m[1], m[2], true
 }
+
+// CaptureNames lists the variable names the file's `# @capture` directives
+// declare, in file order and without duplicates (#2158). A declared name is a
+// *promise*: the value appears as soon as its request runs. That is why a
+// `{{name}}` referring to one is not an unknown variable — the polling
+// request of a chain is written before the chain has ever run — and why
+// completion offers it before any response produced it.
+func (f *File) CaptureNames() []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, r := range f.Requests {
+		for _, c := range r.Captures {
+			if seen[c.Name] {
+				continue
+			}
+			seen[c.Name] = true
+			out = append(out, c.Name)
+		}
+	}
+	return out
+}

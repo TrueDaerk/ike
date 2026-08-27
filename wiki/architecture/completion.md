@@ -4,7 +4,7 @@ title: Completion Engine
 description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection.
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources, postfix]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # Completion Engine
@@ -59,7 +59,11 @@ type TriggerSource interface{ TriggerChar(ch string) bool }
 ```
 
 Such a character dispatches **only the claiming sources**, so the postfix source
-answers a `.` while the word index still stays out of it.
+answers a `.` while the word index still stays out of it. The `.http` source
+claims `{` the same way (#2158), so a `{{` opens the request file's variable
+popup without waiting for a letter to follow the braces; a claim never reaches
+past an exclusive claim on the path, so a claiming source that does not own the
+buffer stays out of it.
 
 **Exclusive sources (#1302).** A language source that fully owns completion for
 its own files implements the optional extension
@@ -253,10 +257,10 @@ shape the insert-mode Tab trigger produces (see
 `lsp.PriorityPostfix` = 20 — below every member the server offers on the same
 dot) is the JetBrains habit of writing the expression first and the construct
 after it: `err.nil` completes to `if err == nil { | }`, `foo(bar).if` wraps the
-whole call, `xs.range` writes a range loop. It is the one local source that
-implements `TriggerSource`, so typing the `.` opens the popup even where no
-language server answers; typing further narrows it through the ordinary
-client-side filter.
+whole call, `xs.range` writes a range loop. It implements `TriggerSource` (as
+does the `.http` source for `{`, #2158), so typing the `.` opens the popup even
+where no language server answers; typing further narrows it through the
+ordinary client-side filter.
 
 **It does not insert at the cursor.** The item carries
 `CompletionItem.ReplacePrefix` — the `<expr>.` text — and the editor's accept

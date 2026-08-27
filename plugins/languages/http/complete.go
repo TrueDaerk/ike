@@ -4,7 +4,6 @@ import (
 	"context"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 
@@ -47,6 +46,15 @@ func (s *httpSource) Name() string { return "http" }
 func (s *httpSource) Exclusive(path string) bool { return isHTTPFile(path) }
 
 func (s *httpSource) Priority() int { return ilsp.PriorityEmmet }
+
+// TriggerChar claims the placeholder brace (#2158). "{" is punctuation, which
+// the engine otherwise reserves for the LSP bridge (#1913) — and .http files
+// have no server — so without this the variable popup would only open once a
+// letter follows the braces, and `{{}}` typed by a snippet or completed from
+// the pair-insert would offer nothing at all. A "{" that opens no placeholder
+// (a JSON body's brace) classifies as no context and answers with an empty
+// batch, which closes the popup rather than filling it with noise.
+func (s *httpSource) TriggerChar(ch string) bool { return ch == "{" }
 
 // Observe implements complete.EventObserver: keep the current text of every
 // open .http buffer.
@@ -102,7 +110,12 @@ func (s *httpSource) Complete(_ context.Context, req complete.Request) ([]ilsp.C
 	case ctxBodyFile:
 		return bodyFileItems(req.Path, before), nil
 	case ctxPlaceholder:
-		return placeholderItems(req.Path, lines, placeholderTyped(before)), nil
+		// The closing braces are inserted with the accepted name — unless the
+		// buffer already carries them right after the cursor, which is what
+		// auto-closing pairs (#517) leave behind for a typed "{{".
+		after := string([]rune(line)[col:])
+		return placeholderItems(req.Path, lines, placeholderTyped(before),
+			!strings.HasPrefix(after, "}}")), nil
 	}
 	return nil, nil
 }
@@ -129,7 +142,17 @@ func classify(lines []string, at int, before string) ctxKind {
 	if at < 0 || at >= len(lines) {
 		return ctxNone
 	}
-	if isCommentLine(lines[at]) || isSeparator(lines[at]) || isVarDefLine(lines[at]) {
+	if isCommentLine(lines[at]) || isSeparator(lines[at]) {
+		return ctxNone
+	}
+	if isVarDefLine(lines[at]) {
+		// A definition's value may reference another variable
+		// (`@api = {{host}}/api`, #1867), and inside that unclosed "{{" the
+		// same names complete as anywhere else (#2158). The name being
+		// defined completes nothing — it is being written, not referenced.
+		if isPlaceholderOpen(before) {
+			return ctxPlaceholder
+		}
 		return ctxNone
 	}
 	// Walk up to the block start, remembering whether a blank line (the body
@@ -362,40 +385,67 @@ func bodyFileItems(bufPath, before string) []ilsp.CompletionItem {
 	return items
 }
 
-// placeholderItems completes an unclosed "{{" (#2135) with the variable
-// names visible in the buffer: the file's own "@name=value" definitions
-// (#1867) and, when a sibling http-client.env.json names environments, the
-// active one's variables (env.go, envselect.go) — the same two rungs of the
-// resolution chain (internal/httpfile.Vars) that have a fixed name list to
-// offer; the captured-response and process-environment rungs do not. The
-// insert text closes the braces the user has not typed yet, so accepting an
-// item leaves one closed placeholder rather than two separate edits.
-func placeholderItems(path string, lines []string, typed string) []ilsp.CompletionItem {
+// placeholderItems completes an unclosed "{{" (#2135, #2158) with the
+// variables the reference could resolve to — every rung of the chain
+// (internal/httpfile.Vars) that has a name list to offer:
+//
+//   - "file"     — the file's own "@name=value" definitions (#1867)
+//   - "env <name>" — the selected environment of a sibling
+//     http-client.env.json (env.go, envselect.go), the private file merged
+//     over the public one; switching the environment switches this set
+//   - "response" — a value an earlier response of this file was captured
+//     from (#1993, captured.go)
+//   - "capture"  — a name a `# @capture` directive declares but no response
+//     has produced yet: the promise the polling request of a chain is
+//     written against before the chain has ever run
+//
+// Each item says which of them it came from, because the same name may live
+// in several and the origin is what tells "the environment has it" from "the
+// last run produced it". The process-environment rung is deliberately absent:
+// it holds hundreds of names that have nothing to do with the file.
+//
+// The insert text closes the braces the user has not typed yet (closeBraces), so
+// accepting an item leaves one closed placeholder rather than two separate
+// edits — and leaves *one* rather than two when auto-closing pairs already
+// put a "}}" past the cursor.
+func placeholderItems(path string, lines []string, typed string, closeBraces bool) []ilsp.CompletionItem {
 	f := httpfile.Parse(strings.Join(lines, "\n"))
+	vars := &httpfile.Vars{Captured: capturedVars(path, f), File: f.VarMap()}
+	envName := ""
+	if envs, err := httpfile.LoadEnvironments(filepath.Dir(path)); err == nil {
+		envName = activeEnvironment(filepath.Dir(path), envs)
+		vars.Env = envs.Vars(envName)
+	}
 	seen := map[string]bool{}
 	var items []ilsp.CompletionItem
+	insert := func(name string) string {
+		if closeBraces {
+			return name + "}}"
+		}
+		return name
+	}
 	add := func(name, detail string) {
 		if name == "" || seen[name] || !matches(typed, name) {
 			return
 		}
 		seen[name] = true
 		items = append(items, ilsp.CompletionItem{
-			Label: name, FilterText: name, InsertText: name + "}}", Detail: detail, SortText: name,
+			Label: name, FilterText: name, InsertText: insert(name), Detail: detail, SortText: name,
 		})
 	}
-	for _, v := range f.Vars {
-		add(v.Name, "variable")
+	for _, d := range vars.Definitions() {
+		detail := d.Origin
+		if d.Origin == httpfile.OriginEnv && envName != "" {
+			// Which environment answered is worth a word: it is the one thing
+			// about a variable set that changes under the author's feet.
+			detail += " " + envName
+		}
+		add(d.Name, detail)
 	}
-	if envs, err := httpfile.LoadEnvironments(filepath.Dir(path)); err == nil {
-		vars := envs.Vars(activeEnvironment(filepath.Dir(path), envs))
-		names := make([]string, 0, len(vars))
-		for name := range vars {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			add(name, "environment")
-		}
+	for _, name := range f.CaptureNames() {
+		// Only reached for the names no response captured yet — a captured
+		// one was added above and keeps its "response" origin.
+		add(name, "capture")
 	}
 	return items
 }

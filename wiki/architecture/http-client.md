@@ -1,7 +1,7 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
 timestamp: 2026-08-27T12:00:00Z
@@ -221,6 +221,19 @@ failure is read.
 
 Re-send (#1832) is unaffected by all of this: it repeats the stored snapshot
 verbatim, so a switched environment cannot change what is repeated.
+
+**Reading the chain the other way round** (#2158): `Vars.Definitions()` lists
+the names the chain defines — each once, sorted, tagged with the rung that
+wins it (`httpfile.OriginResponse` / `OriginFile` / `OriginEnv`) and carrying
+that rung's unsubstituted value — and `Vars.Defines(name)` answers "is this
+reference known" for the whole chain, the process environment included. The two
+are what completion is built from and what the unknown-variable warning asks
+(see [completion](#editor-ux-1250) and
+[unknown variables](#unknown-variables-are-warned-about-2158)). The process
+environment is enumerable by neither: `Defines` consults it, `Definitions`
+leaves it out, since offering its hundreds of names would drown the handful
+that belong to the file. `httpfile.References(src)` is the mirror of both — the
+`{{name}}` occurrences of a source with their line and column spans.
 
 ### Capturing values from a response (#1993)
 
@@ -742,20 +755,40 @@ For a recognized stream:
     accepting one descends. Everything else in bodies, comments, `###` lines
     and folded query continuation lines completes nothing — except for an
     unclosed `{{`, below.
-  - **placeholders** (#2135): an unclosed `{{` — the caret has passed the
-    opening braces but not yet typed `}}` — completes **variable names**
-    wherever a placeholder can sit: the request line, a header value or a
-    body, regardless of the body's `Content-Type`. The list is the file's own
-    `@name=value` definitions (#1867) plus, when a sibling
-    `http-client.env.json` exists, the *active* environment's variables — the
-    persisted selection `http.selectEnvironment` writes to
-    `.ike/httpenv.json`, or the file's only environment when there is no
-    choice to make. A language plugin has no business importing
-    `internal/app` for one JSON file, so `envselect.go` reads the store
-    directly, mirroring the read-only-store pattern every other subsystem
-    under `internal/` already follows for its own `IKE_CONFIG_DIR`-scoped
-    file. Accepting an item inserts the closing `}}` too, so the edit leaves
-    one closed placeholder rather than two.
+  - **placeholders** (#2135, #2158): an unclosed `{{` — the caret has passed
+    the opening braces but not yet typed `}}` — completes **variable names**
+    wherever a placeholder can sit: the request line, a header value, a body
+    regardless of its `Content-Type`, and the value of an `@name=value`
+    definition (`@api = {{host}}/api`) — the name being *defined* still
+    completes nothing, it is being written rather than referenced. The source
+    claims `{` as a trigger character (`complete.TriggerSource`, #1913), so the
+    popup opens on
+    the braces themselves rather than only once a letter follows them; the
+    completion chord opens it just as well. Every rung of the resolution chain
+    that has a name list contributes, and **each item names its origin** —
+    the same name may live in several, and which one answered is the whole
+    question:
+
+    | Detail | Source |
+    | --- | --- |
+    | `file` | the file's own `@name=value` definitions (#1867) |
+    | `env <name>` | the *active* environment of a sibling `http-client.env.json`, private file merged over the public one — the environment is named because it is the one thing that changes under the author's feet |
+    | `response` | a value an earlier response of this file was captured from (#1993), read back from `.ike/http/*.json` |
+    | `capture` | a name a `# @capture` directive declares but no response has produced yet — the promise a chain's polling request is written against before the chain has ever run |
+
+    The active environment is the persisted selection `http.selectEnvironment`
+    writes to `.ike/httpenv.json`, or the file's only environment when there is
+    no choice to make; switching it switches the `env` items. A language plugin
+    has no business importing `internal/app` for one project-local file, so
+    `envselect.go` and `captured.go` read the two stores directly, mirroring the
+    read-only-store pattern every other subsystem under `internal/` already
+    follows for its own `IKE_CONFIG_DIR`-scoped files. The process-environment
+    rung is deliberately absent: it holds hundreds of names that have nothing to
+    do with the file. Accepting an item inserts the closing `}}` too, so the
+    edit leaves one closed placeholder rather than two — unless the buffer
+    already carries them right after the caret, which is what auto-closing
+    pairs (#517) leave behind for a typed `{{`; then the bare name is inserted
+    and the result is `{{host}}`, not `{{host}}}}`.
 
   Matching is a case-insensitive **subsequence** (`internal/fuzzy`), not a
   prefix (#1292): `Cen` reaches `Content-Encoding`, `ctype` reaches
@@ -1144,6 +1177,55 @@ engine dispatches nothing else for them. Before that, typing `CTy` on a header
 line offered `Content-Type` alongside `contentYOff`, `Capability` and whatever
 else the buffer-word and project-scan tiers had indexed, and a request body
 offered *only* those — the http source returns nothing there by design.
+
+## Unknown variables are warned about (#2158)
+
+Completion offers the names that exist; the flip side is the reference that
+names nothing. A typo'd `{{hsot}}` used to surface only at request time, as a
+failed dispatch in the response pane — late, and one pane away from the line
+that caused it. `internal/app/http_vars.go` marks it in the buffer instead:
+
+- **What is checked**: every user-defined `{{name}}` of the buffer's *current*
+  text (`httpfile.References`) — the warning belongs to what is being written,
+  not to what is on disk. The process-environment forms (`${NAME}`,
+  `{{$env NAME}}`) are never flagged: they resolve against the environment of
+  whoever runs IKE, which the file cannot judge. Comment lines are skipped —
+  a `# see {{host}}` is prose and a `# @capture` directive is a definition —
+  while a definition's own value (`@api = {{host}}/api`) is checked like any
+  other text. Every occurrence of an unknown name is marked, not just the
+  first: the fix goes wherever the name is written.
+- **What counts as defined** is exactly what completion offers, through
+  `httpfile.Vars.Defines`: a captured value, an `@name=value` definition, the
+  selected environment, *and* the process environment closing the chain (so
+  `{{HOME}}` never warns). A name a `# @capture` directive declares counts too,
+  before any response produced it — the polling request of a chain is written
+  before the chain has ever run, and warning about it would flag correct files.
+  A definition whose own placeholders are unresolved (`@api = {{missing}}/api`)
+  is still a definition: `{{api}}` is fine, `{{missing}}` is what gets marked.
+- **When it runs**: after an edit goes quiet (400 ms, the autosave-idle
+  debouncer shape of #731, armed off the same `editor.SyncMsg` seam), after a
+  dispatch (a capture may just have defined the name — the re-lint runs *after*
+  the history entry is stored, since that is where captured values are read
+  from), and when `http.selectEnvironment` switches the environment under the
+  file's directory. A file open in no editor is not linted: there is nothing to
+  mark and nobody reading it.
+- **When it deliberately says nothing**: while the environment file does not
+  parse, or while several environments exist and none is chosen. Either way
+  every environment-defined name would read as unknown, and a file full of
+  warnings caused by a JSON typo (or by an unmade choice) is worse than none.
+  Both cases are already loud where they belong — the dispatch error names the
+  file and the unmade choice.
+- **Where it shows**: the ordinary diagnostic path (`applyDiagnostics`), so the
+  reference is marked inline, reads in the diagnostic popup and lands in the
+  Problems tool window, source `http variables`, severity warning — and it can
+  be silenced per rule like any other diagnostic (#1259).
+
+`.http` files have two diagnostic producers now — failed captures (#1993) and
+unknown variables — and `applyDiagnostics` replaces a path's whole set, so
+whichever published last would erase the other. `internal/app/http_diag.go`
+keeps each producer's set per file and publishes the union, ordered by
+position: a dispatch reporting a capture failure leaves the variable warnings
+standing, and a re-lint leaves the capture markers alone.
 
 ## In-flight requests (#1272)
 
