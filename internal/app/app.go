@@ -582,6 +582,13 @@ type Model struct {
 	domHLRev       int
 	lastTestRun    *testRunState
 	testRunSeq     int
+	// testWatch drives watch mode of the Test Results pane (#2172,
+	// testwatch.go): the debounce generation, the scope the pending timer
+	// will run and the single re-run queued behind an in-flight one. The
+	// armed flag itself lives on the panel, so the mode dies with the pane.
+	// testWatchWait overrides the debounce interval in tests.
+	testWatch     testWatchState
+	testWatchWait time.Duration
 	// coverage is the last coverage run's per-file line marks (#2081), fed by
 	// finishTestRun through the language's ParseCover seam and pushed to
 	// editors as gutter marks; coverageShown is the coverage.toggle display
@@ -1506,6 +1513,10 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		// cannot know which paths are bound, so every save reports and the
 		// handler drops the ones that are not.
 		go e.host.Send(forgeEditSavedMsg{path: ev.Path})
+		// Test Results watch mode (#2172): an armed panel re-runs the saved
+		// file's affected tests. Every save reports; the handler is a cheap
+		// no-op while the mode is off or the panel closed.
+		go e.host.Send(testWatchSavedMsg{path: ev.Path})
 	}
 	if ev.Kind == editor.EventCursorMove && ev.Path != "" {
 		// Markdown previews follow the cursor (#62). Same goroutine indirection
@@ -3867,6 +3878,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case testresults.CopyMsg:
 		return m.copyPanelRow(msg.Text, msg.What)
+
+	case testresults.WatchMsg:
+		// The panel's watch toggle (#2172): confirm it, and drop any queued
+		// re-run when it goes off.
+		m.testWatchToggled(msg.On)
+		return m, nil
+
+	case testWatchSavedMsg:
+		// A buffer was saved: (re-)arm watch mode's debounce timer.
+		return m, m.testWatchSaved(msg.path)
+
+	case testWatchFireMsg:
+		// The debounce expired: run the affected scope, or queue it behind
+		// the run already in flight.
+		return m, m.testWatchFire(msg)
 
 	case testresults.RerunMsg:
 		// The panel's re-run actions (#1911): all, failed only, or one test.
