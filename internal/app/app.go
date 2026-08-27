@@ -190,6 +190,10 @@ type Model struct {
 	// by source file + request key: the duplicate-dispatch guard, the
 	// statusline indicator and the cancel action all read it.
 	httpFlight map[string]*httpFlightEntry
+	// httpRerunDiff marks the dispatches whose answer should open against the
+	// run before it once it is stored (#2247) — a re-run or a re-send, keyed
+	// like httpFlight so concurrent dispatches never take each other's diff.
+	httpRerunDiff map[string]bool
 	// httpTickArmed guards the flight indicator's tick chain (#2163). The
 	// old "arm when the map was empty" guard raced the in-flight tick: a
 	// dispatch landing in the window between the last flight finishing and
@@ -1193,6 +1197,13 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	if v, ok := cfg.Get("editor.clipboard_history_size"); ok {
 		if n, err := strconv.Atoi(v); err == nil {
 			regs.SetHistoryCap(n)
+		}
+	}
+	// Per-entry size cap (#2250), applied here for the same reason: a huge
+	// host-side copy before the first editor exists must not enter the ring.
+	if v, ok := cfg.Get("editor.clipboard_history_max_kb"); ok {
+		if kb, err := strconv.Atoi(v); err == nil && kb > 0 {
+			regs.SetEntryMaxBytes(kb * 1024)
 		}
 	}
 	// Per-terminal probe verdicts (#2080) install before the first
@@ -3926,6 +3937,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// for the declaration, like the gutter markers do.
 		return m.locateTest(msg.RerunID)
 
+	case problems.QuickFixMsg:
+		// "a"/alt+enter on a Problems row (#2175): ask the bridge for that
+		// diagnostic's code actions without jumping to it first.
+		return m, m.problemsQuickFix()
+
 	case problems.CopyMsg:
 		// "y"/cmd+c on a Problems row (#2071): the marked line goes to the
 		// clipboard through the shared copy path, with a toast.
@@ -4628,6 +4644,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// http.resend (palette, #1832): the shown response's stored request
 		// goes out again, verbatim.
 		return m, m.resendHTTPRequest()
+
+	case HTTPRerunMsg:
+		// http.rerun (palette, #2247): the shown history entry's request is
+		// re-read from its .http file and dispatched with the current
+		// variables and environment.
+		return m, m.rerunHTTPRequest()
+
+	case httppane.RerunMsg:
+		// "R" in the response pane (#2247): the pane names the moment, the
+		// host re-reads the request and dispatches it.
+		return m, m.rerunHTTPRequest()
 
 	case httppane.ResendMsg:
 		// ctrl+r or the header affordance in the response pane (#1832): the
@@ -6380,6 +6407,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openIntentions(msg)
 			return m, nil
 		}
+		if msg.QuickFix {
+			// The Problems pane's quick-fix key (#2175): the server's actions
+			// alone, anchored under the marked row.
+			m.openProblemQuickFixes(msg)
+			return m, nil
+		}
 		m.actions.Set(msg)
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, actionsPrefix)
@@ -6392,6 +6425,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.RunCommand(id)
 		}
 		return m, m.actions.Run(msg)
+
+	case ilsp.QuickFixPromptMsg:
+		// lsp.quickFixProblem (#2175): the bridge answered with its
+		// continuation — hand it the marked Problems row to request.
+		return m, m.requestProblemQuickFix(msg.Apply)
 
 	case ilsp.RenamePromptMsg:
 		// lsp.rename: the server validated the position; prompt for the name.

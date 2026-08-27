@@ -125,6 +125,25 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().codeAction(h) },
 			},
 			{
+				// The Problems pane's quick-fix key (#2175): code actions for
+				// the marked diagnostic, requested where it is listed rather
+				// than after a jump. Global scope — the request carries its
+				// own location, so no caret is needed and the pane owns the
+				// focus. Run installs the continuation only (like
+				// project.goToClass); the app calls it with the marked row,
+				// which is also what invoking this from the palette fixes.
+				ID:    "lsp.quickFixProblem",
+				Title: "LSP: Quick-Fix Marked Problem",
+				Scope: plugin.GlobalScope(),
+				Run: func(h host.API) tea.Cmd {
+					return func() tea.Msg {
+						return ilsp.QuickFixPromptMsg{
+							Apply: func(req ilsp.QuickFixRequest) tea.Cmd { return shared().quickFixAt(h, req) },
+						}
+					}
+				},
+			},
+			{
 				// Picks and executes a code lens on the cursor line (or any
 				// lens in the file when the line has none, #1912).
 				ID:    "lsp.codeLens",

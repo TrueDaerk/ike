@@ -97,6 +97,11 @@ const followPollMaxMs = 10000
 // couple of hundred entries scrolling it beats re-copying.
 const clipboardHistoryMax = 200
 
+// clipboardHistoryEntryMaxKB caps editor.clipboard_history_max_kb (#2250); the
+// settings form uses the same bound. Past 10 MB per entry the ring stops being
+// a picker-sized convenience and starts being a memory leak with a UI.
+const clipboardHistoryEntryMaxKB = 10240
+
 // ForgePollMinSeconds is the floor forge.poll_interval_seconds is raised to
 // (#2085); the settings form uses the same bound. 0 stays 0 and turns polling
 // off — the floor only guards the range between "off" and "sane", where every
@@ -221,6 +226,11 @@ func validate(c *Config) []Diagnostic {
 	if c.Editor.ClipboardHistorySize > clipboardHistoryMax {
 		diags = append(diags, Diagnostic{Field: "editor.clipboard_history_size", Message: fmt.Sprintf("%d above maximum %d, using %d", c.Editor.ClipboardHistorySize, clipboardHistoryMax, clipboardHistoryMax)})
 		c.Editor.ClipboardHistorySize = clipboardHistoryMax
+	}
+	clampMin("editor.clipboard_history_max_kb", &c.Editor.ClipboardHistoryMaxKB, 1)
+	if c.Editor.ClipboardHistoryMaxKB > clipboardHistoryEntryMaxKB {
+		diags = append(diags, Diagnostic{Field: "editor.clipboard_history_max_kb", Message: fmt.Sprintf("%d above maximum %d, using %d", c.Editor.ClipboardHistoryMaxKB, clipboardHistoryEntryMaxKB, clipboardHistoryEntryMaxKB)})
+		c.Editor.ClipboardHistoryMaxKB = clipboardHistoryEntryMaxKB
 	}
 	clampMin("editor.follow_poll_ms", &c.Editor.FollowPollMs, 100)
 	if c.Editor.FollowPollMs > followPollMaxMs {
@@ -361,6 +371,27 @@ func validate(c *Config) []Diagnostic {
 	default:
 		diags = append(diags, Diagnostic{Field: "scratch.sort", Message: fmt.Sprintf("unknown sort %q, using \"name\"", c.Scratch.Sort)})
 		c.Scratch.Sort = "name"
+	}
+	// Response-diff header filter (#2247): the entries are header names, so
+	// they normalize to lower case and lose their duplicates here — the
+	// matcher then only compares, and a config written in any casing behaves
+	// the same. A blank entry would match nothing and is dropped loudly.
+	if len(c.HTTP.DiffIgnoreHeaders) > 0 {
+		kept := make([]string, 0, len(c.HTTP.DiffIgnoreHeaders))
+		seen := map[string]bool{}
+		for _, h := range c.HTTP.DiffIgnoreHeaders {
+			name := strings.ToLower(strings.TrimSpace(h))
+			if name == "" {
+				diags = append(diags, Diagnostic{Field: "http.diff_ignore_headers", Message: "empty header name, dropping it"})
+				continue
+			}
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			kept = append(kept, name)
+		}
+		c.HTTP.DiffIgnoreHeaders = kept
 	}
 	// Issues window (#2090): both defaults are fixed vocabularies; an unknown
 	// value falls back rather than opening the pane in an undefined state.

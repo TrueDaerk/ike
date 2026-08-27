@@ -208,6 +208,7 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "editor.auto_close_pairs", Type: Bool, Title: "Auto-close brackets", Description: "Insert the matching ), ] or } when typing an opening bracket", Scope: config.UserScope},
 			{Key: "editor.clipboard_sync", Type: Bool, Title: "Yank to system clipboard", Description: "Mirror yanks (yy, y{motion}, visual y) onto the system clipboard; named registers and deletes stay internal", Scope: config.UserScope},
 			{Key: "editor.clipboard_history_size", Type: Int, Title: "Clipboard history size", Description: "How many recent copies Paste from History (cmd+shift+v) keeps: yanks, deletes and pane copy actions, newest first with duplicates collapsed. The ring lives in memory only and starts empty after a restart", Scope: config.UserScope, Min: 1, Max: 200},
+			{Key: "editor.clipboard_history_max_kb", Type: Int, Title: "Clipboard entry limit", Description: "Largest single copy Paste from History keeps, in kilobytes. Bigger yanks, deletes and pane copies are skipped by the ring — never truncated — and still paste in full from the registers", Scope: config.UserScope, Min: 1, Max: 10240},
 			{Key: "editor.auto_save", Type: Enum, Title: "Auto save", Description: "Save a dirty buffer when focus leaves its pane (focus), additionally after an idle delay while editing (idle), or never (off)", Scope: config.UserScope, Options: []string{"focus", "idle", "off"}},
 			{Key: "editor.auto_save_idle_ms", Type: Int, Title: "Auto save idle delay", Description: "Milliseconds a dirty buffer must stay quiet before idle auto save writes it (auto_save = idle)", Scope: config.UserScope, Min: 100, Max: 60000},
 			{Key: "editor.trim_trailing_whitespace", Type: Bool, Title: "Trim trailing whitespace", Description: "Strip line-end whitespace on save", Scope: config.UserScope},
@@ -385,6 +386,10 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "forge.poll_interval_seconds", Type: Int, Title: "Background poll interval", Description: "Seconds between background re-fetches of the repository's issues and pull requests, so new issues, closed issues and PR state changes surface without pressing r. The fetch runs off the UI loop and a tick arriving while the previous one is still running is skipped, so a slow forge never stalls IKE; consecutive failures back off exponentially (up to 5 minutes) and an unavailable forge — no CLI, no matching remote or login — stops polling until a manual refresh succeeds. 0 turns polling off entirely; the lowest interval is 10 seconds", Scope: config.UserScope, Min: 0, Max: config.ForgePollMaxSeconds, ValidateInt: forgePollValidate},
 			{Key: "forge.cache", Type: Bool, Title: "Persistent listing cache", Description: "Keep the last successful issue/PR listing in the project's .ike/forgecache.json (#2108): a freshly started IKE shows it instantly, marked \"cached · updating…\" until the real fetch lands, and background polls only ask the forge for issues updated since the snapshot instead of re-listing everything. Manual r always performs a full resync; a repository or backend switch invalidates the snapshot; off never reads or writes the file", Scope: config.UserScope},
 		}},
+		{Title: "HTTP Client", Description: "The .http client's re-run and compare behaviour (#2247): what a response diff leaves out, and whether re-running a request opens the comparison with the run before it by itself.", Entries: []Entry{
+			{Key: "http.diff_after_rerun", Type: Bool, Title: "Diff after re-run", Description: "Open the previous-vs-new response diff automatically once a re-run (R in the response pane, http.rerun) or a re-send (ctrl+r, http.resend) has landed in the history — the point of re-running a request is usually the comparison, so it needs no second key. A first-ever run has nothing to compare with and opens nothing; off keeps the pane on the new response, where P (\"Diff HTTP Response Against Previous Run\") still opens the same diff on demand", Scope: config.UserScope},
+			{Key: "http.diff_ignore_headers", Type: List, Title: "Volatile diff headers", Description: "Response headers left out of every response diff: two runs of one request differ in Date, a freshly stamped request id and a handful of timing headers every single time, and those lines hide the one header that really changed. Each entry is a header name matched case-insensitively, optionally with a trailing * for a whole family (\"x-amz-*\"); a bare \"*\" is ignored, since an empty diff answers nothing. The notice above the diff says how many headers were filtered. Empty compares every header", Scope: config.UserScope, ValidateEntry: httpIgnoreHeaderValidate},
+		}},
 		{Title: "Scratch Files", Description: "The explorer's Scratches section (#1963): the scratch store listed below the file tree behind a divider, opened, renamed and deleted with the explorer's own keys and dialogs.", Entries: []Entry{
 			{Key: "scratch.section", Type: Bool, Title: "Show Scratches section", Description: "List the scratch store as a divider-separated section at the bottom of the explorer; off removes the section entirely (scratches stay reachable through the \"Open Scratch File…\" command)", Scope: config.UserScope},
 			{Key: "scratch.section_height", Type: Int, Title: "Scratches section height", Description: "Rows the Scratches section shows when expanded (it never grows past its content). Dragging the divider resizes it afterwards, and that height persists with the explorer's session state", Scope: config.UserScope, Min: 1, Max: 30},
@@ -455,6 +460,30 @@ func savedFilterValidate(_ func(key string) string, text string) string {
 	}
 	if _, _, err := issuefilter.ParseSaved(text); err != nil {
 		return err.Error()
+	}
+	return ""
+}
+
+// httpIgnoreHeaderValidate is the form check for one entry of
+// http.diff_ignore_headers (#2247). A header name has a grammar — RFC 9110
+// tokens — and a value that cannot be one would silently never match; a lone
+// "*" would hide every header instead, which is never what the reader of a
+// diff wants. Both are refused here rather than dropped at read time.
+func httpIgnoreHeaderValidate(_ func(key string) string, text string) string {
+	name := strings.TrimSpace(text)
+	switch {
+	case name == "":
+		return "header name must not be empty"
+	case name == "*":
+		return "\"*\" would hide every header; name the volatile ones"
+	}
+	for _, r := range strings.TrimSuffix(name, "*") {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case strings.ContainsRune("-_.~!#$%&'*+^`|", r):
+		default:
+			return "not a header name: " + name
+		}
 	}
 	return ""
 }

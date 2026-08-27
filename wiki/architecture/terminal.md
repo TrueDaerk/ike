@@ -619,13 +619,20 @@ key and recomputes on the next `OutputMsg` — the shell must echo the
 keystroke before the cursor row reads current — and is togglable via
 `terminal.autosuggest` (default on, applies live). up/down move, esc
 dismisses, any other key invalidates and passes through raw.
-Auto-suggest **stays silent while the command soft-wraps** (#1464) — an
-uninvited popup mid-wrap is noise, and if the wrap heuristic ever misses the
-chain the tail would complete as garbage; `ctrl+space` still completes with
-the chain joined. As a safety net, auto-suggest also stays quiet when the
-text left of the cursor carries **no recognizable prompt marker** although
-the row above holds content — then the cursor row may be a continuation row
-whose chain start could not be identified, and the "word" a wrapped tail.
+Auto-suggest **keeps working while the command soft-wraps** (#2262, relaxing
+#1464's blanket suppression): the word comes from the joined chain, so a word
+spanning the wrap boundary completes as its full self, accepting pastes the
+correct remainder, and the popup anchors at the continuation row's left edge
+when the word starts on the row above (the negative-x clamp). The one case
+that stays silent is the safety net (#1464): the text left of the cursor
+carries **no recognizable prompt marker** although the row above the chain's
+first row holds content — then the chain start could not be identified (e.g.
+a line editor that wraps early and leaves the last column blank, defeating
+the occupied-last-column wrap heuristic) and the "word" may be a wrapped
+tail; completing that standalone was the historical garbage-suggestion bug.
+Residual gap: a missed-wrap tail that itself contains a prompt-marker
+sequence (say a `> ` redirect) slips past the net. `ctrl+space` completes
+in every case, always with the chain joined.
 **Focus rule (#1432):** an auto-suggest popup opens *unfocused* — it was
 never asked for, so **enter passes through to the shell** and runs the typed
 line (the popup closes, nothing is inserted). An unfocused popup highlights

@@ -14,6 +14,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/config"
 	"ike/internal/editor"
 	"ike/internal/help"
 	"ike/internal/host"
@@ -72,6 +73,11 @@ type HTTPShowResponseMsg struct{}
 // HTTPResendMsg runs http.resend: send the shown response's stored request
 // again, exactly as it went out (#1832).
 type HTTPResendMsg struct{}
+
+// HTTPRerunMsg runs http.rerun: dispatch the shown history entry's request
+// again from its .http file, with the current variables and environment
+// (#2247).
+type HTTPRerunMsg struct{}
 
 // HTTPDiffResponsesMsg runs http.diffResponses: compare the shown stored
 // response with another one of the same request, side by side (#1992).
@@ -247,10 +253,17 @@ func (m *Model) runHTTPRequestAtCursor() tea.Cmd {
 		m.host.Notify(host.Info, "http: no request under the cursor")
 		return nil
 	}
+	return m.dispatchHTTPRequest(httpSource(ed), f, req)
+}
+
+// dispatchHTTPRequest sends one parsed request block of source, resolving the
+// current variables and environment first — the path http.run takes once it
+// has found the block under the cursor, and the one a history re-run (#2247)
+// takes once it has found the block by request key.
+func (m *Model) dispatchHTTPRequest(source string, f *httpfile.File, req *httpfile.Request) tea.Cmd {
 	// User-defined variables (#1867): the file's own @name=value definitions
 	// plus the selected http-client.env.json environment. A broken
 	// environment file aborts before anything is sent.
-	source := httpSource(ed)
 	vars, envHint, err := m.httpVars(source, f)
 	if err != nil {
 		m.host.Notify(host.Error, "http: "+err.Error())
@@ -292,16 +305,86 @@ func (m *Model) resendHTTPRequest() tea.Cmd {
 		return nil
 	}
 	key := p.Request()
+	// A re-send is a re-run too (#2247): what its answer is worth comparing
+	// with is the run before it, so it arms the same auto-diff.
+	m.armHTTPRerunDiff(p.Source(), key)
 	return m.dispatchHTTP(p.Source(), key, snap.Label(),
 		func(ctx context.Context, _, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
 			return httpclient.Resend(ctx, key, snap, httpclient.Options{}, cb)
 		})
 }
 
+// rerunHTTPRequest runs http.rerun ("R" in the pane, the palette — #2247):
+// the request the shown history entry belongs to goes out again, re-read from
+// its .http file and resolved against the *current* variables and
+// environment. That is the difference to http.resend (#1832), which repeats
+// the stored bytes: a re-run asks "does this request still answer the same
+// today?", so an edited block, a changed variable and a switched environment
+// all count. The answer lands in the pane and in the history like any
+// dispatch, and — with http.diff_after_rerun on — the previous-vs-new diff
+// opens by itself once it is stored.
+func (m *Model) rerunHTTPRequest() tea.Cmd {
+	p := m.httpPanel()
+	if p == nil {
+		m.host.Notify(host.Info, "http: no response pane open — run an .http request, or show a stored one with http.showResponse")
+		return nil
+	}
+	source, key := p.Source(), p.Request()
+	if source == "" || key == "" {
+		m.host.Notify(host.Info, "http: no stored response to re-run — dispatch a request first")
+		return nil
+	}
+	text := m.httpSourceText(source)
+	if text == "" {
+		m.host.Notify(host.Info, "http: "+filepath.Base(source)+" cannot be read — re-send the stored request with http.resend instead")
+		return nil
+	}
+	f := httpfile.Parse(text)
+	var req *httpfile.Request
+	for _, r := range f.Requests {
+		if r.Key() == key {
+			req = r
+			break
+		}
+	}
+	if req == nil {
+		// The block was renamed, moved or deleted since the response was
+		// stored; the verbatim re-send still works and is named here rather
+		// than guessed at.
+		m.host.Notify(host.Info, "http: "+key+" is no longer in "+filepath.Base(source)+" — re-send the stored request with http.resend (ctrl+r)")
+		return nil
+	}
+	m.armHTTPRerunDiff(source, key)
+	return m.dispatchHTTPRequest(source, f, req)
+}
+
+// armHTTPRerunDiff marks one dispatch as a re-run whose answer should be
+// compared with the run before it as soon as it is stored (#2247). The mark is
+// keyed like the in-flight set, so two re-runs of different requests never
+// take each other's diff, and a disabled setting simply never arms.
+func (m *Model) armHTTPRerunDiff(source, key string) {
+	if !config.Get().HTTP.DiffAfterRerun {
+		return
+	}
+	if m.httpRerunDiff == nil {
+		m.httpRerunDiff = map[string]bool{}
+	}
+	m.httpRerunDiff[httpFlightKey(source, key)] = true
+}
+
+// takeHTTPRerunDiff reports whether this finished dispatch was an armed re-run
+// and clears the mark — a diff is offered once, for the run that asked for it.
+func (m *Model) takeHTTPRerunDiff(source, key string) bool {
+	flightKey := httpFlightKey(source, key)
+	armed := m.httpRerunDiff[flightKey]
+	delete(m.httpRerunDiff, flightKey)
+	return armed
+}
+
 // dispatchHTTP runs one exchange off-loop and pumps its events into the
-// update loop — shared by http.run and http.resend. send performs the actual
-// call; everything around it (duplicate guard, in-flight bookkeeping, the
-// event channel) is the same for both.
+// update loop — shared by http.run, http.resend and http.rerun. send performs
+// the actual call; everything around it (duplicate guard, in-flight
+// bookkeeping, the event channel) is the same for all three.
 //
 // The exchange runs on its own goroutine and reports through events: a
 // non-streaming response yields exactly one HTTPResponseMsg, a recognized
@@ -449,6 +532,9 @@ func (m *Model) appendHTTPStream(msg HTTPStreamChunkMsg) {
 // capture report (#1993) into the .http buffer.
 func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
 	canceled := m.finishHTTPFlight(httpFlightKey(msg.Source, msg.Request))
+	// Taken up front (#2247), so a failed or canceled re-run disarms too
+	// instead of leaving its diff waiting for the next unrelated dispatch.
+	rerun := m.takeHTTPRerunDiff(msg.Source, msg.Request)
 	if msg.Err != nil {
 		if canceled || errors.Is(msg.Err, context.Canceled) {
 			// The user aborted it (#1272): a confirmation, not a failure.
@@ -481,12 +567,14 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
 	// The source enables the pane's request picker (#1829) and tells a
 	// re-send (#1832) where to store its answer.
 	p.SetSource(msg.Source)
+	stored := 0
 	if msg.Source != "" {
 		// Persist under .ike/http/ and hand the stored predecessors to the
 		// viewer for h/l browsing (#1251); best effort like local history.
 		store := httphistory.New(httpHistoryDir())
 		store.Append(msg.Source, msg.Request, httphistory.FromResponse(msg.Resp, time.Now()))
 		entries := store.List(msg.Source, msg.Request)
+		stored = len(entries)
 		items := make([]httppane.HistoryItem, 0, len(entries))
 		for _, e := range entries {
 			items = append(items, httppane.HistoryItem{Resp: e.Response(msg.Request), At: e.Time})
@@ -501,6 +589,15 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
 		report = tea.Batch(report, cmd)
 	}
 	m.layout()
+	// A re-run's answer is only half the point (#2247): the comparison with
+	// the run before it is the other half, and it opens here — after the
+	// entry is stored, which is what makes "the previous run" the entry the
+	// re-run replaced.
+	// A first-ever run has nothing to compare with; that is not worth a
+	// notice, so the auto-diff simply stays away.
+	if rerun && stored > 1 {
+		m.openHTTPPreviousRunDiff()
+	}
 	return report
 }
 
@@ -613,6 +710,7 @@ var httpPaneKeys = []struct{ Key, Title string }{
 	{"y", "Copy selection (or the whole body)"},
 	{"Y", "Copy status line and headers"},
 	{"ctrl+r", "Re-send this response's request unchanged (or click ⟳ re-send)"},
+	{"R", "Re-run this request from its .http file (current environment)"},
 	{"C", "Copy this response's request as a curl command"},
 	{"S", "Save the raw response body to a file"},
 	{"x", "Cancel the running request"},

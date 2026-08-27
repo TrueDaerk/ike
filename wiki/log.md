@@ -21,6 +21,66 @@
 - New concept doc: [usage-telemetry](/architecture/usage-telemetry.md);
   schema documented there as the stable analysis interface.
 
+## 2026-08-27 (HTTP history: re-run requests and diff against the previous run, #2247)
+
+- **The gap**: the response history stored every run (#1251), the diff engine
+  compared two of them (#1992, #2060) — but the loop between them was open.
+  Re-running a request from its history meant going back to the `.http` file
+  and finding the block, and the comparison that followed drowned in `Date`
+  and request-id lines that differ on every single run.
+- **`R` in the response pane** (palette: `http.rerun`) re-runs the shown
+  entry's request from its `.http` file with the **current** variables and
+  environment — the difference to `ctrl+r`, which repeats the stored bytes.
+  It re-reads the open buffer when there is one, so unsaved edits count, and
+  a block that was renamed or deleted since is named as such instead of
+  guessed at.
+- **The comparison follows by itself**: `http.diff_after_rerun` (default on)
+  arms the dispatch, and `fillHTTPPanel` opens previous-vs-new the moment the
+  answer is stored — the `P` path (#2060), now reached by the re-run. The
+  mark is taken up front, so a failed or canceled re-run disarms too; a
+  first-ever run has nothing to compare with and stays silent.
+- **Volatile headers are filtered**: `http.diff_ignore_headers` (`date`, the
+  request/trace ids, timing fields, `x-amz-*`-style families) keeps the noise
+  out of every response diff via `httpdiff.TextFiltered`, and the notice says
+  how many headers were dropped so a filtered header never passes for an
+  unchanged one. Both settings live on the new **HTTP Client** settings page.
+
+## 2026-08-27 (Problems pane: apply quick fixes from the entry, #2175)
+
+- **The gap**: the Problems pane could navigate to a diagnostic but not fix
+  one. Every fix meant jumping to the location first and pressing alt+enter
+  *there* — the pane knew exactly which finding you meant and then made you
+  go find it again.
+- **`a` (or `alt+enter`) on a row** now lists that diagnostic's code actions
+  and applies the pick, in a picker anchored under the marked row. A file
+  header stands for its first diagnostic (like `enter`); a
+  related-information row stands for its **parent** — the finding is what a
+  server offers fixes for, the "declared here" note is not.
+- **The seam is the intention seam, entered without a caret**: the pane emits
+  `problems.QuickFixMsg`, the app runs `lsp.quickFixProblem`, which — like
+  `project.goToClass` — answers with a continuation
+  (`ilsp.QuickFixPromptMsg`) rather than asking anything itself. The app
+  calls it with the row's path and the diagnostic's own range
+  (`ilsp.QuickFixRequest`), so the request *carries* its location instead of
+  reading one off a cursor. That is the whole reason no jump is needed. The
+  command is in the palette too, meaning the same thing there.
+- `bridge.quickFixAt` sends the ordinary `textDocument/codeAction` with the
+  cached overlapping diagnostics as context and replies with a
+  `CodeActionsMsg` carrying `QuickFix` — the flag that tells the app to skip
+  the intention merge (no caret, so no provider could apply) and to report
+  "no quick fixes for this problem" on an empty offer, which is the honest
+  answer for a lint note, a task-matcher finding, or a file no server tracks.
+- **Applying reuses the existing tail wholesale**: `applyAction` →
+  `workspace_edit.go`, so an open buffer gets one `FormatEditsMsg` applied as
+  a single undo unit (`u` takes the fix back) and a closed file is rewritten
+  on disk, exactly as the intention path does it. Nothing refreshes the list
+  by hand — the edit makes the server republish and the pane re-derives, the
+  pure-consumer rule intact.
+- The popup's on-screen fit (shift left at the right edge, flip above when it
+  would cross the bottom) moved out of `caretPopupAnchor` into
+  `fitPopupAnchor`, shared with the pane anchor: the two place their row
+  differently but must land on screen identically.
+
 ## 2026-08-27 (Debugger: persisted watches and the evaluate popup, #2174)
 
 - **The gap**: watches (#1914) lived in memory only — a restart lost the list

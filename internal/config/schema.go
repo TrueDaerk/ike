@@ -73,6 +73,8 @@ type Config struct {
 	Remote Remote `toml:"remote"`
 	// Screenshot holds the in-IDE PNG export's behaviour (#2001).
 	Screenshot Screenshot `toml:"screenshot"`
+	// HTTP holds the HTTP client's re-run and response-diff behaviour (#2247).
+	HTTP HTTP `toml:"http"`
 	// Forge holds code-forge behaviour: how often IKE re-reads the forge in
 	// the background (#2085) and how prominently each kind of forge event
 	// announces itself (#2086).
@@ -88,6 +90,21 @@ type Config struct {
 // carries content (no typed text, no clear-text paths); off writes nothing.
 type Telemetry struct {
 	Enabled bool `toml:"enabled"`
+}
+
+// HTTP holds the HTTP client's re-run/compare settings (#2247).
+// DiffIgnoreHeaders names the response headers a response diff leaves out:
+// two runs of the same request differ in Date, a fresh request id and a
+// handful of timing headers *every single time*, and those lines are noise
+// that hides the one header that really changed. Each entry is a header name
+// matched case-insensitively, optionally with a trailing "*" wildcard
+// ("x-amz-*"); an empty list compares every header. DiffAfterRerun opens the
+// previous-vs-new diff automatically once a re-run's answer has landed in the
+// history, which is what closes the "run it again and show me what changed"
+// loop in one key.
+type HTTP struct {
+	DiffIgnoreHeaders []string `toml:"diff_ignore_headers"`
+	DiffAfterRerun    bool     `toml:"diff_after_rerun"`
 }
 
 // Forge holds the code-forge settings (#2085, #2086). PollIntervalSeconds is
@@ -502,7 +519,13 @@ type Editor struct {
 	// picker lists (#2061, cmd+shift+v): the newest N yanks, deletes and
 	// pane-side copies, duplicates collapsed. Clamped to [1, 200]; the ring is
 	// in-memory only and starts empty after a restart.
-	ClipboardHistorySize   int  `toml:"clipboard_history_size"`
+	ClipboardHistorySize int `toml:"clipboard_history_size"`
+	// ClipboardHistoryMaxKB caps a single clipboard-history entry in kilobytes
+	// (#2250). A yank, delete or pane copy larger than this is skipped by the
+	// ring — never truncated into it — so the picker never offers a row that
+	// pastes something other than what was copied; the registers still hold
+	// the payload in full. Clamped to [1, 10240].
+	ClipboardHistoryMaxKB  int  `toml:"clipboard_history_max_kb"`
 	AutoIndent             bool `toml:"auto_indent"`
 	AutoClosePairs         bool `toml:"auto_close_pairs"`
 	TrimTrailingWhitespace bool `toml:"trim_trailing_whitespace"`

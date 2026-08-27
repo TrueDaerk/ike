@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-27T18:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -232,6 +232,13 @@ any entry whose key the typed schema does not expose (no dead keys).
   (the config validator has to be lenient and snaps instead), while the
   steppers jump the hole rather than stopping in it. See
   [Forge Layer](./forge.md).
+- **HTTP Client** (#2247) — `http.diff_after_rerun`, whether re-running (or
+  re-sending) a stored request opens the previous-vs-new response diff by
+  itself, and `http.diff_ignore_headers`, the volatile response headers every
+  diff leaves out (`date`, request/trace ids, timing fields; a trailing `*`
+  matches a family). The header list carries `Entry.ValidateEntry`: a value
+  that is not a header name — or a lone `*`, which would hide every header — is
+  rejected in the form. See [HTTP client](./http-client.md).
 - **Terminal** — the shell override (#1663), command auto-suggest, scrollback.
 - **Notifications** — toast timeout, severity floor.
 - **TODO Index** (#1663) — `todo.patterns`, the tag words the project scan
