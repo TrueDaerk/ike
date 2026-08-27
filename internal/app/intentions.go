@@ -169,7 +169,17 @@ func (m Model) caretPopupAnchor(rows int) (x, y, w int, ok bool) {
 	line, col := ed.CursorPos()
 	x = r.X + paneContentX + ed.GutterWidth() + ed.DisplayOffset(line, col)
 	y = r.Y + m.contentYOff(key) + ed.DisplayRow(line, col) + 1
-	w = intentionPopupWidth
+	x, y, w = m.fitPopupAnchor(x, y, rows)
+	return x, y, w, true
+}
+
+// fitPopupAnchor fits an intention-sized box whose top-left would be (x, y):
+// shifted left at the right screen edge, flipped above the anchor row when it
+// would cross the bottom. The caret anchor and the Problems pane's quick-fix
+// anchor (#2175) place their row differently but must land on screen the same
+// way, so the clamping lives here rather than in each.
+func (m Model) fitPopupAnchor(x, y, rows int) (int, int, int) {
+	w := intentionPopupWidth
 	if x+w > m.width {
 		x = m.width - w
 	}
@@ -186,7 +196,7 @@ func (m Model) caretPopupAnchor(rows int) (x, y, w int, ok bool) {
 			y = 0
 		}
 	}
-	return x, y, w, true
+	return x, y, w
 }
 
 // insertCurlAsRequest lands the caret line's curl command as an .http block

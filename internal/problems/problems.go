@@ -3,7 +3,10 @@
 // project-wide, JetBrains' Problems view scaled to the terminal. It is a pure
 // consumer of the existing publishDiagnostics flow — the root model feeds a
 // shared Store from every DiagnosticsMsg and the panel re-derives its rows;
-// no new LSP traffic ever originates here.
+// no diagnostic traffic ever originates here. The one request that starts in
+// the pane is the quick-fix code action (#2175): "a" on a row asks the app —
+// never a server directly — for that diagnostic's actions, so a listed
+// problem can be fixed without jumping to it first.
 package problems
 
 import (
@@ -29,6 +32,13 @@ type OpenLocationMsg struct {
 	Line int
 	Col  int
 }
+
+// QuickFixMsg asks the root model for the code actions applicable to the
+// marked problem (#2175). The pane holds no LSP seam of its own — it never
+// originates server traffic — so the key only says "fix this one"; the app
+// resolves the marked row through SelectedDiagnostic and runs the request
+// through the same bridge continuation the intention popup uses.
+type QuickFixMsg struct{}
 
 // CopyMsg asks the root model to put Text on the system clipboard; What names
 // the payload for the confirmation toast ("problem", "file"). The panel emits
@@ -424,6 +434,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// vim's yank on the marked row (#2071), the panel counterpart of the
 		// response viewer's "y".
 		return m.copyRow(m.cursor)
+	case "a", "alt+enter":
+		// Quick-fix the marked problem (#2175). "a" is the pane's own
+		// single-letter key; alt+enter rides along so the intention muscle
+		// memory from the editor works here too — nothing else claims it in
+		// this context, where lsp.codeAction is out of scope.
+		return m.quickFix(m.cursor)
 	}
 	if ui.CopyChord(msg.String()) {
 		return m.copyRow(m.cursor)
@@ -473,20 +489,62 @@ func copyCmd(text, what string) tea.Cmd {
 // activate opens the diagnostic under row i; a file header opens the file at
 // its first (most severe) diagnostic.
 func (m *Model) activate(i int) tea.Cmd {
-	if i < 0 || i >= len(m.rows) {
+	r, ok := m.targetRow(i)
+	if !ok {
 		return nil
-	}
-	r := m.rows[i]
-	if r.header {
-		if i+1 < len(m.rows) && !m.rows[i+1].header {
-			r = m.rows[i+1]
-		} else {
-			return nil
-		}
 	}
 	path, line, col := r.target()
 	msg := OpenLocationMsg{Path: path, Line: line, Col: col}
 	return func() tea.Msg { return msg }
+}
+
+// targetRow resolves row i to the row an action acts on: a file header stands
+// for its first (most severe) diagnostic, everything else for itself. ok is
+// false past the list's ends and on a header with nothing beneath it.
+func (m *Model) targetRow(i int) (row, bool) {
+	if i < 0 || i >= len(m.rows) {
+		return row{}, false
+	}
+	r := m.rows[i]
+	if r.header {
+		if i+1 >= len(m.rows) || m.rows[i+1].header {
+			return row{}, false
+		}
+		r = m.rows[i+1]
+	}
+	return r, true
+}
+
+// quickFix asks the app for the marked row's code actions (#2175); an empty
+// list (or a header with nothing under it) asks for nothing.
+func (m *Model) quickFix(i int) tea.Cmd {
+	if _, ok := m.targetRow(i); !ok {
+		return nil
+	}
+	return func() tea.Msg { return QuickFixMsg{} }
+}
+
+// SelectedDiagnostic resolves the marked row to the diagnostic a quick-fix
+// request targets (#2175): the diagnostic itself, the *parent* of a related
+// row — the finding is what a server offers fixes for, its "declared here"
+// note is not — or the first diagnostic under a file header. ok is false when
+// there is nothing to fix.
+func (m *Model) SelectedDiagnostic() (path string, d ilsp.Diagnostic, ok bool) {
+	r, ok := m.targetRow(m.cursor)
+	if !ok {
+		return "", ilsp.Diagnostic{}, false
+	}
+	return r.path, r.d, true
+}
+
+// CursorRow is the marked row's offset inside the visible window — 0 for the
+// topmost listed row. The app anchors the quick-fix popup under it (#2175),
+// converting to pane-content-local coordinates the way Click does in reverse.
+func (m *Model) CursorRow() int {
+	if r := m.cursor - m.top; r > 0 {
+		return r
+	}
+	return 0
 }
 
 // rowRelLabel is a related row's identity across a Refresh — its rendered
@@ -636,7 +694,7 @@ func (m *Model) footer(pal *theme.Palette) string {
 	if m.fileOnly {
 		scope = "project"
 	}
-	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open · y copy · f " + scope + " · j/k move"))
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open · a fix · y copy · f " + scope + " · j/k move"))
 }
 
 // sevGlyph maps a severity to its marker, unspecified counting as error.

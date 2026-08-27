@@ -538,6 +538,30 @@ type CodeActionsMsg struct {
 	// the built-ins still show. The code-lens picker leaves it false and
 	// keeps the plain centered list.
 	Intentions bool
+	// QuickFix marks the out-of-editor flow (#2175): the Problems pane asked
+	// for the actions of one diagnostic. There is no caret, so no intention
+	// provider applies — the app lists the server's actions alone, anchored
+	// under the marked row, and an empty offer reports "no quick fixes"
+	// instead of falling back to the built-ins.
+	QuickFix bool
+}
+
+// QuickFixRequest names one out-of-editor code-action request (#2175): the
+// Problems pane fixes a diagnostic where it is listed, so the range travels
+// with the request instead of being read off a caret. Range is in editor
+// coordinates, exactly as the diagnostic carries it.
+type QuickFixRequest struct {
+	Path  string
+	Range buffer.Range
+}
+
+// QuickFixPromptMsg hands the app the bridge continuation for an
+// out-of-editor code-action request (#2175), mirroring SymbolPromptMsg: the
+// command itself asks nothing, it only installs Apply — the app calls it with
+// the row it wants fixed, and the reply comes back as a CodeActionsMsg with
+// QuickFix set.
+type QuickFixPromptMsg struct {
+	Apply func(QuickFixRequest) tea.Cmd
 }
 
 // SignatureHelpMsg delivers call-signature info for the cursor-anchored popup

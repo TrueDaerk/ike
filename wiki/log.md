@@ -1,5 +1,41 @@
 # Log
 
+## 2026-08-27 (Problems pane: apply quick fixes from the entry, #2175)
+
+- **The gap**: the Problems pane could navigate to a diagnostic but not fix
+  one. Every fix meant jumping to the location first and pressing alt+enter
+  *there* — the pane knew exactly which finding you meant and then made you
+  go find it again.
+- **`a` (or `alt+enter`) on a row** now lists that diagnostic's code actions
+  and applies the pick, in a picker anchored under the marked row. A file
+  header stands for its first diagnostic (like `enter`); a
+  related-information row stands for its **parent** — the finding is what a
+  server offers fixes for, the "declared here" note is not.
+- **The seam is the intention seam, entered without a caret**: the pane emits
+  `problems.QuickFixMsg`, the app runs `lsp.quickFixProblem`, which — like
+  `project.goToClass` — answers with a continuation
+  (`ilsp.QuickFixPromptMsg`) rather than asking anything itself. The app
+  calls it with the row's path and the diagnostic's own range
+  (`ilsp.QuickFixRequest`), so the request *carries* its location instead of
+  reading one off a cursor. That is the whole reason no jump is needed. The
+  command is in the palette too, meaning the same thing there.
+- `bridge.quickFixAt` sends the ordinary `textDocument/codeAction` with the
+  cached overlapping diagnostics as context and replies with a
+  `CodeActionsMsg` carrying `QuickFix` — the flag that tells the app to skip
+  the intention merge (no caret, so no provider could apply) and to report
+  "no quick fixes for this problem" on an empty offer, which is the honest
+  answer for a lint note, a task-matcher finding, or a file no server tracks.
+- **Applying reuses the existing tail wholesale**: `applyAction` →
+  `workspace_edit.go`, so an open buffer gets one `FormatEditsMsg` applied as
+  a single undo unit (`u` takes the fix back) and a closed file is rewritten
+  on disk, exactly as the intention path does it. Nothing refreshes the list
+  by hand — the edit makes the server republish and the pane re-derives, the
+  pure-consumer rule intact.
+- The popup's on-screen fit (shift left at the right edge, flip above when it
+  would cross the bottom) moved out of `caretPopupAnchor` into
+  `fitPopupAnchor`, shared with the pane anchor: the two place their row
+  differently but must land on screen identically.
+
 ## 2026-08-27 (Debugger: persisted watches and the evaluate popup, #2174)
 
 - **The gap**: watches (#1914) lived in memory only — a restart lost the list
