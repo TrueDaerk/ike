@@ -658,6 +658,15 @@ func (m Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 			}
 		}
 		return false, m, nil
+	case "cmd+shift+l":
+		// Link hint mode (#2254) on the focused split side, like the
+		// pane-terminal reserved chord.
+		if inst := m.popupFocused(); inst != nil {
+			if term := inst.ActiveTerminal(); term != nil && term.StartLinkHints() {
+				return true, m, nil
+			}
+		}
+		return false, m, nil
 	}
 	// The spatial focus keys (default ctrl+left/right, #228 overrides apply)
 	// step the keyboard through the layer's surfaces: the box's split sides
