@@ -157,6 +157,7 @@ bring their own.
 | Replace in Path | `project.replaceInPath` | `cmd+shift+r` | — | everywhere |
 | New Python Environment… | `python.newEnvironment` | — | — | everywhere |
 | Browse SSH Host (SFTP)… | `remote.browse` | — | — | everywhere |
+| Edit Run Configuration… | `run.editConfig` | — | — | everywhere |
 | Run File | `run.file` | `shift+f10` | — | everywhere |
 | Rerun Last | `run.rerun` | `cmd+f5` | — | everywhere |
 | Run/Debug Configurations… | `run.select` | — | — | everywhere |
@@ -327,13 +328,16 @@ bring their own.
 | Command | ID | Chord | In the editor | Available in |
 |---|---|---|---|---|
 | Explorer: Jump to Bottom | `explorer.bottom` | — | `G` | `explorer` pane |
+| Explorer: Clear Selection Marks | `explorer.clearMarks` | — | `esc` | `explorer` pane |
 | Explorer: Collapse All | `explorer.collapseAll` | — | — | `explorer` pane |
 | Explorer: Collapse or Go to Parent | `explorer.collapseOrParent` | — | `h / left` | `explorer` pane |
+| Explorer: Copy Selection To… | `explorer.copy` | — | — | `explorer` pane |
 | Explorer: Cursor Down | `explorer.cursorDown` | — | `j / down` | `explorer` pane |
 | Explorer: Cursor Up | `explorer.cursorUp` | — | `k / up` | `explorer` pane |
 | Explorer: Delete | `explorer.delete` | — | — | `explorer` pane |
 | Explorer: Expand All | `explorer.expandAll` | — | — | `explorer` pane |
 | Explorer: Expand or Open | `explorer.expandOrOpen` | — | `l / right` | `explorer` pane |
+| Explorer: Move Selection To… | `explorer.move` | — | — | `explorer` pane |
 | Explorer: New File | `explorer.newFile` | `cmd+n` | — | `explorer` pane |
 | Explorer: New Folder | `explorer.newFolder` | — | — | `explorer` pane |
 | Explorer: Open / Toggle | `explorer.open` | — | `enter` | `explorer` pane |
@@ -346,6 +350,7 @@ bring their own.
 | Explorer: Reveal Open File | `explorer.reveal` | `alt+f1` | — | `explorer` pane |
 | Explorer: Speed Search | `explorer.search` | — | — | `explorer` pane |
 | Explorer: Toggle Hidden Files | `explorer.toggleHidden` | — | — | `explorer` pane |
+| Explorer: Toggle Selection Mark | `explorer.toggleMark` | — | `space` | `explorer` pane |
 | Explorer: Jump to Top | `explorer.top` | — | `gg` | `explorer` pane |
 | Explorer: Undo File Operation | `explorer.undo` | `cmd+z` | — | `explorer` pane |
 

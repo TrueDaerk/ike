@@ -46,7 +46,7 @@ func TestStoreRoundTrip(t *testing.T) {
 	redirect(t)
 	s := Store{}
 	s.Upsert(Config{Name: "a.fake", Kind: KindRun, Lang: "fake", File: "a.fake", Args: []string{"-x"}, Env: map[string]string{"K": "V"}})
-	s.Touch("a.fake")
+	s.Touch("a.fake", KindRun)
 	if err := Save(s); err != nil {
 		t.Fatal(err)
 	}

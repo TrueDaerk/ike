@@ -217,8 +217,13 @@ type DebugTestAtCursorMsg struct{}
 // runs it (debug-kind entries start a debug session).
 type RunSelectMsg struct{}
 
-// RunRerunMsg reruns the last-used run configuration (#576).
+// RunRerunMsg reruns the last-used run configuration the way it was started
+// (#576, #2173): a launch that ran under the debugger reruns under it.
 type RunRerunMsg struct{}
+
+// RunEditConfigMsg opens the run-configuration form (#2173): the picker in
+// edit mode, and the picked stored configuration's environment editor.
+type RunEditConfigMsg struct{}
 
 // TaskSelectMsg opens the Run Task picker (#1915): the Makefile targets,
 // package.json scripts and justfile recipes discovered in the project root;
@@ -505,6 +510,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("run.testsWithCoverage", "Run Tests in File with Coverage", RunTestsWithCoverageMsg{}),
 			appCommand("coverage.toggle", "Toggle Coverage Marks", CoverageToggleMsg{}),
 			appCommand("run.select", "Run/Debug Configurations…", RunSelectMsg{}),
+			appCommand("run.editConfig", "Edit Run Configuration…", RunEditConfigMsg{}),
 			appCommand("run.task", "Run Task…", TaskSelectMsg{}),
 			appCommand("run.taskPromote", "Promote Task to Run Configuration…", TaskPromoteMsg{}),
 			appCommand("http.run", "Run HTTP Request", HTTPRunMsg{}),

@@ -107,13 +107,24 @@ func (m *Model) runTest(path string, t *lang.TestMatch) tea.Cmd {
 	return m.launchRun(root, store, store.Upsert(cfg), created)
 }
 
-// rerunLast is the run.rerun handler: it launches the last-used configuration.
+// rerunLast is the run.rerun handler (cmd+f5 / ctrl+f5): it repeats the
+// last-used configuration *the way it was started* (#2173) — a launch that
+// ran under the debugger reruns under the debugger, everything else rides the
+// ordinary run funnel. The last-used marker lives in the per-project store,
+// so the chord still repeats the previous run after a restart; nothing ever
+// run yet is a toast, not a silent no-op.
 func (m *Model) rerunLast() tea.Cmd {
 	root := projectRoot()
 	store := run.Load()
-	cfg := store.Last()
+	cfg, kind := store.LastLaunch()
 	if cfg == nil {
 		m.host.Notify(host.Info, "run: nothing to rerun yet")
+		return nil
+	}
+	// The stored Kind wins when it says debug: a configuration imported or
+	// authored as a debug config is never a plain run.
+	if kind == run.KindDebug || cfg.Kind == run.KindDebug {
+		m.startDebugConfig(root, *cfg)
 		return nil
 	}
 	return m.launchRun(root, store, cfg, false)
@@ -138,7 +149,7 @@ func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created
 	// ephemeral task run must not point last_used at a name the store cannot
 	// resolve.
 	if store.ByName(cfg.Name) != nil {
-		store.Touch(cfg.Name)
+		store.Touch(cfg.Name, run.KindRun)
 		if err := run.Save(store); err != nil {
 			m.host.Notify(host.Warn, "run: config not saved: "+err.Error())
 		}

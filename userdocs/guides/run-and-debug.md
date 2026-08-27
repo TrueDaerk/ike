@@ -5,12 +5,23 @@
 ++shift+f10++ runs the file you are looking at. There is no configuration step
 first: IKE derives a run configuration from the file's language, saves it as
 the project's default for that file, and tells you it did. ++ctrl+f5++ repeats
-whatever ran last.
+whatever ran last — the way it ran: if the last thing you started was a debug
+session, the chord starts it under the debugger again. The memory is stored
+with the project, so the chord still repeats it tomorrow; with nothing run yet
+it just says so.
 
 Configurations are named, persisted per project in `.ike/runconfigs.json`, and
 carry a command line, a working directory and environment overrides. The
 language registry is what knows how to turn "this Go file" into an actual
 command.
+
+**Edit Run Configuration…** (`run.editConfig` in the palette or the Run menu)
+opens a stored configuration's **environment variables** as an editable list:
+++a++ adds a row, ++enter++ edits the selected one (++tab++ switches between
+key and value), ++d++ removes it, ++ctrl+s++ saves and ++esc++ throws the
+edits away. Empty keys and a key that is already in the list are refused with
+the reason, so nothing silently overwrites anything. Saved variables are
+handed to the program on every later run.
 
 **Run/Debug Configurations…** (`run.select` in the palette or the Run menu)
 lists every stored configuration in a picker. Projects that carry a VS Code
