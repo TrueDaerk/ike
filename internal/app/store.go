@@ -163,10 +163,19 @@ func fileUsageFile() string {
 	return filepath.Join(".ike", "fileusage.json")
 }
 
-// fileFrecencyFile returns the path of the per-project file-open frecency
-// store (#2155), following the layout store's IKE_CONFIG_DIR redirection seam.
-// It is separate from fileusage.json: that one counts palette confirmations,
-// this one every open, and their formats differ.
+// cmdFrecencyFile returns the path of the per-project command-execution
+// history (#2153) backing the palette's frecency boost, following the layout
+// store's IKE_CONFIG_DIR redirection seam.
+func cmdFrecencyFile() string {
+	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, "cmdfrecency.json")
+	}
+	return filepath.Join(".ike", "cmdfrecency.json")
+}
+
+// fileFrecencyFile returns the path of the per-project file-open history
+// (#2155) backing the '@' finder's frecency ranking — the same store type as
+// cmdFrecencyFile's, keyed by file path instead of command id.
 func fileFrecencyFile() string {
 	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
 		return filepath.Join(d, "filefrecency.json")

@@ -5,20 +5,40 @@
 - **The gap**: the `@` finder ranked purely by fuzzy score, so the handful of
   files one lives in ranked no better than never-touched ones — and the empty
   query opened on the alphabetical head of the tree.
-- **`internal/frecency`**: a shared, opaque-keyed store (a later command
-  history can reuse it). One decaying accumulator per key — an event ages the
-  old weight and adds 1.0, a read ages it to now — with a 14-day half-life,
-  a 500-entry cap that prunes the coldest keys, and JSON persistence at
-  `.ike/filefrecency.json` that tolerates a missing or corrupt file.
+- **One shared store** (`internal/frecency`): #2153's command-execution history
+  moved out of `internal/palette` into a key-agnostic, half-life-parameterized
+  package and the file finder took a second instance of it — same timestamp
+  format, same caps (16 hits per key, 400 keys), same corrupt-file tolerance.
+  Command history keeps its 7-day half-life; file opens decay over 14 days,
+  because what one works *on* turns over more slowly than what one runs.
 - **Blend order** (`FileMode.Results`): up to two typed characters frecency
-  leads (the score barely discriminates there anyway); from the third the
-  fuzzy score leads and frecency is the tiebreak above the #1419 usage count,
-  then path.
+  leads (the fuzzy score barely discriminates there anyway); from the third the
+  score leads and frecency is the tiebreak above the #1419 usage count, then
+  path. Command mode keeps its own policy — a query-length-damped boost — which
+  is why the store itself carries no ranking opinion.
 - **Event source**: every open counts, not only palette confirmations — the
-  root model bumps at the same two sites that feed the recent-files MRU
+  root model records at the same two sites that feed the recent-files MRU
   (`openPathWith`, tab re-activation), keyed through `frecency.Key` so the
   finder's root-relative paths and the openers' spellings agree.
 - Wiki: [command-palette](architecture/command-palette.md).
+
+## 2026-08-27 (Command palette: frecency boost from command execution history, #2153)
+
+- **Execution history** (`internal/palette/frecency.go`): a new per-project
+  store keeps the unix timestamps of recent command executions
+  (`.ike/cmdfrecency.json`, `IKE_CONFIG_DIR`-redirectable). It is written in
+  `Model.dispatchCommand` — the single funnel every dispatch path goes through
+  — so keybind and inline invocations count like palette picks, unlike the
+  palette-only most-used counter (#773) it sits beside.
+- **Frecency scoring**: `Score` sums `0.5^(age / 7d)` over a command's
+  timestamps, blending frequency with recency decay. The store is capped at 16
+  timestamps per command and 400 tracked commands (lowest-scoring pruned); a
+  missing or corrupt file loads as empty history.
+- **Ranking blend** (`internal/palette/command_mode.go`): command mode's sort
+  key is now the fuzzy score plus a query-length-damped boost — dominant on an
+  empty query (all fuzzy scores tie there), halved per typed rune, so a longer
+  query's match quality wins and history only breaks near-ties. Context tiers
+  are unchanged.
 
 ## 2026-08-27 (Branch and dirty status per project-picker row, #2178)
 

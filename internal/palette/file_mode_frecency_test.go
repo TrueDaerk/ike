@@ -8,26 +8,18 @@ import (
 	"ike/internal/frecency"
 )
 
-// frecStore builds an in-memory frecency store on a fixed clock and bumps each
-// listed project-relative path the given number of times.
-func frecStore(root string, bumps map[string]int) *frecency.Store {
-	s := frecency.Load("")
-	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	s.SetClock(func() time.Time { return now })
-	for rel, n := range bumps {
+// frecStore builds an in-memory file-open history on a fixed clock and records
+// each listed project-relative path the given number of times.
+func frecStore(root string, opens map[string]int) *Frecency {
+	s := LoadFileFrecency("")
+	base := time.Unix(1_700_000_000, 0)
+	s.SetNow(fixedNow(base, 0))
+	for rel, n := range opens {
 		for i := 0; i < n; i++ {
-			s.Bump(frecency.Key(filepath.Join(root, rel)))
+			s.Record(frecency.Key(filepath.Join(root, rel)))
 		}
 	}
 	return s
-}
-
-func titles(items []Item) []string {
-	out := make([]string, len(items))
-	for i, it := range items {
-		out[i] = it.Title
-	}
-	return out
 }
 
 // TestFileModeFrecencyLeadsOnEmptyQuery guards #2155: with no query typed the
@@ -121,8 +113,8 @@ func TestFileModeFrecencyKeyMatchesEmittedPath(t *testing.T) {
 	cx := Context{Root: "/proj"}
 	items := f.Results("", cx)
 
-	s := frecency.Load("")
-	s.Bump(frecency.Key(items[1].Msg.(OpenFileMsg).Path)) // opened b.go
+	s := LoadFileFrecency("")
+	s.Record(frecency.Key(items[1].Msg.(OpenFileMsg).Path)) // opened b.go
 	f.SetFrecency(s)
 
 	if got := titles(f.Results("", cx)); got[0] != "b.go" {

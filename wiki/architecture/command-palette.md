@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Command Palette
-description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
+description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
 timestamp: 2026-08-27T12:00:00Z
@@ -118,13 +118,39 @@ finds `example.hello`), and ranks **context-first**:
 3. **off-context** — scoped to a different context (ranked last, or hidden when
    `palette.off_context = "hide"`).
 
-Within a tier, higher fuzzy score wins, then **most-used** (#773), then title.
+Within a tier, the sort key is the fuzzy score **plus a frecency boost**
+(#2153), then **most-used** (#773), then title.
+
 The usage counter (`usage.go`, persisted per project in `.ike/cmdusage.json`,
 `IKE_CONFIG_DIR`-redirectable) counts only selections confirmed **from the
 palette window** — the root model bumps it on `palette.RunCommandMsg`, a path
-keybind invocations never take — so shortcut users don't skew the listing. On
-an empty query all scores tie, so the listing opens most-used-first; a typed
-query's match quality still wins over usage. Search everywhere inherits the
+keybind invocations never take — so shortcut users don't skew the listing. It
+stays a pure tiebreaker among otherwise equal keys.
+
+The **frecency store** (`internal/frecency`, wired in `frecency.go`, persisted
+per project in `.ike/cmdfrecency.json`, same redirection seam) answers the
+other question: what does this project actually *run*, lately. It keeps the
+unix timestamps of recent executions per command id, recorded in
+`Model.dispatchCommand` — the single funnel every dispatch path goes through
+(#679), so a keybind and an inline invocation count exactly like a palette
+pick. `Score` sums `0.5^(age / halfLife)` over a command's timestamps — a
+**7-day** half-life here — so three runs today outweigh five last month. The
+store is capped both ways: at most `frecency.MaxHits` = 16 timestamps per key
+(oldest dropped) and `frecency.MaxKeys` = 400 tracked keys (lowest-scoring
+dropped), so it cannot grow without bound; a missing or corrupt file loads as
+empty history and is rewritten on the next event — ranking must never fail on
+state.
+
+The store is **shared** (#2155): `internal/frecency` is key-agnostic and
+half-life-parameterized, and the `@` finder keeps a second instance of it keyed
+by file path. It carries no ranking opinion — how a decayed count becomes order
+is each mode's own policy (a score boost here, a comparator tier there).
+
+`frecencyBoost` squashes the score into `[0,1)` and scales it by query length:
+on an **empty query** the weight is large and every fuzzy score is 0, so the
+listing opens in execution order; from one typed rune the weight starts at 24
+and **halves per further rune**, so within a handful of characters the match
+quality dominates and history only breaks near-ties. Search everywhere inherits the
 order through its composed command source. The dim detail shows the
 command's resolved key binding (`registry.Binding`), else its documentation-only
 `Shortcut`, else its owner. Context-aware filtering relies on the additive
@@ -167,25 +193,22 @@ selections confirmed from the two **ranked palette windows** — Run a Command's
 explorer, go-to-file, the editor's anchored `@` finder or the recent-files mode
 never count.
 
-**Frecency (#2155).** `internal/frecency` is the shared "frequency + recency"
-store — a generic, opaque-keyed helper so a later command-history ranking can
-reuse it. Each key holds one decaying accumulator: an event ages the stored
-weight to its instant and adds `1.0`, and reading a score ages the weight to
-*now*. Decay is exponential with a **14-day half-life** (`Decay(age) =
-0.5^(age/HalfLife)`; a backwards clock never amplifies), so twenty opens last
-week outrank one open yesterday, while a month-old favourite fades without
-vanishing. The store persists as JSON at `.ike/filefrecency.json` (same
-`IKE_CONFIG_DIR` seam), is capped at `MaxEntries` = 500 — the coldest keys are
-pruned on insertion — and tolerates a missing, malformed or hand-broken file by
-degrading to "no frecency data": a ranking aid must never disrupt the session.
+**Frecency (#2155).** The file finder keeps its own instance of the shared
+`internal/frecency` store — the same type, format and caps as the command
+history above (`palette.LoadFileFrecency`, persisted at
+`.ike/filefrecency.json`, `IKE_CONFIG_DIR`-redirectable) — but with a
+**14-day** half-life: what one is working *on* turns over more slowly than what
+one runs, so a file untouched for a fortnight should fade, not vanish. A
+missing, malformed or hand-broken file degrades to "no history": a ranking aid
+must never disrupt the session.
 
-Unlike the usage counter, frecency counts **every** open: the root model bumps
-it at the same two sites that feed the recent-files MRU — a file landing in a
-tab (`openPathWith`) and a background tab being re-activated — so the finder
-reflects what one is working on however the file was reached. Both sides key
-the store through `frecency.Key` (cleaned, absolute), since the finder holds
-root-relative paths and the opening sites hold whatever spelling they were
-given.
+Unlike the usage counter, frecency counts **every** open: the root model
+records at the same two sites that feed the recent-files MRU — a file landing
+in a tab (`openPathWith`) and a background tab being re-activated — so the
+finder reflects what one is working on however the file was reached. Both sides
+key the store through `frecency.Key` (cleaned, absolute), since the finder
+holds root-relative paths and the opening sites hold whatever spelling they
+were given.
 
 **Filesystem reach (#1433).** `@` is no longer project-only: a query typed as
 a filesystem path — leading `/`, `~/`, `./` or `../` — is served by the shared

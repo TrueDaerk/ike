@@ -701,15 +701,12 @@ type Model struct {
 	// palette is the command palette overlay (Roadmap 0070): a modal input that
 	// fronts registered commands (":") and file search ("@"). paletteKey is the
 	// default key that opens it (the final binding is Roadmap 0080's).
-	palette   *palette.Palette
-	projGit   *project.GitCache // async branch/dirty context of picker rows (#2178)
-	cmdUsage  *palette.Usage    // most-used command ranking (#773)
-	fileUsage *palette.Usage    // most-used file ranking in the ranked palettes (#1419)
-	// fileFrec ranks the "@" finder by how often and how recently files were
-	// opened (#2155). Every open and tab re-activation bumps it — the same
-	// events the recent-files MRU records — so the finder reflects what one
-	// is working on, not only what was picked from a palette window.
-	fileFrec    *frecency.Store
+	palette     *palette.Palette
+	projGit     *project.GitCache    // async branch/dirty context of picker rows (#2178)
+	cmdUsage    *palette.Usage       // most-used command ranking (#773)
+	fileUsage   *palette.Usage       // most-used file ranking in the ranked palettes (#1419)
+	cmdFrec     *frecency.Store      // command-execution frecency boost (#2153)
+	fileFrec    *frecency.Store      // file-open frecency ranking in the "@" finder (#2155)
 	winSizes    *ui.WinSizes         // persisted floating-window resize deltas (#774)
 	winSizesAll *ui.WinSizes         // user-scoped last-resize deltas, fallback for fresh projects (#1714)
 	floatDrag   *floatResizeDrag     // live mouse resize of a floating window (#933)
@@ -1118,22 +1115,23 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	bookmarksPicker := &bookmarksMode{}
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
-	vcsSt := &vcsState{}                            // shared before the literal: the reverts picker mode reads it
-	layoutsPicker := newLayoutsMode(layoutNames)    // saved window layouts picker (#1175)
-	httpRequests := newHTTPRequestsMode()           // stored HTTP responses picker (#1829)
-	httpEntries := newHTTPEntriesMode()             // stored-response diff picker (#1992)
-	httpEnvs := newHTTPEnvMode()                    // http-client.env.json picker (#1867)
-	runConfigs := newRunConfigsMode()               // run/debug configurations picker (#1914)
-	tasksPicker := newTasksMode()                   // discovered-tasks picker (#1915)
-	tabPicker := newTabPickerMode()                 // per-pane MRU tab picker (#2151)
-	sshPicker := newSSHMode()                       // ssh_config host picker (#1938)
-	remotePicker := newRemoteMode()                 // SFTP browse host picker (#1997)
-	playFilters := newPlayFiltersMode()             // named saved jq filters (#1995)
-	projGit := project.NewGitCache()                // picker branch/dirty context (#2178)
-	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
-	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
-	fileFrec := frecency.Load(fileFrecencyFile())   // frecency-weighted file finder (#2155)
-	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
+	vcsSt := &vcsState{}                                     // shared before the literal: the reverts picker mode reads it
+	layoutsPicker := newLayoutsMode(layoutNames)             // saved window layouts picker (#1175)
+	httpRequests := newHTTPRequestsMode()                    // stored HTTP responses picker (#1829)
+	httpEntries := newHTTPEntriesMode()                      // stored-response diff picker (#1992)
+	httpEnvs := newHTTPEnvMode()                             // http-client.env.json picker (#1867)
+	runConfigs := newRunConfigsMode()                        // run/debug configurations picker (#1914)
+	tasksPicker := newTasksMode()                            // discovered-tasks picker (#1915)
+	tabPicker := newTabPickerMode()                          // per-pane MRU tab picker (#2151)
+	sshPicker := newSSHMode()                                // ssh_config host picker (#1938)
+	remotePicker := newRemoteMode()                          // SFTP browse host picker (#1997)
+	playFilters := newPlayFiltersMode()                      // named saved jq filters (#1995)
+	projGit := project.NewGitCache()                         // picker branch/dirty context (#2178)
+	cmdUsage := palette.LoadUsage(usageFile())               // most-used ranking (#773)
+	fileUsage := palette.LoadUsage(fileUsageFile())          // most-used file ranking (#1419)
+	cmdFrec := palette.LoadFrecency(cmdFrecencyFile())       // execution frecency (#2153)
+	fileFrec := palette.LoadFileFrecency(fileFrecencyFile()) // file-open frecency (#2155)
+	winSizes := ui.LoadWinSizes(winSizeFile())               // resizable floats (#774)
 	winSizesAll := ui.LoadWinSizes(globalWinSizeFile())
 	// Background forge polling (#2085) is anchored to the project root the
 	// process just chdir'd into: a switch rebuilds the model, and with it a
@@ -1159,6 +1157,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m := Model{
 		cmdUsage:        cmdUsage,
 		fileUsage:       fileUsage,
+		cmdFrec:         cmdFrec,
 		fileFrec:        fileFrec,
 		winSizes:        winSizes,
 		winSizesAll:     winSizesAll,
@@ -1190,7 +1189,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		shell:           ui.New(shellConfig(cfg)),
 		vcs:             vcsSt,
 		forgePoll:       forgeSt,
-		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, fileFrec, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters, projGit),
+		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, fileFrec, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters, projGit),
 		projGit:         projGit,
 		layoutsPicker:   layoutsPicker,
 		httpRequests:    httpRequests,
@@ -2587,13 +2586,14 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, fileFrec *frecency.Store, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, projGit *project.GitCache) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec, fileFrec *frecency.Store, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, projGit *project.GitCache) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
 	}
 	cmd := palette.NewCommandMode(reg, bindings, paletteHideOff(cfg))
 	cmd.SetUsage(usage)
+	cmd.SetFrecency(cmdFrec)
 	file := palette.NewFileMode()
 	file.SetUsage(fileUsage)
 	file.SetFrecency(fileFrec)
@@ -7319,9 +7319,9 @@ func (m Model) openPathWith(path string, newPane bool) (tea.Model, tea.Cmd) {
 			// (#1996) — nothing else says that the file next to this one holds
 			// the hour before it.
 			m.notifyRotatedSet(m.activeWS().Panes.Get(key).Editor())
-			m.recent.Touch(path)                // MRU for the recent-files palette mode (0230)
-			m.fileFrec.Bump(frecency.Key(path)) // frecency ranking for the "@" finder (#2155)
-			m.watcher.Track(path)               // poll-fallback comparison for open buffers
+			m.recent.Touch(path)                  // MRU for the recent-files palette mode (0230)
+			m.fileFrec.Record(frecency.Key(path)) // frecency ranking for the "@" finder (#2155)
+			m.watcher.Track(path)                 // poll-fallback comparison for open buffers
 			m.explorer().SetActive(path)
 			m.syncExplorerOpen()
 			m.setFocus(key)
@@ -7481,7 +7481,7 @@ func (m *Model) activateTab(inst *pane.Instance, idx int) {
 	// Returning to a background tab counts as using its file (MRU, 0230).
 	if ed := inst.Editor(); ed != nil && ed.HasFile() {
 		m.recent.Touch(ed.Path())
-		m.fileFrec.Bump(frecency.Key(ed.Path()))
+		m.fileFrec.Record(frecency.Key(ed.Path()))
 	}
 }
 
@@ -7730,6 +7730,10 @@ func (m Model) commandExecuted(id string) tea.Cmd {
 // inline invocations — funnels through it (#679), so "command X ran" is
 // observable regardless of how it was triggered.
 func (m Model) dispatchCommand(id string, c registry.OwnedCommand) tea.Cmd {
+	// Every dispatch path lands here, so this is the one place that sees the
+	// project's real command-execution history — recorded for the palette's
+	// frecency boost (#2153), unlike the palette-only #773 counter above.
+	m.cmdFrec.Record(id)
 	return tea.Batch(c.Run(m.host), m.commandExecuted(id))
 }
 

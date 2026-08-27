@@ -35,8 +35,9 @@ const (
 type CommandMode struct {
 	src     CommandSource
 	res     BindingResolver
-	usage   *Usage // optional most-used ranking (#773); nil-safe
-	hideOff bool   // drop off-context commands instead of ranking them last
+	usage   *Usage    // optional most-used ranking (#773); nil-safe
+	frec    *Frecency // optional execution-history boost (#2153); nil-safe
+	hideOff bool      // drop off-context commands instead of ranking them last
 	prefix  rune
 }
 
@@ -51,6 +52,12 @@ func NewCommandMode(src CommandSource, res BindingResolver, hideOff bool) *Comma
 // commands rank first. Match quality still wins over usage.
 func (c *CommandMode) SetUsage(u *Usage) { c.usage = u }
 
+// SetFrecency installs the execution-history store (#2153): recently and often
+// executed commands get a bonus added to their fuzzy score, strongest on an
+// empty query and halved per typed rune, so a longer query's match quality
+// dominates and history only breaks near-ties.
+func (c *CommandMode) SetFrecency(f *Frecency) { c.frec = f }
+
 // Prefix implements Mode.
 func (c *CommandMode) Prefix() rune { return c.prefix }
 
@@ -58,17 +65,23 @@ func (c *CommandMode) Prefix() rune { return c.prefix }
 func (c *CommandMode) Placeholder() string { return "Run a command…" }
 
 // rankedCommand is a command with its computed tier and match for sorting.
+// key is the sort score: the fuzzy match score plus the query-length-damped
+// frecency boost (#2153), so history orders the empty-query listing and fades
+// to a tiebreaker as the query grows.
 type rankedCommand struct {
 	item  Item
 	tier  int
+	key   float64
 	usage int
 }
 
 // Results implements Mode. It snapshots all registered commands, keeps those
-// whose Title (or id) fuzzy-matches the query, and orders them by (tier, score,
-// title). An empty query lists every command in tier/title order.
+// whose Title (or id) fuzzy-matches the query, and orders them by (tier,
+// score+frecency boost, usage, title). An empty query lists every command in
+// tier order, most-recently/often-executed first.
 func (c *CommandMode) Results(query string, cx Context) []Item {
 	cmds := c.src.Commands()
+	qlen := len([]rune(query))
 	ranked := make([]rankedCommand, 0, len(cmds))
 	for _, cmd := range cmds {
 		tier := c.tier(cmd, cx.ContextID)
@@ -87,6 +100,7 @@ func (c *CommandMode) Results(query string, cx Context) []Item {
 		}
 		ranked = append(ranked, rankedCommand{
 			tier:  tier,
+			key:   float64(m.Score) + frecencyBoost(c.frec.Score(cmd.ID), qlen),
 			usage: c.usage.Count(cmd.ID),
 			item: Item{
 				Title:  cmd.Title,
@@ -101,8 +115,8 @@ func (c *CommandMode) Results(query string, cx Context) []Item {
 		if ranked[i].tier != ranked[j].tier {
 			return ranked[i].tier < ranked[j].tier
 		}
-		if ranked[i].item.Score != ranked[j].item.Score {
-			return ranked[i].item.Score > ranked[j].item.Score
+		if ranked[i].key != ranked[j].key {
+			return ranked[i].key > ranked[j].key
 		}
 		if ranked[i].usage != ranked[j].usage {
 			return ranked[i].usage > ranked[j].usage

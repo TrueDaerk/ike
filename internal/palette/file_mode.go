@@ -54,14 +54,14 @@ type FileMode struct {
 	// scores, more-often-chosen files rank first — match quality still wins.
 	usage *Usage
 
-	// frecency scores project files by how often and how recently they were
-	// opened (#2155), keyed by frecency.Key of the path the emitted
-	// OpenFileMsg carries — the root model bumps it under the same key, so
-	// finder and opener agree however the path was spelled; nil-safe. Unlike
-	// usage it counts every open of the file, not only palette confirmations:
-	// the point is to know what one is working on, however the file was
-	// reached.
-	frecency *frecency.Store
+	// frec scores project files by how often and how recently they were
+	// opened (#2155) — the shared store command mode also uses (#2153), keyed
+	// by frecency.Key of the path the emitted OpenFileMsg carries. The root
+	// model records under the same key, so finder and opener agree however the
+	// path was spelled; nil-safe. Unlike usage it counts every open of the
+	// file, not only palette confirmations: the point is to know what one is
+	// working on, however the file was reached.
+	frec *frecency.Store
 
 	// scratchList returns the scratch store's paths newest-first (#1812),
 	// mirroring ScratchMode's injection: the palette core owns no store, the
@@ -83,10 +83,10 @@ func NewFileMode() *FileMode { return &FileMode{walk: walkProject} }
 // CountUsage-marked OpenFileMsg).
 func (f *FileMode) SetUsage(u *Usage) { f.usage = u }
 
-// SetFrecency installs the file-open frecency store (#2155). The root model
-// owns it and bumps it whenever a file is opened or re-activated; the finder
-// only reads it.
-func (f *FileMode) SetFrecency(s *frecency.Store) { f.frecency = s }
+// SetFrecency installs the file-open history (#2155) — the shared frecency
+// store, on its own file and half-life. The root model owns it and records
+// whenever a file is opened or re-activated; the finder only reads it.
+func (f *FileMode) SetFrecency(s *Frecency) { f.frec = s }
 
 // SetScratchList installs the scratch-store source (#1812), so a query that
 // hints at "scratch" can offer scratch files inline without switching to
@@ -135,7 +135,7 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 	// maxFiles paths re-ranked on every keystroke. An empty root means the
 	// working directory, the same file the joined OpenFileMsg path names.
 	frecRoot := ""
-	if f.frecency != nil {
+	if f.frec != nil {
 		if root := cx.Root; root != "" {
 			frecRoot = frecency.Key(root)
 		} else {
@@ -149,8 +149,8 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 			continue
 		}
 		frec := 0.0
-		if f.frecency != nil {
-			frec = f.frecency.Score(filepath.Join(frecRoot, p))
+		if f.frec != nil {
+			frec = f.frec.Score(filepath.Join(frecRoot, p))
 		}
 		out = append(out, scored{
 			path:  p,

@@ -40,13 +40,13 @@ func TestOpenFileBumpsFrecency(t *testing.T) {
 	m = out.(Model)
 
 	if got := m.fileFrec.Score(key); got <= 0 {
-		t.Fatalf("opening a file must bump its frecency, score = %v", got)
+		t.Fatalf("opening a file must record its frecency, score = %v", got)
 	}
 	store := filepath.Join(dir, "filefrecency.json")
 	if _, err := os.Stat(store); err != nil {
 		t.Fatalf("frecency store must persist per project: %v", err)
 	}
-	if got := frecency.Load(store).Score(key); got <= 0 {
+	if got := palette.LoadFileFrecency(store).Score(key); got <= 0 {
 		t.Fatalf("persisted store lost the event, score = %v", got)
 	}
 }
