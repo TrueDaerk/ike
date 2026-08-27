@@ -78,6 +78,13 @@ stay a plain `string` because every renderer and matcher reads it.
   panel (sub-panel form → detail editor → filter), and `handlePaste`'s pane
   switch for the tool windows. A surface with no text input returns `false`
   and the block is dropped — it must never leak into the buffer underneath.
+  The router's order mirrors the `KeyPressMsg` guard chain exactly: the
+  overlays resolved *before* the popup terminal layer (`overlayCapturesAbovePopup`)
+  always take the paste, the ones after it (`overlayCapturesBelowPopup` — the
+  single-line prompts, the regex tester, a focused jq playground, the capturing
+  explorer) only while that layer is closed. Anything else would let a merely
+  *mounted* surface steal a paste from the focused one, which is exactly what
+  the jq playground did over a floating terminal (#2236).
 
 ## Input site audit (#2002)
 

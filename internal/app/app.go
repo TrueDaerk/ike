@@ -6850,7 +6850,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// paste route into the palette or a prompt would be the terminal's
 		// bracketed paste. Same shape as the terminal pane's Cmd+V (#727):
 		// read the system clipboard and hand the block to the focused input.
-		if m.overlayCapturesKeyboard() {
+		if m.overlayCapturesPaste() {
 			if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta && k.Base == "v" {
 				if text := clipboardRead(); text != "" {
 					cmd, _ := m.routeOverlayPaste(text)

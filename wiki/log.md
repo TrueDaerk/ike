@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-27 (Paste follows the focus, not the mounted jq playground, #2236)
+
+- **The bug**: `handlePaste` asked `overlayCapturesKeyboard()` first, and that
+  predicate lumps surfaces the `KeyPressMsg` guard chain resolves *after* the
+  popup terminal layer (#1398, #1793) in with the true modals. An open jq
+  playground reports `playFocused()` on its pane's focus, which a floating
+  terminal never takes — so every paste landed in the query line while the
+  panel had the keyboard.
+- **The fix** (`internal/app/inputcoalesce.go`): the predicate is split along
+  the key chain into `overlayCapturesAbovePopup` (full-window modals, finder,
+  palette, decision prompts) and `overlayCapturesBelowPopup` (single-line
+  prompts, regex tester, focused playground, capturing explorer).
+  `overlayCapturesPaste` — used by `handlePaste` and the overlay `cmd+v` branch
+  — takes the first group always and the second only while the popup layer is
+  closed, so the paste reaches the popup shell, the focused editor or the
+  focused tool pane instead.
+- **Guards** (`internal/app/playpasteroute_test.go`): paste with a torn-out
+  floating panel focused, with the popup box open (and back into the
+  playground once it is hidden), with another editor pane focused, and with
+  the issues filter focused.
+
 ## 2026-08-27 (HTTP response viewer: raw/pretty toggle, jq handoff, spooled bodies, #2157)
 
 - **Pretty stays the default, `t` toggles** (`internal/httppane/body.go`): a
