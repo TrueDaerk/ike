@@ -35,7 +35,10 @@ func Text(e httphistory.Entry) string {
 	b.WriteString("\n\n")
 	b.WriteString(HeadersText(e.Headers))
 	b.WriteString("\n")
-	b.WriteString(NormalizeBody(e.Headers.Get("Content-Type"), e.Body))
+	// FullBody, not Body (#2157): a spooled entry keeps only its head in
+	// memory, and a diff of two heads would report a difference at the point
+	// where both were cut off.
+	b.WriteString(NormalizeBody(e.Headers.Get("Content-Type"), e.FullBody()))
 	return strings.TrimRight(b.String(), "\n") + "\n"
 }
 

@@ -194,21 +194,52 @@ func (c *MouseCoalescer) flush() {
 // keyboard right now — mirroring the guard chain in the KeyPressMsg handler. When
 // true, a paste is not routed into the (hidden) editor/terminal below.
 func (m Model) overlayCapturesKeyboard() bool {
+	return m.overlayCapturesAbovePopup() || m.overlayCapturesBelowPopup()
+}
+
+// overlayCapturesAbovePopup are the overlays the KeyPressMsg chain resolves
+// *before* the popup terminal layer (#1398, floating panels #1793): the
+// full-window modals, the finder, the palette and the decision prompts. They
+// can be opened from inside the popup and must get their keys — and their
+// pastes — back.
+func (m Model) overlayCapturesAbovePopup() bool {
 	return m.settings.IsOpen() || m.keyDoctor.IsOpen() || (m.menuEnabled() && m.menu.IsOpen()) ||
 		m.finder.IsOpen() || m.todo.IsOpen() || m.undoTree.IsOpen() ||
 		m.callhier.IsOpen() || m.typehier.IsOpen() || m.palette.IsOpen() ||
-		m.floats.IsOpen() || m.recoveryOpen() || m.onboardingOpen() ||
-		m.conflictOpen() || m.revertPromptOpen() || m.depEditPromptOpen() ||
+		m.recoveryOpen() || m.onboardingOpen() || m.conflictOpen() ||
+		m.runConfigFormOpen() || m.revertPromptOpen() || m.depEditPromptOpen() ||
 		m.switchPromptOpen() || m.switchBlockedPromptOpen() ||
-		m.closePromptOpen() || m.renameOpen() ||
-		m.clonePromptOpen() || m.newProjectPromptOpen() || m.runConfigFormOpen() ||
-		m.generateScratchOpen() || m.saveAsOpen() ||
-		m.regexTesterOpen() || m.playFocused() || m.playNamePromptOpen() ||
-		m.layoutSavePromptOpen() || m.jbImportPromptOpen() ||
-		m.openAPIImportPromptOpen() || m.curlImportPromptOpen() ||
-		m.bookmarkPromptOpen() ||
-		m.lspRenameOpen() || m.lspRenamePreviewOpen() ||
-		m.forgeEditDialogOpen() || m.explorerCapturing()
+		m.closePromptOpen() || m.forgeEditDialogOpen()
+}
+
+// overlayCapturesBelowPopup are the surfaces the KeyPressMsg chain resolves
+// *after* the popup terminal layer: the single-line prompts, the regex tester,
+// the focused playground (#1936, #1980) and the capturing explorer. While a
+// floating terminal panel or the popup box is up, that layer owns the keyboard
+// — so none of these may capture a paste either (#2236). The playground is the
+// case that bit: it stays mounted while another surface has the focus, and may
+// only consume a paste when its own pane holds it.
+func (m Model) overlayCapturesBelowPopup() bool {
+	return m.renameOpen() || m.clonePromptOpen() || m.regexTesterOpen() ||
+		m.playNamePromptOpen() || m.playFocused() ||
+		m.newProjectPromptOpen() || m.generateScratchOpen() || m.saveAsOpen() ||
+		m.bookmarkPromptOpen() || m.layoutSavePromptOpen() ||
+		m.jbImportPromptOpen() || m.openAPIImportPromptOpen() ||
+		m.curlImportPromptOpen() || m.lspRenameOpen() ||
+		m.lspRenamePreviewOpen() || m.floats.IsOpen() ||
+		m.explorerCapturing()
+}
+
+// overlayCapturesPaste reports whether an overlay — rather than the popup
+// terminal layer underneath it — takes the next paste. It is
+// overlayCapturesKeyboard ordered like the key chain: the overlays above the
+// popup layer always win, the ones below it only while that layer is closed
+// (#2236).
+func (m Model) overlayCapturesPaste() bool {
+	if m.overlayCapturesAbovePopup() {
+		return true
+	}
+	return !m.popupLayerOpen() && m.overlayCapturesBelowPopup()
 }
 
 // handlePaste routes a bracketed-paste block (#603) to the focused editable
@@ -221,7 +252,7 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 	if text == "" {
 		return m, nil
 	}
-	if m.overlayCapturesKeyboard() {
+	if m.overlayCapturesPaste() {
 		cmd, _ := m.routeOverlayPaste(text)
 		return m, cmd
 	}

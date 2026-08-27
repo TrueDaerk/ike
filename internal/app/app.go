@@ -4646,6 +4646,36 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffHTTPEntries(msg)
 		return m, nil
 
+	case HTTPToggleRawBodyMsg:
+		// http.toggleRawBody (palette, #2157): the shown body switches between
+		// pretty-printed and as-received.
+		m.toggleHTTPRawBody()
+		return m, nil
+
+	case HTTPJQPlaygroundMsg, httppane.JQPlaygroundMsg:
+		// "q" in the response pane / http.jqPlayground (#2157): the jq
+		// playground opens over the shown body without a detour through the
+		// Tools menu. Focus moves to the viewer first, so playSource resolves
+		// the response rather than whatever editor happened to be focused.
+		m.focusHTTPPanel()
+		return m, m.startPlayground(jqplay.DialectJQ, false)
+
+	case HTTPLoadMoreBodyMsg:
+		// http.loadMoreBody (palette, #2157): one more window of a spooled
+		// body.
+		m.loadMoreHTTPBody()
+		return m, nil
+
+	case HTTPOpenBodyFileMsg:
+		// http.openBodyFile (palette, #2157): the whole spooled body as a
+		// file; the pane names the path, this resolves it.
+		return m, m.openHTTPBodyFile()
+
+	case httppane.OpenBodyFileMsg:
+		// "o" in the response pane (#2157): the pane already resolved the
+		// spool path, the host owns the editor.
+		return m.openPathInEditor(msg.Path)
+
 	case httppane.PickRequestMsg:
 		// "r" in the response pane (#1829): list the .http file's requests
 		// that have stored responses and switch the pane to the chosen one.
@@ -6829,7 +6859,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// paste route into the palette or a prompt would be the terminal's
 		// bracketed paste. Same shape as the terminal pane's Cmd+V (#727):
 		// read the system clipboard and hand the block to the focused input.
-		if m.overlayCapturesKeyboard() {
+		if m.overlayCapturesPaste() {
 			if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta && k.Base == "v" {
 				if text := clipboardRead(); text != "" {
 					cmd, _ := m.routeOverlayPaste(text)

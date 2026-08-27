@@ -45,6 +45,22 @@ type HTTPCopyHeadersMsg struct{}
 // viewer, hidden rows included, to the clipboard (#1787).
 type HTTPCopyFoldMsg struct{}
 
+// HTTPToggleRawBodyMsg runs http.toggleRawBody: the shown response body
+// switches between pretty-printed and as-received (#2157).
+type HTTPToggleRawBodyMsg struct{}
+
+// HTTPJQPlaygroundMsg runs http.jqPlayground: the jq playground opens over the
+// shown response body (#2157) — the palette pendant of the viewer's "q".
+type HTTPJQPlaygroundMsg struct{}
+
+// HTTPLoadMoreBodyMsg runs http.loadMoreBody: one more window of a spooled
+// response body is pulled into the viewer (#2157).
+type HTTPLoadMoreBodyMsg struct{}
+
+// HTTPOpenBodyFileMsg runs http.openBodyFile: the complete body of a spooled
+// response opens as a file (#2157).
+type HTTPOpenBodyFileMsg struct{}
+
 // HTTPResponseHistoryMsg runs http.responseHistory: focus the viewer and
 // report how many stored responses the current request has (#1267).
 type HTTPResponseHistoryMsg struct{}
@@ -517,6 +533,54 @@ func (m *Model) copyHTTPFold() tea.Cmd {
 	return cmd
 }
 
+// toggleHTTPRawBody runs http.toggleRawBody (#2157): the palette pendant of
+// the viewer's "t". It reports the new state, so the command is usable
+// without looking at the footer.
+func (m *Model) toggleHTTPRawBody() {
+	p := m.httpPanel()
+	if p == nil {
+		m.host.Notify(host.Info, "http: no response pane open")
+		return
+	}
+	if p.ToggleRaw() {
+		m.host.Notify(host.Info, "http: showing the raw response body")
+		return
+	}
+	m.host.Notify(host.Info, "http: showing the pretty-printed response body")
+}
+
+// loadMoreHTTPBody runs http.loadMoreBody (#2157): the palette pendant of the
+// viewer's "m". A body that is fully on screen says so rather than doing
+// nothing.
+func (m *Model) loadMoreHTTPBody() {
+	p := m.httpPanel()
+	if p == nil {
+		m.host.Notify(host.Info, "http: no response pane open")
+		return
+	}
+	if !p.LoadMore() {
+		m.host.Notify(host.Info, "http: the whole response body is already shown")
+		return
+	}
+	m.host.Notify(host.Info, fmt.Sprintf("http: showing %d of %d body bytes", p.ShownBodyBytes(), p.TotalBodyBytes()))
+}
+
+// openHTTPBodyFile runs http.openBodyFile (#2157): the palette pendant of the
+// viewer's "o". Only a spooled body has a file behind it — a small one lives
+// in memory and is saved through http.saveResponse instead.
+func (m *Model) openHTTPBodyFile() tea.Cmd {
+	p := m.httpPanel()
+	if p == nil {
+		m.host.Notify(host.Info, "http: no response pane open")
+		return nil
+	}
+	cmd := p.OpenBodyFileCmd()
+	if cmd == nil {
+		m.host.Notify(host.Info, "http: this response body is held in memory — save it with http.saveResponse")
+	}
+	return cmd
+}
+
 // httpPaneKeys documents the response viewer's pane-local keys for the help
 // overlay (#1267): they belong to no command in the registry, so the
 // cheatsheet would otherwise never mention that responses can be browsed,
@@ -533,6 +597,10 @@ var httpPaneKeys = []struct{ Key, Title string }{
 	{"g / G", "Top / bottom"},
 	{"/ · ctrl+f / cmd+f", "Search in the response"},
 	{"n / N", "Next / previous match"},
+	{"t", "Toggle raw / pretty-printed body"},
+	{"q", "Open the jq playground on this body"},
+	{"m", "Load the next window of a large (spooled) body"},
+	{"o", "Open the whole spooled body as a file"},
 	{"za / zc / zo / zM / zR", "Toggle / close / open folds"},
 	{"zy", "Copy the target fold whole (or click its ⧉)"},
 	{"y", "Copy selection (or the whole body)"},

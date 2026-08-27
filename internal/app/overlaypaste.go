@@ -22,6 +22,10 @@ import (
 // the paste. Overlays with no text input return false and the paste is dropped
 // as before — a paste must never leak into the hidden editor underneath.
 //
+// The chain's cut at the popup terminal layer lives in the caller:
+// overlayCapturesPaste only reaches the cases below that cut while the layer
+// is closed (#2236), so a floating terminal takes its own pastes.
+//
 // Pasted blocks are flattened to a single line by ui.PasteText: every target
 // here is a one-line field.
 

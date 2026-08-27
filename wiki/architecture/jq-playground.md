@@ -640,9 +640,14 @@ component, so its context keys would act on a hidden editor), and multi-step
 chords are left alone — resolving them would mean buffering query input, the
 same trade the terminal makes (#805).
 
-A bracketed paste always lands in the query line, **flattened** to one line,
-like every other single-field prompt — the result buffer refuses pastes with
-everything else.
+A bracketed paste lands in the query line, **flattened** to one line, like
+every other single-field prompt — the result buffer refuses pastes with
+everything else. It lands there only while the playground's own pane holds the
+focus, though: the mode stays mounted when the focus moves (#1980, see
+[The inline mount](#the-inline-mount)), and the paste router follows the key chain
+rather than the mounted mode, so an open [popup terminal
+layer](./terminal.md) — box or floating panel — takes it instead, and a focused
+editor or tool pane takes its own (#2236).
 
 Editing output belongs in a writable buffer, which is exactly what `ctrl+o`
 makes — a [scratch file](./scratch-files.md) opened through the standard
