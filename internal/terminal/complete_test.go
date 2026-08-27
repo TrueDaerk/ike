@@ -551,12 +551,12 @@ func startNarrowShModel(t *testing.T, c *collector, dir string) *Model {
 	return &m
 }
 
-// TestWrappedLineAutoSuggestSilent (#1431): a command longer than the pane
-// width soft-wraps; the continuation row alone used to parse as a fresh short
-// command ("ls" here) and command candidates opened the popup on garbage. The
-// logical line is now joined across the wrap, so the true word (a nonsense
-// blob with no candidates) keeps auto-suggest silent, and the parse still
-// sees the real command head past the wrap.
+// TestWrappedLineAutoSuggestSilent (#1431, #2262): a command longer than the
+// pane width soft-wraps; the continuation row alone used to parse as a fresh
+// short command ("ls" here) and command candidates opened the popup on
+// garbage. The logical line is joined across the wrap, so the true word (a
+// nonsense blob with no candidates) keeps auto-suggest silent — no bogus
+// suggestions for the wrapped tail.
 func TestWrappedLineAutoSuggestSilent(t *testing.T) {
 	c := &collector{}
 	m := startNarrowShModel(t, c, t.TempDir())
@@ -616,12 +616,12 @@ func TestWrappedLineCtrlSpaceCompletes(t *testing.T) {
 	}
 }
 
-// TestWrappedLineAutoSuggestSilentWithCandidates (#1464): auto-suggest stays
-// silent while the command soft-wraps even when the joined word HAS
-// candidates — the earlier #1431 test only covered a word without matches.
-// ctrl+space (TestWrappedLineCtrlSpaceCompletes) stays the way to complete a
-// wrapped word.
-func TestWrappedLineAutoSuggestSilentWithCandidates(t *testing.T) {
+// TestWrappedLineAutoSuggestCompletes (#2262): auto-suggest keeps working on
+// a continuation row of a joined soft-wrap chain — the word spanning the wrap
+// boundary ("ta" ends the first row, "rg" opens the continuation row)
+// completes as its full joined self, and tab-accepting pastes the correct
+// remainder across the boundary.
+func TestWrappedLineAutoSuggestCompletes(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "target-file.txt"), nil, 0o644); err != nil {
 		t.Fatal(err)
@@ -643,8 +643,139 @@ func TestWrappedLineAutoSuggestSilentWithCandidates(t *testing.T) {
 		return cmd == "echo" && w == "targ"
 	})
 	m.OnOutput()
+	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0] != "target-file.txt" {
+		t.Fatalf("auto-suggest on a wrapped word = open=%v items=%v, want [target-file.txt]",
+			m.comp.open, m.comp.items)
+	}
+	if m.comp.word != "targ" {
+		t.Fatalf("popup word = %q, want the full joined word %q", m.comp.word, "targ")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	waitFor(t, "remainder pasted across the wrap", func() bool {
+		_, w := parseCmdline(m.lineBeforeCursor())
+		return w == "target-file.txt"
+	})
+}
+
+// TestWrappedLineAutoSuggestAfterWrap (#2262): a fresh word typed entirely
+// after the wrap boundary (the wrapped part is an earlier word) auto-suggests
+// normally on the continuation row.
+func TestWrappedLineAutoSuggestAfterWrap(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "target-file.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &collector{}
+	m := startNarrowShModel(t, c, dir)
+	promptX, promptY := m.sess.CursorPosition()
+
+	// The filler word fills the first row exactly, so " targ" sits wholly on
+	// the continuation row.
+	filler := strings.Repeat("q", m.gridW()-promptX-len("echo "))
+	for _, r := range "echo " + filler + " targ" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "cursor wrapped to the next row", func() bool {
+		_, y := m.sess.CursorPosition()
+		return y > promptY
+	})
+	waitFor(t, "echoed wrapped line", func() bool {
+		cmd, w := parseCmdline(m.lineBeforeCursor())
+		return cmd == "echo" && w == "targ"
+	})
+	m.OnOutput()
+	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0] != "target-file.txt" {
+		t.Fatalf("auto-suggest after the wrap = open=%v items=%v, want [target-file.txt]",
+			m.comp.open, m.comp.items)
+	}
+}
+
+// TestEarlyWrapBlankLastColumnSilent (#2262): the one pattern that still
+// suppresses auto-suggest — the row above holds content but its last column
+// is blank (the shape an early-wrapping line editor leaves), so the
+// SoftWrapped heuristic cannot join the chain and the cursor row's text
+// carries no prompt marker. The "word" may be a wrapped tail; completing it
+// standalone was the historical garbage-suggestion bug. ctrl+space still
+// completes on demand.
+func TestEarlyWrapBlankLastColumnSilent(t *testing.T) {
+	c := &collector{}
+	m := New("terminal", "/bin/sh", t.TempDir(), 30, 24, []string{"PS1="}, c.send)
+	if m.sess == nil {
+		t.Fatalf("spawn failed: %s", m.err)
+	}
+	t.Cleanup(func() { m.Close() })
+	// Output a row of width-1 characters: content above, last column blank —
+	// exactly the shape that defeats the SoftWrapped heuristic.
+	tail := strings.Repeat("q", m.gridW()-1)
+	for _, r := range "echo " + tail + "\r" {
+		m.sess.SendKey(keyFor(r))
+	}
+	waitFor(t, "output row", func() bool { return strings.Contains(plainView(m.sess), tail) })
+	waitFor(t, "at prompt", func() bool { return m.completionActive() })
+
+	m.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
+	m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	waitFor(t, "echoed ls", func() bool {
+		_, w := parseCmdline(m.lineBeforeCursor())
+		return w == "ls"
+	})
+	m.OnOutput()
 	if m.comp.open {
-		t.Fatalf("auto-suggest must stay silent on a wrapped line, got items %v", m.comp.items)
+		t.Fatalf("auto-suggest must stay silent below a blank-last-column row, got %v", m.comp.items)
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+	if !m.comp.open {
+		t.Fatal("ctrl+space must still complete on demand")
+	}
+}
+
+// TestWrappedLinePopupPosition (#2262): the popup renders sanely on a
+// continuation row — a word spanning the wrap starts on the row above, so the
+// anchor clamps to the continuation row's left edge and every view row stays
+// within the pane width, one intact bordered row per entry.
+func TestWrappedLinePopupPosition(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "target-file.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &collector{}
+	m := startNarrowShModel(t, c, dir)
+	promptX, promptY := m.sess.CursorPosition()
+
+	filler := strings.Repeat("q", m.gridW()-promptX-len("echo ")-len(" ta"))
+	for _, r := range "echo " + filler + " targ" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "cursor wrapped to the next row", func() bool {
+		_, y := m.sess.CursorPosition()
+		return y > promptY
+	})
+	waitFor(t, "echoed wrapped line", func() bool {
+		_, w := parseCmdline(m.lineBeforeCursor())
+		return w == "targ"
+	})
+	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+	if !m.comp.open {
+		t.Fatal("ctrl+space must open the popup on the continuation row")
+	}
+	m.SetFocused(true)
+	found := false
+	rows := strings.Split(m.View(), "\n")
+	for i, line := range rows {
+		if w := ansi.StringWidth(line); w > 30 {
+			t.Fatalf("view row wider than pane (%d > 30): %q", w, ansi.Strip(line))
+		}
+		if strings.Contains(ansi.Strip(line), "│ target-file.txt │") {
+			found = true
+			// The popup must sit adjacent to the cursor's continuation row.
+			_, cy := m.sess.CursorPosition()
+			if i < cy-len(m.comp.items)-2 || i > cy+len(m.comp.items)+2 {
+				t.Fatalf("popup row %d too far from cursor row %d", i, cy)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("popup entry row must render intact on the continuation row")
 	}
 }
 
