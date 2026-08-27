@@ -5,6 +5,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"ike/internal/highlight"
 )
 
 // sticky.go implements sticky scroll (#168): the header lines of the
@@ -51,18 +53,60 @@ func (m Model) stickyLines() []int {
 	if max <= 0 {
 		return nil
 	}
+	// The fixed-point loop below scans every scope up to stickyDepth times,
+	// and View, the scroll paths and the mouse map all ask per frame (#2187):
+	// memoize it against everything it reads. The guards above stay outside
+	// the memo — they are field checks, and keeping them there means a
+	// large-file or separator-view pane never touches the cache at all.
+	key := stickyKey{top: m.view.Top, max: max, lines: m.buf.LineCount(), scopeEpoch: m.scopeEpoch, docVersion: m.docVersion}
+	if c := m.stickyCache; c != nil && c.valid && c.key == key {
+		return c.lines
+	}
 	var lines []int
 	for {
 		ref := m.view.Top + len(lines)
 		if ref >= m.buf.LineCount() {
-			return lines
+			break
 		}
 		enclosing := m.enclosingHeaders(ref, max)
 		if len(enclosing) <= len(lines) {
-			return enclosing
+			lines = enclosing
+			break
 		}
 		lines = enclosing
 	}
+	if c := m.stickyCache; c != nil {
+		*c = stickyStore{key: key, lines: lines, valid: true}
+	}
+	return lines
+}
+
+// stickyKey is everything stickyLines' fixed-point loop reads: the viewport
+// top and the depth cap (which folds in the pane height and stickyDepth), the
+// buffer line count, and the two versions the scopes move with — scopeEpoch
+// for a parse landing or a reset, docVersion for an edit that shifted the
+// lines the stale scopes still point at.
+type stickyKey struct {
+	top        int
+	max        int
+	lines      int
+	scopeEpoch int
+	docVersion int
+}
+
+// stickyStore memoizes the pinned header lines across Model value copies
+// (#2187); the single-threaded update loop is the only writer.
+type stickyStore struct {
+	key   stickyKey
+	lines []int
+	valid bool
+}
+
+// setScopes replaces the sticky-scroll scopes and invalidates the header memo
+// keyed on them. Every scopes write funnels through here.
+func (m *Model) setScopes(s []highlight.Scope) {
+	m.scopes = s
+	m.scopeEpoch++
 }
 
 // enclosingHeaders returns the header lines of the scopes containing line,

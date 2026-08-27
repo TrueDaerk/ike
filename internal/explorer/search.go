@@ -40,6 +40,16 @@ type searchState struct {
 	query string
 	pos   int // rune cursor inside query (#2002)
 	prev  int // cursor row when the search opened; esc returns here
+
+	// Match memo (#2187): searchLine runs searchMatches per *frame* to render
+	// its counter, and the scan lowercases every flattened row — tens of
+	// thousands on a monorepo — for as long as the field is open. Keyed by
+	// query and the row-set epoch, the widthCache pattern (#1096); held
+	// behind the search pointer so the value-model copies share it.
+	memoValid bool
+	memoQuery string
+	memoEpoch int
+	memo      []int
 }
 
 // Searching reports whether the speed search is open, so the root model can
@@ -163,6 +173,9 @@ func (m Model) searchMatches() []int {
 	if s == nil || s.query == "" {
 		return nil
 	}
+	if s.memoValid && s.memoQuery == s.query && s.memoEpoch == m.rowsEpoch {
+		return s.memo
+	}
 	q := strings.ToLower(s.query)
 	var out []int
 	for i, n := range m.rows {
@@ -170,6 +183,7 @@ func (m Model) searchMatches() []int {
 			out = append(out, i)
 		}
 	}
+	s.memoValid, s.memoQuery, s.memoEpoch, s.memo = true, s.query, m.rowsEpoch, out
 	return out
 }
 

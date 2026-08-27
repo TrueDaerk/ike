@@ -158,3 +158,33 @@ func TestStickyScrollKeepsCursorVisible(t *testing.T) {
 		t.Errorf("cursor line %d still hidden behind %d sticky rows at Top %d", m.cursor.Line, n, m.view.Top)
 	}
 }
+
+// TestStickyLinesMemoized (#2187): View, the scroll paths and the mouse map
+// all ask per frame, and each ask ran the fixed-point loop over every scope.
+// An unchanged viewport serves the memo; a scroll and a fresh parse recompute.
+func TestStickyLinesMemoized(t *testing.T) {
+	m := stickyModel(t)
+	m.view.Top = 10
+	first := m.stickyLines()
+	if len(first) != 2 {
+		t.Fatalf("setup: stickyLines = %v, want two headers", first)
+	}
+	second := m.stickyLines()
+	if &second[0] != &first[0] {
+		t.Fatal("an unchanged viewport must serve the memoized header set")
+	}
+	m.view.Top = 25 // out of the inner scope, still inside the outer one
+	scrolled := m.stickyLines()
+	if len(scrolled) != 1 || scrolled[0] != 0 {
+		t.Fatalf("after scrolling past the inner scope: %v, want [0]", scrolled)
+	}
+	// A parse landing replaces the scopes without bumping the document
+	// version, so the memo has to key on the scope epoch too.
+	m = feedSpans(t, m, highlight.SpansMsg{
+		Path:   "main.go",
+		Scopes: []highlight.Scope{{HeaderLine: 1, EndLine: 30}},
+	})
+	if got := m.stickyLines(); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("fresh scopes must invalidate the memo: %v, want [1]", got)
+	}
+}

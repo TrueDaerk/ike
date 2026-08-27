@@ -14,6 +14,7 @@ package editor
 // when a pane becomes a new view of a document.
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 
@@ -42,13 +43,61 @@ func (m Model) lineHidden(line int) bool {
 	if m.logRunHidden(line) || m.pemHidden(line) {
 		return true
 	}
-	for h, e := range m.folded {
-		if line > h && line <= e {
-			return true
-		}
+	if len(m.folded) == 0 {
+		return false
 	}
-	return false
+	heads, ends := m.foldSpans()
+	// The last header strictly above line; a fold hides line when any fold at
+	// or before that header reaches it, which is exactly the running maximum
+	// of the ends up to that index.
+	i := sort.SearchInts(heads, line) - 1
+	return i >= 0 && ends[i] >= line
 }
+
+// foldSpans returns the collapsed set as an interval index: the header lines
+// ascending, and the running maximum of the fold ends beside them. lineHidden
+// used to scan the whole map per rendered row per frame — a 100k-line file
+// under zM is ~400k map iterations per frame between the View body loop and
+// wrap.DisplayRow (#2187) — so the index is built once per fold mutation
+// (foldEpoch) and shared across the Model's value copies via foldIdx.
+func (m Model) foldSpans() (heads, ends []int) {
+	if c := m.foldIdx; c != nil && c.valid && c.epoch == m.foldEpoch && c.n == len(m.folded) {
+		return c.heads, c.ends
+	}
+	heads = make([]int, 0, len(m.folded))
+	for h := range m.folded {
+		heads = append(heads, h)
+	}
+	sort.Ints(heads)
+	ends = make([]int, len(heads))
+	best := 0
+	for i, h := range heads {
+		if e := m.folded[h]; i == 0 || e > best {
+			best = e
+		}
+		ends[i] = best
+	}
+	if c := m.foldIdx; c != nil {
+		*c = foldIndex{epoch: m.foldEpoch, n: len(m.folded), heads: heads, ends: ends, valid: true}
+	}
+	return heads, ends
+}
+
+// foldIndex memoizes the interval index of the collapsed set across Model
+// value copies (#2187); the single-threaded update loop is the only writer.
+// n guards the epoch against the copies that share a folded map: a mutation
+// that changed the size can never be served under a stale epoch.
+type foldIndex struct {
+	epoch int
+	n     int
+	heads []int
+	ends  []int
+	valid bool
+}
+
+// bumpFolds invalidates the fold interval index. Every mutation of folded
+// funnels through it — the index is only as trustworthy as that funnel.
+func (m *Model) bumpFolds() { m.foldEpoch++ }
 
 // foldedAt returns the end line of the collapsed fold whose header is line.
 func (m Model) foldedAt(line int) (int, bool) {
@@ -183,6 +232,7 @@ func (m *Model) foldCloseAtCursor() {
 		m.folded = make(map[int]int)
 	}
 	m.folded[f.HeaderLine] = f.EndLine
+	m.bumpFolds()
 	if m.cursor.Line != f.HeaderLine {
 		m.moveTo(buffer.Position{Line: f.HeaderLine, Col: m.cursor.Col})
 	}
@@ -194,6 +244,7 @@ func (m *Model) foldCloseAtCursor() {
 func (m *Model) foldOpenAtCursor() {
 	if _, ok := m.folded[m.cursor.Line]; ok {
 		delete(m.folded, m.cursor.Line)
+		m.bumpFolds()
 		return
 	}
 	// Defensive: a cursor inside a collapsed body (programmatic placement)
@@ -206,6 +257,7 @@ func (m *Model) foldOpenAtCursor() {
 	}
 	if best >= 0 {
 		delete(m.folded, best)
+		m.bumpFolds()
 	}
 }
 
@@ -225,11 +277,15 @@ func (m *Model) foldCloseAll() {
 			m.folded[f.HeaderLine] = f.EndLine
 		}
 	}
+	m.bumpFolds()
 	m.snapCursorOut()
 }
 
 // foldOpenAll is zR: open every fold.
-func (m *Model) foldOpenAll() { m.folded = nil }
+func (m *Model) foldOpenAll() {
+	m.folded = nil
+	m.bumpFolds()
+}
 
 // snapCursorOut moves a cursor hidden inside a collapsed fold onto the
 // innermost enclosing header. Each pass moves the cursor to a smaller line
@@ -261,6 +317,7 @@ func (m *Model) unfoldAtCursor() {
 	for h, e := range m.folded {
 		if m.cursor.Line > h && m.cursor.Line <= e {
 			delete(m.folded, h)
+			m.bumpFolds()
 		}
 	}
 }
@@ -298,6 +355,7 @@ func (m *Model) dissolveFoldsAtEdit() {
 	if len(m.folded) == 0 {
 		m.folded = nil
 	}
+	m.bumpFolds()
 }
 
 // reconcileFolds re-anchors this view's collapsed folds against the fold
@@ -323,6 +381,7 @@ func (m *Model) reconcileFolds() {
 			delete(m.folded, h)
 		}
 	}
+	m.bumpFolds()
 }
 
 // resetFolds clears both the fold ranges and this view's collapsed set, for
@@ -332,6 +391,7 @@ func (m *Model) resetFolds() {
 	m.lspFolds = nil  // server ranges belong to the previous document (#1912)
 	m.hostFolds = nil // host ranges likewise (#2029): the host reinstalls them
 	m.folded = nil
+	m.bumpFolds()
 	m.foldLines = m.buf.LineCount()
 }
 

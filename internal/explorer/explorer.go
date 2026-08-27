@@ -139,6 +139,10 @@ type Model struct {
 	// text can change (rebuild, SetSize, Configure).
 	wcache *widthCache
 
+	// rowsEpoch bumps on every rebuild of rows, keying the speed search's
+	// match memo (#2187) — the row set is otherwise identity-less.
+	rowsEpoch int
+
 	// colorGlobs/colorVals index the colour table (#1098): the glob list is
 	// sorted once when the table is (re)built instead of per row per frame,
 	// and colour strings resolve once instead of per lookup.
@@ -503,6 +507,7 @@ func (m *Model) expand(n *node) tea.Cmd {
 // or restored entry once it becomes visible.
 func (m *Model) rebuild() {
 	m.invalidateWidth() // any row-set change can change the content width (#1096)
+	m.rowsEpoch++       // and invalidates the speed search's match memo (#2187)
 	m.rows = m.rows[:0]
 	m.appendVisible(m.root)
 	snapped := false

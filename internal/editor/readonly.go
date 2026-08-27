@@ -66,7 +66,7 @@ func (m *Model) ShowReadOnly(path, text string) {
 	m.conceal = nil
 	m.decodes = nil
 	m.notes = nil
-	m.scopes = nil
+	m.setScopes(nil)
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
