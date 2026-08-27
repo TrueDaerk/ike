@@ -334,6 +334,7 @@ func (m *Model) AppendStream(chunk []byte) {
 		return
 	}
 	follow := m.top >= m.maxTop()
+	first := len(m.rows)
 	m.streamTail += string(chunk)
 	for {
 		nl := strings.IndexByte(m.streamTail, '\n')
@@ -345,11 +346,49 @@ func (m *Model) AppendStream(chunk []byte) {
 		m.rows = append(m.rows, row{kind: kindBody, text: line, body: m.streamBody})
 		m.streamBody++
 	}
-	m.syncVisible()
+	if len(m.rows) == first {
+		return // no completed line yet: nothing changed on screen
+	}
+	// A stream only appends, so the projection and the search extend at the
+	// tail (#2176) instead of recomputing over every row — per-chunk O(all
+	// rows) work made a long stream quadratic in total.
+	m.appendVisible(first)
 	if follow {
 		m.top = m.maxTop()
 	}
-	m.research()
+	m.researchFrom(first)
+}
+
+// appendVisible extends the display projection for rows appended at the tail
+// (#2176). A live stream has no collapsed folds, so the new rows map
+// one-to-one; the folded case (defensive — history browsing ends the stream)
+// falls back to the full rebuild.
+func (m *Model) appendVisible(from int) {
+	if len(m.folded) > 0 {
+		m.syncVisible()
+		return
+	}
+	for i := from; i < len(m.rows); i++ {
+		m.visible = append(m.visible, i)
+	}
+	m.Scroll(0) // the projection grew: clamp the viewport
+}
+
+// researchFrom appends the open query's matches over rows[from:] (#2176) —
+// the streaming tail extension of research: earlier rows cannot change while
+// a stream appends, so only the new rows are searched.
+func (m *Model) researchFrom(from int) {
+	if m.query == "" || from >= len(m.rows) {
+		return
+	}
+	lines := make([]string, 0, len(m.rows)-from)
+	for _, r := range m.rows[from:] {
+		lines = append(lines, r.text)
+	}
+	for _, sp := range search.Compile(m.query, false, search.CaseSmart).AllMatches(buffer.New(lines)) {
+		sp.Line += from
+		m.matches = append(m.matches, sp)
+	}
 }
 
 // Streaming reports whether a live stream is on show (tests).

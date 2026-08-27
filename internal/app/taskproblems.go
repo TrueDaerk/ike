@@ -3,6 +3,7 @@ package app
 import (
 	"path/filepath"
 	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -65,9 +66,17 @@ func resolveMatchers(names []string) []matcher.Matcher {
 	return out
 }
 
+// taskProblemsQuiet is the snapshot coalescing window (#2176): matches inside
+// the window fold into one TaskProblemsMsg, so a build spraying thousands of
+// findings costs one deep copy — and one store replace plus panel refresh on
+// the Update side — per window instead of one per matched chunk, which was
+// O(n²) on both sides of the message.
+const taskProblemsQuiet = 50 * time.Millisecond
+
 // taskCollector accumulates one run's matcher findings. feed runs on the
 // terminal session's feed goroutine, so state is mutex-guarded and results
-// travel to the Update loop as TaskProblemsMsg snapshots.
+// travel to the Update loop as TaskProblemsMsg snapshots, one per quiet
+// window (#2176) — the debugEventCoalescer arrangement.
 type taskCollector struct {
 	mu     sync.Mutex
 	eng    *matcher.Engine
@@ -75,16 +84,17 @@ type taskCollector struct {
 	source string
 	send   func(tea.Msg)
 	byPath map[string][]ilsp.Diagnostic
+	armed  bool
 }
 
-// feed is the session tap: parse the chunk, convert any new problems and
-// publish a snapshot. Chunks without a completed match cost one engine pass
+// feed is the session tap: parse the chunk, convert any new problems and arm
+// the snapshot flush. Chunks without a completed match cost one engine pass
 // and no message.
 func (c *taskCollector) feed(chunk []byte) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	problems := c.eng.Feed(chunk)
 	if len(problems) == 0 {
-		c.mu.Unlock()
 		return
 	}
 	for _, p := range problems {
@@ -105,6 +115,18 @@ func (c *taskCollector) feed(chunk []byte) {
 			Source:   c.source,
 		})
 	}
+	if !c.armed {
+		c.armed = true
+		time.AfterFunc(taskProblemsQuiet, c.flush)
+	}
+}
+
+// flush publishes the accumulated findings as one wholesale snapshot. The
+// timer always fires within one window of the last match, so the final state
+// of a finished run is never withheld.
+func (c *taskCollector) flush() {
+	c.mu.Lock()
+	c.armed = false
 	snapshot := make(map[string][]ilsp.Diagnostic, len(c.byPath))
 	for p, ds := range c.byPath {
 		snapshot[p] = append([]ilsp.Diagnostic(nil), ds...)

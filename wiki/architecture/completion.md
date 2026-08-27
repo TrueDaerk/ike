@@ -189,7 +189,9 @@ names and IDs (regex over `.css`/`.scss`/`.less`), offered inside HTML
 structurally weak at. Freshness mirrors the word index (observed buffers
 override the disk index; lazy re-extraction) plus **watcher invalidation**:
 the app forwards file-change events through `Engine.NotifyFileChanged` to
-sources implementing `FileObserver`, which re-extract off-goroutine. The
+sources implementing `FileObserver`, which re-extract off-goroutine — queued
+behind a **single worker** with per-path dedup (#2176), so a mass checkout
+cannot fan out into hundreds of concurrent disk readers. The
 one-shot background scan is capped tighter (2000 files, 128KB) since each
 file costs a parse.
 

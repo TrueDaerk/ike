@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,14 @@ const (
 type EventMsg struct {
 	Kind Kind
 	Path string
+}
+
+// EventBatchMsg carries one debounce flush whole (#2176): every pending event
+// of the window in one message, so a 300-file git checkout costs the app one
+// Update pass instead of one per path. Events are sorted by path so a flush
+// is deterministic; the paths are independent, so order carries no meaning.
+type EventBatchMsg struct {
+	Events []EventMsg
 }
 
 // debounceWindow coalesces bursts (editors write + rename, git checkouts).
@@ -513,7 +522,8 @@ func mergeKinds(old, next Kind) Kind {
 	return next
 }
 
-// flush emits every pending event as one EventMsg per path. Suppression is
+// flush emits every pending event as one EventBatchMsg (#2176) — one Update
+// pass per debounce window regardless of how many paths changed. Suppression is
 // re-checked here (#1406): the editor writes first and stamps MarkSaved a few
 // milliseconds later, and on macOS fsnotify routinely delivers the write event
 // inside that gap — at note time the epoch is not stamped yet, so the event
@@ -543,12 +553,15 @@ func (s *Service) flush() {
 		}
 	}
 	s.mu.Unlock()
-	if send == nil {
+	if send == nil || len(batch) == 0 {
 		return
 	}
+	events := make([]EventMsg, 0, len(batch))
 	for path, kind := range batch {
-		send(EventMsg{Kind: kind, Path: path})
+		events = append(events, EventMsg{Kind: kind, Path: path})
 	}
+	sort.Slice(events, func(i, j int) bool { return events[i].Path < events[j].Path })
+	send(EventBatchMsg{Events: events})
 }
 
 // absPath normalises a path for epoch/tracking lookups.

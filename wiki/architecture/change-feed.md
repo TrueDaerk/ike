@@ -53,9 +53,14 @@ pre-change text and the noise predicate.
 
 ## Recording (`internal/app/changefeed.go`)
 
-`recordChangeFeed` runs from the root model's `watch.EventMsg` case, **before**
-the event is routed onward — the auto-reload it triggers would otherwise
-overwrite the very buffer the pre-change content is read from.
+`recordChangeFeedBatch` runs from the root model's `watch.EventBatchMsg` case
+(#2176) — `recordChangeFeed` from the single-event `watch.EventMsg` case —
+**before** the events are routed onward: the auto-reload routing triggers
+would otherwise overwrite the very buffer the pre-change content is read
+from. In the batch path only the open-clean-buffer capture runs inline; the
+local-history fallback resolves on a background goroutine (one command per
+flush, entries land via `changeFeedCapturedMsg`), so a 300-file checkout
+never costs 300 disk reads on the Update loop.
 
 - Only file kinds are recorded. `DirChanged`, `GitChanged` and `ConfigChanged`
   name no project file the user edited.

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -120,6 +121,105 @@ func (m *Model) syncOpenChangeFeed() {
 	}
 	m.refreshChangeFeedDiff()
 	m.setChangeFeedContent()
+}
+
+// changeFeedCapturedMsg delivers the off-loop-resolved pre-change contents of
+// a watcher batch (#2176): entries whose Before had to come from the
+// local-history store, read on a background goroutine instead of the Update
+// loop — a 300-file checkout must not cost 300 disk reads mid-render.
+type changeFeedCapturedMsg struct{ entries []changefeed.Entry }
+
+// recordChangeFeedBatch records one watcher flush's file events (#2176). The
+// exact pre-change content — an open, clean buffer — is captured inline (it is
+// about to be overwritten by the auto-reload that routing triggers), while the
+// local-history fallback resolves in the returned command, off the Update
+// loop; its entries land via changeFeedCapturedMsg.
+func (m *Model) recordChangeFeedBatch(events []watch.EventMsg) tea.Cmd {
+	if m.feed == nil {
+		return nil
+	}
+	// The cap is re-read per flush rather than cached: the setting hot-reloads
+	// like every other, and lowering it has to trim the existing list too.
+	m.feed.SetLimit(m.changeFeedLimit())
+	type deferredCapture struct {
+		path string
+		kind changefeed.Kind
+		at   time.Time
+	}
+	var deferred []deferredCapture
+	added := false
+	for _, msg := range events {
+		switch msg.Kind {
+		case watch.FileChanged, watch.FileCreated, watch.FileRemoved:
+		default:
+			continue
+		}
+		// The watcher suppresses IKE's own saves at ingest and again at flush;
+		// re-asking here keeps the feed honest for events that reach the model
+		// by another route — a save must never look like an agent's write.
+		if m.watcher.SavedRecently(msg.Path) {
+			continue
+		}
+		if msg.Kind != watch.FileCreated {
+			if ed := m.editorForPath(msg.Path); ed == nil || ed.Dirty() || ed.Stale() {
+				// No exact buffer content to save from the reload: the honest
+				// fallback is the newest local-history snapshot, which reads
+				// from disk — deferred off-loop.
+				deferred = append(deferred, deferredCapture{path: msg.Path, kind: feedKind(msg.Kind), at: m.clock()})
+				continue
+			}
+		}
+		before, origin := m.changeFeedBefore(msg.Path, msg.Kind)
+		if m.feed.Add(changefeed.Entry{
+			Path:   msg.Path,
+			Time:   m.clock(),
+			Kind:   feedKind(msg.Kind),
+			Before: before,
+			Origin: origin,
+		}) {
+			added = true
+		}
+	}
+	if added {
+		m.syncOpenChangeFeed()
+	}
+	if len(deferred) == 0 {
+		return nil
+	}
+	store := m.lhStore // stateless disk reads — safe off the Update loop
+	return func() tea.Msg {
+		entries := make([]changefeed.Entry, 0, len(deferred))
+		for _, d := range deferred {
+			before, origin := "", changefeed.NoBefore
+			if snaps := store.List(d.path); len(snaps) > 0 {
+				if data, err := store.Read(snaps[0].Hash); err == nil {
+					if text, terr := normalizeBufferText(data); terr == nil {
+						before, origin = text, changefeed.FromSnapshot
+					}
+				}
+			}
+			entries = append(entries, changefeed.Entry{
+				Path: d.path, Time: d.at, Kind: d.kind, Before: before, Origin: origin,
+			})
+		}
+		return changeFeedCapturedMsg{entries: entries}
+	}
+}
+
+// applyChangeFeedCaptured folds the off-loop captures into the feed (#2176).
+func (m *Model) applyChangeFeedCaptured(msg changeFeedCapturedMsg) {
+	if m.feed == nil {
+		return
+	}
+	added := false
+	for _, e := range msg.entries {
+		if m.feed.Add(e) {
+			added = true
+		}
+	}
+	if added {
+		m.syncOpenChangeFeed()
+	}
 }
 
 // changeFeedBefore resolves what the file held before the external write. The

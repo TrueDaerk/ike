@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -114,8 +115,16 @@ func logDebugOutputAt(root string, stderr bool, text string) {
 }
 
 // logDebugSessionStart writes a delimiter line so consecutive sessions stay
-// distinguishable in the transcript (#637).
+// distinguishable in the transcript (#637). The held handle is dropped first
+// (#2176), so a transcript deleted between sessions is recreated instead of
+// the appends vanishing into an unlinked inode.
 func logDebugSessionStart(name string) {
+	transcript.mu.Lock()
+	if transcript.f != nil {
+		_ = transcript.f.Close()
+		transcript.f = nil
+	}
+	transcript.mu.Unlock()
 	appendDebugSessionLog("──── debug session: " + name + " · " + time.Now().Format(time.RFC3339) + " ────\n")
 }
 
@@ -124,18 +133,42 @@ func appendDebugSessionLog(text string) {
 	appendDebugSessionLogTo(debugSessionLogFile(), text)
 }
 
-// appendDebugSessionLogTo appends text to the given transcript file,
-// best-effort.
+// transcript holds the open debug-session.log handle (#2176): a debuggee
+// print loop used to pay MkdirAll+OpenFile+Close per output event on the
+// Update loop, which dominated the per-event cost. The handle stays open
+// across appends and re-opens when the target path changes (a project switch,
+// a parked workspace's transcript); a write failure drops it so the next
+// append retries from scratch. The mutex is defensive — appends run on the
+// Update loop today, but nothing enforces that here.
+var transcript struct {
+	mu   sync.Mutex
+	path string
+	f    *os.File
+}
+
+// appendDebugSessionLogTo appends text to the given transcript file through
+// the held handle, best-effort.
 func appendDebugSessionLogTo(path, text string) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return
+	transcript.mu.Lock()
+	defer transcript.mu.Unlock()
+	if transcript.f == nil || transcript.path != path {
+		if transcript.f != nil {
+			_ = transcript.f.Close()
+			transcript.f = nil
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return
+		}
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return
+		}
+		transcript.f, transcript.path = f, path
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
+	if _, err := transcript.f.WriteString(text); err != nil {
+		_ = transcript.f.Close()
+		transcript.f = nil
 	}
-	defer f.Close()
-	_, _ = f.WriteString(text)
 }
 
 // prefixLines prefixes every non-empty line of s, preserving the trailing

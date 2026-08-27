@@ -122,8 +122,12 @@ spawn.
 
 The collector feeds the engine, resolves relative paths against the run's
 cwd, converts to 0-based `ilsp.Diagnostic`s (Source = the configuration
-name) and publishes the accumulated set as a `TaskProblemsMsg` snapshot per
-matching chunk. The Update loop stores it via
+name) and publishes the accumulated set as a `TaskProblemsMsg` snapshot **per
+~50ms quiet window** (#2176) — not per matching chunk: a broken build
+spraying thousands of findings used to deep-copy the whole map on the feed
+goroutine and re-sort the whole store per chunk, O(n²) on both sides. The
+timer always fires within one window of the last match, so a finished run's
+final state is never withheld. The Update loop stores it via
 `problems.Store.SetTaskSource` — a third channel next to the server and
 lint-note maps, keyed source → path — and refreshes the panel. Every launch
 first runs `ClearTaskSource(cfg.Name)`, so **a re-run replaces its previous

@@ -115,3 +115,54 @@ func TestAppendStreamIgnoredWithoutStream(t *testing.T) {
 		t.Errorf("rows composed without a stream: %d", m.Rows())
 	}
 }
+
+// TestAppendStreamExtendsVisibleAndSearchIncrementally (#2176): appended rows
+// extend the display projection and an open query's matches at the tail — the
+// result must equal what a full recompute would produce.
+func TestAppendStreamExtendsVisibleAndSearchIncrementally(t *testing.T) {
+	m := startStream(t)
+	m.query = "data"
+	m.research()
+	if len(m.matches) != 0 {
+		t.Fatalf("matches before any body: %d", len(m.matches))
+	}
+	base := m.Rows()
+	m.AppendStream([]byte("data: a\nplain\ndata: b\n"))
+	if got := len(m.visible); got != m.Rows() {
+		t.Fatalf("visible = %d entries, want one per row %d", got, m.Rows())
+	}
+	for i, r := range m.visible {
+		if r != i {
+			t.Fatalf("visible[%d] = %d, want identity projection", i, r)
+		}
+	}
+	if len(m.matches) != 2 {
+		t.Fatalf("matches after append = %d, want 2", len(m.matches))
+	}
+	if m.matches[0].Line != base || m.matches[1].Line != base+2 {
+		t.Fatalf("match lines = %d,%d, want %d,%d", m.matches[0].Line, m.matches[1].Line, base, base+2)
+	}
+	// The incremental result matches the full recompute.
+	var inc []int
+	for _, sp := range m.matches {
+		inc = append(inc, sp.Line, sp.Start, sp.End)
+	}
+	m.research()
+	var full []int
+	for _, sp := range m.matches {
+		full = append(full, sp.Line, sp.Start, sp.End)
+	}
+	if len(inc) != len(full) {
+		t.Fatalf("incremental %v != full %v", inc, full)
+	}
+	for i := range inc {
+		if inc[i] != full[i] {
+			t.Fatalf("incremental %v != full %v", inc, full)
+		}
+	}
+	// A second append keeps extending.
+	m.AppendStream([]byte("data: c\n"))
+	if len(m.matches) != 3 {
+		t.Fatalf("matches after second append = %d, want 3", len(m.matches))
+	}
+}

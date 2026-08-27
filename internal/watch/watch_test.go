@@ -24,8 +24,9 @@ func (c *collector) send(msg tea.Msg) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.raw = append(c.raw, msg)
-	if ev, ok := msg.(EventMsg); ok {
-		c.msgs = append(c.msgs, ev)
+	if b, ok := msg.(EventBatchMsg); ok {
+		// One flush = one batch (#2176); tests still assert per-event.
+		c.msgs = append(c.msgs, b.Events...)
 	}
 }
 
@@ -606,5 +607,29 @@ func TestFlushSweepsExpiredEpochs(t *testing.T) {
 	s.mu.Unlock()
 	if n != 0 {
 		t.Fatalf("expired epochs after flush = %d, want 0", n)
+	}
+}
+
+// TestFlushSendsOneBatch (#2176): a multi-path debounce window arrives as one
+// EventBatchMsg — one Update pass for the whole checkout — sorted by path.
+func TestFlushSendsOneBatch(t *testing.T) {
+	s, c := service()
+	s.note("/p/b.go", FileChanged)
+	s.note("/p/a.go", FileCreated)
+	s.note("/p/c.go", FileChanged)
+	c.wait(t, 3)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.raw) != 1 {
+		t.Fatalf("raw messages = %d, want 1 batch", len(c.raw))
+	}
+	b, ok := c.raw[0].(EventBatchMsg)
+	if !ok || len(b.Events) != 3 {
+		t.Fatalf("msg = %#v, want a 3-event batch", c.raw[0])
+	}
+	for i, want := range []string{"/p/a.go", "/p/b.go", "/p/c.go"} {
+		if b.Events[i].Path != want {
+			t.Fatalf("batch order = %v, want sorted by path", b.Events)
+		}
 	}
 }
