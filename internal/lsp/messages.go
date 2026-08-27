@@ -473,11 +473,15 @@ type FormatEdit struct {
 // owning Path, which applies them as one undo unit. Applied, when set, is
 // invoked by the app right after the edits landed in the buffer (or were
 // dropped for lack of a view) — the save chain's edit-applied signal (#1148);
-// plain format/rename deliveries leave it nil.
+// plain format/rename deliveries leave it nil. Amend asks the editor to merge
+// the edits into the change the previous delivery pushed instead of starting a
+// new one — the save chain sets it on the format step when the organize-imports
+// step already rewrote the buffer, so both land as one undo unit (#2253).
 type FormatEditsMsg struct {
 	Path    string
 	Edits   []FormatEdit
 	Applied func()
+	Amend   bool
 }
 
 // RenamePromptMsg asks the app to prompt for a symbol's new name

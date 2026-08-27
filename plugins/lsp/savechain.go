@@ -84,11 +84,14 @@ func (b *bridge) runSaveChain(h host.API, mgr *manager.Manager, req ilsp.SaveCha
 		b.mu.Unlock()
 		h.Send(ilsp.SaveChainDoneMsg{Path: req.Path})
 	}()
+	organized := false
 	if organize {
-		b.organizeImportsStep(h, mgr, req.Path)
+		organized = b.organizeImportsStep(h, mgr, req.Path)
 	}
 	if doFormat {
-		b.formatStep(h, mgr, req)
+		// Amend when the organize step already rewrote the buffer: both
+		// rewrites of one save form a single undo unit (#2253).
+		b.formatStep(h, mgr, req, organized)
 	}
 }
 
@@ -102,25 +105,33 @@ func langIDFor(path string) string {
 
 // organizeImportsStep requests the source.organizeImports actions and applies
 // the first matching one without the picker. Errors and empty answers fall
-// through silently — on a save, "nothing to organize" is the common case.
-func (b *bridge) organizeImportsStep(h host.API, mgr *manager.Manager, path string) {
+// through silently — on a save, "nothing to organize" is the common case. It
+// reports whether it rewrote path's buffer in place, which is what lets the
+// format step amend the same undo unit (#2253); a command-only action, whose
+// edits arrive later as workspace/applyEdit, reports false — there is no
+// change of ours to merge into.
+func (b *bridge) organizeImportsStep(h host.API, mgr *manager.Manager, path string) bool {
 	b.flushChange(path) // the server must hold the latest text (#595)
 	ctx, cancel := context.WithTimeout(context.Background(), saveChainStepTimeout)
 	actions, err := mgr.CodeActionsByKind(ctx, path, protocol.KindSourceOrganizeImports)
 	cancel()
 	if err != nil {
-		return
+		return false
 	}
 	action, ok := pickActionByKind(actions, protocol.KindSourceOrganizeImports)
 	if !ok {
-		return
+		return false
 	}
+	applied := false
 	if action.Edit != nil {
 		// Inline edit first (per spec): the open buffer's portion applies
 		// acked so the next step sees it; other files go the standard route.
 		var rest []manager.FileEdits
 		for _, f := range mgr.ConvertWorkspaceEdit(path, *action.Edit) {
 			if f.Open && f.Path == path {
+				if len(f.Edits) > 0 {
+					applied = true
+				}
 				b.applyEditsAcked(h, path, f.Edits)
 				continue
 			}
@@ -141,6 +152,7 @@ func (b *bridge) organizeImportsStep(h host.API, mgr *manager.Manager, path stri
 			time.Sleep(150 * time.Millisecond)
 		}
 	}
+	return applied
 }
 
 // formatStep resolves the buffer's formatter through the registry (#1401) and
@@ -149,7 +161,7 @@ func (b *bridge) organizeImportsStep(h host.API, mgr *manager.Manager, path stri
 // tracks the file (the organize step's edits are in there), else the buffer
 // snapshot the editor sent with the request (no server means no organize step
 // ran, so it cannot be stale).
-func (b *bridge) formatStep(h host.API, mgr *manager.Manager, req ilsp.SaveChainRequest) {
+func (b *bridge) formatStep(h host.API, mgr *manager.Manager, req ilsp.SaveChainRequest, amend bool) {
 	path := req.Path
 	prov, ok := format.Resolve(langIDFor(path), path)
 	if !ok {
@@ -174,7 +186,7 @@ func (b *bridge) formatStep(h host.API, mgr *manager.Manager, req ilsp.SaveChain
 	if len(edits) == 0 {
 		return
 	}
-	b.applyEditsAcked(h, path, toFormatEdits(edits))
+	b.applyEditsAckedAmend(h, path, toFormatEdits(edits), amend)
 }
 
 // toFormatEdits converts registry edits into the FormatEditsMsg shape.
@@ -194,12 +206,18 @@ func toFormatEdits(edits []format.Edit) []ilsp.FormatEdit {
 // them (FormatEditsMsg.Applied) or the step timeout expires — the chain's
 // edit-applied signal keeping the steps ordered.
 func (b *bridge) applyEditsAcked(h host.API, path string, edits []ilsp.FormatEdit) {
+	b.applyEditsAckedAmend(h, path, edits, false)
+}
+
+// applyEditsAckedAmend is applyEditsAcked with the undo-merge flag: amend
+// folds the delivery into the previous step's history change (#2253).
+func (b *bridge) applyEditsAckedAmend(h host.API, path string, edits []ilsp.FormatEdit, amend bool) {
 	if len(edits) == 0 {
 		return
 	}
 	done := make(chan struct{})
 	var once sync.Once
-	h.Send(ilsp.FormatEditsMsg{Path: path, Edits: edits, Applied: func() {
+	h.Send(ilsp.FormatEditsMsg{Path: path, Edits: edits, Amend: amend, Applied: func() {
 		once.Do(func() { close(done) })
 	}})
 	select {
@@ -224,4 +242,26 @@ func pickActionByKind(actions []protocol.CodeAction, kind string) (protocol.Code
 		}
 	}
 	return protocol.CodeAction{}, false
+}
+
+// organizeImports runs the organize-imports step on demand for the focused
+// buffer — the lsp.organizeImports palette command (#2253). It is the same
+// step the save chain runs (same time box, same never-block rule), just
+// without a save behind it; unlike the save chain it reports why nothing
+// happened, because an explicitly invoked command that stays silent reads as
+// broken.
+func (b *bridge) organizeImports(h host.API) tea.Cmd {
+	b.ensure(h)
+	path, _, _ := b.cur()
+	mgr := b.manager()
+	if path == "" || mgr == nil {
+		h.Notify(host.Info, "organize imports: no file focused")
+		return nil
+	}
+	if !mgr.OrganizeImportsSupported(path) {
+		h.Notify(host.Info, "organize imports: not offered by the language server for this file")
+		return nil
+	}
+	go b.organizeImportsStep(h, mgr, path)
+	return nil
 }

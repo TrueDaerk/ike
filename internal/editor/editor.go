@@ -128,6 +128,12 @@ type Model struct {
 
 	regs *register.Store
 	hist *history.History
+	// textEditSeq is the history seq the last ApplyTextEdits* call left the
+	// buffer at — the anchor ApplyTextEditsAmend merges into, so the save
+	// chain's organize-imports and format steps form one undo unit (#2253).
+	// Any other change in between moves CurrentSeq away and the amend
+	// degrades to a plain push.
+	textEditSeq int
 	// changes is the vim change list (#1174): the ring of recent edit
 	// positions g; / g, walk. Per-view session state like the local marks;
 	// reset wherever the undo history resets.

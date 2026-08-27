@@ -6499,7 +6499,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 					Text: e.Text,
 				}
 			}
-			views[0].ApplyTextEdits(edits)
+			if msg.Amend {
+				// Save chain step 2 (#2253): merge into the organize-imports
+				// change so one undo reverts both.
+				views[0].ApplyTextEditsAmend(edits)
+			} else {
+				views[0].ApplyTextEdits(edits)
+			}
 			// The applying view bypasses its own Update loop, so its stale
 			// highlight/conceal caches must be dropped and a parse scheduled
 			// here (#1683); the change-sync broadcast already does the same
@@ -10942,6 +10948,7 @@ func editorContextItems(conflict bool) []menu.Item {
 		{Title: "Open in Browser", Command: "file.openInBrowser"},
 		{Title: "Show History for Selection", Command: "vcs.historyForSelection"},
 		{Title: "Reformat File", Command: "lsp.format"},
+		{Title: "Organize Imports", Command: "lsp.organizeImports"},
 		{Title: "Run Test at Cursor", Command: "run.testAtCursor"},
 	}
 	if conflict {
