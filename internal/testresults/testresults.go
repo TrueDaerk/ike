@@ -47,6 +47,13 @@ type RerunMsg struct {
 	ID     string
 }
 
+// WatchMsg reports the watch-mode toggle (#2172) to the root model: while On
+// the app re-runs the affected tests after every buffer save. The flag itself
+// lives on the panel — the app reads it back through Watching() — so the mode
+// dies with the pane and is never persisted; the message exists so the toggle
+// can be confirmed with a toast.
+type WatchMsg struct{ On bool }
+
 // CopyMsg asks the root model to put Text on the system clipboard; What names
 // the payload for the confirmation toast ("test result"). The panel emits it
 // instead of writing itself, the seam every pane copy action uses (#2071).
@@ -99,6 +106,11 @@ type Model struct {
 	coverage    float64
 	hasCoverage bool
 
+	// watch is watch mode (#2172): while set, the app re-runs the affected
+	// tests after every save. Per pane and not persisted — closing the panel
+	// destroys the model and with it the mode.
+	watch bool
+
 	// rawMode shows the whole run's raw output in the detail column instead
 	// of the selected test's buffered output ('o' toggles).
 	rawMode bool
@@ -138,6 +150,12 @@ func (m *Model) Running() bool { return m.running }
 
 // ConfigName reports the last run's configuration name (tests, chrome).
 func (m *Model) ConfigName() string { return m.configName }
+
+// Watching reports whether watch mode is on (app, tests).
+func (m *Model) Watching() bool { return m.watch }
+
+// SetWatch sets watch mode explicitly (tests, palette actions).
+func (m *Model) SetWatch(on bool) { m.watch = on }
 
 // StartRun marks a captured run in flight: the summary shows "running…" and
 // the previous results stay visible until the new ones land.
@@ -309,6 +327,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			return emit(RerunMsg{Failed: true})
 		}
 		return nil
+	case "w":
+		m.watch = !m.watch
+		return emit(WatchMsg{On: m.watch})
 	case "t":
 		if r := m.selected(); r != nil && r.RerunID != "" {
 			return emit(RerunMsg{ID: r.RerunID})
@@ -504,8 +525,17 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 		}
 	}
 	head := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(title)
-	return head + lipgloss.NewStyle().Faint(true).Render("   "+state)
+	line := head + lipgloss.NewStyle().Faint(true).Render("   "+state)
+	if m.watch {
+		// The watch badge (#2172) is the mode's only chrome: warning-toned so
+		// it reads as "this pane acts on its own" at a glance.
+		line += lipgloss.NewStyle().Foreground(pal.Warning).Bold(true).Render("   " + watchBadge)
+	}
+	return line
 }
+
+// watchBadge marks an armed watch mode in the summary header (#2172).
+const watchBadge = "WATCH"
 
 // plural renders "1 passed" — the unit is already plural-neutral.
 func plural(n int, unit string) string {
@@ -606,7 +636,11 @@ func (m *Model) footer(pal *theme.Palette) string {
 	if m.rawMode {
 		mode = "raw"
 	}
-	return lipgloss.NewStyle().Faint(true).Render(clipTo(" enter open · y copy · r rerun · f rerun failed · t rerun test · o "+mode+" · tab pane", m.width))
+	watch := "watch"
+	if m.watch {
+		watch = "watch on"
+	}
+	return lipgloss.NewStyle().Faint(true).Render(clipTo(" enter open · y copy · r rerun · f rerun failed · t rerun test · w "+watch+" · o "+mode+" · tab pane", m.width))
 }
 
 // statusGlyph maps an outcome to its marker.

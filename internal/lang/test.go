@@ -376,3 +376,25 @@ func expandTestArgv(tpl []string, name string, cmd []string, file string) []stri
 	}
 	return out
 }
+
+// TestDirScoped reports whether path's language runs its file-scope tests
+// over the whole directory rather than one file — its FileArgv names no
+// {file}, so the argv (`go test`, with cwd = the file's directory) targets
+// the package every file in it belongs to. Watch mode (#2172) uses it to map
+// an arbitrary saved source file onto the affected test target: unlike
+// testSpecFor this deliberately ignores FilePattern, because the saved file
+// is usually *not* a test file. A language whose file scope is the file
+// itself (pytest's `pytest {file}`) reports false — saving foo.py says
+// nothing about which test file covers it.
+func TestDirScoped(path string) bool {
+	l, found := ByPath(path)
+	if !found || l.Test == nil || len(l.Test.FileArgv) == 0 || l.Test.ParseOutput == nil {
+		return false
+	}
+	for _, a := range l.Test.FileArgv {
+		if strings.Contains(a, "{file}") {
+			return false
+		}
+	}
+	return true
+}

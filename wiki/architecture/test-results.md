@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Test Results Tool Window
-description: Singleton bottom-split pane showing a captured test run as a structured tree — group → test → subtest with pass/fail/skip glyphs, durations and a summary line, a detail column with the selected test's output, jump-to-failure, and re-run all / failed / single actions; fed by a per-language output-parser seam on lang.TestSpec — Go, pytest and PHPUnit (#1911, #1926).
+description: Singleton bottom-split pane showing a captured test run as a structured tree — group → test → subtest with pass/fail/skip glyphs, durations and a summary line, a detail column with the selected test's output, jump-to-failure, and re-run all / failed / single actions and a save-triggered watch mode; fed by a per-language output-parser seam on lang.TestSpec — Go, pytest and PHPUnit (#1911, #1926, #2172).
 resource: internal/testresults/testresults.go
 tags: [architecture, tests, run, tool-window, pane, languages]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Test Results Tool Window (#1911)
@@ -130,10 +130,60 @@ two-column render (tree │ detail) is the debug panel's row-wise join.
   "copied test result". It copies the marked row in both columns — the detail
   text scrolls, it is not marked.
 - `r` re-runs everything, `f` only the failed set, `t` the selected test.
+- `w` toggles **watch mode** (#2172) — see below.
 - `o` toggles the detail column between the selected test's output and the
   whole run's raw output.
 - The wheel scrolls the focused column; a click right of the separator moves
   the scroll focus to the detail column.
+
+## Watch mode (#2172)
+
+`w` arms watch mode: while it is on, the panel's summary header carries a
+warning-toned `WATCH` badge and **every buffer save re-runs the affected
+tests**. The state is a plain flag on `testresults.Model` — per pane, never
+persisted — so closing the pane ends the mode, and a second pane in another
+workspace has its own. The panel emits `testresults.WatchMsg` only so the
+toggle can be confirmed with a toast; the app reads the flag back through
+`Watching()`.
+
+The driver is `internal/app/testwatch.go`. The editor emitter's save fan-out
+gained one more message (`testWatchSavedMsg`, alongside the TODO index, Local
+History and VCS invalidation sends), so *every* save flow — manual write, Save
+All, autosave — feeds it; the handler is a cheap no-op while the mode is off
+or the pane closed.
+
+**Scope resolution.** The saved file is mapped onto the test target to re-run:
+
+- it *is* a test file of a language with a parser → its own scope;
+- its language's file scope *is* the directory (`lang.TestDirScoped`: the
+  `TestSpec.FileArgv` names no `{file}`, so the argv targets the package every
+  file in the directory belongs to — Go's `go test`) → the first test file of
+  the saved file's directory, i.e. **the saved file's package**;
+- otherwise → fall back to re-running the last run's own scope. That is what a
+  file-scoped language like pytest gets: saving `foo.py` says nothing about
+  which test file covers it. Saves outside the last run's project root and
+  packages holding no test file fall back the same way.
+
+`TestDirScoped` deliberately ignores `FilePattern` — the saved file is usually
+*not* a test file. A resolved scope becomes the last test run, so the panel's
+`r`/`f`/`t` afterwards act on the watched target.
+
+**Calm by construction.** Three rules keep a watch run from stampeding:
+
+- **Debounce** — a save arms a 400 ms timer carrying a generation counter; a
+  later save bumps the counter, so the superseded timers fire into the void
+  and a burst of saves (a Save All, a formatter rewrite) collapses into one
+  run.
+- **In-flight guard** — an expiring timer never starts a run while one is
+  running; it writes the scope into a **single** queue slot instead, so any
+  number of saves during a long run produce exactly one follow-up. Draining
+  happens in `finishTestRun`, batched next to the coverage handling.
+- **No store churn** — unlike `launchTestRun`, a watch run neither touches the
+  run store nor announces its command line. It is background activity, not a
+  user-started run.
+
+Disarming (`w` again) drops both the pending scope and the queue, so a run
+armed a moment ago never fires behind the user's back.
 
 ## Persistence & settings
 
