@@ -4,7 +4,7 @@ title: Custom TUI Tool Panes
 description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning runtime tool opens to exact layout positions (#1897; #1946 adds `terminal`/`run`/`debug` as assignable targets; since #2042 saved layouts win over the template on apply), global process-wide instances shared across workspaces (#1890) whose panes follow project switches grouped at their configured positions (#1903, #2042) and return to the pane the project's saved layout recorded (#2141), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, and the built-in Run tool that owns run output (#1905)."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
-timestamp: 2026-08-21T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Custom TUI Tool Panes (#741)
@@ -419,7 +419,9 @@ composited on top — `<name> exited (code N)` plus the `[ Restart (r) ]` and
 with the same directory and environment; `ctrl+w` or the close button
 removes the pane. A pane too small for the dialog falls back to a one-line
 footer with the same actions. Run command sessions keep their existing
-stay-open behavior; plain shell terminals still close on exit.
+stay-open behavior; plain shell terminals still close on exit. The pane title
+carries the finished state too (#2192) — `⚙ NAME ✗ exited (code N)` — and a
+tool hosted as a *tab* marks its segment with the bare `✗` glyph.
 
 The exited pane is a **read-only view of the finished run** (#1951), not a
 half-dead one: the output stays selectable and the copy chord (cmd+c) copies

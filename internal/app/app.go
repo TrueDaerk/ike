@@ -2745,7 +2745,11 @@ func (m Model) terminalFocused() bool {
 		return false
 	}
 	t := inst.ActiveTerminal()
-	return t != nil && t.Running()
+	// Exited(), not Running(): a pipe session past FinishPipe (#1370) keeps
+	// its emulator open — the debuggee is gone all the same, so the finished
+	// DAP console must fall back to normal key handling like every other
+	// finished session, or ctrl+w could never close it (#2192).
+	return t != nil && !t.Exited()
 }
 
 // focusedDeadTerminal returns the focused pane's terminal when its session
@@ -2762,7 +2766,7 @@ func (m Model) focusedDeadTerminal() *terminal.Model {
 		return nil
 	}
 	t := inst.ActiveTerminal()
-	if t == nil || t.Running() {
+	if t == nil || !t.Exited() {
 		return nil
 	}
 	return t
@@ -2792,7 +2796,7 @@ func (m Model) terminalTitle(inst *pane.Instance) string {
 	for _, mp := range activeMappings() {
 		title += " · " + mp.Lang + "→" + project.CompactPath(mp.Interpreter)
 	}
-	return title
+	return title + termExitedTitle(t)
 }
 
 // displayDir shortens a directory for chrome: the base name when it is the
@@ -11625,7 +11629,7 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 				if term.Tool() != "" {
 					title = toolPaneTitle(term)
 				} else {
-					title = "TERMINAL — " + inst.Tab(inst.ActiveTab()).Title()
+					title = "TERMINAL — " + inst.Tab(inst.ActiveTab()).Title() + termExitedTitle(term)
 				}
 			}
 			if c := inst.ActiveContent(); c != nil {
@@ -11651,7 +11655,10 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 		case pane.KindVCS:
 			title = "VCS"
 		case pane.KindDebug:
-			title = "DEBUG"
+			// The combined area (#2190) keeps its console reviewable after
+			// the debuggee ended; the chrome names that state (#2192) so the
+			// pane is not mistaken for a live session.
+			title = "DEBUG" + termExitedTitle(inst.Debug().Term())
 		case pane.KindProblems:
 			title = "PROBLEMS"
 		case pane.KindTests:

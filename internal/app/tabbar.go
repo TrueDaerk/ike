@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/pane"
+	"ike/internal/terminal"
 	"ike/internal/theme"
 )
 
@@ -43,6 +44,27 @@ const (
 // merely re-colors the glyph in Accent.
 const tabPinPrefix = "• "
 
+// termExitedGlyph marks a finished terminal in the chrome (#2192) — the tab
+// segment's compact form of the body's [process exited] line, so the state is
+// readable from the title row alone. That matters most where the body may be
+// scrolled away or covered: popup-layer boxes and floating panels title
+// themselves with nothing else.
+const termExitedGlyph = "✗"
+
+// termExitedTitle is the title-row suffix for a finished terminal, "" while
+// the session runs: the marker plus the word (and the exit code when the
+// session recorded one). Pane titles have room for it; tab segments use the
+// bare glyph.
+func termExitedTitle(t *terminal.Model) string {
+	if t == nil || !t.Exited() {
+		return ""
+	}
+	if code, ok := t.ExitCode(); ok {
+		return " " + termExitedGlyph + " exited (code " + strconv.Itoa(code) + ")"
+	}
+	return " " + termExitedGlyph + " exited"
+}
+
 // tabBar returns the rendered tab bar for an editor pane fitting width cells,
 // and whether the bar (rather than the plain title) should be shown.
 func (m Model) tabBar(inst *pane.Instance, width int) (string, bool) {
@@ -76,10 +98,16 @@ func tabLabels(inst *pane.Instance) []string {
 		if t := inst.Tab(i); t != nil && t.IsTerminal() {
 			// Terminal tabs (#573) label themselves: OSC title or shell
 			// name; a tool session (#741) keeps its tool glyph (#836).
-			if tt := t.Terminal(); tt != nil && tt.Tool() != "" {
+			tt := t.Terminal()
+			if tt != nil && tt.Tool() != "" {
 				name = "⚙ " + t.Title()
 			} else {
 				name = "⌨ " + t.Title()
+			}
+			// A finished session marks its segment (#2192) — the tab bar is
+			// often the only chrome a popup-layer box shows.
+			if tt != nil && tt.Exited() {
+				name += " " + termExitedGlyph
 			}
 		} else if t := inst.Tab(i); t != nil && t.Content() != nil {
 			// Content tabs (#1778) label themselves too: a kind glyph plus
