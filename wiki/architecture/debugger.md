@@ -42,9 +42,11 @@ other adapter.
   debug area's console view via runInTerminal (#625/#1370/#2190), so
   interactive and TUI programs get a real tty.
 - A real-delve end-to-end test (`debug_e2e_test.go`) exercises conditional
-  breakpoints, logpoints, evaluate and stepping; it self-skips without dlv.
+  breakpoints, logpoints, evaluate and stepping; `debug_hitcount_e2e_test.go`
+  adds the hit count (#2245). Both self-skip without dlv — and on macOS
+  without developer mode.
 
-## Breakpoint refinements: conditions, hit counts, logpoints (#1914)
+## Breakpoint refinements: conditions, hit counts, logpoints (#1914, #2245)
 
 The store (#577) attaches an optional `debug.Meta{Condition, HitCondition,
 LogMessage}` per breakpoint (`SetMeta`/`MetaAt`; `EnabledSpecs` is what
@@ -52,10 +54,11 @@ adapters receive). Persistence adds a backward-compatible `"meta"` field to
 `.ike/breakpoints.json`; `AdjustEdit` shifts refinements with their line like
 the disabled flag, and removing a breakpoint drops them.
 
-In the Breakpoints tool window `c`, `n` and `l` open a one-line editor
-prefilled with the current value; it shares the same input helpers as the
-variables editor (`ui.EditKey`, #2002), so word motions, the `opt`/`cmd`
-kills and `cmd+v` all work there too.
+`Meta.Kind()` (`internal/debug/validate.go`) classifies a breakpoint for every
+rendering surface — `KindPlain`, `KindConditional` (condition and/or hit
+count), `KindLogpoint` (a log message wins: it logs instead of stopping) —
+and `Breakpoints.ConditionalLines`/`LogpointLines` are the per-file subsets
+the gutter queries.
 
 On the wire, `dap.SourceBreakpoint` carries `condition`/`hitCondition`/
 `logMessage`, and **`Session.SetBreakpoints` strips fields the adapter did
@@ -66,13 +69,67 @@ refinement degrades to a plain stop instead of a silently missing breakpoint.
 The DBGp bridge advertises none of the three: PHP breakpoints stop
 unconditionally; delve and debugpy support all three.
 
-The Breakpoints window (#1377) edits and shows them: `c` condition · `n` hit
-count · `l` log message open an inline one-line editor on the row (enter
-applies — an emptied field clears — esc cancels; the commit is a
-`SetMetaMsg` the root model applies, persists and syncs to a live session
-like every other mutation). Rows render `if …` / `hit …` / `log "…"`
-suffixes; a logpoint's glyph is `◆` in the warning tone (`◇` disabled) — it
-logs instead of stopping.
+### Glyphs
+
+The gutter and the Breakpoints list draw the same three pairs, filled when
+armed and hollow when disabled (#1377/#2245), so a breakpoint's kind reads at
+a glance:
+
+| Kind | Enabled | Disabled | Tone |
+| --- | --- | --- | --- |
+| plain | `●` | `○` | error |
+| conditional (condition and/or hit count) | `◉` | `◎` | error |
+| logpoint (log message) | `◆` | `◇` | warning |
+
+The editor gets them through two injected line sources next to the existing
+ones (`SetBreakpointConditionalSource`, `SetBreakpointLogpointSource` —
+`breakpointHooks` returns all four plus the adjuster); the paused-line `▶`
+still outranks every breakpoint glyph.
+
+### Editing
+
+Two surfaces edit the same `Meta`, both pure consumers that leave the mutation
+to the root model:
+
+- **Inline, one field at a time** (#1914) in the Breakpoints window: `c`
+  condition · `n` hit count · `l` log message open a one-line editor on the
+  row (enter applies — an emptied field clears — esc cancels; the commit is a
+  `SetMetaMsg`). It shares the input helpers of the variables editor
+  (`ui.EditKey`, #2002), so word motions, the `opt`/`cmd` kills and `cmd+v`
+  work there too. Rows render `if …` / `hit …` / `log "…"` suffixes.
+- **The properties form** (#2245, `internal/app/breakpoint_form.go`) shows all
+  three fields at once in the shell dialog the run-configuration form uses
+  (#2173): `p` on a list row, `debug.breakpointProperties` (cmd/ctrl+alt+f8,
+  palette, Run menu) on the editor's cursor line — JetBrains' *Edit
+  Breakpoint*. tab/↑↓ moves between fields, enter applies, esc cancels; a line
+  without a breakpoint answers with a notice instead of opening.
+
+**Validation** lives next to the store (`debug.ValidateCondition`,
+`ValidateHitCondition`, `ValidateLogMessage`), so both surfaces reject the
+same input with the same wording *before* it reaches an adapter that would
+answer with an opaque `setBreakpoints` error. A field holding only whitespace
+is rejected as "empty but enabled" — clearing it is how a refinement is
+dropped; a hit count must be a number optionally prefixed by `>`, `>=`, `<`,
+`<=`, `==` or `%` (`"5"`, `">3"`, `"%2"`); a log message must have balanced,
+non-empty, non-nested `{expr}` placeholders. A rejected value keeps its editor
+open with the reason (`✗ …` inline, `E: …` in the form) and the focus on the
+offending field.
+
+### The capability gate
+
+Refinement editing is gated on the live adapter (#2245). `Model.breakpointCaps`
+reads the session's three capability flags — `breakpanel.FullCaps()` when no
+session runs, since the store is edited offline all the time and the session
+strips what it cannot honour at push time. With a session:
+
+- the list's `c`/`n`/`l` refuse an unadvertised field and emit a
+  `breakpanel.NoticeMsg` the root model shows ("adapter does not support …"),
+- the form renders that field as `(unsupported by adapter)` — the stored value
+  stays visible but read-only, tab skips it, and a toast names what is
+  disabled when the form opens,
+- session start warns once when the store already holds refinements this
+  adapter will drop ("… — those breakpoints stop unconditionally"), and pushes
+  the breakpoints anyway, so an unsupported capability never breaks a session.
 
 ## Watch expressions (#1914, persisted #2174)
 
@@ -511,7 +568,8 @@ double-click) jumps through the standard open funnel, space (or a click on
 the glyph cell) toggles enable/disable, `y` (or `cmd+c`/`super+c`) copies the
 marked row — `path:line` plus preview and refinements, a header its path,
 via `breakpanel.CopyMsg` and the shared `copyToClipboard` seam (#2071; `c` is
-the condition editor here, so only the chord aliases `y`) — `d` deletes,
+the condition editor here, so only the chord aliases `y`) — `p` opens the
+properties form (#2245), `d` deletes,
 `D` deletes all — each
 action is a message the root model handles (`handleBreakpanelMsg`), which
 mutates the store, saves, refreshes the panel and syncs a live session, so

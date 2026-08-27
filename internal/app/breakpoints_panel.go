@@ -84,6 +84,9 @@ func (m *Model) wireBreakpointsPanel(p *breakpanel.Model) {
 	p.SetPreview(func(path string, line int) string {
 		return markPreview(fileLine(m.bpAbsPath(path), line))
 	})
+	// The refinement fields are gated on the live adapter's capabilities
+	// (#2245); without a session every field is editable.
+	p.SetCaps(m.breakpointCaps())
 	p.SetStore(m.bpts)
 }
 
@@ -92,6 +95,7 @@ func (m *Model) wireBreakpointsPanel(p *breakpanel.Model) {
 // closed panel costs nothing.
 func (m *Model) refreshBreakpointsPanel() {
 	if p := m.breakpointsPanel(); p != nil {
+		p.SetCaps(m.breakpointCaps())
 		p.Refresh()
 	}
 }

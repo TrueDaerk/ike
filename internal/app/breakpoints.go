@@ -29,16 +29,29 @@ func bpKey(path string) string {
 	return abs
 }
 
-// breakpointHooks returns the editor-facing source, disabled-subset and
-// adjuster closures. They capture the store pointer, not the model value, so
-// every view shares the live set.
-func breakpointHooks(bpts *debug.Breakpoints) (source, disabled func(string) []int, adjust func(string, int, int)) {
-	source = func(path string) []int { return bpts.Lines(bpKey(path)) }
-	disabled = func(path string) []int { return bpts.DisabledLines(bpKey(path)) }
-	adjust = func(path string, cursorAfter, delta int) {
-		bpts.AdjustEdit(bpKey(path), cursorAfter, delta)
+// bpHooks bundles the editor-facing breakpoint callbacks: the line sources
+// the gutter renders (all lines, the disabled subset, and the conditional and
+// logpoint subsets that pick their own glyph, #2245) plus the edit adjuster.
+type bpHooks struct {
+	source      func(string) []int
+	disabled    func(string) []int
+	conditional func(string) []int
+	logpoints   func(string) []int
+	adjust      func(string, int, int)
+}
+
+// breakpointHooks returns those closures. They capture the store pointer, not
+// the model value, so every view shares the live set.
+func breakpointHooks(bpts *debug.Breakpoints) bpHooks {
+	return bpHooks{
+		source:      func(path string) []int { return bpts.Lines(bpKey(path)) },
+		disabled:    func(path string) []int { return bpts.DisabledLines(bpKey(path)) },
+		conditional: func(path string) []int { return bpts.ConditionalLines(bpKey(path)) },
+		logpoints:   func(path string) []int { return bpts.LogpointLines(bpKey(path)) },
+		adjust: func(path string, cursorAfter, delta int) {
+			bpts.AdjustEdit(bpKey(path), cursorAfter, delta)
+		},
 	}
-	return source, disabled, adjust
 }
 
 // toggleBreakpoint flips path:line (0-based) and persists the store.

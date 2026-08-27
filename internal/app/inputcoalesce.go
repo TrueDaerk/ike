@@ -207,7 +207,8 @@ func (m Model) overlayCapturesAbovePopup() bool {
 		m.finder.IsOpen() || m.todo.IsOpen() || m.undoTree.IsOpen() ||
 		m.callhier.IsOpen() || m.typehier.IsOpen() || m.palette.IsOpen() ||
 		m.recoveryOpen() || m.onboardingOpen() || m.conflictOpen() ||
-		m.runConfigFormOpen() || m.revertPromptOpen() || m.depEditPromptOpen() ||
+		m.runConfigFormOpen() || m.breakpointFormOpen() ||
+		m.revertPromptOpen() || m.depEditPromptOpen() ||
 		m.switchPromptOpen() || m.switchBlockedPromptOpen() ||
 		m.closePromptOpen() || m.forgeEditDialogOpen()
 }

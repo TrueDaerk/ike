@@ -171,9 +171,10 @@ var reachableAlternatives = map[string]string{
 	// delivered) and the cmd+F primaries need the Kitty protocol, so these
 	// commands have no delivered chord there; off macOS the ctrl forms
 	// deliver and these entries go unused.
-	"debug.stop":             "palette / Run menu",
-	"debug.toggleBreakpoint": "palette / Run menu",
-	"run.rerun":              "palette / Run menu",
+	"debug.stop":                 "palette / Run menu",
+	"debug.toggleBreakpoint":     "palette / Run menu",
+	"debug.breakpointProperties": "palette / Run menu",
+	"run.rerun":                  "palette / Run menu",
 	// #2081: coverage runs and the mark toggle are palette-only — the run
 	// family's chord budget is spent and coverage is an occasional action.
 	"run.testsWithCoverage": "palette",
