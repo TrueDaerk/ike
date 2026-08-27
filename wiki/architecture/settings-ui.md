@@ -213,7 +213,8 @@ any entry whose key the typed schema does not expose (no dead keys).
   `keymap.which_key_delay_ms`, the pending time before it opens (see
   [keybindings](./keybindings.md)). The bindings themselves stay on the custom
   **Keymap** page.
-- **Files & Session** — restore last project, project directory, recent-project
+- **Files & Session** — restore last project, auto-save on project switch
+  (#2186), project directory, recent-project
   and background-workspace caps plus the background LSP timeout (#1663),
   `files.watch`, `files.auto_reload` (clean|never, #81),
   `files.persistent_undo` (undo survives restarts, #148).

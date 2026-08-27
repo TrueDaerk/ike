@@ -305,6 +305,36 @@ subsystem (it must not import editor/explorer), the root model routes:
    `SwitchedMsg` toasts; the recorded write triggers a config reload so the
    picker's in-memory history is already current.
 
+**Auto-save on switch (#2186).** With `project.auto_save_on_switch` on (the
+default, JetBrains' behaviour) an orderly switch first writes the departing
+project's edits — `handleSwitchProject` runs the gate in
+`internal/app/switch_autosave.go` before `performSwitch` ever chdirs:
+
+- Every dirty **file-backed** buffer of the active workspace (background tabs
+  included, shared documents once) is saved through the *manual* save action
+  (`write`), so **format-on-save**, organize-imports-on-save and the other
+  save hooks run exactly as on a `:w`. That path is asynchronous when the save
+  chain applies (#1148), and a parked workspace's editors are cut loose from
+  the model's services — a chain completing after the swap would never write.
+  The gate therefore parks the switch (`autoSaveSwitch`) until the last
+  `ilsp.SaveChainDoneMsg` lands, with a 3s backstop that writes whatever is
+  still pending raw (format skipped) so a wedged server can never strand the
+  switch.
+- Buffers with no writable home never block it silently: **untitled** ones, a
+  **read-only** buffer (#1762) and one **changed on disk** since the edits (a
+  stale buffer, whose overwrite is the conflict guard's decision, not the
+  switch's) — plus anything whose write failed — are collected into **one**
+  dialog naming each buffer and its reason: `[s]` save as… (names the untitled
+  buffers one at a time through the #730 prompt, re-running the gate after
+  each answer — a cancelled prompt brings the dialog back rather than
+  dead-ending), `[d]` switch anyway (they park unsaved with this workspace),
+  `[esc]` cancel — the project stays, nothing is lost.
+- `false` restores the pre-#2186 behaviour: dirty buffers simply park with
+  their workspace (#777). The gate is on the plain `project.switch` path only;
+  a quick peek (#2136), `project.close` and the peek-return keep their own
+  busy guards, whose explicit save/discard answer must not be second-guessed.
+- Settings UI: "Files & Session" → *Auto-save on project switch* (user scope).
+
 **Global tool panes follow the switch (#1890, #1903, #2042).** A
 `[[tools.custom]]` tool marked `global = true` detaches from the departing
 workspace right after the chdir (`detachGlobalTools`) — its one process-wide

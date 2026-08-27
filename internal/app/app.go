@@ -635,6 +635,17 @@ type Model struct {
 	// answer (Roadmap 0090, #3) while the shell shows the save-all / discard /
 	// cancel prompt; "" when no switch is gated.
 	switchPending string
+	// autoSaveSwitch is the project switch parked behind the in-flight
+	// save chains of the auto-save-on-switch gate (#2186); nil when no
+	// switch waits for a write.
+	autoSaveSwitch *autoSaveSwitch
+	// switchBlocked is the aggregated dialog state of that gate (#2186): the
+	// pending root plus the buffers that could not be written.
+	switchBlocked *blockedSwitch
+	// switchSaveAsRoot is the pending switch root while the save-as prompt
+	// names one of those buffers (#2186); "" when the prompt was not opened
+	// by the gate.
+	switchSaveAsRoot string
 	// evictPending is the busy LRU background workspace root awaiting the
 	// eviction-guard answer (0370 M4, #780).
 	evictPending string
@@ -6358,7 +6369,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, c)
 			}
 		}
+		// A project switch parked behind these writes resumes as soon as the
+		// last chain landed (#2186).
+		if next, cmd, handled := m.resumeSwitchAutoSave(); handled {
+			return next, tea.Batch(append(cmds, cmd)...)
+		}
 		return m, tea.Batch(cmds...)
+
+	case autoSaveSwitchTimeoutMsg:
+		// The auto-save gate waited long enough for the save chains (#2186):
+		// write what is still parked raw and switch.
+		return m.forceSwitchAutoSave()
 
 	case ilsp.ReferencesMsg:
 		// lsp.references (alt+f7 / palette): nothing found is a toast, a single
@@ -6958,6 +6979,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// keyboard the same way: s / d / esc answer it.
 		if m.switchPromptOpen() {
 			return m.updateSwitchPrompt(msg)
+		}
+		// The aggregated auto-save dialog before a project switch (#2186):
+		// s / d / esc answer it.
+		if m.switchBlockedPromptOpen() {
+			return m.updateSwitchBlockedPrompt(msg)
 		}
 		// The background-workspace eviction guard (0370 M4, #780): e / esc.
 		if m.evictPromptOpen() {

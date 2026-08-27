@@ -891,6 +891,13 @@ type Project struct {
 	// ("5m", "90s"); empty selects the default (5m), "off"/"0" disables the
 	// shutdown (servers run for as long as the workspace stays parked).
 	BackgroundLSPTimeout string `toml:"background_lsp_timeout"`
+	// AutoSaveOnSwitch writes every dirty file-backed buffer of the departing
+	// project before an orderly project switch (#2186), the way JetBrains
+	// does — the switch itself never asks. Buffers that have no writable home
+	// (untitled, read-only, changed on disk since the edits) are collected
+	// into one decision dialog instead. False restores the pre-#2186
+	// behaviour: dirty buffers simply park with their workspace.
+	AutoSaveOnSwitch bool `toml:"auto_save_on_switch"`
 	// Directory is the default parent for projects IKE creates itself —
 	// today the clone target of project.clone (#1349), mirroring JetBrains'
 	// ~/IdeaProjects. A leading `~` is expanded; empty selects the built-in

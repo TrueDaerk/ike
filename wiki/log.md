@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-27 (Auto-save dirty buffers on project switch, #2186)
+
+- **The gate** (`internal/app/switch_autosave.go`): with
+  `project.auto_save_on_switch` on (new, default `true`) an orderly
+  `project.switch` writes every dirty file-backed buffer of the departing
+  workspace *before* `performSwitch` chdirs — through the **manual** save
+  action, so format-on-save and organize-imports-on-save run as on a `:w`.
+- **Why it has to wait**: that path is async when the save chain applies
+  (#1148) and a parked workspace's editors are cut loose from the model's
+  services, so a chain finishing after the swap would never write. The switch
+  parks until the last `SaveChainDoneMsg`, with a 3s backstop that writes what
+  is still pending raw.
+- **One dialog for the rest**: untitled, read-only and stale ("changed on
+  disk" — overwriting is the conflict guard's call) buffers, plus failed
+  writes, aggregate into a single decision prompt — `[s]` save as… (loops
+  through the untitled ones and re-runs the gate after each answer), `[d]`
+  switch anyway, `[esc]` cancel.
+- **Deliberately scoped to the plain switch**: peek-enter, `project.close` and
+  peek-return keep their own busy guards, whose explicit save/discard answer
+  the gate must not overrule.
+- The `switchModel` test fixture now turns the setting off — those tests are
+  about #777's seamless parking, which is exactly what the gate would write
+  away; `autoSaveSwitchModel` is the on flavour.
+
 ## 2026-08-27 (Investigate: .http highlighting after a failed request line, #2226)
 
 - **The report**: in a ~205-line `.http` file, everything from a

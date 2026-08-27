@@ -30,10 +30,18 @@ import (
 // workspace (buffers included) parks in the background and comes back on the
 // next switch; the unsaved-changes prompt returns as the M4 eviction guard
 // (#780).
+//
+// With project.auto_save_on_switch on (#2186, the default) the switch first
+// runs the auto-save gate (switch_autosave.go): the departing project's dirty
+// buffers are written like a manual save, and only buffers with no writable
+// home reach a dialog. Off, the switch runs unguarded as before.
 func (m Model) handleSwitchProject(msg project.SwitchProjectMsg) (tea.Model, tea.Cmd) {
 	if cwd, err := os.Getwd(); err == nil && cwd == msg.Root {
 		m.host.Notify(host.Info, "already in "+msg.Root)
 		return m, nil
+	}
+	if m.autoSaveOnSwitch() {
+		return m.beginSwitchAutoSave(msg.Root)
 	}
 	return m.performSwitch(msg.Root)
 }

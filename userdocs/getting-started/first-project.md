@@ -21,7 +21,13 @@ what per-project settings and session state attach to.
     on the command line also counts as explicit.
 
 To switch projects later without leaving the IDE, use **Switch project**
-(++cmd+shift+p++), which offers your recent-projects history.
+(++cmd+shift+p++), which offers your recent-projects history. Switching saves
+your edits first — every modified file writes itself, format-on-save and all,
+before the other project opens. Buffers that have nowhere to go (an untitled
+buffer, a read-only one, or a file changed on disk behind your back) are
+collected into a single dialog where you can name them, switch anyway, or
+cancel. Turn the whole behaviour off with `project.auto_save_on_switch` if you
+prefer your unsaved edits to just stay put.
 
 ## The welcome tour
 

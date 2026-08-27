@@ -77,6 +77,12 @@ func (m Model) updateSaveAsPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case msg.Code == tea.KeyEscape:
 		closePrompt()
+		// A switch waiting on this name (#2186) re-runs its gate: the buffer
+		// is still unnamed, so the aggregated dialog comes back rather than
+		// the cancelled prompt dead-ending the switch.
+		if next, cmd, handled := m.resumeSwitchAfterSaveAs(); handled {
+			return next, cmd
+		}
 		return m, nil
 	case msg.Code == tea.KeyEnter:
 		name := strings.TrimSpace(m.saveAsInput)
@@ -98,6 +104,11 @@ func (m Model) updateSaveAsPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		closePrompt()
 		cmd := m.bindUntitled(key, path)
+		// A switch waiting on this name (#2186) re-runs its gate: one blocker
+		// less, so it either switches now or names the next buffer.
+		if next, resume, handled := m.resumeSwitchAfterSaveAs(); handled {
+			return next, tea.Batch(cmd, resume)
+		}
 		if cmd == nil {
 			return m, nil
 		}
