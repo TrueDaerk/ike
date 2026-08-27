@@ -17,6 +17,7 @@ import (
 	"ike/internal/localhistory"
 	"ike/internal/project"
 	"ike/internal/textenc"
+	"ike/internal/theme"
 )
 
 // localhistory.go wires Local History (#35, MVP #1023) into the app: every
@@ -201,6 +202,16 @@ func (m Model) renderLocalHistoryDiff(width int) []string {
 	if len(m.lhDiff.Hunks) == 0 {
 		return []string{dim.Render(ansi.Truncate("no changes — snapshot matches the current buffer", width, "…"))}
 	}
+	return miniDiffLines(pal, m.lhDiff, width)
+}
+
+// miniDiffLines renders res as git-style unified lines clipped to width: an
+// "@@" header per widened hunk, then one row per line with a +/- gutter
+// marker — added green, removed red, context plain. It is the shared inline
+// diff renderer behind the local-history panel, the change feed (#1969) and
+// the crash-recovery dialog (#2160).
+func miniDiffLines(pal *theme.Palette, res diff.Result, width int) []string {
+	dim := lipgloss.NewStyle().Foreground(pal.Hint)
 	added := lipgloss.NewStyle().Foreground(pal.VCSAdded)
 	removed := lipgloss.NewStyle().Foreground(pal.VCSDeleted)
 	clip := func(marker, text string) string {
@@ -208,9 +219,9 @@ func (m Model) renderLocalHistoryDiff(width int) []string {
 		return ansi.Truncate(marker+text, width, "…")
 	}
 	var out []string
-	for _, h := range mergedLocalHistoryHunks(m.lhDiff) {
-		out = append(out, dim.Render(ansi.Truncate(hunkHeader(m.lhDiff.Rows[h.Start:h.End]), width, "…")))
-		for _, row := range m.lhDiff.Rows[h.Start:h.End] {
+	for _, h := range mergedLocalHistoryHunks(res) {
+		out = append(out, dim.Render(ansi.Truncate(hunkHeader(res.Rows[h.Start:h.End]), width, "…")))
+		for _, row := range res.Rows[h.Start:h.End] {
 			switch row.Kind {
 			case diff.RowSame:
 				out = append(out, clip("  ", row.Left))
