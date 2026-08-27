@@ -254,6 +254,12 @@ func (c *Config) Flat() map[string]string {
 	put("files.auto_reload", c.Files.AutoReload)
 	put("files.large_file_kb", c.Files.LargeFileKB)
 	put("files.large_file_lines", c.Files.LargeFileLines)
+	// Per-feature large-file thresholds (#2159); 0 = follow the base cliff.
+	put("files.large_file_highlight_kb", c.Files.LargeFileHighlightKB)
+	put("files.large_file_lsp_kb", c.Files.LargeFileLSPKB)
+	put("files.large_file_vcs_kb", c.Files.LargeFileVCSKB)
+	put("files.large_file_search_kb", c.Files.LargeFileSearchKB)
+	put("files.large_file_format_kb", c.Files.LargeFileFormatKB)
 	put("files.persistent_undo", c.Files.PersistentUndo)
 	put("files.change_feed_limit", c.Files.ChangeFeedLimit)
 	// User file-type associations (#1365); pattern keys contain dots and

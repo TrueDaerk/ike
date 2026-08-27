@@ -215,6 +215,10 @@ type Model struct {
 	// large-file toast (#149), so re-activating the tab stays quiet. Held as
 	// a map so value-receiver open paths mutate the shared set.
 	largeToasted map[string]bool
+	// largeDetail shows the large-file degradation popup (#2159): which
+	// per-edit services are reduced for the focused document and at which
+	// thresholds. Any key or click dismisses it.
+	largeDetail bool
 	// logsetToasted remembers which log paths already offered their rotated
 	// set as a merged timeline (#1996), so re-opening the tab stays quiet.
 	// A map for the same reason largeToasted is one.
@@ -4025,6 +4029,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// degradation (#149) for the focused document.
 		return m.forceCodeInsight()
 
+	case LargeFileDetailsMsg:
+		// editor.largeFileDetails (status-line badge / palette, #2159): the
+		// degradation detail popup for the focused document.
+		if ed := m.activeEditor(); ed == nil || !ed.HasFile() || len(ed.DegradedFeatures()) == 0 {
+			m.host.Notify(host.Info, "no large-file degradation is active for this file")
+			return m, nil
+		}
+		m.largeDetail = true
+		return m, nil
+
 	case ShowKeymapHelpMsg:
 		// palette.keymapHelp (f1, cmd+k cmd+s / palette): the cheatsheet overlay.
 		m.openHelp()
@@ -6648,6 +6662,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.keyDoctor.IsOpen() {
 			return m, m.keyDoctor.Update(msg)
 		}
+		// The large-file detail popup (#2159) is read-only: any key closes it
+		// and is consumed, like a press anywhere closes a context menu.
+		if m.largeDetail {
+			m.largeDetail = false
+			return m, nil
+		}
 		// Esc dismisses persistent error toasts but keeps its normal meaning
 		// (pass-through) so it never costs an extra press elsewhere.
 		if msg.Code == tea.KeyEscape {
@@ -8902,6 +8922,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			m.floatMove = nil // stray press: drop the drag, fall through
 		}
 	}
+	// The large-file detail popup (#2159) is read-only: any press closes it
+	// and is consumed, so a stray click never leaks to the panes below.
+	if m.largeDetail {
+		if msg.action == mousePress {
+			m.largeDetail = false
+		}
+		return m, nil
+	}
 	// The context menu (#1020) is the topmost transient popup: hover follows
 	// the pointer, a left press inside invokes the entry, any press outside
 	// dismisses — and never leaks to the panes below.
@@ -10704,6 +10732,41 @@ func (m Model) largeFileBanner() (text string, x, y, w int, ok bool) {
 	return text, r.X + paneContentX, r.Y + m.contentYOff(key), w, true
 }
 
+// largeFileDetailView renders the large-file degradation popup (#2159): every
+// per-edit service the policy covers, with its on/off state for the focused
+// document. "" when no editor with a file is focused (the popup then simply
+// does not composite).
+func (m Model) largeFileDetailView() string {
+	ed := m.activeEditor()
+	if ed == nil || !ed.HasFile() {
+		return ""
+	}
+	pal := m.pal()
+	on := lipgloss.NewStyle().Background(pal.Panel).Foreground(pal.Foreground)
+	off := lipgloss.NewStyle().Background(pal.Panel).Foreground(pal.Warning)
+	title := on.Bold(true).Render("Large file: " + filepath.Base(ed.Path()) +
+		" (" + strconv.FormatInt(ed.DocBytes()/1024, 10) + " KB, " +
+		strconv.Itoa(ed.LineCount()) + " lines)")
+	rows := []string{title, ""}
+	for f := largefile.Feature(0); f < largefile.FeatureCount; f++ {
+		if ed.FeatureOff(f) {
+			rows = append(rows, off.Render("✗ "+f.Label()+" — off ("+f.Key()+")"))
+		} else {
+			rows = append(rows, on.Render("✓ "+f.Label()+" — on"))
+		}
+	}
+	rows = append(rows, "",
+		on.Faint(true).Render("Force Code Insight re-enables everything for this file;"),
+		on.Faint(true).Render("thresholds live in Settings → Files & Session. Any key closes."))
+	return lipgloss.NewStyle().
+		Background(pal.Panel).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(pal.Border).
+		BorderBackground(pal.Panel).
+		Padding(0, 1).
+		Render(strings.Join(rows, "\n"))
+}
+
 // dismissLargeBanner marks the focused flagged document's banner dismissed.
 func (m Model) dismissLargeBanner() {
 	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor {
@@ -10886,6 +10949,11 @@ func (m Model) render() string {
 	}
 	result := base
 	switch {
+	case m.largeDetail:
+		// The large-file degradation detail popup (#2159).
+		if v := m.largeFileDetailView(); v != "" {
+			result = overlay.Center(base, v, m.width, m.height)
+		}
 	case m.keyDoctor.IsOpen():
 		result = overlay.Center(base, m.keyDoctor.View(), m.width, m.height)
 	case m.finder.IsOpen():

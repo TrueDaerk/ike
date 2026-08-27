@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor"
+	"ike/internal/largefile"
 	"ike/internal/pane"
 	"ike/internal/vcs"
 )
@@ -117,6 +118,12 @@ func (m Model) vcsMarksCmds() []tea.Cmd {
 func (m Model) vcsMarksCmd(ed *editor.Model) tea.Cmd {
 	if ed == nil || !ed.HasFile() {
 		return nil
+	}
+	if ed.FeatureOff(largefile.FeatureVCS) {
+		// Large-file degradation (#2159): the recompute is a `git show` of the
+		// HEAD version plus a whole-file diff — clear any stale marks instead.
+		path := ed.Path()
+		return func() tea.Msg { return vcs.MarksMsg{Path: path} }
 	}
 	snap, path := m.vcs.snap, ed.Path()
 	switch snap.Status(path) {

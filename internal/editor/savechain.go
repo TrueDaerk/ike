@@ -3,6 +3,7 @@ package editor
 import (
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/largefile"
 	ilsp "ike/internal/lsp"
 )
 
@@ -32,8 +33,8 @@ func (m *Model) beginSaveChain(closeAfter bool) tea.Cmd {
 		m.pendingSave.closeAfter = m.pendingSave.closeAfter || closeAfter
 		return func() tea.Msg { return nil }
 	}
-	if m.path == "" || m.largeFile {
-		return nil // large-file mode has no synced document to act on (#149)
+	if m.path == "" || m.FeatureOff(largefile.FeatureFormat) {
+		return nil // a degraded large file has no synced document to act on (#149/#2159)
 	}
 	organize := m.saveChainFlag("editor.organize_imports_on_save")
 	format := m.saveChainFlag("editor.format_on_save")

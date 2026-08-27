@@ -430,6 +430,11 @@ type History struct {
 // LargeFileKB and LargeFileLines are the large-file thresholds (#149): a file
 // crossing either at load/reload is flagged and code insight (highlighting,
 // LSP, watcher content hashing) degrades; 0 disables that guard.
+// The LargeFile*KB per-feature thresholds (#2159) switch one service off
+// earlier than the base cliff — highlighting, LSP didChange sync, the VCS
+// gutter diff, the search match tally, and the on-save format chain each
+// degrade once the file exceeds its own KB value; 0 (the default) means the
+// feature simply follows the base thresholds.
 // PersistentUndo (#148) keeps undo history across restarts (vim's undofile):
 // stacks are written to the state store on save/close and adopted on open
 // while the file content is unchanged.
@@ -443,13 +448,18 @@ type History struct {
 // built-in extension/filename lists and sniffers; internal/lang resolves them
 // (see lang.ByAssociation).
 type Files struct {
-	Watch           bool              `toml:"watch"`
-	AutoReload      string            `toml:"auto_reload"`
-	LargeFileKB     int               `toml:"large_file_kb"`
-	LargeFileLines  int               `toml:"large_file_lines"`
-	PersistentUndo  bool              `toml:"persistent_undo"`
-	ChangeFeedLimit int               `toml:"change_feed_limit"`
-	Associations    map[string]string `toml:"associations"`
+	Watch                bool              `toml:"watch"`
+	AutoReload           string            `toml:"auto_reload"`
+	LargeFileKB          int               `toml:"large_file_kb"`
+	LargeFileLines       int               `toml:"large_file_lines"`
+	LargeFileHighlightKB int               `toml:"large_file_highlight_kb"`
+	LargeFileLSPKB       int               `toml:"large_file_lsp_kb"`
+	LargeFileVCSKB       int               `toml:"large_file_vcs_kb"`
+	LargeFileSearchKB    int               `toml:"large_file_search_kb"`
+	LargeFileFormatKB    int               `toml:"large_file_format_kb"`
+	PersistentUndo       bool              `toml:"persistent_undo"`
+	ChangeFeedLimit      int               `toml:"change_feed_limit"`
+	Associations         map[string]string `toml:"associations"`
 }
 
 // Editor holds text-editing behaviour (Roadmap 0060 consumes most of it).

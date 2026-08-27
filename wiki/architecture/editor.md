@@ -1497,14 +1497,42 @@ stalling:
   completion are silently absent.
 - The watcher's poll fallback never content-hashes the file (mtime+size alone
   decide, `watch.Service.SetHashLimit`).
+- The gutter diff markers stop recomputing (`vcsMarksCmd` sends a clearing
+  `MarksMsg` instead of `git show` + a whole-file diff per refresh, #2159).
+- The search match counter hides (`searchTally` skips its bounded buffer scan,
+  #2159); viewport match highlighting stays, it is per-line.
+- The on-save LSP chain (organize imports / format) is skipped — the save
+  writes raw.
 
-UX: a one-time warn toast on open, plus a `[large file]` status-line segment.
+### Per-feature thresholds (#2159)
+
+Below the base cliff each per-edit service can degrade on its own:
+`largefile.Feature` enumerates highlighting, LSP sync, the VCS gutter diff,
+the search match counter, and format-on-save, and the
+`files.large_file_<feature>_kb` keys (Settings → Files & Session) hold one KB
+threshold each — 0 (the default) means the feature simply follows the base
+thresholds; a positive value switches that feature off earlier. Per-feature
+thresholds only ever degrade *earlier*: past the base cliff everything is off
+regardless. `Model.FeatureOff(f)` is the per-service verdict (decided from the
+load-time byte size, `Model.docBytes`), `Model.DegradedFeatures()` the list
+the status line renders. The LSP bridge's `didOpen` gate honours the LSP
+feature threshold too (`largeFileGated` goes through `Thresholds.Off`).
+
+UX: a one-time warn toast on open, plus a dedicated `largefile` status-line
+segment — `[large file]` past the base cliff, `[large: <feature> off]` /
+`[large: N features off]` for per-feature degradation (#2159; it replaced the
+former marker inside the `file` segment). Clicking the badge — or the palette
+command `editor.largeFileDetails` — opens a centered popup listing every
+feature with its on/off state and config key; any key or click closes it.
 The palette command `editor.forceCodeInsight` overrides per document: it
-records the path in the shared `internal/largefile` override set, reparses
-every view, and re-fires the file-opened hook so the LSP bridge didOpens. The
-policy (thresholds + override set) lives in `internal/largefile`, shared by
-editor, LSP bridge, and app. Replacing the line-slice store (piece table) is
-explicitly out of scope — this mode is the cheap 90%.
+records the path in the shared `internal/largefile` override set (lifting the
+base *and* every per-feature degradation), reparses every view, and re-fires
+the file-opened hook so the LSP bridge didOpens. The policy (thresholds +
+override set) lives in `internal/largefile`, shared by editor, LSP bridge, and
+app. Replacing the line-slice store (piece table) is explicitly out of scope —
+this mode is the cheap 90%; the buffer's in-place fast path for line-count-
+preserving edits (see `/architecture/performance.md`) keeps the raw typing
+cost O(line) either way.
 
 ## Markdown rich rendering (#881)
 

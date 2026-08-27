@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-08-26T12:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -159,8 +159,9 @@ close-side mirror of the `EventFileOpened` dedup over shared tabs/leaves
 (#142); a dragged tab's file, re-opened elsewhere in the same pass, never
 fires. The
 `didOpen` is gated by large-file mode (#149): a file over the
-`files.large_file_kb` / `files.large_file_lines` thresholds
-(`largeFileGated`, policy in `internal/largefile`) is never opened with the
+`files.large_file_kb` / `files.large_file_lines` thresholds — or over the
+per-feature `files.large_file_lsp_kb` threshold (#2159)
+(`largeFileGated`, policy in `internal/largefile`) — is never opened with the
 server — servers choke on huge documents too — so diagnostics and completion
 are silently absent, and the editor's change events ship no text (they carry
 `Large` instead; the bridge stops syncing and closes the document server-side,

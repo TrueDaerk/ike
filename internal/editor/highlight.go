@@ -8,6 +8,7 @@ import (
 	"ike/internal/highlight"
 	"ike/internal/jwt"
 	"ike/internal/lang"
+	"ike/internal/largefile"
 	"ike/internal/nethint"
 	"ike/internal/secret"
 	"ike/internal/unidiff"
@@ -48,7 +49,7 @@ func (m *Model) Reparse() tea.Cmd { return m.parseCmd() }
 // the Unicode hygiene scan (#1654) is language-agnostic, and its ASCII fast path
 // keeps the cost of a plain buffer at one byte scan per line.
 func (m *Model) parseCmd() tea.Cmd {
-	if m.InsightOff() {
+	if m.FeatureOff(largefile.FeatureHighlight) {
 		return nil
 	}
 	// The parse resolves its grammar through langPath — a file-less buffer

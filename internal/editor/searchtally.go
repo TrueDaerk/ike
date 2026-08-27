@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"ike/internal/editor/search"
+	"ike/internal/largefile"
 )
 
 // searchtally.go memoizes the search match counter (#2145): the command line
@@ -42,6 +43,12 @@ func newSearchTally() *searchTallyStore { return &searchTallyStore{} }
 func (m Model) searchTally() (search.Tally, bool) {
 	q, ok := m.searchHLQuery()
 	if !ok {
+		return search.Tally{}, false
+	}
+	if m.FeatureOff(largefile.FeatureSearch) {
+		// Large-file degradation (#2159): even the capped scan is a real pass
+		// per edit — the counter hides and the status badge says why. Viewport
+		// match highlighting is per-line and stays.
 		return search.Tally{}, false
 	}
 	key := searchTallyKey{doc: m.docVersion, query: q.ID()}

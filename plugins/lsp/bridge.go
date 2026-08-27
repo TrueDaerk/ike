@@ -302,7 +302,10 @@ func (b *bridge) fileOpened(h host.API, path string) {
 
 // largeFileGated reports whether path's document crosses the large-file
 // thresholds (#149) without an active per-path override — the didOpen gate.
-// It decides from the just-read bytes, mirroring the editor's Load-time flag.
+// It decides from the just-read bytes, mirroring the editor's Load-time flag,
+// and honours the per-feature LSP threshold (#2159): a file past
+// files.large_file_lsp_kb never didOpens even below the base cliff, matching
+// the editor's suppressed didChange text.
 func largeFileGated(cfg host.Config, path string, data []byte) bool {
 	if largefile.Forced(path) {
 		return false
@@ -312,7 +315,7 @@ func largeFileGated(cfg host.Config, path string, data []byte) bool {
 		get = cfg.Get
 	}
 	lines := strings.Count(string(data), "\n") + 1
-	return largefile.LimitsFrom(get).Exceeded(int64(len(data)), lines)
+	return largefile.ThresholdsFrom(get).Off(largefile.FeatureLSP, int64(len(data)), lines)
 }
 
 func (b *bridge) fileSaved(h host.API, path string) {

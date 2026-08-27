@@ -1,6 +1,9 @@
 package editor
 
-import "ike/internal/editor/mode"
+import (
+	"ike/internal/editor/mode"
+	"ike/internal/largefile"
+)
 
 // events.go is the LSP seam (Roadmap 0100). The editor emits on-change,
 // cursor-move and completion-trigger signals through an injectable Emitter; no
@@ -163,8 +166,8 @@ func (m *Model) emitChar(kind EventKind, ch string) {
 		ev.AnchorLine, ev.AnchorCol = m.anchor.Line, m.anchor.Col
 	}
 	if kind == EventChange {
-		if m.InsightOff() {
-			// A flagged large document ships no text (#149): re-joining
+		if m.FeatureOff(largefile.FeatureLSP) {
+			// A flagged large document ships no text (#149/#2159): re-joining
 			// megabytes per keystroke is exactly the cost this mode avoids.
 			ev.Large = true
 		} else {

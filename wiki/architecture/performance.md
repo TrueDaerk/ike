@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often), the in-app performance HUD, the always-on update-loop stall watchdog, and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog]
-timestamp: 2026-08-26T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -308,3 +308,25 @@ an active stripe: 329µs/606 allocs → 234µs/334 (BenchmarkEditorViewWarm).
 The remaining per-row `ansi.Truncate` pass is bounded by the pane width; the
 deeper option (carrying row widths in the line cache) stays open in the issue
 notes if it ever shows up again.
+
+## Large-file keystroke latency (#2159)
+
+Two guards keep typing flat regardless of file size:
+
+- **Per-feature degradation**: every per-edit service that does O(file) work —
+  the Tree-sitter parse, the LSP didChange full-text sync, the VCS gutter diff
+  recompute, the search match tally, the on-save format chain — is gated
+  through `largefile.Thresholds` (`editor.Model.FeatureOff`). Past the base
+  `files.large_file_kb`/`files.large_file_lines` cliff everything is off;
+  the `files.large_file_<feature>_kb` keys switch single features off earlier.
+  See the Large-file mode section in `/architecture/editor.md`.
+- **Buffer splice fast path**: `buffer.Apply` used to rebuild the entire
+  backing `[]string` on every edit — ~2 MB copied plus matching GC pressure
+  per keystroke on a 120k-line buffer. A line-count-preserving edit (the
+  typing case) now rewrites the touched lines in place; only edits that add or
+  remove lines take the full splice. `BenchmarkKeystrokeLargeFile`
+  (`internal/editor/keystroke_bench_test.go`) guards the result: an insert
+  keystroke on a 120k-line degraded buffer dropped 407µs → ~11µs/op, cheaper
+  than the small-file case (which still schedules a parse). The deterministic
+  companion `TestKeystrokeAvoidsFullBufferWorkWhenLarge` asserts no change
+  text ships and no parse schedules on the degraded path.

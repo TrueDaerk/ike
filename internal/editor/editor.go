@@ -1228,6 +1228,10 @@ func (m Model) Stale() bool { return m.stale }
 // its last load/reload (#149).
 func (m Model) LargeFile() bool { return m.largeFile }
 
+// DocBytes reports the document's byte size as of the last load/reload/set —
+// the size the large-file verdicts were decided from (#2159).
+func (m Model) DocBytes() int64 { return m.docBytes }
+
 // InsightOff reports whether code insight is degraded for this document
 // (#149): flagged large and not overridden per path via ForceCodeInsight. The
 // status line renders its indicator off this, and parseCmd/emit gate on it.
@@ -1239,7 +1243,7 @@ func (m Model) InsightOff() bool { return m.largeFile && !largefile.Forced(m.pat
 // layer re-fires the file-opened hook alongside so the LSP bridge didOpens.
 // Nil when the document is not flagged.
 func (m *Model) ForceCodeInsight() tea.Cmd {
-	if !m.largeFile || !m.HasFile() {
+	if !m.HasFile() || (!m.largeFile && len(m.DegradedFeatures()) == 0) {
 		return nil
 	}
 	largefile.Force(m.path)
@@ -1253,6 +1257,44 @@ func (m Model) limits() largefile.Limits {
 		return largefile.LimitsFrom(nil)
 	}
 	return largefile.LimitsFrom(m.cfg.Get)
+}
+
+// thresholds evaluates the full large-file policy (#2159): the base limits
+// plus the per-feature byte thresholds.
+func (m Model) thresholds() largefile.Thresholds {
+	if m.cfg == nil {
+		return largefile.ThresholdsFrom(nil)
+	}
+	return largefile.ThresholdsFrom(m.cfg.Get)
+}
+
+// FeatureOff reports whether one per-edit service is degraded for this
+// document (#2159): past the base thresholds everything is off (like
+// InsightOff); below them a feature whose own KB threshold is set switches off
+// once the load-time size exceeds it. ForceCodeInsight lifts every feature at
+// once, matching the base override.
+func (m Model) FeatureOff(f largefile.Feature) bool {
+	if m.largeFile {
+		return !largefile.Forced(m.path)
+	}
+	t := m.thresholds()
+	if b := t.FeatureBytes[f]; b > 0 && m.docBytes > b {
+		return !largefile.Forced(m.path)
+	}
+	return false
+}
+
+// DegradedFeatures lists every per-edit service currently degraded for this
+// document, in Feature order; empty means the file is fully serviced. The
+// status-line badge and its detail popup render off this (#2159).
+func (m Model) DegradedFeatures() []largefile.Feature {
+	var off []largefile.Feature
+	for f := largefile.Feature(0); f < largefile.FeatureCount; f++ {
+		if m.FeatureOff(f) {
+			off = append(off, f)
+		}
+	}
+	return off
 }
 
 // ModeName returns the current modal state.
