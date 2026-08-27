@@ -306,21 +306,12 @@ func (m *Model) attachGlobalToolIn(entry config.ToolEntry, term terminal.Model, 
 			return
 		}
 	} else if homed {
-		if occupant := m.dockOccupant(zone); occupant != "" {
-			// A non-tabbable dock occupant shares the edge via a
-			// perpendicular split, like openToolAtHome's non-tabbable branch.
-			share := layout.ZoneBottom
-			if zone == layout.ZoneTop || zone == layout.ZoneBottom {
-				share = layout.ZoneRight
-			}
-			tree, ok := layout.SplitLeaf(ws.Tree, occupant, key, share)
-			if !ok {
-				m.reparkGlobalToolPane(entry.Name, key)
-				return
-			}
-			ws.Tree = tree
-		} else {
-			ws.Tree = layout.DockNew(ws.Tree, key, zone, toolDockShare)
+		// A non-tabbable dock occupant shares the edge via a perpendicular
+		// split, a free edge falls to the tool region and then the full-span
+		// dock — openToolAtHome's tail exactly (dockNewPane).
+		if !m.dockNewPane(key, zone, m.dockOccupant(zone)) {
+			m.reparkGlobalToolPane(entry.Name, key)
+			return
 		}
 	} else {
 		tree, ok := layout.SplitLeaf(ws.Tree, target, key, m.auxZone(target))

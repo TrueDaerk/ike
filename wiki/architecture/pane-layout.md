@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — plus a sticky keyboard resize mode (#2150) stepping the same dividers with hjkl/arrows, with per-project geometry persisted in a dedicated state store and named user-scoped saved layouts that are the whole truth on apply (#2042), tools and multi-tool tab hosts included; slot templates (#1897) only govern runtime tool opens.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, keyboard, persistence, bubbletea]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -100,6 +100,17 @@ mouse reporting via `tea.WithMouseCellMotion` in `cmd/ike`; the root model's
   dock orientation toward that edge; a shared or subdivided edge counts as
   free). See [Tool Panes](/architecture/tool-panes.md) for the open
   semantics.
+- **In-tree regions (`internal/layout/region.go`, #2191).** Docking asks about
+  the workspace's outer edges; placing a pane inside a nested layout asks about
+  a leaf's own neighbourhood. `layout.Hops(root, leaf)` walks the leaf's
+  ancestor path **innermost first**, yielding each ancestor split's other
+  subtree plus the side it occupies relative to the leaf (`layout.Opposite`
+  flips a side) and the split's ratio; `layout.EdgeLeafIn(node, zone)` names
+  the leaf pinned against a *region's* own edge, descending all the way — a
+  strip already subdivided across the dock axis still yields the leaf on
+  zone's side, where `EdgeLeaf` would report the slot free. The tool-region
+  placement (#2191) and the saved-layout editor anchor (`anchorFromLayout`,
+  #1989) both ride these.
 - **Release** during a move resolves the drop target and `DropZone`
   (left/right/top/bottom of the target pane), then `layout.Move` re-parents the
   dragged leaf — swapping order or re-orienting the split. v1 only relocates the

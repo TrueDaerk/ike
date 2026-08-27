@@ -553,17 +553,7 @@ func (m *Model) replaceToolPane(key string) {
 		}
 		if entry, ok := toolEntry(name); ok {
 			if zone, ok := toolHomeZone(entry.Placement); ok {
-				if occupant := m.dockOccupant(zone); occupant != "" {
-					share := layout.ZoneBottom
-					if zone == layout.ZoneTop || zone == layout.ZoneBottom {
-						share = layout.ZoneRight
-					}
-					if tree, ok := layout.SplitLeaf(ws.Tree, occupant, key, share); ok {
-						ws.Tree = tree
-						return
-					}
-				} else {
-					ws.Tree = layout.DockNew(ws.Tree, key, zone, toolDockShare)
+				if m.dockNewPane(key, zone, m.dockOccupant(zone)) {
 					return
 				}
 			}
@@ -1154,40 +1144,13 @@ func (m *Model) anchorFromLayout(tree layout.Node, ids map[string]paneIdentity) 
 	if slot == "" {
 		return "", 0, 0, false
 	}
-	type hop struct {
-		sibling layout.Node
-		zone    layout.Zone
-		ratio   float64
-	}
-	var path []hop // innermost hop first: descend appends on the way back up
-	var descend func(n layout.Node) bool
-	descend = func(n layout.Node) bool {
-		switch t := n.(type) {
-		case *layout.Leaf:
-			return t.Pane == slot
-		case *layout.Split:
-			zoneA, zoneB := layout.ZoneLeft, layout.ZoneRight
-			if t.Orient == layout.Vertical {
-				zoneA, zoneB = layout.ZoneTop, layout.ZoneBottom
-			}
-			if descend(t.A) {
-				path = append(path, hop{sibling: t.B, zone: zoneA, ratio: t.Ratio})
-				return true
-			}
-			if descend(t.B) {
-				path = append(path, hop{sibling: t.A, zone: zoneB, ratio: t.Ratio})
-				return true
-			}
-		}
-		return false
-	}
-	if !descend(tree) {
-		return "", 0, 0, false
-	}
-	for _, h := range path {
-		for _, key := range layout.Leaves(h.sibling) {
+	// layout.Hops walks the path innermost first and names the side each
+	// sibling occupies relative to the slot; the new editor goes on the
+	// opposite side — where the slot itself sat.
+	for _, h := range layout.Hops(tree, slot) {
+		for _, key := range layout.Leaves(h.Sibling) {
 			if live := m.liveCounterpart(ids[key]); live != "" {
-				return live, h.zone, h.ratio, true
+				return live, layout.Opposite(h.Zone), h.Ratio, true
 			}
 		}
 	}

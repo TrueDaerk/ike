@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Custom TUI Tool Panes
-description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking), named slot templates pinning runtime tool opens to exact layout positions (#1897; #1946 adds `terminal`/`run`/`debug` as assignable targets; since #2042 saved layouts win over the template on apply), global process-wide instances shared across workspaces (#1890) whose panes follow project switches grouped at their configured positions (#1903, #2042) and return to the pane the project's saved layout recorded (#2141), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, and the built-in Run tool that owns run output (#1905)."
+description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking, docking into the layout's own tool region when the workspace edge is no slot, #2191), named slot templates pinning runtime tool opens to exact layout positions (#1897; #1946 adds `terminal`/`run`/`debug` as assignable targets; since #2042 saved layouts win over the template on apply), global process-wide instances shared across workspaces (#1890) whose panes follow project switches grouped at their configured positions (#1903, #2042) and return to the pane the project's saved layout recorded (#2141), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, and the built-in Run tool that owns run output (#1905)."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # Custom TUI Tool Panes (#741)
@@ -134,6 +134,20 @@ docking only applies to tools without a slot:
 - **Non-tabbable occupant** (explorer, singleton tool windows) — the tool
   stacks into the same dock via a perpendicular split: side docks stack
   vertically (occupant above), top/bottom strips split side by side.
+- **No slot at the workspace edge at all** (`Model.toolRegionLeaf`, #2191) —
+  when the root split runs *across* the dock axis (the explorer column beside
+  the editor column), the edge is nobody's slot and docking full-span there
+  would re-root the whole tree. The layout's **own tool region** takes the
+  tool first: the active editor's ancestor path is walked outwards
+  (`layout.Hops`) and the first sibling region on the placement's side holding
+  *nothing but* tool windows is the tool area; the tool splits beside that
+  region's edge leaf (`layout.EdgeLeafIn`, so an already subdivided strip
+  still names a neighbour). One editor in the region makes it editor area, not
+  a tool strip, and the full-span dock applies as before. A region pane is only
+  ever **split beside, never tabbed into** — joining an unrelated tool's or
+  shell's tab list is what #1905 forbids; the tab-join above stays reserved for
+  the real workspace-edge slot. `Model.dockNewPane` is the shared tail of all
+  three placements (fresh open, global-tool attach, post-apply re-place).
 
 Placement is **intent, not state**: the `Move`/`Dock` drag mechanics stay
 untouched and never rewrite it, so a moved tool returns to its configured home
@@ -291,6 +305,12 @@ What differs from a configured tool:
   field, the setting names the edge (`bottom` default, `left`, `right`,
   `top`) or `in_pane` for a terminal tab in the focused editor pane. A slot
   assignment still wins.
+- **Placement is state, once the user moves it (#2191)** — for a configured
+  tool the placement is pure intent: a moved tool returns to its home on the
+  next open. Run output reappears on every run, so a Run pane the user
+  dragged somewhere keeps that spot instead; see
+  [Run Configurations](/architecture/run-configurations.md) §
+  "Where run output lands".
 - **Not restored** — the output of a finished program is session state: the
   pane persists as `{kind: "runTool"}` and its leaf is pruned on restore
   rather than re-running the program, like the debug area's embedded console

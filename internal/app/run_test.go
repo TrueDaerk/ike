@@ -93,7 +93,9 @@ func TestRunFileBottomDock(t *testing.T) {
 	if inst.Terminal().Label() != "prog.rfake" {
 		t.Fatalf("Run tool label = %q, want the config name", inst.Terminal().Label())
 	}
-	if got := toolPaneTitle(inst.Terminal()); got != "⚙ RUN — prog.rfake" {
+	// Prefix, not equality: a command this short may already have finished,
+	// and a finished session appends the #2192 exited marker to the chrome.
+	if got := toolPaneTitle(inst.Terminal()); !strings.HasPrefix(got, "⚙ RUN — prog.rfake") {
 		t.Fatalf("Run tool chrome = %q, want the tool plus the configuration", got)
 	}
 	if got := layout.EdgeLeaf(m.activeWS().Tree, layout.ZoneBottom); got != inst.Key() {
