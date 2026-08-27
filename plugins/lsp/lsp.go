@@ -174,6 +174,15 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Scope: plugin.GlobalScope(),
 				Run:   showLog,
 			},
+			{
+				// Per-server failure diagnosis with verified fix
+				// suggestions (#2164); failure notifications name this
+				// command as their troubleshooting route.
+				ID:    "lsp.doctor",
+				Title: "LSP: Doctor",
+				Scope: plugin.GlobalScope(),
+				Run:   doctor,
+			},
 		},
 		Intentions: []intention.Provider{
 			{

@@ -1634,7 +1634,7 @@ func statusForErr(command string, err error) (string, lsp.ServerStatusKind) {
 	if advice := launchAdvice(command, err.Error()); advice != "" {
 		text += " — " + advice
 	}
-	return text + " — details: \"LSP: Show Server Log\"", lsp.ServerEventError
+	return text + " — details: \"LSP: Show Server Log\", diagnose: \"LSP: Doctor\"", lsp.ServerEventError
 }
 
 func splitLines(text string) []string { return strings.Split(text, "\n") }

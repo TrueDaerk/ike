@@ -1066,6 +1066,59 @@ directory when more exist. The disabled-after-repeated-crashes toast names
 this command and `lsp.restart` — the log for the diagnosis, the restart for
 the way out (#2148). No default chord (#711 policy).
 
+## LSP Doctor (#2164)
+
+The palette command **`lsp.doctor`** ("LSP: Doctor", `plugins/lsp/doctor.go`)
+opens a singleton tool window (`internal/lspdoctor`, pane key `lspdoctor`,
+Xdebug-Doctor pattern) that diagnoses server failures instead of leaving the
+user with a raw error and a possibly-wrong install hint. The plugin resolves
+every language's **effective** spec (`resolveSpec` — the same overlay chain
+the manager launches with, delegating languages collapsed onto their server
+language) and hands the set to the app via `ilsp.DoctorMsg`; the app owns the
+report (`Model.lspDoctorReport`), so results survive the panel being closed.
+
+Per server the doctor runs a check chain (`lspdoctor.Run`, every external
+effect behind an injectable `Probes` seam):
+
+1. **binary resolution** — PATH first, then IKE's own fallback dirs
+   (`transport.FallbackDirs`: go/npm install targets — a hit there still
+   works and only warns), then well-known dirs IKE does **not** probe
+   (Homebrew, `~/.local/bin`, …) where a hit means the GUI-launch PATH gap
+   (#1614);
+2. **executable sanity** — exists / exec bit;
+3. **runtime** — a node-shebang script checks `node` availability + version;
+4. **`--version`** — evidence only (many servers ship none), 5 s timeout;
+5. **workspace root sanity**;
+6. **spawn + initialize** — a real handshake round-trip via
+   `transport.Start` + `client.Initialize` against the workspace root, torn
+   down after; on failure the decisive stderr line (`transport.ErrorLine`)
+   is the evidence.
+
+**Feasibility result** — classes reliably distinguishable from that evidence
+(`lspdoctor.classify`): *binary missing* (fix: the spec's `Install` recipe),
+*PATH mismatch* (installed in a dir IKE's PATH lacks; fix: PATH or a
+`[lsp.servers.<id>] command` override with the absolute path), *not
+executable* (`chmod +x`), *wrong architecture* (exec-format/bad-CPU
+signatures — the Rosetta trap #1614), *runtime mismatch* (node engine /
+ERR_REQUIRE_ESM / NODE_MODULE_VERSION / old-node SyntaxError signatures,
+naming the node version IKE sees), *crash on initialize* (stderr evidence;
+the launch-advice table maps known complaints — Homebrew taplo built without
+the LSP — to concrete commands, and a **shadowed-copy** detector points at a
+working install hidden behind the failing PATH binary: the "npm install did
+not help" TOML case that motivated the issue), and *bad workspace root*. Not
+reliably distinguishable from one run: settings a server rejects silently,
+and slow-but-healthy servers vs hangs (the probe reports its timeout as
+crash evidence instead of guessing).
+
+**Fix verification**: the report keeps the previous run's failure class per
+language; `r` re-runs and each server renders *resolved* (was failing, now
+ok), *still failing* (same class — the hint did not work) or *changed*, so
+the doctor never repeats a hint as if it were new. Failure notifications
+route here: launch failures, the repeated-crash disable toast and the
+install-succeeded-but-unresolvable message all append `diagnose: "LSP:
+Doctor"`, and a click on the `lsp` status segment opens the doctor. No
+default chord (#711 policy).
+
 ## Testing
 
 Pure-Go fakes throughout: an in-memory `io.ReadWriteCloser` speaking JSON-RPC

@@ -51,7 +51,6 @@ import (
 	"ike/internal/esq"
 	"ike/internal/explorer"
 	"ike/internal/finder"
-	"ike/internal/keydoctor"
 	"ike/internal/forge"
 	"ike/internal/format"
 	"ike/internal/ghissues"
@@ -62,12 +61,14 @@ import (
 	"ike/internal/httppane"
 	"ike/internal/idcolor"
 	"ike/internal/jqplay"
+	"ike/internal/keydoctor"
 	"ike/internal/keymap"
 	"ike/internal/lang"
 	"ike/internal/largefile"
 	"ike/internal/layout"
 	"ike/internal/localhistory"
 	ilsp "ike/internal/lsp"
+	"ike/internal/lspdoctor"
 	"ike/internal/market"
 	"ike/internal/marks"
 	"ike/internal/menu"
@@ -564,6 +565,12 @@ type Model struct {
 	// panel being closed.
 	doctorReturnFocus string
 	doctorLog         *debugdoctor.Log
+
+	// lspDoctorReturnFocus / lspDoctorReport are the same pair for the LSP
+	// Doctor tool window (#2164); the report keeps the last run's results and
+	// failure classes so a re-run can verify fixes.
+	lspDoctorReturnFocus string
+	lspDoctorReport      *lspdoctor.Report
 	// domReturnFocus is the same dance for the DOM inspector tool window
 	// (#1929). domReqPath/domReqVersion dedup the async buffer parses;
 	// domHLPath/domHLRev remember which file's editors carry the selector
@@ -1158,6 +1165,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		coverage:        coverage.NewStore(), // per-run test coverage (#2081)
 		coverageShown:   true,
 		doctorLog:       debugdoctor.NewLog(),
+		lspDoctorReport: lspdoctor.NewReport(),
 		host:            h,
 		reg:             reg,
 		themePal:        themePal,
@@ -1822,6 +1830,13 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// the app-owned trace log (empty at start; connection attempts
 			// are session state).
 			m.wireDoctorPanel(panes.Get(panes.AddDoctor()).Doctor())
+			continue
+		}
+		if id := ids[key]; id.Kind == "lspdoctor" {
+			// The LSP Doctor restores in its saved slot (#2164), sharing the
+			// app-owned report (empty at start; check runs are session
+			// state — lsp.doctor or 'r' starts a fresh one).
+			m.wireLSPDoctorPanel(panes.Get(panes.AddLSPDoctor()).LSPDoctor())
 			continue
 		}
 		if id := ids[key]; id.Kind == "structure" {
@@ -2914,6 +2929,7 @@ var terminalGlobalCommands = map[string]bool{
 	"structure.toggle":      true,
 	"dom.toggle":            true,
 	"debug.doctor":          true,
+	"lsp.doctor":            true,
 	"scratch.panel":         true,
 	"notifications.history": true,
 	// #997: tab switching stays reachable from a focused terminal/tool pane
@@ -5027,6 +5043,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 'c' in the doctor pane (#1991): drop the connection trace; the
 		// listener status stays.
 		m.doctorLog.Clear()
+		return m, nil
+
+	case ilsp.DoctorMsg:
+		// lsp.doctor (#2164): open/focus the LSP Doctor and start a check
+		// run over the delivered effective server specs.
+		return m, m.handleLSPDoctor(msg)
+
+	case lspdoctor.RerunMsg:
+		// 'r' in the LSP Doctor pane (#2164): re-run the checks; Finish
+		// verifies fixes against the previous run's failure classes.
+		return m, m.runLSPDoctor()
+
+	case lspdoctor.ResultsMsg:
+		// A finished check run (#2164): store it and compute the
+		// resolved/unresolved verdicts.
+		m.lspDoctorReport.Finish(msg.Results)
 		return m, nil
 
 	case domParsedMsg:
@@ -9329,6 +9361,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Doctor().Wheel(lines)
 			}
+		case pane.KindLSPDoctor:
+			// The wheel scrolls the check report (#2164).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.LSPDoctor().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.LSPDoctor().Wheel(lines)
+			}
 		case pane.KindUsages:
 			// The wheel scrolls the usages list (#1155).
 			switch msg.Button {
@@ -10380,6 +10420,11 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// Doctor-trace clicks (#1991): a row click selects.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Doctor().Click(localX, localY)
+		}
+	case pane.KindLSPDoctor:
+		// LSP-Doctor report clicks (#2164): a row click selects.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.LSPDoctor().Click(localX, localY)
 		}
 	case pane.KindUsages:
 		// Usages-list clicks (#1155): a click selects, a double-click opens

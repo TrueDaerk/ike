@@ -23,6 +23,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/httppane"
 	"ike/internal/imgview"
+	"ike/internal/lspdoctor"
 	"ike/internal/merge"
 	"ike/internal/preview"
 	"ike/internal/problems"
@@ -121,6 +122,10 @@ const (
 	// exist, each bound to one ssh host alias, listing the host's files and
 	// asking the root model to open one via the download cache.
 	KindRemote
+	// KindLSPDoctor is the LSP Doctor tool window (#2164): a singleton panel
+	// with per-server failure diagnoses and verified fix suggestions, under
+	// key "lspdoctor".
+	KindLSPDoctor
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -146,6 +151,7 @@ const (
 	ctxDOM      = "dom"
 	ctxDoctor   = "xdoctor"
 	ctxRemote   = "remote"
+	ctxLSPDoc   = "lspdoctor"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -178,6 +184,7 @@ type Instance struct {
 	gi   ghissues.Model
 	dm   domview.Model
 	xd   debugdoctor.Model
+	ld   lspdoctor.Model
 	rm   remote.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
@@ -309,6 +316,8 @@ func (i *Instance) ContextID() string {
 		return ctxDOM
 	case KindDoctor:
 		return ctxDoctor
+	case KindLSPDoctor:
+		return ctxLSPDoc
 	case KindRemote:
 		return ctxRemote
 	}
@@ -374,6 +383,10 @@ func (i *Instance) DOM() *domview.Model { return &i.dm }
 // Doctor returns the underlying Xdebug Doctor tool-window model (#1991). It
 // is only valid for a doctor instance; callers gate on Kind first.
 func (i *Instance) Doctor() *debugdoctor.Model { return &i.xd }
+
+// LSPDoctor returns the underlying LSP Doctor tool-window model (#2164). It
+// is only meaningful for KindLSPDoctor instances.
+func (i *Instance) LSPDoctor() *lspdoctor.Model { return &i.ld }
 
 // Remote returns the underlying SFTP remote browser model (#1997). It is
 // only valid for a remote instance; callers gate on Kind first.
@@ -1145,6 +1158,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.dm.SetSize(w, h)
 	case KindDoctor:
 		i.xd.SetSize(w, h)
+	case KindLSPDoctor:
+		i.ld.SetSize(w, h)
 	case KindRemote:
 		i.rm.SetSize(w, h)
 	}
@@ -1203,6 +1218,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.dm.SetFocused(f)
 	case KindDoctor:
 		i.xd.SetFocused(f)
+	case KindLSPDoctor:
+		i.ld.SetFocused(f)
 	case KindRemote:
 		i.rm.SetFocused(f)
 	}
@@ -1276,6 +1293,8 @@ func (i *Instance) View() string {
 		return i.dm.View()
 	case KindDoctor:
 		return i.xd.View()
+	case KindLSPDoctor:
+		return i.ld.View()
 	case KindRemote:
 		return i.rm.View()
 	}
@@ -1342,6 +1361,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.dm.Update(msg)
 	case KindDoctor:
 		cmd = i.xd.Update(msg)
+	case KindLSPDoctor:
+		cmd = i.ld.Update(msg)
 	case KindRemote:
 		cmd = i.rm.Update(msg)
 	}
@@ -1527,6 +1548,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.dm.SetPalette(p)
 	case KindDoctor:
 		i.xd.SetPalette(p)
+	case KindLSPDoctor:
+		i.ld.SetPalette(p)
 	case KindRemote:
 		i.rm.SetPalette(p)
 	}

@@ -106,6 +106,7 @@ func Defaults() []Menu {
 			{Title: "Save Playground Filter…", Command: "json.jqSaveFilter"},
 			{Title: "Toggle Full Query View", Command: "json.jqQueryView"},
 			{Title: "Restart Language Servers", Command: "lsp.restart"},
+			{Title: "LSP Doctor", Command: "lsp.doctor"},
 			{Title: "Plugins", Command: "tools.plugins"},
 		}},
 		{Title: "Settings", Items: []Item{
