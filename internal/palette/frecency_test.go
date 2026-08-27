@@ -1,8 +1,6 @@
 package palette
 
 import (
-	"fmt"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -10,6 +8,10 @@ import (
 	"ike/internal/plugin"
 	"ike/internal/registry"
 )
+
+// The store itself (persistence, decay, corrupt files, caps) is tested in
+// internal/frecency; what belongs here is the palette's *blend policy* — how a
+// decayed count turns into ranking.
 
 // frecSource is a stub CommandSource whose titles differ in match quality for
 // the query "gamma": "Gamma" matches at the very start, "Regenerate Gamma"
@@ -32,92 +34,6 @@ func (frecSource) Commands() []registry.OwnedCommand {
 // fixedNow returns a clock pinned to base, offset by d.
 func fixedNow(base time.Time, d time.Duration) func() time.Time {
 	return func() time.Time { return base.Add(d) }
-}
-
-func TestFrecencyPersistsAcrossLoads(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "cmdfrecency.json")
-	base := time.Unix(1_700_000_000, 0)
-	f := LoadFrecency(path)
-	f.SetNow(fixedNow(base, 0))
-	f.Record("b.gamma")
-	f.Record("b.gamma")
-	f.Record("a.alpha")
-
-	re := LoadFrecency(path)
-	re.SetNow(fixedNow(base, 0))
-	if got := re.Score("b.gamma"); got < 1.99 || got > 2.01 {
-		t.Fatalf("persisted score = %v, want ~2", got)
-	}
-	if got := re.Score("c.regen"); got != 0 {
-		t.Fatalf("unrecorded score = %v, want 0", got)
-	}
-	// Nil receiver and empty id stay inert.
-	var nilF *Frecency
-	nilF.Record("x")
-	if nilF.Score("x") != 0 {
-		t.Fatal("nil Frecency must score 0")
-	}
-}
-
-func TestFrecencyDecaysWithAge(t *testing.T) {
-	base := time.Unix(1_700_000_000, 0)
-	f := LoadFrecency(filepath.Join(t.TempDir(), "cmdfrecency.json"))
-	f.SetNow(fixedNow(base, 0))
-	f.Record("a.alpha")
-
-	// One half-life later the single hit is worth half an execution.
-	f.SetNow(fixedNow(base, frecencyHalfLife))
-	if got := f.Score("a.alpha"); got < 0.49 || got > 0.51 {
-		t.Fatalf("score after one half-life = %v, want ~0.5", got)
-	}
-	// A clock that steps backwards must not inflate the score.
-	f.SetNow(fixedNow(base, -time.Hour))
-	if got := f.Score("a.alpha"); got > 1.0001 {
-		t.Fatalf("score with a backwards clock = %v, want <= 1", got)
-	}
-}
-
-func TestFrecencyToleratesCorruptFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "cmdfrecency.json")
-	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	f := LoadFrecency(path)
-	if got := f.Score("a.alpha"); got != 0 {
-		t.Fatalf("corrupt file must load empty, score = %v", got)
-	}
-	// The store stays usable and repairs the file on the next write.
-	f.Record("a.alpha")
-	if got := LoadFrecency(path).Score("a.alpha"); got <= 0 {
-		t.Fatalf("record after corrupt load did not persist, score = %v", got)
-	}
-	// A missing file is equally tolerated.
-	if got := LoadFrecency(filepath.Join(t.TempDir(), "none.json")).Score("x"); got != 0 {
-		t.Fatalf("missing file must load empty, score = %v", got)
-	}
-}
-
-func TestFrecencyCapsHistory(t *testing.T) {
-	base := time.Unix(1_700_000_000, 0)
-	f := LoadFrecency(filepath.Join(t.TempDir(), "cmdfrecency.json"))
-	f.SetNow(fixedNow(base, 0))
-	for i := 0; i < frecencyMaxHits*3; i++ {
-		f.Record("a.alpha")
-	}
-	if got := len(f.hits["a.alpha"]); got != frecencyMaxHits {
-		t.Fatalf("hits per command = %d, want %d", got, frecencyMaxHits)
-	}
-	// Many distinct commands: the store caps the id count, keeping the
-	// highest-scoring entries.
-	for i := 0; i < frecencyMaxIDs+50; i++ {
-		f.Record(fmt.Sprintf("gen.%03d", i))
-	}
-	if got := len(f.hits); got != frecencyMaxIDs {
-		t.Fatalf("tracked commands = %d, want %d", got, frecencyMaxIDs)
-	}
-	if f.Score("a.alpha") == 0 {
-		t.Fatal("the most-executed command must survive pruning")
-	}
 }
 
 func TestCommandModeEmptyQueryRanksByFrecency(t *testing.T) {
@@ -162,6 +78,27 @@ func TestCommandModeLongQueryFuzzyDominatesFrecency(t *testing.T) {
 	// Five runes: the far better match wins despite ten recent executions.
 	if got := titles(c.Results("gamma", Context{})); got[0] != "Gamma" {
 		t.Fatalf("long query must be dominated by match quality: %+v", got)
+	}
+}
+
+// TestFileFrecencyHalfLifeIsSlower guards the two stores' distinct decay
+// (#2155): a file open a week old still counts nearly fully, while a command
+// execution of the same age is worth half.
+func TestFileFrecencyHalfLifeIsSlower(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	week := 7 * 24 * time.Hour
+	cmd := LoadFrecency(filepath.Join(t.TempDir(), "cmdfrecency.json"))
+	file := LoadFileFrecency(filepath.Join(t.TempDir(), "filefrecency.json"))
+	for _, f := range []*Frecency{cmd, file} {
+		f.SetNow(fixedNow(base, 0))
+		f.Record("x")
+		f.SetNow(fixedNow(base, week))
+	}
+	if got := cmd.Score("x"); got < 0.49 || got > 0.51 {
+		t.Fatalf("command score after a week = %v, want ~0.5", got)
+	}
+	if file.Score("x") <= cmd.Score("x") {
+		t.Fatalf("file history must decay slower: file=%v cmd=%v", file.Score("x"), cmd.Score("x"))
 	}
 }
 

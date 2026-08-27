@@ -173,6 +173,16 @@ func cmdFrecencyFile() string {
 	return filepath.Join(".ike", "cmdfrecency.json")
 }
 
+// fileFrecencyFile returns the path of the per-project file-open history
+// (#2155) backing the '@' finder's frecency ranking — the same store type as
+// cmdFrecencyFile's, keyed by file path instead of command id.
+func fileFrecencyFile() string {
+	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, "filefrecency.json")
+	}
+	return filepath.Join(".ike", "filefrecency.json")
+}
+
 // winSizeFile returns the path of the per-project floating-window size store
 // (#774), following the layout store's IKE_CONFIG_DIR redirection seam.
 func winSizeFile() string {
