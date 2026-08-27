@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, curl export and raw-body file save for the shown exchange.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-25T12:00:00Z
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -545,6 +545,51 @@ user-variable chain (`Options.Vars`, #1867 — the caller's value is copied, so
 one `Options` can serve several dispatches), override the config file paths,
 or disable detection entirely.
 
+### Large bodies are spooled to disk (#2157)
+
+Every dispatch used to answer with one `[]byte` holding the whole body. The
+viewer then composed rows from it, indexed those for highlighting and scanned
+them for folds — several derived copies of the same megabytes, alive for as
+long as the response was on show, and up to five at a time once the
+[history ring](#response-history-1251) filled. A 10 MiB answer made the pane
+stutter and never gave the memory back.
+
+A body past `SpoolThreshold` (1 MiB) is therefore **streamed to a spool file**
+while it is received (`internal/httpclient/spool.go`, `bodySink`):
+
+- `Response.Body` holds the first `SpoolThreshold` bytes — the *head*, which
+  is what the viewer renders.
+- `Response.SpoolPath` names the file holding the **whole** body, head
+  included, so it is a complete artifact on its own: "open as file" opens the
+  response, not its tail.
+- `Response.BodySize` is the total received size (`BodyBytes()` answers it for
+  old responses too, where `len(Body)` is the whole story).
+- `MaxBodyBytes` still caps the total at 10 MiB, with the same truncation
+  warning. Both the collect path and the streaming path share the sink, so the
+  two cannot drift.
+
+Everything that genuinely needs all the bytes asks for them explicitly, so the
+full copy lives for one operation rather than for the session:
+`FullBody()` (a `# @capture` expression, `httpdiff`), `BodyReader()` (the
+raw-body file save, which *streams* into the destination) and `BodyRange(off,
+n)` (the viewer's "load more", one window at a time). A spool file that has
+gone missing reports `ErrSpoolGone` and degrades to the head — a shortened
+answer beats none.
+
+Spool files live in one per-process directory under the OS temp dir.
+`CleanupSpool` (deferred in `cmd/ike/main.go`) removes it on exit; a crash
+leaves it behind, so *creating* a spool directory first sweeps the ones older
+than 24 hours — the same best-effort posture the history store takes.
+
+Because a temp file dies with the process, the **history store adopts it**: on
+`Append` the spool is copied into `.ike/http/bodies/` and the entry records
+the name relative to the store directory (`Entry.BodyFile`, `Entry.BodySize`).
+Pruning past `MaxPerRequest` deletes the dropped entries' body files, so
+`bodies/` follows the five-entry ring. The head stays inline in the history
+JSON as before, so showing a stored entry still costs no read; `FullBody()` is
+what reaches past it. An adoption that fails costs the entry its full body —
+the stored head still shows — never the entry itself.
+
 ### As-sent request snapshot (#1832)
 
 Every dispatch captures a `RequestSnapshot` — method, final URL, headers and
@@ -783,6 +828,55 @@ For a recognized stream:
   re-sent answer is stored under the same history key, and `dispatchHTTP`
   carries the duplicate guard, in-flight bookkeeping and event pump for
   `http.run` and `http.resend` alike.
+- **Pretty by default, raw on request** (#2157): a JSON body is indented
+  before it is composed, so the common case — an API answering minified —
+  reads without a keystroke, and the fold ranges (below) have lines to attach
+  to. `t` / `http.toggleRawBody` switches to the **bytes as received** and
+  back, for the moments where the bytes themselves are the question (a
+  whitespace-sensitive payload, a malformed answer `json.Indent` refuses).
+  Highlighting stays on in raw mode: it is the *formatting* that is off, not
+  the styling. The flag belongs to the **view**, not to the response, so
+  browsing history (#1251) keeps showing bodies the way the user asked for
+  them. `formatBody` in `internal/httppane/body.go` owns all of it, and the
+  toggle goes through the same `recompose` path a new response does — the
+  fold ranges are rebuilt from the rows that exist now, never carried over
+  from rows that no longer do.
+- **Formatting is capped** (`PrettyLimit`, 2 MiB, #2157): indenting,
+  highlighting and fold-scanning a body all cost time linear in its size, and
+  a pane that freezes for a second on arrival has stopped being a viewer. Past
+  the cap the body composes as plain rows — no `json.Indent`, no highlight
+  index, no fold scan — with a warning row saying so. The cap is *surfaced,
+  never silent*: without the notice a minified megabyte just looks like a
+  viewer that forgot how to indent.
+- **Large bodies are a window onto a file** (#2157): the dispatcher spools
+  anything past `SpoolThreshold` (1 MiB) to disk (see
+  [Large bodies are spooled to disk](#large-bodies-are-spooled-to-disk-2157)),
+  so what the pane holds is the **head**. A warning row states the situation
+  and names both ways on — `(showing the first 1.0 MiB of 7.3 MiB — m load
+  more · o open as file)`:
+  - `m` / `http.loadMoreBody` reads the next `LoadMoreChunk` (1 MiB) window
+    off the spool through `Response.BodyRange` and recomposes. One window at a
+    time is the point: pulling the remainder in would undo the spooling. The
+    notice and the footer hint disappear once nothing is left behind the head.
+  - `o` / `http.openBodyFile` opens the **whole** body as an editor tab. The
+    pane resolves the path and emits `httppane.OpenBodyFileMsg`; the host opens
+    it through `openPathInEditor` — the `CopyMsg` seam again. A body held in
+    memory has no file and the key does nothing (`http.saveResponse` is the
+    action for that one).
+  - A spool file that has gone missing degrades to the head rather than
+    emptying the pane: `LoadMore` reports no progress and the composed rows
+    stay readable.
+- **One key into the jq playground** (#2157): `q` / `http.jqPlayground` opens
+  the [jq playground](./jq-playground.md) over the shown body, in the response
+  pane itself — the mode already resolved a focused response as its input
+  (`playSource`), this is the key that says so without a detour through the
+  Tools menu. The pane emits `httppane.JQPlaygroundMsg`; the host focuses the
+  viewer and calls `startPlayground(DialectJQ, false)`, so the palette command
+  works from an editor too. The input is `Model.JQInput()`, which for a
+  spooled body is the **whole** body read back off the spool, not the head on
+  screen: a program written against a truncated document answers questions
+  about a document that never arrived. The playground snapshots its input
+  once, so that copy lives no longer than the parse.
 - **Identifier colors** (#1626): UUIDs and long hex hashes in the **body**
   rows take a color hashed from the identifier itself (`internal/idcolor`,
   drawn from the shared rainbow palette), so the trace id of this response
@@ -953,6 +1047,13 @@ fixture cannot go through the clipboard at all, and `HasRawBody` gates the
 action on the raw bytes rather than on the composed rows so a binary body
 qualifies where the copy actions do not.
 
+A **spooled** body (#2157) is streamed into the destination through
+`Response.BodyReader` rather than read into memory first: the save exists
+precisely for the responses too large to hold, so pulling one back in to write
+it out would defeat it. `HasRawBody`/`httpResponseToSave` gate on
+`Response.BodyBytes()` — the total — so a body that is mostly on the spool
+still qualifies.
+
 The path comes from a one-line shell prompt with `pathcomplete` tab
 completion, the JetBrains-import prompt's shape (#677). It is prefilled with
 `httpResponseFileName`: the last path segment of the snapshot's URL (query and
@@ -1091,7 +1192,11 @@ other `.ike/` stores). Entries are keyed by source file + request key
 (`httpfile.Request.Key`), so every request in a multi-request file keeps its
 own history; one JSON file per request (debuggable base-name prefix + hash),
 newest first, pruned on append, all writes best effort — losing a history
-entry never fails a dispatch.
+entry never fails a dispatch. A **spooled** body (#2157) does not fit that
+shape: its file is a per-process temp file, so `Append` copies it into
+`.ike/http/bodies/` and records the name relative to the store; pruning
+deletes the dropped entries' body files, so `bodies/` follows the same
+five-entry ring.
 
 After each dispatch the app appends the response and hands the stored list
 to the viewer: `h`/`l` or `←`/`→` (#1471) browse older/newer responses of the
@@ -1117,7 +1222,7 @@ palette carries `http.responseHistory` ("Browse HTTP Response History"),
 which focuses the viewer and reports how many responses are stored; and the
 help overlay gains an `http response pane` group listing the pane-local keys
 (`h/l ←/→`, `r`, `s`, `D`, `j/k`, `shift+←/→`, `0/$`, `g/G`, `/`, `n/N`, `za…`,
-`zy`, `y`, `Y`, `ctrl+r`, `C`, `S`, `x`, `esc`) — they belong to no
+`zy`, `y`, `Y`, `ctrl+r`, `C`, `S`, `t`, `q`, `m`, `o`, `x`, `esc`) — they belong to no
 registry command, so nothing else would document them. `help.SetExtra` takes
 several groups for that.
 

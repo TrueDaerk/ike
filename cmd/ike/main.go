@@ -15,6 +15,7 @@ import (
 	"ike/internal/config"
 	"ike/internal/diag"
 	"ike/internal/host"
+	"ike/internal/httpclient"
 	"ike/internal/project"
 	"ike/internal/registry"
 	"ike/internal/version"
@@ -155,6 +156,10 @@ func main() {
 	ctx := context.Background()
 	wasmRT := wasm.NewRuntime(ctx, nil)
 	defer wasmRT.Close()
+	// Large HTTP response bodies are spooled to a per-process temp directory
+	// (#2157) so the response viewer never holds them whole. It goes away with
+	// the process; a crash leaves it behind and the next start sweeps it.
+	defer httpclient.CleanupSpool()
 	wasmHost := bridge.NewHostAdapter()
 	if err := abi.InstantiateHostGated(ctx, wasmRT.Engine(), wasmHost, wasmRT.Allows); err != nil {
 		fmt.Fprintln(os.Stderr, "ike: wasm host module:", err)

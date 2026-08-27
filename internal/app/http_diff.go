@@ -100,7 +100,7 @@ func storedHTTPEntries(entries []httphistory.Entry, shown int) []storedEntry {
 		out = append(out, storedEntry{
 			Idx:    i,
 			Label:  fmt.Sprintf("%d/%d · %s", i+1, len(entries), e.Status),
-			Detail: fmt.Sprintf("%s · %d bytes", e.Proto, len(e.Body)),
+			Detail: fmt.Sprintf("%s · %d bytes", e.Proto, e.BodySizeBytes()),
 			At:     e.Time,
 		})
 	}

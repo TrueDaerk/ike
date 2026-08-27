@@ -232,9 +232,14 @@ type playInputSource struct {
 func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
 	httpOK := d != jqplay.DialectYQ
 	if c := m.focusedContent(); httpOK && c != nil && c.Kind() == pane.KindHTTP {
-		if body := c.HTTP().BodyText(); strings.TrimSpace(body) != "" {
-			paneKey := m.activeWS().Panes.Focused()
-			return playInputSource{text: body, label: "HTTP response", key: "http:" + paneKey, paneKey: paneKey, tabIdx: -1}, true
+		// JQInput, not BodyText (#2157): a spooled body is only partly in the
+		// pane, and a program written against its head would answer questions
+		// about a document that never arrived.
+		if c.HTTP().HasBodyText() {
+			if body := c.HTTP().JQInput(); strings.TrimSpace(body) != "" {
+				paneKey := m.activeWS().Panes.Focused()
+				return playInputSource{text: body, label: "HTTP response", key: "http:" + paneKey, paneKey: paneKey, tabIdx: -1}, true
+			}
 		}
 	}
 	if ed := m.activeEditor(); ed != nil {
@@ -254,8 +259,10 @@ func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
 	if hostKey, tabIdx, inst, ok := m.findContent(func(c *pane.Instance) bool {
 		return httpOK && c.Kind() == pane.KindHTTP
 	}); ok && m.leafVisible(hostKey) {
-		if body := inst.HTTP().BodyText(); strings.TrimSpace(body) != "" {
-			return playInputSource{text: body, label: "HTTP response", key: "http:" + hostKey, paneKey: hostKey, tabIdx: tabIdx}, true
+		if inst.HTTP().HasBodyText() {
+			if body := inst.HTTP().JQInput(); strings.TrimSpace(body) != "" {
+				return playInputSource{text: body, label: "HTTP response", key: "http:" + hostKey, paneKey: hostKey, tabIdx: tabIdx}, true
+			}
 		}
 	}
 	return playInputSource{}, false

@@ -9,7 +9,6 @@ package httppane
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -121,6 +120,14 @@ type Model struct {
 	// content as the current answer. pendingSince drives the elapsed time.
 	pending      string
 	pendingSince time.Time
+
+	// raw shows the body as it arrived instead of pretty-printed (#2157), and
+	// more holds the spool bytes "load more" has pulled in beyond the
+	// response's in-memory head. raw belongs to the view and survives history
+	// browsing; more belongs to the shown entry and is dropped on every
+	// compose. See body.go.
+	raw  bool
+	more []byte
 
 	// Streaming (#1776): while a recognized stream is live the viewer shows
 	// status, headers and the body lines received so far — plaintext, no
@@ -410,8 +417,19 @@ func (m *Model) Pending() string { return m.pending }
 // HistoryIndex reports the shown entry and the history length (tests).
 func (m *Model) HistoryIndex() (int, int) { return m.histIdx, len(m.hist) }
 
-// compose rebuilds the display rows for one response.
+// compose rebuilds the display rows for one response — the entry point every
+// content change goes through. It drops the spool bytes "load more" pulled in
+// (#2157): they belong to the entry that was on show, not to this one.
 func (m *Model) compose(resp *httpclient.Response) {
+	m.more = nil
+	m.recompose(resp)
+}
+
+// recompose rebuilds the display rows for the response already on show, with
+// whatever the raw toggle and "load more" currently say (#2157). Scroll and
+// selection reset like they do on a new response: the row count changed under
+// them, so keeping either would point at different content.
+func (m *Model) recompose(resp *httpclient.Response) {
 	m.loaded = true
 	m.streaming = false
 	m.streamTail = ""
@@ -444,49 +462,30 @@ func (m *Model) compose(resp *httpclient.Response) {
 	}
 	m.rows = append(m.rows, row{kind: kindBlank})
 
-	body, tag, notice := formatBody(resp)
-	if notice != "" {
+	view := formatBody(resp, m.bodyBytes(resp), m.raw)
+	for _, notice := range view.notices {
 		m.rows = append(m.rows, row{kind: kindWarn, text: notice})
 	}
-	if len(body) > 0 {
-		if tag != "" && !highlight.FencedSupported(tag) {
+	if len(view.lines) > 0 {
+		if view.tag != "" && !highlight.FencedSupported(view.tag) {
 			// A recognized Content-Type whose grammar is not in this build
 			// (CGo-free, or the plugin not linked) renders plain — say so
 			// instead of failing silently (#1270).
-			m.rows = append(m.rows, row{kind: kindWarn, text: fmt.Sprintf("(no %s highlighter in this build — showing plain text)", tag)})
+			m.rows = append(m.rows, row{kind: kindWarn, text: fmt.Sprintf("(no %s highlighter in this build — showing plain text)", view.tag)})
 		}
-		m.bodyIx = highlight.NewIndex(highlight.HighlightFenced(tag, body))
+		m.bodyIx = highlight.NewIndex(highlight.HighlightFenced(view.tag, view.lines))
 		bodyStart := len(m.rows)
-		for i, line := range body {
+		for i, line := range view.lines {
 			m.rows = append(m.rows, row{kind: kindBody, text: line, body: i})
 		}
-		// The body folds by its own language's rules (#1330).
-		m.setFolds(highlight.FencedFolds(tag, body), bodyStart)
+		// The body folds by its own language's rules (#1330). A body past
+		// PrettyLimit carries no tag, so it is neither highlighted nor
+		// scanned for folds (#2157).
+		m.setFolds(highlight.FencedFolds(view.tag, view.lines), bodyStart)
 	}
 	m.syncVisible()
 	m.ClearSelection() // the rows changed: an old selection means nothing
 	m.research()       // the search survives history browsing and new responses
-}
-
-// formatBody renders the response body for display: pretty-printed JSON,
-// raw text for other recognized/unknown text types, a notice instead of
-// content for binary bodies. tag is the fence tag used for highlighting.
-func formatBody(resp *httpclient.Response) (lines []string, tag, notice string) {
-	if len(resp.Body) == 0 {
-		return nil, "", ""
-	}
-	if isBinary(resp.Body) {
-		return nil, "", fmt.Sprintf("(binary body, %d bytes — not shown)", len(resp.Body))
-	}
-	tag = contentTag(resp.Headers.Get("Content-Type"))
-	text := string(resp.Body)
-	if tag == "json" {
-		var buf bytes.Buffer
-		if err := json.Indent(&buf, resp.Body, "", "  "); err == nil {
-			text = buf.String()
-		}
-	}
-	return strings.Split(strings.TrimRight(text, "\n"), "\n"), tag, ""
 }
 
 // contentTag maps a Content-Type header onto a fence tag for highlighting;
@@ -634,6 +633,22 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Keep the scroll position while stepping through history (#1493),
 		// per request; the footer anchor marks the active state.
 		m.ToggleKeepScroll()
+	case "t":
+		// Raw ⇄ pretty-printed body (#2157). Pretty is the default — the
+		// toggle is for the moments where the bytes themselves are the
+		// question (a whitespace-sensitive payload, a malformed JSON answer).
+		m.ToggleRaw()
+	case "q":
+		// Open the jq playground over this body (#2157). The pane holds the
+		// body, the host owns the mode — the CopyMsg seam again.
+		return func() tea.Msg { return JQPlaygroundMsg{} }
+	case "m":
+		// One more window of a spooled body (#2157). Nothing to load is not
+		// an error: the footer only advertises the key while there is.
+		m.LoadMore()
+	case "o":
+		// Open the whole spooled body as a file (#2157).
+		return m.OpenBodyFileCmd()
 	case "shift+left":
 		// Sideways panning of wide bodies (#1290) moved off the bare arrows
 		// when those took over history (#1471).
@@ -1114,6 +1129,22 @@ func (m *Model) footerText() string {
 	// The fold hint only appears when the body actually has ranges (#1330).
 	if len(m.folds) > 0 {
 		s += " · za/zM/zR fold"
+	}
+	// The body actions (#2157) come next: the raw toggle and the jq handoff
+	// need a body at all, "load more" and "open as file" a spooled one.
+	if !m.streaming && m.HasBodyText() {
+		if m.raw {
+			s += " · t pretty"
+		} else {
+			s += " · t raw"
+		}
+		s += " · q jq"
+	}
+	if m.CanLoadMore() {
+		s += " · m more"
+	}
+	if m.BodyFilePath() != "" {
+		s += " · o open file"
 	}
 	// The curl export and the file save (#2059) need an entry on show; a
 	// live stream has neither a snapshot nor a finished body. They sit last:
