@@ -525,6 +525,12 @@ type Editor struct {
 	// (#168); StickyScrollDepth caps how many nested headers are pinned.
 	StickyScroll      bool `toml:"sticky_scroll"`
 	StickyScrollDepth int  `toml:"sticky_scroll_depth"`
+	// StickyScrollSymbols lets sticky scroll fall back to the LSP
+	// documentSymbol tree the Structure view and the breadcrumbs already
+	// cache (#2167), so languages with no Tree-sitter grammar still pin
+	// their enclosing declarations. Tree-sitter scopes always win where
+	// they exist — they need no server and follow every keystroke.
+	StickyScrollSymbols bool `toml:"sticky_scroll_symbols"`
 	// SmartPaste re-indents a multi-line linewise paste to the target line's
 	// indentation, preserving relative structure (#1476).
 	SmartPaste bool `toml:"smart_paste"`
