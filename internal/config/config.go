@@ -291,6 +291,8 @@ func (c *Config) Flat() map[string]string {
 	put("scratch.section", c.Scratch.Section)
 	put("scratch.section_height", c.Scratch.SectionHeight)
 	put("scratch.sort", c.Scratch.Sort)
+	put("http.diff_ignore_headers", strings.Join(c.HTTP.DiffIgnoreHeaders, ","))
+	put("http.diff_after_rerun", c.HTTP.DiffAfterRerun)
 	put("issues.default_tab", c.Issues.DefaultTab)
 	put("issues.default_sort", c.Issues.DefaultSort)
 	put("issues.default_filter", c.Issues.DefaultFilter)

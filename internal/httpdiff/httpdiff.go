@@ -29,11 +29,19 @@ const Indent = "  "
 // blank line, body. Both halves are comparable in one view (#1992) with the
 // body — the part that matters — last, where a growing diff does not push the
 // headers out of sight.
-func Text(e httphistory.Entry) string {
+func Text(e httphistory.Entry) string { return TextFiltered(e, nil) }
+
+// TextFiltered renders one stored response like Text, with the headers whose
+// names ignore matches left out (#2247). Two runs of one request differ in
+// Date, a fresh request id and a few timing headers every single time, and
+// those lines push the header that really changed out of sight — so the noise
+// is filtered rather than read. An empty ignore list keeps every header, which
+// is what Text is.
+func TextFiltered(e httphistory.Entry, ignore []string) string {
 	var b strings.Builder
 	b.WriteString(strings.TrimSpace(e.Proto + " " + e.Status))
 	b.WriteString("\n\n")
-	b.WriteString(HeadersText(e.Headers))
+	b.WriteString(HeadersTextFiltered(e.Headers, ignore))
 	b.WriteString("\n")
 	// FullBody, not Body (#2157): a spooled entry keeps only its head in
 	// memory, and a diff of two heads would report a difference at the point
@@ -45,9 +53,16 @@ func Text(e httphistory.Entry) string {
 // HeadersText renders the headers one "Name: value" per line, sorted by name
 // and then in their sent order per name, so header diffs are order-stable
 // too — Go's http.Header is a map and would otherwise shuffle every render.
-func HeadersText(h http.Header) string {
+func HeadersText(h http.Header) string { return HeadersTextFiltered(h, nil) }
+
+// HeadersTextFiltered renders the headers like HeadersText, skipping the ones
+// IgnoreHeader matches (#2247).
+func HeadersTextFiltered(h http.Header, ignore []string) string {
 	names := make([]string, 0, len(h))
 	for n := range h {
+		if IgnoreHeader(n, ignore) {
+			continue
+		}
 		names = append(names, n)
 	}
 	sort.Strings(names)
@@ -58,6 +73,36 @@ func HeadersText(h http.Header) string {
 		}
 	}
 	return b.String()
+}
+
+// IgnoreHeader reports whether the header called name is filtered out of a
+// response diff by one of the patterns (#2247). Matching is
+// case-insensitive — a header name is — and a trailing "*" makes a pattern a
+// prefix, so a whole vendor family ("x-amz-*") is one entry instead of a
+// dozen. A pattern of just "*" would hide every header and is refused: an
+// empty diff is never the answer to "what changed?".
+func IgnoreHeader(name string, patterns []string) bool {
+	if len(patterns) == 0 {
+		return false
+	}
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if lower == "" {
+		return false
+	}
+	for _, p := range patterns {
+		p = strings.ToLower(strings.TrimSpace(p))
+		switch {
+		case p == "" || p == "*":
+			continue
+		case strings.HasSuffix(p, "*"):
+			if strings.HasPrefix(lower, strings.TrimSuffix(p, "*")) {
+				return true
+			}
+		case p == lower:
+			return true
+		}
+	}
+	return false
 }
 
 // NormalizeBody returns the diff-ready form of one response body: JSON

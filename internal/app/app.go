@@ -189,6 +189,10 @@ type Model struct {
 	// by source file + request key: the duplicate-dispatch guard, the
 	// statusline indicator and the cancel action all read it.
 	httpFlight map[string]*httpFlightEntry
+	// httpRerunDiff marks the dispatches whose answer should open against the
+	// run before it once it is stored (#2247) — a re-run or a re-send, keyed
+	// like httpFlight so concurrent dispatches never take each other's diff.
+	httpRerunDiff map[string]bool
 	// httpTickArmed guards the flight indicator's tick chain (#2163). The
 	// old "arm when the map was empty" guard raced the in-flight tick: a
 	// dispatch landing in the window between the last flight finishing and
@@ -4619,6 +4623,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// http.resend (palette, #1832): the shown response's stored request
 		// goes out again, verbatim.
 		return m, m.resendHTTPRequest()
+
+	case HTTPRerunMsg:
+		// http.rerun (palette, #2247): the shown history entry's request is
+		// re-read from its .http file and dispatched with the current
+		// variables and environment.
+		return m, m.rerunHTTPRequest()
+
+	case httppane.RerunMsg:
+		// "R" in the response pane (#2247): the pane names the moment, the
+		// host re-reads the request and dispatches it.
+		return m, m.rerunHTTPRequest()
 
 	case httppane.ResendMsg:
 		// ctrl+r or the header affordance in the response pane (#1832): the

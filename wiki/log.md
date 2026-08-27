@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-27 (HTTP history: re-run requests and diff against the previous run, #2247)
+
+- **The gap**: the response history stored every run (#1251), the diff engine
+  compared two of them (#1992, #2060) — but the loop between them was open.
+  Re-running a request from its history meant going back to the `.http` file
+  and finding the block, and the comparison that followed drowned in `Date`
+  and request-id lines that differ on every single run.
+- **`R` in the response pane** (palette: `http.rerun`) re-runs the shown
+  entry's request from its `.http` file with the **current** variables and
+  environment — the difference to `ctrl+r`, which repeats the stored bytes.
+  It re-reads the open buffer when there is one, so unsaved edits count, and
+  a block that was renamed or deleted since is named as such instead of
+  guessed at.
+- **The comparison follows by itself**: `http.diff_after_rerun` (default on)
+  arms the dispatch, and `fillHTTPPanel` opens previous-vs-new the moment the
+  answer is stored — the `P` path (#2060), now reached by the re-run. The
+  mark is taken up front, so a failed or canceled re-run disarms too; a
+  first-ever run has nothing to compare with and stays silent.
+- **Volatile headers are filtered**: `http.diff_ignore_headers` (`date`, the
+  request/trace ids, timing fields, `x-amz-*`-style families) keeps the noise
+  out of every response diff via `httpdiff.TextFiltered`, and the notice says
+  how many headers were dropped so a filtered header never passes for an
+  unchanged one. Both settings live on the new **HTTP Client** settings page.
+
 ## 2026-08-27 (Problems pane: apply quick fixes from the entry, #2175)
 
 - **The gap**: the Problems pane could navigate to a diagnostic but not fix

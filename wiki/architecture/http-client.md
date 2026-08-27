@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-27T12:00:00Z
+timestamp: 2026-08-27T18:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -1304,7 +1304,7 @@ palette carries `http.responseHistory` ("Browse HTTP Response History"),
 which focuses the viewer and reports how many responses are stored; and the
 help overlay gains an `http response pane` group listing the pane-local keys
 (`h/l ←/→`, `r`, `s`, `D`, `j/k`, `shift+←/→`, `0/$`, `g/G`, `/`, `n/N`, `za…`,
-`zy`, `y`, `Y`, `ctrl+r`, `C`, `S`, `t`, `q`, `m`, `o`, `x`, `esc`) — they belong to no
+`zy`, `y`, `Y`, `ctrl+r`, `R`, `C`, `S`, `t`, `q`, `m`, `o`, `x`, `esc`) — they belong to no
 registry command, so nothing else would document them. `help.SetExtra` takes
 several groups for that.
 
@@ -1380,11 +1380,57 @@ response or no earlier run to compare against each notify instead of opening
 something wrong; the footer advertises `P diff prev` once an earlier entry
 exists below the one on show.
 
+**Re-running a request from its history** (#2247): `ctrl+r` above repeats the
+stored *bytes*, which is the right answer to "did that exact exchange change"
+but the wrong one to "does this request still answer the same today" — an
+edited block, a redefined variable and a switched environment must all count
+there. `R` in the focused pane (uppercase next to the verbatim `ctrl+r`; `r`
+is the request picker) emits `httppane.RerunMsg`, the palette pendant is
+`http.rerun` ("Re-run HTTP Request from History"); both land in
+`Model.rerunHTTPRequest` (`internal/app/http.go`), which re-reads the pane's
+source file — the open buffer when it has one, so unsaved edits count —,
+finds the block whose `Key()` matches the shown entry's request, resolves the
+current variables and environment through `httpVars` and dispatches it through
+`dispatchHTTPRequest`, the very path `http.run` takes once it has found the
+block under the cursor. The answer lands in the pane and in the history like
+any dispatch. A source that cannot be read, and a block renamed or deleted
+since the response was stored, each notify and name `http.resend` as the way
+that still works, rather than dispatching something else. The footer advertises
+`R re-run` once the pane knows its source file.
+
+**Comparing a re-run with the run before it** (#2247): the point of re-running
+is usually the comparison, so `http.diff_after_rerun` (default **on**) opens it
+without a second key. `rerunHTTPRequest` — and `resendHTTPRequest`, a re-run in
+spirit — *arms* the dispatch in `Model.httpRerunDiff`, keyed like the in-flight
+set so two concurrent re-runs never take each other's diff;
+`fillHTTPPanel` takes the mark up front (a failed or canceled re-run disarms
+too) and, once the answer is appended to the history, calls
+`openHTTPPreviousRunDiff` — the same `P` path (#2060), now reached by the
+re-run itself. A first-ever run has nothing to compare with and opens nothing,
+silently. Off keeps the pane on the new response, where `P` still opens the
+same diff on demand.
+
+**Volatile headers are filtered** (#2247): two runs of one request differ in
+`Date`, a freshly stamped request id and a handful of timing headers *every
+single time*, and those lines hide the one header that really changed.
+`http.diff_ignore_headers` names the header names left out of every response
+diff — matched case-insensitively, optionally with a trailing `*` for a whole
+vendor family (`x-amz-*`); a bare `*` is refused, since an empty diff answers
+nothing. The default list covers `date`, `age`, `expires`, `keep-alive`,
+`server-timing`, `x-runtime`, the request/correlation/trace id headers,
+`traceparent`, `cf-ray` and the common AWS/CDN ids. `diffHTTPEntries` passes
+the list to `httpdiff.TextFiltered`, and the notice above the diff says how
+many headers were filtered (`countIgnoredHTTPHeaders`), so a filtered header
+never passes for an unchanged one. Both settings live on the **HTTP Client**
+settings page; the config validator lower-cases the list and drops blanks and
+duplicates, so the matcher only ever compares.
+
 **Normalizing what is compared** (`internal/httpdiff`, #1992): comparing two
 responses byte for byte drowns the real difference in serialization noise —
 key order, indentation, a minified answer against a pretty-printed one.
 `httpdiff.Text` renders one `httphistory.Entry` as status line, sorted
-headers, blank line, body (a combined view: the body — what matters — sits
+headers (`TextFiltered` is the same render with the volatile ones dropped,
+#2247), blank line, body (a combined view: the body — what matters — sits
 last, where a growing diff does not push the headers out of sight), and the
 dispatch *duration*, which differs on every run, stays out of it deliberately.
 `httpdiff.NormalizeBody` decodes a JSON body and re-encodes it with sorted
