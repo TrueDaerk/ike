@@ -198,7 +198,26 @@ line runs that test (see /architecture/run-configurations.md).
   1–200 in both `config.validate` and the settings form) sizes it: any
   configured editor applies it to the app-wide store on `Configure`, and the
   root model applies it once at startup so copies before the first editor are
-  bounded too. Shrinking drops the oldest entries immediately. Saves
+  bounded too. Shrinking drops the oldest entries immediately.
+  **Oversized copies are skipped, not truncated (#2250).**
+  `editor.clipboard_history_max_kb` (default **256**, clamped to 1–10240) caps
+  a single ring entry: a yank, delete or pane copy above it never enters the
+  history, so the picker can never offer a row that pastes something other
+  than what was copied — the registers still hold the payload in full, so `p`
+  and `"1p` are unaffected. Raising the cap does not re-admit copies that were
+  already skipped, and lowering it leaves rows the picker is already showing
+  in place; the cap governs admission only. Rows *display* truncated (first
+  line, whitespace-compacted, ellipsised, plus a `3 lines` / `12 chars` size)
+  while pasting the entry in full.
+  **The picked entry pastes in its captured mode (#2250).** The paste reads
+  the *unnamed* register, not `"+`: a `"+` read goes through the system
+  clipboard, which carries text only and re-derives linewise from a trailing
+  newline, which would turn a charwise span that happens to end in a newline
+  into a linewise paste. `PasteHistoryEntry` still mirrors the pick onto the
+  system clipboard and the unnamed register first (the JetBrains "the pick
+  becomes the clipboard" behaviour), then runs the shared `pasteRegister`
+  path — prompt, visual, mid-insert and normal-mode paste all behave exactly
+  as for `Cmd+V`, in one undo step. Saves
   report on the ex line (#261): `"file" written` on success, `E: <error>`
   on failure (read-only file, no file name) — a failed write keeps the
   buffer dirty and aborts `:wq`.

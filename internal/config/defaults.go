@@ -69,7 +69,8 @@ func defaults() *Config {
 			ScrollOff:              3,
 			TextWidth:              80,
 			ClipboardSync:          true,
-			ClipboardHistorySize:   20, // register.DefaultHistoryCap, JetBrains' ring size
+			ClipboardHistorySize:   20,  // register.DefaultHistoryCap, JetBrains' ring size
+			ClipboardHistoryMaxKB:  256, // register.DefaultEntryMaxBytes; bigger copies stay out of the ring
 			AutoIndent:             true,
 			AutoClosePairs:         true,
 			TrimTrailingWhitespace: true,

@@ -71,6 +71,7 @@ distinct message toasts once per session (`notifyConfigDiags`).
 Clamped today:
 `editor.tab_width >= 1`, `editor.scroll_off >= 0`,
 `editor.clipboard_history_size` ∈ [1, 200] (#2061),
+`editor.clipboard_history_max_kb` ∈ [1, 10240] (#2250),
 `editor.sticky_scroll_depth >= 1`, `explorer.tree_indent >= 0`,
 `project.max_history >= 0`, `backup.debounce_ms >= 100`,
 `backup.max_age_days >= 1`, `explorer.sort` ∈ {name,type,size,modified},
