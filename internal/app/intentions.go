@@ -60,6 +60,7 @@ func (m Model) intentionContext() (intention.Context, bool) {
 		HunkAtCaret:       ed.HunkAtCursor(),
 		ConflictAtCaret:   ed.ConflictAtCursor(),
 		CanToggleValue:    ed.CanToggleValueAtCaret(),
+		Preview:           intentionPreview(ed),
 	}
 	if hasSel {
 		// Only the clipboard diff needs this, and reading the system
@@ -97,6 +98,36 @@ func (m Model) intentionContext() (intention.Context, bool) {
 	return cx, true
 }
 
+// intentionPreview is the app's answer to "what would this entry change?"
+// (#2252), handed to the providers as Context.Preview. Only the intentions
+// that are pure buffer rewrites can answer — the value toggle and the three
+// conflict accepts — and each answers from a read-only computation over the
+// editor's own lines, never through the command that would apply it. Every
+// other command id returns false, which the popup renders as "no preview".
+func intentionPreview(ed *editor.Model) func(string) (intention.Edit, bool) {
+	return func(commandID string) (intention.Edit, bool) {
+		switch commandID {
+		case "editor.toggleValue":
+			return asIntentionEdit(ed.ToggleValuePreview())
+		case "merge.acceptOurs":
+			return asIntentionEdit(ed.ConflictPreviewAtCaret(true, false))
+		case "merge.acceptTheirs":
+			return asIntentionEdit(ed.ConflictPreviewAtCaret(false, true))
+		case "merge.acceptBoth":
+			return asIntentionEdit(ed.ConflictPreviewAtCaret(true, true))
+		}
+		return intention.Edit{}, false
+	}
+}
+
+// asIntentionEdit adapts an editor preview probe to the provider seam's shape.
+func asIntentionEdit(before, after string, line int, ok bool) (intention.Edit, bool) {
+	if !ok {
+		return intention.Edit{}, false
+	}
+	return intention.Edit{Before: before, After: after, Line: line}, true
+}
+
 // fillHTTPIntentions adds the response-side and environment facts of the HTTP
 // client to a caret inside a request block (#2026). The copy and re-send
 // entries read the visible response pane rather than the caret, and the
@@ -122,7 +153,10 @@ func (m Model) fillHTTPIntentions(cx *intention.Context) {
 // openIntentions merges the LSP offer with the built-in providers and opens
 // the picker anchored at the caret. The "no code actions here" verdict moved
 // here from the bridge: it is only honest for the merged list.
-func (m *Model) openIntentions(msg ilsp.CodeActionsMsg) {
+//
+// Opening highlights the first row, which is a selection change like any other
+// (#2252), so the returned command is the palette's preview debounce for it.
+func (m *Model) openIntentions(msg ilsp.CodeActionsMsg) tea.Cmd {
 	var items []intention.Item
 	if cx, ok := m.intentionContext(); ok {
 		for _, p := range m.reg.IntentionProviders() {
@@ -130,17 +164,19 @@ func (m *Model) openIntentions(msg ilsp.CodeActionsMsg) {
 		}
 	}
 	m.actions.SetMerged(msg, items)
+	m.actions.SetPalette(m.pal())
 	if m.actions.Len() == 0 {
 		m.host.Notify(host.Info, "no code actions here")
-		return
+		return nil
 	}
 	m.palette.SetSize(m.width, m.height)
 	cx := palette.Context{ContextID: m.focusContext(), Root: "."}
 	if x, y, w, ok := m.caretPopupAnchor(m.actions.Len()); ok {
 		m.palette.OpenAnchoredWith(cx, actionsPrefix, "", x, y, w)
-		return
+		return m.palette.SelectionKick()
 	}
 	m.palette.OpenLocked(cx, actionsPrefix)
+	return m.palette.SelectionKick()
 }
 
 // intentionPopupWidth is the anchored intention box's outer width: wide
@@ -187,8 +223,11 @@ func (m Model) fitPopupAnchor(x, y, rows int) (int, int, int) {
 		x = 0
 	}
 	// The box is the framed query row plus the result rows (capped at the
-	// palette's default window).
-	h := min(rows, 12) + 4
+	// palette's default window) plus the preview area under them (#2252):
+	// its rule and at most actionPreviewMaxLines of diff, budgeted for even
+	// while the first preview is still resolving, so the box does not have to
+	// move once it arrives.
+	h := min(rows, 12) + 5 + actionPreviewMaxLines
 	if y+h > m.height {
 		if above := y - 1 - h; above >= 0 {
 			y = above

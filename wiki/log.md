@@ -20,6 +20,28 @@
   [lsp](/architecture/lsp.md), the code-intelligence guide and the generated
   command reference.
 
+## 2026-08-27 (Intention popup: diff preview of the highlighted action, #2252)
+
+- **Preview under the list**: the intention popup renders a small inline diff
+  of the row the highlight rests on (`internal/app/actionpreview.go`), through
+  the same `miniDiffLines` renderer local history and the rename confirmation
+  use. Rows with no resolvable edit — commands, pickers, side effects — read
+  "no preview"; an edit that changes nothing says so.
+- **LSP lazy resolve (#2252 needs it)**: `codeAction/resolve` is implemented
+  (client capability `dataSupport` + `resolveSupport: ["edit"]`,
+  `Capabilities.CodeActionResolve`, `Manager.ResolveCodeAction`). One offer is
+  an `actionSet` (`plugins/lsp/codeaction.go`) that resolves a row once and
+  keeps it, so previewing and then applying share a single round trip and
+  apply produces exactly the previewed edit. Applying an unpreviewed lazy
+  action now resolves instead of reporting "no edit".
+- **Provider seam for built-ins**: `intention.Context.Preview(commandID)` plus
+  `Context.PreviewFor(id)` wire a lazy `Item.Preview` closure; the value
+  toggle and the three merge accepts opt in through read-only editor probes
+  (`ToggleValuePreview`, `ConflictPreviewAtCaret`) that mutate nothing.
+- **Palette seams**: `SelectionMode` (debounced `SelectionChanged`, 120 ms,
+  stale ticks dropped) and `FooterMode` (lines under the list behind the same
+  dim rule), plus a click guard so the footer area is inert.
+
 ## 2026-08-27 (Local-only usage telemetry, #2235)
 
 - **New subsystem** `internal/telemetry`: a `Recorder` appending usage events

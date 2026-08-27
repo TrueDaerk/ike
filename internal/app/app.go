@@ -6404,18 +6404,24 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// entry dispatches actionPickedMsg below. The code-lens picker
 		// (Intentions false, #1912) keeps the plain centered list.
 		if msg.Intentions {
-			m.openIntentions(msg)
-			return m, nil
+			return m, m.openIntentions(msg)
 		}
 		if msg.QuickFix {
 			// The Problems pane's quick-fix key (#2175): the server's actions
 			// alone, anchored under the marked row.
-			m.openProblemQuickFixes(msg)
-			return m, nil
+			return m, m.openProblemQuickFixes(msg)
 		}
 		m.actions.Set(msg)
+		m.actions.SetPalette(m.pal())
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, actionsPrefix)
+		return m, m.palette.SelectionKick()
+
+	case ilsp.ActionPreviewMsg:
+		// The intention popup's preview reply (#2252): what the highlighted
+		// action would change, resolved on copies — recorded for the row it
+		// was requested for, so the very next frame renders it.
+		m.actions.SetActionPreview(msg)
 		return m, nil
 
 	case actionPickedMsg:
@@ -6472,6 +6478,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case palette.LiveTickMsg:
 		// A live mode's settled-query debounce fired (#295).
 		return m, m.palette.LiveTick(msg)
+
+	case palette.SelectionTickMsg:
+		// A selection-watching mode's highlight settled (#2252): the
+		// intention popup resolves the row's preview now, not per keystroke.
+		return m, m.palette.SelectionTick(msg)
 
 	case format.FileRequestMsg:
 		// Reformat File (#1401): resolve the formatter registry's provider
@@ -9490,6 +9501,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				m.palette.Wheel(msg.X-bx, msg.Y-by, wheelLines*msg.ticks())
 			}
+			// A notch moves the highlight too, so a selection-watching mode
+			// (the intention preview, #2252) follows the wheel like the keys.
+			return m, m.palette.SelectionKick()
 		}
 		return m, nil
 	}

@@ -112,6 +112,38 @@ type Context struct {
 	// "nothing conceals this", which is no intention.
 	ConcealValue  bool
 	ConcealFamily string
+
+	// Preview computes what the entry for one command id would change, for
+	// the popup's diff preview of the highlighted action (#2252). The app
+	// fills it with a pure function over copies of the buffer — it applies
+	// nothing and mutates nothing — and answers false for every command it
+	// cannot preview. A nil Preview (a provider test, a context built before
+	// the preview seam existed) previews nothing at all, which is the same
+	// honest "no preview" the popup shows for a command-style action.
+	Preview func(commandID string) (Edit, bool)
+}
+
+// Edit is what an intention would do to the buffer, as text: the affected
+// region before and after the action, from which the popup renders a small
+// inline diff. Line is the 0-based line Before starts at, so a preview of a
+// region can be labelled with where it sits. Nothing here is applied — the
+// apply path stays the command dispatch it always was.
+type Edit struct {
+	Before string
+	After  string
+	Line   int
+}
+
+// PreviewFor wires an item to the lazy preview of its command: the returned
+// closure is called only when the row is actually highlighted, and only after
+// the popup's debounce, so scrolling the list computes nothing. It is nil when
+// this context previews nothing, which is what makes "no preview" the default
+// for every entry that does not opt in.
+func (c Context) PreviewFor(commandID string) func() (Edit, bool) {
+	if c.Preview == nil {
+		return nil
+	}
+	return func() (Edit, bool) { return c.Preview(commandID) }
 }
 
 // lineAt reads line i of the buffer through the snapshot's accessor, falling
@@ -165,6 +197,13 @@ type Item struct {
 	Kind  string
 	// CommandID names the registered command to run on activation.
 	CommandID string
+	// Preview computes the edit this entry would produce, for the popup's
+	// inline diff of the highlighted row (#2252). Nil — the default — means
+	// "no preview": an entry that runs a command, opens a picker or has any
+	// other side effect has no edit to show, and the popup says so rather
+	// than pretending. Providers get one from Context.PreviewFor; it must
+	// stay pure, since highlighting a row must never change the buffer.
+	Preview func() (Edit, bool)
 }
 
 // Provider yields the items applicable at a caret. Items runs synchronously

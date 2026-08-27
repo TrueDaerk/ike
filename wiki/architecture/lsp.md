@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-08-27T12:00:00Z
+timestamp: 2026-08-27T13:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -660,10 +660,27 @@ through `workspace_edit.go` and/or executes its `command` via
 the read loop, converted, and dispatched through the same apply path. Result
 decode is lenient — bare `Command` entries wrap into command-only actions.
 Every outcome reports (#309): applied edits toast "'<title>': edited N
-files", a no-op edit toasts "changed nothing", an action with neither edit
-nor command warns that `codeAction/resolve` is not supported yet, and
+files", a no-op edit toasts "changed nothing", an action that has neither
+edit nor command *after* being resolved warns that it returned no edit, and
 command failures surface as error toasts. Gated on `codeActionProvider` /
 `executeCommandProvider`.
+
+**Lazy resolve (#2252).** Servers whose `codeActionProvider` declares
+`resolveProvider` ship lean actions — title and kind plus an opaque `data`
+token — and compute the `WorkspaceEdit` only when asked; the client announces
+`dataSupport` and `resolveSupport: {properties: ["edit"]}` so they may. One
+offer is an `actionSet` (`plugins/lsp/codeaction.go`) holding the actions
+behind a mutex: `at(i)` resolves an edit-less action through
+`Manager.ResolveCodeAction` (`codeAction/resolve`) and **replaces** it, so
+previewing a row and then applying it costs one round trip and cannot get two
+different answers. Both the intention popup's preview (`Preview(index)`,
+answering `ActionPreviewMsg`) and its apply (`Apply(index)`) go through it,
+which is what makes "apply produces exactly the previewed edit" a property of
+the code rather than a hope. A failed resolve keeps the unresolved action —
+the row still applies whatever it does carry. The preview itself converts the
+resolved edit and runs `previewFiles` (`workspace_edit.go`), the same
+before/after computation the multi-file rename confirmation uses, on *copies*
+of the affected documents: nothing is written, no `FormatEditsMsg` goes out.
 
 A second, caret-less way in (#2175): `lsp.quickFixProblem` fixes the marked
 row of the [Problems pane](./problems.md) where it is listed. Like

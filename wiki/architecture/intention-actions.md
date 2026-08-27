@@ -1,15 +1,15 @@
 ---
 type: concept
 title: Intention Actions
-description: The alt+enter popup — LSP code actions merged with built-in caret-dependent intention actions through a plugin-registered provider seam, opened anchored at the caret.
+description: The alt+enter popup — LSP code actions merged with built-in caret-dependent intention actions through a plugin-registered provider seam, opened anchored at the caret, with a debounced diff preview of the highlighted action.
 resource: internal/intention
 tags: [architecture, intentions, code-actions, palette, plugins, shortcuts]
-timestamp: 2026-08-24T12:00:00Z
+timestamp: 2026-08-27T13:00:00Z
 ---
 
 # Intention Actions
 
-Issues #2020, #2025, #2026, #2033, #2056. IntelliJ's alt+enter mixes server fixes with IDE intentions; IKE
+Issues #2020, #2025, #2026, #2033, #2056, #2252. IntelliJ's alt+enter mixes server fixes with IDE intentions; IKE
 does the same: one caret-anchored popup that merges **LSP code actions**
 ([lsp](./lsp.md), #8) with **built-in intention actions** whose applicability
 is decided from the caret context. Before this slice the popup was
@@ -25,7 +25,10 @@ internal/plugin/plugin.go     Capabilities.Intentions — providers as a plugin 
 internal/registry/            IntentionProviders() — dedup + deterministic order
 internal/app/intentions.go    caret snapshot, merge, caret-anchored open, curl insert
 internal/app/codeactions.go   the palette mode over the merged entry list
+internal/app/actionpreview.go the highlighted row's diff preview (#2252)
+internal/palette/selection.go the selection debounce + footer seams (#2252)
 internal/editor/intentions.go exported caret probes (diag/hunk/toggle/conceal)
+plugins/lsp/codeaction.go     the offer's actionSet: lazy resolve, preview, apply
 plugins/lsp                   Intentions=true offer + the position-gated rename provider
 ```
 
@@ -42,8 +45,8 @@ occupancy). The facts come from state the editor and the app already cache, so
 providers stay cheap and table-testable; the snapshot is built once per open
 (`Model.intentionContext`).
 
-An `Item` is `{Title, Kind, CommandID}` — **always a registered command,
-never new logic**. Activation funnels through `RunCommand` →
+An `Item` is `{Title, Kind, CommandID}` plus the optional `Preview` closure of
+#2252 — **always a registered command, never new logic**. Activation funnels through `RunCommand` →
 `dispatchCommand`, so `EventCommandExecuted` fires (#679) and every entry is
 also reachable the ordinary ways (palette, chords, menus). A provider
 therefore contributes *visibility at the caret*, nothing else.
@@ -122,6 +125,68 @@ same provider and both about the buffer rather than the caret:
 `langPath()`), added rather than probed in the provider like every other
 `Context` field. What materializing does — and where the file lands — is in
 [Language Registry](./languages.md#language-tools-from-a-typed-buffer-2056).
+
+## Diff preview of the highlighted action
+
+Issue #2252. Intentions apply on selection, so for a non-obvious action the
+only way to see what it does used to be doing it. The popup now shows, under
+the result list, a **small inline diff of the row the highlight rests on** —
+computed, never applied.
+
+**Two sources, one shape.** An LSP row is resolved through the offer's
+`actionSet` (`codeAction/resolve` when the action arrived edit-less, see
+[lsp](./lsp.md)), converted, and rendered from the affected files' before/after
+text (`previewFiles`, the multi-file rename dialog's payload builder, #2149).
+A built-in row hands its edit over **through the provider seam**:
+`Context.Preview(commandID)` is a pure function the app fills in
+(`intentionPreview`), and `Context.PreviewFor(id)` wires it onto the item as a
+lazy closure, so listing the items computes nothing and only the highlighted
+row is ever asked. Both land as an `actionPreview` — a `diff.Result` or a note
+— and render through `miniDiffLines`, the same inline renderer local history,
+the change feed and the rename confirmation use.
+
+**Nothing is applied to preview.** The LSP side runs the edits against copies
+of the manager's document lines; the built-in probes
+(`Model.ToggleValuePreview`, `Model.ConflictPreviewAtCaret`) read the buffer
+and build strings — no recorder, no mutation, no dirty flag. Apply stays the
+existing path: `RunCommand` for a built-in row, the bridge continuation for an
+LSP one, which reuses the very action the preview resolved.
+
+**Rows without a resolvable edit say so.** A command-style action (server
+command, picker, side effect) has no edit at any point, so the footer reads
+"no preview" rather than an empty diff; an edit that turns out to change
+nothing reads "changes nothing here". Which built-ins opt in is deliberately
+small — the entries that are pure buffer rewrites:
+
+| Entry | Preview |
+|---|---|
+| `editor.toggleValue` | the caret line as it is → with the token flipped |
+| `merge.acceptOurs` / `acceptTheirs` / `acceptBoth` | the whole conflict block → the kept side(s), ours first |
+
+Everything else (copies, playgrounds, HTTP runs, blame, tests, the type pick)
+previews nothing, which is the honest answer for an action whose effect is not
+a buffer edit. A new previewable entry is one `Context.PreviewFor(id)` on the
+item plus a case in `intentionPreview` — the probe itself belongs in the
+editor, next to the command it mirrors, so the two cannot drift.
+
+**Debounce.** Resolution hangs off two palette seams (`internal/palette/selection.go`):
+`SelectionMode.SelectionChanged(sel, cx)` is called when the highlight
+*settles* — every move schedules a `SelectionTickMsg` after
+`SelectionDebounce` (120 ms) and each new move invalidates the previous tick,
+the `LiveMode` pattern of #295 applied to the selection instead of the query —
+and `FooterMode.Footer(sel, width)` renders the lines under the list behind
+the same dim rule. Walking a long offer with a held arrow key therefore
+resolves only the row one stops on; a resolved row is cached for the life of
+the offer, so scrolling back costs nothing, and a reply that names another
+path or an index no longer in the list is dropped rather than shown against
+the wrong row. Opening the popup is a selection change too (the first row is
+highlighted from the start), so `openIntentions` returns the kick. The footer
+area is inert to clicks, and the anchor math budgets its height
+(`actionPreviewMaxLines`, 8 diff lines) so the box does not have to move once
+the first preview arrives.
+
+The [Problems pane's quick fixes](./problems.md) (#2175) ride the same mode
+and preview identically — the offer differs only in having no built-ins.
 
 ## Digit shortcuts
 
@@ -269,7 +334,23 @@ query, digit filters once a query is typed) plus the #2026 gates that need a
 whole model (HTTP response and env-file facts, clipboard, read-only buffer);
 `internal/palette/digit_test.go`
 covers the `DigitPicker` seam itself (fast path, out-of-range digit, opt-out
-modes, hint rendering);
+modes, hint rendering); `internal/palette/selection_test.go` the #2252 seams
+(the settled row is reported, a burst's stale ticks are dropped, a closed
+palette reports nothing, a query edit schedules one, the footer renders under
+the list and is click-inert); `internal/app/actionpreview_test.go` the popup
+half (a built-in edit renders as a diff, the buffer and its dirty flag are
+untouched, a command row says "no preview", an LSP row resolves once and its
+reply renders, a reply for another offer is ignored, opening schedules the
+debounce); `plugins/lsp/codeaction_test.go` the bridge half against a scripted
+server (a lazy action resolves once and previews before/after, the synced
+document is unchanged and no edits are dispatched, a command action previews a
+note, apply reuses the preview's resolve and applies exactly it, apply without
+a preview resolves on its own); `internal/editor/intentionpreview_test.go` the
+two read-only probes (flipped line, kept conflict side, buffer untouched, and
+that applying writes what was previewed); `internal/intention/preview_test.go`
+the provider seam (rewriting entries carry a preview, it is computed only when
+asked, command entries carry none, a context without the app's function wires
+nothing);
 `internal/editor/intentions_test.go` covers the tightened caret probes (a
 plain identifier is not a concealed value, a mask and a size hint are, a
 diagnostic needs an ignore rule); `internal/app/intentions_test.go` covers the

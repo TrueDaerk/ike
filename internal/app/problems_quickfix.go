@@ -56,19 +56,23 @@ func (m *Model) requestProblemQuickFix(apply func(ilsp.QuickFixRequest) tea.Cmd)
 // the picker anchored under the marked row. An empty offer says so instead of
 // opening an empty box, which is the whole "no fixes" verdict: a lint note, a
 // task-matcher finding or a file no server tracks simply has nothing to offer.
-func (m *Model) openProblemQuickFixes(msg ilsp.CodeActionsMsg) {
+// The fixes preview like the caret's intentions do (#2252), so the returned
+// command is the palette's preview debounce for the row highlighted on open.
+func (m *Model) openProblemQuickFixes(msg ilsp.CodeActionsMsg) tea.Cmd {
 	m.actions.Set(msg)
+	m.actions.SetPalette(m.pal())
 	if m.actions.Len() == 0 {
 		m.host.Notify(host.Info, "no quick fixes for this problem")
-		return
+		return nil
 	}
 	m.palette.SetSize(m.width, m.height)
 	cx := palette.Context{ContextID: m.focusContext(), Root: "."}
 	if x, y, w, ok := m.problemsPopupAnchor(m.actions.Len()); ok {
 		m.palette.OpenAnchoredWith(cx, actionsPrefix, "", x, y, w)
-		return
+		return m.palette.SelectionKick()
 	}
 	m.palette.OpenLocked(cx, actionsPrefix)
+	return m.palette.SelectionKick()
 }
 
 // problemsPopupAnchor places the quick-fix popup one row below the marked

@@ -113,12 +113,18 @@ func clientCapabilities() protocol.ClientCapabilities {
 			Formatting:      &protocol.ReferencesClientCaps{},
 			RangeFormatting: &protocol.ReferencesClientCaps{},
 			Rename:          &protocol.RenameClientCaps{PrepareSupport: true},
-			CodeAction:      &protocol.ReferencesClientCaps{},
-			SignatureHelp:   &protocol.ReferencesClientCaps{},
-			CallHierarchy:   &protocol.ReferencesClientCaps{},
-			InlayHint:       &protocol.ReferencesClientCaps{},
-			DocumentSymbol:  &protocol.DocumentSymbolClientCaps{HierarchicalDocumentSymbolSupport: true},
-			CodeLens:        &protocol.ReferencesClientCaps{},
+			// Code actions (#2252): dataSupport plus resolveSupport for the
+			// edit let servers ship lean actions and compute the edit only
+			// when the intention popup previews or applies one.
+			CodeAction: &protocol.CodeActionClientCaps{
+				DataSupport:    true,
+				ResolveSupport: &protocol.CodeActionResolveSupport{Properties: []string{"edit"}},
+			},
+			SignatureHelp:  &protocol.ReferencesClientCaps{},
+			CallHierarchy:  &protocol.ReferencesClientCaps{},
+			InlayHint:      &protocol.ReferencesClientCaps{},
+			DocumentSymbol: &protocol.DocumentSymbolClientCaps{HierarchicalDocumentSymbolSupport: true},
+			CodeLens:       &protocol.ReferencesClientCaps{},
 			// lineFoldingOnly (#1912): IKE folds whole lines, so servers can
 			// skip the character-precise fold endpoints.
 			FoldingRange:   &protocol.FoldingRangeClientCaps{LineFoldingOnly: true},

@@ -278,8 +278,12 @@ func TestIntentionPopupDigitFiltersWithQuery(t *testing.T) {
 	m = out.(Model)
 	out, cmd := m.Update(tea.KeyPressMsg{Code: '2', Text: "2"})
 	m = out.(Model)
+	// A query edit reshuffles the list, so it schedules the preview debounce
+	// (#2252) — what it must never do is activate the row the digit names.
 	if cmd != nil {
-		t.Fatal("with a query typed, the digit must filter instead of running")
+		if _, picked := cmd().(actionPickedMsg); picked {
+			t.Fatal("with a query typed, the digit must filter instead of running")
+		}
 	}
 	if !m.palette.IsOpen() {
 		t.Fatal("filtering must keep the popup open")

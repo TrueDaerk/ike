@@ -133,7 +133,7 @@ type TextDocumentClientCaps struct {
 	Formatting      *ReferencesClientCaps     `json:"formatting,omitempty"`
 	RangeFormatting *ReferencesClientCaps     `json:"rangeFormatting,omitempty"`
 	Rename          *RenameClientCaps         `json:"rename,omitempty"`
-	CodeAction      *ReferencesClientCaps     `json:"codeAction,omitempty"`
+	CodeAction      *CodeActionClientCaps     `json:"codeAction,omitempty"`
 	SignatureHelp   *ReferencesClientCaps     `json:"signatureHelp,omitempty"`
 	SemanticTokens  *SemanticTokensClientCaps `json:"semanticTokens,omitempty"`
 	CallHierarchy   *ReferencesClientCaps     `json:"callHierarchy,omitempty"`
@@ -145,6 +145,22 @@ type TextDocumentClientCaps struct {
 	// PublishDiagnostics must be advertised for servers that gate their push
 	// diagnostics on it (#1060): vtsls sends none at all without the entry.
 	PublishDiagnostics *PublishDiagnosticsClientCaps `json:"publishDiagnostics,omitempty"`
+}
+
+// CodeActionClientCaps announces code-action support. DataSupport keeps the
+// server's opaque data token on the offered actions and ResolveSupport lists
+// the properties the client will fetch via codeAction/resolve (#2252) — both
+// are the precondition for a server shipping lean actions whose edit is
+// computed only when the intention popup previews or applies one.
+type CodeActionClientCaps struct {
+	DataSupport    bool                      `json:"dataSupport,omitempty"`
+	ResolveSupport *CodeActionResolveSupport `json:"resolveSupport,omitempty"`
+}
+
+// CodeActionResolveSupport lists the code-action properties the client
+// resolves lazily; IKE fetches the edit.
+type CodeActionResolveSupport struct {
+	Properties []string `json:"properties"`
 }
 
 // PublishDiagnosticsClientCaps announces textDocument/publishDiagnostics
@@ -564,6 +580,10 @@ type CodeAction struct {
 	IsPreferred bool           `json:"isPreferred,omitempty"`
 	Edit        *WorkspaceEdit `json:"edit,omitempty"`
 	Command     *Command       `json:"command,omitempty"`
+	// Data is the server's opaque token on a lazily computed action (#2252):
+	// the offer arrives without an Edit and the client asks for it via
+	// codeAction/resolve, round-tripping this verbatim.
+	Data json.RawMessage `json:"data,omitempty"`
 }
 
 // Command is a server-defined command reference (the executeCommand shape).

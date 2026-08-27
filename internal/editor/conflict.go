@@ -157,6 +157,37 @@ func (m Model) ConflictAtCursor() bool {
 	return ok
 }
 
+// ConflictPreviewAtCaret computes what accepting one or both sides would make
+// of the conflict block under the caret (#2252): the block as it stands —
+// marker lines included — and the kept side(s) that would replace it, ours
+// first when both are kept. It reads the buffer and builds strings; nothing is
+// applied, which is what lets the intention popup show it while the caret
+// merely rests on the row. ok is false outside a conflict block.
+func (m Model) ConflictPreviewAtCaret(keepOurs, keepTheirs bool) (before, after string, line int, ok bool) {
+	c, ok := m.conflictAt(m.cursor.Line)
+	if !ok {
+		return "", "", 0, false
+	}
+	var was []string
+	for l := c.start; l <= c.end && l < m.buf.LineCount(); l++ {
+		was = append(was, m.buf.Line(l))
+	}
+	// The very selection acceptConflict keeps, read the same way — so the
+	// preview and the apply cannot disagree about which lines survive.
+	var kept []string
+	if keepOurs {
+		for l := c.start + 1; l < c.oursEnd(); l++ {
+			kept = append(kept, m.buf.Line(l))
+		}
+	}
+	if keepTheirs {
+		for l := c.sep + 1; l < c.end; l++ {
+			kept = append(kept, m.buf.Line(l))
+		}
+	}
+	return strings.Join(was, "\n"), strings.Join(kept, "\n"), c.start, true
+}
+
 // conflictRoleOf classifies a line for rendering: marker lines dim bold, the
 // ours/theirs sections tint, the diff3 base section dims (view.go).
 func (m Model) conflictRoleOf(line int) conflictRole {
