@@ -318,15 +318,36 @@ not shown raw (#379): fence markers (```` ```go ````) are stripped, the fenced
 block is syntax-highlighted through the language registry (`HighlightFenced`,
 fence tag resolved as language id then extension; an unresolvable tag falls
 back to an accent tint so the signature still reads as code), and a thematic
-break (`---`) draws as a horizontal rule sized to the popup content.
+break (`---`) draws as a horizontal rule sized to the popup content. The prose
+around the fences renders its **inline markdown** too (#2147,
+`internal/editor/hovermd.go`): ATX headings render bold, list markers become
+`•` bullets and block quotes `│`, `**bold**`/`*italic*` become terminal
+attributes, `` `code` `` takes the accent tint, and a `[text](url)` link shows
+its text followed by the dimmed URL (a terminal popup cannot be clicked, so the
+address has to be readable) — `<autolinks>` render as the bare address, images
+keep only their alt text. It is a deliberate hand-written subset, not a
+markdown engine: the rules that matter are the ones keeping code-shaped prose
+intact — an underscore inside `snake_case` is never emphasis, a link
+destination containing whitespace is not a link (so `func F[T any](v T)` keeps
+its brackets), an unmatched marker stays literal, and a backslash escape passes
+its rune through.
 
 **Diagnostic details popup** (#739, `lsp.diagnosticInfo`, default `ctrl+f1` —
 the JetBrains error-description chord): shows every diagnostic covering the
 caret line on the hover popup surface — per entry a severity header colored
 like the gutter mark with the server attribution (`pyright ·
 reportUndefinedVariable`; `Diagnostic.Code` carries the protocol's
-string-or-number code as text), then the message; entries separate with a
-rule, any key dismisses. Pure client state (the cached publishDiagnostics
+string-or-number code as text), then the message, then the diagnostic's
+**related information** (#2147) — one dimmed `↳ note  file:line` row per
+linked location ("declared here", the competing branch of a type conflict).
+The client advertises `publishDiagnostics.relatedInformation`, the wire
+entries convert to editor coordinates alongside the diagnostic
+(`ilsp.RelatedInfo`; a location in the published document converts through
+the negotiated encoding, one in another file keeps the server's position —
+enough to land on the right line), and because the popup is not interactive
+the location is spelled out rather than hidden behind a jump; the
+[Problems window](./problems.md) is where a related entry is navigated to.
+Entries separate with a rule, any key dismisses. Pure client state (the cached publishDiagnostics
 answer, no server round trip); a clean caret line raises an info toast
 instead. With source and code visible a false positive can be attributed to
 its server and reported or configured away.

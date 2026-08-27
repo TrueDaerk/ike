@@ -211,11 +211,25 @@ func (s *Store) Paths() []string {
 // Len reports how many files currently hold findings.
 func (s *Store) Len() int { return len(s.Paths()) }
 
-// row is one rendered line: a file header or one diagnostic under it.
+// row is one rendered line: a file header, one diagnostic under it, or one of
+// that diagnostic's related-information entries (#2147). A related row carries
+// its own location — the entry routinely points at another file — so opening
+// it navigates there rather than to the diagnostic it hangs under.
 type row struct {
 	header bool
 	path   string
 	d      ilsp.Diagnostic
+	// rel is set on a related-information row; d is then the parent
+	// diagnostic, kept for the severity tint the child inherits.
+	rel *ilsp.RelatedInfo
+}
+
+// target returns the location activating the row opens.
+func (r row) target() (path string, line, col int) {
+	if r.rel != nil {
+		return r.rel.Path, r.rel.Line, r.rel.Col
+	}
+	return r.path, r.d.Range.Start.Line, r.d.Range.Start.Col
 }
 
 // Model is the tool window state. Value type with pointer-receiver mutators,
@@ -299,10 +313,14 @@ func (m *Model) Cursor() int { return m.cursor }
 // every store update so the pane tracks publishes live.
 func (m *Model) Refresh() {
 	keepPath, keepLine, keepCol, keepHeader := "", -1, -1, false
+	keepRel := ""
 	if m.cursor >= 0 && m.cursor < len(m.rows) {
 		r := m.rows[m.cursor]
 		keepPath, keepHeader = r.path, r.header
 		keepLine, keepCol = r.d.Range.Start.Line, r.d.Range.Start.Col
+		if r.rel != nil {
+			keepRel = r.rel.Label() // a related row is identified by its own text
+		}
 	}
 	m.rows = nil
 	if m.store != nil {
@@ -321,12 +339,17 @@ func (m *Model) Refresh() {
 			})
 			for _, d := range diags {
 				m.rows = append(m.rows, row{path: path, d: d})
+				// Related information hangs under its diagnostic (#2147),
+				// navigable in its own right.
+				for i := range d.Related {
+					m.rows = append(m.rows, row{path: path, d: d, rel: &d.Related[i]})
+				}
 			}
 		}
 	}
 	m.cursor = 0
 	for i, r := range m.rows {
-		if r.path == keepPath && r.header == keepHeader &&
+		if r.path == keepPath && r.header == keepHeader && rowRelLabel(r) == keepRel &&
 			(r.header || (r.d.Range.Start.Line == keepLine && r.d.Range.Start.Col == keepCol)) {
 			m.cursor = i
 			break
@@ -426,6 +449,10 @@ func (m *Model) copyRow(i int) tea.Cmd {
 // rowText renders one diagnostic as copyable text: position, message and the
 // code the row shows, all on one line.
 func (m *Model) rowText(r row) string {
+	if r.rel != nil {
+		pos := strconv.Itoa(r.rel.Line+1) + ":" + strconv.Itoa(r.rel.Col+1)
+		return m.shorten(r.rel.Path) + ":" + pos + ": " + strings.TrimSpace(r.rel.Message)
+	}
 	pos := strconv.Itoa(r.d.Range.Start.Line+1) + ":" + strconv.Itoa(r.d.Range.Start.Col+1)
 	text := m.shorten(r.path) + ":" + pos + ": " + strings.TrimRight(r.d.Message, "\n")
 	if r.d.Code != "" {
@@ -457,8 +484,18 @@ func (m *Model) activate(i int) tea.Cmd {
 			return nil
 		}
 	}
-	msg := OpenLocationMsg{Path: r.path, Line: r.d.Range.Start.Line, Col: r.d.Range.Start.Col}
+	path, line, col := r.target()
+	msg := OpenLocationMsg{Path: path, Line: line, Col: col}
 	return func() tea.Msg { return msg }
+}
+
+// rowRelLabel is a related row's identity across a Refresh — its rendered
+// text — and "" for the diagnostic and header rows.
+func rowRelLabel(r row) string {
+	if r.rel == nil {
+		return ""
+	}
+	return r.rel.Label()
 }
 
 // View renders the scope header, the scrolled rows, and the key-hint footer.
@@ -499,8 +536,8 @@ func plural(n int, unit string) string {
 // full diagnostic set per frame.
 func (m *Model) visibleCounts() (errs, warns int) {
 	for _, r := range m.rows {
-		if r.header {
-			continue
+		if r.header || r.rel != nil {
+			continue // a related row is context, not a problem of its own
 		}
 		switch normSev(r.d.Severity) {
 		case 1:
@@ -545,14 +582,16 @@ func (m *Model) emptyText() string {
 // rowBaseStyles holds the loop-invariant row styles, built once per View
 // call (#1100) instead of per row.
 type rowBaseStyles struct {
-	base   lipgloss.Style
-	header lipgloss.Style
+	base    lipgloss.Style
+	header  lipgloss.Style
+	related lipgloss.Style
 }
 
 func (m *Model) rowStyles(pal *theme.Palette) rowBaseStyles {
 	return rowBaseStyles{
-		base:   lipgloss.NewStyle().Foreground(pal.Foreground),
-		header: lipgloss.NewStyle().Foreground(pal.Accent).Bold(true),
+		base:    lipgloss.NewStyle().Foreground(pal.Foreground),
+		header:  lipgloss.NewStyle().Foreground(pal.Accent).Bold(true),
+		related: lipgloss.NewStyle().Foreground(pal.Foreground).Faint(true),
 	}
 }
 
@@ -563,6 +602,11 @@ func (m *Model) renderRow(pal *theme.Palette, rs rowBaseStyles, i int) string {
 	if r.header {
 		line = " " + m.shorten(r.path)
 		style = rs.header
+	} else if r.rel != nil {
+		// Related information (#2147) reads as a child of its diagnostic:
+		// indented, faint, and labelled with its own location.
+		line = "     ↳ " + r.rel.Label()
+		style = rs.related
 	} else {
 		pos := strconv.Itoa(r.d.Range.Start.Line+1) + ":" + strconv.Itoa(r.d.Range.Start.Col+1)
 		msg := r.d.Message

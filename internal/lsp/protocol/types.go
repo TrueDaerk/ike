@@ -348,6 +348,18 @@ type Diagnostic struct {
 	Code     any    `json:"code,omitempty"`
 	Source   string `json:"source,omitempty"`
 	Message  string `json:"message"`
+	// RelatedInformation carries the linked locations a server attaches to a
+	// diagnostic (#2147) — "declared here" for a redeclaration, the competing
+	// branch of a type conflict. The client advertises the capability in
+	// PublishDiagnosticsClientCaps, so servers that have it send it.
+	RelatedInformation []DiagnosticRelatedInformation `json:"relatedInformation,omitempty"`
+}
+
+// DiagnosticRelatedInformation is one linked location on a diagnostic
+// (#2147): a message plus where in the workspace it applies.
+type DiagnosticRelatedInformation struct {
+	Location Location `json:"location"`
+	Message  string   `json:"message"`
 }
 
 // --- completion ---
