@@ -161,6 +161,15 @@ auto-save deliberately never reformats under you:
 | `editor.format_on_save` | Runs the reformat chain (external tool, server or built-in formatter) before writing |
 | `editor.organize_imports_on_save` | Applies the organize-imports action before writing |
 
+Organize imports runs first, then the reformat chain. When both change the
+buffer they land as **one undo unit**, so a single ++u++ takes the file back to
+what you had before saving. Neither step can hold the save up: each is given
+two seconds, and an unsupported, failing or slow server is skipped and the file
+is written anyway.
+
+Without waiting for a save, **LSP: Organize Imports** (`lsp.organizeImports`,
+palette or the editor's right-click menu) applies the same action on demand.
+
 ## Reformatting
 
 ++cmd+alt+l++ (**Reformat File**) is not tied to the language server: IKE

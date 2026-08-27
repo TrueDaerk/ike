@@ -559,7 +559,11 @@ parked write — see [Editor § Format & organize imports on
 save](./editor.md#format--organize-imports-on-save-1148). The capability
 gate parses `codeActionProvider.codeActionKinds`
 (`client.Capabilities.OffersCodeActionKind`; an undeclared list counts as
-offered).
+offered). When both steps rewrite the buffer the format delivery carries
+`FormatEditsMsg.Amend`, so the two rewrites collapse into a single undo unit
+(#2253). `lsp.organizeImports` runs the organize step on demand for the
+focused buffer, with the same time box and a toast when the server does not
+offer the kind.
 
 **Rename (#6).** `lsp.rename` runs `prepareRename` first (when the server
 offers it): a server without the rename capability at all toasts "language

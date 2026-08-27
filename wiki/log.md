@@ -18,6 +18,26 @@
   the user gesture (click, hint activation), never per render — `linkStat` is
   the seam a test counts through.
 
+## 2026-08-27 (Organize imports on save: one undo unit and an on-demand command, #2253)
+
+- **One undo unit for the save chain**: with both on-save steps enabled the
+  organize-imports and format rewrites used to leave two undo levels, so
+  undoing a save took two `u`. `history.Amend` merges a change into the one
+  that produced the current state (appending forwards and inverses, refusing
+  on a state with child branches), `ApplyTextEditsAmend` uses it while the
+  buffer still sits on the anchor the previous `ApplyTextEdits*` left, and
+  `FormatEditsMsg.Amend` carries the request from the bridge: the format step
+  amends only when the organize step actually rewrote the buffer. Anything in
+  between (a keystroke, an undo, a timed-out or command-only organize step)
+  degrades to a plain push — never a wrong merge.
+- **On-demand `lsp.organizeImports`** ("LSP: Organize Imports", palette and
+  the editor context menu): the same capability-gated, 2 s-time-boxed step
+  without a save behind it, toasting when nothing is focused or the server
+  does not offer the kind.
+- Docs: [editor](/architecture/editor.md#format--organize-imports-on-save-1148),
+  [lsp](/architecture/lsp.md), the code-intelligence guide and the generated
+  command reference.
+
 ## 2026-08-27 (Intention popup: diff preview of the highlighted action, #2252)
 
 - **Preview under the list**: the intention popup renders a small inline diff

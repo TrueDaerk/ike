@@ -383,6 +383,7 @@ bring their own.
 | LSP: Hover | `lsp.hover` | `ctrl+q` | — | `editor` pane |
 | LSP: Go to Implementations | `lsp.implementations` | `cmd+alt+b` | — | `editor` pane |
 | LSP: Install Missing Servers | `lsp.installMissing` | — | — | everywhere |
+| LSP: Organize Imports | `lsp.organizeImports` | — | — | `editor` pane |
 | LSP: Parameter Info | `lsp.parameterInfo` | `cmd+p` | — | `editor` pane |
 | LSP: Peek Definition | `lsp.peekDefinition` | `cmd+y` | — | `editor` pane |
 | LSP: Quick-Fix Marked Problem | `lsp.quickFixProblem` | — | — | everywhere |

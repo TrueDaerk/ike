@@ -157,6 +157,15 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Scope: plugin.PaneScope("editor"),
 				Run:   func(h host.API) tea.Cmd { return shared().rename(h) },
 			},
+			{
+				// Organize imports on demand (#2253): the same
+				// source.organizeImports code action the save chain runs,
+				// applied without the picker.
+				ID:    "lsp.organizeImports",
+				Title: "LSP: Organize Imports",
+				Scope: plugin.PaneScope("editor"),
+				Run:   func(h host.API) tea.Cmd { return shared().organizeImports(h) },
+			},
 			// lsp.format / lsp.formatRange moved to plugins/format (#1401):
 			// reformat resolves through the formatter registry now, with this
 			// plugin's LSP provider (provider.go) as one chain entry.
