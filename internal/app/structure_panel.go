@@ -14,7 +14,9 @@ import (
 // mirroring the VCS panel's toggle state machine. The refresh runs through the
 // registry command lsp.documentSymbols — the root model never touches the LSP
 // manager — and re-fires when the pane opens, the focused buffer changes
-// (structureSyncCmd in the Update wrapper) or the buffer saves.
+// (structureSyncCmd in the Update wrapper) or the buffer saves. Two more
+// consumers share the cache and the funnel: the breadcrumbs bar (#1153) and
+// sticky scroll's symbol fallback (#2167, symbolscopes.go).
 
 // StructureToggleMsg runs structure.toggle.
 type StructureToggleMsg struct{}
@@ -79,10 +81,11 @@ func (m *Model) openStructurePanel() {
 // The request dedup (structReqPath) keeps a provider-less file from
 // re-requesting every pass. The breadcrumbs bar (#1153) shares the funnel:
 // with the panel closed it still issues the request when its per-path cache
-// (docSymbols) lacks the active buffer's tree.
+// (docSymbols) lacks the active buffer's tree; sticky scroll's symbol
+// fallback (#2167) keeps the funnel alive with breadcrumbs off too.
 func (m *Model) structureSyncCmd() tea.Cmd {
 	sp := m.structPanel()
-	if sp == nil && !m.breadcrumbsOn() {
+	if sp == nil && !m.breadcrumbsOn() && !m.stickySymbolsOn() {
 		return nil
 	}
 	key := m.activeEditorKey()
@@ -128,8 +131,8 @@ func (m *Model) structureNeedsRequest(shown, path string) bool {
 
 // applyDocumentSymbols stores a documentSymbol reply in the breadcrumbs'
 // per-path cache (#1153) — empty and provider-less replies included, so the
-// sync's dedup sees the path as answered — and feeds the open Structure
-// panel.
+// sync's dedup sees the path as answered — feeds the open Structure panel and
+// refreshes sticky scroll's fallback scopes (#2167).
 func (m *Model) applyDocumentSymbols(msg ilsp.DocumentSymbolsMsg) {
 	if m.docSymbols == nil {
 		m.docSymbols = map[string][]ilsp.SymbolNode{}
@@ -138,4 +141,8 @@ func (m *Model) applyDocumentSymbols(msg ilsp.DocumentSymbolsMsg) {
 	if sp := m.structPanel(); sp != nil {
 		sp.SetSymbols(msg.Path, msg.Symbols, msg.NoProvider)
 	}
+	// Sticky scroll's LSP fallback (#2167) rides the same delivery: the views
+	// showing the file get the derived scopes now, so a post-save refresh
+	// re-pins in the pass it lands in.
+	m.pushSymbolScopes(msg.Path, msg.Symbols)
 }
