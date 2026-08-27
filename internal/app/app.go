@@ -3636,6 +3636,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// once the pass settled: symbol data arriving, tab/zen switches and the
 	// config toggle all change the row's visibility without a layout event.
 	mm.syncBreadcrumbLayout()
+	// Sticky scroll's symbol fallback (#2167) fills the views a reply could
+	// not reach — a pane that opened the file after its tree was cached, or a
+	// tab switched back to one — from the same cache, never a new request.
+	mm.syncSymbolScopes()
 	// An armed explorer reveal (#1042) drains here once the pass settled:
 	// SetActive's call sites (focus changes, tab switches, the CLI open flow)
 	// cannot dispatch Cmds, so auto-reveal / Reveal() only mark the model and

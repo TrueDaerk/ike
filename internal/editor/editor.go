@@ -508,6 +508,15 @@ type Model struct {
 	// as hlIndex: pre-ordered multi-line declarations whose header line pins
 	// at the top of the view while the cursor is inside their body.
 	scopes []highlight.Scope
+	// symScopes are the LSP fallback scopes (#2167), derived from the
+	// documentSymbol tree the app caches for symScopePath and pushed in by
+	// SetSymbolScopes. They are used only while the Tree-sitter parse
+	// delivers none (no grammar for the language, or a CGo-less build) and
+	// the path still matches — a load of another file invalidates them
+	// without a reset call. symEpoch keys the header memo like scopeEpoch.
+	symScopes    []highlight.Scope
+	symScopePath string
+	symEpoch     int
 	// scopeEpoch bumps on every scopes assignment (a parse landing, a reset),
 	// keying the sticky-header memo (#2187): scopes arrive without a
 	// docVersion bump, so the version alone cannot see them change.
@@ -689,7 +698,10 @@ type Model struct {
 	semanticTokens bool
 	stickyScroll   bool
 	stickyDepth    int
-	smartPaste     bool
+	// stickySymbols gates the LSP fallback source for sticky scroll
+	// (#2167, editor.sticky_scroll_symbols): symScopes below.
+	stickySymbols bool
+	smartPaste    bool
 
 	// View options (#64). softWrap/wsMode/indentGuides follow the [editor]
 	// config until their palette toggle flips them; the *Set flags mark a
@@ -760,6 +772,7 @@ func New() Model {
 		lspFolding:         true,
 		stickyScroll:       true,
 		stickyDepth:        4,
+		stickySymbols:      true,
 		smartPaste:         true,
 		hlTheme:            highlight.NewTheme(nil, nil),
 		cmdHistIdx:         -1,
@@ -928,6 +941,7 @@ func (m *Model) applyConfig() {
 	m.applyMarkToggles()
 	m.refreshConcealRules() // the per-file conceal gate (#1704, concealfile.go)
 	m.stickyScroll = boolOr(m.cfg, "editor.sticky_scroll", m.stickyScroll)
+	m.stickySymbols = boolOr(m.cfg, "editor.sticky_scroll_symbols", m.stickySymbols)
 	m.smartPaste = boolOr(m.cfg, "editor.smart_paste", m.smartPaste)
 	m.searchIgnoreCase = boolOr(m.cfg, "editor.search_ignore_case", m.searchIgnoreCase)
 	if !m.mdRenderSet {

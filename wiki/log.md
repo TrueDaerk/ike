@@ -1,5 +1,33 @@
 # Log
 
+## 2026-08-27 (Sticky scroll from LSP symbols, #2167)
+
+- **The gap**: the editor breadcrumbs half of #2167 shipped with #1153 — the
+  `file ▸ symbol ▸ child` row, its `editor.breadcrumbs` toggle, the shared
+  per-path symbol cache. What was still missing is the issue's sticky variant
+  for languages the Tree-sitter side cannot serve: sticky scroll (#168) reads
+  `lang.Language.ScopeNodes`, so Rust, Java, C# — anything with no grammar
+  plugin, and every language in a CGo-less build — pinned nothing, even with
+  a language server answering `documentSymbol` all along.
+- **Third consumer of one cache** (`internal/app/symbolscopes.go`): the tree
+  `applyDocumentSymbols` already caches per path is converted to
+  `highlight.Scope`s in pre-order — single-line symbols dropped, since their
+  header can never scroll out — and pushed into the editor views showing the
+  file. A reply installs them in the pass it lands in; a settled-pass sync
+  fills the views a reply could not reach (a pane that opened the file later,
+  a tab switched back to one). No request is added: `structureSyncCmd` keeps
+  its per-path dedup and now merely stays alive when the Structure pane is
+  closed *and* breadcrumbs are off.
+- **Tree-sitter always wins** (`editor/sticky.go`, `stickySource`): the parse
+  needs no server and follows every keystroke, so the symbols only fill the
+  gap where it produces nothing. The fallback scopes carry the path they were
+  derived for, so a buffer that loads another document ignores a stale
+  delivery without a reset call, and `symEpoch` keys the header memo (#2187)
+  so a post-save refresh is seen.
+- **Config** `editor.sticky_scroll_symbols` (bool, default on, settings panel
+  entry); `editor.sticky_scroll` still gates both sources
+  (`/architecture/editor.md`, `/architecture/structure-view.md`).
+
 ## 2026-08-27 (Keydoctor: dead bindings in the active keymap, #2161)
 
 - **The gap**: the reachability table knew which chord families terminals eat,

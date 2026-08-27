@@ -321,6 +321,17 @@ line runs that test (see /architecture/run-configurations.md).
   separator between the headers and the scrolling body. Large-file mode pins
   nothing (#1910): `stickyLines` gates on `InsightOff`, so headers can never
   pin from stale scope data even though the parse itself is already skipped.
+  A language with **no Tree-sitter grammar** — Rust, Java, C#, or anything in
+  a CGo-less build — falls back to the LSP `documentSymbol` tree (#2167,
+  `app/symbolscopes.go`): the app converts the cached tree the Structure view
+  and the breadcrumbs already share into scopes (pre-order, single-line
+  symbols dropped) and pushes them into the views showing the file
+  (`SetSymbolScopes`), so no request is issued for the headers. The scopes
+  carry their path, so a buffer that loads another document ignores a stale
+  delivery; `stickySource` prefers the parse's scopes wherever they exist —
+  they need no server and follow every keystroke. Config
+  `editor.sticky_scroll_symbols` (bool, default on, settings panel entry)
+  gates the fallback; `editor.sticky_scroll` still governs both sources.
   **Code folding** (#144) collapses the body of a function, block, import
   list or multi-line comment behind its header line: the foldable ranges come
   from the same parse (`SpansMsg.Folds`, node kinds per language via
@@ -3038,7 +3049,8 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `auto_indent`, `auto_close_pairs`, `typing.space_after_punctuation` (#1326),
 `trim_trailing_whitespace`, `insert_final_newline`,
 `line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll`,
-`sticky_scroll_depth`, `wrap`, `show_whitespace` (`none|trailing|all`),
+`sticky_scroll_depth`, `sticky_scroll_symbols` (#2167),
+`wrap`, `show_whitespace` (`none|trailing|all`),
 `indent_guides`, `rulers`, `markdown_rendering` (#881), `log_rendering`
 (#1621), `timestamp_decoding` (#1618), `cron_hints` (#1624),
 `byte_size_hints`/`duration_hints`/`digit_grouping`/`radix_hints` (#1627),

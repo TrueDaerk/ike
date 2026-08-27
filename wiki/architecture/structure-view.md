@@ -16,7 +16,11 @@ fallback for server-less languages remains a follow-up tracked there. The
 editor breadcrumbs bar (#1153, `/architecture/editor.md`) consumes the same
 data: `applyDocumentSymbols` caches the hierarchical tree app-side per path
 (`docSymbols`), and `structureSyncCmd` issues the request even with the pane
-closed while `editor.breadcrumbs` is enabled.
+closed while `editor.breadcrumbs` is enabled. Sticky scroll's symbol fallback
+(#2167, `app/symbolscopes.go`) is the third consumer of the same cache — it
+pins enclosing declarations for languages with no Tree-sitter grammar — and
+keeps the funnel alive with both the pane closed and breadcrumbs off; none of
+the three costs an extra request.
 
 ## Data path
 
