@@ -234,7 +234,7 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// the fresh model below. The fresh model starts with a zero popup of its
 	// own.
 	m.activeWS().Aux = wsExtras{dbg: m.dbg, dbgLaunching: m.dbgLaunching, dbgLaunchGen: m.dbgLaunchGen,
-		dbgTermKey: m.dbgTermKey, popup: m.popup, floats: projectFloatTerms(m.floatTerms)}
+		popup: m.popup, floats: projectFloatTerms(m.floatTerms)}
 	parkedRoot := m.activeWS().Root
 	m.ws.Park()
 	// Arm the background LSP idle shutdown for the workspace just parked

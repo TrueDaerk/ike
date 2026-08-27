@@ -320,6 +320,14 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "run.placement", Message: fmt.Sprintf("unknown placement %q, using \"bottom\"", c.Run.Placement)})
 		c.Run.Placement = "bottom"
 	}
+	// debug.session_end (#2190) picks the combined debug area's fate when a
+	// session ends: keep it open reviewable, or close it.
+	switch c.Debug.SessionEnd {
+	case "keep", "close":
+	default:
+		diags = append(diags, Diagnostic{Field: "debug.session_end", Message: fmt.Sprintf("unknown mode %q, using \"keep\"", c.Debug.SessionEnd)})
+		c.Debug.SessionEnd = "keep"
+	}
 	// The #1932 scratch tool pane became the explorer's Scratches section
 	// (#1963). Old configs still carry [scratch] panel / panel_height; both
 	// migrate silently, like new_terminal: panel_height seeds section_height

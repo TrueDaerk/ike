@@ -117,6 +117,13 @@ func (s *stubAdapter) serve() {
 // debugModel builds a sized model with an open file and a live stub session.
 func debugModel(t *testing.T) (Model, *stubAdapter, string) {
 	t.Helper()
+	return debugModelWith(t, host.MapConfig{})
+}
+
+// debugModelWith is debugModel with an explicit config layer (#2190), so
+// tests can flip settings like debug.session_end.
+func debugModelWith(t *testing.T, cfg host.MapConfig) (Model, *stubAdapter, string) {
+	t.Helper()
 	if testStoreRoot != "" {
 		os.Setenv("IKE_CONFIG_DIR", filepath.Join(testStoreRoot, "debug-"+t.Name()))
 	}
@@ -124,7 +131,7 @@ func debugModel(t *testing.T) (Model, *stubAdapter, string) {
 	if err := os.WriteFile(path, []byte("a\nb\nc\nd\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	m := NewWith(registry.New(), host.MapConfig{})
+	m := NewWith(registry.New(), cfg)
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	tm, _ = tm.(Model).Update(explorer.OpenFileMsg{Path: path})
 	m = tm.(Model)
@@ -252,7 +259,7 @@ func TestDebugEndedCleansUp(t *testing.T) {
 		t.Fatal("termination must clear the paused marker")
 	}
 	// Trailing output flushed past `terminated` still lands in the surviving
-	// debuggee terminal pane (#689/#1370), not only in the transcript.
+	// debug area's console (#689/#1370/#2190), not only in the transcript.
 	tm, _ = m.Update(debugEventMsg{ev: dap.Event{
 		Name: "output",
 		Body: []byte(`{"category":"stdout","output":"late flush\n"}`),
@@ -262,11 +269,11 @@ func TestDebugEndedCleansUp(t *testing.T) {
 	if p == nil || !p.Finished() {
 		t.Fatal("the panel must survive termination in a finished state")
 	}
-	inst := m.debugTermInstance()
-	if inst == nil {
-		t.Fatal("the debuggee terminal pane must survive termination")
+	term := m.debugConsole()
+	if term == nil {
+		t.Fatal("the console must survive termination")
 	}
-	waitViewContains(t, inst.Terminal(), "late flush")
+	waitViewContains(t, term, "late flush")
 }
 
 // waitViewContains polls the terminal view until want appears (the pipe feed
@@ -311,14 +318,14 @@ func TestDebugPanelOpensAndFrameSelection(t *testing.T) {
 	if m.activeWS().Panes.Get(pane.DebugKey).Kind() != pane.KindDebug {
 		t.Fatal("the panel leaf must be the debug kind")
 	}
-	// The debuggee terminal pane opens beside the panel (#1370): a real
-	// terminal pane marked as the debug terminal, fed by DAP output events.
-	inst := m.debugTermInstance()
-	if inst == nil || inst.Kind() != pane.KindTerminal || !inst.IsDebugTerm() {
-		t.Fatal("a stop must open the debuggee terminal pane beside the panel")
+	// The console lives inside the combined area (#2190): one pane, fed by
+	// DAP output events — no separate debuggee terminal pane.
+	term := m.debugConsole()
+	if term == nil {
+		t.Fatal("a stop must install the console in the debug area")
 	}
-	if !inst.Terminal().IsPipe() {
-		t.Fatal("without runInTerminal the debuggee terminal is pipe-fed")
+	if !term.IsPipe() {
+		t.Fatal("without runInTerminal the console is pipe-fed")
 	}
 	waitForCommand(t, sa, "scopes") // top frame scopes fetched eagerly
 	// Selecting the outer frame re-scopes and navigates to its line.
@@ -387,16 +394,16 @@ func TestRunInTerminalSpawnFailureLeavesNoTerminal(t *testing.T) {
 	if resp.Success || resp.Message != "debuggee failed to start" {
 		t.Fatalf("response = %+v, want the spawn-failure refusal", resp)
 	}
-	if inst := m.debugTermInstance(); inst != nil && !inst.Terminal().IsPipe() {
-		t.Fatal("a failed spawn must leave the pipe terminal in place")
+	if term := m.debugConsole(); term != nil && !term.IsPipe() {
+		t.Fatal("a failed spawn must leave the pipe console in place")
 	}
 }
 
-// TestRunInTerminalUsesTerminalPane verifies the debuggee runs in the real
-// debuggee terminal pane (#1370): the pane pair opens (panel + terminal), the
-// PTY takes over the pipe placeholder's slot, and the adapter gets the real
-// pid. A later runInTerminal replaces the exited terminal in place, the pane
-// survives session end for review, and closing the pane ends the session.
+// TestRunInTerminalUsesTerminalPane verifies the debuggee runs in the debug
+// area's console (#1370 → #2190): one combined pane opens, the PTY takes over
+// the pipe placeholder inside it, and the adapter gets the real pid. A later
+// runInTerminal replaces the exited terminal in place, the area survives
+// session end for review, and closing the pane ends the session.
 func TestRunInTerminalUsesTerminalPane(t *testing.T) {
 	m, sa, _ := debugModel(t)
 	before := len(layout.Leaves(m.activeWS().Tree))
@@ -407,61 +414,61 @@ func TestRunInTerminalUsesTerminalPane(t *testing.T) {
 		t.Fatalf("first spawn refused: %+v", resp)
 	}
 	if !m.activeWS().Panes.Has(pane.DebugKey) {
-		t.Fatal("runInTerminal must open the debug panel")
+		t.Fatal("runInTerminal must open the debug area")
 	}
-	inst := m.debugTermInstance()
-	if inst == nil {
-		t.Fatal("runInTerminal must open the debuggee terminal pane")
+	term := m.debugConsole()
+	if term == nil {
+		t.Fatal("runInTerminal must install the console in the debug area")
 	}
-	if inst.Terminal().IsPipe() {
+	if term.IsPipe() {
 		t.Fatal("the PTY debuggee must replace the pipe placeholder")
 	}
-	if got := len(layout.Leaves(m.activeWS().Tree)); got != before+2 {
-		t.Fatalf("leaves = %d, want %d — the panel and the terminal pane split", got, before+2)
+	if p := m.debugPanel(); p == nil || !p.ConsoleActive() {
+		t.Fatal("a PTY debuggee must surface the console view for input")
 	}
-	oldKey := inst.Terminal().SessionKey()
-	old := inst.Terminal()
-	// Wait for the short-lived debuggee to exit; the pane must survive it
+	if got := len(layout.Leaves(m.activeWS().Tree)); got != before+1 {
+		t.Fatalf("leaves = %d, want %d — one combined debug area, no pane pair", got, before+1)
+	}
+	oldKey := term.SessionKey()
+	// Wait for the short-lived debuggee to exit; the area must survive it
 	// (output review).
 	deadline := time.Now().Add(3 * time.Second)
-	for old.Running() && time.Now().Before(deadline) {
+	for term.Running() && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
-	if old.Running() {
+	if term.Running() {
 		t.Fatal("debuggee process never exited")
 	}
 	// The next runInTerminal replaces the exited terminal in place — same
-	// pane slot, fresh session.
+	// area, fresh session.
 	tm, _ = m.Update(debugRunInTerminalMsg{seq: 46, sess: m.dbg.sess, args: dap.RunInTerminalArgs{Args: argv}})
 	m = tm.(Model)
 	if resp := waitForReverseResp(t, sa, 46); !resp.Success {
 		t.Fatalf("second spawn refused: %+v", resp)
 	}
-	inst = m.debugTermInstance()
-	if inst == nil || inst.Terminal().SessionKey() == oldKey {
-		t.Fatal("the second spawn must install a fresh session in the same pane")
+	term = m.debugConsole()
+	if term == nil || term.SessionKey() == oldKey {
+		t.Fatal("the second spawn must install a fresh session in the same area")
 	}
-	if got := len(layout.Leaves(m.activeWS().Tree)); got != before+2 {
-		t.Fatalf("leaves = %d after the second spawn, want %d (no extra pane)", got, before+2)
+	if got := len(layout.Leaves(m.activeWS().Tree)); got != before+1 {
+		t.Fatalf("leaves = %d after the second spawn, want %d (no extra pane)", got, before+1)
 	}
-	// Session end keeps the pane pair — and the terminal's scrollback — open
-	// for review (#689); closing the pane then kills the PTY.
-	term := inst.Terminal()
-	termKey := m.dbgTermKey
+	// Session end keeps the area — and the console's scrollback — open for
+	// review (#689); closing the pane then kills the PTY.
 	tm, _ = m.Update(debugEndedMsg{})
 	m = tm.(Model)
 	if !m.activeWS().Panes.Has(pane.DebugKey) {
-		t.Fatal("session end must keep the debug panel open")
+		t.Fatal("session end must keep the debug area open")
 	}
-	if m.debugTermInstance() == nil {
-		t.Fatal("session end must keep the debuggee terminal pane open")
+	if m.debugConsole() == nil {
+		t.Fatal("session end must keep the console reviewable")
 	}
 	if p := m.debugPanel(); p == nil || !p.Finished() {
 		t.Fatal("the surviving panel must show the finished state")
 	}
-	m.closeKey(termKey)
-	if m.activeWS().Panes.Has(termKey) {
-		t.Fatal("closing the pane must remove the debuggee terminal")
+	m.closeKey(pane.DebugKey)
+	if m.activeWS().Panes.Has(pane.DebugKey) {
+		t.Fatal("closing the pane must remove the debug area")
 	}
 	waitNotRunning(t, term)
 }

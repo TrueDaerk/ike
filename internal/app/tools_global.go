@@ -361,7 +361,7 @@ func (m *Model) toolAreaPane() string {
 		if toolTabHost(inst) {
 			return key
 		}
-		if inst.Kind() == pane.KindTerminal && !inst.IsDebugTerm() {
+		if inst.Kind() == pane.KindTerminal {
 			if tool := inst.Terminal().Tool(); tool != "" && tool != runToolName {
 				return key
 			}

@@ -41,7 +41,8 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
 - `Registry.ReusableRunTerminal()` (internal/pane) scans panes and terminal
   tabs in insertion order for a take-over candidate: never typed into, or its
   process already ended (a finished run's terminal is fair game again). The
-  debuggee terminal pane (#1370, instance flag `debugTerm`) is excluded.
+  debuggee's console is out of reach by construction since #2190 — it is
+  embedded in the debug area, not a terminal pane.
 
 ## Pipe sessions (#1370)
 
@@ -407,7 +408,7 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 | `cmd+f` | open the scrollback search (#1504) — the muscle-memory entry point to the same inline search `/` starts from scrollback (#1169), working from the live view too (`Model.StartSearch`; esc then returns to the live view). Under an alt-screen or mouse-reporting child the chord stays with the child (vim/lazygit own their find); outside terminals `cmd+f` keeps its global binding (`editor.find`). The popup terminal reserves it too, on the focused split side |
 | `ctrl+arrows` | spatial focus moves out of the terminal (#228) — the same `keymap.bindings.focus_*` overrides apply; a disabled direction stays with the shell. Inside the popup layer left/right instead step through its surfaces — split sides and floating panels — raising the one they land on (#1806) |
 | `cmd+c` | copy an active mouse selection (#227) — without one the key stays with the shell |
-| `cmd+v` | paste the system clipboard through the bracketed-paste path (#727) — under the Kitty protocol the host delivers cmd+v as a key, so the app performs the paste itself; the debuggee terminal pane (#1370) is an ordinary terminal pane and needs no special casing |
+| `cmd+v` | paste the system clipboard through the bracketed-paste path (#727) — under the Kitty protocol the host delivers cmd+v as a key, so the app performs the paste itself; the debug area's console view (#1370, #2190) takes the paste through the same path — `debugpanel.PasteText` hands it to the embedded terminal |
 | global IDE chords | the chords bound to the `terminalGlobalCommands` allowlist dispatch in the IDE instead of the shell (#805, widened in #973): `palette.searchEverywhere` (`cmd+shift+a`), `palette.recentFiles` (`cmd+e`), `project.switch`, `settings.open` (`cmd+,`), `project.goToFile`/`goToClass`, `project.findInPath`/`replaceInPath`, `explorer.toggle` (`cmd+1`), `window.hideAllTools`, `nav.pins` (`cmd+2`) and `nav.pinGoto1..4`, `todo.list` (`cmd+6`), `vcs.panel` (`cmd+9`), `notifications.history`, `editor.tab.next`/`tab.prev` (`ctrl+cmd+right/left`, #997 — switches the focused tab host's tabs; the `ctrl+alt+arrow` secondaries deliberately stay with the shell, `terminalShellChords`, since alt-arrows are common readline navigation), plus a configured `palette.toggle_key` — resolved via the live binding table, so rebinds move along. Single-step chords, and the **double-shift tap** (#973): two bare shift presses within 600ms open Search Everywhere — a bare modifier means nothing to the shell, unlike esc-esc, which deliberately stays with it (vim/lazygit would see side effects) |
 
 `shift+pgup` / `shift+pgdn` page the **scrollback** inside the pane (half a

@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/dap"
+	"ike/internal/terminal"
 	"ike/internal/theme"
 	"ike/internal/ui"
 )
@@ -63,7 +64,17 @@ type varNode struct {
 type Model struct {
 	pal     *theme.Palette
 	focused bool
-	w, h    int
+	// w/h is the body interior (under the tab bar); outerH the pane's full
+	// interior height as SetSize received it (#2190).
+	w, h   int
+	outerH int
+
+	// The combined debug area (#2190): term is the debuggee's console
+	// terminal, hosted behind the internal tab bar; tab the visible view and
+	// tabTouched whether the user picked it (AutoTab then stops overriding).
+	term       *terminal.Model
+	tab        Tab
+	tabTouched bool
 
 	frames   []dap.StackFrame
 	frameSel int
@@ -121,18 +132,30 @@ func New(pal *theme.Palette) Model { return Model{pal: pal, now: time.Now} }
 // rescales proportionally — the only place it is converted, so drags
 // themselves stay drift-free (#695).
 func (m *Model) SetSize(w, h int) {
-	m.w, m.h = w, h
+	m.w, m.outerH = w, h
+	m.applySize()
 	if usable := w - 1; m.colFW > 0 && m.lastUsable > 0 && usable > 0 && usable != m.lastUsable {
 		m.colFW = m.colFW * usable / m.lastUsable
 		m.lastUsable = usable
 	}
 }
 
-// SetFocused records focus.
-func (m *Model) SetFocused(f bool) { m.focused = f }
+// SetFocused records focus; the console terminal carries it while it is the
+// visible view (#2190).
+func (m *Model) SetFocused(f bool) {
+	m.focused = f
+	if m.term != nil {
+		m.term.SetFocused(f && m.tab == TabConsole)
+	}
+}
 
-// SetPalette re-threads the theme palette.
-func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
+// SetPalette re-threads the theme palette, console terminal included.
+func (m *Model) SetPalette(p *theme.Palette) {
+	m.pal = p
+	if m.term != nil {
+		m.term.SetPalette(p)
+	}
+}
 
 // SetEditable records whether the adapter supports setVariable (#627); when
 // false, the edit affordance is disabled.
@@ -209,6 +232,7 @@ func (m Model) Finished() bool { return m.finished }
 // finished marker and stale frames/variables — for a fresh launch that reuses
 // the still-open panel (#689).
 func (m *Model) ResetSession() {
+	m.tabTouched = false // the automatic view selection starts fresh (#2190)
 	m.finished = false
 	m.hasExit = false
 	m.exitCode = 0
@@ -306,6 +330,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	// The console view owns the keys while visible (#2190): a PTY debuggee
+	// gets everything, a pipe console keeps tab/shift+tab as the way back.
+	if m.ConsoleActive() {
+		return m.consoleKey(k)
+	}
 	if m.editing {
 		return m.editKey(k)
 	}
@@ -315,7 +344,18 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	switch k.String() {
-	case "tab", "l", "right":
+	case "tab", "shift+tab":
+		// With a console installed, tab cycles the panel's views (#2190) —
+		// h/l keep switching the columns; without one it stays the historic
+		// column switch.
+		if m.term != nil {
+			m.SetTab(TabConsole)
+			return nil
+		}
+		if k.String() == "tab" && m.col < colVars {
+			m.col++
+		}
+	case "l", "right":
 		if m.col < colVars {
 			m.col++
 		}
@@ -410,8 +450,13 @@ func (m *Model) editKey(k tea.KeyPressMsg) tea.Cmd {
 
 // PasteText inserts a pasted block into the open inline editor at its cursor
 // (#2002); it reports whether anything was consumed, so a closed editor lets
-// the paste fall through.
+// the paste fall through. While the console view is visible the paste belongs
+// to the terminal (#2190) — a PTY debuggee's stdin, like any terminal pane.
 func (m *Model) PasteText(text string) bool {
+	if m.ConsoleActive() {
+		m.term.PasteText(text)
+		return true
+	}
 	if !m.editing {
 		return false
 	}
@@ -524,6 +569,20 @@ func (m Model) View() string {
 	if m.w < 4 || m.h < 1 {
 		return ""
 	}
+	// The combined area (#2190): the tab bar leads, the active view follows —
+	// the variables body or the console terminal, both sized to the rows
+	// underneath.
+	if m.term != nil {
+		if m.tab == TabConsole {
+			return m.tabBar() + "\n" + m.term.View()
+		}
+		return m.tabBar() + "\n" + m.bodyView()
+	}
+	return m.bodyView()
+}
+
+// bodyView renders the frames │ variables columns over the body height.
+func (m Model) bodyView() string {
 	fw, vw := m.colWidths()
 	frames := m.renderFrames(fw)
 	vars := m.renderVars(vw)
@@ -572,6 +631,9 @@ func clampCol(w, max int) int {
 // separator (0) or not (-1), so the app can start a resize drag (#691)
 // instead of a row click.
 func (m Model) SeparatorHit(x int) int {
+	if m.ConsoleActive() {
+		return -1 // the console view has no column separator
+	}
 	fw, _ := m.colWidths()
 	if x == fw {
 		return 0

@@ -3,6 +3,7 @@ package pane
 import (
 	"testing"
 
+	"ike/internal/debugpanel"
 	"ike/internal/host"
 	"ike/internal/terminal"
 )
@@ -110,14 +111,31 @@ func TestKeysInsertionOrder(t *testing.T) {
 	}
 }
 
-// TestDebugTerminalMarking (#1370): the debuggee terminal pane is marked as
-// such, so persistence treats it as session state rather than as a terminal.
-func TestDebugTerminalMarking(t *testing.T) {
+// TestDebugConsoleEmbedding (#2190): the debug area embeds the debuggee's
+// console terminal; while the console view is active the pane's input reaches
+// it (ActiveTerminal, terminal keymap context), and closing the pane releases
+// the session.
+func TestDebugConsoleEmbedding(t *testing.T) {
 	r := newReg()
-	key := r.AddDebugTerminalFrom(terminal.NewPipe(r.MintTerminalKey(), 40, 6, nil))
+	key := r.AddDebug()
 	inst := r.Get(key)
-	if inst == nil || !inst.IsDebugTerm() {
-		t.Fatal("AddDebugTerminalFrom must mark the instance as the debug terminal")
+	if inst.ActiveTerminal() != nil {
+		t.Fatal("a console-less debug pane must expose no active terminal")
+	}
+	term := terminal.NewPipe(r.MintTerminalKey(), 40, 6, nil)
+	inst.Debug().SetTerm(&term)
+	if inst.ActiveTerminal() != nil || inst.ContextID() != ctxDebug {
+		t.Fatal("the variables view must keep the debug context and no active terminal")
+	}
+	inst.Debug().SetTab(debugpanel.TabConsole)
+	if inst.ActiveTerminal() != &term {
+		t.Fatal("the console view must expose the embedded terminal as the active one")
+	}
+	if inst.ContextID() != ctxTerminal {
+		t.Fatalf("console view context = %q, want %q", inst.ContextID(), ctxTerminal)
 	}
 	r.Close(key)
+	if term.Running() {
+		t.Fatal("closing the debug pane must end the console session")
+	}
 }

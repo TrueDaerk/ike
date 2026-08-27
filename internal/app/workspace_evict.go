@@ -102,6 +102,12 @@ func setWorkspaceTerminalsParked(w *workspace.Workspace, parked bool) {
 					t.SetParked(parked)
 				}
 			}
+		case pane.KindDebug:
+			// The debug area's embedded console (#2190) parks like any
+			// terminal session: its pipe/PTY feed batches while backgrounded.
+			if t := inst.Debug().Term(); t != nil {
+				t.SetParked(parked)
+			}
 		}
 	}
 	if extras, ok := w.Aux.(wsExtras); ok {
@@ -146,6 +152,8 @@ func teardownWorkspace(w *workspace.Workspace) {
 			inst.Terminal().Close()
 		case pane.KindEditor:
 			inst.CloseTerminalTabs()
+		case pane.KindDebug:
+			inst.Debug().CloseTerm() // the embedded console session (#2190)
 		}
 	}
 	if extras, ok := w.Aux.(wsExtras); ok {

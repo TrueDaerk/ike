@@ -1257,7 +1257,7 @@ func identityMatches(id paneIdentity, inst *pane.Instance) bool {
 		}
 		return inst.Kind() == pane.KindEditor && !toolTabHost(inst)
 	case "terminal":
-		return inst.Kind() == pane.KindTerminal && !inst.IsDebugTerm() && inst.Terminal().Tool() == ""
+		return inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() == ""
 	case "tool":
 		return inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() == id.Tool
 	default:

@@ -190,11 +190,6 @@ type Instance struct {
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
 
-	// debugTerm marks a terminal instance as the debuggee terminal (#1370):
-	// persistence records it separately (the pane is session state and never
-	// resurrects as a shell) and runs never reuse it for their own output.
-	debugTerm bool
-
 	// Editor state: the ordered tab list and the active index. A tab holds a
 	// document editor or an embedded terminal (#573). cfg/pal/size and focus
 	// are remembered so tabs created later match the live pane.
@@ -291,6 +286,12 @@ func (i *Instance) ContextID() string {
 	case KindVCS:
 		return ctxVCS
 	case KindDebug:
+		// The combined debug area (#2190): while the console view is visible
+		// its terminal owns the input, so terminal bindings (and raw key
+		// passthrough to a PTY debuggee) apply.
+		if i.dp.ConsoleActive() {
+			return ctxTerminal
+		}
 		return ctxDebug
 	case KindProblems:
 		return ctxProblems
@@ -331,10 +332,6 @@ func (i *Instance) Explorer() *explorer.Model { return &i.exp }
 // Terminal returns the underlying terminal model. It is only valid for a
 // terminal instance; callers gate on Kind first.
 func (i *Instance) Terminal() *terminal.Model { return &i.term }
-
-// IsDebugTerm reports whether the terminal instance is the debuggee terminal
-// pane (#1370).
-func (i *Instance) IsDebugTerm() bool { return i.debugTerm }
 
 // ReplaceTerminal swaps the instance's terminal model for t, closing the
 // previous session (#1370): a new debug session reuses the debuggee terminal
@@ -505,6 +502,14 @@ func (i *Instance) TabTerminal(idx int) *terminal.Model {
 func (i *Instance) ActiveTerminal() *terminal.Model {
 	if i.kind == KindTerminal {
 		return &i.term
+	}
+	if i.kind == KindDebug {
+		// The debug area's console view (#2190): its embedded terminal is
+		// what the pane's input reaches while visible.
+		if i.dp.ConsoleActive() {
+			return i.dp.Term()
+		}
+		return nil
 	}
 	if i.kind != KindEditor {
 		return nil
@@ -864,6 +869,9 @@ func (i *Instance) releaseContent() {
 	switch i.kind {
 	case KindTerminal:
 		i.term.Close()
+	case KindDebug:
+		// The embedded console terminal's session ends with the pane (#2190).
+		i.dp.CloseTerm()
 	case KindData:
 		i.dv.Close()
 	case KindES:
