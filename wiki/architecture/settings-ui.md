@@ -116,10 +116,11 @@ box capped at ~110×32 cells above the workspace, laid out as the
   back to the user/global value on the reload. Custom pages keep their own
   keys (`s` on the Tools page still opens suggestions — the panel's
   selector only applies to schema rows).
-- **Filter.** `/` starts a type-to-filter across all schema pages (titles,
-  keys, page names); matches render as `Page › Title`, and the result list
-  names the custom pages the filter cannot search (`(not searched: Keymap,
-  …)`, #383). Esc clears the filter, then closes the panel.
+- **Filter.** `/` starts a fuzzy search across all schema pages (keys, titles,
+  descriptions, page names, #2179); matches render as `Page › Title`, and the
+  result list names the custom pages the filter cannot search
+  (`(not searched: Keymap, …)`, #383). Esc clears the query, a second esc
+  leaves the search, and esc without a search closes the panel.
 - **Keys.** ↑↓/jk navigate, ←→ (and h/l) or tab switch columns, enter edits,
   esc cancels/closes (#383). On custom pages only arrow-left returns to the
   categories — plain `h` is forwarded to the page (it may be filter text
@@ -673,6 +674,38 @@ takes over the grid instead, keeping all three columns doing their job:
 
 Custom-page items keep coming through the `Searchable` seam (#886) and still
 navigate on enter.
+
+## Fuzzy search over all settings (#2179)
+
+The query is matched by `search.go`'s `searchRows`, so finding a setting no
+longer means knowing which category it lives in:
+
+- **Match sources are the schema itself** — the dotted config **key**, the
+  **title** and the **description**, plus the owning page's title (and, for a
+  custom page's `SearchItem`, its label and keywords). Nothing is registered
+  anywhere: a new `Entry` is searchable the moment it exists.
+- **The match is fuzzy** (`internal/fuzzy`, the command palette's matcher), so
+  `edtabw` finds `editor.tab_width`. Whitespace-separated terms are **ANDed** —
+  `interface menu` narrows instead of widening.
+- **Prose has a floor.** In a description or a keyword list a scattered one- or
+  two-rune subsequence is noise, so patterns shorter than three runes only
+  count where they occur literally. Names (key, title) have no such gate: a
+  short pattern typed at a key is meant.
+- **Ranking is two-level.** Rows stay grouped by their page, because the rail
+  lists *pages with hits* (#1297) and a group has to be contiguous to read as
+  one; inside a group rows are ordered by score, and the groups by their best
+  row. So the strongest match is the first row of the first group, and a hit
+  in a name (`bonusKey` > `bonusTitle` > page > prose) outranks the same word
+  buried in another setting's description.
+- **The highlight explains the ranking**: `highlightMatch` marks each term
+  where it occurs literally and otherwise on exactly the runes the matcher
+  hit.
+- **Landing on the field.** `tab` on a result opens the match's own category
+  positioned on the real form row, focused with its editor live — the value is
+  editable with the next key, no extra step. `enter` still sets the value from
+  inside the search (#1297).
+- **Esc follows the picker speed search** (`ui.SpeedSearch.EscClears`, #2111):
+  first press clears the query, second leaves the search.
 
 ## Keymap page on the grid (0460, #1298)
 

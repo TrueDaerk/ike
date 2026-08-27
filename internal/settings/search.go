@@ -5,6 +5,166 @@ package settings
 // titles match as jump rows, and activating a result navigates there —
 // "/python interpreter" lands on Toolchain › python instead of "no matching
 // settings".
+//
+// Since #2179 the match itself is fuzzy and reads every piece of schema
+// metadata: the config key, the title and the description, so a setting is
+// findable by what it does ("/wrap long lines") and not only by what it is
+// called. Matching is schema-driven, so a new Entry is searchable the moment
+// it exists.
+
+import (
+	"sort"
+	"strings"
+
+	"ike/internal/fuzzy"
+)
+
+// searchField is one haystack a row exposes to the query. bonus lifts a hit
+// in a name above the same hit in prose, so "tab width" ranks the entry above
+// every description that happens to mention tabs; prose marks free text, where
+// a scattered subsequence of one or two runes is noise rather than a match.
+type searchField struct {
+	text  string
+	bonus int
+	prose bool
+}
+
+// Field weights and the prose gate. The numbers only have to order fields
+// against each other — the fuzzy scorer's own bonuses (16 for a word
+// boundary) set the scale.
+const (
+	bonusKey    = 24 // the dotted config key: the most precise thing to type
+	bonusTitle  = 20 // the form label
+	bonusPage   = 8  // the category title, so "appearance theme" narrows
+	bonusProse  = 0  // description / keywords
+	proseMinLen = 3  // shorter patterns must appear literally in prose
+)
+
+// scoreFields matches query against fields. Whitespace-separated terms are
+// ANDed — every term must hit at least one field, so "editor tab" narrows
+// instead of widening — and the row's score is the sum of each term's best
+// field score. ok is false when a term matches nothing.
+func scoreFields(query string, fields ...searchField) (int, bool) {
+	terms := strings.Fields(strings.ToLower(query))
+	if len(terms) == 0 {
+		return 0, true
+	}
+	total := 0
+	for _, term := range terms {
+		best, hit := 0, false
+		for _, f := range fields {
+			if f.text == "" {
+				continue
+			}
+			res, ok := fuzzy.Match(term, f.text)
+			if !ok {
+				continue
+			}
+			if f.prose && len([]rune(term)) < proseMinLen &&
+				!strings.Contains(strings.ToLower(f.text), term) {
+				// "e" scattered through a sentence is not a hit.
+				continue
+			}
+			if s := res.Score + f.bonus; !hit || s > best {
+				best, hit = s, true
+			}
+		}
+		if !hit {
+			return 0, false
+		}
+		total += best
+	}
+	return total, true
+}
+
+// searchCache memoizes one query's result rows (#2179). rows() runs many
+// times per frame — the form, the rail's hit pages, the selection, the
+// editor — and fuzzy-matching every entry of every page on each call is far
+// too expensive to repeat. The cache lives for exactly one input event: every
+// entry point that can change the query or a page's items drops it, so a
+// result list can never outlive the state it was built from.
+type searchCache struct {
+	query string
+	rows  []row
+	valid bool
+}
+
+// invalidateSearch drops the memoized result list.
+func (m *Model) invalidateSearch() { m.search = searchCache{} }
+
+// scored is one match with the score that ordered it.
+type scored struct {
+	row   row
+	score int
+}
+
+// searchRows builds the filter's flat result list: every page title, schema
+// entry and custom-page item the query matches, across all categories.
+//
+// The rows stay grouped by their page — the rail lists "pages with hits"
+// (#1297) and a group has to be contiguous for that to read — but both levels
+// are ordered by score: the page with the best hit comes first, and inside a
+// page the best row does. So the strongest match is always the first row of
+// the first group, and the rail is still a map of where the matches are.
+func (m *Model) searchRows(query string) []row {
+	type group struct {
+		rows []scored
+		best int
+	}
+	groups := make([]group, 0, len(m.pages))
+	for pi, p := range m.pages {
+		var g group
+		add := func(r row, score int) {
+			g.rows = append(g.rows, scored{row: r, score: score})
+			if len(g.rows) == 1 || score > g.best {
+				g.best = score
+			}
+		}
+		// Category titles match as jump rows (#886).
+		if s, ok := scoreFields(query, searchField{text: p.Title, bonus: bonusTitle}); ok {
+			add(row{page: pi, kind: rowPage, label: p.Title}, s)
+		}
+		if p.Custom != nil {
+			// Custom pages export their items through the Searchable seam
+			// (#886); enter navigates there.
+			if sp, ok := p.Custom.(Searchable); ok {
+				for _, it := range sp.SearchItems() {
+					s, ok := scoreFields(query,
+						searchField{text: it.Label, bonus: bonusTitle},
+						searchField{text: p.Title, bonus: bonusPage},
+						searchField{text: it.Keywords, bonus: bonusProse, prose: true})
+					if !ok {
+						continue
+					}
+					add(row{page: pi, kind: rowItem, label: p.Title + " › " + it.Label, activate: it.Activate}, s)
+				}
+			}
+		}
+		for _, e := range p.Entries {
+			s, ok := scoreFields(query,
+				searchField{text: e.Key, bonus: bonusKey},
+				searchField{text: e.Title, bonus: bonusTitle},
+				searchField{text: p.Title, bonus: bonusPage},
+				searchField{text: e.Description, bonus: bonusProse, prose: true})
+			if !ok {
+				continue
+			}
+			add(row{page: pi, entry: e}, s)
+		}
+		if len(g.rows) > 0 {
+			sort.SliceStable(g.rows, func(i, j int) bool { return g.rows[i].score > g.rows[j].score })
+			groups = append(groups, g)
+		}
+	}
+	sort.SliceStable(groups, func(i, j int) bool { return groups[i].best > groups[j].best })
+	var out []row
+	for _, g := range groups {
+		for _, s := range g.rows {
+			out = append(out, s.row)
+		}
+	}
+	return out
+}
 
 // SearchItem is one filterable item a custom page exports.
 type SearchItem struct {

@@ -209,8 +209,8 @@ func (m *Model) openKeyHelp() {
 		"        r reset to default",
 		"apply:  ctrl+s review and write the staged changes",
 		"        esc with changes pending opens the same review",
-		"search: / all settings · the rail lists the pages with hits",
-		"        enter sets the value here · tab opens its page",
+		"search: / fuzzy over key, label, description · rail = hit pages",
+		"        enter sets here · tab opens the page · esc clears, then exits",
 		"global: s write-scope: auto → user → project",
 		"        ? this overlay · esc back / close",
 	}
