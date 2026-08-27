@@ -105,6 +105,20 @@ func CompileExact(pattern string) Query {
 // Empty reports whether the query has no pattern.
 func (q Query) Empty() bool { return q.Pattern == "" }
 
+// MatchesLine reports whether the query matches anywhere in text. It is the
+// allocation-free predicate behind the follow filter (#2255), which asks it
+// per buffer line per frame — LineMatches would build a span slice per line
+// only to have the caller throw it away.
+func (q Query) MatchesLine(text string) bool {
+	if q.Empty() {
+		return false
+	}
+	if q.re != nil {
+		return q.re.MatchString(text)
+	}
+	return strings.Contains(text, q.Pattern)
+}
+
 // LineMatches returns every match on line i as rune-column spans.
 func (q Query) LineMatches(b *buffer.Buffer, i int) []Span {
 	line := b.Line(i)

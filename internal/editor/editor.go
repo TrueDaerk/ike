@@ -487,6 +487,16 @@ type Model struct {
 	mergedLog bool
 	followSrc string
 	mergeWait bool
+	// Follow filter (#2255, logfilter.go): logFilt is the view's live
+	// filter/highlight over the tailed stream, filtPrev the filter an open
+	// filter line restores on Esc, and filtering marks that line open (the
+	// command line's third kind, beside ":" and "/"). logFiltCache holds the
+	// badge's match count for one document version, pointer-held and extended
+	// over appends like logRunCache.
+	logFilt      logFilter
+	filtPrev     logFilter
+	filtering    bool
+	logFiltCache *logFilterState
 	// logDeltaCache caches the inter-line elapsed times (#1651, logdelta.go)
 	// per document version, the same way.
 	logDeltaCache *logDeltaState
@@ -803,6 +813,7 @@ func New() Model {
 		docPathCache:       &docPathState{},
 		logRender:          true,
 		logRunCache:        &logRunState{},
+		logFiltCache:       &logFilterState{},
 		logLangCache:       &logLangState{},
 		logDeltaCache:      &logDeltaState{},
 		pemSummary:         true,
@@ -1088,6 +1099,7 @@ func (m *Model) Load(path string) error {
 	// any merged rotation set the view held (#1996).
 	m.follow, m.followPaused, m.followRotated = false, false, false
 	m.mergedLog, m.followSrc, m.mergeWait = false, "", false
+	m.logFilt, m.filtPrev, m.filtering = logFilter{}, logFilter{}, false // #2255
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal
@@ -1095,6 +1107,7 @@ func (m *Model) Load(path string) error {
 	m.wait = awaitNone
 	m.cmdline = ""
 	m.searching = false
+	m.filtering = false
 	m.dirty = false
 	m.stale = false
 	// Dependency-file guard (#565): lock a vendored file on open. A reload of the
@@ -1158,6 +1171,7 @@ func (m *Model) NewFile(path string) {
 	m.wait = awaitNone
 	m.cmdline = ""
 	m.searching = false
+	m.filtering = false
 	m.dirty = false
 	m.stale = false
 	// A newly created file is authored by the user even under a dependency dir,

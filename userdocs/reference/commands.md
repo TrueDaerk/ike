@@ -307,6 +307,9 @@ bring their own.
 | Merge: Previous Conflict | `merge.prevConflict` | — | — | `editor` pane |
 | Next Change (Editor) | `vcs.nextChange` | — | `]c` | `editor` pane |
 | Previous Change (Editor) | `vcs.prevChange` | — | `[c` | `editor` pane |
+| Clear Follow Filter | `view.clearFollowFilter` | — | — | `editor` pane |
+| Filter Followed Output | `view.followFilter` | `alt+shift+g` | — | `editor` pane |
+| Highlight in Followed Output | `view.followHighlight` | — | — | `editor` pane |
 | Toggle Base64 Decoding | `view.toggleBase64Decoding` | — | — | `editor` pane |
 | Toggle Byte Size Hints | `view.toggleByteSizeHints` | — | — | `editor` pane |
 | Toggle CIDR Hints | `view.toggleCIDRHints` | — | — | `editor` pane |

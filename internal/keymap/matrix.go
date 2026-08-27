@@ -97,6 +97,7 @@ var reachableAlternatives = map[string]string{
 	"perf.hud":                 "palette / View menu",
 	"json.jqQueryView":         "palette / Tools menu",
 	"view.toggleFollow":        "palette",
+	"view.followFilter":        "palette",
 	"editor.tab.next":          "palette",
 	"editor.tab.prev":          "palette",
 	"editor.tab.reopenClosed":  "palette",

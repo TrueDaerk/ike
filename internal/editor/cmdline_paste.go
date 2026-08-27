@@ -34,7 +34,8 @@ func (m *Model) pasteIntoPrompt(text string) bool {
 
 // pasteCmdline inserts at the command-line cursor, then re-runs the same
 // hooks a typed rune triggers: incremental search preview on the "/" line,
-// path-suggest refresh on the ":" line, and the history-recall reset (#1171).
+// the live re-filter on the "|" line (#2255), path-suggest refresh on the
+// ":" line, and the history-recall reset (#1171).
 func (m *Model) pasteCmdline(text string) {
 	out, ncur, changed := ui.PasteText(m.cmdline, m.cmdCur, text)
 	if !changed {
@@ -43,9 +44,10 @@ func (m *Model) pasteCmdline(text string) {
 	m.bumpRender()
 	m.cmdline, m.cmdCur = out, ncur
 	m.cmdHistIdx = -1
-	if m.searching {
-		m.searchPreview()
-	} else {
+	switch {
+	case m.searching || m.filtering:
+		m.cmdPreview() // #2255: the filter line previews like the search line
+	default:
 		m.refreshCmdlineSuggest()
 	}
 }

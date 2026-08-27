@@ -36,6 +36,11 @@ const (
 	Ex = "ex"
 	// FindInPath is the find-in-path overlay's query field.
 	FindInPath = "findInPath"
+	// FollowFilter is the follow-mode filter/highlight line (#2255). It
+	// shares the search line's pattern language but recalls separately: the
+	// patterns worth re-applying to a live log are rarely the ones just
+	// searched for in source.
+	FollowFilter = "followFilter"
 )
 
 // FindState is the find-in-path overlay's last full search state (#2054):

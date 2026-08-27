@@ -36,6 +36,7 @@ var statusLeft = []statusSegment{
 	{id: "peek", render: peekSegment},
 	{id: "macro", render: macroSegment},
 	{id: "follow", render: followSegment},
+	{id: "followfilter", render: followFilterSegment},
 	{id: "file", render: fileSegment},
 	{id: "largefile", render: largeFileSegment},
 	{id: "buflang", render: bufferLangSegment},
@@ -148,6 +149,16 @@ func followSegment(_ Model, ed *editor.Model) string {
 		return ""
 	}
 	return ed.FollowLabel()
+}
+
+// followFilterSegment shows the live filter over a followed stream (#2255)
+// right after the FOLLOW badge — "FILTER err (12)", "HIGHLIGHT ~w\d+ (3)", or
+// the inline error of a pattern that would not compile. Hidden without one.
+func followFilterSegment(_ Model, ed *editor.Model) string {
+	if ed == nil {
+		return ""
+	}
+	return ed.FollowFilterLabel()
 }
 
 // modeSegment is the editor input mode; NORMAL when no editor exists.

@@ -77,6 +77,8 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.cmdline = ""
 	m.cmdCur = 0
 	m.searching = false
+	m.filtering = false
+	m.logFilt, m.filtPrev = logFilter{}, logFilter{} // #2255: per-view filter
 	// Highlighting is document-derived like the fold ranges, and the index is
 	// immutable — the new view adopts the source's spans instead of starting
 	// blank (#857): clearing here left drag/drop-opened views unhighlighted

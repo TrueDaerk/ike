@@ -3,8 +3,12 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/editor"
 	"ike/internal/host"
@@ -59,5 +63,36 @@ func TestFollowInterval(t *testing.T) {
 	cfg := host.MapConfig{"editor.follow_poll_ms": "250"}
 	if got := followInterval(cfg); got != 250*time.Millisecond {
 		t.Fatalf("configured interval = %v", got)
+	}
+}
+
+// TestFollowFilterBadgeInStatusLine: the follow filter (#2255) shows in the
+// status line right after the FOLLOW badge, so a narrowed pane says so.
+func TestFollowFilterBadgeInStatusLine(t *testing.T) {
+	m := sized(t, 100, 40)
+	path := filepath.Join(t.TempDir(), "app.log")
+	if err := os.WriteFile(path, []byte("error one\ninfo two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := m.openPath(path, false)
+	m = out.(Model)
+	_ = m.routeToEditor(path, editor.ActionMsg{Action: "toggle_follow"})
+	_ = m.routeToEditor(path, editor.ActionMsg{Action: "follow_filter"})
+	for _, r := range "error" {
+		_ = m.routeToEditor(path, tea.KeyPressMsg{Text: string(r), Code: r})
+	}
+	ed := m.activeEditor()
+	if ed == nil {
+		t.Fatal("setup: no active editor")
+	}
+	if got := followSegment(m, ed); got != "FOLLOW" {
+		t.Fatalf("follow badge = %q", got)
+	}
+	if got := followFilterSegment(m, ed); got != "FILTER error (1)" {
+		t.Fatalf("filter badge = %q", got)
+	}
+	line := ansi.Strip(m.statusLine())
+	if !strings.Contains(line, "FOLLOW") || !strings.Contains(line, "FILTER error (1)") {
+		t.Fatalf("status line must carry both badges, got %q", line)
 	}
 }

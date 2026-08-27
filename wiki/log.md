@@ -1,5 +1,30 @@
 # Log
 
+## 2026-08-27 (Follow mode: live filter and highlight over tailed output, #2255)
+
+- **Filter line** (`internal/editor/logfilter.go`): `view.followFilter`
+  (`alt+shift+g`, palette) opens a `|` command line over a followed buffer —
+  every non-matching line is hidden, existing content and streamed appends
+  alike, and the auto-scroll sticks to the *filtered* tail. Typing is live;
+  `view.followHighlight` (`*` line) is the same pattern without hiding, with
+  matches on their own warning-tinted background; `view.clearFollowFilter`,
+  an emptied pattern, Esc or leaving follow mode restores the stream. The
+  pattern language is the search line's (`\v` regex — `ctrl+r` toggles the
+  marker — `\c`/`\C` case), except that a broken regex reports inline instead
+  of being demoted to a literal.
+- **Follow semantics**: "the end" is now the last *visible* line, so
+  `followToEnd` and the pause predicate follow the filtered tail; the
+  viewport test counts visible rows, since hidden lines let more of the
+  buffer fit than the window height suggests. Hiding rides `lineHidden`, so
+  motions, scrolling and mouse mapping need no special case; a merged rotated
+  log set filters the same way.
+- **Badge & cost**: the status line shows `FILTER error (12)` /
+  `HIGHLIGHT ~pat (3)` / the compile error next to `FOLLOW`. The match count
+  is cached per document version and extended over appends
+  (`logFilterState`), never recounted per poll (#2163).
+- Docs: [follow mode](/architecture/follow-mode.md), the keybinding matrix
+  and the generated command/keybinding reference.
+
 ## 2026-08-27 (Organize imports on save: one undo unit and an on-demand command, #2253)
 
 - **One undo unit for the save chain**: with both on-save steps enabled the

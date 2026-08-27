@@ -142,6 +142,7 @@ Active when an editor pane has focus.
 | Duplicate line(s) | `cmd+d` | `ctrl+d` | `editor.duplicateLine` |
 | Extend selection | `alt+up` | `alt+up` | `editor.selection.extend` |
 | File structure | `cmd+f12` | `ctrl+f12` | `lsp.documentSymbols` |
+| Filter followed output | `alt+shift+g` | `alt+shift+g` | `view.followFilter` |
 | Find in file | `cmd+f` | `ctrl+f` | `editor.find` |
 | Find usages | `alt+f7` | `alt+f7` | `lsp.references` |
 | Find usages (panel) | `cmd+alt+f7` | `ctrl+alt+f7` | `lsp.referencesPanel` |

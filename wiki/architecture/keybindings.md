@@ -968,6 +968,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `todo.list` | `cmd+6` | fragile | `palette` | live via palette |
 | `vcs.panel` | `cmd+9` | fragile | `palette` | live via palette |
 | `vcs.revertFile` | `cmd+alt+z` | fragile | `palette` | live via palette |
+| `view.followFilter` | `alt+shift+g` | fragile | `palette` | live via palette |
 | `view.toggleFollow` | `alt+shift+f` | fragile | `palette` | live via palette |
 | `view.zenMode` | `ctrl+alt+f` | fragile | `palette / View menu` | live via palette / View menu |
 | `window.hideAllTools` | `cmd+shift+f12` | fragile | `palette` | live via palette |
