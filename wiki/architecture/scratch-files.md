@@ -4,7 +4,7 @@ title: Scratch Files
 description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette or generated as synthetic test data in nine formats, listed as the explorer's Scratches section with the explorer's own open/rename/delete semantics, surviving restarts as ordinary files.
 resource: internal/scratch
 tags: [architecture, scratch, palette, languages, explorer, testdata]
-timestamp: 2026-08-25T12:00:00Z
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # Scratch Files
@@ -121,15 +121,20 @@ reads the wall clock: the `date` kind defaults to a fixed 2000–2030 window and
 generated log timestamps start at a fixed epoch. **Seed 0 means "draw a fresh
 random seed"**; any other seed repeats.
 
-The catalog (`testdata.Catalog()`, the wizard's reference and the docs' table):
-`id` (the 1-based row number, not random), `uuid`, `first_name`, `last_name`,
-`full_name`, `email`, `url`, `hostname`, `domain`, `ipv4`, `ipv6`, `mac`,
-`phone`, `street`, `city`, `country`, `company`, `job_title`, `sentence`,
-`paragraph`, `int`, `float`, `bool`, `date`, `hex_color`, `user_agent`. Four
-take a parameter: `email`/`url`/`hostname` a **domain**, which constrains every
-generated value to it (`https://example.com/…`, `srv12.example.com`),
-`int`/`float` a `min..max` range and `date` a `from..to` range (`YYYY-MM-DD` or
-RFC3339).
+The catalog (`testdata.Catalog()`, the wizard's kind picker and the docs'
+table): `id` (the 1-based row number, not random), `uuid`, `first_name`,
+`last_name`, `full_name`, `email`, `url`, `hostname`, `domain`, `ipv4`,
+`ipv6`, `mac`, `phone`, `street`, `city`, `country`, `company`, `job_title`,
+`sentence`, `paragraph`, `int`, `float`, `bool`, `date`, `hex_color`,
+`user_agent`, `from_list`. The parameterized kinds: `email`/`url`/`hostname`
+take a **domain**, which constrains every generated value to it
+(`https://example.com/…`, `srv12.example.com`), `int`/`float` a `min..max`
+range, `date` a `from..to` range (`YYYY-MM-DD` or RFC3339), and `from_list`
+(#2228) **comma-separated entries** the value is drawn from at random
+(`red, green, blue`; entries are trimmed, empties dropped, a literal comma in
+an entry is out of scope). `from_list` is the one kind whose parameter is
+**required** — every other kind has a default, but a list to pick from cannot
+be invented.
 
 **Writers stream.** Each format is a `begin` / one call per row / `end` encoder
 over a 64 KiB buffer, so a million-row CSV never materializes as a million rows
@@ -163,14 +168,30 @@ generated file reads as a stream.
 ### Commands and the wizard
 
 - **`scratch.generate` ("Generate Test Data…", palette + File menu)** opens a
-  four-step shell dialog (`internal/app/scratch_generate.go`), modelled on the
-  [new-project wizard](./project-switching.md) rather than a settings form, so
-  it needs no page host: **format** (↑↓, enter) → **rows / seed / table** (tab
-  between fields) → **field list** (`a` add, `e` edit, `d` delete, enter
-  generates) → **field editor** (name / kind / param; ↑↓ on the Kind row cycle
-  the catalog, so 26 kinds need no typing). Every accept validates through
-  `Spec.Validate`, and a failure keeps the dialog open with the reason on its
-  error line. `esc` walks the steps backwards and closes on the first.
+  five-step shell dialog (`internal/app/scratch_generate.go`, reworked in
+  #2228), modelled on the [new-project wizard](./project-switching.md) rather
+  than a settings form, so it needs no page host: **format** (↑↓, enter) →
+  **rows / seed / table** (tab between fields; the row count is prompted with
+  its 1…1 000 000 bound stated and the preset's value prefilled) → **column
+  list** (`a` add, `e`/enter edit, `d` delete — announcing what it removed —
+  and the deliberate `g` generates, so the file-writing action is never the
+  reflex key) → **column editor** (name / kind / param; the Kind row is not a
+  text field — enter or a click on it opens the picker) → **kind picker** (the
+  whole catalog with descriptions, type-to-filter via `ui.SpeedSearch`, the
+  selected kind's parameter grammar under the list; enter/click chooses, and
+  choosing focuses the parameter when the kind takes one). Every accept
+  validates through `Spec.Validate`, and a failure keeps the dialog open with
+  the reason on its error line. `esc` walks the steps backwards (clearing an
+  active picker filter first) and closes on the first.
+
+  The wizard is **fully mouse-operable** (#2228): every rendered line records
+  a hit region while it renders, so a click acts on what it visibly hits —
+  list rows select on the first click and activate on a click at the selected
+  row, the Kind row and the catalog rows behave like a dropdown, and every
+  step carries a clickable `[button]` row that replays the key it is labelled
+  with. The wheel moves the list selections, and long lists (columns, the
+  catalog) window themselves to the shell's viewport with `↑/↓ n more`
+  indicators, so the dialog stays inside the screen at any window size.
 - **`scratch.generate.<format>`** — one per format, mirroring
   `scratch.new.<lang>`: no prompt at all, generated straight from that format's
   stored preset.

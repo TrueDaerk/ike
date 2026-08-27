@@ -170,6 +170,10 @@ func TestKindValues(t *testing.T) {
 				if !validDomain(v.(string)) {
 					t.Fatalf("domain %q malformed", v)
 				}
+			case KindFromList:
+				if s := v.(string); s != "red" && s != "green" && s != "blue" {
+					t.Fatalf("from_list %q not in the list", s)
+				}
 			default:
 				if s, ok := v.(string); !ok || strings.TrimSpace(s) == "" {
 					t.Fatalf("kind %s produced %#v, want a non-empty string", f.Kind, v)

@@ -122,6 +122,7 @@ const (
 	KindDate      Kind = "date"       // from..to
 	KindHexColor  Kind = "hex_color"  //
 	KindUserAgent Kind = "user_agent" //
+	KindFromList  Kind = "from_list"  // comma-separated entries (required)
 )
 
 // KindInfo describes one catalog entry for the wizard's kind field and the
@@ -163,6 +164,7 @@ var kindCatalog = []KindInfo{
 	{KindDate, "date in a range", "from..to, default 2000-01-01..2030-01-01"},
 	{KindHexColor, "hex color, #rrggbb", ""},
 	{KindUserAgent, "browser user agent", ""},
+	{KindFromList, "random pick from a list", "comma-separated entries, e.g. red, green, blue"},
 }
 
 // Kinds lists the catalog in cycling order.
@@ -293,10 +295,14 @@ func (s Spec) Normalized() Spec {
 }
 
 // checkParam validates a field's parameter against its kind's grammar. An
-// empty parameter is always valid — every kind has a default.
+// empty parameter is valid for every kind except from_list — the others all
+// have a default, but a list to pick from cannot be invented.
 func checkParam(f Field) error {
 	p := strings.TrimSpace(f.Param)
 	if p == "" {
+		if f.Kind == KindFromList {
+			return fmt.Errorf("from_list needs at least one entry (comma-separated)")
+		}
 		return nil
 	}
 	switch f.Kind {
@@ -313,6 +319,10 @@ func checkParam(f Field) error {
 	case KindDate:
 		_, _, err := parseDateRange(p)
 		return err
+	case KindFromList:
+		if len(parseList(p)) == 0 {
+			return fmt.Errorf("from_list needs at least one entry (comma-separated)")
+		}
 	default:
 		return fmt.Errorf("kind %q takes no parameter", string(f.Kind))
 	}
@@ -370,6 +380,20 @@ func parseFloatRange(p string) (float64, float64, error) {
 		return 0, 0, fmt.Errorf("range min %v is above max %v", lo, hi)
 	}
 	return lo, hi, nil
+}
+
+// parseList reads a from_list parameter: comma-separated entries, trimmed,
+// empties dropped. A value that needs a literal comma is out of scope — the
+// point of the kind is small enum-ish columns (statuses, tags, categories).
+func parseList(p string) []string {
+	parts := strings.Split(p, ",")
+	out := make([]string, 0, len(parts))
+	for _, e := range parts {
+		if e = strings.TrimSpace(e); e != "" {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // dateLayouts are the accepted spellings of a date-range end, tried in order.

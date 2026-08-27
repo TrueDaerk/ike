@@ -156,6 +156,9 @@ func (g *Generator) compile(f Field) (func(row int) any, error) {
 			from, to, _ = parseDateRange(f.Param)
 		}
 		return func(int) any { return fake.DateRange(from, to).UTC().Truncate(time.Second) }, nil
+	case KindFromList:
+		entries := parseList(f.Param)
+		return func(int) any { return entries[fake.IntRange(0, len(entries)-1)] }, nil
 	}
 	// Unreachable: Validate rejects unknown kinds before compile runs. Kept as
 	// a guard so a kind added to the catalog without a case here fails loudly
