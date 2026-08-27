@@ -229,7 +229,55 @@ snapshots, active-session DAP output, watcher event batching,
 completion-source locking, per-frame sticky/fold/speed-search memoization,
 tick generation stamps across model rebuilds) are split into follow-up
 issues — see the #2163 issue trail; the host outbox bounding landed as
-#2169.
+#2169 and the per-frame memoizations as #2187 (next section).
+
+## The remaining per-frame recomputation (#2187)
+
+The #2163 follow-up: the four hot paths the #612/#614/#1096–#1099 caches did
+not cover. All four take the same shape — a memo behind a pointer field, so
+the value copies of a Model share it, keyed on everything the computation
+reads and invalidated where that changes.
+
+- **Sticky-scroll headers** (`internal/editor/sticky.go`): `enclosingHeaders`
+  scans every scope of the parse, and the fixed-point loop that settles the
+  pinned count repeats that up to `stickyDepth` times — per ask, and `View`,
+  the scroll paths and the mouse map each ask per frame. `stickyLines` now
+  memoizes against `stickyKey` (viewport top, the depth cap, buffer line
+  count, `scopeEpoch`, `docVersion`). `scopeEpoch` exists because a landing
+  parse replaces the scopes *without* bumping the document version — the
+  version alone could not see them change — so every `scopes` write funnels
+  through `setScopes`.
+- **Fold hiding** (`internal/editor/fold.go`): `lineHidden` scanned the whole
+  collapsed map per rendered row per frame — a 100k-line file under `zM` is
+  ~400k map iterations per frame between the `View` body loop and
+  `wrap.DisplayRow`. The collapsed set now carries an interval index
+  (`foldSpans`: header lines ascending plus the running maximum of the fold
+  ends), binary-searched instead of scanned, rebuilt once per fold mutation.
+  Every mutation of `folded` funnels through `bumpFolds` — the index is only
+  as trustworthy as that funnel — and a second view of a shared document gets
+  its own index, like its own collapsed set (#144). The same path also stopped
+  re-deciding "is this a log buffer" per row: `logBuffer` resolves
+  `lang.ByPath` (a mutex, a regexp and a dozen allocations) once per language
+  path now, dropped on a config reload since `files.associations` can rename
+  it. `BenchmarkLineHiddenManyFolds` guards a frame's worth of rows over 2000
+  folds: ~420µs/480 allocs → 31µs/0.
+- **Explorer speed search** (`internal/explorer/search.go`): `searchLine`
+  renders its "3/17" counter from `searchMatches`, which lowercases and scans
+  every flattened row — tens of thousands on a monorepo — per frame for as
+  long as the `/` field is open. Memoized on the `searchState` by query and a
+  `rowsEpoch` bumped in `rebuild`, the `widthCache` pattern (#1096); the
+  terminal's scrollback search got the same fix in #2163.
+- **The settled pass** (`internal/app/app.go`): the reconcile steps at the end
+  of `Update` run once per *message*, so a flood paid O(panes × tabs) each
+  time. `imageSyncCmd` returns immediately unless the registry ever minted an
+  image pane (`Registry.ImagesMinted`) or placements are still resident, and
+  allocates its live-id map only once an image pane is actually found;
+  `domSyncCmd` returns before resolving the active editor when neither the
+  inspector nor a highlighted file exists; `syncBreadcrumbLayout` returns
+  before building the pane signature when no pane *can* show the row (zen, the
+  feature off, or no symbol tree cached) and the recorded signature is already
+  empty. `internal/app/settledearlyout_test.go` pins all three at zero
+  allocations per pass in those states.
 
 ## Diagnostics hooks (`internal/diag`, #1001)
 

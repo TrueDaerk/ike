@@ -95,8 +95,16 @@ func (m *Model) openImagePreview(path string) {
 // unknown it emits the capability probe once (first image pane); without
 // support it does nothing and the panes render their metadata fallback.
 func (m *Model) imageSyncCmd() tea.Cmd {
+	// This runs on *every* message (#2187), and the walk below allocates a
+	// key slice per pane host plus a map. A workspace that never opened an
+	// image pane cannot have anything to reconcile — the mint counter says so
+	// without touching an instance — and neither can one whose placements are
+	// already released.
+	if !m.activeWS().Panes.ImagesMinted() && len(m.liveImages) == 0 {
+		return nil
+	}
 	supported := m.kittyGfx != nil && *m.kittyGfx
-	live := map[int]bool{}
+	var live map[int]bool
 	var raw []string
 	hasImages := false
 	m.contentInstances(func(_ string, _ int, inst *pane.Instance) bool {
@@ -108,6 +116,9 @@ func (m *Model) imageSyncCmd() tea.Cmd {
 		iv.SetGraphics(supported)
 		if !supported {
 			return true
+		}
+		if live == nil {
+			live = map[int]bool{}
 		}
 		live[iv.ID()] = true
 		if seqs := iv.SyncSeqs(); len(seqs) > 0 {

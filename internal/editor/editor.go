@@ -453,6 +453,12 @@ type Model struct {
 	// logRunCache caches the collapsed repeat runs (#1650, logfold.go) per
 	// document version (pointer, shared across the value copies like svTable).
 	logRunCache *logRunState
+	// logLangCache memoizes the "is this a log buffer" language lookup
+	// (#2187): lineHidden asks it per rendered row per frame through
+	// logRunHidden, and lang.ByPath is a dozen allocations plus a mutex and a
+	// regexp each time. Pointer-held like logRunCache; keyed by the resolved
+	// language path and dropped on a config reload, which can re-associate it.
+	logLangCache *logLangState
 	// Follow mode (#1928, follow.go): follow streams content appended to the
 	// open file into the buffer, tail -f style; followPaused parks the
 	// auto-scroll while the user inspects earlier lines. followOffset is the
@@ -502,6 +508,14 @@ type Model struct {
 	// as hlIndex: pre-ordered multi-line declarations whose header line pins
 	// at the top of the view while the cursor is inside their body.
 	scopes []highlight.Scope
+	// scopeEpoch bumps on every scopes assignment (a parse landing, a reset),
+	// keying the sticky-header memo (#2187): scopes arrive without a
+	// docVersion bump, so the version alone cannot see them change.
+	scopeEpoch int
+	// stickyCache memoizes the pinned header lines per (view top, height,
+	// depth, document version, scope epoch) — pointer-held so the value
+	// copies of the model share it, like lineCache. See sticky.go.
+	stickyCache *stickyStore
 	// Code folding (#144): folds are the foldable ranges delivered by the
 	// same parse as hlIndex (pre-order); folded is this view's collapsed set,
 	// keyed by header line with the fold's end line as value — per-view state
@@ -511,6 +525,11 @@ type Model struct {
 	folds     []highlight.Fold
 	folded    map[int]int
 	foldLines int
+	// foldEpoch bumps on every mutation of folded (bumpFolds); foldIdx
+	// memoizes the interval index lineHidden binary-searches instead of
+	// scanning the whole map per rendered row per frame (#2187).
+	foldEpoch int
+	foldIdx   *foldIndex
 	// lspFolds are the server-provided folding ranges (#1912), replaced by
 	// each FoldingRangesMsg and merged over folds by foldRanges (lspfold.go);
 	// LSP ranges win on a shared header and may carry a Kind. lspFolding is
@@ -726,6 +745,8 @@ func New() Model {
 		buf:                buffer.New(nil),
 		parseTag:           nextParseTag(),
 		sbcache:            &sbCache{},
+		stickyCache:        &stickyStore{},
+		foldIdx:            &foldIndex{},
 		mode:               Normal,
 		regs:               register.New(),
 		hist:               history.New(),
@@ -759,6 +780,7 @@ func New() Model {
 		docPathCache:       &docPathState{},
 		logRender:          true,
 		logRunCache:        &logRunState{},
+		logLangCache:       &logLangState{},
 		logDeltaCache:      &logDeltaState{},
 		pemSummary:         true,
 		pemCache:           &pemState{},
@@ -794,6 +816,9 @@ func New() Model {
 // later changes are re-read live. Unset keys keep their built-in defaults.
 func (m *Model) Configure(cfg host.Config) {
 	m.bumpRender() // a live config reload can change wrap/whitespace/gutter/colors (#614)
+	if m.logLangCache != nil {
+		*m.logLangCache = logLangState{} // files.associations can rename the language (#2187)
+	}
 	m.cfg = cfg
 	m.rebuildTheme()
 	m.applyConfig()
@@ -1056,7 +1081,7 @@ func (m *Model) Load(path string) error {
 	m.conceal = nil
 	m.decodes = nil
 	m.notes = nil
-	m.scopes = nil
+	m.setScopes(nil)
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
@@ -1117,7 +1142,7 @@ func (m *Model) NewFile(path string) {
 	m.conceal = nil
 	m.decodes = nil
 	m.notes = nil
-	m.scopes = nil
+	m.setScopes(nil)
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
@@ -1154,7 +1179,7 @@ func (m *Model) RestoreText(text string) {
 	m.conceal = nil
 	m.decodes = nil
 	m.notes = nil
-	m.scopes = nil
+	m.setScopes(nil)
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
@@ -1494,7 +1519,7 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 			m.concealExt = extents
 			m.decodes = decodes
 			m.setNotes(msg.Notes)
-			m.scopes = msg.Scopes
+			m.setScopes(msg.Scopes)
 			m.folds = msg.Folds
 			m.reconcileFolds()
 			m.hlVersion = msg.Version

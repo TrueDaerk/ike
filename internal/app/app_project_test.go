@@ -57,11 +57,27 @@ func TestProjectPickerGitInfoFillsRows(t *testing.T) {
 
 // switchModel builds a sized model with per-project state files (no
 // IKE_CONFIG_DIR redirect), so a switch resolves session/layout under each
-// project's own .ike directory exactly like production.
+// project's own .ike directory exactly like production. The #2186 auto-save
+// gate is off: these fixtures are about the seamless parking of dirty buffers
+// (#777), which is exactly what the gate would write away. Tests of the gate
+// itself build their model with autoSaveSwitchModel.
 func switchModel(t *testing.T) Model {
 	t.Helper()
+	return switchModelCfg(t, host.MapConfig{"project.auto_save_on_switch": "false"})
+}
+
+// autoSaveSwitchModel is switchModel with the #2186 auto-save gate on, the
+// production default.
+func autoSaveSwitchModel(t *testing.T) Model {
+	t.Helper()
+	return switchModelCfg(t, host.MapConfig{"project.auto_save_on_switch": "true"})
+}
+
+// switchModelCfg is the shared builder behind both.
+func switchModelCfg(t *testing.T, cfg host.MapConfig) Model {
+	t.Helper()
 	t.Setenv("IKE_CONFIG_DIR", "")
-	m := NewWith(registry.New(), host.MapConfig{})
+	m := NewWith(registry.New(), cfg)
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return tm.(Model)
 }

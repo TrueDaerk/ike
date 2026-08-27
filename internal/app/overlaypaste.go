@@ -43,7 +43,7 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		return m.palette.Paste(text)
 	case m.recoveryOpen(), m.onboardingOpen(), m.conflictOpen(),
 		m.revertPromptOpen(), m.depEditPromptOpen(), m.switchPromptOpen(),
-		m.closePromptOpen():
+		m.switchBlockedPromptOpen(), m.closePromptOpen():
 		return nil, false // decision prompts, no text input
 	case m.renameOpen():
 		return nil, m.pasteRenamePrompt(text)

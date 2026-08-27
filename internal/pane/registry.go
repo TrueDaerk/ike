@@ -1062,6 +1062,13 @@ func (r *Registry) Close(key string) {
 	}
 }
 
+// ImagesMinted reports whether this registry ever created an image preview
+// (#2187). Every construction path — AddImagePreview, AddImageKey and the
+// tab restore's NewContentPane — bumps the mint counter, so a false answer
+// means no image pane can exist and the per-message Kitty reconcile walk can
+// be skipped without touching a single instance.
+func (r *Registry) ImagesMinted() bool { return r != nil && r.images > 0 }
+
 // Keys returns the instance keys in insertion order.
 func (r *Registry) Keys() []string {
 	out := make([]string, len(r.order))

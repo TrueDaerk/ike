@@ -104,8 +104,15 @@ func isHTMLPath(path string) bool {
 // match highlights ride the same pass: whenever the pane's match revision
 // moved, the ranges re-route to every editor showing the file.
 func (m *Model) domSyncCmd() tea.Cmd {
-	var cmds []tea.Cmd
 	sp := m.domPanel()
+	// The common case is no inspector and no highlighted file (#2187): with
+	// both absent there is nothing to follow and nothing to clear, so the
+	// pass costs one map lookup and a string compare instead of walking to
+	// the active editor.
+	if sp == nil && m.domHLPath == "" {
+		return nil
+	}
+	var cmds []tea.Cmd
 	if sp != nil {
 		if key := m.activeEditorKey(); key != "" {
 			if ed := m.activeWS().Panes.Get(key).Editor(); ed != nil && ed.HasFile() {

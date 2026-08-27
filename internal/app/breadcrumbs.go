@@ -272,6 +272,14 @@ func (m *Model) syncBreadcrumbLayout() {
 	if m.width == 0 || m.height == 0 {
 		return
 	}
+	// Cheapest first (#2187): this runs on every message, and the signature
+	// walk allocates the registry's key slice plus the builder's buffer. When
+	// no pane can be showing the row — zen, the feature off, or no symbol
+	// tree cached yet — the signature is empty by construction, so a state
+	// that already recorded the empty signature has nothing to compare.
+	if m.crumbSig == "" && (m.zen || len(m.docSymbols) == 0 || !m.breadcrumbsOn()) {
+		return
+	}
 	var b strings.Builder
 	for _, key := range m.activeWS().Panes.Keys() {
 		if rows := m.breadcrumbRows(m.activeWS().Panes.Get(key)); rows > 0 {

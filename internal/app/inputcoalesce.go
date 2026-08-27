@@ -199,7 +199,8 @@ func (m Model) overlayCapturesKeyboard() bool {
 		m.callhier.IsOpen() || m.typehier.IsOpen() || m.palette.IsOpen() ||
 		m.floats.IsOpen() || m.recoveryOpen() || m.onboardingOpen() ||
 		m.conflictOpen() || m.revertPromptOpen() || m.depEditPromptOpen() ||
-		m.switchPromptOpen() || m.closePromptOpen() || m.renameOpen() ||
+		m.switchPromptOpen() || m.switchBlockedPromptOpen() ||
+		m.closePromptOpen() || m.renameOpen() ||
 		m.clonePromptOpen() || m.newProjectPromptOpen() || m.runConfigFormOpen() ||
 		m.generateScratchOpen() || m.saveAsOpen() ||
 		m.regexTesterOpen() || m.playFocused() || m.playNamePromptOpen() ||
