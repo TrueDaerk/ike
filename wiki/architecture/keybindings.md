@@ -341,6 +341,16 @@ as the registry-less fallback), `pane.switcher` (`ctrl+tab`, still flagged
 fragile; same cycle as the hardcoded `tab`), and `project.goToFile`
 (`cmd+shift+o`, the centered palette locked to the `@` file mode).
 
+`pane.resizeMode` (`ctrl+alt+r`, #2150) is the one **mode-entering** default:
+it arms the sticky keyboard pane-resize mode instead of running a one-shot
+action. While the mode is armed the root model consumes every key press before
+this layer sees it — `h`/`j`/`k`/`l` and the arrows step the focused pane's
+edge, `esc`/`enter`/`q` leave, everything else is inert — so the mode's own
+keys are deliberately *not* rows in this table (they cannot be rebound; the
+entry chord can). The chord joins the `ctrl+alt` family and sits on the
+terminal global-command allowlist, so it also arms from a focused terminal or
+tool pane. See [Pane Layout & Drag](/architecture/pane-layout.md).
+
 Every default binding's command id is either **registered** (live) or listed in
 the **blocked ledger** (`blocked.go`) with the dependency that unblocks it —
 the coverage test in `internal/app` (`TestNoSilentlyDeadDefaultBindings`) fails
@@ -865,6 +875,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `palette.recentFiles` | `cmd+e` | fragile | `palette` | live via palette |
 | `palette.searchEverywhere` | `cmd+shift+a` | fragile | `palette (esc esc)` | live via palette (esc esc) |
 | `pane.maximize` | `cmd+k z` | fragile | `palette` | live via palette |
+| `pane.resizeMode` | `ctrl+alt+r` | fragile | `palette / pane context menu` | live via palette / pane context menu |
 | `pane.splitDown` | `cmd+k down` | fragile | `palette` | live via palette |
 | `pane.splitLeft` | `cmd+k left` | fragile | `palette` | live via palette |
 | `pane.splitRight` | `cmd+k right` | fragile | `palette` | live via palette |

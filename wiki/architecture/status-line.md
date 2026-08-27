@@ -40,6 +40,10 @@ segments.
 | `notifications` | `● N` unseen notification count, see below | count is 0 |
 | `forge` | `● 2 new issues` unread forge events (#2086), see [Notifications](/architecture/notifications.md) | nothing unread |
 
+While the keyboard pane-resize mode is armed (#2150) the bar drops the slots
+entirely for a mode banner — `RESIZE <pane>  hjkl / arrows move the edge · esc
+to finish`, in the drop-target colour — because that mode owns every key press
+and has to say so (see [Pane Layout & Drag](/architecture/pane-layout.md)).
 The drag hint and the non-editor focus branches (terminal/explorer, #381) keep
 their dedicated rendering; the terminal/explorer line appends the host status,
 the notification counter and the forge unread badge — the badge is persistent
@@ -119,7 +123,8 @@ history directly (see "Clickable segments" below).
 (`statusSpan{id, x0, x1}`) of the final line — shrunken segments narrower,
 dropped segments absent — so hit-testing always matches what is drawn.
 `Model.statusSegmentAt(x)` resolves a status-row cell to a segment id (empty
-while the row shows a drag hint or a non-editor focus summary), and the mouse
+while the row shows a drag hint, the resize-mode banner or a non-editor focus
+summary), and the mouse
 router dispatches a left press through `statusSegmentCommands`:
 
 | segment | command |

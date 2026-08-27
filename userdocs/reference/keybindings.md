@@ -85,6 +85,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Replace in path | `cmd+shift+r` | `ctrl+shift+r` | `project.replaceInPath` |
 | Rerun last | `cmd+f5` | `ctrl+f5` | `run.rerun` |
 | Rerun last | `ctrl+f5` | `ctrl+f5` | `run.rerun` |
+| Resize pane (keyboard mode) | `ctrl+alt+r` | `ctrl+alt+r` | `pane.resizeMode` |
 | Restore default layout | `shift+f12` | `shift+f12` | `window.restoreLayout` |
 | Return from peek | `cmd+shift+b` | `ctrl+shift+b` | `project.peek.return` |
 | Return from peek | `ctrl+shift+b` | `ctrl+shift+b` | `project.peek.return` |

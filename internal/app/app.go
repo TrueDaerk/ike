@@ -838,6 +838,9 @@ type Model struct {
 	// so leaving zen restores that state instead of the full layout.
 	zen         bool
 	zenKeepZoom bool
+	// resizeMode is the sticky keyboard pane-resize mode (#2150): while it is
+	// armed the mode owns every key press (see resizemode.go). Not persisted.
+	resizeMode bool
 	// keys is the JetBrains-flavoured keybinding resolver (Roadmap 0080). It maps
 	// IDE-level chords (in the focused pane's context) to registered command ids;
 	// unbound or inert chords fall through to the existing dispatch.
@@ -2945,6 +2948,9 @@ var terminalGlobalCommands = map[string]bool{
 	"view.zenMode": true,
 	// #1398: the popup terminal must open from a focused pane terminal too.
 	"terminal.popup": true,
+	// #2150: a terminal pane is resized by keyboard like any other, and the
+	// shell never meaningfully sees the mode chord.
+	"pane.resizeMode": true,
 }
 
 // terminalShellChords are chords that stay with the shell even when they
@@ -4207,6 +4213,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// pane.splitDown / pane.splitUp (cmd+k down / cmd+k up): split the
 		// focused leaf with a fresh empty editor, no drag or file open needed.
 		m.SplitFocused(msg.Zone)
+		return m, nil
+
+	case PaneResizeModeMsg:
+		// pane.resizeMode (ctrl+alt+r / pane context menu, #2150): arm the
+		// sticky keyboard resize mode for the focused pane.
+		m.enterResizeMode()
 		return m, nil
 
 	case MaximizePaneMsg:
@@ -6668,6 +6680,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// and is consumed, like a press anywhere closes a context menu.
 		if m.largeDetail {
 			m.largeDetail = false
+			return m, nil
+		}
+		// Pane resize mode (#2150) owns the keyboard while armed: the
+		// direction keys step the focused pane's edge, esc/enter leave, and
+		// every other key is inert — nothing reaches an editor or the keymap
+		// layer, so a mode left armed can never cause a stray edit.
+		if m.resizeMode {
+			m.resizeModeKey(msg)
 			return m, nil
 		}
 		// Esc dismisses persistent error toasts but keeps its normal meaning
@@ -10590,6 +10610,7 @@ func paneContextItems() []menu.Item {
 		{Title: "Split Right", Command: "pane.splitRight"},
 		{Title: "Split Down", Command: "pane.splitDown"},
 		{Title: "Maximize", Command: "pane.maximize"},
+		{Title: "Resize…", Command: "pane.resizeMode"},
 		{Title: "Close Pane", Command: "pane.close"},
 	}
 }

@@ -110,6 +110,10 @@ type SaveAllMsg struct{}
 // from the source view.
 type SplitViewMsg struct{ Zone layout.Zone }
 
+// PaneResizeModeMsg asks the root model to arm the sticky keyboard pane
+// resize mode for the focused pane (#2150). Dispatched by pane.resizeMode.
+type PaneResizeModeMsg struct{}
+
 // SplitFocusedMsg asks the root model to split the focused leaf toward Zone
 // with a fresh empty editor (#114). Dispatched by pane.splitDown / pane.splitUp.
 type SplitFocusedMsg struct{ Zone layout.Zone }
@@ -544,6 +548,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("editor.forceCodeInsight", "Force Code Insight (Large File)", ForceCodeInsightMsg{}),
 			appCommand("editor.largeFileDetails", "Large File Details", LargeFileDetailsMsg{}),
 			appCommand("pane.maximize", "Maximize Pane", MaximizePaneMsg{}),
+			appCommand("pane.resizeMode", "Resize Pane (Keyboard Mode)", PaneResizeModeMsg{}),
 			appCommand("pane.close", "Close Pane", ClosePaneMsg{}),
 			appCommand("view.zenMode", "Zen Mode", ZenModeMsg{}),
 			appCommand("view.exportScreenshot", "Export Screenshot (Pane)", ExportScreenshotMsg{}),

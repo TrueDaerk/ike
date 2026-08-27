@@ -56,6 +56,7 @@ Overlays — the palette, the settings panel, the cheatsheet — are neither: se
 |---|---|
 | ++cmd+k++ then ++left++ / ++right++ / ++up++ / ++down++ | Split the focused pane in that direction |
 | ++cmd+k++ then ++z++ | Maximize the focused pane, and back |
+| ++ctrl+alt+r++ | Resize the focused pane (see below) |
 | ++ctrl+tab++ | Cycle pane focus (++ctrl++ + arrows moves directionally) |
 | ++cmd+shift+f12++ | Hide all tool windows |
 | ++shift+f12++ | Restore the default layout |
@@ -66,6 +67,21 @@ with an editor pane focused it puts the same buffer in a second pane next to
 the first.
 
 ![The same file open in two editor panes after Split View Right; the focused pane is the one with the highlighted border](../screenshots/features/layout-split.png)
+
+### Resizing without the mouse
+
+++ctrl+alt+r++ (or **Resize…** in a title bar's context menu) starts **resize
+mode**: you type the chord *once*, then ++h++ ++j++ ++k++ ++l++ — or the arrow
+keys — move the focused pane's edge one cell per press, as often as you like.
+++esc++ or ++enter++ leaves the mode; the status line shows `RESIZE` with the
+pane's name while it is on, and nothing else you type does anything, so a
+forgotten mode can never edit a file.
+
+The keys say **where the edge moves**, not "bigger" or "smaller": ++l++ moves
+it right, ++j++ moves it down. A pane with a neighbour to its right therefore
+grows with ++l++ and shrinks with ++h++; the rightmost pane, whose only edge is
+on its left, reads the other way round. Panes never shrink away entirely — the
+same minimum size the mouse drag respects applies here.
 
 With the mouse: drag a divider to resize, drag a pane's title bar to move the
 pane somewhere else, right-click a title bar for the pane's context menu. A

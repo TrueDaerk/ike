@@ -142,6 +142,7 @@ bring their own.
 | Search Everywhere | `palette.searchEverywhere` | `cmd+shift+a` | — | everywhere |
 | Close Pane | `pane.close` | — | — | everywhere |
 | Maximize Pane | `pane.maximize` | `cmd+k z` | — | everywhere |
+| Resize Pane (Keyboard Mode) | `pane.resizeMode` | `ctrl+alt+r` | — | everywhere |
 | Split Down | `pane.splitDown` | `cmd+k down` | — | everywhere |
 | Split Left | `pane.splitLeft` | `cmd+k left` | — | everywhere |
 | Split Right | `pane.splitRight` | `cmd+k right` | — | everywhere |

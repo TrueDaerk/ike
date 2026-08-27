@@ -29,6 +29,7 @@ var noCounterpart = map[string]string{
 	"notifications.history": "JetBrains notifications tool window has no default shortcut action",
 	"palette.keymapHelp":    "no JetBrains equivalent",
 	"perf.hud":              "IKE-only concept (#1999); JetBrains profiles from the IDE's own tooling, not a keymap action",
+	"pane.resizeMode":       "IKE-only concept (#2150): JetBrains resizes panes by drag or per-step actions, no sticky mode",
 	"pane.splitDown":        "JetBrains has only the two editor splits, mapped to editor.splitView*",
 	"pane.splitLeft":        "JetBrains has only the two editor splits, mapped to editor.splitView*",
 	"pane.splitRight":       "JetBrains has only the two editor splits, mapped to editor.splitView*",
