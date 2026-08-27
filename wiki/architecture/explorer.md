@@ -144,7 +144,9 @@ extensions and filenames the language plugins register; a drift test in
   node. Never moves above the root.
 - `shift+j` / `shift+k` (and `shift+down` / `shift+up`) — extend a contiguous
   multi-select range from an anchor (#1044, see below).
-- `esc` — clear an active multi-select range.
+- `space` — toggle the **selection mark** on the cursor row (#2166, see below).
+- `m` / `y` — move / copy the selection into a target directory (#2166).
+- `esc` — clear the multi-select: both the range and the marks.
 - `/` — open the type-to-select **speed search** (#1087, see below).
 
 ## Speed search (#1087)
@@ -213,13 +215,68 @@ background over the row's semantic foreground, the same recipe as the
 unfocused cursor — while the cursor row keeps the full Selection recipe, so it
 reads as the range's active end. Range members outrank hover.
 
-**Delete acts on the whole selection** with one confirm prompt ("Delete N
-entries?"): each entry is trashed individually, but the batch is recorded as
-ONE undo step (`fileOp.batch`), so a single undo restores the entire
-selection (and a single redo re-deletes it). Entries nested under another
-selected directory are filtered out (trashing the ancestor already moves
-them), and the root is never a target. Rename and move stay single-target —
-they ignore the selection beyond the cursor.
+## Marked multi-select and bulk operations (#2166)
+
+Beside the transient range sits a **sticky selection**: `space` toggles a mark
+on the cursor row, and the mark stays until `esc` clears it or an operation
+consumes it. The two models complement each other — the range is an "extend
+from here" gesture that any plain motion collapses, marks are deliberate and
+survive every motion, rebuild, sort change and hidden-files toggle.
+
+Marks live in `Model.marks`, keyed by **absolute path**, never by row index, so
+a rescan cannot silently re-point them at the wrong entries; `rebuild` prunes
+only the marks whose entry left the tree (`pruneMarks`). The map is copied on
+write, because `Model` travels by value and a shared map would leak marks into
+stale copies. The root is never markable, and the Scratches section has no
+multi-select at all (see below).
+
+Visually, a marked row takes the `rowMarked` kind — the same muted
+`SelectionMuted` recipe as a range member — and, while anything is marked, every
+tree row gains one leading marker cell (`selMarker`): `✓ ` on marked rows, two
+spaces elsewhere. With nothing marked the column does not exist, so the
+unmarked tree renders exactly as it always did.
+
+`opTargets` is the single resolution point every bulk-capable operation goes
+through: the **marks** first, then an active **range**, then the plain **cursor
+entry**. The first two report `bulk = true` (multi-entry wording, target list,
+batched undo step); the last keeps the single-entry behaviour byte-for-byte
+unchanged. In both multi-entry cases the root is dropped and entries nested
+under another selected directory are filtered out — operating on the ancestor
+already carries its subtree.
+
+Three operations act on that selection:
+
+- **Delete** (`d`) — one confirmation, titled `Delete N entries?` and **listing
+  every target** project-relative (capped at 8 rows plus an "… and N more"
+  line, `prompt.lines`). Entries are trashed individually.
+- **Move** (`m`, `explorer.move`) — one target-directory prompt for the whole
+  batch; each entry keeps its base name. An absolute input is taken as-is,
+  anything else is read relative to the project root. The app's `file.move`
+  (`f6`) picker feeds the same path: with marks present it sends
+  `MoveManyMsg` instead of `MoveToMsg`. A **single** target still goes through
+  `relocateEntry`, so it keeps the LSP `willRenameFiles` round trip (#1912),
+  which is inherently one rename at a time.
+- **Copy** (`y`, `explorer.copy`) — the same target-directory prompt, but the
+  originals stay put. `copyTree` recurses into directories, preserves file
+  modes and recreates symlinks as symlinks rather than following them. Each
+  copy is recorded as an `opCreate`, so one undo trashes exactly the copies
+  and leaves the sources alone; every created path is announced with
+  `FileCreatedMsg` so the app refreshes the git status snapshot.
+
+Whatever succeeds is recorded as **ONE undo step** (`fileOp.batch`), so a single
+undo reverses the whole batch and a single redo re-applies it; a one-entry
+batch is pushed as the plain operation it is. The selection **clears once the
+operation has run** — it never outlives the action it was built for.
+
+**Partial failure is expected, not exceptional.** A failing entry does not
+abandon the rest of the batch: every other target is still processed,
+everything that succeeded stays applied and undoable, and the failures are
+reported together in the error dialog as `moved 1 of 2 — a.txt: already
+exists` (`batchErr`). A half-written copy is removed, so a failed entry leaves
+the destination exactly as it was.
+
+Renaming stays single-target — it needs one new name per entry, which a
+selection cannot supply.
 
 Directories render with a `▾`/`▸` marker; a read error is retained and shown in
 place of the tree.
@@ -377,8 +434,12 @@ these are defaults.
 | `explorer.reveal` | `alt+f1` (global) | reveal the open file: expand collapsed ancestors, select and scroll to its row (`RevealMsg`, #1042) |
 | `explorer.newFile` | `a` | prompt for a name, create a file seeded with its [language template](./languages.md#file-templates-170), empty otherwise (`NewFileMsg`) |
 | `explorer.newFolder` | `A` | prompt for a name, create a directory (`NewDirMsg`) |
-| `explorer.delete` | `d` | delete the selected entry — or the whole multi-select range (#1044) — after one confirmation (`DeleteMsg`) |
+| `explorer.delete` | `d` | delete the selected entry — or the whole multi-select (#1044, #2166) — after one confirmation listing every target (`DeleteMsg`) |
 | `explorer.rename` | `R` | prompt (prefilled with the current name) to rename the selected entry (`RenameMsg`) |
+| `explorer.move` | `m` | prompt for a target directory and move the selection there (`MoveSelectionMsg`, #2166) |
+| `explorer.copy` | `y` | prompt for a target directory and copy the selection there (`CopySelectionMsg`, #2166) |
+| `explorer.toggleMark` | `space` | toggle the selection mark on the cursor row (`ToggleMarkMsg`, #2166) |
+| `explorer.clearMarks` | `esc` | clear the whole multi-select (`ClearMarksMsg`, #2166) |
 | `explorer.search` | `/` | open the type-to-select speed search (`SearchMsg`, #1087) |
 | `explorer.undo` | `Ctrl+Z` | reverse the last file operation instantly (`UndoMsg`) |
 | `explorer.redo` | `Ctrl+Shift+Z` / `Cmd+Shift+Z` | re-apply the last undone file operation (`RedoMsg`) |
@@ -484,9 +545,12 @@ editor's history):
 
 - **Undo of a create** moves the entry to the trash (never `os.Remove`, so a
   redo — or a mistaken undo — loses nothing); redo moves it back.
-- **Undo of a batch delete** (#1044, a multi-select delete) restores every
-  entry of the batch in one step, last trashed first; redo re-trashes them
-  all. The batch lives in `fileOp.batch` as plain per-entry delete sub-ops.
+- **Undo of a batch** (#1044, #2166 — a multi-select delete, move or copy)
+  reverses every sub-operation in one step, in reverse order; redo re-applies
+  them in the original order. The batch lives in `fileOp.batch` as plain
+  per-entry sub-ops, all of one kind, and `undoBatch`/`redoBatch` dispatch on
+  that kind: a delete restores from the trash, a move renames back, a copy's
+  creations go to the trash.
 - **Undo of a delete** moves the trashed entry back to its original path; redo
   re-trashes it.
 - **Undo of a rename or move** relocates the entry back; redo re-applies it.

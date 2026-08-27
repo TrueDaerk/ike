@@ -176,7 +176,9 @@ func (m *Model) finishTestRun(msg TestRunDoneMsg) tea.Cmd {
 	if p := m.testsPanel(); p != nil {
 		p.FinishRun(results, msg.Output)
 	}
-	return m.finishCoverage()
+	// The slot is free again: watch mode (#2172) starts the re-run that was
+	// queued behind this run, if any.
+	return tea.Batch(m.finishCoverage(), m.testWatchDrain())
 }
 
 // finishCoverage consumes the last run's coverage profile, if any: parse
