@@ -7707,8 +7707,9 @@ func (m Model) RunCommand(id string) tea.Cmd {
 	return nil
 }
 
-// openHelp shows the keymap cheatsheet overlay in the modal shell, scoped to
-// the focused pane's context (global commands plus that context's own).
+// openHelp shows the keymap cheatsheet overlay in the modal shell, led by the
+// focused pane's context (#2182): its own bindings first, then the global
+// ones, with tab switching to the flat sheet and the essentials view.
 func (m *Model) openHelp() {
 	// Honest blocked section (0081/40): bindings whose command has no owner
 	// yet appear with their dependency instead of vanishing. Built live from

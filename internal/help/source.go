@@ -42,10 +42,13 @@ type Entry struct {
 }
 
 // Group is a titled cluster of entries sharing a scope label (e.g. "global",
-// "editor", "explorer"). Entries are sorted deterministically.
+// "editor", "explorer"). Entries are sorted deterministically. Focused marks
+// the group that belongs to the currently focused pane's context (#2182) so
+// the heading can say so.
 type Group struct {
 	Label   string
 	Entries []Entry
+	Focused bool
 }
 
 // CommandSource is the read-only registry view help needs: every registered
@@ -111,4 +114,32 @@ func groupOrder(label string) string {
 		return "\x00" + label // sort before any real label
 	}
 	return label
+}
+
+// ContextSnapshot builds the context-first ordering (#2182): every registered
+// scope is kept, but the focused context's own group leads (flagged Focused so
+// its heading can say so), followed by the global bindings, followed by the
+// remaining contexts in the usual alphabetical order. An empty contextID — or
+// one with no registered commands — yields the plain Snapshot ordering, since
+// there is nothing to pull to the front.
+func ContextSnapshot(src CommandSource, res BindingResolver, contextID string) []Group {
+	all := Snapshot(src, res, "")
+	if contextID == "" || contextID == "global" {
+		return all
+	}
+	var focused *Group
+	rest := make([]Group, 0, len(all))
+	for i := range all {
+		if all[i].Label == contextID {
+			g := all[i]
+			g.Focused = true
+			focused = &g
+			continue
+		}
+		rest = append(rest, all[i])
+	}
+	if focused == nil {
+		return all
+	}
+	return append([]Group{*focused}, rest...)
 }
