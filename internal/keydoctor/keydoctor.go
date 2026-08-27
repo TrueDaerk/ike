@@ -4,6 +4,11 @@
 // button before keymap resolution — the same matching `cmd/keyprobe` does,
 // via the shared keymap.ProbeSession — and a finished run is offered for
 // persistence as this terminal's reachability override set.
+//
+// Its second job needs no probing (#2161): the dead-binding report audits the
+// active keymap against this platform and terminal, lists every chord that
+// cannot arrive here with the reason, and offers a conflict-free rebind per
+// finding (analysis.go, report.go).
 package keydoctor
 
 import (
@@ -19,20 +24,26 @@ import (
 
 // ResultMsg is emitted when the overlay closes after a run: Save asks the
 // app to persist the results as the terminal's override set; a discarded run
-// carries Save=false and must leave the store untouched.
+// carries Save=false and must leave the store untouched. Review additionally
+// asks for the dead-binding report (#2161) — the saved verdicts install
+// before it opens, so the audit judges against measured truth.
 type ResultMsg struct {
 	Terminal string
 	Results  []keymap.ProbeResult
 	Save     bool
+	Review   bool
 }
 
 // phase is the overlay's state: probing matches raw keys; summary interprets
-// keys normally again (probing has stopped) to decide the run's fate.
+// keys normally again (probing has stopped) to decide the run's fate; report
+// is the dead-binding audit of the active keymap (#2161), which presses no
+// keys at all and can be opened on its own.
 type phase int
 
 const (
 	probing phase = iota
 	summary
+	report
 )
 
 // Model is the doctor overlay, owned by the app model like the other
@@ -46,6 +57,17 @@ type Model struct {
 	width    int
 	height   int
 	pal      *theme.Palette
+
+	// Dead-binding report state (#2161): the audited findings, the selected
+	// row with its scroll offset, which suggestion each finding currently
+	// offers, and the chords already rebound in this run.
+	env      keymap.TerminalEnv
+	findings []Finding
+	sel      int
+	off      int
+	pick     []int
+	applied  map[string]bool
+	note     string
 }
 
 // New constructs a closed doctor.
@@ -112,8 +134,11 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	if !m.open {
 		return nil
 	}
-	if m.ph == summary {
+	switch m.ph {
+	case summary:
 		return m.updateSummary(msg)
+	case report:
+		return m.updateReport(msg)
 	}
 	// Control keys first, by raw string: ctrl+d (delivered everywhere, not a
 	// target) and esc (not a target either) end the probing phase; the
@@ -134,11 +159,12 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // updateSummary decides the run's fate with ordinary key semantics: enter/y
-// saves, d/n discards, esc resumes probing.
+// saves, r saves and goes on to the dead-binding report, d/n discards, esc
+// resumes probing.
 func (m *Model) updateSummary(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "enter", "y":
-		res := ResultMsg{Terminal: m.terminal, Results: m.sess.Results(), Save: true}
+	case "enter", "y", "r":
+		res := ResultMsg{Terminal: m.terminal, Results: m.sess.Results(), Save: true, Review: msg.String() == "r"}
 		m.open = false
 		return func() tea.Msg { return res }
 	case "d", "n":
@@ -160,9 +186,12 @@ func (m *Model) View() string {
 	boxH := m.height - 2
 	innerW, innerH := boxW-4, boxH-2
 	var body string
-	if m.ph == summary {
+	switch m.ph {
+	case summary:
 		body = m.summaryBody(innerW)
-	} else {
+	case report:
+		body = m.reportBody(innerW, innerH)
+	default:
 		body = m.probeBody(innerW, innerH)
 	}
 	return lipgloss.NewStyle().
@@ -257,7 +286,7 @@ func (m *Model) summaryBody(w int) string {
 	if pending > 0 {
 		lines = append(lines, warn.Render("saving records the "+strconv.Itoa(pending)+" untried chords as missing — esc to keep probing, or skip them first"), "")
 	}
-	lines = append(lines, sec.Render("enter/y save for this terminal · d discard · esc resume probing"))
+	lines = append(lines, sec.Render("enter/y save for this terminal · r save + review dead bindings · d discard · esc resume probing"))
 	clip := lipgloss.NewStyle().MaxWidth(w)
 	for i := range lines {
 		lines[i] = clip.Render(lines[i])

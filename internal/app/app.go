@@ -1326,6 +1326,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	keymapPage.SetDoctorLaunch(func() tea.Cmd {
 		return func() tea.Msg { return KeymapDoctorMsg{} }
 	})
+	// The dead-binding report launcher (#2161): the same sub-panel dispatches
+	// keymap.deadBindings, which audits the active keymap without probing.
+	keymapPage.SetDeadBindingsLaunch(func() tea.Cmd {
+		return func() tea.Msg { return KeymapDeadBindingsMsg{} }
+	})
 	pages = append(pages, settings.Page{Section: "TOOLS", Title: "Keymap", Custom: keymapPage})
 	// The [[tools.custom]] list editor (#755): custom TUI tool panes (#741).
 	pages = append(pages, settings.Page{Title: "Tools", Custom: settings.NewToolsPage(m.cfgOpts)})
@@ -4179,11 +4184,33 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		keymap.SetProbeVerdicts(store.Results(keymap.TerminalID(os.Getenv)))
 		m.host.Notify(host.Info, "keymap doctor: saved probe results for "+msg.Terminal)
+		if msg.Review {
+			// "save + review" (#2161): the audit re-opens the overlay against
+			// the verdicts just installed, so probed-missing chords are the
+			// first findings it lists.
+			m.openDeadBindings()
+		}
 		opts := m.cfgOpts
 		return m, func() tea.Msg {
 			cfg, diags := config.Load(opts)
 			return config.ConfigReloadedMsg{Config: cfg, Diags: diags}
 		}
+
+	case KeymapDeadBindingsMsg:
+		// keymap.deadBindings (palette / settings, #2161): the dead-binding
+		// report over the active keymap. Like the probe it is full-screen, so
+		// the settings panel closes first.
+		if m.settings.IsOpen() {
+			m.settings.Close()
+		}
+		m.openDeadBindings()
+		return m, nil
+
+	case keydoctor.RebindMsg:
+		// A rebind accepted in the report (#2161): the same write-back the
+		// settings keymap page uses — the suggested chord binds the command at
+		// user scope, the dead chord unbinds, one reload rebuilds the table.
+		return m, m.applyKeymapRebind(msg)
 
 	case ShowWelcomeTourMsg:
 		// help.welcomeTour (palette): the paged welcome tour (#657).
@@ -5962,6 +5989,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		diags = append(diags, unitMappingDiags()...)
 		m.notifyConfigDiags(diags)
 		m.notifyKeymapDiags()             // the reload above rebuilt the binding table
+		m.refreshDeadBindings()           // an open dead-binding report re-audits (#2161)
 		m.settings.NoteReloadDiags(diags) // inline in the panel too (#891)
 		m.palette.Refresh()
 		// Diagnostic ignore (#1259) and severity remap (#1503) rules apply

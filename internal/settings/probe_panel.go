@@ -26,19 +26,23 @@ type probePanel struct {
 	host   SubPanelHost
 	pal    *theme.Palette
 	launch func() tea.Cmd // dispatches keymap.doctor in the app; nil hides the button
-	store  keymap.ProbeStore
+	// dead dispatches keymap.deadBindings (#2161): the audit of the active
+	// keymap, which needs no probing; nil hides its button.
+	dead  func() tea.Cmd
+	store keymap.ProbeStore
 	// current is the running terminal's identity: clearing it must also
 	// uninstall the live verdicts, not just rewrite the file.
 	current string
 	sel     int // selected terminal in TerminalIDs() order
 }
 
-func newProbePanel(page *KeymapPage, host SubPanelHost, launch func() tea.Cmd) *probePanel {
+func newProbePanel(page *KeymapPage, host SubPanelHost, launch, dead func() tea.Cmd) *probePanel {
 	return &probePanel{
 		page:    page,
 		host:    host,
 		pal:     page.theme(),
 		launch:  launch,
+		dead:    dead,
 		store:   keymap.LoadProbeStore(keymap.ProbeStorePath()),
 		current: keymap.TerminalID(os.Getenv),
 	}
@@ -51,6 +55,7 @@ func (p *probePanel) Buttons() []Button {
 	terms := p.store.TerminalIDs()
 	return []Button{
 		{Label: "Run Probe", Key: "p", Do: p.run, Disabled: p.launch == nil},
+		{Label: "Dead Bindings", Key: "d", Do: p.reviewDead, Disabled: p.dead == nil},
 		{Label: "Clear Results", Key: "c", Do: p.clear, Disabled: len(terms) == 0},
 		{Label: "Close", Do: func() tea.Cmd { p.host.Pop(); return nil }},
 	}
@@ -64,6 +69,16 @@ func (p *probePanel) run() tea.Cmd {
 	}
 	p.host.Pop()
 	return p.launch()
+}
+
+// reviewDead opens the dead-binding report (#2161) the same way: the report
+// is a full-screen overlay, so the settings flow pops first.
+func (p *probePanel) reviewDead() tea.Cmd {
+	if p.dead == nil {
+		return nil
+	}
+	p.host.Pop()
+	return p.dead()
 }
 
 // clear drops the selected terminal's stored run. Clearing the running
@@ -115,6 +130,7 @@ func (p *probePanel) View(width, height int) string {
 	terms := p.store.TerminalIDs()
 	var lines []string
 	lines = append(lines, clip.Render(sec.Render("probe chord delivery in this terminal ("+p.current+"); saved runs override the static reachability table")))
+	lines = append(lines, clip.Render(sec.Render("d audits the active keymap for dead bindings and offers rebinds — no probing needed")))
 	lines = append(lines, "")
 	if len(terms) == 0 {
 		lines = append(lines, clip.Render(sec.Render("no stored probe runs — press p to run the doctor")))
