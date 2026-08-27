@@ -175,25 +175,23 @@ func (m *Model) refreshCompletion(auto bool) {
 }
 
 // autoSuggestSafe reports whether an uninvited (auto-suggest) popup may open
-// for the cursor line (#1464). Two cases stay silent; ctrl+space is unaffected
-// and still completes with the soft-wrap chain joined:
-//
-//   - The command soft-wraps (the cursor sits on a continuation row of a
-//     joined chain): #1431's acceptance criteria — no popup opens by itself
-//     while a command wraps.
-//   - The chain start could not be identified: the joined text carries no
-//     prompt marker although the row above holds content. Then the cursor row
-//     is likely a continuation row whose wrap the SoftWrapped heuristic missed
-//     (e.g. a line editor that wraps early and leaves the last column blank),
-//     and the "word" is a wrapped tail — PATH suggestions for it are garbage.
+// for the cursor line (#1464, relaxed by #2262). Continuation rows of a
+// *joined* soft-wrap chain are fine: lineBeforeCursor already hands
+// parseCmdline the full logical line, so a word spanning the wrap boundary is
+// its full self and words typed after the wrap are ordinary words. Only one
+// pattern stays silent — the chain start could not be identified: the joined
+// text carries no prompt marker although the row above the chain's first row
+// holds content. Then that first row is likely a continuation row whose wrap
+// the SoftWrapped heuristic missed (e.g. a line editor that wraps early and
+// leaves the last column blank), and the "word" is a wrapped tail — PATH
+// suggestions for it are garbage. Residual gap: a missed-wrap tail that
+// happens to contain a prompt-marker sequence itself (say a `> ` redirect)
+// slips past this net; ctrl+space is unaffected either way.
 func (m *Model) autoSuggestSafe(before string) bool {
 	_, y := m.sess.CursorPosition()
 	cur := m.sess.ScrollbackLen() + y
 	first, _ := m.logicalLineSpan(cur)
-	if first < cur {
-		return false
-	}
-	if !hasPromptMarker(before) && cur > 0 && m.sess.LineText(cur-1) != "" {
+	if !hasPromptMarker(before) && first > 0 && m.sess.LineText(first-1) != "" {
 		return false
 	}
 	return true
@@ -601,6 +599,9 @@ func (m Model) completionView(view string) string {
 	// Anchor at the start of the word, but keep the whole box (width + border)
 	// inside the pane (#1463): an anchor near the right edge shifts left, else
 	// the overlaid rows exceed the pane width and the render wraps them apart.
+	// A word spanning a soft-wrap boundary (#2262) starts on the row above the
+	// cursor; its on-row tail begins at column 0, so the negative-x clamp
+	// anchors the box at the continuation row's left edge.
 	x := cx - len([]rune(m.comp.word))
 	if x > m.w-width-4 {
 		x = m.w - width - 4
