@@ -94,11 +94,17 @@ type Model struct {
 	editLine  int
 	editBuf   []rune
 	editCur   int
+	// editErr holds the validation complaint of the last rejected commit
+	// (#2245); it renders under the editor and clears on the next keystroke.
+	editErr string
+	// caps gates the three fields on the live adapter's capabilities (#2245);
+	// FullCaps without a session.
+	caps Caps
 }
 
 // New returns an empty panel; the store arrives via SetStore.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal, lastClickRow: -1, now: time.Now}
+	return Model{pal: pal, lastClickRow: -1, now: time.Now, caps: FullCaps()}
 }
 
 // SetStore shares the app-level breakpoint store and rebuilds the rows.
@@ -202,11 +208,17 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			return func() tea.Msg { return msg }
 		}
 	case "c":
-		m.startMetaEdit(fieldCondition)
+		return m.startMetaEdit(fieldCondition)
 	case "n":
-		m.startMetaEdit(fieldHit)
+		return m.startMetaEdit(fieldHit)
 	case "l":
-		m.startMetaEdit(fieldLog)
+		return m.startMetaEdit(fieldLog)
+	case "p":
+		// All three fields at once, in the root model's form (#2245).
+		if r, ok := m.selected(); ok {
+			msg := EditMetaMsg{Path: r.path, Line: r.line}
+			return func() tea.Msg { return msg }
+		}
 	case "d", "delete", "backspace":
 		if r, ok := m.selected(); ok {
 			msg := RemoveMsg{Path: r.path, Line: r.line}
@@ -337,9 +349,11 @@ func (m *Model) renderRows(pal *theme.Palette, height int) string {
 }
 
 // renderRow draws one line: file headers accented, breakpoints glyph-tagged —
-// ● enabled in the error tone (matching the gutter), ○ disabled faint. A
-// logpoint renders ◆ in the warning tone (#1914) — it logs instead of
-// stopping — and refinements trail the preview as `if …` / `hit …` / `log …`.
+// ● enabled in the error tone (matching the gutter), ○ disabled faint. The
+// refined kinds carry their own glyph, the same pair the gutter draws
+// (#1914/#2245): ◉/◎ conditional (condition and/or hit count), ◆/◇ logpoint
+// in the warning tone — it logs instead of stopping. Refinements trail the
+// preview as `if …` / `hit …` / `log …`.
 func (m *Model) renderRow(pal *theme.Palette, base, header lipgloss.Style, i int) string {
 	r := m.rows[i]
 	if m.editing && i == m.cursor && !r.header && r.path == m.editPath && r.line == m.editLine {
@@ -351,18 +365,8 @@ func (m *Model) renderRow(pal *theme.Palette, base, header lipgloss.Style, i int
 		line = " " + m.shorten(r.path)
 		style = header
 	} else {
-		logpoint := r.meta.LogMessage != ""
-		glyph := "●"
-		if logpoint {
-			glyph = "◆"
-		}
-		if !r.enabled {
-			glyph = "○"
-			if logpoint {
-				glyph = "◇"
-			}
-		}
-		line = "   " + glyph + " " + strconv.Itoa(r.line+1)
+		logpoint := r.meta.Kind() == debug.KindLogpoint
+		line = "   " + rowGlyph(r.meta.Kind(), r.enabled) + " " + strconv.Itoa(r.line+1)
 		if r.preview != "" {
 			line += "  " + r.preview
 		}
@@ -372,7 +376,7 @@ func (m *Model) renderRow(pal *theme.Palette, base, header lipgloss.Style, i int
 		if r.meta.HitCondition != "" {
 			line += "  hit " + r.meta.HitCondition
 		}
-		if logpoint {
+		if r.meta.LogMessage != "" {
 			line += "  log \"" + r.meta.LogMessage + "\""
 		}
 		switch {
@@ -394,12 +398,42 @@ func (m *Model) renderRow(pal *theme.Palette, base, header lipgloss.Style, i int
 	return style.Render(m.clip(line))
 }
 
+// rowGlyph picks the marker for a breakpoint kind (#2245). Enabled and
+// disabled are the filled and the hollow member of the same pair, so a muted
+// breakpoint keeps its shape and only loses its fill — the gutter draws the
+// identical set.
+func rowGlyph(k debug.Kind, enabled bool) string {
+	switch k {
+	case debug.KindLogpoint:
+		if enabled {
+			return "◆"
+		}
+		return "◇"
+	case debug.KindConditional:
+		if enabled {
+			return "◉"
+		}
+		return "◎"
+	default:
+		if enabled {
+			return "●"
+		}
+		return "○"
+	}
+}
+
 // renderEditRow draws the inline refinement editor on the selected row (#1914):
-// the field keyword, the typed value and a cursor, windowed to the width.
+// the field keyword, the typed value and a cursor, windowed to the width. A
+// rejected commit (#2245) appends the validation complaint below it.
 func (m *Model) renderEditRow(pal *theme.Palette, r row) string {
 	prefix := "   " + strconv.Itoa(r.line+1) + " " + m.editField.label() + ": "
 	line := append([]rune(prefix), m.editBuf...)
 	ci := len([]rune(prefix)) + m.editCur
+	if m.editErr != "" {
+		// The complaint rides the same row — the list is one row per index,
+		// so a second line would shift every row below it (#2245).
+		line = append(line, []rune("  ✗ "+m.editErr)...)
+	}
 	if ci == len(line) {
 		line = append(line, ' ') // the cursor sits past the buffer end
 	}

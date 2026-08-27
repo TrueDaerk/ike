@@ -37,6 +37,7 @@ bring their own.
 | Toggle Coverage Marks | `coverage.toggle` | — | — | everywhere |
 | CSV: Column Profile | `csv.columnProfile` | — | — | `editor` pane |
 | Data: Column Profile | `data.columnProfile` | — | — | `data` pane |
+| Breakpoint Properties… | `debug.breakpointProperties` | `cmd+alt+f8` | — | everywhere |
 | Breakpoints | `debug.breakpoints` | `cmd+shift+f8` | — | everywhere |
 | Debug: Toggle Console/Variables View | `debug.console` | — | — | everywhere |
 | Continue | `debug.continue` | `f9` | — | everywhere |

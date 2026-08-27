@@ -43,6 +43,19 @@ type stubAdapter struct {
 	// varsBody overrides the variables response, so a structured evaluate
 	// result has children to page in.
 	varsBody map[string]any
+	// caps overrides the initialize response (#2245), so a test can run
+	// against an adapter that does or does not advertise the breakpoint
+	// refinements; bpArgs records every setBreakpoints request's arguments.
+	caps   map[string]any
+	bpArgs []json.RawMessage
+}
+
+// breakpointRequests returns the arguments of every setBreakpoints request
+// seen so far (#2245).
+func (s *stubAdapter) breakpointRequests() []json.RawMessage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]json.RawMessage(nil), s.bpArgs...)
 }
 
 // evaluates returns the arguments of every evaluate request seen so far.
@@ -124,6 +137,11 @@ func (s *stubAdapter) serve() {
 		case "initialize":
 			// Advertise setVariable so the app-level edit gating is exercisable.
 			body["supportsSetVariable"] = true
+			for k, v := range s.caps {
+				body[k] = v
+			}
+		case "setBreakpoints":
+			s.bpArgs = append(s.bpArgs, append(json.RawMessage(nil), req.Arguments...))
 		case "evaluate":
 			s.evalArgs = append(s.evalArgs, append(json.RawMessage(nil), req.Arguments...))
 			if s.evalRefuse != "" {
@@ -143,6 +161,19 @@ func (s *stubAdapter) serve() {
 		_ = jsonrpc.WriteFrame(s.out, resp)
 		s.mu.Unlock()
 	}
+}
+
+// debugStubCaps is the capability set the stub adapter advertises in the next
+// debugModel* call, on top of supportsSetVariable (#2245). Tests set it
+// through debugCaps; it resets itself when that test ends.
+var debugStubCaps map[string]any
+
+// debugCaps makes the next stub session advertise caps, for the tests that
+// exercise the breakpoint-refinement gating (#2245).
+func debugCaps(t *testing.T, caps map[string]any) {
+	t.Helper()
+	debugStubCaps = caps
+	t.Cleanup(func() { debugStubCaps = nil })
 }
 
 // debugModel builds a sized model with an open file and a live stub session.
@@ -174,6 +205,9 @@ func debugModelReg(t *testing.T, reg *registry.Registry, cfg host.MapConfig) (Mo
 	tm, _ = tm.(Model).Update(explorer.OpenFileMsg{Path: path})
 	m = tm.(Model)
 	pipe, sa := startStub(t)
+	sa.mu.Lock()
+	sa.caps = debugStubCaps
+	sa.mu.Unlock()
 	sess := dap.NewSession(dap.NewConn(pipe, nil))
 	// Run the capability handshake so the session carries the stub's
 	// supportsSetVariable, like a real post-launch session would (#640).

@@ -85,7 +85,7 @@ func New(src CommandSource, res BindingResolver, minCol int) *Help {
 // shell is opened so the cheat sheet reflects the current registry and focus.
 func (h *Help) Snapshot(contextID string) {
 	h.ctxID = contextID
-	h.ctxGroups = h.withExtra(ContextSnapshot(h.src, h.res, contextID))
+	h.ctxGroups = h.withExtraLeading(ContextSnapshot(h.src, h.res, contextID))
 	h.flatGroups = h.withExtra(Snapshot(h.src, h.res, contextID))
 	h.essentials = EssentialsSnapshot(h.src, h.res)
 	// With a pane focused the sheet opens on its own bindings (#2182); the
@@ -111,6 +111,27 @@ func (h *Help) withExtra(groups []Group) []Group {
 		}
 	}
 	return groups
+}
+
+// withExtraLeading is withExtra for the context view: an extra group the caller
+// flagged Focused *leads* the sheet instead of trailing it. That is how a mode
+// owning the keyboard without owning a registry scope — the jq/yq playground
+// (#2237) — becomes a context of its own here: its keys are the first thing
+// the sheet shows, ahead of the global bindings, exactly like a focused pane's
+// registered scope. Unflagged extras keep trailing.
+func (h *Help) withExtraLeading(groups []Group) []Group {
+	var lead []Group
+	for _, g := range h.extra {
+		if len(g.Entries) == 0 {
+			continue
+		}
+		if g.Focused {
+			lead = append(lead, g)
+			continue
+		}
+		groups = append(groups, g)
+	}
+	return append(lead, groups...)
 }
 
 // hasContextView reports whether a focused-context view exists: a context is

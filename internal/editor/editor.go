@@ -657,8 +657,13 @@ type Model struct {
 	// bpDisabledSource reports the disabled subset (#1377); those lines draw
 	// a hollow ○ marker.
 	bpDisabledSource func(path string) []int
-	bpAdjust         func(path string, cursorAfter, delta int)
-	bpLines          int
+	// bpCondSource and bpLogSource report the refined subsets (#2245): lines
+	// carrying a condition and/or a hit count draw ◉, logpoints ◆, so the
+	// gutter tells the three breakpoint kinds apart at a glance.
+	bpCondSource func(path string) []int
+	bpLogSource  func(path string) []int
+	bpAdjust     func(path string, cursorAfter, delta int)
+	bpLines      int
 	// paused/pausedLine mark the debugger's current line (#579), set by the
 	// app while a session is stopped in this buffer.
 	paused     bool

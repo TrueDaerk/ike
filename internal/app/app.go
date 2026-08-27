@@ -117,6 +117,11 @@ import (
 const (
 	ctxExplorer = "explorer"
 	ctxEditor   = "editor"
+	// ctxPlayground is not a pane context: the jq/yq playground is a mode
+	// mounted *inside* another pane, so no Instance advertises it. It names
+	// the playground's keyboard in the one place that has to tell the two
+	// apart — the cheatsheet (#2237, see helpContext).
+	ctxPlayground = "playground"
 )
 
 const (
@@ -396,6 +401,9 @@ type Model struct {
 	// runForm is the open run-configuration form (#2173) — the environment
 	// editor of one stored configuration; nil when it is closed.
 	runForm *runFormState
+	// bpForm is the open breakpoint-properties form (#2245) — condition, hit
+	// count and log message of one breakpoint; nil when it is closed.
+	bpForm *bpFormState
 
 	// tdGen is the open test-data wizard (#2134); nil when it is closed.
 	tdGen *tdGenState
@@ -1622,14 +1630,16 @@ func (m *Model) wireEditorEmitters() {
 // pane. It is idempotent, so re-running it after a tab is added is cheap.
 func (m *Model) installEmitter(key string) {
 	if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
-		source, disabled, adjust := breakpointHooks(m.bpts)
+		bph := breakpointHooks(m.bpts)
 		mkSet, mkLines, mkAdjust := markHooks(m.gmarks)
 		bmSigns, bmAdjust := bookmarkHooks(m.bmarks)
 		for _, ed := range inst.Editors() {
 			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key})
-			ed.SetBreakpointSource(source)
-			ed.SetBreakpointDisabledSource(disabled)
-			ed.SetBreakpointAdjuster(adjust)
+			ed.SetBreakpointSource(bph.source)
+			ed.SetBreakpointDisabledSource(bph.disabled)
+			ed.SetBreakpointConditionalSource(bph.conditional)
+			ed.SetBreakpointLogpointSource(bph.logpoints)
+			ed.SetBreakpointAdjuster(bph.adjust)
 			ed.SetMarkHooks(mkSet, mkLines, mkAdjust)
 			ed.SetBookmarkHooks(bmSigns, bmAdjust)
 			ed.SetHistories(m.qhist) // search/ex query recall (#1171)
@@ -2965,6 +2975,16 @@ func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 		// child, which owns its own find; outside terminals cmd+f keeps
 		// its global binding (editor.find).
 		if term := m.activeWS().Panes.FocusedInstance().ActiveTerminal(); term != nil && term.StartSearch() {
+			return true, m, nil
+		}
+		return false, m, nil
+	case "cmd+shift+l":
+		// cmd+shift+l opens link hint mode (#2254): the keyboard route to
+		// the file:line references cmd+click opens. Under an alt-screen or
+		// mouse-reporting child, or with no resolvable reference on screen,
+		// the chord stays with the child; outside terminals it has no
+		// global binding.
+		if term := m.activeWS().Panes.FocusedInstance().ActiveTerminal(); term != nil && term.StartLinkHints() {
 			return true, m, nil
 		}
 		return false, m, nil
@@ -4817,6 +4837,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toggleBreakpointAtCursor()
 		return m, nil
 
+	case DebugBreakpointPropertiesMsg:
+		// debug.breakpointProperties (cmd/ctrl+alt+f8 / palette, #2245): the
+		// condition/hit-count/log-message form for the cursor line's
+		// breakpoint.
+		m.breakpointPropertiesAtCursor()
+		return m, nil
+
 	case DebugStartMsg:
 		// debug.start (shift+f9 / Run menu / palette, #579).
 		m.startDebug()
@@ -5259,6 +5286,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// debug.breakpoints (#1377): same state machine for the Breakpoints
 		// tool window.
 		m.toggleBreakpointsPanel()
+		return m, nil
+
+	case breakpanel.EditMetaMsg:
+		// The list's `p` action (#2245): the properties form for that row.
+		m.openBreakpointForm(msg.Path, msg.Line)
+		return m, nil
+
+	case breakpanel.NoticeMsg:
+		// A gated field the panel refused to open (#2245); the panel never
+		// notifies itself.
+		m.host.Notify(host.Warn, msg.Text)
 		return m, nil
 
 	case breakpanel.OpenLocationMsg, breakpanel.ToggleEnabledMsg,
@@ -7138,6 +7176,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.runConfigFormOpen() {
 			return m.updateRunConfigForm(msg)
 		}
+		// The breakpoint-properties form (#2245) is the same kind of modal
+		// shell dialog and sits right next to it: opened from the Breakpoints
+		// list or the gutter chord, typically while a session runs.
+		if m.breakpointFormOpen() {
+			return m.updateBreakpointForm(msg)
+		}
 		// The pinned-files picker (#788) owns the keyboard the same way.
 		if m.pinPickerOpen() {
 			return m.updatePinPicker(msg)
@@ -7218,6 +7262,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// prompts above still win — they can be opened from inside the popup
 		// and must get their keys back.
 		if m.popupLayerOpen() {
+			// Link hint mode (#2254) owns the popup's keyboard while open,
+			// like in a terminal pane: before the reserved set, so a label
+			// can never be shadowed by a chord.
+			if inst := m.popupFocused(); inst != nil {
+				if term := inst.ActiveTerminal(); term != nil && term.Hinting() {
+					if p, line, col, ok := term.LinkHintKey(msg); ok {
+						return m.openPathAt(p, line, col)
+					}
+					return m, nil
+				}
+			}
 			if handled, tm, cmd := m.popupReservedKey(msg.String()); handled {
 				return tm, cmd
 			}
@@ -7268,6 +7323,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// except the reserved set below; scrollback paging keys are handled by
 		// the pane itself.
 		if m.terminalFocused() {
+			// Link hint mode (#2254) owns the keyboard while open — before
+			// the reserved set, so a label is never shadowed by a chord:
+			// a label opens its target through the ordinary open funnel,
+			// esc (and any other key) just closes the mode.
+			if term := m.activeWS().Panes.FocusedInstance().ActiveTerminal(); term != nil && term.Hinting() {
+				if p, line, col, ok := term.LinkHintKey(msg); ok {
+					return m.openPathAt(p, line, col)
+				}
+				return m, nil
+			}
 			if handled, tm, cmd := m.terminalReservedKey(msg.String()); handled {
 				return tm, cmd
 			}
@@ -8055,9 +8120,14 @@ func (m *Model) openHelp() {
 	// Honest blocked section (0081/40): bindings whose command has no owner
 	// yet appear with their dependency instead of vanishing. Built live from
 	// the effective table on every open.
-	m.help.SetExtra(m.blockedHelpGroup(), m.paneKeysHelpGroup())
+	extra := []help.Group{m.blockedHelpGroup(), m.paneKeysHelpGroup()}
+	// The jq/yq playground owns the keyboard without owning a registry scope
+	// (#2237); its keys lead the sheet as their own context while it is
+	// focused, and contribute nothing otherwise.
+	extra = append(extra, m.playgroundHelpGroups()...)
+	m.help.SetExtra(extra...)
 	m.help.SetFilter("") // each open starts unfiltered (#271)
-	m.help.Snapshot(m.focusContext())
+	m.help.Snapshot(m.helpContext())
 	m.shell.SetContent(m.help)
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -8143,6 +8213,19 @@ func (m Model) focusContext() string {
 		return inst.ContextID()
 	}
 	return ctxExplorer
+}
+
+// helpContext is focusContext for the cheatsheet (#2237): the focused pane's
+// context, except while the jq/yq playground owns the keyboard — then the
+// sheet opens on the playground's own context rather than on the bindings of
+// the pane whose component the mode has replaced, which do not apply. Only the
+// help snapshot uses it; keymap resolution, palette scoping and the mode
+// indicator keep the plain focusContext.
+func (m Model) helpContext() string {
+	if m.playFocused() {
+		return ctxPlayground
+	}
+	return m.focusContext()
 }
 
 // keyContext is focusContext for the keymap layer (#1876): the focused pane's

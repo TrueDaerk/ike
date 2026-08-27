@@ -30,6 +30,8 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
 | Bookmarks | `cmd+f3` | `ctrl+f3` | `nav.bookmarks` |
+| Breakpoint properties | `cmd+alt+f8` | `ctrl+alt+f8` | `debug.breakpointProperties` |
+| Breakpoint properties | `ctrl+alt+f8` | `ctrl+alt+f8` | `debug.breakpointProperties` |
 | Breakpoints | `cmd+shift+f8` | `ctrl+shift+f8` | `debug.breakpoints` |
 | Close active tab | `cmd+w` | `ctrl+w` | `editor.closeTab` |
 | Close project | `cmd+shift+w` | `ctrl+shift+w` | `project.close` |

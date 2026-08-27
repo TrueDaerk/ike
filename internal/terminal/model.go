@@ -77,6 +77,10 @@ type Model struct {
 	// Scrollback search (#1169): open while non-nil; it owns the keyboard.
 	// Lives behind a pointer so value-receiver View copies share it.
 	search *termSearch
+	// Link hint mode (#2254): open while non-nil; like the search it owns
+	// the keyboard and lives behind a pointer so value-receiver View copies
+	// share it. See hints.go.
+	hints *linkHints
 	// sbGrab is the in-thumb grab offset of a scrollbar drag (#1368), see
 	// scrollbar.go.
 	sbGrab int
@@ -273,6 +277,9 @@ func (m *Model) SetPalette(p *theme.Palette) {
 // the bar never covers content and its appearance never reflows the child.
 func (m *Model) SetSize(w, h int) {
 	m.w, m.h = w, h
+	// The hint labels were placed over a viewport of the old geometry
+	// (#2254); a reflow moves the rows out from under them.
+	m.hints = nil
 	if m.sess != nil {
 		m.sess.Resize(m.gridW(), h)
 		// A width reflow rewrites the history, so the paging offset can end
@@ -290,8 +297,15 @@ func (m Model) gridW() int {
 	return m.w
 }
 
-// SetFocused records focus; the cursor cell renders only while focused.
-func (m *Model) SetFocused(on bool) { m.focused = on }
+// SetFocused records focus; the cursor cell renders only while focused. A
+// terminal that loses the focus also drops link hint mode (#2254) — the
+// labels answer keys it no longer receives.
+func (m *Model) SetFocused(on bool) {
+	m.focused = on
+	if !on {
+		m.hints = nil
+	}
+}
 
 // Size reports the current grid size (#676): hosts embedding the model
 // (the debug panel's Output column) assert their sizing through it.
@@ -398,6 +412,13 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	// the child.
 	if m.search != nil {
 		m.searchKey(msg)
+		return nil
+	}
+	// Link hint mode (#2254) is driven app-side (LinkHintKey, which needs the
+	// open funnel): a key arriving here means the mode outlived its route, so
+	// close it rather than typing into the shell hidden behind the labels.
+	if m.hints != nil {
+		m.hints = nil
 		return nil
 	}
 	if msg.String() == "/" && m.searchCaptures() {
@@ -1057,7 +1078,8 @@ func (m Model) baseView() string {
 		if g, ok := m.deadDialogGeom(); ok && m.search == nil {
 			view = overlay.Place(view, m.renderDeadDialog(g), g.x, g.y, m.w, m.h)
 		}
-		return view
+		// Link hints (#2254) label the windowed-in scrollback rows too.
+		return m.hintView(view)
 	}
 	view := m.sess.View()
 	if m.selOn {
@@ -1076,6 +1098,12 @@ func (m Model) baseView() string {
 		}
 		lines[len(lines)-1] = m.searchLine()
 		return strings.Join(lines, "\n")
+	}
+	// Link hint mode (#2254) owns the display while it owns the keyboard: the
+	// labels replace the reference's first cell and the prompt takes the
+	// bottom row, standing in for the cursor/completion chrome.
+	if m.hints != nil {
+		return m.hintView(view)
 	}
 	if !m.sess.Running() || m.sess.PipeDone() {
 		return m.deadView(view)

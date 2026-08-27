@@ -435,6 +435,8 @@ func detachWorkspaceServices(w *workspace.Workspace) {
 			ed.SetEmitter(nil)
 			ed.SetBreakpointSource(nil)
 			ed.SetBreakpointDisabledSource(nil)
+			ed.SetBreakpointConditionalSource(nil)
+			ed.SetBreakpointLogpointSource(nil)
 			ed.SetBreakpointAdjuster(nil)
 			ed.SetMarkHooks(nil, nil, nil)
 			ed.SetBookmarkHooks(nil, nil)

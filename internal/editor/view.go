@@ -541,6 +541,8 @@ func (m Model) View() string {
 	}
 	bps := m.breakpointSet()
 	bpsOff := m.disabledBreakpointSet()
+	bpsCond := m.conditionalBreakpointSet()
+	bpsLog := m.logpointSet()
 	tests := m.testMarks()
 	bookmarks := m.bookmarkSigns()
 	for i := m.view.Top + len(sticky); len(out) < height && i < lineCount; i++ {
@@ -566,14 +568,30 @@ func (m Model) View() string {
 			sign = "▶"
 			signStyle = lipgloss.NewStyle().Foreground(m.theme().Warning).Bold(true)
 		} else if bps[i] {
-			// A disabled breakpoint (#1377) keeps its slot but draws hollow
-			// and faint — visible, not armed.
-			if bpsOff[i] {
+			// The breakpoint kind picks the glyph (#2245): ● plain, ◉
+			// conditional (condition and/or hit count), ◆ logpoint in the
+			// warning tone — it logs instead of stopping. A disabled
+			// breakpoint (#1377) keeps its slot and its shape but draws
+			// hollow and faint — visible, not armed.
+			sign = "●"
+			tone := m.theme().Error
+			switch {
+			case bpsLog[i]:
+				sign, tone = "◆", m.theme().Warning
+				if bpsOff[i] {
+					sign = "◇"
+				}
+			case bpsCond[i]:
+				sign = "◉"
+				if bpsOff[i] {
+					sign = "◎"
+				}
+			case bpsOff[i]:
 				sign = "○"
-				signStyle = lipgloss.NewStyle().Foreground(m.theme().Error).Faint(true)
-			} else {
-				sign = "●"
-				signStyle = lipgloss.NewStyle().Foreground(m.theme().Error).Bold(true)
+			}
+			signStyle = lipgloss.NewStyle().Foreground(tone).Bold(true)
+			if bpsOff[i] {
+				signStyle = lipgloss.NewStyle().Foreground(tone).Faint(true)
 			}
 		} else if glyph, ok := bookmarks[i]; ok {
 			// A bookmark/mark glyph (#1151) slots below the breakpoint —

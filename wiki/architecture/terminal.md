@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
 timestamp: 2026-08-27T00:00:00Z
@@ -301,7 +301,10 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   dead tab could only be closed after docking it into a pane, and the EOF the
   idle arm sends would reach nobody. The active tab's ✕ shares the path, the
   float resize chords (#774) adjust the box, cmd+c/cmd+v
-  copy/paste, and the `terminalGlobalCommands` allowlist stays with the IDE.
+  copy/paste, `cmd+f` opens the scrollback search and `cmd+shift+l` link hint
+  mode (#2254) on the focused side — hint mode is checked *before* the
+  reserved set, like in a pane, so its labels can never be shadowed by a
+  chord — and the `terminalGlobalCommands` allowlist stays with the IDE.
   Everything else goes raw to the shell. `terminal.popup` is itself
   allowlisted, so a focused pane terminal can summon the popup.
 - **Split & broadcast** (#1427): the reserved `cmd+d` (the pane-terminal split
@@ -410,6 +413,7 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 | `cmd+d` | split right (#982, iTerm-style): a fresh terminal pane opens to the right of the focused terminal's pane and takes focus — the same for dedicated terminal panes and editor-hosted terminal tabs. Outside terminals `cmd+d` keeps its global binding (`editor.duplicateLine`) |
 | `cmd+w` | close the terminal (#986): an idle shell gets an EOF (ctrl+d) — it exits and the regular exit path closes the pane/tab; a **busy** terminal (foreground process group ≠ shell, or a still-running command session — `Session.Busy`) raises a centered guard first: enter closes, esc cancels; a **finished** session (`Model.Exited`) is closed outright (#2192) — there is no child left to receive an EOF, so waiting for an exit that already happened would leave it unclosable. `ctrl+w` stays with the shell (delete word); outside terminals `cmd+w` keeps its global binding (`editor.closeTab`) |
 | `cmd+f` | open the scrollback search (#1504) — the muscle-memory entry point to the same inline search `/` starts from scrollback (#1169), working from the live view too (`Model.StartSearch`; esc then returns to the live view). Under an alt-screen or mouse-reporting child the chord stays with the child (vim/lazygit own their find); outside terminals `cmd+f` keeps its global binding (`editor.find`). The popup terminal reserves it too, on the focused split side |
+| `cmd+shift+l` | enter link hint mode (#2254) — label every resolvable `file:line` reference on the visible rows and open the one whose label is typed (`Model.StartLinkHints`/`LinkHintKey`, File:line links below). With no resolvable reference on screen, or under an alt-screen / mouse-reporting child, the chord stays with the child; outside terminals it has no global binding. The popup terminal reserves it too, on the focused split side |
 | `ctrl+arrows` | spatial focus moves out of the terminal (#228) — the same `keymap.bindings.focus_*` overrides apply; a disabled direction stays with the shell. Inside the popup layer left/right instead step through its surfaces — split sides and floating panels — raising the one they land on (#1806) |
 | `cmd+c` | copy an active mouse selection (#227) — without one the key stays with the shell |
 | `cmd+v` | paste the system clipboard through the bracketed-paste path (#727) — under the Kitty protocol the host delivers cmd+v as a key, so the app performs the paste itself; the debug area's console view (#1370, #2190) takes the paste through the same path — `debugpanel.PasteText` hands it to the embedded terminal |
@@ -530,16 +534,25 @@ The colours themselves — including the derived fallback for themes that ship
 none and the contrast floor every entry clears — belong to
 [Themes](./themes.md), together with the `[theme.terminal]` overrides.
 
-## File:line links (#1168)
+## File:line links (#1168, keyboard hints #2254)
 
 Terminal output referencing `path/file.ext:12[:col]` — compiler errors, test
-failures, grep output — is clickable (`links.go`):
+failures, grep output — is clickable (`links.go`) and reachable from the
+keyboard (`hints.go`):
 
 - **Detection** is a pragmatic regex over the rendered plain text: relative
   (`file.go:12`, `./pkg/x.go:3:14`) and absolute paths, line plus optional
-  column; the last path component must carry a letter-led extension, which
-  keeps clock times (`12:30`) and `host:port` pairs out (extensionless files
-  like `Makefile:3` are deliberately not detected).
+  column; the last path component must carry a letter-led extension **or** be
+  one of the extensionless well-known names (#2254) — `Makefile`,
+  `GNUmakefile`, `Dockerfile`, `Vagrantfile`, `Rakefile`, `Gemfile`,
+  `LICENSE`, `README`, `CHANGELOG`, `BUILD` … (`linkNames`, a closed and
+  case-sensitive list). That keeps clock times (`12:30`) and `host:port`
+  pairs out, and the closed list is what keeps `note:12`-shaped prose out of
+  the extensionless half. RE2 has no lookbehind, so the match **consumes a
+  left boundary** (start of line, or a rune that cannot belong to a path)
+  before the path capture: without it the fixed names would match inside a
+  longer token (`foo-Makefile:3`). The boundary rune sits outside the capture
+  group, so the reported span still starts at the reference itself.
 - **cmd+click** (`ModSuper`/`ModMeta`, mirroring the editor's cmd+click
   go-to-definition) resolves the reference under the pointer: relative paths
   against the session's live cwd (OSC 7, falling back to the spawn dir), then
@@ -554,6 +567,24 @@ failures, grep output — is clickable (`links.go`):
   cache (#803) — one scan per grid change, the cached fast path returns the
   already-decorated string; scrollback rows decorate as `scrolledView`
   windows them in, so links work throughout the history.
+- **Keyboard hints** (#2254): `cmd+shift+l` (reserved app-side, in the popup
+  layer too) enters hint mode over the **visible viewport** — every reference
+  on the rendered rows that survives the stat gate gets a one-character label
+  stamped over its first cell (`a s d f g h j k l q w e …`, the home row
+  first, 26 max), the bottom row turns into the mode prompt, and typing a
+  label hands the target to `openPathAt` — the same funnel cmd+click uses.
+  esc, any unassigned key, a resize or a focus change close the mode; while
+  it is open **no key reaches the shell** (`Model.LinkHintKey`, routed before
+  the reserved set so a label is never shadowed by a chord). Labels were
+  chosen over next/prev-with-enter because a compiler run prints a screenful
+  of references at once and the wanted one is rarely the newest: a label
+  costs one keystroke where stepping costs O(n), and the labelled set shows
+  at a glance which references are *live* (i.e. resolve to an existing file).
+  Scrollback works by construction — the mode reads the rows currently
+  windowed in, so paging first with `shift+pgup` then hinting labels history.
+  The stat gate stays a **user-gesture** cost: hint mode stats once per
+  visible reference at activation, never per render (`linkStat` is the seam
+  the tests count through).
 
 ## Scrollback search (#1169)
 

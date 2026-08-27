@@ -25,6 +25,77 @@
 - Docs: [follow mode](/architecture/follow-mode.md), the keybinding matrix
   and the generated command/keybinding reference.
 
+## 2026-08-27 (Breakpoint properties: form, glyphs, capability gate, #2245)
+
+- **Properties form** (`internal/app/breakpoint_form.go`): condition, hit
+  count and log message of one breakpoint in the shell dialog the
+  run-configuration form uses — `p` on a Breakpoints-list row and
+  `debug.breakpointProperties` (cmd/ctrl+alt+f8, palette, Run menu) on the
+  editor's cursor line, JetBrains' *Edit Breakpoint*. The list's inline
+  `c`/`n`/`l` editors stay for one-field edits.
+- **Validation next to the store** (`internal/debug/validate.go`): both
+  surfaces reject the same input with the same wording before it reaches an
+  adapter — a whitespace-only field ("empty but enabled"), a hit count that is
+  not a number optionally prefixed by `>`/`>=`/`<`/`<=`/`==`/`%`, an
+  unbalanced/empty/nested `{}` in a log message. A rejected value keeps its
+  editor open with the reason.
+- **Distinct glyphs** (`Meta.Kind`): `◉`/`◎` conditional and `◆`/`◇` logpoint
+  next to the plain `●`/`○`, in the gutter and the list alike — the editor
+  gets two more injected line sources, the paused `▶` still wins.
+- **Capability gate**: the three fields follow the live adapter's
+  `supportsConditionalBreakpoints`/`supportsHitConditionalBreakpoints`/
+  `supportsLogPoints`. A gated field is refused with a notice (list) or drawn
+  read-only as `(unsupported by adapter)` (form), and session start warns once
+  when the store holds refinements this adapter will strip. The breakpoints
+  are pushed either way — an unsupported capability never breaks a session.
+
+## 2026-08-27 (jq playground keyboard: esc esc, code actions, its own help context, #2237)
+
+- **`esc esc` reaches the palette from the playground.** The mode's `esc`
+  returned straight out of the modal routing, which sits above the double-esc
+  detector in `Update`: the first press left the input, the second found
+  nothing armed, and the palette was unreachable from the query line.
+  `leavePlaygroundOnEsc` closes the mode *and* arms the detector, so the single
+  `esc` keeps its immediate meaning (no chord-timeout latency on the most-pressed
+  key) and the second one opens the palette. Both focuses go through it; an
+  `esc` the completion popup consumes as a dismissal does not arm it.
+- **Code actions answer instead of doing nothing.** `alt+enter`
+  (`lsp.codeAction`) is editor-scoped, so the mode's routing kept it from the
+  keymap layer and the Global fallback never matched — a silent no-op. There is
+  no language server behind a jq program, so the playground now says so on the
+  info row, in the status line's warning colour, and names `ctrl+space` and
+  `ctrl+l` as the nearest things it does have.
+- **The cheatsheet knows the playground.** `helpContext` reports `playground`
+  while the mode owns the keyboard (help only — keymap resolution, palette
+  scoping and the mode indicator keep `focusContext`), and `playhelp.go`
+  contributes three groups: query line, result buffer, and the keymap chords
+  that still reach the mode, resolved live from the binding table.
+  `help.withExtraLeading` puts `Focused` extra groups at the head of the
+  context view, so a mode owning the keyboard without owning a registry scope
+  leads the sheet like a focused pane would.
+- **Discoverability**: the info row's hint tail ends in `f1 keys`, last so a
+  narrow pane drops it first.
+- Docs: [jq & yq playground](/architecture/jq-playground.md#keys),
+  [help overlay](/architecture/help-overlay.md#contexts-without-a-registry-scope-2237).
+
+## 2026-08-27 (Terminal link hints + extensionless references, #2254)
+
+- **Keyboard hints** (`internal/terminal/hints.go`): the reserved
+  `cmd+shift+l` labels every resolvable `file:line` reference on the visible
+  rows with a single home-row character; typing one opens it through
+  `openPathAt`, esc / any unassigned key / a resize / a blur close the mode,
+  and no key reaches the shell while it is open. Labels beat next/prev
+  stepping here: a compiler run prints a screenful at once and the wanted
+  reference is rarely the newest. Reserved in the popup layer too.
+- **Extensionless names** (`linkNames`): `Makefile:12`, `src/Dockerfile:4`,
+  `LICENSE:7` … now detect, off a closed case-sensitive list. RE2 has no
+  lookbehind, so the regex consumes a left boundary outside the path capture
+  group — otherwise the fixed names would match inside longer tokens
+  (`foo-Makefile:3`). Timestamps and `host:port` stay out.
+- **Performance posture unchanged** (#1168): the existence `os.Stat` runs at
+  the user gesture (click, hint activation), never per render — `linkStat` is
+  the seam a test counts through.
+
 ## 2026-08-27 (Organize imports on save: one undo unit and an on-demand command, #2253)
 
 - **One undo unit for the save chain**: with both on-save steps enabled the

@@ -267,7 +267,8 @@ former Roadmap 0085, spec in git history, for the v1→v2 key-model change:
 A focused live terminal forwards keys raw to the PTY, so terminal-scoped
 bindings resolve **before** the forwarding, in the root model's terminal
 branch (`terminalContextChord` in `internal/app`), after the hardcoded
-reserved set (`ctrl+tab`, `alt+f12`, `cmd+t/d/w/f`), the spatial focus moves
+reserved set (`ctrl+tab`, `alt+f12`, `cmd+t/d/w/f`, `cmd+shift+l` for link
+hint mode #2254), the spatial focus moves
 and the `terminalGlobalCommands` allowlist. Guard rails keep the shell
 usable:
 
@@ -841,6 +842,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `bookmark.previous` | `ctrl+shift+f11` | delivered | `—` | live |
 | `bookmark.toggle` | `f11` | delivered | `—` | live |
 | `bookmark.toggleMnemonic` | `alt+f3` | fragile | `palette / Navigate menu` | live via palette / Navigate menu |
+| `debug.breakpointProperties` | `cmd+alt+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.breakpoints` | `cmd+shift+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.continue` | `f9` | delivered | `—` | live |
 | `debug.evaluate` | `alt+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
