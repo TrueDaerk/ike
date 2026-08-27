@@ -3912,6 +3912,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// for the declaration, like the gutter markers do.
 		return m.locateTest(msg.RerunID)
 
+	case problems.QuickFixMsg:
+		// "a"/alt+enter on a Problems row (#2175): ask the bridge for that
+		// diagnostic's code actions without jumping to it first.
+		return m, m.problemsQuickFix()
+
 	case problems.CopyMsg:
 		// "y"/cmd+c on a Problems row (#2071): the marked line goes to the
 		// clipboard through the shared copy path, with a toast.
@@ -6366,6 +6371,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openIntentions(msg)
 			return m, nil
 		}
+		if msg.QuickFix {
+			// The Problems pane's quick-fix key (#2175): the server's actions
+			// alone, anchored under the marked row.
+			m.openProblemQuickFixes(msg)
+			return m, nil
+		}
 		m.actions.Set(msg)
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, actionsPrefix)
@@ -6378,6 +6389,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.RunCommand(id)
 		}
 		return m, m.actions.Run(msg)
+
+	case ilsp.QuickFixPromptMsg:
+		// lsp.quickFixProblem (#2175): the bridge answered with its
+		// continuation — hand it the marked Problems row to request.
+		return m, m.requestProblemQuickFix(msg.Apply)
 
 	case ilsp.RenamePromptMsg:
 		// lsp.rename: the server validated the position; prompt for the name.

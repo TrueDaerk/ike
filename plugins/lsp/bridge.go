@@ -1081,6 +1081,55 @@ func (b *bridge) codeAction(h host.API) tea.Cmd {
 	return nil
 }
 
+// quickFixAt answers an out-of-editor code-action request (#2175): the
+// Problems pane names the file and the diagnostic's range, so nothing is read
+// off a caret here. It is otherwise the same request codeAction makes — the
+// cached diagnostics overlapping the range travel as CodeActionContext, and
+// the chosen action runs through applyAction, hence the same WorkspaceEdit
+// path (one undo unit in an open buffer, a direct rewrite for a closed file).
+//
+// Every path answers with a CodeActionsMsg carrying QuickFix, so an offer
+// that never reached a server is indistinguishable from an empty one only in
+// the wording the app picks — never in a silence.
+//
+// The no-server answer is dispatched rather than sent (#2027): that half runs
+// on the Update goroutine, where Send would block the program against itself.
+func (b *bridge) quickFixAt(h host.API, req ilsp.QuickFixRequest) tea.Cmd {
+	b.ensure(h)
+	mgr := b.manager()
+	path := req.Path
+	if path == "" || mgr == nil {
+		return h.Dispatch(ilsp.CodeActionsMsg{Path: path, QuickFix: true})
+	}
+	start, end := req.Range.Start, req.Range.End
+	diags := b.diagsOverlapping(path, start.Line, end.Line)
+	go func() {
+		actions, err := mgr.CodeActions(context.Background(), path, start, end, diags)
+		if requestFailed(h, "quick fixes", err) {
+			// The failure toast reported already; the empty offer keeps the
+			// pane's own feedback from claiming a verdict it never got.
+			h.Send(ilsp.CodeActionsMsg{Path: path, QuickFix: true})
+			return
+		}
+		choices := make([]ilsp.CodeActionChoice, len(actions))
+		for i, a := range actions {
+			choices[i] = ilsp.CodeActionChoice{Title: a.Title, Kind: a.Kind, Preferred: a.IsPreferred}
+		}
+		h.Send(ilsp.CodeActionsMsg{
+			Path:     path,
+			Actions:  choices,
+			QuickFix: true,
+			Apply: func(i int) tea.Cmd {
+				if i < 0 || i >= len(actions) {
+					return nil
+				}
+				return b.applyAction(h, path, actions[i])
+			},
+		})
+	}()
+	return nil
+}
+
 // applyAction performs one chosen action: the inline Edit first (per spec),
 // then the command, whose edits arrive via workspace/applyEdit.
 func (b *bridge) applyAction(h host.API, path string, action protocol.CodeAction) tea.Cmd {

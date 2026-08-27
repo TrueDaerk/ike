@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -660,6 +660,17 @@ files", a no-op edit toasts "changed nothing", an action with neither edit
 nor command warns that `codeAction/resolve` is not supported yet, and
 command failures surface as error toasts. Gated on `codeActionProvider` /
 `executeCommandProvider`.
+
+A second, caret-less way in (#2175): `lsp.quickFixProblem` fixes the marked
+row of the [Problems pane](./problems.md) where it is listed. Like
+`project.goToClass` the command only installs its continuation
+(`ilsp.QuickFixPromptMsg`); the app calls it with the row's path and the
+diagnostic's own range (`ilsp.QuickFixRequest`), and `bridge.quickFixAt`
+sends the identical `textDocument/codeAction` request — same diagnostic
+context, same `Apply`/`workspace_edit.go` tail — answering with
+`QuickFix: true` instead of `Intentions: true`. That flag is what tells the
+app to skip the intention merge (there is no caret for a provider to read)
+and to say "no quick fixes for this problem" on an empty offer.
 
 **Signature help (#4, #523).** Two ways in: typing one of the server's
 advertised trigger characters (`signatureHelpProvider.triggerCharacters` +

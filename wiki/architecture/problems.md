@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Problems Tool Window
-description: Singleton bottom-split pane aggregating LSP diagnostics project-wide — grouped by file, errors first, enter/double-click jumps to the location, 'f' toggles current-file vs project scope; consumes the publishDiagnostics flow plus the Go-computed lint notes and per-run task-matcher findings (#1024, part of #33; notes #1654; tasks #1915).
+description: Singleton bottom-split pane aggregating LSP diagnostics project-wide — grouped by file, errors first, enter/double-click jumps to the location, 'a' applies a code action without leaving the pane, 'f' toggles current-file vs project scope; consumes the publishDiagnostics flow plus the Go-computed lint notes and per-run task-matcher findings (#1024, part of #33; notes #1654; tasks #1915; quick fixes #2175).
 resource: internal/problems/problems.go
-tags: [architecture, lsp, diagnostics, tool-window, pane, tasks]
-timestamp: 2026-08-17T18:00:00Z
+tags: [architecture, lsp, diagnostics, tool-window, pane, tasks, code-actions]
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # Problems Tool Window (#1024)
@@ -55,7 +55,10 @@ and the editor decorations always agree. The per-severity decoration toggles
 *painting* (scrollbar/gutter/underline) — the Problems pane keeps showing
 every non-ignored diagnostic regardless, so nothing is silently lost.
 
-No new LSP traffic originates in the pane.
+No diagnostic traffic originates in the pane: it never asks for findings, it
+only consumes what the flow publishes. The one request that *does* start here
+is the quick-fix code action (#2175, below) — user-initiated, one round trip
+per keypress, and routed through the bridge rather than issued by the pane.
 
 ## The pane
 
@@ -105,6 +108,49 @@ their rendered text, since they share their parent's path and position.
 - `f` toggles **current file** vs **project** scope (named in the footer).
   The active path tracks the focused editor via `syncProblemsActive`, hooked
   into `setFocus` and tab switching like the explorer's active-file accent.
+- `a` (or `alt+enter`, the editor's intention key) **applies a quick fix** to
+  the marked problem — see below.
+
+## Quick fixes from the pane (#2175)
+
+Fixing a listed problem used to mean jumping to it first and pressing
+alt+enter there. `a` on a row does it where the problem is listed instead,
+through the same seam the [intention popup](./lsp.md) uses — only entered
+from outside an editor:
+
+1. The pane resolves what the marked row stands for and emits
+   `problems.QuickFixMsg`. A diagnostic row means itself; a file header its
+   first (most severe) diagnostic, like `enter`; a **related-information row
+   its parent** — the finding is what a server offers fixes for, its
+   "declared here" note is not. An empty list emits nothing.
+2. The root model runs `lsp.quickFixProblem`. Like `project.goToClass`, that
+   command asks nothing by itself: it answers with `ilsp.QuickFixPromptMsg`,
+   the bridge continuation. The app calls it with the marked row's path and
+   the diagnostic's own range (`ilsp.QuickFixRequest`) — so the request
+   carries its location rather than reading one off a caret, which is the
+   whole reason no jump is needed. The command is in the palette too, where
+   it means the same thing: fix the marked Problems row.
+3. `bridge.quickFixAt` issues the ordinary `textDocument/codeAction` request,
+   with the cached diagnostics overlapping the range as `CodeActionContext`
+   — the same context alt+enter sends — and answers with an
+   `ilsp.CodeActionsMsg` carrying `QuickFix`.
+4. The app fills the *same* `actionsMode` the intention popup uses (LSP
+   actions only: with no caret, no intention provider could apply) and opens
+   the picker anchored under the marked row, `caretPopupAnchor`'s math for a
+   list pane. Picking a row runs the bridge's `Apply` continuation.
+5. Applying goes through the shared WorkspaceEdit path
+   (`plugins/lsp/workspace_edit.go`): an open buffer gets one
+   `FormatEditsMsg`, applied as a single undo unit, so `u` takes the fix
+   back; a file no editor holds is rewritten on disk, exactly as the
+   intention path does it.
+6. Nothing refreshes the list by hand. The edit makes the server republish,
+   the publish feeds the store, and the pane re-derives its rows — the pure
+   consumer rule holds for fixes too.
+
+The "no fixes" verdict is explicit: an offer with no actions closes nothing
+and toasts `no quick fixes for this problem`. That is the honest answer for a
+lint note (#1654), a task-matcher finding (#1915) or a file no language
+server tracks — none of which any server has an action for.
 
 ## Persistence
 
