@@ -1,5 +1,32 @@
 # Log
 
+## 2026-08-27 (Investigate: .http highlighting after a failed request line, #2226)
+
+- **The report**: in a ~205-line `.http` file, everything from a
+  `GET {{host}}/…` request to the end of the file rendered plain — headers and
+  JSON bodies of *later* requests included.
+- **Finding — no cascade exists at HEAD**: the vendored grammar
+  (rest-nvim/tree-sitter-http) resynchronises at every `###` separator; a
+  battery of hostile inputs (placeholder targets, garbage request lines,
+  unclosed `{{`, unbalanced JSON bodies, lowercase/unknown methods, CRLF,
+  `###` inside a body string) produces no ERROR node that crosses the next
+  separator, at any file length. The Go layers are per-line (`spans.go`) or
+  per-`###`-block (`httpfile.Parse` behind body regions), so a broken block
+  cannot eat its neighbours either. The reported cascade was the pre-#2218
+  placeholder gap as far as it is reproducible today; verified in the running
+  app on a 249-line file with the report's exact request at line ~242.
+- **Regression guards** (`plugins/languages/http/highlight_test.go`):
+  `TestErrorRecoveryMidFile` plants four kinds of broken request ~200 lines
+  into a long file and asserts the next section highlights again at its `###`
+  separator (separator, method, header name, injected JSON body);
+  `TestPlaceholderRequestHighlighted` pins the report's own request — method,
+  placeholder, path, header and body captures on the `{{host}}` section
+  itself.
+- **A body only counts as JSON with a `Content-Type`**: body regions resolve
+  the injected language from the request's `Content-Type` header (#1303) — a
+  body under a header-less request renders with host styling by design, which
+  is worth knowing before reading such a body as "highlighting died".
+
 ## 2026-08-27 (Settings UI: fuzzy search across all settings, #2179)
 
 - **The gap**: the panel filter was a case-insensitive substring over page
