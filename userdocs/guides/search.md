@@ -63,6 +63,12 @@ streams results in, grouped by file with per-file match counts.
 | ++enter++ | Open the selected match |
 | ++esc++ | Close — the results stay live |
 
+If text is selected when you open it — an editor visual selection, or a mouse
+selection in a terminal, a diff, a merge or the HTTP response viewer — the
+query starts out filled with that text, already selected, so typing replaces
+it and ++enter++ searches for it. A selection spanning several lines prefills
+nothing, and in regex mode the text is escaped so it is found literally.
+
 The include and exclude fields take comma-separated globs: `*.go`,
 `!vendor/**`, `internal/**,cmd/**`. Each keystroke restarts the scan and
 cancels the previous one, so a long search never blocks the next one.

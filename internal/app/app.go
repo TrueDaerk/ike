@@ -3791,14 +3791,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// project.findInPath (cmd+shift+f / palette): the find-in-path overlay
 		// (Roadmap 0150), rooted at the working directory like the explorer.
 		m.finder.SetSize(m.width, m.height)
-		m.finder.Open(".")
+		m.finder.OpenPrefilled(".", m.activeSelectionText())
 		return m, nil
 
 	case OpenReplaceInPathMsg:
 		// project.replaceInPath (cmd+shift+r / palette): find-in-path plus the
 		// replacement input, preview and apply keys (#86).
 		m.finder.SetSize(m.width, m.height)
-		m.finder.OpenReplace(".")
+		m.finder.OpenReplacePrefilled(".", m.activeSelectionText())
 		return m, nil
 
 	case OpenTodoIndexMsg:
