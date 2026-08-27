@@ -2,6 +2,7 @@ package pane
 
 import (
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -966,6 +967,34 @@ func (i *Instance) activate(idx int) {
 	for n, t := range i.tabs {
 		t.setFocused(i.focused && n == i.active)
 	}
+}
+
+// TabLastUsed reports tab idx's activation stamp — the per-instance
+// use-sequence value written when the tab was last activated (#742), 0 for a
+// tab that was never activated (a restored background tab) and for an
+// out-of-range index. It is a recency rank, not a timestamp: only the order
+// between a pane's own stamps is meaningful.
+func (i *Instance) TabLastUsed(idx int) int {
+	if idx < 0 || idx >= len(i.tabs) {
+		return 0
+	}
+	return i.tabs[idx].lastUsed
+}
+
+// TabsByMRU returns every tab index ordered most-recently-used first (#2151),
+// the order the tab picker lists them in: the active tab leads (activate
+// stamps it last), then the tabs by descending activation stamp, with
+// never-activated tabs last in tab order. Ties keep tab order, so the listing
+// is stable across opens.
+func (i *Instance) TabsByMRU() []int {
+	order := make([]int, len(i.tabs))
+	for n := range i.tabs {
+		order[n] = n
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		return i.tabs[order[a]].lastUsed > i.tabs[order[b]].lastUsed
+	})
+	return order
 }
 
 // TabPinned reports whether tab idx is pinned (#1172); false out of range.

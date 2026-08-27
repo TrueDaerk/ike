@@ -52,6 +52,12 @@ type NewEditorTabMsg struct{}
 // allowed. Dispatched by editor.tab.togglePin (tab context menu / palette).
 type TabTogglePinMsg struct{}
 
+// TabPickerMsg opens the tab picker (#2151): the focused editor pane's tabs
+// listed most-recently-used first in a locked palette mode, filtered by the
+// palette's speed search, enter activating the picked tab. Dispatched by
+// editor.tab.picker.
+type TabPickerMsg struct{}
+
 // ClosePaneMsg closes the focused pane whole — every tab at once — behind the
 // unsaved-changes guard (#1128). Dispatched by pane.close (pane-title context
 // menu / palette).
@@ -407,6 +413,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 		appCommand("editor.tab.reopenClosed", "Reopen Closed Tab", TabReopenMsg{}),
 		appCommand("editor.tab.closeOthers", "Close Other Tabs", TabCloseOthersMsg{}),
 		appCommand("editor.tab.togglePin", "Pin/Unpin Tab", TabTogglePinMsg{}),
+		appCommand("editor.tab.picker", "Switch Tab…", TabPickerMsg{}),
 	}
 	for i := 1; i <= 9; i++ {
 		n := strconv.Itoa(i)

@@ -70,6 +70,7 @@ bring their own.
 | Move Tab Right | `editor.tab.moveRight` | `ctrl+shift+pgdown` | — | everywhere |
 | New Empty Editor Tab | `editor.tab.new` | `ctrl+t` | — | everywhere |
 | Next Tab | `editor.tab.next` | `cmd+ctrl+right` | — | everywhere |
+| Switch Tab… | `editor.tab.picker` | `alt+e` | — | everywhere |
 | Previous Tab | `editor.tab.prev` | `cmd+ctrl+left` | — | everywhere |
 | Reopen Closed Tab | `editor.tab.reopenClosed` | `cmd+shift+t` | — | everywhere |
 | Go to Tab 1 | `editor.tab.select1` | `alt+1` | — | everywhere |

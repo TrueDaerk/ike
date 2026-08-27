@@ -19,8 +19,16 @@ import (
 // renders (unless editor.tabs.always_show), with two or more the tab list does.
 // Overflow elides around the active tab; the bar never wraps.
 
-// tabEllipsis marks tabs hidden beyond either end of the bar window.
+// tabEllipsis is the truncation marker of a label that does not fit its
+// segment (#2151); the hidden tabs beyond either end of the window are marked
+// by a counting overflow indicator instead (tabOverflowMark).
 const tabEllipsis = "…"
+
+// tabLabelCap bounds one segment's label width (#2151): a very long label
+// ellipsizes to this many cells so a single tab can never push every neighbour
+// out of the bar. Wide enough for "somelongmodule_test.go ●" while still
+// leaving room for two or three siblings on an 80-cell pane.
+const tabLabelCap = 24
 
 // tabCloseGlyph is the per-segment close button (#1128); tabCloseW is the
 // extra cells a segment spends on it: the glyph plus its trailing pad,
@@ -177,10 +185,36 @@ func contentTabGlyph(k pane.Kind) string {
 	return ""
 }
 
+// fitTabLabels ellipsizes over-long labels to tabLabelCap cells (#2151), the
+// widths every bar computation works from. It is idempotent — an already
+// capped label passes through unchanged — so callers may apply it freely, and
+// truncating from the right keeps a pinned tab's "• " prefix intact.
+func fitTabLabels(labels []string) []string {
+	out := make([]string, len(labels))
+	for i, l := range labels {
+		if ansi.StringWidth(l) > tabLabelCap {
+			l = ansi.Truncate(l, tabLabelCap, tabEllipsis)
+		}
+		out[i] = l
+	}
+	return out
+}
+
+// tabOverflowMark is the indicator standing in for the tabs hidden beyond one
+// end of the window (#2151): "+7" for seven elided tabs, empty for none. It
+// replaces the bare … the bar used to show, so the count of what is out of
+// sight is readable without opening the tab picker.
+func tabOverflowMark(hidden int) string {
+	if hidden < 1 {
+		return ""
+	}
+	return "+" + strconv.Itoa(hidden)
+}
+
 // renderTabBar lays the labels out in one row of at most width cells: labels
 // joined by │ separators, the active label highlighted via theme slots. When
-// the row overflows, a window of tabs around the active one is shown and a …
-// on either end marks the tabs elided there.
+// the row overflows, a window of tabs around the active one is shown and a
+// "+N" on either end counts the tabs elided there.
 func renderTabBar(labels []string, active, width int, pal *theme.Palette) string {
 	if len(labels) == 0 || width < 1 {
 		return ""
@@ -188,6 +222,7 @@ func renderTabBar(labels []string, active, width int, pal *theme.Palette) string
 	if active < 0 || active >= len(labels) {
 		active = 0
 	}
+	labels = fitTabLabels(labels)
 	lo, hi := tabWindow(labels, active, width)
 
 	activeStyle := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
@@ -195,9 +230,10 @@ func renderTabBar(labels []string, active, width int, pal *theme.Palette) string
 	frameStyle := lipgloss.NewStyle().Foreground(pal.Border)
 	pinStyle := lipgloss.NewStyle().Foreground(pal.Accent)
 
+	left, right := tabEnds(labels, lo, hi, width)
 	var b strings.Builder
-	if lo > 0 {
-		b.WriteString(frameStyle.Render(tabEllipsis))
+	if left != "" {
+		b.WriteString(frameStyle.Render(left))
 	}
 	for i := lo; i <= hi; i++ {
 		if i > lo {
@@ -233,23 +269,45 @@ func renderTabBar(labels []string, active, width int, pal *theme.Palette) string
 			b.WriteString(frameStyle.Render(tabCloseGlyph) + " ")
 		}
 	}
-	if hi < len(labels)-1 {
-		b.WriteString(frameStyle.Render(tabEllipsis))
+	if right != "" {
+		b.WriteString(frameStyle.Render(right))
 	}
 	return b.String()
 }
 
 // loneTabRoom is the label room of a bar showing a single (lo == hi) segment:
-// the width minus the segment's own padding and any end ellipsis cells.
+// the width minus the segment's own padding and any end overflow indicators.
 func loneTabRoom(labels []string, lo, width int) int {
-	room := width - 2
+	left, right := tabEnds(labels, lo, lo, width)
+	return width - 2 - len(left) - len(right)
+}
+
+// tabEnds are the window's end overflow indicators as drawn (#2151): "+N"
+// counting the tabs hidden left of lo and right of hi, empty where nothing is
+// hidden. On a bar too narrow to carry both an indicator and a one-cell label
+// segment, the indicators are dropped — showing the active tab beats counting
+// what is not shown — so every geometry consumer must ask here rather than
+// derive the widths itself.
+func tabEnds(labels []string, lo, hi, width int) (string, string) {
+	left, right := "", ""
 	if lo > 0 {
-		room--
+		left = tabOverflowMark(lo)
 	}
-	if lo < len(labels)-1 {
-		room--
+	if hi < len(labels)-1 {
+		right = tabOverflowMark(len(labels) - 1 - hi)
 	}
-	return room
+	if width-len(left)-len(right) < 3 {
+		return "", ""
+	}
+	return left, right
+}
+
+// tabEndsWidth is the cell cost the window math budgets for the end
+// indicators — "+N" markers whose width grows with the hidden count, unlike
+// the single-cell … they replaced.
+func tabEndsWidth(labels []string, lo, hi, width int) int {
+	left, right := tabEnds(labels, lo, hi, width)
+	return len(left) + len(right)
 }
 
 // tabAt resolves a bar-local x cell to the tab index rendered there, or -1 for
@@ -270,11 +328,10 @@ func tabHit(labels []string, active, width, x int) (int, bool) {
 	if active < 0 || active >= len(labels) {
 		active = 0
 	}
+	labels = fitTabLabels(labels)
 	lo, hi := tabWindow(labels, active, width)
-	pos := 0
-	if lo > 0 {
-		pos++ // left ellipsis cell
-	}
+	left, _ := tabEnds(labels, lo, hi, width)
+	pos := len(left) // the left "+N" indicator's cells
 	if x < pos {
 		return -1, false
 	}
@@ -330,8 +387,10 @@ func (m Model) tabBarHit(x, y int) (string, int, bool, bool) {
 
 // tabWindow picks the run of tabs [lo, hi] to show: starting from the active
 // tab it grows rightward then leftward while the row — separators and any
-// end ellipses included — still fits width.
+// end overflow indicators included — still fits width. The active tab is
+// therefore always inside the window, however many tabs the pane holds.
 func tabWindow(labels []string, active, width int) (int, int) {
+	labels = fitTabLabels(labels)
 	ws := make([]int, len(labels))
 	for i, l := range labels {
 		// One padding space each side plus the ✕ close zone (#1128).
@@ -343,13 +402,7 @@ func tabWindow(labels []string, active, width int) (int, int) {
 			w += ws[i]
 		}
 		w += hi - lo // one │ between neighbours
-		if lo > 0 {
-			w++
-		}
-		if hi < len(labels)-1 {
-			w++
-		}
-		return w
+		return w + tabEndsWidth(labels, lo, hi, width)
 	}
 	lo, hi := active, active
 	for {

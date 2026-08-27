@@ -31,6 +31,26 @@
   key route. Parked global tools (#1890) have no host and end with
   `closeParkedGlobalTools`.
 
+## 2026-08-27 (Editor tabs: overflow handling + MRU tab picker, #2151)
+
+- **Tab strip overflow** (`internal/app/tabbar.go`): the window around the
+  active tab now counts what it hides — a `+N` indicator at each overflowing
+  end (`tabEnds`, `tabOverflowMark`) instead of a bare `…` — and every label
+  is ellipsized at 24 cells (`fitTabLabels`), so one long filename can no
+  longer push its neighbours off the bar. The active tab stays visible at any
+  tab count and width; on a bar too narrow for both an indicator and a
+  one-cell segment the indicators drop in favour of the tab itself.
+  `tabWindow`, `tabHit` and `renderTabBar` share the fitted labels and the
+  end-width math, so clicks still land on what is drawn.
+- **MRU tab picker** (`internal/app/tab_picker.go`, `editor.tab.picker`,
+  `alt+e`, File menu "Switch Tab…"): the focused editor pane's tabs in a
+  locked palette mode, most-recently-used first, speed search filtering
+  without re-sorting, enter activating the picked tab. The tab shown right now
+  sits last with a `●` badge, so the preselected row is the alternate-tab
+  flip. Recency reads the activation stamp the tab-limit eviction already
+  keeps: `pane.Instance.TabsByMRU()` / `TabLastUsed()` over `Tab.lastUsed`,
+  never-activated (restored) tabs last in tab order.
+
 ## 2026-08-27 (Pane resize mode: enter once, resize with hjkl, #2150)
 
 - **Sticky keyboard resize mode** (`internal/app/resizemode.go`):

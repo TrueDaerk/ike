@@ -818,6 +818,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `editor.tab.moveRight` | `ctrl+shift+pgdown` | delivered | `—` | live |
 | `editor.tab.new` | `ctrl+t` | delivered | `—` | live |
 | `editor.tab.next` | `cmd+ctrl+right` | fragile | `palette` | live via palette |
+| `editor.tab.picker` | `alt+e` | fragile | `palette` | live via palette |
 | `editor.tab.prev` | `cmd+ctrl+left` | fragile | `palette` | live via palette |
 | `editor.tab.reopenClosed` | `alt+shift+t` | fragile | `palette` | live via palette |
 | `editor.tab.select1` | `alt+1` | fragile | `palette` | live via palette |
