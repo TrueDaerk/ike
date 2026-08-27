@@ -1,6 +1,8 @@
 package host
 
 import (
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -114,5 +116,121 @@ func TestSendWithoutProgramIsNoop(t *testing.T) {
 	defer h.sendMu.Unlock()
 	if len(h.outbox) != 0 {
 		t.Fatalf("outbox = %+v, want nothing queued without a program", h.outbox)
+	}
+}
+
+// snapMsg is a Coalescable test message: an idempotent snapshot keyed by key.
+type snapMsg struct{ key, val string }
+
+func (s snapMsg) CoalesceKey() string { return s.key }
+
+// parkedHost returns a host whose pump sits blocked inside the sender —
+// standing in for an Update loop that cannot receive — with the first message
+// ("head") already popped in flight. Messages sent afterwards queue in the
+// outbox until release is closed; deliveries arrive on got.
+func parkedHost(t *testing.T, buf int) (h *Host, release chan struct{}, got chan tea.Msg) {
+	t.Helper()
+	h = New(nil)
+	release, got = make(chan struct{}), make(chan tea.Msg, buf)
+	first := make(chan struct{})
+	var once sync.Once
+	h.SetSender(func(msg tea.Msg) {
+		once.Do(func() { close(first) })
+		<-release
+		got <- msg
+	})
+	h.Send("head")
+	<-first // the pump holds "head" in flight; the outbox is empty
+	return h, release, got
+}
+
+// expectMsgs asserts the next deliveries on got, in order.
+func expectMsgs(t *testing.T, got chan tea.Msg, want []tea.Msg) {
+	t.Helper()
+	for _, w := range want {
+		select {
+		case msg := <-got:
+			if msg != w {
+				t.Fatalf("got %#v, want %#v", msg, w)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("message %#v never arrived", w)
+		}
+	}
+}
+
+// TestSendCoalescesKeyedSnapshots (#2169): while an earlier Coalescable
+// message with the same non-empty key waits in the outbox, a newer one
+// replaces it in place — same queue position, latest payload — instead of
+// growing the queue. An empty key never coalesces.
+func TestSendCoalescesKeyedSnapshots(t *testing.T) {
+	h, release, got := parkedHost(t, 16)
+	h.Send(snapMsg{key: "a", val: "1"})
+	h.Send("plain")
+	h.Send(snapMsg{key: "b", val: "1"})
+	h.Send(snapMsg{key: "a", val: "2"})
+	h.Send(snapMsg{key: "a", val: "3"})
+	h.Send(snapMsg{key: "b", val: "2"})
+	h.Send(snapMsg{key: "", val: "x"})
+	h.Send(snapMsg{key: "", val: "y"})
+	close(release)
+	expectMsgs(t, got, []tea.Msg{
+		"head",
+		snapMsg{key: "a", val: "3"},
+		"plain",
+		snapMsg{key: "b", val: "2"},
+		snapMsg{key: "", val: "x"},
+		snapMsg{key: "", val: "y"},
+	})
+	if n := h.SendDrops(); n != 0 {
+		t.Fatalf("SendDrops = %d, coalescing must not count as dropping", n)
+	}
+}
+
+// TestSendOutboxBounded (#2169): once the outbox holds maxOutbox entries, a
+// further non-coalescing message is dropped (newest loses), counted, and
+// reported once to the diag logger — while a keyed snapshot still replaces
+// its queued entry, since a replace never grows the queue.
+func TestSendOutboxBounded(t *testing.T) {
+	h, release, got := parkedHost(t, maxOutbox+2)
+	var logLines []string
+	h.SetDiagLog(func(line string) { logLines = append(logLines, line) })
+
+	h.Send(snapMsg{key: "k", val: "old"})
+	for i := 0; i < maxOutbox-1; i++ {
+		h.Send(i) // fills the outbox to exactly maxOutbox
+	}
+	const extra = 7
+	for i := 0; i < extra; i++ {
+		h.Send("overflow")
+	}
+	if n := h.SendDrops(); n != extra {
+		t.Fatalf("SendDrops = %d, want %d", n, extra)
+	}
+	if len(logLines) != 1 || !strings.Contains(logLines[0], "outbox full") {
+		t.Fatalf("want exactly one diag line on the first drop, got %q", logLines)
+	}
+	// The keyed snapshot coalesces even at the cap: replaced, not dropped.
+	h.Send(snapMsg{key: "k", val: "new"})
+	if n := h.SendDrops(); n != extra {
+		t.Fatalf("SendDrops = %d after keyed replace at cap, want %d", n, extra)
+	}
+
+	close(release)
+	expectMsgs(t, got, []tea.Msg{"head", snapMsg{key: "k", val: "new"}})
+	for i := 0; i < maxOutbox-1; i++ {
+		select {
+		case msg := <-got:
+			if msg != i {
+				t.Fatalf("delivery %d out of order: got %#v", i, msg)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("queued message %d never arrived", i)
+		}
+	}
+	select {
+	case msg := <-got:
+		t.Fatalf("dropped message delivered anyway: %#v", msg)
+	case <-time.After(100 * time.Millisecond):
 	}
 }

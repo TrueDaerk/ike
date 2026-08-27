@@ -101,6 +101,20 @@ that a single dispatcher goroutine drains into the program, so delivery keeps
 better shape where one is available — it is ordered against the model's own
 commands — but a `Send` from the wrong goroutine can no longer hang the IDE.
 
+The outbox is **bounded and coalescing** (#2169). At 1024 queued messages a
+further message is dropped — newest loses, keeping queued order — counted
+(`Host.SendDrops`) and reported to `debug.log` through the host's diag
+logger (first drop, then every 500th), so a firehose producer that outruns
+the Update loop (a busy terminal, an LSP diagnostics storm) can no longer
+grow the queue and pin the loop against a backlog it never drains. A message
+class whose newest payload fully subsumes the older one — an idempotent
+snapshot, e.g. a whole diagnostics set — implements `host.Coalescable`
+(`CoalesceKey() string`, the jsonrpc `NotifyCoalesced` pattern): while an
+earlier message with the same non-empty key waits in the outbox, the new
+payload replaces it in place, so snapshot classes never grow the queue and
+never drop. Keys must name a bounded resource (a document URI, a session id);
+an empty key never coalesces.
+
 ## Registry semantics
 
 - **Deterministic ordering.** Lookups sort enabled plugins by id, then results by
