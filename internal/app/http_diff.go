@@ -2,8 +2,11 @@ package app
 
 import (
 	"fmt"
+	"net/http"
+	"strings"
 	"time"
 
+	"ike/internal/config"
 	"ike/internal/fuzzy"
 	"ike/internal/host"
 	"ike/internal/httpdiff"
@@ -188,11 +191,37 @@ func (m *Model) diffHTTPEntries(msg DiffHTTPEntriesMsg) {
 		older, newer = newer, older
 	}
 	left, right := entries[older], entries[newer]
+	// Volatile headers are filtered (#2247): Date, a fresh request id and the
+	// timing fields differ on every run and would report a change where
+	// nothing changed. The list is a setting, since which id header a stack
+	// stamps on is the stack's business.
+	ignore := config.Get().HTTP.DiffIgnoreHeaders
 	m.openDiffTexts("",
 		httpEntryTitle(msg.Request, older, len(entries), left),
 		httpEntryTitle(msg.Request, newer, len(entries), right),
-		httpdiff.Text(left), httpdiff.Text(right), false)
-	m.host.Notify(host.Info, fmt.Sprintf("http: comparing stored responses %d and %d of %s", older+1, newer+1, msg.Request))
+		httpdiff.TextFiltered(left, ignore), httpdiff.TextFiltered(right, ignore), false)
+	note := fmt.Sprintf("http: comparing stored responses %d and %d of %s", older+1, newer+1, msg.Request)
+	if n := countIgnoredHTTPHeaders(left, right, ignore); n > 0 {
+		// Say what is missing rather than let a filtered header read as an
+		// unchanged one.
+		note += fmt.Sprintf(" (%d volatile header(s) filtered)", n)
+	}
+	m.host.Notify(host.Info, note)
+}
+
+// countIgnoredHTTPHeaders counts the distinct header names either side of the
+// comparison carries that the noise filter drops (#2247) — what the notice
+// reports, so a filtered header never passes for an unchanged one.
+func countIgnoredHTTPHeaders(a, b httphistory.Entry, ignore []string) int {
+	seen := map[string]bool{}
+	for _, h := range []http.Header{a.Headers, b.Headers} {
+		for name := range h {
+			if httpdiff.IgnoreHeader(name, ignore) {
+				seen[strings.ToLower(name)] = true
+			}
+		}
+	}
+	return len(seen)
 }
 
 // validHTTPEntryPair reports whether both indexes still address distinct

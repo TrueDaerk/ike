@@ -531,6 +531,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.responseHistory", "Browse HTTP Response History", HTTPResponseHistoryMsg{}),
 			appCommand("http.showResponse", "Show Stored HTTP Response", HTTPShowResponseMsg{}),
 			appCommand("http.resend", "Re-send Stored HTTP Request", HTTPResendMsg{}),
+			appCommand("http.rerun", "Re-run HTTP Request from History", HTTPRerunMsg{}),
 			appCommand("http.diffResponses", "Compare Stored HTTP Responses", HTTPDiffResponsesMsg{}),
 			appCommand("http.diffPreviousRun", "Diff HTTP Response Against Previous Run", HTTPDiffPreviousRunMsg{}),
 			appCommand("http.selectEnvironment", "Select HTTP Environment", HTTPSelectEnvMsg{}),

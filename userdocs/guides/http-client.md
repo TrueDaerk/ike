@@ -412,6 +412,7 @@ highlighted, binary bodies collapsed to a notice.
 | `Y` | Copy the status line plus headers |
 | `h` / `l`, ++left++ / ++right++ | Older / newer response for this request |
 | ++ctrl+r++ | Send this response's request again, unchanged |
+| `R` | Re-run this request from its `.http` file, with today's variables |
 | `C` | Copy this response's request as a curl command |
 | `S` | Save the raw response body to a file |
 | `t` | Switch between the pretty-printed and the raw body |
@@ -590,6 +591,32 @@ once and the entry after that is re-sendable.
     that were already kept there. Keep that directory out of version control
     (and out of backups) if your requests carry secrets.
 
+## Re-running and comparing with the previous run
+
+++ctrl+r++ repeats the stored bytes; `R` **re-runs** the request instead — the
+block is read from the `.http` file again (from the open buffer, so unsaved
+edits count) and its placeholders are resolved against the variables and the
+environment selected *now*. That is the one to reach for when the question is
+"does this endpoint still answer the same today?" rather than "what did that
+exact exchange do?". The answer lands in the pane and in the history like any
+other response. If the request block was renamed or deleted since, IKE says so
+and points at ++ctrl+r++, which still works.
+
+The comparison follows by itself: after a re-run (or a re-send) the
+previous-vs-new diff opens in the diff viewer, previous run on the left. A
+first run has nothing to compare with and opens nothing. Turn it off with
+**Diff after re-run** (`http.diff_after_rerun`) on the **HTTP Client**
+settings page — `P` in the response pane still opens the same diff whenever
+you want it.
+
+Response diffs leave the **volatile headers** out, because `Date`, a freshly
+stamped `X-Request-Id` and a few timing headers differ on every single run and
+would bury the header that actually changed. **Volatile diff headers**
+(`http.diff_ignore_headers`) is that list: header names, matched
+case-insensitively, with a trailing `*` for a whole family (`x-amz-*`). The
+notice above the diff says how many headers were filtered, so nothing goes
+missing quietly.
+
 ## Commands
 
 | Command | Id | Default chord |
@@ -611,6 +638,7 @@ once and the entry after that is re-sendable.
 | Browse HTTP Response History | `http.responseHistory` | — |
 | Show Stored HTTP Response | `http.showResponse` | — |
 | Re-send Stored HTTP Request | `http.resend` | — |
+| Re-run HTTP Request from History | `http.rerun` | — |
 | Compare Stored HTTP Responses | `http.diffResponses` | — |
 
 A scratch file is a quick way to try something without adding a file to the

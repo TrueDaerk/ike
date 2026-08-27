@@ -111,6 +111,7 @@ bring their own.
 | Open jq Playground on HTTP Response | `http.jqPlayground` | — | — | everywhere |
 | Load More of the HTTP Response Body | `http.loadMoreBody` | — | — | everywhere |
 | Open Full HTTP Response Body as File | `http.openBodyFile` | — | — | everywhere |
+| Re-run HTTP Request from History | `http.rerun` | — | — | everywhere |
 | Re-send Stored HTTP Request | `http.resend` | — | — | everywhere |
 | Browse HTTP Response History | `http.responseHistory` | — | — | everywhere |
 | Run HTTP Request | `http.run` | `ctrl+f9` | — | everywhere |
@@ -384,6 +385,7 @@ bring their own.
 | LSP: Install Missing Servers | `lsp.installMissing` | — | — | everywhere |
 | LSP: Parameter Info | `lsp.parameterInfo` | `cmd+p` | — | `editor` pane |
 | LSP: Peek Definition | `lsp.peekDefinition` | `cmd+y` | — | `editor` pane |
+| LSP: Quick-Fix Marked Problem | `lsp.quickFixProblem` | — | — | everywhere |
 | LSP: Find Usages | `lsp.references` | `alt+f7` | — | `editor` pane |
 | LSP: Find Usages (Panel) | `lsp.referencesPanel` | `cmd+alt+f7` | — | `editor` pane |
 | LSP: Rename Symbol | `lsp.rename` | `shift+f6` | — | `editor` pane |

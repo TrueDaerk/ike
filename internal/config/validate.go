@@ -362,6 +362,27 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "scratch.sort", Message: fmt.Sprintf("unknown sort %q, using \"name\"", c.Scratch.Sort)})
 		c.Scratch.Sort = "name"
 	}
+	// Response-diff header filter (#2247): the entries are header names, so
+	// they normalize to lower case and lose their duplicates here — the
+	// matcher then only compares, and a config written in any casing behaves
+	// the same. A blank entry would match nothing and is dropped loudly.
+	if len(c.HTTP.DiffIgnoreHeaders) > 0 {
+		kept := make([]string, 0, len(c.HTTP.DiffIgnoreHeaders))
+		seen := map[string]bool{}
+		for _, h := range c.HTTP.DiffIgnoreHeaders {
+			name := strings.ToLower(strings.TrimSpace(h))
+			if name == "" {
+				diags = append(diags, Diagnostic{Field: "http.diff_ignore_headers", Message: "empty header name, dropping it"})
+				continue
+			}
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			kept = append(kept, name)
+		}
+		c.HTTP.DiffIgnoreHeaders = kept
+	}
 	// Issues window (#2090): both defaults are fixed vocabularies; an unknown
 	// value falls back rather than opening the pane in an undefined state.
 	switch c.Issues.DefaultTab {

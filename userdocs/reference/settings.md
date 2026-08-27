@@ -250,6 +250,13 @@ secrets — are documented together, with screenshots, in
 | Background poll interval | `forge.poll_interval_seconds` | integer (0–3600) | `20` | user | Seconds between background re-fetches of the repository's issues and pull requests, so new issues, closed issues and PR state changes surface without pressing r. The fetch runs off the UI loop and a tick arriving while the previous one is still running is skipped, so a slow forge never stalls IKE; consecutive failures back off exponentially (up to 5 minutes) and an unavailable forge — no CLI, no matching remote or login — stops polling until a manual refresh succeeds. 0 turns polling off entirely; the lowest interval is 10 seconds |
 | Persistent listing cache | `forge.cache` | boolean | `true` | user | Keep the last successful issue/PR listing in the project's .ike/forgecache.json (#2108): a freshly started IKE shows it instantly, marked "cached · updating…" until the real fetch lands, and background polls only ask the forge for issues updated since the snapshot instead of re-listing everything. Manual r always performs a full resync; a repository or backend switch invalidates the snapshot; off never reads or writes the file |
 
+### HTTP Client
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Diff after re-run | `http.diff_after_rerun` | boolean | `true` | user | Open the previous-vs-new response diff automatically once a re-run (R in the response pane, http.rerun) or a re-send (ctrl+r, http.resend) has landed in the history — the point of re-running a request is usually the comparison, so it needs no second key. A first-ever run has nothing to compare with and opens nothing; off keeps the pane on the new response, where P ("Diff HTTP Response Against Previous Run") still opens the same diff on demand |
+| Volatile diff headers | `http.diff_ignore_headers` | list | `date,age,expires,keep-alive,server-timing,x-runtime,x-request-id,request-id,x-correlation-id,x-trace-id,traceparent,cf-ray,x-amzn-requestid,x-amzn-trace-id,x-served-by,x-timer` | user | Response headers left out of every response diff: two runs of one request differ in Date, a freshly stamped request id and a handful of timing headers every single time, and those lines hide the one header that really changed. Each entry is a header name matched case-insensitively, optionally with a trailing * for a whole family ("x-amz-*"); a bare "*" is ignored, since an empty diff answers nothing. The notice above the diff says how many headers were filtered. Empty compares every header |
+
 ### Scratch Files
 
 | Setting | Key | Type | Default | Scope | Description |

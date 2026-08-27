@@ -73,10 +73,27 @@ type Config struct {
 	Remote Remote `toml:"remote"`
 	// Screenshot holds the in-IDE PNG export's behaviour (#2001).
 	Screenshot Screenshot `toml:"screenshot"`
+	// HTTP holds the HTTP client's re-run and response-diff behaviour (#2247).
+	HTTP HTTP `toml:"http"`
 	// Forge holds code-forge behaviour: how often IKE re-reads the forge in
 	// the background (#2085) and how prominently each kind of forge event
 	// announces itself (#2086).
 	Forge Forge `toml:"forge"`
+}
+
+// HTTP holds the HTTP client's re-run/compare settings (#2247).
+// DiffIgnoreHeaders names the response headers a response diff leaves out:
+// two runs of the same request differ in Date, a fresh request id and a
+// handful of timing headers *every single time*, and those lines are noise
+// that hides the one header that really changed. Each entry is a header name
+// matched case-insensitively, optionally with a trailing "*" wildcard
+// ("x-amz-*"); an empty list compares every header. DiffAfterRerun opens the
+// previous-vs-new diff automatically once a re-run's answer has landed in the
+// history, which is what closes the "run it again and show me what changed"
+// loop in one key.
+type HTTP struct {
+	DiffIgnoreHeaders []string `toml:"diff_ignore_headers"`
+	DiffAfterRerun    bool     `toml:"diff_after_rerun"`
 }
 
 // Forge holds the code-forge settings (#2085, #2086). PollIntervalSeconds is

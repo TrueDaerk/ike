@@ -262,6 +262,22 @@ func defaults() *Config {
 			SectionHeight: 5,
 			Sort:          "name",
 		},
+		HTTP: HTTP{
+			// The headers two runs of one request differ in without anything
+			// having changed (#2247): the clock, the per-request ids every
+			// gateway stamps on, the timing/keep-alive fields. Filtering them
+			// is what makes a previous-vs-new diff readable; the list is a
+			// setting, since which id header a stack emits is its own.
+			DiffIgnoreHeaders: []string{
+				"date", "age", "expires", "keep-alive", "server-timing",
+				"x-runtime", "x-request-id", "request-id", "x-correlation-id",
+				"x-trace-id", "traceparent", "cf-ray", "x-amzn-requestid",
+				"x-amzn-trace-id", "x-served-by", "x-timer",
+			},
+			// The re-run's whole point is the comparison (#2247), so it opens
+			// on its own; off leaves the pane on the new response and "P".
+			DiffAfterRerun: true,
+		},
 		Issues: Issues{
 			// The issues window opens on its issue list, ordered the way the
 			// forge listing arrives (newest first) and re-ranked by fuzzy

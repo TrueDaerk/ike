@@ -214,6 +214,14 @@ type HistoryItem struct {
 // reach the clipboard (CopyMsg).
 type ResendMsg struct{}
 
+// RerunMsg asks the host to dispatch the shown history entry's request again
+// from its .http file (#2247), "R" in the focused viewer. Unlike ResendMsg —
+// which repeats the stored bytes — a re-run re-reads the request block and
+// resolves the current variables and environment, which is the form the
+// question "does it still answer the same?" usually takes. The pane knows
+// neither the request file nor the environment, so the host does the work.
+type RerunMsg struct{}
+
 // CopyCurlMsg asks the host to put the shown entry's request on the clipboard
 // as a runnable curl command (#2059), "C" in the focused viewer. The pane
 // holds the snapshot (CurrentRequest) but neither the clipboard nor the
@@ -594,6 +602,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// out even without a snapshot — the host says why nothing happened
 		// instead of the key dying silently on a legacy entry.
 		return func() tea.Msg { return ResendMsg{} }
+	case "R":
+		// Re-run the shown entry's request from the .http file, with the
+		// current variables and environment (#2247). Uppercase next to the
+		// verbatim ctrl+r re-send: the two are neighbours in meaning, and "r"
+		// is the request picker.
+		return func() tea.Msg { return RerunMsg{} }
 	case "j", "down":
 		m.Scroll(1)
 	case "k", "up":
@@ -1108,6 +1122,12 @@ func (m *Model) footerText() string {
 			s += " ⚓ keep pos"
 		} else if len(m.hist) > 1 {
 			s += " · s keep pos"
+		}
+		// Re-running the shown entry (#2247) needs the .http file it came
+		// from — the pane's source — since the block is re-read and its
+		// variables resolved afresh.
+		if m.source != "" {
+			s += " · R re-run"
 		}
 		// Diffing needs a second entry to compare against (#1992). The direct
 		// previous-run shortcut (#2060) only makes sense while an earlier
