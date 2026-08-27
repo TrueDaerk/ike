@@ -15,6 +15,28 @@
   flat `string`; non-url values keep the flat `string` capture.
 - Wiki: http-client concept doc updated (#1740/#1880 bullets).
 
+## 2026-08-27 (Frecency-weighted file finder, #2155)
+
+- **The gap**: the `@` finder ranked purely by fuzzy score, so the handful of
+  files one lives in ranked no better than never-touched ones — and the empty
+  query opened on the alphabetical head of the tree.
+- **One shared store** (`internal/frecency`): #2153's command-execution history
+  moved out of `internal/palette` into a key-agnostic, half-life-parameterized
+  package and the file finder took a second instance of it — same timestamp
+  format, same caps (16 hits per key, 400 keys), same corrupt-file tolerance.
+  Command history keeps its 7-day half-life; file opens decay over 14 days,
+  because what one works *on* turns over more slowly than what one runs.
+- **Blend order** (`FileMode.Results`): up to two typed characters frecency
+  leads (the fuzzy score barely discriminates there anyway); from the third the
+  score leads and frecency is the tiebreak above the #1419 usage count, then
+  path. Command mode keeps its own policy — a query-length-damped boost — which
+  is why the store itself carries no ranking opinion.
+- **Event source**: every open counts, not only palette confirmations — the
+  root model records at the same two sites that feed the recent-files MRU
+  (`openPathWith`, tab re-activation), keyed through `frecency.Key` so the
+  finder's root-relative paths and the openers' spellings agree.
+- Wiki: [command-palette](architecture/command-palette.md).
+
 ## 2026-08-27 (Command palette: frecency boost from command execution history, #2153)
 
 - **Execution history** (`internal/palette/frecency.go`): a new per-project

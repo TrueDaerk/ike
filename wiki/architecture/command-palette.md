@@ -127,17 +127,24 @@ palette window** — the root model bumps it on `palette.RunCommandMsg`, a path
 keybind invocations never take — so shortcut users don't skew the listing. It
 stays a pure tiebreaker among otherwise equal keys.
 
-The **frecency store** (`frecency.go`, persisted per project in
-`.ike/cmdfrecency.json`, same redirection seam) answers the other question:
-what does this project actually *run*, lately. It keeps the unix timestamps of
-recent executions per command id, recorded in `Model.dispatchCommand` — the
-single funnel every dispatch path goes through (#679), so a keybind and an
-inline invocation count exactly like a palette pick. `Score` sums
-`0.5^(age / 7d)` over a command's timestamps, so three runs today outweigh five
-last month. The store is capped both ways: at most 16 timestamps per command
-(oldest dropped) and 400 tracked commands (lowest-scoring dropped), so it
-cannot grow without bound; a missing or corrupt file loads as empty history and
-is rewritten on the next execution — ranking must never fail on state.
+The **frecency store** (`internal/frecency`, wired in `frecency.go`, persisted
+per project in `.ike/cmdfrecency.json`, same redirection seam) answers the
+other question: what does this project actually *run*, lately. It keeps the
+unix timestamps of recent executions per command id, recorded in
+`Model.dispatchCommand` — the single funnel every dispatch path goes through
+(#679), so a keybind and an inline invocation count exactly like a palette
+pick. `Score` sums `0.5^(age / halfLife)` over a command's timestamps — a
+**7-day** half-life here — so three runs today outweigh five last month. The
+store is capped both ways: at most `frecency.MaxHits` = 16 timestamps per key
+(oldest dropped) and `frecency.MaxKeys` = 400 tracked keys (lowest-scoring
+dropped), so it cannot grow without bound; a missing or corrupt file loads as
+empty history and is rewritten on the next event — ranking must never fail on
+state.
+
+The store is **shared** (#2155): `internal/frecency` is key-agnostic and
+half-life-parameterized, and the `@` finder keeps a second instance of it keyed
+by file path. It carries no ranking opinion — how a decayed count becomes order
+is each mode's own policy (a score boost here, a comparator tier there).
 
 `frecencyBoost` squashes the score into `[0,1)` and scales it by query length:
 on an **empty query** the weight is large and every fuzzy score is 0, so the
@@ -163,15 +170,45 @@ hidden entries and heavy directories (`.git`, `node_modules`, `vendor`), uses
 forward-slash paths for stable matching, and is capped at `maxFiles`. Activation
 emits `OpenFileMsg{Path}` joined onto the root.
 
-Ranking is fuzzy score, then **most-used** (#1419), then path: the file-usage
-counter (same `Usage` type as #773, persisted in `.ike/fileusage.json`,
-`IKE_CONFIG_DIR`-redirectable) counts only file selections confirmed from the
-two **ranked palette windows** — Run a Command's `@` source and Search
-Everywhere. The palette marks such an activation (`OpenFileMsg.CountUsage`)
-and the root model bumps the counter; opens via the explorer, go-to-file, the
-editor's anchored `@` finder or the recent-files mode never count. Match
-quality still wins — usage only breaks equal scores, notably the empty-query
-listing.
+Ranking blends three signals — fuzzy score, **frecency** (#2155) and the
+**most-used** counter (#1419) — and the blend order depends on how much the
+user has typed:
+
+| Query length | Order |
+| --- | --- |
+| 0–2 characters (`shortQueryLen`) | frecency, then fuzzy score, then usage, then path |
+| 3+ characters | fuzzy score, then frecency, then usage, then path |
+
+The rationale is that one or two characters barely discriminate — nearly every
+file matches, and the score differences are noise — so the files one is
+actually working on belong on top; from the third character the typed text is a
+real signal and match quality leads again, with frecency demoted to the
+tiebreak that decides equally good matches.
+
+The file-usage counter (same `Usage` type as #773, persisted in
+`.ike/fileusage.json`, `IKE_CONFIG_DIR`-redirectable) counts only file
+selections confirmed from the two **ranked palette windows** — Run a Command's
+`@` source and Search Everywhere. The palette marks such an activation
+(`OpenFileMsg.CountUsage`) and the root model bumps the counter; opens via the
+explorer, go-to-file, the editor's anchored `@` finder or the recent-files mode
+never count.
+
+**Frecency (#2155).** The file finder keeps its own instance of the shared
+`internal/frecency` store — the same type, format and caps as the command
+history above (`palette.LoadFileFrecency`, persisted at
+`.ike/filefrecency.json`, `IKE_CONFIG_DIR`-redirectable) — but with a
+**14-day** half-life: what one is working *on* turns over more slowly than what
+one runs, so a file untouched for a fortnight should fade, not vanish. A
+missing, malformed or hand-broken file degrades to "no history": a ranking aid
+must never disrupt the session.
+
+Unlike the usage counter, frecency counts **every** open: the root model
+records at the same two sites that feed the recent-files MRU — a file landing
+in a tab (`openPathWith`) and a background tab being re-activated — so the
+finder reflects what one is working on however the file was reached. Both sides
+key the store through `frecency.Key` (cleaned, absolute), since the finder
+holds root-relative paths and the opening sites hold whatever spelling they
+were given.
 
 **Filesystem reach (#1433).** `@` is no longer project-only: a query typed as
 a filesystem path — leading `/`, `~/`, `./` or `../` — is served by the shared

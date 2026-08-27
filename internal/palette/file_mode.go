@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"ike/internal/frecency"
 	"ike/internal/fuzzy"
 	"ike/internal/pathcomplete"
 )
@@ -15,6 +16,13 @@ import (
 // stalls the palette. The cap is generous; very large repos rely on the query to
 // narrow results rather than on listing everything.
 const maxFiles = 10000
+
+// shortQueryLen is the query length up to which frecency leads the ranking
+// (#2155). With no query — or one or two characters, where the fuzzy score
+// barely discriminates anyway — the files one actually works on belong on top;
+// from the third character the typed text is a real signal and match quality
+// takes the lead again, with frecency demoted to a tiebreak.
+const shortQueryLen = 2
 
 // maxFsFallback caps the filesystem rows appended below the project matches
 // (#1775), per anchor (project root, home). The fallback is a reachability
@@ -46,6 +54,15 @@ type FileMode struct {
 	// scores, more-often-chosen files rank first — match quality still wins.
 	usage *Usage
 
+	// frec scores project files by how often and how recently they were
+	// opened (#2155) — the shared store command mode also uses (#2153), keyed
+	// by frecency.Key of the path the emitted OpenFileMsg carries. The root
+	// model records under the same key, so finder and opener agree however the
+	// path was spelled; nil-safe. Unlike usage it counts every open of the
+	// file, not only palette confirmations: the point is to know what one is
+	// working on, however the file was reached.
+	frec *frecency.Store
+
 	// scratchList returns the scratch store's paths newest-first (#1812),
 	// mirroring ScratchMode's injection: the palette core owns no store, the
 	// root model wires internal/scratch.List in. Nil-safe — a finder built
@@ -66,6 +83,11 @@ func NewFileMode() *FileMode { return &FileMode{walk: walkProject} }
 // CountUsage-marked OpenFileMsg).
 func (f *FileMode) SetUsage(u *Usage) { f.usage = u }
 
+// SetFrecency installs the file-open history (#2155) — the shared frecency
+// store, on its own file and half-life. The root model owns it and records
+// whenever a file is opened or re-activated; the finder only reads it.
+func (f *FileMode) SetFrecency(s *Frecency) { f.frec = s }
+
 // SetScratchList installs the scratch-store source (#1812), so a query that
 // hints at "scratch" can offer scratch files inline without switching to
 // ScratchMode. Mirrors NewScratchMode's injection.
@@ -84,10 +106,13 @@ func (f *FileMode) CodePreview() bool { return true }
 // Placeholder implements Mode.
 func (f *FileMode) Placeholder() string { return "Find a file… (tab completes; /, ~/ any path)" }
 
-// Results implements Mode. With an empty query it lists files in path order;
-// with a query it fuzzy-matches the relative path and ranks by score, then
-// usage count (#1419), then path. A query typed as a filesystem path (#1433:
-// leading /, ~/, ./ or ../) is served by the shared pathcomplete engine
+// Results implements Mode. With an empty or very short query (up to
+// shortQueryLen) it ranks by frecency (#2155) — the files opened most often
+// and most recently first — so the finder opens on what one is working on
+// instead of on the alphabetical head of the tree. From the third character
+// the fuzzy score of the relative path leads and frecency is only a tiebreak
+// above the usage count (#1419), then path. A query typed as a filesystem path
+// (#1433: leading /, ~/, ./ or ../) is served by the shared pathcomplete engine
 // instead — the same candidates the ';' picker produces — so '@' also reaches
 // files outside the project. Below the project matches every non-empty query
 // also offers filesystem candidates for the same text (#1775), so a file like
@@ -102,7 +127,20 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 		path  string
 		score int
 		usage int
+		frec  float64
 		spans []int
+	}
+	// The frecency key prefix is resolved once per call, not per candidate:
+	// frecency.Key consults the working directory, and the walk holds up to
+	// maxFiles paths re-ranked on every keystroke. An empty root means the
+	// working directory, the same file the joined OpenFileMsg path names.
+	frecRoot := ""
+	if f.frec != nil {
+		if root := cx.Root; root != "" {
+			frecRoot = frecency.Key(root)
+		} else {
+			frecRoot = frecency.Key(".")
+		}
 	}
 	out := make([]scored, 0, len(files))
 	for _, p := range files {
@@ -110,21 +148,36 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 		if !ok {
 			continue
 		}
+		frec := 0.0
+		if f.frec != nil {
+			frec = f.frec.Score(filepath.Join(frecRoot, p))
+		}
 		out = append(out, scored{
 			path:  p,
 			score: m.Score,
 			usage: f.usage.Count(filepath.Join(cx.Root, p)),
+			frec:  frec,
 			spans: m.Positions,
 		})
 	}
+	// Frecency leads while the query is too short to discriminate, and is a
+	// tiebreak below the fuzzy score once it is not (#2155).
+	frecencyLeads := len([]rune(strings.TrimSpace(query))) <= shortQueryLen
 	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].score != out[j].score {
-			return out[i].score > out[j].score
+		a, b := out[i], out[j]
+		if frecencyLeads && !sameFrecency(a.frec, b.frec) {
+			return a.frec > b.frec
 		}
-		if out[i].usage != out[j].usage {
-			return out[i].usage > out[j].usage
+		if a.score != b.score {
+			return a.score > b.score
 		}
-		return out[i].path < out[j].path
+		if !sameFrecency(a.frec, b.frec) {
+			return a.frec > b.frec
+		}
+		if a.usage != b.usage {
+			return a.usage > b.usage
+		}
+		return a.path < b.path
 	})
 	items := make([]Item, len(out))
 	seen := make(map[string]bool, len(out))
@@ -144,6 +197,15 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 		items = append(items, f.fsFallbackItems(cx.Root, query, seen)...)
 	}
 	return items
+}
+
+// sameFrecency reports whether two frecency scores are close enough to count
+// as tied. Scores are decayed floats, so an exact comparison would let
+// rounding noise — two files opened in the same instant, decayed a fortnight
+// later — decide an order the usage and path tiebreaks should decide.
+func sameFrecency(a, b float64) bool {
+	d := a - b
+	return d < 1e-9 && d > -1e-9
 }
 
 // scratchItems offers the scratch store's files inline in the '@' finder
