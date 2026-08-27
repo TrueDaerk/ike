@@ -1,5 +1,37 @@
 # Log
 
+## 2026-08-27 (Explorer: marked multi-select with bulk delete/move/copy, #2166)
+
+- **The gap**: the explorer's only multi-select was the transient shift+j/k
+  range (#1044), and only *delete* honoured it. Operating on a handful of
+  scattered files meant repeating the whole flow per file.
+- **Sticky marks** (`internal/explorer/marks.go`): `space` toggles a mark on
+  the cursor row, `esc` clears the set. Marks are keyed by absolute path — not
+  by row index — so a rescan, a sort change or a hidden-files toggle can never
+  re-point them at the wrong entries; only marks whose entry left the tree are
+  pruned. A marked row reads with the muted `SelectionMuted` recipe and, while
+  anything is marked, every tree row gains one leading `✓ `/`  ` marker cell.
+  With nothing marked the column does not exist.
+- **One resolution point**: `opTargets` picks the marks, else an active range,
+  else the plain cursor entry — so single-entry behaviour is unchanged when
+  nothing is selected, and delete/move/copy all agree on what they act on.
+- **Bulk delete/move/copy** (`internal/explorer/bulkops.go`): delete confirms
+  once and **lists every target**; move and copy each ask once for a target
+  directory. Copy recurses (`copyTree`), preserves modes and recreates
+  symlinks as symlinks. Whatever succeeds is recorded as ONE undo step, and
+  `undoBatch`/`redoBatch` now dispatch on the sub-op kind, so a bulk move and
+  a bulk copy are as reversible as a bulk delete.
+- **Partial failure is expected, not exceptional**: a failing entry no longer
+  abandons the batch. The rest is still processed, everything applied stays
+  undoable, and the failures are reported together — `moved 1 of 2 — a.txt:
+  already exists`.
+- **VCS follows**: `FileDeletedMsg`/`FileMovedMsg` now schedule a git status
+  refresh, and a bulk copy announces its new paths with `FileCreatedMsg`, so
+  the explorer's VCS colouring is correct after any of the three.
+- The app's `file.move` (`f6`) picker feeds the same batch path via
+  `MoveManyMsg` when the explorer's multi-select is non-empty.
+- Wiki: [explorer](architecture/explorer.md).
+
 ## 2026-08-27 (Crash recovery: restore dialog with diff preview, #2160)
 
 - **The gap**: the restore offer listed file names and nothing else — the user

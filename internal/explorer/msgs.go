@@ -57,6 +57,40 @@ type MoveToMsg struct {
 	TargetDir string
 }
 
+// ToggleMarkMsg toggles the multi-select mark on the cursor row
+// (explorer.toggleMark, space, #2166).
+type ToggleMarkMsg struct{}
+
+// ClearMarksMsg drops the whole multi-select (explorer.clearMarks, esc).
+type ClearMarksMsg struct{}
+
+// MoveSelectionMsg opens the target-directory prompt for the explorer's
+// selection — the marked entries, or the cursor entry when nothing is marked
+// (explorer.move, #2166).
+type MoveSelectionMsg struct{}
+
+// CopySelectionMsg opens the target-directory prompt for copying the
+// explorer's selection (explorer.copy, #2166).
+type CopySelectionMsg struct{}
+
+// MoveManyMsg moves every path into TargetDir as one batched, single-undo
+// operation (#2166). The app's file.move directory picker sends it when the
+// explorer's multi-select is non-empty; a single path still goes through
+// MoveToMsg, which keeps the LSP willRenameFiles round trip (#1912).
+type MoveManyMsg struct {
+	Paths     []string
+	TargetDir string
+}
+
+// FileCreatedMsg announces paths the explorer created on disk without moving
+// anything (a bulk copy, #2166), so the app can refresh the git status
+// snapshot. Like FileDeletedMsg it is handled by the app and deliberately does
+// not implement Msg.
+type FileCreatedMsg struct {
+	Path  string
+	IsDir bool
+}
+
 // UndoMsg reverses the last file operation instantly: a create is moved to the
 // trash, a delete is restored, a rename is renamed back (explorer.undo).
 type UndoMsg struct{}
@@ -89,16 +123,21 @@ type FileMovedMsg struct {
 // handled by the app and deliberately does not implement Msg.
 type HiddenToggledMsg struct{ ShowHidden bool }
 
-func (ToggleHiddenMsg) explorerMsg() {}
-func (CollapseAllMsg) explorerMsg()  {}
-func (RefreshMsg) explorerMsg()      {}
-func (ResyncMsg) explorerMsg()       {}
-func (RevealMsg) explorerMsg()       {}
-func (NewFileMsg) explorerMsg()      {}
-func (NewDirMsg) explorerMsg()       {}
-func (DeleteMsg) explorerMsg()       {}
-func (RenameMsg) explorerMsg()       {}
-func (RenamePathMsg) explorerMsg()   {}
-func (MoveToMsg) explorerMsg()       {}
-func (UndoMsg) explorerMsg()         {}
-func (RedoMsg) explorerMsg()         {}
+func (ToggleHiddenMsg) explorerMsg()  {}
+func (CollapseAllMsg) explorerMsg()   {}
+func (RefreshMsg) explorerMsg()       {}
+func (ResyncMsg) explorerMsg()        {}
+func (RevealMsg) explorerMsg()        {}
+func (NewFileMsg) explorerMsg()       {}
+func (NewDirMsg) explorerMsg()        {}
+func (DeleteMsg) explorerMsg()        {}
+func (RenameMsg) explorerMsg()        {}
+func (RenamePathMsg) explorerMsg()    {}
+func (MoveToMsg) explorerMsg()        {}
+func (ToggleMarkMsg) explorerMsg()    {}
+func (ClearMarksMsg) explorerMsg()    {}
+func (MoveSelectionMsg) explorerMsg() {}
+func (CopySelectionMsg) explorerMsg() {}
+func (MoveManyMsg) explorerMsg()      {}
+func (UndoMsg) explorerMsg()          {}
+func (RedoMsg) explorerMsg()          {}
