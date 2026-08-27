@@ -101,9 +101,9 @@ func TestPaneTitleRightClickOpensPaneMenu(t *testing.T) {
 	if !m.ctxMenu.IsOpen() {
 		t.Fatal("right-click on the title band must open the pane menu")
 	}
-	// Row 3 is "Close Pane" (pane.close).
+	// Row 4 is "Close Pane" (pane.close) — Resize… (#2150) sits above it.
 	px, py := m.ctxMenu.Pos()
-	out, cmd := m.Update(tea.MouseClickMsg{X: px + 1, Y: py + 1 + 3, Button: tea.MouseLeft})
+	out, cmd := m.Update(tea.MouseClickMsg{X: px + 1, Y: py + 1 + 4, Button: tea.MouseLeft})
 	m = drainCmd(out.(Model), cmd)
 	if _, ok := m.lay.Panes[key]; ok {
 		t.Fatal("Close Pane must close the clicked pane whole")

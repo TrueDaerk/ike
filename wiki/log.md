@@ -1,5 +1,30 @@
 # Log
 
+## 2026-08-27 (Pane resize mode: enter once, resize with hjkl, #2150)
+
+- **Sticky keyboard resize mode** (`internal/app/resizemode.go`):
+  `pane.resizeMode` (`ctrl+alt+r`, pane context menu → **Resize…**, palette)
+  arms a mode instead of running a one-shot action. While armed it is the
+  first consumer in the `tea.KeyPressMsg` branch — ahead of overlays, the
+  keymap layer and pane routing — so `h`/`j`/`k`/`l` and the arrows step the
+  focused pane's edge one cell per press, `esc`/`enter`/`q` leave (persisting
+  the tree like a released drag), and **every other key is inert**: a mode
+  left armed can never cause a stray edit. It refuses to arm where every key
+  would be a no-op (no focused pane, a maximized pane, a dividerless
+  workspace).
+- **Same geometry truth as the mouse** (`internal/layout/resize.go`):
+  `Divider.ResizeStep(delta)` is the keyboard sibling of the drag's
+  `ResizeTo` — it reads the ratio back into a cell offset so repeated
+  single-cell steps accumulate exactly, and clamps against the same
+  `minCell`. `Layout.EdgeDivider(pane, zone)` picks the split to move: the
+  band on the pane's trailing edge along the requested axis (else the
+  leading one), innermost first. Direction means *where the edge travels*,
+  which keeps grow and shrink on the same four keys.
+- **Visible while active**: the status line swaps its segments for a
+  `RESIZE <pane>  hjkl / arrows move the edge · esc to finish` banner in the
+  drop-target colour, the slot an engaged move drag already uses; segment
+  hit-testing goes quiet with it.
+
 ## 2026-08-27 (LSP: markdown in hover, diagnostic related information, #2147)
 
 - **Inline markdown in hover** (`internal/editor/hovermd.go`): the prose

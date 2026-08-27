@@ -361,6 +361,13 @@ func (m Model) statusLine() string {
 		Background(m.pal().Panel).
 		Foreground(m.pal().Foreground)
 
+	// Keyboard pane resize mode (#2150) takes the whole line while armed, the
+	// same way an engaged move drag does below: the mode owns every key, so
+	// the line has to say so — and how to leave again.
+	if m.resizeMode {
+		return style.Foreground(m.pal().DropTarget).Render(" " + m.resizeModeHint())
+	}
+
 	if d := m.drag; d != nil && (d.kind == dragMove || d.kind == dragTab) && d.engaged() {
 		hint := "MOVE " + m.paneLabel(d.srcPane)
 		if d.kind == dragTab {
@@ -692,8 +699,12 @@ var statusSegmentCommands = map[string]string{
 
 // statusSegmentAt returns the id of the segment rendered at cell x of the
 // status row (#1128), or "" between segments and while the row shows a drag
-// hint or a non-editor focus summary instead of the segment slots.
+// hint, the resize-mode banner or a non-editor focus summary instead of the
+// segment slots.
 func (m Model) statusSegmentAt(x int) string {
+	if m.resizeMode {
+		return "" // the resize mode banner replaces the slots (#2150)
+	}
 	if d := m.drag; d != nil && (d.kind == dragMove || d.kind == dragTab) && d.engaged() {
 		return ""
 	}

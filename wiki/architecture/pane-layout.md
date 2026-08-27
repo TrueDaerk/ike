@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Pane Layout & Drag
-description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store and named user-scoped saved layouts that are the whole truth on apply (#2042), tools and multi-tool tab hosts included; slot templates (#1897) only govern runtime tool opens.
+description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — plus a sticky keyboard resize mode (#2150) stepping the same dividers with hjkl/arrows, with per-project geometry persisted in a dedicated state store and named user-scoped saved layouts that are the whole truth on apply (#2042), tools and multi-tool tab hosts included; slot templates (#1897) only govern runtime tool opens.
 resource: internal/layout/tree.go
-tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-08-21T00:00:00Z
+tags: [architecture, layout, panes, mouse, drag, resize, split, close, keyboard, persistence, bubbletea]
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -293,6 +293,47 @@ merge label — labelled with the dragged pane. It is drawn with `overlay.Place`
 sibling of `overlay.Center` (both splice ANSI-aware rows so styling survives the
 seam). Resize feedback is the shared pane edge tracking the cursor in real time
 as the ratio updates per motion frame.
+
+## Keyboard resize mode (#2150)
+
+Resizing by keyboard used to mean nothing at all — the divider drag was the
+only route. `pane.resizeMode` (`ctrl+alt+r`, pane context menu → **Resize…**,
+palette) arms a **sticky mode** instead of spending one chord per step:
+
+- **Enter once.** The command sets `m.resizeMode` (`internal/app/resizemode.go`).
+  It refuses — with a toast, not a silently armed mode — when there is no
+  focused pane, while a pane is maximized, or when the workspace has no
+  divider at all: every key would be a no-op there.
+- **Step repeatedly.** While armed, the mode is the *first* consumer in the
+  `tea.KeyPressMsg` branch, ahead of overlays, the keymap layer and pane
+  routing. `h`/`j`/`k`/`l` and the arrow keys move the focused pane's edge one
+  cell per press — key repeat covers long distances, which is the point of a
+  sticky mode. Direction means **where the edge travels**: `l` moves it right.
+  A pane that owns its trailing edge (right/bottom) therefore *grows* with
+  `l`/`j` and shrinks with `h`/`k`; a pane that only owns its leading edge —
+  the rightmost or bottom pane — reads the other way round, which keeps both
+  grow and shrink reachable with the same four keys.
+- **Which divider.** `Layout.EdgeDivider(pane, zone)` (`internal/layout/resize.go`)
+  picks the split: the divider band sitting on the pane's trailing edge along
+  the requested axis and spanning the pane completely, else the leading-edge
+  one. Where several bands meet the same edge the **innermost** (smallest
+  cross extent) wins — the pane's nearest enclosing split. The step itself is
+  `Divider.ResizeStep(delta)`, the keyboard sibling of the drag's
+  `Divider.ResizeTo`: it reads the ratio back into a cell offset so repeated
+  single-cell steps accumulate exactly, and clamps against the same `minCell`,
+  so a pane can no more be keyed to zero than dragged there.
+- **Leave.** `esc`, `enter` or `q` disarm the mode and persist the tree with
+  `saveLayout`, exactly what a released drag commits. **Every other key is
+  inert** — it neither resizes nor reaches an editor, so a mode left armed can
+  never cause a stray edit.
+- **Visible while active.** The status line replaces its segments with a
+  `RESIZE <pane>  hjkl / arrows move the edge · esc to finish` banner in the
+  drop-target colour, the same slot an engaged move drag uses (see
+  [Status Line](/architecture/status-line.md)).
+
+The chord is a single modifier chord, not a `cmd+k` sequence — the sequence
+family is capped at five (#711) — and sits on the `terminalGlobalCommands`
+allowlist, so the mode also arms from a focused terminal or tool pane.
 
 ## Maximize / zoom (Roadmap 0290, #358)
 

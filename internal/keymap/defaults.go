@@ -220,6 +220,11 @@ var jetbrainsRows = []row{
 	{"cmd+k right", "pane.splitRight", "Split right", Global, "App (01)"},
 	{"cmd+k left", "pane.splitLeft", "Split left", Global, "App (01)"},
 	{"cmd+k z", "pane.maximize", "Maximize pane", Global, "Zen & maximize (#358)"},
+	// Keyboard pane resize mode (#2150): a single delivered-style chord, not
+	// a cmd+k sequence — the sequence family is capped at five (#711), and a
+	// single chord also reaches the mode from a focused terminal/tool pane
+	// (see terminalGlobalChord). r for resize, joining the ctrl+alt family.
+	{"ctrl+alt+r", "pane.resizeMode", "Resize pane (keyboard mode)", Global, "Pane resize mode (#2150)"},
 	// Distraction-free toggle (#934): a single delivered chord so zen also
 	// works from a focused terminal/tool pane (multi-step sequences cannot be
 	// intercepted there — see terminalGlobalChord).
