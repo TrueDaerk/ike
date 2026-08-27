@@ -250,6 +250,8 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 		return singleton(pane.DOMKey, "dom")
 	case pane.KindDoctor:
 		return singleton(pane.DoctorKey, "xdoctor")
+	case pane.KindLSPDoctor:
+		return singleton(pane.LSPDoctorKey, "lspdoctor")
 	case pane.KindUsages:
 		return singleton(pane.UsagesKey, "usages")
 	case pane.KindHTTP:
@@ -822,6 +824,12 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 			m.wireDoctorPanel(reg.Get(key).Doctor())
 		}
 		return key, ok
+	case "lspdoctor":
+		key, ok := singleton(reg.AddLSPDoctor)
+		if ok {
+			m.wireLSPDoctorPanel(reg.Get(key).LSPDoctor())
+		}
+		return key, ok
 	case "tests":
 		return singleton(reg.AddTests)
 	case "issues":
@@ -1283,6 +1291,8 @@ func singletonSlotKey(kind string) string {
 		return pane.DOMKey
 	case "xdoctor":
 		return pane.DoctorKey
+	case "lspdoctor":
+		return pane.LSPDoctorKey
 	case "usages":
 		return pane.UsagesKey
 	case "http":

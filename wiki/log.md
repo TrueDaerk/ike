@@ -1,5 +1,25 @@
 # Log
 
+## 2026-08-27 (LSP doctor: per-server failure diagnosis with verified fixes, #2164)
+
+- **`internal/lspdoctor`** + palette command `lsp.doctor` ("LSP: Doctor"):
+  singleton tool window (pane key `lspdoctor`) running a per-server check
+  chain — binary resolution (PATH → IKE fallback dirs → well-known dirs =
+  the GUI-PATH gap #1614), exec bit, node-runtime probe, `--version`,
+  workspace-root sanity, and a real spawn + initialize round-trip.
+- **Signature→diagnosis mapping** (`classify`): binary missing (install
+  recipe as fix), PATH mismatch (config-override escape hatch), not
+  executable, wrong architecture (Rosetta trap), node runtime mismatch,
+  crash-on-initialize with stderr evidence — incl. the launch-advice table
+  and a shadowed-copy detector for the taplo/TOML "npm install did not
+  help" case.
+- **Verified fixes**: the app-owned report remembers the previous run's
+  failure classes; `r` re-runs and marks each server resolved / still
+  failing / changed instead of repeating the hint.
+- **Routing**: launch-failure, repeated-crash-disable and install-unresolved
+  toasts append `diagnose: "LSP: Doctor"`; the `lsp` status segment click
+  now opens the doctor (was `lsp.showLog`); Tools menu entry.
+
 ## 2026-08-27 (large files: per-feature degradation, badge + detail popup, buffer fast path, #2159)
 
 - **Per-feature thresholds**: `largefile.Feature` (highlight, LSP sync, VCS

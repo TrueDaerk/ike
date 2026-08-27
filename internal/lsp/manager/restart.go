@@ -153,7 +153,7 @@ func (m *Manager) giveUp(old *server, docs []*document, errLine string) {
 		reason = " (" + errLine + ")"
 	}
 	m.status(old.lang, old.lang+" language server disabled after repeated crashes"+reason+
-		" — restart: \""+restartCommandTitle+"\", details: \"LSP: Show Server Log\"", lsp.ServerEventError)
+		" — restart: \""+restartCommandTitle+"\", details: \"LSP: Show Server Log\", diagnose: \"LSP: Doctor\"", lsp.ServerEventError)
 	appendLog(old.lang, "disabled after repeated crashes")
 	// Nobody maintains the dead server's findings anymore — drop them
 	// from every affected editor (#994).

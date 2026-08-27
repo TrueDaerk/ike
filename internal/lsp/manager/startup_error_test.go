@@ -36,6 +36,10 @@ func TestStatusForErrPointsAtLog(t *testing.T) {
 		!strings.Contains(text, `"LSP: Show Server Log"`) {
 		t.Fatalf("text = %q", text)
 	}
+	// #2164: the failure notification also routes to the doctor.
+	if !strings.Contains(text, `"LSP: Doctor"`) {
+		t.Fatalf("text must name the doctor: %q", text)
+	}
 	if kind != lsp.ServerEventError {
 		t.Fatalf("kind = %v want ServerEventError", kind)
 	}

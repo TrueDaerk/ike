@@ -685,7 +685,7 @@ var statusSegmentCommands = map[string]string{
 	"largefile":     "editor.largeFileDetails",
 	"todo":          "todo.list",
 	"notifications": "notifications.history",
-	"lsp":           "lsp.showLog",
+	"lsp":           "lsp.doctor",
 	// The forge unread badge (#2086) opens what it announces.
 	"forge": "issues.toggle",
 }

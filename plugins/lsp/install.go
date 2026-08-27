@@ -195,6 +195,7 @@ func (b *bridge) runInstall(langID, path string, manual bool) tea.Msg {
 		if dirs := transport.FallbackDirs(); len(dirs) > 0 {
 			text += " (looked in " + strings.Join(dirs, ", ") + ")"
 		}
+		text += " — diagnose: \"LSP: Doctor\""
 		return ilsp.ServerStatusMsg{Lang: langID, Text: text, Kind: ilsp.ServerEventError}
 	}
 	// Success: re-open the triggering document so the server starts now; other

@@ -129,7 +129,7 @@ router dispatches a left press through `statusSegmentCommands`:
 | `todo` (TODO count) | `todo.list` |
 | `notifications` (`● N` counter) | `notifications.history` |
 | `forge` (unread forge events) | `issues.toggle` |
-| `lsp` (server state) | `lsp.showLog` |
+| `lsp` (server state) | `lsp.doctor` (#2164) |
 
 Only segments with one clear, obvious target are wired; every other press on
 the status row is swallowed (the row sits outside the layout tree, so nothing

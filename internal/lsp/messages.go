@@ -10,6 +10,7 @@ import (
 	"ike/internal/editor/buffer"
 	"ike/internal/highlight"
 	"ike/internal/lsp/protocol"
+	"ike/internal/lspdoctor"
 )
 
 // messages.go defines the editor-facing tea.Msg types LSP results arrive as, plus
@@ -648,6 +649,14 @@ type ServerStatusMsg struct {
 	Lang string
 	Text string
 	Kind ServerStatusKind
+}
+
+// DoctorMsg asks the root model to open the LSP Doctor tool window (#2164)
+// and run its per-server check chain. The plugin's lsp.doctor command builds
+// it with the effective server specs (after config overlays), so the app
+// probes exactly what the manager would launch.
+type DoctorMsg struct {
+	Servers []lspdoctor.Server
 }
 
 // ConvertDiagnostics maps protocol diagnostics to editor coordinates using the
