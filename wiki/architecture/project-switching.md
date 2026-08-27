@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-08-21T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -255,6 +255,29 @@ one action that also unloads it.
   action in #1113. `cmd+shift+p` is also in the JetBrains chord table
   (`internal/keymap/defaults.go`): the chord layer resolves modified chords
   even in a capturing editor, which the registry keymap layer does not.
+- **Branch + dirty marker per row (#2178)**: each git project's row carries
+  its current branch and a `*` when the checkout has uncommitted changes —
+  `⎇ main*`, in the same badge column as the `●` in-memory dot (`● ⎇ main*`).
+  Reading that costs a subprocess per row, so it is **fully asynchronous**
+  (`gitinfo.go`): opening the picker lists the history immediately and returns
+  `EnrichCmd(history)`, which fires one probe per entry — capped at
+  `maxGitProbes` (24) entries, at most `gitProbeParallel` (4) subprocesses at
+  a time. Each probe is a single `git status --porcelain=v2 --branch -z`
+  (branch header plus "is anything changed at all"; `--ignored` deliberately
+  not requested, unlike `vcs.Load`, which needs it for explorer dimming),
+  bounded by `gitProbeTimeout` (1s — tighter than `vcs`'s 5s `gitTimeout`: a
+  row that has not answered by then is better left plain than filled in after
+  the eye has moved on). Untracked files count as dirty; a detached HEAD shows
+  the short commit hash. Results arrive one `GitInfoMsg` at a time; the root
+  model files each in the shared `GitCache` — one cache serves both picker
+  flavours, so a probe made for the switch list is already there when the peek
+  list opens — and calls `palette.RefreshRows`, the in-place re-list that keeps
+  selection and scroll (plain `Refresh` resets to the top like a query edit and
+  would yank the cursor from under a user already arrowing down). Everything
+  that is not a clean answer — a non-git root, a missing git binary, a timeout,
+  an unreadable path — degrades to the plain row: the badge stays empty and
+  nothing is toasted. A cached result survives the palette closing, so a
+  re-open starts from the last known state and re-probes on top of it.
 
 ## Switch orchestration (#3)
 

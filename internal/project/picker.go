@@ -50,7 +50,15 @@ type PickerMode struct {
 	// emits PeekPickedMsg and alt+enter falls back to the normal switch —
 	// the exact inverse of the default mode's primary/alternate pair.
 	peek bool
+	// git holds the asynchronously probed branch/dirty context per project
+	// root (#2178), shared with the peek flavour. Nil — or a root not probed
+	// yet — simply renders the row as it always was.
+	git *GitCache
 }
+
+// SetGitCache installs the shared branch/dirty cache (#2178); the app injects
+// one cache into both picker flavours and fills it from GitInfoMsg.
+func (m *PickerMode) SetGitCache(c *GitCache) { m.git = c }
 
 // SetOpen installs the in-memory check (#820); the app injects the workspace
 // manager's Peek so the picker package stays workspace-agnostic.
@@ -171,6 +179,10 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 			// Unloaded entries prune from the history instead (#842).
 			it.Aux = RemoveFromHistoryMsg{Path: s.entry.Path}
 		}
+		// The git context (#2178) shares the badge column with the dot:
+		// "● ⎇ main*". It is empty until the row's probe answers, so the
+		// list is complete the moment the picker opens and fills in after.
+		it.Badge = joinBadge(it.Badge, m.gitBadge(s.entry.Path))
 		items = append(items, it)
 	}
 	if q := strings.TrimSpace(query); q != "" {
@@ -197,6 +209,28 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 		})
 	}
 	return items
+}
+
+// gitBadge is the row's branch/dirty suffix (#2178): "" while the probe is
+// still in flight and for every project it could not answer for.
+func (m *PickerMode) gitBadge(path string) string {
+	info, ok := m.git.Get(path)
+	if !ok {
+		return ""
+	}
+	return info.Badge()
+}
+
+// joinBadge merges the in-memory dot (#820) and the git badge (#2178) into
+// the single Badge column, one space apart; either half may be empty.
+func joinBadge(parts ...string) string {
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return strings.Join(out, " ")
 }
 
 // Complete implements palette.Completer (#542): tab extends the query to the

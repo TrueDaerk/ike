@@ -33,6 +33,28 @@ func TestProjectPickerOpensLocked(t *testing.T) {
 	}
 }
 
+// TestProjectPickerGitInfoFillsRows covers the async enrichment (#2178): a
+// probe result landing as GitInfoMsg is cached and shows up in the open
+// picker's rows, without the palette closing or losing its selection.
+func TestProjectPickerGitInfoFillsRows(t *testing.T) {
+	m := sized(t, 100, 40)
+	out, _ := m.Update(project.OpenPickerMsg{})
+	m = out.(Model)
+
+	root := cwd(t)
+	out, _ = m.Update(project.GitInfoMsg{Info: project.GitInfo{
+		Path: root, Branch: "main", Dirty: true, Repo: true,
+	}})
+	m = out.(Model)
+	if !m.palette.IsOpen() {
+		t.Fatal("a probe result must not close the picker")
+	}
+	info, ok := m.projGit.Get(root)
+	if !ok || info.Badge() != "⎇ main*" {
+		t.Fatalf("cached info = %+v (%v), want the dirty main badge", info, ok)
+	}
+}
+
 // switchModel builds a sized model with per-project state files (no
 // IKE_CONFIG_DIR redirect), so a switch resolves session/layout under each
 // project's own .ike directory exactly like production.

@@ -18,6 +18,24 @@
   query's match quality wins and history only breaks near-ties. Context tiers
   are unchanged.
 
+## 2026-08-27 (Branch and dirty status per project-picker row, #2178)
+
+- **The gap**: the recent-projects picker listed roots and last-opened times,
+  but not the two facts that actually decide which checkout to open — the
+  branch it sits on and whether work was left uncommitted there.
+- **Async by construction** (`internal/project/gitinfo.go`): the picker opens
+  on the history alone and returns `EnrichCmd`, one `git status
+  --porcelain=v2 --branch -z` per entry — capped at 24 rows, 4 subprocesses
+  in flight, 1s deadline each. Results land as `GitInfoMsg`, go into the
+  shared `GitCache` (both picker flavours read it) and render as the badge
+  `⎇ main*`, merged with the `●` in-memory dot into `● ⎇ main*`.
+- **Never worse than before**: a non-git root, a missing git binary, a
+  timeout or an unparsable answer all resolve to the plain row — no toast, no
+  error state, no delay in the open path.
+- **`palette.RefreshRows`**: the in-place re-list added for this. `Refresh`
+  resets selection and scroll like a query edit, which would have yanked the
+  cursor away from a user arrowing down while probes trickle in.
+- Wiki: [project-switching](architecture/project-switching.md).
 ## 2026-08-27 (Run output pane: respect the tool region, remember a move, #2191)
 
 - **Tool-region placement** (`internal/layout/region.go`,
