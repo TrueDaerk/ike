@@ -108,7 +108,10 @@ Sections and their default-bearing slots (`schema.go`):
   see [Workspace](/architecture/workspace.md)), plus `directory` (#1348,
   default `~/IkeProjects`: the default parent for projects IKE creates
   itself, resolved and created on demand by `project.ProjectsDir` /
-  `EnsureDirectory`). The entry semantics —
+  `EnsureDirectory`), plus `auto_save_on_switch` (#2186, default `true`: an
+  orderly project switch writes the departing project's dirty file-backed
+  buffers first, collecting the unsaveable ones into one dialog — see
+  [project switching](./project-switching.md)). The entry semantics —
   validation, upsert, dedupe, cap — live in `internal/project` (Roadmap
   0090); config only fixes the persisted shape.
 - `[backup]` — `enable`, `debounce_ms`, `max_age_days` for crash-recovery

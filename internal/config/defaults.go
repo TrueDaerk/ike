@@ -189,6 +189,8 @@ func defaults() *Config {
 			History:     []ProjectHistoryEntry{},
 			MaxHistory:  20,
 			RestoreLast: false,
+			// JetBrains' behaviour: leaving a project writes its edits (#2186).
+			AutoSaveOnSwitch: true,
 			// The visible default mirrors JetBrains' ~/IdeaProjects; it is
 			// only materialised when a feature needs it (project.clone).
 			Directory: "~/IkeProjects",
