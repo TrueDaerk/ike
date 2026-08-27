@@ -34,7 +34,26 @@ func logCapture(capture string) bool {
 }
 
 // logBuffer reports whether the buffer renders as a log file.
-func (m Model) logBuffer() bool { return highlight.Lang(m.langPath()) == "log" }
+func (m Model) logBuffer() bool {
+	path := m.langPath()
+	c := m.logLangCache
+	if c == nil {
+		return highlight.Lang(path) == "log"
+	}
+	if c.valid && c.path == path {
+		return c.isLog
+	}
+	*c = logLangState{valid: true, path: path, isLog: highlight.Lang(path) == "log"}
+	return c.isLog
+}
+
+// logLangState memoizes logBuffer across Model value copies (#2187), keyed by
+// the resolved language path — which already folds in the type override.
+type logLangState struct {
+	valid bool
+	path  string
+	isLog bool
+}
 
 // parseConcealOn reports whether the parse-produced conceal ranges apply
 // right now: for log buffers the log toggle gates them (concealed ANSI escape

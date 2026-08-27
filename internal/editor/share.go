@@ -47,6 +47,8 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	// A separate view of the same document needs its own line cache — its cursor,
 	// scroll and size differ, so it must never share cached bodies (#614/#142).
 	m.lineCache = newLineCache()
+	m.foldIdx = &foldIndex{}             // the collapsed set is per-view too (#144/#2187)
+	m.stickyCache = &stickyStore{}       // pinned headers follow this view's top (#2187)
 	m.testCache = newTestMarkStore()     // per-view cache like lineCache (#1150)
 	m.tally = newSearchTally()           // per-view: keyed by this view's query (#2145)
 	m.docPathCache = &docPathState{}     // keyed by the caret, so per-view too (#1660)
@@ -89,6 +91,7 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.folds = src.folds
 	m.lspFolds = src.lspFolds
 	m.folded = nil
+	m.bumpFolds()
 	m.foldLines = m.buf.LineCount()
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
@@ -125,6 +128,7 @@ func (m Model) applySync(msg SyncMsg) (Model, tea.Cmd) {
 	for h, e := range m.folded {
 		if e >= m.foldLines {
 			delete(m.folded, h)
+			m.bumpFolds()
 		}
 	}
 	m.hlIndex = highlight.Index{}

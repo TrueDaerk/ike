@@ -159,7 +159,7 @@ func (m *Model) resetLangState() {
 	m.conceal = nil
 	m.decodes = nil
 	m.notes = nil
-	m.scopes = nil
+	m.setScopes(nil)
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
