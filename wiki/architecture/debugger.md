@@ -1,9 +1,9 @@
 ---
 type: concept
 title: Debugger
-description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit (with conditions, hit counts and logpoints), paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; a combined debug area (frames/variables panel + debuggee console behind internal tabs) with watch expressions and inline variable values in the editor; Python via debugpy, Go via delve (dlv dap over a socket), PHP via the in-process Xdebug/DBGp bridge.
+description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit (with conditions, hit counts and logpoints), paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; a combined debug area (frames/variables panel + debuggee console behind internal tabs) with per-project watch expressions, an evaluate popup (Alt+F8) and inline variable values in the editor; Python via debugpy, Go via delve (dlv dap over a socket), PHP via the in-process Xdebug/DBGp bridge.
 resource: internal/app/debugsession.go
-tags: [architecture, debug, dap, dbgp, xdebug, delve, run, breakpoints, watches]
+tags: [architecture, debug, dap, dbgp, xdebug, delve, run, breakpoints, watches, evaluate]
 timestamp: 2026-08-27T00:00:00Z
 ---
 
@@ -74,19 +74,25 @@ like every other mutation). Rows render `if …` / `hit …` / `log "…"`
 suffixes; a logpoint's glyph is `◆` in the warning tone (`◇` disabled) — it
 logs instead of stopping.
 
-## Watch expressions (#1914)
+## Watch expressions (#1914, persisted #2174)
 
 `dap.Session.Evaluate(expr, frameID, "watch")` is the request; the DBGp
 bridge answers `evaluate` through DBGp `eval` (flat results — eval properties
 carry no stable fullname to page children through), so PHP watches work too.
 
-The expression list lives on the root model (`watchExprs` — in memory,
-surviving debug sessions). On every stop, and on frame selection, the app
-re-evaluates all of them against the current frame
-(`evaluateWatches` next to `fetchScopes`; results ride one
-`debugWatchesMsg`, session-guarded per #1523) and pushes
-`debugpanel.SetWatches`. A failed expression carries its error in place of a
-value.
+The expression list is a **per-project store** (`debug.Watches`,
+`internal/debug/watches.go` — `.ike/watches.json`, `IKE_CONFIG_DIR` override
+like the breakpoint store): loaded at start, saved after every mutation
+(`saveWatches`, a warning toast on failure like `saveBreakpoints`), so
+watches survive session restarts *and* IDE restarts. A missing or malformed
+file loads empty, blank expressions are dropped on the way in, and an
+out-of-range mutation is a no-op — the panel and the store never have to
+agree on indices to stay safe. On every stop, and on frame selection, the app
+re-evaluates all of them against the current frame (`evaluateWatches` next to
+`fetchScopes`; results ride one `debugWatchesMsg`, session-guarded per #1523)
+and pushes `debugpanel.SetWatches`. A failed expression carries its error in
+place of a value — one bad watch never hides the others, and never breaks the
+session.
 
 The panel renders a **Watches** section leading the variables tree (a
 synthetic root; `SetScopes` does not clobber it): `a` adds (an inline editor
@@ -95,6 +101,67 @@ on a placeholder row — allowed while running, evaluated on the next stop),
 its value), `d` removes, and enter on a structured result expands it through
 the ordinary `ExpandVarMsg`/`SetChildren` round trip. Committing an emptied
 expression removes the watch.
+
+## Evaluate: the capability gate (#2174)
+
+DAP has **no initialize capability for `evaluate`** — the spec requires every
+adapter to implement it — so `Session.SupportsEvaluate()` starts optimistic
+and is discovered at first use: an adapter answering with an
+"unsupported/unimplemented/unknown command" message latches the verdict off
+(`unsupportedRequest` classifies the message; a *bad expression* error is
+explicitly not a capability signal, or one mistyped watch would disable
+watches), and every later `Evaluate` returns `dap.ErrEvaluateUnsupported`
+without touching the wire.
+
+What the latch changes:
+
+- `refreshWatches` stops evaluating and pushes the bare expression list; the
+  panel's Watches header reads `evaluate unsupported`
+  (`SetEvaluateSupported`, mirrored from the session in `attachDebugPanel`
+  beside the `setVariable` gate). The expressions stay listed and editable —
+  the list is per project, not per adapter.
+- `debug.evaluate` refuses before opening its prompt, so an expression is
+  never typed for nothing.
+- Either path notifies **once per session** (`debugState.evalNoticed`), so a
+  stop with five watches is one notification, not five.
+
+`supportsEvaluateForHovers` *is* a real initialize flag and is decoded: the
+evaluate popup sends the `hover` context for a selection when the adapter
+advertises it, and falls back to `repl` — the context every adapter
+understands — otherwise.
+
+## Evaluate popup (#2174)
+
+`debug.evaluate` (**Alt+F8**, JetBrains' Evaluate Expression; palette and
+Run menu too) evaluates in the frame the debugger is paused in:
+
+- **The selection wins**: a visual selection is flattened to one line
+  (`strings.Fields` join, so a wrapped call still evaluates) and sent
+  straight away. With nothing selected, a single-field shell prompt asks for
+  an expression (`ui.EditKey`/`ui.PasteText`, enter/esc, like the curl and
+  OpenAPI import prompts).
+- **Preflight** (`evalReady`): no session, a running debuggee and a latched
+  capability each explain themselves instead of failing silently.
+- **The popup** (`internal/editor/evalpopup.go`) is a cursor-anchored box in
+  the same frame as hover/peek (#316), composited first in
+  `compositeLSPPopups` — it is explicitly invoked and keyboard-driven, so it
+  outranks the transient popups. It owns `j`/`k`/arrows (move),
+  `enter`/`space`/`l`/`right` (expand or fold), `h`/`left` (fold, or step to
+  the parent) and `esc`; **any other key dismisses it and falls through**,
+  the hover/peek precedent, so a popup key never reaches the buffer and a
+  normal key is never swallowed.
+- **Structured results page in**: a non-zero `variablesReference` starts
+  collapsed (expanding costs a request), and expanding emits
+  `editor.EvalExpandMsg{Ref}` → `fetchEvalChildren` → DAP `variables` →
+  `debugEvalVarsMsg` → `SetEvalChildren`. Deliberately *not* the panel's
+  `debugVarsMsg`: the two trees expand independently and a shared message
+  would cross them. Loaded children never re-request; a failed expansion
+  leaves the row collapsed rather than broken.
+- The editor stays protocol-free: rows cross as `editor.EvalVar` values, the
+  same seam `editor.DebugLocal` uses for inline values.
+- **The result never outlives its frame**: `clearPausedMarker` closes the
+  popup in every editor view (continue, step, stop, session end), the rule
+  the paused marker and the inline values already follow.
 
 ## Inline variable values (#1914)
 

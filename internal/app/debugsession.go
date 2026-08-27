@@ -64,6 +64,11 @@ type debugState struct {
 	// the first output event opens it so a program that never pauses is still
 	// visible, but a panel the user closed afterwards stays closed.
 	panelOpened bool
+
+	// evalNoticed records that the "adapter cannot evaluate" notice was shown
+	// for this session (#2174), so a stop with several watches does not stack
+	// one notification per expression.
+	evalNoticed bool
 }
 
 // maxPendingOut caps the pre-panel output buffer, the same order as the
@@ -763,6 +768,7 @@ func (m *Model) markPausedLine(path string, line int) {
 // paused state.
 func (m *Model) clearPausedMarker() {
 	m.clearInlineValues()
+	m.dismissEvalPopups() // an evaluate result describes the frame just left (#2174)
 	if m.dbg == nil || m.dbg.pausedPath == "" {
 		return
 	}
@@ -878,6 +884,7 @@ func (m *Model) attachDebugPanel(p *debugpanel.Model) {
 		return
 	}
 	p.SetEditable(m.dbg.sess.SupportsSetVariable())
+	p.SetEvaluateSupported(m.dbg.sess.SupportsEvaluate()) // #2174
 	m.dbg.panelOpened = true
 	// A freshly opened (or restored) panel shows the watch expressions right
 	// away (#1914); the stop that opened it evaluates them next.

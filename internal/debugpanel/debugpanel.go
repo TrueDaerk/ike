@@ -123,6 +123,11 @@ type Model struct {
 	// editWatchIdx targets the app's list (-1 = the pending add row).
 	editWatch    bool
 	editWatchIdx int
+
+	// noEval mirrors an adapter that refused evaluate (#2174): watch rows
+	// stay listed and editable, but the section header says why they carry
+	// no values.
+	noEval bool
 }
 
 // New returns an empty panel.

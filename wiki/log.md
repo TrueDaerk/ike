@@ -1,5 +1,48 @@
 # Log
 
+## 2026-08-27 (Debugger: persisted watches and the evaluate popup, #2174)
+
+- **The gap**: watches (#1914) lived in memory only — a restart lost the list
+  — and there was no way to evaluate an ad-hoc expression at all. Nothing
+  gated either on the adapter actually implementing `evaluate`.
+- **Watches persist per project** (`debug.Watches`,
+  `internal/debug/watches.go` → `.ike/watches.json`, `IKE_CONFIG_DIR`
+  override): loaded at start beside the breakpoint store, saved after every
+  add/edit/remove with a warning toast on failure. The store owns the "an
+  emptied expression removes the row" rule and treats out-of-range indices as
+  no-ops, so the panel and the store never have to agree on indices to stay
+  safe. A missing or malformed file loads empty.
+- **Evaluate popup** (`debug.evaluate`, **alt+f8** — JetBrains' chord, plus
+  the palette and the Run menu): a visual selection is flattened to one line
+  and evaluated straight away; with nothing selected a single-field shell
+  prompt asks for the expression. The answer opens in a cursor-anchored popup
+  (`internal/editor/evalpopup.go`) in the hover/peek frame, composited first
+  in `compositeLSPPopups` because it is explicitly invoked and
+  keyboard-driven.
+- **Structured results page in on demand**: a non-zero `variablesReference`
+  starts collapsed, and expanding runs `editor.EvalExpandMsg` →
+  `fetchEvalChildren` → DAP `variables` → `debugEvalVarsMsg` →
+  `SetEvalChildren`. Deliberately a separate message from the panel's
+  `debugVarsMsg` — the two trees expand independently and a shared message
+  would cross them. The editor stays protocol-free: rows cross as
+  `editor.EvalVar`, the seam `editor.DebugLocal` already uses.
+- **The capability gate is discovered, not advertised**: DAP has no
+  `supportsEvaluate` flag, so `Session.SupportsEvaluate()` is optimistic until
+  an adapter refuses the request as unimplemented — then the verdict latches
+  and every later call answers `dap.ErrEvaluateUnsupported` without a round
+  trip. `unsupportedRequest` classifies the message so a *bad expression*
+  never counts: one mistyped watch must not disable watches. With the latch
+  on, the Watches header reads `evaluate unsupported` (expressions stay listed
+  and editable), `debug.evaluate` refuses before opening its prompt, and the
+  explanation is notified once per session (`debugState.evalNoticed`).
+- **`supportsEvaluateForHovers`** *is* a real flag and is decoded: a selection
+  evaluates with the `hover` context where the adapter promises it, `repl`
+  otherwise.
+- **The result never outlives its frame**: `clearPausedMarker` closes the
+  popup in every editor view, the rule the paused marker and the inline values
+  already follow. Any key the popup does not own dismisses it and falls
+  through, so a popup key never reaches the buffer.
+
 ## 2026-08-27 (LSP peek: pick between definitions inside the popup, #2168)
 
 - **The gap**: peek definition (#1154) already showed a single target inline,

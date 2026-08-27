@@ -36,6 +36,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Close project | `ctrl+shift+w` | `ctrl+shift+w` | `project.close` |
 | Continue (debug) | `f9` | `f9` | `debug.continue` |
 | Debug file | `shift+f9` | `shift+f9` | `debug.start` |
+| Evaluate expression | `alt+f8` | `alt+f8` | `debug.evaluate` |
 | Find in path | `cmd+shift+f` | `ctrl+shift+f` | `project.findInPath` |
 | Full query view | `ctrl+alt+e` | `ctrl+alt+e` | `json.jqQueryView` |
 | Go to file | `cmd+shift+o` | `ctrl+shift+o` | `project.goToFile` |

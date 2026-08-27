@@ -41,6 +41,7 @@ bring their own.
 | Debug: Toggle Console/Variables View | `debug.console` | — | — | everywhere |
 | Continue | `debug.continue` | `f9` | — | everywhere |
 | Xdebug Doctor | `debug.doctor` | — | — | everywhere |
+| Evaluate Expression | `debug.evaluate` | `alt+f8` | — | everywhere |
 | Listen for PHP Debug Connections | `debug.listen` | — | — | everywhere |
 | Debug File | `debug.start` | `shift+f9` | — | everywhere |
 | Step Into | `debug.stepInto` | `f7` | — | everywhere |

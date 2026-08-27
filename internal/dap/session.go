@@ -2,7 +2,10 @@ package dap
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
+	"strings"
+	"sync"
 
 	"ike/internal/lsp/transport"
 )
@@ -18,6 +21,12 @@ type Session struct {
 	// caps are the adapter capabilities from the initialize response; only the
 	// flags IKE gates on are decoded.
 	caps capabilities
+
+	// evalMu guards evalUnsupported, the discovered evaluate capability
+	// (#2174). Evaluate runs off the UI goroutine — watches fan out one
+	// request per expression — so the latch needs a lock.
+	evalMu          sync.Mutex
+	evalUnsupported bool
 }
 
 // capabilities is the subset of the initialize response IKE reads.
@@ -26,6 +35,7 @@ type capabilities struct {
 	SupportsConditionalBreakpoints    bool `json:"supportsConditionalBreakpoints"`
 	SupportsHitConditionalBreakpoints bool `json:"supportsHitConditionalBreakpoints"`
 	SupportsLogPoints                 bool `json:"supportsLogPoints"`
+	SupportsEvaluateForHovers         bool `json:"supportsEvaluateForHovers"`
 }
 
 // Start spawns the adapter described by spec and connects. Events (stopped,
@@ -94,6 +104,58 @@ func (s *Session) SupportsHitConditionalBreakpoints() bool {
 // SupportsLogPoints reports logpoint support (#1914). Without it, log
 // messages are stripped and the breakpoint behaves as a plain stop.
 func (s *Session) SupportsLogPoints() bool { return s.caps.SupportsLogPoints }
+
+// SupportsEvaluateForHovers reports whether the adapter accepts the "hover"
+// evaluate context (#2174). It is the only evaluate-related flag DAP puts in
+// the initialize response; the evaluate popup falls back to the "repl"
+// context without it, which every adapter understands.
+func (s *Session) SupportsEvaluateForHovers() bool { return s.caps.SupportsEvaluateForHovers }
+
+// ErrEvaluateUnsupported is what Evaluate answers once the adapter refused
+// the request as unimplemented (#2174). It is a sticky verdict: the watch and
+// evaluate-popup surfaces disable themselves with a notice instead of
+// spending one failing request per expression per stop.
+var ErrEvaluateUnsupported = errors.New("dap: adapter does not support evaluate")
+
+// SupportsEvaluate reports whether evaluate requests are worth sending
+// (#2174). DAP has no initialize capability for evaluate — the spec requires
+// every adapter to implement it — so support is optimistic until an adapter
+// refuses the request as unsupported, which latches it off for the rest of
+// the session.
+func (s *Session) SupportsEvaluate() bool {
+	s.evalMu.Lock()
+	defer s.evalMu.Unlock()
+	return !s.evalUnsupported
+}
+
+// markEvaluateUnsupported latches the verdict.
+func (s *Session) markEvaluateUnsupported() {
+	s.evalMu.Lock()
+	s.evalUnsupported = true
+	s.evalMu.Unlock()
+}
+
+// unsupportedRequest reports whether an adapter error reads as "I do not
+// implement this request" rather than "that expression is bad". Only the
+// former latches the capability off — a mistyped watch must never disable
+// watches. The phrasings cover IKE's own DBGp bridge ("unsupported request:
+// evaluate") and the wordings adapters use for a missing command.
+func unsupportedRequest(msg string) bool {
+	msg = strings.ToLower(msg)
+	for _, needle := range []string{
+		"unsupported",
+		"not supported",
+		"unimplemented",
+		"not implemented",
+		"unknown command",
+		"unknown request",
+	} {
+		if strings.Contains(msg, needle) {
+			return true
+		}
+	}
+	return false
+}
 
 // OnRunInTerminal registers the handler for the adapter's runInTerminal reverse
 // request (#625). fn runs on the read-loop goroutine and MUST hand off (it may
@@ -298,8 +360,13 @@ func (s *Session) SetVariable(ref int, name, value string) (Variable, error) {
 // Evaluate evaluates expr in the context of frameID (0 = the adapter's
 // default frame) and returns the rendered result (#1914, watches). context is
 // the DAP evaluate context hint ("watch", "repl", "hover"); adapters may use
-// it to pick side-effect rules.
+// it to pick side-effect rules. An adapter that refuses evaluate as
+// unimplemented latches SupportsEvaluate off, and every later call answers
+// ErrEvaluateUnsupported without touching the wire (#2174).
 func (s *Session) Evaluate(expr string, frameID int, context string) (EvaluateResult, error) {
+	if !s.SupportsEvaluate() {
+		return EvaluateResult{}, ErrEvaluateUnsupported
+	}
 	args := map[string]any{"expression": expr}
 	if frameID != 0 {
 		args["frameId"] = frameID
@@ -309,6 +376,10 @@ func (s *Session) Evaluate(expr string, frameID int, context string) (EvaluateRe
 	}
 	body, err := s.conn.Call("evaluate", args)
 	if err != nil {
+		if unsupportedRequest(err.Error()) {
+			s.markEvaluateUnsupported()
+			return EvaluateResult{}, ErrEvaluateUnsupported
+		}
 		return EvaluateResult{}, err
 	}
 	var resp EvaluateResult

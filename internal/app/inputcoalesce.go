@@ -225,7 +225,7 @@ func (m Model) overlayCapturesBelowPopup() bool {
 		m.newProjectPromptOpen() || m.generateScratchOpen() || m.saveAsOpen() ||
 		m.bookmarkPromptOpen() || m.layoutSavePromptOpen() ||
 		m.jbImportPromptOpen() || m.openAPIImportPromptOpen() ||
-		m.curlImportPromptOpen() || m.lspRenameOpen() ||
+		m.curlImportPromptOpen() || m.evalPromptOpen() || m.lspRenameOpen() ||
 		m.lspRenamePreviewOpen() || m.floats.IsOpen() ||
 		m.explorerCapturing()
 }

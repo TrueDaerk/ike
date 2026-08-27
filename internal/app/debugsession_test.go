@@ -33,6 +33,23 @@ type stubAdapter struct {
 	mu   sync.Mutex
 	cmd  []string
 	resp []reverseResp
+
+	// Evaluate scripting (#2174): evalRefuse fails the request with that
+	// message (an adapter that does not implement it), evalBody overrides the
+	// success body, and evalArgs records what the client sent.
+	evalRefuse string
+	evalBody   map[string]any
+	evalArgs   []json.RawMessage
+	// varsBody overrides the variables response, so a structured evaluate
+	// result has children to page in.
+	varsBody map[string]any
+}
+
+// evaluates returns the arguments of every evaluate request seen so far.
+func (s *stubAdapter) evaluates() []json.RawMessage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]json.RawMessage(nil), s.evalArgs...)
 }
 
 // reverseResp is one client response to an adapter-initiated request.
@@ -78,9 +95,10 @@ func (s *stubAdapter) serve() {
 			return
 		}
 		var req struct {
-			Seq     int    `json:"seq"`
-			Type    string `json:"type"`
-			Command string `json:"command"`
+			Seq       int             `json:"seq"`
+			Type      string          `json:"type"`
+			Command   string          `json:"command"`
+			Arguments json.RawMessage `json:"arguments"`
 		}
 		if json.Unmarshal(data, &req) != nil {
 			continue
@@ -101,13 +119,26 @@ func (s *stubAdapter) serve() {
 		s.cmd = append(s.cmd, req.Command)
 		seq++
 		body := map[string]any{}
-		if req.Command == "initialize" {
+		success, message := true, ""
+		switch req.Command {
+		case "initialize":
 			// Advertise setVariable so the app-level edit gating is exercisable.
 			body["supportsSetVariable"] = true
+		case "evaluate":
+			s.evalArgs = append(s.evalArgs, append(json.RawMessage(nil), req.Arguments...))
+			if s.evalRefuse != "" {
+				success, message = false, s.evalRefuse
+			} else if s.evalBody != nil {
+				body = s.evalBody
+			}
+		case "variables":
+			if s.varsBody != nil {
+				body = s.varsBody
+			}
 		}
 		resp, _ := json.Marshal(map[string]any{
 			"seq": seq, "type": "response", "request_seq": req.Seq,
-			"command": req.Command, "success": true, "body": body,
+			"command": req.Command, "success": success, "message": message, "body": body,
 		})
 		_ = jsonrpc.WriteFrame(s.out, resp)
 		s.mu.Unlock()

@@ -36,6 +36,21 @@ type WatchResult struct {
 	Err   string
 }
 
+// SetEvaluateSupported records the session's evaluate capability (#2174).
+// With it off, the watches section keeps listing the expressions — the list
+// is per project, not per adapter — but says so in its header instead of
+// showing values that will never arrive.
+func (m *Model) SetEvaluateSupported(v bool) { m.noEval = !v }
+
+// EvaluateSupported reports the recorded evaluate capability (#2174).
+func (m Model) EvaluateSupported() bool { return !m.noEval }
+
+// watchesUnsupportedNote is the header suffix of a watches section whose
+// adapter cannot evaluate (#2174). Short on purpose — the variables column is
+// narrow and would truncate a sentence; the full wording rides the
+// notification the app posts once per session.
+const watchesUnsupportedNote = "evaluate unsupported"
+
 // SetWatches replaces the watches section with the pushed results; an empty
 // list removes it. Any open inline editor is cancelled — the rows it anchored
 // to are being replaced (#640).
@@ -50,6 +65,9 @@ func (m *Model) SetWatches(results []WatchResult) {
 		v:        dap.Variable{Name: "Watches"},
 		expanded: true,
 		loaded:   true,
+	}
+	if m.noEval {
+		root.v.Value = watchesUnsupportedNote
 	}
 	for i, r := range results {
 		v := dap.Variable{Name: r.Expr, Value: r.Value, Type: r.Type, VariablesReference: r.Ref}

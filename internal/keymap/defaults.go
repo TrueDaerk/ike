@@ -320,6 +320,9 @@ var jetbrainsRows = []row{
 	{"f7", "debug.stepInto", "Step into", Global, "Run (0350)"},
 	{"shift+f8", "debug.stepOut", "Step out", Global, "Run (0350)"},
 	{"f9", "debug.continue", "Continue (debug)", Global, "Run (0350)"},
+	// JetBrains Evaluate Expression (alt+f8 on both keymaps): the selection,
+	// or a typed expression, evaluated in the paused frame (#2174).
+	{"alt+f8", "debug.evaluate", "Evaluate expression", Global, "Run (0350)"},
 	// JetBrains Windows-scheme Rerun and Stop (#1048), staying in the same
 	// scheme as the run/debug F-key family above; both deliver everywhere.
 	// JetBrains HTTP client run (#1250): cmd+enter dispatches the .http
