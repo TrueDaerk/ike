@@ -2973,6 +2973,16 @@ func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 			return true, m, nil
 		}
 		return false, m, nil
+	case "cmd+shift+l":
+		// cmd+shift+l opens link hint mode (#2254): the keyboard route to
+		// the file:line references cmd+click opens. Under an alt-screen or
+		// mouse-reporting child, or with no resolvable reference on screen,
+		// the chord stays with the child; outside terminals it has no
+		// global binding.
+		if term := m.activeWS().Panes.FocusedInstance().ActiveTerminal(); term != nil && term.StartLinkHints() {
+			return true, m, nil
+		}
+		return false, m, nil
 	}
 	return false, m, nil
 }
@@ -7223,6 +7233,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// prompts above still win — they can be opened from inside the popup
 		// and must get their keys back.
 		if m.popupLayerOpen() {
+			// Link hint mode (#2254) owns the popup's keyboard while open,
+			// like in a terminal pane: before the reserved set, so a label
+			// can never be shadowed by a chord.
+			if inst := m.popupFocused(); inst != nil {
+				if term := inst.ActiveTerminal(); term != nil && term.Hinting() {
+					if p, line, col, ok := term.LinkHintKey(msg); ok {
+						return m.openPathAt(p, line, col)
+					}
+					return m, nil
+				}
+			}
 			if handled, tm, cmd := m.popupReservedKey(msg.String()); handled {
 				return tm, cmd
 			}
@@ -7273,6 +7294,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// except the reserved set below; scrollback paging keys are handled by
 		// the pane itself.
 		if m.terminalFocused() {
+			// Link hint mode (#2254) owns the keyboard while open — before
+			// the reserved set, so a label is never shadowed by a chord:
+			// a label opens its target through the ordinary open funnel,
+			// esc (and any other key) just closes the mode.
+			if term := m.activeWS().Panes.FocusedInstance().ActiveTerminal(); term != nil && term.Hinting() {
+				if p, line, col, ok := term.LinkHintKey(msg); ok {
+					return m.openPathAt(p, line, col)
+				}
+				return m, nil
+			}
 			if handled, tm, cmd := m.terminalReservedKey(msg.String()); handled {
 				return tm, cmd
 			}

@@ -50,6 +50,70 @@ func TestScanLinks(t *testing.T) {
 	}
 }
 
+// TestScanLinksExtensionless guards the extensionless well-known names
+// (#2254): `Makefile:12` and friends read as references, while the shapes
+// that only look like one — a longer token ending in a name, a lowercased
+// name that is not on the list, prose — stay inert.
+func TestScanLinksExtensionless(t *testing.T) {
+	cases := []struct {
+		in         string
+		path       string // "" = no link expected
+		line, col  int
+		start, end int
+	}{
+		{in: "Makefile:12", path: "Makefile", line: 12, start: 0, end: 11},
+		{in: "make: *** [Makefile:3: all] Error 1", path: "Makefile", line: 3, start: 11, end: 21},
+		{in: "src/Dockerfile:4:2", path: "src/Dockerfile", line: 4, col: 2, start: 0, end: 18},
+		{in: "./Makefile:1", path: "./Makefile", line: 1, start: 0, end: 12},
+		{in: "/repo/LICENSE:7", path: "/repo/LICENSE", line: 7, start: 0, end: 15},
+		{in: "(GNUmakefile:9)", path: "GNUmakefile", line: 9, start: 1, end: 14},
+		{in: "foo-Makefile:3", path: ""}, // a longer token, not the file
+		{in: "MyMakefile:3", path: ""},   // ditto, without a separator
+		{in: "Makefiles:3", path: ""},    // the name must end the token
+		{in: "dockerfile:4", path: ""},   // not the listed spelling
+		{in: "TODO:12", path: ""},        // prose, not on the list
+		{in: "12:30", path: ""},          // still a clock time
+		{in: "localhost:8080", path: ""}, // still host:port
+		{in: "buildserver:8080", path: ""},
+	}
+	for _, c := range cases {
+		links := scanLinks(c.in)
+		if c.path == "" {
+			if len(links) != 0 {
+				t.Errorf("%q: unexpected link %+v", c.in, links[0])
+			}
+			continue
+		}
+		if len(links) != 1 {
+			t.Errorf("%q: got %d links, want 1", c.in, len(links))
+			continue
+		}
+		l := links[0]
+		if l.path != c.path || l.line != c.line || l.col != c.col ||
+			l.start != c.start || l.end != c.end {
+			t.Errorf("%q: got %+v, want path=%q line=%d col=%d span=[%d,%d)",
+				c.in, l, c.path, c.line, c.col, c.start, c.end)
+		}
+	}
+}
+
+// TestScanLinksMultiplePerLine: the consumed left boundary (#2254) must not
+// swallow a following reference — grep output puts several on one line.
+func TestScanLinksMultiplePerLine(t *testing.T) {
+	got := scanLinks("a.go:1 Makefile:2 b/c.rs:3:4")
+	if len(got) != 3 {
+		t.Fatalf("got %d links, want 3: %+v", len(got), got)
+	}
+	for i, want := range []string{"a.go", "Makefile", "b/c.rs"} {
+		if got[i].path != want {
+			t.Errorf("link %d = %q, want %q", i, got[i].path, want)
+		}
+	}
+	if got[2].line != 3 || got[2].col != 4 {
+		t.Errorf("last link = %d:%d, want 3:4", got[2].line, got[2].col)
+	}
+}
+
 // TestResolveLinkExistenceGate guards the click-time stat gate: relative
 // paths resolve against the cwd, missing files and directories never resolve.
 func TestResolveLinkExistenceGate(t *testing.T) {
