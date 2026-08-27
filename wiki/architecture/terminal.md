@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-08-18T12:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -296,7 +296,11 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   the active tab through the busy guard (`termClosePopup` targets the shared
   prompt; the guard pins its target by session key, `termCloseSess`, and the
   confirm re-resolves it — a shell that exited while the prompt was open
-  closes nothing else, #1786), the float resize chords (#774) adjust the box, cmd+c/cmd+v
+  closes nothing else, #1786) — or, on a **finished** session, outright
+  (#2192): the layer has no pane registry behind it, so without that arm a
+  dead tab could only be closed after docking it into a pane, and the EOF the
+  idle arm sends would reach nobody. The active tab's ✕ shares the path, the
+  float resize chords (#774) adjust the box, cmd+c/cmd+v
   copy/paste, and the `terminalGlobalCommands` allowlist stays with the IDE.
   Everything else goes raw to the shell. `terminal.popup` is itself
   allowlisted, so a focused pane terminal can summon the popup.
@@ -404,7 +408,7 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 | `alt+f12` | `terminal.toggle` — return focus to the previous pane (the reliable hatch) |
 | `cmd+t` | new terminal tab (#729/#983, iTerm-style): a terminal tab hosted by an editor pane gets a sibling tab in the same pane (#573); a dedicated single-session terminal pane **converts into a tab host in place** (the same conversion a tab drop performs, #836) — its live shell becomes the first tab, the fresh one the second, with the regular tab bar on top. Outside terminals `cmd+t` has no global binding anymore (its former `vcs.updateProject` was removed in #750) |
 | `cmd+d` | split right (#982, iTerm-style): a fresh terminal pane opens to the right of the focused terminal's pane and takes focus — the same for dedicated terminal panes and editor-hosted terminal tabs. Outside terminals `cmd+d` keeps its global binding (`editor.duplicateLine`) |
-| `cmd+w` | close the terminal (#986): an idle shell gets an EOF (ctrl+d) — it exits and the regular exit path closes the pane/tab; a **busy** terminal (foreground process group ≠ shell, or a still-running command session — `Session.Busy`) raises a centered guard first: enter closes, esc cancels. `ctrl+w` stays with the shell (delete word); outside terminals `cmd+w` keeps its global binding (`editor.closeTab`) |
+| `cmd+w` | close the terminal (#986): an idle shell gets an EOF (ctrl+d) — it exits and the regular exit path closes the pane/tab; a **busy** terminal (foreground process group ≠ shell, or a still-running command session — `Session.Busy`) raises a centered guard first: enter closes, esc cancels; a **finished** session (`Model.Exited`) is closed outright (#2192) — there is no child left to receive an EOF, so waiting for an exit that already happened would leave it unclosable. `ctrl+w` stays with the shell (delete word); outside terminals `cmd+w` keeps its global binding (`editor.closeTab`) |
 | `cmd+f` | open the scrollback search (#1504) — the muscle-memory entry point to the same inline search `/` starts from scrollback (#1169), working from the live view too (`Model.StartSearch`; esc then returns to the live view). Under an alt-screen or mouse-reporting child the chord stays with the child (vim/lazygit own their find); outside terminals `cmd+f` keeps its global binding (`editor.find`). The popup terminal reserves it too, on the focused split side |
 | `ctrl+arrows` | spatial focus moves out of the terminal (#228) — the same `keymap.bindings.focus_*` overrides apply; a disabled direction stays with the shell. Inside the popup layer left/right instead step through its surfaces — split sides and floating panels — raising the one they land on (#1806) |
 | `cmd+c` | copy an active mouse selection (#227) — without one the key stays with the shell |
@@ -420,7 +424,42 @@ the pane; inside the pane it becomes a read-only view of the finished output
 addition to the shift-chords, `r` restarts a run/tool session, `cmd+c` still
 copies the mouse selection (`focusedDeadTerminal` — `terminalFocused` reports
 live sessions only), and every other key is inert instead of snapping the view
-back to live.
+back to live. Both predicates read `Model.Exited()`, not `Running()` (#2192),
+so a **pipe session past `FinishPipe`** — the DAP console, whose emulator
+stays open for trailing output — counts as finished like every other exited
+session; otherwise the finished debug area would swallow its own close chord.
+
+## Closing a finished terminal (#2192)
+
+A *pseudo-terminal* — a terminal that exists as the output vehicle of a run,
+a tool or a debuggee rather than as an interactive shell — deliberately
+**outlives its process**: the exit path keeps command sessions (#576), tool
+panes (#810), popup tabs and the debug area open so the output stays
+reviewable. The close action must therefore work on a session that is already
+gone, wherever it lives, with no docking-into-a-pane prerequisite.
+
+- `Model.Exited()` (exported `dead()`) is the single predicate: no session, a
+  child that ended, or a pipe past `FinishPipe`. Every close route consults it
+  **before** the busy guard, since a finished session is never `Busy`.
+- **Panes and tab hosts** — `requestTerminalClose` closes the focused tab/leaf
+  outright instead of sending an EOF. In practice the key never gets that far
+  for a PTY session (`terminalFocused` already excludes it, so `ctrl+w` takes
+  the ordinary `editor.closeTab` route), but the arm keeps the reserved chord
+  honest for a session that dies between the focus check and the dispatch.
+- **Popup box tabs and floating panels** — `requestPopupTabClose` calls
+  `closePopupTab` for a finished tab, from `cmd+w` and from the active
+  segment's ✕ alike. This is the placement the bug was reported in: the layer
+  routes keys itself, so the pane fallback never applied.
+- **Debug console** — the pipe session keeps `Running()` true past
+  `FinishPipe`, so `terminalFocused`/`focusedDeadTerminal` read `Exited()`
+  instead; the finished area then closes with the ordinary chord like any
+  other pane.
+
+**Exited chrome**: `termExitedTitle` appends `✗ exited (code N)` to the pane,
+tool, popup-box and floating-panel titles, and `tabLabels` marks a finished
+terminal segment with the bare `✗` glyph — the tab bar is often the only
+chrome a popup-layer box shows, and the body's `[process exited]` line can be
+scrolled away or covered.
 
 ## Scrollback bound (#1545)
 

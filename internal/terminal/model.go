@@ -308,6 +308,13 @@ func (m Model) dead() bool {
 	return m.sess == nil || !m.sess.Running() || m.sess.PipeDone()
 }
 
+// Exited is the exported dead(): the session has finished — a failed spawn, an
+// ended child, or a pipe session past FinishPipe (#1370). Close paths need the
+// distinction (#2192): an idle shell is closed by sending it an EOF, but a
+// finished session has nobody left to receive one, so its host must drop the
+// pane/tab outright instead of waiting for an exit that already happened.
+func (m Model) Exited() bool { return m.dead() }
+
 // SetParked forwards the parked flag (#1522) to the live session; a no-op for
 // a failed spawn.
 func (m Model) SetParked(parked bool) {

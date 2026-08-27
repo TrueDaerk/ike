@@ -124,6 +124,13 @@ func debugModel(t *testing.T) (Model, *stubAdapter, string) {
 // tests can flip settings like debug.session_end.
 func debugModelWith(t *testing.T, cfg host.MapConfig) (Model, *stubAdapter, string) {
 	t.Helper()
+	return debugModelReg(t, registry.New(), cfg)
+}
+
+// debugModelReg is debugModelWith with an explicit registry — pass
+// registry.Global() when the test dispatches real key bindings (#2192).
+func debugModelReg(t *testing.T, reg *registry.Registry, cfg host.MapConfig) (Model, *stubAdapter, string) {
+	t.Helper()
 	if testStoreRoot != "" {
 		os.Setenv("IKE_CONFIG_DIR", filepath.Join(testStoreRoot, "debug-"+t.Name()))
 	}
@@ -131,7 +138,7 @@ func debugModelWith(t *testing.T, cfg host.MapConfig) (Model, *stubAdapter, stri
 	if err := os.WriteFile(path, []byte("a\nb\nc\nd\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	m := NewWith(registry.New(), cfg)
+	m := NewWith(reg, cfg)
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	tm, _ = tm.(Model).Update(explorer.OpenFileMsg{Path: path})
 	m = tm.(Model)

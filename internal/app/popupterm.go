@@ -433,7 +433,7 @@ func (m Model) renderPopupSide(inst *pane.Instance, w, h int, focused bool) stri
 	}
 	title := "POPUP TERMINAL"
 	if t := inst.Tab(inst.ActiveTab()); t != nil && t.IsTerminal() {
-		title = "POPUP TERMINAL — " + t.Title()
+		title = "POPUP TERMINAL — " + t.Title() + termExitedTitle(t.Terminal())
 	}
 	if bar, ok := m.tabBar(inst, w-paneChromeW-lipgloss.Width(marker)); ok {
 		title = bar
@@ -698,7 +698,8 @@ func (m *Model) cyclePopupTab(step int) {
 
 // requestPopupTabClose handles the reserved cmd+w inside the popup (#986
 // semantics): an idle shell gets an EOF — the exit path closes its tab — and
-// a busy one raises the confirmation guard targeted at the popup.
+// a busy one raises the confirmation guard targeted at the popup. A finished
+// session (#2192) is closed here and now.
 func (m *Model) requestPopupTabClose() {
 	inst := m.popupFocused()
 	if inst == nil {
@@ -706,6 +707,15 @@ func (m *Model) requestPopupTabClose() {
 	}
 	term := inst.ActiveTerminal()
 	if term == nil {
+		return
+	}
+	if term.Exited() {
+		// Nothing is left to send an EOF to (#2192): a failed spawn, or a
+		// run/tool session whose process ended while its output stayed
+		// parked in the layer. Without this arm the tab could only be closed
+		// after docking it into a pane — close it outright instead, the same
+		// way the exit path would have.
+		m.closePopupTab(inst, inst.ActiveTab())
 		return
 	}
 	if term.Busy() {
