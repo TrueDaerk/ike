@@ -61,8 +61,10 @@ func TestProbePanelViewAndClear(t *testing.T) {
 	}
 	keymap.SetProbeVerdicts(store.Results(current))
 
-	launched := false
-	p := newProbePanel(k, k.host, func() tea.Cmd { launched = true; return nil })
+	launched, audited := false, false
+	p := newProbePanel(k, k.host,
+		func() tea.Cmd { launched = true; return nil },
+		func() tea.Cmd { audited = true; return nil })
 	view := p.View(100, 20)
 	if !strings.Contains(view, current) || !strings.Contains(view, "✗ cmd+p (arrives as p)") {
 		t.Fatalf("panel must list the stored run with evidence:\n%s", view)
@@ -72,6 +74,12 @@ func TestProbePanelViewAndClear(t *testing.T) {
 	p.run()
 	if !launched {
 		t.Fatal("Run Probe must call the launcher")
+	}
+
+	// Dead Bindings (#2161) launches the audit the same way.
+	p.reviewDead()
+	if !audited {
+		t.Fatal("Dead Bindings must call the audit launcher")
 	}
 
 	// Clear drops the stored run and uninstalls the live verdicts.

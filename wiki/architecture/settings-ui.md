@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-08-25T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -302,7 +302,10 @@ listed (missing chords with their collapse evidence) and clearable, and
 "Run Probe" launches the full-screen probe overlay — the settings panel
 closes first, since the doctor must own every raw key. A default whose
 chord probed missing in this terminal reads `✗ probed missing` in the list,
-ahead of the generic fragility ⚠.
+ahead of the generic fragility ⚠. The same sub-panel's "Dead Bindings" button
+(`d`, #2161) opens the doctor's dead-binding report — the active keymap
+audited against this platform and terminal, with a conflict-free rebind
+offered per finding; it needs no probe run.
 
 ## Toolchain page (#94)
 

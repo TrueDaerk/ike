@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-08-25T00:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -603,8 +603,8 @@ keyboard mode receives, which is precisely the reality the bindings live in.
 Controls: a computed free `ctrl+letter` (normally `ctrl+n` — picked to never
 collide with a target) skips the highlighted pending chord (skipped chords
 get **no verdict**), `ctrl+d`/`esc` end probing into a summary, where
-`enter`/`y` saves, `d`/`n` discards without touching the store, and `esc`
-resumes probing.
+`enter`/`y` saves, `r` saves and opens the dead-binding report (#2161),
+`d`/`n` discards without touching the store, and `esc` resumes probing.
 
 A saved run persists as a **per-terminal override set** in
 `keyprobe.json` under the config dir (`$IKE_CONFIG_DIR`, else `~/.ike`) —
@@ -638,6 +638,57 @@ protocol):
 - `cmd+*` — delivered **when sent as Kitty CSI-u sequences**; plain macOS
   terminals without the protocol swallow them.
 - plain keys, `ctrl+letter`, `f1/f6/f10`, `shift+f6` — delivered.
+
+### Dead-binding report (#2161)
+
+Probing answers "does this chord arrive?" one keypress at a time. The doctor's
+second job answers it for the **whole active keymap** without pressing
+anything: the `keymap.deadBindings` command (palette, or `d` in the Keymap
+page's "Keymap Doctor" sub-panel) audits every effective binding and lists the
+ones that cannot arrive here, with the reason and a rebind offer. The summary
+of a probe run reaches it directly with `r` ("save + review dead bindings"),
+so a fresh run flows into the repairs it justifies.
+
+**Verdicts** (`TerminalEnv.Deliverability`, `internal/keymap/deadchords.go`)
+sharpen the three reachability classes into what a user can act on. `Fragile`
+lumps "needs a terminal setting" together with "certainly swallowed here", and
+only the second is worth rebinding proactively:
+
+| Verdict | Meaning |
+|---|---|
+| **live** | `Delivered`, or probed delivered in this terminal |
+| **at risk** | `Fragile` with no known-dead pattern matching — it may work, and it may silently not (`cmd+*` without the Kitty protocol, `ctrl+shift+letter`, `alt+*` in an unidentified terminal) |
+| **dead** | known not to arrive: probed missing (with the collapse evidence), plain `ctrl+fN` on darwin (#1374), `ctrl+tab` under tmux, `alt+<character key>` in a macOS terminal that composes the Option layer by default, and the `Undetectable` bare-modifier taps |
+
+`TerminalEnv` is `{GOOS, Terminal}` — the terminal identity is
+`keymap.TerminalID`, the same key the probe store uses, so a stored run and a
+static verdict always talk about the same terminal. The
+option-composition rule fires only for terminals whose *default* composes
+(`optionComposingTerminals`: Terminal.app, iTerm2, Ghostty, kitty, WezTerm,
+Alacritty, VS Code); an unidentified terminal — or tmux, whose outer emulator
+decides — stays "at risk" rather than being condemned. It applies to character
+keys only: `alt+f7` and `alt+left` carry their modifier in the CSI parameter
+and arrive whatever Option does. **Probed truth wins in both directions**: a
+chord probed delivered is never called dead however grim the rules look, and
+one probed missing is dead however clean they look.
+
+**Suggestions** (`internal/keydoctor/analysis.go`) are generated best-first —
+the same base key under a delivered modifier (`ctrl+f8` → `shift+f8`), then
+mnemonic `ctrl+<letter>` chords from the command id, then two-step sequences
+under a `ctrl+k`/`ctrl+x`/`ctrl+w` prefix — and each candidate must be *live*
+in this setup and **free across the whole keymap**: not bound, not the prefix
+of a multi-step chord, not prefixed by one. The check is deliberately
+context-blind because the write is an unqualified
+`keymap.bindings.<chord>` override, which claims the chord everywhere. Within
+one audit no two findings offer the same chord (dead bindings pick first), so
+applying every offer stays conflict-free.
+
+**Applying** emits `keydoctor.RebindMsg`, which the root model runs through
+the ordinary customization path (`internal/app/deadbindings.go`): the new
+chord binds the command at user scope, the dead chord unbinds, one config
+reload rebuilds the table. The report stays open and re-audits on that reload,
+so a repaired binding drops off the list and the remaining suggestions are
+re-checked against the keymap as it now stands.
 
 ## macOS: the Option key as Alt (#2064)
 
@@ -708,7 +759,10 @@ stops producing `∫ ƒ å …`, so anyone who types those characters wants the
 one-sided (`left`/`right`) variant. Everything bound to `alt+*` also stays
 reachable from the command palette, the universal escape hatch — and
 `cmd/keyprobe` answers "does this chord actually arrive?" for a given terminal
-before anyone changes a binding.
+before anyone changes a binding. Anyone who would rather move the bindings than
+the terminal setting can run the [dead-binding report](#dead-binding-report-2161)
+(`keymap.deadBindings`): in a composing terminal it lists exactly the `alt+*`
+chords on character keys and offers a deliverable chord for each.
 
 Two further macOS notes:
 

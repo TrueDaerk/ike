@@ -124,6 +124,7 @@ bring their own.
 | Toggle Full Query View | `json.jqQueryView` | `ctrl+alt+e` | — | everywhere |
 | Rename Saved jq Filter… | `json.jqRenameFilter` | — | — | everywhere |
 | Save Playground Filter… | `json.jqSaveFilter` | — | — | everywhere |
+| Keymap Doctor: Dead Bindings | `keymap.deadBindings` | — | — | everywhere |
 | Keymap Doctor: Probe Chord Delivery | `keymap.doctor` | — | — | everywhere |
 | Import JetBrains Keymap XML… | `keymap.importJetBrains` | — | — | everywhere |
 | Open Rotated Log Set (Merged Timeline) | `log.openRotatedSet` | — | — | everywhere |

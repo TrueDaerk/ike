@@ -44,6 +44,9 @@ type KeymapPage struct {
 	// doctorLaunch dispatches keymap.doctor in the app (#2080); the doctor
 	// sub-panel's Run Probe button is hidden while it is nil.
 	doctorLaunch func() tea.Cmd
+	// deadLaunch dispatches keymap.deadBindings in the app (#2161); the
+	// sub-panel's Dead Bindings button is hidden while it is nil.
+	deadLaunch func() tea.Cmd
 	off       int // list scroll offset (#537)
 	filter    string
 	filterCur int  // rune cursor inside filter (#2002)
@@ -99,6 +102,11 @@ func (k *KeymapPage) SetSubPanelHost(h SubPanelHost) { k.host = h }
 // SetDoctorLaunch injects the command that opens the keymap doctor overlay
 // (#2080) — the app closes the settings panel and runs the probe.
 func (k *KeymapPage) SetDoctorLaunch(f func() tea.Cmd) { k.doctorLaunch = f }
+
+// SetDeadBindingsLaunch injects the command that opens the doctor's
+// dead-binding report (#2161) — the audit of the active keymap against this
+// platform and terminal.
+func (k *KeymapPage) SetDeadBindingsLaunch(f func() tea.Cmd) { k.deadLaunch = f }
 
 // Capturing implements PageModel: while a rebind capture (or its conflict
 // confirmation) or the filter input (#531) is active the page needs every key
@@ -290,7 +298,7 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		// Keymap doctor (#2080): stored per-terminal probe runs, viewable
 		// and clearable, plus the launcher for a fresh probe.
 		if k.host != nil {
-			k.host.Push(newProbePanel(k, k.host, k.doctorLaunch))
+			k.host.Push(newProbePanel(k, k.host, k.doctorLaunch, k.deadLaunch))
 		}
 	case "i":
 		// JetBrains keymap import (#677): inline path input with completion.
