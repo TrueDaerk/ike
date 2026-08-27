@@ -3,10 +3,12 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/config"
 	"ike/internal/coverage"
 	"ike/internal/editor"
 	"ike/internal/host"
@@ -125,5 +127,89 @@ func TestEditMarksStoreStale(t *testing.T) {
 	m = out.(Model)
 	if _, stale, ok := m.coverage.Marks("/cov.go"); !ok || !stale {
 		t.Fatal("an edit must mark the stored coverage stale")
+	}
+}
+
+// coverageStatusApp opens src in a wide app whose tests.coverage_status is
+// set to on — the status-line segment's opt-in (#2246).
+func coverageStatusApp(t *testing.T, src string, on bool) Model {
+	t.Helper()
+	orig := config.Get()
+	t.Cleanup(func() { config.Set(orig) })
+	c, _ := config.Load(config.Options{})
+	c.Tests.CoverageStatus = on
+	config.Set(c)
+	m := coverageApp(t)
+	// The temp path in the file segment is long; widen the bar so the
+	// overflow guard cannot clip the segment under test.
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 400, Height: 30})
+	m = out.(Model)
+	out, _ = m.openPath(src, false)
+	return out.(Model)
+}
+
+// TestCoverageStatusSegment: with the setting on, the focused file's
+// percentage reaches the status line, an edit marks it stale, and an
+// uncovered file shows nothing.
+func TestCoverageStatusSegment(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "f.cvt")
+	if err := os.WriteFile(src, []byte("a\nb\nc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	registerCovLang(t, src)
+	m := coverageStatusApp(t, src, true)
+	if line := m.statusLine(); strings.Contains(line, "cov ") {
+		t.Fatalf("without a coverage run the segment must stay hidden: %q", line)
+	}
+	m.coverage.SetRun([]lang.FileCoverage{{Path: src, Lines: map[int]lang.CoverKind{
+		1: lang.CoverCovered, 2: lang.CoverUncovered, 3: lang.CoverPartial,
+	}}})
+	if line := m.statusLine(); !strings.Contains(line, "cov 66.7%") {
+		t.Fatalf("the focused file's percentage must show: %q", line)
+	}
+	out, _ := m.Update(editor.SyncMsg{Path: src})
+	m = out.(Model)
+	if line := m.statusLine(); !strings.Contains(line, "cov 66.7% stale") {
+		t.Fatalf("an edit must mark the segment stale: %q", line)
+	}
+
+	other := filepath.Join(dir, "g.cvt")
+	if err := os.WriteFile(other, []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, _ = m.openPath(other, false)
+	m = out.(Model)
+	if line := m.statusLine(); strings.Contains(line, "cov ") {
+		t.Fatalf("an uncovered file must hide the segment: %q", line)
+	}
+}
+
+// TestCoverageStatusSegmentOptIn: the segment stays off while
+// tests.coverage_status is off — the default.
+func TestCoverageStatusSegmentOptIn(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "f.cvt")
+	if err := os.WriteFile(src, []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	registerCovLang(t, src)
+	m := coverageStatusApp(t, src, false)
+	m.coverage.SetRun([]lang.FileCoverage{{Path: src, Lines: map[int]lang.CoverKind{1: lang.CoverCovered}}})
+	if line := m.statusLine(); strings.Contains(line, "cov ") {
+		t.Fatalf("the segment must be opt-in: %q", line)
+	}
+}
+
+// TestCoverageFilesForPanel: the store's per-file summaries reach the Test
+// Results panel worst-covered first.
+func TestCoverageFilesForPanel(t *testing.T) {
+	m := coverageApp(t)
+	m.coverage.SetRun([]lang.FileCoverage{
+		{Path: "/full.go", Lines: map[int]lang.CoverKind{1: lang.CoverCovered}},
+		{Path: "/half.go", Lines: map[int]lang.CoverKind{1: lang.CoverCovered, 2: lang.CoverUncovered}},
+	})
+	files := m.coverageFiles()
+	if len(files) != 2 || files[0].Path != "/half.go" || files[0].Percent != 50 || files[1].Percent != 100 {
+		t.Fatalf("coverageFiles = %+v", files)
 	}
 }

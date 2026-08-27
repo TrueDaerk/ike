@@ -351,9 +351,13 @@ type MatcherEntry struct {
 // -json`, pytest) into the structured Test Results pane; off keeps every
 // test run in the raw Run tool terminal (#1905). AutoOpen opens the pane
 // when a captured test run starts; off, it only fills an already open pane.
+// CoverageStatus (#2246) adds the focused file's coverage percentage to the
+// editor status line after a run with coverage; off by default, since the
+// figure only matters while one works on coverage.
 type Tests struct {
-	ResultsWindow bool `toml:"results_window"`
-	AutoOpen      bool `toml:"auto_open"`
+	ResultsWindow  bool `toml:"results_window"`
+	AutoOpen       bool `toml:"auto_open"`
+	CoverageStatus bool `toml:"coverage_status"`
 }
 
 // Scratch holds the explorer's Scratches section behaviour (#1963, replacing

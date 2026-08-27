@@ -251,6 +251,9 @@ func defaults() *Config {
 		Tests: Tests{
 			ResultsWindow: true, // parsed test runs open the Test Results tool (#1911)
 			AutoOpen:      true,
+			// The status-line coverage figure is opt-in (#2246): the bar is
+			// crowded, and the percentage is only wanted while working on it.
+			CoverageStatus: false,
 		},
 		Scratch: Scratch{
 			// The explorer's Scratches section (#1963) shows by default: it

@@ -25,15 +25,19 @@ func testsEntry(t *testing.T, key string) Entry {
 	return Entry{}
 }
 
-// TestTestsEntriesShape: both keys are booleans on the Tests page.
+// TestTestsEntriesShape: every key is a boolean on the Tests page.
 func TestTestsEntriesShape(t *testing.T) {
-	for _, key := range []string{"tests.results_window", "tests.auto_open"} {
+	for _, key := range []string{"tests.results_window", "tests.auto_open", "tests.coverage_status"} {
 		if e := testsEntry(t, key); e.Type != Bool {
 			t.Fatalf("%s type = %v, want Bool", key, e.Type)
 		}
 	}
 	if d := config.Defaults(); d["tests.results_window"] != "true" || d["tests.auto_open"] != "true" {
 		t.Fatal("both Test Results toggles must default to on")
+	}
+	// The status-line coverage figure is opt-in (#2246).
+	if config.Defaults()["tests.coverage_status"] != "false" {
+		t.Fatal("tests.coverage_status must default to off")
 	}
 }
 
@@ -71,5 +75,24 @@ func TestTestsAutoOpenRoundTrip(t *testing.T) {
 	commit(t, m)
 	if config.Get().Tests.AutoOpen {
 		t.Fatal("persisted tests.auto_open must be false")
+	}
+}
+
+// TestTestsCoverageStatusRoundTrip: the status-line coverage segment's
+// opt-in persists through the panel (#2246).
+func TestTestsCoverageStatusRoundTrip(t *testing.T) {
+	restoreConfig(t)
+	e := testsEntry(t, "tests.coverage_status")
+	m := New([]Page{{Title: "Tests", Entries: []Entry{e}}}, testOpts(t))
+	m.SetSize(90, 24)
+	m.Open()
+
+	m.writeValue(e, true)
+	commit(t, m)
+	if !config.Get().Tests.CoverageStatus {
+		t.Fatal("persisted tests.coverage_status must be true")
+	}
+	if got := m.value("tests.coverage_status"); got != "true" {
+		t.Fatalf("panel value = %q, want true", got)
 	}
 }

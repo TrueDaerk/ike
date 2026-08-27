@@ -206,7 +206,7 @@ func (m *Model) finishCoverage() tea.Cmd {
 	m.coverageShown = true
 	if p := m.testsPanel(); p != nil {
 		if pct, ok := m.coverage.Percent(); ok {
-			p.SetCoverage(pct)
+			p.SetCoverage(pct, m.coverageFiles())
 		}
 	}
 	return m.pushCoverageMarks()

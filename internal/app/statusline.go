@@ -48,6 +48,7 @@ var statusLeft = []statusSegment{
 	{id: "docpath", render: docPathSegment},
 	{id: "logspan", render: logSpanSegment},
 	{id: "diagnostics", render: diagSegment},
+	{id: "coverage", render: func(m Model, ed *editor.Model) string { return m.coverageSegment(ed) }},
 	{id: "host", render: func(m Model, _ *editor.Model) string { return m.host.Status() }},
 	{id: "lsp", render: func(m Model, ed *editor.Model) string { return m.focusedLangStatus(ed) }},
 	{id: "toolchain", render: func(m Model, ed *editor.Model) string { return m.toolchainSegment(ed) }},

@@ -1,5 +1,28 @@
 # Log
 
+## 2026-08-28 (Per-file test coverage: Test Results listing and status segment, #2246)
+
+- **Per-file percentages** (`internal/coverage`): the store gained
+  `FilePercent(path)` — one file's executed-over-tracked ratio plus its
+  staleness flag — and `FileStats()`, the whole run summarized worst coverage
+  first (path-sorted within an equal percentage, untracked files dropped).
+  `Percent()` now shares the same counting helper.
+- **Test Results detail** (`internal/testresults`): `c` swaps the detail
+  column for the run's per-file breakdown — the run-wide figure, then one
+  right-aligned percentage per file with its path relative to the run
+  directory. `SetCoverage(pct, files)` carries the breakdown in as
+  `CoverageFile` values, so the panel still imports nothing from
+  `internal/coverage`; `StartRun` drops listing and mode, so a plain re-run
+  leaves nothing stale behind. The footer only advertises `c` once a coverage
+  run has filled it.
+- **Status segment** (`internal/app/coverage.go`, `statusline.go`): the
+  focused file's percentage as `cov 82.4%`, suffixed `stale` after an edit.
+  Opt-in via the new `tests.coverage_status` setting (Settings → Tests, off by
+  default) and independent of `coverage.toggle` / `editor.marks.coverage` —
+  those quiet the gutter, not the figure.
+- The gutter bars, the toggle and edit-driven staleness themselves landed with
+  #2081; see /architecture/test-results.md and /architecture/editor.md.
+
 ## 2026-08-27 (Follow mode: live filter and highlight over tailed output, #2255)
 
 - **Filter line** (`internal/editor/logfilter.go`): `view.followFilter`

@@ -249,6 +249,7 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Structured test results | `tests.results_window` | boolean | `true` | user | Parse test runs into the Test Results tool window (result tree, re-run failed, jump to failure) when the language declares an output parser; off keeps every test run in the raw Run tool terminal |
 | Open on test run | `tests.auto_open` | boolean | `true` | user | Open the Test Results tool window when a captured test run starts; off only updates an already open pane |
+| Coverage in status line | `tests.coverage_status` | boolean | `false` | user | Show the focused file's line-coverage percentage in the editor status line after a run with coverage ("cov 82.4%", marked "stale" once the buffer changed since the run); off keeps the figure to the Test Results window, whose detail column lists every covered file under c |
 
 ### Forge
 
