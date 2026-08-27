@@ -64,3 +64,35 @@ func (p *Palette) Refresh() {
 	}
 	p.recompute()
 }
+
+// RefreshRows recomputes the visible rows *in place* (#2178): same rows, only
+// richer — the project picker's rows grow their git branch badge as the
+// per-project probes answer, one msg at a time. Refresh's selection reset
+// would yank the cursor back to the top under a user already arrowing down,
+// so this variant keeps selection and scroll, clamped to the new list. Like
+// Refresh it is a no-op while closed.
+func (p *Palette) RefreshRows() {
+	if !p.open {
+		return
+	}
+	sel, top := p.selected, p.top
+	sideSel, sideTop, sideFocus := p.sideSel, p.sideTop, p.sideFocus
+	p.recompute()
+	p.selected, p.top = clampIndex(sel, len(p.items)), clampIndex(top, len(p.items))
+	p.sideSel, p.sideTop = clampIndex(sideSel, len(p.sideItems)), clampIndex(sideTop, len(p.sideItems))
+	if len(p.sideItems) > 0 {
+		p.sideFocus = sideFocus
+	}
+}
+
+// clampIndex bounds a remembered row index to a list of n rows; an empty list
+// or a negative index yields 0.
+func clampIndex(i, n int) int {
+	if i < 0 || n == 0 {
+		return 0
+	}
+	if i >= n {
+		return n - 1
+	}
+	return i
+}

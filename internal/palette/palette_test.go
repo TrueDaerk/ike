@@ -383,6 +383,41 @@ func TestLiveModeDebounce(t *testing.T) {
 	}
 }
 
+// TestRefreshRowsKeepsSelection guards the in-place variant (#2178): the
+// project picker's rows grow their git badge while the user is already
+// arrowing through the list, so re-listing must not reset the cursor — and
+// must still clamp when the new list is shorter.
+func TestRefreshRowsKeepsSelection(t *testing.T) {
+	live := &liveStub{rows: []Item{{Title: "a"}, {Title: "b"}, {Title: "c"}}}
+	p := New(Config{}, live)
+	p.SetSize(80, 24)
+	p.OpenLocked(Context{}, '$')
+	p.selected, p.top = 2, 1
+
+	// Same rows, enriched: the selection stays where the user put it.
+	live.rows = []Item{{Title: "a", Badge: "⎇ main"}, {Title: "b"}, {Title: "c"}}
+	p.RefreshRows()
+	if p.selected != 2 || p.top != 1 {
+		t.Errorf("selection moved to %d/%d, want 2/1", p.selected, p.top)
+	}
+	if p.items[0].Badge != "⎇ main" {
+		t.Errorf("rows were not recomputed: %+v", p.items)
+	}
+	// A shorter list clamps instead of pointing past the end.
+	live.rows = []Item{{Title: "a"}}
+	p.RefreshRows()
+	if p.selected != 0 || p.top != 0 {
+		t.Errorf("selection = %d/%d after shrinking, want 0/0", p.selected, p.top)
+	}
+	// Closed is a no-op, like Refresh.
+	p.Close()
+	live.rows = nil
+	p.RefreshRows()
+	if len(p.items) != 1 {
+		t.Errorf("RefreshRows recomputed while closed: %+v", p.items)
+	}
+}
+
 // completerMode is a Mode implementing Completer for tab tests (#542).
 type completerMode struct{ out string }
 

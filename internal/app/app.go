@@ -701,6 +701,7 @@ type Model struct {
 	// fronts registered commands (":") and file search ("@"). paletteKey is the
 	// default key that opens it (the final binding is Roadmap 0080's).
 	palette     *palette.Palette
+	projGit     *project.GitCache    // async branch/dirty context of picker rows (#2178)
 	cmdUsage    *palette.Usage       // most-used command ranking (#773)
 	fileUsage   *palette.Usage       // most-used file ranking in the ranked palettes (#1419)
 	winSizes    *ui.WinSizes         // persisted floating-window resize deltas (#774)
@@ -1122,6 +1123,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	sshPicker := newSSHMode()                       // ssh_config host picker (#1938)
 	remotePicker := newRemoteMode()                 // SFTP browse host picker (#1997)
 	playFilters := newPlayFiltersMode()             // named saved jq filters (#1995)
+	projGit := project.NewGitCache()                // picker branch/dirty context (#2178)
 	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
 	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
@@ -1180,7 +1182,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		shell:           ui.New(shellConfig(cfg)),
 		vcs:             vcsSt,
 		forgePoll:       forgeSt,
-		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters),
+		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters, projGit),
+		projGit:         projGit,
 		layoutsPicker:   layoutsPicker,
 		httpRequests:    httpRequests,
 		httpEntries:     httpEntries,
@@ -2576,7 +2579,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, projGit *project.GitCache) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -2603,10 +2606,15 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	// and closable in place via the aux action (#820).
 	openInMemory := func(path string) bool { return wsMgr != nil && wsMgr.Peek(path) != nil }
 	proj.SetOpen(openInMemory)
+	// Branch + dirty marker per row (#2178), filled asynchronously after the
+	// picker opens; one cache serves both flavours, so a probe made for the
+	// switch list is already there when the peek list opens.
+	proj.SetGitCache(projGit)
 	// The peek flavour behind project.peek (#2136): same list, activation
 	// peeks; alt+enter still switches for real.
 	projPeek := project.NewPeekPickerMode(nil)
 	projPeek.SetOpen(openInMemory)
+	projPeek.SetGitCache(projGit)
 	mru.SetProjects(func() []palette.Item {
 		cur, _ := os.Getwd()
 		var items []palette.Item
@@ -5527,13 +5535,24 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// picker, locked to its mode; the selection lands as project.PickedMsg.
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, project.PickerPrefix)
-		return m, nil
+		// The list is complete already; branch + dirty marker per row (#2178)
+		// arrive afterwards, one GitInfoMsg at a time.
+		return m, project.EnrichCmd(project.History(config.Get()))
 
 	case project.OpenPeekPickerMsg:
 		// project.peek (#2136): the same recent-projects list, locked to the
 		// peek flavour — plain activation peeks, alt+enter switches for real.
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, project.PeekPickerPrefix)
+		return m, project.EnrichCmd(project.History(config.Get()))
+
+	case project.GitInfoMsg:
+		// One finished picker probe (#2178): file it and re-list, so the row
+		// grows its branch badge without the palette losing its query. A
+		// result arriving after the palette closed is still worth caching —
+		// the next open starts from it and re-probes on top.
+		m.projGit.Set(msg.Info)
+		m.palette.RefreshRows()
 		return m, nil
 
 	case project.PeekPickedMsg:
