@@ -491,6 +491,33 @@ type RenamePromptMsg struct {
 	Apply       func(newName string) tea.Cmd
 }
 
+// RenamePreviewFile is one file a pending rename would rewrite: its path,
+// whether an open editor buffer holds it, how many edits land in it, and the
+// full text before and after applying them. The before/after pair is what the
+// preview dialog diffs — the app renders it with the inline diff renderer and
+// never reaches into the manager or the file system itself.
+type RenamePreviewFile struct {
+	Path   string
+	Open   bool
+	Edits  int
+	Before string
+	After  string
+}
+
+// RenamePreviewMsg asks the app to confirm a rename that touches more than one
+// file (#2149) before anything is written. Files lists every affected file in
+// the manager's deterministic path order; Apply is the bridge continuation the
+// dialog runs on confirm, which applies exactly the edits the preview showed.
+// Cancelling simply drops the message: nothing has been applied yet. A rename
+// confined to a single file never produces this message — it applies straight
+// away, as it always has.
+type RenamePreviewMsg struct {
+	OldName string
+	NewName string
+	Files   []RenamePreviewFile
+	Apply   func() tea.Cmd
+}
+
 // CodeActionChoice is one offered action, presentation-ready.
 type CodeActionChoice struct {
 	Title     string

@@ -102,6 +102,10 @@ A few more things arrive on their own once a server runs:
 - **Extend/Shrink Selection** — grow the selection outward through
   syntactic units (identifier → expression → statement → block …) and back
   in again; works without a server too, via the syntax tree.
+- **Rename preview** — ++shift+f6++ on a symbol used in more than one file
+  shows what would change first: every affected file with its edit count and
+  a diff of the edits. ++enter++ applies them, ++esc++ leaves everything
+  untouched. A rename that stays inside the current file applies right away.
 - **Rename refactoring on file moves** — renaming or moving a file or
   folder in the explorer lets the server update whatever refers to it
   (import paths, package references) before the file actually moves. The

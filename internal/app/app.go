@@ -514,6 +514,9 @@ type Model struct {
 	// lspRename is the open symbol-rename prompt (Roadmap 0100, #6); nil when
 	// no rename is in flight.
 	lspRename *lspRenameState
+	// lspRenamePreview is the multi-file rename confirmation (#2149); nil
+	// while no previewed rename waits for an answer.
+	lspRenamePreview *lspRenamePreviewState
 	// lspStatus holds the persistent per-language server state ("ready",
 	// "disabled") behind the status line's server segment (#380). Keyed by
 	// language ID; the segment renders only the focused buffer's language, so
@@ -6268,6 +6271,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openLSPRenamePrompt(msg)
 		return m, nil
 
+	case ilsp.RenamePreviewMsg:
+		// lsp.rename touching more than one file (#2149): show what would
+		// change before anything is written.
+		m.openLSPRenamePreview(msg)
+		return m, nil
+
 	case ilsp.SymbolPromptMsg:
 		// project.goToClass (cmd+o): install the bridge
 		// continuation as the live mode's re-query hook (#295) and open the
@@ -7165,6 +7174,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The symbol-rename prompt (0100, #6) mirrors it.
 		if m.lspRenameOpen() {
 			return m.updateLSPRenamePrompt(msg)
+		}
+		// The multi-file rename preview (#2149) owns the keyboard the same
+		// way: j/k pick the file, enter applies, esc cancels.
+		if m.lspRenamePreviewOpen() {
+			return m.updateLSPRenamePreview(msg)
 		}
 		if m.floats.IsOpen() && !m.tourOpen() {
 			// The tour never reaches this branch: its keys are handled (or

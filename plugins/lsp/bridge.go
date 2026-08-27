@@ -964,6 +964,14 @@ func (b *bridge) promptRename(h host.API, path string, pos buffer.Position, plac
 // buffers in-editor, closed files on disk, followed by a summary toast.
 // oldName is the prepareRename placeholder, needed by the Markdown heading
 // completion (markdown_rename.go).
+//
+// A rename that reaches beyond one file is not applied straight away (#2149):
+// the app is asked to confirm it first, with the affected files and a diff of
+// every edit (RenamePreviewMsg). The dialog's confirm runs the very edits the
+// preview was built from — no second server round trip whose answer could
+// differ from what the user just approved — and cancelling leaves the project
+// untouched, since nothing has been written at this point. A single-file
+// rename keeps applying instantly.
 func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, oldName, newName string) tea.Cmd {
 	mgr := b.manager()
 	if mgr == nil || strings.TrimSpace(newName) == "" {
@@ -976,17 +984,36 @@ func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, oldNa
 			return
 		}
 		files = b.mergeHeadingTitleEdits(files, path, oldName, strings.TrimSpace(newName))
-		n, derr := dispatchWorkspaceEdits(h, files)
-		switch {
-		case derr != nil:
-			h.Send(ilsp.ServerStatusMsg{Text: "rename applied partially: " + derr.Error(), Kind: ilsp.ServerEventWarn})
-		case n == 0:
-			h.Send(ilsp.ServerStatusMsg{Text: "nothing to rename", Kind: ilsp.ServerEventInfo})
-		default:
-			h.Send(ilsp.ServerStatusMsg{Text: editSummary(n), Kind: ilsp.ServerEventInfo})
+		if preview := renamePreviewFiles(mgr, files); len(preview) > 1 {
+			h.Send(ilsp.RenamePreviewMsg{
+				OldName: oldName,
+				NewName: strings.TrimSpace(newName),
+				Files:   preview,
+				Apply: func() tea.Cmd {
+					go dispatchRenameEdits(h, files)
+					return nil
+				},
+			})
+			return
 		}
+		dispatchRenameEdits(h, files)
 	}()
 	return nil
+}
+
+// dispatchRenameEdits applies the converted rename edits and reports the
+// outcome as a toast. It is the shared tail of the instant and the confirmed
+// path, so both report identically.
+func dispatchRenameEdits(h host.API, files []manager.FileEdits) {
+	n, derr := dispatchWorkspaceEdits(h, files)
+	switch {
+	case derr != nil:
+		h.Send(ilsp.ServerStatusMsg{Text: "rename applied partially: " + derr.Error(), Kind: ilsp.ServerEventWarn})
+	case n == 0:
+		h.Send(ilsp.ServerStatusMsg{Text: "nothing to rename", Kind: ilsp.ServerEventInfo})
+	default:
+		h.Send(ilsp.ServerStatusMsg{Text: editSummary(n), Kind: ilsp.ServerEventInfo})
+	}
 }
 
 // codeAction lists the actions available at the cursor (or the active visual

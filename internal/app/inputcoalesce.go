@@ -206,7 +206,8 @@ func (m Model) overlayCapturesKeyboard() bool {
 		m.layoutSavePromptOpen() || m.jbImportPromptOpen() ||
 		m.openAPIImportPromptOpen() || m.curlImportPromptOpen() ||
 		m.bookmarkPromptOpen() ||
-		m.lspRenameOpen() || m.forgeEditDialogOpen() || m.explorerCapturing()
+		m.lspRenameOpen() || m.lspRenamePreviewOpen() ||
+		m.forgeEditDialogOpen() || m.explorerCapturing()
 }
 
 // handlePaste routes a bracketed-paste block (#603) to the focused editable

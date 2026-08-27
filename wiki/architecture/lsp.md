@@ -570,6 +570,23 @@ same single-view rule as replace-in-path) and stay dirty; every other file
 is rewritten on disk
 (bottom-up, mode-preserving). A summary toast reports the touched file count.
 
+*Multi-file preview (#2149).* A rename whose `WorkspaceEdit` reaches beyond
+one file is **not** applied straight away: the bridge builds a preview payload
+first (`renamePreviewFiles`, `plugins/lsp/workspace_edit.go`) — per affected
+file its edit count, whether an open buffer holds it, and the file's text
+before and after the edits — and sends it as a `RenamePreviewMsg`. The app
+raises a floating-shell dialog (`internal/app/lsprenamepreview.go`): every
+affected file with its edit count, and the selected file's changes as an
+inline diff, rendered by the same `miniDiffLines` renderer local history, the
+change feed and the crash-recovery prompt use. `j`/`k` walk the files (the
+diff follows), `enter` applies, `esc` cancels. The "after" text is produced
+by the very `applyEditsToLines` the apply path runs, so the preview shows
+exactly what confirming writes, and confirming replays the *already converted*
+edits — no second `textDocument/rename` whose answer could differ from what
+the user approved. Cancelling is free: nothing has been written when the
+dialog is up, so buffers and files stay as they were. A rename confined to a
+single file keeps applying instantly, dialog-free.
+
 *Markdown headings (#2025).* marksman resolves same-document references
 itself: renaming `## Old Heading` already returns edits rewriting every
 `](#old-heading)` in the file alongside the heading, and IKE applies them —

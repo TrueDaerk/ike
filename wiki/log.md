@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-27 (LSP rename: preview multi-file edits before applying, #2149)
+
+- **The gap**: `lsp.rename` applied the server's `WorkspaceEdit` the moment it
+  arrived. A rename reaching into files the user never opened rewrote them —
+  on disk, for closed files — with no way to see the blast radius first.
+- **Preview built from the converted edits, not a second request**
+  (`renamePreviewFiles`, `plugins/lsp/workspace_edit.go`): per affected file
+  the edit count, whether an open buffer holds it, and the text before/after,
+  where "after" comes from the very `applyEditsToLines` the apply path runs.
+  Confirming replays those same converted edits, so what the dialog showed is
+  what lands — a second `textDocument/rename` could have answered differently.
+- **The dialog** (`internal/app/lsprenamepreview.go`) is the crash-recovery
+  prompt's shape: a `ui.Content` in the floating shell so the body learns the
+  width budget, the file list above the selected file's diff, and the diff
+  cached per cursor move rather than per frame (#409). Rendering reuses
+  `miniDiffLines` — the same inline renderer behind local history, the change
+  feed and recovery.
+- **The single-file path is untouched**: the bridge only sends
+  `RenamePreviewMsg` for two or more affected files; one file still applies
+  instantly. That is the half most renames take, and a dialog per identifier
+  rename would have been a regression.
+- **Cancel is free by construction**, not by undo: the bridge writes nothing
+  while the answer is pending, so dropping the message leaves every buffer and
+  file exactly as it was — covered end-to-end in `plugins/lsp` against a fake
+  server returning a synthetic two-file `WorkspaceEdit`.
+
 ## 2026-08-27 (Investigate: .http highlighting after a failed request line, #2226)
 
 - **The report**: in a ~205-line `.http` file, everything from a
