@@ -202,17 +202,23 @@ IO loop and Update/View hot path was audited; findings fixed in #2163:
 - **The DBGp accept loop survives transient errors** (`EMFILE` under a
   php-fpm burst) with a 100ms backoff instead of dying silently for the
   session.
+- **The host `Send` outbox is bounded and coalescing** (#2169): 1024
+  messages, drop-newest with a counted `debug.log` line when the bound
+  trips, and keyed in-place replacement (`host.Coalescable`, the jsonrpc
+  `NotifyCoalesced` pattern) for idempotent snapshots — the last hop that
+  otherwise defeated every producer's own backpressure.
 
 Audited and left as they were (safe by construction): the forge poller
 (idempotent arm, exponential backoff, root-tagged messages), the demand-armed
 debounce ticks, the terminal read/feed/write loops (error exits, `sync.Cond`
 spool with a 16 MB cap), the jsonrpc read/write loops, the LSP restart
 backoff (capped at 3), the input coalescer, and the watcher's fsnotify loop.
-Larger flood/coalescing findings (host outbox bounding, HTTP stream chunk
-coalescing, task-problem snapshots, active-session DAP output, watcher event
-batching, completion-source locking, per-frame sticky/fold/speed-search
-memoization, tick generation stamps across model rebuilds) are split into
-follow-up issues — see the #2163 issue trail.
+Larger flood/coalescing findings (HTTP stream chunk coalescing, task-problem
+snapshots, active-session DAP output, watcher event batching,
+completion-source locking, per-frame sticky/fold/speed-search memoization,
+tick generation stamps across model rebuilds) are split into follow-up
+issues — see the #2163 issue trail; the host outbox bounding landed as
+#2169.
 
 ## Diagnostics hooks (`internal/diag`, #1001)
 

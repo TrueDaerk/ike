@@ -1044,6 +1044,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// Missing-formatter install hints (#1402, the #1067 pattern) surface as
 	// warn toasts; re-wiring on a project switch keeps the live host.
 	format.SetNotifier(func(text string) { h.Notify(host.Warn, text) })
+	// Send-outbox drop reporting (#2169): a tripped bound leaves a line in
+	// debug.log; re-wiring on a project switch keeps the live host.
+	h.SetDiagLog(logDiagnostic)
 	// The local completion engine (#851) listens to editor events next to the
 	// LSP bridge; registration by name keeps a project switch idempotent. The
 	// word (#852) and symbol (#853) indexes start their one-shot project

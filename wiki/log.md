@@ -1,5 +1,19 @@
 # Log
 
+## 2026-08-27 (host.Send outbox: bounded and coalescing, #2169)
+
+- **Bounded outbox** (#2163 follow-up): the fire-and-forget `Send` queue
+  (#2027) caps at 1024 messages. At the cap the incoming message is dropped
+  (newest loses, queued order kept), counted (`Host.SendDrops`) and reported
+  to `debug.log` via the new `Host.SetDiagLog` seam (first drop, then every
+  500th) — a firehose producer can no longer grow the queue monotonically
+  and pin the Update loop on a backlog it never drains.
+- **Per-type coalescing**: `host.Coalescable` (`CoalesceKey() string`, the
+  jsonrpc `NotifyCoalesced` pattern #1542) marks idempotent snapshots; a
+  queued message with the same non-empty key is replaced in place — same
+  slot, latest payload — so snapshot classes never grow the queue and never
+  drop. Producers adopt it in their own follow-up issues.
+
 ## 2026-08-27 (debugging: combined tool area — panel + console in one pane, #2190)
 
 - **Combined debug area**: the separate debuggee terminal pane (#1370,

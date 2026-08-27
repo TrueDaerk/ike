@@ -6,6 +6,7 @@
 package host
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 
@@ -53,7 +54,9 @@ type API interface {
 	// It never blocks the caller: delivery is queued (#2027), so a seam that
 	// answers straight from Update — a command's Run, an EditorEmitter.Emit —
 	// may Send without deadlocking the program against itself. Queued messages
-	// keep their Send order.
+	// keep their Send order. The queue is bounded and coalesces Coalescable
+	// snapshots (#2169), so a producer outrunning the Update loop cannot grow
+	// it without limit.
 	Send(msg tea.Msg)
 	// SetStatus replaces the persistent status-line segment (e.g. LSP server
 	// state). It is rendered until overwritten; event-like messages belong in
@@ -163,6 +166,35 @@ const (
 // EditorEmitter receives editor lifecycle events. Implementations must not block.
 type EditorEmitter interface{ Emit(EditorEvent) }
 
+// Coalescable marks a Send message as an idempotent snapshot (#2169, the
+// jsonrpc NotifyCoalesced pattern from #1542): while an earlier message with
+// the same non-empty key still waits in the Send outbox, a newer one replaces
+// it in place — same queue position, latest payload — instead of growing the
+// queue. Implement it only where the newest payload fully subsumes the older
+// one (a whole diagnostics set, a terminal output snapshot), and key by the
+// bounded resource the snapshot describes (a document URI, a session id) so
+// distinct keys stay few. An empty key never coalesces.
+type Coalescable interface{ CoalesceKey() string }
+
+// maxOutbox bounds the Send outbox (#2169). A firehose producer that outruns
+// the Update loop (a busy terminal session, an LSP diagnostics storm,
+// per-keystroke editor events) otherwise grows the queue monotonically: the
+// pump delivers back-to-back forever while RSS climbs with the retained
+// payloads, defeating every subsystem's own backpressure at the last hop. At
+// the cap the incoming message is dropped — newest loses, since keeping the
+// already-queued messages preserves Send order — counted, and reported
+// through the diag logger. Snapshot classes should implement Coalescable
+// instead: a keyed replace never grows the queue, so it never drops.
+const maxOutbox = 1024
+
+// sendEntry is one queued Send message with its coalescing key ("" for
+// none), captured at enqueue so the outbox scan never re-asserts the
+// interface.
+type sendEntry struct {
+	key string
+	msg tea.Msg
+}
+
 // Config is read-only key/value configuration access for plugins.
 type Config interface {
 	Get(key string) (value string, ok bool)
@@ -224,9 +256,9 @@ func FromConfig(c *config.Config) Config {
 
 // Host is the in-process implementation of API.
 type Host struct {
-	cfg       Config
-	status    string
-	send      func(tea.Msg)
+	cfg        Config
+	status     string
+	send       func(tea.Msg)
 	edEmitters map[string]EditorEmitter
 
 	// Queued notifications awaiting the root model's drain. Guarded by mu:
@@ -237,9 +269,14 @@ type Host struct {
 	// Outbox for Send (#2027), guarded by sendMu: messages awaiting the
 	// dispatcher goroutine that hands them to the program in Send order.
 	// pumping says that dispatcher is alive, so at most one runs at a time.
+	// The outbox is bounded at maxOutbox and coalesces keyed snapshots
+	// (#2169); dropped counts messages the bound rejected, diagLog is the
+	// best-effort drop reporter (the app's debug.log).
 	sendMu  sync.Mutex
-	outbox  []tea.Msg
+	outbox  []sendEntry
 	pumping bool
+	dropped uint64
+	diagLog func(string)
 }
 
 // New returns a Host backed by cfg. A nil cfg yields an empty configuration.
@@ -270,12 +307,42 @@ func (h *Host) SetConfig(cfg Config) {
 // local hover/definition provider claiming an EditorEmitter.Emit — froze the
 // whole IDE against itself. Queueing keeps Send order (one dispatcher, FIFO
 // outbox) while making it non-blocking for every caller.
+//
+// The outbox is bounded and coalescing (#2169): a Coalescable message with a
+// non-empty key replaces a queued message with the same key in place, and any
+// other message arriving while the outbox holds maxOutbox entries is dropped,
+// counted (SendDrops) and reported through the diag logger.
 func (h *Host) Send(msg tea.Msg) {
 	if h.send == nil {
 		return // no program yet: nothing to deliver to
 	}
+	var key string
+	if c, ok := msg.(Coalescable); ok {
+		key = c.CoalesceKey()
+	}
 	h.sendMu.Lock()
-	h.outbox = append(h.outbox, msg)
+	if key != "" {
+		for i := range h.outbox {
+			if h.outbox[i].key == key {
+				// Superseded snapshot: latest payload, same queue slot.
+				h.outbox[i].msg = msg
+				h.sendMu.Unlock()
+				return
+			}
+		}
+	}
+	if len(h.outbox) >= maxOutbox {
+		h.dropped++
+		dropped, logf := h.dropped, h.diagLog
+		h.sendMu.Unlock()
+		// Report the first drop of a flood and every 500th after, so the
+		// bound tripping is visible without the log becoming the flood.
+		if logf != nil && (dropped == 1 || dropped%500 == 0) {
+			logf(fmt.Sprintf("host: send outbox full (%d), dropping %T (%d dropped so far)", maxOutbox, msg, dropped))
+		}
+		return
+	}
+	h.outbox = append(h.outbox, sendEntry{key: key, msg: msg})
 	if h.pumping {
 		h.sendMu.Unlock()
 		return // the live dispatcher picks it up
@@ -283,6 +350,24 @@ func (h *Host) Send(msg tea.Msg) {
 	h.pumping = true
 	h.sendMu.Unlock()
 	go h.pump()
+}
+
+// SetDiagLog wires a best-effort diagnostic logger (the app's debug.log) that
+// reports Send outbox drops (#2169). Re-wiring on a project switch is safe
+// while background workers Send.
+func (h *Host) SetDiagLog(logf func(string)) {
+	h.sendMu.Lock()
+	h.diagLog = logf
+	h.sendMu.Unlock()
+}
+
+// SendDrops reports how many messages the bounded Send outbox has rejected
+// since start (#2169) — the counter behind the diag log line, exposed for
+// tests and diagnostics. Coalesced replacements are not drops.
+func (h *Host) SendDrops() uint64 {
+	h.sendMu.Lock()
+	defer h.sendMu.Unlock()
+	return h.dropped
 }
 
 // pump drains the outbox into the program, in Send order, until it runs dry.
@@ -295,11 +380,11 @@ func (h *Host) pump() {
 			h.sendMu.Unlock()
 			return
 		}
-		msg := h.outbox[0]
+		msg := h.outbox[0].msg
 		// Drop the slot's reference before advancing: a delivered message
 		// (a whole document's spans, a diagnostics batch) must not stay
 		// reachable through the backing array.
-		h.outbox[0] = nil
+		h.outbox[0] = sendEntry{}
 		h.outbox = h.outbox[1:]
 		h.sendMu.Unlock()
 		h.send(msg)
