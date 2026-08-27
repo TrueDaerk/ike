@@ -148,6 +148,11 @@ type playState struct {
 	gen    int
 	cancel context.CancelFunc
 	status string
+	// statusWarn renders the status line as a warning rather than a
+	// confirmation (#2237): "that key does nothing here" is not good news,
+	// and painting it in the same green as "copied the result" would read as
+	// if something had happened.
+	statusWarn bool
 }
 
 // setBufFocus moves the keyboard between the query line and the result
@@ -562,6 +567,20 @@ func (m *Model) closePlayground() {
 	m.play = nil
 }
 
+// leavePlaygroundOnEsc is the mode's esc: it closes the playground *and* arms
+// the double-esc palette detector (#2237). Before this the mode swallowed the
+// chord — its own esc returned straight from the modal routing, well above the
+// detector in Update, so the first press of `esc esc` left the input and the
+// second one found nothing armed and the palette stayed shut. Arming here is
+// the "chord recognition ahead of the input exit" the issue asks for, in the
+// shape the rest of the app already uses (see Update): the single esc keeps
+// its immediate meaning — no timeout latency on the common key — and the
+// second esc, now landing in a normal focus, opens the palette.
+func (m *Model) leavePlaygroundOnEsc() {
+	m.closePlayground()
+	m.lastEscAt = m.clock()
+}
+
 // cancelRun aborts the evaluation in flight, if any.
 func (s *playState) cancelRun() {
 	if s.cancel != nil {
@@ -778,7 +797,7 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if s == nil {
 		return m, nil
 	}
-	s.status = ""
+	s.status, s.statusWarn = "", false
 	// A goal column survives a *run* of vertical motions only (#2038): it is
 	// stashed here and cleared, so every other key re-anchors it on the
 	// column the cursor is actually in.
@@ -819,7 +838,7 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "esc":
-		m.closePlayground()
+		m.leavePlaygroundOnEsc()
 		return m, nil
 	case "tab":
 		s.setBufFocus(true)
@@ -885,6 +904,15 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	out, pos, handled, changed := ui.EditKey(msg, s.program, s.pos)
 	if !handled {
+		// The code-action chord (alt+enter) is answered before the Global
+		// lookup can drop it (#2237): it is bound in the editor context, so
+		// nothing here or below claims it and the key used to do a silent
+		// nothing. There is no LSP behind a jq program — the honest answer is
+		// to say the key is not available here and name what is.
+		if m.playCodeActionChord(msg) {
+			m.playNoCodeActions()
+			return m, nil
+		}
 		// A key neither the mode nor the query line claims resolves against
 		// the Global keymap scope (#1983), so cmd+shift+a (Search Everywhere),
 		// cmd+e (Recent Files) and the other IDE-level chords keep working
@@ -938,9 +966,17 @@ func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.openPlayResultAsScratch()
 	case "esc":
 		if s.resultEd.ModeName() == editor.Normal {
-			m.closePlayground()
+			m.leavePlaygroundOnEsc()
 			return m, nil
 		}
+	}
+	// The code-action chord gets the same honest answer here as on the query
+	// line (#2237): the result is a read-only throwaway buffer with no
+	// language server behind it, so alt+enter has nothing to offer — and
+	// saying nothing at all is what made the key feel broken.
+	if m.playCodeActionChord(msg) {
+		m.playNoCodeActions()
+		return m, nil
 	}
 	// Modified chords the result actions leave over resolve against the
 	// Global keymap scope (#1983) before the buffer sees them — the same
@@ -964,6 +1000,23 @@ func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // layer. The lookup is against the editor context, not the hosting pane's: the
 // substitute buffer is an editor regardless of what pane it is mounted in.
 func (m Model) playCopyChord(msg tea.KeyPressMsg) bool {
+	return m.playEditorChord(msg, "editor.copy")
+}
+
+// playCodeActionChord reports whether msg is the chord bound to lsp.codeAction
+// (default alt+enter) — the key the issue found doing a silent nothing in the
+// playground (#2237). Like editor.copy it is an editor-context binding, so the
+// mode's routing keeps it from the keymap layer and the Global fallback never
+// matches it; recognizing it here is what lets the mode answer at all.
+func (m Model) playCodeActionChord(msg tea.KeyPressMsg) bool {
+	return m.playEditorChord(msg, "lsp.codeAction")
+}
+
+// playEditorChord reports whether msg is the single-step chord bound to
+// command in the editor context. The lookup is against the editor context, not
+// the hosting pane's: the playground's buffers are editors regardless of what
+// pane the mode is mounted in.
+func (m Model) playEditorChord(msg tea.KeyPressMsg, command string) bool {
 	if m.bindings == nil || m.bindings.Table() == nil {
 		return false
 	}
@@ -973,7 +1026,24 @@ func (m Model) playCopyChord(msg tea.KeyPressMsg) bool {
 	}
 	chord := keymap.Chord{Steps: []keymap.Key{k}}
 	b, found := m.bindings.Table().Lookup(chord, keymap.Context(editor.ContextID))
-	return found && b.Command == "editor.copy"
+	return found && b.Command == command
+}
+
+// playNoCodeActions is the playground's answer to the code-action chord
+// (#2237). Intention actions are an LSP offer over a real document; a jq
+// program in a query line and a throwaway read-only result have no server, no
+// document and no diagnostics behind them, so there is nothing to offer and
+// nothing worth inventing. What the key gets instead is a plain statement that
+// it does not apply here plus the two keys that do the closest thing the
+// playground actually has — completion and the saved-filter library — which is
+// the whole difference between "not available" and "apparently broken".
+func (m *Model) playNoCodeActions() {
+	s := m.play
+	if s == nil {
+		return
+	}
+	s.status = "no code actions in the playground — ctrl+space completes, ctrl+l opens saved filters"
+	s.statusWarn = true
 }
 
 // playGlobalChord resolves a single-step chord against the Global scope of the
@@ -1242,7 +1312,11 @@ func (m Model) playInfoRow(width int) string {
 		return ansi.Truncate(line, width, "…")
 	}
 	if s.status != "" {
-		return ansi.Truncate(lipgloss.NewStyle().Foreground(pal.Success).Render(s.status), width, "…")
+		col := pal.Success
+		if s.statusWarn {
+			col = pal.Warning
+		}
+		return ansi.Truncate(lipgloss.NewStyle().Foreground(col).Render(s.status), width, "…")
 	}
 	line := m.playInputSegment()
 	if res := m.playResultSegment(); res != "" {
@@ -1280,7 +1354,7 @@ func (m Model) playHints() []string {
 		// za/zM/zR are the editor's own fold keys (#1741), listed here
 		// because folding a big result (#2029) is the reason to be in the
 		// buffer at all — and nothing else on the row advertises them.
-		return []string{"tab query line", "za fold", "zM/zR fold all", view, "ctrl+y copy", "ctrl+o scratch", "esc close"}
+		return []string{"tab query line", "za fold", "zM/zR fold all", view, "ctrl+y copy", "ctrl+o scratch", "esc close", playHelpHint}
 	}
 	// The arrows change meaning with the view (#2038), so the hints say which
 	// one is in front of the user: rows to walk, or the history.
@@ -1290,8 +1364,16 @@ func (m Model) playHints() []string {
 	}
 	out := []string{"tab result", "enter run", view}
 	out = append(out, hist...)
-	return append(out, "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close")
+	return append(out, "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close", playHelpHint)
 }
+
+// playHelpHint is the hint tail's last segment (#2237): the one key that lists
+// every other one. It sits last on purpose — the hints drop from the right on
+// a narrow pane, and this is the segment a user needs least once they know it.
+// f1 is Global-scope (palette.keymapHelp), so it already reaches the cheatsheet
+// through playGlobalChord from both the query line and the result buffer; the
+// mode simply never said so.
+const playHelpHint = "f1 keys"
 
 // playQueryViewChord names the chord bound to json.jqQueryView (#2032) for the
 // hints, resolved against the live binding table so a rebind is reflected
