@@ -3,6 +3,7 @@
 package langhttp
 
 import (
+	"fmt"
 	"testing"
 
 	"ike/internal/highlight"
@@ -56,6 +57,108 @@ func TestHighlighting(t *testing.T) {
 	}
 	if got := ix.CaptureAt(2, 0); got != "constant" { // header name
 		t.Errorf("header name: got capture %q, want constant", got)
+	}
+}
+
+// TestErrorRecoveryMidFile (#2226): a request the grammar cannot parse
+// cleanly — a `{{host}}` placeholder target, plain garbage, an unclosed
+// placeholder, an unbalanced body — must not take the rest of the file's
+// highlighting with it. The broken request sits ~200 lines in (the report was
+// about a long file, so this guards the far-from-the-error case too), and the
+// section after it must highlight again at its `###` separator at the latest:
+// separator, method, header name and JSON body all carry their captures.
+func TestErrorRecoveryMidFile(t *testing.T) {
+	brokenVariants := map[string][]string{
+		"placeholder-target": {
+			"### Check scrapeless",
+			"GET {{host}}/ai_tracking_read/_search",
+			"Content-Type: application/json",
+			"",
+			"{",
+			"    \"size\": 0,",
+			"    \"query\": {",
+			"    }",
+			"}",
+			"",
+		},
+		"garbage-line":    {"### broken", "THISISNOTAMETHOD !!! ???", ""},
+		"unclosed-var":    {"### broken", "GET {{host/ai/_search", ""},
+		"unbalanced-body": {"### broken", "POST https://x.test/a", "Content-Type: application/json", "", "{", "  \"unclosed\": {", ""},
+	}
+	for name, broken := range brokenVariants {
+		// ~200 lines of healthy requests, the broken section, one trailing
+		// healthy section whose highlighting is what the test guards.
+		var lines []string
+		for i := 0; i < 20; i++ {
+			lines = append(lines,
+				fmt.Sprintf("### Request %d", i),
+				fmt.Sprintf("POST https://seo01.example.net:9210/idx%d/_search", i),
+				"Content-Type: application/json",
+				"",
+				"{",
+				fmt.Sprintf("    \"size\": %d,", i),
+				"    \"query\": {",
+				"    }",
+				"}",
+				"",
+			)
+		}
+		lines = append(lines, broken...)
+		after := len(lines)
+		lines = append(lines,
+			"### After the broken request",
+			"POST https://example.com/ok",
+			"Content-Type: application/json",
+			"",
+			"{",
+			"    \"tail\": true",
+			"}",
+		)
+		ix := highlight.NewIndex(highlight.Highlight("req.http", lines))
+		if got := ix.CaptureAt(after, 0); got != "comment" {
+			t.Errorf("%s: separator after broken request: got capture %q, want comment", name, got)
+		}
+		if got := ix.CaptureAt(after+1, 0); got != "function" {
+			t.Errorf("%s: method after broken request: got capture %q, want function", name, got)
+		}
+		if got := ix.CaptureAt(after+2, 0); got != "constant" {
+			t.Errorf("%s: header after broken request: got capture %q, want constant", name, got)
+		}
+		if got := ix.CaptureAt(after+5, 5); got == "" {
+			t.Errorf("%s: JSON body key after broken request carries no capture", name)
+		}
+	}
+}
+
+// TestPlaceholderRequestHighlighted (#2226, the repro from the report): the
+// `{{host}}` request itself, its header and its JSON body all highlight — the
+// parse error the placeholder used to cause must not eat its own section
+// either.
+func TestPlaceholderRequestHighlighted(t *testing.T) {
+	lines := []string{
+		"### Check scrapeless",
+		"GET {{host}}/ai_tracking_read/_search",
+		"Content-Type: application/json",
+		"",
+		"{",
+		"    \"size\": 0",
+		"}",
+	}
+	ix := highlight.NewIndex(highlight.Highlight("req.http", lines))
+	if got := ix.CaptureAt(1, 0); got != "function" {
+		t.Errorf("method: got capture %q, want function", got)
+	}
+	if got := ix.CaptureAt(1, 6); got != "variable" {
+		t.Errorf("placeholder name: got capture %q, want variable", got)
+	}
+	if got := ix.CaptureAt(1, 12); got != "label" {
+		t.Errorf("path after placeholder: got capture %q, want label", got)
+	}
+	if got := ix.CaptureAt(2, 0); got != "constant" {
+		t.Errorf("header name: got capture %q, want constant", got)
+	}
+	if got := ix.CaptureAt(5, 5); got == "" {
+		t.Error("JSON body key carries no capture")
 	}
 }
 
