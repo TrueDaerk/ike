@@ -99,7 +99,8 @@ func querySpans(lines []string) []lang.Span {
 		// The path portion gets its own capture (#1594), distinct from the
 		// grammar's url string covering scheme and authority. Emitted after
 		// the percent/query spans so those win inside the path.
-		if ps, pe := pathBounds(runes, tStart, tEnd, qPos); ps >= 0 {
+		ps, pe := pathBounds(runes, tStart, tEnd, qPos, ph)
+		if ps >= 0 {
 			out = appendExcluding(out, li, ps, pe, "label", ph)
 		}
 		// The "scheme://authority" prefix reads as three segments rather than
@@ -113,6 +114,16 @@ func querySpans(lines []string) []lang.Span {
 			out = appendExcluding(out, li, p.scheme[0], p.scheme[1], "comment", ph)
 			out = appendExcluding(out, li, p.sep[0], p.sep[1], "punctuation", ph)
 			out = appendExcluding(out, li, p.authority[0], p.authority[1], "string.special", ph)
+		} else if tStart < tEnd && inRanges(ph, tStart) {
+			// A target opening with a placeholder and no "://" of its own
+			// ("{{host}}.test:8080/my/path", #2218): the stretch between the
+			// placeholder and the path is the authority remainder, styled
+			// like the #1740 authority so the line reads as one url.
+			authEnd := ps
+			if authEnd < 0 {
+				authEnd = pe
+			}
+			out = appendExcluding(out, li, tStart, authEnd, "string.special", ph)
 		}
 		// Folded query continuation lines (#1269): indented lines starting
 		// with "?" or "&" extend the target until the first header, blank
@@ -248,6 +259,25 @@ func variableDefinitionSpans(lines []string) []lang.Span {
 		startByte := eq + 1 + idx
 		startCol := utf8.RuneCountInString(line[:startByte])
 		endCol := startCol + utf8.RuneCountInString(value)
+		// A url-shaped value ("@host=http://www.example.com", #2218) reads as
+		// the same segments a request target does: dimmed scheme,
+		// punctuation "://", authority, path label and query structure —
+		// split around placeholders so those keep their own captures.
+		runes := []rune(line)
+		ph := placeholderRanges(runes, startCol, endCol)
+		qPos := indexFrom(runes, startCol, endCol, '?')
+		if p, ok := targetPrefix(runes, startCol, endCol, qPos); ok {
+			out = appendExcluding(out, i, p.scheme[0], p.scheme[1], "comment", ph)
+			out = appendExcluding(out, i, p.sep[0], p.sep[1], "punctuation", ph)
+			out = appendExcluding(out, i, p.authority[0], p.authority[1], "string.special", ph)
+			if ps, pe := pathBounds(runes, startCol, endCol, qPos, ph); ps >= 0 {
+				out = appendExcluding(out, i, ps, pe, "label", ph)
+			}
+			if qPos >= 0 {
+				out = appendQuerySpans(out, i, runes, qPos, endCol, ph)
+			}
+			continue
+		}
 		out = append(out, lang.Span{Line: i, StartCol: startCol, EndCol: endCol, Capture: "string"})
 	}
 	return out
@@ -323,21 +353,31 @@ func standIns(spans []lang.Span) []lang.Span {
 // pathBounds locates the path portion of a request target in [from, to): the
 // first "/" after the "scheme://authority" prefix — or the target start for
 // origin-form targets ("/api/users") — through the query (qPos, -1 for
-// none). start -1 when the target has no path portion.
-func pathBounds(runes []rune, from, to, qPos int) (start, end int) {
+// none). A target opening with a placeholder ("{{host}}/my/path", #2218) has
+// its path start at the first "/" outside the placeholder ranges ph, so the
+// line keeps highlighting past the variable. start -1 when the target has no
+// path portion.
+func pathBounds(runes []rune, from, to, qPos int, ph [][2]int) (start, end int) {
 	end = to
 	if qPos >= 0 {
 		end = qPos
 	}
 	start = -1
 	for i := from; i+2 < end; i++ {
-		if runes[i] == ':' && runes[i+1] == '/' && runes[i+2] == '/' {
+		if runes[i] == ':' && runes[i+1] == '/' && runes[i+2] == '/' && !inRanges(ph, i) {
 			start = indexFrom(runes, i+3, end, '/')
 			return start, end
 		}
 	}
 	if from < end && runes[from] == '/' {
 		return from, end
+	}
+	if from < end && inRanges(ph, from) {
+		for i := from; i < end; i++ {
+			if runes[i] == '/' && !inRanges(ph, i) {
+				return i, end
+			}
+		}
 	}
 	return -1, end
 }

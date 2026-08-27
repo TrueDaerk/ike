@@ -1,5 +1,20 @@
 # Log
 
+## 2026-08-27 (.http highlighting continues across {{variables}}, url-shaped definitions, #2218)
+
+- **Placeholder-led targets** (`plugins/languages/http/spans.go`): a request
+  target opening with a placeholder and no scheme of its own
+  (`GET {{host}}/my/path`) no longer loses highlighting after the variable —
+  `pathBounds` is placeholder-aware, so the path starts at the first `/`
+  outside the `{{…}}` ranges (`label`, query structure as before), and the
+  stretch between the placeholder and the path (`{{host}}.test:8080`) reads
+  as the authority remainder in `string.special`.
+- **Url-shaped definition values**: `@host=http://www.example.com/base?a=1`
+  now reads as the same segments a request target does (dimmed scheme,
+  `://` punctuation, authority, path label, query structure) instead of one
+  flat `string`; non-url values keep the flat `string` capture.
+- Wiki: http-client concept doc updated (#1740/#1880 bullets).
+
 ## 2026-08-27 (Command palette: frecency boost from command execution history, #2153)
 
 - **Execution history** (`internal/palette/frecency.go`): a new per-project
