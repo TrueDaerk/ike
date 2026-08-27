@@ -984,7 +984,7 @@ func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, oldNa
 			return
 		}
 		files = b.mergeHeadingTitleEdits(files, path, oldName, strings.TrimSpace(newName))
-		if preview := renamePreviewFiles(mgr, files); len(preview) > 1 {
+		if preview := previewFiles(mgr, files); len(preview) > 1 {
 			h.Send(ilsp.RenamePreviewMsg{
 				OldName: oldName,
 				NewName: strings.TrimSpace(newName),
@@ -1062,20 +1062,13 @@ func (b *bridge) codeAction(h host.API) tea.Cmd {
 			h.Send(ilsp.CodeActionsMsg{Path: path, Intentions: true})
 			return
 		}
-		choices := make([]ilsp.CodeActionChoice, len(actions))
-		for i, a := range actions {
-			choices[i] = ilsp.CodeActionChoice{Title: a.Title, Kind: a.Kind, Preferred: a.IsPreferred}
-		}
+		set := &actionSet{path: path, actions: actions}
 		h.Send(ilsp.CodeActionsMsg{
 			Path:       path,
-			Actions:    choices,
+			Actions:    set.choices(),
 			Intentions: true,
-			Apply: func(i int) tea.Cmd {
-				if i < 0 || i >= len(actions) {
-					return nil
-				}
-				return b.applyAction(h, path, actions[i])
-			},
+			Apply:      func(i int) tea.Cmd { return set.applyCmd(h, b, i) },
+			Preview:    func(i int) tea.Cmd { return set.previewCmd(h, mgr, i) },
 		})
 	}()
 	return nil
@@ -1111,58 +1104,60 @@ func (b *bridge) quickFixAt(h host.API, req ilsp.QuickFixRequest) tea.Cmd {
 			h.Send(ilsp.CodeActionsMsg{Path: path, QuickFix: true})
 			return
 		}
-		choices := make([]ilsp.CodeActionChoice, len(actions))
-		for i, a := range actions {
-			choices[i] = ilsp.CodeActionChoice{Title: a.Title, Kind: a.Kind, Preferred: a.IsPreferred}
-		}
+		set := &actionSet{path: path, actions: actions}
 		h.Send(ilsp.CodeActionsMsg{
 			Path:     path,
-			Actions:  choices,
+			Actions:  set.choices(),
 			QuickFix: true,
-			Apply: func(i int) tea.Cmd {
-				if i < 0 || i >= len(actions) {
-					return nil
-				}
-				return b.applyAction(h, path, actions[i])
-			},
+			Apply:    func(i int) tea.Cmd { return set.applyCmd(h, b, i) },
+			Preview:  func(i int) tea.Cmd { return set.previewCmd(h, mgr, i) },
 		})
 	}()
 	return nil
 }
 
-// applyAction performs one chosen action: the inline Edit first (per spec),
-// then the command, whose edits arrive via workspace/applyEdit.
+// applyAction performs one chosen action off the Update goroutine.
 func (b *bridge) applyAction(h host.API, path string, action protocol.CodeAction) tea.Cmd {
-	mgr := b.manager()
-	if mgr == nil {
+	if b.manager() == nil {
 		return nil
 	}
-	go func() {
-		// Every outcome reports (#309): a silent action is indistinguishable
-		// from a broken one.
-		switch {
-		case action.Edit == nil && action.Command == nil:
-			// Lazy actions need codeAction/resolve, which is not implemented
-			// yet — say so instead of doing nothing.
-			h.Send(ilsp.ServerStatusMsg{Text: "'" + action.Title + "' returned no edit (codeAction/resolve not supported yet)", Kind: ilsp.ServerEventWarn})
-			return
-		case action.Edit != nil:
-			files := mgr.ConvertWorkspaceEdit(path, *action.Edit)
-			if n, err := dispatchWorkspaceEdits(h, files); err != nil {
-				h.Send(ilsp.ServerStatusMsg{Text: "edit applied partially: " + err.Error(), Kind: ilsp.ServerEventWarn})
-			} else if n > 0 {
-				h.Send(ilsp.ServerStatusMsg{Text: "'" + action.Title + "': " + applySummary(n), Kind: ilsp.ServerEventInfo})
-			} else if action.Command == nil {
-				h.Send(ilsp.ServerStatusMsg{Text: "'" + action.Title + "' changed nothing", Kind: ilsp.ServerEventInfo})
-			}
-		}
-		if action.Command != nil {
-			if err := mgr.ExecuteCommand(context.Background(), path, *action.Command); err != nil {
-				h.Send(ilsp.ServerStatusMsg{Text: "code action failed: " + err.Error(), Kind: ilsp.ServerEventError})
-			}
-		}
-	}()
+	go b.runAction(h, path, action)
 	return nil
+}
+
+// runAction is the apply itself: the inline Edit first (per spec), then the
+// command, whose edits arrive via workspace/applyEdit. It blocks on the
+// server, so every caller runs it on a goroutine of its own — including the
+// popup's apply, which resolves the action first (#2252) and hands the
+// resolved copy in, so what applies is exactly what the preview showed.
+func (b *bridge) runAction(h host.API, path string, action protocol.CodeAction) {
+	mgr := b.manager()
+	if mgr == nil {
+		return
+	}
+	// Every outcome reports (#309): a silent action is indistinguishable
+	// from a broken one.
+	switch {
+	case action.Edit == nil && action.Command == nil:
+		// The action was already run through codeAction/resolve (#2252), so
+		// this is the server's final answer, not a missing client feature.
+		h.Send(ilsp.ServerStatusMsg{Text: "'" + action.Title + "' returned no edit", Kind: ilsp.ServerEventWarn})
+		return
+	case action.Edit != nil:
+		files := mgr.ConvertWorkspaceEdit(path, *action.Edit)
+		if n, err := dispatchWorkspaceEdits(h, files); err != nil {
+			h.Send(ilsp.ServerStatusMsg{Text: "edit applied partially: " + err.Error(), Kind: ilsp.ServerEventWarn})
+		} else if n > 0 {
+			h.Send(ilsp.ServerStatusMsg{Text: "'" + action.Title + "': " + applySummary(n), Kind: ilsp.ServerEventInfo})
+		} else if action.Command == nil {
+			h.Send(ilsp.ServerStatusMsg{Text: "'" + action.Title + "' changed nothing", Kind: ilsp.ServerEventInfo})
+		}
+	}
+	if action.Command != nil {
+		if err := mgr.ExecuteCommand(context.Background(), path, *action.Command); err != nil {
+			h.Send(ilsp.ServerStatusMsg{Text: "code action failed: " + err.Error(), Kind: ilsp.ServerEventError})
+		}
+	}
 }
 
 // maybeSignatureHelp fires a signature request after a change when the typed

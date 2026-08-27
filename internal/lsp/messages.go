@@ -491,17 +491,37 @@ type RenamePromptMsg struct {
 	Apply       func(newName string) tea.Cmd
 }
 
-// RenamePreviewFile is one file a pending rename would rewrite: its path,
-// whether an open editor buffer holds it, how many edits land in it, and the
-// full text before and after applying them. The before/after pair is what the
-// preview dialog diffs — the app renders it with the inline diff renderer and
-// never reaches into the manager or the file system itself.
-type RenamePreviewFile struct {
+// PreviewFile is one file a pending edit would rewrite: its path, whether an
+// open editor buffer holds it, how many edits land in it, and the full text
+// before and after applying them. The before/after pair is what the preview
+// side diffs — the app renders it with the inline diff renderer and never
+// reaches into the manager or the file system itself. It is shared by the
+// rename confirmation (#2149) and the intention popup's action preview
+// (#2252), which show the same thing about different pending edits.
+type PreviewFile struct {
 	Path   string
 	Open   bool
 	Edits  int
 	Before string
 	After  string
+}
+
+// RenamePreviewFile is the rename dialog's spelling of PreviewFile (#2149).
+type RenamePreviewFile = PreviewFile
+
+// ActionPreviewMsg answers one intention-popup preview request (#2252): what
+// the highlighted code action *would* change, computed on copies of the
+// affected files without applying anything. Index addresses the offer the
+// request named, so a reply arriving after the highlight moved on is matched
+// (or dropped) by the popup rather than shown on the wrong row. Files is empty
+// for an action with no resolvable edit — a command, a pure side effect, or a
+// server that offers neither an edit nor codeAction/resolve — and Note then
+// says why in the popup's own words.
+type ActionPreviewMsg struct {
+	Path  string
+	Index int
+	Files []PreviewFile
+	Note  string
 }
 
 // RenamePreviewMsg asks the app to confirm a rename that touches more than one
@@ -532,6 +552,12 @@ type CodeActionsMsg struct {
 	Path    string
 	Actions []CodeActionChoice
 	Apply   func(index int) tea.Cmd
+	// Preview asks what the action at index would change (#2252), answering
+	// with an ActionPreviewMsg. It resolves a lazy action via
+	// codeAction/resolve first and computes the result on copies — nothing is
+	// applied, and Apply keeps using the very action the preview resolved, so
+	// what was shown is what lands. Nil when the offer reached no server.
+	Preview func(index int) tea.Cmd
 	// Intentions marks the alt+enter flow (#2020): the app merges the offer
 	// with the built-in intention providers and opens the picker anchored at
 	// the caret — Actions may then be empty (no server, or nothing offered),

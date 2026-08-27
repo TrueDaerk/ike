@@ -54,6 +54,9 @@ type Palette struct {
 
 	// liveGen pins debounce ticks to the newest query edit (#295).
 	liveGen int
+	// selGen pins selection debounce ticks to the newest highlight move
+	// (#2252, selection.go).
+	selGen int
 
 	// locked, when non-nil, pins the palette to a single mode (no prefix
 	// switching): a slimmed file-only palette opened from the editor uses this.
@@ -334,7 +337,7 @@ func (p *Palette) Paste(text string) (cmd tea.Cmd, handled bool) {
 	p.query, p.cur = out, ncur
 	p.sideManual = false
 	p.recompute()
-	return p.liveKick(), true
+	return p.queryKick(), true
 }
 
 // Update handles a key while the palette is open and returns a command for the
@@ -418,16 +421,16 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		return p.activate()
 	case msg.Code == tea.KeyUp, msg.Code == 'p' && msg.Mod == tea.ModCtrl:
 		p.move(-1)
-		return nil
+		return p.SelectionKick()
 	case msg.Code == tea.KeyDown, msg.Code == 'n' && msg.Mod == tea.ModCtrl:
 		p.move(1)
-		return nil
+		return p.SelectionKick()
 	case msg.Code == tea.KeyPgUp:
 		p.movePage(-1)
-		return nil
+		return p.SelectionKick()
 	case msg.Code == tea.KeyPgDown:
 		p.movePage(1)
-		return nil
+		return p.SelectionKick()
 	case msg.Code == tea.KeyTab:
 		// Ask the active mode to extend the query (path completion, #542;
 		// completion from the selected row, #1775).
@@ -437,7 +440,7 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 			p.cur = len([]rune(p.query))
 			p.sideManual = false
 			p.recompute()
-			return p.liveKick()
+			return p.queryKick()
 		}
 		return nil
 	case msg.Code == 'u' && msg.Mod == tea.ModCtrl:
@@ -445,7 +448,7 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		p.cur = 0
 		p.sideManual = false
 		p.recompute()
-		return p.liveKick()
+		return p.queryKick()
 	}
 	// Everything else is single-line editing on the query (#763): cursor
 	// motions, word ops, backspace/delete, printable insertion.
@@ -454,7 +457,7 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		if changed {
 			p.sideManual = false
 			p.recompute()
-			return p.liveKick()
+			return p.queryKick()
 		}
 	}
 	return nil
@@ -687,7 +690,10 @@ func (p *Palette) Click(x, y int) tea.Cmd {
 		}
 	}
 	idx := p.top + (y - 2)
-	if idx < 0 || idx >= len(p.items) {
+	// Below the visible rows lies a FooterMode's own area (#2252, the
+	// intention preview), which is inert: a press there must not activate the
+	// row a scrolled window happens to have at that index.
+	if idx < 0 || idx >= len(p.items) || y-2 >= p.visibleRows() {
 		return nil
 	}
 	p.sideFocus = false
@@ -881,7 +887,15 @@ func (p *Palette) View() string {
 		rows = lipgloss.JoinHorizontal(lipgloss.Top,
 			lipgloss.NewStyle().Width(sideW).Render(side), " ", div, " ", main)
 	}
-	body := lipgloss.JoinVertical(lipgloss.Left, prompt, sep, rows)
+	parts := []string{prompt, sep, rows}
+	// A FooterMode open (#2252) renders its own lines under the list behind
+	// the same dim rule — the intention popup's diff preview of the
+	// highlighted action.
+	if foot := p.footerLines(inner); len(foot) > 0 {
+		parts = append(parts, sep)
+		parts = append(parts, foot...)
+	}
+	body := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).

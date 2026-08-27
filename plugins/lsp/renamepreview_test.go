@@ -234,7 +234,7 @@ func TestRenamePreviewFilesSkipsEmptyAndUnreadable(t *testing.T) {
 	if err := os.WriteFile(path, []byte("aaa\nbbb\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := renamePreviewFiles(nil, []manager.FileEdits{
+	got := previewFiles(nil, []manager.FileEdits{
 		{Path: path, Edits: []ilsp.FormatEdit{{StartLine: 0, StartCol: 0, EndLine: 0, EndCol: 3, Text: "AAA"}}},
 		{Path: filepath.Join(dir, "gone.go"), Edits: []ilsp.FormatEdit{{EndCol: 1, Text: "X"}}},
 		{Path: path}, // no edits

@@ -31,6 +31,7 @@ type Capabilities struct {
 	PrepareRename      bool
 	CodeAction         bool
 	CodeActionKinds    []string
+	CodeActionResolve  bool
 	ExecuteCommand     bool
 	SignatureHelp      bool
 	SignatureTriggers  []string
@@ -115,11 +116,16 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 	if caps.CodeAction {
 		// A CodeActionOptions object may declare the offered kinds (#1148);
 		// a bare `true` provider leaves the list empty (= unknown).
+		// The same object may promise codeAction/resolve (#2252) — the seam
+		// the intention popup's diff preview resolves lazy actions through;
+		// a bare `true` provider resolves nothing.
 		var opts struct {
 			CodeActionKinds []string `json:"codeActionKinds"`
+			ResolveProvider bool     `json:"resolveProvider"`
 		}
 		if json.Unmarshal(sc.CodeActionProvider, &opts) == nil {
 			caps.CodeActionKinds = opts.CodeActionKinds
+			caps.CodeActionResolve = opts.ResolveProvider
 		}
 	}
 	caps.ExecuteCommand = truthyProvider(sc.ExecuteCommandProvider)

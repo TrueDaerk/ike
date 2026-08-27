@@ -221,10 +221,16 @@ func vcsProvider() Provider {
 				items = append(items, Item{Title: "Revert Hunk Under Caret", Kind: "vcs", CommandID: "vcs.revertHunk"})
 			}
 			if cx.ConflictAtCaret && !cx.ReadOnly {
+				// The three accepts are pure rewrites of the conflict block,
+				// so each carries its preview (#2252): which side survives is
+				// exactly what one wants to see before committing to it.
 				items = append(items,
-					Item{Title: "Accept Ours", Kind: "vcs", CommandID: "merge.acceptOurs"},
-					Item{Title: "Accept Theirs", Kind: "vcs", CommandID: "merge.acceptTheirs"},
-					Item{Title: "Accept Both", Kind: "vcs", CommandID: "merge.acceptBoth"},
+					Item{Title: "Accept Ours", Kind: "vcs", CommandID: "merge.acceptOurs",
+						Preview: cx.PreviewFor("merge.acceptOurs")},
+					Item{Title: "Accept Theirs", Kind: "vcs", CommandID: "merge.acceptTheirs",
+						Preview: cx.PreviewFor("merge.acceptTheirs")},
+					Item{Title: "Accept Both", Kind: "vcs", CommandID: "merge.acceptBoth",
+						Preview: cx.PreviewFor("merge.acceptBoth")},
 				)
 			}
 			if cx.InRepo {
@@ -269,7 +275,11 @@ func editProvider() Provider {
 		Items: func(cx Context) []Item {
 			var items []Item
 			if cx.CanToggleValue && !cx.ReadOnly {
-				items = append(items, Item{Title: "Toggle Value Under Caret", Kind: "edit", CommandID: "editor.toggleValue"})
+				// The flip is a one-line rewrite, so the popup can show it
+				// (#2252): "true" → "false" is small, but which token on the
+				// line is meant is exactly what the preview answers.
+				items = append(items, Item{Title: "Toggle Value Under Caret", Kind: "edit",
+					CommandID: "editor.toggleValue", Preview: cx.PreviewFor("editor.toggleValue")})
 			}
 			if cx.HasSelection && cx.HasClipboard {
 				items = append(items, Item{Title: "Compare Selection with Clipboard", Kind: "diff", CommandID: "diff.compareWithClipboard"})
