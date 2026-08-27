@@ -689,14 +689,18 @@ func (m *Model) completionAccept() {
 		}
 		// A malformed snippet falls back to the raw text.
 	}
+	// An accept is its own undo unit (#2189), like a paste: the segment
+	// holding the typed prefix commits first, so one undo removes exactly the
+	// accepted text and restores the prefix.
+	m.breakInsertUndo()
 	if m.insert.rec == nil {
 		m.insert.rec = m.newRecorder()
 	}
 	// Auto-import first (#848): additionalTextEdits land away from the cursor
 	// (typically the import block), so applying them before the main insert
 	// keeps the item's coordinates valid; the cursor and carets shift by the
-	// line delta of edits above them. Same recorder, so esc undoes the accept
-	// and its import as one step.
+	// line delta of edits above them. Same recorder, so one undo removes the
+	// accept and its import as one step.
 	m.applyCompletionExtraEdits(item.AdditionalEdits)
 	// Replace the partial identifier already typed before the cursor with the
 	// item's insert text — at every caret when carets are active (#145). The
@@ -722,6 +726,9 @@ func (m *Model) completionAccept() {
 	if len(stops) > 0 && !m.hasCarets() {
 		m.startSnippetSession(insertText, stops)
 	}
+	// Close the accept's segment after the tabstop session placed the caret,
+	// so the change's CursorAfter (what redo restores) is the first stop.
+	m.breakInsertUndo()
 }
 
 // SetCompletionMRU injects the shared recently-accepted-completions store
@@ -1202,9 +1209,12 @@ func truncateTo(s string, max int) string {
 // newHover parses hover markdown into display rows (#379): fenced code blocks
 // lose their ``` markers and are syntax-highlighted via the language registry
 // (or fall back to an accent tint, so the signature still reads as code), and a
-// thematic break ("---") becomes a rule row. Returns nil for empty content.
+// thematic break ("---") becomes a rule row. Prose rows render their inline
+// markdown (#2147) — emphasis, inline code and links become terminal styling
+// instead of literal syntax. Returns nil for empty content.
 func (m Model) newHover(contents string) *hoverState {
 	src := strings.Split(contents, "\n")
+	st := m.hoverMDStyles()
 	var out []hoverLine
 	for i := 0; i < len(src); i++ {
 		trimmed := strings.TrimSpace(src[i])
@@ -1221,7 +1231,7 @@ func (m Model) newHover(contents string) *hoverState {
 			out = append(out, hoverLine{rule: true})
 			continue
 		}
-		out = append(out, hoverLine{text: src[i]})
+		out = append(out, hoverLine{text: renderMarkdownLine(src[i], st)})
 	}
 	if len(out) == 0 {
 		return nil
@@ -1475,6 +1485,24 @@ func (m Model) diagLines(ds []ilsp.Diagnostic) []hoverLine {
 		for _, line := range strings.Split(d.Message, "\n") {
 			out = append(out, hoverLine{text: line})
 		}
+		out = append(out, m.relatedLines(d)...)
+	}
+	return out
+}
+
+// relatedLines renders a diagnostic's linked locations (#2147) under its
+// message: one dimmed "↳ message  file:line" row per entry, the same text the
+// Problems pane offers for navigation. The popup itself is not interactive —
+// any key dismisses it — so the location is spelled out rather than hidden
+// behind a jump.
+func (m Model) relatedLines(d ilsp.Diagnostic) []hoverLine {
+	if len(d.Related) == 0 {
+		return nil
+	}
+	dim := lipgloss.NewStyle().Foreground(m.theme().Border)
+	out := make([]hoverLine, 0, len(d.Related))
+	for _, r := range d.Related {
+		out = append(out, hoverLine{text: dim.Render("↳ " + r.Label())})
 	}
 	return out
 }

@@ -228,11 +228,13 @@ line runs that test (see /architecture/run-configurations.md).
   no undo depth makes it read as clean. Saving from *insert* mode pins the
   written state, not the one before the open segment (#2188): the write closes
   the segment first, so `esc` afterwards leaves the buffer clean.
-  **Insert granularity** (#1818, `insertundo.go`): an insert session commits a
-  *sequence* of changes, not one — see the insert-mode section below. The store
-  is untouched by this: the editor decides where a segment ends, `Recorder` and
-  the tree stay change-based, so branching, `g-`/`g+`, the byte budget and the
-  persisted tree work on the finer steps unchanged.
+  **Insert granularity** (#1818/#2189, `insertundo.go`): an insert session
+  commits a *sequence* of changes, not one — split at word boundaries, line
+  breaks, typing pauses, pastes, completion accepts and snippet expansions;
+  see the insert-mode section below. The store is untouched by this: the
+  editor decides where a segment ends, `Recorder` and the tree stay
+  change-based, so branching, `g-`/`g+`, the byte budget and the persisted
+  tree work on the finer steps unchanged.
   **Change list** (#1174, `changelist.go`): a per-document ring (cap 100) of
   the `CursorAfter` of every committed `Change` — derived from the same
   `pushChange` that makes an edit undoable, so undo/redo walks add no
@@ -572,13 +574,13 @@ all inside the running undo segment. An `undo`/`redo`
 requested mid-insert (e.g. `Ctrl+Z` while typing) first **commits the open
 insert session**, so it behaves identically from insert and normal mode.
 
-**Undo granularity inside an insert** (#1818, `insertundo.go`). A long insert
-used to commit as *one* change, so a single undo threw away everything typed
-since entering insert mode. The session now closes the running recorder at the
-boundaries a user thinks in and opens a fresh one — `commitInsert` only commits
-the remaining tail, and `breakInsertUndo` is the split (it commits nothing when
-the segment recorded nothing, so no break can produce an empty or duplicated
-change):
+**Undo granularity inside an insert** (#1818/#2189, `insertundo.go`). A long
+insert used to commit as *one* change, so a single undo threw away everything
+typed since entering insert mode. The session now closes the running recorder
+at the boundaries a user thinks in and opens a fresh one — `commitInsert` only
+commits the remaining tail, and `breakInsertUndo` is the split (it commits
+nothing when the segment recorded nothing, so no break can produce an empty or
+duplicated change):
 
 - **A pasted block is exactly one change.** `Cmd+V` and bracketed paste
   mid-insert (`pasteIntoInsert`) close the running segment, splice the block
@@ -592,14 +594,36 @@ change):
   the whole insert, which is what the issue set out to fix). Trailing
   whitespace rides with the word before it, so undoing `baz` leaves `foo bar `
   with the caret where the next word would start.
-- **A segment holding no word yet never splits.** The indent after `Enter`, the
-  `(` that auto-closed into `()`, the space `o` opened the line with — leading
-  separators belong to the word that follows them, so no undo tears a pair or
-  an indent off the keystroke that produced it. Backspace and the kills,
-  `Tab`/`Shift+Tab`, completion accepts and snippet expansions join the running
-  segment as well (a correction belongs to the word it corrects) and reset the
-  segment's typing state, so typing on after a correction never splits
-  mid-word.
+- **A line break closes its segment** (#2189). `Enter` — with its auto-indent
+  and block split (`{|}` → three lines) — rides with the text typed before it
+  and then breaks, so the next line's text undoes separately and undoing it
+  further removes the word *and* the break that ended it. The indentation of
+  the new line belongs to the word typed onto it, per the no-word rule below.
+- **A pause splits too** (#2189, `insertPauseBreak`, fixed at 2s). A typing
+  keystroke arriving that long after the segment's previous rune closes the
+  segment first, so "undo what I typed after stopping to think" works even
+  inside one long word run. The boundary is drawn lazily at the next keystroke
+  (no timer runs while the user thinks — same units as a live debounce), and
+  only the gap between two *typed* runes of one segment counts: a segment
+  holding only structural edits (the `ciw` deletion, the line `o` opened)
+  never pause-splits, so thinking before the first character keeps `c`'s
+  delete-plus-typing a single unit. Macro replay feeds keys back instantly,
+  so a replay never pause-splits mid-run.
+- **A completion accept and a snippet expansion are their own change**
+  (#2189), like a paste: the segment holding the typed prefix (or trigger
+  word) commits first, the accept — including its auto-import
+  `additionalTextEdits` — or the expanded template body lands in a segment of
+  its own, and that one closes right after. One undo removes exactly the
+  accepted/expanded text and puts the typed prefix back; the closing break
+  runs after the tabstop session placed the caret, so redo restores the first
+  stop.
+- **A segment holding no word yet never word-splits.** The indent after
+  `Enter`, the `(` that auto-closed into `()`, the space `o` opened the line
+  with — leading separators belong to the word that follows them, so no undo
+  tears a pair or an indent off the keystroke that produced it. Backspace and
+  the kills, `Tab`/`Shift+Tab` join the running segment (a correction belongs
+  to the word it corrects) and reset the segment's typing state, so typing on
+  after a correction never splits mid-word.
 - **A save closes the segment** (#2188). Every write path (`saveAs`, so `:w`,
   `ctrl+s`, autosave and the save-as prompt alike) breaks the running segment
   before it pins the save checkpoint, and a save chain breaks it again when it

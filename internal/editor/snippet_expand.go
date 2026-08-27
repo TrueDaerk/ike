@@ -42,6 +42,10 @@ func (m *Model) expandSnippetTrigger() bool {
 	if err != nil {
 		text, stops = src, nil // malformed body: insert it raw
 	}
+	// The expansion is its own undo unit (#2189), like a paste: the segment
+	// holding the typed trigger commits first, so one undo removes exactly
+	// the expanded body and restores the trigger word.
+	m.breakInsertUndo()
 	if m.insert.rec == nil {
 		m.insert.rec = m.newRecorder()
 	}
@@ -52,6 +56,9 @@ func (m *Model) expandSnippetTrigger() bool {
 	if len(stops) > 0 {
 		m.startSnippetSession(text, stops)
 	}
+	// Close the expansion's segment after the tabstop session placed the
+	// caret, so the change's CursorAfter (what redo restores) is the first stop.
+	m.breakInsertUndo()
 	return true
 }
 
