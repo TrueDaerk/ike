@@ -109,6 +109,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Switch pane focus | `ctrl+tab` | `ctrl+tab` | `pane.switcher` |
 | Switch project | `cmd+shift+p` | `ctrl+shift+p` | `project.switch` |
 | Switch project | `ctrl+shift+p` | `ctrl+shift+p` | `project.switch` |
+| Switch tab (recent tabs) | `alt+e` | `alt+e` | `editor.tab.picker` |
 | TODO index | `cmd+6` | `ctrl+6` | `todo.list` |
 | Toggle VCS tool window | `cmd+9` | `ctrl+9` | `vcs.panel` |
 | Toggle breakpoint | `cmd+f8` | `ctrl+f8` | `debug.toggleBreakpoint` |

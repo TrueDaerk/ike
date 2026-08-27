@@ -99,6 +99,7 @@ var reachableAlternatives = map[string]string{
 	"editor.tab.next":          "palette",
 	"editor.tab.prev":          "palette",
 	"editor.tab.reopenClosed":  "palette",
+	"editor.tab.picker":        "palette",
 	"editor.tab.select1":       "palette",
 	"editor.tab.select2":       "palette",
 	"editor.tab.select3":       "palette",
