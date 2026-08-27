@@ -95,13 +95,72 @@ func (s *Store) Empty() bool {
 func (s *Store) Percent() (float64, bool) {
 	covered, total := 0, 0
 	for _, e := range s.files {
-		for _, kind := range e.marks {
-			total++
-			if kind != lang.CoverUncovered {
-				covered++
-			}
+		c, t := e.count()
+		covered, total = covered+c, total+t
+	}
+	return percent(covered, total)
+}
+
+// FilePercent is one file's line-coverage percentage (#2246) — the figure the
+// status-line segment and the Test Results detail listing show. stale repeats
+// the store's staleness flag for the file; ok=false when the last run covered
+// no such file, or tracked no line in it.
+func (s *Store) FilePercent(path string) (pct float64, stale, ok bool) {
+	e := s.files[path]
+	if e == nil {
+		return 0, false, false
+	}
+	pct, ok = percent(e.count())
+	return pct, e.stale, ok
+}
+
+// FileStat is one file's coverage summary: executed lines (covered or
+// partial) over the file's tracked lines, plus the derived percentage and the
+// store's staleness flag.
+type FileStat struct {
+	Path    string
+	Covered int
+	Total   int
+	Percent float64
+	Stale   bool
+}
+
+// FileStats summarizes every covered file, worst coverage first and
+// path-sorted within an equal percentage — the order the Test Results detail
+// column reads as a to-do list. Files whose run tracked no line at all are
+// left out; they carry no information.
+func (s *Store) FileStats() []FileStat {
+	out := make([]FileStat, 0, len(s.files))
+	for path, e := range s.files {
+		covered, total := e.count()
+		pct, ok := percent(covered, total)
+		if !ok {
+			continue
+		}
+		out = append(out, FileStat{Path: path, Covered: covered, Total: total, Percent: pct, Stale: e.stale})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Percent != out[j].Percent {
+			return out[i].Percent < out[j].Percent
+		}
+		return out[i].Path < out[j].Path
+	})
+	return out
+}
+
+// count reports one file's executed and tracked line counts.
+func (e *entry) count() (covered, total int) {
+	for _, kind := range e.marks {
+		total++
+		if kind != lang.CoverUncovered {
+			covered++
 		}
 	}
+	return covered, total
+}
+
+// percent is the shared covered/total ratio; ok=false when nothing is tracked.
+func percent(covered, total int) (float64, bool) {
 	if total == 0 {
 		return 0, false
 	}

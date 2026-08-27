@@ -1,12 +1,17 @@
 package app
 
 import (
+	"strconv"
+
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/config"
 	"ike/internal/coverage"
+	"ike/internal/editor"
 	"ike/internal/host"
 	"ike/internal/lang"
 	"ike/internal/run"
+	"ike/internal/testresults"
 )
 
 // coverage.go wires run-with-coverage (#2081): run.testsWithCoverage runs the
@@ -16,6 +21,10 @@ import (
 // gutter marks. coverage.toggle hides/shows the marks without dropping the
 // data; a plain rerun or rerun-failed leaves the store untouched, so coverage
 // of files those runs did not exercise survives.
+//
+// #2246 added the per-file figures on top: the store's breakdown feeds the
+// Test Results detail listing (coverageFiles) and the focused file's
+// percentage in the status line (coverageSegment).
 
 // runTestsWithCoverage is the run.testsWithCoverage handler: runTestsInFile
 // with coverage collection enabled.
@@ -67,4 +76,40 @@ func (m Model) coverageMarksCmd(path string) tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg { return coverage.MarksMsg{Path: path, Marks: marks, Stale: stale} }
+}
+
+// coverageFiles converts the store's per-file summaries into the Test Results
+// panel's shape (#2246), keeping the panel free of a coverage import — it
+// stays a pure consumer, like it is for parsed test results.
+func (m Model) coverageFiles() []testresults.CoverageFile {
+	stats := m.coverage.FileStats()
+	out := make([]testresults.CoverageFile, 0, len(stats))
+	for _, s := range stats {
+		out = append(out, testresults.CoverageFile{Path: s.Path, Percent: s.Percent})
+	}
+	return out
+}
+
+// coverageSegment is the focused file's line coverage in the status line
+// (#2246) — "cov 82.4%", suffixed "stale" once the buffer changed since the
+// run. Off by default and opt-in through tests.coverage_status: the figure is
+// only interesting while one works on coverage. It is deliberately
+// independent of coverage.toggle and editor.marks.coverage — those quiet the
+// gutter, and the percentage stays readable without the per-line noise.
+func (m Model) coverageSegment(ed *editor.Model) string {
+	if ed == nil || !ed.HasFile() || m.coverage == nil {
+		return ""
+	}
+	if c := config.Get(); c == nil || !c.Tests.CoverageStatus {
+		return ""
+	}
+	pct, stale, ok := m.coverage.FilePercent(ed.Path())
+	if !ok {
+		return ""
+	}
+	seg := "cov " + strconv.FormatFloat(pct, 'f', 1, 64) + "%"
+	if stale {
+		seg += " stale"
+	}
+	return seg
 }

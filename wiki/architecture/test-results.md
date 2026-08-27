@@ -133,6 +133,9 @@ two-column render (tree │ detail) is the debug panel's row-wise join.
 - `w` toggles **watch mode** (#2172) — see below.
 - `o` toggles the detail column between the selected test's output and the
   whole run's raw output.
+- `c` toggles the **per-file coverage listing** (#2246) into the detail
+  column — see below. Inert while no coverage run has filled it, and the
+  footer only advertises the key once it has.
 - The wheel scrolls the focused column; a click right of the separator moves
   the scroll focus to the detail column.
 
@@ -193,7 +196,9 @@ slot — results are session state. It counts as a tool window for
 `tests`, #1897). No default chord (the budget is full, #711) — the palette,
 the Tools menu and `tests.toggle` bindings deliver it.
 
-Settings (Settings → Tests): `tests.results_window` (off = every test run
+Settings (Settings → Tests): `tests.coverage_status` (the focused file's
+coverage percentage in the status line, #2246, off by default),
+`tests.results_window` (off = every test run
 stays in the raw Run tool terminal) and `tests.auto_open` (off = a captured
 run only updates an already open pane).
 
@@ -222,3 +227,29 @@ the `editor.marks.coverage` setting is the persistent gate underneath. Editing
 a file marks its coverage stale — visible but neutralized — in the store (for
 later opens) and instantly in every live view by document version (see
 /architecture/editor.md).
+
+## Per-file coverage (#2246)
+
+The run-wide figure answers "how are we doing"; the per-file one answers
+"where do I go next". `coverage.Store` derives both from the same marks —
+`FilePercent(path)` for a single file (with the store's staleness flag) and
+`FileStats()` for the whole run, ordered **worst coverage first**, path-sorted
+within an equal percentage, files with no tracked line left out.
+
+Two surfaces read it:
+
+- **Test Results detail column**, under `c`: the run-wide figure followed by
+  one right-aligned percentage per file, path relative to the run's working
+  directory. `finishCoverage` hands the breakdown in with the summary figure
+  (`SetCoverage(pct, files)`, `testresults.CoverageFile`) — the panel keeps
+  importing nothing from `internal/coverage`, exactly as it stays free of the
+  test-parsing internals. `StartRun` drops both, so a plain re-run never
+  leaves a stale listing behind (and the detail column falls back to test
+  output).
+- **Status line**, segment `coverage`: the focused file's percentage,
+  `cov 82.4%`, suffixed `stale` once the buffer changed since the run. Opt-in
+  through `tests.coverage_status` (Settings → Tests), off by default — the bar
+  is crowded and the figure is only wanted while one works on coverage. It is
+  deliberately *independent* of `coverage.toggle` and `editor.marks.coverage`:
+  those quiet the per-line gutter noise, and the percentage stays readable
+  without it.

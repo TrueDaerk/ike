@@ -102,9 +102,13 @@ type Model struct {
 	passed, failed, skipped int
 	elapsed                 float64
 	// coverage is the run-wide line-coverage percentage of a coverage run
-	// (#2081); hasCoverage gates it — a plain run shows none.
+	// (#2081); hasCoverage gates it — a plain run shows none. coverFiles is
+	// the same run's per-file breakdown (#2246), listed in the detail column
+	// while coverMode is on ('c').
 	coverage    float64
 	hasCoverage bool
+	coverFiles  []CoverageFile
+	coverMode   bool
 
 	// watch is watch mode (#2172): while set, the app re-runs the affected
 	// tests after every save. Per pane and not persisted — closing the panel
@@ -164,13 +168,26 @@ func (m *Model) StartRun(configName, dir string) {
 	m.dir = dir
 	m.running = true
 	m.hasCoverage = false
+	m.coverFiles = nil
+	m.coverMode = false
 }
 
-// SetCoverage stamps the run-wide coverage percentage onto the summary
-// (#2081); StartRun resets it, so only a coverage run shows one.
-func (m *Model) SetCoverage(pct float64) {
+// CoverageFile is one file's coverage summary for the detail column (#2246):
+// an absolute path and its line-coverage percentage. The panel stays a pure
+// consumer — the app derives these from its coverage store and hands them in.
+type CoverageFile struct {
+	Path    string
+	Percent float64
+}
+
+// SetCoverage stamps a coverage run's figures onto the panel (#2081, #2246):
+// the run-wide percentage shown in the summary header, and the per-file
+// breakdown the detail column lists under 'c', worst file first as the store
+// ordered it. StartRun resets both, so only a coverage run shows them.
+func (m *Model) SetCoverage(pct float64, files []CoverageFile) {
 	m.coverage = pct
 	m.hasCoverage = true
+	m.coverFiles = files
 }
 
 // FinishRun installs a completed run's parsed results and raw output and
@@ -318,6 +335,16 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case "o":
 		m.rawMode = !m.rawMode
+		m.detailTop = 0
+		return nil
+	case "c":
+		// The per-file coverage listing (#2246) takes over the detail column
+		// while a coverage run's figures are loaded; without them the key is
+		// inert rather than opening an empty list.
+		if len(m.coverFiles) == 0 {
+			return nil
+		}
+		m.coverMode = !m.coverMode
 		m.detailTop = 0
 		return nil
 	case "r":
@@ -597,6 +624,9 @@ func (m *Model) renderRow(pal *theme.Palette, i, width int) string {
 // detailLines is the detail column's content: the raw run output in raw
 // mode, the selected test's buffered output otherwise.
 func (m *Model) detailLines() []string {
+	if m.coverMode {
+		return m.coverageLines()
+	}
 	if m.rawMode {
 		return strings.Split(strings.TrimRight(m.raw, "\n"), "\n")
 	}
@@ -604,6 +634,41 @@ func (m *Model) detailLines() []string {
 		return strings.Split(strings.TrimRight(r.Output, "\n"), "\n")
 	}
 	return nil
+}
+
+// coverageLines is the per-file coverage breakdown (#2246): the run-wide
+// figure, then one right-aligned percentage per file with its path relative
+// to the run directory — worst-covered file first, the order the app's store
+// hands them in.
+func (m *Model) coverageLines() []string {
+	out := []string{"Coverage — " + formatPercent(m.coverage) + " overall", ""}
+	for _, f := range m.coverFiles {
+		pct := formatPercent(f.Percent)
+		pad := 6 - len([]rune(pct))
+		if pad < 0 {
+			pad = 0
+		}
+		out = append(out, strings.Repeat(" ", pad)+pct+"  "+m.relPath(f.Path))
+	}
+	return out
+}
+
+// formatPercent renders a coverage percentage with one decimal ("82.4%").
+func formatPercent(pct float64) string {
+	return strconv.FormatFloat(pct, 'f', 1, 64) + "%"
+}
+
+// relPath shortens an absolute path against the run's working directory; a
+// path outside it stays absolute.
+func (m *Model) relPath(path string) string {
+	if m.dir == "" {
+		return path
+	}
+	rel, err := filepath.Rel(m.dir, path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return path
+	}
+	return rel
 }
 
 // renderDetail draws the scrolled detail column.
@@ -640,7 +705,17 @@ func (m *Model) footer(pal *theme.Palette) string {
 	if m.watch {
 		watch = "watch on"
 	}
-	return lipgloss.NewStyle().Faint(true).Render(clipTo(" enter open · y copy · r rerun · f rerun failed · t rerun test · w "+watch+" · o "+mode+" · tab pane", m.width))
+	hints := " enter open · y copy · r rerun · f rerun failed · t rerun test · w " + watch + " · o " + mode
+	if len(m.coverFiles) > 0 {
+		// The coverage listing's key only advertises itself once a coverage
+		// run has filled it (#2246).
+		cov := "coverage"
+		if m.coverMode {
+			cov = "detail"
+		}
+		hints += " · c " + cov
+	}
+	return lipgloss.NewStyle().Faint(true).Render(clipTo(hints+" · tab pane", m.width))
 }
 
 // statusGlyph maps an outcome to its marker.
