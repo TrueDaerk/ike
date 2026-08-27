@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -102,6 +103,70 @@ type HTTPStreamChunkMsg struct {
 // final HTTPResponseMsg ends the chain.
 func nextHTTPEvent(events chan tea.Msg) tea.Cmd {
 	return func() tea.Msg { return <-events }
+}
+
+// httpStreamQuiet is the chunk coalescing window (#2176), the terminal's
+// notifyQuiet idea: an SSE endpoint delivering thousands of tiny chunks used
+// to cost one full Update+render — plus a viewer resync — per chunk, which is
+// quadratic over the stream. One window's bytes arrive as one message; short
+// enough that a live stream still reads as live.
+const httpStreamQuiet = 12 * time.Millisecond
+
+// httpChunkCoalescer buffers a stream's received body chunks and emits one
+// HTTPStreamChunkMsg per quiet window (#2176). The mutex is held across the
+// channel send — like the debugEventCoalescer — so the flush timer and the
+// dispatch goroutine's finish can never reorder; finish marks the coalescer
+// done, which keeps a late timer from sending after the channel closed.
+type httpChunkCoalescer struct {
+	mu    sync.Mutex
+	emit  func([]byte) // sends one chunk message into the events channel
+	buf   []byte
+	armed bool
+	done  bool
+}
+
+// add is the httpclient.StreamCallbacks OnChunk seam: the chunk folds into
+// the current window's buffer.
+func (c *httpChunkCoalescer) add(chunk []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.done {
+		return
+	}
+	c.buf = append(c.buf, chunk...)
+	if !c.armed {
+		c.armed = true
+		time.AfterFunc(httpStreamQuiet, c.flush)
+	}
+}
+
+// flush delivers the window's bytes.
+func (c *httpChunkCoalescer) flush() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.armed = false
+	c.flushLocked()
+}
+
+// flushLocked emits the buffered bytes; the caller holds c.mu. The channel
+// send may block on a slow UI — that is the stream's backpressure, unchanged.
+func (c *httpChunkCoalescer) flushLocked() {
+	if c.done || len(c.buf) == 0 {
+		return
+	}
+	buf := c.buf
+	c.buf = nil
+	c.emit(buf)
+}
+
+// finish flushes the tail and stops the coalescer — called on the dispatch
+// goroutine after the exchange returned, ahead of the final HTTPResponseMsg,
+// so every received byte precedes the finalizing message.
+func (c *httpChunkCoalescer) finish() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.flushLocked()
+	c.done = true
 }
 
 // httpHistoryDir is the project-local response-history location (#1251),
@@ -244,6 +309,12 @@ func (m *Model) dispatchHTTP(source, key, label string,
 		cancel:  cancel,
 	})
 	events := make(chan tea.Msg, 32)
+	// Chunks coalesce per quiet window (#2176): one message — one Update pass,
+	// one render, one viewer resync — per window instead of per received chunk.
+	coal := &httpChunkCoalescer{emit: func(buf []byte) {
+		events <- HTTPStreamChunkMsg{Source: source, Request: key,
+			Chunk: buf, events: events}
+	}}
 	dispatch := func() tea.Msg {
 		go func() {
 			resp, err := send(ctx, source, key, httpclient.StreamCallbacks{
@@ -251,12 +322,10 @@ func (m *Model) dispatchHTTP(source, key, label string,
 					events <- HTTPStreamStartMsg{Source: source, Request: key,
 						Status: status, Proto: proto, Headers: headers, events: events}
 				},
-				OnChunk: func(chunk []byte) {
-					events <- HTTPStreamChunkMsg{Source: source, Request: key,
-						Chunk: chunk, events: events}
-				},
+				OnChunk: coal.add,
 			})
-			cancel() // release the context regardless of the outcome
+			cancel()      // release the context regardless of the outcome
+			coal.finish() // the buffered tail lands ahead of the final response
 			events <- HTTPResponseMsg{Source: source, Request: key, Resp: resp, Err: err}
 			close(events)
 		}()

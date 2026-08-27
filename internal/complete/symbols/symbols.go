@@ -93,6 +93,14 @@ type Source struct {
 	buffers map[string]*doc
 	files   map[string]fileIndex
 	scanned bool
+
+	// Invalidation queue (#2176): watcher events re-extract through one
+	// worker goroutine instead of one goroutine per event — a 300-file git
+	// checkout must not become 300 concurrent disk readers.
+	invalMu   sync.Mutex
+	invalQ    []string
+	invalSet  map[string]bool
+	invalBusy bool
 }
 
 // New returns the source and starts the one-shot background scan under root
@@ -140,12 +148,42 @@ func (s *Source) Observe(ev host.EditorEvent) {
 
 // InvalidateFile implements complete.FileObserver: an on-disk change
 // re-extracts the file off the caller's goroutine (the buffer entry, when the
-// file is open, keeps overriding it anyway).
+// file is open, keeps overriding it anyway). Paths queue behind one worker
+// (#2176) — bounded disk concurrency — and a path already queued is not
+// queued twice.
 func (s *Source) InvalidateFile(path string) {
 	if !eligible(path) {
 		return
 	}
-	go func() {
+	s.invalMu.Lock()
+	if s.invalSet == nil {
+		s.invalSet = map[string]bool{}
+	}
+	if !s.invalSet[path] {
+		s.invalSet[path] = true
+		s.invalQ = append(s.invalQ, path)
+	}
+	if !s.invalBusy {
+		s.invalBusy = true
+		go s.drainInvalidations()
+	}
+	s.invalMu.Unlock()
+}
+
+// drainInvalidations is the single re-extraction worker (#2176): it pops the
+// queue until empty and exits; the next InvalidateFile restarts it.
+func (s *Source) drainInvalidations() {
+	for {
+		s.invalMu.Lock()
+		if len(s.invalQ) == 0 {
+			s.invalBusy = false
+			s.invalMu.Unlock()
+			return
+		}
+		path := s.invalQ[0]
+		s.invalQ = s.invalQ[1:]
+		delete(s.invalSet, path)
+		s.invalMu.Unlock()
 		idx, ok := extractDisk(path)
 		s.mu.Lock()
 		if ok {
@@ -154,7 +192,7 @@ func (s *Source) InvalidateFile(path string) {
 			delete(s.files, path)
 		}
 		s.mu.Unlock()
-	}()
+	}
 }
 
 // Complete implements complete.Source. Inside an HTML class=/id= attribute it

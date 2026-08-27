@@ -4718,8 +4718,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case debugEventBatchMsg:
-		// A parked session's coalesced output window (#1557): all events apply
-		// in one Update pass instead of one pass each.
+		// One coalesced output window (#1557/#2176): all events apply in one
+		// Update pass instead of one pass each.
 		for _, ev := range msg.evs {
 			m.handleDebugEvent(msg.sess, ev)
 		}
@@ -6363,84 +6363,35 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case watch.EventMsg:
-		// External file changes (Roadmap 0140): directory events refresh the
-		// explorer, file events go to the editor leaf owning the path. Every
-		// event also invalidates the git status snapshot (Roadmap 0320); the
-		// debounce collapses bursts into one refresh.
-		vcsCmd := m.scheduleVCSRefresh()
-		// On-disk changes refresh the symbol completion index (#853); repo
-		// metadata and settings files are not index material.
-		if m.completeEngine != nil && msg.Kind != watch.GitChanged && msg.Kind != watch.ConfigChanged {
-			m.completeEngine.NotifyFileChanged(msg.Path)
-		}
-		if msg.Kind == watch.ConfigChanged {
-			// The project settings file changed externally (0380, #795):
-			// re-run the reload pipeline — theme, keymap, editor behavior
-			// re-apply live, diagnostics toast via the normal path. No VCS
-			// refresh: .ike is not part of the working tree view.
-			return m, config.Reload(m.cfgOpts)
-		}
-		if msg.Kind == watch.GitChanged {
-			// Repository metadata changed under .git (#738): an external commit,
-			// branch switch, staging or pull — e.g. inside a lazygit tool pane.
-			// Only the snapshot refresh; there is no project file to route.
-			return m, vcsCmd
-		}
-		if msg.Kind == watch.DirChanged {
-			if m.activeWS().Panes.Has(pane.ExplorerKey) {
-				return m, tea.Batch(m.activeWS().Panes.Get(pane.ExplorerKey).Update(msg), vcsCmd)
-			}
-			return m, vcsCmd
-		}
-		if msg.Kind == watch.FileRemoved {
-			if _, err := os.Stat(msg.Path); err == nil {
-				// The file is back: a replace-in-place (write temp + rename,
-				// git checkout) coalesced remove over create — a content change.
-				msg.Kind = watch.FileChanged
-			}
-		}
+		// One external file change — the single-event shape the tests and
+		// internal replays use; the real watcher flushes EventBatchMsg (#2176).
+		msg = fixRemovedWatchKind(msg)
 		// Record it in the change feed (#2000) *before* anything routes the
 		// event onward: the pre-change content is read off the open buffer,
 		// which the auto-reload below is about to overwrite.
 		m.recordChangeFeed(msg)
-		// Announce the (kind-fixed) file event to hook subscribers (#1144):
-		// the LSP bridge forwards it to the servers as
-		// workspace/didChangeWatchedFiles, so Intelephense re-indexes
-		// externally created/changed/deleted files.
-		hookCmds := m.fireHooks(plugin.EventExternalFileChange, plugin.FileChange{
-			Path: msg.Path,
-			Kind: fileChangeKind(msg.Kind),
-		})
-		if msg.Kind == watch.FileRemoved {
-			if ed := m.editorForPath(msg.Path); ed != nil && ed.Following() {
-				// A followed file disappeared (#1928): rotation in progress,
-				// not a close — keep the pane, re-stamp the poll tracker so
-				// the replacement file is picked up (Poll dropped the entry
-				// when it reported the removal), and let the editor mark the
-				// pending rotation.
-				if m.watcher != nil {
-					m.watcher.Track(msg.Path)
-				}
-			} else if ed != nil && !ed.Dirty() {
-				// Externally deleted, nothing unsaved: same as the
-				// explorer's delete flow — close the pane (#83). A dirty
-				// buffer instead stays open, marked stale by the editor.
-				m.closeEditorsForPath(msg.Path, false)
-				return m, tea.Batch(append(hookCmds, vcsCmd)...)
-			}
+		return m, m.routeWatchEvent(msg)
+
+	case watch.EventBatchMsg:
+		// One debounce flush arrives whole (#2176): a 300-file git checkout is
+		// one Update pass — one render — instead of one full pass per path.
+		// The change-feed capture runs first, before any routing reloads a
+		// buffer; pre-change contents that need the local-history store are
+		// resolved off-loop by the returned command.
+		events := make([]watch.EventMsg, len(msg.Events))
+		for i, ev := range msg.Events {
+			events[i] = fixRemovedWatchKind(ev)
 		}
-		if msg.Kind == watch.FileChanged || msg.Kind == watch.FileCreated {
-			// A gz preview's buffer path names content *inside* the archive
-			// (#1763), so the editor's own reload never matches the file that
-			// changed: re-decompress it here. The command it returns re-runs
-			// the parse the fresh content needs (#1853).
-			hookCmds = append(hookCmds, m.refreshGzipBuffers(msg.Path))
+		cmds := []tea.Cmd{m.recordChangeFeedBatch(events)}
+		for _, ev := range events {
+			cmds = append(cmds, m.routeWatchEvent(ev))
 		}
-		// A merged rotation set's buffer path names no file either (#1996): its
-		// followers tail the set's newest member, so the event is routed by
-		// follow source rather than by path.
-		hookCmds = append(hookCmds, m.routeMergedLogFollow(msg))
-		return m, tea.Batch(append(hookCmds, m.routeToEditor(msg.Path, msg), vcsCmd)...)
+		return m, tea.Batch(cmds...)
+
+	case changeFeedCapturedMsg:
+		// The off-loop pre-change capture of a watcher batch landed (#2176).
+		m.applyChangeFeedCaptured(msg)
+		return m, nil
 
 	case vcsInvalidateMsg:
 		// Something changed the working tree (a buffer save, a mutating VCS
@@ -7544,7 +7495,7 @@ func (m Model) lastOpenedTimes() map[string]time.Time {
 
 // fileChangeKind maps a watcher file-event kind onto the hook payload kind
 // (#1144). Only the three file kinds reach it — the dir/git/config kinds
-// return early in the watch.EventMsg case.
+// return early in routeWatchEvent.
 func fileChangeKind(k watch.Kind) plugin.FileChangeKind {
 	switch k {
 	case watch.FileCreated:

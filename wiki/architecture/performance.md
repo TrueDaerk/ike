@@ -187,6 +187,17 @@ IO loop and Update/View hot path was audited; findings fixed in #2163:
   sustained churn faster than the 100ms window used to reset the timer
   forever — no flush, unbounded pending growth, changes invisible until the
   writer paused.
+- **Message floods coalesce instead of hitting Update per event** (#2176):
+  HTTP stream chunks fold into one message per ~12ms window
+  (`httpChunkCoalescer`) and the response viewer extends its projection and
+  search at the tail instead of recomputing them per chunk; task problem
+  matchers snapshot per ~50ms window instead of deep-copying per matched
+  chunk; DAP output batches unconditionally (not just parked) and the
+  transcript appends through a held handle instead of open/close per event;
+  a watch flush arrives as one `EventBatchMsg` (one Update pass per
+  checkout, not per file), the change feed's local-history capture runs
+  off-loop, and symbol-index invalidation queues behind one worker instead
+  of one goroutine per changed file.
 - **The terminal-check retry tick gives up** after ~a minute of a parked
   modal instead of waking the program every 2s for the session's life.
 - **Clipboard subprocesses are deadline-bounded** (3s): they run on the

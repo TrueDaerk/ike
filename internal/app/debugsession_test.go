@@ -498,8 +498,8 @@ func TestEnvMapToSliceSkipsNulls(t *testing.T) {
 	}
 }
 
-// TestDebugEventCoalescerPassThrough (#1557): unparked, every event delivers
-// individually and immediately.
+// TestDebugEventCoalescerPassThrough (#1557): non-output events deliver
+// individually and immediately; buffered output flushes ahead of them.
 func TestDebugEventCoalescerPassThrough(t *testing.T) {
 	var mu sync.Mutex
 	var got []tea.Msg
@@ -509,30 +509,29 @@ func TestDebugEventCoalescerPassThrough(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if len(got) != 2 {
-		t.Fatalf("unparked events = %d msgs, want 2", len(got))
+		t.Fatalf("events = %d msgs, want output batch + stopped", len(got))
 	}
-	for i, name := range []string{"output", "stopped"} {
-		ev, ok := got[i].(debugEventMsg)
-		if !ok || ev.ev.Name != name {
-			t.Fatalf("msg %d = %#v, want debugEventMsg %s", i, got[i], name)
-		}
+	if b, ok := got[0].(debugEventBatchMsg); !ok || len(b.evs) != 1 || b.evs[0].Name != "output" {
+		t.Fatalf("msg 0 = %#v, want the buffered output flushed first (#2176)", got[0])
+	}
+	if ev, ok := got[1].(debugEventMsg); !ok || ev.ev.Name != "stopped" {
+		t.Fatalf("msg 1 = %#v, want debugEventMsg stopped", got[1])
 	}
 }
 
-// TestDebugEventCoalescerBatchesParkedOutput (#1557): parked output events
-// buffer and arrive as one debugEventBatchMsg per quiet window.
-func TestDebugEventCoalescerBatchesParkedOutput(t *testing.T) {
+// TestDebugEventCoalescerBatchesOutput (#1557/#2176): output events buffer —
+// parked or not — and arrive as one debugEventBatchMsg per quiet window.
+func TestDebugEventCoalescerBatchesOutput(t *testing.T) {
 	var mu sync.Mutex
 	var got []tea.Msg
 	c := &debugEventCoalescer{send: func(m tea.Msg) { mu.Lock(); got = append(got, m); mu.Unlock() }}
-	c.SetParked(true)
 	for i := 0; i < 5; i++ {
 		c.onEvent(dap.Event{Name: "output"})
 	}
 	mu.Lock()
 	if len(got) != 0 {
 		mu.Unlock()
-		t.Fatalf("parked output delivered immediately: %d msgs", len(got))
+		t.Fatalf("output delivered immediately: %d msgs", len(got))
 	}
 	mu.Unlock()
 	deadline := time.Now().Add(2 * time.Second)

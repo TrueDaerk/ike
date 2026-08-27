@@ -42,10 +42,9 @@ type debugState struct {
 	cfgName string
 	root    string
 
-	// coal sits between the adapter's read loop and host.Send (#1557): while
-	// the owning workspace is parked, output events coalesce into batches so a
-	// chatty background debuggee does not cost the active workspace one full
-	// Update+render pass per event.
+	// coal sits between the adapter's read loop and host.Send (#1557): output
+	// events coalesce into batches — parked or active (#2176) — so a chatty
+	// debuggee does not cost one full Update+render pass per event.
 	coal *debugEventCoalescer
 
 	threadID   int
@@ -106,8 +105,8 @@ type (
 		threadID int
 		frames   []dap.StackFrame
 	}
-	// debugEventBatchMsg delivers coalesced parked-session output events in
-	// one Update pass (#1557); the events apply in arrival order.
+	// debugEventBatchMsg delivers one quiet window's coalesced output events
+	// in one Update pass (#1557/#2176); the events apply in arrival order.
 	debugEventBatchMsg struct {
 		sess *dap.Session
 		evs  []dap.Event
@@ -150,19 +149,20 @@ type (
 	}
 )
 
-// debugParkedQuiet is the coalescing window for a parked debuggee's output
-// events (#1557): long enough to fold a print-loop burst into few batches,
-// short enough that the transcript and parked terminal stay near-live.
-const debugParkedQuiet = 50 * time.Millisecond
+// debugOutputQuiet is the coalescing window for a debuggee's output events
+// (#1557, unconditional since #2176): long enough to fold a print-loop burst
+// into few batches, short enough that the console, transcript and parked
+// terminal stay near-live.
+const debugOutputQuiet = 50 * time.Millisecond
 
-// debugEventCoalescer relays adapter events to host.Send, batching a parked
-// session's output (#1557). Unparked (the common case) every event passes
-// straight through as its own debugEventMsg. Parked, output events buffer and
-// flush as one debugEventBatchMsg per quiet window — the SetParked idea from
-// the terminal's #1522 batching — while any other event (stopped, terminated,
-// #1544's exited) flushes the buffer and delivers individually, keeping
-// arrival order. The mutex is held across sends so the batch/single order can
-// never invert between the read loop and the flush timer.
+// debugEventCoalescer relays adapter events to host.Send, batching output
+// events (#1557). Output events buffer and flush as one debugEventBatchMsg
+// per quiet window — parked or not (#2176): an active debuggee running a
+// print loop used to cost one full Update+render pass per event — while any
+// other event (stopped, terminated, #1544's exited) flushes the buffer and
+// delivers individually, keeping arrival order. The mutex is held across
+// sends so the batch/single order can never invert between the read loop and
+// the flush timer.
 //
 // It also carries the owning session pointer for event tagging (#1523): the
 // session only exists after Connect/Start, while the read loop starts inside
@@ -185,7 +185,9 @@ func (c *debugEventCoalescer) setSession(s *dap.Session) {
 	c.mu.Unlock()
 }
 
-// SetParked flips the parked flag; un-parking flushes whatever buffered.
+// SetParked flips the parked flag; un-parking flushes whatever buffered. The
+// flag no longer changes the batching itself (#2176) — output coalesces
+// either way — but the unpark flush keeps the re-attach immediate.
 func (c *debugEventCoalescer) SetParked(parked bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -199,14 +201,14 @@ func (c *debugEventCoalescer) SetParked(parked bool) {
 func (c *debugEventCoalescer) onEvent(ev dap.Event) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.parked && ev.Name == "output" {
+	if ev.Name == "output" {
 		c.pending = append(c.pending, ev)
 		if len(c.pending) > maxPendingOut {
 			c.pending = c.pending[len(c.pending)-maxPendingOut:]
 		}
 		if !c.armed {
 			c.armed = true
-			time.AfterFunc(debugParkedQuiet, c.flushTimer)
+			time.AfterFunc(debugOutputQuiet, c.flushTimer)
 		}
 		return
 	}
@@ -430,7 +432,7 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	send := m.host.Send
 	// Events are tagged with their owning session (#1523) so Update can route
 	// one from a parked workspace's debuggee away from the active session's
-	// state; the coalescer additionally batches parked output (#1557). The
+	// state; the coalescer additionally batches output (#1557/#2176). The
 	// session pointer only exists after Connect/Start below, while the reader
 	// goroutine (and thus onEvent) starts inside them — the handshake's own
 	// events may still carry nil, which the handler treats as the active

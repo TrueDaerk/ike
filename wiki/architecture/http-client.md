@@ -736,11 +736,17 @@ For a recognized stream:
   the dispatch section) renders **incrementally** instead of leaving the pane
   empty until the connection ends. The dispatch goroutine feeds a buffered
   event channel the update loop pumps (`HTTPStreamStartMsg` → status line and
-  headers compose immediately, `HTTPStreamChunkMsg` per chunk → the pump
-  re-arms itself, the final `HTTPResponseMsg` ends the chain); a slow UI slows
-  the reads — backpressure, never dropped data. In the pane,
+  headers compose immediately, `HTTPStreamChunkMsg` per quiet window → the
+  pump re-arms itself, the final `HTTPResponseMsg` ends the chain); a slow UI
+  slows the reads — backpressure, never dropped data. Received chunks
+  **coalesce per ~12ms quiet window** (`httpChunkCoalescer`, #2176) into one
+  message — one Update pass, one render, one viewer resync — so an SSE
+  endpoint spraying thousands of tiny chunks cannot pin the UI; the window's
+  tail flushes ahead of the finalizing response. In the pane,
   `StartStream`/`AppendStream` append complete lines as plaintext body rows
-  and buffer the incomplete last line; the header shows `⟳ streaming… (1.2s)`
+  and buffer the incomplete last line — extending the display projection and
+  any open search **incrementally at the tail** (#2176) instead of
+  recomputing them over every row per append; the header shows `⟳ streaming… (1.2s)`
   and the footer leads with `x cancel stream`. The viewport **auto-follows**
   the stream end while it is at the end — scrolling up detaches, log-viewer
   style, `G` re-attaches. Highlighting and folds are *not* computed live: the

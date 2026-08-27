@@ -519,7 +519,13 @@ automatic view selection, and a fresh pipe session replaces the console
 (`SetTerm`) — so the placement the user arranged survives across sessions.
 Every chunk is also appended to the per-project transcript
 `.ike/debug-session.log` (#624; stderr chunks prefixed `[stderr] `, ANSI
-stripped via `debugpanel.StripANSI`).
+stripped via `debugpanel.StripANSI`). Output events **coalesce per ~50ms
+quiet window** before reaching the Update loop — parked *and* active since
+#2176 (`debugEventCoalescer`, #1557): a print-looping debuggee costs one
+Update+render batch per window instead of one per event — and the transcript
+appends through a **held file handle** (#2176) instead of paying
+MkdirAll+open+close per event; a session start drops the handle so a deleted
+transcript is recreated.
 
 **Persistence** (#1370, #2190): `saveLayout` records the area as one `debug`
 leaf (restored empty, variables view, no console — session state never

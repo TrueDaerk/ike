@@ -77,11 +77,14 @@ root, recursive (watching newly created directories) but pruning
 dot-directories and vendored/noise dirs (`node_modules`, `__pycache__`,
 `site-packages`, `vendor`) via `skipWatchDir` so a populated `.venv` does not
 register thousands of watches (#596), debounced ~100ms with per-path coalescing
-(removal wins; create survives a follow-up write). It emits `watch.EventMsg{Kind, Path}` — `FileChanged` /
-`FileCreated` / `FileRemoved` / `DirChanged` — through `host.Send`; the root
-model routes file kinds to the editor leaf owning the path
+(removal wins; create survives a follow-up write). Each debounce flush emits
+one `watch.EventBatchMsg{Events}` (#2176) carrying the window's
+`watch.EventMsg{Kind, Path}` entries — `FileChanged` / `FileCreated` /
+`FileRemoved` / `DirChanged` — through `host.Send`, so a 300-file git checkout
+costs the app one Update pass instead of one per path; the root model routes
+each event's file kind to the editor leaf owning the path
 (`editorKeyForPath`) and `DirChanged` to the explorer (consumers land in
-#81–#83).
+#81–#83). A bare `EventMsg` is still routed identically (tests, replays).
 
 - **Self-event suppression:** the editor emits `EventSave` after every disk
   write; the app's emitter adapter stamps `watcher.MarkSaved(path)`, and
