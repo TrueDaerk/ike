@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-08-24T12:00:00Z
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # Command Palette
@@ -144,15 +144,48 @@ hidden entries and heavy directories (`.git`, `node_modules`, `vendor`), uses
 forward-slash paths for stable matching, and is capped at `maxFiles`. Activation
 emits `OpenFileMsg{Path}` joined onto the root.
 
-Ranking is fuzzy score, then **most-used** (#1419), then path: the file-usage
-counter (same `Usage` type as #773, persisted in `.ike/fileusage.json`,
-`IKE_CONFIG_DIR`-redirectable) counts only file selections confirmed from the
-two **ranked palette windows** — Run a Command's `@` source and Search
-Everywhere. The palette marks such an activation (`OpenFileMsg.CountUsage`)
-and the root model bumps the counter; opens via the explorer, go-to-file, the
-editor's anchored `@` finder or the recent-files mode never count. Match
-quality still wins — usage only breaks equal scores, notably the empty-query
-listing.
+Ranking blends three signals — fuzzy score, **frecency** (#2155) and the
+**most-used** counter (#1419) — and the blend order depends on how much the
+user has typed:
+
+| Query length | Order |
+| --- | --- |
+| 0–2 characters (`shortQueryLen`) | frecency, then fuzzy score, then usage, then path |
+| 3+ characters | fuzzy score, then frecency, then usage, then path |
+
+The rationale is that one or two characters barely discriminate — nearly every
+file matches, and the score differences are noise — so the files one is
+actually working on belong on top; from the third character the typed text is a
+real signal and match quality leads again, with frecency demoted to the
+tiebreak that decides equally good matches.
+
+The file-usage counter (same `Usage` type as #773, persisted in
+`.ike/fileusage.json`, `IKE_CONFIG_DIR`-redirectable) counts only file
+selections confirmed from the two **ranked palette windows** — Run a Command's
+`@` source and Search Everywhere. The palette marks such an activation
+(`OpenFileMsg.CountUsage`) and the root model bumps the counter; opens via the
+explorer, go-to-file, the editor's anchored `@` finder or the recent-files mode
+never count.
+
+**Frecency (#2155).** `internal/frecency` is the shared "frequency + recency"
+store — a generic, opaque-keyed helper so a later command-history ranking can
+reuse it. Each key holds one decaying accumulator: an event ages the stored
+weight to its instant and adds `1.0`, and reading a score ages the weight to
+*now*. Decay is exponential with a **14-day half-life** (`Decay(age) =
+0.5^(age/HalfLife)`; a backwards clock never amplifies), so twenty opens last
+week outrank one open yesterday, while a month-old favourite fades without
+vanishing. The store persists as JSON at `.ike/filefrecency.json` (same
+`IKE_CONFIG_DIR` seam), is capped at `MaxEntries` = 500 — the coldest keys are
+pruned on insertion — and tolerates a missing, malformed or hand-broken file by
+degrading to "no frecency data": a ranking aid must never disrupt the session.
+
+Unlike the usage counter, frecency counts **every** open: the root model bumps
+it at the same two sites that feed the recent-files MRU — a file landing in a
+tab (`openPathWith`) and a background tab being re-activated — so the finder
+reflects what one is working on however the file was reached. Both sides key
+the store through `frecency.Key` (cleaned, absolute), since the finder holds
+root-relative paths and the opening sites hold whatever spelling they were
+given.
 
 **Filesystem reach (#1433).** `@` is no longer project-only: a query typed as
 a filesystem path — leading `/`, `~/`, `./` or `../` — is served by the shared

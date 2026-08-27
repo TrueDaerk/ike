@@ -1,5 +1,25 @@
 # Log
 
+## 2026-08-27 (Frecency-weighted file finder, #2155)
+
+- **The gap**: the `@` finder ranked purely by fuzzy score, so the handful of
+  files one lives in ranked no better than never-touched ones — and the empty
+  query opened on the alphabetical head of the tree.
+- **`internal/frecency`**: a shared, opaque-keyed store (a later command
+  history can reuse it). One decaying accumulator per key — an event ages the
+  old weight and adds 1.0, a read ages it to now — with a 14-day half-life,
+  a 500-entry cap that prunes the coldest keys, and JSON persistence at
+  `.ike/filefrecency.json` that tolerates a missing or corrupt file.
+- **Blend order** (`FileMode.Results`): up to two typed characters frecency
+  leads (the score barely discriminates there anyway); from the third the
+  fuzzy score leads and frecency is the tiebreak above the #1419 usage count,
+  then path.
+- **Event source**: every open counts, not only palette confirmations — the
+  root model bumps at the same two sites that feed the recent-files MRU
+  (`openPathWith`, tab re-activation), keyed through `frecency.Key` so the
+  finder's root-relative paths and the openers' spellings agree.
+- Wiki: [command-palette](architecture/command-palette.md).
+
 ## 2026-08-27 (Branch and dirty status per project-picker row, #2178)
 
 - **The gap**: the recent-projects picker listed roots and last-opened times,

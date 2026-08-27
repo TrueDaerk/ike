@@ -53,6 +53,7 @@ import (
 	"ike/internal/finder"
 	"ike/internal/forge"
 	"ike/internal/format"
+	"ike/internal/frecency"
 	"ike/internal/ghissues"
 	"ike/internal/help"
 	"ike/internal/highlight"
@@ -700,10 +701,15 @@ type Model struct {
 	// palette is the command palette overlay (Roadmap 0070): a modal input that
 	// fronts registered commands (":") and file search ("@"). paletteKey is the
 	// default key that opens it (the final binding is Roadmap 0080's).
-	palette     *palette.Palette
-	projGit     *project.GitCache    // async branch/dirty context of picker rows (#2178)
-	cmdUsage    *palette.Usage       // most-used command ranking (#773)
-	fileUsage   *palette.Usage       // most-used file ranking in the ranked palettes (#1419)
+	palette   *palette.Palette
+	projGit   *project.GitCache // async branch/dirty context of picker rows (#2178)
+	cmdUsage  *palette.Usage    // most-used command ranking (#773)
+	fileUsage *palette.Usage    // most-used file ranking in the ranked palettes (#1419)
+	// fileFrec ranks the "@" finder by how often and how recently files were
+	// opened (#2155). Every open and tab re-activation bumps it — the same
+	// events the recent-files MRU records — so the finder reflects what one
+	// is working on, not only what was picked from a palette window.
+	fileFrec    *frecency.Store
 	winSizes    *ui.WinSizes         // persisted floating-window resize deltas (#774)
 	winSizesAll *ui.WinSizes         // user-scoped last-resize deltas, fallback for fresh projects (#1714)
 	floatDrag   *floatResizeDrag     // live mouse resize of a floating window (#933)
@@ -1126,6 +1132,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	projGit := project.NewGitCache()                // picker branch/dirty context (#2178)
 	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
+	fileFrec := frecency.Load(fileFrecencyFile())   // frecency-weighted file finder (#2155)
 	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
 	winSizesAll := ui.LoadWinSizes(globalWinSizeFile())
 	// Background forge polling (#2085) is anchored to the project root the
@@ -1152,6 +1159,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m := Model{
 		cmdUsage:        cmdUsage,
 		fileUsage:       fileUsage,
+		fileFrec:        fileFrec,
 		winSizes:        winSizes,
 		winSizesAll:     winSizesAll,
 		pins:            loadPins(),                          // pinned file slots (#788)
@@ -1182,7 +1190,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		shell:           ui.New(shellConfig(cfg)),
 		vcs:             vcsSt,
 		forgePoll:       forgeSt,
-		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters, projGit),
+		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, fileFrec, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters, projGit),
 		projGit:         projGit,
 		layoutsPicker:   layoutsPicker,
 		httpRequests:    httpRequests,
@@ -2579,7 +2587,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, projGit *project.GitCache) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, fileFrec *frecency.Store, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, projGit *project.GitCache) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -2588,6 +2596,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	cmd.SetUsage(usage)
 	file := palette.NewFileMode()
 	file.SetUsage(fileUsage)
+	file.SetFrecency(fileFrec)
 	file.SetScratchList(scratchList)
 	dir := palette.NewDirMode()
 	proj := project.NewPickerMode(nil)
@@ -7310,8 +7319,9 @@ func (m Model) openPathWith(path string, newPane bool) (tea.Model, tea.Cmd) {
 			// (#1996) — nothing else says that the file next to this one holds
 			// the hour before it.
 			m.notifyRotatedSet(m.activeWS().Panes.Get(key).Editor())
-			m.recent.Touch(path)  // MRU for the recent-files palette mode (0230)
-			m.watcher.Track(path) // poll-fallback comparison for open buffers
+			m.recent.Touch(path)                // MRU for the recent-files palette mode (0230)
+			m.fileFrec.Bump(frecency.Key(path)) // frecency ranking for the "@" finder (#2155)
+			m.watcher.Track(path)               // poll-fallback comparison for open buffers
 			m.explorer().SetActive(path)
 			m.syncExplorerOpen()
 			m.setFocus(key)
@@ -7471,6 +7481,7 @@ func (m *Model) activateTab(inst *pane.Instance, idx int) {
 	// Returning to a background tab counts as using its file (MRU, 0230).
 	if ed := inst.Editor(); ed != nil && ed.HasFile() {
 		m.recent.Touch(ed.Path())
+		m.fileFrec.Bump(frecency.Key(ed.Path()))
 	}
 }
 
