@@ -36,6 +36,10 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			cmd("explorer.newFolder", "Explorer: New Folder", NewDirMsg{}),
 			cmd("explorer.delete", "Explorer: Delete", DeleteMsg{}),
 			cmd("explorer.rename", "Explorer: Rename", RenameMsg{}),
+			cmd("explorer.move", "Explorer: Move Selection To…", MoveSelectionMsg{}),
+			cmd("explorer.copy", "Explorer: Copy Selection To…", CopySelectionMsg{}),
+			cmdHint("explorer.toggleMark", "Explorer: Toggle Selection Mark", "space", ToggleMarkMsg{}),
+			cmdHint("explorer.clearMarks", "Explorer: Clear Selection Marks", "esc", ClearMarksMsg{}),
 			cmd("explorer.search", "Explorer: Speed Search", SearchMsg{}),
 			cmd("explorer.undo", "Explorer: Undo File Operation", UndoMsg{}),
 			cmd("explorer.redo", "Explorer: Redo File Operation", RedoMsg{}),
@@ -61,6 +65,11 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			keymap("A", "explorer.newFolder", NewDirMsg{}),
 			keymap("d", "explorer.delete", DeleteMsg{}),
 			keymap("R", "explorer.rename", RenameMsg{}),
+			// Bulk operations over the multi-select (#2166); with nothing
+			// marked they act on the cursor entry, like every other file op.
+			keymap("m", "explorer.move", MoveSelectionMsg{}),
+			keymap("y", "explorer.copy", CopySelectionMsg{}),
+			keymap("space", "explorer.toggleMark", ToggleMarkMsg{}),
 			keymap("/", "explorer.search", SearchMsg{}),
 		},
 	}

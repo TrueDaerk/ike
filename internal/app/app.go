@@ -475,6 +475,10 @@ type Model struct {
 	// movePending is the file whose move target the palette's directory picker
 	// is currently asking for (file.move, #175); "" when no move is pending.
 	movePending string
+	// moveMany is the explorer's multi-select awaiting the same picker
+	// (#2166); non-empty it outranks movePending and the whole set moves as
+	// one batched, single-undo operation.
+	moveMany []string
 	// jbImportOpen marks the JetBrains keymap import prompt (#677) while the
 	// shell shows it; jbImportInput/jbImportPos are the typed path and cursor.
 	jbImportOpen  bool
@@ -3956,12 +3960,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.probStore.Drop(msg.Path, msg.IsDir)
 		m.dropRawDiags(msg.Path, msg.IsDir)
 		m.refreshProblemsPanel()
-		return m, nil
+		// A removed path changes the working tree, so the git status snapshot
+		// behind the explorer's VCS colouring is stale (#2166) — refresh it
+		// through the usual debounce, exactly like a buffer save does.
+		return m, m.scheduleVCSRefresh()
 
 	case explorer.FileMovedMsg:
 		// A rename/move (or its undo/redo): open editors follow the new path
-		// instead of closing (#175).
-		return m, m.followMovedFile(msg)
+		// instead of closing (#175). Both ends changed status, so the git
+		// snapshot is refreshed with them (#2166).
+		return m, tea.Batch(m.followMovedFile(msg), m.scheduleVCSRefresh())
+
+	case explorer.FileCreatedMsg:
+		// A bulk copy created paths without moving anything (#2166): nothing
+		// to re-point, but the new files are untracked and the VCS colouring
+		// must show it.
+		return m, m.scheduleVCSRefresh()
 
 	case explorer.HiddenToggledMsg:
 		// Persist the show-hidden toggle immediately so it survives a kill/crash,

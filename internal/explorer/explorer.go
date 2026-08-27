@@ -169,6 +169,13 @@ type Model struct {
 	// shifts, so a stale range would cover the wrong entries — kept simple).
 	selAnchor int
 
+	// Sticky multi-select (#2166, marks.go): the set of marked entries, keyed
+	// by absolute path so a rescan can never re-point a mark at the wrong
+	// row. Space toggles the cursor row, esc clears the set, and delete/move/
+	// copy act on the whole set at once. Nil (the default) means the explorer
+	// behaves exactly as it did before marks existed.
+	marks map[string]bool
+
 	// Scratches section (#1963, scratches.go): the scratch store listed as a
 	// divider-separated section below the tree, operated with the explorer's
 	// own semantics. A nil lister means "no section" (the default), so the
@@ -520,6 +527,9 @@ func (m *Model) rebuild() {
 	if m.selAnchor >= len(m.rows) {
 		m.selAnchor = len(m.rows) - 1
 	}
+	// Marks are path-keyed and survive the rebuild (#2166); only the ones
+	// whose entry left the tree entirely are dropped.
+	m.pruneMarks()
 	// Content changed, the cursor did not (#1140): only bound the offset, so
 	// a wheel-scrolled viewport survives watcher/VCS/config rebuilds — except
 	// when a user-initiated pendingSel snap just moved the cursor (snapCursorTo),
@@ -723,6 +733,24 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case DeleteMsg:
 		m.promptDelete()
 		return m, nil
+	case ToggleMarkMsg:
+		m.clearSel()
+		m.toggleMark()
+		return m, nil
+	case ClearMarksMsg:
+		m.clearSel()
+		m.clearMarks()
+		return m, nil
+	case MoveSelectionMsg:
+		m.promptMove()
+		return m, nil
+	case CopySelectionMsg:
+		m.promptCopy()
+		return m, nil
+	case MoveManyMsg:
+		// The app's file.move picker resolved a target for the explorer's
+		// multi-select (#2166): move every marked entry in one batch.
+		return m, m.moveTargets(m.pathTargets(msg.Paths), msg.TargetDir)
 	case RenameMsg:
 		m.promptRename()
 		return m, nil
@@ -780,6 +808,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		case "K", "shift+up":
 			m.extendSel(-1)
+			return m, nil
+		case "space":
+			// Sticky multi-select (#2166): space toggles the cursor row and
+			// leaves the cursor where it is, so a selection is built by
+			// walking the tree and marking as you go.
+			m.clearSel()
+			m.toggleMark()
+			return m, nil
+		case "esc":
+			// Esc clears both selections — the transient range and the
+			// sticky marks (#2166) — and never moves the cursor.
+			m.clearSel()
+			m.clearMarks()
 			return m, nil
 		}
 		m.clearSel()
@@ -1558,7 +1599,7 @@ func (m Model) rowParts(n *node) (guides, mark, name, ctx string) {
 	if n.isDir {
 		name += "/"
 	}
-	mark = m.marker(n)
+	mark = m.selMarker(n) + m.marker(n)
 	if m.icons {
 		mark += typeGlyph(n) + " "
 	}
@@ -1618,6 +1659,20 @@ func abbrevHome(p string) string {
 // (#1039): a loaded dir with no (filter-surviving) children shows no
 // expander, JetBrains-style, instead of expanding to nothing. Unloaded dirs
 // keep the caret (contents unknown until the first scan).
+// selMarker is the multi-select column (#2166): a leading marker cell that
+// exists only while something is marked, so an unmarked tree renders exactly
+// as it always did — and, once marks exist, every row indents by the same
+// amount, keeping the tree's columns aligned.
+func (m Model) selMarker(n *node) string {
+	if len(m.marks) == 0 {
+		return ""
+	}
+	if m.marked(n.path) {
+		return markGlyph + " "
+	}
+	return "  "
+}
+
 func (m Model) marker(n *node) string {
 	if !n.isDir {
 		return "  "
@@ -2403,11 +2458,12 @@ func (m Model) rowStyleSetVCS(i int, n *node, rv rowVCS, ss rowStyleSet) lipglos
 	switch m.rowKind(i) {
 	case rowSelected:
 		return base.Background(ss.pal.Selection).Bold(true)
-	case rowRange, rowCursorIdle:
-		// Multi-select members (#1044) share the muted-selection recipe with
-		// the unfocused cursor (#1034): a background overlay only, so the
-		// semantic foreground stays readable; the cursor row keeps the full
-		// Selection recipe above and reads as the range's active end.
+	case rowRange, rowMarked, rowCursorIdle:
+		// Multi-select members — a shift+j/k range (#1044) or a space-marked
+		// entry (#2166) — share the muted-selection recipe with the unfocused
+		// cursor (#1034): a background overlay only, so the semantic
+		// foreground stays readable; the cursor row keeps the full Selection
+		// recipe above and reads as the range's active end.
 		return base.Background(ss.pal.SelectionMuted)
 	case rowHover:
 		return base.Background(ss.pal.Panel)
@@ -2436,6 +2492,7 @@ const (
 	rowActive
 	rowCursorIdle
 	rowRange
+	rowMarked
 	rowHover
 	rowSelected
 )
@@ -2453,6 +2510,10 @@ func (m Model) rowKind(i int) rowKind {
 		// visible while the mouse sweeps over it. The cursor row is caught
 		// above (focused) or by the muted-idle case below.
 		return rowRange
+	case m.marked(n.path):
+		// A marked entry (#2166) reads like a range member — the same muted
+		// selection recipe — and equally outranks a hover sweeping over it.
+		return rowMarked
 	case i == m.hover:
 		return rowHover
 	case i == m.cursor:

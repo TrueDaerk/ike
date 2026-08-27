@@ -115,6 +115,15 @@ func (m Model) updateRenamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // startMoveFile handles MoveFileMsg (file.move): stash the source and open
 // the palette locked to the directory picker.
 func (m *Model) startMoveFile() {
+	// The explorer's multi-select (#2166) moves as a batch: the picker asks
+	// for one target directory and every marked entry goes there.
+	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindExplorer {
+		if marked := m.explorer().MarkedPaths(); len(marked) > 0 {
+			m.moveMany = marked
+			m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: m.explorer().Root()}, '>')
+			return
+		}
+	}
 	path, ok := m.refactorTarget()
 	if !ok {
 		return
@@ -126,14 +135,19 @@ func (m *Model) startMoveFile() {
 // finishMoveFile handles the picked target directory: the pending source
 // moves there through the explorer's fileops (undo/redo included).
 func (m *Model) finishMoveFile(dir string) tea.Cmd {
-	path := m.movePending
-	m.movePending = ""
-	if path == "" {
+	path, many := m.movePending, m.moveMany
+	m.movePending, m.moveMany = "", nil
+	if path == "" && len(many) == 0 {
 		return nil
 	}
 	target := filepath.Clean(filepath.Join(m.explorer().Root(), filepath.FromSlash(dir)))
 	exp := m.explorer()
 	var cmd tea.Cmd
+	if len(many) > 0 {
+		// A multi-select move (#2166): one batch, one undo step.
+		*exp, cmd = exp.Update(explorer.MoveManyMsg{Paths: many, TargetDir: target})
+		return cmd
+	}
 	*exp, cmd = exp.Update(explorer.MoveToMsg{Path: path, TargetDir: target})
 	return cmd
 }
