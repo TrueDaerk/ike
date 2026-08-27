@@ -249,7 +249,7 @@ func (m *Model) startDebug() {
 		m.host.Notify(host.Info, "debug: no run command for this file type")
 		return
 	}
-	store.Touch(cfg.Name)
+	store.Touch(cfg.Name, run.KindDebug)
 	_ = run.Save(store)
 	m.startDebugConfig(root, *cfg)
 }
@@ -299,7 +299,7 @@ func (m *Model) debugTestAtCursor() {
 	}
 	store := run.Load()
 	store.Upsert(cfg)
-	store.Touch(cfg.Name)
+	store.Touch(cfg.Name, run.KindDebug)
 	_ = run.Save(store)
 	m.startDebugConfig(root, cfg)
 }

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Run Configurations
-description: Work stream 0350 — named, persisted run/debug configurations synthesized into command lines through the language registry; per-project store in .ike/runconfigs.json; output in the dedicated Run tool pane (#1905), placed in the layout's tool region rather than the outermost bottom and remembering a user-moved position per project (#2191); run.select picker merging .vscode/launch.json imports (#1914); literal-argv task configurations, the Run Task picker and problem matchers (#1915).
+description: Work stream 0350 — named, persisted run/debug configurations synthesized into command lines through the language registry; per-project store in .ike/runconfigs.json; output in the dedicated Run tool pane (#1905), placed in the layout's tool region rather than the outermost bottom and remembering a user-moved position per project (#2191); run.select picker merging .vscode/launch.json imports (#1914); literal-argv task configurations, the Run Task picker and problem matchers (#1915); the run.editConfig environment form and the kind-faithful rerun-last chord (#2173).
 resource: internal/run
 tags: [architecture, run, debug, toolchain, languages, vscode, tasks]
-timestamp: 2026-08-27T12:00:00Z
+timestamp: 2026-08-27T18:00:00Z
 ---
 
 # Run Configurations (0350)
@@ -36,9 +36,11 @@ type Config struct {
 
 - **Store**: `run.Load()` / `run.Save(store)` persist `.ike/runconfigs.json`
   (`IKE_CONFIG_DIR` override like session/layout). `Store` keeps the ordered
-  config list plus `LastUsed` (the rerun-last target, `Touch`/`Last`).
+  config list plus `LastUsed` and `LastKind` — the rerun-last target *and the
+  way it was started* (`Touch(name, kind)` / `Last` / `LastLaunch`, #2173).
   Missing or malformed files load as empty — run configs are convenience
-  state, never a startup error; a failed save must not abort the run.
+  state, never a startup error; a failed save must not abort the run. A store
+  written before #2173 carries no `last_kind`; that reads back as `KindRun`.
 - **Default synthesis**: `Store.EnsureFor(root, file)` returns the config for
   a file, creating and remembering the default on first run: kind `run`, no
   env, cwd = project root, the language's module form when the file lies in
@@ -47,6 +49,14 @@ type Config struct {
   through the language seam below — unless the configuration carries a
   literal `Argv` (#1915, task configurations), which is returned as-is;
   `Config.Dir(root)` and `Config.EnvSlice()` feed the terminal spawn.
+- **Environment rows** (#2173): `run.EnvRows(env)` renders the overlay as the
+  sorted key/value rows the form edits, `run.ValidateEnvKey` and `run.EnvMap`
+  are the validation seam (empty keys, keys carrying `=` or whitespace, and
+  duplicate keys are rejected with a user-facing message), and
+  `Config.SetEnv(rows)` validates a whole set before it replaces `Env` — an
+  invalid set leaves the configuration untouched, an empty one clears the
+  overlay. The rules live next to the store, not in the dialog, so the store
+  is never handed an unchecked map.
 - **Tasks**: `run.TaskConfig(lang.Task)` renders a discovered build-tool
   target (Makefile/npm/just, #1915) as a configuration named
   `"source: name"` with the literal argv and the task's default problem
@@ -79,7 +89,13 @@ Registered providers:
 - **`run.file`** (shift+f10 — JetBrains' Windows-keymap Run; macOS ctrl+r
   would shadow vim redo — Run menu, palette) ensures a configuration for the
   active file (`EnsureFor`; the first run persists the default and says so in
-  the toast) and launches it. **`run.rerun`** repeats the last-used config.
+  the toast) and launches it. **`run.rerun`** (cmd+f5 / ctrl+f5) repeats the
+  last-used config **the way it was started** (#2173): every launch funnel
+  touches the store with its kind, so a configuration last run under the
+  debugger reruns through `startDebugConfig` and everything else rides
+  `launchRun`. The marker is part of the per-project store, so the chord still
+  repeats yesterday's run after a restart; nothing ever run yet is a toast
+  (`run: nothing to rerun yet`), never a silent no-op.
 - The command runs as a **terminal command session** (#574) — interactive
   stdin, exit code shown on completion — with the toolchain shim env plus the
   config's env overlay, in the config's cwd; the terminal is labelled with
@@ -250,6 +266,22 @@ the detail column. Picking a run-kind row rides the ordinary `launchRun`
 funnel; a debug-kind row (all launch.json imports, and the picker is how a
 stored debug config is launched by name) goes through `startDebugConfig`,
 the same guard funnel as `debug.start`.
+
+**`run.editConfig`** (Run menu, palette, #2173) opens the same picker in
+**edit mode** — stored configurations only, since a `launch.json` import is
+someone else's file and is never written back — and a picked row opens the
+**run-configuration form** (`internal/app/runconfig_form.go`): the shell
+dialog editing that configuration's environment as rows. `↑↓`/`jk` select,
+`a` adds a row, `enter` opens the two-field row editor (`tab` switches key and
+value), `d` removes, `ctrl+s` saves and `esc` discards. A row only joins the
+list once it validates (`run.ValidateEnvKey` plus a duplicate check against
+the other rows), so a typo is corrected in place instead of being dropped, and
+the save re-validates the whole set before writing `.ike/runconfigs.json`.
+From there every later launch spawns its process with those variables
+(`Config.EnvSlice` → `terminal.MergeEnv`). The form is checked **ahead of the
+popup/terminal key routing** in `internal/app/app.go`: it is typically opened
+right after a launch, when the Run tool's terminal holds the focus, and a
+modal dialog must not lose its keys to it.
 
 Two sibling commands ride the same locked-palette pattern (#1915):
 **`run.task`** lists the build-tool targets the task providers discover

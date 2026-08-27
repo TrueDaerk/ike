@@ -22,10 +22,12 @@ import (
 // only, so the rune has no user-facing prefix story.
 const runConfigsPrefix = '('
 
-// RunConfigPickedMsg launches one picked configuration.
+// RunConfigPickedMsg launches one picked configuration — or, with Edit set,
+// opens it in the run-configuration form (#2173) instead of running it.
 type RunConfigPickedMsg struct {
 	Cfg    run.Config
 	Stored bool // lives in .ike/runconfigs.json (vs a launch.json import)
+	Edit   bool // opened through run.editConfig: edit, do not launch
 }
 
 // runConfigEntry is one row of the picker.
@@ -38,6 +40,10 @@ type runConfigEntry struct {
 // model fills entries before each locked open (the httpRequestsMode pattern).
 type runConfigsMode struct {
 	entries []runConfigEntry
+	// edit flags the mode as opened by run.editConfig (#2173): a picked row
+	// opens the configuration form instead of launching it. The mode is only
+	// ever opened locked, so the flag is set right before each open.
+	edit bool
 }
 
 func newRunConfigsMode() *runConfigsMode { return &runConfigsMode{} }
@@ -46,7 +52,12 @@ func newRunConfigsMode() *runConfigsMode { return &runConfigsMode{} }
 func (r *runConfigsMode) Prefix() rune { return runConfigsPrefix }
 
 // Placeholder implements palette.Mode.
-func (r *runConfigsMode) Placeholder() string { return "Run configuration…" }
+func (r *runConfigsMode) Placeholder() string {
+	if r.edit {
+		return "Edit run configuration…"
+	}
+	return "Run configuration…"
+}
 
 // Results implements palette.Mode: rows fuzzy-matched over the configuration
 // name, detailing kind, language and target; launch.json imports name their
@@ -73,7 +84,7 @@ func (r *runConfigsMode) Results(query string, _ palette.Context) []palette.Item
 			Spans:  res.Positions,
 			Score:  res.Score,
 			Detail: detail,
-			Msg:    RunConfigPickedMsg{Cfg: e.cfg, Stored: e.stored},
+			Msg:    RunConfigPickedMsg{Cfg: e.cfg, Stored: e.stored, Edit: r.edit},
 		})
 	}
 	return items
@@ -89,7 +100,15 @@ func (m Model) vscodeLaunchEnabled() bool {
 // openRunConfigPicker opens the palette locked to the configurations mode
 // (run.select). Nothing to list explains itself instead of showing an empty
 // palette.
-func (m *Model) openRunConfigPicker() {
+func (m *Model) openRunConfigPicker() { m.openRunConfigs(false) }
+
+// openRunConfigEditor opens the same picker in edit mode (run.editConfig,
+// #2173): only the stored configurations are listed — a launch.json import is
+// someone else's file and is never written back.
+func (m *Model) openRunConfigEditor() { m.openRunConfigs(true) }
+
+// openRunConfigs fills and opens the locked picker in either mode.
+func (m *Model) openRunConfigs(edit bool) {
 	root := projectRoot()
 	store := run.Load()
 	var entries []runConfigEntry
@@ -97,6 +116,16 @@ func (m *Model) openRunConfigPicker() {
 	for _, cfg := range store.Configs {
 		entries = append(entries, runConfigEntry{cfg: cfg, stored: true})
 		names[cfg.Name] = true
+	}
+	if edit {
+		if len(entries) == 0 {
+			m.host.Notify(host.Info, "run: no configurations to edit yet — run a file first")
+			return
+		}
+		m.runConfigs.entries, m.runConfigs.edit = entries, true
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, runConfigsPrefix)
+		return
 	}
 	if m.vscodeLaunchEnabled() {
 		for _, cfg := range vscodelaunch.Configs(root) {
@@ -110,7 +139,7 @@ func (m *Model) openRunConfigPicker() {
 		m.host.Notify(host.Info, "run: no configurations yet — run a file first, or add .vscode/launch.json entries")
 		return
 	}
-	m.runConfigs.entries = entries
+	m.runConfigs.entries, m.runConfigs.edit = entries, false
 	m.palette.SetSize(m.width, m.height)
 	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, runConfigsPrefix)
 }
@@ -121,10 +150,14 @@ func (m *Model) openRunConfigPicker() {
 // configurations).
 func (m *Model) runPickedConfig(msg RunConfigPickedMsg) tea.Cmd {
 	root := projectRoot()
+	if msg.Edit {
+		m.openRunConfigForm(msg.Cfg.Name)
+		return nil
+	}
 	if msg.Cfg.Kind == run.KindDebug {
 		if msg.Stored {
 			store := run.Load()
-			store.Touch(msg.Cfg.Name)
+			store.Touch(msg.Cfg.Name, run.KindDebug)
 			_ = run.Save(store)
 		}
 		m.startDebugConfig(root, msg.Cfg)

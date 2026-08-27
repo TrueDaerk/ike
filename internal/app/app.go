@@ -388,6 +388,9 @@ type Model struct {
 
 	// newProj is the open new-project wizard (#1718); nil when it is closed.
 	newProj *newProjState
+	// runForm is the open run-configuration form (#2173) — the environment
+	// editor of one stored configuration; nil when it is closed.
+	runForm *runFormState
 
 	// tdGen is the open test-data wizard (#2134); nil when it is closed.
 	tdGen *tdGenState
@@ -4664,6 +4667,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openRunConfigPicker()
 		return m, nil
 
+	case RunEditConfigMsg:
+		// run.editConfig (Run menu / palette, #2173): the same picker in edit
+		// mode; a picked configuration opens in the environment form.
+		m.openRunConfigEditor()
+		return m, nil
+
 	case RunConfigPickedMsg:
 		// A picker row was activated (#1914): run or debug the configuration.
 		return m, m.runPickedConfig(msg)
@@ -6863,6 +6872,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// handling: k / r / esc answer it, everything else is swallowed.
 		if m.conflictOpen() {
 			return m.updateConflict(msg)
+		}
+		// The run-configuration form (#2173) owns the keyboard the same way:
+		// the environment row list, and the key/value row editor enter opens.
+		// It is checked up here, ahead of the popup/terminal routing below,
+		// because the form is typically opened right after a launch — the Run
+		// tool's terminal holds the focus then, and a modal dialog must not
+		// lose its keys to it.
+		if m.runConfigFormOpen() {
+			return m.updateRunConfigForm(msg)
 		}
 		// The pinned-files picker (#788) owns the keyboard the same way.
 		if m.pinPickerOpen() {
