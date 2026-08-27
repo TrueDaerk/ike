@@ -62,7 +62,15 @@ func applyCaptures(resp *Response, req *httpfile.Request) {
 	if resp == nil || req == nil || len(req.Captures) == 0 {
 		return
 	}
-	resp.Captures = runCaptures(req.Captures, resp.Body)
+	// A spooled body (#2157) is only partly in memory; a capture expression
+	// must see all of it, so the full bytes are pulled back for the length of
+	// this call and dropped again. A spool that has gone missing degrades to
+	// the head rather than failing every directive.
+	body, err := resp.FullBody()
+	if err != nil {
+		resp.Warnings = append(resp.Warnings, fmt.Sprintf("captures ran on the first %d bytes only — %v", len(body), err))
+	}
+	resp.Captures = runCaptures(req.Captures, body)
 	for _, c := range resp.Captures {
 		if !c.OK() {
 			resp.Warnings = append(resp.Warnings, fmt.Sprintf("capture %s: %s", c.Name, c.Err))

@@ -227,8 +227,9 @@ func TestDispatchStreamTruncatesAtMaxBodyBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !resp.Truncated || len(resp.Body) != MaxBodyBytes {
-		t.Errorf("truncation: truncated=%v len=%d", resp.Truncated, len(resp.Body))
+	// The head stays in memory, the rest on the spool file (#2157).
+	if !resp.Truncated || len(resp.Body) != SpoolThreshold || resp.BodySize != MaxBodyBytes {
+		t.Errorf("truncation: truncated=%v head=%d size=%d", resp.Truncated, len(resp.Body), resp.BodySize)
 	}
 	if got := len(rec.joined()); got != MaxBodyBytes {
 		t.Errorf("chunks past the cap were delivered: %d bytes", got)

@@ -53,7 +53,19 @@ type Response struct {
 	StatusCode int
 	Proto      string
 	Headers    http.Header
-	Body       []byte
+	// Body is the body as far as it is held in memory: the whole thing for an
+	// ordinary response, and only the first SpoolThreshold bytes — the head —
+	// for one large enough to be spooled (#2157). SpoolPath then names the
+	// file holding all of it; FullBody, BodyReader and BodyRange (spool.go)
+	// are the ways to reach past the head.
+	Body []byte
+	// SpoolPath is the file holding the complete body, "" while the body fits
+	// in memory (#2157).
+	SpoolPath string
+	// BodySize is the total number of body bytes received, head and spool
+	// together; 0 on a response built before the field existed, where
+	// len(Body) is the answer (see BodyBytes).
+	BodySize int
 	// Truncated is set when the body exceeded MaxBodyBytes and was cut.
 	Truncated bool
 	// Duration is the wall-clock time of the exchange.
@@ -377,28 +389,29 @@ func (p *prepared) collect(key string) (*Response, error) {
 // collectBody reads a started exchange's body to the cap and composes the
 // Response; start is when the exchange began.
 func (p *prepared) collectBody(key string, httpResp *http.Response, start time.Time) (*Response, error) {
-	body, readErr := io.ReadAll(io.LimitReader(httpResp.Body, MaxBodyBytes+1))
+	// The body goes through a bodySink (#2157): the head stays in memory, a
+	// body past SpoolThreshold streams on to a spool file, and MaxBodyBytes
+	// still bounds the whole thing.
+	sink := newBodySink(SpoolThreshold, MaxBodyBytes)
+	_, readErr := io.Copy(sink, io.LimitReader(httpResp.Body, MaxBodyBytes+1))
 	elapsed := p.now().Sub(start)
 	if readErr != nil {
+		sink.fail(readErr)
 		return nil, fmt.Errorf("request %s: reading response: %v", key, readErr)
 	}
-	truncated := false
-	warnings := p.warnings
-	if len(body) > MaxBodyBytes {
-		body = body[:MaxBodyBytes]
-		truncated = true
-		warnings = append(warnings, fmt.Sprintf("response body exceeded %d bytes and was truncated", MaxBodyBytes))
-	}
+	body, spool, total := sink.close()
 	return &Response{
 		Status:     httpResp.Status,
 		StatusCode: httpResp.StatusCode,
 		Proto:      httpResp.Proto,
 		Headers:    httpResp.Header,
 		Body:       body,
-		Truncated:  truncated,
+		SpoolPath:  spool,
+		BodySize:   total,
+		Truncated:  sink.truncated,
 		Duration:   elapsed,
 		RequestKey: key,
-		Warnings:   warnings,
+		Warnings:   append(p.warnings, sink.warnings()...),
 		Request:    p.snapshot,
 	}, nil
 }
@@ -512,25 +525,20 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 	watchdog := time.AfterFunc(idle, func() { idledOut.Store(true); cancel() })
 	defer watchdog.Stop()
 
-	var body []byte
-	truncated := false
+	sink := newBodySink(SpoolThreshold, MaxBodyBytes)
 	var readErr error
 	buf := make([]byte, 32<<10)
 	for {
 		n, err := httpResp.Body.Read(buf)
 		if n > 0 {
 			watchdog.Reset(idle)
-			keep := n
-			if room := MaxBodyBytes - len(body); keep > room {
-				keep, truncated = room, true
+			// The sink keeps what fits (#2157) and reports how much that was;
+			// the live view only ever sees bytes that were actually kept.
+			kept := sink.add(buf[:n])
+			if kept > 0 && cb.OnChunk != nil {
+				cb.OnChunk(append([]byte(nil), buf[:kept]...))
 			}
-			if keep > 0 {
-				body = append(body, buf[:keep]...)
-				if cb.OnChunk != nil {
-					cb.OnChunk(append([]byte(nil), buf[:keep]...))
-				}
-			}
-			if truncated {
+			if sink.truncated {
 				break
 			}
 		}
@@ -542,9 +550,9 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 		}
 	}
 	elapsed := p.now().Sub(start)
-	if truncated {
-		warnings = append(warnings, fmt.Sprintf("response body exceeded %d bytes and was truncated", MaxBodyBytes))
-	}
+	body, spool, total := sink.close()
+	truncated := sink.truncated
+	warnings = append(warnings, sink.warnings()...)
 	switch {
 	case idledOut.Load():
 		warnings = append(warnings, fmt.Sprintf("stream idle for %s — stopped, showing what arrived", idle))
@@ -560,6 +568,8 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 		Proto:      httpResp.Proto,
 		Headers:    httpResp.Header,
 		Body:       body,
+		SpoolPath:  spool,
+		BodySize:   total,
 		Truncated:  truncated,
 		Duration:   elapsed,
 		RequestKey: key,
