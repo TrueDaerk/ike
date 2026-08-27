@@ -54,7 +54,7 @@ func (m *Model) launchTestRun(root string, store run.Store, cfg *run.Config, cre
 	if !ok {
 		return nil, false
 	}
-	store.Touch(cfg.Name)
+	store.Touch(cfg.Name, run.KindRun)
 	if err := run.Save(store); err != nil {
 		m.host.Notify(host.Warn, "run: config not saved: "+err.Error())
 	}
@@ -87,7 +87,7 @@ func (m *Model) launchCoverageRun(root string, store run.Store, cfg *run.Config,
 		m.host.Notify(host.Info, "coverage: "+cfg.Lang+" declares no coverage support")
 		return nil
 	}
-	store.Touch(cfg.Name)
+	store.Touch(cfg.Name, run.KindRun)
 	if err := run.Save(store); err != nil {
 		m.host.Notify(host.Warn, "run: config not saved: "+err.Error())
 	}

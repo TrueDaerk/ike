@@ -60,11 +60,15 @@ type Config struct {
 	Matchers []string `json:"matchers,omitempty"`
 }
 
-// Store is the persisted set of configurations plus the last-used name (the
-// rerun-last target).
+// Store is the persisted set of configurations plus the last-used name and
+// the way it was started (the rerun-last target, #2173).
 type Store struct {
 	Configs  []Config `json:"configs"`
 	LastUsed string   `json:"last_used,omitempty"`
+	// LastKind records whether the last launch was a plain run or a debug
+	// session, so rerun-last repeats it *the way it ran* (#2173). Empty in a
+	// store written before #2173 — Last treats that as a plain run.
+	LastKind Kind `json:"last_kind,omitempty"`
 }
 
 // File returns the path of the per-project run-configuration store, honoring
@@ -138,11 +142,31 @@ func (s *Store) Upsert(cfg Config) *Config {
 	return &s.Configs[len(s.Configs)-1]
 }
 
-// Touch marks name as the last-used configuration (the rerun target).
-func (s *Store) Touch(name string) { s.LastUsed = name }
+// Touch marks name as the last-used configuration, launched as kind (the
+// rerun target). An empty kind records a plain run.
+func (s *Store) Touch(name string, kind Kind) {
+	s.LastUsed = name
+	if kind == "" {
+		kind = KindRun
+	}
+	s.LastKind = kind
+}
 
 // Last returns the last-used configuration, or nil.
 func (s *Store) Last() *Config { return s.ByName(s.LastUsed) }
+
+// LastLaunch returns the last-used configuration together with the kind it
+// was started as (#2173) — what the rerun chord repeats. A store written
+// before #2173, or one whose last launch predates the marker, reports
+// KindRun. cfg is nil when nothing ran yet.
+func (s *Store) LastLaunch() (cfg *Config, kind Kind) {
+	cfg = s.Last()
+	kind = s.LastKind
+	if kind == "" {
+		kind = KindRun
+	}
+	return cfg, kind
+}
 
 // Names lists the configuration names, sorted (pickers, tests).
 func (s *Store) Names() []string {

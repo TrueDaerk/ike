@@ -125,7 +125,7 @@ func TestTestConfigRerunMemory(t *testing.T) {
 	var s Store
 	cfg, _ := TestConfig(root, filepath.Join(root, "pkg", "a_test.rt"), &lang.TestMatch{Name: "TestX", Kind: "Test"})
 	stored := s.Upsert(cfg)
-	s.Touch(stored.Name)
+	s.Touch(stored.Name, KindRun)
 	if last := s.Last(); last == nil || !last.Tests || last.TestName != "TestX" {
 		t.Fatalf("Last = %+v, want the test config", s.Last())
 	}

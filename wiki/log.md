@@ -26,6 +26,36 @@
 - **Esc is the picker's speed search** (#2111): the first press clears the
   query, the second leaves the search.
 
+## 2026-08-27 (Run configs: environment form and a kind-faithful rerun, #2173)
+
+- **The gap**: a run configuration's environment overlay existed in the model
+  and reached the process, but the only way to *edit* it was hand-writing
+  `.ike/runconfigs.json`. And the rerun chord always relaunched through the
+  run funnel, so repeating what was last started under the debugger silently
+  downgraded it to a plain run.
+- **Validation next to the store** (`internal/run/env.go`): `EnvRows` renders
+  the overlay as sorted key/value rows, `ValidateEnvKey` rejects empty keys
+  and keys carrying `=` or whitespace, `EnvMap` rejects duplicates by name,
+  and `Config.SetEnv` validates a whole set before replacing `Env` — an
+  invalid set leaves the configuration untouched, an empty one clears the
+  overlay. The dialog never hands the store an unchecked map.
+- **The form** (`internal/app/runconfig_form.go`, `run.editConfig`): the
+  configuration picker in edit mode — stored configurations only, a
+  `launch.json` import is someone else's file — opening the picked one in a
+  shell dialog. `a` adds, `enter` opens the two-field row editor (`tab`
+  switches key and value), `d` removes, `ctrl+s` saves, `esc` discards. A
+  rejected row stays open with the reason instead of being dropped. The
+  handler sits **ahead of the popup/terminal key routing**: the form is
+  typically opened right after a launch, when the Run tool's terminal holds
+  the focus, and a modal dialog must not lose its keys to it.
+- **Rerun repeats the kind** (`Store.Touch(name, kind)` / `LastLaunch`): every
+  launch funnel records how it started, so `run.rerun` (cmd+f5 / ctrl+f5)
+  sends a debug launch back through `startDebugConfig`. The marker persists
+  with the per-project store, so the chord still repeats yesterday's run after
+  a restart; a store written before #2173 has no marker and reads as a plain
+  run. Nothing run yet stays a toast, not a silent no-op.
+- Wiki: run-configurations concept doc and the run/debug guide updated;
+  docgen re-run for the new command.
 ## 2026-08-27 (Explorer: marked multi-select with bulk delete/move/copy, #2166)
 
 - **The gap**: the explorer's only multi-select was the transient shift+j/k

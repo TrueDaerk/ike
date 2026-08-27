@@ -66,6 +66,7 @@ func Defaults() []Menu {
 			{Title: "Run File", Command: "run.file"},
 			{Title: "Rerun Last", Command: "run.rerun"},
 			{Title: "Run/Debug Configurations…", Command: "run.select"},
+			{Title: "Edit Run Configuration…", Command: "run.editConfig"},
 			{Title: "Run Task…", Command: "run.task"},
 			{Title: "Promote Task to Run Configuration…", Command: "run.taskPromote"},
 			{Title: "Run Test at Cursor", Command: "run.testAtCursor"},
