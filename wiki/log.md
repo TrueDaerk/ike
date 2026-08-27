@@ -1,5 +1,30 @@
 # Log
 
+## 2026-08-27 (LSP peek: pick between definitions inside the popup, #2168)
+
+- **The gap**: peek definition (#1154) already showed a single target inline,
+  but a symbol with several definitions fell back to the #279 modal candidate
+  picker — a peek that opens a palette has given up the one thing it promised,
+  staying where you are.
+- **All candidates in one popup** (`openPeekCandidates`,
+  `internal/app/peek.go`): every candidate's bounded excerpt is read up front —
+  live buffer for open files, bounded disk scan otherwise, unreadable ones
+  dropped — and handed to a single `OpenPeekTargets` call. Nothing readable
+  left notifies instead of opening an empty box.
+- **The popup grew a selection** (`internal/editor/peek.go`): a `(2/3)`
+  counter in the header, a 4-row candidate window under the excerpt that
+  follows the selection (titles truncated from the left, like the header, so
+  `file:line` survives a long path), `tab` / `shift+tab` to cycle with wrap,
+  and each candidate starting at the top of its own excerpt. Enter jumps to
+  the *selected* candidate through the unchanged `DefinitionMsg` funnel, so
+  nav history records exactly as before; esc still just closes.
+- **`tab` is swallowed even with one candidate** — a peek must never leak an
+  indent into the buffer — while every other unowned key keeps closing the
+  popup and falling through.
+- **The picker is the overflow path, not the default**: above
+  `peekCandidateMax` (12) targets the answer still opens `refsMode.SetPeek`,
+  where a filter beats scrolling and 13+ excerpt reads are not worth it.
+
 ## 2026-08-27 (Sticky scroll from LSP symbols, #2167)
 
 - **The gap**: the editor breadcrumbs half of #2167 shipped with #1153 — the

@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -11,7 +12,8 @@ import (
 
 // peek_test.go covers the peek-definition popup (#1154): open/render, the
 // keys it owns (esc close, enter jump, scroll), and the any-other-key
-// close-and-fall-through rule.
+// close-and-fall-through rule — plus the inline candidate list of a
+// multi-target peek (#2168): counter, tab cycling, per-candidate excerpt.
 
 func peekLines(n int) []string {
 	out := make([]string, n)
@@ -117,6 +119,130 @@ func TestPeekScrollAndEllipses(t *testing.T) {
 	}
 	if !m.PeekOpen() {
 		t.Fatal("scrolling must keep the peek open")
+	}
+}
+
+// openedPeekTargets opens a peek over n candidates, each with its own
+// one-line excerpt naming it.
+func openedPeekTargets(t *testing.T, n int) Model {
+	t.Helper()
+	m, _ := loaded(t, "alpha\nbeta\ngamma\n")
+	targets := make([]PeekTarget, n)
+	for i := range targets {
+		name := "t" + strconv.Itoa(i)
+		targets[i] = PeekTarget{
+			Title: name + ".go:" + strconv.Itoa(i+1),
+			Lines: []string{"body of " + name},
+			Path:  "/tmp/" + name + ".go",
+			Line:  i,
+			Col:   0,
+		}
+	}
+	m.OpenPeekTargets(targets)
+	if !m.PeekOpen() {
+		t.Fatal("peek must be open after OpenPeekTargets")
+	}
+	return m
+}
+
+func TestPeekCandidateListAndCounter(t *testing.T) {
+	m := openedPeekTargets(t, 3)
+	v := m.PeekView()
+	for _, want := range []string{"t0.go:1", "(1/3)", "body of t0", "t1.go:2", "t2.go:3", "tab: next candidate"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("multi-candidate view must show %q, got:\n%s", want, v)
+		}
+	}
+	// A single candidate keeps the plain popup: no counter, no list, no hint.
+	single := openedPeekTargets(t, 1)
+	v = single.PeekView()
+	for _, unwanted := range []string{"(1/1)", "tab: next candidate"} {
+		if strings.Contains(v, unwanted) {
+			t.Fatalf("single-candidate view must not show %q, got:\n%s", unwanted, v)
+		}
+	}
+}
+
+func TestPeekTabCyclesCandidates(t *testing.T) {
+	m := openedPeekTargets(t, 3)
+	m, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if cmd != nil {
+		t.Fatal("tab must not emit a command")
+	}
+	if !m.PeekOpen() {
+		t.Fatal("tab must keep the peek open")
+	}
+	if v := m.PeekView(); !strings.Contains(v, "(2/3)") || !strings.Contains(v, "body of t1") {
+		t.Fatalf("tab must show the next candidate's excerpt, got:\n%s", v)
+	}
+	// shift+tab goes back, and wraps around the front of the list.
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+	if v := m.PeekView(); !strings.Contains(v, "(3/3)") {
+		t.Fatalf("shift+tab must wrap to the last candidate, got:\n%s", v)
+	}
+	// Enter jumps to the selected candidate, not the first one.
+	m, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter must emit the jump command")
+	}
+	msg, ok := cmd().(ilsp.DefinitionMsg)
+	if !ok || msg.Path != "/tmp/t2.go" || msg.Line != 2 {
+		t.Fatalf("enter must jump to the selected candidate, got %#v", cmd())
+	}
+}
+
+func TestPeekTabOnSingleCandidateIsSwallowed(t *testing.T) {
+	m := openedPeekTargets(t, 1)
+	line0 := m.buf.Line(0)
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if !m.PeekOpen() {
+		t.Fatal("tab must not close a single-candidate peek")
+	}
+	if got := m.buf.Line(0); got != line0 {
+		t.Fatalf("tab must not reach the buffer, line0 = %q", got)
+	}
+}
+
+func TestPeekCandidateSwitchResetsScroll(t *testing.T) {
+	m, _ := loaded(t, "alpha\nbeta\ngamma\n")
+	m.OpenPeekTargets([]PeekTarget{
+		{Title: "long.go:1", Lines: peekLines(peekVisibleRows + 8), Path: "/tmp/long.go", Line: 0},
+		{Title: "short.go:1", Lines: []string{"only"}, Path: "/tmp/short.go", Line: 0},
+	})
+	m, _ = m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
+	if m.peek.scroll == 0 {
+		t.Fatal("setup: ctrl+d must scroll the long excerpt")
+	}
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if m.peek.scroll != 0 {
+		t.Fatalf("switching candidates must start at the top, scroll=%d", m.peek.scroll)
+	}
+	// The short excerpt has nothing to scroll: the offset stays clamped.
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if m.peek.scroll != 0 {
+		t.Fatalf("a one-line excerpt must not scroll, scroll=%d", m.peek.scroll)
+	}
+}
+
+func TestPeekDropsEmptyCandidates(t *testing.T) {
+	m, _ := loaded(t, "alpha\n")
+	m.OpenPeekTargets([]PeekTarget{
+		{Title: "empty.go:1", Path: "/tmp/empty.go"},
+		{Title: "real.go:2", Lines: []string{"code"}, Path: "/tmp/real.go", Line: 1},
+	})
+	if !m.PeekOpen() {
+		t.Fatal("a candidate with an excerpt must open the peek")
+	}
+	if v := m.PeekView(); strings.Contains(v, "empty.go") {
+		t.Fatalf("excerpt-less candidates must be dropped, got:\n%s", v)
+	}
+	// Nothing left to show opens nothing at all.
+	var none Model
+	none, _ = loaded(t, "alpha\n")
+	none.OpenPeekTargets([]PeekTarget{{Title: "empty.go:1", Path: "/tmp/empty.go"}})
+	if none.PeekOpen() {
+		t.Fatal("candidates without excerpts must not open a popup")
 	}
 }
 
