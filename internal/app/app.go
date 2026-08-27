@@ -6039,6 +6039,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// data.columnProfile (#1940): the focused grid column's aggregates.
 		return m, m.profileColumn()
 
+	case DataSortColumnMsg:
+		// data.sortColumn (#2248): cycle the focused column's sort.
+		return m, m.dataPaneUpdate(dataview.SortMsg{})
+
+	case DataExportMsg:
+		// data.export (#2248): open the viewer's export line.
+		return m, m.dataPaneUpdate(dataview.ExportMsg{})
+
+	case dataview.ExportedMsg:
+		// An export finished (#2248): the pane's line is closed by now, so
+		// the confirmation is a toast.
+		return m, m.exported(msg)
+
 	case CSVColumnProfileMsg:
 		// csv.columnProfile (#1940): the caret's column in a table-rendered
 		// csv/tsv/psv buffer, scanned in the background.

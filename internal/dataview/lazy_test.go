@@ -30,6 +30,13 @@ type fakeSource struct {
 	counts  int      // Count calls
 	counted []string // what each count was for, "table|clause"
 
+	// sorted records the sort of every PageWhere call, and pageBlock (when
+	// non-nil) suspends every page fetch until the test closes it — the
+	// export's cancel path needs a backend that can be caught mid-scan
+	// (#2248).
+	sorted    []datasrc.Sort
+	pageBlock chan struct{}
+
 	// Column profile (#1940): profiles counts the calls, profiled records
 	// what each was for, block (when non-nil) suspends the call until the
 	// test closes it, and profileErr makes it fail.
@@ -60,9 +67,33 @@ func (f *fakeSource) Page(table string, offset, limit int64) (datasrc.Page, erro
 	return page, nil
 }
 
-func (f *fakeSource) PageWhere(table, clause string, offset, limit int64) (datasrc.Page, error) {
-	if clause == "" {
+func (f *fakeSource) PageWhere(table, clause string, sort datasrc.Sort, offset, limit int64) (datasrc.Page, error) {
+	if f.pageBlock != nil {
+		// The export's page fetches hang here until the test releases them,
+		// which is how "the export is async and cancelable" (#2248) is
+		// asserted without a database slow enough to catch in the act.
+		// Nothing is recorded on this path, so the blocked goroutine touches
+		// no field the test reads.
+		<-f.pageBlock
+		return datasrc.Page{Columns: []string{"id"}, Offset: offset,
+			Total: -1, Rows: [][]datasrc.Cell{{{Text: "1"}}}}, nil
+	}
+	f.sorted = append(f.sorted, sort)
+	if clause == "" && !sort.Active() {
 		return f.Page(table, offset, limit)
+	}
+	if clause == "" {
+		// Sorted but unfiltered: the fake serves the same rows in reverse for
+		// a descending sort, which is enough for the pane's paging to be
+		// checked without a real engine.
+		page, err := f.Page(table, offset, limit)
+		if err != nil || !sort.Desc {
+			return page, err
+		}
+		for i, j := 0, len(page.Rows)-1; i < j; i, j = i+1, j-1 {
+			page.Rows[i], page.Rows[j] = page.Rows[j], page.Rows[i]
+		}
+		return page, nil
 	}
 	f.pages++
 	return datasrc.Page{Columns: []string{"id"}, Offset: offset, Total: -1,
