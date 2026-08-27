@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Command Palette
-description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
+description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-08-24T12:00:00Z
+timestamp: 2026-08-27T12:00:00Z
 ---
 
 # Command Palette
@@ -118,13 +118,32 @@ finds `example.hello`), and ranks **context-first**:
 3. **off-context** — scoped to a different context (ranked last, or hidden when
    `palette.off_context = "hide"`).
 
-Within a tier, higher fuzzy score wins, then **most-used** (#773), then title.
+Within a tier, the sort key is the fuzzy score **plus a frecency boost**
+(#2153), then **most-used** (#773), then title.
+
 The usage counter (`usage.go`, persisted per project in `.ike/cmdusage.json`,
 `IKE_CONFIG_DIR`-redirectable) counts only selections confirmed **from the
 palette window** — the root model bumps it on `palette.RunCommandMsg`, a path
-keybind invocations never take — so shortcut users don't skew the listing. On
-an empty query all scores tie, so the listing opens most-used-first; a typed
-query's match quality still wins over usage. Search everywhere inherits the
+keybind invocations never take — so shortcut users don't skew the listing. It
+stays a pure tiebreaker among otherwise equal keys.
+
+The **frecency store** (`frecency.go`, persisted per project in
+`.ike/cmdfrecency.json`, same redirection seam) answers the other question:
+what does this project actually *run*, lately. It keeps the unix timestamps of
+recent executions per command id, recorded in `Model.dispatchCommand` — the
+single funnel every dispatch path goes through (#679), so a keybind and an
+inline invocation count exactly like a palette pick. `Score` sums
+`0.5^(age / 7d)` over a command's timestamps, so three runs today outweigh five
+last month. The store is capped both ways: at most 16 timestamps per command
+(oldest dropped) and 400 tracked commands (lowest-scoring dropped), so it
+cannot grow without bound; a missing or corrupt file loads as empty history and
+is rewritten on the next execution — ranking must never fail on state.
+
+`frecencyBoost` squashes the score into `[0,1)` and scales it by query length:
+on an **empty query** the weight is large and every fuzzy score is 0, so the
+listing opens in execution order; from one typed rune the weight starts at 24
+and **halves per further rune**, so within a handful of characters the match
+quality dominates and history only breaks near-ties. Search everywhere inherits the
 order through its composed command source. The dim detail shows the
 command's resolved key binding (`registry.Binding`), else its documentation-only
 `Shortcut`, else its owner. Context-aware filtering relies on the additive

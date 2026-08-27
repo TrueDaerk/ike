@@ -704,6 +704,7 @@ type Model struct {
 	projGit     *project.GitCache    // async branch/dirty context of picker rows (#2178)
 	cmdUsage    *palette.Usage       // most-used command ranking (#773)
 	fileUsage   *palette.Usage       // most-used file ranking in the ranked palettes (#1419)
+	cmdFrec     *palette.Frecency    // command-execution frecency boost (#2153)
 	winSizes    *ui.WinSizes         // persisted floating-window resize deltas (#774)
 	winSizesAll *ui.WinSizes         // user-scoped last-resize deltas, fallback for fresh projects (#1714)
 	floatDrag   *floatResizeDrag     // live mouse resize of a floating window (#933)
@@ -1112,21 +1113,22 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	bookmarksPicker := &bookmarksMode{}
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
-	vcsSt := &vcsState{}                            // shared before the literal: the reverts picker mode reads it
-	layoutsPicker := newLayoutsMode(layoutNames)    // saved window layouts picker (#1175)
-	httpRequests := newHTTPRequestsMode()           // stored HTTP responses picker (#1829)
-	httpEntries := newHTTPEntriesMode()             // stored-response diff picker (#1992)
-	httpEnvs := newHTTPEnvMode()                    // http-client.env.json picker (#1867)
-	runConfigs := newRunConfigsMode()               // run/debug configurations picker (#1914)
-	tasksPicker := newTasksMode()                   // discovered-tasks picker (#1915)
-	tabPicker := newTabPickerMode()                 // per-pane MRU tab picker (#2151)
-	sshPicker := newSSHMode()                       // ssh_config host picker (#1938)
-	remotePicker := newRemoteMode()                 // SFTP browse host picker (#1997)
-	playFilters := newPlayFiltersMode()             // named saved jq filters (#1995)
-	projGit := project.NewGitCache()                // picker branch/dirty context (#2178)
-	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
-	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
-	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
+	vcsSt := &vcsState{}                               // shared before the literal: the reverts picker mode reads it
+	layoutsPicker := newLayoutsMode(layoutNames)       // saved window layouts picker (#1175)
+	httpRequests := newHTTPRequestsMode()              // stored HTTP responses picker (#1829)
+	httpEntries := newHTTPEntriesMode()                // stored-response diff picker (#1992)
+	httpEnvs := newHTTPEnvMode()                       // http-client.env.json picker (#1867)
+	runConfigs := newRunConfigsMode()                  // run/debug configurations picker (#1914)
+	tasksPicker := newTasksMode()                      // discovered-tasks picker (#1915)
+	tabPicker := newTabPickerMode()                    // per-pane MRU tab picker (#2151)
+	sshPicker := newSSHMode()                          // ssh_config host picker (#1938)
+	remotePicker := newRemoteMode()                    // SFTP browse host picker (#1997)
+	playFilters := newPlayFiltersMode()                // named saved jq filters (#1995)
+	projGit := project.NewGitCache()                   // picker branch/dirty context (#2178)
+	cmdUsage := palette.LoadUsage(usageFile())         // most-used ranking (#773)
+	fileUsage := palette.LoadUsage(fileUsageFile())    // most-used file ranking (#1419)
+	cmdFrec := palette.LoadFrecency(cmdFrecencyFile()) // execution frecency (#2153)
+	winSizes := ui.LoadWinSizes(winSizeFile())         // resizable floats (#774)
 	winSizesAll := ui.LoadWinSizes(globalWinSizeFile())
 	// Background forge polling (#2085) is anchored to the project root the
 	// process just chdir'd into: a switch rebuilds the model, and with it a
@@ -1152,6 +1154,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m := Model{
 		cmdUsage:        cmdUsage,
 		fileUsage:       fileUsage,
+		cmdFrec:         cmdFrec,
 		winSizes:        winSizes,
 		winSizesAll:     winSizesAll,
 		pins:            loadPins(),                          // pinned file slots (#788)
@@ -1182,7 +1185,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		shell:           ui.New(shellConfig(cfg)),
 		vcs:             vcsSt,
 		forgePoll:       forgeSt,
-		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters, projGit),
+		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters, projGit),
 		projGit:         projGit,
 		layoutsPicker:   layoutsPicker,
 		httpRequests:    httpRequests,
@@ -2579,13 +2582,14 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, projGit *project.GitCache) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec *palette.Frecency, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, projGit *project.GitCache) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
 	}
 	cmd := palette.NewCommandMode(reg, bindings, paletteHideOff(cfg))
 	cmd.SetUsage(usage)
+	cmd.SetFrecency(cmdFrec)
 	file := palette.NewFileMode()
 	file.SetUsage(fileUsage)
 	file.SetScratchList(scratchList)
@@ -7719,6 +7723,10 @@ func (m Model) commandExecuted(id string) tea.Cmd {
 // inline invocations — funnels through it (#679), so "command X ran" is
 // observable regardless of how it was triggered.
 func (m Model) dispatchCommand(id string, c registry.OwnedCommand) tea.Cmd {
+	// Every dispatch path lands here, so this is the one place that sees the
+	// project's real command-execution history — recorded for the palette's
+	// frecency boost (#2153), unlike the palette-only #773 counter above.
+	m.cmdFrec.Record(id)
 	return tea.Batch(c.Run(m.host), m.commandExecuted(id))
 }
 
