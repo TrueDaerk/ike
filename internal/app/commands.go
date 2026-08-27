@@ -62,6 +62,12 @@ type ClosePaneMsg struct{}
 // didOpens despite the size. Dispatched by editor.forceCodeInsight.
 type ForceCodeInsightMsg struct{}
 
+// LargeFileDetailsMsg asks the root model to open the large-file detail popup
+// (#2159): which per-edit services are degraded for the focused document and
+// at which thresholds. Dispatched by editor.largeFileDetails and a click on
+// the status line's large-file badge.
+type LargeFileDetailsMsg struct{}
+
 // ShowKeymapHelpMsg asks the root model to open the keymap cheatsheet overlay,
 // the same view the hardcoded "?" opens. Dispatched by palette.keymapHelp.
 type ShowKeymapHelpMsg struct{}
@@ -530,6 +536,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("editor.splitViewDown", "Split View Down", SplitViewMsg{Zone: layout.ZoneBottom}),
 			appCommand("editor.pasteFromHistory", "Paste from History", ShowPasteHistoryMsg{}),
 			appCommand("editor.forceCodeInsight", "Force Code Insight (Large File)", ForceCodeInsightMsg{}),
+			appCommand("editor.largeFileDetails", "Large File Details", LargeFileDetailsMsg{}),
 			appCommand("pane.maximize", "Maximize Pane", MaximizePaneMsg{}),
 			appCommand("pane.close", "Close Pane", ClosePaneMsg{}),
 			appCommand("view.zenMode", "Zen Mode", ZenModeMsg{}),

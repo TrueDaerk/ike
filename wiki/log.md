@@ -1,5 +1,25 @@
 # Log
 
+## 2026-08-27 (large files: per-feature degradation, badge + detail popup, buffer fast path, #2159)
+
+- **Per-feature thresholds**: `largefile.Feature` (highlight, LSP sync, VCS
+  gutter diff, search tally, format-on-save) + `largefile.Thresholds`; the new
+  `files.large_file_<feature>_kb` keys (config, validation, Settings UI, user
+  docs) switch one service off *below* the base cliff — 0 follows the base
+  thresholds. `editor.Model.FeatureOff`/`DegradedFeatures` are the verdicts.
+- **New guards**: the VCS gutter recompute (`vcsMarksCmd` clears instead of
+  `git show` + whole-file diff) and the search match tally (counter hides)
+  now degrade too; the LSP `didOpen` gate honours the LSP feature threshold.
+- **Surfacing**: dedicated `largefile` status segment (replaces the `[large
+  file]` suffix in the `file` segment) — clickable, like
+  `editor.largeFileDetails`, opening a centered popup listing every feature's
+  state; any key/click closes. `editor.forceCodeInsight` lifts per-feature
+  degradation as well.
+- **Buffer fast path**: `buffer.Apply` rewrites line-count-preserving edits in
+  place instead of rebuilding the whole `[]string`; typing on a 120k-line
+  buffer dropped 407µs → ~11µs/op (`BenchmarkKeystrokeLargeFile` +
+  deterministic no-full-buffer-work test guard the path).
+
 ## 2026-08-27 (replace-in-path: per-row preview, selective apply, stale-file & encoding guards, #2154)
 
 - **Per-row preview**: in replace mode every result row now renders each match

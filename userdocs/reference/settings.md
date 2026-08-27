@@ -186,6 +186,11 @@ secrets — are documented together, with screenshots, in
 | Large file threshold (KB) | `files.large_file_kb` | integer | `1024` | user | Above this size, highlighting and language features are disabled for the file (#149); 0 disables the size guard. Applies to subsequently opened or reloaded files |
 | External-change feed size | `files.change_feed_limit` | integer (0–5000) | `200` | user | How many externally changed files the change feed (watch.changeFeed) keeps for the session, oldest dropped first; 0 turns the feed off. It records writes by other processes — a coding agent, a git checkout, a formatter in a tool pane — never IKE's own saves |
 | Large file threshold (lines) | `files.large_file_lines` | integer | `100000` | user | Above this line count, highlighting and language features are disabled for the file (#149); 0 disables the line guard. Applies to subsequently opened or reloaded files |
+| Highlighting off above (KB) | `files.large_file_highlight_kb` | integer | `0` | user | Switch syntax highlighting (and its lint/Unicode scan) off once the file exceeds this size, before the base large-file cliff; 0 follows the base thresholds. The status line badges the degradation |
+| LSP sync off above (KB) | `files.large_file_lsp_kb` | integer | `0` | user | Stop syncing the document to language servers (didOpen/didChange) once the file exceeds this size; 0 follows the base thresholds. The status line badges the degradation |
+| VCS gutter off above (KB) | `files.large_file_vcs_kb` | integer | `0` | user | Skip the gutter diff-marker recompute (git show + whole-file diff per refresh) once the file exceeds this size; 0 follows the base thresholds. The status line badges the degradation |
+| Search counter off above (KB) | `files.large_file_search_kb` | integer | `0` | user | Hide the search match counter (a bounded buffer scan per edit while highlights are armed) once the file exceeds this size; 0 follows the base thresholds. Match highlighting in the viewport stays |
+| Format on save off above (KB) | `files.large_file_format_kb` | integer | `0` | user | Skip the on-save LSP chain (organize imports, format) once the file exceeds this size; 0 follows the base thresholds. The save itself is unaffected |
 
 ### Backup
 

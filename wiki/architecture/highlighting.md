@@ -4,7 +4,7 @@ title: Syntax Highlighting
 description: The Tree-sitter lexical highlighting layer — per-language grammars parsed off the event loop into capture spans, cached by document version, resolved to theme colours, and applied per cell in the editor's renderLine; plus the pure-Go bracket-pair tracker behind rainbow brackets, unmatched-bracket errors and depth-coloured indent guides.
 resource: internal/highlight
 tags: [architecture, highlighting, tree-sitter, syntax, editor, theme, cgo, brackets]
-timestamp: 2026-08-07T12:00:00Z
+timestamp: 2026-08-27T00:00:00Z
 ---
 
 # Syntax Highlighting
@@ -202,8 +202,9 @@ so the cursor and the visual selection still win on overlap, and a diagnostic
 underline composes on top.
 
 Large-file mode (#149) gates this at the source: a document flagged by the
-`files.large_file_kb` / `files.large_file_lines` thresholds never schedules a
-parse (`parseCmd` returns nil before the grammar check) — the CGo parse cost
+`files.large_file_kb` / `files.large_file_lines` thresholds — or past the
+per-feature `files.large_file_highlight_kb` threshold (#2159) — never
+schedules a parse (`parseCmd` returns nil before the grammar check) — the CGo parse cost
 scales with file size, so this is the single biggest degradation win. The
 palette command `editor.forceCodeInsight` re-enables it per document; see
 `/architecture/editor.md`.

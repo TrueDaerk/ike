@@ -38,12 +38,21 @@ func (b *Buffer) Apply(e Edit) (inverse Edit, end Position) {
 	merged := prefix + e.Text + suffix
 	newLines := strings.Split(merged, "\n")
 
-	// Splice newLines in place of lines [r.Start.Line .. r.End.Line].
-	rebuilt := make([]string, 0, len(b.lines)-(r.End.Line-r.Start.Line)-1+len(newLines))
-	rebuilt = append(rebuilt, b.lines[:r.Start.Line]...)
-	rebuilt = append(rebuilt, newLines...)
-	rebuilt = append(rebuilt, b.lines[r.End.Line+1:]...)
-	b.setLines(rebuilt)
+	// Splice newLines in place of lines [r.Start.Line .. r.End.Line]. An edit
+	// that keeps the line count — the per-keystroke typing case — rewrites the
+	// touched lines in place (#2159): the full rebuild below reallocates the
+	// entire backing slice, which on a 100k-line buffer made every keystroke
+	// O(file) in copying and GC pressure. Nothing aliases the slice (Lines()
+	// hands out copies), so the in-place write is safe.
+	if len(newLines) == r.End.Line-r.Start.Line+1 {
+		copy(b.lines[r.Start.Line:], newLines)
+	} else {
+		rebuilt := make([]string, 0, len(b.lines)-(r.End.Line-r.Start.Line)-1+len(newLines))
+		rebuilt = append(rebuilt, b.lines[:r.Start.Line]...)
+		rebuilt = append(rebuilt, newLines...)
+		rebuilt = append(rebuilt, b.lines[r.End.Line+1:]...)
+		b.setLines(rebuilt)
+	}
 
 	// End position of the inserted text.
 	nl := strings.Count(e.Text, "\n")

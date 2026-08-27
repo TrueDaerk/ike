@@ -189,6 +189,13 @@ func validate(c *Config) []Diagnostic {
 	// The external-change feed's cap (#2000). 0 is the legitimate "off"
 	// value, so only a negative count is a mistake worth reporting.
 	clampMin("files.change_feed_limit", &c.Files.ChangeFeedLimit, 0)
+	// Per-feature large-file thresholds (#2159): 0 is the documented "follow
+	// the base thresholds" value, so only negatives are mistakes.
+	clampMin("files.large_file_highlight_kb", &c.Files.LargeFileHighlightKB, 0)
+	clampMin("files.large_file_lsp_kb", &c.Files.LargeFileLSPKB, 0)
+	clampMin("files.large_file_vcs_kb", &c.Files.LargeFileVCSKB, 0)
+	clampMin("files.large_file_search_kb", &c.Files.LargeFileSearchKB, 0)
+	clampMin("files.large_file_format_kb", &c.Files.LargeFileFormatKB, 0)
 
 	// explorer.exclude entries are filepath.Match glob patterns over entry
 	// base names (#1139): a malformed pattern (e.g. an unclosed "[") is

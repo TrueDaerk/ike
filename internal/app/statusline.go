@@ -37,6 +37,7 @@ var statusLeft = []statusSegment{
 	{id: "macro", render: macroSegment},
 	{id: "follow", render: followSegment},
 	{id: "file", render: fileSegment},
+	{id: "largefile", render: largeFileSegment},
 	{id: "buflang", render: bufferLangSegment},
 	{id: "hint", render: emptyHintSegment},
 	{id: "eol", render: eolSegment},
@@ -184,11 +185,30 @@ func fileSegment(_ Model, ed *editor.Model) string {
 	if ed.Stale() {
 		file += " [disk changed]"
 	}
-	if ed.InsightOff() {
-		// Large-file mode (#149): say why highlighting/LSP are absent.
-		file += " [large file]"
-	}
 	return file
+}
+
+// largeFileSegment is the large-file degradation badge (#2159): visible while
+// any per-edit service is reduced for the focused document, naming the single
+// degraded feature or counting them. A click (statusSegmentCommands) — or
+// editor.largeFileDetails — opens the detail popup listing every feature.
+// It replaces the former `[large file]` suffix inside the file segment.
+func largeFileSegment(_ Model, ed *editor.Model) string {
+	if ed == nil || !ed.HasFile() {
+		return ""
+	}
+	off := ed.DegradedFeatures()
+	switch {
+	case len(off) == 0:
+		return ""
+	case ed.InsightOff():
+		// The base cliff (#149): everything is off.
+		return "[large file]"
+	case len(off) == 1:
+		return "[large: " + off[0].Label() + " off]"
+	default:
+		return "[large: " + strconv.Itoa(len(off)) + " features off]"
+	}
 }
 
 // eolSegment is the focused file's on-disk line-ending flavor (#66) — "LF" or
@@ -662,6 +682,7 @@ func middleEllipsis(s string, max int) string {
 // segments with one clear, obvious target are wired.
 var statusSegmentCommands = map[string]string{
 	"buflang":       "editor.setBufferLanguage",
+	"largefile":     "editor.largeFileDetails",
 	"todo":          "todo.list",
 	"notifications": "notifications.history",
 	"lsp":           "lsp.showLog",
