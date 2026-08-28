@@ -45,7 +45,7 @@ func TestPerfHUDToggleStartsAndStopsCollection(t *testing.T) {
 		t.Fatal("perf.hud did not disable collection")
 	}
 	// A tick still in flight from the open phase must not re-arm.
-	out, cmd = m.Update(perfTickMsg{})
+	out, cmd = m.Update(perfTickMsg{gen: m.modelGen})
 	m = out.(Model)
 	if cmd != nil || m.perfTickArmed {
 		t.Error("the sampling tick re-armed after the HUD closed")
@@ -118,7 +118,7 @@ func TestPerfHUDOverlayAppearsAfterTheFirstSample(t *testing.T) {
 	if strings.Contains(m.render(), "PERF HUD") {
 		t.Fatal("the HUD box drew before its first sample")
 	}
-	out, cmd := m.Update(perfTickMsg{})
+	out, cmd := m.Update(perfTickMsg{gen: m.modelGen})
 	m = out.(Model)
 	if cmd == nil {
 		t.Error("the sampling tick did not re-arm while the HUD is open")
@@ -149,7 +149,7 @@ func TestPerfHUDBoxIsLaidOutPerSampleNotPerFrame(t *testing.T) {
 	if m.perfBox != "" {
 		t.Fatal("a box was laid out before the first sample")
 	}
-	out, _ = m.Update(perfTickMsg{})
+	out, _ = m.Update(perfTickMsg{gen: m.modelGen})
 	m = out.(Model)
 	if m.perfBox == "" || m.perfBoxW != m.width {
 		t.Fatalf("the sample did not cache a box for width %d (%q)", m.width, m.perfBox)
@@ -166,7 +166,7 @@ func TestPerfHUDBoxIsLaidOutPerSampleNotPerFrame(t *testing.T) {
 	if !strings.Contains(m.render(), "PERF HUD") {
 		t.Fatal("the HUD vanished after a resize")
 	}
-	out, _ = m.Update(perfTickMsg{})
+	out, _ = m.Update(perfTickMsg{gen: m.modelGen})
 	m = out.(Model)
 	if m.perfBoxW != 90 {
 		t.Errorf("the cached box is still laid out for width %d", m.perfBoxW)
@@ -190,7 +190,7 @@ func TestPerfSnapshotCopiesAPlainTextBlock(t *testing.T) {
 	out, _ := m.Update(TogglePerfHUDMsg{})
 	m = out.(Model)
 	m.render()
-	out, _ = m.Update(perfTickMsg{})
+	out, _ = m.Update(perfTickMsg{gen: m.modelGen})
 	m = out.(Model)
 
 	out, _ = m.Update(PerfSnapshotMsg{})
@@ -237,7 +237,7 @@ func TestArmedTimersCountsTheHUDsOwnTick(t *testing.T) {
 	}
 	// The sample taken while handling the tick must still count it: it was
 	// armed for the window it closes, and it re-arms immediately.
-	out, _ = m.Update(perfTickMsg{})
+	out, _ = m.Update(perfTickMsg{gen: m.modelGen})
 	m = out.(Model)
 	s, ok := perfhud.Latest()
 	if !ok {

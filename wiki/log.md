@@ -27,6 +27,39 @@
 - Tests: `internal/help/columns_test.go` covers `TypicalColumnWidth`,
   `ColumnLayout`, the entry truncation, and the sectioned render at a wide and a
   narrow budget. Wiki: [Help Overlay](/architecture/help-overlay.md).
+## 2026-08-28 (Change feed: batch reload/revert and per-process grouping, #2183)
+
+- **Batch actions** (`internal/app/changefeed.go`): `A` reloads and `V` reverts
+  a whole scope instead of a row. The scope is the marked rows when there are
+  any and the entire listed feed otherwise — marking refines a batch, it is not
+  a precondition for one. `space` marks a row, `m` marks the selection's whole
+  group, which is what makes a titled section's reload/revert one keystroke
+  without a second set of group-only keys; `m` unmarks only a fully marked
+  group, so it completes a partial selection rather than discarding it.
+- **Conflicts are never resolved by a batch** (`changeFeedConflict`): a file
+  changed externally *and* edited in IKE is left alone and named in the report
+  (`reloaded 3 file(s) · skipped 2 (unsaved changes): a.go, b.go`). The
+  per-entry `R`/`r` still exist for settling them one at a time. Reload also
+  skips what it cannot reach (not open, gone), revert what has no recorded
+  previous version.
+- **Revert-all is confirmed with the file list** (`openChangeFeedRevertAllPrompt`):
+  every file it will touch, plus what it is leaving alone and why. Undoing one
+  external write is a decision about one buffer; undoing an agent run is a
+  decision about the working tree. Confirmed, each file takes the same restore
+  path as the single revert (`revertChangeFeedPath`, now shared) and the batch
+  reports once — `applyBufferRestore` (split out of `restoreLocalHistory`) is
+  the quiet restore that makes one report possible instead of N toasts.
+- **Per-process grouping** (`internal/changefeed`: `Entry.Source`, `Groups`,
+  `Attributed`): entries carry a best-effort attribution and render as titled
+  sections, attributed groups first, the unattributed rows last under a plain
+  `unattributed` title. With nothing attributed the list stays flat.
+- **Attribution is only what IKE spawned** (`changeFeedSource`,
+  `terminal.Model.Argv`): a *busy* tool pane, Run task or terminal command at
+  the moment of the write. Exactly one candidate is an answer, two are not —
+  an ambiguous moment stays unattributed rather than blaming the formatter
+  that ran beside the agent. Resolved once per watcher flush.
+- Docs: `wiki/architecture/change-feed.md` (new "Batch actions" section,
+  attribution and grouping).
 
 ## 2026-08-28 (Diff viewer: ignore-whitespace toggle, per-side intra-line emphasis, #2170)
 

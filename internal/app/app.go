@@ -338,6 +338,13 @@ type Model struct {
 	backupTickArmed bool
 	backupIv        time.Duration
 
+	// modelGen is the generation this model instance owns (#2194, tickgen.go).
+	// Every demand-armed debounce tick carries it, and Update drops the ticks
+	// stamped with another generation — a project switch rebuilds the model
+	// while a tick minted by the departed one may still be sleeping, and
+	// handling it here would arm a second chain on the same clock.
+	modelGen int64
+
 	// Follow mode (#1928, follow.go): one demand-armed tick drives the
 	// watcher's poll fallback while at least one editor view follows its
 	// file; it self-stops (no re-arm) once none does, so an idle session
@@ -808,6 +815,13 @@ type Model struct {
 	cfDiff    diff.Result        // selected entry's before vs now, for the mini-diff
 	cfErr     string             // why the selection has no diff, shown in its place
 	cfRevert  string             // file awaiting the revert confirmation
+	// Batch state (#2183): the marked rows a batch action is scoped to, and
+	// the files a revert-all confirmation is holding — spelled out in the
+	// prompt, because reverting a whole agent run at once is the destructive
+	// end of the panel.
+	cfMarks       map[string]bool
+	cfRevertBatch []string
+	cfRevertSkip  []string
 
 	tl       timelineState // per-file Timeline data (#1916)
 	tlPicker bool          // the Timeline owns the modal shell
@@ -1235,6 +1249,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// Classify at table-build time, so probed truth has to be in place first.
 	keymap.SetProbeVerdicts(keymap.LoadProbeStore(keymap.ProbeStorePath()).Results(keymap.TerminalID(os.Getenv)))
 	m := Model{
+		modelGen:        nextModelGen(), // stamps this model's ticks (#2194)
 		cmdUsage:        cmdUsage,
 		fileUsage:       fileUsage,
 		cmdFrec:         cmdFrec,
@@ -3813,11 +3828,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var tick tea.Cmd
 		if !m.caps.scheduled {
 			m.caps.scheduled = true
-			tick = termCheckTick()
+			tick = termCheckTick(m.modelGen)
 		}
 		return m, tick
 
 	case termCheckMsg:
+		// A verdict tick from a departed model (project switch) would judge
+		// the fresh model's zero-valued caps and report a Kitty-capable
+		// terminal as broken (#2194); the model that probed already answered.
+		if !m.ownsTick(msg.gen) {
+			return m, nil
+		}
 		return m, m.runTermCheck()
 
 	case tea.BackgroundColorMsg:
@@ -4525,6 +4546,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case perfTickMsg:
 		// One HUD measurement window closed (#1999); re-arms while open.
+		if !m.ownsTick(msg.gen) {
+			return m, nil // a departed model's tick (#2194)
+		}
 		return m, m.perfTick()
 
 	case PerfSnapshotMsg:
@@ -4689,13 +4713,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Keep the in-flight indicator moving while dispatches run (#1272) —
 		// the statusline segment reads the flight set directly, the inline
 		// markers in the .http file are refreshed here (#1746).
+		if !m.ownsTick(msg.gen) {
+			return m, nil // a departed model's tick (#2194)
+		}
 		m.httpTickArmed = false
 		m.refreshHTTPFlightMarks()
 		if len(m.httpFlight) == 0 {
 			return m, nil
 		}
 		m.httpTickArmed = true
-		return m, tea.Tick(httpFlightTick, func(time.Time) tea.Msg { return httpTickMsg{} })
+		gen := m.modelGen
+		return m, tea.Tick(httpFlightTick, func(time.Time) tea.Msg { return httpTickMsg{gen: gen} })
 
 	case HTTPCancelMsg:
 		// http.cancel (palette, x in the response pane, #1272).
@@ -7022,7 +7050,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case followTickMsg:
 		// The follow poll deadline elapsed (#1928): poll the tracked files
-		// and re-arm while a view still follows.
+		// and re-arm while a view still follows. A tick from a departed model
+		// retires here (#2194) instead of arming a second poll chain.
+		if !m.ownsTick(msg.gen) {
+			return m, nil
+		}
 		return m, m.followTick()
 
 	case OpenMergedLogMsg:
@@ -7044,12 +7076,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case backupTickMsg:
 		// A debounce deadline elapsed: snapshot the quiet dirty buffers and
 		// re-arm while marks remain (Roadmap 0210, #167).
+		if !m.ownsTick(msg.gen) {
+			return m, nil // a departed model's tick (#2194)
+		}
 		m.backupTickArmed = false
 		return m, tea.Batch(m.snapshotDueBackups(time.Now()), m.armBackupTick())
 
 	case autosaveIdleTickMsg:
 		// An idle deadline elapsed: save the quiet dirty buffers and re-arm
 		// while marks remain (#731).
+		if !m.ownsTick(msg.gen) {
+			return m, nil // a departed model's tick (#2194)
+		}
 		m.autosaveIdleTickArmed = false
 		m.saveDueIdleBuffers(time.Now())
 		return m, m.armAutosaveIdleTick()
@@ -7057,12 +7095,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case httpVarsTickMsg:
 		// An .http buffer went quiet (#2158): re-check its `{{name}}`
 		// references against the variable chain and re-arm while marks remain.
+		if !m.ownsTick(msg.gen) {
+			return m, nil // a departed model's tick (#2194)
+		}
 		cmd := m.lintDueHTTPVars(time.Now())
 		return m, cmd
 
 	case mouseHoverTickMsg:
 		// The mouse-idle hover deadline elapsed (#1129): fire the hover when
 		// the pointer still rests on the tracked cell, else re-arm/no-op.
+		if !m.ownsTick(msg.gen) {
+			return m, nil // a departed model's tick (#2194)
+		}
 		return m, m.mouseHoverTick(time.Now())
 
 	case toastExpireMsg:

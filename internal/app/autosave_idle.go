@@ -19,7 +19,8 @@ import (
 // "idle" is a superset of "focus": the on-blur save stays active too.
 
 // autosaveIdleTickMsg wakes the model to save the buffers whose debounce expired.
-type autosaveIdleTickMsg struct{}
+// gen names the model that armed it (#2194); another model's tick is dropped.
+type autosaveIdleTickMsg struct{ gen int64 }
 
 // autosaveIdle reports whether editor.auto_save is in idle mode.
 func (m *Model) autosaveIdle() bool {
@@ -80,7 +81,8 @@ func (m *Model) armAutosaveIdleTick() tea.Cmd {
 	if d < 0 {
 		d = 0
 	}
-	return tea.Tick(d, func(time.Time) tea.Msg { return autosaveIdleTickMsg{} })
+	gen := m.modelGen
+	return tea.Tick(d, func(time.Time) tea.Msg { return autosaveIdleTickMsg{gen: gen} })
 }
 
 // saveDueIdleBuffers autosaves every buffer whose idle deadline expired.

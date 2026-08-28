@@ -25,7 +25,8 @@ import (
 // recovery.go.
 
 // backupTickMsg wakes the model to snapshot the buffers whose debounce expired.
-type backupTickMsg struct{}
+// gen names the model that armed it (#2194); another model's tick is dropped.
+type backupTickMsg struct{ gen int64 }
 
 // untitledPrefix namespaces snapshot keys of pathless buffers by pane key.
 const untitledPrefix = "untitled:"
@@ -116,7 +117,8 @@ func (m *Model) armBackupTick() tea.Cmd {
 	if d < 0 {
 		d = 0
 	}
-	return tea.Tick(d, func(time.Time) tea.Msg { return backupTickMsg{} })
+	gen := m.modelGen
+	return tea.Tick(d, func(time.Time) tea.Msg { return backupTickMsg{gen: gen} })
 }
 
 // snapshotDueBackups captures the text of every buffer whose debounce expired
