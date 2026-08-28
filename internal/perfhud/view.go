@@ -2,6 +2,7 @@ package perfhud
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -110,6 +111,37 @@ func bodyLines(s Sample, hist []Sample) []string {
 			out = append(out, fmt.Sprintf("  %-14s %s", shortKey(p.Key, 14), fmtDur(p.Avg)))
 		}
 	}
+	out = append(out, startupLines(hudStartupPhases)...)
+	return out
+}
+
+// hudStartupPhases caps how many startup phases the HUD box lists — the
+// costliest ones; the clipboard snapshot carries the whole sequence.
+const hudStartupPhases = 3
+
+// startupLines renders the startup section (#2260) from the recorded phase
+// timings: the first-frame total and the maxPhases costliest phases. Empty
+// when nothing was recorded (tests, models built without a StartupBegin).
+func startupLines(maxPhases int) []string {
+	phases, first := StartupPhases()
+	if first == 0 && len(phases) == 0 {
+		return nil
+	}
+	var out []string
+	if first > 0 {
+		out = append(out, fmt.Sprintf("startup: first frame %s", fmtDur(first)))
+	} else {
+		out = append(out, "startup: (no frame yet)")
+	}
+	byCost := make([]StartupPhase, len(phases))
+	copy(byCost, phases)
+	sort.SliceStable(byCost, func(i, j int) bool { return byCost[i].D > byCost[j].D })
+	if len(byCost) > maxPhases {
+		byCost = byCost[:maxPhases]
+	}
+	for _, p := range byCost {
+		out = append(out, fmt.Sprintf("  %-14s %s", shortKey(p.Name, 14), fmtDur(p.D)))
+	}
 	return out
 }
 
@@ -180,6 +212,16 @@ func SnapshotText(s Sample, hist []Sample) string {
 		for _, p := range s.Panes {
 			fmt.Fprintf(&b, "  %-16s avg %s over %d frames (total %s)\n",
 				p.Key, fmtDur(p.Avg), p.Frames, fmtDur(p.Total))
+		}
+	}
+	if phases, first := StartupPhases(); first > 0 || len(phases) > 0 {
+		if first > 0 {
+			fmt.Fprintf(&b, "startup: first frame in %s\n", fmtDur(first))
+		} else {
+			b.WriteString("startup: no frame composed yet\n")
+		}
+		for _, p := range phases {
+			fmt.Fprintf(&b, "  %-16s %s\n", p.Name, fmtDur(p.D))
 		}
 	}
 	if len(hist) > 1 {

@@ -13,6 +13,7 @@ import (
 	"ike/internal/config"
 	"ike/internal/debugpanel"
 	"ike/internal/diag"
+	"ike/internal/perfhud"
 )
 
 // debuglog.go is the slow-operation diagnostic (#125), motivated by the #123
@@ -59,6 +60,20 @@ func logSlowUpdate(msg tea.Msg, took time.Duration) {
 // entry means the event arrived and the keymap had its say.
 func logMouseNavButton(base string) {
 	logDiagnostic("mouse: navigation button delivered as " + base)
+}
+
+// logStartup appends the one-time startup timing line (#2260) once the first
+// sized frame composed: the first-frame total plus every recorded phase, in
+// completion order. It runs after main.go's chdir into the project root, so
+// the line lands in the opened project's state dir.
+func logStartup(firstFrame time.Duration) {
+	phases, _ := perfhud.StartupPhases()
+	var b strings.Builder
+	fmt.Fprintf(&b, "startup: first frame in %s", firstFrame.Round(time.Millisecond))
+	for _, p := range phases {
+		fmt.Fprintf(&b, ", %s %s", p.Name, p.D.Round(time.Millisecond))
+	}
+	logDiagnostic(b.String())
 }
 
 // logDiagnostic appends a timestamped line to the state debug log.

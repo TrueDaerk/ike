@@ -160,6 +160,12 @@ type Model struct {
 	autoReveal    bool
 	wantReveal    bool
 
+	// Async session restore (#2260, state.go): the saved expanded paths whose
+	// children have not landed yet, and the saved cursor waiting for its row.
+	// Nil/empty outside a restore in flight.
+	restorePending map[string]bool
+	restoreCursor  string
+
 	// Speed search (#1087, search.go): the open type-to-select state, nil
 	// when closed. While non-nil the search owns every key (Searching()
 	// gives it the same raw-key capture the file-op prompt gets).
@@ -350,8 +356,11 @@ func (m *Model) applyScan(msg ScanDoneMsg) tea.Cmd {
 	if msg.Err != nil {
 		m.err = msg.Err
 		// Continue anyway: the failed directory now reads loaded-and-empty,
-		// so a reveal descending through it abandons cleanly.
-		return m.continueReveal()
+		// so a reveal descending through it abandons cleanly and a pending
+		// restore (#2260) drops the entries below it.
+		restore := m.continueRestore()
+		m.finishRestore()
+		return tea.Batch(m.continueReveal(), restore)
 	}
 	m.err = nil
 	n.modTime = msg.ModTime
@@ -368,8 +377,13 @@ func (m *Model) applyScan(msg ScanDoneMsg) tea.Cmd {
 		}
 	}
 	m.setChildren(n, msg.Entries)
+	// A pending session restore (#2260) expands and scans the saved
+	// directories this scan just made reachable — before the rebuild, so the
+	// fresh expansion flags shape the rows.
+	restore := m.continueRestore()
 	m.rebuild()
-	return m.continueReveal()
+	m.finishRestore()
+	return tea.Batch(m.continueReveal(), restore)
 }
 
 // continueExpandAll resumes an in-flight expand-all (#1043) after a scan
@@ -628,13 +642,21 @@ func (m *Model) SetFocused(f bool) { m.focused = f }
 // the first ScanDoneMsg instead (see startPoll).
 func (m *Model) Init() tea.Cmd {
 	if m.root.loaded {
+		var cmds []tea.Cmd
+		// A session restore left its expanded directories pending (#2260):
+		// issue the reachable scans now, off the update loop.
+		if c := m.continueRestore(); c != nil {
+			cmds = append(cmds, c)
+			m.rebuild()
+		}
 		if !m.autoRefresh {
 			m.polling = false
-			return nil
+			return tea.Batch(cmds...)
 		}
 		m.polling = true
 		m.pollID = pollSeq.Add(1)
-		return m.schedulePoll()
+		cmds = append(cmds, m.schedulePoll())
+		return tea.Batch(cmds...)
 	}
 	return scanCmd(m.root.path)
 }

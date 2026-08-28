@@ -228,6 +228,13 @@ func (s *Service) Start(root string) error {
 		if err != nil || !d.IsDir() {
 			return nil
 		}
+		// A newer Start (project switch) superseded this walk (#2260): stop
+		// registering on the closed watcher instead of walking the rest of
+		// the tree for nothing. Start runs off the update loop now, so this
+		// is a live possibility, not just a shutdown race.
+		if !s.owns(w) {
+			return filepath.SkipAll
+		}
 		// The root is always watched, even if its own name is dotted or noisy;
 		// the filter only prunes descendants (#596).
 		if path != root && skipWatchDir(d.Name()) {
@@ -240,6 +247,13 @@ func (s *Service) Start(root string) error {
 		watched++
 		return nil
 	})
+	if !s.owns(w) {
+		// Superseded mid-walk: the newer Start owns the service now; close
+		// this watcher (idempotent when Stop already did) and bow out without
+		// touching the metadata watches or spawning a reader loop.
+		_ = w.Close()
+		return nil
+	}
 	if watched >= maxWatchDirs && s.send != nil {
 		go s.send(TruncatedMsg{Watched: watched})
 	}
@@ -247,6 +261,14 @@ func (s *Service) Start(root string) error {
 	s.watchConfigDir(root)
 	go s.loop(w)
 	return nil
+}
+
+// owns reports whether w is still the service's active watcher — false once a
+// later Start or a Stop replaced it.
+func (s *Service) owns(w *fsnotify.Watcher) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w == w
 }
 
 // watchConfigDir adds the project config-directory watch (0380, #795):

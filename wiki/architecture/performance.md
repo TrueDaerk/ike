@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Performance & Diagnostics
-description: Idle-behavior rules (who may wake the render loop, and how often), the in-app performance HUD, the always-on update-loop stall watchdog, and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
+description: Idle-behavior rules (who may wake the render loop, and how often), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
-tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog]
-timestamp: 2026-08-27T00:00:00Z
+tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup]
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -134,6 +134,57 @@ HUD still open across it.
 Reach for the HUD first — it answers "what is waking me and which pane is
 expensive" in seconds. Reach for the pprof hooks below when the answer is
 "something inside one pane" and you need the stack.
+
+## Startup instrumentation & the async open path (#2260)
+
+Opening a project used to be unmeasured, so a slow start was guesswork. Now
+every coarse startup phase stamps its wall-clock cost into the collector
+(`perfhud.RecordStartupPhase`): `project-history` (restore-last + recent list),
+`wasm-plugins` (scan + compile), `model-build` (the whole constructor) with its
+sub-phases `config`, `settings-ui`, `session-restore` and `recovery-scan`, and
+`cli-open`. The first *sized* frame closes the measurement
+(`perfhud.RecordFirstFrame` in `render`) — everything after that point fills in
+asynchronously by design. Unlike the rest of the collector this is **not**
+gated on `Enabled()`: startup is over before the HUD can be toggled on, so the
+phases record unconditionally (a handful of appends, nothing periodic).
+
+The numbers surface in two places:
+
+- a **startup** block in the HUD box (first-frame total plus the costliest
+  phases) and, in full, in the `perf.snapshot` clipboard text;
+- one line in the state-dir log (`.ike/debug.log`) per process:
+  `startup: first frame in 41ms, project-history 2ms, …` — written once, off
+  the render path, after the chdir into the project root.
+
+A project switch re-runs the constructor phases and re-records them by name
+(replace-in-place), so the block always describes the most recent open.
+
+**What must not block the first frame.** The rule since #2260: nothing after
+the first sized frame may wait on tree-sized work. The blocking steps that
+were on the critical path and are now asynchronous:
+
+- **The file watcher's recursive registration** (`watch.Service.Start`) walks
+  the whole project tree to `Add` each directory — on a large repository the
+  single biggest pre-first-frame cost. main.go starts it via
+  `StartWatcherAsync` (a goroutine); the switch path and tests keep the
+  synchronous `StartWatcher`, and a `Start` superseded by a project switch
+  notices mid-walk (`Service.owns`) and abandons its closed watcher.
+- **The explorer's session restore** (`explorer.Restore`) used to re-read
+  every saved expanded directory synchronously on the constructor thread. Now
+  only the root loads synchronously (one `ReadDir` for the first frame's
+  rows); the saved expansions are recorded as pending, `Init` issues the
+  reachable scans, and each landing scan expands the pending descendants it
+  uncovered (`continueRestore`). The saved cursor parks via the pending-snap
+  mechanism when its row appears. `TestRestoreReadsNoExpandedDirSynchronously`
+  is the regression guard.
+- **The LSP bridge's `fileOpened` hook** read each restored file's bytes on
+  the caller (Init) before handing off to the didOpen goroutine; the read and
+  the large-file gate now run inside the goroutine.
+
+Already asynchronous before this work, and kept that way: the explorer's
+initial root scan (`scanCmd`), the git status snapshot (`vcsInvalidateMsg`
+through the debounced refresh), the LSP server spawn/handshake, the completion
+word/symbol project scans, and the TODO index scan.
 
 ## The update-loop stall watchdog (`internal/diag`, #2163)
 
