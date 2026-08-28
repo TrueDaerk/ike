@@ -2,8 +2,9 @@ package explorer
 
 import (
 	"os"
-	"sort"
-	"strings"
+	"path/filepath"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 // State captures the explorer's session-restorable state: the set of expanded
@@ -58,11 +59,14 @@ func (m Model) currentConst() *node {
 	return m.rows[m.cursor]
 }
 
-// Restore re-applies a saved State: it sets the show-hidden flag, synchronously
-// re-expands the saved directories (shallowest first so ancestors load before
-// their children), rebuilds the visible rows, and parks the cursor on the saved
-// path when it is visible. Directories that no longer exist are skipped. Restore
-// loads the root synchronously, so Init must not issue a competing async scan.
+// Restore re-applies a saved State. Only the root loads on the constructor
+// thread (#2260) — one ReadDir for the rows the first frame shows. The saved
+// expanded directories load through the async scan path instead: Restore
+// records them in restorePending, Init issues the scans that are already
+// reachable, and each landing scan expands the pending descendants it just
+// uncovered (continueRestore). Directories that no longer exist are dropped as
+// soon as their parent's scan proves them gone. The root being loaded still
+// means Init must not issue a competing root re-scan.
 func (m *Model) Restore(s State) {
 	m.showHidden = s.ShowHidden
 	m.scrCollapsed = s.ScratchCollapsed
@@ -71,36 +75,88 @@ func (m *Model) Restore(s State) {
 	}
 	m.loadSync(m.root)
 
-	// Shallower paths first: a child can only be reached once its parent's
-	// children have been loaded.
-	paths := append([]string(nil), s.Expanded...)
-	sort.SliceStable(paths, func(i, j int) bool {
-		return strings.Count(paths[i], string(os.PathSeparator)) <
-			strings.Count(paths[j], string(os.PathSeparator))
-	})
-	for _, p := range paths {
-		n := nodeByPath(m.root, p)
-		if n == nil || !n.isDir {
-			continue
-		}
-		n.expanded = true
-		m.loadSync(n)
-	}
-
-	// The synchronous load means Init issues no scan and no ScanDoneMsg will
-	// start the auto-refresh loop; Init sees the loaded root and arms a
-	// fresh poll chain itself (#2163).
-
-	m.rebuild()
-	if s.Cursor != "" {
-		for i, n := range m.rows {
-			if n.path == s.Cursor {
-				m.cursor = i
-				break
+	if len(s.Expanded) > 0 {
+		m.restorePending = make(map[string]bool, len(s.Expanded))
+		for _, p := range s.Expanded {
+			m.restorePending[p] = true
+			// Already-reachable nodes (the root's own children) show their
+			// expanded arrow from the first frame; deeper ones appear as their
+			// ancestors load. No I/O here — Init issues the scans.
+			if n := nodeByPath(m.root, p); n != nil && n.isDir {
+				n.expanded = true
 			}
 		}
 	}
+
+	m.rebuild()
+	if s.Cursor != "" {
+		placed := false
+		for i, n := range m.rows {
+			if n.path == s.Cursor {
+				m.cursor = i
+				placed = true
+				break
+			}
+		}
+		if !placed && len(m.restorePending) > 0 {
+			// The saved cursor sits inside a directory still loading: park it
+			// as a pending snap, resolved by the rebuild of whichever restore
+			// scan makes the row visible. finishRestore clears a snap whose
+			// row never appeared (the file is gone).
+			m.restoreCursor = s.Cursor
+			m.pendingSel = s.Cursor
+			m.followSel = true
+		}
+	}
 	m.followCursor()
+}
+
+// continueRestore advances the async session restore (#2260): every pending
+// saved-expanded path whose node became reachable is expanded and scanned;
+// paths whose loaded parent no longer lists them are dropped. Init calls it
+// for the paths reachable right after Restore, applyScan after every landing
+// scan. Nil when nothing new is scannable.
+func (m *Model) continueRestore() tea.Cmd {
+	if len(m.restorePending) == 0 {
+		return nil
+	}
+	var cmds []tea.Cmd
+	for p := range m.restorePending {
+		n := nodeByPath(m.root, p)
+		if n == nil {
+			if parent := nodeByPath(m.root, filepath.Dir(p)); parent != nil && parent.loaded {
+				delete(m.restorePending, p) // gone from disk since the save
+			}
+			continue
+		}
+		if !n.isDir {
+			delete(m.restorePending, p)
+			continue
+		}
+		n.expanded = true
+		if n.loaded {
+			delete(m.restorePending, p)
+			continue
+		}
+		if !n.loading {
+			n.loading = true
+			cmds = append(cmds, scanCmd(n.path))
+		}
+	}
+	return tea.Batch(cmds...)
+}
+
+// finishRestore runs after a landing scan's rebuild: once nothing is pending
+// and the saved cursor's snap did not resolve, the row is gone for good — the
+// slot is released so the stability snap (#1140) works again.
+func (m *Model) finishRestore() {
+	if len(m.restorePending) != 0 || m.restoreCursor == "" {
+		return
+	}
+	if m.pendingSel == m.restoreCursor {
+		m.pendingSel = ""
+	}
+	m.restoreCursor = ""
 }
 
 // loadSync reads a directory node's children on the update thread. Unlike the

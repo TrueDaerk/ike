@@ -265,21 +265,25 @@ func (b *bridge) fileOpened(h host.API, path string) {
 	if !ok || !l.HasServer() {
 		return
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return
-	}
-	if largeFileGated(h.Config(), path, data) {
-		// Large-file mode (#149): servers choke on huge documents too, so the
-		// didOpen never happens — diagnostics and completion are silently
-		// absent. Change events for the unopened document no-op in the
-		// manager. editor.forceCodeInsight re-fires this hook with the
-		// override set.
-		return
-	}
 	mgr := b.manager()
+	cfg := h.Config()
 	go func() {
-		err := mgr.Open(path, l.ID, string(data))
+		// The disk read runs off the caller too (#2260): Init fires this hook
+		// once per restored file, and a session full of large files would
+		// otherwise stack synchronous reads before the first frame.
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return
+		}
+		if largeFileGated(cfg, path, data) {
+			// Large-file mode (#149): servers choke on huge documents too, so
+			// the didOpen never happens — diagnostics and completion are
+			// silently absent. Change events for the unopened document no-op
+			// in the manager. editor.forceCodeInsight re-fires this hook with
+			// the override set.
+			return
+		}
+		err = mgr.Open(path, l.ID, string(data))
 		if err != nil && errors.Is(err, transport.ErrNotFound) {
 			// Missing binary on first use: activation implies installation
 			// (#131). We are already off the Update loop here.
