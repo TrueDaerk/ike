@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // readSession returns the parsed lines of the single session file in dir.
@@ -204,6 +206,55 @@ func TestEmptyDirYieldsInertRecorder(t *testing.T) {
 	r := New("", nil)
 	if r != nil {
 		t.Fatal("empty dir should yield a nil recorder")
+	}
+}
+
+// TestPeriodicFlushWithoutExplicitFlush pins the freeze-fest guarantee: the
+// writer goroutine puts enqueued events on disk on its own ticker, with no
+// caller-driven Flush and no sleep — the fake ticker channel is the seam.
+func TestPeriodicFlushWithoutExplicitFlush(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	tick := make(chan time.Time)
+	r.newTicker = func(d time.Duration) (<-chan time.Time, func()) {
+		return tick, func() {}
+	}
+	r.Command("x", SourceInternal)
+
+	// The unbuffered send only rendezvous with the writer's receive; wait
+	// for a subsequent ack so the tick's flush is guaranteed to have run
+	// (the writer's select loop completes one case fully before the next).
+	tick <- time.Now()
+	r.Flush()
+
+	evs := readSession(t, dir)
+	if len(evs) != 1 || evs[0].Data["id"] != "x" {
+		t.Fatalf("periodic tick did not flush the enqueued event: %v", evs)
+	}
+	r.Close()
+}
+
+// TestCloseStopsTicker pins that Close tears the ticker down — no busy
+// ticker running after the writer goroutine has exited.
+func TestCloseStopsTicker(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	var stopped atomic.Bool
+	r.newTicker = func(d time.Duration) (<-chan time.Time, func()) {
+		return make(chan time.Time), func() { stopped.Store(true) }
+	}
+	r.Command("x", SourceInternal)
+	r.Close()
+
+	if !stopped.Load() {
+		t.Fatal("Close did not stop the periodic ticker")
+	}
+}
+
+func TestDefaultFlushIntervalIsAFewSeconds(t *testing.T) {
+	r := New(t.TempDir(), nil)
+	if r.FlushInterval <= 0 || r.FlushInterval > 5*time.Second {
+		t.Fatalf("FlushInterval = %v, want something in the 2-5s range", r.FlushInterval)
 	}
 }
 
