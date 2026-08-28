@@ -1007,7 +1007,9 @@ func (d *dragState) engaged() bool {
 // the global plugin registry. It loads the merged configuration (defaults < user
 // < project) from the working directory and backs the host with it.
 func New() Model {
+	phase := time.Now()
 	cfg, diags := config.Load(config.Discover("."))
+	perfhud.RecordStartupPhase("config", time.Since(phase))
 	config.Set(cfg)
 	terminal.SetDefaultScrollbackLines(cfg.Terminal.ScrollbackLines)
 	// Arm the update-loop stall watchdog (#2163) as soon as the threshold is
@@ -1346,6 +1348,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.ctxMenu = menu.NewContext(m.commandInfo(reg))
 	m.ctxMenu.SetPalette(themePal)
 	m.cfgOpts = config.Discover(".")
+	phase := time.Now()
 	pages := settings.BasePages(themeNames(reg), themeNamesByDark(reg, false), themeNamesByDark(reg, true), reg.Themes()...)
 	// The [theme.captures] editor (#1238) belongs with the theme picker.
 	pages = settings.InsertAfter(pages, "Appearance", settings.Page{
@@ -1435,6 +1438,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	)
 	pages = append(pages, settings.Page{Title: "Marketplace", Custom: m.marketPage})
 	m.settings = settings.New(append(pages, reg.SettingsPages()...), m.cfgOpts)
+	perfhud.RecordStartupPhase("settings-ui", time.Since(phase))
 	// Thread the startup palette through every chrome component; without this
 	// the settings panel, command palette, shell, help, and menu render with
 	// the default palette until the first theme switch (#384).
@@ -1448,6 +1452,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// before this the model kept the empty constructor list — which the next
 	// saveSession (quit, hidden-toggle, switch-away) then persisted, wiping
 	// the project's MRU history for good.
+	phase = time.Now()
 	if s, ok := loadSession(); ok {
 		m.recent.Set(s.RecentFiles.toEntries())
 		// The per-tab caret/framing table (#2177) is read here, before the
@@ -1481,9 +1486,12 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// dark theme's tokens — near-white identifiers on a light theme's
 	// background. Idempotent when no layout was restored.
 	m.activeWS().Panes.SetPalette(themePal)
+	perfhud.RecordStartupPhase("session-restore", time.Since(phase))
+	phase = time.Now()
 	m.scanRecovery()
 	m.scanTour()
 	m.scanOnboarding()
+	perfhud.RecordStartupPhase("recovery-scan", time.Since(phase))
 	m.wireEditorEmitters()
 	if themeWarning != "" {
 		m.host.Notify(host.Warn, themeWarning)
@@ -11582,6 +11590,12 @@ var renderNanos atomic.Int64
 func (m Model) render() string {
 	if m.width == 0 {
 		return "starting ike…"
+	}
+	// The first sized frame closes the startup measurement (#2260): everything
+	// after this point fills in asynchronously. The log write runs off the
+	// render path; ok is true exactly once per process.
+	if d, ok := perfhud.RecordFirstFrame(time.Now()); ok {
+		go logStartup(d)
 	}
 	start := time.Now()
 	defer func() {

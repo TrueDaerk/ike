@@ -16,6 +16,7 @@ import (
 	"ike/internal/diag"
 	"ike/internal/host"
 	"ike/internal/httpclient"
+	"ike/internal/perfhud"
 	"ike/internal/project"
 	"ike/internal/registry"
 	"ike/internal/version"
@@ -98,6 +99,10 @@ func mustGetwd() string {
 }
 
 func main() {
+	// Startup instrumentation (#2260): every coarse phase below stamps its
+	// wall-clock cost into the perf HUD's startup section; the first composed
+	// frame closes the measurement and logs one line to the state dir.
+	perfhud.StartupBegin(time.Now())
 	// CLI open targets (Roadmap 0270): `ike file.go:42` opens the file at that
 	// line. Parse argv up front so a malformed invocation fails before any UI.
 	inv, err := cli.Parse(os.Args[1:])
@@ -131,6 +136,7 @@ func main() {
 	// stored project falls back to cwd with a notice raised after the model
 	// exists.
 	restoreNotice := ""
+	phase := time.Now()
 	if len(inv.Targets) == 0 && !inv.Stdin {
 		if root, notice := project.RestoreLastRoot(config.Discover("."), mustGetwd()); root != "" {
 			if err := os.Chdir(root); err != nil {
@@ -145,6 +151,7 @@ func main() {
 	// configuration (Roadmap 0090: the initial open counts as an open). A
 	// failure is non-fatal — history is a convenience, not a startup gate.
 	_ = project.RecordOpen(config.Discover("."), ".", time.Now())
+	perfhud.RecordStartupPhase("project-history", time.Since(phase))
 	// Under bubbletea v2 the alternate screen and mouse cell-motion reporting
 	// (which drives the pane drag/resize layout, Roadmap 0036) are declared on the
 	// model's View, not via program options. See app.Model.View.
@@ -154,6 +161,7 @@ func main() {
 	// module is skipped with a diagnostic; a missing directory is normal. The
 	// host adapter binds to the live host below, once the model exists.
 	ctx := context.Background()
+	phase = time.Now()
 	wasmRT := wasm.NewRuntime(ctx, nil)
 	defer wasmRT.Close()
 	// Large HTTP response bodies are spooled to a per-process temp directory
@@ -170,18 +178,23 @@ func main() {
 	for _, diag := range bridge.RegisterModules(ctx, wasmRT, registry.Global()) {
 		fmt.Fprintln(os.Stderr, "ike:", diag)
 	}
+	perfhud.RecordStartupPhase("wasm-plugins", time.Since(phase))
 
+	phase = time.Now()
 	m := app.New()
+	perfhud.RecordStartupPhase("model-build", time.Since(phase))
 	if restoreNotice != "" {
 		m.Host().Notify(host.Info, restoreNotice)
 	}
 	// Open the CLI targets after construction: session restore already ran, so
 	// the requested files win focus over the restored layout.
+	phase = time.Now()
 	m = m.OpenCLITargets(inv.Targets)
 	if inv.Stdin {
 		// The scratch buffer opens after the file targets and wins focus.
 		m = m.OpenStdinBuffer(stdinText)
 	}
+	perfhud.RecordStartupPhase("cli-open", time.Since(phase))
 	wasmHost.SetAPI(m.Host())
 	// The mouse coalescer (#602) folds wheel/motion bursts before Update so they
 	// never queue ahead of keystrokes; it re-injects the folded batch via the
