@@ -1184,3 +1184,30 @@ func feedIgnore(w *watch.Service) func(string) bool {
 		return watch.Ignored(root, path)
 	}
 }
+
+// changeFeedClickRow maps a body row of the feed panel onto an entry (#2275):
+// the rendered lines are changeFeedRows() one for one — the mini-diff column
+// beside them shares those rows, so a click anywhere on the line picks the
+// same file — while group titles, the detail line and the key hints below the
+// list are inert. A click selects; a click on the already-selected entry opens
+// it, the panel's enter.
+func (m Model) changeFeedClickRow(row int) (tea.Model, tea.Cmd) {
+	rows := m.changeFeedRows()
+	if row < 0 || row >= len(rows) || rows[row].entry < 0 {
+		return m, nil
+	}
+	i := rows[row].entry
+	if i == m.cfSel {
+		e := m.cfEntries[i]
+		m.closeChangeFeed()
+		if e.Kind == changefeed.Removed {
+			m.host.Notify(host.Warn, displayPath(e.Path)+" no longer exists — r restores it from the feed")
+			return m, nil
+		}
+		return m.openPathInEditor(e.Path)
+	}
+	m.cfSel = i
+	m.refreshChangeFeedDiff()
+	m.setChangeFeedContent()
+	return m, nil
+}

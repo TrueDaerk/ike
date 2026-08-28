@@ -9793,23 +9793,22 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			bx, by := (m.width-w)/2, (m.height-h)/2
 			if sx, sy, ok := ui.ResizeZone(msg.X-bx, msg.Y-by, w, h); ok {
 				m.floatDrag = &floatResizeDrag{kind: "shell", sx: sx, sy: sy, lastX: msg.X, lastY: msg.Y}
-			} else if top == m.shell && m.layoutSelectOpen() {
-				// The save-layout mini-map (#1570): a click on a cell focuses
-				// and toggles that pane.
-				ox, oy := m.shell.ContentOrigin()
-				m.layoutSelectClick(msg.X-bx-ox, msg.Y-by-oy+m.shell.ScrollOffset())
-			} else if top == m.shell && m.generateScratchOpen() {
-				// The test-data wizard (#2228): the click acts on the hit
-				// region the last render recorded for that body line.
-				ox, oy := m.shell.ContentOrigin()
-				out, cmd, _ := m.mouseGenerateScratch(msg, msg.X-bx-ox, msg.Y-by-oy+m.shell.ScrollOffset())
-				return out, cmd
-			} else if top == m.shell && m.scratchManagerOpen() {
-				// The scratch manager (#2256) hit-tests its rows and buttons
-				// the same way.
-				ox, oy := m.shell.ContentOrigin()
-				out, cmd, _ := m.mouseScratchManager(msg, msg.X-bx-ox, msg.Y-by-oy+m.shell.ScrollOffset())
-				return out, cmd
+				return m, nil
+			}
+			// Everything inside the ring is a body press, and the shell owns
+			// the coordinate math for it (#2275): BodyPoint maps the box-local
+			// cell onto body-local content coordinates — chrome origin plus
+			// the rows scrolled off the top — so no picker repeats it here.
+			// Content that carries the hit-test itself (ui.RowClickable) is
+			// asked first; the value-model pickers dispatch through
+			// shellBodyClick, which mutates the model in place.
+			if cmd, handled := top.ClickRow(msg.X-bx, msg.Y-by); handled {
+				return m, cmd
+			}
+			if cx, cy, ok := top.BodyPoint(msg.X-bx, msg.Y-by); ok && top == m.shell {
+				if out, cmd, handled := m.shellBodyClick(msg, cx, cy); handled {
+					return out, cmd
+				}
 			}
 		}
 		return m, nil

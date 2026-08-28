@@ -404,3 +404,59 @@ func (f *Floating) margin() int {
 	}
 	return f.cfg.Margin
 }
+
+// RowClickable is an optional Content extension (#2275): content that can map
+// a rendered body row back onto one of its items handles a left press on the
+// shell body itself. The shell owns the coordinate math — chrome origin plus
+// scroll offset — and hands the content the body-local row it produced; the
+// content answers with the command the click should run (nil when the row is
+// a heading, a separator or the blank tail, which are inert).
+type RowClickable interface {
+	Content
+	// ClickRow acts on the 0-based row of the rendered body under the
+	// pointer, returning any command the click produced.
+	ClickRow(row int) tea.Cmd
+}
+
+// BodyPoint maps a box-local press — the shell box's top-left cell is (0, 0),
+// which is what the host gets after subtracting the centered box origin —
+// onto body-local content coordinates, adding back the rows scrolled off the
+// top. It reports ok=false when the shell is closed or the press landed on
+// the chrome (border, padding, heading rows) rather than the body.
+//
+// This is the single place the mapping lives (#2275): before it every hosted
+// picker that wanted a click repeated `msg.Y - by - oy + ScrollOffset()` in
+// the root model's mouse handler.
+func (f *Floating) BodyPoint(x, y int) (int, int, bool) {
+	if !f.open || f.content == nil {
+		return 0, 0, false
+	}
+	ox, oy := f.ContentOrigin()
+	if x < ox || y < oy {
+		return 0, 0, false
+	}
+	return x - ox, y - oy + f.ScrollOffset(), true
+}
+
+// BodyRow is BodyPoint's row half, for the common list-shaped picker whose
+// hit-test only needs the line under the pointer.
+func (f *Floating) BodyRow(x, y int) (int, bool) {
+	_, row, ok := f.BodyPoint(x, y)
+	return row, ok
+}
+
+// ClickRow routes a box-local left press through BodyRow to a RowClickable
+// content, reporting whether the seam handled it. Content that does not
+// implement the seam reports handled=false, so the host can fall back to its
+// own routing.
+func (f *Floating) ClickRow(x, y int) (tea.Cmd, bool) {
+	rc, ok := f.content.(RowClickable)
+	if !ok {
+		return nil, false
+	}
+	row, ok := f.BodyRow(x, y)
+	if !ok {
+		return nil, false
+	}
+	return rc.ClickRow(row), true
+}

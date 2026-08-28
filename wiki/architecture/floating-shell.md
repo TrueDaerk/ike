@@ -4,7 +4,7 @@ title: Floating Shell
 description: Reusable centered overlay component — a content-sized box composited on the active layout that hosts any tea.Model-shaped content, owning chrome, sizing, scroll, and dismissal.
 resource: internal/ui/floating.go
 tags: [architecture, overlay, modal, floating, reusable, bubbletea]
-timestamp: 2026-08-28T12:00:00Z
+timestamp: 2026-08-28T18:00:00Z
 ---
 
 # Floating Shell
@@ -64,8 +64,8 @@ title row, clamped by an optional max width fraction), hands it to
 view-only model (`func() string`) into `Content`, ignoring the width budget — it
 is the seam that lets a plugin float its `plugin.Pane` as a modal for free.
 
-Two optional Content extensions refine key routing while the shell is open
-(checked in this order: filter → dismiss → key handler → scroll):
+Three optional Content extensions refine input routing while the shell is open.
+Keys are checked in this order — filter → dismiss → key handler → scroll:
 
 - **`ui.Filterable`** (#271): printable keys become a live filter string
   instead of scroll keys; `esc` first clears an active filter.
@@ -75,6 +75,11 @@ Two optional Content extensions refine key routing while the shell is open
   `false` falls through to the scroller. This lets content own view toggles
   (help's essentials/all `tab` switch) or paging keys without the shell
   knowing about them. Dismiss keys never reach the content.
+- **`ui.RowClickable`** (#2275): the pointer's equivalent — `ClickRow(row) tea.Cmd`
+  receives the body-local row a left press landed on, so content that keeps a
+  list and a cursor can map the click onto an item. The shell owns the
+  coordinate math (`BodyPoint`/`BodyRow`, below); the content only answers what
+  the row means, returning nil for a heading, a separator or the blank tail.
 
 ## Sizing & scrolling
 
@@ -89,10 +94,13 @@ Two optional Content extensions refine key routing while the shell is open
   the pointer half of the same scroller — the root model routes a notch over
   the topmost open layer to it, clamped at both ends. Like the editor's wheel
   it moves the view alone: a hosted picker's own cursor stays put until the
-  next key press pulls the window back to it. Clicking a *row* inside a
-  hosted picker is still not possible — the shell sees its content as opaque
-  text, so it has no way to map a clicked line onto an item
-  (see /architecture/mouse.md; tracked as #2275).
+  next key press pulls the window back to it. **`BodyPoint(x, y)`** (#2275) is
+  the hit-test half: it maps a box-local press onto body-local content
+  coordinates, subtracting the chrome origin (`ContentOrigin`) and adding
+  `ScrollOffset()` back, and `BodyRow` is its row-only form. That is the single
+  place the mapping lives — the root model calls it once for every press inside
+  the box and routes the row on, either to `RowClickable` content or to the
+  hosted picker that owns the shell (see /architecture/mouse.md).
 - **User resize** (#774): `cmd+shift+arrows (macOS; spelled shift+super) / ctrl+shift+arrows / alt+shift+arrows` (CSI-parameter-encoded, so
   delivered everywhere) adjust the open shell's content budget; the delta is
   persisted per content title in the per-project `winsize.json` store

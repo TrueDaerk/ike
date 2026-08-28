@@ -13,6 +13,7 @@ import (
 	"ike/internal/backup"
 	"ike/internal/diff"
 	"ike/internal/host"
+	"ike/internal/ui"
 )
 
 // recovery.go is the crash-recovery restore flow (Roadmap 0210, #166, #2160).
@@ -494,4 +495,24 @@ func recoveryName(snap backup.Snapshot) string {
 		return "untitled buffer"
 	}
 	return filepath.Base(snap.Path)
+}
+
+// recoveryClickRow maps a body row of the restore dialog onto a snapshot
+// (#2275): the intro line and its blank spacer occupy rows 0 and 1, the
+// recoverable files follow, and the diff preview plus the key legend below
+// them are inert. The dialog has no enter action — r restores, d discards — so
+// like the doctor panes a click selects and nothing more.
+func (m Model) recoveryClickRow(row int) (tea.Model, tea.Cmd) {
+	rc := m.recovery
+	if rc == nil {
+		return m, nil
+	}
+	const recoveryHeadRows = 2 // "A previous session…" plus its blank spacer
+	i, ok := ui.RowAt(row, 0, recoveryHeadRows, len(rc.items), len(rc.items))
+	if !ok || i == rc.cursor {
+		return m, nil
+	}
+	rc.cursor = i
+	m.refreshRecoveryDiff()
+	return m, nil
 }

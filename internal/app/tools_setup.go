@@ -209,3 +209,29 @@ func (m Model) closeToolSetup() tea.Model {
 	m.advanceSetup()
 	return m
 }
+
+// toolSetupHeadRows is how many body lines sit above the first tool row: the
+// three intro lines plus their blank spacer. The pointer hit-test (#2275)
+// counts them off, so it must move with toolSetupBody.
+const toolSetupHeadRows = 4
+
+// toolSetupClickRow maps a body row of the tool-pane dialog onto a checkbox
+// row (#2275), the onboarding dialog's twin: a click selects, a click on the
+// already-selected row toggles its checkbox (space). Intro lines and the
+// legend are inert.
+func (m Model) toolSetupClickRow(row int) (tea.Model, tea.Cmd) {
+	ts := m.toolSetup
+	if ts == nil {
+		return m, nil
+	}
+	i, ok := ui.RowAt(row, 0, toolSetupHeadRows, len(ts.rows), len(ts.rows))
+	if !ok {
+		return m, nil
+	}
+	if i == ts.cursor {
+		ts.rows[i].checked = !ts.rows[i].checked
+		return m, nil
+	}
+	ts.cursor = i
+	return m, nil
+}

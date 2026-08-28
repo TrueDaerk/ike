@@ -4,7 +4,7 @@ title: Mouse Gestures
 description: The one convention every surface obeys for the wheel, the click and the double click, the shared list-mouse helpers behind it, and the audited surface×gesture matrix.
 resource: internal/ui/listmouse.go
 tags: [architecture, ui, mouse, lists, navigation, reusable]
-timestamp: 2026-08-28T12:00:00Z
+timestamp: 2026-08-28T18:00:00Z
 ---
 
 # Mouse Gestures
@@ -60,9 +60,12 @@ For **transient overlays** (the command palette, Search Everywhere, the
 find-in-path finder, the settings panel, the floating-shell pickers) the
 activation rule is deliberately looser: a **single click on a row picks it**,
 because an overlay exists to choose exactly one thing and then close. The
-finder and the settings panel use the press-again variant — the first click
-selects, any later click on the already-selected row opens it — which a double
-click satisfies too. Wheel and hit-test rules are the same as everywhere else.
+finder, the settings panel and the floating-shell pickers use the press-again
+variant — the first click selects, any later click on the already-selected row
+opens it — which a double click satisfies too. Wheel and hit-test rules are the
+same as everywhere else. A shell-hosted picker with no `enter` action (crash
+recovery, whose per-file keys are `r`/`d`/`s`) selects only, and one whose rows
+are checkboxes (the setup wizards) activates by toggling the box.
 
 Horizontal panning (the horizontal wheel, and `shift`+wheel on terminals that
 send no horizontal events) is a **viewer** gesture, not a list one: the editor,
@@ -103,6 +106,29 @@ type ClickTracker struct{ … }
 Coordinates are **pane-content-local** throughout — `y 0` is the pane's first
 rendered line — and the app translates screen cells into them once, in
 `paneClick`.
+
+The floating shell has the same seam for the pickers it hosts (#2275). The
+shell renders its content as opaque text into a scroller, so it cannot map a
+clicked line onto an item by itself; what it *can* own is the arithmetic:
+
+```go
+// internal/ui/floating.go
+(*Floating).BodyPoint(x, y int) (int, int, bool)   // box-local cell → body-local x/y + scroll offset
+(*Floating).BodyRow(x, y int) (int, bool)          // its row half
+(*Floating).ClickRow(x, y int) (tea.Cmd, bool)     // routed to RowClickable content
+
+type RowClickable interface { Content; ClickRow(row int) tea.Cmd }
+```
+
+`BodyPoint` subtracts the chrome origin (`ContentOrigin`: border + padding +
+the heading rows) and adds `ScrollOffset()` back, so a picker sees the content
+row it drew regardless of where the box sits or how far it is scrolled. The
+root model calls it once in `handleMouse` and hands the result to
+`shellBodyClick` (`internal/app/shell_rowclick.go`), which dispatches to the
+picker that owns the shell; each picker's `…ClickRow` is the inverse of its
+render loop. Content that can answer for itself implements `RowClickable`
+instead — the root model is a value model, so its own pickers cannot mutate
+state from inside a Content snapshot and go through the dispatcher.
 
 ## Surface × gesture matrix
 
@@ -155,22 +181,13 @@ and is listed so the next change has a baseline.
 | TODO index | ✅ | ✅ | (single click picks) |
 | Undo tree | ✅ | ✅ | (single click picks) |
 | Settings panel | ✅ | ✅ rows, hover, border resize drag | (press-again covers it) |
-| Floating-shell pickers | ❌ → ✅ scrolls the shell viewport | ⚠️ border resize and the two wizards only (#2275) | — |
+| Floating-shell pickers | ✅ scrolls the shell viewport | ✅ picks the row (#2275), group titles/legends inert, border resize drag | (press-again covers it) |
 | Menu bar / dropdowns | — | ✅ opens, hover selects, invokes | — |
 | Context menu | — | ✅ hover, invoke, press outside dismisses | — |
 | Status line | — | ✅ clickable segments dispatch their command | — |
 | Large-file banner | — | ✅ `✕` dismisses, body forces code insight | — |
 | Popup terminal box / floating panels | ✅ scrollback per side | ✅ tab activate, `✕` closes, ❌ → ✅ middle closes, title drag moves, border resizes | — |
 | Floating windows | ✅ per layer | ✅ title-bar drag moves, border ring resizes | — |
-
-### Known remaining gap
-
-**Row clicks inside floating-shell pickers.** The shell renders its content as
-opaque text into a scroller, so it cannot map a clicked line back to an item
-without a per-picker hit-test seam — roughly fifteen pickers (pins, local
-history, VCS history, crash recovery, the setup wizards) would each need one.
-The wheel now scrolls them; clicking a row still does not select it, and the
-keyboard remains the way to drive them. Tracked as #2275.
 
 ## See also
 

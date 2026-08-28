@@ -10,6 +10,7 @@ import (
 
 	"ike/internal/diff"
 	ilsp "ike/internal/lsp"
+	"ike/internal/ui"
 )
 
 // lsprenamepreview.go is the multi-file rename confirmation (#2149). A rename
@@ -245,4 +246,35 @@ func (m Model) closeLSPRenamePreview() Model {
 	m.lspRenamePreview = nil
 	m.shell.Close()
 	return m
+}
+
+// lspRenamePreviewHeadRows is how many body lines sit above the first file
+// row: the headline plus its blank spacer. The pointer hit-test (#2275) counts
+// them off, so it must move with lspRenamePreviewBody.
+const lspRenamePreviewHeadRows = 2
+
+// lspRenamePreviewClickRow maps a body row of the rename dialog onto an
+// affected file (#2275); the headline, the diff preview and the legend are
+// inert. A click selects, refreshing the diff beneath it; a click on the
+// already-selected file applies the rename, the dialog's enter.
+func (m Model) lspRenamePreviewClickRow(row int) (tea.Model, tea.Cmd) {
+	p := m.lspRenamePreview
+	if p == nil {
+		return m, nil
+	}
+	i, ok := ui.RowAt(row, 0, lspRenamePreviewHeadRows, len(p.files), len(p.files))
+	if !ok {
+		return m, nil
+	}
+	if i == p.cursor {
+		apply := p.apply
+		tm := m.closeLSPRenamePreview()
+		if apply == nil {
+			return tm, nil
+		}
+		return tm, apply()
+	}
+	p.cursor = i
+	m.refreshLSPRenamePreviewDiff()
+	return m, nil
 }

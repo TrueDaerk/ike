@@ -174,3 +174,26 @@ func (m Model) updateHistoryPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
+
+// historyPickerClickRow maps a body row of the range-history list onto a
+// commit (#2275): rows 0..n-1 are commits, the truncation note and the key
+// hints below them are inert, and the patch view has no rows to click at all.
+// A click selects; a click on the already-selected commit shows its patch,
+// the picker's enter.
+func (m Model) historyPickerClickRow(row int) (tea.Model, tea.Cmd) {
+	if m.histPatch || row < 0 || row >= len(m.histResult.Entries) {
+		return m, nil
+	}
+	if row == m.histSel {
+		m.histPatch = true
+		e := m.histResult.Entries[m.histSel]
+		m.shell.SetContent(ui.ModelContent{
+			Heading: historyHeading + e.ShortHash + " — " + e.Subject,
+			Body:    m.renderHistoryPatch,
+		})
+		return m, nil
+	}
+	m.histSel = row
+	m.setHistoryListContent()
+	return m, nil
+}
