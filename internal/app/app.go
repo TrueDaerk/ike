@@ -2918,6 +2918,11 @@ func (m Model) terminalTitle(inst *pane.Instance) string {
 	for _, mp := range activeMappings() {
 		title += " · " + mp.Lang + "→" + project.CompactPath(mp.Interpreter)
 	}
+	// Copy mode (#2162): the pane chrome names the mode so the detached
+	// keyboard state is visible beyond the in-pane status row.
+	if t.Copying() {
+		title += " · COPY"
+	}
 	return title + termExitedTitle(t)
 }
 
@@ -3001,6 +3006,15 @@ func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 		// the chord stays with the child; outside terminals it has no
 		// global binding.
 		if term := m.activeWS().Panes.FocusedInstance().ActiveTerminal(); term != nil && term.StartLinkHints() {
+			return true, m, nil
+		}
+		return false, m, nil
+	case "cmd+shift+c":
+		// cmd+shift+c enters copy mode (#2162): the keyboard detaches from
+		// the PTY and vim motions cursor over the scrollback. Under an
+		// alt-screen or mouse-reporting child the chord stays with the
+		// child; outside terminals it has no global binding.
+		if term := m.activeWS().Panes.FocusedInstance().ActiveTerminal(); term != nil && term.StartCopyMode() {
 			return true, m, nil
 		}
 		return false, m, nil
@@ -5507,6 +5521,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if t := m.terminalModelForSession(msg.Key); t != nil {
 			t.OnOutput()
 		}
+		return m, nil
+
+	case terminal.CopiedMsg:
+		// A copy-mode yank (#2162): the text goes through the same clipboard
+		// funnel every pane copy uses — system clipboard plus the app-wide
+		// clipboard history (#2061).
+		m.copyToClipboard(msg.Text)
+		m.host.Notify(host.Info, "copied selection")
 		return m, nil
 
 	case terminal.AutoScrollMsg:

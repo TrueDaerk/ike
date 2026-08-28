@@ -81,6 +81,10 @@ type Model struct {
 	// the keyboard and lives behind a pointer so value-receiver View copies
 	// share it. See hints.go.
 	hints *linkHints
+	// Copy mode (#2162): open while non-nil; owns the keyboard completely
+	// and moves a cursor over the scrollback with vim motions. Behind a
+	// pointer for the same value-copy sharing. See copymode.go.
+	copy *copyMode
 	// sbGrab is the in-thumb grab offset of a scrollbar drag (#1368), see
 	// scrollbar.go.
 	sbGrab int
@@ -173,6 +177,7 @@ func (m *Model) StartCommand(key string, argv []string, dir string, extraEnv []s
 	}
 	m.scroll = 0
 	m.search = nil
+	m.copy = nil
 	m.ClearSelection()
 	m.occupied = false
 	m.err = ""
@@ -278,8 +283,13 @@ func (m *Model) SetPalette(p *theme.Palette) {
 func (m *Model) SetSize(w, h int) {
 	m.w, m.h = w, h
 	// The hint labels were placed over a viewport of the old geometry
-	// (#2254); a reflow moves the rows out from under them.
+	// (#2254); a reflow moves the rows out from under them. Copy mode's
+	// cursor and window are virtual line indices a width reflow rewrites
+	// (#935), so it closes too rather than pointing at reshuffled lines.
 	m.hints = nil
+	if m.copy != nil {
+		m.exitCopyMode()
+	}
 	if m.sess != nil {
 		m.sess.Resize(m.gridW(), h)
 		// A width reflow rewrites the history, so the paging offset can end
@@ -360,6 +370,7 @@ func (m Model) Title() string {
 func (m *Model) Clear() {
 	m.scroll = 0
 	m.search = nil // the history it searched is gone (#1169)
+	m.copy = nil   // so is the buffer copy mode cursored over (#2162)
 	m.ClearSelection()
 	if m.sess != nil {
 		m.sess.Clear()
@@ -405,6 +416,11 @@ func (m *Model) Close() {
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	if m.sess == nil {
 		return nil
+	}
+	// Copy mode (#2162) owns the keyboard completely while open: every key
+	// is consumed by the mode — nothing can leak into the shell.
+	if m.copy != nil {
+		return m.copyKey(msg)
 	}
 	// The scrollback search (#1169) owns the keyboard while open; `/` opens
 	// it only in the scrolled plain-shell state (searchCaptures) — at the live
@@ -969,6 +985,10 @@ func (m *Model) MouseWheel(x, y, delta int) {
 	up := delta > 0
 	lines, events := wheelChildBudget(delta)
 	switch {
+	// Copy mode (#2162) keeps the wheel for its own window: paging moves
+	// the anchored view, the cursor following.
+	case m.copy != nil:
+		m.copyWheel(delta)
 	// A finished session keeps the wheel for its own scrollback (#1951):
 	// forwarding it to the child that exited in mouse-reporting or
 	// alt-screen mode would scroll nothing at all.
@@ -1016,6 +1036,17 @@ func wheelChildBudget(delta int) (lines, events int) {
 // (#1882) when one is up, otherwise forwards it through the bracketed-paste
 // path to the shell.
 func (m *Model) PasteText(text string) {
+	// Copy mode (#2162): a paste edits the open query line; anywhere else in
+	// the mode it is inert — nothing may reach the detached shell.
+	if c := m.copy; c != nil {
+		if c.input {
+			out, ncur, changed := ui.PasteText(c.query, c.qpos, text)
+			if changed {
+				c.query, c.qpos = out, ncur
+			}
+		}
+		return
+	}
 	if m.search != nil {
 		out, ncur, changed := ui.PasteText(m.search.query, m.search.pos, text)
 		if changed {
@@ -1068,6 +1099,12 @@ func (m Model) View() string {
 func (m Model) baseView() string {
 	if m.sess == nil {
 		return "terminal failed: " + m.err
+	}
+	// Copy mode (#2162) owns the display while it owns the keyboard: the
+	// windowed buffer with cursor, selection and match highlights, plus the
+	// mode's status row.
+	if m.copy != nil {
+		return m.copyView()
 	}
 	if m.scroll > 0 {
 		view := m.scrolledView()
