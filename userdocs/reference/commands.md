@@ -190,6 +190,7 @@ bring their own.
 | Generate Test Data: XML | `scratch.generate.xml` | — | — | everywhere |
 | Generate Test Data: YAML | `scratch.generate.yaml` | — | — | everywhere |
 | Open Scratch File… | `scratch.list` | — | — | everywhere |
+| Manage Scratch Files… | `scratch.manage` | — | — | everywhere |
 | New Scratch File… | `scratch.new` | `cmd+shift+n` | — | everywhere |
 | New Scratch File: CSS | `scratch.new.css` | — | — | everywhere |
 | New Scratch File: CSV | `scratch.new.csv` | — | — | everywhere |

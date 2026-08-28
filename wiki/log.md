@@ -27,6 +27,28 @@
 - **Setting**: `marketplace.auto_check` (user scope, default on) in config and
   under Settings ▸ Marketplace Catalog.
 
+## 2026-08-28 (Scratch files: manager with rename, delete, language change, #2256)
+
+- **The manager** (`internal/app/scratch_manager.go`): `scratch.manage`
+  ("Manage Scratch Files…", palette + File menu) lists the whole store in a
+  floating shell dialog with name, language, size and last-modified, narrowed
+  by a `ui.SpeedSearch` type-ahead over name *and* language; `enter` (or a
+  second click on a row) opens through the standard funnel.
+- **Actions are chords, not letters** — a letter belongs to the type-ahead:
+  `ctrl+r`/`f2` renames (prefilled, validated by the store), `ctrl+l` opens the
+  language list, `ctrl+d`/`delete` deletes after a confirmation, `esc` clears
+  the query, walks a step back, then closes.
+- **Open buffers follow without new machinery**: mutations emit
+  `explorer.FileMovedMsg` / `explorer.FileDeletedMsg`, so a scratch open in a
+  tab re-points (tab title and language follow via `editor.SetPath`) or closes
+  through the paths #175 already established.
+- **Store** (`internal/scratch`): `Entry` carries the file's `Size`, and
+  `SetExt` expresses the language change as what it is — keep the stem, swap
+  the extension — running through `Rename` so its guards (no overwrite, no
+  traversal, nothing outside the store) hold unchanged.
+- **Reachable from the creation flow**: the `scratch.new` language picker has
+  an "Open existing scratch…" row that runs the manager.
+
 ## 2026-08-28 (Bookmarks: descriptions and a project-wide overview, #2251)
 
 - **The overview** (`internal/app/bookmarks_overview.go`, `bookmark.overview`):
