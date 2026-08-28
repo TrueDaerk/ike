@@ -18,6 +18,8 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/issuefilter"
 )
 
 // qualifier is one recognized, terminated token: the canonical dimension it
@@ -27,25 +29,43 @@ type qualifier struct {
 	value string
 }
 
-// qualNames is what the name completion offers, in offer order.
-var qualNames = []string{"is:", "label:", "sort:", "state:"}
+// qualNames is what the name completion offers, in offer order: every
+// spelling the shared schema accepts (#2156), sorted.
+var qualNames = sortedStrings(issuefilter.Schema.Names())
 
-// stateValues are the state gate's value candidates, sorted.
-var stateValues = []string{"all", "closed", "open"}
+// stateValues are the state gate's value candidates, sorted. Like every
+// vocabulary here it is read off issuefilter.Schema — the live input and the
+// config reader cannot drift, because there is only one list (#2156).
+var stateValues = sortedStrings(schemaValues("is"))
 
-// sortValues lists the sort order names, sorted for the completion.
-func sortValues() []string {
-	out := make([]string, 0, len(sortOrders))
-	for _, o := range sortOrders {
-		out = append(out, o.String())
+// schemaValues returns one schema field's vocabulary, nil when the field is
+// free-form or absent.
+func schemaValues(name string) []string {
+	f, ok := issuefilter.Schema.Lookup(name)
+	if !ok {
+		return nil
 	}
+	return f.Values
+}
+
+// sortedStrings returns a sorted copy of list.
+func sortedStrings(list []string) []string {
+	out := append([]string(nil), list...)
 	sort.Strings(out)
 	return out
 }
 
+// sortValues lists the sort order names, sorted for the completion.
+func sortValues() []string { return sortedStrings(schemaValues("sort")) }
+
 // splitTokens cuts the match line into space-separated tokens, keeping quoted
 // spans (label:"help wanted") together, and reports whether the line ends in a
 // separator space — the terminator that turns the last token into a qualifier.
+//
+// It is the live-input twin of filterexpr.Tokenize (#2156): the same splitting
+// and quoting rules, but a half-typed unterminated quote is tolerated rather
+// than an error, and the trailing separator is reported so the token still
+// being typed can be left alone.
 func splitTokens(input string) (toks []string, trailingSpace bool) {
 	var cur []rune
 	inQuote := false
@@ -88,28 +108,40 @@ func parseQualifier(tok string) (q qualifier, ok bool, note string) {
 		}
 	}
 	val := unquote(tok[i+1:])
-	switch name {
+	f, known := issuefilter.Schema.Lookup(name)
+	if !known {
+		return qualifier{}, false, "unknown qualifier \"" + name + ":\" — matched literally"
+	}
+	switch f.Name {
 	case "label":
 		if val == "" {
 			return qualifier{}, false, "label: wants a label name"
 		}
 		return qualifier{name: "label", value: val}, true, ""
-	case "is", "state":
-		for _, s := range stateValues {
-			if val == s {
-				return qualifier{name: "state", value: val}, true, ""
-			}
+	case "is":
+		// The overlay's own name for the dimension is "state"; "is" is the
+		// spelling the shared schema canonicalizes on.
+		if !inList(f.Values, val) {
+			return qualifier{}, false, name + ": wants open, closed or all"
 		}
-		return qualifier{}, false, name + ": wants open, closed or all"
+		return qualifier{name: "state", value: val}, true, ""
 	case "sort":
-		for _, o := range sortOrders {
-			if val == o.String() {
-				return qualifier{name: "sort", value: val}, true, ""
-			}
+		if !inList(f.Values, val) {
+			return qualifier{}, false, "sort: wants " + strings.Join(sortValues(), ", ")
 		}
-		return qualifier{}, false, "sort: wants " + strings.Join(sortValues(), ", ")
+		return qualifier{name: "sort", value: val}, true, ""
 	}
-	return qualifier{}, false, "unknown qualifier \"" + name + ":\" — matched literally"
+	return qualifier{}, false, ""
+}
+
+// inList reports whether v is in list.
+func inList(list []string, v string) bool {
+	for _, s := range list {
+		if s == v {
+			return true
+		}
+	}
+	return false
 }
 
 // extractQualifiers pulls every terminated valid qualifier out of input and

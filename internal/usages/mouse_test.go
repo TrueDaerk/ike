@@ -10,7 +10,7 @@ import (
 func mouseModel(t *testing.T) (*Model, *time.Time) {
 	t.Helper()
 	m := New(nil)
-	m.SetSize(80, 5) // body height 3
+	m.SetSize(80, 6) // title + filter + footer, body height 3
 	m.Set("Foo", []ilsp.Reference{
 		ref("/a.go", 1, 0, "one"),
 		ref("/a.go", 2, 0, "two"),
@@ -23,15 +23,15 @@ func mouseModel(t *testing.T) (*Model, *time.Time) {
 
 func TestClickSelectsDoubleClickActivates(t *testing.T) {
 	m, at := mouseModel(t)
-	// y 1 is the first row (the file header); y 2 the first reference.
-	if cmd := m.Click(4, 2); cmd != nil {
+	// y 2 is the first row (the file header); y 3 the first reference.
+	if cmd := m.Click(4, 3); cmd != nil {
 		t.Fatal("single click must only select")
 	}
 	if m.Cursor() != 1 {
 		t.Fatalf("cursor = %d, want 1", m.Cursor())
 	}
 	*at = at.Add(100 * time.Millisecond)
-	cmd := m.Click(4, 2)
+	cmd := m.Click(4, 3)
 	if cmd == nil {
 		t.Fatal("double click must activate")
 	}
@@ -41,7 +41,7 @@ func TestClickSelectsDoubleClickActivates(t *testing.T) {
 	}
 	// A slow second click on another run is a fresh selection.
 	*at = at.Add(time.Second)
-	if cmd := m.Click(4, 2); cmd != nil {
+	if cmd := m.Click(4, 3); cmd != nil {
 		t.Fatal("slow click must not activate")
 	}
 }
@@ -52,7 +52,7 @@ func TestClickOutsideRowsIgnored(t *testing.T) {
 	if cmd := m.Click(0, 0); cmd != nil || m.Cursor() != 0 {
 		t.Fatal("header-line click must be a no-op")
 	}
-	if cmd := m.Click(0, 4); cmd != nil {
+	if cmd := m.Click(0, 5); cmd != nil {
 		t.Fatal("footer click must be a no-op")
 	}
 }

@@ -11,8 +11,9 @@ import (
 // the hit-test and the double-click clock come from the shared list-mouse
 // layer (#2259).
 
-// headerRows is how many lines sit above the first list row.
-const headerRows = 1
+// headerRows is how many lines sit above the first list row: the title and
+// the filter row (#2156).
+const headerRows = 2
 
 // Wheel scrolls the list by delta rows (positive = down); the cursor is
 // dragged along so it stays inside the visible window.

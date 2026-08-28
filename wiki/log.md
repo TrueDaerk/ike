@@ -1,5 +1,36 @@
 # Log
 
+## 2026-08-28 (Unified list-filter syntax, #2156)
+
+- **One filter language** (`internal/filterexpr`): the fielded-term syntax the
+  Issues pane introduced (#2110/#2115) is now a leaf package every list pane
+  shares — tokenizer, quoting, `Schema`/`Field` validation with the error
+  wording, `Format`, and the two match helpers (`MatchText` over
+  `internal/fuzzy`, `MatchPath` over `internal/pathglob`). Terms of different
+  fields AND, repeats of one field OR, bare words are the fuzzy pattern.
+- **One filter row** (`internal/filterbar`): the permanent one-line input the
+  panes render, focused with `/` everywhere. `enter` applies, `esc` clears,
+  `tab` accepts the inline completion (field names from the schema, values
+  from the schema or the pane's own candidates); navigation keys fall through
+  so the list can be steered while typing, and a half-written expression
+  keeps the last good query instead of emptying the list.
+- **Issues migrated, unchanged**: `internal/issuefilter` is now the Issues
+  *dialect* (the `Schema` for `is:`/`label:`/`sort:` plus its `Spec` shape),
+  and the live match input resolves its qualifiers against that same schema,
+  so the pane and the config reader cannot drift. The conformance test and
+  every existing error message stand.
+- **Problems, Usages, TODO index gained the same syntax**: `severity:`
+  (alias `sev:`), `file:`, `code:`, `source:`, `scope:` in Problems;
+  `file:`, `text:` in Usages; `tag:`, `file:`, `scope:` in the TODO index.
+  Filtered-empty files drop out header and all, and the panes' visible
+  totals follow the filter.
+- **Single-key filters became sugar**: Problems' `f` writes `scope:file`
+  (still resolved against the *current* editor file, so the scope follows the
+  editor), the TODO index's `ctrl+t`/`ctrl+o` write `tag:`/`scope:file`, and
+  its chips row renders those terms rather than holding state beside them.
+- Docs: new [List Filter Syntax](/architecture/list-filters.md); Problems,
+  Usages, TODO index and Issues pages updated.
+
 ## 2026-08-28 (Unbound-command audit: defaults for the useful ones, #2305)
 
 - Second pass over the commands that ship without a default keybind. Thirteen

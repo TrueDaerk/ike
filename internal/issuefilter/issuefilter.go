@@ -1,5 +1,6 @@
-// Package issuefilter parses the filter expression the Issues tool window's
-// default filter and its named saved filters are written in (#2115).
+// Package issuefilter is the Issues pane's dialect of the shared filter
+// syntax (internal/filterexpr): the expression the pane's default filter and
+// its named saved filters are written in (#2115).
 //
 // The syntax is the one the filter overlay's match input already accepts
 // (#2110, internal/ghissues/qualifier.go), so an expression can be typed in
@@ -12,10 +13,14 @@
 // fuzzy match pattern, so a bare word means "match this". A value with spaces
 // is double-quoted.
 //
-// The one deliberate difference from the live input is strictness. In the
-// overlay an unknown qualifier stays literal fuzzy text — you are mid-typing
-// and can see it — while a config value has no reader to correct it, so here
-// it is an error the settings form and the config diagnostics can name.
+// Since #2156 the tokenizer, the quoting rules and the error wording live in
+// internal/filterexpr, shared with the Problems, Usages and TODO index panes;
+// this package is the Issues Schema over it plus the Spec shape its readers
+// want. The one deliberate difference from the live input is strictness. In
+// the overlay an unknown qualifier stays literal fuzzy text — you are
+// mid-typing and can see it — while a config value has no reader to correct
+// it, so here it is an error the settings form and the config diagnostics can
+// name.
 //
 // It is a leaf package on purpose: the config validator, the settings form
 // and the pane all read the same expression, so none of them owns the syntax.
@@ -25,6 +30,8 @@ package issuefilter
 import (
 	"fmt"
 	"strings"
+
+	"ike/internal/filterexpr"
 )
 
 // Spec is one parsed expression. Every field is optional — an empty Spec
@@ -55,46 +62,28 @@ var States = []string{"open", "closed", "all"}
 // list; the conformance test fails if the two ever drift.
 var SortOrders = []string{"relevance", "newest", "oldest", "updated", "number"}
 
+// Schema is the Issues pane's filter language, the single definition every
+// reader of the syntax resolves a qualifier against (#2156).
+var Schema = filterexpr.Schema{Fields: []filterexpr.Field{
+	{Name: "is", Aliases: []string{"state"}, Values: States, Doc: "state gate: open, closed or all"},
+	{Name: "label", ValueDoc: "a label name", Doc: "issue label, repeatable (OR)"},
+	{Name: "sort", Values: SortOrders, Doc: "list order"},
+}}
+
 // Parse reads one filter expression. It rejects an unknown qualifier, an
 // unknown value and an unterminated quote with a message naming what is
 // valid — the settings form shows it verbatim, so it has to read as advice.
 func Parse(expr string) (Spec, error) {
-	toks, err := tokenize(expr)
+	q, err := Schema.Parse(expr)
 	if err != nil {
 		return Spec{}, err
 	}
-	var spec Spec
-	var match []string
-	for _, t := range toks {
-		key, val, ok := qualifier(t)
-		if !ok {
-			match = append(match, t.text)
-			continue
-		}
-		switch key {
-		case "is", "state":
-			if !oneOf(val, States) {
-				return Spec{}, fmt.Errorf("%s: wants %s", key, strings.Join(States, ", "))
-			}
-			spec.State = val
-		case "label":
-			if val == "" {
-				return Spec{}, fmt.Errorf("label: wants a label name")
-			}
-			if !oneOf(val, spec.Labels) {
-				spec.Labels = append(spec.Labels, val)
-			}
-		case "sort":
-			if !oneOf(val, SortOrders) {
-				return Spec{}, fmt.Errorf("sort: wants %s", strings.Join(SortOrders, ", "))
-			}
-			spec.Sort = val
-		default:
-			return Spec{}, fmt.Errorf("unknown qualifier %q, use is:, label: or sort: — anything else is match text", key+":")
-		}
-	}
-	spec.Match = strings.Join(match, " ")
-	return spec, nil
+	return Spec{
+		State:  q.Value("is"),
+		Labels: q.Values("label"),
+		Sort:   q.Value("sort"),
+		Match:  q.Match,
+	}, nil
 }
 
 // ParseSaved reads one "name=expression" saved-filter entry (the
@@ -122,104 +111,16 @@ func ParseSaved(entry string) (string, Spec, error) {
 // Format writes a Spec back as an expression. It is the inverse of Parse for
 // every expression Parse accepts, up to qualifier order and quoting.
 func Format(s Spec) string {
-	var parts []string
+	var q filterexpr.Query
 	if s.State != "" {
-		parts = append(parts, "is:"+quote(s.State))
+		q.Terms = append(q.Terms, filterexpr.Term{Field: "is", Value: s.State})
 	}
 	for _, l := range s.Labels {
-		parts = append(parts, "label:"+quote(l))
+		q.Terms = append(q.Terms, filterexpr.Term{Field: "label", Value: l})
 	}
 	if s.Sort != "" {
-		parts = append(parts, "sort:"+quote(s.Sort))
+		q.Terms = append(q.Terms, filterexpr.Term{Field: "sort", Value: s.Sort})
 	}
-	if s.Match != "" {
-		parts = append(parts, s.Match)
-	}
-	return strings.Join(parts, " ")
-}
-
-// quote wraps a value in double quotes when it carries a space, so Format's
-// output parses back. Quotes are the only grouping the syntax has — there is
-// no escape, exactly as in the live match input.
-func quote(v string) string {
-	if !strings.ContainsAny(v, " \t") {
-		return v
-	}
-	return "\"" + strings.ReplaceAll(v, "\"", "") + "\""
-}
-
-// token is one tokenized word plus the byte offset of the first colon written
-// outside quotes (-1 when there is none). Quoting decides what is a
-// qualifier: label:"good first issue" splits at its unquoted colon, while a
-// fully quoted "fix:tests" is plain match text.
-type token struct {
-	text  string
-	colon int
-}
-
-// tokenize splits an expression on whitespace, keeping double-quoted runs
-// together. A quote may open mid-word (label:"good first issue"), which is
-// how a qualifier carries a value with spaces; the quotes themselves are
-// dropped from the token, mirroring the live input's unquote.
-func tokenize(expr string) ([]token, error) {
-	var out []token
-	var cur strings.Builder
-	inWord, inQuote := false, false
-	colon := -1
-	flush := func() {
-		if inWord {
-			out = append(out, token{text: cur.String(), colon: colon})
-			cur.Reset()
-			inWord, colon = false, -1
-		}
-	}
-	for _, r := range expr {
-		switch {
-		case r == '"':
-			inWord, inQuote = true, !inQuote
-		case !inQuote && (r == ' ' || r == '\t' || r == '\n' || r == '\r'):
-			flush()
-		default:
-			if r == ':' && !inQuote && colon < 0 {
-				colon = cur.Len()
-			}
-			inWord = true
-			cur.WriteRune(r)
-		}
-	}
-	if inQuote {
-		return nil, fmt.Errorf("unterminated quote")
-	}
-	flush()
-	return out, nil
-}
-
-// qualifier splits a token at its unquoted colon. It is a qualifier only when
-// that colon exists and the key before it is all ASCII letters (read
-// case-insensitively), so a bare match word carrying a colon ("fix#2:tests")
-// stays match text — the same rule the live input applies.
-func qualifier(t token) (string, string, bool) {
-	if t.colon < 0 {
-		return "", "", false
-	}
-	key, val := strings.ToLower(t.text[:t.colon]), t.text[t.colon+1:]
-	if key == "" {
-		return "", "", false
-	}
-	for _, r := range key {
-		if r < 'a' || r > 'z' {
-			return "", "", false
-		}
-	}
-	return key, val, true
-}
-
-// oneOf reports whether v is in list.
-func oneOf(v string, list []string) bool {
-	for _, s := range list {
-		if s == v {
-			return true
-		}
-	}
-	return false
+	q.Match = s.Match
+	return filterexpr.Format(q)
 }

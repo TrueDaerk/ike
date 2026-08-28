@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Usages Tool Window
-description: Singleton bottom-split pane holding the latest find-references result persistently — grouped by file, line:col + preview rows, enter/double-click jumps, 'r' re-runs the search; filled by lsp.referencesPanel while lsp.references keeps the quick palette (#1155), and by the palette overlays' Open in Find window hand-off (#2055).
+description: Singleton bottom-split pane holding the latest find-references result persistently — grouped by file, line:col + preview rows, enter/double-click jumps, '/' filters with the shared list-filter syntax, 'r' re-runs the search; filled by lsp.referencesPanel while lsp.references keeps the quick palette (#1155), by the palette overlays' Open in Find window hand-off (#2055), filtered like every list pane (#2156).
 resource: internal/usages/usages.go
-tags: [architecture, lsp, references, find-usages, tool-window, pane]
-timestamp: 2026-08-24T00:00:00Z
+tags: [architecture, lsp, references, find-usages, tool-window, pane, filter]
+timestamp: 2026-08-28T12:00:00Z
 ---
 
 # Usages Tool Window (#1155)
@@ -64,6 +64,16 @@ order, within-file order untouched); each reference row shows 1-based
   as `path:line:col  preview` (path project-relative), a file header as its
   path. The pane emits `usages.CopyMsg`; the root model writes it through the
   shared `copyToClipboard` seam and toasts "copied usage".
+- `/` focuses the **filter row** (#2156): the shared filter line
+  ([List Filter Syntax](./list-filters.md)) the Problems pane and the TODO
+  index wear too, permanent under the header so narrowing never shifts the
+  list. Its fields (`usages.Schema`) are `file:` — a path glob or substring,
+  repeatable (OR) — and `text:`, a substring of the source-line preview;
+  bare words are the fuzzy match text, run over the path and the preview
+  together. The pane keeps the unfiltered result set behind the filter, so
+  the title totals (`12 in 4 files`) describe what is visible and clearing
+  the filter restores every hit without re-running the request. `file:`
+  completion offers the files the result set covers.
 - `r` **refreshes**: it dispatches the carried `Refresh` continuation, which
   re-runs the references request for the stored `(path, position)` the
   result was created from. Best-effort by design: after edits the stored

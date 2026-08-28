@@ -4,7 +4,7 @@ title: Issues Tool Window
 description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select with an any-of/all-of switch) with a permanent chip row whose chips clear individually and a structured qualifier layer in the match input (label:/is:/sort: with inline tab completion) writing the same filter model, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, a consolidated key table with one meaning per letter family across all modes, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111, #2114, #2112, #2110).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane, keymap]
-timestamp: 2026-08-25T22:00:00Z
+timestamp: 2026-08-28T12:00:00Z
 ---
 
 # Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104, #2110, #2111, #2112, #2114)
@@ -553,6 +553,14 @@ saved_filters = ["triage=is:open label:bug", "stale=is:all sort:oldest flaky"]
   settings form and the config diagnostics name. `internal/issuefilter` is the
   strict reader; `ghissues/qualifier_conformance_test.go` pins the two
   implementations to each other, since the config layer cannot import the pane.
+- Since #2156 the syntax itself is not the Issues pane's own: the tokenizer,
+  the quoting rules, the schema validation and the error wording live in
+  `internal/filterexpr`, shared with the Problems and Usages panes and the
+  TODO index — see [List Filter Syntax](./list-filters.md).
+  `internal/issuefilter` is the Issues *dialect*: the `Schema` naming `is:`,
+  `label:` and `sort:` plus the `Spec` shape the config validator and the
+  settings form read. The live match input resolves its qualifiers against
+  that same schema, so the two readers cannot drift on which values exist.
 
 A saved filter is applied from the filter overlay's `saved` row — present
 only while any is configured, cycling over `(none)` plus the configured names
