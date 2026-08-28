@@ -239,6 +239,7 @@ reporting, which fewer terminals implement. See
 		{keymap.Editor, "Editor", "Active when an editor pane has focus."},
 		{keymap.Explorer, "Explorer", "Active when the file explorer has focus."},
 		{keymap.Diff, "Diff viewer", "Active when a diff pane has focus."},
+		{keymap.HTTP, "HTTP response viewer", "Active when the HTTP response pane has focus."},
 		{keymap.Palette, "Palette", "Active while the command palette is open."},
 	} {
 		rows := byContext[ctx.key]
@@ -279,7 +280,7 @@ the value is the command ID, and an empty value unbinds the chord:
 ` + "```" + `
 
 A chord may be qualified with the pane it applies in — ` + "`global`" + `, ` + "`editor`" + `,
-` + "`explorer`" + `, ` + "`palette`" + ` or ` + "`diff`" + ` — so one chord can run different
+` + "`explorer`" + `, ` + "`palette`" + `, ` + "`diff`" + ` or ` + "`http`" + ` — so one chord can run different
 commands depending on what has focus. The qualified form only touches its own
 context; the bare form applies wherever the chord is bound:
 
@@ -482,12 +483,22 @@ Your own configuration adds to this list: every tool pane you define under
 bring their own.`))
 
 	chords := map[string]string{}
+	chordGlobal := map[string]bool{}
 	for _, bd := range keymap.Defaults(keymap.PresetJetBrains) {
 		// Several chords can share a command (a JetBrains primary plus a
 		// deliverable fallback); the shortest is the one worth advertising.
-		if cur, ok := chords[bd.Command]; !ok || len(bd.Chord.String()) < len(cur) {
-			chords[bd.Command] = bd.Chord.String()
+		// A globally bound chord beats a shorter pane-scoped one either way
+		// (#2315): file.copyPath answers cmd+shift+c everywhere but cmd+c
+		// only in the explorer, and this column has no room for the caveat.
+		global := bd.Context == keymap.Global
+		cur, ok := chords[bd.Command]
+		switch {
+		case !ok, global && !chordGlobal[bd.Command]:
+		case global == chordGlobal[bd.Command] && len(bd.Chord.String()) < len(cur):
+		default:
+			continue
 		}
+		chords[bd.Command], chordGlobal[bd.Command] = bd.Chord.String(), global
 	}
 
 	cmds := reg.Commands()

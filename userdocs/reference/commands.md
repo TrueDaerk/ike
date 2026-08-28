@@ -109,6 +109,7 @@ bring their own.
 | Copy HTTP Response Body | `http.copyBody` | — | — | everywhere |
 | Copy Folded Range (HTTP Response) | `http.copyFold` | — | — | everywhere |
 | Copy HTTP Response Headers | `http.copyHeaders` | — | — | everywhere |
+| Copy HTTP Response Selection or Body | `http.copyResponse` | `cmd+c` | — | everywhere |
 | Copy Shown HTTP Request as curl | `http.copyShownAsCurl` | — | — | everywhere |
 | Diff HTTP Response Against Previous Run | `http.diffPreviousRun` | `cmd+shift+d` | — | everywhere |
 | Compare Stored HTTP Responses | `http.diffResponses` | — | — | everywhere |

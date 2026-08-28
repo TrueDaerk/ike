@@ -39,6 +39,11 @@ type HTTPRunMsg struct{}
 // clipboard (#1266).
 type HTTPCopyBodyMsg struct{}
 
+// HTTPCopyResponseMsg runs http.copyResponse: the response pane's own copy
+// key as a bound command (#2315) — the selection when the pane has one, else
+// the whole body.
+type HTTPCopyResponseMsg struct{}
+
 // HTTPCopyHeadersMsg runs http.copyHeaders: status line plus headers.
 type HTTPCopyHeadersMsg struct{}
 
@@ -620,6 +625,24 @@ func (m *Model) copyHTTPResponse(headers bool) tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg { return httppane.CopyMsg{Text: text, What: what} }
+}
+
+// copyHTTPResponseOrSelection runs http.copyResponse (#2315): cmd+c in the
+// response pane means what the pane's own copy key means — the live selection
+// when there is one, the whole body otherwise. The pane owns that choice, so
+// the host only forwards, and the copy travels the same CopyMsg path every
+// other response copy uses.
+func (m *Model) copyHTTPResponseOrSelection() tea.Cmd {
+	p := m.httpPanel()
+	if p == nil {
+		m.host.Notify(host.Info, "http: no response pane open")
+		return nil
+	}
+	cmd := p.CopyKeyCmd()
+	if cmd == nil {
+		m.host.Notify(host.Info, "http: nothing to copy")
+	}
+	return cmd
 }
 
 // copyHTTPFold runs http.copyFold (#1787): the response viewer's target fold

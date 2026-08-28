@@ -199,6 +199,10 @@ var reachableAlternatives = map[string]string{
 	"pane.close":          "palette / pane context menu",
 	"view.toggleWrap":     "palette",
 	"window.layouts":      "palette",
+	// #2315: the response viewer's copy also has its pane-local keys — "y"
+	// for the body, and ctrl+c once a selection exists (#2062) — either of
+	// which delivers on every terminal.
+	"http.copyResponse": "response pane \"y\" / palette",
 }
 
 // StatusMatrix builds the ledger over the default table. commandExists

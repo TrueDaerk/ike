@@ -210,6 +210,7 @@ Active when the file explorer has focus.
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| Copy path of the selected entry | `cmd+c` | `ctrl+c` | `file.copyPath` |
 | Redo file operation | `cmd+shift+z` | `ctrl+shift+z` | `explorer.redo` |
 | Redo file operation | `ctrl+shift+z` | `ctrl+shift+z` | `explorer.redo` |
 | Undo file operation | `cmd+z` | `ctrl+z` | `explorer.undo` |
@@ -223,6 +224,14 @@ Active when a diff pane has focus.
 |---|---|---|---|
 | Next change (diff) | `f7` | `f7` | `diff.nextChange` |
 | Previous change (diff) | `shift+f7` | `shift+f7` | `diff.prevChange` |
+
+## HTTP response viewer
+
+Active when the HTTP response pane has focus.
+
+| Action | macOS | Linux / Windows | Command |
+|---|---|---|---|
+| Copy response selection or body | `cmd+c` | `ctrl+c` | `http.copyResponse` |
 
 ## Palette
 
@@ -245,7 +254,7 @@ the value is the command ID, and an empty value unbinds the chord:
 ```
 
 A chord may be qualified with the pane it applies in — `global`, `editor`,
-`explorer`, `palette` or `diff` — so one chord can run different
+`explorer`, `palette`, `diff` or `http` — so one chord can run different
 commands depending on what has focus. The qualified form only touches its own
 context; the bare form applies wherever the chord is bound:
 
