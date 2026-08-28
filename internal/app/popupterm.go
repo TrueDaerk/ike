@@ -485,6 +485,27 @@ func (m Model) dragTerminal(key string) *terminal.Model {
 // scrollbar/links, the wheel pages the scrollback. Motion and release with an
 // active drag never reach this — the generic drag machinery owns them. done
 // reports whether the event was consumed.
+// popupBoxTabAt resolves a title-row hit on the popup box's tab bar: the tab
+// index and whether the press landed on its ✕ zone. Shared by the left-click
+// (activate / close) and middle-click (close, #2259) paths so the two can
+// never drift apart. lx is title-row-local, sw the box side's width.
+func (m Model) popupBoxTabAt(inst *pane.Instance, lx, sw int) (idx int, closeHit, ok bool) {
+	if inst.TabCount() <= 1 && !m.tabsAlwaysShow() {
+		return 0, false, false
+	}
+	// The broadcast marker (#1427) prefixes the title row, shifting the bar
+	// right by its width — mirror that in the hit test.
+	bx := lx
+	if m.popup.broadcast && m.popup.split != nil {
+		bx -= lipgloss.Width("⇉ ")
+	}
+	i, cl := tabHit(tabLabels(inst), inst.ActiveTab(), sw-paneChromeW, bx)
+	if i < 0 {
+		return 0, false, false
+	}
+	return i, cl, true
+}
+
 func (m Model) popupTermMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 	px, py, pw, ph := m.popupTermRect()
 	// Resolve the split side under the pointer (#1427): the x offset picks the
@@ -497,6 +518,22 @@ func (m Model) popupTermMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 	term := inst.ActiveTerminal()
 	lx, ly := msg.X-(sx+paneContentX), msg.Y-(py+paneContentY)
 	switch {
+	case msg.action == mousePress && msg.Button == tea.MouseMiddle && msg.Y == py+1:
+		// Middle click closes the tab under the pointer (#2259) — the editor
+		// tab bar's gesture, on the popup box's bar too. The active tab goes
+		// through the busy guard, like its ✕ does; the press claims the
+		// keyboard for its side first, exactly as a left press does, so the
+		// guard acts on the tab that was clicked.
+		m.setFloatFocus(nil)
+		m.setPopupFocus(right)
+		if idx, _, ok := m.popupBoxTabAt(inst, lx, sw); ok {
+			if idx == inst.ActiveTab() {
+				m.requestPopupTabClose()
+			} else {
+				m.closePopupTab(inst, idx)
+			}
+		}
+		return m, nil, true
 	case msg.action == mousePress && msg.Button == tea.MouseLeft:
 		// The border ring starts a mouse resize (#933), centered geometry.
 		if zx, zy, ok := ui.ResizeZone(msg.X-px, msg.Y-py, pw, ph); ok {
@@ -514,29 +551,20 @@ func (m Model) popupTermMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 		// through the busy guard, others directly) — or, outside every
 		// segment, the box move drag (#1793).
 		if msg.Y == py+1 {
-			if inst.TabCount() > 1 || m.tabsAlwaysShow() {
-				labels := tabLabels(inst)
-				// The broadcast marker (#1427) prefixes the title row, shifting
-				// the bar right by its width — mirror that in the hit test.
-				bx := lx
-				if m.popup.broadcast && m.popup.split != nil {
-					bx -= lipgloss.Width("⇉ ")
+			if idx, closeHit, ok := m.popupBoxTabAt(inst, lx, sw); ok {
+				switch {
+				case !closeHit:
+					inst.ActivateTab(idx)
+					// Engaged, the drag tears the tab out of the box —
+					// into another layer box or its own floating panel.
+					m.drag = &dragState{kind: dragTab, srcPane: popupPaneKey, srcInst: inst, srcTab: idx,
+						curX: msg.X, curY: msg.Y, startX: msg.X, startY: msg.Y}
+				case idx == inst.ActiveTab():
+					m.requestPopupTabClose()
+				default:
+					m.closePopupTab(inst, idx)
 				}
-				if idx, closeHit := tabHit(labels, inst.ActiveTab(), sw-paneChromeW, bx); idx >= 0 {
-					switch {
-					case !closeHit:
-						inst.ActivateTab(idx)
-						// Engaged, the drag tears the tab out of the box —
-						// into another layer box or its own floating panel.
-						m.drag = &dragState{kind: dragTab, srcPane: popupPaneKey, srcInst: inst, srcTab: idx,
-							curX: msg.X, curY: msg.Y, startX: msg.X, startY: msg.Y}
-					case idx == inst.ActiveTab():
-						m.requestPopupTabClose()
-					default:
-						m.closePopupTab(inst, idx)
-					}
-					return m, nil, true
-				}
+				return m, nil, true
 			}
 			m.floatMove = &floatMoveDrag{lastX: msg.X, lastY: msg.Y}
 			return m, nil, true

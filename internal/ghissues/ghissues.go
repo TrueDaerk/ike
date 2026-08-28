@@ -380,14 +380,13 @@ type Model struct {
 	filterTouched bool
 
 	// Double-click detection mirrors the Usages panel (#514).
-	lastClickRow int
-	lastClickAt  time.Time
-	now          func() time.Time
+	clicks ui.ClickTracker
+	now    func() time.Time
 }
 
 // New returns an empty pane; content arrives via SetResult.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal, labelSel: map[string]bool{}, lastClickRow: -1, now: time.Now}
+	return Model{pal: pal, labelSel: map[string]bool{}, now: time.Now}
 }
 
 // SetSize records the interior content size.

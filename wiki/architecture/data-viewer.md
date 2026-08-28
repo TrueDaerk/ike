@@ -440,6 +440,11 @@ rows 1 … `bodyHeight`, the sidebar owning `x < sidebarWidth`).
   inert until `enter` or `esc` closes it, since loading another table would
   drop the half-typed clause.
 
+Since #2259 the arithmetic behind all three lives in `internal/ui/listmouse.go`
+(`WheelWindow`, `RowAt`, `ClickTracker`) — this pane's clamp-at-the-last-page
+wheel became the rule for every list-shaped surface; see
+/architecture/mouse.md.
+
 `s` shows the selected object's schema — the `CREATE` statement for SQLite and
 DuckDB, the schema view for Parquet — in a read-only editor tab under the
 virtual path `<db>!<table>.sql`, the same `!` convention as an archive entry

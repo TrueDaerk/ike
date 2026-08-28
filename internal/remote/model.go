@@ -12,6 +12,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -99,6 +100,12 @@ type Model struct {
 	pendingReveal string
 	lastErr       error
 
+	// Double-click detection (#2259) mirrors the archive viewer: activating a
+	// row with the mouse needs a second click on it within
+	// ui.DoubleClickWindow; now is injectable so tests control the clock.
+	clicks ui.ClickTracker
+	now    func() time.Time
+
 	w, h    int
 	focused bool
 }
@@ -114,6 +121,7 @@ func New(key, alias string, dial DialFunc, pal *theme.Palette) Model {
 		alias: alias,
 		dial:  dial,
 		pal:   pal,
+		now:   time.Now,
 		root:  &node{name: "/", path: "/", expanded: true},
 	}
 }

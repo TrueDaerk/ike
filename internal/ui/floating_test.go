@@ -338,3 +338,36 @@ func TestFilterableTypingAndDismissRules(t *testing.T) {
 		t.Fatal("q on an empty filter must dismiss the shell")
 	}
 }
+
+// TestFloatingWheelScrollsAndClamps guards the shell's wheel (#2259): a notch
+// moves the viewport, and both ends clamp instead of running off the content.
+func TestFloatingWheelScrollsAndClamps(t *testing.T) {
+	tall := strings.TrimRight(strings.Repeat("line\n", 200), "\n")
+	f := New(Config{})
+	f.SetContent(&stubContent{heading: "T", body: tall})
+	f.SetSize(80, 24)
+	f.Open()
+	f.Wheel(5)
+	if got := f.ScrollOffset(); got != 5 {
+		t.Fatalf("offset = %d, want 5", got)
+	}
+	f.Wheel(-100)
+	if got := f.ScrollOffset(); got != 0 {
+		t.Fatalf("offset = %d, want clamped to 0", got)
+	}
+	f.Wheel(10000)
+	if got := f.ScrollOffset(); got >= 200 {
+		t.Fatalf("offset = %d ran past the content", got)
+	}
+}
+
+// TestFloatingWheelIgnoredWhenClosed: a stray notch on a closed shell is inert.
+func TestFloatingWheelIgnoredWhenClosed(t *testing.T) {
+	f := New(Config{})
+	f.SetContent(&stubContent{heading: "T", body: strings.Repeat("line\n", 50)})
+	f.SetSize(80, 24)
+	f.Wheel(5)
+	if got := f.ScrollOffset(); got != 0 {
+		t.Fatalf("offset = %d on a closed shell, want 0", got)
+	}
+}

@@ -80,11 +80,10 @@ type Model struct {
 	top    int
 
 	// Double-click detection mirrors the Problems panel: activating a row
-	// needs a second click on the same row within doubleClickWindow; now is
-	// injectable so tests control the clock.
-	lastClickRow int
-	lastClickAt  time.Time
-	now          func() time.Time
+	// needs a second click on the same row within ui.DoubleClickWindow; now
+	// is injectable so tests control the clock.
+	clicks ui.ClickTracker
+	now    func() time.Time
 
 	// Inline refinement editing (#1914): editField names the condition/hit/
 	// log field being typed for the breakpoint editPath:editLine.
@@ -104,7 +103,7 @@ type Model struct {
 
 // New returns an empty panel; the store arrives via SetStore.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal, lastClickRow: -1, now: time.Now, caps: FullCaps()}
+	return Model{pal: pal, now: time.Now, caps: FullCaps()}
 }
 
 // SetStore shares the app-level breakpoint store and rebuilds the rows.

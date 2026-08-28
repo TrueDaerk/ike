@@ -14,12 +14,17 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/ui"
 )
 
 // doubleClickWindow is the maximum delay between two clicks on the same
-// sidebar row for the second to load the table, matching the explorer and the
-// tool panels.
-const doubleClickWindow = 400 * time.Millisecond
+// sidebar row for the second to load the table; the shared list-mouse value
+// (#2259), so the gesture matches the explorer and the tool panels.
+const doubleClickWindow = ui.DoubleClickWindow
+
+// headerRows is how many lines sit above the body: the pane's header line.
+const headerRows = 1
 
 // Wheel scrolls the focused region by delta rows (positive = down): the table
 // list in the sidebar, the loaded page's rows in the grid. The cursor is
@@ -39,13 +44,13 @@ func (m *Model) Wheel(delta int) {
 		return
 	}
 	if m.region == regionSidebar {
-		wheelWindow(&m.ttop, &m.tcur, len(m.tables), m.bodyHeight(), delta)
+		ui.WheelWindow(&m.ttop, &m.tcur, delta, len(m.tables), m.bodyHeight())
 		m.clampScroll()
 		return
 	}
 	if n := len(m.page.Rows); n > 0 {
 		top := m.rowTop
-		wheelWindow(&m.rowTop, &m.rowCur, n, m.gridHeight(), delta)
+		ui.WheelWindow(&m.rowTop, &m.rowCur, delta, n, m.gridHeight())
 		if m.rowTop != top {
 			m.clampScroll()
 			return
@@ -86,29 +91,6 @@ func (m *Model) WheelX(delta int) {
 	m.clampScroll()
 }
 
-// wheelWindow scrolls a window of height h over n rows by delta and drags the
-// cursor back inside it.
-func wheelWindow(top, cur *int, n, h, delta int) {
-	maxTop := n - h
-	if maxTop < 0 {
-		maxTop = 0
-	}
-	*top += delta
-	if *top > maxTop {
-		*top = maxTop
-	}
-	if *top < 0 {
-		*top = 0
-	}
-	if *cur < *top {
-		*cur = *top
-	}
-	if *cur >= *top+h {
-		*cur = *top + h - 1
-	}
-	clamp(cur, n)
-}
-
 // Click handles one left click at content-local (x, y). The clicked half takes
 // the region focus, so the pointer and the keyboard never disagree about where
 // the cursor is: a sidebar click selects the object and a second click on it
@@ -123,11 +105,11 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	if m.err != nil || m.src == nil || m.fEditing || m.prof != nil || m.exp != nil {
 		return nil
 	}
-	if y < 1 || y > m.bodyHeight() {
+	if y < headerRows || y >= headerRows+m.bodyHeight() {
 		return nil
 	}
 	if x < m.sidebarWidth() {
-		m.sidebarClick(m.ttop + y - 1)
+		m.sidebarClick(y)
 		// A double click loaded another table, whose count is the one now
 		// worth running (#1795).
 		return m.countCmd()
@@ -136,9 +118,12 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	return nil
 }
 
-// sidebarClick selects table i, loading it on the second click.
-func (m *Model) sidebarClick(i int) {
-	if i < 0 || i >= len(m.tables) {
+// sidebarClick selects the table under content-local row y, loading it on the
+// second click.
+func (m *Model) sidebarClick(y int) {
+	i, ok := ui.RowAt(y, m.ttop, headerRows, m.bodyHeight(), len(m.tables))
+	if !ok {
+		m.clicks.Reset()
 		return
 	}
 	double := m.doubleClicked(i)
@@ -157,7 +142,7 @@ func (m *Model) sidebarClick(i int) {
 // under it.
 func (m *Model) gridClick(y int) {
 	m.region = regionGrid
-	m.lastClickRow = -1
+	m.clicks.Reset()
 	if i := m.rowTop + y - 2; y >= 2 && i >= 0 && i < len(m.page.Rows) {
 		m.rowCur = i
 	}
@@ -171,7 +156,5 @@ func (m *Model) doubleClicked(row int) bool {
 	if m.now != nil {
 		at = m.now()
 	}
-	hit := m.lastClickRow == row && at.Sub(m.lastClickAt) <= doubleClickWindow
-	m.lastClickRow, m.lastClickAt = row, at
-	return hit
+	return m.clicks.Double(row, at)
 }

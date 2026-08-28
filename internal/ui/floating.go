@@ -362,6 +362,18 @@ func (f *Floating) ContentOrigin() (x, y int) {
 	return borderH/2 + padH, borderV/2 + padV + titleRows
 }
 
+// Wheel scrolls the shell's viewport by delta rows (positive = down),
+// clamped at both ends (#2259). Before it a floating picker was the one
+// scrollable surface the wheel did not reach: only its keys paged it. Like
+// the editor's wheel this moves the view alone — the content's own cursor
+// stays put until the next key press pulls the window back to it.
+func (f *Floating) Wheel(delta int) {
+	if !f.open || delta == 0 {
+		return
+	}
+	f.scroll.vp.SetYOffset(f.scroll.vp.YOffset() + delta)
+}
+
 // ScrollOffset returns how many content rows are scrolled off the top.
 func (f *Floating) ScrollOffset() int { return f.scroll.vp.YOffset() }
 
