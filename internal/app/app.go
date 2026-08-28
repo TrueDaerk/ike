@@ -289,7 +289,13 @@ type Model struct {
 	// marketPage is kept aside so opening the panel can prefetch the catalog
 	// (Roadmap 0310, #446).
 	marketPage *settings.MarketplacePage
-	cfgOpts    config.Options
+	// marketEngine is the same install engine the page uses; the startup
+	// update check (#2257) reads the installed sidecars through it.
+	marketEngine *market.Engine
+	// marketFetch is the catalog fetcher the startup check uses (the page's
+	// own seam stays private); tests replace it before Init.
+	marketFetch settings.MarketFetcher
+	cfgOpts     config.Options
 	help       *help.Help
 	// shell is the base floating overlay (Roadmap 0035); floats is the
 	// z-ordered stack of floating panes it lives in (#1237) — shell is its
@@ -1465,10 +1471,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// The marketplace page (Roadmap 0310, #446): production engine over the
 	// conventional plugins dir, catalog fetch through the market client.
 	marketClient := market.NewClient()
-	m.marketPage = settings.NewMarketplacePage(
-		market.NewEngine(marketClient, wasm.DefaultDir()),
-		marketClient.FetchIndex,
-	)
+	m.marketEngine = market.NewEngine(marketClient, wasm.DefaultDir())
+	m.marketFetch = marketClient.FetchIndex
+	m.marketPage = settings.NewMarketplacePage(m.marketEngine, m.marketFetch)
 	pages = append(pages, settings.Page{Title: "Marketplace", Custom: m.marketPage})
 	m.settings = settings.New(append(pages, reg.SettingsPages()...), m.cfgOpts)
 	perfhud.RecordStartupPhase("settings-ui", time.Since(phase))
@@ -3691,6 +3696,10 @@ func (m Model) Init() tea.Cmd {
 		cmds = append(cmds, forge.LoadCacheCmd("."))
 	}
 	cmds = append(cmds, m.initRemotePanes()...)
+	// The plugin update check (#2257): one background catalog fetch, at most
+	// once a day, nil whenever the setting is off, no catalog is configured
+	// or the rate limit has not elapsed.
+	cmds = append(cmds, m.marketUpdateCheckCmd())
 	// Highlight any files restored from the previous session at startup, before
 	// the user edits them, and announce each to the plugin hooks (#332): the
 	// restore paths (restoreLayout/restoreSession) load editors directly via
@@ -4454,6 +4463,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Venv-wizard internals (#884): spinner ticks and async data fetches
 		// route back into the open sub-panel, which may chain follow-ups.
 		return m, m.settings.Deliver(msg)
+
+	case MarketUpdateCheckMsg:
+		// The startup update check finished (#2257): the page caches the
+		// catalog, the toast carries the count.
+		return m.handleMarketUpdateCheck(msg)
 
 	case settings.MarketCatalogMsg:
 		// A finished marketplace catalog fetch (Roadmap 0310, #446).

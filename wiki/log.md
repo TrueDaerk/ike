@@ -1,5 +1,32 @@
 # Log
 
+## 2026-08-28 (Marketplace: update notifications for installed plugins, #2257)
+
+- **Update diff** (`internal/market/update.go`): `FindUpdates` compares the
+  installed sidecars against the catalog and returns one `market.Update` per
+  outdated plugin, including `AddedCapabilities` — what the new version asks
+  for beyond the manifest's pin. Dropped capabilities do not count; a shorter
+  list can only reduce what the runtime allows. The sidecar's capability list
+  now comes back with `Engine.Installed`, which is what makes the diff
+  possible.
+- **The capability gate**: an update with a grown capability list is badged
+  `⚠ new capabilities`, named in the row detail, **held back** from update-all
+  with an inline note, and installed only through a confirmation dialog that
+  spells out the added capabilities. A capability change is surfaced, never
+  auto-accepted; the install path's re-pinning rules are untouched.
+- **Automatic check** (`internal/app/marketupdates.go`, wired into `Init`):
+  one background catalog fetch on start, rate-limited to once per 24 h through
+  a timestamp in `~/.ike/marketplace-check.json`, and silent on failure — an
+  unreachable catalog raises nothing and leaves the timestamp alone, so the
+  next start retries instead of waiting a day. A check that finds updates
+  raises exactly one notification and hands its catalog to the marketplace
+  page, so opening it shows the badges without re-fetching.
+- **Update-all** (`u`) installs every pending update through the existing
+  checksum-verified atomic install path, in one batch; the page header counts
+  the pending updates.
+- **Setting**: `marketplace.auto_check` (user scope, default on) in config and
+  under Settings ▸ Marketplace Catalog.
+
 ## 2026-08-28 (Bookmarks: descriptions and a project-wide overview, #2251)
 
 - **The overview** (`internal/app/bookmarks_overview.go`, `bookmark.overview`):

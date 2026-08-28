@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Plugin Marketplace
-description: Roadmap 0310 — discover, install, update and remove WASM plugins from inside the IDE; static HTTPS catalog, checksum-verified installs, capability review before install.
+description: Roadmap 0310 — discover, install, update and remove WASM plugins from inside the IDE; static HTTPS catalog, checksum-verified installs, capability review before install, rate-limited update notifications.
 resource: internal/market
 tags: [architecture, plugins, wasm, marketplace, settings]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Plugin Marketplace
@@ -77,6 +77,34 @@ Signature verification beyond the checksum is deliberately out of scope for
 v1: the sha256 pins artifact↔catalog, catalog authenticity rests on HTTPS plus
 the configured URL.
 
+## Update detection (`internal/market/update.go`, #2257)
+
+`market.FindUpdates(index, installed)` diffs the catalog against the installed
+sidecars and returns one `market.Update` per outdated plugin (sorted by name),
+carrying the installed version, the catalog entry, and
+**`AddedCapabilities`** — the capabilities the new version requests that the
+installed manifest does not pin. Dropped capabilities do not count: a shorter
+list can only reduce what the runtime allows.
+
+A non-empty `AddedCapabilities` makes `Update.NeedsConfirm()` true, and that
+is the trust-model gate: such an update is **never** applied by update-all and
+never installed without a confirmation dialog naming the new capabilities. The
+capability list stays pinned from the *catalog entry that was actually
+installed* — the re-pinning rules of the install path are unchanged.
+
+**Automatic check.** `marketplace.auto_check` (user scope, default on) runs one
+check in the background at IDE start (`Model.marketUpdateCheckCmd`, wired into
+`Init`): fetch the catalog, scan the plugins directory, diff. It is
+**rate-limited** to at most once per `market.DefaultCheckInterval` (24 h) via a
+timestamp in `~/.ike/marketplace-check.json` (`IKE_CONFIG_DIR` redirects it),
+and **silent on failure** — an unreachable catalog produces no toast and does
+not stamp the timestamp, so the next start simply tries again. Only a check
+that completed spends the rate-limit budget. A successful check with pending
+updates raises exactly one notification, "marketplace: n plugin updates are
+available — Settings ▸ Marketplace", and hands the fetched catalog to the
+marketplace page so opening it shows the badges without re-fetching. Opening
+the settings panel checks as before, regardless of the setting.
+
 ## Marketplace page (`internal/settings/marketplace_page.go`)
 
 A custom `settings.PageModel` ("Marketplace", registered in
@@ -84,8 +112,14 @@ A custom `settings.PageModel` ("Marketplace", registered in
 entry with its status (available / installed / `update 1.0.0 → 1.2.0` /
 working…); `enter` expands the detail — versions, homepage and the **full
 capability list**. `i` installs or updates, and only works from the expanded
-detail: the review is structurally in front of the action. `x` removes, `r`
+detail: the review is structurally in front of the action. `x` removes, `g`
 re-fetches the catalog.
+
+When updates are pending the header counts them ("2 plugin updates available —
+press u to update all") and `u` installs them all in one batch. An update whose
+capability list grew is badged `⚠ new capabilities`, named in the detail, and
+**held back** from `u` with an inline note; `i` on it opens a confirmation
+listing the added capabilities.
 
 All network and disk work happens inside `tea.Cmd`s; results return as
 `settings.MarketCatalogMsg` / `settings.MarketActionMsg`, routed through the

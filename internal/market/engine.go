@@ -45,6 +45,10 @@ type Installed struct {
 	// marketplace then never claims an update is available for it.
 	Version   Version
 	VersionOK bool
+	// Capabilities is the capability list the sidecar pins — what the user
+	// reviewed at install time. The update check diffs a catalog entry
+	// against it to spot a version that asks for more (#2257).
+	Capabilities []string
 }
 
 // Installed scans the plugins directory and reports every plugin present
@@ -67,6 +71,7 @@ func (e *Engine) Installed() (map[string]Installed, error) {
 		inst := Installed{Name: name}
 		if data, err := os.ReadFile(e.manifestPath(name)); err == nil {
 			if m, err := wasm.ParseManifest(data); err == nil {
+				inst.Capabilities = append([]string{}, m.Capabilities...)
 				if v, err := ParseVersion(m.Version); err == nil {
 					inst.Version, inst.VersionOK = v, true
 				}
