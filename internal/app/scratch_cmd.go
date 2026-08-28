@@ -31,6 +31,7 @@ func scratchCommands() []plugin.Command {
 		appCommand("scratch.new", "New Scratch File…", ShowNewScratchMsg{}),
 		appCommand(scratchTextCommandID, "New Scratch File: Plain Text", NewScratchMsg{Ext: "txt"}),
 		appCommand("scratch.list", "Open Scratch File…", ShowScratchFilesMsg{}),
+		appCommand(scratchManageCommandID, "Manage Scratch Files…", ShowScratchManagerMsg{}),
 	}
 	// The test-data generator (#2134) is a scratch producer too, so its
 	// command family is built alongside the creators.

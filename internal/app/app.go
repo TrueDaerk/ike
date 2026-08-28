@@ -416,6 +416,10 @@ type Model struct {
 	// tdGen is the open test-data wizard (#2134); nil when it is closed.
 	tdGen *tdGenState
 
+	// scratchMgr is the open scratch manager (#2256) — the scratch store
+	// listed with its rename/delete/language actions; nil when it is closed.
+	scratchMgr *scratchMgrState
+
 	// csvProfile is the open csv column profile (#1940); nil when it is
 	// closed. The data viewer's profile lives in its own pane, not here.
 	csvProfile *csvProfileContent
@@ -6053,6 +6057,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.startGenerateScratch()
 		return m, nil
 
+	case ShowScratchManagerMsg:
+		// scratch.manage (#2256): the manager over the whole scratch store.
+		m.startScratchManager()
+		return m, nil
+
 	case scratchGenDoneMsg:
 		// The generation finished: open the scratch or show the error.
 		return m.finishGenerateScratch(msg)
@@ -7599,6 +7608,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// enter/esc.
 		if m.generateScratchOpen() {
 			return m.updateGenerateScratch(msg)
+		}
+		// The scratch manager (#2256) mirrors it: the list with its
+		// type-ahead, plus the rename, delete and language steps.
+		if m.scratchManagerOpen() {
+			return m.updateScratchManager(msg)
 		}
 		// The untitled save-as prompt (#730) mirrors it.
 		if m.saveAsOpen() {
@@ -9742,6 +9756,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					return out, cmd
 				}
 			}
+			if top == m.shell && m.scratchManagerOpen() {
+				// The scratch manager (#2256) scrolls its list the same way.
+				if out, cmd, handled := m.mouseScratchManager(msg, 0, 0); handled {
+					return out, cmd
+				}
+			}
 			// Every other picker hosted in the shell scrolls its viewport
 			// (#2259) — before it a floating picker was the one scrollable
 			// surface the wheel did not reach.
@@ -9769,6 +9789,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				// region the last render recorded for that body line.
 				ox, oy := m.shell.ContentOrigin()
 				out, cmd, _ := m.mouseGenerateScratch(msg, msg.X-bx-ox, msg.Y-by-oy+m.shell.ScrollOffset())
+				return out, cmd
+			} else if top == m.shell && m.scratchManagerOpen() {
+				// The scratch manager (#2256) hit-tests its rows and buttons
+				// the same way.
+				ox, oy := m.shell.ContentOrigin()
+				out, cmd, _ := m.mouseScratchManager(msg, msg.X-bx-ox, msg.Y-by-oy+m.shell.ScrollOffset())
 				return out, cmd
 			}
 		}

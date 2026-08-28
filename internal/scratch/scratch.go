@@ -112,11 +112,13 @@ func List() ([]string, error) {
 }
 
 // Entry is one scratch file: its absolute path plus the modification time the
-// listing sorts on. The scratch-files panel (#1932) renders name, extension
-// and age from it, so nothing outside this package stats the scratch dir.
+// listing sorts on plus the file's byte size. The scratch-files panel (#1932)
+// renders name, extension and age from it and the scratch manager (#2256) its
+// size, so nothing outside this package stats the scratch dir.
 type Entry struct {
 	Path    string
 	ModTime time.Time
+	Size    int64
 }
 
 // Entries is List with the mod times kept: the existing scratch files
@@ -144,7 +146,11 @@ func Entries() ([]Entry, error) {
 		if err != nil {
 			continue
 		}
-		out = append(out, Entry{Path: filepath.Join(dir, e.Name()), ModTime: info.ModTime()})
+		out = append(out, Entry{
+			Path:    filepath.Join(dir, e.Name()),
+			ModTime: info.ModTime(),
+			Size:    info.Size(),
+		})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if !out[i].ModTime.Equal(out[j].ModTime) {
@@ -236,6 +242,31 @@ func Rename(path, name string) (string, error) {
 		return "", fmt.Errorf("renaming scratch: %w", err)
 	}
 	return target, nil
+}
+
+// SetExt re-languages one scratch (#2256): it keeps the file's stem and gives
+// it ext instead — "scratch-1.txt" with ext "py" becomes "scratch-1.py" — and
+// returns the new absolute path. Everything language-aware in the editor flows
+// from the extension, so swapping it *is* the language change; the guards are
+// Rename's, since that is what it runs, and an existing target is refused
+// rather than overwritten. The extension is dot-optional and empty means
+// "txt", exactly like Create's; a scratch whose name is all extension
+// (".env") keeps its whole name as the stem.
+func SetExt(path, ext string) (string, error) {
+	abs, err := inStore(path)
+	if err != nil {
+		return "", err
+	}
+	ext = strings.TrimPrefix(ext, ".")
+	if ext == "" {
+		ext = "txt"
+	}
+	base := filepath.Base(abs)
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	if stem == "" {
+		stem = base
+	}
+	return Rename(abs, stem+"."+ext)
 }
 
 // inStore resolves path to absolute and verifies it names an entry directly
