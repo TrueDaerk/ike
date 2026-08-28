@@ -53,6 +53,7 @@ func Defaults() []Menu {
 			{Title: "Toggle Bookmark", Command: "bookmark.toggle"},
 			{Title: "Toggle Bookmark with Mnemonic", Command: "bookmark.toggleMnemonic"},
 			{Title: "Edit Bookmark Note", Command: "bookmark.annotate"},
+			{Title: "Bookmarks Overview", Command: "bookmark.overview"},
 			{Title: "Next Bookmark", Command: "bookmark.next"},
 			{Title: "Previous Bookmark", Command: "bookmark.previous"},
 			{Title: "Go to Declaration", Command: "lsp.definition"},

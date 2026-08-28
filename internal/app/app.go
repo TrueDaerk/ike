@@ -921,6 +921,9 @@ type Model struct {
 	// like bpts. bmPrompt is the open mnemonic/note prompt, nil when none.
 	bmarks   *bookmarks.Store
 	bmPrompt *bookmarkPrompt
+	// bmOverview is the open project-wide bookmarks overview (#2251), nil
+	// when the floating list is closed.
+	bmOverview *bmOverview
 	// qhist is the persistent query-history store (#1171): named recall
 	// buckets for the editor's search/ex lines and find-in-path, shared by
 	// every editor and the finder overlay.
@@ -5784,6 +5787,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.startBookmarkPrompt(bmPromptNote)
 		return m, nil
 
+	case BookmarkOverviewMsg:
+		// bookmark.overview (#2251): the project-wide floating list of every
+		// bookmark, grouped by file.
+		m.openBookmarkOverview()
+		return m, nil
+
 	case BookmarkStepMsg:
 		// bookmark.next / bookmark.previous (#55): step through the project's
 		// bookmarks in (path, line) order, wrapping at both ends.
@@ -7604,6 +7613,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// typed note, enter/esc.
 		if m.bookmarkPromptOpen() {
 			return m.updateBookmarkPrompt(msg)
+		}
+		// The bookmarks overview (#2251) is a floating list: arrows move,
+		// enter jumps, ctrl+e edits, delete removes, typing filters.
+		if m.bookmarkOverviewOpen() {
+			return m.updateBookmarkOverview(msg)
 		}
 		// The save-layout name prompt (#1175) mirrors it.
 		if m.layoutSavePromptOpen() {

@@ -60,6 +60,10 @@ type bookmarkPrompt struct {
 	line  int    // 0-based
 	input string
 	pos   int
+	// back reopens the bookmarks overview (#2251) once the prompt closes:
+	// the overview's edit key routes through this very prompt, so saving or
+	// cancelling must land back in the list it was opened from.
+	back bool
 }
 
 // bookmarkHooks returns the editor-facing gutter-sign and adjuster closures
@@ -143,6 +147,25 @@ func (m *Model) startBookmarkPrompt(kind bookmarkPromptKind) {
 	m.shell.Open()
 }
 
+// startBookmarkNotePrompt opens the note prompt on an arbitrary bookmark
+// rather than on the cursor line — the overview's edit action (#2251). back
+// asks the prompt to reopen the overview once it closes.
+func (m *Model) startBookmarkNotePrompt(b bookmarks.Bookmark, back bool) {
+	p := &bookmarkPrompt{
+		kind:  bmPromptNote,
+		key:   b.Path,
+		disp:  displayPath(bookmarkPath(b.Path)),
+		line:  b.Line,
+		input: b.Note,
+		pos:   len([]rune(b.Note)),
+		back:  back,
+	}
+	m.bmPrompt = p
+	m.renderBookmarkPrompt()
+	m.shell.SetSize(m.width, m.height)
+	m.shell.Open()
+}
+
 // bookmarkPromptOpen reports whether the shell shows a bookmark prompt.
 func (m Model) bookmarkPromptOpen() bool { return m.bmPrompt != nil && m.shell.IsOpen() }
 
@@ -213,13 +236,17 @@ func (m Model) updateBookmarkPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.Code == tea.KeyEscape {
+		back := p.back
 		m.closeBookmarkPrompt()
+		if back {
+			m.openBookmarkOverview()
+		}
 		return m, nil
 	}
 	if p.kind == bmPromptNote {
 		if msg.Code == tea.KeyEnter {
 			note := strings.TrimSpace(p.input)
-			key, line := p.key, p.line
+			key, line, back := p.key, p.line, p.back
 			m.closeBookmarkPrompt()
 			m.bmarks.SetNote(key, line, note)
 			m.saveBookmarks()
@@ -227,6 +254,9 @@ func (m Model) updateBookmarkPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.host.Notify(host.Info, "bookmark note cleared")
 			} else {
 				m.host.Notify(host.Info, "bookmark note saved")
+			}
+			if back {
+				m.openBookmarkOverview()
 			}
 			return m, nil
 		}

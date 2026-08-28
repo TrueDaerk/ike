@@ -168,6 +168,7 @@ var reachableAlternatives = map[string]string{
 	"bookmark.toggleMnemonic": "palette / Navigate menu",
 	"bookmark.jumpMnemonic":   "palette",
 	"bookmark.annotate":       "palette / Navigate menu",
+	"bookmark.overview":       "palette / Navigate menu",
 	// #1374: on darwin plain ctrl+F-keys are macOS system shortcuts (never
 	// delivered) and the cmd+F primaries need the Kitty protocol, so these
 	// commands have no delivered chord there; off macOS the ctrl forms
