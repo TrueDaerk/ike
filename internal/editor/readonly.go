@@ -40,6 +40,7 @@ func (m *Model) ShowReadOnly(path, text string) {
 	m.seedMarkLines()
 	m.clearLocalMarks()
 	m.eol, m.enc, m.mixedEOL = textenc.LF, textenc.UTF8, false
+	m.clearVaultState() // a preview is not vault-backed (#2293)
 	m.largeFile = m.limits().Exceeded(int64(len(text)), m.buf.LineCount())
 	m.docBytes = int64(len(text))
 	m.cursor = buffer.Position{}

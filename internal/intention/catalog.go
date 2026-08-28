@@ -25,7 +25,26 @@ func Builtins() []Provider {
 		vcsProvider(),
 		testProvider(),
 		editProvider(),
+		vaultProvider(),
 		bufferLangProvider(),
+	}
+}
+
+// vaultProvider offers "Treat as Vault File" (#2293) for a file-backed,
+// writable buffer that is not vault-backed yet, when a password source is
+// configured (VaultReady) — without one the action could only report the
+// missing source. Both branches live behind the one command: a buffer holding
+// vault ciphertext (opened before the password source existed) decrypts in
+// place, a plaintext one is encrypted to disk on the spot.
+func vaultProvider() Provider {
+	return Provider{
+		ID: "app.vault",
+		Items: func(cx Context) []Item {
+			if cx.VaultBuffer || cx.Fileless || cx.ReadOnly || !cx.VaultReady {
+				return nil
+			}
+			return []Item{{Title: "Treat as Vault File", Kind: "buffer", CommandID: "vault.treatAsFile"}}
+		},
 	}
 }
 

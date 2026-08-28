@@ -28,9 +28,12 @@ bring their own.
 
 | Command | ID | Chord | In the editor | Available in |
 |---|---|---|---|---|
+| Extract Whole Archive… | `archive.extractAll` | — | — | everywhere |
+| Extract Selected Archive Entry… | `archive.extractEntry` | — | — | everywhere |
 | Edit Bookmark Note | `bookmark.annotate` | — | — | everywhere |
 | Go to Bookmark by Mnemonic | `bookmark.jumpMnemonic` | — | — | everywhere |
 | Next Bookmark | `bookmark.next` | `shift+f11` | — | everywhere |
+| Bookmarks Overview | `bookmark.overview` | — | — | everywhere |
 | Previous Bookmark | `bookmark.previous` | `ctrl+shift+f11` | — | everywhere |
 | Toggle Bookmark | `bookmark.toggle` | `f11` | — | everywhere |
 | Toggle Bookmark with Mnemonic | `bookmark.toggleMnemonic` | `alt+f3` | — | everywhere |
@@ -225,6 +228,7 @@ bring their own.
 | Regex Tester… | `tools.regexTester` | — | — | everywhere |
 | Set Up Tool Panes | `tools.setup` | — | — | everywhere |
 | Usages | `usages.toggle` | — | — | everywhere |
+| Treat as Vault File | `vault.treatAsFile` | — | — | everywhere |
 | Toggle Inline Blame | `vcs.blameLine` | — | — | everywhere |
 | Diff File Against HEAD | `vcs.diff` | — | — | everywhere |
 | Show History for Selection | `vcs.historyForSelection` | — | — | everywhere |
@@ -303,11 +307,12 @@ bring their own.
 | Ignore Diagnostic Under Caret | `lsp.ignoreDiagnostic` | — | — | `editor` pane |
 | Next Diagnostic | `lsp.nextDiagnostic` | `f2` | — | `editor` pane |
 | Previous Diagnostic | `lsp.prevDiagnostic` | `shift+f2` | — | `editor` pane |
-| Merge: Accept Both | `merge.acceptBoth` | — | — | `editor` pane |
-| Merge: Accept Ours | `merge.acceptOurs` | — | — | `editor` pane |
-| Merge: Accept Theirs | `merge.acceptTheirs` | — | — | `editor` pane |
-| Merge: Next Conflict | `merge.nextConflict` | — | — | `editor` pane |
-| Merge: Previous Conflict | `merge.prevConflict` | — | — | `editor` pane |
+| Merge: Accept Both | `merge.acceptBoth` | — | `gb` | `editor` pane |
+| Merge: Accept Ours | `merge.acceptOurs` | — | `go` | `editor` pane |
+| Merge: Accept Theirs | `merge.acceptTheirs` | — | `gt` | `editor` pane |
+| Merge: Keep Manual Edit | `merge.keepManual` | — | `gm` | `editor` pane |
+| Merge: Next Conflict | `merge.nextConflict` | — | `]n` | `editor` pane |
+| Merge: Previous Conflict | `merge.prevConflict` | — | `[n` | `editor` pane |
 | Next Change (Editor) | `vcs.nextChange` | — | `]c` | `editor` pane |
 | Previous Change (Editor) | `vcs.prevChange` | — | `[c` | `editor` pane |
 | Clear Follow Filter | `view.clearFollowFilter` | — | — | `editor` pane |

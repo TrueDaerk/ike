@@ -1570,6 +1570,19 @@ and transcoding live in `internal/textenc`; `encoding.go` is the editor side.
 - EditorConfig (#63) will layer *policy* (`end_of_line`, `charset`) on this
   mechanism once it lands.
 
+## Transparent Ansible Vault editing (#2293)
+
+A `$ANSIBLE_VAULT;` file opens **decrypted** into an ordinary editable buffer
+when a password source is configured, and `saveAs` re-encrypts on the way out
+— the plaintext never lands on disk. The vault flag is a document property
+like the line-ending flavor (copied on share, mirrored via `SyncMsg`), with
+the password captured at decrypt time; persistent undo and crash-recovery
+backups are switched off for such a document. Without a source (or with a
+wrong password) the ciphertext opens as before, with the reason on the ex
+line; the "Treat as Vault File" intention covers the files the automatic path
+missed. The whole concept — format, password precedence, leak surfaces, the
+intention's two branches — lives in [ansible-vault](./ansible-vault.md).
+
 ## Shared documents (#142)
 
 Two editor panes showing the same file are two **views of one document**

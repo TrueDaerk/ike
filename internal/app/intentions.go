@@ -60,6 +60,8 @@ func (m Model) intentionContext() (intention.Context, bool) {
 		HunkAtCaret:       ed.HunkAtCursor(),
 		ConflictAtCaret:   ed.ConflictAtCursor(),
 		CanToggleValue:    ed.CanToggleValueAtCaret(),
+		VaultBuffer:       ed.Vault(),
+		VaultReady:        ed.VaultPasswordConfigured(),
 		Preview:           intentionPreview(ed),
 	}
 	if hasSel {

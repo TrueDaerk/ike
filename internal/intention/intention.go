@@ -112,6 +112,14 @@ type Context struct {
 	// "nothing conceals this", which is no intention.
 	ConcealValue  bool
 	ConcealFamily string
+	// The Ansible Vault facts (#2293). VaultBuffer reports a buffer already
+	// vault-backed (decrypted in memory, re-encrypted on save) — nothing left
+	// to offer. VaultReady reports that a password source is configured (an
+	// ANSIBLE_VAULT_* variable or ansible.vault_password_file), the
+	// precondition of vault.treatAsFile — without one the action could only
+	// answer "no password source".
+	VaultBuffer bool
+	VaultReady  bool
 
 	// Preview computes what the entry for one command id would change, for
 	// the popup's diff preview of the highlighted action (#2252). The app

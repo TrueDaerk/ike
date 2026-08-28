@@ -140,7 +140,9 @@ func (m *Model) snapshotDueBackups(now time.Time) tea.Cmd {
 	var docs []backup.Doc
 	for _, key := range due {
 		ed := m.backupEditorFor(key)
-		if ed == nil || !ed.Dirty() {
+		if ed == nil || !ed.Dirty() || ed.Vault() {
+			// A vault document (#2293) is never snapshotted: the backup would
+			// write its decrypted text to disk in plaintext.
 			continue
 		}
 		d := backup.Doc{Key: key, Path: ed.Path(), Text: ed.Text()}
@@ -247,7 +249,8 @@ func (m *Model) backupFlushWorkspace(w *workspace.Workspace) {
 	}
 	m.backupWalkWorkspace(w, func(svc *backup.Service, ed *editor.Model, bk string) {
 		m.backupCancelMark(bk)
-		if !ed.Dirty() {
+		if !ed.Dirty() || ed.Vault() {
+			// Vault documents (#2293) opt out of snapshots — see snapshotDueBackups.
 			return
 		}
 		d := backup.Doc{Key: bk, Path: ed.Path(), Text: ed.Text()}

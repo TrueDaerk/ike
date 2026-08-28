@@ -552,6 +552,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.loadMoreBody", "Load More of the HTTP Response Body", HTTPLoadMoreBodyMsg{}),
 			appCommand("http.openBodyFile", "Open Full HTTP Response Body as File", HTTPOpenBodyFileMsg{}),
 			appCommand("http.insertCurlAsRequest", "Insert curl as HTTP Request", InsertCurlAsRequestMsg{}),
+			appCommand("vault.treatAsFile", "Treat as Vault File", TreatAsVaultFileMsg{}),
 			appCommand("http.cancel", "Cancel Running HTTP Request", HTTPCancelMsg{}),
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
 			appCommand("debug.breakpointProperties", "Breakpoint Properties…", DebugBreakpointPropertiesMsg{}),

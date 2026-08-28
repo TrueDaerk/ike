@@ -150,7 +150,7 @@ secrets — are documented together, with screenshots, in
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
-| Theme | `theme.name` | enum: `default`, `tokyo-night`, `nord`, `gruvbox`, `gruvbox-light`, `rose-pine`, `rose-pine-dawn`, `catppuccin-mocha`, `catppuccin-latte`, `kanagawa`, `one-dark`, `solarized-dark`, `solarized-light`, `dracula`, `darcula`, `intellij-light`, `everforest-dark`, `everforest-light`, `ayu-dark`, `ayu-mirage`, `ayu-light`, `github-dark`, `github-light`, `oxocarbon`, `monokai-pro`, `zenburn`, `high-contrast-dark`, `high-contrast-light` | `default` | user | Color scheme; applies immediately on selection (and turns off auto sync) |
+| Theme | `theme.name` | enum: `default`, `tokyo-night`, `nord`, `gruvbox`, `gruvbox-light`, `rose-pine`, `rose-pine-dawn`, `catppuccin-mocha`, `catppuccin-latte`, `kanagawa`, `one-dark`, `solarized-dark`, `solarized-light`, `dracula`, `darcula`, `intellij-light`, `everforest-dark`, `everforest-light`, `ayu-dark`, `ayu-mirage`, `ayu-light`, `github-dark`, `github-light`, `oxocarbon`, `monokai-pro`, `zenburn`, `high-contrast-dark`, `high-contrast-light` | `default` | user | Color scheme; previews live while you scroll the list, esc restores the previous one (and selecting turns off auto sync) |
 | Sync with terminal | `theme.auto` | boolean | `false` | user | Pick the light or dark theme below from the terminal's background colour (OSC 11); picking a theme explicitly turns this off |
 | Light theme | `theme.light` | enum: `gruvbox-light`, `rose-pine-dawn`, `catppuccin-latte`, `solarized-light`, `intellij-light`, `everforest-light`, `ayu-light`, `github-light`, `high-contrast-light` | `intellij-light` | user | Theme used when auto sync sees a light terminal background |
 | Dark theme | `theme.dark` | enum: `default`, `tokyo-night`, `nord`, `gruvbox`, `rose-pine`, `catppuccin-mocha`, `kanagawa`, `one-dark`, `solarized-dark`, `dracula`, `darcula`, `everforest-dark`, `ayu-dark`, `ayu-mirage`, `github-dark`, `oxocarbon`, `monokai-pro`, `zenburn`, `high-contrast-dark` | `default` | user | Theme used when auto sync sees a dark terminal background |
@@ -230,6 +230,12 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Screenshot directory | `screenshot.directory` | path | *(empty)* | user | Directory the exported PNGs are written to, created on the first capture; "~" expands and a relative path resolves against the project directory. Empty means the built-in default, ~/.ike/screenshots |
 
+### Ansible Vault
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Vault password file | `ansible.vault_password_file` | path | *(empty)* | user | File whose first line is the Ansible Vault password; "~" expands. The user-scope value is the global default and a project-scope value overrides it; the ANSIBLE_VAULT_PASSWORD and ANSIBLE_VAULT_PASSWORD_FILE environment variables beat both. Empty (and no variable set) leaves vault files opening as ciphertext |
+
 ### Remote Browsing
 
 | Setting | Key | Type | Default | Scope | Description |
@@ -257,6 +263,13 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Background poll interval | `forge.poll_interval_seconds` | integer (0–3600) | `20` | user | Seconds between background re-fetches of the repository's issues and pull requests, so new issues, closed issues and PR state changes surface without pressing r. The fetch runs off the UI loop and a tick arriving while the previous one is still running is skipped, so a slow forge never stalls IKE; consecutive failures back off exponentially (up to 5 minutes) and an unavailable forge — no CLI, no matching remote or login — stops polling until a manual refresh succeeds. 0 turns polling off entirely; the lowest interval is 10 seconds |
 | Persistent listing cache | `forge.cache` | boolean | `true` | user | Keep the last successful issue/PR listing in the project's .ike/forgecache.json (#2108): a freshly started IKE shows it instantly, marked "cached · updating…" until the real fetch lands, and background polls only ask the forge for issues updated since the snapshot instead of re-listing everything. Manual r always performs a full resync; a repository or backend switch invalidates the snapshot; off never reads or writes the file |
+
+### Diff Viewer
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Context lines | `diff.context` | integer (-1–100) | `3` | user | Unchanged lines kept visible on each side of a change before the rest folds into a "··· N unchanged lines ···" separator; o expands the nearest fold and c shows the file in full. -1 never folds |
+| Ignore whitespace | `diff.ignore_whitespace` | boolean | `false` | user | Compare lines with every whitespace rune removed, the way "git diff -w" does: a re-indented or re-wrapped line counts as unchanged and drops out of the hunk list, and inside a line that really changed the emphasis marks only the non-whitespace ranges. Each column still shows its own raw text. w toggles it on the open diff and stores the choice here, so a reformat-heavy branch stays readable across panes |
 
 ### HTTP Client
 

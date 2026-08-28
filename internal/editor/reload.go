@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/ansiblevault"
 	"ike/internal/editor/buffer"
 	"ike/internal/highlight"
 	"ike/internal/textenc"
@@ -130,6 +131,33 @@ func (m Model) reloadFromDisk() (Model, tea.Cmd) {
 // (#1928) reads the file once and needs the raw byte length to anchor its
 // append offset, so the read and the swap are separate steps.
 func (m Model) reloadFrom(data []byte) (Model, tea.Cmd) {
+	// Vault documents (#2293): the disk holds ciphertext, the buffer
+	// plaintext — decrypt before the compare below, or every own-write that
+	// slipped past the watcher's suppression would look like a real change.
+	// raw keeps the on-disk bytes for diskHash.
+	raw := data
+	switch {
+	case m.vault && ansiblevault.IsVault(data):
+		plain, err := ansiblevault.Decrypt(data, m.vaultPass)
+		if err != nil {
+			// Re-encrypted externally with a different password: keep the
+			// buffer as is, like an undecodable rewrite; the next open
+			// reports the error properly.
+			return m, nil
+		}
+		data = plain
+	case m.vault:
+		// Decrypted externally: the disk now holds plaintext — follow it.
+		m.vault, m.vaultPass, m.vaultLabel = false, "", ""
+	case ansiblevault.IsVault(data):
+		// Encrypted externally (ansible-vault encrypt outside IKE): adopt
+		// the vault like a fresh Load when a password source is available;
+		// without one the ciphertext reloads as before.
+		if plain, pass, note := m.decryptVault(data); note == "" {
+			m.vault, m.vaultPass, m.vaultLabel = true, pass, ansiblevault.Label(data)
+			data = plain
+		}
+	}
 	text, info, err := textenc.Decode(data, m.fallbackEncoding())
 	if err != nil {
 		// The rewritten file is no longer decodable (#66): keep the buffer as
@@ -160,7 +188,7 @@ func (m Model) reloadFrom(data []byte) (Model, tea.Cmd) {
 	m.hist.Reset()
 	m.diskHash = "" // re-keyed below unless large-file mode opts out (#148)
 	if !m.largeFile {
-		m.diskHash = undostore.Hash(data)
+		m.diskHash = undostore.Hash(raw) // the on-disk bytes — for a vault file the ciphertext
 	}
 	m.dirty = false
 	m.stale = false

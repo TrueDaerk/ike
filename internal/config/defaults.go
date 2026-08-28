@@ -352,5 +352,8 @@ func defaults() *Config {
 			// is actually used. The settings UI switches it off.
 			Enabled: true,
 		},
+		// No vault password file by default (#2293): vault files open as
+		// ciphertext until a source is configured.
+		Ansible: Ansible{VaultPasswordFile: ""},
 	}
 }

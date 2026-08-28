@@ -126,6 +126,17 @@ same provider and both about the buffer rather than the caret:
 `Context` field. What materializing does — and where the file lands — is in
 [Language Registry](./languages.md#language-tools-from-a-typed-buffer-2056).
 
+### Treat as Vault File (#2293)
+
+`vaultProvider` offers the flip into a vault-backed buffer for a writable
+file-backed buffer that is not one yet, gated on two precomputed facts:
+`Context.VaultReady` (a password source is configured — checked without
+reading it, the popup gate must stay cheap) and `Context.VaultBuffer`
+(suppresses the entry once flipped). The item points at `vault.treatAsFile`;
+the two branches — decrypt a ciphertext buffer in place, or encrypt a
+plaintext file on the spot — live in the editor and are documented in
+[ansible-vault](./ansible-vault.md#treat-as-vault-file-2293).
+
 ## Diff preview of the highlighted action
 
 Issue #2252. Intentions apply on selection, so for a non-obvious action the

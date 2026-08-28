@@ -13,6 +13,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/ansiblevault"
 	"ike/internal/complete/mru"
 	"ike/internal/concealfilter"
 	"ike/internal/coverage"
@@ -310,6 +311,17 @@ type Model struct {
 	// copied on share, mirrored via SyncMsg. Empty for unsaved new files and
 	// crash restores (nothing to key against).
 	diskHash string
+	// vault marks an Ansible Vault backed document (#2293): the buffer holds
+	// the decrypted plaintext of an on-disk `$ANSIBLE_VAULT;` file, save
+	// re-encrypts with vaultPass (captured at decrypt time, so a config
+	// change mid-session cannot strand the buffer), and vaultLabel preserves
+	// a 1.2 header's vault id across the round-trip. Document properties like
+	// dirty/stale: copied on share, mirrored via SyncMsg. Persistent undo and
+	// crash-recovery backups are disabled for such a document — the plaintext
+	// must never land on disk.
+	vault      bool
+	vaultPass  string
+	vaultLabel string
 	// largeFile flags a document crossing the files.large_file_kb /
 	// files.large_file_lines thresholds at Load/reload (#149): code insight
 	// (highlighting, LSP sync, change-event text) degrades so typing stays
@@ -1068,6 +1080,23 @@ func (m *Model) Load(path string) error {
 	if err != nil {
 		return err
 	}
+	// Transparent Ansible Vault editing (#2293): an `$ANSIBLE_VAULT;` file
+	// decrypts into the buffer when a password source is available; save
+	// re-encrypts. Without a source — or with the wrong password — the
+	// ciphertext loads as before, with the reason on the ex line. raw keeps
+	// the on-disk bytes: diskHash must describe the file, not the buffer.
+	raw := data
+	isVault, vaultPass, vaultLabel := false, "", ""
+	vaultNote := ""
+	if ansiblevault.IsVault(data) {
+		plain, pass, note := m.decryptVault(data)
+		if note != "" {
+			vaultNote = note
+		} else {
+			isVault, vaultPass, vaultLabel = true, pass, ansiblevault.Label(data)
+			data = plain
+		}
+	}
 	// Resolve .editorconfig before decoding: its charset is the decode
 	// fallback (#63). Restore the previous identity if the decode fails, so a
 	// failed :e leaves the open buffer untouched.
@@ -1096,6 +1125,10 @@ func (m *Model) Load(path string) error {
 		m.cmdMsg = "W: mixed line endings, first is " + string(info.EOL) +
 			" — saving normalizes; file.setLineEndings converts explicitly"
 	}
+	m.vault, m.vaultPass, m.vaultLabel = isVault, vaultPass, vaultLabel
+	if vaultNote != "" {
+		m.cmdMsg = vaultNote
+	}
 	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
 	m.docBytes = int64(len(data))
 	m.readOnly = false // a real file replaced any read-only preview (#1762)
@@ -1123,7 +1156,7 @@ func (m *Model) Load(path string) error {
 	}
 	m.hist = history.New()
 	m.changes = changeList{} // the change list follows the history (#1174)
-	m.restoreUndo(data)
+	m.restoreUndo(raw) // hash the on-disk bytes — for a vault file the ciphertext
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
@@ -1155,6 +1188,7 @@ func (m *Model) NewFile(path string) {
 	m.seedMarkLines()
 	m.clearLocalMarks()                                        // local marks belong to the previous content (#1151)
 	m.eol, m.enc, m.mixedEOL = textenc.LF, textenc.UTF8, false // nothing on disk to preserve (#66)
+	m.clearVaultState()                                        // a fresh path is not vault-backed (#2293)
 	// A new file has no on-disk flavor to preserve, so .editorconfig picks
 	// the initial line endings and charset outright (#63).
 	if eol, ok := m.editorconfigEOL(); ok {

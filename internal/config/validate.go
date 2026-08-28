@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode"
 
+	"ike/internal/ansiblevault"
 	"ike/internal/concealfilter"
 	"ike/internal/issuefilter"
 	"ike/internal/layout"
@@ -138,6 +139,13 @@ func validate(c *Config) []Diagnostic {
 			diags = append(diags, Diagnostic{Field: "editor.rulers", Message: fmt.Sprintf("ruler column %d below minimum 1, using 1", r)})
 			c.Editor.Rulers[i] = 1
 		}
+	}
+
+	// Vault password file (#2293): a missing file would silently leave vault
+	// files opening as ciphertext, so say why. The value is kept — the file
+	// may appear later (a mounted secret, a git-ignored path).
+	if msg := ansiblevault.PasswordFileError(c.Ansible.VaultPasswordFile); msg != "" {
+		diags = append(diags, Diagnostic{Field: "ansible.vault_password_file", Message: msg})
 	}
 
 	// Per-family conceal rules (#1704): an entry naming no conceal family, or
