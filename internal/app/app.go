@@ -1549,12 +1549,20 @@ func (m Model) StartWatcher(root string) {
 	// Large files are never content-hashed by the poll fallback (#149):
 	// mtime+size alone decide for them.
 	m.watcher.SetHashLimit(largefile.LimitsFrom(m.host.Config().Get).MaxBytes)
-	// The recursive watch registration walks the whole project tree — on a
-	// large repository the biggest single pre-first-frame cost — so it runs
-	// off the critical path (#2260). Missing the first seconds of events is
-	// covered by the explorer's poll and the initial VCS snapshot above; a
-	// Start superseded by a project switch abandons its walk (watch.Service).
-	go func() { _ = m.watcher.Start(root) }()
+	_ = m.watcher.Start(root)
+}
+
+// StartWatcherAsync is StartWatcher with the recursive watch registration off
+// the caller (#2260): the walk over the whole project tree is the biggest
+// single pre-first-frame cost on a large repository, so main.go must not pay
+// it before the first paint. Missing the first seconds of events is covered
+// by the explorer's poll and the initial VCS snapshot; a Start superseded by
+// a project switch abandons its walk (watch.Service.owns). main.go-only — the
+// switch path and tests keep the synchronous StartWatcher, so a switch's
+// watcher is fully registered when the switch returns and tests never race a
+// background walk.
+func (m Model) StartWatcherAsync(root string) {
+	go m.StartWatcher(root)
 }
 
 // editorEmitter adapts editor lifecycle events into host editor events, which the

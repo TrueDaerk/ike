@@ -165,9 +165,10 @@ were on the critical path and are now asynchronous:
 
 - **The file watcher's recursive registration** (`watch.Service.Start`) walks
   the whole project tree to `Add` each directory — on a large repository the
-  single biggest pre-first-frame cost. `StartWatcher` now runs it on a
-  goroutine; a `Start` superseded by a project switch notices mid-walk
-  (`Service.owns`) and abandons its closed watcher.
+  single biggest pre-first-frame cost. main.go starts it via
+  `StartWatcherAsync` (a goroutine); the switch path and tests keep the
+  synchronous `StartWatcher`, and a `Start` superseded by a project switch
+  notices mid-walk (`Service.owns`) and abandons its closed watcher.
 - **The explorer's session restore** (`explorer.Restore`) used to re-read
   every saved expanded directory synchronously on the constructor thread. Now
   only the root loads synchronously (one `ReadDir` for the first frame's

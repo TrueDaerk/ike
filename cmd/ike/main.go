@@ -209,8 +209,9 @@ func main() {
 	m.SetSender(p.Send)
 	mouse.SetSender(p.Send)
 	// Watch the project root for external file changes (Roadmap 0140); events
-	// arrive through the host's Send as watch.EventMsg.
-	m.StartWatcher(".")
+	// arrive through the host's Send as watch.EventMsg. Async (#2260): the
+	// recursive registration walks the whole tree and must not delay p.Run.
+	m.StartWatcherAsync(".")
 	// Background forge polling (#2085) starts on the same lifecycle, so the
 	// issues window keeps up with the forge without a manual refresh.
 	// forge.poll_interval_seconds = 0 opts out.
