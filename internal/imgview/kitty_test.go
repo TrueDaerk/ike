@@ -118,13 +118,13 @@ func TestFitGrid(t *testing.T) {
 		{0, 0, 80, 24, 1, 1},       // degenerate input
 	}
 	for _, c := range cases {
-		gotC, gotR := fitGrid(c.imgW, c.imgH, c.maxC, c.maxR)
+		gotC, gotR := FitGrid(c.imgW, c.imgH, c.maxC, c.maxR)
 		if gotC != c.wantC || gotR != c.wantR {
-			t.Errorf("fitGrid(%d×%d in %d×%d) = %d×%d, want %d×%d",
+			t.Errorf("FitGrid(%d×%d in %d×%d) = %d×%d, want %d×%d",
 				c.imgW, c.imgH, c.maxC, c.maxR, gotC, gotR, c.wantC, c.wantR)
 		}
 		if gotC > c.maxC || gotR > c.maxR {
-			t.Errorf("fitGrid overflows the pane: %d×%d in %d×%d", gotC, gotR, c.maxC, c.maxR)
+			t.Errorf("FitGrid overflows the pane: %d×%d in %d×%d", gotC, gotR, c.maxC, c.maxR)
 		}
 	}
 }

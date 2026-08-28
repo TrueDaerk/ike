@@ -105,10 +105,10 @@ func PlaceholderGrid(id, cols, rows int) []string {
 	return out
 }
 
-// fitGrid computes the largest cols×rows cell grid inside maxCols×maxRows
+// FitGrid computes the largest cols×rows cell grid inside maxCols×maxRows
 // that preserves the pixel aspect ratio of imgW×imgH, assuming terminal
 // cells are twice as tall as wide. Both dimensions are at least 1.
-func fitGrid(imgW, imgH, maxCols, maxRows int) (cols, rows int) {
+func FitGrid(imgW, imgH, maxCols, maxRows int) (cols, rows int) {
 	if imgW <= 0 || imgH <= 0 || maxCols <= 0 || maxRows <= 0 {
 		return 1, 1
 	}
