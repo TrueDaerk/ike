@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -25,6 +26,30 @@ import (
 // explorer, `:e` or the CLI opens a supported archive, so a tar never lands in
 // a raw text buffer.
 type OpenArchiveMsg struct{ Path string }
+
+// ArchiveReloadMsg runs archive.reload (ctrl+r in the archive viewer, #2314):
+// the focused viewer re-reads its archive from disk, so a re-packed file shows
+// its new members without being closed and re-opened.
+type ArchiveReloadMsg struct{}
+
+// reloadArchivePane runs archive.reload against the focused archive viewer.
+// The pane owns the re-read; the model only resolves it and reports what
+// happened, since a reload that changed nothing looks exactly like a key that
+// did nothing.
+func (m *Model) reloadArchivePane() {
+	inst := m.activeWS().Panes.FocusedInstance()
+	if inst == nil || inst.Kind() != pane.KindArchive || inst.Archive() == nil {
+		m.host.Notify(host.Info, "archive: focus an archive viewer first")
+		return
+	}
+	av := inst.Archive()
+	av.Reload()
+	if err := av.Err(); err != nil {
+		m.host.Notify(host.Error, "archive: cannot read "+filepath.Base(av.Path())+": "+err.Error())
+		return
+	}
+	m.host.Notify(host.Info, fmt.Sprintf("archive: reloaded %s — %d entries", filepath.Base(av.Path()), av.Entries()))
+}
 
 // archiveProvider is the compile-in plugin claiming archive files by
 // extension and content sniff, routing them to the archive viewer.

@@ -6230,6 +6230,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.startArchiveExtractCommand(true)
 		return m, nil
 
+	case ArchiveReloadMsg:
+		// archive.reload (ctrl+r in the viewer, palette — #2314): re-read the
+		// focused archive from disk.
+		m.reloadArchivePane()
+		return m, nil
+
 	case archview.ExtractMsg:
 		// e / E in the archive pane (#2249): ask where the members should
 		// land, then write them out under the safety guards.

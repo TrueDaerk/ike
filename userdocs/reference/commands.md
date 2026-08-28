@@ -30,6 +30,7 @@ bring their own.
 |---|---|---|---|---|
 | Extract Whole Archive… | `archive.extractAll` | — | — | everywhere |
 | Extract Selected Archive Entry… | `archive.extractEntry` | — | — | everywhere |
+| Reload Archive Listing | `archive.reload` | `ctrl+r` | — | everywhere |
 | Edit Bookmark Note | `bookmark.annotate` | — | — | everywhere |
 | Go to Bookmark by Mnemonic | `bookmark.jumpMnemonic` | — | — | everywhere |
 | Next Bookmark | `bookmark.next` | `shift+f11` | — | everywhere |
@@ -119,7 +120,7 @@ bring their own.
 | Load More of the HTTP Response Body | `http.loadMoreBody` | — | — | everywhere |
 | Open Full HTTP Response Body as File | `http.openBodyFile` | — | — | everywhere |
 | Re-run HTTP Request from History | `http.rerun` | — | — | everywhere |
-| Re-send Stored HTTP Request | `http.resend` | — | — | everywhere |
+| Re-send Stored HTTP Request | `http.resend` | `ctrl+r` | — | everywhere |
 | Browse HTTP Response History | `http.responseHistory` | — | — | everywhere |
 | Run HTTP Request | `http.run` | `ctrl+f9` | — | everywhere |
 | Save HTTP Response Body to File… | `http.saveResponse` | — | — | everywhere |

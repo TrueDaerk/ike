@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-27T18:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -855,7 +855,16 @@ For a recognized stream:
   the fold's `⧉` (#1787), so the label never starts a text selection. The key
   reaches the host even without a snapshot: the notice ("no stored request —
   re-run it from the .http file") beats a key that dies silently on a legacy
-  entry. `http.resend` ("Re-send Stored HTTP Request") is the palette pendant.
+  entry. `http.resend` ("Re-send Stored HTTP Request") is the palette pendant,
+  and since #2314 it is also the *bound* form of the key: the default keymap
+  binds `ctrl+r` to `http.resend` in the `http` context, so the chord resolves
+  through the keymap layer (visible in the keymap listing, the keybindings
+  reference and Settings → Keymap, and rebindable there) instead of being a
+  pane-local key nothing above the pane knows about — which is what made it
+  land in the usage log as an unbound press. JetBrains spends the same chord
+  on Rerun, which is why users press it here. The pane keeps its own `ctrl+r`
+  branch underneath as the fallback for a stripped keymap or an unregistered
+  command; both paths end in `resendHTTPRequest`.
   App side, `Model.httpPaneSource` remembers which `.http` file the shown
   content came from — the pane knows the request key, not the file — so the
   re-sent answer is stored under the same history key, and `dispatchHTTP`
