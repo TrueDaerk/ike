@@ -1,15 +1,21 @@
 // Package undotree is the undo-tree overlay (#59): a centered view of the
 // focused editor's change tree (vim's undotree plugin). Every state the
-// buffer ever reached is a row — timestamps, an excerpt of the change, the
+// buffer ever reached is a row — its age, an excerpt of the change, the
 // current and last-saved states marked — ordered newest-first with sibling
 // branches indented under their branch point. j/k move, enter restores the
 // selected state (the root model dispatches the jump back into the editor and
 // refreshes the view, so the overlay stays open for further time travel).
+//
+// Rows carry a relative age ("5m ago") and the selected state gets a live
+// inline diff preview against the current buffer (#2143, preview.go); "t"
+// asks for an age in minutes and restores the newest state at least that old
+// (timejump.go).
 package undotree
 
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -40,6 +46,20 @@ type Model struct {
 	width, height int
 	pal           *theme.Palette
 
+	// src supplies the buffer text the diff preview (#2143) is computed
+	// against; cache memoizes the rendered diff per state seq.
+	src   Source
+	cache map[int][]string
+
+	// now overrides the clock the relative timestamps and the time jump use
+	// (tests only); nil means time.Now.
+	now func() time.Time
+
+	// asking/ageInput are the time-jump prompt ("t"): the typed age in
+	// minutes, confirmed with enter.
+	asking   bool
+	ageInput string
+
 	// lay records, during View, where the list rows sit so Click can hit-test.
 	listTop, listRows int
 }
@@ -63,6 +83,7 @@ func (m *Model) Open(nodes []history.NodeInfo) {
 // on the current state so repeated jumps read naturally.
 func (m *Model) SetNodes(nodes []history.NodeInfo) {
 	m.rows = layout(nodes)
+	m.cache = nil // the jump moved the current state: every diff is stale
 	m.cursor = 0
 	for i, r := range m.rows {
 		if r.node.Current {
@@ -78,7 +99,10 @@ func (m *Model) SetNodes(nodes []history.NodeInfo) {
 func (m *Model) Close() {
 	m.open = false
 	m.rows = nil
+	m.cache = nil
+	m.src = nil
 	m.cursor, m.top = 0, 0
+	m.asking, m.ageInput = false, ""
 }
 
 // IsOpen reports whether the overlay is shown.
@@ -123,7 +147,7 @@ func layout(nodes []history.NodeInfo) []row {
 // (#1666). It is derived from the terminal height, so it is known before the
 // first render.
 func (m *Model) listHeight() int {
-	h := m.height/2 - 6
+	h := m.height/2 - 6 - m.previewHeight()
 	if h < 4 {
 		h = 4
 	}
@@ -135,11 +159,18 @@ func (m *Model) listHeight() int {
 
 // Update handles one key while the overlay is open.
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
+	if m.asking {
+		return m.updateTimeJump(msg)
+	}
 	switch msg.String() {
 	case "esc", "q":
 		m.Close()
 	case "enter":
 		return m.jumpCurrent()
+	case "t":
+		// Time jump (#2143): ask for an age in minutes, then restore the
+		// newest state at least that old.
+		m.startTimeJump()
 	default:
 		// Shared list semantics (#1666): steps wrap, page jumps clamp to a
 		// visible page.
@@ -227,8 +258,15 @@ func (m *Model) View() string {
 	}
 
 	dim := lipgloss.NewStyle().Faint(true)
-	rows = append(rows, "",
-		dim.Render(strconv.Itoa(len(m.rows))+" states — j/k move, enter restores, esc closes"))
+	rows = append(rows, m.previewBlock(innerW)...)
+	if m.asking {
+		rows = append(rows, "",
+			"Jump to the state from "+m.ageInput+"▏minutes ago (enter confirms, esc cancels)")
+	} else {
+		rows = append(rows, "",
+			dim.Render(strconv.Itoa(len(m.rows))+" states — j/k move, enter restores, "+
+				"t time-jump, esc closes"))
+	}
 
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -245,10 +283,7 @@ func (m *Model) renderRow(r row, selected bool, width int) string {
 	if r.node.Current {
 		marker = "●"
 	}
-	when := "        "
-	if !r.node.At.IsZero() {
-		when = r.node.At.Format("15:04:05")
-	}
+	when := pad(relAge(r.node.At, m.clock()), 9)
 	label := r.node.Preview
 	if r.node.Parent < 0 {
 		label = "(original)"
@@ -266,6 +301,26 @@ func (m *Model) renderRow(r row, selected bool, width int) string {
 		st = st.Foreground(pal.BorderFocus).Bold(true)
 	}
 	return st.Render(line)
+}
+
+// previewBlock renders the diff preview for the selected node under the list:
+// a header naming the compared states plus the inline diff (#2143).
+func (m *Model) previewBlock(width int) []string {
+	if m.src == nil || m.cursor < 0 || m.cursor >= len(m.rows) {
+		return nil
+	}
+	seq := m.rows[m.cursor].node.Seq
+	h := m.previewHeight()
+	lines := m.preview(seq, h)
+	if lines == nil {
+		return nil
+	}
+	dim := lipgloss.NewStyle().Faint(true)
+	out := []string{"", dim.Render("diff: current → state " + strconv.Itoa(seq))}
+	for _, l := range lines {
+		out = append(out, m.renderPreview(l, width))
+	}
+	return out
 }
 
 // pad right-pads s to width with spaces.

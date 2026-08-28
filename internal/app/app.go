@@ -4039,6 +4039,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// focused editor's change tree.
 		if ed := m.activeEditor(); ed != nil {
 			m.undoTree.SetSize(m.width, m.height)
+			m.undoTree.SetSource(ed) // diff preview against the live buffer (#2143)
 			m.undoTree.Open(ed.HistoryTree())
 		}
 		return m, nil
@@ -4049,6 +4050,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key := m.activeEditorKey(); key != "" {
 			cmd := m.activeWS().Panes.Get(key).Update(editor.HistoryJumpMsg{Seq: msg.Seq})
 			if ed := m.activeEditor(); ed != nil {
+				m.undoTree.SetSource(ed)
 				m.undoTree.SetNodes(ed.HistoryTree())
 			}
 			return m, cmd
