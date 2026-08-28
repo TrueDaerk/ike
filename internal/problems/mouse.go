@@ -7,12 +7,14 @@ import (
 )
 
 // Mouse control, mirroring the VCS panel (#503/#514). Coordinates are
-// pane-content-local: y 0 is the header line, rows start at y 1. The wheel,
-// the hit-test and the double-click clock come from the shared list-mouse
-// layer (#2259) so every list pane behaves the same.
+// pane-content-local: y 0 is the header line, y 1 the filter row (#2156), and
+// list rows start at y 2. The wheel, the hit-test and the double-click clock
+// come from the shared list-mouse layer (#2259) so every list pane behaves
+// the same.
 
-// headerRows is how many lines sit above the first list row.
-const headerRows = 1
+// headerRows is how many lines sit above the first list row: the title and
+// the filter row.
+const headerRows = 2
 
 // Wheel scrolls the list by delta rows (positive = down); the cursor is
 // dragged along so it stays inside the visible window.

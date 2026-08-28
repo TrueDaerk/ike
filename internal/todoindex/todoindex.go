@@ -5,9 +5,12 @@
 // find-in-path scanner, so gitignore/binary/hidden rules match, #29) whose
 // messages arrive wrapped in ScanMsg so the finder can never mistake them for
 // its own generation. A full scan runs at startup and on demand; a buffer save
-// rescans just that file (FileScanMsg). Filters — tag kind and current file
-// only — are applied in-memory over the retained entry set, so toggling them
-// never rescans. Selecting an entry dispatches OpenLocationMsg.
+// rescans just that file (FileScanMsg). Filtering is the shared list-filter
+// row (#2156, internal/filterbar over internal/filterexpr): tag:, file: and
+// scope: plus free match text, focused with "/" and applied in-memory over the
+// retained entry set, so no filter change ever rescans; the ctrl+t/ctrl+o
+// single-key filters write into that same expression. Selecting an entry
+// dispatches OpenLocationMsg.
 package todoindex
 
 import (
@@ -23,6 +26,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/filterbar"
 	"ike/internal/locations"
 	"ike/internal/search"
 	"ike/internal/theme"
@@ -81,9 +85,12 @@ type Model struct {
 	entries []Entry // full unfiltered set, scan order
 	list    locations.List
 
-	tagIdx   int    // 0 = all tags, else patterns[tagIdx-1]
-	fileOnly bool   // restrict to curPath
-	curPath  string // active editor file when opened (absolute)
+	// filter is the shared filter row (#2156): "/" focuses it, ctrl+t and
+	// ctrl+o write tag: and scope:file into it, and every listed entry passes
+	// matches(). Filtering is in-memory over the retained entry set, so no
+	// filter change ever rescans.
+	filter  filterbar.Model
+	curPath string // active editor file when opened (absolute)
 
 	// lay records, during View, which content rows the mouse can hit; Click
 	// hit-tests against it (same scheme as the finder).
@@ -109,8 +116,36 @@ func New(svc *search.Service, root string, patterns []string) *Model {
 	if len(cleaned) == 0 {
 		cleaned = append(cleaned, DefaultPatterns...)
 	}
-	return &Model{svc: svc, root: root, patterns: cleaned}
+	m := &Model{svc: svc, root: root, patterns: cleaned, filter: filterbar.New(schemaFor(cleaned))}
+	m.filter.Candidates = func(field string) []string {
+		if field == "file" {
+			return m.filePaths()
+		}
+		return nil
+	}
+	return m
 }
+
+// filePaths lists the indexed files as completion candidates for file:,
+// shortened the way the group headers render them.
+func (m *Model) filePaths() []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, e := range m.entries {
+		p := e.Item.Path
+		if m.displayPath != nil {
+			p = m.displayPath(p)
+		}
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// Filter exposes the filter row (tests, and the app's key routing).
+func (m *Model) Filter() *filterbar.Model { return &m.filter }
 
 // SetPalette threads the active theme in.
 func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
@@ -330,32 +365,33 @@ func (m Model) scanFile(abs string) []Entry {
 	return out
 }
 
-// tagFilter returns the active tag word, "" when all tags show.
-func (m *Model) tagFilter() string {
-	if m.tagIdx == 0 {
-		return ""
-	}
-	return strings.ToUpper(m.patterns[m.tagIdx-1])
-}
-
-// rebuildList re-derives the visible list from the entry set and the filters.
+// rebuildList re-derives the visible list from the entry set and the filter.
 func (m *Model) rebuildList() {
-	tag := m.tagFilter()
 	m.list.Reset()
 	for _, e := range m.entries {
-		if tag != "" && e.Tag != tag {
-			continue
+		if m.matches(e) {
+			m.list.Append([]locations.Item{e.Item})
 		}
-		if m.fileOnly && e.Item.Path != m.curPath {
-			continue
-		}
-		m.list.Append([]locations.Item{e.Item})
 	}
 }
 
 // Update handles one key while the overlay is open.
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
+	// The focused filter row owns its editing keys (#2156); the arrow and
+	// page keys fall through, so the list can be steered while typing.
+	if m.filter.Active() {
+		handled, changed := m.filter.Key(msg)
+		if changed {
+			m.rebuildList()
+		}
+		if handled {
+			return nil
+		}
+	}
 	switch msg.String() {
+	case "/":
+		// The shared focus key: every list pane opens its filter with it.
+		m.filter.Focus()
 	case "esc":
 		m.Close()
 		return nil
@@ -377,10 +413,10 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	// so alt chords never reach the terminal (#422); ctrl is the delivered
 	// primary, alt stays for terminals where it works.
 	case "alt+t", "ctrl+t":
-		m.tagIdx = (m.tagIdx + 1) % (len(m.patterns) + 1)
+		m.cycleTag()
 		m.rebuildList()
 	case "alt+o", "ctrl+o":
-		m.fileOnly = !m.fileOnly
+		m.toggleFileScope()
 		m.rebuildList()
 	case "alt+r", "ctrl+r":
 		m.Rescan()
@@ -404,6 +440,7 @@ func (m *Model) openCurrent() tea.Cmd {
 // targets; View fills it in each render, -1 marks an absent row.
 type layoutInfo struct {
 	filters           int
+	input             int
 	listTop, listRows int
 }
 
@@ -416,7 +453,7 @@ const (
 )
 
 // filterSpans mirrors filtersRow's layout: the half-open x ranges of the tag
-// cycle and the current-file checkbox within the content row.
+// cycle and the current-file checkbox within the chips row.
 func (m *Model) filterSpans() (tag, file [2]int) {
 	w := len(tagLabelPrefix) + len(m.tagName()) + len(tagHint)
 	tag = [2]int{0, w}
@@ -424,12 +461,15 @@ func (m *Model) filterSpans() (tag, file [2]int) {
 	return
 }
 
-// tagName is the active tag filter's display name.
+// tagName is the active tag filter's display name, read off the filter: the
+// chips row renders the tag: term rather than holding a state of its own
+// (#2156). Several tag: terms read as their OR.
 func (m *Model) tagName() string {
-	if m.tagIdx == 0 {
+	tags := m.filter.Query().Values("tag")
+	if len(tags) == 0 {
 		return "All"
 	}
-	return strings.ToUpper(m.patterns[m.tagIdx-1])
+	return strings.Join(tags, "|")
 }
 
 // Click handles a left press at panel-local coordinates (0,0 = the box's
@@ -448,12 +488,16 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		tagSp, fileSp := m.filterSpans()
 		switch {
 		case cx >= tagSp[0] && cx < tagSp[1]:
-			m.tagIdx = (m.tagIdx + 1) % (len(m.patterns) + 1)
+			m.cycleTag()
 			m.rebuildList()
 		case cx >= fileSp[0] && cx < fileSp[1]:
-			m.fileOnly = !m.fileOnly
+			m.toggleFileScope()
 			m.rebuildList()
 		}
+		return nil
+	}
+	if m.lay.input > 0 && cy == m.lay.input {
+		m.filter.Focus() // clicking the filter line puts the cursor in it
 		return nil
 	}
 	if m.lay.listTop >= 0 && cy >= m.lay.listTop && cy < m.lay.listTop+m.lay.listRows {
@@ -501,7 +545,9 @@ func (m *Model) View() string {
 	lay := layoutInfo{listTop: -1}
 	rows := []string{title, ""}
 	lay.filters = len(rows)
-	rows = append(rows, m.filtersRow(innerW), "")
+	rows = append(rows, m.filtersRow(innerW))
+	lay.input = len(rows)
+	rows = append(rows, m.filter.View(innerW, pal), "")
 
 	listH := m.height/2 - 6
 	if listH < 4 {
@@ -529,14 +575,14 @@ func (m *Model) filtersRow(width int) string {
 	on := lipgloss.NewStyle().Foreground(pal.BorderFocus).Bold(true)
 	dim := lipgloss.NewStyle().Faint(true)
 	tag := tagLabelPrefix + m.tagName()
-	if m.tagIdx == 0 {
+	if len(m.filter.Query().Values("tag")) == 0 {
 		tag = dim.Render(tag)
 	} else {
 		tag = on.Render(tag)
 	}
 	tag += dim.Render(tagHint)
 	file := dim.Render("[ ] " + fileLabel)
-	if m.fileOnly {
+	if m.FileOnly() {
 		file = on.Render("[x] " + fileLabel)
 	}
 	return clipRow(tag+"  "+file, width)
@@ -564,7 +610,7 @@ func (m *Model) statusRow(width int) string {
 	case m.scanning && m.list.Total() == 0:
 		return dim.Render("scanning…")
 	case m.list.Total() == 0:
-		return dim.Render(clipRow("no tags — enter opens, esc closes, ctrl+t tag, ctrl+o file, ctrl+r rescan", width))
+		return dim.Render(clipRow("no tags — enter opens, esc closes, / filter, ctrl+t tag, ctrl+o file, ctrl+r rescan", width))
 	}
 	s := plural(m.list.Total(), "tag", "tags") + " in " + plural(m.list.Files(), "file", "files")
 	if m.truncated {
@@ -572,7 +618,7 @@ func (m *Model) statusRow(width int) string {
 	} else if m.scanning {
 		s += "…"
 	}
-	return dim.Render(clipRow(s+" — enter opens, ctrl+t tag, ctrl+o file, ctrl+r rescan", width))
+	return dim.Render(clipRow(s+" — enter opens, / filter, ctrl+t tag, ctrl+o file, ctrl+r rescan", width))
 }
 
 // plural renders "1 tag" / "3 tags" style counts.

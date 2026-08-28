@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Problems Tool Window
-description: Singleton bottom-split pane aggregating LSP diagnostics project-wide — grouped by file, errors first, enter/double-click jumps to the location, 'a' applies a code action without leaving the pane, 'f' toggles current-file vs project scope; consumes the publishDiagnostics flow plus the Go-computed lint notes and per-run task-matcher findings (#1024, part of #33; notes #1654; tasks #1915; quick fixes #2175).
+description: Singleton bottom-split pane aggregating LSP diagnostics project-wide — grouped by file, errors first, enter/double-click jumps to the location, 'a' applies a code action without leaving the pane, '/' filters with the shared list-filter syntax and 'f' is its current-file sugar; consumes the publishDiagnostics flow plus the Go-computed lint notes and per-run task-matcher findings (#1024, part of #33; notes #1654; tasks #1915; quick fixes #2175; shared filter #2156).
 resource: internal/problems/problems.go
-tags: [architecture, lsp, diagnostics, tool-window, pane, tasks, code-actions]
-timestamp: 2026-08-27T12:00:00Z
+tags: [architecture, lsp, diagnostics, tool-window, pane, tasks, code-actions, filter]
+timestamp: 2026-08-28T12:00:00Z
 ---
 
 # Problems Tool Window (#1024)
@@ -105,11 +105,40 @@ their rendered text, since they share their parent's path and position.
   `copyToClipboard` seam (system clipboard + clipboard history, #2061) and
   confirms with a "copied problem" toast. `ctrl+c` stays the global quit: the
   list has no text selection that could claim it (#2062).
+- `/` focuses the **filter row** — see below.
 - `f` toggles **current file** vs **project** scope (named in the footer).
-  The active path tracks the focused editor via `syncProblemsActive`, hooked
-  into `setFocus` and tab switching like the explorer's active-file accent.
+  Since #2156 it is sugar over the filter: it writes `scope:file` into it and
+  removes it again. The active path tracks the focused editor via
+  `syncProblemsActive`, hooked into `setFocus` and tab switching like the
+  explorer's active-file accent, and `scope:` resolves against it on every
+  refresh — so the scope still follows the editor rather than pinning the
+  path the key was pressed on.
 - `a` (or `alt+enter`, the editor's intention key) **applies a quick fix** to
   the marked problem — see below.
+
+## Filtering (#2156)
+
+The row under the header is the shared filter line
+([List Filter Syntax](./list-filters.md), `internal/filterbar` over
+`internal/filterexpr`) — the same widget, the same syntax and the same `/`
+focus key as the Usages pane, the TODO index and the Issues pane's saved
+filters. It is permanent, so a filter appearing never shifts the list.
+
+The pane's fields (`problems.Schema`):
+
+| Field | Takes |
+| --- | --- |
+| `severity:` (alias `sev:`) | `error`, `warning`, `info`, `hint` — repeatable (OR) |
+| `file:` | a path glob (`internal/**/*.go`, `*.ts`) or a substring |
+| `code:` | a substring of the server's rule code (#739) |
+| `source:` (alias `src:`) | a substring of the reporting server, linter or task |
+| `scope:` | `file` (the active editor's file, what `f` writes) or `project` |
+
+Bare words are the fuzzy match text, run over the message and the code.
+Terms of different fields AND, repeats of one field OR. A file the filter
+empties drops out entirely — header and all — and the header's error/warning
+totals count what is *visible*, so the counts always describe the list under
+them. `file:` completion offers the paths the pane currently lists.
 
 ## Quick fixes from the pane (#2175)
 

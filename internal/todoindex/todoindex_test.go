@@ -251,8 +251,8 @@ func assertRowsClip(t *testing.T, m *Model, wantLines int) {
 }
 
 // TestViewClipsOverlongRows: overlong todo text and an overlong path each stay
-// on one line in a narrow window. Layout: border + title + blank + filters +
-// blank + (header + 2 items) + blank + status + border = 11 lines.
+// on one line in a narrow window. Layout: border + title + blank + chips +
+// filter + blank + (header + 2 items) + blank + status + border = 12 lines.
 func TestViewClipsOverlongRows(t *testing.T) {
 	m := New(search.New(nil), t.TempDir(), nil)
 	m.SetSize(46, 30) // boxW clamps to 40
@@ -263,7 +263,7 @@ func TestViewClipsOverlongRows(t *testing.T) {
 		match(filepath.Join(strings.Repeat("deeply/nested/", 10), "file.go"), 2, "// FIXME: two", "FIXME"),
 	)
 	done(m)
-	assertRowsClip(t, m, 11)
+	assertRowsClip(t, m, 12)
 }
 
 // TestViewClipsWideRuneRows: rows full of double-width runes pass a rune-count
@@ -277,7 +277,7 @@ func TestViewClipsWideRuneRows(t *testing.T) {
 	done(m)
 	// border + title + blank + filters + blank + (header + 1 item) + blank +
 	// status + border = 10 lines.
-	assertRowsClip(t, m, 10)
+	assertRowsClip(t, m, 11)
 }
 
 // TestStatusRowClipsError: a long error (root path, scanner failure) clips on
@@ -288,7 +288,7 @@ func TestStatusRowClipsError(t *testing.T) {
 	m.open = true
 	m.errText = "open " + strings.Repeat("/very/long/root/path", 10) + ": permission denied"
 	// border + title + blank + filters + blank + blank + status + border = 8.
-	assertRowsClip(t, m, 8)
+	assertRowsClip(t, m, 9)
 	if !strings.Contains(ansi.Strip(m.View()), "error: open") {
 		t.Fatal("clipped status row lost the error prefix")
 	}

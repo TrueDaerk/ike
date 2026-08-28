@@ -1,10 +1,10 @@
 ---
 type: concept
 title: TODO Index
-description: "#61 — JetBrains-style TODO tool window: project-wide comment-tag index (TODO/FIXME/HACK/XXX, configurable) as a centered overlay over the locations list, own search.Service scan, per-file rescan on save, tag/current-file filters, status-line count."
+description: "#61 — JetBrains-style TODO tool window: project-wide comment-tag index (TODO/FIXME/HACK/XXX, configurable) as a centered overlay over the locations list, own search.Service scan, per-file rescan on save, the shared list-filter row with tag/file/scope fields (ctrl+t and ctrl+o as its sugar), status-line count."
 resource: internal/todoindex
-tags: [architecture, todo, comment-tags, overlay, search]
-timestamp: 2026-07-29T12:00:00Z
+tags: [architecture, todo, comment-tags, overlay, search, filter]
+timestamp: 2026-08-28T12:00:00Z
 ---
 
 # TODO Index (#61)
@@ -46,10 +46,26 @@ cross-contaminate.
 
 ## Filters
 
-Filters are applied in-memory over the retained entry set — toggling never
-rescans. `ctrl+t`/`alt+t` (or clicking the label) cycles the tag filter
-(All → TODO → FIXME → …), `ctrl+o`/`alt+o` toggles current-file-only (the
-active editor's file at open time). The status row shows filtered counts and
+Filters are applied in-memory over the retained entry set — nothing a filter
+does ever rescans. Since #2156 they are one shared filter expression
+([List Filter Syntax](./list-filters.md)), typed into the `internal/filterbar`
+row under the chips and focused with `/` like in every other list pane:
+
+| Field | Takes |
+| --- | --- |
+| `tag:` | one of the configured pattern words (`TODO`, `FIXME`, …) — repeatable (OR) |
+| `file:` | a path glob or substring |
+| `scope:` | `file` (the active editor's file at open time) or `project` |
+
+Bare words are the fuzzy match text, run over the tag's source line.
+
+The two single-key filters are sugar that writes into that same expression:
+`ctrl+t`/`alt+t` (or clicking the label) steps the `tag:` term through the
+configured patterns and back to none, `ctrl+o`/`alt+o` toggles `scope:file`.
+The chips row above the input renders those two terms — it is a view of the
+filter, not state beside it — so a typed `tag:FIXME` lights the same chip the
+key would. `esc` in a focused filter clears it; `esc` with the filter blurred
+closes the overlay as before. The status row shows filtered counts and
 truncation; `Count()` stays the unfiltered total.
 
 ## Rendering

@@ -3,7 +3,10 @@
 // (lsp.referencesPanel), the persistent counterpart to the transient palette
 // list lsp.references opens. It is a pure consumer — the LSP bridge delivers
 // a UsagesMsg, the root model fills this pane; 'r' re-runs the request via
-// the bridge-built Refresh continuation the message carried.
+// the bridge-built Refresh continuation the message carried. "/" opens the
+// shared list-filter row (#2156, internal/filterbar over internal/filterexpr),
+// which narrows the retained result set in place — file:, text: and free
+// match text — without asking the server again.
 package usages
 
 import (
@@ -14,6 +17,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"ike/internal/filterbar"
 	ilsp "ike/internal/lsp"
 	"ike/internal/theme"
 	"ike/internal/ui"
@@ -58,6 +62,12 @@ type Model struct {
 	// stored position re-resolves as-is.
 	refresh tea.Cmd
 
+	// all is the unfiltered result set in arrival order; rows are re-derived
+	// from it whenever the filter moves (#2156), so narrowing never loses a
+	// hit the server reported.
+	all    []ilsp.Reference
+	filter filterbar.Model
+
 	rows   []row
 	count  int // references behind the rows (title)
 	files  int // distinct files holding them (title)
@@ -73,12 +83,22 @@ type Model struct {
 
 // New returns an empty pane; results arrive via Set.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal, now: time.Now}
+	return Model{pal: pal, now: time.Now, filter: filterbar.New(Schema)}
 }
 
 // SetDisplayPath injects the project-relative path shortener the app already
-// uses for the finder; unset falls back to the raw (absolute) path.
-func (m *Model) SetDisplayPath(f func(string) string) { m.displayPath = f }
+// uses for the finder; unset falls back to the raw (absolute) path. It also
+// binds the filter's completion source — a pointer receiver, so the copy the
+// pane renders is the one that gets it.
+func (m *Model) SetDisplayPath(f func(string) string) {
+	m.displayPath = f
+	m.filter.Candidates = func(field string) []string {
+		if field == "file" {
+			return m.filePaths()
+		}
+		return nil
+	}
+}
 
 // SetSize records the interior content size.
 func (m *Model) SetSize(w, h int) { m.width, m.height = w, h }
@@ -113,15 +133,33 @@ func (m *Model) Set(symbol string, refs []ilsp.Reference, refresh tea.Cmd) {
 	m.symbol = symbol
 	m.refresh = refresh
 	m.loaded = true
+	m.all = refs
+	m.rebuild()
+	m.cursor, m.top = 0, 0
+	if len(m.rows) > 1 {
+		m.cursor = 1 // start on the first reference, not its file header
+	}
+	m.clampScroll()
+}
+
+// rebuild re-derives the rows and the totals from the retained result set
+// through the filter, grouped by file in server order (file order = first
+// appearance, within-file order untouched). A file the filter leaves nothing
+// of drops out entirely, header and all.
+func (m *Model) rebuild() {
 	m.rows = nil
-	m.count = len(refs)
+	m.count = 0
 	byPath := map[string][]ilsp.Reference{}
 	var order []string
-	for _, ref := range refs {
+	for _, ref := range m.all {
+		if !m.matches(ref) {
+			continue
+		}
 		if _, ok := byPath[ref.Path]; !ok {
 			order = append(order, ref.Path)
 		}
 		byPath[ref.Path] = append(byPath[ref.Path], ref)
+		m.count++
 	}
 	m.files = len(order)
 	for _, path := range order {
@@ -129,10 +167,6 @@ func (m *Model) Set(symbol string, refs []ilsp.Reference, refresh tea.Cmd) {
 		for _, ref := range byPath[path] {
 			m.rows = append(m.rows, row{path: path, ref: ref})
 		}
-	}
-	m.cursor, m.top = 0, 0
-	if len(m.rows) > 1 {
-		m.cursor = 1 // start on the first reference, not its file header
 	}
 	m.clampScroll()
 }
@@ -156,12 +190,26 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	// The focused filter row owns its editing keys (#2156); list navigation
+	// (up/down/page) falls through, so one can steer the list while typing.
+	if m.filter.Active() {
+		handled, changed := m.filter.Key(msg)
+		if changed {
+			m.rebuild()
+		}
+		if handled {
+			return nil
+		}
+	}
 	// Shared list semantics (#1666): steps wrap, page jumps clamp.
 	if ui.ListNav(msg.String(), &m.cursor, len(m.rows), m.bodyHeight(), ui.NavFull) {
 		m.clampScroll()
 		return nil
 	}
 	switch msg.String() {
+	case "/":
+		// The shared focus key: every list pane opens its filter with it.
+		m.filter.Focus()
 	case "r":
 		// Re-run the request for the stored origin (#1155); best-effort
 		// after edits — the position re-resolves as-is.
@@ -232,6 +280,8 @@ func (m *Model) View() string {
 	var b strings.Builder
 	b.WriteString(m.headerLine(pal))
 	b.WriteString("\n")
+	b.WriteString(m.filter.View(m.width, pal))
+	b.WriteString("\n")
 	b.WriteString(m.renderRows(pal, m.bodyHeight()))
 	b.WriteString(m.footer(pal))
 	return b.String()
@@ -301,6 +351,9 @@ func (m *Model) renderRows(pal *theme.Palette, height int) string {
 // emptyText explains the empty pane per state.
 func (m *Model) emptyText() string {
 	if m.loaded {
+		if !m.filter.Empty() && len(m.all) > 0 {
+			return "(no usages match the filter)"
+		}
 		if m.label != "" {
 			return "(no results)"
 		}
@@ -335,7 +388,7 @@ func (m *Model) renderRow(pal *theme.Palette, base, header lipgloss.Style, i int
 
 // footer shows the key hints.
 func (m *Model) footer(pal *theme.Palette) string {
-	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open · y copy · r refresh · j/k move"))
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open · y copy · / filter · r refresh · j/k move"))
 }
 
 // shorten renders a path project-relative when the app injected a shortener.
@@ -346,9 +399,10 @@ func (m *Model) shorten(path string) string {
 	return path
 }
 
-// bodyHeight is the room between the header and footer lines.
+// bodyHeight is the room the list gets between the header, the filter row
+// and the footer.
 func (m *Model) bodyHeight() int {
-	h := m.height - 2
+	h := m.height - 3
 	if h < 1 {
 		h = 1
 	}

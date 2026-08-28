@@ -17,7 +17,10 @@ import (
 )
 
 // The vocabularies must be the same set of values, or an expression typed in
-// the overlay would be rejected by the settings form (or vice versa).
+// the overlay would be rejected by the settings form (or vice versa). Since
+// #2156 the live input reads issuefilter.Schema directly, so what is left to
+// pin is the pane's own SortOrder enum against the schema's list — the two
+// are still separate declarations, and the enum is what the pane sorts by.
 func TestQualifierVocabulariesMatch(t *testing.T) {
 	gotStates := append([]string(nil), stateValues...)
 	wantStates := append([]string(nil), issuefilter.States...)
@@ -26,11 +29,25 @@ func TestQualifierVocabulariesMatch(t *testing.T) {
 	if !reflect.DeepEqual(gotStates, wantStates) {
 		t.Fatalf("state values = %v, issuefilter.States = %v", gotStates, wantStates)
 	}
-	gotSorts := sortValues() // already sorted
+	gotSorts := make([]string, 0, len(sortOrders))
+	for _, o := range sortOrders {
+		gotSorts = append(gotSorts, o.String())
+	}
 	wantSorts := append([]string(nil), issuefilter.SortOrders...)
+	sort.Strings(gotSorts)
 	sort.Strings(wantSorts)
 	if !reflect.DeepEqual(gotSorts, wantSorts) {
-		t.Fatalf("sort values = %v, issuefilter.SortOrders = %v", gotSorts, wantSorts)
+		t.Fatalf("pane sort orders = %v, issuefilter.SortOrders = %v", gotSorts, wantSorts)
+	}
+	// Every value the schema accepts must parse through the live input too.
+	for _, v := range append(append([]string(nil), issuefilter.States...), issuefilter.SortOrders...) {
+		field := "is:"
+		if !contains(issuefilter.States, v) {
+			field = "sort:"
+		}
+		if _, ok, note := parseQualifier(field + v); !ok {
+			t.Fatalf("live input rejected %q: %s", field+v, note)
+		}
 	}
 }
 

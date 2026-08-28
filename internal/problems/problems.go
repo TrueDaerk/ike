@@ -6,7 +6,10 @@
 // no diagnostic traffic ever originates here. The one request that starts in
 // the pane is the quick-fix code action (#2175): "a" on a row asks the app —
 // never a server directly — for that diagnostic's actions, so a listed
-// problem can be fixed without jumping to it first.
+// problem can be fixed without jumping to it first. "/" opens the shared
+// list-filter row (#2156, internal/filterbar over internal/filterexpr):
+// severity:, file:, code:, source: and scope: plus free match text, with the
+// 'f' current-file key writing scope:file into that same expression.
 package problems
 
 import (
@@ -20,6 +23,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"ike/internal/filterbar"
 	ilsp "ike/internal/lsp"
 	"ike/internal/theme"
 	"ike/internal/ui"
@@ -253,8 +257,9 @@ type Model struct {
 	store       *Store
 	displayPath func(string) string
 
-	// fileOnly scopes the list to the active editor's file ('f' toggles).
-	fileOnly   bool
+	// filter is the shared filter row (#2156): "/" focuses it, 'f' writes
+	// scope:file into it, and every listed diagnostic passes matches().
+	filter     filterbar.Model
 	activePath string
 
 	rows   []row
@@ -274,12 +279,22 @@ type Model struct {
 
 // New returns an empty panel; the store arrives via SetStore.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal, now: time.Now}
+	m := Model{pal: pal, now: time.Now, filter: filterbar.New(Schema)}
+	return m
 }
 
 // SetStore shares the app-level diagnostics store and rebuilds the rows.
 func (m *Model) SetStore(s *Store) {
 	m.store = s
+	// The completion source is bound here rather than in New: the model is a
+	// value embedded in a pane.Instance, so only a pointer receiver sees the
+	// copy the pane actually renders.
+	m.filter.Candidates = func(field string) []string {
+		if field == "file" {
+			return m.filePaths()
+		}
+		return nil
+	}
 	m.Refresh()
 }
 
@@ -296,17 +311,15 @@ func (m *Model) SetFocused(f bool) { m.focused = f }
 // SetPalette re-threads the active theme.
 func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 
-// FileOnly reports the scope filter state (tests, persistence).
-func (m *Model) FileOnly() bool { return m.fileOnly }
-
 // SetActivePath tracks the focused editor's file for the current-file scope;
-// the root model calls it on focus and tab changes.
+// the root model calls it on focus and tab changes. scope:file resolves
+// against this path on every Refresh, so the scope follows the editor.
 func (m *Model) SetActivePath(path string) {
 	if path == m.activePath {
 		return
 	}
 	m.activePath = path
-	if m.fileOnly {
+	if m.FileOnly() {
 		m.Refresh()
 	}
 }
@@ -333,20 +346,10 @@ func (m *Model) Refresh() {
 	}
 	m.rows = nil
 	if m.store != nil {
-		for _, path := range m.sortedPaths() {
+		paths, kept := m.sortedPaths()
+		for _, path := range paths {
 			m.rows = append(m.rows, row{header: true, path: path})
-			diags := append([]ilsp.Diagnostic(nil), m.store.Get(path)...)
-			sort.SliceStable(diags, func(i, j int) bool {
-				a, b := diags[i], diags[j]
-				if sa, sb := normSev(a.Severity), normSev(b.Severity); sa != sb {
-					return sa < sb
-				}
-				if a.Range.Start.Line != b.Range.Start.Line {
-					return a.Range.Start.Line < b.Range.Start.Line
-				}
-				return a.Range.Start.Col < b.Range.Start.Col
-			})
-			for _, d := range diags {
+			for _, d := range kept[path] {
 				m.rows = append(m.rows, row{path: path, d: d})
 				// Related information hangs under its diagnostic (#2147),
 				// navigable in its own right.
@@ -368,25 +371,52 @@ func (m *Model) Refresh() {
 	m.clampScroll()
 }
 
+// visibleDiags is path's findings after the filter, sorted worst-first then
+// by position — the order the rows under a file header are built in.
+func (m *Model) visibleDiags(path string) []ilsp.Diagnostic {
+	all := m.store.Get(path)
+	diags := make([]ilsp.Diagnostic, 0, len(all))
+	for _, d := range all {
+		if m.matches(path, d) {
+			diags = append(diags, d)
+		}
+	}
+	sort.SliceStable(diags, func(i, j int) bool {
+		a, b := diags[i], diags[j]
+		if sa, sb := normSev(a.Severity), normSev(b.Severity); sa != sb {
+			return sa < sb
+		}
+		if a.Range.Start.Line != b.Range.Start.Line {
+			return a.Range.Start.Line < b.Range.Start.Line
+		}
+		return a.Range.Start.Col < b.Range.Start.Col
+	})
+	return diags
+}
+
 // sortedPaths orders the visible files: worst severity first, then path —
-// files with errors surface above warning-only files. The current-file scope
-// reduces the list to the active editor's path.
-func (m *Model) sortedPaths() []string {
+// files with errors surface above warning-only files. A file the filter
+// leaves nothing of drops out entirely, header and all. The filtered sets
+// come back with the order so Refresh does not gate every diagnostic twice.
+func (m *Model) sortedPaths() ([]string, map[string][]ilsp.Diagnostic) {
 	var paths []string
+	kept := map[string][]ilsp.Diagnostic{}
 	for _, p := range m.store.Paths() {
-		if m.fileOnly && p != m.activePath {
+		ds := m.visibleDiags(p)
+		if len(ds) == 0 {
 			continue
 		}
+		kept[p] = ds
 		paths = append(paths, p)
 	}
 	sort.SliceStable(paths, func(i, j int) bool {
-		wi, wj := worstSev(m.store.Get(paths[i])), worstSev(m.store.Get(paths[j]))
+		wi, wj := worstSev(kept[paths[i]]), worstSev(kept[paths[j]])
 		if wi != wj {
 			return wi < wj
 		}
 		return paths[i] < paths[j]
 	})
-	return paths
+	return paths, kept
 }
 
 // normSev maps an unspecified severity to error, matching the gutter.
@@ -418,15 +448,30 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	// The focused filter row owns its editing keys (#2156); list navigation
+	// (up/down/page) falls through, so one can steer the list while typing.
+	if m.filter.Active() {
+		handled, changed := m.filter.Key(msg)
+		if changed {
+			m.Refresh()
+		}
+		if handled {
+			return nil
+		}
+	}
 	// Shared list semantics (#1666): steps wrap, page jumps clamp.
 	if ui.ListNav(msg.String(), &m.cursor, len(m.rows), m.bodyHeight(), ui.NavFull) {
 		m.clampScroll()
 		return nil
 	}
 	switch msg.String() {
+	case "/":
+		// The shared focus key: every list pane opens its filter with it.
+		m.filter.Focus()
 	case "f":
-		m.fileOnly = !m.fileOnly
-		m.Refresh()
+		if m.toggleFileScope() {
+			m.Refresh()
+		}
 	case "enter":
 		return m.activate(m.cursor)
 	case "y":
@@ -561,6 +606,8 @@ func (m *Model) View() string {
 	var b strings.Builder
 	b.WriteString(m.headerLine(pal))
 	b.WriteString("\n")
+	b.WriteString(m.filter.View(m.width, pal))
+	b.WriteString("\n")
 	b.WriteString(m.renderRows(pal, m.bodyHeight()))
 	b.WriteString(m.footer(pal))
 	return b.String()
@@ -569,7 +616,7 @@ func (m *Model) View() string {
 // headerLine names the scope and totals the visible problems.
 func (m *Model) headerLine(pal *theme.Palette) string {
 	scope := "project"
-	if m.fileOnly {
+	if m.FileOnly() {
 		scope = "current file"
 	}
 	errs, warns := m.errCount, m.warnCount
@@ -624,13 +671,16 @@ func (m *Model) renderRows(pal *theme.Palette, height int) string {
 	return b.String()
 }
 
-// emptyText explains an empty list per scope.
+// emptyText explains an empty list per scope and filter.
 func (m *Model) emptyText() string {
-	if m.fileOnly {
+	if m.FileOnly() {
 		if m.activePath == "" {
 			return "(no active file — press f for the whole project)"
 		}
 		return "(no problems in the current file)"
+	}
+	if !m.filter.Empty() {
+		return "(no problems match the filter)"
 	}
 	return "(no problems)"
 }
@@ -690,10 +740,10 @@ func (m *Model) renderRow(pal *theme.Palette, rs rowBaseStyles, i int) string {
 // footer shows the key hints, naming the scope toggle (#1024).
 func (m *Model) footer(pal *theme.Palette) string {
 	scope := "current file"
-	if m.fileOnly {
+	if m.FileOnly() {
 		scope = "project"
 	}
-	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open · a fix · y copy · f " + scope + " · j/k move"))
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open · a fix · y copy · / filter · f " + scope + " · j/k move"))
 }
 
 // sevGlyph maps a severity to its marker, unspecified counting as error.
@@ -730,9 +780,10 @@ func (m *Model) shorten(path string) string {
 	return path
 }
 
-// bodyHeight is the room between the header and footer lines.
+// bodyHeight is the room the list gets between the header, the filter row
+// and the footer.
 func (m *Model) bodyHeight() int {
-	h := m.height - 2
+	h := m.height - 3
 	if h < 1 {
 		h = 1
 	}
