@@ -103,6 +103,31 @@ func TestVisualJoin(t *testing.T) {
 	}
 }
 
+func TestVisualJoinNoSpace(t *testing.T) {
+	m, _ := loaded(t, "one\ntwo\nthree\n")
+	m = typeKeys(m, "VjgJ")
+	if line(m, 0) != "onetwo" || line(m, 1) != "three" {
+		t.Fatalf("VjgJ got %q / %q", line(m, 0), line(m, 1))
+	}
+	if m.mode != Normal {
+		t.Fatal("gJ should leave visual mode")
+	}
+}
+
+func TestVisualGgExtends(t *testing.T) {
+	m, _ := loaded(t, "one\ntwo\nthree\n")
+	m = typeKeys(m, "GVggd")
+	if m.buf.LineCount() != 1 || line(m, 0) != "" {
+		t.Fatalf("GVggd should delete all lines, got %q", m.buf.Lines())
+	}
+
+	m, _ = loaded(t, "one\ntwo\nthree\nfour\n")
+	m = typeKeys(m, "GV2ggd")
+	if line(m, 0) != "one" || m.buf.LineCount() != 1 {
+		t.Fatalf("GV2ggd should keep only line one, got %q", m.buf.Lines())
+	}
+}
+
 func TestVisualReplace(t *testing.T) {
 	m, _ := loaded(t, "abcdef\n")
 	m = typeKeys(m, "vllrx")
@@ -289,6 +314,36 @@ func TestScrollZCommands(t *testing.T) {
 	m = typeKeys(m, "zb")
 	if m.view.Top != 49-h+1 {
 		t.Fatalf("zb top=%d want %d", m.view.Top, 49-h+1)
+	}
+}
+
+func TestScrollZCommandsCount(t *testing.T) {
+	content := ""
+	for i := 0; i < 100; i++ {
+		content += "line\n"
+	}
+	m, _ := loaded(t, content)
+	m.view.ScrollOff = 0
+	h := m.view.Height()
+
+	// [count]zt moves the cursor to that line, then puts it at the top.
+	m = typeKeys(m, "10zt")
+	if m.cursor.Line != 9 || m.view.Top != 9 {
+		t.Fatalf("10zt cursor=%d top=%d want 9/9", m.cursor.Line, m.view.Top)
+	}
+	m = typeKeys(m, "60zz")
+	if m.cursor.Line != 59 || m.view.Top != 59-h/2 {
+		t.Fatalf("60zz cursor=%d top=%d want 59/%d", m.cursor.Line, m.view.Top, 59-h/2)
+	}
+	m = typeKeys(m, "30zb")
+	if m.cursor.Line != 29 || m.view.Top != 29-h+1 {
+		t.Fatalf("30zb cursor=%d top=%d want 29/%d", m.cursor.Line, m.view.Top, 29-h+1)
+	}
+	// Without a count the cursor stays put.
+	m = typeKeys(m, "50G")
+	m = typeKeys(m, "zt")
+	if m.cursor.Line != 49 || m.view.Top != 49 {
+		t.Fatalf("zt cursor=%d top=%d want 49/49", m.cursor.Line, m.view.Top)
 	}
 }
 

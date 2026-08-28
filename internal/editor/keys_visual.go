@@ -79,6 +79,23 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// A pending "g" resolves the visual g-sequences (#2144): gg extends the
+	// selection to the first line ({count}gg to line count), gJ joins the
+	// selected lines without inserting spaces. Anything else cancels.
+	if m.wait == awaitG {
+		m.wait = awaitNone
+		switch s {
+		case "g":
+			res := motion.First(m.buf, m.cursor, countOrZero(m.pending))
+			m.pending.Count = 0
+			m.cursor = m.buf.ClampCursor(buffer.Position{Line: res.Pos.Line, Col: m.svVerticalCol(res.Pos.Line)})
+			m.emit(EventCursorMove)
+		case "J":
+			m.joinVisual(false)
+		}
+		return m, nil
+	}
+
 	// A pending text-object selector (after i/a) sets the selection to the object.
 	if m.wait == awaitObject {
 		m.wait = awaitNone
@@ -181,6 +198,8 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.visualOperate('=')
 	case "J":
 		m.joinVisual(true)
+	case "g":
+		m.wait = awaitG
 	case "r":
 		m.wait = awaitReplace
 	case "S":

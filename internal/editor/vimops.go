@@ -315,6 +315,15 @@ func (m *Model) openFileUnderCursor() tea.Cmd {
 	return func() tea.Msg { return OpenPathMsg{Path: path, From: from} }
 }
 
+// scrollCountLine implements [count]zz/zt/zb (#2144): a count first moves the
+// cursor to that line (same column, like vim), then the line is positioned.
+func (m *Model) scrollCountLine(dir int) {
+	if n := countOrZero(m.pending); n > 0 {
+		m.moveTo(buffer.Position{Line: n - 1, Col: m.cursor.Col})
+	}
+	m.scrollCursorLine(dir)
+}
+
 // scrollCursorLine implements zz/zt/zb: place the cursor's line at the centre,
 // top or bottom of the view. dir is -1 (top), 0 (centre) or 1 (bottom).
 func (m *Model) scrollCursorLine(dir int) {
