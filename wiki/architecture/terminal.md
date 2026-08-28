@@ -674,7 +674,14 @@ the prompt (only ever on the chain's first row) is stripped heuristically
 (`$ `, `% `, `> `, `# `,
 `❯ `), command separators (`|`, `;`, `&&`, `||`) start a fresh command — so
 the shell keeps owning line editing and history. Sources per word: PATH
-executables while the first word is typed, make targets after `make`
+executables while the first word is typed — served from a **cached
+executable set** (#2193): the scan of every `$PATH` entry runs in a
+background goroutine (prewarmed at session start, 30s TTL, a changed `$PATH`
+invalidates immediately), never synchronously in `Update`, where it used to
+cost tens of ms per output flush on nix/homebrew-heavy PATHs; a stale
+same-PATH set is served while the rescan runs, and a cold cache postpones the
+popup refresh until the scan lands (it re-arrives through the session's
+output hook) — make targets after `make`
 (Makefile/makefile/GNUmakefile in the live cwd), files/dirs
 relative to the live cwd otherwise (dir part in the word honoured, `~/` and
 absolute paths too, dotfiles only on a `.` prefix, dirs keep a trailing `/`).

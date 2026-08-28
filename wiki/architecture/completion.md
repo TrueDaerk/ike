@@ -167,7 +167,11 @@ sources.
 `lsp.PriorityWords`): vim-keyword-level completion from identifier words. Two
 feeds: **open buffers** — the engine forwards every `EditorChange` event (the
 optional `EventObserver` extension) and the buffer's word set re-extracts
-lazily on the next query (large-file buffers drop out) — and a **one-shot
+lazily on the next query (large-file buffers drop out); re-extraction runs
+**outside the source's lock** (#2193) — texts snapshot under the lock,
+tokenize unlocked, re-install generation-guarded — so a keystroke's `Observe`
+(reached synchronously from `Update`) never blocks behind tokenizing dirty
+buffers — and a **one-shot
 background project scan** at construction (skips dot-dirs, `node_modules`,
 `vendor` & co.; 256KB/file, 10k files, binaries by NUL sniff). A query
 computes the partial identifier at the cursor from the observed buffer text,
@@ -191,7 +195,8 @@ names and IDs (regex over `.css`/`.scss`/`.less`), offered inside HTML
 `class="…"`/`id="…"` attribute values — detected on the current line, with
 `data-class` & co. excluded — the cross-file case language servers are
 structurally weak at. Freshness mirrors the word index (observed buffers
-override the disk index; lazy re-extraction) plus **watcher invalidation**:
+override the disk index; lazy re-extraction outside the lock, #2193) plus
+**watcher invalidation**:
 the app forwards file-change events through `Engine.NotifyFileChanged` to
 sources implementing `FileObserver`, which re-extract off-goroutine — queued
 behind a **single worker** with per-path dedup (#2176), so a mass checkout

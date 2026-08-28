@@ -52,11 +52,15 @@ type Source struct {
 	scanned bool // project scan finished (tests wait on it)
 }
 
-// buffer is one observed open buffer.
+// buffer is one observed open buffer. gen counts Observe updates (#2193): the
+// query snapshots it before tokenizing outside the lock, and only a matching
+// gen on re-install may clear dirty — an edit that landed mid-extraction keeps
+// the buffer dirty for the next query.
 type buffer struct {
 	text  string
 	words map[string]struct{}
 	dirty bool
+	gen   uint64
 }
 
 // New returns the source and starts the one-shot project scan under root in
@@ -97,6 +101,7 @@ func (s *Source) Observe(ev host.EditorEvent) {
 		s.buffers[ev.BufKey()] = b
 	}
 	b.text, b.dirty = ev.Text, true
+	b.gen++
 }
 
 // Complete implements complete.Source: candidates are identifier words
@@ -105,16 +110,40 @@ func (s *Source) Observe(ev host.EditorEvent) {
 // maxResults. The word being typed itself is excluded. SortText encodes the
 // locality tier, so the merged popup lists nearer words first.
 func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.CompletionItem, error) {
+	// Tokenizing dirty buffers must not run under the lock (#2193): Observe is
+	// reached synchronously from the UI's Update and would block behind a
+	// re-tokenize of every dirty megabyte-sized text. Snapshot under the lock,
+	// extract unlocked, re-install — a buffer edited mid-extraction stays
+	// dirty (gen moved) and re-extracts on the next query.
+	type extraction struct {
+		b    *buffer
+		text string
+		gen  uint64
+	}
 	s.mu.Lock()
 	cur := s.buffers[req.BufKey()]
-	prefix := ""
+	curText := ""
 	if cur != nil {
-		prefix = identifierPrefix(cur.text, req.Line, req.Col)
+		curText = cur.text
 	}
+	var jobs []extraction
 	for _, b := range s.buffers {
-		b.extract()
+		if b.dirty {
+			jobs = append(jobs, extraction{b: b, text: b.text, gen: b.gen})
+		}
 	}
 	s.mu.Unlock()
+
+	prefix := identifierPrefix(curText, req.Line, req.Col)
+	for i := range jobs {
+		words := extractWords(jobs[i].text, nil)
+		s.mu.Lock()
+		jobs[i].b.words = words
+		if jobs[i].b.gen == jobs[i].gen {
+			jobs[i].b.dirty = false
+		}
+		s.mu.Unlock()
+	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -184,15 +213,6 @@ func identifierPrefix(text string, line, col int) string {
 		start--
 	}
 	return string(runes[start:col])
-}
-
-// extract refreshes a dirty buffer's word set.
-func (b *buffer) extract() {
-	if !b.dirty {
-		return
-	}
-	b.words = extractWords(b.text, nil)
-	b.dirty = false
 }
 
 // extractWords collects identifier words of at least minWordLen runes into

@@ -150,24 +150,109 @@ func TestCandidatesSourceRouting(t *testing.T) {
 		t.Fatal(err)
 	}
 	// First word → commands; after make → targets; otherwise → paths.
-	if got := candidates("make", "bui", dir, t.TempDir()); len(got) != 1 || got[0].text != "build" {
+	if got := candidates("make", "bui", dir, nil); len(got) != 1 || got[0].text != "build" {
 		t.Fatalf("make routing = %v, want [build]", got)
 	}
-	if got := candidates("ls", "bui", dir, t.TempDir()); len(got) != 1 || got[0].text != "bui.txt" {
+	if got := candidates("ls", "bui", dir, nil); len(got) != 1 || got[0].text != "bui.txt" {
 		t.Fatalf("path routing = %v, want [bui.txt]", got)
 	}
 	binDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(binDir, "buildit"), []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := candidates("bui", "bui", dir, binDir); len(got) != 1 ||
+	exes := scanPathExecutables(binDir)
+	if got := candidates("bui", "bui", dir, exes); len(got) != 1 ||
 		got[0] != (candidate{text: "buildit", kind: candFinal}) {
 		t.Fatalf("command routing = %v, want [{buildit final}]", got)
 	}
 	// A word with a slash always completes as a path, even as the first word.
-	if got := candidates("./bu", "./bu", dir, binDir); len(got) != 1 || got[0].text != "./bui.txt" {
+	if got := candidates("./bu", "./bu", dir, exes); len(got) != 1 || got[0].text != "./bui.txt" {
 		t.Fatalf("slash word must route to paths, got %v", got)
 	}
+}
+
+// TestExeCache (#2193): a cold cache misses and starts one background scan; a
+// filled same-env cache hits without rescanning; a changed env misses again
+// (invalidation) while still triggering a rescan for the new env.
+func TestExeCache(t *testing.T) {
+	binA, binB := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(binA, "tool-a"), []byte("#!"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binB, "tool-b"), []byte("#!"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	c := &exeCache{}
+	scanned := make(chan struct{}, 4)
+	done := func() { scanned <- struct{}{} }
+	if _, ok := c.cached(binA, done); ok {
+		t.Fatal("a cold cache must miss")
+	}
+	<-scanned
+	names, ok := c.cached(binA, done)
+	if !ok || len(names) != 1 || names[0] != "tool-a" {
+		t.Fatalf("filled cache = %v ok=%v, want [tool-a] true", names, ok)
+	}
+	// A different PATH invalidates: miss now, hit for the new env after the
+	// rescan lands.
+	if _, ok := c.cached(binB, done); ok {
+		t.Fatal("a changed env must miss")
+	}
+	<-scanned
+	if names, ok := c.cached(binB, done); !ok || len(names) != 1 || names[0] != "tool-b" {
+		t.Fatalf("rescanned cache = %v ok=%v, want [tool-b] true", names, ok)
+	}
+}
+
+// TestColdCachePostponesRefresh (#2193): a command-word refresh against a cold
+// executable cache must not scan PATH synchronously in Update — it closes the
+// popup, arms the pending refresh, and completes once the scan lands.
+func TestColdCachePostponesRefresh(t *testing.T) {
+	c := &collector{}
+	m := startShModel(t, c)
+	for _, r := range "ec" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "echo of ec", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "ec"
+	})
+	// Drop the warm cache: the next refresh sees a cold one.
+	m.exe = &exeCache{}
+	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+	if m.comp.open {
+		t.Fatal("a cold cache must postpone the popup, not scan in Update")
+	}
+	if !m.pendingSuggest || !m.pendingManual {
+		t.Fatalf("postponed refresh must arm pending (manual), got suggest=%v manual=%v",
+			m.pendingSuggest, m.pendingManual)
+	}
+	waitExes(t, m)
+	m.OnOutput() // the scan's OutputMsg re-runs the refresh through here
+	if !m.comp.open || !m.comp.focused {
+		t.Fatalf("the landed scan must reopen the popup as the manual request it was, got open=%v focused=%v",
+			m.comp.open, m.comp.focused)
+	}
+	found := false
+	for _, it := range m.comp.items {
+		if it.text == "echo" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("reopened popup must offer echo, got %v", m.comp.items)
+	}
+}
+
+// waitExes waits for the prewarmed PATH executable scan (#2193): tests drive
+// Update/OnOutput synchronously, so they wait for the cache directly instead
+// of the scan's OutputMsg round trip through the app.
+func waitExes(t *testing.T, m *Model) {
+	t.Helper()
+	waitFor(t, "PATH executable scan", func() bool {
+		_, ok := m.exeNames()
+		return ok
+	})
 }
 
 // startShModel spawns a live /bin/sh model for popup integration tests.
@@ -186,6 +271,7 @@ func startShModelIn(t *testing.T, c *collector, dir string) *Model {
 	}
 	t.Cleanup(func() { m.Close() })
 	waitFor(t, "prompt", func() bool { return strings.Contains(plainView(m.sess), "$") })
+	waitExes(t, &m)
 	return &m
 }
 
@@ -298,7 +384,7 @@ func TestCompletionFollowsCd(t *testing.T) {
 	}
 	waitFor(t, "cwd update", func() bool { return m.sess.Cwd() == other })
 	// Path candidates for "./ta" resolve in the live cwd.
-	got := candidates("./ta", "./ta", m.sess.Cwd(), "")
+	got := candidates("./ta", "./ta", m.sess.Cwd(), nil)
 	if len(got) != 1 || got[0].text != "./target-file.txt" {
 		t.Fatalf("candidates after cd = %v, want [./target-file.txt]", got)
 	}
@@ -565,6 +651,7 @@ func startNarrowShModel(t *testing.T, c *collector, dir string) *Model {
 	t.Cleanup(func() { m.Close() })
 	waitFor(t, "prompt", func() bool { return strings.Contains(plainView(m.sess), "$") })
 	waitFor(t, "at prompt", func() bool { return m.completionActive() })
+	waitExes(t, &m)
 	return &m
 }
 
@@ -720,6 +807,7 @@ func TestEarlyWrapBlankLastColumnSilent(t *testing.T) {
 		t.Fatalf("spawn failed: %s", m.err)
 	}
 	t.Cleanup(func() { m.Close() })
+	waitExes(t, &m)
 	// Output a row of width-1 characters: content above, last column blank —
 	// exactly the shape that defeats the SoftWrapped heuristic.
 	tail := strings.Repeat("q", m.gridW()-1)
@@ -813,6 +901,7 @@ func TestWrappedCompletionAfterResize(t *testing.T) {
 	t.Cleanup(func() { m.Close() })
 	waitFor(t, "prompt", func() bool { return strings.Contains(plainView(m.sess), "$") })
 	waitFor(t, "at prompt", func() bool { return m.completionActive() })
+	waitExes(t, &m)
 
 	m.SetSize(30, 24)
 	waitFor(t, "resized", func() bool { return m.sess.Width() == m.gridW() })
@@ -851,6 +940,7 @@ func TestAutoSuggestSuppressedWithoutPrompt(t *testing.T) {
 		t.Fatalf("spawn failed: %s", m.err)
 	}
 	t.Cleanup(func() { m.Close() })
+	waitExes(t, &m)
 	for _, r := range "echo hello\r" {
 		m.sess.SendKey(keyFor(r))
 	}

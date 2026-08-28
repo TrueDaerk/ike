@@ -799,6 +799,10 @@ through the code-action picker and executes the choice: unresolved lenses
 `workspace/executeCommand` runs the command, whose edits come back as
 `workspace/applyEdit`. A server-initiated `workspace/codeLens/refresh`
 re-requests every open document (gopls does this when test files change).
+Refresh rounds are **rate-limited per capability kind** (#2193, one second
+between rounds): the first notification runs at once, further ones inside the
+window coalesce into a single trailing round — a misbehaving server spamming
+`workspace/*/refresh` can no longer drive the re-request loop at wire speed.
 Toggle: `lsp.code_lens` (default `true`).
 
 **Server folding ranges (#1912).** `textDocument/foldingRange` feeds the

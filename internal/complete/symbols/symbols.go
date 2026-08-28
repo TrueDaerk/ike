@@ -79,11 +79,14 @@ type fileIndex struct {
 // grammar by — the file path, or the synthetic name of a file-less buffer's
 // chosen language (#2048), which is why it is stored instead of re-derived
 // from the map key.
+// gen counts Observe updates (#2193): the query snapshots it before extracting
+// outside the lock, and only a matching gen on re-install may clear dirty.
 type doc struct {
 	text  string
 	lang  string
 	idx   fileIndex
 	dirty bool
+	gen   uint64
 }
 
 // Source is the symbol index. It implements complete.Source,
@@ -144,6 +147,7 @@ func (s *Source) Observe(ev host.EditorEvent) {
 		d.lang, d.idx = ev.LangName(), fileIndex{}
 	}
 	d.text, d.dirty = ev.Text, true
+	d.gen++
 }
 
 // InvalidateFile implements complete.FileObserver: an on-disk change
@@ -199,17 +203,42 @@ func (s *Source) drainInvalidations() {
 // offers the project's CSS class names / IDs; elsewhere the indexed symbols,
 // current file first.
 func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.CompletionItem, error) {
+	// Extraction (tree-sitter over full texts) must not run under the lock
+	// (#2193): Observe is reached synchronously from the UI's Update and would
+	// block behind it. Snapshot under the lock, extract unlocked, re-install —
+	// a doc edited mid-extraction stays dirty (gen moved), and a doc whose
+	// language switched (#2048) discards the wrong-grammar result entirely.
+	type extraction struct {
+		d          *doc
+		lang, text string
+		gen        uint64
+	}
 	s.mu.Lock()
 	cur := s.buffers[req.BufKey()]
-	line := ""
+	curText := ""
 	if cur != nil {
-		cur.extract()
-		line = lineAt(cur.text, req.Line)
+		curText = cur.text
 	}
+	var jobs []extraction
 	for _, d := range s.buffers {
-		d.extract()
+		if d.dirty {
+			jobs = append(jobs, extraction{d: d, lang: d.lang, text: d.text, gen: d.gen})
+		}
 	}
 	s.mu.Unlock()
+
+	line := lineAt(curText, req.Line)
+	for i := range jobs {
+		idx := extractText(jobs[i].lang, jobs[i].text)
+		s.mu.Lock()
+		if jobs[i].d.lang == jobs[i].lang {
+			jobs[i].d.idx = idx
+			if jobs[i].d.gen == jobs[i].gen {
+				jobs[i].d.dirty = false
+			}
+		}
+		s.mu.Unlock()
+	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -305,16 +334,6 @@ func (s *Source) cssItems(attr, prefix string) []ilsp.CompletionItem {
 }
 
 // --- extraction ---
-
-// extract refreshes a dirty buffer, classified by the buffer's own language
-// name rather than its store key (#2048).
-func (d *doc) extract() {
-	if !d.dirty {
-		return
-	}
-	d.idx = extractText(d.lang, d.text)
-	d.dirty = false
-}
 
 // extractDisk reads and extracts one file within the size cap.
 func extractDisk(path string) (fileIndex, bool) {

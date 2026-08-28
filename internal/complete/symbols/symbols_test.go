@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -11,6 +12,33 @@ import (
 	"ike/internal/host"
 	"ike/internal/lsp/protocol"
 )
+
+// TestObserveDuringCompleteNotLost (#2193): extraction runs outside the lock,
+// so Observe never blocks behind it — and an edit landing while a query
+// extracts must not be lost: the final query reflects the final text.
+func TestObserveDuringCompleteNotLost(t *testing.T) {
+	s := New("")
+	cssPath := "/style.css"
+	page := "/index.html"
+	s.Observe(change(page, `<div class="cls`))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			s.Observe(change(cssPath, ".cls-"+strconv.Itoa(i)+" {}"))
+		}
+	}()
+	req := complete.Request{Path: page, Line: 0, Col: len(`<div class="cls`)}
+	for i := 0; i < 50; i++ {
+		if _, err := s.Complete(context.Background(), req); err != nil {
+			t.Fatal(err)
+		}
+	}
+	<-done
+	if got := labels(t, s, req); len(got) != 1 || got[0] != "cls-199" {
+		t.Fatalf("after concurrent edits got %v, want [cls-199]", got)
+	}
+}
 
 func change(path, text string) host.EditorEvent {
 	return host.EditorEvent{Kind: host.EditorChange, Path: path, Text: text}
