@@ -36,6 +36,8 @@ type Config struct {
 	Marketplace Marketplace `toml:"marketplace"`
 	// Todo holds the TODO/FIXME index settings (#61).
 	Todo Todo `toml:"todo"`
+	// Diff holds the diff viewer's defaults (0340, #2170).
+	Diff Diff `toml:"diff"`
 	// Run holds run-configuration behaviour (0350, #576).
 	Run Run `toml:"run"`
 	// Tasks holds task-discovery and problem-matcher settings (#1915):
@@ -396,6 +398,19 @@ type Issues struct {
 	DefaultSort   string   `toml:"default_sort"`
 	DefaultFilter string   `toml:"default_filter"`
 	SavedFilters  []string `toml:"saved_filters"`
+}
+
+// Diff holds the diff viewer's defaults. Context is the number of unchanged
+// lines kept around each change before the rest folds into a "N unchanged
+// lines" separator (0340, #494); a negative value disables the folding
+// entirely. IgnoreWhitespace is the start state of the viewer's 'w' toggle
+// (#2170): with it on, lines that differ only in whitespace render as
+// unchanged and intra-line refinement reports only the non-whitespace
+// ranges, which is what makes a reformat-heavy diff readable. The pane's
+// toggle writes the key back, so the last choice is the next diff's default.
+type Diff struct {
+	Context          int  `toml:"context"`
+	IgnoreWhitespace bool `toml:"ignore_whitespace"`
 }
 
 // Todo holds the comment-tag index settings (#61). Patterns is the list of tag

@@ -7,8 +7,14 @@
 // engine.go is the pure computation half: no rendering, no bubbletea. Lines
 // computes the line-level edit script; Compute pairs delete/insert runs into
 // changed line pairs, refines them at rune level into per-side spans, and
-// groups the result into hunks for n/N navigation.
+// groups the result into hunks for n/N navigation. ComputeWith runs the same
+// computation under Options — today: ignoring whitespace (#2170).
 package diff
+
+import (
+	"strings"
+	"unicode"
+)
 
 // Op classifies one edit-script entry.
 type Op int
@@ -85,12 +91,56 @@ func Lines(a, b []string) []Edit {
 	return script(a, b)
 }
 
-// Compute diffs two texts (split on '\n') into aligned rows and hunks.
-func Compute(left, right string) Result {
+// Options tunes how a diff compares its two sides (#2170).
+type Options struct {
+	// IgnoreWhitespace drops whitespace from every comparison, the way
+	// "git diff -w" does: lines differing only in whitespace pair up as
+	// unchanged rows (both sides keep their own raw text, so each column
+	// still shows what it really holds), and intra-line refinement reports
+	// only the ranges that carry non-whitespace changes.
+	IgnoreWhitespace bool
+}
+
+// Compute diffs two texts (split on '\n') into aligned rows and hunks, with
+// the default (whitespace-significant) options.
+func Compute(left, right string) Result { return ComputeWith(left, right, Options{}) }
+
+// ComputeWith diffs two texts under opts.
+func ComputeWith(left, right string, opts Options) Result {
 	a := splitLines(left)
 	b := splitLines(right)
-	rows := buildRows(script(a, b))
+	rows := buildRows(pairScript(a, b, opts), opts)
 	return Result{Rows: rows, Hunks: hunksOf(rows)}
+}
+
+// lineKey is the comparison key of one line: the line itself, or — ignoring
+// whitespace — the line with every whitespace rune removed, so indentation,
+// alignment padding and re-wrapped spacing compare equal.
+func lineKey(line string, opts Options) string {
+	if !opts.IgnoreWhitespace || !strings.ContainsFunc(line, unicode.IsSpace) {
+		return line
+	}
+	var b strings.Builder
+	b.Grow(len(line))
+	for _, r := range line {
+		if unicode.IsSpace(r) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// lineKeys maps a whole side onto its comparison keys.
+func lineKeys(lines []string, opts Options) []string {
+	if !opts.IgnoreWhitespace {
+		return lines
+	}
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = lineKey(l, opts)
+	}
+	return out
 }
 
 // splitLines splits text on '\n', treating the empty text as zero lines so an
@@ -124,36 +174,44 @@ func splitLines(text string) []string {
 	return out
 }
 
+// pairEdit is one entry of the aligned edit script: an equal pair carries the
+// raw text of *both* sides (they may differ in whitespace when the comparison
+// ignores it), a delete only the left, an insert only the right.
+type pairEdit struct {
+	op          Op
+	left, right string
+}
+
 // buildRows folds the edit script into aligned display rows: runs of deletes
 // followed by inserts pair up positionally into changed rows (with intra-line
 // spans); the unpaired remainder stays one-sided.
-func buildRows(edits []Edit) []Row {
+func buildRows(edits []pairEdit, opts Options) []Row {
 	var rows []Row
 	leftNo, rightNo := 0, 0
 	i := 0
 	for i < len(edits) {
-		switch edits[i].Op {
+		switch edits[i].op {
 		case OpEqual:
 			leftNo++
 			rightNo++
-			rows = append(rows, Row{Kind: RowSame, LeftNo: leftNo, RightNo: rightNo, Left: edits[i].Text, Right: edits[i].Text})
+			rows = append(rows, Row{Kind: RowSame, LeftNo: leftNo, RightNo: rightNo, Left: edits[i].left, Right: edits[i].right})
 			i++
 		default:
 			// Collect the maximal delete run then insert run.
 			var dels, ins []string
-			for i < len(edits) && edits[i].Op == OpDelete {
-				dels = append(dels, edits[i].Text)
+			for i < len(edits) && edits[i].op == OpDelete {
+				dels = append(dels, edits[i].left)
 				i++
 			}
-			for i < len(edits) && edits[i].Op == OpInsert {
-				ins = append(ins, edits[i].Text)
+			for i < len(edits) && edits[i].op == OpInsert {
+				ins = append(ins, edits[i].right)
 				i++
 			}
 			pairs := min(len(dels), len(ins))
 			for p := 0; p < pairs; p++ {
 				leftNo++
 				rightNo++
-				ls, rs := refine(dels[p], ins[p])
+				ls, rs := refineWith(dels[p], ins[p], opts)
 				rows = append(rows, Row{
 					Kind: RowChanged, LeftNo: leftNo, RightNo: rightNo,
 					Left: dels[p], Right: ins[p], LeftSpans: ls, RightSpans: rs,
@@ -200,6 +258,42 @@ func hunksOf(rows []Row) []Hunk {
 // emphasizes their changed ranges with the same algorithm the diff views use.
 func Refine(left, right string) (ls, rs []Span) { return refine(left, right) }
 
+// refineWith refines a changed pair under opts: ignoring whitespace, spans
+// that carry no non-whitespace change drop out and the remaining ones shrink
+// to their non-whitespace core, so a re-indented line whose *content* changed
+// emphasizes the content and not the leading run.
+func refineWith(left, right string, opts Options) (ls, rs []Span) {
+	ls, rs = refine(left, right)
+	if !opts.IgnoreWhitespace {
+		return ls, rs
+	}
+	return trimSpaceSpans(left, ls), trimSpaceSpans(right, rs)
+}
+
+// trimSpaceSpans trims each span's leading and trailing whitespace runes and
+// drops the spans left empty (whitespace-only changes).
+func trimSpaceSpans(line string, spans []Span) []Span {
+	if len(spans) == 0 {
+		return nil
+	}
+	runes := []rune(line)
+	var out []Span
+	for _, s := range spans {
+		start := clamp(s.Start, 0, len(runes))
+		end := clamp(s.End, start, len(runes))
+		for start < end && unicode.IsSpace(runes[start]) {
+			start++
+		}
+		for end > start && unicode.IsSpace(runes[end-1]) {
+			end--
+		}
+		if start < end {
+			out = append(out, Span{Start: start, End: end})
+		}
+	}
+	return out
+}
+
 // refine runs a rune-level diff over a changed line pair and returns the
 // changed spans on each side. Oversized lines skip refinement (whole-line
 // emphasis reads better than quadratic work).
@@ -245,28 +339,60 @@ type runEdit struct {
 	n  int
 }
 
-// script computes the line-level edit script via Myers.
+// script computes the line-level edit script (whitespace significant), the
+// shape Lines exposes.
 func script(a, b []string) []Edit {
+	pairs := pairScript(a, b, Options{})
+	edits := make([]Edit, 0, len(pairs))
+	for _, p := range pairs {
+		text := p.left
+		if p.op == OpInsert {
+			text = p.right
+		}
+		edits = append(edits, Edit{Op: p.op, Text: text})
+	}
+	return edits
+}
+
+// pairScript computes the line-level edit script via Myers, comparing lines
+// by their opts key (whole line, or whitespace-stripped) while every entry
+// carries the raw text of the side(s) it consumes.
+func pairScript(a, b []string, opts Options) []pairEdit {
+	ka, kb := lineKeys(a, opts), lineKeys(b, opts)
 	// Trim the common prefix and suffix — typical edits touch a small region,
 	// and Myers cost grows with the differing middle.
 	pre := 0
-	for pre < len(a) && pre < len(b) && a[pre] == b[pre] {
+	for pre < len(a) && pre < len(b) && ka[pre] == kb[pre] {
 		pre++
 	}
 	suf := 0
-	for suf < len(a)-pre && suf < len(b)-pre && a[len(a)-1-suf] == b[len(b)-1-suf] {
+	for suf < len(a)-pre && suf < len(b)-pre && ka[len(a)-1-suf] == kb[len(b)-1-suf] {
 		suf++
 	}
-	mid := myers(a[pre:len(a)-suf], b[pre:len(b)-suf])
-	edits := make([]Edit, 0, pre+len(mid)+suf)
-	for _, l := range a[:pre] {
-		edits = append(edits, Edit{Op: OpEqual, Text: l})
+	ops := myersTrace(stringSeq{ka[pre : len(ka)-suf]}, stringSeq{kb[pre : len(kb)-suf]})
+	out := make([]pairEdit, 0, pre+len(ops)+suf)
+	for i := 0; i < pre; i++ {
+		out = append(out, pairEdit{op: OpEqual, left: a[i], right: b[i]})
 	}
-	edits = append(edits, mid...)
-	for _, l := range a[len(a)-suf:] {
-		edits = append(edits, Edit{Op: OpEqual, Text: l})
+	ai, bi := pre, pre
+	for _, op := range ops {
+		switch op {
+		case OpEqual:
+			out = append(out, pairEdit{op: OpEqual, left: a[ai], right: b[bi]})
+			ai++
+			bi++
+		case OpDelete:
+			out = append(out, pairEdit{op: OpDelete, left: a[ai]})
+			ai++
+		case OpInsert:
+			out = append(out, pairEdit{op: OpInsert, right: b[bi]})
+			bi++
+		}
 	}
-	return edits
+	for i := 0; i < suf; i++ {
+		out = append(out, pairEdit{op: OpEqual, left: a[len(a)-suf+i], right: b[len(b)-suf+i]})
+	}
+	return out
 }
 
 // runeScript computes a run-length rune-level edit script via the same Myers
@@ -300,29 +426,6 @@ func runeScript(a, b []rune) []runEdit {
 		}
 	}
 	return out
-}
-
-// myers runs the Myers core over line slices and expands the op trace into
-// line-carrying edits.
-func myers(a, b []string) []Edit {
-	ops := myersTrace(stringSeq{a}, stringSeq{b})
-	edits := make([]Edit, 0, len(ops))
-	ai, bi := 0, 0
-	for _, op := range ops {
-		switch op {
-		case OpEqual:
-			edits = append(edits, Edit{Op: OpEqual, Text: a[ai]})
-			ai++
-			bi++
-		case OpDelete:
-			edits = append(edits, Edit{Op: OpDelete, Text: a[ai]})
-			ai++
-		case OpInsert:
-			edits = append(edits, Edit{Op: OpInsert, Text: b[bi]})
-			bi++
-		}
-	}
-	return edits
 }
 
 // seq abstracts the two element types (lines, runes) the Myers core walks.
