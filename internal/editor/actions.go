@@ -530,6 +530,11 @@ func (m *Model) jumpHistory(seq int) {
 // tree already includes the in-flight typing.
 func (m *Model) HistoryTree() []history.NodeInfo { return m.hist.Tree() }
 
+// HistoryContentAt reconstructs the buffer text at history state seq for the
+// overlay's diff preview (#2143). It is read-only: neither the buffer nor the
+// history moves. Returns false for a state that is no longer in the tree.
+func (m *Model) HistoryContentAt(seq int) (string, bool) { return m.hist.ContentAt(m.buf, seq) }
+
 // save writes the buffer to disk, applying the trim-trailing-whitespace and
 // final-newline policies, and clears the dirty flag. No-op without a file.
 func (m *Model) save() error { return m.saveAs(m.path) }
