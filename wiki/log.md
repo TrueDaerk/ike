@@ -1,5 +1,33 @@
 # Log
 
+## 2026-08-28 (Help overlay: multi-column layout restored in the context view, #2215)
+
+- **The column width now aims at the typical entry, not the longest one**
+  (`internal/help/layout.go`, `help.go`). Since #2182 the context view lists
+  *every* scope at once, so the widest rendered cell was drawn from hundreds of
+  commands: one verbose title pushed the shared column width past half the
+  terminal, only a single column fit, and the overlay degraded to one endlessly
+  tall column in every section. `TypicalColumnWidth(cells, configMin, pct)`
+  answers "how wide must a column be so almost nothing is clipped" (help asks
+  for 90%), and the new `ColumnLayout(width, natural, floor, maxCols)` takes the
+  largest column count whose columns stay at or above that floor, shrinking them
+  to their fair share of the budget when the natural width does not fit. On a
+  120-cell budget the sectioned sheet goes from 1 column / 62 rows back to 2
+  columns / 39 rows.
+- **Overlong rows are ellipsised, never wrapped** (`renderEntry`): the *title*
+  is truncated with `…` so the row stays one line and its shortcut stays
+  visible — the shortcut itself is never cut. A column with less than
+  `minTitleWidth` room left for a title keeps the untruncated row and lets it
+  overflow, since a bare `…` says nothing; that is also what keeps very narrow
+  budgets rendering as before.
+- **Unchanged:** the section structure and headings from #2182 (focused context
+  first, then global, then the rest), the `tab` view cycle, the two-column cap,
+  and the single-column fallback on genuinely narrow terminals. `ColumnCount`
+  is gone — `ColumnLayout` subsumes it and nothing else called it.
+- Tests: `internal/help/columns_test.go` covers `TypicalColumnWidth`,
+  `ColumnLayout`, the entry truncation, and the sectioned render at a wide and a
+  narrow budget. Wiki: [Help Overlay](/architecture/help-overlay.md).
+
 ## 2026-08-28 (Diff viewer: ignore-whitespace toggle, per-side intra-line emphasis, #2170)
 
 - **Ignore whitespace** (`internal/diff/engine.go`): `ComputeWith(left, right,

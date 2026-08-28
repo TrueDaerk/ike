@@ -1,6 +1,10 @@
 package help
 
-import "charm.land/lipgloss/v2"
+import (
+	"sort"
+
+	"charm.land/lipgloss/v2"
+)
 
 // gutter is the blank space inserted between adjacent columns.
 const gutter = 2
@@ -8,20 +12,6 @@ const gutter = 2
 // defaultMinColWidth is the floor used when no per-entry width or config value
 // drives the column width.
 const defaultMinColWidth = 20
-
-// ColumnCount returns how many columns of minColWidth (plus a gutter each) fit
-// in width. It never drops below one, so narrow terminals fall back to a single
-// column.
-func ColumnCount(width, minColWidth int) int {
-	if minColWidth < 1 {
-		minColWidth = 1
-	}
-	cols := width / (minColWidth + gutter)
-	if cols < 1 {
-		return 1
-	}
-	return cols
-}
 
 // MinColumnWidth derives the column width from the widest rendered cell, never
 // below configMin (or defaultMinColWidth when configMin is non-positive).
@@ -37,6 +27,79 @@ func MinColumnWidth(cells []string, configMin int) int {
 		}
 	}
 	return w
+}
+
+// TypicalColumnWidth returns the narrowest width that still shows pct percent
+// of the cells in full, floored like MinColumnWidth. It is the counterpart to
+// MinColumnWidth: where that one answers "how wide must a column be so nothing
+// is clipped", this one answers "how wide must it be so almost nothing is" —
+// the width a single unusually long command title must not be allowed to
+// dictate (#2215). pct outside 1..100 clamps into range.
+func TypicalColumnWidth(cells []string, configMin, pct int) int {
+	floor := configMin
+	if floor < 1 {
+		floor = defaultMinColWidth
+	}
+	if len(cells) == 0 {
+		return floor
+	}
+	if pct < 1 {
+		pct = 1
+	}
+	if pct > 100 {
+		pct = 100
+	}
+	widths := make([]int, len(cells))
+	for i, c := range cells {
+		widths[i] = lipgloss.Width(c)
+	}
+	sort.Ints(widths)
+	// ceil(pct% of n) cells fit, so at least one always does.
+	at := (len(widths)*pct + 99) / 100
+	if at < 1 {
+		at = 1
+	}
+	w := widths[at-1]
+	if w < floor {
+		return floor
+	}
+	return w
+}
+
+// ColumnLayout picks how many columns of what width to render into a body
+// budget of width cells. natural is the width that clips nothing, floor the
+// narrowest column still worth having (see TypicalColumnWidth). It returns the
+// largest column count up to maxCols whose columns stay at or above floor,
+// preferring natural when the budget affords it — so a lone overlong entry
+// costs that one row a truncation instead of collapsing the whole sheet into a
+// single column (#2215).
+func ColumnLayout(width, natural, floor, maxCols int) (cols, colW int) {
+	if maxCols < 1 {
+		maxCols = 1
+	}
+	if floor < 1 {
+		floor = defaultMinColWidth
+	}
+	if natural < floor {
+		natural = floor
+	}
+	for c := maxCols; c > 1; c-- {
+		share := (width - gutter*(c-1)) / c
+		if share < floor {
+			continue
+		}
+		if share > natural {
+			share = natural
+		}
+		return c, share
+	}
+	if natural > width {
+		natural = width
+	}
+	if natural < 1 {
+		natural = 1
+	}
+	return 1, natural
 }
 
 // Pack distributes cells column-major into cols balanced columns: each column
