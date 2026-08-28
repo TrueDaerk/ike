@@ -63,10 +63,15 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
 - **PTY lifecycle** via `creack/pty`: the shell (`terminal.shell` config
   override → `$SHELL` → `/bin/sh`) spawns in the project root with
   `TERM=xterm-256color`; pane resizes propagate through `pty.Setsize`
-  (SIGWINCH for the child) and the emulator — **debounced** (#804): the first
-  resize applies immediately, a rapid burst (divider drag) folds into one
-  trailing apply of the final size, so the child redraws once instead of per
-  drag step; `Close` kills the child and releases the PTY (bounded — the loop
+  (SIGWINCH for the child) and the emulator — **debounced** (#804): a rapid
+  burst (divider drag) folds into one trailing apply of the final size, so
+  the child redraws once instead of per drag step. A quiet **height-only**
+  change keeps the instant leading edge (its apply is screen-sized reserve
+  bookkeeping); **width** changes never apply on the caller (#2184) — the
+  width reflow walks the whole history under `mu`+`gridMu`, and `Resize`
+  runs on the update loop, so they always park for the trailing apply on the
+  timer goroutine while the pane clips/pads the stale-size grid;
+  `Close` kills the child and releases the PTY (bounded — the loop
   joins continue in the background, #1786), and a shell `exit` sends
   `ExitedMsg` so the root model closes the pane. A **finished** session still
   resizes (#1951) — its output stays on screen in the exited state, so the
@@ -809,7 +814,12 @@ unavailable then, like in xterm.
 (across its soft-wrapped rows), then the cycle restarts. Word boundaries are
 shell-friendly: alphanumerics plus `/.-_~+@$%=:`, so `/usr/local/bin`,
 `--flag=value` or `user@host:path` select whole, and a word spanning the wrap
-break stays one word. `cmd+c` copies multi-click selections through the same
+break stays one word. The span walk is capped at `logicalWalkCap` (80) rows
+per direction (#2184): when every row is full-width (cat of a minified file,
+a base64 dump) the wrap heuristic reads the entire scrollback as one logical
+line, and an uncapped walk would touch every row — two lock round-trips each
+— and materialize the whole buffer as one "word" on a double click, re-run
+per motion flush while a word/line drag extends. `cmd+c` copies multi-click selections through the same
 path as drags. Keeping the button down after the second/third click and
 dragging extends unit-wise (#951): word by word after a double click, whole
 logical lines after a triple click — in both directions, with the originally
