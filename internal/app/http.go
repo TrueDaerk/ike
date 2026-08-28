@@ -823,8 +823,9 @@ type httpFlightEntry struct {
 	canceled bool
 }
 
-// httpTickMsg repaints the in-flight indicator while requests run.
-type httpTickMsg struct{}
+// httpTickMsg repaints the in-flight indicator while requests run. gen names
+// the model that armed it (#2194); another model's tick is dropped.
+type httpTickMsg struct{ gen int64 }
 
 // HTTPCancelMsg runs http.cancel: abort every in-flight dispatch (#1272).
 type HTTPCancelMsg struct{}
@@ -898,7 +899,8 @@ func (m *Model) startHTTPFlight(key string, e *httpFlightEntry) tea.Cmd {
 		return nil // a tick loop is already running
 	}
 	m.httpTickArmed = true
-	return tea.Tick(httpFlightTick, func(time.Time) tea.Msg { return httpTickMsg{} })
+	gen := m.modelGen
+	return tea.Tick(httpFlightTick, func(time.Time) tea.Msg { return httpTickMsg{gen: gen} })
 }
 
 // finishHTTPFlight drops a finished dispatch and reports whether the user had

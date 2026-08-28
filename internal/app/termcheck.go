@@ -42,8 +42,11 @@ const termCheckMaxRetries = 30
 // termReportWidth caps the report body: long lines wrap here.
 const termReportWidth = 66
 
-// termCheckMsg draws the verdict when the grace period elapses.
-type termCheckMsg struct{}
+// termCheckMsg draws the verdict when the grace period elapses. gen names the
+// model that armed it (#2194): a project switch rebuilds the model while the
+// grace tick sleeps, and the fresh model's zero-valued caps would read a
+// Kitty-capable terminal as lacking the protocol.
+type termCheckMsg struct{ gen int64 }
 
 // termCaps accumulates the capability reports until the verdict.
 type termCaps struct {
@@ -63,12 +66,14 @@ type termCaps struct {
 }
 
 // termCheckTick schedules the verdict; the retry variant re-polls a busy shell.
-func termCheckTick() tea.Cmd {
-	return tea.Tick(termCheckGrace, func(time.Time) tea.Msg { return termCheckMsg{} })
+// Both stamp the arming model's generation, so a tick outliving a project
+// switch retires on arrival.
+func termCheckTick(gen int64) tea.Cmd {
+	return tea.Tick(termCheckGrace, func(time.Time) tea.Msg { return termCheckMsg{gen: gen} })
 }
 
-func termCheckRetryTick() tea.Cmd {
-	return tea.Tick(termCheckRetry, func(time.Time) tea.Msg { return termCheckMsg{} })
+func termCheckRetryTick(gen int64) tea.Cmd {
+	return tea.Tick(termCheckRetry, func(time.Time) tea.Msg { return termCheckMsg{gen: gen} })
 }
 
 // insideTmux reports whether IKE runs under tmux (or screen), which consumes
@@ -138,7 +143,7 @@ func (m *Model) runTermCheck() tea.Cmd {
 			return nil
 		}
 		m.caps.retries++
-		return termCheckRetryTick()
+		return termCheckRetryTick(m.modelGen)
 	}
 	m.caps.done = true
 	body := m.termReportBody(issues)

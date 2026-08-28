@@ -22,7 +22,9 @@ so with many panes each unnecessary wake is expensive. The standing rules:
 - **No unconditional repeating ticks.** Debounce-style timers (autosave idle,
   backup, VCS refresh, keymap chord timeout, the follow-mode poll #1928) arm
   on demand and re-arm only while work is pending (`arm*Tick` + `*TickArmed`
-  flags in `internal/app`).
+  flags in `internal/app`). Each such tick also carries the generation of the
+  model that armed it, so a project switch cannot leave two chains running on
+  the same clock (#2194, below).
 - **One documented exception: the forge poll** (#2085). Watching a remote
   forge has no change seam to arm on, so its tick repeats while
   `forge.poll_interval_seconds` is non-zero — a standing 1 in the armed-ticker
@@ -280,7 +282,8 @@ snapshots, active-session DAP output, watcher event batching,
 completion-source locking, per-frame sticky/fold/speed-search memoization,
 tick generation stamps across model rebuilds) are split into follow-up
 issues — see the #2163 issue trail; the host outbox bounding landed as
-#2169 and the per-frame memoizations as #2187 (next section).
+#2169, the per-frame memoizations as #2187 (next section) and the tick
+generation stamps as #2194.
 
 ## The remaining per-frame recomputation (#2187)
 
@@ -329,6 +332,35 @@ reads and invalidated where that changes.
   feature off, or no symbol tree cached) and the recorded signature is already
   empty. `internal/app/settledearlyout_test.go` pins all three at zero
   allocations per pass in those states.
+
+## Tick generation stamps across model rebuilds (#2194)
+
+The other #2163 follow-up. Every `*TickArmed` guard lives on the `Model`
+*value*, but a project switch rebuilds the model (`buildModel`) while a tick
+minted by the departed one may still be sleeping — a window of up to the whole
+tick interval. The fresh model's zeroed flag then let that tick arm a second
+chain on the same clock. For the follow poll both chains self-sustain while a
+view keeps following: one extra 500ms poll chain per park/resume race. The
+backup and idle-autosave chains converged on their own (re-arming needs
+pending marks), but the class kept reappearing per site.
+
+The guard is structural now (`internal/app/tickgen.go`): `buildModel` stamps
+each model with a generation from a process-wide counter (`modelGen`), every
+demand-armed tick message carries the generation of the model that armed it,
+and `Update` drops a tick whose generation the receiving model does not own —
+without a re-arm, which retires the departed chain, and without touching the
+live model's armed flag. It is the pattern `preview.RenderTickMsg`,
+`palette.LiveTickMsg`, `terminal.AutoScrollMsg`, `playDebounceMsg` and the
+explorer's `pollMsg` (#2163) already used, applied to the remaining armed-flag
+ticks: backup, idle autosave, follow poll, mouse-idle hover, the HUD sample,
+the `.http` flight indicator and the `.http` variable lint.
+
+The same stamp fixes a visible symptom: `termCheckMsg`. A grace or retry tick
+outliving a project switch was judged against the fresh model's zero-valued
+`termCaps`, and an unprobed model reads as "no Kitty keyboard protocol" — so a
+Kitty-capable terminal could be told its shortcuts will not work. A stale
+verdict tick now retires; the model that actually probed the terminal is the
+only one that reports.
 
 ## Diagnostics hooks (`internal/diag`, #1001)
 
