@@ -4,7 +4,7 @@ title: Usage Telemetry
 description: Local-only usage recording — command, keybinding and layout events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Usage Telemetry
@@ -101,6 +101,16 @@ history).
   loop never blocks and a usage log never disrupts the session. The recorder
   opens its file lazily on the first accepted event and is flushed/closed in
   the quit path.
+- **No ghost sessions (#2318)**: a bare `layout`/`pane.focus` event does not
+  open the file. The session restore moves focus from the explorer to the
+  restored editor on every launch, so a start-and-quit would otherwise leave
+  a file holding that single synthetic event — ten such ghosts out of sixteen
+  files in one day. Deferred focus events are held in memory (capped at 32,
+  oldest dropped) and written ahead of the first *meaningful* event, so real
+  sessions keep the full chronology; a session that never produces one leaves
+  no file. The rule lives in `startsSession`
+  (`internal/telemetry/telemetry.go`) — everything except a bare pane focus
+  starts a session.
 - **Periodic flush (#2295)**: the writer goroutine also holds a ticker
   (`Recorder.FlushInterval`, default 3s) and flushes the `bufio.Writer` on
   every tick, independent of buffer fill or an explicit `Flush()`/`Close()`
@@ -113,7 +123,8 @@ history).
   channel instead of sleeping.
 - **Bounded growth**: the session file is capped (5 MiB; past it the recorder
   stops writing), and opening a new session prunes the directory down to the
-  newest 20 session files.
+  newest 20 session files. The same pass deletes zero-byte session files left
+  by launches killed before the writer flushed anything (#2318).
 - **Switch**: `telemetry.enabled` (Settings → Usage Telemetry, default on) is
   read live per event, so a settings flip applies immediately; off, nothing
   is written at all. A nil recorder is inert, mirroring the frecency store.

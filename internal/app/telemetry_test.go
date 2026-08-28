@@ -161,6 +161,24 @@ func TestTelemetryPlainTypingNeverRecorded(t *testing.T) {
 	}
 }
 
+// TestTelemetryStartAndQuitLeavesNoFile pins the ghost-session rule (#2318):
+// a launch whose only telemetry is a pane focus change — what the session
+// restore emits on startup — must leave no file behind at all.
+func TestTelemetryStartAndQuitLeavesNoFile(t *testing.T) {
+	m := telemetryModel(t, host.MapConfig{})
+	m.cycleFocus()
+	m.quit()
+
+	dir := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "telemetry")
+	entries, err := os.ReadDir(dir)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("start-and-quit left telemetry files: %v", entries)
+	}
+}
+
 // TestTelemetryLayoutEvents checks the structural layout hooks: split, pane
 // focus and resize land as layout events with structural payloads only.
 func TestTelemetryLayoutEvents(t *testing.T) {
