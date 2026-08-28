@@ -64,6 +64,8 @@ func (m Model) shellBodyClick(msg mouseEvent, x, y int) (tea.Model, tea.Cmd, boo
 		f = m.localHistoryClickRow
 	case m.timelineOpen():
 		f = m.timelineClickRow
+	case m.projectHistoryOpen():
+		f = m.projectHistoryClickRow
 	case m.changeFeedOpen():
 		f = m.changeFeedClickRow
 	case m.historyPickerOpen():

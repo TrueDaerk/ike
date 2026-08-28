@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Local History
-description: Per-project file snapshots on every save, with a floating two-pane panel — snapshot list left, live inline diff against the current buffer right — plus restore through the undoable edit path and the per-file Timeline merging those snapshots with the file's git history
+description: Per-project file snapshots on every save, with a floating two-pane panel — snapshot list left, live inline diff against the current buffer right — plus restore through the undoable edit path, the per-file Timeline merging those snapshots with the file's git history, and a project-wide timeline of every file's snapshots grouped by day
 resource: internal/localhistory/localhistory.go
-tags: [history, snapshots, diff, restore, persistence, timeline, git]
-timestamp: 2026-08-20T00:00:00Z
+tags: [history, snapshots, diff, restore, persistence, timeline, git, project-wide]
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Local History
@@ -129,6 +129,40 @@ via the shared `openDiffTexts` (single-slot reuse, otherwise a titled split).
 
 The filter the view **opens** with is the `history.timeline_source` setting
 (Settings → Timeline): `both` (default), `local` or `git`.
+
+## Project-wide timeline (`internal/app/projecthistory.go`)
+
+`history.projectTimeline` ("Show Project History Timeline", #2171) asks the
+other axis: not "what happened to this file" but **"what did I change
+today?"**. It lists the snapshots of *every* file the store knows, newest
+first, grouped by day.
+
+- **Data layer** (`internal/localhistory/project.go`) is pure: `Scan` collects
+  the index into one newest-first `Snapshot` list (an `Entry` plus its path),
+  `GroupByDay`/`DayLabel` bucket it into `Today` / `Yesterday` / `Mon
+  2026-08-24` in that order. Ties break on path, then hash, so the order is
+  total and a re-scan never reshuffles rows under the cursor.
+- **Bounds:** the scan keeps the newest `DefaultScanCap` (2000) snapshots and
+  reports that it cut the tail; the panel reveals `projectHistoryPage` (100)
+  rows at a time, growing as the selection walks toward the end or on
+  `ctrl+l`, and windows the rendered block to the terminal's height. The
+  counts line under the rows always says how much is reachable and why the
+  rest is not — silence would read as "this is everything".
+- **Filter line:** printable keys narrow the list by path substring
+  (`ui.SpeedSearch`, the shared type-ahead), which is why loading more is the
+  chord `ctrl+l` and not the per-file Timeline's bare `L`, and why the
+  selection walks on the arrows / page keys / `ctrl+n`/`ctrl+p` rather than
+  `j`/`k`. The first `esc` clears a running filter, the second closes.
+- **Handoff:** `enter` (or a click on the selected row) closes the timeline,
+  **opens the row's file** and raises the per-file panel above with that
+  snapshot preselected — matched on time *and* hash, since the same content
+  saved twice shares one hash. Opening the file first is what makes the
+  panel's `r` work from here: restore edits a buffer, and the whole point of
+  the timeline is that its rows are files the user does not have open. A file
+  deleted since its snapshot still opens the panel, diffing against nothing.
+
+Day headings, the counts line and the hints are inert to clicks; a click
+selects a row and a click on the already-selected row hands off (#2275).
 
 ## Third consumer: the external-change feed
 
