@@ -229,8 +229,14 @@ func isBinary(data []byte) bool {
 // handleArchviewMsg routes the archive pane's action messages; handled
 // reports whether msg was one of them.
 func (m Model) handleArchviewMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
-	if open, ok := msg.(archview.OpenEntryMsg); ok {
-		return m, m.openArchiveEntry(open.Archive, open.Entry), true
+	switch msg := msg.(type) {
+	case archview.OpenEntryMsg:
+		return m, m.openArchiveEntry(msg.Archive, msg.Entry), true
+	case archview.ExtractMsg:
+		// The pane names what to extract; the target directory, the safety
+		// checks and the writing all live in archextract.go (#2249).
+		m.startArchiveExtract(msg)
+		return m, nil, true
 	}
 	return m, nil, false
 }

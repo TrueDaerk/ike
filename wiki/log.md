@@ -23,6 +23,33 @@
   mnemonic, preview and description together; `esc` clears the query before it
   closes. Line texts are read once and cached per overview, so narrowing never
   re-reads a file.
+## 2026-08-28 (Archive viewer: extract members or the whole archive to disk, #2249)
+
+- **Extraction, guarded** (`internal/archive/extract.go`): `PlanExtract` reads
+  headers only and reports what a run would do — selected members, refused
+  ones with a reason, existing targets, declared size — and `Extract` writes
+  what the plan named. The two phases are what makes the overwrite question
+  askable at all.
+- **Nothing escapes the target dir** (`SafeTarget`): absolute names, any `../`
+  component after `path.Clean`, and Windows volume names are refused and
+  reported as `unsafe path`, never clamped silently; the joined path is
+  re-checked against the destination afterwards. Sym-/hard links and special
+  files are skipped rather than materialized, and an existing symlink at a
+  target is replaced instead of written through.
+- **Bomb guard for tars** (`DefaultExtractLimit`, 1 GiB): enforced on the
+  plan's declared total *and* on the bytes actually written, since a header
+  size is untrusted — the partial file is removed and the message names the
+  cap.
+- **Pane keys and palette** (`internal/archview`): `e` extracts the row under
+  the cursor (a directory row means its subtree), `E` the whole archive; both
+  only emit `archview.ExtractMsg`, so the viewer stays write-free. The palette
+  entries `archive.extractEntry` / `archive.extractAll` act on the focused
+  viewer.
+- **The UI around it** (`internal/app/archextract.go`): a target-directory
+  prompt prefilled next to the archive and named after it without its archive
+  suffix (`backup.tar.gz` → `./backup`), an overwrite guard answering
+  `o` / `s` / `esc` for the whole run, and a summary toast counting files,
+  bytes and the skipped entries with their reasons.
 
 ## 2026-08-28 (Theme picker: live preview while scrolling, rollback on esc, #2181)
 

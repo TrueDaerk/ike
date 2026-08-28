@@ -23,6 +23,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/archive"
 	"ike/internal/archview"
 	"ike/internal/backup"
 	"ike/internal/bookmarks"
@@ -546,6 +547,20 @@ type Model struct {
 	httpSaveOpen  bool
 	httpSaveInput string
 	httpSavePos   int
+	// archExtractOpen marks the archive extraction target-directory prompt
+	// (#2249) while the shell shows it; archExtractInput/archExtractPos are
+	// the typed path and cursor, and archExtractArchive/archExtractMembers
+	// hold what the pane asked to extract (no members = the whole archive).
+	// archExtractPlan is the pending plan while the overwrite guard is up.
+	archExtractOpen    bool
+	archExtractInput   string
+	archExtractPos     int
+	archExtractArchive string
+	archExtractMembers []string
+	archExtractPlan    *archive.Plan
+	// archExtractLimit overrides the extraction byte cap (0 = the package
+	// default), the seam the cap's test drives.
+	archExtractLimit int64
 	// lspRename is the open symbol-rename prompt (Roadmap 0100, #6); nil when
 	// no rename is in flight.
 	lspRename *lspRenameState
@@ -6137,6 +6152,23 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model, cmd, _ := m.handleArchviewMsg(msg)
 		return model, cmd
 
+	case ArchiveExtractEntryMsg:
+		// archive.extractEntry (palette, #2249): the same flow as "e", from
+		// the focused archive viewer.
+		m.startArchiveExtractCommand(false)
+		return m, nil
+
+	case ArchiveExtractAllMsg:
+		// archive.extractAll (palette, #2249): the same flow as "E".
+		m.startArchiveExtractCommand(true)
+		return m, nil
+
+	case archview.ExtractMsg:
+		// e / E in the archive pane (#2249): ask where the members should
+		// land, then write them out under the safety guards.
+		model, cmd, _ := m.handleArchviewMsg(msg)
+		return model, cmd
+
 	case OpenDataMsg:
 		// data.view (#1764): a database file opens as a table browser,
 		// never as a raw text buffer. The database itself opens in the
@@ -7612,6 +7644,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// one path line with tab completion.
 		if m.httpSavePromptOpen() {
 			return m.updateHTTPSavePrompt(msg)
+		}
+		// The archive extraction target prompt (#2249) mirrors it, and its
+		// overwrite guard answers on o / s / esc like the other guards.
+		if m.archiveExtractPromptOpen() {
+			return m.updateArchiveExtractPrompt(msg)
+		}
+		if m.archiveExtractGuardOpen() {
+			return m.updateArchiveExtractGuard(msg)
 		}
 		// The symbol-rename prompt (0100, #6) mirrors it.
 		if m.lspRenameOpen() {
