@@ -1055,6 +1055,10 @@ func (d *dragState) engaged() bool {
 // < project) from the working directory and backs the host with it.
 func New() Model {
 	phase := time.Now()
+	// Sweep whatever "Open in Browser" unpacked into its scratch directory in
+	// a previous, possibly crashed, run (#2298) — a clean exit already empties
+	// it, so this only ever finds something after a kill or a crash.
+	cleanOpenInBrowserTempDir()
 	cfg, diags := config.Load(config.Discover("."))
 	perfhud.RecordStartupPhase("config", time.Since(phase))
 	config.Set(cfg)
@@ -2472,6 +2476,7 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 		inst.CloseTerminalTabs()
 	}
 	m.backupCleanShutdown()
+	os.RemoveAll(openInBrowserTempDir)
 	// End everything that would otherwise outlive the process (#1546). The
 	// active workspace's pane and tab terminal sessions close like a parked
 	// workspace's would; the active debug session gets Disconnect — the only

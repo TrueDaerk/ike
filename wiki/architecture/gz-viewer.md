@@ -3,8 +3,8 @@ type: concept
 title: Gz Viewer
 description: "#1763 — a plain .gz opens transparently decompressed in a read-only editor buffer with the inner file's language and highlighting; the decompressed-byte cap is the bomb guard, tarballs route to the archive viewer instead."
 resource: internal/gzfile
-tags: [architecture, gzip, viewer, read-only, large-file]
-timestamp: 2026-08-18T00:00:00Z
+tags: [architecture, gzip, viewer, read-only, large-file, open-in-browser]
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Gz Viewer (#1763)
@@ -148,6 +148,27 @@ drops the cached spans and advances the document version, and a read-only
 buffer can never schedule a parse the way an edit does — so without that
 command the preview would go plain the first time the file changed and stay
 plain for the rest of the session (#1853).
+
+## Open in Browser unpacks, not previews (#2298)
+
+"Open in Browser" (`internal/app/openinbrowser.go`, #1429) reaches into a
+plain gzip file the same way as the preview above, but a browser cannot
+render gzip bytes directly, so instead of a read-only buffer it decompresses
+into a real file and opens that. `gzipArchiveOf` resolves the target back to
+the on-disk `.gz` — directly, or by stripping the `<archive>!<inner>` suffix
+off an already-open preview buffer's own path — then reuses `gzfile.IsPlain`
+and `gzfile.Read` unchanged: a compressed tar is still declined (routed to
+the archive viewer instead), and the same `files.large_file_kb` cap guards
+against a decompression bomb, refused with a toast rather than opened
+partially.
+
+The unpacked copy lands under an ike-owned scratch directory
+(`$TMPDIR/ike-open-in-browser`), in a subdirectory keyed by the archive's own
+absolute path (a SHA-1 hex digest, to dodge path-length and character
+issues) — so reopening `report.html.gz` overwrites the same unpacked file
+instead of piling up a new one every time. The whole directory is swept on a
+clean exit and again at the next startup, so a kill or a crash never leaves
+unpacked copies behind for good.
 
 ## Boundaries
 
