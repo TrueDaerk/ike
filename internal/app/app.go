@@ -5303,6 +5303,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case preview.LinkMsg:
+		// enter/y on a selected preview link (#2180): follow it into the
+		// editor, the preview itself (anchors) or the platform opener.
+		return m.followPreviewLink(msg)
+
 	case TerminalToggleMsg:
 		// terminal.toggle (alt+f12 / palette / menu): the JetBrains state
 		// machine — create, focus, or return focus (#97).
@@ -7833,7 +7838,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// own sidebar/grid regions, the way an editor keeps its plain
 			// keys. Pane focus still cycles with ctrl+tab (the pane switcher)
 			// and the focus keys.
-			if m.dataPaneFocused() {
+			if m.dataPaneFocused() || m.previewLinkPaneFocused() {
 				return m.routeKey(msg)
 			}
 			m.cycleFocus()
@@ -8588,6 +8593,16 @@ func (m Model) explorerCapturing() bool {
 func (m Model) dataPaneFocused() bool {
 	inst := m.focusedContent()
 	return inst != nil && (inst.Kind() == pane.KindData || inst.Kind() == pane.KindES)
+}
+
+// previewLinkPaneFocused reports whether tab belongs to a focused markdown
+// preview (#2180), where it walks the document's links. Only a preview that
+// actually has links claims the key — a link-free document keeps tab's global
+// focus-cycling meaning rather than swallowing it — and ctrl+tab cycles panes
+// either way.
+func (m Model) previewLinkPaneFocused() bool {
+	inst := m.focusedContent()
+	return inst != nil && inst.Kind() == pane.KindMarkdown && inst.Preview().HasLinks()
 }
 
 // paneSelectionCopy reports whether the focused pane holds a live text

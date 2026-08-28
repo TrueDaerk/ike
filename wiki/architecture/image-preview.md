@@ -4,7 +4,7 @@ title: Image Preview
 description: "#1479 — image files render in a preview pane via the Kitty graphics protocol (Unicode placeholders): capability probe with metadata fallback, per-pass transmit/delete reconcile, decode of PNG/JPEG/GIF/WebP, layout persistence."
 resource: internal/imgview
 tags: [architecture, image, preview, pane, kitty, graphics]
-timestamp: 2026-08-13T12:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Image Preview (#1479)
@@ -35,7 +35,7 @@ restores as the pane's decode-error fallback).
 IKE uses the protocol's Unicode-placeholder flavour (`U=1`), not absolute
 positioning: the image is transmitted once as a *virtual placement* (PNG
 payload, base64, 4096-byte chunks — `kitty.go`) scaled to a cell grid that
-`fitGrid` fits into the pane preserving pixel aspect (cells counted 2:1
+`FitGrid` fits into the pane preserving pixel aspect (cells counted 2:1
 tall). `View` then renders ordinary text: rows of U+10EEEE placeholder cells
 carrying row/column diacritics, with the image id encoded in the foreground
 colour. The terminal composites the image over those cells. Because
@@ -72,9 +72,11 @@ reset makes the resume's reconcile pass transmit again.
 
 ## Boundaries
 
-- Markdown previews still degrade inline images to their alt-text links
-  ([markdown-preview](./markdown-preview.md)); this pane handles image
-  *files* only.
+- This pane handles image *files*. The markdown preview renders the images a
+  buffer references through the same protocol layer (#2180) — `FitGrid`,
+  `PlaceholderGrid`, `Transmit`, `Delete` and `HumanSize` are shared, and
+  `imageSyncCmd` / `releaseWorkspaceImages` reconcile both kinds — but it owns
+  its own placements; see [markdown-preview](./markdown-preview.md).
 - No animation: a GIF shows its first frame (stdlib decode).
 - Sixel / iTerm2 inline-image protocols are out of scope; terminals without
   Kitty graphics get the metadata card.

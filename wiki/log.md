@@ -1,5 +1,39 @@
 # Log
 
+## 2026-08-28 (Markdown preview: follow relative links, render local images inline, #2180)
+
+- **Link following** (`internal/preview/links.go`): the preview indexes its
+  links out of the rendered output's OSC 8 hyperlink sequences — glamour
+  already carries the raw markdown destination there, so a link's row and byte
+  span come from the rendering itself, and the label/printed-URL pair for one
+  link collapses to one entry. In-document `#anchor` links, which glamour
+  renders as bare text, are recovered from the source and located by label
+  from where the scroll-sync mapping puts them. `tab`/`shift+tab` walk the
+  links (wrapping, revealing, reverse-video marker on the label, destination
+  in the status line), `enter` follows and `y` copies. A link-free preview
+  leaves `tab` its global focus-cycling meaning.
+- **Follow policy** (`internal/app/previewlinks.go`): `preview.LinkMsg` hands
+  the destination to the root model. `#anchor` scrolls the preview itself
+  (GitHub-style slugs); an absolute URL goes to the `browserOpen` seam — only
+  on the explicit key, never during rendering; anything else resolves against
+  the previewed file and opens through `openPath`, or `openPathAt` on the
+  heading line for `file.md#section`. A missing target toasts.
+- **Inline images** (`internal/preview/images.go`): local images the buffer
+  references decode once (cached by resolved path) and replace their rendered
+  "Image: …" line with a Unicode-placeholder block, reusing the image pane's
+  protocol layer — `imgview.FitGrid`, `PlaceholderGrid`, `Transmit`, `Delete`
+  and `HumanSize` are now exported and shared. Substitution runs *before* the
+  scroll-sync anchors are built, so headings around an image block still map
+  to the lines they really occupy.
+- **Reconcile**: `imageSyncCmd` and `releaseWorkspaceImages` walk markdown
+  previews alongside image panes (one pane, many ids), and
+  `Registry.PreviewsMinted` joins `ImagesMinted` in the #2187 early-out.
+- **Boundaries**: no network I/O — a destination with a scheme is remote by
+  definition and is never opened for its bytes, so remote images stay text.
+  Without Kitty graphics the alt-text line keeps its place and gains a dim
+  format/size/dimensions caption; missing and undecodable targets degrade the
+  same way.
+
 ## 2026-08-28 (Local history: project-wide timeline across files, #2171)
 
 - **Project-wide read side** (`internal/localhistory/project.go`): `Scan`
