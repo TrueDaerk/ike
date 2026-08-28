@@ -938,3 +938,37 @@ func TestDeadTerminalSelectionCopyKey(t *testing.T) {
 		t.Fatal("cmd+c must not move focus")
 	}
 }
+
+// TestReservedCmdShiftCOpensCopyMode guards #2162: cmd+shift+c inside a
+// focused terminal enters copy mode, and the pane title names the mode.
+func TestReservedCmdShiftCOpensCopyMode(t *testing.T) {
+	m, key := openTestTerminal(t)
+	handled, out, _ := m.terminalReservedKey("cmd+shift+c")
+	if !handled {
+		t.Fatal("cmd+shift+c must be reserved while a terminal is focused (#2162)")
+	}
+	m = out.(Model)
+	inst := m.activeWS().Panes.Get(key)
+	if !inst.Terminal().Copying() {
+		t.Fatal("cmd+shift+c must enter copy mode")
+	}
+	if title := m.terminalTitle(inst); !strings.Contains(title, "COPY") {
+		t.Fatalf("the pane title must carry the mode indicator, got %q", title)
+	}
+}
+
+// TestCopiedMsgReachesClipboard guards #2162: a copy-mode yank routes through
+// the app's clipboard funnel like every other pane copy.
+func TestCopiedMsgReachesClipboard(t *testing.T) {
+	var copied string
+	orig := clipboardWrite
+	clipboardWrite = func(text string) { copied = text }
+	t.Cleanup(func() { clipboardWrite = orig })
+
+	m, _ := openTestTerminal(t)
+	out, _ := m.Update(terminal.CopiedMsg{Key: "any", Text: "yanked text"})
+	_ = out.(Model)
+	if copied != "yanked text" {
+		t.Fatalf("CopiedMsg must reach the clipboard seam, got %q", copied)
+	}
+}

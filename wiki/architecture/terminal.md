@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -413,6 +413,7 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 | `cmd+d` | split right (#982, iTerm-style): a fresh terminal pane opens to the right of the focused terminal's pane and takes focus — the same for dedicated terminal panes and editor-hosted terminal tabs. Outside terminals `cmd+d` keeps its global binding (`editor.duplicateLine`) |
 | `cmd+w` | close the terminal (#986): an idle shell gets an EOF (ctrl+d) — it exits and the regular exit path closes the pane/tab; a **busy** terminal (foreground process group ≠ shell, or a still-running command session — `Session.Busy`) raises a centered guard first: enter closes, esc cancels; a **finished** session (`Model.Exited`) is closed outright (#2192) — there is no child left to receive an EOF, so waiting for an exit that already happened would leave it unclosable. `ctrl+w` stays with the shell (delete word); outside terminals `cmd+w` keeps its global binding (`editor.closeTab`) |
 | `cmd+f` | open the scrollback search (#1504) — the muscle-memory entry point to the same inline search `/` starts from scrollback (#1169), working from the live view too (`Model.StartSearch`; esc then returns to the live view). Under an alt-screen or mouse-reporting child the chord stays with the child (vim/lazygit own their find); outside terminals `cmd+f` keeps its global binding (`editor.find`). The popup terminal reserves it too, on the focused split side |
+| `cmd+shift+c` | enter copy mode (#2162, Copy mode below) — the keyboard detaches from the PTY and vim motions cursor over the scrollback (`Model.StartCopyMode`). Under a live alt-screen or mouse-reporting child the chord stays with the child; outside terminals it has no global binding. The popup terminal reserves it too, on the focused split side |
 | `cmd+shift+l` | enter link hint mode (#2254) — label every resolvable `file:line` reference on the visible rows and open the one whose label is typed (`Model.StartLinkHints`/`LinkHintKey`, File:line links below). With no resolvable reference on screen, or under an alt-screen / mouse-reporting child, the chord stays with the child; outside terminals it has no global binding. The popup terminal reserves it too, on the focused split side |
 | `ctrl+arrows` | spatial focus moves out of the terminal (#228) — the same `keymap.bindings.focus_*` overrides apply; a disabled direction stays with the shell. Inside the popup layer left/right instead step through its surfaces — split sides and floating panels — raising the one they land on (#1806) |
 | `cmd+c` | copy an active mouse selection (#227) — without one the key stays with the shell |
@@ -614,6 +615,53 @@ guard applies identically; there `StartSearch` reports false and the chord
 stays with the child.
 `terminal.clear` and a command-session restart drop an open search along
 with the history it indexed.
+
+## Copy mode (#2162)
+
+`cmd+shift+c` (reserved app-side, in the popup layer too) enters a
+**tmux-style copy mode** (`copymode.go`): the keyboard detaches from the PTY
+and a cursor moves over the whole virtual buffer `[scrollback ++ screen]`
+with vim motions. While the mode is open **every key is consumed** — nothing
+can leak into the shell — and the pane renders the mode's own view: the
+windowed buffer with the cursor cell reversed, plus a status row carrying a
+`COPY` badge, the cursor's `line/total` position and the search state; the
+pane title appends `· COPY` so the detached state shows in the chrome as
+well. Like the scrollback search, entry refuses under a live alt-screen or
+mouse-reporting child (vim/lazygit own their keys); a finished session
+(#1951) always qualifies.
+
+- **Motions**: `h j k l` (arrows too), `w`/`b` (whitespace-separated words,
+  crossing line boundaries), `0`/`$` (line start / last content column),
+  `gg`/`G` (buffer top / bottom), `ctrl+u`/`ctrl+d` (half a page, pgup/pgdn
+  too). The window re-anchors on the cursor so it stays visible; the wheel
+  pages the window, pulling the cursor along.
+- **Selection & yank**: `v` anchors a selection that follows the cursor
+  (inclusive, vim-style); it projects onto the same anchor/head fields the
+  mouse selection uses, so the reverse-video highlight and the extraction
+  (`SelectionText` — soft-wrapped rows join without a newline, #936) are
+  shared. `y` yanks the span and exits; the text travels as a `CopiedMsg`
+  through the app's clipboard funnel (`copyToClipboard`, #2061), landing on
+  the system clipboard *and* the clipboard history. esc cancels the
+  selection first, then exits; `q` exits outright. Exit always snaps the
+  view back to live (scroll 0).
+- **Search inside the mode**: `/` (forward, toward newer lines) and `?`
+  (backward) open a query line on the status row — the scrollback search's
+  matching rule (#1169): case-insensitive contains over the plain line text.
+  enter jumps to the nearest match in the search's direction (the cursor
+  lands on the match's column), `n` repeats, `N` reverses, both wrapping
+  around; visible occurrences highlight reverse-video (the query being typed
+  highlights live) and a miss reports `no matches` in the Error colour with
+  the cursor unmoved. A paste edits the open query line (#1882) and is inert
+  anywhere else in the mode.
+- **Live output**: the session's feed loop never pauses — PTY output keeps
+  flowing into the emulator, so nothing printed during copy mode is lost.
+  The window anchors on an **absolute virtual line** (`top`), not the
+  live-relative scroll offset, so arriving output can neither slide the
+  window nor move the cursor off the text being selected; the scroll offset
+  mirrors the position for the scrollbar (#1368). `terminal.clear` and a
+  command-session restart drop the mode with the buffer it cursored over,
+  and a resize drops it too — a width reflow (#935) rewrites every virtual
+  index the mode holds.
 
 ## Command completion popup (#740)
 
