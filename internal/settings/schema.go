@@ -315,7 +315,7 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "lsp.log_level", Type: Enum, Title: "Server log level", Description: "Verbosity of the language-server log the LSP: Show Server Log command opens", Scope: config.UserScope, Options: []string{"error", "warn", "info", "debug"}},
 		}},
 		{Title: "Appearance", Description: "How IKE looks: the color scheme, the menu bar and the size of centered popups.", Entries: []Entry{
-			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; applies immediately on selection (and turns off auto sync)", Scope: config.UserScope, Options: themes, Preview: swatch, RowColors: rowColors},
+			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; previews live while you scroll the list, esc restores the previous one (and selecting turns off auto sync)", Scope: config.UserScope, Options: themes, Preview: swatch, RowColors: rowColors},
 			{Key: "theme.auto", Type: Bool, Title: "Sync with terminal", Description: "Pick the light or dark theme below from the terminal's background colour (OSC 11); picking a theme explicitly turns this off", Scope: config.UserScope},
 			{Key: "theme.light", Type: Enum, Title: "Light theme", Description: "Theme used when auto sync sees a light terminal background", Scope: config.UserScope, Options: lightThemes, Preview: swatch, RowColors: rowColors},
 			{Key: "theme.dark", Type: Enum, Title: "Dark theme", Description: "Theme used when auto sync sees a dark terminal background", Scope: config.UserScope, Options: darkThemes, Preview: swatch, RowColors: rowColors},

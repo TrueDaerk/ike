@@ -1,5 +1,32 @@
 # Log
 
+## 2026-08-28 (Theme picker: live preview while scrolling, rollback on esc, #2181)
+
+- **Preview on the highlight, not on the choice**
+  (`internal/settings/livepreview.go`): every move in the theme enum's option
+  list — arrows, page jumps, wheel, filter narrowing — arms a debounced
+  preview of the highlighted theme. Comparing two schemes no longer means
+  enter, look, reopen, repeat.
+- **Debounced, one generation at a time** (`browsePreview` / `PreviewTick`,
+  `previewDebounce` = 60 ms): each move bumps a generation and arms a
+  `PreviewTickMsg`; only the newest deadline still matches, so a held `j`
+  through eighteen themes re-threads one palette instead of eighteen.
+- **Rollback that cannot be forgotten** (`CancelPreview`): esc in the list,
+  tab out of the detail column, the panel's close paths and the app's
+  overlay-takeover closes all route through it, restoring the *effective*
+  value the browse started from (staged, else live). A browse abandoned before
+  its first deadline applied nothing and rolls nothing back.
+- **Browsing is not staging**: a previewed value never enters the staging
+  buffer, so it can never reach disk. `enter` (and a click) calls
+  `keepPreview` and hands the value to the normal staged write-back, which
+  re-emits it as its own preview — no flash of the old theme in between.
+- **Open buffers re-color in place**: the preview reuses the existing
+  `settings.PreviewMsg` → `previewTheme` → `applyTheme` path, so
+  `editor.SetPalette` rebuilds each tab's capture table and bumps the render
+  epoch; syntax spans recolor without reopening anything.
+- **Wheel plumbing**: `wheelEditor.Wheel` and `settings.Model.Wheel` now
+  return a `tea.Cmd`, because scrolling an option list can have an effect
+  beyond redrawing it.
 ## 2026-08-28 (Help overlay: multi-column layout restored in the context view, #2215)
 
 - **The column width now aims at the typical entry, not the longest one**

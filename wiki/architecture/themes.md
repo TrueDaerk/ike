@@ -4,7 +4,7 @@ title: Themes / Color Schemes
 description: Named-palette system — one [theme].name recolors syntax, explorer, chrome and the integrated terminal ANSI palette together; one shared color resolver; plugin-extensible built-ins.
 resource: internal/theme
 tags: [architecture, themes, color, lipgloss]
-timestamp: 2026-08-28T18:00:00Z
+timestamp: 2026-08-28T20:00:00Z
 ---
 
 # Themes / Color Schemes
@@ -369,6 +369,25 @@ Config is the single source of truth: `reloadConfig` re-resolves and
 re-threads the palette on every reload, so both the palette pick and a manual
 `[theme].name` edit land the same way.
 
+## Live preview in the picker (#2181)
+
+Both pickers now apply what they *highlight*, not only what they confirm:
+
+- The **setup wizard**'s theme step (`internal/app/setup.go`) has previewed on
+  every cursor move since it was written — `previewTheme` resolves the name and
+  re-threads the palette, `esc` re-applies the one the dialog opened with.
+- **Settings → Appearance** does the same since #2181. The option list emits a
+  debounced `settings.PreviewTickMsg`; the newest deadline turns into the
+  `settings.PreviewMsg` the root already handled, so scrolling the list
+  re-themes panes, chrome, overlays and the syntax colors of open buffers
+  without reopening anything. `esc` restores the value the browse started from;
+  only `enter` stages a value, which the normal config write-back then
+  persists. Details and the debounce rationale live in
+  [settings-ui](settings-ui.md#live-preview-while-browsing-2181).
+
+Neither path writes: a preview is a palette on screen, never a config
+mutation, so an abandoned comparison leaves the settings file untouched.
+
 ## Auto light/dark sync (#1480)
 
 With `[theme].auto = true`, the theme follows the terminal background:
@@ -395,7 +414,9 @@ key of a never-read pre-#1480 bool.
   0100/0105; this system supplies capture-color **defaults** only.
 - Explorer file-color *resolution logic* stays in 0050; this system supplies
   file-color **defaults** + the shared resolver.
-- A dedicated picker UI with live preview is a later UX pass; today's runtime
-  switching is plain palette commands (see above), persistence is config-only.
+- Picker UI with live preview: done (#2181, see above). What stays out of this
+  system is *authoring* — editing a palette's slots in-app; themes are still
+  contributed as `theme.Theme` values by plugins, and per-slot tweaking is
+  `[theme.captures]` / `[theme.terminal]` config.
 
 The original plan and milestones lived in the former `roadmaps/0110-themes.md` (planning moved to GitHub issues; the file remains in git history).

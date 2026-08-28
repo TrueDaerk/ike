@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-08-28T18:00:00Z
+timestamp: 2026-08-28T20:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -670,11 +670,47 @@ re-themes and rebuilds its keymaps once instead of once per changed key
 - **Live preview.** Keys whose whole point is their appearance (today
   `theme.name`) emit a `settings.PreviewMsg` when staged; the app applies it
   without persisting. Discarding — or dropping the line — sends the previous
-  value back the same way, so a previewed theme is always undone.
+  value back the same way, so a previewed theme is always undone. Since #2181
+  the preview starts one step earlier: **browsing** the option list previews
+  the highlighted value, debounced, and esc rolls it back (see
+  [Live preview while browsing](#live-preview-while-browsing-2181)).
 - **Reset (`r`) stages a removal** like any other edit; the diff shows
   `old → default`.
 - Custom pages keep writing directly: installing a plugin or creating a
   virtualenv is not "a value in a file" and cannot be staged meaningfully.
+
+## Live preview while browsing (#2181)
+
+Choosing a theme used to apply only on confirm, so comparing two schemes meant
+enter, look, reopen, repeat. `livepreview.go` moves the preview onto the
+*highlight* instead of the *choice*:
+
+- Every move in the enum's option list — arrows, `pgup`/`pgdn`/`home`/`end`,
+  the wheel, and narrowing the type-to-filter line — calls
+  `Model.browsePreview`, which records a `browseState` and arms a
+  `PreviewTickMsg`.
+- The root resolves that tick with `Model.PreviewTick`; only the newest
+  generation still matches, so a held `j` through eighteen themes coalesces
+  into **one** re-theme instead of eighteen (`previewDebounce`, 60 ms). The
+  applied value goes out as the same `PreviewMsg` staging already used, so the
+  app path — `previewTheme` → `applyTheme` → every pane, popup and overlay —
+  is unchanged, and open buffers re-color their syntax spans in place
+  (`editor.SetPalette` rebuilds the capture table and bumps the render epoch);
+  nothing is reopened.
+- `Model.CancelPreview` restores the value the browse started from — the
+  *effective* one, so a theme staged earlier in the same batch is what esc
+  lands on, not the file's. Esc in the list, tab out of the detail column,
+  and every panel-close path route through it, so a preview can never outlive
+  the list that armed it. A browse abandoned before its first deadline applied
+  nothing and therefore rolls nothing back.
+- `enter` (and a click on an option) instead calls `keepPreview`: the
+  highlighted value is handed to the normal staged write-back, which re-emits
+  it as its own preview, so there is no flash of the old theme between
+  browsing and staging.
+
+A browsed value never enters the staging buffer, so the only thing browsing
+can leave behind is a palette — it can never reach disk. Persisting stays
+exactly what it was: stage, `ctrl+s`, diff, write.
 
 ## Search inside the grid (0460, #1297)
 

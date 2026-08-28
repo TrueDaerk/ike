@@ -4311,6 +4311,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (#2080). The settings panel closes first — the doctor is
 		// full-screen and must own every raw key.
 		if m.settings.IsOpen() {
+			m.cancelSettingsPreview()
 			m.settings.Close()
 		}
 		m.keyDoctor.SetSize(m.width, m.height)
@@ -4350,6 +4351,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// report over the active keymap. Like the probe it is full-screen, so
 		// the settings panel closes first.
 		if m.settings.IsOpen() {
+			m.cancelSettingsPreview()
 			m.settings.Close()
 		}
 		m.openDeadBindings()
@@ -4414,6 +4416,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.previewTheme(msg.Value)
 		}
 		return m, nil
+
+	case settings.PreviewTickMsg:
+		// A theme-picker debounce deadline (#2181): the newest one re-themes
+		// the app on the highlighted option, superseded ones are dropped, so
+		// a held j coalesces into a single re-theme.
+		return m, m.settings.PreviewTick(msg)
 
 	case settings.VersionMsg:
 		// Async interpreter version probes land in the toolchain page's cache.
@@ -9641,8 +9649,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		w, h := m.settings.Size()
 		bx, by := (m.width-w)/2, (m.height-h)/2
 		if msg.action == mousePress && w > 0 && !inRect(msg.X, msg.Y, bx, by, w, h) {
+			cmd := m.settings.CancelPreview()
 			m.settings.Close()
-			return m, nil
+			return m, cmd
 		}
 		switch {
 		case msg.action == mousePress && msg.Button == tea.MouseLeft:
@@ -9657,9 +9666,10 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			// Hover affordance (#885), menu-bar parity.
 			m.settings.Hover(msg.X-bx, msg.Y-by)
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
-			m.settings.Wheel(msg.X-bx, msg.Y-by, -wheelLines*msg.ticks())
+			// Wheeling the theme enum previews what it highlights (#2181).
+			return m, m.settings.Wheel(msg.X-bx, msg.Y-by, -wheelLines*msg.ticks())
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
-			m.settings.Wheel(msg.X-bx, msg.Y-by, wheelLines*msg.ticks())
+			return m, m.settings.Wheel(msg.X-bx, msg.Y-by, wheelLines*msg.ticks())
 		}
 		return m, nil
 	}
