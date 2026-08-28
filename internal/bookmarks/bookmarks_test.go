@@ -216,3 +216,26 @@ func TestAllOrdersByPathThenLine(t *testing.T) {
 		}
 	}
 }
+
+// TestPersistenceKeepsAnonymousDescriptions guards #2251: the overview shows
+// descriptions on anonymous bookmarks too, so a note without a mnemonic must
+// survive the round trip.
+func TestPersistenceKeepsAnonymousDescriptions(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	s := New()
+	s.SetNote("a.go", 3, "why this line")
+	s.SetNote("a.go", 9, "and this one")
+	if err := s.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	back := Load()
+	first, ok := back.At("a.go", 3)
+	if !ok || first.Note != "why this line" || !first.Anonymous() {
+		t.Fatalf("reloaded a.go:3 = %+v %v", first, ok)
+	}
+	second, ok := back.At("a.go", 9)
+	if !ok || second.Note != "and this one" {
+		t.Fatalf("reloaded a.go:9 = %+v %v", second, ok)
+	}
+}

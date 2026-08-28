@@ -110,6 +110,11 @@ runs the section **owns the overlay**: the cursor stays inside the narrowed
 labels and `up`/`down` wrap within them, so a label named `state` is reachable
 even though the row above is called state.
 
+The bookmarks overview (#2251, [Editor § Bookmarks overview](./editor.md)):
+typing narrows the project-wide bookmark list, matching path, line, mnemonic,
+line preview and description alike; `esc` clears the query before it closes
+the floating list.
+
 The helper is deliberately free of any pane dependency, so the other modal
 pickers (pins, local history, VCS history, the setup wizards) can adopt it
 without a refactor.

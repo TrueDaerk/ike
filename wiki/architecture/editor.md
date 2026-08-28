@@ -957,7 +957,8 @@ cursor line:
 | `bookmark.toggle` | `f11` | set/clear an anonymous bookmark |
 | `bookmark.toggleMnemonic` | `alt+f3` | digit prompt: assign `0`-`9`; the digit already on the line removes the bookmark |
 | `bookmark.jumpMnemonic` | palette | digit prompt: jump to the bookmark carrying that digit |
-| `bookmark.annotate` | palette | note prompt, prefilled with the current annotation; an empty note clears it |
+| `bookmark.annotate` | palette | description prompt, prefilled with the current annotation; on an unbookmarked line it places the bookmark *with* the description, an empty note clears it |
+| `bookmark.overview` | palette | the project-wide bookmarks overview (#2251, below) |
 | `bookmark.next` / `bookmark.previous` | `shift+f11` / `ctrl+shift+f11` | step through all bookmarks in (path, line) order, wrapping |
 
 The prompts run in the floating shell, the save-layout prompt's shape
@@ -973,8 +974,29 @@ breakpoints (two bookmarks squeezed onto one line merge, the lower source
 line keeping the slot) and follow renames/moves: `followMovedFile` re-keys
 the store, directories included.
 
-Still open from the idea issue: a bookmarks tool-window pane and toggling by
-clicking the gutter (pairs with #30).
+### Bookmarks overview (#2251)
+
+`bookmark.overview` opens the project-wide list in the floating shell
+(`internal/app/bookmarks_overview.go`). Where the picker above mixes bookmarks
+with the vim marks and ranks rows fuzzily, the overview is the bookmark set as
+a set: a header per file (clipped from the left, so the file name survives a
+long path) and below it one row per bookmark in line order —
+`12  ⚑  the bookmarked line  — description`, the glyph being the mnemonic
+digit where the bookmark carries one. Line texts come from the focused editor
+when the bookmark sits in the open file and from disk otherwise, cached for
+the overview's lifetime so narrowing never re-reads a file.
+
+| Key | Effect |
+| --- | --- |
+| `enter` | jump to the bookmark through the standard open funnel (`openPathAt`), so the navigation history records |
+| `ctrl+e` | edit the description — the `bookmark.annotate` prompt on *that* bookmark rather than on the cursor line; saving or cancelling lands back in the overview |
+| `delete` / `ctrl+d` | remove the bookmark (the list stays open until the last one goes) |
+| arrows, `pgup`/`pgdown`, `home`/`end`, `ctrl+n`/`ctrl+p` | move the selection (`ui.ListNav`, #1666) |
+| printable keys | narrow the list through the shared speed search (#2111) — path, line, mnemonic, line preview and description all match |
+| `esc` | clear a running filter, then close |
+
+Still open from the idea issue: a bookmarks tool-window pane (the overview is
+the floating flavour) and toggling by clicking the gutter (pairs with #30).
 
 ## Git hunk navigation (#1170)
 
