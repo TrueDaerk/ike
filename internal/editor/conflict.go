@@ -157,24 +157,55 @@ func (m Model) ConflictAtCursor() bool {
 	return ok
 }
 
-// ConflictPreviewAtCaret computes what accepting one or both sides would make
-// of the conflict block under the caret (#2252): the block as it stands —
-// marker lines included — and the kept side(s) that would replace it, ours
-// first when both are kept. It reads the buffer and builds strings; nothing is
-// applied, which is what lets the intention popup show it while the caret
-// merely rests on the row. ok is false outside a conflict block.
-func (m Model) ConflictPreviewAtCaret(keepOurs, keepTheirs bool) (before, after string, line int, ok bool) {
-	c, ok := m.conflictAt(m.cursor.Line)
-	if !ok {
-		return "", "", 0, false
+// ConflictIndexAtCursor reports the 1-based position of the conflict block
+// the caret sits in among the remaining blocks, plus their count (#2258) —
+// the "conflict 2/5" reading of the merge chrome and the status line. idx is
+// 0 when the caret is outside every block; the blocks come out of the scan in
+// buffer order, so the index is the one the n/N cycle counts up.
+func (m Model) ConflictIndexAtCursor() (idx, total int) {
+	blocks := m.conflicts()
+	for i, c := range blocks {
+		if c.contains(m.cursor.Line) {
+			return i + 1, len(blocks)
+		}
 	}
-	var was []string
-	for l := c.start; l <= c.end && l < m.buf.LineCount(); l++ {
-		was = append(was, m.buf.Line(l))
+	return 0, len(blocks)
+}
+
+// ConflictMarkerLines counts the buffer lines that open with a conflict
+// marker, whether or not they form a well-formed block (#2258). The block scan
+// only sees complete `<<<<<<<`…`>>>>>>>` runs, so a half-edited block — a
+// stray opener, a separator whose closer was deleted — counts zero conflicts
+// while still poisoning the file. The merge tool's finish guard checks this
+// before writing, so a saved result is always marker-free. It walks the
+// buffer, so it belongs in a guard, not in a per-frame path.
+func (m Model) ConflictMarkerLines() int {
+	n := 0
+	for _, l := range m.buf.Lines() {
+		if conflictMarkerAt(l, "<<<<<<<") || conflictMarkerAt(l, "|||||||") ||
+			conflictMarkerAt(l, "=======") || conflictMarkerAt(l, ">>>>>>>") {
+			n++
+		}
 	}
-	// The very selection acceptConflict keeps, read the same way — so the
-	// preview and the apply cannot disagree about which lines survive.
+	return n
+}
+
+// conflictKept returns the lines a resolution of c would keep, read straight
+// off the buffer: the accepted side(s) — ours before theirs, the diff3 base
+// never — or, for the manual resolution (#2258), every line between the outer
+// markers as it now stands, base section included. Both the previews and the
+// applies read through here, so they cannot disagree about which lines
+// survive.
+func (m Model) conflictKept(c conflictBlock, keepOurs, keepTheirs, manual bool) []string {
 	var kept []string
+	if manual {
+		for l := c.start + 1; l < c.end; l++ {
+			if l != c.base && l != c.sep {
+				kept = append(kept, m.buf.Line(l))
+			}
+		}
+		return kept
+	}
 	if keepOurs {
 		for l := c.start + 1; l < c.oursEnd(); l++ {
 			kept = append(kept, m.buf.Line(l))
@@ -185,6 +216,37 @@ func (m Model) ConflictPreviewAtCaret(keepOurs, keepTheirs bool) (before, after 
 			kept = append(kept, m.buf.Line(l))
 		}
 	}
+	return kept
+}
+
+// ConflictPreviewAtCaret computes what accepting one or both sides would make
+// of the conflict block under the caret (#2252): the block as it stands —
+// marker lines included — and the kept side(s) that would replace it, ours
+// first when both are kept. It reads the buffer and builds strings; nothing is
+// applied, which is what lets the intention popup show it while the caret
+// merely rests on the row. ok is false outside a conflict block.
+func (m Model) ConflictPreviewAtCaret(keepOurs, keepTheirs bool) (before, after string, line int, ok bool) {
+	return m.conflictPreview(keepOurs, keepTheirs, false)
+}
+
+// ConflictManualPreviewAtCaret is the same probe for the keep-manual-edit
+// resolution (#2258): the block as it stands against the same block with its
+// marker lines stripped.
+func (m Model) ConflictManualPreviewAtCaret() (before, after string, line int, ok bool) {
+	return m.conflictPreview(false, false, true)
+}
+
+// conflictPreview is the shared body of the resolution previews.
+func (m Model) conflictPreview(keepOurs, keepTheirs, manual bool) (before, after string, line int, ok bool) {
+	c, ok := m.conflictAt(m.cursor.Line)
+	if !ok {
+		return "", "", 0, false
+	}
+	var was []string
+	for l := c.start; l <= c.end && l < m.buf.LineCount(); l++ {
+		was = append(was, m.buf.Line(l))
+	}
+	kept := m.conflictKept(c, keepOurs, keepTheirs, manual)
 	return strings.Join(was, "\n"), strings.Join(kept, "\n"), c.start, true
 }
 
@@ -217,17 +279,31 @@ func (m *Model) acceptConflict(keepOurs, keepTheirs bool) tea.Cmd {
 	if !ok {
 		return notice("no merge conflict at cursor")
 	}
-	var kept []string
-	if keepOurs {
-		for l := c.start + 1; l < c.oursEnd(); l++ {
-			kept = append(kept, m.buf.Line(l))
-		}
+	m.replaceConflict(c, m.conflictKept(c, keepOurs, keepTheirs, false))
+	return nil
+}
+
+// keepManualConflict resolves the block containing the cursor by dropping
+// only its marker lines, keeping everything between them exactly as it now
+// stands (#2258) — the escape hatch for a block the user hand-merged inside
+// the result buffer instead of taking one prepared side. A diff3 block keeps
+// its base section too: after a manual merge those lines are the user's, and
+// dropping them would throw the edit away. On an untouched two-way block the
+// op therefore reads like accept-both. One undo unit, like the accepts.
+func (m *Model) keepManualConflict() tea.Cmd {
+	c, ok := m.conflictAt(m.cursor.Line)
+	if !ok {
+		return notice("no merge conflict at cursor")
 	}
-	if keepTheirs {
-		for l := c.sep + 1; l < c.end; l++ {
-			kept = append(kept, m.buf.Line(l))
-		}
-	}
+	m.replaceConflict(c, m.conflictKept(c, false, false, true))
+	return nil
+}
+
+// replaceConflict swaps the whole block — marker lines included — for kept as
+// ONE undo unit (the mutate/Recorder path every operator uses); the cursor
+// lands on the block's start line. Shared by the accepts and the keep-manual
+// resolution, so all four ops spell the buffer surgery once.
+func (m *Model) replaceConflict(c conflictBlock, kept []string) {
 	text := strings.Join(kept, "\n")
 	last := m.buf.LineCount() - 1
 	m.mutate(func(rec *history.Recorder) buffer.Position {
@@ -256,7 +332,6 @@ func (m *Model) acceptConflict(keepOurs, keepTheirs bool) tea.Cmd {
 		rec.Apply(buffer.Edit{Range: r, Text: text})
 		return buffer.Position{Line: c.start}
 	})
-	return nil
 }
 
 // conflictJump moves the cursor to the next (forward) or previous conflict

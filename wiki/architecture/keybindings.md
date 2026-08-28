@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -402,7 +402,10 @@ deliberately: enumerated variants (`scratch.new.*`, `themes.select.*`,
 `file.setEncoding.*`/`file.setLineEndings.*`), pane-local commands the pane
 already keys (`explorer.*` speed keys, terminal pass-through), commands with a
 vim-native equivalent (`editor.fold.*` = `za`/`zc`/`zo`/`zM`/`zR`,
-`vcs.nextChange`/`vcs.prevChange` = `]c`/`[c`, `editor.quit`/
+`vcs.nextChange`/`vcs.prevChange` = `]c`/`[c`, `merge.acceptOurs`/
+`merge.acceptTheirs`/`merge.acceptBoth`/`merge.keepManual` =
+`go`/`gt`/`gb`/`gm` and `merge.nextConflict`/`merge.prevConflict` =
+`]n`/`[n` (#2258), `editor.quit`/
 `editor.write_quit` = `:q`/`:wq`), and commands JetBrains itself ships without
 a default (local history, pin/close-others tab actions, window layouts, HTTP
 client utilities, maintenance commands).

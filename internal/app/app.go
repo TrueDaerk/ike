@@ -706,6 +706,20 @@ type Model struct {
 	// mergeClosePending is the merge-view key awaiting the unresolved-
 	// conflicts close guard (#1478); "" when no guard is open.
 	mergeClosePending string
+	// mergeFinishPending is the merge-view key whose save/finish offer is up
+	// (#2258), raised when its last conflict is resolved; "" when none is.
+	mergeFinishPending string
+	// mergeUnresolved remembers each merge pane's unresolved count from the
+	// previous settled pass (#2258), so the finish offer fires on the
+	// transition to zero and re-arms when an undo brings a conflict back.
+	mergeUnresolved map[string]int
+	// mergeOfferPending is the conflicted file whose "open the merge tool?"
+	// offer is up (#2258); "" when none is.
+	mergeOfferPending string
+	// mergeOffered records the conflicted paths already offered the merge
+	// tool this session — the offer interrupts once per file, like the
+	// large-file and rotated-log toasts.
+	mergeOffered map[string]bool
 	// termClosePending is true while the busy-terminal close guard (#986)
 	// owns the keyboard.
 	termClosePending bool
@@ -1235,6 +1249,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		recent:          recent,
 		largeToasted:    map[string]bool{},
 		logsetToasted:   map[string]bool{},
+		mergeOffered:    map[string]bool{},
+		mergeUnresolved: map[string]int{},
 		toolchainSeg:    map[string]string{},
 		liveImages:      map[int]bool{},
 		navHist:         &nav.History{},
@@ -3717,6 +3733,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if poll := mm.armForgePoll(); poll != nil {
 		cmd = tea.Batch(cmd, poll)
 	}
+	// The merge views' remaining-conflict counters settle here too (#2258):
+	// a view whose last conflict just went — by chord, palette command or
+	// plain typing — offers save/finish.
+	mm.syncMergeFinish()
 	return mm, cmd
 }
 
@@ -7252,6 +7272,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.mergeClosePromptOpen() {
 			return m.updateMergeClosePrompt(msg)
 		}
+		// The merge-tool offer on a conflicted file and the save/finish offer
+		// on a completed merge (#2258): m / s — or enter — accept, anything
+		// else dismisses.
+		if m.mergeOfferPromptOpen() {
+			return m.updateMergeOfferPrompt(msg)
+		}
+		if m.mergeFinishPromptOpen() {
+			return m.updateMergeFinishPrompt(msg)
+		}
 		// The busy-terminal close guard (#986): enter / esc answer it.
 		if m.termClosePromptOpen() {
 			return m.updateTermClosePrompt(msg)
@@ -7672,6 +7701,10 @@ func (m Model) openPathWith(path string, newPane bool) (tea.Model, tea.Cmd) {
 			// (#1996) — nothing else says that the file next to this one holds
 			// the hour before it.
 			m.notifyRotatedSet(m.activeWS().Panes.Get(key).Editor())
+			// A git-conflicted file offers the three-way merge tool (#2258):
+			// a buffer full of `<<<<<<<` markers says nothing about the view
+			// that can resolve them side by side.
+			m.offerMergeTool(path)
 			m.recent.Touch(path)                  // MRU for the recent-files palette mode (0230)
 			m.fileFrec.Record(frecency.Key(path)) // frecency ranking for the "@" finder (#2155)
 			m.watcher.Track(path)                 // poll-fallback comparison for open buffers
@@ -11028,7 +11061,7 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 // JetBrains staples, each referencing a registered command so availability
 // and shortcuts resolve through the same InfoFunc as the menu bar (LSP
 // entries render disabled while no server backs them). When the caret sits
-// inside a merge-conflict block (#1149) the per-block accept entries are
+// inside a merge-conflict block (#1149) the per-block resolution entries are
 // appended contextually.
 func editorContextItems(conflict bool) []menu.Item {
 	items := []menu.Item{
@@ -11053,6 +11086,7 @@ func editorContextItems(conflict bool) []menu.Item {
 			menu.Item{Title: "Accept Ours", Command: "merge.acceptOurs"},
 			menu.Item{Title: "Accept Theirs", Command: "merge.acceptTheirs"},
 			menu.Item{Title: "Accept Both", Command: "merge.acceptBoth"},
+			menu.Item{Title: "Keep Manual Edit", Command: "merge.keepManual"},
 		)
 	}
 	return items

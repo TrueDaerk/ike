@@ -4,7 +4,7 @@ title: Diff Viewer
 description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, side-by-side or unified rendering with theme diff slots and per-side tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070), diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Diff Viewer (#60)
@@ -159,16 +159,48 @@ renders ours (left) and theirs (right) as read-only columns around an
 `:1`/`:2`/`:3` index stages (`vcs.MergeStagesCmd`; a missing `:1` stage —
 both-added — degrades to an empty base). Because the remaining conflicts are
 ordinary markers, the editor's inline conflict machinery (#1149) provides
-per-conflict accept ours/theirs/both and next/previous navigation unchanged
-(palette `merge.*` commands — the pane advertises the editor context, and
-`editor.ActionMsg` routes into the result editor when a merge pane has
-focus). The header and statusline show `unresolved/total`; the side columns
-follow the result editor's scroll offset.
+per-conflict resolution and navigation unchanged (the `merge.*` commands — the
+pane advertises the editor context, and `editor.ActionMsg` routes into the
+result editor when a merge pane has focus). The side columns follow the result
+editor's scroll offset.
 
-Entry points: `vcs.mergeFile` on the focused conflicted file, or `enter` on
-a conflicted VCS-panel row. `vcs.mergeApply` saves the result, stages the
-file and closes the view (blocked while conflicts remain); closing the pane
-with unresolved conflicts or an unsaved result opens a discard/cancel guard.
+### Resolving (#2258)
+
+- **Navigation** — `]n` / `[n` cycle the *remaining* blocks with wrap-around
+  (`merge.nextConflict` / `merge.prevConflict`), reporting `merge conflict
+  n/m`. As blocks are resolved they leave the cycle, so the walk always
+  visits work that is left.
+- **Resolution** — `go` ours, `gt` theirs, `gb` both (ours then theirs), `gm`
+  keep the hand-merged block (marker lines only are dropped). Each is one undo
+  unit, so `u` puts the block back — which the counter follows. Free editing
+  of the result buffer resolves a block just as well: a block stops counting
+  the moment its markers are gone.
+- **Counter** — the pane header reads `⚠ conflict 2/3 · 3/5 unresolved` (the
+  caret's place in the cycle, then remaining out of the total) and flips to
+  `✓ resolved — apply to finish`; the status line's `MERGE` segment carries
+  the same reading. Both come from `merge.Model.Unresolved()` /
+  `ConflictIndex()`, i.e. the editor's cached block scan — never a re-scan per
+  frame.
+- **Finishing** — when a view's last conflict goes, the settled Update pass
+  (`syncMergeFinish`) raises the centered **Merge complete** offer: `s`/enter
+  applies (save + `git add` + close), esc keeps the view open. It watches the
+  count rather than one key route, so it fires however the block was resolved,
+  and an undo that brings a conflict back re-arms it. `vcs.mergeApply` refuses
+  to finish while any conflict remains, with a toast naming the count.
+- **Marker guard** — the block scan only sees complete `<<<<<<<`…`>>>>>>>`
+  runs, so a *half-edited* block (a deleted closer, a stray separator) counts
+  zero conflicts while still poisoning the file. Both the finish offer and
+  `vcs.mergeApply` therefore also check `MarkerLines()` — a buffer walk, run
+  only on the transition to zero and before a write, never per frame — so the
+  written file is always marker-free.
+
+Entry points: `vcs.mergeFile` on the focused conflicted file, `enter` on a
+conflicted VCS-panel row, or the **Conflicted file** offer (#2258) raised when
+a file git reports as conflicted is opened in the editor — `m`/enter opens the
+merge view, esc leaves the user editing the markers in place. That offer
+interrupts once per path per session, like the large-file toast, and never
+over another dialog. Closing the pane with unresolved conflicts or an unsaved
+result opens a discard/cancel guard.
 The pane is session state: a saved layout records its slot as an anonymous
 editor pane.
 

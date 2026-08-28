@@ -58,3 +58,27 @@ func TestViewShowsColumnsAndCount(t *testing.T) {
 		t.Fatalf("side columns missing content:\n%s", v)
 	}
 }
+
+// TestHeaderCounterTracksResolution (#2258): the header names the caret's
+// place in the conflict cycle, and reads resolved once the block is gone.
+func TestHeaderCounterTracksResolution(t *testing.T) {
+	m := newView(t)
+	m.SetContents("a\nx\nz\n", "a\nours\nz\n", "a\ntheirs\nz\n")
+	if idx, remaining := m.ConflictIndex(); idx != 0 || remaining != 1 {
+		t.Fatalf("caret outside the block: idx=%d remaining=%d, want 0/1", idx, remaining)
+	}
+	m.Update(editor.ActionMsg{Action: "merge_next_conflict"})
+	if idx, remaining := m.ConflictIndex(); idx != 1 || remaining != 1 {
+		t.Fatalf("caret in the block: idx=%d remaining=%d, want 1/1", idx, remaining)
+	}
+	if v := m.View(); !strings.Contains(v, "conflict 1/1") {
+		t.Fatalf("header missing the conflict index:\n%s", v)
+	}
+	m.Update(editor.ActionMsg{Action: "merge_accept_ours"})
+	if m.Unresolved() != 0 {
+		t.Fatalf("unresolved=%d after accept, want 0", m.Unresolved())
+	}
+	if v := m.View(); !strings.Contains(v, "resolved") || strings.Contains(v, "unresolved") {
+		t.Fatalf("header must read resolved:\n%s", v)
+	}
+}

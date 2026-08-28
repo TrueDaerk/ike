@@ -100,10 +100,11 @@ func (m Model) intentionContext() (intention.Context, bool) {
 
 // intentionPreview is the app's answer to "what would this entry change?"
 // (#2252), handed to the providers as Context.Preview. Only the intentions
-// that are pure buffer rewrites can answer — the value toggle and the three
-// conflict accepts — and each answers from a read-only computation over the
-// editor's own lines, never through the command that would apply it. Every
-// other command id returns false, which the popup renders as "no preview".
+// that are pure buffer rewrites can answer — the value toggle and the four
+// conflict resolutions (#2258) — and each answers from a read-only
+// computation over the editor's own lines, never through the command that
+// would apply it. Every other command id returns false, which the popup
+// renders as "no preview".
 func intentionPreview(ed *editor.Model) func(string) (intention.Edit, bool) {
 	return func(commandID string) (intention.Edit, bool) {
 		switch commandID {
@@ -115,6 +116,8 @@ func intentionPreview(ed *editor.Model) func(string) (intention.Edit, bool) {
 			return asIntentionEdit(ed.ConflictPreviewAtCaret(false, true))
 		case "merge.acceptBoth":
 			return asIntentionEdit(ed.ConflictPreviewAtCaret(true, true))
+		case "merge.keepManual":
+			return asIntentionEdit(ed.ConflictManualPreviewAtCaret())
 		}
 		return intention.Edit{}, false
 	}

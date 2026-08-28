@@ -1,5 +1,42 @@
 # Log
 
+## 2026-08-28 (Merge tool: conflict navigation, resolution chords, counter, offer/finish flow, #2258)
+
+- **Resolution chords** (`internal/editor/conflict.go`, `keys_normal.go`): the
+  `merge.*` commands stopped being palette-only. `go` / `gt` / `gb` accept
+  ours / theirs / both on the block at the caret and `]n` / `[n` cycle the
+  remaining blocks with wrap-around, joining the `]c` / `[c` hunk family. The
+  resolutions are not motions — a pending operator (`dgo`) cancels — and off a
+  conflict block they only notice, so the plain letters stay harmless in
+  ordinary buffers.
+- **Keep manual edit** (`merge.keepManual`, `gm`): the fourth resolution, for
+  a block hand-merged inside the result buffer. It drops **only** the marker
+  lines, keeping everything between them verbatim — the diff3 base section
+  included, which is what distinguishes it from accept-both: after a manual
+  merge those lines are the user's. `acceptConflict` and it now share
+  `replaceConflict`, so all four spell the one-undo-unit buffer surgery once.
+- **Counter** (`ConflictIndexAtCursor`, `merge.Model.ConflictIndex`): the
+  merge header reads `⚠ conflict 2/3 · 3/5 unresolved` and the status line's
+  `MERGE` segment the same, both flipping to an all-resolved reading that
+  names `vcs.mergeApply`. Both come off the cached block scan, so an undo that
+  brings a conflict back is reflected without a re-scan per frame.
+- **Offer and finish** (`internal/app/merge_view.go`): opening a file git
+  reports as conflicted raises the centered **Conflicted file** offer —
+  `m`/enter opens the three-way view, esc leaves the markers in the editor,
+  once per path per session. When a view's last conflict goes, the settled
+  Update pass (`syncMergeFinish`) raises **Merge complete** — `s`/enter saves,
+  stages and closes. It watches the count rather than one key route, so it
+  fires however the block was resolved and re-arms after an undo.
+- **Marker guard** (`ConflictMarkerLines`): the block scan only sees complete
+  marker runs, so a half-edited block counts zero conflicts while still
+  poisoning the file. The finish offer and `vcs.mergeApply` both check the raw
+  marker lines as well — a buffer walk run on the transition to zero and
+  before a write, never per frame — so a written result is marker-free.
+- Wiki: [Diff Viewer](/architecture/diff-viewer.md) (three-way merge view),
+  [Editor](/architecture/editor.md), [VCS](/architecture/vcs.md),
+  [Status Line](/architecture/status-line.md),
+  [Keybindings](/architecture/keybindings.md).
+
 ## 2026-08-28 (Per-file test coverage: Test Results listing and status segment, #2246)
 
 - **Per-file percentages** (`internal/coverage`): the store gained
