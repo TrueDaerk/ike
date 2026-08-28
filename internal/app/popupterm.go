@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -290,6 +291,8 @@ func (m Model) popupInputTerminals() []*terminal.Model {
 
 // newPopupShell spawns a fresh shell session for the popup, mirroring the
 // pane-terminal creation recipe (shell config, toolchain env, host injector).
+// The start directory follows terminal.popup_cwd (#2316): "." is the project
+// root (the process cwd), "file" resolves the focused file's directory.
 func (m *Model) newPopupShell() terminal.Model {
 	shell := ""
 	if v, ok := m.host.Config().Get("terminal.shell"); ok {
@@ -297,7 +300,20 @@ func (m *Model) newPopupShell() terminal.Model {
 	}
 	popupSessSeq++
 	key := fmt.Sprintf("popup:term:%d", popupSessSeq)
-	return terminal.New(key, terminal.Shell(shell), ".", 80, 24, terminalEnv(), m.host.Send)
+	return terminal.New(key, terminal.Shell(shell), m.popupShellDir(), 80, 24, terminalEnv(), m.host.Send)
+}
+
+// popupShellDir resolves the directory a fresh popup shell starts in (#2316):
+// the focused (else most recent) editor file's directory under
+// terminal.popup_cwd = "file", the project root otherwise — including the
+// "file" mode with no file open, so the mode degrades instead of erroring.
+func (m *Model) popupShellDir() string {
+	if v, _ := m.host.Config().Get("terminal.popup_cwd"); v == "file" {
+		if p := m.activeFilePath(); p != "" {
+			return filepath.Dir(p)
+		}
+	}
+	return "."
 }
 
 // newPopupTerminalTab opens a sibling shell tab inside the popup (cmd+t

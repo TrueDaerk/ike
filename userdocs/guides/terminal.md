@@ -6,11 +6,35 @@ IKE.
 
 | Keys | What it does |
 |---|---|
-| ++alt+f12++ | Toggle the terminal — and the reliable way back out |
-| ++cmd+alt+t++ | New terminal |
+| ++cmd+alt+t++ | Popup terminal — a floating shell over the layout; the same chord dismisses it |
+| ++alt+f12++ | Toggle the docked terminal pane — and the reliable way back out |
+| ++cmd+alt+shift+t++ | New terminal pane |
 | ++cmd+t++ | New terminal tab, in the focused terminal's pane |
 | ++cmd+d++ | Split a fresh terminal to the right |
 | ++cmd+w++ | Close the terminal |
+
+For a quick command the **popup terminal** (++cmd+alt+t++) is the everyday
+flow — see below. ++alt+f12++ toggles a docked terminal *pane* instead; note
+that some terminal emulators do not deliver ++alt++ + F-keys, in which case
+rebind `terminal.toggle` or reach it through the palette.
+
+## Popup terminal
+
+++cmd+alt+t++ drops a floating shell over the layout; the same chord hides it
+again, so a check-something-and-back round trip is two keystrokes. Hiding is
+not closing: the shell keeps running, and reopening reveals the same session,
+tabs and scrollback. Inside it, ++cmd+t++ opens a sibling tab, ++cmd+d++
+splits the box, ++cmd+w++ closes the active tab — closing the last one drops
+the shell for real.
+
+The box remembers its size and position: drag the border to resize, drag the
+title bar to move, and both persist per project (with your last adjustment as
+the default for projects you never touched).
+
+Where a fresh popup shell starts is the `terminal.popup_cwd` setting
+(Settings → Terminal): `project` (default) spawns it in the project root,
+`file` in the focused file's directory. It applies when the shell is spawned —
+the retained session keeps whatever directory you `cd`-ed to.
 
 A terminal can be a pane of its own or a tab inside an editor pane, so a pane
 can hold a mix of files and shells.
@@ -100,8 +124,9 @@ The interpreter is the one from the Toolchain settings page if you chose one,
 otherwise the one detected in the project. It is the same resolution the
 language server and the debugger use, so all three agree.
 
-`terminal.shell` overrides which shell is spawned; empty follows `$SHELL`. It
-has no entry in the settings panel — set it in `settings.toml` directly.
+`terminal.shell` overrides which shell is spawned; empty follows `$SHELL`.
+It lives on the Settings → Terminal page, next to the other `[terminal]`
+options.
 
 While you type at the prompt, a completion popup offers commands, paths and
 `make` targets. ++ctrl+space++ opens it on demand; set `terminal.autosuggest` to `false` to

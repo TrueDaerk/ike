@@ -82,6 +82,8 @@ var (
 	timelineSources = map[string]bool{"both": true, "local": true, "git": true}
 	// forgeNotifyStyles are the forge.notify.* values (#2086).
 	forgeNotifyStyles = map[string]bool{"dialog": true, "badge": true, "toast": true, "off": true}
+	// popupCwds are the terminal.popup_cwd values (#2316).
+	popupCwds = map[string]bool{"project": true, "file": true}
 )
 
 // whichKeyMaxDelayMs caps keymap.which_key_delay_ms (#1909); the settings
@@ -315,6 +317,11 @@ func validate(c *Config) []Diagnostic {
 	if !saveModes[c.Editor.AutoSave] {
 		diags = append(diags, Diagnostic{Field: "editor.auto_save", Message: fmt.Sprintf("unknown mode %q, using \"focus\"", c.Editor.AutoSave)})
 		c.Editor.AutoSave = "focus"
+	}
+	// terminal.popup_cwd (#2316) picks the popup shell's start directory.
+	if !popupCwds[c.Terminal.PopupCwd] {
+		diags = append(diags, Diagnostic{Field: "terminal.popup_cwd", Message: fmt.Sprintf("unknown mode %q, using \"project\"", c.Terminal.PopupCwd)})
+		c.Terminal.PopupCwd = "project"
 	}
 	// history.timeline_source (#1916) is the Timeline's default source filter.
 	if !timelineSources[c.History.TimelineSource] {

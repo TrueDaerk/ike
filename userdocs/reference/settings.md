@@ -223,6 +223,7 @@ secrets — are documented together, with screenshots, in
 | Command auto-suggest | `terminal.autosuggest` | boolean | `true` | user | Popup with command/path/make-target completions while typing at the shell prompt; ctrl+space opens it on demand either way |
 | Extra SSH hosts | `terminal.ssh_hosts` | list | *(empty)* | user | Additional host aliases the SSH Host picker (terminal.ssh) offers, for machines no ~/.ssh/config entry declares. Each entry is passed to ssh verbatim ("build01", "ops@10.0.0.5"); the aliases parsed from ~/.ssh/config and its Include files are listed either way |
 | Scrollback lines | `terminal.scrollback_lines` | integer (100–1000000) | `10000` | user | Lines of scrollback each terminal session keeps (#1545); the main memory cost per terminal pane. Applies to new sessions and, on lowering, trims live ones forward — already-trimmed history is not restored by raising it |
+| Popup terminal directory | `terminal.popup_cwd` | enum: `project`, `file` | `project` | user | Directory new popup-terminal shells start in: the project root, or the focused file's directory (project root when no file is open). Applies when a shell is spawned — the retained popup session keeps its own working directory across hide/show |
 
 ### Screenshots
 

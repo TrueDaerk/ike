@@ -251,6 +251,12 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   workspaces' popups included (#1407). Nothing
   resurrects across restarts; only the resize delta persists (`ui.WinSizes`
   key `popupterm`).
+- **Start directory** (`popupShellDir`, #2316): a fresh popup shell spawns in
+  the project root by default; `terminal.popup_cwd = "file"` starts it in the
+  focused (else most recent) editor file's directory instead, degrading to
+  the root when no file is open. Spawn-time only — the retained session keeps
+  its live cwd across hide/show, and the setting is on the Settings UI's
+  Terminal page like the rest of `[terminal]`.
 - **Start size** (`popupSize`, #1714): the box defaults to 0.60 × 0.55 of the
   screen, then takes a resize delta resolved through a three-step cascade —
   the project's own `popupterm` delta in `.ike/winsize.json`, else the
