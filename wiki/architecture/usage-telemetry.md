@@ -63,7 +63,12 @@ All hooks sit at the existing funnels, so coverage is by construction:
   `RunCommandMsg`, menu `RunMsg`, keymap resolution, status-line mouse
   clicks); everything else counts as `internal`.
 - **Keys**: `resolveKeymap` (and the chord-timeout branch) in
-  `internal/app/app.go` — resolved, blocked and unbound outcomes.
+  `internal/app/app.go` — resolved, blocked and unbound outcomes. With an
+  editor focused the `unbound` verdict is deferred until the pane has seen the
+  key (#2303): the editor owns editing chords the keymap table never lists
+  (`alt+delete`, `alt+backspace`, `ctrl+u`, …), and `routeKey` records the
+  event only when `editor.HandledLastKey()` says the editor ignored it too.
+  Otherwise those keys drown the real missing-keybind signal.
 - **Layout**: `SplitFocused`, `setFocus` (real focus transitions only),
   `commitMove`, divider drags and resize mode, `switchTab`/`moveTab`, and the
   project-switch transaction.

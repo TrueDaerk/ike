@@ -208,3 +208,10 @@ func objectTarget(res textobject.Result) operator.Target {
 	}
 	return operator.CharTarget(res.Range)
 }
+
+// HandledLastKey reports whether the last key press routed into the editor did
+// anything here (#2303). The host asks after dispatch: a chord the keymap layer
+// found no binding for is only an "unbound" telemetry event when the editor
+// ignored it too — editor-owned chords like alt+delete never reach the keymap
+// table and must not be reported as missing keybinds.
+func (m Model) HandledLastKey() bool { return m.keyHandled }

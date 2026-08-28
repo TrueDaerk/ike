@@ -242,6 +242,17 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 
 	count := m.pending.EffectiveCount()
 
+	// Word kills outside insert mode (#2303): the macOS chords delete a word
+	// here too, so alt+delete means the same thing in every mode a caret sits
+	// in — it used to fall through as an unknown key and got logged as an
+	// unbound chord. alt+delete/ctrl+delete kill forward (like `dw`),
+	// alt+backspace kills backward (like `db`), both count-aware. A pending
+	// operator keeps its own meaning and falls through to the cancel below.
+	if kill, ok := wordKillKey(s); ok && !m.pending.HasOperator() {
+		m.killWord(kill, count)
+		return m, nil
+	}
+
 	// Operators: a doubled operator (dd/cc/yy) is linewise on count lines.
 	if op, ok := operatorKey(s); ok {
 		if m.pending.Operator == op {
@@ -719,6 +730,10 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 		// last one). The pending count survives until the name resolves.
 		m.wait = awaitPlayReg
 		return m, nil
+	default:
+		// Nothing in normal mode wants this key — the host may report it as an
+		// unbound chord (#2303).
+		m.keyHandled = false
 	}
 	m.pending.Reset()
 	return m, nil
@@ -867,6 +882,33 @@ func (m Model) resolveAfterZ(s string) (Model, tea.Cmd) {
 	}
 	m.pending.Reset()
 	return m, nil
+}
+
+// wordKillKey reports whether s is one of the modifier word-kill chords
+// outside insert mode (#2303) and in which direction it deletes. The chords
+// mirror the insert-mode kills: alt+delete is the macOS convention, ctrl+delete
+// the everywhere-deliverable fallback (#1583); alt+backspace kills backward
+// (#246). alt+d / ctrl+w stay out of it — in normal mode they would collide
+// with the `d` operator and the window-command prefix.
+func wordKillKey(s string) (forward bool, ok bool) {
+	switch s {
+	case "alt+delete", "ctrl+delete", "alt+shift+delete", "ctrl+shift+delete":
+		return true, true
+	case "alt+backspace", "alt+shift+backspace":
+		return false, true
+	}
+	return false, false
+}
+
+// killWord deletes count words from the cursor in the given direction, exactly
+// like the `dw` / `db` operator pair, and yanks them into the pending register.
+func (m *Model) killWord(forward bool, count int) {
+	res := motion.WordBackward(m.buf, m.cursor, count)
+	if forward {
+		res = motion.WordForward(m.buf, m.cursor, count)
+	}
+	m.runOperator('d', operator.Compose(m.buf, m.cursor, res.Pos, res.Kind), m.pending.Register)
+	m.pending.Reset()
 }
 
 // operatorKey reports whether s is an operator key and which one.
