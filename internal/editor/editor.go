@@ -1756,6 +1756,12 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.scroll()
 		return m.maybeReparse(before, nil)
 	case tea.KeyPressMsg:
+		// Lock modifiers say nothing about an editing chord (#2313): a Kitty-
+		// protocol terminal reports caps/num lock alongside the real modifiers,
+		// which would break every exact key.Mod comparison below (alt+backspace
+		// with num lock on would degrade to a plain backspace). The terminal
+		// pane strips them the same way.
+		msg.Mod &^= tea.ModCapsLock | tea.ModNumLock
 		// Assume the key lands somewhere in the editor; only the two
 		// fall-through defaults (unknown normal-mode command, unmatched
 		// insert-mode chord) revoke it (#2303).

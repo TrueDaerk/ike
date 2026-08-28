@@ -572,7 +572,11 @@ cancels instead. In visual mode the chords delete the selection like plain
 mode they would collide with the `d` operator and the window-command prefix.
 Because these chords never reach the keymap table, the host asks the editor
 whether it acted on a key before logging it as an unbound chord — see
-[keymap.md](keymap.md). `Shift+arrows` (plus `Shift+Home/End`) are selection keys: in normal
+[keymap.md](keymap.md). The editor strips the caps/num-lock modifier bits a
+Kitty-protocol terminal reports before matching any key (#2313), so a lock key
+held or latched never changes what an editing chord means. All of these chords
+are mode-owned, not language-owned: they behave identically in every buffer
+regardless of its language classification (#2313). `Shift+arrows` (plus `Shift+Home/End`) are selection keys: in normal
 mode they enter charwise visual mode anchored at the cursor and move; in visual
 mode they extend the selection like their plain counterparts.
 `Shift+Alt/Option+←/→` (and `Shift+Ctrl+←/→`) extend the selection by the same
