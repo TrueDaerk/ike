@@ -103,6 +103,7 @@ bring their own.
 | Show Timeline | `file.timeline` | — | — | everywhere |
 | Open Results in Find Window | `find.openInPanel` | `cmd+enter` | — | everywhere |
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
+| Show Project History Timeline | `history.projectTimeline` | — | — | everywhere |
 | Cancel Running HTTP Request | `http.cancel` | — | — | everywhere |
 | Copy HTTP Request as curl | `http.copyAsCurl` | — | — | everywhere |
 | Copy HTTP Response Body | `http.copyBody` | — | — | everywhere |

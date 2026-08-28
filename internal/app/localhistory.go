@@ -72,19 +72,53 @@ func (m *Model) openLocalHistoryPicker() {
 		return
 	}
 	path := ed.Path()
+	if !m.openLocalHistoryFor(path, localhistory.Entry{}) {
+		m.host.Notify(host.Info, "no local history for "+baseName(path)+" yet — snapshots record on save")
+	}
+}
+
+// openLocalHistoryFor raises the panel over path with at preselected (the
+// zero entry selects the newest snapshot), reporting whether path has any
+// history to show. It is the shared open path: the focused-file command above
+// and the project-wide timeline's handoff (#2171) differ only in which file
+// and which snapshot they name.
+func (m *Model) openLocalHistoryFor(path string, at localhistory.Entry) bool {
 	entries := m.lhStore.List(path)
 	if len(entries) == 0 {
-		m.host.Notify(host.Info, "no local history for "+baseName(path)+" yet — snapshots record on save")
-		return
+		return false
 	}
 	m.lhPath = path
 	m.lhEntries = entries
 	m.lhSel = 0
+	for i, e := range entries {
+		// Identity is time plus hash: the same content saved twice is two
+		// entries sharing one hash, and only the time tells them apart.
+		if e.Hash == at.Hash && e.Time.Equal(at.Time) {
+			m.lhSel = i
+			break
+		}
+	}
 	m.lhPicker = true
-	m.lhCur = ed.Text()
+	m.lhCur = m.localHistoryCurrentText(path)
 	m.refreshLocalHistoryDiff()
 	m.setLocalHistoryContent()
 	m.shell.Open()
+	return true
+}
+
+// localHistoryCurrentText is the text the panel diffs its snapshots against:
+// the live buffer when the file is open, otherwise the file on disk — a file
+// the project-wide timeline hands over may have failed to open (deleted since
+// the snapshot), and an empty right side is the honest picture of that.
+func (m Model) localHistoryCurrentText(path string) string {
+	if ed := m.editorForPath(path); ed != nil {
+		return ed.Text()
+	}
+	text, err := normalizeBufferText([]byte(readFileOrEmpty(path)))
+	if err != nil {
+		return ""
+	}
+	return text
 }
 
 // localHistoryContent implements ui.Content (not ModelContent) so the body
