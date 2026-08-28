@@ -74,10 +74,16 @@ type Event struct {
 	Data map[string]string `json:"data,omitempty"`
 }
 
+// maxPending caps the deferred low-signal events held before the session
+// file exists (see startsSession). A handful is all a real session produces
+// before its first meaningful event; beyond that the oldest are dropped.
+const maxPending = 32
+
 // Recorder appends events for one session. Create it with New; the session
-// file opens lazily on the first accepted event, so a recorder that never
-// records (telemetry off, or a model discarded on project switch) costs
-// nothing and leaves no file.
+// file opens lazily on the first *meaningful* event (see startsSession), so a
+// recorder that never records — telemetry off, a model discarded on project
+// switch, or a launch that only ever emitted the synthetic startup
+// pane.focus — costs nothing and leaves no file (#2318).
 type Recorder struct {
 	dir       string
 	enabled   func() bool
@@ -98,6 +104,7 @@ type Recorder struct {
 	started bool
 	closed  bool
 	sid     string
+	pending []*Event // low-signal events held until the file is opened
 	ch      chan envelope
 	done    chan struct{}
 }
@@ -196,6 +203,16 @@ func (r *Recorder) Layout(op string, detail map[string]string) {
 	r.record(TypeLayout, d)
 }
 
+// startsSession reports whether an event is meaningful enough to create the
+// session file. Everything is, except a bare pane focus change: IKE emits one
+// on startup when the session restore moves focus from the explorer to the
+// restored editor, so a launch that is immediately quit would otherwise leave
+// a ghost file holding that single event (#2318). Deferred events are not
+// lost — they are held in memory and written once a meaningful event arrives.
+func startsSession(typ string, data map[string]string) bool {
+	return !(typ == TypeLayout && data["op"] == "pane.focus")
+}
+
 // record enqueues one event. It never blocks: a full buffer drops the event.
 func (r *Recorder) record(typ string, data map[string]string) {
 	if r == nil {
@@ -209,6 +226,15 @@ func (r *Recorder) record(typ string, data map[string]string) {
 		r.mu.Unlock()
 		return
 	}
+	if !r.started && !startsSession(typ, data) {
+		// Hold it: this event alone must not create a file.
+		r.pending = append(r.pending, r.newEvent(typ, data))
+		if len(r.pending) > maxPending {
+			r.pending = r.pending[len(r.pending)-maxPending:]
+		}
+		r.mu.Unlock()
+		return
+	}
 	if !r.started {
 		r.started = true
 		r.sidLocked()
@@ -219,25 +245,37 @@ func (r *Recorder) record(typ string, data map[string]string) {
 		f := r.open()
 		if f == nil {
 			r.closed = true
+			r.pending = nil
 			r.mu.Unlock()
 			return
 		}
 		r.ch = make(chan envelope, 256)
 		r.done = make(chan struct{})
 		go r.run(f)
+		// The deferred low-signal events precede this one in time, so they
+		// go in first — the log keeps its chronological order.
+		for _, p := range r.pending {
+			r.ch <- envelope{ev: p}
+		}
+		r.pending = nil
 	}
-	ev := &Event{
-		V:    SchemaVersion,
-		TS:   r.now().UTC().Format("2006-01-02T15:04:05.000Z07:00"),
-		SID:  r.sid,
-		Type: typ,
-		Data: data,
-	}
+	ev := r.newEvent(typ, data)
 	ch := r.ch
 	r.mu.Unlock()
 	select {
 	case ch <- envelope{ev: ev}:
 	default: // full buffer: drop — never block the render loop
+	}
+}
+
+// newEvent stamps one event. Called under the mutex.
+func (r *Recorder) newEvent(typ string, data map[string]string) *Event {
+	return &Event{
+		V:    SchemaVersion,
+		TS:   r.now().UTC().Format("2006-01-02T15:04:05.000Z07:00"),
+		SID:  r.sidLocked(),
+		Type: typ,
+		Data: data,
 	}
 }
 
@@ -351,9 +389,13 @@ func (r *Recorder) run(f *os.File) {
 	}
 }
 
-// prune deletes the oldest session files beyond KeepFiles-1, so the directory
-// holds at most KeepFiles files once this session's file is created. The
-// timestamped names sort chronologically.
+// prune deletes empty session files and then the oldest ones beyond
+// KeepFiles-1, so the directory holds at most KeepFiles files once this
+// session's file is created. The timestamped names sort chronologically.
+//
+// Zero-byte files are litter from earlier launches that were killed before
+// the writer flushed anything; dropping them here keeps the directory (and
+// the retention budget) free of sessions that hold no events (#2318).
 func (r *Recorder) prune() {
 	keep := r.KeepFiles - 1
 	if keep < 0 {
@@ -365,9 +407,14 @@ func (r *Recorder) prune() {
 	}
 	var names []string
 	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".jsonl") {
-			names = append(names, e.Name())
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
+			continue
 		}
+		if info, err := e.Info(); err == nil && info.Size() == 0 {
+			os.Remove(filepath.Join(r.dir, e.Name()))
+			continue
+		}
+		names = append(names, e.Name())
 	}
 	sort.Strings(names)
 	for i := 0; i < len(names)-keep; i++ {

@@ -297,3 +297,93 @@ func TestCloseIsIdempotentAndStopsRecording(t *testing.T) {
 		t.Fatalf("want only the pre-close event, got %v", evs)
 	}
 }
+
+// A launch that only ever emits the synthetic startup pane.focus must leave
+// no file at all — that ghost file was pure noise (#2318).
+func TestLoneFocusEventCreatesNoFile(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.Layout("pane.focus", nil)
+	r.Flush()
+	r.Close()
+	if files := sessionFiles(t, dir); len(files) != 0 {
+		t.Fatalf("lone pane.focus created files: %v", files)
+	}
+}
+
+// Deferred focus events are held, not dropped: the first meaningful event
+// opens the file and the earlier focus changes land ahead of it, in order.
+func TestDeferredFocusEventsLandOnFirstRealEvent(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.Layout("pane.focus", nil)
+	r.Layout("pane.focus", nil)
+	if files := sessionFiles(t, dir); len(files) != 0 {
+		t.Fatalf("file created before the first meaningful event: %v", files)
+	}
+	r.Command("editor.save", SourceKeybind)
+	r.Layout("pane.focus", nil)
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != 4 {
+		t.Fatalf("want 4 events, got %d: %v", len(evs), evs)
+	}
+	wantOps := []string{"pane.focus", "pane.focus", "", "pane.focus"}
+	for i, want := range wantOps {
+		if evs[i].Data["op"] != want {
+			t.Errorf("event %d: op = %q, want %q", i, evs[i].Data["op"], want)
+		}
+	}
+	if evs[2].Type != TypeCommand || evs[2].Data["id"] != "editor.save" {
+		t.Errorf("meaningful event wrong: %v", evs[2])
+	}
+	for _, ev := range evs {
+		if ev.SID != r.SessionID() {
+			t.Errorf("event %v: sid %q != session %q", ev, ev.SID, r.SessionID())
+		}
+	}
+}
+
+// Holding focus events must stay bounded — a session that only switches
+// panes for a long time may not grow the pending buffer without limit.
+func TestPendingFocusEventsAreBounded(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	for i := 0; i < maxPending*3; i++ {
+		r.Layout("pane.focus", nil)
+	}
+	r.Command("editor.save", SourceKeybind)
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != maxPending+1 {
+		t.Fatalf("want %d events (capped pending plus the real one), got %d", maxPending+1, len(evs))
+	}
+}
+
+// The retention pass drops zero-byte session files — litter from launches
+// killed before the writer flushed anything (#2318).
+func TestPruneDeletesEmptySessionFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "20250101T000000-aaa.jsonl"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "20250102T000000-bbb.jsonl"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := New(dir, nil)
+	r.KeepFiles = 20
+	r.Command("x", SourceInternal)
+	r.Close()
+
+	files := sessionFiles(t, dir)
+	if len(files) != 2 {
+		t.Fatalf("want the non-empty file plus this session's, got %v", files)
+	}
+	for _, f := range files {
+		if f == "20250101T000000-aaa.jsonl" {
+			t.Fatal("empty session file survived the prune")
+		}
+	}
+}
