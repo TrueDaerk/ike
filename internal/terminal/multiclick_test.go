@@ -448,3 +448,26 @@ func TestDoubleClickWordAcrossWrap(t *testing.T) {
 		t.Fatalf("cross-wrap word selection = %q, want %q", got, wrapped30)
 	}
 }
+
+// TestLogicalLineSpanCapped guards #2184: with every row full-width (cat of a
+// minified file, a base64 dump) the soft-wrap heuristic reads the whole
+// scrollback as ONE logical line — the multi-click span walk must stay
+// bounded at logicalWalkCap rows per direction instead of touching every row
+// (and materializing the whole buffer as one "word") on a double click.
+func TestLogicalLineSpanCapped(t *testing.T) {
+	m := NewPipe("cap-test", 40, 6, nil)
+	t.Cleanup(m.Close)
+	// One unbroken 40*(3*cap)-rune line: every row is full-width, so the wrap
+	// chain spans the entire buffer.
+	rows := 3 * logicalWalkCap
+	m.FeedText(strings.Repeat("a", 40*rows))
+	waitFor(t, "chain fed into the scrollback", func() bool {
+		return m.sess.ScrollbackLen() >= rows-6
+	})
+	v := m.sess.ScrollbackLen() / 2 // deep inside the chain, both directions long
+	first, last := m.logicalLineSpan(v)
+	if v-first != logicalWalkCap || last-v != logicalWalkCap {
+		t.Fatalf("span [%d,%d] around %d must stop at the cap %d on both sides",
+			first, last, v, logicalWalkCap)
+	}
+}

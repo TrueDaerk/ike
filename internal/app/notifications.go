@@ -12,6 +12,7 @@ import (
 
 	"ike/internal/host"
 	"ike/internal/overlay"
+	"ike/internal/ui"
 )
 
 // notifications.go renders host.Notify toasts (Roadmap 0130): short event
@@ -128,28 +129,86 @@ func (m Model) minSeverity() host.Severity {
 	return host.Info
 }
 
-// historyView renders the history ring for the floating shell: newest first,
-// severity-colored, timestamped. An entry emitted in another project (#1514:
-// the ring survives project switches) carries a dimmed [project] label so its
-// context is clear; entries from the current project stay unlabeled.
+// notifCenterTitle is the floating shell heading of the notification center.
+// It doubles as the identity check that routes the center's own keys (#2152),
+// so clear-all never fires over a different shell content.
+const notifCenterTitle = "NOTIFICATIONS"
+
+// notifCenterLegend names the center's own keys, the way the other shell
+// dialogs footer theirs.
+const notifCenterLegend = "[c] clear all   [esc] close"
+
+// ageColumn is the width the relative-age column is padded to, wide enough for
+// every ui.ShortAge form ("now", "59m", "23h", "13d", "52w").
+const ageColumn = 3
+
+// historyView renders the history ring for the notification center (#2152):
+// newest first, severity glyph, relative age ("now", "5m", "3h"), and the
+// clear-all/close legend. An entry emitted in another project (#1514: the ring
+// survives project switches) carries a dimmed [project] label so its context is
+// clear; entries from the current project stay unlabeled.
 func (m Model) historyView() string {
+	dim := lipgloss.NewStyle().Foreground(m.pal().InlayHint)
 	if len(m.history) == 0 {
-		return "no notifications yet"
+		return "no notifications yet\n\n" + dim.Render(notifCenterLegend)
 	}
 	cur := m.projectRootTag()
-	dim := lipgloss.NewStyle().Foreground(m.pal().InlayHint)
+	now := time.Now()
 	var b strings.Builder
-	for i, e := range m.history {
-		if i > 0 {
-			b.WriteByte('\n')
+	for _, e := range m.history {
+		age := ui.ShortAge(e.at, now)
+		for lipgloss.Width(age) < ageColumn {
+			age = " " + age
 		}
-		line := e.at.Format("15:04:05") + " " + toastIcon(e.sev) + " " + e.text
+		line := age + " " + toastIcon(e.sev) + " " + e.text
 		b.WriteString(lipgloss.NewStyle().Foreground(m.toastColor(e.sev)).Render(line))
 		if e.root != "" && e.root != cur {
 			b.WriteString(dim.Render("  [" + filepath.Base(e.root) + "]"))
 		}
+		b.WriteByte('\n')
 	}
+	b.WriteByte('\n')
+	b.WriteString(dim.Render(notifCenterLegend))
 	return b.String()
+}
+
+// openNotifCenter shows the history ring in the floating shell and marks
+// everything seen: the status line counter resets (#101). The body is a method
+// value, so ages stay live while the center is open.
+func (m *Model) openNotifCenter() {
+	m.notifUnseen = 0
+	m.bindNotifCenter()
+	m.shell.Open()
+}
+
+// bindNotifCenter (re-)binds the center's content to the current model copy —
+// the body is a method value, so a cleared ring only renders after a re-bind.
+func (m *Model) bindNotifCenter() {
+	m.shell.SetContent(ui.ModelContent{Heading: notifCenterTitle, Body: m.historyView})
+	m.shell.SetSize(m.width, m.height)
+}
+
+// notifCenterOpen reports whether the notification center owns the shell — and
+// with it the keys the center handles itself.
+func (m Model) notifCenterOpen() bool {
+	if !m.shell.IsOpen() {
+		return false
+	}
+	c, ok := m.shell.Content().(ui.ModelContent)
+	return ok && c.Heading == notifCenterTitle
+}
+
+// updateNotifCenter handles the center's own keys while it is open. Only "c"
+// (clear all) is consumed — reported by the handled flag; every other key falls
+// through to the shell, so scrolling and Esc keep their meaning.
+func (m Model) updateNotifCenter(msg tea.KeyPressMsg) (Model, bool) {
+	if msg.String() != "c" {
+		return m, false
+	}
+	m.history = nil
+	m.notifUnseen = 0
+	m.bindNotifCenter()
+	return m, true
 }
 
 // projectRootTag is the absolute project root recorded on history entries

@@ -666,14 +666,25 @@ func (m *Model) MousePress(x, y int) {
 	}
 }
 
+// logicalWalkCap bounds logicalLineSpan's soft-wrap chain walk in each
+// direction (#2184): with every row full-width (cat of a minified file, a
+// base64 dump) the wrap heuristic reads the entire scrollback as ONE logical
+// line, and an uncapped walk visits up to the whole history — two lock
+// acquisitions per row — and then materializes megabytes of text on a double
+// click, re-run per motion flush while a word/line drag extends (extendUnit).
+// Two screenfuls, mirroring the wheel path's wheelChildCap: a "word" or
+// "line" spanning more than that is not a unit anyone selects on purpose.
+const logicalWalkCap = 80
+
 // logicalLineSpan walks the soft-wrap chain around virtual line v and returns
-// the first and last row of the logical line it belongs to.
+// the first and last row of the logical line it belongs to, capped at
+// logicalWalkCap rows in each direction (#2184).
 func (m Model) logicalLineSpan(v int) (first, last int) {
 	first, last = v, v
-	for first > 0 && m.sess.SoftWrapped(first-1) {
+	for first > 0 && v-first < logicalWalkCap && m.sess.SoftWrapped(first-1) {
 		first--
 	}
-	for m.sess.SoftWrapped(last) {
+	for last-v < logicalWalkCap && m.sess.SoftWrapped(last) {
 		last++
 	}
 	return first, last
@@ -916,6 +927,11 @@ func (m *Model) stopAutoScroll() {
 // concatenate without a newline (#936): only hard newlines put `\n` in the
 // clipboard, so a wrapped command pastes back as the one line the program
 // printed.
+//
+// The extraction is O(selected rows × width) with two lock round-trips per
+// row (LineText + SoftWrapped) — fine for explicit copies (cmd+c, copy
+// mode); a select-all over a full scrollback would want an off-loop path
+// before it lands on the update loop (#2184).
 func (m Model) SelectionText() string {
 	if !m.selOn || m.sess == nil {
 		return ""

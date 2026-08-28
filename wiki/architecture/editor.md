@@ -233,7 +233,21 @@ line runs that test (see /architecture/run-configurations.md).
   a centered view of the change tree — newest first, abandoned branches
   indented, current/saved states marked — where `j`/`k` move and `enter`
   restores the selected state (the overlay stays open and refreshes, esc
-  closes). A per-buffer cap (1000 nodes) prunes oldest leaf branches first; a
+  closes). Each row carries the state's **relative age** (`just now`, `5m ago`,
+  `2h ago`, `3d ago`; the root state predates the history and shows none), and
+  a **diff preview** (#2143) under the list shows what restoring the selected
+  state would do: the inline diff from the current buffer to that state
+  (`-` lines disappear, `+` lines appear), computed with `internal/diff` over
+  `History.ContentAt` — a read-only replay of the same inverse/forward walk
+  `JumpTo` performs, on a scratch copy, so neither buffer nor history moves.
+  The preview keeps one context line around each change, marks skipped
+  regions with `@@`, is capped to a quarter of the screen (3–10 rows, the
+  remainder reported as `… N more lines`) and is memoized per state seq, so
+  moving the selection back and forth replays nothing twice; a jump
+  (`SetNodes`) drops the cache. `t` starts a **time jump**: type an age in
+  minutes and `enter` restores the *newest* state at least that old — the
+  untimestamped root always qualifies, so a too-large age lands on the
+  original content; `esc` cancels the prompt without closing the overlay. A per-buffer cap (1000 nodes) prunes oldest leaf branches first; a
   purely linear history over the cap drops its oldest level, vim's
   `undolevels`. A per-buffer **byte budget** (32 MiB of retained edit text,
   #1537) prunes in the same order — whole-buffer changes (reformat-on-save,

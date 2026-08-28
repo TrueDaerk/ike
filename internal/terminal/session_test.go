@@ -89,6 +89,9 @@ func TestSessionResizePropagates(t *testing.T) {
 	s := startSh(t, c)
 
 	s.Resize(100, 30)
+	// Width changes apply from the trailing timer goroutine (#2184), so the
+	// size must land before stty samples it.
+	waitFor(t, "resize applied", func() bool { return s.em.Width() == 100 })
 	for _, r := range "stty size\r" {
 		s.SendKey(keyFor(r))
 	}
@@ -589,30 +592,32 @@ func BenchmarkSessionView(b *testing.B) {
 	})
 }
 
-// TestSessionResizeDebounce guards #804: a rapid resize burst (divider drag)
-// applies the first size immediately and folds the rest into one trailing
-// apply of the final size — intermediate sizes never reach the PTY/emulator.
+// TestSessionResizeDebounce guards #804/#2184: a rapid resize burst (divider
+// drag) folds into one trailing apply of the final size — intermediate sizes
+// never reach the PTY/emulator — and width changes never apply on the caller
+// (the reflow is too heavy for the update loop), while a quiet height-only
+// change keeps the instant leading edge.
 func TestSessionResizeDebounce(t *testing.T) {
 	c := &collector{}
 	s := startSh(t, c)
 
-	s.Resize(100, 30) // leading edge: immediate
-	if w := s.em.Width(); w != 100 {
-		t.Fatalf("leading resize must apply immediately, width = %d", w)
+	s.Resize(100, 30) // width change: parked for the trailing timer
+	if w := s.em.Width(); w != 80 {
+		t.Fatalf("width resize must not apply on the caller, width = %d", w)
 	}
 	s.Resize(96, 30)
 	s.Resize(92, 30)
 	s.Resize(88, 30)
-	if w := s.em.Width(); w != 100 {
-		t.Fatalf("burst resizes must defer, width = %d, want still 100", w)
+	if w := s.em.Width(); w != 80 {
+		t.Fatalf("burst resizes must defer, width = %d, want still 80", w)
 	}
 	waitFor(t, "trailing resize", func() bool { return s.em.Width() == 88 })
 
-	// A lone resize after the quiet window is immediate again.
+	// A lone height-only resize after the quiet window is immediate.
 	time.Sleep(resizeQuiet + 20*time.Millisecond)
-	s.Resize(80, 24)
-	if w := s.em.Width(); w != 80 {
-		t.Fatalf("post-quiet resize must apply immediately, width = %d", w)
+	s.Resize(88, 24)
+	if h := s.em.Height(); h != 24 {
+		t.Fatalf("post-quiet height resize must apply immediately, height = %d", h)
 	}
 }
 
@@ -1001,8 +1006,10 @@ func TestWidthReflowWithWiderReserve(t *testing.T) {
 	s.FeedBytes([]byte("\x1b[?1049l")) // back to the primary screen
 	waitFor(t, "primary screen", func() bool { return !s.AltScreen() })
 
+	// resizeNow: a plain Resize would only park the width change for the
+	// trailing timer (#2184) and return without touching the reflow.
 	done := make(chan struct{})
-	go func() { s.Resize(25, 20); close(done) }() // width reflow vs. wider reserve
+	go func() { resizeNow(s, 25, 20); close(done) }() // width reflow vs. wider reserve
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):

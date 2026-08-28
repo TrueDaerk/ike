@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Notifications
-description: Toast notifications — host.Notify severities, expiry, stacking, Esc dismissal; the prominent forge event dialog, the status-line unread badge and the per-event-kind style setting; SetStatus stays for persistent status segments.
+description: Toast notifications — host.Notify severities, expiry, stacking, Esc dismissal; the notification center over the session history ring with relative ages and clear-all; the prominent forge event dialog, the status-line unread badge and the per-event-kind style setting; SetStatus stays for persistent status segments.
 resource: internal/app/notifications.go
 tags: [architecture, notifications, host, ui, forge]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Notifications
@@ -39,12 +39,28 @@ produced.
 - **Theming:** severity → palette slots (`Info`/`Warning`/`Error`) on the
   `Surface` background — light/dark aware without new theme slots.
 
-## History & config (#78)
+## History & the notification center (#78, #2152)
 
 Every notification (toast-worthy or not) is recorded in a **ring of the newest
-100** entries with timestamp and severity. The `notifications.history` registry
-command (palette) opens the ring in the floating shell: newest first,
-severity-colored, `HH:MM:SS` timestamps.
+100** entries (`historyCap`) with timestamp and severity. Toasts expire, the
+ring does not — the **notification center** is where past notifications are
+read back.
+
+The center is the floating shell hosting `historyView`, opened by the
+`notifications.history` registry command (palette, `cmd+alt+n` /
+`ctrl+alt+n`, the Help menu, and a click on the status-line counter). It lists
+the ring **newest first**, one line per entry: a right-aligned relative age
+(`ui.ShortAge` — "now", "5m", "3h", "4d"), the severity glyph (`●`/`▲`/`✖`)
+in the severity color, and the text.
+
+Its own keys, footered in the view as `[c] clear all   [esc] close`:
+
+- **`c`** — clear all: the ring is emptied and the view reads "no
+  notifications yet". Only this key is consumed (`updateNotifCenter` reports
+  it as handled); everything else falls through to the shell, so scrolling and
+  Esc keep their usual meaning. Outside the center `c` is an ordinary key —
+  the center is identified by its shell content heading, not by a flag that
+  could go stale under another dialog.
 
 The ring is session state, not workspace state (#1514): it survives a seamless
 project switch (the root model carries `history` and the unseen counter into
@@ -53,7 +69,8 @@ the view labels entries from other projects with a dimmed `[project]` suffix,
 while current-project entries stay unlabeled.
 
 The status line shows an unseen-count segment (`● N`, #101): entries recorded
-since the history view was last opened; opening it resets the counter. See
+since the center was last opened; opening it resets the counter, and clicking
+the segment is one of the ways to open it. See
 [Status Line Segments](/architecture/status-line.md).
 
 Config (typed section `[notifications]`, live-reloaded — the root model
