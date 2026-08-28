@@ -111,6 +111,23 @@ func (m *PickerMode) projectsBase() string {
 	return dir
 }
 
+// currentRoot resolves the project the picker was opened in (#2317). The root
+// model always opens the picker with Root "." — the whole IDE is anchored at
+// the process working directory — so an Abs of the context root names the
+// currently open project. It returns "" when the root cannot be resolved, in
+// which case nothing is filtered out.
+func (m *PickerMode) currentRoot(cx palette.Context) string {
+	root := cx.Root
+	if root == "" {
+		root = "."
+	}
+	resolved, err := filepath.Abs(root)
+	if err != nil {
+		return ""
+	}
+	return filepath.Clean(resolved)
+}
+
 // Prefix implements palette.Mode.
 func (m *PickerMode) Prefix() rune {
 	if m.peek {
@@ -131,6 +148,13 @@ func (m *PickerMode) Placeholder() string {
 // name and path (an empty query lists all, newest first), followed by an
 // "open this path" item for the raw query so a project outside the history is
 // always reachable.
+//
+// The currently open project is dropped from the list (#2317), the way the
+// recent-files mode drops the active file: the history's newest entry is
+// always the project you are standing in, so listing it would put a row that
+// only answers "already in …" on top. Without it the first row is the
+// *previous* project, and the switch chord plus enter bounces between the two
+// projects you alternate between.
 func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 	type scored struct {
 		entry Entry
@@ -138,7 +162,11 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 		spans []int
 	}
 	var out []scored
+	cur := m.currentRoot(cx)
 	for _, e := range m.history() {
+		if cur != "" && filepath.Clean(e.Path) == cur {
+			continue
+		}
 		if r, ok := fuzzy.Match(query, e.Name); ok {
 			out = append(out, scored{entry: e, score: r.Score, spans: r.Positions})
 			continue

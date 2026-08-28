@@ -305,3 +305,78 @@ func TestPickerShowsLastOpenedTime(t *testing.T) {
 		t.Fatalf("unloaded entry aux glyph = %q, want default", items[1].AuxGlyph)
 	}
 }
+
+// --- current project excluded (#2317) ---
+
+// TestPickerHidesCurrentProject: the history's newest entry is always the
+// project the picker was opened in, so it is dropped and the *previous*
+// project takes the top row — chord + enter bounces between two projects.
+func TestPickerHidesCurrentProject(t *testing.T) {
+	m, _ := newPicker(t, fixedHistory)
+	items := m.Results("", palette.Context{Root: "/code/ike"})
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items with the current project hidden, got %+v", items)
+	}
+	want := []string{"website", "intra"}
+	for i, w := range want {
+		if items[i].Title != w {
+			t.Errorf("items[%d] = %q, want %q", i, items[i].Title, w)
+		}
+	}
+	// The previous project activates a real switch, not an "already in …".
+	if msg, ok := items[0].Msg.(PickedMsg); !ok || msg.Path != "/code/website" {
+		t.Errorf("first item msg = %+v, want PickedMsg{/code/website}", items[0].Msg)
+	}
+}
+
+// TestPickerHidesCurrentProjectFromQuery: the exclusion is not an empty-query
+// special case — a fuzzy query cannot surface the current project either.
+func TestPickerHidesCurrentProjectFromQuery(t *testing.T) {
+	m, _ := newPicker(t, fixedHistory)
+	for _, it := range m.Results("ike", palette.Context{Root: "/code/ike"}) {
+		if it.Title == "ike" {
+			t.Fatalf("query surfaced the current project: %+v", it)
+		}
+	}
+}
+
+// TestPickerCurrentProjectResolvesRelativeRoot: the root model opens the
+// picker with Root ".", so the exclusion has to resolve against the process
+// working directory.
+func TestPickerCurrentProjectResolvesRelativeRoot(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	// t.TempDir may hand out a symlinked path (/var → /private/var on
+	// macOS); the history stores what the picker resolves, so mirror it.
+	cur, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	history := func() []Entry {
+		return []Entry{
+			{Path: cur, Name: "current"},
+			{Path: "/code/website", Name: "website"},
+		}
+	}
+	m, _ := newPicker(t, history)
+	items := m.Results("", palette.Context{Root: "."})
+	if len(items) != 1 || items[0].Title != "website" {
+		t.Fatalf("Root \".\" should hide the cwd project, got %+v", items)
+	}
+}
+
+// TestPeekPickerHidesCurrentProject: peeking the project you are already in
+// is the same no-op, so the peek flavour hides it too — and its top row is
+// the project a peek would actually take you to.
+func TestPeekPickerHidesCurrentProject(t *testing.T) {
+	base := t.TempDir()
+	m := NewPeekPickerMode(fixedHistory)
+	m.projectsDir = func() (string, error) { return base, nil }
+	items := m.Results("", palette.Context{Root: "/code/ike"})
+	if len(items) != 2 || items[0].Title != "website" {
+		t.Fatalf("peek picker should hide the current project, got %+v", items)
+	}
+	if msg, ok := items[0].Msg.(PeekPickedMsg); !ok || msg.Path != "/code/website" {
+		t.Errorf("first item msg = %+v, want PeekPickedMsg{/code/website}", items[0].Msg)
+	}
+}

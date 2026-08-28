@@ -221,7 +221,21 @@ one action that also unloads it.
   locked) reusing Roadmap 0070's overlay/fuzzy list. Items are the history
   entries — fuzzy-matched on display name, falling back to the path; an empty
   query lists all, newest first — plus an `Open "<query>"…` affordance for a
-  typed path outside the history. Any non-empty query also browses the
+  typed path outside the history.
+  The **currently open project is not listed** (#2317), the way the
+  recent-files mode drops the active file: the history's newest entry is
+  always the project you are standing in, so listing it would put a row that
+  can only answer "already in …" on top. Dropping it makes the first row the
+  *previous* project, so the switch chord plus `enter` bounces between the two
+  projects you alternate between — the whole picker is an MRU switcher, and
+  the MRU order is the persisted history, so it survives a restart. The
+  exclusion is not an empty-query special case: a query cannot surface the
+  current project either, and the peek flavour hides it for the same reason
+  (peeking where you already are is the same no-op). It resolves the palette
+  `Context.Root` (always `"."` — the IDE is anchored at the process working
+  directory) with `filepath.Abs` and compares cleaned paths against the
+  stored, absolute history paths; an unresolvable root filters nothing.
+  Any non-empty query also browses the
   filesystem (#542): matching directories (via the shared
   `internal/pathcomplete` engine, dirs-only) render as selectable
   `Open <dir>` items ahead of the raw affordance, and `tab` extends the query
