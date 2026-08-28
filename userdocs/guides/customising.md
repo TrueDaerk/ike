@@ -61,8 +61,11 @@ the batch again.
 edits away silently. `r` (reset to the default) stages a removal like any
 other change.
 
-Settings whose whole point is how they look — the theme — preview live while
-staged, and the preview is undone if you discard.
+Settings whose whole point is how they look — the theme — preview live: moving
+through the option list re-themes the whole IDE on the highlighted entry,
+++esc++ puts the previous theme back, and only ++enter++ stages a value that
+the usual ++ctrl+s++ then writes. A preview is never written, and discarding a
+staged one undoes it the same way.
 
 Custom pages are the exception: installing a plugin, choosing an interpreter
 or creating a virtualenv writes straight through, because those are actions,
@@ -218,8 +221,10 @@ washed-out projectors. Plugins can register more. The README shows a
 [screenshot of every theme](https://github.com/TrueDaerk/ike#themes).
 
 Switching live is easiest from the palette — type `:` and then `Theme`. The
-**Appearance** settings page lists them too, and previews as you move through
-the list. Every row of that list is its own mini-preview: the theme's name is
+**Appearance** settings page lists them too, and re-themes the whole IDE — open
+files included, syntax colours and all — as you move through the list. Nothing
+is written until you press ++enter++ and apply; ++esc++ restores the theme you
+came in with. Every row of that list is its own mini-preview: the theme's name is
 painted in that theme's background and foreground, and the strip of colour
 chips at the end of the row shows its background, foreground, accent, keyword
 and string colours — so themes compare at a glance without applying them one

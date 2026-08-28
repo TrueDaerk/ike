@@ -85,6 +85,11 @@ type Model struct {
 	// edits collect here and reach disk only when the batch is applied.
 	changes []change
 
+	// browse is the debounced live preview of the option list currently being
+	// scrolled (#2181); see livepreview.go. It is deliberately separate from
+	// changes — a browsed value is shown, never staged.
+	browse browseState
+
 	notice   string // transient info line (clamp feedback #889, saved flash #891)
 	writeErr string // inline write/reload error (#891), cleared on the next action
 
@@ -220,6 +225,7 @@ func (m *Model) Open() {
 	m.filter, m.filterCur, m.notice, m.writeErr = "", 0, "", ""
 	m.editor, m.editorKey = nil, ""
 	m.stack = nil
+	m.browse = browseState{}
 }
 
 // Close hides the panel (and any open sub-panels), remembering the page.
@@ -227,6 +233,10 @@ func (m *Model) Close() {
 	m.invalidateSearch()
 	m.open = false
 	m.stack = nil
+	// A browse preview belongs to the open list (#2181). Callers roll it back
+	// with CancelPreview before closing; dropping the state here keeps a stale
+	// base from being restored over a later, unrelated selection.
+	m.browse = browseState{}
 	if m.cat >= 0 && m.cat < len(m.pages) {
 		saveLastPage(m.pages[m.cat].Title)
 	}
@@ -353,7 +363,8 @@ func (m *Model) Click(x, y int) tea.Cmd {
 			m.cat, m.sel, m.focus = rows[idx].page, 0, catColumn
 			m.followCat, m.followForm = true, true
 		}
-		return nil
+		// The page the browsed entry lived on is gone from view (#2181).
+		return m.CancelPreview()
 	}
 	// Custom pages own everything right of the rail: forward the press
 	// page-locally through the optional PageClicker seam (#674).
@@ -388,25 +399,40 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		m.sel, m.focus = idx, formColumn
 		m.followForm = true
 		m.syncEditor()
+		// Selecting another entry abandons the browsed one (#2181). Staying
+		// on the browsed entry keeps its preview: the editor is unchanged.
+		return m.cancelPreviewOffEntry(idx)
 	}
 	return nil
+}
+
+// cancelPreviewOffEntry rolls a live preview back when the selection lands on
+// a row other than the entry that armed it (#2181).
+func (m *Model) cancelPreviewOffEntry(idx int) tea.Cmd {
+	if m.browse.key == "" {
+		return nil
+	}
+	if rows := m.rows(); idx >= 0 && idx < len(rows) && rows[idx].entry.Key == m.browse.key {
+		return nil
+	}
+	return m.CancelPreview()
 }
 
 // Wheel scrolls the column under the pointer by moving its selection (the
 // lists follow their selection, like every other overlay panel): the category
 // column when hovered, the form column otherwise. x/y are panel-local; y
 // picks the stacked detail band apart from the list above it (#1664).
-func (m *Model) Wheel(x, y, delta int) {
+func (m *Model) Wheel(x, y, delta int) tea.Cmd {
 	m.invalidateSearch()
 	if !m.open {
-		return
+		return nil
 	}
 	if m.SubOpen() {
 		m.wheelSub(delta)
-		return
+		return nil
 	}
 	if m.filtering {
-		return
+		return nil
 	}
 	if x >= 1 && x < 1+catWidth {
 		// Viewport scroll, one row per notch (#885): the wheel browses, it
@@ -420,7 +446,7 @@ func (m *Model) Wheel(x, y, delta int) {
 			n = len(m.hitPages()) + 1 // the "pages with hits" header row
 		}
 		m.catOff = clamp(m.catOff+step, 0, maxOff(n, m.height-chromeRows))
-		return
+		return nil
 	}
 	// Custom pages own their scrolling: forward through the optional
 	// PageWheeler seam (#674).
@@ -428,7 +454,7 @@ func (m *Model) Wheel(x, y, delta int) {
 		if w, ok := page.(PageWheeler); ok {
 			w.Wheel(delta)
 		}
-		return
+		return nil
 	}
 	// The detail column scrolls its own editor (#1325): a long enum list is
 	// the one thing over there with more content than room. In the stacked
@@ -436,12 +462,13 @@ func (m *Model) Wheel(x, y, delta int) {
 	g := m.gridFor()
 	if (g.side && x >= m.detailX()) || (!g.side && y-bodyTop > g.listH) {
 		if w, ok := m.editor.(wheelEditor); ok {
-			w.Wheel(delta)
+			return w.Wheel(delta)
 		}
-		return
+		return nil
 	}
 	// Schema form: viewport scroll, decoupled from the selection (#885).
 	m.formOff = clamp(m.formOff+delta, 0, maxOff(len(m.rows()), g.listH))
+	return nil
 }
 
 // maxOff is the largest sensible scroll offset for n lines in an h window.
@@ -521,7 +548,8 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		// complete, #541).
 		if key.String() == "tab" && !m.editor.Capturing() {
 			m.focus = catColumn
-			return nil
+			// Leaving the editor abandons whatever it highlighted (#2181).
+			return m.CancelPreview()
 		}
 		return m.editor.Update(key)
 	}
@@ -659,12 +687,15 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 // instead of throwing them away, so a batch is never lost to a stray key
 // (#1296). The diff's own buttons then close the panel.
 func (m *Model) closeOrApply() tea.Cmd {
+	// A browse preview is undone either way (#2181): it was never staged, so
+	// nothing but the palette on screen would survive the close.
+	cancel := m.CancelPreview()
 	if m.Dirty() {
 		m.Push(&applyPanel{m: m, pal: m.pal, closeAfter: true})
-		return nil
+		return cancel
 	}
 	m.Close()
-	return nil
+	return cancel
 }
 
 // jumpToLetter selects the next page whose title starts with letter (#890).

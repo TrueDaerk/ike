@@ -127,7 +127,9 @@ func (m *Model) runHintAction(action string) tea.Cmd {
 	case "openpage":
 		m.openHitPage()
 	case "close":
+		cmd := m.CancelPreview()
 		m.Close()
+		return cmd
 	}
 	return nil
 }

@@ -52,8 +52,10 @@ type clickEditor interface {
 	Click(x, y int) tea.Cmd
 }
 
+// Wheel returns a command because scrolling an option list can have an effect
+// beyond redrawing it: the theme enum previews what it highlights (#2181).
 type wheelEditor interface {
-	Wheel(delta int)
+	Wheel(delta int) tea.Cmd
 }
 
 // newEditor builds the editor for an entry's type.
@@ -261,15 +263,20 @@ func (n *enumEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	opts := n.matches()
 	switch key.String() {
 	case "esc":
+		// Both branches abandon the highlighted option, so both roll the live
+		// preview back to the value the browse started from (#2181).
 		if n.filter != "" {
 			n.filter, n.filterCur = "", 0
 			n.idx = optionIndex(n.e, n.m.value(n.e.Key))
-			return nil
+			return n.m.CancelPreview()
 		}
 		n.m.leaveEditor()
-		return nil
+		return n.m.CancelPreview()
 	case "enter":
 		if n.idx >= 0 && n.idx < len(opts) {
+			// The preview becomes the staged value: keep it on screen and let
+			// writeValue re-emit it, instead of a rollback flashing past.
+			n.m.keepPreview()
 			return n.m.writeValue(n.e, opts[n.idx])
 		}
 		return nil
@@ -280,7 +287,7 @@ func (n *enumEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	switch key.String() {
 	case "up", "down", "pgup", "pgdown", "home", "end":
 		listNav(key.String(), &n.idx, len(opts), n.navPageSize())
-		return nil
+		return n.m.browsePreview(n.e, n.highlighted())
 	}
 	if key.Text == " " {
 		// Space stays inert: no option name needs it and it would silently
@@ -294,8 +301,20 @@ func (n *enumEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 		if n.filter != "" {
 			n.idx = clamp(n.idx, 0, len(n.matches())-1)
 		}
+		// Narrowing moves the highlight, so it previews like a step does.
+		return n.m.browsePreview(n.e, n.highlighted())
 	}
 	return nil
+}
+
+// highlighted is the option under the cursor, or "" when the filter left the
+// list empty.
+func (n *enumEditor) highlighted() string {
+	opts := n.matches()
+	if n.idx < 0 || n.idx >= len(opts) {
+		return ""
+	}
+	return opts[n.idx]
 }
 
 // Click picks the option under the pointer (#1325). Row 0 is the filter head,
@@ -307,14 +326,18 @@ func (n *enumEditor) Click(_, y int) tea.Cmd {
 		return nil
 	}
 	n.idx = idx
+	n.m.keepPreview()
 	return n.m.writeValue(n.e, opts[idx])
 }
 
 // Wheel moves the selection, which the option window follows (#1325): the
 // window offset is derived from the selection on every render, so scrolling it
-// on its own would be undone by the next frame.
-func (n *enumEditor) Wheel(delta int) {
+// on its own would be undone by the next frame. Like a key step, the new
+// highlight previews itself (#2181) — debounced, so a flick of the wheel
+// re-themes once.
+func (n *enumEditor) Wheel(delta int) tea.Cmd {
 	n.idx = clamp(n.idx+delta, 0, len(n.matches())-1)
+	return n.m.browsePreview(n.e, n.highlighted())
 }
 
 func (n *enumEditor) View(w, h int) []string {
@@ -901,10 +924,11 @@ func (l *listEditor) Click(_, y int) tea.Cmd {
 }
 
 // Wheel walks the value rows, the add row included.
-func (l *listEditor) Wheel(delta int) {
+func (l *listEditor) Wheel(delta int) tea.Cmd {
 	if !l.editing {
 		l.idx = clamp(l.idx+delta, 0, len(l.items))
 	}
+	return nil
 }
 
 func (l *listEditor) View(w, h int) []string {

@@ -7,6 +7,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/plugin"
 	"ike/internal/registry"
+	"ike/internal/settings"
 	"ike/internal/terminal"
 	"ike/internal/theme"
 )
@@ -248,5 +249,19 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	}
 	if warning != "" {
 		m.host.Notify(host.Warn, warning)
+	}
+}
+
+// cancelSettingsPreview undoes a settings-panel live theme preview (#2181)
+// synchronously. The panel hands rollbacks back as a PreviewMsg command; the
+// close paths that swap the settings panel for a full-screen overlay have no
+// command to return it through, so they resolve it here instead.
+func (m *Model) cancelSettingsPreview() {
+	cmd := m.settings.CancelPreview()
+	if cmd == nil {
+		return
+	}
+	if msg, ok := cmd().(settings.PreviewMsg); ok && msg.Key == "theme.name" {
+		m.previewTheme(msg.Value)
 	}
 }
