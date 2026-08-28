@@ -71,14 +71,17 @@ func TestStructureOpenRequestsSymbolsOnce(t *testing.T) {
 		t.Fatalf("opening must issue a refresh for %q, requested %q", files[0], m.structReqPath)
 	}
 	// While the request is outstanding (or the server has no provider),
-	// further settled passes must not re-request the same path.
-	if m.structureNeedsRequest(m.structPanel().Path(), files[0]) {
+	// further settled passes must not re-request or re-arm the debounce.
+	if cmd := m.structureSyncCmd(); cmd != nil {
 		t.Fatal("an unanswered path must not re-request every pass")
 	}
-	// A save forces the re-request of the unchanged path.
+	// A save forces the immediate re-request of the unchanged path.
 	m.structForce = true
-	if !m.structureNeedsRequest(m.structPanel().Path(), files[0]) {
+	if cmd := m.structureSyncCmd(); cmd == nil {
 		t.Fatal("a forced refresh must re-request the same path")
+	}
+	if m.structForce {
+		t.Fatal("the forced refresh must consume the flag")
 	}
 }
 
@@ -126,13 +129,127 @@ func TestStructureBufferSwitchRefreshes(t *testing.T) {
 	tm, _ = m.Update(ilsp.DocumentSymbolsMsg{Path: files[0], Symbols: sampleNodes()})
 	m = tm.(Model)
 
-	// Opening another file re-targets the refresh on the next settled pass.
+	// Opening an uncached file arms the debounce on the next settled pass;
+	// the request itself only goes out once the timer fires (#2319).
 	tm, _ = m.openPath(files[1], false)
 	m = tm.(Model)
 	tm, _ = m.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
 	m = tm.(Model)
+	if m.structReqPath == files[1] {
+		t.Fatal("the switch must debounce, not request immediately")
+	}
+	if m.structDebPath != files[1] {
+		t.Fatalf("debounce armed for %q, want %q", m.structDebPath, files[1])
+	}
+	tm, _ = m.Update(structDebounceMsg{seq: m.structDebSeq})
+	m = tm.(Model)
 	if m.structReqPath != files[1] {
 		t.Fatalf("switching buffers must request %q, requested %q", files[1], m.structReqPath)
+	}
+}
+
+func TestStructureTabSwitchCacheHit(t *testing.T) {
+	m, files := structureSeed(t)
+	tm, _ := m.Update(StructureToggleMsg{})
+	m = tm.(Model)
+	tm, _ = m.Update(ilsp.DocumentSymbolsMsg{Path: files[0], Symbols: sampleNodes()})
+	m = tm.(Model)
+	tm, _ = m.openPath(files[1], false)
+	m = tm.(Model)
+	tm, _ = m.Update(tea.KeyPressMsg{Code: 'l', Text: "l"}) // settled pass arms files[1]
+	m = tm.(Model)
+	tm, _ = m.Update(structDebounceMsg{seq: m.structDebSeq})
+	m = tm.(Model)
+	tm, _ = m.Update(ilsp.DocumentSymbolsMsg{Path: files[1], Symbols: sampleNodes()[:1]})
+	m = tm.(Model)
+
+	// Switching back to the unchanged first buffer must refeed the panel
+	// from the cache — no debounce armed, no request dispatched (#2319).
+	debSeq := m.structDebSeq
+	tm, _ = m.openPath(files[0], false)
+	m = tm.(Model)
+	tm, _ = m.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
+	m = tm.(Model)
+	if m.structReqPath != files[1] {
+		t.Fatalf("the cached switch must not request, requested %q", m.structReqPath)
+	}
+	if m.structDebSeq != debSeq {
+		t.Fatal("the cached switch must not arm the debounce")
+	}
+	sp := m.structPanel()
+	if sp == nil || sp.Path() != files[0] || len(sp.Rows()) != 2 {
+		t.Fatalf("the panel must refill from the cache: %+v", sp)
+	}
+}
+
+func TestStructureEditInvalidatesCache(t *testing.T) {
+	m, files := structureSeed(t)
+	tm, _ := m.Update(StructureToggleMsg{})
+	m = tm.(Model)
+	tm, _ = m.Update(ilsp.DocumentSymbolsMsg{Path: files[0], Symbols: sampleNodes()})
+	m = tm.(Model)
+	tm, _ = m.Update(StructureToggleMsg{}) // focus back to the editor
+	m = tm.(Model)
+
+	// An edit bumps the buffer DocVersion past the cached tree: the settled
+	// pass arms the debounced refresh, and its tick re-requests the path.
+	for _, k := range []tea.KeyPressMsg{
+		{Code: 'i', Text: "i"}, {Code: 'x', Text: "x"}, {Code: tea.KeyEscape},
+	} {
+		tm, _ = m.Update(k)
+		m = tm.(Model)
+	}
+	if m.structDebPath != files[0] {
+		t.Fatalf("the edit must arm the refresh for %q, armed %q", files[0], m.structDebPath)
+	}
+	tm, _ = m.Update(structDebounceMsg{seq: m.structDebSeq})
+	m = tm.(Model)
+	ed := m.activeWS().Panes.Get(m.activeEditorKey()).Editor()
+	if m.structReqPath != files[0] || m.structReqVersion != ed.DocVersion() {
+		t.Fatalf("the edit must re-request %q at version %d, got %q at %d",
+			files[0], ed.DocVersion(), m.structReqPath, m.structReqVersion)
+	}
+	// The reply caches at the requested version, so the next settled pass is
+	// quiet again and the panel shows the refreshed tree.
+	tm, _ = m.Update(ilsp.DocumentSymbolsMsg{Path: files[0], Symbols: sampleNodes()[:1]})
+	m = tm.(Model)
+	if cmd := m.structureSyncCmd(); cmd != nil {
+		t.Fatal("the refreshed cache must be quiet on the next pass")
+	}
+	if got := len(m.structPanel().Rows()); got != 1 {
+		t.Fatalf("panel rows = %d, want 1 (refreshed tree)", got)
+	}
+}
+
+func TestStructureDebounceDropsSupersededTick(t *testing.T) {
+	m, files := structureSeed(t)
+	tm, _ := m.Update(StructureToggleMsg{})
+	m = tm.(Model)
+	tm, _ = m.Update(ilsp.DocumentSymbolsMsg{Path: files[0], Symbols: sampleNodes()})
+	m = tm.(Model)
+
+	// Cycle files[0] → files[1] → files[0]: the tick armed for files[1] is
+	// stale by the time it fires, so no request for the passed-over tab.
+	tm, _ = m.openPath(files[1], false)
+	m = tm.(Model)
+	tm, _ = m.Update(tea.KeyPressMsg{Code: 'l', Text: "l"}) // settled pass arms files[1]
+	m = tm.(Model)
+	staleSeq := m.structDebSeq
+	if m.structDebPath != files[1] {
+		t.Fatalf("setup: debounce armed for %q, want %q", m.structDebPath, files[1])
+	}
+	tm, _ = m.openPath(files[0], false)
+	m = tm.(Model)
+	tm, _ = m.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
+	m = tm.(Model)
+	before := m.structReqPath
+	tm, _ = m.Update(structDebounceMsg{seq: staleSeq})
+	m = tm.(Model)
+	if m.structReqPath != before {
+		t.Fatalf("a superseded tick must not request; requested %q", m.structReqPath)
+	}
+	if m.structReqPath == files[1] {
+		t.Fatal("the passed-over tab must never be requested")
 	}
 }
 
