@@ -297,14 +297,7 @@ func (m Model) updateLocalHistoryPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 		closePicker()
 		return m, nil
 	case "enter":
-		path, entry := m.lhPath, m.lhEntries[m.lhSel]
-		closePicker()
-		text, ok := m.localHistoryText(entry)
-		if !ok {
-			return m, nil
-		}
-		m.openLocalHistoryDiffPane(path, entry.Time, text)
-		return m, nil
+		return m.localHistoryOpenSelected()
 	case "r":
 		path, entry := m.lhPath, m.lhEntries[m.lhSel]
 		closePicker()
@@ -423,4 +416,40 @@ func (m *Model) applyBufferRestore(path, snapshot string) (tea.Cmd, bool) {
 	// The restore bypassed the editor's Update loop; drop its stale
 	// highlight/conceal caches and reparse the new content (#1683).
 	return ed.ReparseEdits(), true
+}
+
+// localHistoryOpenSelected is the panel's enter: close it and show the
+// selected snapshot against the buffer in the reusable diff pane (#60).
+func (m Model) localHistoryOpenSelected() (tea.Model, tea.Cmd) {
+	if m.lhSel < 0 || m.lhSel >= len(m.lhEntries) {
+		return m, nil
+	}
+	path, entry := m.lhPath, m.lhEntries[m.lhSel]
+	m.lhPicker = false
+	m.lhCur, m.lhDiff, m.lhErr = "", diff.Result{}, ""
+	m.shell.Close()
+	text, ok := m.localHistoryText(entry)
+	if !ok {
+		return m, nil
+	}
+	m.openLocalHistoryDiffPane(path, entry.Time, text)
+	return m, nil
+}
+
+// localHistoryClickRow maps a body row of the snapshot panel onto an entry
+// (#2275): the list column occupies rows 0..n-1 — the diff column beside it
+// shares those rows, so a click anywhere on the line picks the same snapshot —
+// and the blank tail plus the key hints below are inert. A click selects; a
+// click on the already-selected snapshot opens it in the diff pane.
+func (m Model) localHistoryClickRow(row int) (tea.Model, tea.Cmd) {
+	if row < 0 || row >= len(m.lhEntries) {
+		return m, nil
+	}
+	if row == m.lhSel {
+		return m.localHistoryOpenSelected()
+	}
+	m.lhSel = row
+	m.refreshLocalHistoryDiff()
+	m.setLocalHistoryContent()
+	return m, nil
 }

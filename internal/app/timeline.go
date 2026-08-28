@@ -411,3 +411,26 @@ func (m *Model) applyTimelineRestore(msg timelineRestoreMsg) tea.Cmd {
 	}
 	return m.restoreLocalHistory(msg.path, msg.at, msg.text)
 }
+
+// timelineClickRow maps a body row of the Timeline onto a merged entry
+// (#2275): rows 0..n-1 are entries, the loading/"load more" note and the key
+// hints below them are inert. A click selects (pulling the next commit window
+// in near the end, like the keys); a click on the already-selected entry
+// diffs it against the buffer, the picker's enter.
+func (m Model) timelineClickRow(row int) (tea.Model, tea.Cmd) {
+	if row < 0 || row >= len(m.tl.merged) {
+		return m, nil
+	}
+	if row == m.tl.sel {
+		sel, path := m.tl.merged[m.tl.sel], m.tl.path
+		m.closeTimeline()
+		return m, m.timelineDiffCmd(path, sel, timeline.Entry{}, true)
+	}
+	m.tl.sel = row
+	m.refreshTimeline()
+	cmd := tea.Cmd(nil)
+	if m.tl.sel >= len(m.tl.merged)-3 {
+		cmd = m.loadMoreTimeline()
+	}
+	return m, cmd
+}

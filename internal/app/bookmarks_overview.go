@@ -301,3 +301,57 @@ func (m Model) updateBookmarkOverview(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	}
 	return m, nil
 }
+
+// bookmarkOverviewRowAt maps a rendered body row onto a flat bookmark index
+// (#2275). The overview interleaves a file header above each group's first
+// visible bookmark and shows only a window of bmOverviewRows rows, so the
+// mapping replays bookmarkOverviewBody's own loop rather than doing
+// arithmetic; headers, the counter line and the legend report no item.
+func (m Model) bookmarkOverviewRowAt(row int) (int, bool) {
+	ov := m.bmOverview
+	if ov == nil || row < 0 || len(ov.flat) == 0 {
+		return 0, false
+	}
+	line, idx, shown := 0, 0, 0
+	printed := map[string]bool{}
+	for _, g := range ov.groups {
+		for range g.items {
+			if idx < ov.top || shown >= bmOverviewRows {
+				idx++
+				continue
+			}
+			if !printed[g.disp] {
+				printed[g.disp] = true
+				if line == row {
+					return 0, false // the group's file header
+				}
+				line++
+			}
+			if line == row {
+				return idx, true
+			}
+			line++
+			idx++
+			shown++
+		}
+	}
+	return 0, false
+}
+
+// bookmarkOverviewClickRow selects the clicked bookmark; a click on the
+// already-selected one jumps to it, the overview's enter (#2275).
+func (m Model) bookmarkOverviewClickRow(row int) (tea.Model, tea.Cmd) {
+	ov := m.bmOverview
+	i, ok := m.bookmarkOverviewRowAt(row)
+	if !ok {
+		return m, nil
+	}
+	if i == ov.sel {
+		bm := ov.flat[i]
+		m.closeBookmarkOverview()
+		return m.openPathAt(bookmarkPath(bm.Path), bm.Line, 0)
+	}
+	ov.sel = i
+	ov.top = ui.ScrollToShow(ov.top, ov.sel, bmOverviewRows, len(ov.flat))
+	return m, nil
+}

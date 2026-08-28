@@ -223,3 +223,32 @@ func (m Model) updateToolchainInfo(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
+
+// themePickHeadRows is how many body lines sit above the first theme row: the
+// two intro lines plus their blank spacer. The pointer hit-test (#2275) counts
+// them off, so it must move with themePickBody.
+const themePickHeadRows = 3
+
+// themePickClickRow maps a body row of the theme chooser onto a theme (#2275).
+// A click selects, previewing it live exactly as moving the cursor does; a
+// click on the already-selected theme keeps it, the chooser's enter.
+func (m Model) themePickClickRow(row int) (tea.Model, tea.Cmd) {
+	tp := m.themePick
+	if tp == nil {
+		return m, nil
+	}
+	i, ok := ui.RowAt(row, 0, themePickHeadRows, len(tp.names), len(tp.names))
+	if !ok {
+		return m, nil
+	}
+	if i == tp.cursor {
+		cmd := m.selectTheme(tp.names[i])
+		m.themePick = nil
+		m.shell.Close()
+		m.advanceSetup()
+		return m, cmd
+	}
+	tp.cursor = i
+	m.previewTheme(tp.names[i])
+	return m, nil
+}

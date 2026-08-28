@@ -243,3 +243,22 @@ func (m Model) updatePinPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
+
+// pinPickerClickRow maps a body row of the slot picker onto a slot (#2275):
+// the four slot lines are rows 0..3, the blank line and the key hints under
+// them are inert. A click selects; a click on the already-selected slot jumps
+// to it, the picker's enter.
+func (m Model) pinPickerClickRow(row int) (tea.Model, tea.Cmd) {
+	if row < 0 || row >= pinSlotCount {
+		return m, nil
+	}
+	if row == m.pinSel {
+		slot := m.pinSel + 1
+		m.pinPicker = false
+		m.shell.Close()
+		return m.pinJump(slot)
+	}
+	m.pinSel = row
+	m.setPinPickerContent()
+	return m, nil
+}

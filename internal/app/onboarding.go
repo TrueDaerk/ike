@@ -102,6 +102,11 @@ func (m *Model) openOnboardingDialog() bool {
 // onboardingOpen reports whether the dialog is showing.
 func (m Model) onboardingOpen() bool { return m.onboarding != nil && m.shell.IsOpen() }
 
+// onboardingHeadRows is how many body lines sit above the first language row:
+// the three intro lines plus their blank spacer. The pointer hit-test (#2275)
+// counts them off, so it must move with onboardingBody.
+const onboardingHeadRows = 4
+
 // onboardingBody renders the checkbox list with the cursor and the key legend.
 func (m Model) onboardingBody() string {
 	ob := m.onboarding
@@ -199,4 +204,27 @@ func (m Model) closeOnboarding() tea.Model {
 	// Continue the post-tour setup flow (#713); a no-op outside it.
 	m.advanceSetup()
 	return m
+}
+
+// onboardingClickRow maps a body row of the language-server dialog onto a
+// checkbox row (#2275): the three intro lines and their blank spacer occupy
+// rows 0..3, the languages follow, the legend below them is inert. A click
+// selects; a click on the already-selected row toggles its checkbox, which is
+// what space does — the row's activation.
+func (m Model) onboardingClickRow(row int) (tea.Model, tea.Cmd) {
+	ob := m.onboarding
+	if ob == nil {
+		return m, nil
+	}
+	i, ok := ui.RowAt(row, 0, onboardingHeadRows, len(ob.items), len(ob.items))
+	if !ok {
+		return m, nil
+	}
+	if i == ob.cursor {
+		id := ob.items[i].ID
+		ob.checked[id] = !ob.checked[id]
+		return m, nil
+	}
+	ob.cursor = i
+	return m, nil
 }
