@@ -455,6 +455,11 @@ type Terminal struct {
 	Shell           string `toml:"shell"`
 	Autosuggest     bool   `toml:"autosuggest"`
 	ScrollbackLines int    `toml:"scrollback_lines"`
+	// PopupCwd picks the popup terminal's start directory (#2316): "project"
+	// spawns its shells in the project root, "file" in the focused file's
+	// directory (falling back to the project root when no file is open). Only
+	// spawn-time behaviour — the retained popup session keeps its live cwd.
+	PopupCwd string `toml:"popup_cwd"`
 	// SSHHosts are extra aliases the SSH host picker (#1938) offers beyond
 	// the ones ~/.ssh/config declares — machines reachable by name that no
 	// ssh config entry mentions.

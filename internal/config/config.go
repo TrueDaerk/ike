@@ -283,6 +283,7 @@ func (c *Config) Flat() map[string]string {
 	put("terminal.shell", c.Terminal.Shell)
 	put("terminal.autosuggest", c.Terminal.Autosuggest)
 	put("terminal.scrollback_lines", c.Terminal.ScrollbackLines)
+	put("terminal.popup_cwd", c.Terminal.PopupCwd)
 	put("terminal.ssh_hosts", strings.Join(c.Terminal.SSHHosts, ","))
 
 	put("run.placement", c.Run.Placement)

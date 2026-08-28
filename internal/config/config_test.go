@@ -348,6 +348,26 @@ func TestBackupDefaults(t *testing.T) {
 	}
 }
 
+func TestTerminalPopupCwdDefaultAndFallback(t *testing.T) {
+	c, _ := Load(Options{})
+	if c.Terminal.PopupCwd != "project" {
+		t.Errorf("default popup_cwd should be %q, got %q", "project", c.Terminal.PopupCwd)
+	}
+	proj := writeProject(t, "[terminal]\npopup_cwd = \"file\"\n")
+	c, diags := Load(Options{ProjectRoot: proj})
+	if c.Terminal.PopupCwd != "file" || len(diags) != 0 {
+		t.Errorf("popup_cwd = %q (diags %v), want %q", c.Terminal.PopupCwd, diags, "file")
+	}
+	proj = writeProject(t, "[terminal]\npopup_cwd = \"desktop\"\n")
+	c, diags = Load(Options{ProjectRoot: proj})
+	if c.Terminal.PopupCwd != "project" {
+		t.Errorf("unknown popup_cwd should fall back to %q, got %q", "project", c.Terminal.PopupCwd)
+	}
+	if len(diags) != 1 {
+		t.Errorf("expected one fallback diagnostic, got %v", diags)
+	}
+}
+
 func TestTerminalScrollbackClampAndDefault(t *testing.T) {
 	c, _ := Load(Options{})
 	if c.Terminal.ScrollbackLines != 10000 {

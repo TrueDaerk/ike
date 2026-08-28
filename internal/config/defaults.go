@@ -238,6 +238,7 @@ func defaults() *Config {
 		Terminal: Terminal{
 			Autosuggest:     true,
 			ScrollbackLines: 10000,
+			PopupCwd:        "project",
 		},
 		Lang:  map[string]map[string]string{},
 		Tools: Tools{Custom: defaultTools()},
