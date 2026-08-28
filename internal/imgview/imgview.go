@@ -102,7 +102,7 @@ func (m *Model) Grid() (cols, rows int) {
 	if m.imgRef == nil {
 		return 0, 0
 	}
-	return fitGrid(m.imgW, m.imgH, m.w, m.h)
+	return FitGrid(m.imgW, m.imgH, m.w, m.h)
 }
 
 // SyncSeqs returns the raw sequences bringing the terminal's placement in
@@ -172,7 +172,7 @@ func (m *Model) metadataView() string {
 		lines = append(lines, dim.Render("cannot decode: "+m.err.Error()))
 	default:
 		lines = append(lines, dim.Render(fmt.Sprintf("%s · %d×%d px · %s",
-			strings.ToUpper(m.format), m.imgW, m.imgH, humanSize(m.size))))
+			strings.ToUpper(m.format), m.imgW, m.imgH, HumanSize(m.size))))
 		if !m.gfx {
 			lines = append(lines, "", dim.Render("terminal has no Kitty graphics support — showing metadata"))
 		}
@@ -181,8 +181,9 @@ func (m *Model) metadataView() string {
 	return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, body)
 }
 
-// humanSize formats a byte count for the metadata line.
-func humanSize(n int64) string {
+// HumanSize formats a byte count for the metadata line; the markdown
+// preview's inline-image captions (#2180) share it.
+func HumanSize(n int64) string {
 	switch {
 	case n >= 1<<20:
 		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))

@@ -86,6 +86,33 @@ func TestEventsLandAsJSONL(t *testing.T) {
 	}
 }
 
+// Internally triggered dispatches (source SourceInternal — polling/background
+// funnels) must land as TypeInternal, while every user-triggered source lands
+// as TypeCommand, so a "command" query never mixes the two (#2304).
+func TestCommandTypeBySource(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.Command("lsp.documentSymbols", SourceInternal)
+	r.Command("editor.save", SourceKeybind)
+	r.Command("palette.searchEverywhere", SourcePalette)
+	r.Command("view.toggleMinimap", SourceMenu)
+	r.Command("pane.focus", SourceMouse)
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != 5 {
+		t.Fatalf("want 5 events, got %d", len(evs))
+	}
+	if evs[0].Type != TypeInternal || evs[0].Data["id"] != "lsp.documentSymbols" || evs[0].Data["source"] != SourceInternal {
+		t.Errorf("internal dispatch wrong: %v", evs[0])
+	}
+	for _, ev := range evs[1:] {
+		if ev.Type != TypeCommand {
+			t.Errorf("user-triggered dispatch %v: type = %q, want %q", ev, ev.Type, TypeCommand)
+		}
+	}
+}
+
 // The schema is the interface for later analysis: only structural fields may
 // appear. A new payload key must be added here deliberately.
 func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {

@@ -44,7 +44,7 @@ bring their own.
 | Data: Sort Column | `data.sortColumn` | — | — | `data` pane |
 | Breakpoint Properties… | `debug.breakpointProperties` | `cmd+alt+f8` | — | everywhere |
 | Breakpoints | `debug.breakpoints` | `cmd+shift+f8` | — | everywhere |
-| Debug: Toggle Console/Variables View | `debug.console` | — | — | everywhere |
+| Debug: Toggle Console/Variables View | `debug.console` | `cmd+5` | — | everywhere |
 | Continue | `debug.continue` | `f9` | — | everywhere |
 | Xdebug Doctor | `debug.doctor` | — | — | everywhere |
 | Evaluate Expression | `debug.evaluate` | `alt+f8` | — | everywhere |
@@ -54,7 +54,7 @@ bring their own.
 | Step Out | `debug.stepOut` | `shift+f8` | — | everywhere |
 | Step Over | `debug.stepOver` | `f8` | — | everywhere |
 | Stop Debug Session | `debug.stop` | `cmd+f2` | — | everywhere |
-| Debug Test at Cursor | `debug.testAtCursor` | — | — | everywhere |
+| Debug Test at Cursor | `debug.testAtCursor` | `alt+shift+f9` | — | everywhere |
 | Toggle Breakpoint | `debug.toggleBreakpoint` | `cmd+f8` | — | everywhere |
 | Write Heap Dump | `diag.heapDump` | — | — | everywhere |
 | Memory Statistics | `diag.memoryStats` | — | — | everywhere |
@@ -92,7 +92,7 @@ bring their own.
 | Pin/Unpin Tab | `editor.tab.togglePin` | — | — | everywhere |
 | ES: Run Query Buffer | `es.run` | — | — | `editor` pane |
 | Focus Explorer / Editor | `explorer.toggle` | `cmd+1` | — | everywhere |
-| Copy Path | `file.copyPath` | — | — | everywhere |
+| Copy Path | `file.copyPath` | `cmd+shift+c` | — | everywhere |
 | Copy Reference | `file.copyReference` | — | — | everywhere |
 | Copy Relative Path | `file.copyRelPath` | — | — | everywhere |
 | Show Local History | `file.localHistory` | — | — | everywhere |
@@ -103,6 +103,7 @@ bring their own.
 | Show Timeline | `file.timeline` | — | — | everywhere |
 | Open Results in Find Window | `find.openInPanel` | `cmd+enter` | — | everywhere |
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
+| Show Project History Timeline | `history.projectTimeline` | — | — | everywhere |
 | Cancel Running HTTP Request | `http.cancel` | — | — | everywhere |
 | Copy HTTP Request as curl | `http.copyAsCurl` | — | — | everywhere |
 | Copy HTTP Response Body | `http.copyBody` | — | — | everywhere |
@@ -127,7 +128,7 @@ bring their own.
 | Toggle Raw / Pretty HTTP Response Body | `http.toggleRawBody` | — | — | everywhere |
 | GitHub Issues | `issues.toggle` | — | — | everywhere |
 | Saved jq Filters… | `json.jqFilters` | — | — | everywhere |
-| jq Playground… | `json.jqPlayground` | — | — | everywhere |
+| jq Playground… | `json.jqPlayground` | `ctrl+alt+j` | — | everywhere |
 | jq Playground at Cursor Path… | `json.jqPlaygroundAtPath` | — | — | everywhere |
 | Toggle Full Query View | `json.jqQueryView` | `ctrl+alt+e` | — | everywhere |
 | Rename Saved jq Filter… | `json.jqRenameFilter` | — | — | everywhere |
@@ -154,7 +155,7 @@ bring their own.
 | Keymap Cheatsheet | `palette.keymapHelp` | `f1` | — | everywhere |
 | Recent Files | `palette.recentFiles` | `cmd+e` | — | everywhere |
 | Search Everywhere | `palette.searchEverywhere` | `cmd+shift+a` | — | everywhere |
-| Close Pane | `pane.close` | — | — | everywhere |
+| Close Pane | `pane.close` | `ctrl+alt+w` | — | everywhere |
 | Maximize Pane | `pane.maximize` | `cmd+k z` | — | everywhere |
 | Resize Pane (Keyboard Mode) | `pane.resizeMode` | `ctrl+alt+r` | — | everywhere |
 | Split Down | `pane.splitDown` | `cmd+k down` | — | everywhere |
@@ -173,13 +174,13 @@ bring their own.
 | Edit Run Configuration… | `run.editConfig` | — | — | everywhere |
 | Run File | `run.file` | `shift+f10` | — | everywhere |
 | Rerun Last | `run.rerun` | `cmd+f5` | — | everywhere |
-| Run/Debug Configurations… | `run.select` | — | — | everywhere |
+| Run/Debug Configurations… | `run.select` | `alt+shift+f10` | — | everywhere |
 | Run Task… | `run.task` | — | — | everywhere |
 | Promote Task to Run Configuration… | `run.taskPromote` | — | — | everywhere |
 | Run Test at Cursor | `run.testAtCursor` | `ctrl+shift+f10` | — | everywhere |
 | Run Tests in File | `run.testsInFile` | — | — | everywhere |
 | Run Tests in File with Coverage | `run.testsWithCoverage` | — | — | everywhere |
-| Generate Test Data… | `scratch.generate` | — | — | everywhere |
+| Generate Test Data… | `scratch.generate` | `cmd+alt+shift+n` | — | everywhere |
 | Generate Test Data: CSV | `scratch.generate.csv` | — | — | everywhere |
 | Generate Test Data: JSON | `scratch.generate.json` | — | — | everywhere |
 | Generate Test Data: Log lines (logfmt) | `scratch.generate.log` | — | — | everywhere |
@@ -224,14 +225,14 @@ bring their own.
 | Popup Terminal | `terminal.popup` | `cmd+alt+t` | — | everywhere |
 | SSH Host… | `terminal.ssh` | — | — | everywhere |
 | Toggle Terminal | `terminal.toggle` | `alt+f12` | — | everywhere |
-| Test Results | `tests.toggle` | — | — | everywhere |
+| Test Results | `tests.toggle` | `cmd+4` | — | everywhere |
 | TODO Index | `todo.list` | `cmd+6` | — | everywhere |
 | Regex Tester… | `tools.regexTester` | — | — | everywhere |
 | Set Up Tool Panes | `tools.setup` | — | — | everywhere |
 | Usages | `usages.toggle` | — | — | everywhere |
 | Treat as Vault File | `vault.treatAsFile` | — | — | everywhere |
 | Toggle Inline Blame | `vcs.blameLine` | — | — | everywhere |
-| Diff File Against HEAD | `vcs.diff` | — | — | everywhere |
+| Diff File Against HEAD | `vcs.diff` | `cmd+alt+d` | — | everywhere |
 | Show History for Selection | `vcs.historyForSelection` | — | — | everywhere |
 | Merge: Save Result and Stage | `vcs.mergeApply` | — | — | everywhere |
 | Resolve Conflicts in Merge View | `vcs.mergeFile` | — | — | everywhere |
@@ -244,12 +245,12 @@ bring their own.
 | Zen Mode | `view.zenMode` | `ctrl+alt+f` | — | everywhere |
 | Show External Changes | `watch.changeFeed` | — | — | everywhere |
 | Hide All Tool Windows | `window.hideAllTools` | `cmd+shift+f12` | — | everywhere |
-| Window Layouts… | `window.layouts` | — | — | everywhere |
+| Window Layouts… | `window.layouts` | `alt+shift+f12` | — | everywhere |
 | Restore Default Layout | `window.restoreLayout` | `shift+f12` | — | everywhere |
 | Save Window Layout… | `window.saveLayout` | — | — | everywhere |
 | Set Default Window Layout… | `window.setDefaultLayout` | — | — | everywhere |
 | Saved yq Filters… | `yaml.yqFilters` | — | — | everywhere |
-| yq Playground… | `yaml.yqPlayground` | — | — | everywhere |
+| yq Playground… | `yaml.yqPlayground` | `ctrl+alt+y` | — | everywhere |
 | yq Playground at Cursor Path… | `yaml.yqPlaygroundAtPath` | — | — | everywhere |
 | Rename Saved yq Filter… | `yaml.yqRenameFilter` | — | — | everywhere |
 
@@ -340,7 +341,7 @@ bring their own.
 | Toggle Timestamp Decoding | `view.toggleTimestampDecoding` | — | — | `editor` pane |
 | Toggle Unicode Escape Decoding | `view.toggleUnicodeEscapeDecoding` | — | — | `editor` pane |
 | Toggle Whitespace Rendering | `view.toggleWhitespace` | — | — | `editor` pane |
-| Toggle Soft Wrap | `view.toggleWrap` | — | — | `editor` pane |
+| Toggle Soft Wrap | `view.toggleWrap` | `alt+shift+w` | — | `editor` pane |
 
 ## explorer
 
@@ -395,7 +396,7 @@ bring their own.
 | LSP: Hover | `lsp.hover` | `ctrl+q` | — | `editor` pane |
 | LSP: Go to Implementations | `lsp.implementations` | `cmd+alt+b` | — | `editor` pane |
 | LSP: Install Missing Servers | `lsp.installMissing` | — | — | everywhere |
-| LSP: Organize Imports | `lsp.organizeImports` | — | — | `editor` pane |
+| LSP: Organize Imports | `lsp.organizeImports` | `ctrl+alt+o` | — | `editor` pane |
 | LSP: Parameter Info | `lsp.parameterInfo` | `cmd+p` | — | `editor` pane |
 | LSP: Peek Definition | `lsp.peekDefinition` | `cmd+y` | — | `editor` pane |
 | LSP: Quick-Fix Marked Problem | `lsp.quickFixProblem` | — | — | everywhere |

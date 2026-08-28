@@ -33,17 +33,29 @@ paths.** Two guards enforce it:
 ## Event schema (the analysis interface)
 
 One JSON object per line. `v` is the schema version (`telemetry.SchemaVersion`,
-currently 1); readers must tolerate unknown fields and filter on `v`.
+currently 2); readers must tolerate unknown fields and filter on `v`.
 
 ```json
-{"v":1,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
+{"v":2,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
+{"v":2,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
 ```
 
 - `ts` — event time, UTC, millisecond RFC 3339.
 - `sid` — random per-session id; also part of the file name.
 - `type` + `data`:
-  - `command` — a registered command dispatched. `id` is the command id,
-    `source` one of `palette`, `menu`, `keybind`, `mouse`, `internal`.
+  - `command` — a **user-triggered** command dispatch. `id` is the command
+    id, `source` one of `palette`, `menu`, `keybind`, `mouse`.
+  - `internal` — a command dispatched by an internal funnel, not the user
+    (polling/background work — e.g. the structure panel's/breadcrumbs'
+    `lsp.documentSymbols` refresh on cursor move or save). Same `data` shape
+    as `command` (`id`, `source`, always `"internal"`); split into its own
+    type (#2304) so a high-frequency poller like `lsp.documentSymbols` can't
+    dominate a `type=="command"` query and skew top-command lists or the
+    palette-vs-keybind ratio. **v1 compatibility**: files written before this
+    split (`v":1`) carry these same dispatches under `type:"command"` with
+    `data.source == "internal"` — a reader spanning both versions must filter
+    v1 files on `data.source != "internal"` in addition to selecting
+    `type=="command"` on v2+ files.
   - `key` — a keymap resolution. `chord` is the canonical chord string
     (`"cmd+k cmd+c"`), `context` the focus context it resolved in
     (`"editor[go]"`), `status` one of `resolved` (plus `command`), `blocked`
@@ -61,9 +73,16 @@ All hooks sit at the existing funnels, so coverage is by construction:
 - **Commands**: `dispatchCommandFrom` in `internal/app/app.go` — the single
   dispatch funnel (#679). Callers that know their origin pass it (palette
   `RunCommandMsg`, menu `RunMsg`, keymap resolution, status-line mouse
-  clicks); everything else counts as `internal`.
+  clicks); everything else counts as `internal` and is recorded under the
+  `internal` event type, not `command` (`Recorder.Command` in
+  `internal/telemetry/telemetry.go` picks the type from the source).
 - **Keys**: `resolveKeymap` (and the chord-timeout branch) in
-  `internal/app/app.go` — resolved, blocked and unbound outcomes.
+  `internal/app/app.go` — resolved, blocked and unbound outcomes. With an
+  editor focused the `unbound` verdict is deferred until the pane has seen the
+  key (#2303): the editor owns editing chords the keymap table never lists
+  (`alt+delete`, `alt+backspace`, `ctrl+u`, …), and `routeKey` records the
+  event only when `editor.HandledLastKey()` says the editor ignored it too.
+  Otherwise those keys drown the real missing-keybind signal.
 - **Layout**: `SplitFocused`, `setFocus` (real focus transitions only),
   `commitMove`, divider drags and resize mode, `switchTab`/`moveTab`, and the
   project-switch transaction.
@@ -103,6 +122,7 @@ history).
 
 ```sh
 jq -r 'select(.type=="command") | .data.source' ~/.ike/telemetry/*.jsonl | sort | uniq -c
+jq -r 'select(.type=="internal") | .data.id' ~/.ike/telemetry/*.jsonl | sort | uniq -c | sort -rn
 jq -r 'select(.data.status=="unbound") | .data.chord' ~/.ike/telemetry/*.jsonl | sort | uniq -c | sort -rn
 ```
 

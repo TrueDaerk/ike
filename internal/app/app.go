@@ -312,6 +312,11 @@ type Model struct {
 	// project-owned ones park in wsExtras with the popup box (#1407).
 	floatTerms []*floatTerm
 	floatFocus *floatTerm
+	// popupUnseen marks output a popup-layer shell produced while the layer
+	// was hidden (#2309): the statusbar activity segment shows it until the
+	// next show puts the output on screen. Runtime state like the layer's
+	// sessions — never persisted.
+	popupUnseen bool
 	// conflictKey is the editor pane awaiting a save-conflict answer (Roadmap
 	// 0140, #82) while the shell shows the prompt; "" when no conflict is open.
 	conflictKey string
@@ -809,6 +814,7 @@ type Model struct {
 	fileUsage   *palette.Usage       // most-used file ranking in the ranked palettes (#1419)
 	cmdFrec     *frecency.Store      // command-execution frecency boost (#2153)
 	usage       *telemetry.Recorder  // local-only usage telemetry (#2235); session state, rides across project switches
+	pendUnbound *unboundKey          // unbound chord awaiting the focused editor's verdict (#2303)
 	fileFrec    *frecency.Store      // file-open frecency ranking in the "@" finder (#2155)
 	winSizes    *ui.WinSizes         // persisted floating-window resize deltas (#774)
 	winSizesAll *ui.WinSizes         // user-scoped last-resize deltas, fallback for fresh projects (#1714)
@@ -827,6 +833,11 @@ type Model struct {
 	lhCur       string               // buffer text the open panel diffs against
 	lhDiff      diff.Result          // selected snapshot vs lhCur, for the inline diff pane
 	lhErr       string               // selection's snapshot load error, shown in place of the diff
+
+	// The project-wide local-history timeline (#2171): every file's snapshots
+	// on one day-grouped axis, handing a picked row to the per-file panel.
+	ph       projectHistoryState
+	phPicker bool // the project-wide timeline owns the modal shell
 
 	// feed is the session-scoped record of files changed by something other
 	// than IKE (#2000) — a coding agent, a git checkout, a formatter run in a
@@ -1050,6 +1061,10 @@ func (d *dragState) engaged() bool {
 // < project) from the working directory and backs the host with it.
 func New() Model {
 	phase := time.Now()
+	// Sweep whatever "Open in Browser" unpacked into its scratch directory in
+	// a previous, possibly crashed, run (#2298) — a clean exit already empties
+	// it, so this only ever finds something after a kill or a crash.
+	cleanOpenInBrowserTempDir()
 	cfg, diags := config.Load(config.Discover("."))
 	perfhud.RecordStartupPhase("config", time.Since(phase))
 	config.Set(cfg)
@@ -2467,6 +2482,7 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 		inst.CloseTerminalTabs()
 	}
 	m.backupCleanShutdown()
+	os.RemoveAll(openInBrowserTempDir)
 	// End everything that would otherwise outlive the process (#1546). The
 	// active workspace's pane and tab terminal sessions close like a parked
 	// workspace's would; the active debug session gets Disconnect — the only
@@ -2707,6 +2723,15 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 		// expected-but-missing keybinds. Only command-modified chords and
 		// function keys are recordable — plain typed characters never are.
 		if recordableUnbound(k) {
+			// With an editor focused the verdict waits for the pane (#2303):
+			// the editor owns editing chords the keymap table never lists
+			// (alt+delete, alt+backspace, ctrl+u, …), and reporting those as
+			// unbound buried the genuinely missing keybinds in noise.
+			// routeKey logs the event only if the editor ignored the key too.
+			if m.focusedEditor() != nil {
+				m.pendUnbound = &unboundKey{chord: k.String(), context: string(m.keyContext())}
+				break
+			}
 			m.usage.Key(k.String(), string(m.keyContext()), "", "unbound")
 		}
 	}
@@ -4688,7 +4713,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (iTerm's cmd+t, #729); otherwise a shell tab joins the active
 		// editor pane, next to the file tabs.
 		switch {
-		case m.popupLayerOpen():
+		case m.popupLayerFocused():
 			m.newPopupTerminalTab()
 		case m.focusContext() == string(keymap.Terminal):
 			m.newTerminalSibling()
@@ -5298,6 +5323,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case preview.LinkMsg:
+		// enter/y on a selected preview link (#2180): follow it into the
+		// editor, the preview itself (anchors) or the platform opener.
+		return m.followPreviewLink(msg)
+
 	case TerminalToggleMsg:
 		// terminal.toggle (alt+f12 / palette / menu): the JetBrains state
 		// machine — create, focus, or return focus (#97).
@@ -5629,6 +5659,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the keystrokes, so the cursor row reads current.
 		if t := m.terminalModelForSession(msg.Key); t != nil {
 			t.OnOutput()
+			// Output landing in a hidden popup-layer shell arms the statusbar
+			// activity indicator (#2309); the next show clears it. A visible
+			// layer — focused or blurred — has the output on screen already.
+			if !m.popupLayerVisible() {
+				if _, _, pt := m.popupTabForSession(msg.Key); pt != nil {
+					m.popupUnseen = true
+				}
+			}
 		}
 		return m, nil
 
@@ -6585,6 +6623,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// file.localHistory (#1023): list the focused file's snapshots.
 		m.openLocalHistoryPicker()
 		return m, nil
+	case ProjectHistoryMsg:
+		// history.projectTimeline (#2171): every file's snapshots on one
+		// day-grouped axis, newest first.
+		m.openProjectHistory()
+		return m, nil
 	case ChangeFeedMsg:
 		// watch.changeFeed (#2000): the session's external file changes with
 		// a mini-diff of the selected one.
@@ -7226,6 +7269,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// for keys the app consumes before the editor's own dismissHover
 		// would see them.
 		m.cancelMouseHover()
+		// A chord held back for the editor's verdict (#2303) that never
+		// reached a pane was consumed app-side, so it was bound after all:
+		// drop it rather than pinning it on the next key.
+		m.pendUnbound = nil
 		// Keys landing in an editor or terminal stamp the do-not-interrupt
 		// guard (#2086): a forge event dialog never lands mid-word.
 		m.noteTypingInput()
@@ -7403,6 +7450,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.timelineOpen() {
 			return m.updateTimeline(msg)
 		}
+		// The project-wide history timeline (#2171) owns the keyboard the
+		// same way; its printable keys type into its path filter.
+		if m.projectHistoryOpen() {
+			return m.updateProjectHistory(msg)
+		}
 		// The external-change feed (#2000) owns the keyboard the same way.
 		if m.changeFeedOpen() {
 			return m.updateChangeFeed(msg)
@@ -7479,7 +7531,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// every key raw except the reserved popup set. The overlays and
 		// prompts above still win — they can be opened from inside the popup
 		// and must get their keys back.
-		if m.popupLayerOpen() {
+		if m.popupLayerFocused() {
 			// Link hint mode (#2254) owns the popup's keyboard while open,
 			// like in a terminal pane: before the reserved set, so a label
 			// can never be shadowed by a chord.
@@ -7818,7 +7870,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// own sidebar/grid regions, the way an editor keeps its plain
 			// keys. Pane focus still cycles with ctrl+tab (the pane switcher)
 			// and the focus keys.
-			if m.dataPaneFocused() {
+			if m.dataPaneFocused() || m.previewLinkPaneFocused() {
 				return m.routeKey(msg)
 			}
 			m.cycleFocus()
@@ -8451,7 +8503,7 @@ func (m Model) editorNormalMode() bool {
 
 // focusContext reports the context id advertised by the focused pane.
 func (m Model) focusContext() string {
-	if m.popupLayerOpen() {
+	if m.popupLayerFocused() {
 		// The open popup terminal layer (#1398, #1793) owns the keyboard, so
 		// bindings and the mode indicator resolve under its focused host's
 		// context, not the pane below.
@@ -8483,7 +8535,7 @@ func (m Model) helpContext() string {
 // (palette scoping, registry, help snapshot) keeps the plain focusContext.
 func (m Model) keyContext() keymap.Context {
 	ctx := keymap.Context(m.focusContext())
-	if ctx != keymap.Editor || m.popupLayerOpen() {
+	if ctx != keymap.Editor || m.popupLayerFocused() {
 		return ctx
 	}
 	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil {
@@ -8575,6 +8627,16 @@ func (m Model) dataPaneFocused() bool {
 	return inst != nil && (inst.Kind() == pane.KindData || inst.Kind() == pane.KindES)
 }
 
+// previewLinkPaneFocused reports whether tab belongs to a focused markdown
+// preview (#2180), where it walks the document's links. Only a preview that
+// actually has links claims the key — a link-free document keeps tab's global
+// focus-cycling meaning rather than swallowing it — and ctrl+tab cycles panes
+// either way.
+func (m Model) previewLinkPaneFocused() bool {
+	inst := m.focusedContent()
+	return inst != nil && inst.Kind() == pane.KindMarkdown && inst.Preview().HasLinks()
+}
+
 // paneSelectionCopy reports whether the focused pane holds a live text
 // selection its own copy key would put on the clipboard (#2062), so a chord
 // the shell would otherwise claim has to be routed into the pane instead.
@@ -8619,7 +8681,32 @@ func (m Model) routeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	cmd := inst.Update(msg)
+	m.flushUnbound(inst)
 	return m, cmd
+}
+
+// unboundKey is a chord the keymap layer found no binding for, held back until
+// the focused editor has had its say (#2303).
+type unboundKey struct {
+	chord   string
+	context string
+}
+
+// flushUnbound records the held-back unbound chord once the pane has seen the
+// key — unless the editor acted on it, in which case the chord is bound after
+// all, just inside the editor rather than in the keymap table. A chord that
+// never reaches a pane (an app-level handler consumed it) is dropped here by
+// the caller clearing the slot on the next key press.
+func (m *Model) flushUnbound(inst *pane.Instance) {
+	ev := m.pendUnbound
+	m.pendUnbound = nil
+	if ev == nil {
+		return
+	}
+	if ed := inst.Editor(); ed != nil && ed.HandledLastKey() {
+		return
+	}
+	m.usage.Key(ev.chord, ev.context, "", "unbound")
 }
 
 // activeEditorKey returns the editor that should receive a Replace open or an
@@ -9867,9 +9954,31 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	// the overlays that render above it. An active drag (selection, scrollbar,
 	// tab tear-out) skips the branch — the generic drag machinery below
 	// handles motion and release popup-aware.
-	if m.popupLayerOpen() && m.drag == nil {
-		if tm, cmd, done := m.popupLayerMouse(msg); done {
-			return tm, cmd
+	if m.popupLayerVisible() && m.drag == nil {
+		switch {
+		case m.popup.blurred:
+			// The blurred layer (#2309) stays on screen but owns neither
+			// keyboard nor mouse: only events over a layer box reach it — a
+			// press there refocuses the layer first (click-to-focus), and
+			// everything outside its boxes belongs to the surfaces below.
+			if m.popupLayerHit(msg.X, msg.Y) {
+				if msg.action == mousePress {
+					m.focusPopupLayer()
+				}
+				if tm, cmd, done := m.popupLayerMouse(msg); done {
+					return tm, cmd
+				}
+			}
+		case msg.action == mousePress && !m.popupLayerHit(msg.X, msg.Y):
+			// A press outside every layer box blurs the layer instead of
+			// hiding it (#2309) and falls through, so the same click also
+			// lands in the pane below — open popup, click into the editor,
+			// copy, toggle back, paste.
+			m.blurPopupLayer()
+		default:
+			if tm, cmd, done := m.popupLayerMouse(msg); done {
+				return tm, cmd
+			}
 		}
 	}
 	// Menu bar (Roadmap 0160): with a dropdown open, moving the mouse over an
@@ -11440,7 +11549,7 @@ func (m Model) termLocal(key string, msg mouseEvent) (x, y int, ok bool) {
 		// coordinates derive from the focused host's box rectangle — a
 		// floating panel's own rect (#1793), or the popup box offset to the
 		// focused split side while split (#1427).
-		if !m.popupLayerOpen() {
+		if !m.popupLayerVisible() {
 			return 0, 0, false
 		}
 		if f := m.floatFocused(); f != nil {
@@ -11831,7 +11940,7 @@ func (m Model) render() string {
 		x, y := m.ctxMenu.Pos()
 		base = overlay.Place(base, m.ctxMenu.View(), x, y, m.width, m.height)
 	}
-	if m.popupLayerOpen() && !m.settings.IsOpen() {
+	if m.popupLayerVisible() && !m.settings.IsOpen() {
 		// The popup terminal layer (#1398) floats above the workspace but
 		// below the exclusive overlays: a palette or the settings panel opened
 		// from inside it must draw on top (settings composites earlier, so it

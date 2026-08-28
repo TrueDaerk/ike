@@ -26,6 +26,10 @@ It supports windowing, tabs, panes and resizing / moving any pane to another loc
   (`internal/settings/`) in the *same* change — never config-file-only. Validate it in the form
   (rejecting bad input with a clear message), persist it, show it in any list rendering, and test
   it (see [wiki/process/change-workflow.md](wiki/process/change-workflow.md)).
+- **Commands need a keybind:** every new command ships with a **default keybind** in the same
+  change (`internal/keymap/defaults.go`); keybind-less only with a reason recorded in the audit
+  ledger `cmd/ike/keybind_audit_test.go`, whose test fails otherwise
+  (see [wiki/process/change-workflow.md](wiki/process/change-workflow.md)).
 - **Keep the wiki current:** when a change alters behavior the wiki documents, update the matching
   concept doc in the same change (see [wiki/process/wiki-format.md](wiki/process/wiki-format.md)
   for the OKF format rules).

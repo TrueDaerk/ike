@@ -31,6 +31,107 @@
 - Docs: new [List Filter Syntax](/architecture/list-filters.md); Problems,
   Usages, TODO index and Issues pages updated.
 
+## 2026-08-28 (Unbound-command audit: defaults for the useful ones, #2305)
+
+- Second pass over the commands that ship without a default keybind. Thirteen
+  everyday actions got one: `file.copyPath` (`cmd+shift+c`),
+  `lsp.organizeImports` (`ctrl+alt+o`), the jq/yq playgrounds (`ctrl+alt+j` /
+  `ctrl+alt+y`), the test-data wizard `scratch.generate`
+  (`cmd+alt+shift+n`), `vcs.diff` (`cmd+alt+d`), the `tests.toggle` and
+  `debug.console` tool windows (`cmd+4` / `cmd+5`), `run.select`
+  (`alt+shift+f10`), `debug.testAtCursor` (`alt+shift+f9`), `pane.close`
+  (`ctrl+alt+w`), `view.toggleWrap` (`alt+shift+w`) and `window.layouts`
+  (`alt+shift+f12`) — conflict- and shadow-free on both platforms, each with
+  its palette/menu escape route recorded in `reachableAlternatives`.
+- The remaining palette-only commands are keybind-less on purpose, and now say
+  so: the audit ledger in `cmd/ike/keybind_audit_test.go` records a reason per
+  command family (vim-native key, pane-local key, picker entry, flavour of a
+  bound command, intention doorway, menu home, one-off) and fails the build for
+  any registered command that is neither bound nor justified — and for any
+  stale entry.
+- Fallout of the bigger table: the Keymap Doctor's probe grid sizes each column
+  to its own longest chord and shrinks the inter-column gap until the grid fits
+  the box, instead of letting the rightmost column fall off the edge — a probe
+  target the user cannot see is one they cannot press.
+- Process: [Change Workflow](/process/change-workflow.md) now states that new
+  commands ship with a default keybind, keybind-less only with a recorded
+  reason.
+
+## 2026-08-28 (Markdown preview: follow relative links, render local images inline, #2180)
+
+- **Link following** (`internal/preview/links.go`): the preview indexes its
+  links out of the rendered output's OSC 8 hyperlink sequences — glamour
+  already carries the raw markdown destination there, so a link's row and byte
+  span come from the rendering itself, and the label/printed-URL pair for one
+  link collapses to one entry. In-document `#anchor` links, which glamour
+  renders as bare text, are recovered from the source and located by label
+  from where the scroll-sync mapping puts them. `tab`/`shift+tab` walk the
+  links (wrapping, revealing, reverse-video marker on the label, destination
+  in the status line), `enter` follows and `y` copies. A link-free preview
+  leaves `tab` its global focus-cycling meaning.
+- **Follow policy** (`internal/app/previewlinks.go`): `preview.LinkMsg` hands
+  the destination to the root model. `#anchor` scrolls the preview itself
+  (GitHub-style slugs); an absolute URL goes to the `browserOpen` seam — only
+  on the explicit key, never during rendering; anything else resolves against
+  the previewed file and opens through `openPath`, or `openPathAt` on the
+  heading line for `file.md#section`. A missing target toasts.
+- **Inline images** (`internal/preview/images.go`): local images the buffer
+  references decode once (cached by resolved path) and replace their rendered
+  "Image: …" line with a Unicode-placeholder block, reusing the image pane's
+  protocol layer — `imgview.FitGrid`, `PlaceholderGrid`, `Transmit`, `Delete`
+  and `HumanSize` are now exported and shared. Substitution runs *before* the
+  scroll-sync anchors are built, so headings around an image block still map
+  to the lines they really occupy.
+- **Reconcile**: `imageSyncCmd` and `releaseWorkspaceImages` walk markdown
+  previews alongside image panes (one pane, many ids), and
+  `Registry.PreviewsMinted` joins `ImagesMinted` in the #2187 early-out.
+- **Boundaries**: no network I/O — a destination with a scheme is remote by
+  definition and is never opened for its bytes, so remote images stay text.
+  Without Kitty graphics the alt-text line keeps its place and gains a dim
+  format/size/dimensions caption; missing and undecodable targets degrade the
+  same way.
+## 2026-08-28 (Open in Browser: compressed HTML files, #2298)
+
+- "Open in Browser" now reaches into a plain gzip file (`report.html.gz`)
+  whose *inner* content is browser-viewable: `gzipArchiveOf` resolves the
+  focused target back to the on-disk `.gz` — directly, or through an
+  already-open preview buffer's `<archive>!<inner>` path — and, when
+  `gzfile.IsPlain` claims it, decompresses into an ike-owned scratch
+  directory (`$TMPDIR/ike-open-in-browser`, one subdirectory per source
+  path so a reopen overwrites instead of accumulating) before opening the
+  unpacked file. A compressed tar stays with the archive viewer; a gzip
+  whose inner content is not browser-viewable (`app.log.gz`) still declines
+  with the same toast as before; decompressed content past
+  `files.large_file_kb` is refused with a clear notice instead of opening
+  partially. The scratch directory is swept on a clean exit and again at
+  the next startup, so a kill or a crash never leaves unpacked copies
+  behind. See [Gz Viewer](architecture/gz-viewer.md#open-in-browser-unpacks-not-previews-2298).
+
+## 2026-08-28 (Local history: project-wide timeline across files, #2171)
+
+- **Project-wide read side** (`internal/localhistory/project.go`): `Scan`
+  collects the whole index into one newest-first `Snapshot` list (an entry
+  plus its path), bounded by `DefaultScanCap` (2000) and reporting that it cut
+  the tail; `GroupByDay`/`DayLabel` bucket it into `Today` / `Yesterday` /
+  `Mon 2026-08-24`, on calendar days in the local zone. Ties break on path
+  then hash, so the order is total and a re-scan never reshuffles rows.
+- **The panel** (`history.projectTimeline`, "Show Project History Timeline",
+  `internal/app/projecthistory.go`): every file's snapshots on one day-grouped
+  axis — the answer to "what did I change today?", which the per-file panel
+  (#1023) and the per-file Timeline (#1916) cannot give. Printable keys narrow
+  by path substring (`ui.SpeedSearch`), so navigation is the arrows / page
+  keys / `ctrl+n`/`ctrl+p` and loading more is `ctrl+l`, not the Timeline's
+  bare `L`. Rows reveal 100 at a time (also as the selection walks toward the
+  end) and the rendered block windows to the terminal height, with a counts
+  line that always says what is held back and why.
+- **Handoff:** `enter` (or a click on the selected row, #2275) closes the
+  timeline, opens the row's file and raises the per-file panel with that
+  snapshot preselected — matched on time *and* hash. Opening the file first is
+  what makes `r` restore work from there; the shared `openLocalHistoryFor` is
+  the one open path both entry points use.
+- [architecture/local-history.md](architecture/local-history.md) grew the
+  project-wide section.
+
 ## 2026-08-28 (Transparent Ansible Vault editing, #2293)
 
 - **Native vault format** (`internal/ansiblevault`): the Vault 1.1/1.2

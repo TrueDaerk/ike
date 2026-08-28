@@ -53,6 +53,7 @@ var statusLeft = []statusSegment{
 	{id: "lsp", render: func(m Model, ed *editor.Model) string { return m.focusedLangStatus(ed) }},
 	{id: "toolchain", render: func(m Model, ed *editor.Model) string { return m.toolchainSegment(ed) }},
 	{id: "notifications", render: func(m Model, _ *editor.Model) string { return m.notifSegment() }},
+	{id: "popupterm", render: func(m Model, _ *editor.Model) string { return m.popupTermSegment() }},
 	{id: "forge", render: func(m Model, _ *editor.Model) string { return m.forgeBadgeSegment() }},
 	{id: "todo", render: func(m Model, _ *editor.Model) string { return m.todoSegment() }},
 	{id: "http", render: func(m Model, _ *editor.Model) string { return m.httpFlightSegment() }},
@@ -363,6 +364,42 @@ func (m Model) notifSegment() string {
 	return "● " + strconv.Itoa(m.notifUnseen)
 }
 
+// popupTermSegment is the hidden popup terminal's activity indicator (#2309):
+// "popup ⚙" while any popup-layer shell runs a foreground process, "popup ●"
+// when output arrived since the layer was last on screen, both when both. It
+// answers the "is something still running in there?" peek without opening the
+// popup at all; hidden while the layer is visible (the popup itself shows the
+// state then) and while the layer holds no live shell. A click dispatches
+// terminal.popup (statusSegmentCommands).
+func (m Model) popupTermSegment() string {
+	if m.popupLayerVisible() {
+		return ""
+	}
+	busy, any := false, false
+	for _, inst := range m.popupLayerInstances() {
+		for i := 0; i < inst.TabCount(); i++ {
+			if t := inst.TabTerminal(i); t != nil {
+				any = true
+				busy = busy || t.Busy()
+			}
+		}
+	}
+	if !any {
+		// Nothing retained (the last shell exited): there is nothing left to
+		// look at, whatever arrived before the exit.
+		return ""
+	}
+	switch {
+	case busy && m.popupUnseen:
+		return "popup ⚙ ●"
+	case busy:
+		return "popup ⚙"
+	case m.popupUnseen:
+		return "popup ●"
+	}
+	return ""
+}
+
 // statusLine renders the bottom status bar. With an editor focused it shows
 // the segment slots (mode, file, diagnostics, …, cursor); with a terminal or
 // the explorer focused it names that pane kind instead, so the line always
@@ -435,6 +472,13 @@ func (m Model) statusLine() string {
 			}
 		case inst.Kind() == pane.KindMarkdown:
 			left += "PREVIEW │ " + filepath.Base(inst.Preview().Path())
+			// The selected link (#2180) is what enter would follow and y
+			// would copy, so it belongs where the user looks before pressing.
+			if target, ok := inst.Preview().SelectedTarget(); ok {
+				left += " │ → " + target
+			} else if inst.Preview().HasLinks() {
+				left += " │ tab: links"
+			}
 		case inst.Kind() == pane.KindMerge:
 			// The remaining-conflict counter (#2258): the caret's place in
 			// the ]n/[n cycle while it stands in a block, the unresolved
@@ -495,6 +539,11 @@ func (m Model) statusLine() string {
 			left += " │ " + s
 		}
 		if s := m.notifSegment(); s != "" {
+			left += " │ " + s
+		}
+		// The popup activity indicator (#2309) is layer state, not an editor
+		// detail: it stays visible while a terminal or tool pane is focused.
+		if s := m.popupTermSegment(); s != "" {
 			left += " │ " + s
 		}
 		// The forge unread badge (#2086) is persistent state, not an editor
@@ -581,7 +630,7 @@ func renderParts(m Model, ed *editor.Model, segs []statusSegment) []renderedSeg 
 // (already shrunken) file segment and the cursor never drop.
 var statusDropOrder = []string{
 	"hint", "eol", "encoding", "indent", "svcolumn", "docpath", "logspan", "toolchain", "todo",
-	"host", "notifications", "macro", "branch", "buflang", "forge", "diagnostics", "lsp",
+	"host", "notifications", "popupterm", "macro", "branch", "buflang", "forge", "diagnostics", "lsp",
 	// The search counter (#2145) shows only during an active search and is
 	// what the user is watching then, so it drops last of all.
 	"search",
@@ -719,6 +768,8 @@ var statusSegmentCommands = map[string]string{
 	"largefile":     "editor.largeFileDetails",
 	"todo":          "todo.list",
 	"notifications": "notifications.history",
+	// The popup activity indicator (#2309) opens what it announces.
+	"popupterm": "terminal.popup",
 	"lsp":           "lsp.doctor",
 	// The forge unread badge (#2086) opens what it announces.
 	"forge": "issues.toggle",

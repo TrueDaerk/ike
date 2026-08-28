@@ -163,9 +163,10 @@ var actionMap = map[string]string{
 	// Refactors on files. RenameElement is deliberately kept on lsp.rename
 	// (JetBrains uses one action for symbol and file renames), so file.rename
 	// has no import source.
-	"Move":       "file.move",
-	"NewElement": "explorer.newFile",
-	"NewFile":    "explorer.newFile",
+	"OptimizeImports": "lsp.organizeImports",
+	"Move":            "file.move",
+	"NewElement":      "explorer.newFile",
+	"NewFile":         "explorer.newFile",
 
 	// Tool windows & views.
 	"ActivateProjectToolWindow":        "explorer.toggle",
@@ -174,8 +175,12 @@ var actionMap = map[string]string{
 	"ActivateProblemsViewToolWindow":   "problems.toggle",
 	"ActivateStructureToolWindow":      "structure.toggle",
 	"ActivateVersionControlToolWindow": "vcs.panel",
-	"SelectInProjectView":              "explorer.reveal",
-	"ShowBookmarks":                    "nav.bookmarks",
+	// #2305: the Run and Debug tool windows are IKE's test-results and
+	// debug-console panels.
+	"ActivateRunToolWindow":   "tests.toggle",
+	"ActivateDebugToolWindow": "debug.console",
+	"SelectInProjectView":     "explorer.reveal",
+	"ShowBookmarks":           "nav.bookmarks",
 	// Bookmarks (#55): the JetBrains action ids of the bookmark family.
 	"ToggleBookmark":             "bookmark.toggle",
 	"ToggleBookmarkWithMnemonic": "bookmark.toggleMnemonic",
@@ -190,6 +195,8 @@ var actionMap = map[string]string{
 	"SplitHorizontally":          "editor.splitViewDown",
 	"NewScratchFile":             "scratch.new",
 	"CloseProject":               "project.close",
+	"CopyPaths":                  "file.copyPath",
+	"EditorToggleUseSoftWraps":   "view.toggleWrap",
 
 	// Diff viewer.
 	"NextDiff":     "diff.nextChange",
@@ -203,20 +210,21 @@ var actionMap = map[string]string{
 	"Compare.SameVersion": "vcs.diff",
 
 	// Run & debug.
-	"Run":                  "run.file",
-	"RunClass":             "run.file",
-	"Debug":                "debug.start",
-	"DebugClass":           "debug.start",
-	"Rerun":                "run.rerun",
-	"Stop":                 "debug.stop",
-	"ToggleLineBreakpoint": "debug.toggleBreakpoint",
-	"StepOver":             "debug.stepOver",
-	"StepInto":             "debug.stepInto",
-	"StepOut":              "debug.stepOut",
-	"Resume":               "debug.continue",
-	"ViewBreakpoints":      "debug.breakpoints",
-	"EditBreakpoint":       "debug.breakpointProperties",
-	"EvaluateExpression":   "debug.evaluate",
+	"Run":                    "run.file",
+	"RunClass":               "run.file",
+	"Debug":                  "debug.start",
+	"DebugClass":             "debug.start",
+	"Rerun":                  "run.rerun",
+	"Stop":                   "debug.stop",
+	"ToggleLineBreakpoint":   "debug.toggleBreakpoint",
+	"StepOver":               "debug.stepOver",
+	"StepInto":               "debug.stepInto",
+	"StepOut":                "debug.stepOut",
+	"Resume":                 "debug.continue",
+	"ViewBreakpoints":        "debug.breakpoints",
+	"EditBreakpoint":         "debug.breakpointProperties",
+	"EvaluateExpression":     "debug.evaluate",
+	"ChooseRunConfiguration": "run.select",
 }
 
 // jbKeyName maps JetBrains keystroke key tokens (java.awt.event.KeyEvent VK_

@@ -37,6 +37,22 @@ func TestDoctorProbesRawKeys(t *testing.T) {
 	}
 }
 
+// TestDoctorGridShowsEveryTarget (#2305): the grid sizes each column to its
+// own longest chord and shrinks the gap between columns until the whole set
+// fits, so growing the default table cannot silently push targets off the
+// right edge where the user never sees the chord they are asked to press.
+func TestDoctorGridShowsEveryTarget(t *testing.T) {
+	m := New()
+	m.SetSize(160, 44)
+	m.Open("testterm")
+	view := m.View()
+	for _, target := range keymap.ProbeTargets() {
+		if !strings.Contains(view, target) {
+			t.Errorf("probe target %q missing from the doctor view", target)
+		}
+	}
+}
+
 func TestDoctorSkipKeyIsNotATarget(t *testing.T) {
 	m := New()
 	m.Open("testterm")
