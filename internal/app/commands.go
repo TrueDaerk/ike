@@ -612,6 +612,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("tests.toggle", "Test Results", TestsToggleMsg{}),
 			appCommand("issues.toggle", "GitHub Issues", IssuesToggleMsg{}),
 			paneCommand("data.columnProfile", "Data: Column Profile", "data", DataColumnProfileMsg{}),
+			paneCommand("data.sortColumn", "Data: Sort Column", "data", DataSortColumnMsg{}),
+			paneCommand("data.export", "Data: Export Rows…", "data", DataExportMsg{}),
 			paneCommand("csv.columnProfile", "CSV: Column Profile", "editor", CSVColumnProfileMsg{}),
 			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
 			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),

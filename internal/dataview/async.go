@@ -32,6 +32,7 @@ type ResultMsg struct {
 	open    *openResult
 	count   *countResult
 	profile *profileResult
+	export  *exportResult
 }
 
 // Discard releases what an unrouted result holds. Only the open carries a
@@ -113,6 +114,8 @@ func (m *Model) applyResult(msg ResultMsg) tea.Cmd {
 		return m.applyCount(msg.count)
 	case msg.profile != nil:
 		return m.applyProfile(msg.profile)
+	case msg.export != nil:
+		return m.applyExport(msg.export)
 	}
 	return nil
 }

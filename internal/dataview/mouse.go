@@ -100,8 +100,9 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	// The filter line owns the input while it is open (#1777) — its clause is
 	// half-typed text, and loading a table would drop it — so clicks are inert
 	// until enter or esc closes the line. The profile popup (#1940) covers the
-	// grid it describes and holds the input the same way.
-	if m.err != nil || m.src == nil || m.fEditing || m.prof != nil {
+	// grid it describes and holds the input the same way, and so does the
+	// export line (#2248), whose half-typed path a click must not drop.
+	if m.err != nil || m.src == nil || m.fEditing || m.prof != nil || m.exp != nil {
 		return nil
 	}
 	if y < headerRows || y >= headerRows+m.bodyHeight() {

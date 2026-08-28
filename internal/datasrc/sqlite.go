@@ -53,13 +53,14 @@ func OpenSQLite(path string) (Source, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Three connections, one per concurrent job the pane runs: the page
-	// fetches, the background row count (#1795), and the column profile
-	// (#1940). A COUNT(*) or a profile over a ten-million-row table runs for
-	// seconds, and sharing one connection would queue every page fetch behind
-	// it and hang the pane both were made asynchronous for. Three is also the
-	// ceiling: the pane runs at most one count and one profile at a time.
-	db.SetMaxOpenConns(3)
+	// Four connections, one per concurrent job the pane runs: the page
+	// fetches, the background row count (#1795), the column profile (#1940)
+	// and the export (#2248). A COUNT(*), a profile or an export over a
+	// ten-million-row table runs for seconds, and sharing one connection would
+	// queue every page fetch behind it and hang the pane they were all made
+	// asynchronous for. Four is also the ceiling: the pane runs at most one of
+	// each at a time.
+	db.SetMaxOpenConns(4)
 	s := &sqliteSource{db: db}
 	if _, err := s.Tables(); err != nil {
 		db.Close()
@@ -188,15 +189,16 @@ func (s *sqliteSource) Page(table string, offset, limit int64) (Page, error) {
 	return scanSQLRows(rows, offset, total)
 }
 
-// PageWhere pages the table filtered by the user's clause (#1777). The clause
-// runs inside a subquery — `SELECT * FROM (SELECT * FROM "t" <clause>) LIMIT
-// n OFFSET m` — so the pane's window sits outside whatever the user wrote and
-// a clause of its own `LIMIT` bounds the result instead of fighting the pane.
-// The connection is `mode=ro`, so no clause can write; a clause carrying a
-// second statement is refused before the engine ever sees it.
-func (s *sqliteSource) PageWhere(table, clause string, offset, limit int64) (Page, error) {
+// PageWhere pages the table filtered by the user's clause (#1777) and ordered
+// by the grid's column sort (#2248). The clause runs inside a subquery —
+// `SELECT * FROM (SELECT * FROM "t" <clause>) ORDER BY "c" LIMIT n OFFSET m` —
+// so the pane's window and its sort both sit outside whatever the user wrote
+// and a clause of its own `LIMIT` bounds the result instead of fighting the
+// pane. The connection is `mode=ro`, so no clause can write; a clause carrying
+// a second statement is refused before the engine ever sees it.
+func (s *sqliteSource) PageWhere(table, clause string, sort Sort, offset, limit int64) (Page, error) {
 	clause = normalizeClause(clause)
-	if clause == "" {
+	if clause == "" && !sort.Active() {
 		return s.Page(table, offset, limit)
 	}
 	if err := checkClause(clause); err != nil {
@@ -207,7 +209,7 @@ func (s *sqliteSource) PageWhere(table, clause string, offset, limit int64) (Pag
 	// (#1795) — a WHERE over a large table scans it, and typing a filter must
 	// not stall the pane.
 	const total = int64(-1)
-	rows, err := s.db.Query(filteredQuery(base, clause, offset, limit))
+	rows, err := s.db.Query(filteredQuery(base, clause, sort, offset, limit))
 	if err != nil {
 		return Page{}, err
 	}

@@ -101,12 +101,15 @@ func skipBlockComment(r []rune, i int) (int, bool) {
 	return 0, false
 }
 
-// filteredQuery wraps a backend's base select (`SELECT <cols> FROM <source>`)
-// and the user's clause into one paged query. The clause ends the subquery's
-// line so a trailing `--` comment cannot comment out the closing parenthesis.
-func filteredQuery(base, clause string, offset, limit int64) string {
-	return fmt.Sprintf("SELECT * FROM (%s %s\n) AS %s LIMIT %d OFFSET %d",
-		base, clause, filterAlias, limit, offset)
+// filteredQuery wraps a backend's base select (`SELECT <cols> FROM <source>`),
+// the user's clause and the grid's column sort (#2248) into one paged query.
+// The clause ends the subquery's line so a trailing `--` comment cannot
+// comment out the closing parenthesis, and the sort's ORDER BY lands *after*
+// that parenthesis — outside whatever the user wrote, and before the pane's
+// own window, so paging walks the sorted result.
+func filteredQuery(base, clause string, sort Sort, offset, limit int64) string {
+	return fmt.Sprintf("SELECT * FROM (%s %s\n) AS %s%s LIMIT %d OFFSET %d",
+		base, clause, filterAlias, sort.orderBy(), limit, offset)
 }
 
 // filteredCount counts the whole filtered result, so the pane's status line

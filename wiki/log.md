@@ -31,6 +31,31 @@
   inside floating-shell pickers stay open — the shell sees its content as
   opaque text — and are named there as such, tracked in #2275.
 
+## 2026-08-28 (Data viewer: column sort and CSV/JSON export, #2248)
+
+- **Column sort** (`internal/datasrc/sort.go`, `internal/dataview/sort.go`):
+  `S` in the grid — or `data.sortColumn` — cycles the focused column through
+  ascending, descending and unsorted. The pane hands a `datasrc.Sort` to
+  `PageWhere`, whose signature grew it; every engine renders the same
+  `ORDER BY` **outside** the filter's subquery, so it composes with a clause
+  that already ends in an `ORDER BY` or a `LIMIT` and paging walks the sorted
+  result. A new order restarts the walk, the count cache is untouched
+  (ordering changes no count), and switching tables drops the sort like the
+  filter. Parquet borrows the duckdb CLI for it, as it already does to filter.
+- **Export** (`internal/datasrc/export.go`, `internal/dataview/export.go`):
+  `E` — or `data.export` — writes the filtered, sorted result to a CSV or
+  JSON path, the format taken from the extension. The writer uses nothing but
+  the `Source` interface (it pages `PageWhere`), so all three engines export
+  through the same code; it streams in 2000-row batches, caps at
+  `ExportLimit` (1 000 000) and reports `Capped` so the toast can say so. CSV
+  goes through `encoding/csv` with `NULL` as the empty field; JSON is a
+  streamed array of objects with `NULL` as `null` and every value a string.
+  The line refuses an unknown extension and a missing directory before
+  scanning anything, and warns once before overwriting.
+- The SQLite backend now opens **four** connections, the fourth being the
+  export's, so a long write never queues page fetches behind it.
+- See /architecture/data-viewer.md.
+
 ## 2026-08-28 (Per-file test coverage: Test Results listing and status segment, #2246)
 
 - **Per-file percentages** (`internal/coverage`): the store gained

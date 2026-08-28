@@ -95,6 +95,16 @@ type Model struct {
 	fErr     error
 	hl       highlight.Theme
 
+	// Column sort (#2248): the ORDER BY the backend applies outside the
+	// filter, zero while the grid is unsorted.
+	sort datasrc.Sort
+
+	// Export (#2248): exp is the open export line (nil — closed), expSeq
+	// stamps each export so a result landing after its line closed is
+	// dropped, exactly like a profile's.
+	exp    *exportState
+	expSeq int
+
 	// Column profile (#1940): prof is the open popup (nil — closed), profSeq
 	// stamps each profile so a result landing after its popup closed, or
 	// after another column was asked for, is dropped.
@@ -139,6 +149,7 @@ func (m *Model) Err() error { return m.err }
 func (m *Model) Close() {
 	m.closed = true
 	m.closeProfile() // a running profile must not outlive its pane (#1940)
+	m.closeExport()  // nor a running export (#2248)
 	if m.src != nil {
 		m.src.Close()
 		m.src = nil
@@ -196,6 +207,7 @@ func (m *Model) loadTable(i int) {
 	m.sel, m.tcur = i, i
 	m.rowCur, m.rowTop, m.colOff = 0, 0, 0
 	m.filter, m.fInput, m.fCur, m.fErr = "", "", 0, nil
+	m.clearSort() // a column of the old table cannot order the new one
 	m.fetch(0)
 }
 
@@ -206,8 +218,11 @@ func (m *Model) fetch(offset int64) {
 	if m.src == nil || m.sel < 0 {
 		return
 	}
-	if m.filter != "" {
-		m.page, m.pageErr = m.src.PageWhere(m.tables[m.sel].Name, m.filter, offset, PageSize)
+	// The sort travels with the filter (#2248): the backend composes both
+	// into one query, and an unsorted, unfiltered grid still takes the plain
+	// Page path it always did.
+	if m.filter != "" || m.sort.Active() {
+		m.page, m.pageErr = m.src.PageWhere(m.tables[m.sel].Name, m.filter, m.sort, offset, PageSize)
 	} else {
 		m.page, m.pageErr = m.src.Page(m.tables[m.sel].Name, offset, PageSize)
 	}
@@ -240,6 +255,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case ProfileMsg:
 		// data.columnProfile from the palette (#1940): the same action P runs.
 		return m.startProfile()
+	case SortMsg:
+		// data.sortColumn from the palette (#2248): the same action S runs.
+		return tea.Batch(m.sortColumnKey(), m.countCmd())
+	case ExportMsg:
+		// data.export from the palette (#2248): the same action E runs.
+		m.startExport()
+		return nil
 	}
 	return nil
 }
@@ -260,6 +282,11 @@ func (m *Model) keyAction(msg tea.KeyPressMsg) tea.Cmd {
 	if m.fEditing {
 		m.filterKey(msg)
 		return nil
+	}
+	// The export line owns it the same way (#2248): a path is text, and a
+	// running export answers nothing but esc.
+	if m.exp != nil {
+		return m.exportKey(msg)
 	}
 	// The profile popup owns it likewise (#1940): paging a grid the popup
 	// covers would be blind navigation.
@@ -338,6 +365,12 @@ func (m *Model) gridKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.lastPage()
 	case "/":
 		m.startFilter()
+	case "S":
+		return m.sortColumnKey()
+	case "E":
+		m.startExport()
+		m.clampScroll()
+		return nil
 	case "P":
 		cmd := m.startProfile()
 		m.clampScroll()
@@ -467,6 +500,10 @@ func (m *Model) View() string {
 	b.WriteString(m.body(pal))
 	if m.fEditing {
 		b.WriteString(m.filterLine(pal))
+		b.WriteString("\n")
+	}
+	if m.exp != nil {
+		b.WriteString(m.exportLine(pal))
 		b.WriteString("\n")
 	}
 	b.WriteString(m.footer(pal))
@@ -658,7 +695,9 @@ func (m *Model) renderGrid(pal *theme.Palette, height int) string {
 func (m *Model) colWidths(w int) []int {
 	widths := make([]int, len(m.page.Columns))
 	for i, c := range m.page.Columns {
-		widths[i] = lipgloss.Width(c)
+		// The sorted column's arrow (#2248) rides inside the header cell, so
+		// it is part of that column's width rather than an overflow.
+		widths[i] = lipgloss.Width(c + m.sortMarker(c))
 	}
 	for _, row := range m.page.Rows {
 		for i, cell := range row {
@@ -686,7 +725,7 @@ func (m *Model) colWidths(w int) []int {
 func (m *Model) headerRow(pal *theme.Palette, widths []int, w int) string {
 	var cells []string
 	for i := m.colOff; i < len(m.page.Columns); i++ {
-		cells = append(cells, padTo(m.page.Columns[i], widths[i]))
+		cells = append(cells, padTo(m.page.Columns[i]+m.sortMarker(m.page.Columns[i]), widths[i]))
 	}
 	line := " " + strings.Join(cells, "  ")
 	return lipgloss.NewStyle().Bold(true).Foreground(pal.Accent).Render(clipTo(line, w))
@@ -736,6 +775,11 @@ func (m *Model) dataRow(pal *theme.Palette, i int, widths []int, w int) string {
 // hints that fit. With the filter line open it belongs to the filter — the
 // engine's rejection of a clause, or the two keys that close the line.
 func (m *Model) footer(pal *theme.Palette) string {
+	// The export line owns the footer while it is open (#2248), the same way
+	// the filter line does: its errors belong under the field they describe.
+	if m.exp != nil {
+		return m.exportFooter(pal)
+	}
 	if m.fEditing {
 		if m.fErr != nil {
 			return lipgloss.NewStyle().Foreground(pal.Error).Render(clipTo(" "+m.fErr.Error(), m.w))
@@ -766,7 +810,9 @@ func (m *Model) footer(pal *theme.Palette) string {
 		return lipgloss.NewStyle().Faint(true).Render(
 			clipTo(" column profile · esc closes · y copies", m.w))
 	}
-	hints := "tab switch · j/k row · h/l column · pgup/pgdn screen · n/p page · / filter · P profile · s schema"
+	// The keys are ordered by how hard they are to guess — the line is clipped
+	// to the pane, and pgup/pgdn is the one nobody needs told.
+	hints := "tab switch · j/k row · h/l column · n/p page · / filter · S sort · E export · P profile · s schema · pgup/pgdn screen"
 	line := " " + status
 	if status != "" {
 		line += " · "
@@ -780,6 +826,9 @@ func (m *Model) footer(pal *theme.Palette) string {
 func (m *Model) bodyHeight() int {
 	h := m.h - 2
 	if m.fEditing {
+		h--
+	}
+	if m.exp != nil {
 		h--
 	}
 	if h < 1 {
