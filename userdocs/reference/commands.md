@@ -33,6 +33,7 @@ bring their own.
 | Edit Bookmark Note | `bookmark.annotate` | — | — | everywhere |
 | Go to Bookmark by Mnemonic | `bookmark.jumpMnemonic` | — | — | everywhere |
 | Next Bookmark | `bookmark.next` | `shift+f11` | — | everywhere |
+| Bookmarks Overview | `bookmark.overview` | — | — | everywhere |
 | Previous Bookmark | `bookmark.previous` | `ctrl+shift+f11` | — | everywhere |
 | Toggle Bookmark | `bookmark.toggle` | `f11` | — | everywhere |
 | Toggle Bookmark with Mnemonic | `bookmark.toggleMnemonic` | `alt+f3` | — | everywhere |
