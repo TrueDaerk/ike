@@ -244,6 +244,12 @@ func defaults() *Config {
 		Todo: Todo{
 			Patterns: []string{"TODO", "FIXME", "HACK", "XXX"},
 		},
+		Marketplace: Marketplace{
+			// Installed plugins are checked against the catalog on start
+			// (#2257) — at most once a day, silent when the network is gone.
+			// Without a configured catalog the check does nothing at all.
+			AutoCheck: true,
+		},
 		Diff: Diff{
 			Context: 3, // context lines kept around a change (0340, #494)
 		},

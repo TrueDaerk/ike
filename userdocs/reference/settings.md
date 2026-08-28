@@ -342,6 +342,7 @@ secrets — are documented together, with screenshots, in
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Catalog URL | `marketplace.catalog_url` | string | *(empty)* | user | HTTPS location of the marketplace index.json; empty falls back to the built-in default, which may itself be empty — then the marketplace stays disabled |
+| Check for plugin updates | `marketplace.auto_check` | boolean | `true` | user | Compare installed plugins against the catalog on IDE start and announce how many updates are available (#2257). The check runs in the background at most once a day and stays silent when the catalog cannot be reached; opening the Marketplace page always checks regardless |
 
 ### Elasticsearch
 
