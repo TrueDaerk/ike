@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-08-27T18:00:00Z
+timestamp: 2026-08-28T18:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -232,6 +232,13 @@ any entry whose key the typed schema does not expose (no dead keys).
   (the config validator has to be lenient and snaps instead), while the
   steppers jump the hole rather than stopping in it. See
   [Forge Layer](./forge.md).
+- **Diff Viewer** (#2170) — `diff.context`, the unchanged lines kept around a
+  change before the rest folds into a separator (`-1` never folds), and
+  `diff.ignore_whitespace`, whether lines that differ only in whitespace count
+  as unchanged. Both are starting points the pane's own keys (`c`/`o`, `w`)
+  override live — and `w` writes its new state straight back into this key, so
+  the setting and the open panes never disagree. See
+  [diff viewer](./diff-viewer.md).
 - **HTTP Client** (#2247) — `http.diff_after_rerun`, whether re-running (or
   re-sending) a stored request opens the previous-vs-new response diff by
   itself, and `http.diff_ignore_headers`, the volatile response headers every

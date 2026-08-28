@@ -5448,6 +5448,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.host.Notify(host.Info, "copied "+msg.What)
 		return m, nil
 
+	case diff.IgnoreWhitespaceMsg:
+		// 'w' in a diff pane (#2170): the pane already flipped its own view;
+		// persist the choice as diff.ignore_whitespace so the next diff — and
+		// every other open one, through the reload — starts the same way.
+		state := "off"
+		if msg.On {
+			state = "on"
+		}
+		m.host.Notify(host.Info, "diff: ignore whitespace "+state)
+		return m, config.WriteAndReload(m.cfgOpts, config.DefaultScope("diff.ignore_whitespace"), "diff.ignore_whitespace", msg.On)
+
 	case diff.EditRequestMsg:
 		// 'e' in a diff pane (0340, #496): mount a live editor as the right
 		// column. Revision-only diffs (the log's parent-vs-commit view) stay
@@ -12397,7 +12408,11 @@ func contentPaneTitle(inst *pane.Instance) string {
 		return "SFTP " + inst.Remote().Alias()
 	case pane.KindDiff:
 		l, r := inst.Diff().Titles()
-		return "DIFF " + l + " ⇄ " + r
+		title := "DIFF " + l + " ⇄ " + r
+		if inst.Diff().IgnoreWhitespace() {
+			title += " [-w]" // ignore-whitespace is on (#2170)
+		}
+		return title
 	case pane.KindHTTP:
 		return strings.ToUpper(inst.HTTP().Title())
 	}

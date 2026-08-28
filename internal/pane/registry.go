@@ -597,18 +597,10 @@ func (r *Registry) AddDiff(leftPath, rightPath string) string {
 	return key
 }
 
-// applyDiffConfig threads the diff.context config key (0340, #494) into a
-// fresh diff instance; unset keeps the model's default.
-func (r *Registry) applyDiffConfig(inst *Instance) {
-	if r.cfg == nil {
-		return
-	}
-	if v, ok := r.cfg.Get("diff.context"); ok {
-		if n, err := strconv.Atoi(v); err == nil {
-			inst.df.SetContext(n)
-		}
-	}
-}
+// applyDiffConfig threads the diff.* config keys — context (0340, #494) and
+// ignore_whitespace (#2170) — into a fresh diff instance; unset keys keep the
+// model's defaults.
+func (r *Registry) applyDiffConfig(inst *Instance) { applyDiffCfg(r.cfg, inst) }
 
 // AddMerge creates a three-way merge view for the conflicted file at path
 // (#1478), returning the new instance's key ("merge", then "merge:N"). The

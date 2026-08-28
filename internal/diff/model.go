@@ -10,6 +10,7 @@ package diff
 
 import (
 	"fmt"
+	"image/color"
 	"path/filepath"
 	"strings"
 
@@ -48,6 +49,13 @@ type Model struct {
 	w, h    int
 	focused bool
 	unified bool
+
+	// Ignore whitespace (#2170): a viewer-level toggle ('w', persisted as
+	// diff.ignore_whitespace) feeding the engine's Options — lines differing
+	// only in whitespace pair up as unchanged and intra-line refinement
+	// reports only non-whitespace ranges, so a reformat-heavy diff shows the
+	// changes that carry meaning.
+	ignoreWS bool
 
 	res       Result
 	cur       int // current hunk index, -1 before the first n/N
@@ -107,6 +115,14 @@ type Model struct {
 	vrows    []vrow
 }
 
+// IgnoreWhitespaceMsg reports that the diff pane Key flipped its
+// ignore-whitespace mode (#2170), so the root model can persist the new state
+// as the diff.ignore_whitespace preference. The pane has already applied it.
+type IgnoreWhitespaceMsg struct {
+	Key string
+	On  bool
+}
+
 // EditRequestMsg asks the root model to start edit mode on the diff pane Key
 // (the 'e' key, #496); the root validates editability and builds the editor.
 type EditRequestMsg struct {
@@ -160,6 +176,23 @@ func (m Model) RightPath() string { return m.rightPath }
 
 // Unified reports whether the view is in unified (single-column) layout.
 func (m Model) Unified() bool { return m.unified }
+
+// IgnoreWhitespace reports whether whitespace-only changes are ignored.
+func (m Model) IgnoreWhitespace() bool { return m.ignoreWS }
+
+// SetIgnoreWhitespace switches whitespace-insensitive comparison on or off
+// and re-diffs the retained texts in place: the scroll position and the
+// current hunk survive as far as the new hunk list allows.
+func (m *Model) SetIgnoreWhitespace(on bool) {
+	if m.ignoreWS == on {
+		return
+	}
+	m.ignoreWS = on
+	m.recompute()
+}
+
+// diffOpts is the engine option set the view currently compares under.
+func (m Model) diffOpts() Options { return Options{IgnoreWhitespace: m.ignoreWS} }
 
 // HunkCount returns how many hunks the diff holds.
 func (m Model) HunkCount() int { return len(m.res.Hunks) }
@@ -235,7 +268,7 @@ func (m *Model) SetSize(w, h int) {
 func (m *Model) SetContents(left, right string) {
 	m.leftText = left
 	m.rightText = right
-	m.res = Compute(left, right)
+	m.res = ComputeWith(left, right, m.diffOpts())
 	m.cur = -1
 	m.top = 0
 	m.hoff = 0
@@ -305,19 +338,36 @@ func (m Model) EditMode() bool { return m.editModeOn }
 // left text (per keystroke in edit mode); scroll and hunk state stay.
 func (m *Model) Rediff(right string) {
 	m.rightText = right
-	m.res = Compute(m.leftText, right)
-	m.clearSelection()
-	if m.cur >= len(m.res.Hunks) {
-		m.cur = len(m.res.Hunks) - 1
-	}
-	m.gaps = computeGaps(m.res, m.ctx)
-	m.buildRightRow()
+	m.rediff()
 	if !m.editModeOn {
 		// In edit mode the right column is the embedded editor's own render;
 		// re-parsing it here per keystroke would be wasted work (#1699).
 		m.rehighlight(false, true)
 	}
 	m.render()
+}
+
+// rediff re-runs the comparison over the retained texts and rebuilds the
+// derived state around it, without rendering: the caller decides whether the
+// sides need re-parsing and where the view should land afterwards.
+func (m *Model) rediff() {
+	m.res = ComputeWith(m.leftText, m.rightText, m.diffOpts())
+	m.clearSelection()
+	if m.cur >= len(m.res.Hunks) {
+		m.cur = len(m.res.Hunks) - 1
+	}
+	m.gaps = computeGaps(m.res, m.ctx)
+	m.buildRightRow()
+}
+
+// recompute re-diffs under changed options (#2170) and re-renders, keeping the
+// view on the hunk it was on — clamped to the new hunk list, since ignoring
+// whitespace usually makes hunks disappear. The texts themselves did not
+// change, so neither side is re-parsed.
+func (m *Model) recompute() {
+	m.rediff()
+	m.render()
+	m.scrollToHunk(m.cur)
 }
 
 // buildRightRow indexes rows by their right line number for edit alignment.
@@ -428,6 +478,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.stepHunk(-1)
 	case "u":
 		m.SetUnified(!m.unified)
+	case "w":
+		// Ignore whitespace (#2170): flips the live diff and asks the root
+		// model to persist the preference.
+		m.SetIgnoreWhitespace(!m.ignoreWS)
+		key, on := m.key, m.ignoreWS
+		return func() tea.Msg { return IgnoreWhitespaceMsg{Key: key, On: on} }
 	case "c":
 		// Toggle collapsed context (#494); the current hunk stays in view.
 		m.collapsed = !m.collapsed
@@ -483,7 +539,7 @@ func (m *Model) RenderEditSplit(edLines []string, topLine, height int) string {
 			row := m.res.Rows[ri]
 			left = m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, st) +
 				renderSegment(expand(row.Left), row.Kind == RowAdded, m.hoff, colL,
-					st.base(row.Kind, false), st.span, expandSpans(row.Left, row.LeftSpans),
+					st.base(row.Kind, false), st.emph(row.Kind, false), expandSpans(row.Left, row.LeftSpans),
 					sideCaps(m.leftIx, row.LeftNo, row.Left), hl, 0, 0, st.sel)
 		}
 		b.WriteString(left)
@@ -752,12 +808,13 @@ func (m *Model) sepLabel(gi int) string {
 
 // styles bundles the resolved lipgloss styles one render pass reuses.
 type styles struct {
-	gutter  lipgloss.Style
-	same    lipgloss.Style
-	added   lipgloss.Style
-	removed lipgloss.Style
-	span    lipgloss.Style
-	sel     lipgloss.Style
+	gutter      lipgloss.Style
+	same        lipgloss.Style
+	added       lipgloss.Style
+	removed     lipgloss.Style
+	addedEmph   lipgloss.Style
+	removedEmph lipgloss.Style
+	sel         lipgloss.Style
 }
 
 func (m Model) styles() styles {
@@ -765,13 +822,24 @@ func (m Model) styles() styles {
 	if pal == nil {
 		pal = theme.DefaultPalette()
 	}
+	// Intra-line emphasis (#2170) is the line's own colour one step stronger
+	// (the DiffAddedEmph/DiffRemovedEmph slots) plus bold: the background
+	// step alone stays inside the palette's readability envelope and is easy
+	// to miss, while bold marks the changed runes in every theme, including
+	// the monochrome-ish ones. (Underline would be the other candidate, but
+	// lipgloss emits it per grapheme — one escape pair per rune — which
+	// bloats every changed line and breaks plain-text matching downstream.)
+	emph := func(bg color.Color) lipgloss.Style {
+		return lipgloss.NewStyle().Background(bg).Bold(true)
+	}
 	return styles{
-		gutter:  lipgloss.NewStyle().Faint(true),
-		same:    lipgloss.NewStyle(),
-		added:   lipgloss.NewStyle().Background(pal.DiffAdded),
-		removed: lipgloss.NewStyle().Background(pal.DiffRemoved),
-		span:    lipgloss.NewStyle().Background(pal.DiffChanged),
-		sel:     lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText),
+		gutter:      lipgloss.NewStyle().Faint(true),
+		same:        lipgloss.NewStyle(),
+		added:       lipgloss.NewStyle().Background(pal.DiffAdded),
+		removed:     lipgloss.NewStyle().Background(pal.DiffRemoved),
+		addedEmph:   emph(pal.DiffAddedEmph),
+		removedEmph: emph(pal.DiffRemovedEmph),
+		sel:         lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText),
 	}
 }
 
@@ -789,6 +857,17 @@ func (st styles) base(kind Kind, right bool) lipgloss.Style {
 		return st.removed
 	}
 	return st.same
+}
+
+// emph returns the intra-line emphasis style belonging to one side of a row —
+// the added side's on the right of a changed pair (and on an added line), the
+// removed side's on the left (and on a removed line), so an emphasized range
+// never leaves the colour of the line carrying it.
+func (st styles) emph(kind Kind, right bool) lipgloss.Style {
+	if kind == RowAdded || (kind == RowChanged && right) {
+		return st.addedEmph
+	}
+	return st.removedEmph
 }
 
 // renderSideBySide paints two aligned columns with a dual gutter:
@@ -817,12 +896,12 @@ func (m *Model) renderSideBySide(items []displayItem) {
 		var b strings.Builder
 		b.WriteString(m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, st))
 		b.WriteString(renderSegment(expand(row.Left), row.Kind == RowAdded, m.hoff, colL,
-			st.base(row.Kind, false), st.span, expandSpans(row.Left, row.LeftSpans), capsL, hl,
+			st.base(row.Kind, false), st.emph(row.Kind, false), expandSpans(row.Left, row.LeftSpans), capsL, hl,
 			selL0, selL1, st.sel))
 		b.WriteString(sep)
 		b.WriteString(m.gutterCell(row.RightNo, rw, row.Kind != RowRemoved, st))
 		b.WriteString(renderSegment(expand(row.Right), row.Kind == RowRemoved, m.hoff, colR,
-			st.base(row.Kind, true), st.span, expandSpans(row.Right, row.RightSpans), capsR, hl,
+			st.base(row.Kind, true), st.emph(row.Kind, true), expandSpans(row.Right, row.RightSpans), capsR, hl,
 			selR0, selR1, st.sel))
 		m.lines = append(m.lines, b.String())
 	}
@@ -836,12 +915,12 @@ func (m *Model) renderUnified(items []displayItem) {
 	hl := m.hlTheme()
 	lw, rw := m.gutterWidths()
 	col := max(1, m.w-(lw+1)-(rw+1))
-	emit := func(text string, leftNo, rightNo int, base lipgloss.Style, spans []Span, caps []string) {
+	emit := func(text string, leftNo, rightNo int, base, emph lipgloss.Style, spans []Span, caps []string) {
 		sel0, sel1 := m.selCols(len(m.lines), false)
 		var b strings.Builder
 		b.WriteString(m.gutterCell(leftNo, lw, true, st))
 		b.WriteString(m.gutterCell(rightNo, rw, true, st))
-		b.WriteString(renderSegment(expand(text), false, m.hoff, col, base, st.span, expandSpans(text, spans), caps, hl,
+		b.WriteString(renderSegment(expand(text), false, m.hoff, col, base, emph, expandSpans(text, spans), caps, hl,
 			sel0, sel1, st.sel))
 		m.lines = append(m.lines, b.String())
 	}
@@ -855,14 +934,14 @@ func (m *Model) renderUnified(items []displayItem) {
 		m.rowStarts[ri] = len(m.lines)
 		switch row.Kind {
 		case RowSame:
-			emit(row.Left, row.LeftNo, row.RightNo, st.same, nil, sideCaps(m.rightIx, row.RightNo, row.Right))
+			emit(row.Left, row.LeftNo, row.RightNo, st.same, st.same, nil, sideCaps(m.rightIx, row.RightNo, row.Right))
 		case RowChanged:
-			emit(row.Left, row.LeftNo, 0, st.removed, row.LeftSpans, sideCaps(m.leftIx, row.LeftNo, row.Left))
-			emit(row.Right, 0, row.RightNo, st.added, row.RightSpans, sideCaps(m.rightIx, row.RightNo, row.Right))
+			emit(row.Left, row.LeftNo, 0, st.removed, st.removedEmph, row.LeftSpans, sideCaps(m.leftIx, row.LeftNo, row.Left))
+			emit(row.Right, 0, row.RightNo, st.added, st.addedEmph, row.RightSpans, sideCaps(m.rightIx, row.RightNo, row.Right))
 		case RowRemoved:
-			emit(row.Left, row.LeftNo, 0, st.removed, row.LeftSpans, sideCaps(m.leftIx, row.LeftNo, row.Left))
+			emit(row.Left, row.LeftNo, 0, st.removed, st.removedEmph, row.LeftSpans, sideCaps(m.leftIx, row.LeftNo, row.Left))
 		case RowAdded:
-			emit(row.Right, 0, row.RightNo, st.added, row.RightSpans, sideCaps(m.rightIx, row.RightNo, row.Right))
+			emit(row.Right, 0, row.RightNo, st.added, st.addedEmph, row.RightSpans, sideCaps(m.rightIx, row.RightNo, row.Right))
 		}
 	}
 }
@@ -892,7 +971,9 @@ func (m Model) gutterCell(no, width int, present bool, st styles) string {
 
 // renderSegment paints one row's visible window — display columns [hoff,
 // hoff+width) of the tab-expanded line, padded to width cells: base-styled
-// text with span ranges emphasized and syntax captures as foreground (#1699).
+// text with span ranges painted in emphSt — the side's stronger emphasis
+// background, in bold (#2170) — and syntax captures as
+// foreground (#1699).
 // Syntax colours the runes, the diff state colours the background, and both
 // survive inside an emphasized range. Spans and captures are indexed in
 // absolute display columns, so intra-line emphasis stays on the right runes at
@@ -900,7 +981,7 @@ func (m Model) gutterCell(no, width int, present bool, st styles) string {
 // (blank, unstyled) rather than an empty styled line. [selA, selB) is the
 // mouse selection's covered column interval (#2070); selected cells take selSt
 // whole — the selection outranks emphasis and syntax while it lives.
-func renderSegment(runes []rune, gap bool, hoff, width int, base, span lipgloss.Style, spans []Span, caps []string, hl *highlight.Theme, selA, selB int, selSt lipgloss.Style) string {
+func renderSegment(runes []rune, gap bool, hoff, width int, base, emphSt lipgloss.Style, spans []Span, caps []string, hl *highlight.Theme, selA, selB int, selSt lipgloss.Style) string {
 	if gap {
 		return strings.Repeat(" ", width)
 	}
@@ -919,7 +1000,7 @@ func renderSegment(runes []rune, gap bool, hoff, width int, base, span lipgloss.
 		}
 		st := base
 		if emph {
-			st = span
+			st = emphSt
 		}
 		if cname != "" && hl != nil {
 			if cs, ok := hl.Style(cname); ok {
