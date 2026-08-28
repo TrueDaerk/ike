@@ -530,10 +530,11 @@ func (s *Session) notify() {
 
 // resizeQuiet debounces rapid resize sequences (#804): a divider drag emits
 // one resize per motion flush, and every applied resize costs a PTY SIGWINCH
-// (the child — vim, htop — redraws) plus an emulator reflow. The first resize
-// applies immediately (leading edge, so a lone layout change is instant);
-// further ones inside the window fold into one trailing apply of the final
-// size. Meanwhile the pane clips/pads the stale-size grid.
+// (the child — vim, htop — redraws) plus an emulator reflow. A height-only
+// resize applies immediately when quiet (leading edge, so a lone layout
+// change is instant); width changes and mid-burst calls fold into one
+// trailing apply of the final size, run from the timer goroutine. Meanwhile
+// the pane clips/pads the stale-size grid.
 const resizeQuiet = 100 * time.Millisecond
 
 // Resize propagates a pane size change to the PTY (SIGWINCH for the child)
@@ -541,6 +542,16 @@ const resizeQuiet = 100 * time.Millisecond
 // A finished session still resizes (#1951): its output stays on screen behind
 // the exit dialog, and dragging the pane divider must reflow it like a live
 // one — only the (closed) PTY is left out.
+//
+// Width changes never apply on the caller (#2184): a width apply reflows the
+// whole history — O(scrollback × width) uv.Line copies plus a full replay
+// under s.mu and gridMu (#935) — and Resize runs on the update loop, so a
+// divider drag across several terminals holding full scrollbacks used to pay
+// that inline on every leading edge, with the feed loops queued on gridMu
+// behind it: the "resize freezes the app" shape from the #2163 audit. They
+// always park in pendW/H and apply from the trailing timer goroutine.
+// Height-only changes keep the leading edge — their apply is screen-sized
+// reserve bookkeeping, cheap enough for the caller.
 func (s *Session) Resize(w, h int) {
 	if w < 2 || h < 2 {
 		return
@@ -555,8 +566,8 @@ func (s *Session) Resize(w, h int) {
 		s.mu.Unlock()
 		return
 	}
-	if time.Since(s.lastResize) >= resizeQuiet {
-		s.applyResizeLocked(w, h)
+	if w == s.w && time.Since(s.lastResize) >= resizeQuiet {
+		s.applyResizeLocked(w, h) // height-only leading edge: cheap
 		s.mu.Unlock()
 		return
 	}
