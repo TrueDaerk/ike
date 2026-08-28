@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-28 (Bookmarks: descriptions and a project-wide overview, #2251)
+
+- **The overview** (`internal/app/bookmarks_overview.go`, `bookmark.overview`):
+  a floating list of every project bookmark, grouped by file, each row showing
+  the bookmarked line's text and — where there is one — its description. The
+  palette picker mixes bookmarks with the vim marks and ranks fuzzily; the
+  overview is the bookmark set as a set, in stable (path, line) order.
+- **Three row actions**: `enter` jumps through the standard open funnel (so the
+  navigation history records), `ctrl+e` edits the description, `delete` /
+  `ctrl+d` removes the bookmark and the list stays open until the last one
+  goes.
+- **Edit reuses the annotate prompt** (`startBookmarkNotePrompt`): the note
+  prompt now targets an arbitrary bookmark rather than only the cursor line,
+  and its new `back` flag reopens the overview on save *and* on cancel — the
+  edit never drops the user out of the list they came from.
+- **Descriptions while placing**: `bookmark.annotate` on an unbookmarked line
+  already placed the bookmark together with its note; that is now the
+  documented "describe while placing" path, and the menu entry sits beside the
+  new overview.
+- **Speed search** (#2111): printable keys narrow the list against path, line,
+  mnemonic, preview and description together; `esc` clears the query before it
+  closes. Line texts are read once and cached per overview, so narrowing never
+  re-reads a file.
+
 ## 2026-08-28 (Theme picker: live preview while scrolling, rollback on esc, #2181)
 
 - **Preview on the highlight, not on the choice**

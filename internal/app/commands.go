@@ -470,6 +470,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("bookmark.toggleMnemonic", "Toggle Bookmark with Mnemonic", BookmarkMnemonicMsg{}),
 			appCommand("bookmark.jumpMnemonic", "Go to Bookmark by Mnemonic", BookmarkMnemonicMsg{Jump: true}),
 			appCommand("bookmark.annotate", "Edit Bookmark Note", BookmarkNoteMsg{}),
+			appCommand("bookmark.overview", "Bookmarks Overview", BookmarkOverviewMsg{}),
 			appCommand("bookmark.next", "Next Bookmark", BookmarkStepMsg{Delta: 1}),
 			appCommand("bookmark.previous", "Previous Bookmark", BookmarkStepMsg{Delta: -1}),
 			appCommand("nav.pinSlot1", "Pin File to Slot 1", PinSlotMsg{Slot: 1}),
