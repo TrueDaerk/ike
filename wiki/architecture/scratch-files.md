@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Scratch Files
-description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette or generated as synthetic test data in nine formats, listed as the explorer's Scratches section with the explorer's own open/rename/delete semantics, surviving restarts as ordinary files.
+description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette or generated as synthetic test data in nine formats, managed from a floating manager and the explorer's Scratches section (open, rename, delete, change language), surviving restarts as ordinary files.
 resource: internal/scratch
 tags: [architecture, scratch, palette, languages, explorer, testdata]
-timestamp: 2026-08-27T12:00:00Z
+timestamp: 2026-08-28T12:00:00Z
 ---
 
 # Scratch Files
@@ -31,6 +31,7 @@ func Entries() ([]Entry, error)   // the same order, with each file's mod time
 func FirstLine(path string) string // first non-empty line, capped read, "" if empty/blank/unreadable
 func Delete(path string) error    // remove one scratch; refuses anything outside the dir
 func Rename(path, name string) (string, error) // rename inside the dir; both ends guarded
+func SetExt(path, ext string) (string, error)  // keep the stem, swap the extension (the language change)
 ```
 
 `Dir` mirrors `config.Discover`'s user-layer override, so a sandboxed IKE
@@ -64,8 +65,15 @@ a directory, a traversal through `..`, a pathy name or anything outside is
 refused with an error rather than acted on, and a rename never overwrites an
 existing target. The explorer section below can therefore pass whatever it has
 selected without the app re-deriving the guard rail. `Entries` is `List` with
-the mod times kept, so the section's rows need no second stat pass and nothing
-outside this package reads the scratch directory.
+the mod times **and byte sizes** kept, so neither the section's rows nor the
+manager's metadata columns need a second stat pass and nothing outside this
+package reads the scratch directory.
+
+`SetExt` (#2256) is the language change expressed in the only terms the store
+knows: everything language-aware flows from the extension, so re-languaging a
+scratch *is* renaming `scratch-1.txt` to `scratch-1.py`. It keeps the stem
+(a name that is all extension, `.env`, counts as the stem) and runs `Rename`,
+inheriting its guards — an existing target is refused, never overwritten.
 
 ## Creating (#351, #1223)
 
@@ -257,6 +265,54 @@ in the `@` finder below the project matches — no mode switch needed for the
 common case of typing "scratch" to find a scratch file. See [Command
 Palette](/architecture/command-palette.md) for the file-mode ranking this
 slots into.
+
+## The manager (#2256)
+
+`scratch.manage` ("Manage Scratch Files…", palette + File menu) opens the
+**scratch manager** — the surface that manages the store from anywhere, since
+the explorer's Scratches section needs the explorer pane and `scratch.list` is
+a deliberate pure finder. It is a floating shell dialog
+(`internal/app/scratch_manager.go`) in the shape of the [test-data
+wizard](#commands-and-the-wizard): steps walked by enter/esc, type-ahead
+narrowing through `ui.SpeedSearch`, clickable rows and buttons, wheel-scrolled
+lists.
+
+The list is the store newest-first with the metadata a decision needs — **name,
+language, size, last-modified** — and the type-ahead matches name *and*
+language, so `py` finds the Python scratches. `enter` opens the selection
+through the standard funnel (`openPath`), which is also what a second click on
+a row does.
+
+The actions are chords, not letters, because a letter belongs to the
+type-ahead:
+
+| key | action |
+| --- | --- |
+| `enter` | open the scratch (closes the manager) |
+| `ctrl+r` / `f2` | rename — the prompt is prefilled with the current name |
+| `ctrl+l` | change language — a filterable list of the registered languages |
+| `ctrl+d` / `delete` | delete, after a confirmation |
+| `esc` | clear the query, walk a step back, then close |
+
+Every mutation runs through the store, so the dialog owns no validation of its
+own: a rename collision, a pathy name and a `..` traversal come back as the
+store's error and keep the prompt open with it on the error line. A delete
+always confirms first — scratches have no trash.
+
+**Open buffers follow.** Nothing here touches an editor: a rename (and a
+language change, which is a rename of the extension) emits
+`explorer.FileMovedMsg` and a delete `explorer.FileDeletedMsg` — the very
+messages the explorer's file ops announce — so a scratch open in a tab
+re-points through the one existing path (#175, `followMovedFile`), its tab
+title follows the new name and `editor.SetPath` resets the language state, and
+a deleted scratch's tab closes. After each mutation the list reloads and the
+cursor stays on the file that was acted on, and the explorer's Scratches
+section is refreshed.
+
+**Reachable from the creation flow**: the `scratch.new` language picker carries
+an "Open existing scratch…" row (sorted last, so it never displaces a
+language) that runs `scratch.manage` — "new scratch" is where one notices the
+wanted scratch already exists.
 
 ## The explorer's Scratches section (#1963)
 

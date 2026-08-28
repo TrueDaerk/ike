@@ -49,6 +49,30 @@ different project.
 **Open Scratch File…** lists them, newest first, with fuzzy filtering. Open
 scratch tabs also come back with your session like any other file.
 
+### Managing them
+
+**Manage Scratch Files…** opens the scratch manager: every scratch with its
+name, language, size and when it last changed. Type to narrow the list by name
+or language, ++enter++ opens the selected one (a click selects a row, a second
+click opens it), and three chords manage it in place:
+
+- ++ctrl+r++ (or ++f2++) **renames** it. The name is prefilled; a name that is
+  already taken, or one that tries to point somewhere else, is refused with the
+  reason instead of being applied.
+- ++ctrl+l++ **changes the language** — pick from the same list the creation
+  prompt shows. The scratch keeps its name and swaps its extension, which is
+  what re-languages it.
+- ++ctrl+d++ (or ++delete++) **deletes** it, after a confirmation. Scratches
+  have no trash, so the confirmation is the only undo.
+
+If the scratch is open in a tab while you rename it or change its language, the
+tab follows: the same buffer, the new name in the tab title, the new
+highlighting. Deleting one closes its tab.
+
+The manager is also reachable from the creation prompt — the language picker's
+last row, **Open existing scratch…**, for the moment you notice the scratch you
+wanted already exists.
+
 The explorer shows them too: a **Scratches** section sits behind a divider at
 the bottom of the file tree, sorted by name (switch to newest-first with the
 `scratch.sort` setting). The cursor walks into it with the explorer's normal
