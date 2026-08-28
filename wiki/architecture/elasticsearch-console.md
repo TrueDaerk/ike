@@ -4,7 +4,7 @@ title: Elasticsearch Console
 description: "#1927 — a read-only console per configured cluster: index sidebar with doc counts, paged hit grid over from/size, per-index Query-DSL buffers as real files with mapping-aware completion; every cluster request asynchronous"
 resource: internal/espane
 tags: [architecture, elasticsearch, pane, read-only, grid, completion, async]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-08-28T12:00:00Z
 ---
 
 # Elasticsearch Console (#1927)
@@ -78,6 +78,28 @@ across page edges, `g`/`G` first/last): every search forces
 separate count request ever runs. Page size is 100 — every page is a network
 fetch of full documents. A query error (the cluster's own root-cause reason)
 renders in the grid while the last good page's rows are kept.
+
+### Mouse (#2259)
+
+The pane exposes `Wheel`, `WheelX` and `Click`, which `internal/app`'s wheel
+and click dispatch routes to for `pane.KindES` — the data viewer's gestures,
+on the same pane-content-local coordinates (y 0 the header line, the body
+rows 1 … `bodyHeight`, the sidebar owning `x < sidebarWidth`, the grid's own
+first body row its column header). Until #2259 the console was the one viewer
+the mouse could not touch at all.
+
+- **Wheel** scrolls whichever region has the focus, dragging that region's
+  cursor along only when it would leave the window, clamped so the last page
+  never scrolls off (`ui.WheelWindow`). A tick on a grid already parked at the
+  loaded page's edge **returns the fetch command** for the neighbour page —
+  the one difference from the data viewer, whose pages are local and
+  synchronous.
+- **Horizontal wheel and shift+wheel** pan the grid's columns (`colOff`).
+- **Click** gives the clicked half the region focus; in the sidebar one click
+  selects the index and a second within `ui.DoubleClickWindow` loads it (like
+  `enter`, but staying in the sidebar the pointer is on), in the grid a click
+  moves the row cursor. The column-header row only moves the focus, and a
+  click on the header line or below the body is inert (`ui.RowAt`).
 
 ## Query buffers
 

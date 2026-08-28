@@ -517,10 +517,40 @@ func (m Model) popupLayerMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 // again) and the move drag (#1793); body presses anchor selections or hit the
 // scrollbar/links and the wheel pages the scrollback, exactly like a popup
 // box side.
+// floatPanelTabAt resolves a title-row hit on a floating panel's tab bar: the
+// tab index and whether the press landed on its ✕ zone. Shared by the
+// left-click (activate / close) and middle-click (close, #2259) paths. lx is
+// content-local, so the global-toggle marker's width is subtracted here.
+func (m Model) floatPanelTabAt(f *floatTerm, lx int) (idx int, closeHit, ok bool) {
+	if f.inst.TabCount() <= 1 && !m.tabsAlwaysShow() {
+		return 0, false, false
+	}
+	i, cl := tabHit(tabLabels(f.inst), f.inst.ActiveTab(), f.w-paneChromeW-floatMarkerW, lx-floatMarkerW)
+	if i < 0 {
+		return 0, false, false
+	}
+	return i, cl, true
+}
+
 func (m Model) floatTermMouse(f *floatTerm, msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 	term := f.inst.ActiveTerminal()
 	lx, ly := msg.X-(f.x+paneContentX), msg.Y-(f.y+paneContentY)
 	switch {
+	case msg.action == mousePress && msg.Button == tea.MouseMiddle && msg.Y == f.y+1:
+		// Middle click closes the tab under the pointer (#2259) — the editor
+		// tab bar's gesture, on a floating panel's bar too. The active tab
+		// goes through the busy guard, like its ✕ does; the press focuses and
+		// raises the panel first, exactly as a left press does, so the guard
+		// acts on the tab that was clicked.
+		m.setFloatFocus(f)
+		if idx, _, ok := m.floatPanelTabAt(f, lx); ok {
+			if idx == f.inst.ActiveTab() {
+				m.requestPopupTabClose()
+			} else {
+				m.closePopupTab(f.inst, idx)
+			}
+		}
+		return m, nil, true
 	case msg.action == mousePress && msg.Button == tea.MouseLeft:
 		m.setFloatFocus(f)
 		if zx, zy, ok := ui.ResizeZone(msg.X-f.x, msg.Y-f.y, f.w, f.h); ok {
@@ -533,23 +563,20 @@ func (m Model) floatTermMouse(f *floatTerm, msg mouseEvent) (tea.Model, tea.Cmd,
 				m.toggleFloatTermGlobal(f)
 				return m, nil, true
 			}
-			if f.inst.TabCount() > 1 || m.tabsAlwaysShow() {
-				labels := tabLabels(f.inst)
-				if idx, closeHit := tabHit(labels, f.inst.ActiveTab(), f.w-paneChromeW-floatMarkerW, lx-floatMarkerW); idx >= 0 {
-					switch {
-					case !closeHit:
-						f.inst.ActivateTab(idx)
-						// The press arms a tear-again drag (#1793): engaged,
-						// the tab moves to another box or its own panel.
-						m.drag = &dragState{kind: dragTab, srcPane: popupPaneKey, srcInst: f.inst, srcTab: idx,
-							curX: msg.X, curY: msg.Y, startX: msg.X, startY: msg.Y}
-					case idx == f.inst.ActiveTab():
-						m.requestPopupTabClose()
-					default:
-						m.closePopupTab(f.inst, idx)
-					}
-					return m, nil, true
+			if idx, closeHit, ok := m.floatPanelTabAt(f, lx); ok {
+				switch {
+				case !closeHit:
+					f.inst.ActivateTab(idx)
+					// The press arms a tear-again drag (#1793): engaged,
+					// the tab moves to another box or its own panel.
+					m.drag = &dragState{kind: dragTab, srcPane: popupPaneKey, srcInst: f.inst, srcTab: idx,
+						curX: msg.X, curY: msg.Y, startX: msg.X, startY: msg.Y}
+				case idx == f.inst.ActiveTab():
+					m.requestPopupTabClose()
+				default:
+					m.closePopupTab(f.inst, idx)
 				}
+				return m, nil, true
 			}
 			// The title row outside any tab segment starts the move drag.
 			m.floatMove = &floatMoveDrag{target: f, lastX: msg.X, lastY: msg.Y}

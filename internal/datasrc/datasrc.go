@@ -64,11 +64,18 @@ type Source interface {
 	// Page returns up to limit rows of the named table starting at offset,
 	// in a stable order so consecutive pages never overlap or skip rows.
 	Page(table string, offset, limit int64) (Page, error)
-	// PageWhere is Page over the user's filter clause (#1777): everything
-	// the pane's filter line holds after `SELECT * FROM <table>` — a WHERE,
-	// an ORDER BY, a LIMIT, or any combination. An empty clause behaves
-	// exactly like Page. The clause runs inside a subquery, so offset and
-	// limit still page the *filtered* result, and Page.Total counts it.
+	// PageWhere is Page over the user's filter clause (#1777) and the grid's
+	// column sort (#2248). The clause is everything the pane's filter line
+	// holds after `SELECT * FROM <table>` — a WHERE, an ORDER BY, a LIMIT,
+	// or any combination. An empty clause and an inactive sort together
+	// behave exactly like Page. The clause runs inside a subquery, so offset
+	// and limit still page the *filtered* result, and Page.Total counts it.
+	//
+	// The sort is applied *outside* that subquery, which is what lets it
+	// compose with a clause that already ends in an ORDER BY or a LIMIT, and
+	// what makes paging walk the sorted result rather than sorting one page
+	// at a time. The column names a result column, not free text, and is
+	// quoted as an identifier all the same.
 	//
 	// The clause is user text, so implementations must keep the read-only
 	// contract against it: a clause carrying a statement separator is
@@ -76,7 +83,7 @@ type Source interface {
 	// engine itself stays opened read-only. A clause the engine rejects
 	// comes back as its own error — the pane shows it and keeps the last
 	// good page.
-	PageWhere(table, clause string, offset, limit int64) (Page, error)
+	PageWhere(table, clause string, sort Sort, offset, limit int64) (Page, error)
 	// FilterPrefix is the fixed query head the filter line shows before the
 	// editable clause, with the table named the way this engine quotes it
 	// (`SELECT * FROM "users" `). It is display text: the pane never builds

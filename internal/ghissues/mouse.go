@@ -2,18 +2,15 @@ package ghissues
 
 // mouse.go: wheel scroll plus click-select / double-click-open, mirroring the
 // Usages panel (#514) — activating a row needs a second click on the same row
-// within doubleClickWindow — extended in #2090 with the tab bar as a click
+// within ui.DoubleClickWindow — extended in #2090 with the tab bar as a click
 // target and with hit-testing that accounts for the filter row and the
 // detail view's position header.
 
 import (
-	"time"
-
 	tea "charm.land/bubbletea/v2"
-)
 
-// doubleClickWindow bounds the second click of a double-click.
-const doubleClickWindow = 400 * time.Millisecond
+	"ike/internal/ui"
+)
 
 // Wheel scrolls the active view (or the open modal / detail) by delta rows.
 // It returns the timeline page a scroll to the end of the issue detail pulls
@@ -70,17 +67,19 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		return nil
 	}
 	rows := m.rowsOf(m.tab)
-	row := m.Top() + y - m.bodyTop()
-	if y < m.bodyTop() || row < 0 || row >= len(rows) || rows[row].idx < 0 {
+	// The shared row hit-test (#2259) rejects the chrome above the body and
+	// the blank tail below the last row; a group header is not activatable.
+	row, ok := ui.RowAt(y, m.Top(), m.bodyTop(), m.bodyHeight(), len(rows))
+	if !ok || rows[row].idx < 0 {
+		m.clicks.Reset()
 		return nil
 	}
 	m.setCursor(row)
 	m.clampScroll()
-	if row == m.lastClickRow && m.clock().Sub(m.lastClickAt) <= doubleClickWindow {
-		m.lastClickRow, m.lastClickAt = -1, time.Time{}
+	if m.clicks.Double(row, m.clock()) {
+		m.clicks.Reset()
 		return m.activate()
 	}
-	m.lastClickRow, m.lastClickAt = row, m.clock()
 	return nil
 }
 

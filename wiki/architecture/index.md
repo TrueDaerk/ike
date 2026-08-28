@@ -16,6 +16,7 @@ Component-level concepts for the IKE codebase.
 * [Workspace](/architecture/workspace.md) - per-project UI state unit (panes, split tree, focus) behind a Manager; the seamless project-switching seam (Roadmap 0370)
 * [Floating Shell](/architecture/floating-shell.md) - reusable centered overlay component hosting any content (modals, plugin popups, help)
 * [Selection-List Navigation](/architecture/list-navigation.md) - the cursor semantics every selectable list shares: wrapping single steps, clamping page keys sized to the visible list, viewport follow (#1666)
+* [Mouse Gestures](/architecture/mouse.md) - the one wheel/click/double-click convention every surface obeys, the shared list-mouse helpers behind it, and the audited surface×gesture matrix (#2259)
 * [Picker Speed Search](/architecture/speed-search.md) - the shared type-ahead every modal picker narrows with: printable keys filter live, space stays the toggle, backspace peels the query, esc clears before it closes (#2111)
 * [Single-Line Text Input](/architecture/text-input.md) - the editing semantics every one-line text field shares: ui.EditKey/PasteText/CursorView, paste routing per surface, the audit of every input site and the guard test against hand-rolled inputs (#2002)
 * [Pane Layout & Drag](/architecture/pane-layout.md) - pure split-tree layout, mouse pane-edge resize & title-bar move, split/close ops, per-project persistence (Roadmap 0036/0037)

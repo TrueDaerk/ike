@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"ike/internal/ui"
 	"ike/internal/vcs"
 )
 
@@ -33,7 +34,7 @@ func TestSlowSecondClickOnlySelects(t *testing.T) {
 		t.Fatal("first click must only select")
 	}
 	// Second click outside the window: still just a selection.
-	clock = clock.Add(doubleClickWindow + time.Millisecond)
+	clock = clock.Add(ui.DoubleClickWindow + time.Millisecond)
 	if cmd := m.Click(10, 1); cmd != nil {
 		t.Fatal("slow second click must not open the diff")
 	}

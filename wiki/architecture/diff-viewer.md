@@ -4,7 +4,7 @@ title: Diff Viewer
 description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, side-by-side or unified rendering with theme diff slots and per-side tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070), diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-08-28T12:00:00Z
 ---
 
 # Diff Viewer (#60)
@@ -162,7 +162,9 @@ ordinary markers, the editor's inline conflict machinery (#1149) provides
 per-conflict resolution and navigation unchanged (the `merge.*` commands — the
 pane advertises the editor context, and `editor.ActionMsg` routes into the
 result editor when a merge pane has focus). The side columns follow the result
-editor's scroll offset.
+editor's scroll offset — which is why `merge.Wheel` (#2259) simply moves that
+editor's viewport: one notch scrolls all three columns in lockstep, and the
+view is no longer the one viewer the wheel skipped.
 
 ### Resolving (#2258)
 

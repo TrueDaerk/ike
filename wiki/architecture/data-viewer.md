@@ -1,13 +1,13 @@
 ---
 type: concept
 title: Data Viewer
-description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825/#1851/#1885/#1940 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table> (the head prefills through WHERE, so only the condition is typed), run inside a subquery so paging keeps working; 'P' profiles the focused column (nulls, distinct, min/max, top values, plus mean or length range) through SQL aggregates or a bounded scan, asynchronously and cancelably."
+description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825/#1851/#1885/#1940/#2248 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table> (the head prefills through WHERE, so only the condition is typed), run inside a subquery so paging keeps working, and 'S' cycles the focused column through ascending/descending/none as an ORDER BY outside that subquery; 'E' exports the filtered, sorted result as CSV or JSON — streamed through the Source interface, bounded by a row cap that announces itself; 'P' profiles the focused column (nulls, distinct, min/max, top values, plus mean or length range) through SQL aggregates or a bounded scan, asynchronously and cancelably."
 resource: internal/dataview
-tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sql, mouse, paging, async, performance, profile, statistics]
-timestamp: 2026-08-18T16:00:00Z
+tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sort, export, csv, json, sql, mouse, paging, async, performance, profile, statistics]
+timestamp: 2026-08-28T12:00:00Z
 ---
 
-# Data Viewer (#1764, #1765, #1766, #1777, #1788, #1795, #1940)
+# Data Viewer (#1764, #1765, #1766, #1777, #1788, #1795, #1940, #2248)
 
 Opening a SQLite database, a DuckDB database or a Parquet file lands in a pane
 of kind `KindData`: a sidebar listing the tables and views (with row counts),
@@ -19,9 +19,11 @@ Three packages carry it, and only one of them knows SQL:
 
 - `internal/datasrc` — the backend contract plus the engines. The `Source`
   interface is the whole surface the pane sees: `Tables()`,
-  `Page(table, offset, limit)`, `PageWhere(table, clause, offset, limit)`,
+  `Page(table, offset, limit)`,
+  `PageWhere(table, clause, sort, offset, limit)` (#2248),
   `Count(table, clause)`, `Profile(ctx, table, column, clause)` (#1940),
-  `FilterPrefix(table)`, `Schema(table)`, `Close()`.
+  `FilterPrefix(table)`, `Schema(table)`, `Close()`. The export (#2248) adds
+  no method at all: it pages `PageWhere` like the grid does.
   Nothing but `Count` and the explicitly-invoked `Profile` ever scans rows,
   and nothing but the pane's background commands ever calls either (#1795,
   below). The pane holds
@@ -94,10 +96,10 @@ accepted over a cgo driver):
 - **Read-only**: the DSN is `file:<path>?mode=ro` on a single connection.
   A concurrent writer is never blocked and never sees a lock from IKE
   (`TestReadOnlyNeverBlocksWriters` proves both directions).
-- **Read connections**: three, one per concurrent job the pane runs — page
-  fetches, the background row count (#1795) and the column profile (#1940).
-  With a single connection a `COUNT(*)` over a huge table would queue every
-  page fetch behind it.
+- **Read connections**: four, one per concurrent job the pane runs — page
+  fetches, the background row count (#1795), the column profile (#1940) and
+  the export (#2248). With a single connection a `COUNT(*)` over a huge table
+  would queue every page fetch behind it.
 - **Paging**: `SELECT * FROM "t" ORDER BY rowid LIMIT n OFFSET m` — rowid
   gives `LIMIT/OFFSET` a stable order on ordinary tables; views and
   `WITHOUT ROWID` tables fall back to the bare scan. One page is `PageSize`
@@ -137,7 +139,7 @@ Switching tables drops it — a clause naming another table's columns could only
 fail.
 
 One shape serves every engine: the clause goes into a **subquery** and the
-pane's own window sits outside it.
+pane's own window — and its column sort (#2248) — sit outside it.
 
 ```sql
 SELECT * FROM (SELECT * FROM "users" WHERE status = 'active' ORDER BY id
@@ -171,6 +173,90 @@ closing parenthesis. This is a second line, not the first: SQLite is opened
 the viewer's own connection is refused and the table survives a rejected
 clause. A clause the engine rejects comes back as **the engine's own message**,
 shown under the still-open filter line while the grid keeps the last good page.
+
+## The column sort (#2248)
+
+`S` in the grid — or `data.sortColumn` from the palette — cycles the **focused
+column** (the leftmost visible one, the same column `P` profiles) through
+**ascending → descending → unsorted**. The header row marks it with `▲`/`▼`
+and the pane header states it (`sort: name ▼`), because the sorted column may
+be scrolled out of sight.
+
+The sort is a `datasrc.Sort{Column, Desc}` the pane hands to `PageWhere`; the
+pane composes no SQL for it either. Every engine renders the same `ORDER BY`
+and puts it in the **same place — outside the filter's subquery**:
+
+```sql
+SELECT * FROM (SELECT * FROM "users" WHERE status = 'active'
+) AS ike_rows ORDER BY "name" DESC LIMIT 500 OFFSET 1000
+```
+
+Outside is the only correct place. The user's clause may already end in an
+`ORDER BY`, a `LIMIT` or a `--` comment, so appending to it would either be a
+syntax error or would silently reorder a result the user bounded. Sorting the
+subquery's *output* composes with whatever was typed, and because the pane's
+`LIMIT/OFFSET` window sits after the `ORDER BY`, **paging walks the sorted
+result** instead of sorting each page on its own. The column name is a result
+column the engine itself reported, and it is quoted as an identifier all the
+same.
+
+Three consequences fall out of that shape:
+
+- **A new order restarts the walk.** Offset 500 is a different set of rows
+  under a different order, so the cycle jumps back to the first page rather
+  than leaving the cursor on a row that has moved.
+- **The count is untouched.** Ordering changes no row count, so the count
+  cache still keys on `(table, filter)` (#1795) and sorting a counted table
+  issues no new `COUNT(*)`.
+- **Switching tables drops it**, like the filter: a column of the old table
+  cannot order the new one.
+
+Parquet is the one asymmetry: parquet-go is a reader and can no more order
+than it can filter, so a sorted parquet grid takes the same **duckdb CLI**
+path the filter does (`read_parquet('<file>')`), and without the binary the
+sort reports the `MissingToolError` while the plain grid keeps paging through
+the pure-Go reader.
+
+## Export (#2248)
+
+`E` — or `data.export` from the palette — writes **what the grid currently
+shows**, filter and sort included, to a CSV or JSON file. The line is the
+filter line's twin: one editable field that owns the keyboard, `enter`
+applies, `esc` drops it, errors stay inline under the field. What it holds is
+a **path**, prefilled as `<database dir>/<table>.csv`, and the **extension
+picks the format** (`.csv` or `.json`) — exporting is one question, not two.
+Anything else is refused by name (`cannot export to .xlsx: use .csv or
+.json`), as is a directory that does not exist, and an **existing file is
+reported once**: only a second `enter` overwrites it.
+
+The writer (`datasrc.Export`) is written against the **Source interface
+only** — it pages `PageWhere` exactly like the grid does — so all three
+engines export through the same code and no new SQL exists anywhere. Two
+properties follow:
+
+- **It streams.** Rows are fetched one batch (2000) at a time and written
+  straight out, so a ten-million-row table costs one batch of memory.
+- **It is bounded and says so.** At most `ExportLimit` (1 000 000) rows are
+  written; if more matched, `Capped` travels back and the confirmation toast
+  becomes a warning (`… — capped, more rows matched`). A result that fills
+  the cap exactly is *not* reported as capped: one extra probe row decides,
+  so nothing is called truncated that was not.
+
+Like the row count and the profile it is a `tea.Cmd`: the line says
+`exporting…` while the grid keeps rendering, `esc` cancels the job through its
+context, and a result landing after its line closed is dropped by sequence
+number. A cancelled or failed export leaves the partial file where it is —
+a file the user can see is a file the user can delete.
+
+Escaping is each format's own, and the one ambiguity is `NULL`:
+
+| | CSV | JSON |
+|---|---|---|
+| Writer | `encoding/csv` (RFC 4180): a value with a comma, a quote or a newline is quoted and its quotes doubled | hand-streamed array of objects, keys in result order |
+| `NULL` | the empty field — CSV has no null, and every spreadsheet and `COPY … TO` writes it that way | `null`, which is lossless |
+| Empty string | the empty field (indistinguishable from `NULL`, by the format's nature) | `""` |
+| Values | as the grid rendered them | **always strings**, even numeric ones: the Source hands over display text, and guessing a type back would turn an order number into a float that no longer round-trips |
+| `<` `&` | plain | plain — the encoder's HTML escaping is off, so a file reads like the grid did |
 
 ## The DuckDB backend (#1765)
 
@@ -254,7 +340,8 @@ made viewing a Parquet file depend on a tool the user may not have installed.
   `Page` both recover — a corrupt file becomes the pane's notice, never a
   crash.
 - **Paging**: `Reader.SeekToRow(offset)` then `ReadRows` for one `PageSize`
-  window. Only the column pages that window touches are decoded; the file is
+  window — and so is an unfiltered, unsorted **export** (#2248), which needs
+  no external tool. Only the column pages that window touches are decoded; the file is
   never read whole, and nothing like `ReadAll` appears in the backend. Row
   groups are crossed transparently by the reader.
 - **The schema view** is the format's headline metadata, so `s` shows more
@@ -304,10 +391,11 @@ Two regions, `tab` between them; `h` at the grid's left edge also falls back
 to the sidebar. In the sidebar the shared list navigation (#1666) moves,
 `enter`/`l` loads the selection. In the grid `j`/`k` step rows — crossing a
 page edge fetches the neighbour page — `h`/`l` scroll columns, `g`/`G` jump to
-the first/last page, `/` opens the SQL filter (above) and `P` the column
-profile (below). The filter line owns the keyboard while it is open: the
-grid's single-letter keys are plain text inside a clause, and the profile
-popup owns it the same way. Column widths derive from the loaded page, clamped with an
+the first/last page, `/` opens the SQL filter (above), `S` cycles the focused
+column's sort and `E` opens the export line (both above), and `P` opens the
+column profile (below). The filter line owns the keyboard while it is open: the
+grid's single-letter keys are plain text inside a clause, and the export line
+and the profile popup own it the same way. Column widths derive from the loaded page, clamped with an
 ellipsis like the csv grid.
 
 `tab` reaches the pane because a focused data viewer is an exception to the
@@ -351,6 +439,11 @@ rows 1 … `bodyHeight`, the sidebar owning `x < sidebarWidth`).
 - While the **filter line** is open it keeps the input (#1777): clicks are
   inert until `enter` or `esc` closes it, since loading another table would
   drop the half-typed clause.
+
+Since #2259 the arithmetic behind all three lives in `internal/ui/listmouse.go`
+(`WheelWindow`, `RowAt`, `ClickTracker`) — this pane's clamp-at-the-last-page
+wheel became the rule for every list-shaped surface; see
+/architecture/mouse.md.
 
 `s` shows the selected object's schema — the `CREATE` statement for SQLite and
 DuckDB, the schema view for Parquet — in a read-only editor tab under the

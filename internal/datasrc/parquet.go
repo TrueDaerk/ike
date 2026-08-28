@@ -250,19 +250,20 @@ func (s *parquetSource) renderRow(row parquet.Row, leaves int) []Cell {
 	return cells
 }
 
-// PageWhere pages the file filtered by the user's clause (#1777). parquet-go
-// is a reader, not a query engine, so the clause is run by the **duckdb CLI**
-// over `read_parquet('<file>')` — the one place the Parquet backend takes the
-// soft dependency the plain grid deliberately avoids. Without the binary the
-// filter reports a MissingToolError (the pane shows it in the filter line) and
-// the unfiltered grid keeps working through the pure-Go reader.
+// PageWhere pages the file filtered by the user's clause (#1777) and ordered
+// by the grid's column sort (#2248). parquet-go is a reader, not a query
+// engine — it can neither filter nor order — so both run through the **duckdb
+// CLI** over `read_parquet('<file>')`, the one place the Parquet backend takes
+// the soft dependency the plain grid deliberately avoids. Without the binary
+// filtering and sorting report a MissingToolError (the pane shows it inline)
+// while the plain grid keeps working through the pure-Go reader.
 //
 // DuckDB only ever reads the file: `read_parquet` is a scan, the statement is
 // a single SELECT, and a clause carrying a second statement is refused before
 // the CLI sees it.
-func (s *parquetSource) PageWhere(table, clause string, offset, limit int64) (Page, error) {
+func (s *parquetSource) PageWhere(table, clause string, sort Sort, offset, limit int64) (Page, error) {
 	clause = normalizeClause(clause)
-	if clause == "" {
+	if clause == "" && !sort.Active() {
 		return s.Page(table, offset, limit)
 	}
 	if err := checkClause(clause); err != nil {
@@ -277,7 +278,7 @@ func (s *parquetSource) PageWhere(table, clause string, offset, limit int64) (Pa
 	// One invocation, not two: the filtered total is counted in the background
 	// through Count (#1795).
 	page := Page{Offset: offset, Total: -1}
-	out, err := cli.queryMem(filteredQuery(base, clause, offset, limit))
+	out, err := cli.queryMem(filteredQuery(base, clause, sort, offset, limit))
 	if err != nil {
 		return Page{}, err
 	}
@@ -307,9 +308,9 @@ func (s *parquetSource) filterBase() string {
 	return "SELECT * FROM read_parquet(" + quoteString(s.path) + ")"
 }
 
-// parquetFilterTool restates a missing duckdb binary for the filter path: the
-// pane opens Parquet files without any external tool, so the message has to
-// say that only *filtering* needs one.
+// parquetFilterTool restates a missing duckdb binary for the query path: the
+// pane opens and pages Parquet files without any external tool, so the message
+// has to say that only *filtering and sorting* need one.
 func parquetFilterTool(err error) error {
 	var missing *MissingToolError
 	if !errors.As(err, &missing) {
@@ -317,7 +318,7 @@ func parquetFilterTool(err error) error {
 	}
 	return &MissingToolError{
 		Tool:  missing.Tool,
-		Why:   "filtering a parquet table runs the clause through the duckdb command line tool",
+		Why:   "filtering and sorting a parquet table run through the duckdb command line tool",
 		Hints: missing.Hints,
 	}
 }

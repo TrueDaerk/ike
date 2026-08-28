@@ -41,9 +41,6 @@ type Row struct {
 	EndLine int
 }
 
-// doubleClickWindow matches the explorer's and VCS panel's double-click delay.
-const doubleClickWindow = 400 * time.Millisecond
-
 // Model is the tool window state. Value type with pointer-receiver mutators,
 // embedded in a pane.Instance like the VCS panel.
 type Model struct {
@@ -59,14 +56,16 @@ type Model struct {
 	top        int
 	current    int // enclosing symbol of the editor cursor (-1 none)
 
-	lastClickRow int
-	lastClickAt  time.Time
-	now          func() time.Time
+	// Double-click detection: navigating to a symbol needs a second click on
+	// the same row within ui.DoubleClickWindow; now is injectable so tests
+	// control the clock.
+	clicks ui.ClickTracker
+	now    func() time.Time
 }
 
 // New returns an empty panel awaiting its first symbol delivery.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal, current: -1, lastClickRow: -1, now: time.Now}
+	return Model{pal: pal, current: -1, now: time.Now}
 }
 
 // SetSize records the interior content size.
@@ -192,24 +191,28 @@ func (m *Model) navigate(i int) tea.Cmd {
 	return func() tea.Msg { return msg }
 }
 
-// Wheel scrolls the list by delta rows (positive = down), like the VCS panel.
+// headerRows is how many lines sit above the first symbol row.
+const headerRows = 1
+
+// Wheel scrolls the list by delta rows (positive = down), like the VCS panel;
+// the shared list-mouse layer (#2259) keeps the last page full and drags the
+// cursor along.
 func (m *Model) Wheel(delta int) {
-	m.top = clampInt(m.top+delta, 0, maxInt(0, len(m.rows)-1))
-	m.cursor = clampInt(m.cursor, m.top, maxInt(m.top, m.top+m.bodyHeight()-1))
+	ui.WheelWindow(&m.top, &m.cursor, delta, len(m.rows), m.bodyHeight())
 }
 
 // Click handles one left click at content-local (x, y): a row click selects,
 // a second click on the same row within the double-click window navigates.
 func (m *Model) Click(x, y int) tea.Cmd {
-	i := m.top + (y - 1)
-	if y < 1 || i < 0 || i >= len(m.rows) {
+	i, ok := ui.RowAt(y, m.top, headerRows, m.bodyHeight(), len(m.rows))
+	if !ok {
+		m.clicks.Reset()
 		return nil
 	}
-	nowAt := m.now()
-	double := m.lastClickRow == i && nowAt.Sub(m.lastClickAt) <= doubleClickWindow
-	m.lastClickRow, m.lastClickAt = i, nowAt
+	double := m.clicks.Double(i, m.now())
 	m.cursor = i
 	if double {
+		m.clicks.Reset()
 		return m.navigate(i)
 	}
 	return nil
@@ -395,21 +398,4 @@ func baseName(p string) string {
 		return p[i+1:]
 	}
 	return p
-}
-
-func clampInt(v, lo, hi int) int {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

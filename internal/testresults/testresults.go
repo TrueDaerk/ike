@@ -124,14 +124,13 @@ type Model struct {
 
 	// Double-click detection mirrors the Problems panel; now is injectable so
 	// tests control the clock.
-	lastClickRow int
-	lastClickAt  time.Time
-	now          func() time.Time
+	clicks ui.ClickTracker
+	now    func() time.Time
 }
 
 // New returns an empty panel; results arrive via StartRun/FinishRun.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal, lastClickRow: -1, now: time.Now}
+	return Model{pal: pal, now: time.Now}
 }
 
 // SetSize records the interior content size.

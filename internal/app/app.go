@@ -6059,6 +6059,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// data.columnProfile (#1940): the focused grid column's aggregates.
 		return m, m.profileColumn()
 
+	case DataSortColumnMsg:
+		// data.sortColumn (#2248): cycle the focused column's sort.
+		return m, m.dataPaneUpdate(dataview.SortMsg{})
+
+	case DataExportMsg:
+		// data.export (#2248): open the viewer's export line.
+		return m, m.dataPaneUpdate(dataview.ExportMsg{})
+
+	case dataview.ExportedMsg:
+		// An export finished (#2248): the pane's line is closed by now, so
+		// the confirmation is a toast.
+		return m, m.exported(msg)
+
 	case CSVColumnProfileMsg:
 		// csv.columnProfile (#1940): the caret's column in a table-rendered
 		// csv/tsv/psv buffer, scanned in the background.
@@ -9552,12 +9565,24 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			m.floats.Pop()
 			return m, nil
 		}
-		if top == m.shell && m.generateScratchOpen() && msg.action == mouseWheel {
-			// The test-data wizard (#2228) scrolls its list selections with
-			// the wheel; other shell content still ignores wheel events.
-			if out, cmd, handled := m.mouseGenerateScratch(msg, 0, 0); handled {
-				return out, cmd
+		if msg.action == mouseWheel {
+			if top == m.shell && m.generateScratchOpen() {
+				// The test-data wizard (#2228) scrolls its list selections
+				// with the wheel; it outranks the shell's own viewport.
+				if out, cmd, handled := m.mouseGenerateScratch(msg, 0, 0); handled {
+					return out, cmd
+				}
 			}
+			// Every other picker hosted in the shell scrolls its viewport
+			// (#2259) — before it a floating picker was the one scrollable
+			// surface the wheel did not reach.
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				top.Wheel(-wheelLines * msg.ticks())
+			case tea.MouseWheelDown:
+				top.Wheel(wheelLines * msg.ticks())
+			}
+			return m, nil
 		}
 		if msg.action == mousePress && msg.Button == tea.MouseLeft {
 			v := top.View()
@@ -9828,6 +9853,44 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				inst.Archive().Wheel(-lines)
 			case tea.MouseWheelDown:
 				inst.Archive().Wheel(lines)
+			}
+		case pane.KindRemote:
+			// The wheel scrolls the remote browser's entry list (#2259),
+			// exactly like the archive viewer it borrows its tree shape from.
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Remote().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Remote().Wheel(lines)
+			}
+		case pane.KindES:
+			// The wheel scrolls the console's focused region (#2259) — the
+			// index list or the grid's hits; crossing a page edge returns the
+			// fetch command, like the keyboard's page walk. The horizontal
+			// wheel and shift+wheel pan the grid's columns, like the data
+			// viewer.
+			switch {
+			case msg.Button == tea.MouseWheelLeft:
+				inst.ES().WheelX(-lines)
+			case msg.Button == tea.MouseWheelRight:
+				inst.ES().WheelX(lines)
+			case msg.Button == tea.MouseWheelUp && shift:
+				inst.ES().WheelX(-lines)
+			case msg.Button == tea.MouseWheelDown && shift:
+				inst.ES().WheelX(lines)
+			case msg.Button == tea.MouseWheelUp:
+				return m, inst.ES().Wheel(-lines)
+			case msg.Button == tea.MouseWheelDown:
+				return m, inst.ES().Wheel(lines)
+			}
+		case pane.KindMerge:
+			// The wheel scrolls the three-way view (#2259): the side columns
+			// follow the result editor's offset, so one scroll moves them all.
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Merge().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Merge().Wheel(lines)
 			}
 		case pane.KindBreakpoints:
 			// The wheel scrolls the breakpoints list (#1377).
@@ -10954,6 +11017,21 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// it (like enter), a grid click moves the row cursor.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Data().Click(localX, localY)
+		}
+	case pane.KindES:
+		// Elasticsearch-console clicks (#2259): the data viewer's gestures —
+		// the clicked half takes the region focus, a sidebar click selects
+		// the index and a double-click loads it (like enter), a grid click
+		// moves the row cursor.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.ES().Click(localX, localY)
+		}
+	case pane.KindRemote:
+		// Remote-browser clicks (#2259): a row click selects, a press on a
+		// directory's fold glyph expands or collapses it, and a double-click
+		// activates — opening a file read-only, exactly like enter.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Remote().Click(localX, localY)
 		}
 	case pane.KindHTTP:
 		// Response-viewer clicks (#1266): a left press anchors a text

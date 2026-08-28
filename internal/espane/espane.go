@@ -16,6 +16,7 @@ package espane
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -108,6 +109,12 @@ type Model struct {
 	// run-from-editor path may open the pane first); applyOpen consumes it.
 	pending *pendingQuery
 
+	// Double-click detection (#2259) mirrors the data viewer: loading an index
+	// with the mouse needs a second click on it within ui.DoubleClickWindow;
+	// now is injectable so tests control the clock.
+	clicks ui.ClickTracker
+	now    func() time.Time
+
 	w, h    int
 	focused bool
 }
@@ -119,6 +126,7 @@ type Model struct {
 func New(key, endpoint string, pal *theme.Palette) Model {
 	return Model{
 		key: key, endpoint: endpoint, pal: pal, sel: -1,
+		now:      time.Now,
 		queries:  map[string]string{},
 		mappings: map[string]string{},
 	}
@@ -175,6 +183,12 @@ func (m *Model) PageRows() int {
 	}
 	return len(m.res.Rows)
 }
+
+// GridCursor returns the row cursor's index within the loaded page (tests).
+func (m *Model) GridCursor() int { return m.rowCur }
+
+// GridTop returns the grid's first visible row within the loaded page (tests).
+func (m *Model) GridTop() int { return m.rowTop }
 
 // InGrid reports whether the grid half holds the region focus (tests).
 func (m *Model) InGrid() bool { return m.region == regionGrid }

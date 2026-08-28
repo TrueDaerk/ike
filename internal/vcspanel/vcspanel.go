@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/theme"
+	"ike/internal/ui"
 	"ike/internal/vcs"
 )
 
@@ -32,16 +33,15 @@ type Model struct {
 	chTop    int
 
 	// Double-click detection (#514): activating a row (diff) needs a second
-	// click on the same row within doubleClickWindow; now is injectable so
+	// click on the same row within ui.DoubleClickWindow; now is injectable so
 	// tests control the clock.
-	lastClickRow int
-	lastClickAt  time.Time
-	now          func() time.Time
+	clicks ui.ClickTracker
+	now    func() time.Time
 }
 
 // New returns a closed-over-nothing panel.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal, lastClickRow: -1, now: time.Now}
+	return Model{pal: pal, now: time.Now}
 }
 
 // SetSize records the interior content size.

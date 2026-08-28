@@ -317,12 +317,10 @@ func (m Model) scratchClick(x, y int) (Model, tea.Cmd) {
 	// Row identity for the double-click pairing lives past the tree rows so a
 	// tree click and a section click never pair up.
 	rowID := len(m.rows) + i
-	clickAt := m.now()
-	if rowID == m.lastClickRow && clickAt.Sub(m.lastClickAt) <= doubleClickWindow {
+	if m.clicks.Double(rowID, m.now()) {
 		m.resetClick()
 		return m.activate()
 	}
-	m.lastClickRow, m.lastClickAt = rowID, clickAt
 	return m, nil
 }
 

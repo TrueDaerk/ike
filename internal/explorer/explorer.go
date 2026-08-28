@@ -70,11 +70,11 @@ type Model struct {
 	open map[string]bool // paths currently open in any editor pane
 
 	// Double-click detection: a single click only selects a row; activating
-	// (opening a file, toggling a directory) needs a second click on the same row
-	// within doubleClickWindow. now is injectable so tests control the clock.
-	lastClickRow int
-	lastClickAt  time.Time
-	now          func() time.Time
+	// (opening a file, toggling a directory) needs a second click on the same
+	// row within ui.DoubleClickWindow. now is injectable so tests control the
+	// clock.
+	clicks ui.ClickTracker
+	now    func() time.Time
 
 	autoRefresh bool          // poll expanded directories for external changes
 	pollEvery   time.Duration // interval between auto-refresh polls
@@ -225,24 +225,23 @@ func New(dir string) Model {
 		loading:  true,
 	}
 	m := Model{
-		root:         root,
-		hover:        -1,
-		indent:       2,
-		sort:         "name",
-		exclude:      defaultExclude(),
-		excludeCfg:   strings.Join(defaultExclude(), ","),
-		colors:       defaultColors(),
-		lastClickRow: -1,
-		selAnchor:    -1,
-		now:          time.Now,
-		autoRefresh:  true,
-		pollEvery:    2 * time.Second,
-		wcache:       &widthCache{},
-		scrEnabled:   true,
-		scrSort:      "name",
-		scrHeight:    defaultScratchHeight,
-		scrCursor:    -1,
-		scrHover:     -1,
+		root:        root,
+		hover:       -1,
+		indent:      2,
+		sort:        "name",
+		exclude:     defaultExclude(),
+		excludeCfg:  strings.Join(defaultExclude(), ","),
+		colors:      defaultColors(),
+		selAnchor:   -1,
+		now:         time.Now,
+		autoRefresh: true,
+		pollEvery:   2 * time.Second,
+		wcache:      &widthCache{},
+		scrEnabled:  true,
+		scrSort:     "name",
+		scrHeight:   defaultScratchHeight,
+		scrCursor:   -1,
+		scrHover:    -1,
 	}
 	m.rebuildColorIndex()
 	m.rebuild()
@@ -1894,8 +1893,9 @@ func (m Model) HoverRow() int { return m.hover }
 func (m Model) Active() string { return m.active }
 
 // doubleClickWindow is the maximum delay between two clicks on the same row for
-// the pair to count as a double-click.
-const doubleClickWindow = 400 * time.Millisecond
+// the pair to count as a double-click; the shared list-mouse value (#2259), so
+// the gesture matches every other list-shaped surface.
+const doubleClickWindow = ui.DoubleClickWindow
 
 // MouseClick handles a left-press at content-local coordinates (0-based from the
 // top-left of the tree area). A press on a scrollbar jumps that axis. A single
@@ -1944,12 +1944,10 @@ func (m Model) MouseClick(x, y int) (Model, tea.Cmd) {
 		m.resetClick()
 		return m.activate()
 	}
-	clickAt := m.now()
-	if i == m.lastClickRow && clickAt.Sub(m.lastClickAt) <= doubleClickWindow {
+	if m.clicks.Double(i, m.now()) {
 		m.resetClick()
 		return m.activate()
 	}
-	m.lastClickRow, m.lastClickAt = i, clickAt
 	return m, nil
 }
 
@@ -2067,10 +2065,7 @@ func (m Model) onMarker(n *node, x int) bool {
 }
 
 // resetClick clears the pending single-click state after an activation.
-func (m *Model) resetClick() {
-	m.lastClickRow = -1
-	m.lastClickAt = time.Time{}
-}
+func (m *Model) resetClick() { m.clicks.Reset() }
 
 func clamp(v, lo, hi int) int {
 	if v < lo {

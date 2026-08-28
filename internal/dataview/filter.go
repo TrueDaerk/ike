@@ -92,7 +92,7 @@ func (m *Model) applyFilter() {
 		return
 	}
 	clause := clauseOf(m.fInput)
-	page, err := m.src.PageWhere(m.tables[m.sel].Name, clause, 0, PageSize)
+	page, err := m.src.PageWhere(m.tables[m.sel].Name, clause, m.sort, 0, PageSize)
 	if err != nil {
 		m.fErr = err
 		return
@@ -252,11 +252,20 @@ func (m *Model) captureStyle(pal *theme.Palette, ix highlight.Index, col int) li
 
 // filterNote is the header's active-filter marker: the clause is visible even
 // while the line is closed, so a filtered grid never reads as the whole table.
+// The column sort (#2248) joins it for the same reason — the grid's arrow is
+// on a column that may be scrolled out of sight.
 func (m *Model) filterNote(pal *theme.Palette, width int) string {
-	if m.filter == "" {
+	var parts []string
+	if m.filter != "" {
+		parts = append(parts, "filter: "+m.filter)
+	}
+	if m.sort.Active() {
+		parts = append(parts, "sort: "+m.sort.String())
+	}
+	if len(parts) == 0 {
 		return ""
 	}
-	return lipgloss.NewStyle().Foreground(pal.Warning).Render(clipTo("   filter: "+m.filter, width))
+	return lipgloss.NewStyle().Foreground(pal.Warning).Render(clipTo("   "+strings.Join(parts, " · "), width))
 }
 
 // rebuildTheme re-resolves the capture styles of the filter line from the
@@ -273,6 +282,20 @@ func (m *Model) rebuildTheme() {
 // (#2002); it reports whether the line consumed it, so a closed line lets the
 // paste fall through.
 func (m *Model) PasteText(text string) bool {
+	// The export line (#2248) takes a path, which is exactly the kind of text
+	// one pastes rather than types, so it consumes a paste the same way.
+	if m.exp != nil {
+		if m.exp.cancel != nil {
+			return false // the path is settled while its export runs
+		}
+		out, ncur, changed := ui.PasteText(m.exp.input, m.exp.cur, text)
+		if !changed {
+			return false
+		}
+		m.exp.input, m.exp.cur = out, ncur
+		m.exp.err, m.exp.overwrite = nil, false
+		return true
+	}
 	if !m.fEditing {
 		return false
 	}

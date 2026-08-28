@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"ike/internal/ui"
 )
 
 // clockPane builds a pane over p whose double-click clock the test drives.
@@ -146,7 +148,7 @@ func TestSlowSecondClickDoesNotOpen(t *testing.T) {
 	p := writeArchive(t, "README.md", "src/main.go")
 	m, now := clockPane(t, p, 80, 20)
 	m.Click(20, 2)
-	*now = now.Add(2 * doubleClickWindow)
+	*now = now.Add(2 * ui.DoubleClickWindow)
 	if cmd := m.Click(20, 2); cmd != nil {
 		t.Fatal("a slow second click must not open")
 	}

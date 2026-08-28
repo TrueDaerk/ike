@@ -4,7 +4,7 @@ title: Floating Shell
 description: Reusable centered overlay component — a content-sized box composited on the active layout that hosts any tea.Model-shaped content, owning chrome, sizing, scroll, and dismissal.
 resource: internal/ui/floating.go
 tags: [architecture, overlay, modal, floating, reusable, bubbletea]
-timestamp: 2026-07-30T12:00:00Z
+timestamp: 2026-08-28T12:00:00Z
 ---
 
 # Floating Shell
@@ -85,7 +85,14 @@ Two optional Content extensions refine key routing while the shell is open
 - Overflowing content **scrolls, never truncates**: the scroller wraps
   `bubbles/viewport` (↑/↓, pgup/pgdn, ctrl+u/ctrl+d, plus g/G for top/bottom) and
   appends a position indicator (`▲ … ▼  NN%`) only when the content overflows.
-  The pane therefore never grows past the terminal.
+  The pane therefore never grows past the terminal. `Wheel(delta)` (#2259) is
+  the pointer half of the same scroller — the root model routes a notch over
+  the topmost open layer to it, clamped at both ends. Like the editor's wheel
+  it moves the view alone: a hosted picker's own cursor stays put until the
+  next key press pulls the window back to it. Clicking a *row* inside a
+  hosted picker is still not possible — the shell sees its content as opaque
+  text, so it has no way to map a clicked line onto an item
+  (see /architecture/mouse.md; tracked as #2275).
 - **User resize** (#774): `cmd+shift+arrows (macOS; spelled shift+super) / ctrl+shift+arrows / alt+shift+arrows` (CSI-parameter-encoded, so
   delivered everywhere) adjust the open shell's content budget; the delta is
   persisted per content title in the per-project `winsize.json` store

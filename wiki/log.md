@@ -37,6 +37,83 @@
   [Status Line](/architecture/status-line.md),
   [Keybindings](/architecture/keybindings.md).
 
+## 2026-08-28 (Mouse audit: uniform wheel / click / double click, #2259)
+
+- **Shared list-mouse layer** (`internal/ui/listmouse.go`): `WheelWindow`
+  (clamped scroll that drags the cursor along), `RowAt` (content-local row
+  hit-test) and `ClickTracker` (`DoubleClickWindow` = 400 ms), adopted by the
+  explorer, VCS, Problems, Usages, Structure, Breakpoints, Test Results,
+  GitHub Issues, DOM inspector, Archive viewer, Data viewer, and both doctor
+  panes. A dozen packages had carried their own copies.
+- **Two behaviour fixes fell out of the merge**: the wheel no longer scrolls a
+  list's last page off the screen (nine panes used `maxTop = n-1`; the archive
+  and data viewers' `n-height` is now the rule), and a click on the footer row
+  or on the blank tail under a short list no longer selects a row (Structure,
+  the DOM inspector, the VCS changes list and GitHub Issues had no upper bound
+  on `y`).
+- **Gaps closed**: the Elasticsearch console (`internal/espane/mouse.go`) and
+  the SFTP remote browser (`internal/remote/mouse.go`) had no mouse handling
+  at all and now scroll, select and activate like the data viewer and the
+  archive viewer they mirror; the merge view gained a wheel that moves all
+  three columns (`internal/merge`); a floating-shell picker's viewport now
+  scrolls with the wheel (`ui.Floating.Wheel`).
+- **Tabs**: middle-click-closes reached the popup terminal box and the
+  floating panels (`popupBoxTabAt` / `floatPanelTabAt` now back both the left-
+  and middle-click paths), where only the `✕` zone had closed a tab.
+- **Convention and matrix**: /architecture/mouse.md records the one rule every
+  surface obeys — wheel scrolls (clamped), single click focuses and selects,
+  double click activates, affordances answer to one click, chrome is inert —
+  the tab rules, the looser single-click-picks rule transient overlays keep,
+  and the audited surface×gesture table with before/after state. Row clicks
+  inside floating-shell pickers stay open — the shell sees its content as
+  opaque text — and are named there as such, tracked in #2275.
+
+## 2026-08-28 (Terminal completion: type-aware trailing space on accept, #2261)
+
+- **Candidates carry their source** (`internal/terminal/complete.go`): the
+  popup's items are `candidate{text, kind}` instead of plain strings — the
+  filesystem, PATH and Makefile scanners tag each entry `candDir` or
+  `candFinal`, and the tag rides through to the accept.
+- **The accept follows the kind** (the zsh/fish rule): a directory keeps its
+  trailing `/` and nothing more, so completion continues inside it; a file, a
+  PATH executable or a make target is a finished token and gets a **trailing
+  space**. An explicitly picked candidate that is a strict prefix of other
+  still-matching ones counts as final too — only directory semantics suppress
+  the space. Both accept paths (tab, and enter on a focused popup) share it.
+- **No doubled space**: `spaceFollowsCursor` reads the joined soft-wrap chain
+  forwards from the cursor, so accepting mid-line (or on a row's last column,
+  where the next cell lives on the continuation row) inserts the candidate
+  alone.
+- `lineBeforeCursor` now pads the right-trimmed cursor row back to the cursor
+  column, so a trailing space — accepted or typed — is visible to
+  `parseCmdline` and the finished word parses as a fresh empty one.
+- See /architecture/terminal.md.
+
+## 2026-08-28 (Data viewer: column sort and CSV/JSON export, #2248)
+
+- **Column sort** (`internal/datasrc/sort.go`, `internal/dataview/sort.go`):
+  `S` in the grid — or `data.sortColumn` — cycles the focused column through
+  ascending, descending and unsorted. The pane hands a `datasrc.Sort` to
+  `PageWhere`, whose signature grew it; every engine renders the same
+  `ORDER BY` **outside** the filter's subquery, so it composes with a clause
+  that already ends in an `ORDER BY` or a `LIMIT` and paging walks the sorted
+  result. A new order restarts the walk, the count cache is untouched
+  (ordering changes no count), and switching tables drops the sort like the
+  filter. Parquet borrows the duckdb CLI for it, as it already does to filter.
+- **Export** (`internal/datasrc/export.go`, `internal/dataview/export.go`):
+  `E` — or `data.export` — writes the filtered, sorted result to a CSV or
+  JSON path, the format taken from the extension. The writer uses nothing but
+  the `Source` interface (it pages `PageWhere`), so all three engines export
+  through the same code; it streams in 2000-row batches, caps at
+  `ExportLimit` (1 000 000) and reports `Capped` so the toast can say so. CSV
+  goes through `encoding/csv` with `NULL` as the empty field; JSON is a
+  streamed array of objects with `NULL` as `null` and every value a string.
+  The line refuses an unknown extension and a missing directory before
+  scanning anything, and warns once before overwriting.
+- The SQLite backend now opens **four** connections, the fourth being the
+  export's, so a long write never queues page fetches behind it.
+- See /architecture/data-viewer.md.
+
 ## 2026-08-28 (Per-file test coverage: Test Results listing and status segment, #2246)
 
 - **Per-file percentages** (`internal/coverage`): the store gained
