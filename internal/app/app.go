@@ -809,6 +809,7 @@ type Model struct {
 	fileUsage   *palette.Usage       // most-used file ranking in the ranked palettes (#1419)
 	cmdFrec     *frecency.Store      // command-execution frecency boost (#2153)
 	usage       *telemetry.Recorder  // local-only usage telemetry (#2235); session state, rides across project switches
+	pendUnbound *unboundKey          // unbound chord awaiting the focused editor's verdict (#2303)
 	fileFrec    *frecency.Store      // file-open frecency ranking in the "@" finder (#2155)
 	winSizes    *ui.WinSizes         // persisted floating-window resize deltas (#774)
 	winSizesAll *ui.WinSizes         // user-scoped last-resize deltas, fallback for fresh projects (#1714)
@@ -2717,6 +2718,15 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 		// expected-but-missing keybinds. Only command-modified chords and
 		// function keys are recordable — plain typed characters never are.
 		if recordableUnbound(k) {
+			// With an editor focused the verdict waits for the pane (#2303):
+			// the editor owns editing chords the keymap table never lists
+			// (alt+delete, alt+backspace, ctrl+u, …), and reporting those as
+			// unbound buried the genuinely missing keybinds in noise.
+			// routeKey logs the event only if the editor ignored the key too.
+			if m.focusedEditor() != nil {
+				m.pendUnbound = &unboundKey{chord: k.String(), context: string(m.keyContext())}
+				break
+			}
 			m.usage.Key(k.String(), string(m.keyContext()), "", "unbound")
 		}
 	}
@@ -7246,6 +7256,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// for keys the app consumes before the editor's own dismissHover
 		// would see them.
 		m.cancelMouseHover()
+		// A chord held back for the editor's verdict (#2303) that never
+		// reached a pane was consumed app-side, so it was bound after all:
+		// drop it rather than pinning it on the next key.
+		m.pendUnbound = nil
 		// Keys landing in an editor or terminal stamp the do-not-interrupt
 		// guard (#2086): a forge event dialog never lands mid-word.
 		m.noteTypingInput()
@@ -8654,7 +8668,32 @@ func (m Model) routeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	cmd := inst.Update(msg)
+	m.flushUnbound(inst)
 	return m, cmd
+}
+
+// unboundKey is a chord the keymap layer found no binding for, held back until
+// the focused editor has had its say (#2303).
+type unboundKey struct {
+	chord   string
+	context string
+}
+
+// flushUnbound records the held-back unbound chord once the pane has seen the
+// key — unless the editor acted on it, in which case the chord is bound after
+// all, just inside the editor rather than in the keymap table. A chord that
+// never reaches a pane (an app-level handler consumed it) is dropped here by
+// the caller clearing the slot on the next key press.
+func (m *Model) flushUnbound(inst *pane.Instance) {
+	ev := m.pendUnbound
+	m.pendUnbound = nil
+	if ev == nil {
+		return
+	}
+	if ed := inst.Editor(); ed != nil && ed.HandledLastKey() {
+		return
+	}
+	m.usage.Key(ev.chord, ev.context, "", "unbound")
 }
 
 // activeEditorKey returns the editor that should receive a Replace open or an
