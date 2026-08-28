@@ -86,10 +86,10 @@ func (m *Model) syncSymbolScopes() {
 		if ed == nil || !ed.HasFile() || ed.SymbolScopePath() == ed.Path() {
 			continue
 		}
-		syms, ok := m.docSymbols[ed.Path()]
+		entry, ok := m.docSymbols[ed.Path()]
 		if !ok {
 			continue
 		}
-		ed.SetSymbolScopes(ed.Path(), symbolScopes(syms))
+		ed.SetSymbolScopes(ed.Path(), symbolScopes(entry.Symbols))
 	}
 }

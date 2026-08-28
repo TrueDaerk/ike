@@ -68,7 +68,7 @@ func (m Model) breadcrumbRows(inst *pane.Instance) int {
 	if ed == nil || !ed.HasFile() {
 		return 0
 	}
-	if len(m.docSymbols[ed.Path()]) == 0 {
+	if len(m.docSymbols[ed.Path()].Symbols) == 0 {
 		return 0
 	}
 	return 1
@@ -127,7 +127,7 @@ func (m Model) crumbLabels(inst *pane.Instance) ([]string, []ilsp.SymbolNode, bo
 	}
 	ed := inst.Editor()
 	line, _ := ed.Cursor() // 1-based
-	chain := symbolChain(m.docSymbols[ed.Path()], line-1)
+	chain := symbolChain(m.docSymbols[ed.Path()].Symbols, line-1)
 	labels := make([]string, 0, len(chain)+1)
 	labels = append(labels, baseName(ed.Path()))
 	for _, n := range chain {

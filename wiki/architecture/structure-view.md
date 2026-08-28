@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Structure View
-description: "Structure tool pane (#1025) — the focused buffer's symbol tree from LSP textDocument/documentSymbol: singleton right-split pane, capability-gated request through the manager, cursor auto-follow, enter/double-click navigates via the open funnel."
+description: "Structure tool pane (#1025) — the focused buffer's symbol tree from LSP textDocument/documentSymbol: singleton right-split pane, capability-gated request through the manager, version-stamped per-buffer cache with debounced refresh (#2319), cursor auto-follow, enter/double-click navigates via the open funnel."
 resource: internal/structpanel
 tags: [architecture, lsp, structure, tool-window]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Structure View (#1025)
@@ -78,13 +78,26 @@ records the jump (`nav.back` returns).
 `internal/app/structure_panel.go` owns the triggers; the LSP manager stays
 unreachable from the app:
 
-- **Pane open** resets the request dedup and refreshes.
+- **Pane open** resets the request dedup and refills — from the cache when
+  the buffer is unchanged, else via an immediate (undebounced) request.
 - **Focused buffer change**: `structureSyncCmd` runs from the Update wrapper
-  once per settled pass; when the shown tree belongs to another file it issues
-  one `lsp.documentSymbols` run, deduplicated per path (`structReqPath`) so a
-  provider-less file never re-requests every pass.
-- **Save**: the `todoSavedMsg` handler sets `structForce`, which bypasses the
-  dedup for the unchanged path.
+  once per settled pass. Each cached reply (`docSymbols`, a `docSymEntry`) is
+  stamped with the buffer `DocVersion` the request was issued at (#2319):
+  switching to a buffer whose cached tree matches the current version refeeds
+  the pane from the cache — no server round trip — while a missing or
+  edited-past tree arms a 250 ms debounce (`structDebounceDelay`). The timer's
+  tick (`structDebounceMsg`) dispatches only when its seq is still current and
+  the active buffer still matches the armed path and version, so rapid
+  tab-cycling or a typing burst sends one request for the buffer the user
+  settles on. Outstanding requests dedup on path + version
+  (`structReqPath`/`structReqVersion`); provider-less replies cache as
+  `NoProvider` and stay fresh regardless of version, so such files never
+  re-request per edit.
+- **Edit**: every buffer change bumps `DocVersion`, invalidating the cached
+  tree; the debounced refresh above updates the pane in the background once
+  typing pauses.
+- **Save**: the `todoSavedMsg` handler sets `structForce`, which bypasses
+  cache, dedup and debounce for the unchanged path.
 - **Cursor follow**: the same settled pass hands the active editor's cursor
   line to `Model.Follow`, which highlights the enclosing symbol (last
   containing row in depth-first order; nearest preceding row as fallback) and

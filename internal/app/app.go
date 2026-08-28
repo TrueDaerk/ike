@@ -683,19 +683,28 @@ type Model struct {
 	diagSeverity    ilsp.SeverityRules
 	diagSeverityRaw []string
 	// structReturnFocus is the same dance for the Structure tool window
-	// (#1025); structReqPath is the last path a documentSymbol refresh was
-	// issued for (the request dedup), and structForce marks a save-triggered
-	// refresh that must re-request the unchanged path.
+	// (#1025); structReqPath/structReqVersion are the path and buffer
+	// DocVersion the last documentSymbol refresh was issued for (the request
+	// dedup and the cache stamp for the async reply, #2319), and structForce
+	// marks a save-triggered refresh that must re-request the unchanged path.
+	// structDeb* track the armed debounce: the pending target and the seq
+	// that lets a newer target invalidate an older timer's tick.
 	structReturnFocus string
 	structReqPath     string
+	structReqVersion  int
 	structForce       bool
-	// docSymbols caches each file's hierarchical documentSymbol tree (#1153):
-	// the breadcrumbs bar derives the cursor's enclosing chain from it at
-	// render time (the Structure pane keeps its own flattened rows). Fed by
-	// applyDocumentSymbols, evicted when the file's last view closes.
+	structDebPath     string
+	structDebVersion  int
+	structDebSeq      int
+	// docSymbols caches each file's documentSymbol reply (#1153/#2319): the
+	// hierarchical tree the breadcrumbs bar derives the cursor's enclosing
+	// chain from at render time (the Structure pane keeps its own flattened
+	// rows), stamped with the buffer DocVersion it was requested at so an
+	// unchanged buffer never re-requests. Fed by applyDocumentSymbols,
+	// evicted when the file's last view closes.
 	// crumbSig is the last applied breadcrumb geometry signature; the settled
 	// pass (syncBreadcrumbLayout) re-runs layout() when it changes.
-	docSymbols map[string][]ilsp.SymbolNode
+	docSymbols map[string]docSymEntry
 	crumbSig   string
 	// usagesReturnFocus is the same dance for the Usages tool window (#1155).
 	usagesReturnFocus string
@@ -5488,6 +5497,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A documentSymbol reply (#1025) fills the open Structure pane.
 		m.applyDocumentSymbols(msg)
 		return m, nil
+
+	case structDebounceMsg:
+		// An elapsed symbol-refresh debounce (#2319) dispatches the request —
+		// unless a newer target superseded it or the user moved on.
+		return m, m.structureDebounceFire(msg)
 
 	case structpanel.NavigateMsg:
 		// Enter / double-click on a symbol row (#1025): jump the editor to
