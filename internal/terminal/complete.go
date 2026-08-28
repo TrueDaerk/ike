@@ -20,6 +20,19 @@ import (
 // just pastes the remainder.
 // Sources: executables on PATH (first word), files/dirs relative to the
 // session's start directory, and make targets after `make`.
+//
+// Accepting is type-aware (#2261), the way zsh/fish behave: every candidate
+// carries the source it came from (candidate.kind), and the kind decides what
+// follows the inserted text. A directory ends in "/" and gets nothing more —
+// the argument is unfinished and completion continues inside it. Every other
+// candidate — file, PATH executable, make target — is an atomic, finished
+// token and gets a trailing space, so the next word can be typed straight
+// away. Ambiguity does not enter into it: picking a candidate that is a
+// strict prefix of other still-matching ones (`main.go` while `main.go.bak`
+// exists) is an explicit choice and counts as final, so it too ends with a
+// space; only directory semantics suppress it. The space is skipped when the
+// grid already has one right of the cursor (accepting mid-line), so it never
+// doubles up.
 
 // maxCompItems bounds the popup list (and the per-source candidate scan).
 const maxCompItems = 8
@@ -33,11 +46,42 @@ const maxCompItems = 8
 // explicitly with ctrl+space. Tab accepts regardless of focus.
 type completion struct {
 	open    bool
-	items   []string
+	items   []candidate
 	sel     int
 	word    string
 	auto    bool
 	focused bool
+}
+
+// candKind is a candidate's source reduced to what it means for accepting:
+// whether the inserted text finishes the argument.
+type candKind uint8
+
+const (
+	// candFinal is an atomic, finished token — a file, a PATH executable, a
+	// make target. Accepting it ends the word, so a space follows.
+	candFinal candKind = iota
+	// candDir is a directory. Its text already ends in "/", the argument is
+	// unfinished and completion may descend, so no space follows.
+	candDir
+)
+
+// candidate is one popup entry: the full replacement word plus the accept
+// semantics of the source it came from.
+type candidate struct {
+	text string
+	kind candKind
+}
+
+// accepted returns the text an accept inserts for c: the candidate itself
+// plus the trailing space its kind calls for. spaceAhead reports whether the
+// grid already holds a space right of the cursor, which suppresses the
+// appended one (no double space when accepting mid-line).
+func (c candidate) accepted(spaceAhead bool) string {
+	if c.kind == candDir || spaceAhead {
+		return c.text
+	}
+	return c.text + " "
 }
 
 // SetAutoSuggest toggles the while-typing trigger (terminal.autosuggest);
@@ -159,7 +203,10 @@ func (m *Model) refreshCompletion(auto bool) {
 	// Matching runs on the unescaped word (#1552): the line holds `My\ Doc`,
 	// the filesystem holds `My Documents`.
 	items := candidates(unescapeShellWord(cmd), unescapeShellWord(word), m.sess.Cwd(), os.Getenv("PATH"))
-	if len(items) == 0 || (len(items) == 1 && items[0] == unescapeShellWord(word)) {
+	// A lone candidate identical to the typed word offers nothing to insert —
+	// except the trailing space a finished token still owes the line (#2261).
+	if len(items) == 0 || (len(items) == 1 && items[0].text == unescapeShellWord(word) &&
+		(items[0].kind == candDir || m.spaceFollowsCursor())) {
 		m.comp = completion{}
 		return
 	}
@@ -197,12 +244,12 @@ func (m *Model) autoSuggestSafe(before string) bool {
 	return true
 }
 
-func sameItems(a, b []string) bool {
+func sameItems(a, b []candidate) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for i := range a {
-		if a[i] != b[i] {
+		if a[i].text != b[i].text || a[i].kind != b[i].kind {
 			return false
 		}
 	}
@@ -214,6 +261,9 @@ func sameItems(a, b []string) bool {
 // typed); a candidate matching only case-insensitively (#968) erases the
 // typed word with backspaces first and types the candidate in its canonical
 // case, so `mak` accepting `Makefile` lands as Makefile, not makMakefile.
+// What follows the inserted text is the candidate's kind (#2261): a trailing
+// space for a finished token, nothing for a directory (see the file header),
+// and nothing either when the grid already has a space right of the cursor.
 // The text goes in as plain key presses, not a bracketed paste (#1442): zsh
 // standout-highlights a pasted region by default, so the accepted text sat
 // on the command line with a background.
@@ -233,6 +283,9 @@ func (m *Model) acceptCompletion() {
 		return
 	}
 	item := c.items[c.sel]
+	// The trailing space (#2261) is decided before anything is inserted — the
+	// grid still shows the line as the user left it.
+	tail := strings.TrimPrefix(item.accepted(m.spaceFollowsCursor()), item.text)
 	// The popup's word is a snapshot from its last refresh. A keystroke whose
 	// echo landed on the grid after that snapshot (fast type-then-tab, #1538)
 	// leaves it stale, and a remainder computed from the snapshot double-types
@@ -249,24 +302,24 @@ func (m *Model) acceptCompletion() {
 	// the escaped (on-screen) length.
 	uword := unescapeShellWord(word)
 	switch {
-	case strings.HasPrefix(item, uword):
-		rest := strings.TrimPrefix(item, uword)
-		if rest == "" {
-			return
+	case strings.HasPrefix(item.text, uword):
+		rest := strings.TrimPrefix(item.text, uword)
+		if rest == "" && tail == "" {
+			return // nothing left to insert: the word is already complete
 		}
 		// A dangling escape (`My\` mid-escape) would double up with the
 		// escaped remainder — erase the lone backslash first.
-		if hasDanglingEscape(word) {
+		if rest != "" && hasDanglingEscape(word) {
 			m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyBackspace})
 		}
-		m.sess.SendText(escapeShellWord(rest))
-	case hasFoldPrefix(item, uword):
+		m.sess.SendText(escapeShellWord(rest) + tail)
+	case hasFoldPrefix(item.text, uword):
 		// Case-correcting accept (#968): erase the word as it is on the line
 		// now, not the snapshot's length.
 		for range []rune(word) {
 			m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyBackspace})
 		}
-		m.sess.SendText(escapeShellWord(item))
+		m.sess.SendText(escapeShellWord(item.text) + tail)
 	}
 }
 
@@ -314,11 +367,48 @@ func (m *Model) lineBeforeCursor() string {
 		}
 		text = append(text, seg...)
 	}
+	// The cursor row is right-trimmed by the emulator, so blanks between the
+	// last glyph and the cursor are missing from it — pad them back (#2261):
+	// they are real cells of the command line, and the trailing space that
+	// ends an accepted argument (or a space the user typed) is exactly what
+	// tells parseCmdline the current word is a fresh, empty one.
 	r := []rune(m.sess.LineText(cur))
-	if x > len(r) {
-		x = len(r)
+	for len(r) < x {
+		r = append(r, ' ')
 	}
 	return string(append(text, r[:x]...))
+}
+
+// spaceFollowsCursor reports whether the logical command line already holds a
+// space directly right of the cursor — the guard against a doubled space when
+// a completion is accepted mid-line (#2261). It reads the grid the way
+// lineBeforeCursor does, only forwards: the rest of the cursor row plus the
+// remaining rows of the soft-wrap chain, every row but the chain's last padded
+// to the pane width, so a space the emulator right-trimmed still counts and a
+// cursor on a row's last column sees the continuation row's first character.
+// Past the end of the line nothing follows, so the space is appended.
+func (m *Model) spaceFollowsCursor() bool {
+	x, y := m.sess.CursorPosition()
+	cur := m.sess.ScrollbackLen() + y
+	_, last := m.logicalLineSpan(cur)
+	w := m.sess.Width()
+	row := func(l int) []rune {
+		seg := []rune(m.sess.LineText(l))
+		for l < last && len(seg) < w {
+			seg = append(seg, ' ')
+		}
+		return seg
+	}
+	seg := row(cur)
+	if x < len(seg) {
+		return seg[x] == ' ' || seg[x] == '\t'
+	}
+	for l := cur + 1; l <= last; l++ {
+		if next := row(l); len(next) > 0 {
+			return next[0] == ' ' || next[0] == '\t'
+		}
+	}
+	return false
 }
 
 // parseCmdline extracts the command head and the word under the cursor from
@@ -431,8 +521,9 @@ func hasDanglingEscape(s string) bool {
 // candidates resolves the completion source for (cmd, word): PATH commands
 // while the first word is being typed, make targets after `make`, files and
 // directories relative to dir otherwise. Every candidate extends word (strict
-// prefix match), so accepting can paste the remainder.
-func candidates(cmd, word, dir, pathEnv string) []string {
+// prefix match), so accepting can paste the remainder, and carries its
+// source's accept semantics (candKind) along for the trailing space (#2261).
+func candidates(cmd, word, dir, pathEnv string) []candidate {
 	switch {
 	case cmd == word && !strings.Contains(word, "/"):
 		return commandCandidates(pathEnv, word)
@@ -453,9 +544,10 @@ func hasFoldPrefix(s, prefix string) bool {
 	return strings.EqualFold(s[:len(prefix)], prefix)
 }
 
-// commandCandidates lists executables on pathEnv matching the prefix.
-func commandCandidates(pathEnv, prefix string) []string {
-	seen := map[string]bool{}
+// commandCandidates lists executables on pathEnv matching the prefix. A
+// command is a finished token: accepting it ends the word.
+func commandCandidates(pathEnv, prefix string) []candidate {
+	seen := map[string]candKind{}
 	for _, d := range filepath.SplitList(pathEnv) {
 		ents, err := os.ReadDir(d)
 		if err != nil {
@@ -463,20 +555,21 @@ func commandCandidates(pathEnv, prefix string) []string {
 		}
 		for _, e := range ents {
 			name := e.Name()
-			if !hasFoldPrefix(name, prefix) || seen[name] || e.IsDir() {
+			if _, dup := seen[name]; !hasFoldPrefix(name, prefix) || dup || e.IsDir() {
 				continue
 			}
 			if info, err := e.Info(); err != nil || info.Mode()&0o111 == 0 {
 				continue
 			}
-			seen[name] = true
+			seen[name] = candFinal
 		}
 	}
 	return capSorted(seen)
 }
 
-// makeCandidates lists targets of the Makefile in dir matching the prefix.
-func makeCandidates(dir, prefix string) []string {
+// makeCandidates lists targets of the Makefile in dir matching the prefix —
+// atomic names, so accepting finishes the word.
+func makeCandidates(dir, prefix string) []candidate {
 	var data []byte
 	for _, name := range []string{"Makefile", "makefile", "GNUmakefile"} {
 		if b, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
@@ -484,7 +577,7 @@ func makeCandidates(dir, prefix string) []string {
 			break
 		}
 	}
-	seen := map[string]bool{}
+	seen := map[string]candKind{}
 	for _, line := range strings.Split(string(data), "\n") {
 		if line == "" || line[0] == '\t' || line[0] == '#' {
 			continue
@@ -494,8 +587,8 @@ func makeCandidates(dir, prefix string) []string {
 			continue
 		}
 		for _, t := range strings.Fields(head) {
-			if hasFoldPrefix(t, prefix) && !strings.HasPrefix(t, ".") && !seen[t] {
-				seen[t] = true
+			if _, dup := seen[t]; hasFoldPrefix(t, prefix) && !strings.HasPrefix(t, ".") && !dup {
+				seen[t] = candFinal
 			}
 		}
 	}
@@ -504,9 +597,10 @@ func makeCandidates(dir, prefix string) []string {
 
 // pathCandidates lists entries under dir matching the word, which may carry
 // its own directory part (`src/ma` → entries of dir/src starting with "ma").
-// Directories keep a trailing "/" so accepting descends. Dotfiles only show
-// when the base prefix asks for them.
-func pathCandidates(dir, word string) []string {
+// Directories keep a trailing "/" so accepting descends — and are marked
+// candDir, so no space follows them. Dotfiles only show when the base prefix
+// asks for them.
+func pathCandidates(dir, word string) []candidate {
 	sub, base := filepath.Split(word)
 	root := filepath.Join(dir, filepath.FromSlash(sub))
 	if strings.HasPrefix(word, "/") {
@@ -522,7 +616,7 @@ func pathCandidates(dir, word string) []string {
 	if err != nil {
 		return nil
 	}
-	seen := map[string]bool{}
+	seen := map[string]candKind{}
 	for _, e := range ents {
 		name := e.Name()
 		if !hasFoldPrefix(name, base) {
@@ -531,22 +625,23 @@ func pathCandidates(dir, word string) []string {
 		if strings.HasPrefix(name, ".") && !strings.HasPrefix(base, ".") {
 			continue
 		}
-		item := sub + name
+		item, kind := sub+name, candFinal
 		if e.IsDir() {
 			item += "/"
+			kind = candDir
 		}
-		seen[item] = true
+		seen[item] = kind
 	}
 	return capSorted(seen)
 }
 
-// capSorted flattens the candidate set sorted and bounded.
-func capSorted(seen map[string]bool) []string {
-	out := make([]string, 0, len(seen))
-	for k := range seen {
-		out = append(out, k)
+// capSorted flattens the candidate set sorted by text and bounded.
+func capSorted(seen map[string]candKind) []candidate {
+	out := make([]candidate, 0, len(seen))
+	for k, kind := range seen {
+		out = append(out, candidate{text: k, kind: kind})
 	}
-	sort.Strings(out)
+	sort.Slice(out, func(i, j int) bool { return out[i].text < out[j].text })
 	if len(out) > maxCompItems {
 		out = out[:maxCompItems]
 	}
@@ -562,7 +657,7 @@ func (m Model) completionView(view string) string {
 	}
 	width := 0
 	for _, it := range m.comp.items {
-		if w := len([]rune(it)); w > width {
+		if w := len([]rune(it.text)); w > width {
 			width = w
 		}
 	}
@@ -577,7 +672,7 @@ func (m Model) completionView(view string) string {
 	sel := lipgloss.NewStyle().Reverse(true)
 	row := lipgloss.NewStyle().Faint(false)
 	for i, it := range m.comp.items {
-		r := []rune(it)
+		r := []rune(it.text)
 		if len(r) > width {
 			r = r[:width]
 		}
