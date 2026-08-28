@@ -291,6 +291,9 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 		}
 		if m.popup.open {
 			fresh.popup.open = true
+			// A blurred layer (#2309) stays blurred: the switch was driven
+			// from the panes, so the keyboard stays with them.
+			fresh.popup.blurred = m.popup.blurred
 		}
 	}
 	// The incoming project's settings layer just applied (0380): surface its

@@ -157,14 +157,125 @@ func TestPopupShellExitClosesTabThenPopup(t *testing.T) {
 	}
 }
 
-func TestPopupOutsideClickHides(t *testing.T) {
+// TestPopupOutsideClickBlurs guards #2309: a press outside the popup no
+// longer hides it — the layer stays visible, only the keyboard moves to the
+// panes below, so a copy round trip keeps the popup on screen.
+func TestPopupOutsideClickBlurs(t *testing.T) {
 	m := openTestPopup(t)
+	sess := m.popup.inst.ActiveTerminal().SessionKey()
 	m = step(m, press(0, 0)) // far outside the centered box
-	if m.popup.open {
-		t.Fatal("a press outside the popup should hide it")
+	if !m.popup.open || !m.popup.blurred {
+		t.Fatal("a press outside the popup should blur it, not hide it")
 	}
-	if m.popup.inst == nil {
-		t.Fatal("outside-click hide must retain the instance")
+	if v := m.render(); !strings.Contains(v, "POPUP TERMINAL") {
+		t.Fatal("the blurred popup must stay on screen")
+	}
+	if m.popupLayerFocused() {
+		t.Fatal("the blurred layer must not own the keyboard")
+	}
+	// The toggle chord refocuses the blurred layer instead of hiding it —
+	// same instance, same session.
+	out, _ := m.Update(TerminalPopupMsg{})
+	m = out.(Model)
+	if !m.popup.open || m.popup.blurred {
+		t.Fatal("terminal.popup on a blurred layer should refocus it")
+	}
+	if m.popup.inst.ActiveTerminal().SessionKey() != sess {
+		t.Fatal("refocusing must keep the same session")
+	}
+	// A second toggle from the focused layer hides it as before.
+	out, _ = m.Update(TerminalPopupMsg{})
+	m = out.(Model)
+	if m.popup.open {
+		t.Fatal("terminal.popup on the focused layer should hide it")
+	}
+}
+
+// TestPopupBlurredClickBackFocuses guards #2309: a press into the visible,
+// blurred popup box takes the keyboard back.
+func TestPopupBlurredClickBackFocuses(t *testing.T) {
+	m := openTestPopup(t)
+	m = step(m, press(0, 0))
+	if !m.popup.blurred {
+		t.Fatal("outside press should blur the layer")
+	}
+	px, py, pw, ph := m.popupTermRect()
+	m = step(m, press(px+pw/2, py+ph/2))
+	m = step(m, release(px+pw/2, py+ph/2)) // settle the selection drag
+	if !m.popup.open || m.popup.blurred {
+		t.Fatal("a press into the blurred popup should refocus the layer")
+	}
+	if !m.popupLayerFocused() {
+		t.Fatal("the refocused layer must own the keyboard again")
+	}
+}
+
+// TestPopupBlurredKeysGoToPanes guards #2309: while the layer is blurred the
+// key funnel belongs to the panes below — the popup's shell sees nothing.
+func TestPopupBlurredKeysGoToPanes(t *testing.T) {
+	m := openTestPopup(t)
+	m = step(m, press(0, 0))
+	if m.focusContext() == "terminal" {
+		t.Fatal("the blurred layer must not supply the focus context")
+	}
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'i', Text: "i"})
+	m = out.(Model)
+	if !m.popup.open || m.popup.blurred == false {
+		t.Fatal("plain keys must leave the blurred layer untouched")
+	}
+}
+
+// TestPopupUnseenOutputIndicator guards #2309: output landing in a hidden
+// popup shell arms the statusbar activity segment; showing the layer clears
+// it. Output into the visible layer never arms it.
+func TestPopupUnseenOutputIndicator(t *testing.T) {
+	m := openTestPopup(t)
+	sess := m.popup.inst.ActiveTerminal().SessionKey()
+
+	// Visible layer: output is on screen, no indicator.
+	out, _ := m.Update(terminal.OutputMsg{Key: sess})
+	m = out.(Model)
+	if m.popupUnseen || m.popupTermSegment() != "" {
+		t.Fatal("output into the visible popup must not arm the indicator")
+	}
+
+	// Hide, then output arrives: the indicator shows in the status line.
+	out, _ = m.Update(TerminalPopupMsg{})
+	m = out.(Model)
+	out, _ = m.Update(terminal.OutputMsg{Key: sess})
+	m = out.(Model)
+	if !m.popupUnseen {
+		t.Fatal("output into the hidden popup must arm the indicator")
+	}
+	if seg := m.popupTermSegment(); !strings.Contains(seg, "popup") || !strings.Contains(seg, "●") {
+		t.Fatalf("the segment should announce unseen popup output, got %q", seg)
+	}
+	if !strings.Contains(m.statusLine(), "popup") {
+		t.Fatal("the status line should carry the popup activity segment")
+	}
+
+	// Showing the layer is the "looked at it" moment: the indicator clears.
+	out, _ = m.Update(TerminalPopupMsg{})
+	m = out.(Model)
+	if m.popupUnseen || m.popupTermSegment() != "" {
+		t.Fatal("showing the popup must clear the indicator")
+	}
+}
+
+// TestPopupIndicatorGoneWithoutShells guards #2309: once the layer holds no
+// live shell there is nothing left to look at — the segment stays hidden even
+// if unseen output had been recorded before the exit.
+func TestPopupIndicatorGoneWithoutShells(t *testing.T) {
+	m := openTestPopup(t)
+	sess := m.popup.inst.ActiveTerminal().SessionKey()
+	out, _ := m.Update(TerminalPopupMsg{})
+	m = out.(Model)
+	out, _ = m.Update(terminal.OutputMsg{Key: sess})
+	m = out.(Model)
+	out, _ = m.Update(terminal.ExitedMsg{Key: sess})
+	m = out.(Model)
+	if m.popupTermSegment() != "" {
+		t.Fatal("an emptied popup layer must not keep the indicator")
 	}
 }
 

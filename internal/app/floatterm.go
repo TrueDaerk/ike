@@ -55,10 +55,18 @@ type floatMoveDrag struct {
 // popupSessSeq: keys must stay unique across the models a session builds.
 var floatTermSeq int
 
-// popupLayerOpen reports whether the popup terminal layer — the popup box
-// plus every floating panel (#1793) — is shown and has anything to show.
-func (m Model) popupLayerOpen() bool {
+// popupLayerVisible reports whether the popup terminal layer — the popup box
+// plus every floating panel (#1793) — is shown and has anything to show,
+// focused or blurred (#2309). Rendering and mouse hit-testing key off this.
+func (m Model) popupLayerVisible() bool {
 	return m.popup.open && (m.popup.inst != nil || len(m.floatTerms) > 0)
+}
+
+// popupLayerFocused reports whether the visible layer also owns the keyboard
+// (#2309): key routing, paste routing and context resolution key off this — a
+// blurred layer stays on screen but leaves input to the panes below.
+func (m Model) popupLayerFocused() bool {
+	return m.popupLayerVisible() && !m.popup.blurred
 }
 
 // popupLayerInstances returns every live tab host of the popup layer: the
@@ -483,24 +491,20 @@ func (m Model) renderFloatTerm(f *floatTerm) string {
 		title = bar
 	}
 	border := m.pal().Border
-	if m.popup.open && m.floatFocused() == f {
+	if m.popupLayerFocused() && m.floatFocused() == f {
 		border = m.pal().BorderFocus
 	}
 	return paneBox(marker+title, f.inst.View(), f.w, f.h, border)
 }
 
-// popupLayerMouse routes a mouse event while the popup layer is open and no
-// drag is active: a press outside every box hides the whole layer (the #1398
-// toggle unit — panels have no per-panel hidden state), otherwise the box the
-// z-order puts on top under the pointer handles it (#1806), and anything over
-// no box at all falls through to the popup box's handler. done reports whether
-// the event was consumed (always — the layer owns the mouse like it owns the
-// keyboard).
+// popupLayerMouse routes a mouse event over the popup layer while no drag is
+// active: the box the z-order puts on top under the pointer handles it
+// (#1806), and anything over no box at all falls through to the popup box's
+// handler. Presses outside every layer box never reach this — the funnel's
+// layer branch blurs the layer and lets them fall through to the panes below
+// (#2309). done reports whether the event was consumed (always — over its
+// boxes the layer owns the mouse like it owns the keyboard).
 func (m Model) popupLayerMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
-	if msg.action == mousePress && !m.popupLayerHit(msg.X, msg.Y) {
-		m.togglePopupTerminal()
-		return m, nil, true
-	}
 	if f := m.floatTermFor(m.popupBoxAt(msg.X, msg.Y)); f != nil {
 		return m.floatTermMouse(f, msg)
 	}

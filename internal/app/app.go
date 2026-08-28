@@ -312,6 +312,11 @@ type Model struct {
 	// project-owned ones park in wsExtras with the popup box (#1407).
 	floatTerms []*floatTerm
 	floatFocus *floatTerm
+	// popupUnseen marks output a popup-layer shell produced while the layer
+	// was hidden (#2309): the statusbar activity segment shows it until the
+	// next show puts the output on screen. Runtime state like the layer's
+	// sessions — never persisted.
+	popupUnseen bool
 	// conflictKey is the editor pane awaiting a save-conflict answer (Roadmap
 	// 0140, #82) while the shell shows the prompt; "" when no conflict is open.
 	conflictKey string
@@ -4708,7 +4713,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (iTerm's cmd+t, #729); otherwise a shell tab joins the active
 		// editor pane, next to the file tabs.
 		switch {
-		case m.popupLayerOpen():
+		case m.popupLayerFocused():
 			m.newPopupTerminalTab()
 		case m.focusContext() == string(keymap.Terminal):
 			m.newTerminalSibling()
@@ -5654,6 +5659,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the keystrokes, so the cursor row reads current.
 		if t := m.terminalModelForSession(msg.Key); t != nil {
 			t.OnOutput()
+			// Output landing in a hidden popup-layer shell arms the statusbar
+			// activity indicator (#2309); the next show clears it. A visible
+			// layer — focused or blurred — has the output on screen already.
+			if !m.popupLayerVisible() {
+				if _, _, pt := m.popupTabForSession(msg.Key); pt != nil {
+					m.popupUnseen = true
+				}
+			}
 		}
 		return m, nil
 
@@ -7518,7 +7531,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// every key raw except the reserved popup set. The overlays and
 		// prompts above still win — they can be opened from inside the popup
 		// and must get their keys back.
-		if m.popupLayerOpen() {
+		if m.popupLayerFocused() {
 			// Link hint mode (#2254) owns the popup's keyboard while open,
 			// like in a terminal pane: before the reserved set, so a label
 			// can never be shadowed by a chord.
@@ -8490,7 +8503,7 @@ func (m Model) editorNormalMode() bool {
 
 // focusContext reports the context id advertised by the focused pane.
 func (m Model) focusContext() string {
-	if m.popupLayerOpen() {
+	if m.popupLayerFocused() {
 		// The open popup terminal layer (#1398, #1793) owns the keyboard, so
 		// bindings and the mode indicator resolve under its focused host's
 		// context, not the pane below.
@@ -8522,7 +8535,7 @@ func (m Model) helpContext() string {
 // (palette scoping, registry, help snapshot) keeps the plain focusContext.
 func (m Model) keyContext() keymap.Context {
 	ctx := keymap.Context(m.focusContext())
-	if ctx != keymap.Editor || m.popupLayerOpen() {
+	if ctx != keymap.Editor || m.popupLayerFocused() {
 		return ctx
 	}
 	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil {
@@ -9941,9 +9954,31 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	// the overlays that render above it. An active drag (selection, scrollbar,
 	// tab tear-out) skips the branch — the generic drag machinery below
 	// handles motion and release popup-aware.
-	if m.popupLayerOpen() && m.drag == nil {
-		if tm, cmd, done := m.popupLayerMouse(msg); done {
-			return tm, cmd
+	if m.popupLayerVisible() && m.drag == nil {
+		switch {
+		case m.popup.blurred:
+			// The blurred layer (#2309) stays on screen but owns neither
+			// keyboard nor mouse: only events over a layer box reach it — a
+			// press there refocuses the layer first (click-to-focus), and
+			// everything outside its boxes belongs to the surfaces below.
+			if m.popupLayerHit(msg.X, msg.Y) {
+				if msg.action == mousePress {
+					m.focusPopupLayer()
+				}
+				if tm, cmd, done := m.popupLayerMouse(msg); done {
+					return tm, cmd
+				}
+			}
+		case msg.action == mousePress && !m.popupLayerHit(msg.X, msg.Y):
+			// A press outside every layer box blurs the layer instead of
+			// hiding it (#2309) and falls through, so the same click also
+			// lands in the pane below — open popup, click into the editor,
+			// copy, toggle back, paste.
+			m.blurPopupLayer()
+		default:
+			if tm, cmd, done := m.popupLayerMouse(msg); done {
+				return tm, cmd
+			}
 		}
 	}
 	// Menu bar (Roadmap 0160): with a dropdown open, moving the mouse over an
@@ -11514,7 +11549,7 @@ func (m Model) termLocal(key string, msg mouseEvent) (x, y int, ok bool) {
 		// coordinates derive from the focused host's box rectangle — a
 		// floating panel's own rect (#1793), or the popup box offset to the
 		// focused split side while split (#1427).
-		if !m.popupLayerOpen() {
+		if !m.popupLayerVisible() {
 			return 0, 0, false
 		}
 		if f := m.floatFocused(); f != nil {
@@ -11905,7 +11940,7 @@ func (m Model) render() string {
 		x, y := m.ctxMenu.Pos()
 		base = overlay.Place(base, m.ctxMenu.View(), x, y, m.width, m.height)
 	}
-	if m.popupLayerOpen() && !m.settings.IsOpen() {
+	if m.popupLayerVisible() && !m.settings.IsOpen() {
 		// The popup terminal layer (#1398) floats above the workspace but
 		// below the exclusive overlays: a palette or the settings panel opened
 		// from inside it must draw on top (settings composites earlier, so it

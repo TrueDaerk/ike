@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
 timestamp: 2026-08-28T00:00:00Z
@@ -292,10 +292,11 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   through exactly the size delta's #1714 cascade — project store, user-scoped
   fallback, mirror on release — and re-clamped in `popupTermRect` so the box
   always stays fully on screen whatever terminal it resumes under.
-- **Keys**: while open, the popup's branch in the funnel sits after the modal
-  prompts and before the pane-terminal block. Its reserved set mirrors the
+- **Keys**: while the layer is focused, the popup's branch in the funnel sits
+  after the modal prompts and before the pane-terminal block (a blurred layer
+  skips it, #2309). Its reserved set mirrors the
   pane one: the toggle chord (resolved via the live binding table) hides from
-  inside, `cmd+t` opens a sibling popup tab, `cmd+d` splits the popup
+  inside — and refocuses a blurred layer (#2309) — `cmd+t` opens a sibling popup tab, `cmd+d` splits the popup
   (#1427), `cmd+shift+i` toggles input broadcast (#1427), `ctrl+tab` and the
   `editor.tab.next/prev` chords cycle the focused side's tabs, `cmd+w` closes
   the active tab through the busy guard (`termClosePopup` targets the shared
@@ -326,8 +327,33 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   to a single box (the right side is promoted when the primary empties) and
   resets broadcast. Every whole-popup walk (theme, quit, teardown, busy
   guards) iterates `popupTerm.instances()` instead of touching `inst` alone.
-- **Mouse**: a press outside every layer box hides the whole layer (state
-  retained), the border ring starts a `popupterm` resize drag (centered
+- **Focus loss & blur** (#2309): the layer has three states — hidden,
+  visible+focused, visible+blurred (`popupTerm.blurred`). A press outside
+  every layer box **blurs** instead of hiding: the layer stays on screen
+  without borders' focus mark, the same press falls through so it also lands
+  in the pane below (focus + caret), and keys/pastes route to the panes as if
+  the layer were hidden (`popupLayerFocused` gates the funnel branches,
+  `popupLayerVisible` gates rendering and mouse hit-testing). The toggle
+  chord on a blurred layer **refocuses** it — content and scroll position
+  untouched — instead of hiding; hiding stays a focused-layer act (the toggle
+  chord from inside, or over free space via `terminal.popup`). A press into a
+  blurred layer box refocuses the layer first, then routes normally
+  (click-to-focus). This makes the copy round trip one gesture chain: popup
+  open, click into the editor, copy, `cmd+alt+t`, paste. Everything over a
+  blurred layer's boxes still belongs to the layer (wheel pages scrollback);
+  everything outside belongs to the panes. Blur state parks and switches with
+  the layer.
+- **Activity indicator** (#2309): output landing in a popup-layer shell while
+  the layer is **hidden** arms `Model.popupUnseen`; the status bar's
+  `popupterm` segment then shows `popup ●` (unseen output), `popup ⚙` (a
+  shell is busy), or both — the "is something still running in there?" peek
+  without opening the popup. Showing the layer clears the flag; a layer with
+  no live shell left shows nothing. The segment renders in the editor slot
+  list and the non-editor focus summary alike, and a click on it dispatches
+  `terminal.popup` (`statusSegmentCommands`). Runtime state only — never
+  persisted.
+- **Mouse**: a press outside every layer box blurs the whole layer (#2309,
+  state retained), the border ring starts a `popupterm` resize drag (centered
   doubled-delta math), the tab-bar row activates/closes tabs on its side —
   and a segment press arms the tear-out drag (#1793) — body presses anchor
   selections / hit the scrollbar and cmd+click links, the wheel routes like a
@@ -377,9 +403,9 @@ the box, the box's split sides at its slot, panels above it, wrapping around
 (`popupSurfaces`/`stepPopupFocus`); with a single surface they stay with the
 shell. Since the surface stepped onto rises, repeated steps alternate between
 the two frontmost surfaces, alt-tab style. The toggle chord and the
-outside-press dismiss act on the **whole layer** — box and panels show and
-hide as one unit, sessions always retained; panels have no per-panel hidden
-state. Panel chrome repeats the popup's: tab bar, `cmd+t` sibling tabs,
+outside-press blur (#2309) act on the **whole layer** — box and panels show,
+hide and blur as one unit, sessions always retained; panels have no
+per-panel hidden or blurred state. Panel chrome repeats the popup's: tab bar, `cmd+t` sibling tabs,
 `cmd+w` through the busy guard, tab cycling, cmd+c/v, scrollback search —
 everything `popupFocused` routes; the resize chords (#774) and the border
 drag (#933, corner-anchored 1:1 math) size the focused panel. Box-only
