@@ -4571,13 +4571,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.RunCommandFrom(msg.Command, telemetry.SourceMenu)
 
 	case ShowNotificationHistoryMsg:
-		// notifications.history (palette): the history ring in the floating shell.
-		// Opening marks everything seen — the status line counter resets (#101).
-		m.notifUnseen = 0
-		body := m.historyView()
-		m.shell.SetContent(ui.ModelContent{Heading: "NOTIFICATIONS", Body: func() string { return body }})
-		m.shell.SetSize(m.width, m.height)
-		m.shell.Open()
+		// notifications.history (palette / cmd+alt+n / status counter click):
+		// the notification center over the history ring (#2152). Opening marks
+		// everything seen — the status line counter resets (#101).
+		m.openNotifCenter()
 		return m, nil
 
 	case ToggleExplorerFocusMsg:
@@ -7524,6 +7521,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// way: j/k pick the file, enter applies, esc cancels.
 		if m.lspRenamePreviewOpen() {
 			return m.updateLSPRenamePreview(msg)
+		}
+		// The notification center (#2152) owns one key of its own — "c"
+		// clears the ring; everything else (scrolling, Esc) belongs to the
+		// shell below, so only a handled key returns here.
+		if m.notifCenterOpen() {
+			if nm, handled := m.updateNotifCenter(msg); handled {
+				return nm, nil
+			}
 		}
 		if m.floats.IsOpen() && !m.tourOpen() {
 			// The tour never reaches this branch: its keys are handled (or

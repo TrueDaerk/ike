@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-28 (Notifications: the history ring reads as a notification center, #2152)
+
+- **Relative ages** (`internal/app/notifications.go`, `historyView`): the
+  history list swapped its `HH:MM:SS` stamps for a right-aligned relative age
+  off `ui.ShortAge` — "now", "5m", "3h", "4d". An expired toast is read back
+  by *how long ago* it happened, which is the question being asked; the
+  absolute clock time never was.
+- **Clear all** (`updateNotifCenter`, `c`): the center empties its ring and
+  reads "no notifications yet"; the view footers `[c] clear all   [esc]
+  close`. Only `c` is consumed — everything else falls through to the shell,
+  so its scrolling and Esc keep working untouched.
+- **Identified by content, not a flag** (`notifCenterOpen`): the key route
+  tests the shell's content heading (`notifCenterTitle`) instead of a
+  `notifCenter bool`. A flag left standing when a different dialog takes the
+  shell would hand that dialog's `c` to clear-all; a heading cannot go stale.
+- **Live body** (`openNotifCenter`, `bindNotifCenter`): the shell content is
+  the `historyView` method value rather than a string snapshotted at open, so
+  ages tick while the center is open. Clear-all re-binds — the method value
+  closes over a model copy, so a cleared ring needs the fresh one.
+- The center was already reachable (palette, `cmd+alt+n`, Help menu, a click
+  on the `●` counter, which resets on open) — #2152 is what makes it worth
+  opening. Docs: `wiki/architecture/notifications.md` (renamed section),
+  `status-line.md`, `userdocs/troubleshooting.md`.
+
 ## 2026-08-28 (Merge tool: conflict navigation, resolution chords, counter, offer/finish flow, #2258)
 
 - **Resolution chords** (`internal/editor/conflict.go`, `keys_normal.go`): the

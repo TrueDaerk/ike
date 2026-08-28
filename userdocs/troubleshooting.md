@@ -152,8 +152,11 @@ noticeably slower on large trees and with simpler `.gitignore` handling.
 `$IKE_CONFIG_DIR`), collects errors not worth interrupting you for — language
 server failures, install errors, adapter problems.
 
-**Notification History** (++cmd+alt+n++) shows what scrolled past, including
-notifications suppressed by `notifications.min_severity`.
+**Notification History** (++cmd+alt+n++, or a click on the `●` counter in the
+status line) shows what scrolled past, including notifications suppressed by
+`notifications.min_severity`. It lists the last 100 of this session, newest
+first, with a severity glyph and how long ago each arrived; ++c++ clears the
+list, ++esc++ closes it.
 
 **LSP: Show Server Log** dumps what a language server has been saying.
 

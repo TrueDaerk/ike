@@ -121,10 +121,12 @@ per frame, and hides entirely outside a git repository. See
 ## Notification counter
 
 `Model.notifUnseen` counts history-ring entries recorded since the
-notification history view (0130, #78) was last opened; the segment renders
-`● N` and disappears at zero. Opening the history — the `notifications.history`
+notification center (0130, #78; #2152) was last opened; the segment renders
+`● N` and disappears at zero. Opening the center — the `notifications.history`
 command — resets it, and since #1128 a left click on the segment opens the
-history directly (see "Clickable segments" below).
+center directly (see "Clickable segments" below), which is what makes the
+counter a hint at where the missed notifications went. Clearing the center's
+list (`c`) also leaves nothing unread.
 
 ## Clickable segments (#1128)
 
