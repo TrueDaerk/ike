@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-28 (Terminal completion: type-aware trailing space on accept, #2261)
+
+- **Candidates carry their source** (`internal/terminal/complete.go`): the
+  popup's items are `candidate{text, kind}` instead of plain strings — the
+  filesystem, PATH and Makefile scanners tag each entry `candDir` or
+  `candFinal`, and the tag rides through to the accept.
+- **The accept follows the kind** (the zsh/fish rule): a directory keeps its
+  trailing `/` and nothing more, so completion continues inside it; a file, a
+  PATH executable or a make target is a finished token and gets a **trailing
+  space**. An explicitly picked candidate that is a strict prefix of other
+  still-matching ones counts as final too — only directory semantics suppress
+  the space. Both accept paths (tab, and enter on a focused popup) share it.
+- **No doubled space**: `spaceFollowsCursor` reads the joined soft-wrap chain
+  forwards from the cursor, so accepting mid-line (or on a row's last column,
+  where the next cell lives on the continuation row) inserts the candidate
+  alone.
+- `lineBeforeCursor` now pads the right-trimmed cursor row back to the cursor
+  column, so a trailing space — accepted or typed — is visible to
+  `parseCmdline` and the finished word parses as a fresh empty one.
+- See /architecture/terminal.md.
+
 ## 2026-08-28 (Data viewer: column sort and CSV/JSON export, #2248)
 
 - **Column sort** (`internal/datasrc/sort.go`, `internal/dataview/sort.go`):
