@@ -33,7 +33,10 @@ func (f *fakeMarketEngine) Install(_ context.Context, e market.Entry) error {
 	if f.installErr != nil {
 		return f.installErr
 	}
-	f.installed[e.Name] = market.Installed{Name: e.Name, Version: e.ParsedVersion(), VersionOK: true}
+	f.installed[e.Name] = market.Installed{
+		Name: e.Name, Version: e.ParsedVersion(), VersionOK: true,
+		Capabilities: append([]string{}, e.Capabilities...),
+	}
 	return nil
 }
 
@@ -128,8 +131,11 @@ func TestMarketplaceDetailShowsCapabilities(t *testing.T) {
 }
 
 func TestMarketplaceUpdateStatus(t *testing.T) {
+	// Same capability list as the catalog entry: a routine version bump, so
+	// no re-review gate stands between i and the install (#2257).
 	eng := &fakeMarketEngine{installed: map[string]market.Installed{
-		"example": {Name: "example", Version: market.Version{Major: 1, Minor: 0, Patch: 0}, VersionOK: true},
+		"example": {Name: "example", Version: market.Version{Major: 1, Minor: 0, Patch: 0}, VersionOK: true,
+			Capabilities: []string{"commands", "notify"}},
 	}}
 	p := loadedPage(t, eng)
 	if v := p.View(120, 40); !strings.Contains(v, "update 1.0.0 → 1.2.0") {

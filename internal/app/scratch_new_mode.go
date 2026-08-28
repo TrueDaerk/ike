@@ -40,15 +40,24 @@ func (scratchNewMode) Placeholder() string { return "New scratch file: language�
 // title, "Plain Text" is pinned to the top of the unfiltered list (the
 // JetBrains default), and the detail column shows the extension the scratch
 // will get. Activating a row runs the matching scratch.new[.<id>] command, so
-// the picker owns no creation logic of its own.
+// the picker owns no creation logic of its own. One row is not a language:
+// "Open existing scratch…" (#2256) leaves the creation flow for the scratch
+// manager, since "new scratch" is where one notices that the wanted scratch
+// already exists; it sorts last so it never displaces a language.
 func (scratchNewMode) Results(query string, _ palette.Context) []palette.Item {
 	type row struct {
 		title, ext, id string
+		// detail overrides the extension chip; only the manager row uses it.
+		detail string
 		// rank breaks ties for equal fuzzy scores: plain text first, then
 		// alphabetically by title.
 		rank int
 	}
-	rows := []row{{title: "Plain Text", ext: "txt", id: scratchTextCommandID, rank: 0}}
+	rows := []row{
+		{title: "Plain Text", ext: "txt", id: scratchTextCommandID, rank: 0},
+		{title: "Open existing scratch…", id: scratchManageCommandID,
+			detail: "rename · delete · language", rank: 2},
+	}
 	for _, l := range lang.All() {
 		if len(l.Extensions) == 0 {
 			continue
@@ -72,10 +81,14 @@ func (scratchNewMode) Results(query string, _ palette.Context) []palette.Item {
 		if !ok {
 			continue
 		}
+		detail := r.detail
+		if detail == "" {
+			detail = "." + r.ext
+		}
 		out = append(out, scored{
 			item: palette.Item{
 				Title:  r.title,
-				Detail: "." + r.ext,
+				Detail: detail,
 				Spans:  m.Positions,
 				Score:  m.Score,
 				Msg:    palette.RunCommandMsg{ID: r.id},

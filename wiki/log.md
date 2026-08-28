@@ -27,6 +27,55 @@
   immediately.
 - New concept doc [architecture/ansible-vault.md](architecture/ansible-vault.md).
 
+## 2026-08-28 (Marketplace: update notifications for installed plugins, #2257)
+
+- **Update diff** (`internal/market/update.go`): `FindUpdates` compares the
+  installed sidecars against the catalog and returns one `market.Update` per
+  outdated plugin, including `AddedCapabilities` — what the new version asks
+  for beyond the manifest's pin. Dropped capabilities do not count; a shorter
+  list can only reduce what the runtime allows. The sidecar's capability list
+  now comes back with `Engine.Installed`, which is what makes the diff
+  possible.
+- **The capability gate**: an update with a grown capability list is badged
+  `⚠ new capabilities`, named in the row detail, **held back** from update-all
+  with an inline note, and installed only through a confirmation dialog that
+  spells out the added capabilities. A capability change is surfaced, never
+  auto-accepted; the install path's re-pinning rules are untouched.
+- **Automatic check** (`internal/app/marketupdates.go`, wired into `Init`):
+  one background catalog fetch on start, rate-limited to once per 24 h through
+  a timestamp in `~/.ike/marketplace-check.json`, and silent on failure — an
+  unreachable catalog raises nothing and leaves the timestamp alone, so the
+  next start retries instead of waiting a day. A check that finds updates
+  raises exactly one notification and hands its catalog to the marketplace
+  page, so opening it shows the badges without re-fetching.
+- **Update-all** (`u`) installs every pending update through the existing
+  checksum-verified atomic install path, in one batch; the page header counts
+  the pending updates.
+- **Setting**: `marketplace.auto_check` (user scope, default on) in config and
+  under Settings ▸ Marketplace Catalog.
+
+## 2026-08-28 (Scratch files: manager with rename, delete, language change, #2256)
+
+- **The manager** (`internal/app/scratch_manager.go`): `scratch.manage`
+  ("Manage Scratch Files…", palette + File menu) lists the whole store in a
+  floating shell dialog with name, language, size and last-modified, narrowed
+  by a `ui.SpeedSearch` type-ahead over name *and* language; `enter` (or a
+  second click on a row) opens through the standard funnel.
+- **Actions are chords, not letters** — a letter belongs to the type-ahead:
+  `ctrl+r`/`f2` renames (prefilled, validated by the store), `ctrl+l` opens the
+  language list, `ctrl+d`/`delete` deletes after a confirmation, `esc` clears
+  the query, walks a step back, then closes.
+- **Open buffers follow without new machinery**: mutations emit
+  `explorer.FileMovedMsg` / `explorer.FileDeletedMsg`, so a scratch open in a
+  tab re-points (tab title and language follow via `editor.SetPath`) or closes
+  through the paths #175 already established.
+- **Store** (`internal/scratch`): `Entry` carries the file's `Size`, and
+  `SetExt` expresses the language change as what it is — keep the stem, swap
+  the extension — running through `Rename` so its guards (no overwrite, no
+  traversal, nothing outside the store) hold unchanged.
+- **Reachable from the creation flow**: the `scratch.new` language picker has
+  an "Open existing scratch…" row that runs the manager.
+
 ## 2026-08-28 (Bookmarks: descriptions and a project-wide overview, #2251)
 
 - **The overview** (`internal/app/bookmarks_overview.go`, `bookmark.overview`):

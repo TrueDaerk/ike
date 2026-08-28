@@ -9,6 +9,9 @@ package settings
 // back as MarketCatalogMsg/MarketActionMsg through the panel's Deliver
 // routing. Newly installed plugins load on the next start (the runtime scans
 // at startup), so every successful install/update shows the restart notice.
+// Update detection (#2257) lives in market.FindUpdates: rows carry an
+// "update x → y" badge, `u` updates everything at once, and a version that
+// grew its capability list is held back for an explicit per-plugin confirm.
 
 import (
 	"context"
@@ -59,6 +62,10 @@ type MarketplacePage struct {
 	fetchErr  string
 	fetching  bool
 	installed map[string]market.Installed
+	// updates is the catalog-vs-installed diff (#2257), keyed by plugin name
+	// and recomputed on every rescan; it drives the row badge, the
+	// capability-change gate and update-all.
+	updates map[string]market.Update
 
 	sel      int
 	host     SubPanelHost
@@ -76,6 +83,7 @@ func NewMarketplacePage(engine MarketEngine, fetch MarketFetcher) *MarketplacePa
 		engine:    engine,
 		fetch:     fetch,
 		installed: map[string]market.Installed{},
+		updates:   map[string]market.Update{},
 		expanded:  map[string]bool{},
 		busy:      map[string]bool{},
 		rowNote:   map[string]string{},
@@ -151,7 +159,8 @@ func (p *MarketplacePage) Receive(msg tea.Msg) {
 	}
 }
 
-// rescan refreshes the installed map from the plugins directory.
+// rescan refreshes the installed map from the plugins directory and rebuilds
+// the update diff against the loaded catalog (#2257).
 func (p *MarketplacePage) rescan() {
 	if p.engine == nil {
 		return
@@ -159,6 +168,22 @@ func (p *MarketplacePage) rescan() {
 	if inst, err := p.engine.Installed(); err == nil {
 		p.installed = inst
 	}
+	p.updates = map[string]market.Update{}
+	if p.catalog == nil {
+		return
+	}
+	for _, u := range market.FindUpdates(*p.catalog, p.installed) {
+		p.updates[u.Name()] = u
+	}
+}
+
+// Updates returns the pending updates sorted by name; the app reads it to
+// announce "n plugin updates available" after the startup check (#2257).
+func (p *MarketplacePage) Updates() []market.Update {
+	if p.catalog == nil {
+		return nil
+	}
+	return market.FindUpdates(*p.catalog, p.installed)
 }
 
 // rows returns the catalog entries sorted by name.
@@ -180,7 +205,9 @@ func (p *MarketplacePage) current() (market.Entry, bool) {
 	return rows[p.sel], true
 }
 
-// status classifies one entry against the installed state.
+// status classifies one entry against the installed state. An update whose
+// capability list grew carries the "new capabilities" badge — update-all
+// skips it and `i` asks first (#2257).
 func (p *MarketplacePage) status(e market.Entry) string {
 	inst, ok := p.installed[e.Name]
 	switch {
@@ -189,7 +216,11 @@ func (p *MarketplacePage) status(e market.Entry) string {
 	case !ok:
 		return "available"
 	case market.UpdateAvailable(e, inst):
-		return "update " + inst.Version.String() + " → " + e.ParsedVersion().String()
+		s := "update " + inst.Version.String() + " → " + e.ParsedVersion().String()
+		if u, ok := p.updates[e.Name]; ok && u.NeedsConfirm() {
+			s += " ⚠ new capabilities"
+		}
+		return s
 	default:
 		return "installed"
 	}
@@ -226,11 +257,14 @@ func (p *MarketplacePage) Update(key tea.KeyPressMsg) tea.Cmd {
 		// list has been on screen (the review step).
 		if hasRow && p.expanded[row.Name] && !p.busy[row.Name] {
 			if act := p.action(row); act != "" {
-				return p.run(row.Name, act, func(ctx context.Context) error {
-					return p.engine.Install(ctx, row)
-				})
+				return p.startInstall(row)
 			}
 		}
+	case "u":
+		// Update all (#2257): every pending update whose capability list did
+		// not grow, in one batch. A grown list is a re-review and stays on
+		// the per-plugin `i` path.
+		return p.updateAll()
 	case "x":
 		if _, ok := p.installed[row.Name]; hasRow && ok && !p.busy[row.Name] && p.host != nil {
 			name := row.Name
@@ -245,6 +279,59 @@ func (p *MarketplacePage) Update(key tea.KeyPressMsg) tea.Cmd {
 		return p.refresh()
 	}
 	return nil
+}
+
+// startInstall installs or updates one entry. An update that grows the
+// capability list is never applied silently (#2257): the confirm dialog names
+// the added capabilities, so the user re-reviews exactly what is new. Without
+// a sub-panel host to ask on, such an update is refused rather than accepted.
+func (p *MarketplacePage) startInstall(e market.Entry) tea.Cmd {
+	act := p.action(e)
+	if act == "" {
+		return nil
+	}
+	do := func() tea.Cmd {
+		return p.run(e.Name, act, func(ctx context.Context) error {
+			return p.engine.Install(ctx, e)
+		})
+	}
+	u, ok := p.updates[e.Name]
+	if !ok || !u.NeedsConfirm() {
+		return do()
+	}
+	if p.host == nil {
+		p.rowNote[e.Name] = "update requests new capabilities: " + strings.Join(u.AddedCapabilities, ", ")
+		return nil
+	}
+	what := "update " + e.Name + " to " + u.To().String() +
+		" — it requests new capabilities: " + strings.Join(u.AddedCapabilities, ", ")
+	p.host.Push(newConfirm(p.host, what, "Update", p.pal, do))
+	return nil
+}
+
+// updateAll runs every pending update that keeps its capability list, in one
+// batch. Updates asking for more are left alone and noted on their row.
+func (p *MarketplacePage) updateAll() tea.Cmd {
+	var cmds []tea.Cmd
+	for _, e := range p.rows() {
+		u, ok := p.updates[e.Name]
+		if !ok || p.busy[e.Name] {
+			continue
+		}
+		if u.NeedsConfirm() {
+			p.rowNote[e.Name] = "held back: new capabilities (" +
+				strings.Join(u.AddedCapabilities, ", ") + ") — press i to review"
+			continue
+		}
+		entry := e
+		cmds = append(cmds, p.run(entry.Name, "update", func(ctx context.Context) error {
+			return p.engine.Install(ctx, entry)
+		}))
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 // run marks the row busy and wraps one engine call into a tea.Cmd.
@@ -285,6 +372,9 @@ func (p *MarketplacePage) View(width, height int) string {
 	default:
 		head.WriteString(dim.Render(" plugin · status · description"))
 	}
+	if n := len(p.updates); n > 0 {
+		head.WriteString("\n" + dim.Render(" "+plural(n, "plugin update")+" available — press u to update all"))
+	}
 	if p.restart {
 		head.WriteString("\n" + warn.Render(" restart IKE to load installed/updated plugins"))
 	}
@@ -315,7 +405,7 @@ func (p *MarketplacePage) View(width, height int) string {
 		list = append(list, clip.Render(warn.Render(" "+d)))
 	}
 	footer := wrapFooter([]footerLine{{
-		text:  " enter details · i install/update (from details) · x remove · g refresh catalog · ? keys",
+		text:  " enter details · i install/update (from details) · u update all · x remove · g refresh catalog · ? keys",
 		style: dim,
 	}}, width, 2)
 	hl := p.headLines()
@@ -330,6 +420,9 @@ func (p *MarketplacePage) View(width, height int) string {
 // arithmetic View uses (#674).
 func (p *MarketplacePage) headLines() int {
 	n := 1
+	if len(p.updates) > 0 {
+		n++
+	}
 	if p.restart {
 		n++
 	}
@@ -393,6 +486,12 @@ func (p *MarketplacePage) inspectEntry(e market.Entry) []string {
 		caps = "capabilities: " + strings.Join(e.Capabilities, ", ")
 	}
 	out = append(out, caps)
+	// A version asking for capabilities the installed manifest does not pin
+	// is a re-review, so the detail names them next to the full list (#2257).
+	if u, ok := p.updates[e.Name]; ok && u.NeedsConfirm() {
+		out = append(out, "new capabilities in "+u.To().String()+": "+strings.Join(u.AddedCapabilities, ", ")+
+			" — updating asks for confirmation")
+	}
 	if act := p.action(e); act != "" {
 		out = append(out, "press i to "+act)
 	}
@@ -403,6 +502,7 @@ func (p *MarketplacePage) inspectEntry(e market.Entry) []string {
 func (p *MarketplacePage) KeyHelp() []string {
 	return []string{
 		"enter  details (capability review) · i  install/update",
+		"u  update all (plugins asking for new capabilities are held back)",
 		"x  remove the installed plugin",
 		"g  refresh the catalog",
 	}

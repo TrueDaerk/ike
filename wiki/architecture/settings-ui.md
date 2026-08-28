@@ -256,7 +256,8 @@ any entry whose key the typed schema does not expose (no dead keys).
 - **TODO Index** (#1663) — `todo.patterns`, the tag words the project scan
   matches (see [TODO index](./todo-index.md)).
 - **Marketplace Catalog** (#1663) — `marketplace.catalog_url`, the index the
-  Marketplace page installs from.
+  Marketplace page installs from, and `marketplace.auto_check` (#2257), the
+  daily background update check (see [marketplace](./marketplace.md)).
 
 ### No file-only keys (#1663)
 

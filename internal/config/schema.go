@@ -438,8 +438,12 @@ type Todo struct {
 // Marketplace holds plugin-marketplace settings (Roadmap 0310, #444).
 // CatalogURL is the HTTPS location of the catalog index.json; empty falls back
 // to the built-in default (which may itself be empty — marketplace disabled).
+// AutoCheck turns the automatic update check on IDE start on or off (#2257);
+// it is rate-limited to at most once per day and stays silent on failure. The
+// marketplace page always checks when it opens, regardless of this setting.
 type Marketplace struct {
 	CatalogURL string `toml:"catalog_url"`
+	AutoCheck  bool   `toml:"auto_check"`
 }
 
 // Terminal holds integrated-terminal behaviour (Roadmap 0170). Autosuggest

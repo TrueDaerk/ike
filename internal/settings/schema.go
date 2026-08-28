@@ -441,6 +441,7 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 		}},
 		{Title: "Marketplace Catalog", Description: "Where the plugin marketplace fetches its catalog from. The Marketplace page installs from whatever this URL serves.", Entries: []Entry{
 			{Key: "marketplace.catalog_url", Type: String, Title: "Catalog URL", Description: "HTTPS location of the marketplace index.json; empty falls back to the built-in default, which may itself be empty — then the marketplace stays disabled", Scope: config.UserScope},
+			{Key: "marketplace.auto_check", Type: Bool, Title: "Check for plugin updates", Description: "Compare installed plugins against the catalog on IDE start and announce how many updates are available (#2257). The check runs in the background at most once a day and stays silent when the catalog cannot be reached; opening the Marketplace page always checks regardless", Scope: config.UserScope},
 		}},
 	}
 }

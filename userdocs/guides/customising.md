@@ -285,6 +285,13 @@ enabled = false
 
 A plugin's own settings, where it has any, appear as their own settings page.
 
+IKE checks installed plugins against the marketplace catalog once a day in the
+background and tells you how many updates are waiting; `u` on the Marketplace
+page installs them all at once. A new version that asks for **more
+capabilities** than the one you installed is held back and updated only after
+you confirm the added capabilities. Turn the check off with
+`marketplace.auto_check = false` (Settings ▸ Marketplace Catalog).
+
 ## Where it all ends up
 
 | Path | What |

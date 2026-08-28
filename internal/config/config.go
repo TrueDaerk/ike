@@ -327,6 +327,7 @@ func (c *Config) Flat() map[string]string {
 	put("debug.php.hostname", c.Debug.PHP.Hostname)
 
 	put("marketplace.catalog_url", c.Marketplace.CatalogURL)
+	put("marketplace.auto_check", c.Marketplace.AutoCheck)
 
 	put("todo.patterns", strings.Join(c.Todo.Patterns, ","))
 
