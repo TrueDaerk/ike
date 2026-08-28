@@ -4,7 +4,7 @@ title: Remote File Browsing (SFTP)
 description: "#1997 — an SSH host profile browsed as an explorer-like pane over the sftp subsystem of the user's own ssh; remote files download into a local cache and open read-only (viewers get the local copy), saves are blocked, never silently redirected."
 resource: internal/remote
 tags: [architecture, remote, sftp, ssh, pane, read-only]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-08-28T12:00:00Z
 ---
 
 # Remote File Browsing (SFTP) (#1997)
@@ -78,6 +78,19 @@ just-dialed session, or the ssh subprocess would linger.
   successful scan — the tree is never replaced by raw error text.
 - **Close** (`ctrl+w` / `pane.close`) ends the SFTP session and kills the
   ssh subprocess (`releaseContent`).
+
+### Mouse (#2259)
+
+The pane exposes `Wheel` and `Click` (`internal/remote/mouse.go`), routed for
+`pane.KindRemote` by the app's wheel and click dispatch. The gestures are the
+archive viewer's, on the same shared primitives: the wheel scrolls the entry
+list clamped at the last page with the cursor dragged along
+(`ui.WheelWindow`), a click selects the row under the pointer (`ui.RowAt`
+rejects the header, the footer and the blank tail), a press on a directory's
+two-cell fold glyph expands or collapses it right away — scanning it on first
+expand, like `enter` — and a second press on the same row within
+`ui.DoubleClickWindow` activates it. While the connect is failing the whole
+pane is a notice, so both gestures are inert.
 
 ## Opening a remote file: the cache
 

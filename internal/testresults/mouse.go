@@ -1,17 +1,18 @@
 package testresults
 
 import (
-	"time"
-
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/ui"
 )
 
 // Mouse control, mirroring the Problems panel. Coordinates are
-// pane-content-local: y 0 is the header line, rows start at y 1.
+// pane-content-local: y 0 is the header line, rows start at y 1. The wheel,
+// the hit-test and the double-click clock come from the shared list-mouse
+// layer (#2259).
 
-// doubleClickWindow is the maximum delay between two clicks on the same row
-// for the second to activate it, matching the explorer.
-const doubleClickWindow = 400 * time.Millisecond
+// headerRows is how many lines sit above the first tree row.
+const headerRows = 1
 
 // Wheel scrolls by delta rows (positive = down): the detail column when it
 // holds the focus, the tree otherwise (the cursor dragged along so it stays
@@ -22,58 +23,30 @@ func (m *Model) Wheel(delta int) {
 		m.clampDetail()
 		return
 	}
-	maxTop := len(m.rows) - 1
-	if maxTop < 0 {
-		maxTop = 0
-	}
-	m.top += delta
-	if m.top > maxTop {
-		m.top = maxTop
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
-	if m.cursor < m.top {
-		m.cursor = m.top
-	}
-	if h := m.bodyHeight(); m.cursor >= m.top+h {
-		m.cursor = m.top + h - 1
-	}
-	if m.cursor > len(m.rows)-1 {
-		m.cursor = len(m.rows) - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
+	ui.WheelWindow(&m.top, &m.cursor, delta, len(m.rows), m.bodyHeight())
 }
 
 // Click handles one left click at content-local (x, y). A click right of the
 // separator focuses the detail column; a tree-row click selects, a second
-// click on the selected row within doubleClickWindow activates it.
+// click on the selected row within the double-click window activates it.
 func (m *Model) Click(x, y int) tea.Cmd {
 	tw, _ := m.colWidths()
 	if x > tw {
 		m.detailFocus = true
+		m.clicks.Reset()
 		return nil
 	}
 	m.detailFocus = false
-	i := m.top + (y - 1)
-	if y < 1 || y > m.bodyHeight() || i < 0 || i >= len(m.rows) {
+	i, ok := ui.RowAt(y, m.top, headerRows, m.bodyHeight(), len(m.rows))
+	if !ok {
+		m.clicks.Reset()
 		return nil
 	}
-	double := m.doubleClicked(i)
+	double := m.clicks.Double(i, m.now())
 	m.cursor = i
 	if double {
+		m.clicks.Reset()
 		return m.activate(i)
 	}
 	return nil
-}
-
-// doubleClicked records one click on a row and reports whether it completes
-// a double-click on that row.
-func (m *Model) doubleClicked(row int) bool {
-	nowAt := m.now()
-	hit := m.lastClickRow == row && nowAt.Sub(m.lastClickAt) <= doubleClickWindow
-	m.lastClickRow, m.lastClickAt = row, nowAt
-	return hit
 }

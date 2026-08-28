@@ -139,6 +139,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
+// Wheel scrolls the view by delta rows (positive = down), the gesture every
+// other viewer answers to (#2259). All three columns render off the result
+// editor's scroll offset, so moving that viewport moves the whole view — the
+// side columns stay aligned with the edited region exactly as they do for the
+// keyboard.
+func (m *Model) Wheel(delta int) { m.ed.ScrollBy(delta) }
+
 // theme returns the active palette, falling back to the default.
 func (m Model) theme() *theme.Palette {
 	if m.pal != nil {

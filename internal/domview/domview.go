@@ -38,9 +38,6 @@ type CopyMsg struct {
 	What string
 }
 
-// doubleClickWindow matches the explorer's and Structure panel's delay.
-const doubleClickWindow = 400 * time.Millisecond
-
 // textPreviewRunes caps a text node's display excerpt.
 const textPreviewRunes = 40
 
@@ -80,9 +77,11 @@ type Model struct {
 	matchIdx   int // current match (-1 none)
 	matchesRev int // bumped whenever matches or the current match change
 
-	lastClickRow int
-	lastClickAt  time.Time
-	now          func() time.Time
+	// Double-click detection: navigating to a node needs a second click on
+	// the same row within ui.DoubleClickWindow; now is injectable so tests
+	// control the clock.
+	clicks ui.ClickTracker
+	now    func() time.Time
 }
 
 // New returns an empty panel awaiting its first document delivery.
@@ -90,7 +89,7 @@ func New(pal *theme.Palette) Model {
 	return Model{
 		pal: pal, current: -1, matchIdx: -1,
 		collapsed: map[*html.Node]bool{}, matchSet: map[*html.Node]bool{},
-		lastClickRow: -1, now: time.Now,
+		now: time.Now,
 	}
 }
 
@@ -473,11 +472,15 @@ func (m *Model) cursorElement() *html.Node {
 	return nil
 }
 
+// headerRows is how many lines sit above the first tree row: the title and
+// the CSS selector line.
+const headerRows = 2
+
 // Wheel scrolls the list by delta rows (positive = down), like the Structure
-// panel.
+// panel; the shared list-mouse layer (#2259) keeps the last page full and
+// drags the cursor along.
 func (m *Model) Wheel(delta int) {
-	m.top = clampInt(m.top+delta, 0, maxInt(0, len(m.rows)-1))
-	m.cursor = clampInt(m.cursor, m.top, maxInt(m.top, m.top+m.bodyHeight()-1))
+	ui.WheelWindow(&m.top, &m.cursor, delta, len(m.rows), m.bodyHeight())
 }
 
 // Click handles one left click at content-local (x, y): the selector line
@@ -488,22 +491,23 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		m.selEditing = true
 		return nil
 	}
-	i := m.top + (y - 2)
-	if y < 2 || i < 0 || i >= len(m.rows) {
+	i, ok := ui.RowAt(y, m.top, headerRows, m.bodyHeight(), len(m.rows))
+	if !ok {
+		m.clicks.Reset()
 		return nil
 	}
 	m.selEditing = false
 	r := m.rows[i]
 	if r.HasKids && x >= 1+2*r.Depth && x < 3+2*r.Depth {
 		m.cursor = i
+		m.clicks.Reset()
 		m.toggleFold(i)
 		return nil
 	}
-	nowAt := m.now()
-	double := m.lastClickRow == i && nowAt.Sub(m.lastClickAt) <= doubleClickWindow
-	m.lastClickRow, m.lastClickAt = i, nowAt
+	double := m.clicks.Double(i, m.now())
 	m.cursor = i
 	if double {
+		m.clicks.Reset()
 		return m.navigate(i)
 	}
 	return nil

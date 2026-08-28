@@ -104,9 +104,8 @@ type Model struct {
 	// Mouse state (#1788): loading a table by mouse needs a second click on
 	// the same sidebar row within doubleClickWindow; now is swappable in
 	// tests.
-	lastClickRow int
-	lastClickAt  time.Time
-	now          func() time.Time
+	clicks ui.ClickTracker
+	now    func() time.Time
 
 	w, h    int
 	focused bool
@@ -119,7 +118,7 @@ type Model struct {
 // draws its loading notice; an open error lands the same way and degrades to a
 // notice, so an encrypted or corrupt file explains itself.
 func New(key, p string, pal *theme.Palette) Model {
-	m := Model{key: key, path: p, pal: pal, sel: -1, lastClickRow: -1, now: time.Now}
+	m := Model{key: key, path: p, pal: pal, sel: -1, now: time.Now}
 	m.rebuildTheme()
 	return m
 }

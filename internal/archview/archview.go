@@ -71,18 +71,17 @@ type Model struct {
 	focused bool
 
 	// Double-click detection (#1852) mirrors the explorer: activating a row
-	// with the mouse needs a second click on it within doubleClickWindow;
+	// with the mouse needs a second click on it within ui.DoubleClickWindow;
 	// now is injectable so tests control the clock.
-	lastClickRow int
-	lastClickAt  time.Time
-	now          func() time.Time
+	clicks ui.ClickTracker
+	now    func() time.Time
 }
 
 // New opens the archive at path and builds its entry tree. A listing error is
 // kept for View — the pane opens either way and explains itself, so a
 // truncated or corrupt archive degrades to a notice instead of a crash.
 func New(key, p string, pal *theme.Palette) Model {
-	m := Model{key: key, path: p, pal: pal, collapsed: map[string]bool{}, lastClickRow: -1, now: time.Now}
+	m := Model{key: key, path: p, pal: pal, collapsed: map[string]bool{}, now: time.Now}
 	m.listing, m.err = archive.List(p)
 	m.build()
 	return m

@@ -1,5 +1,36 @@
 # Log
 
+## 2026-08-28 (Mouse audit: uniform wheel / click / double click, #2259)
+
+- **Shared list-mouse layer** (`internal/ui/listmouse.go`): `WheelWindow`
+  (clamped scroll that drags the cursor along), `RowAt` (content-local row
+  hit-test) and `ClickTracker` (`DoubleClickWindow` = 400 ms), adopted by the
+  explorer, VCS, Problems, Usages, Structure, Breakpoints, Test Results,
+  GitHub Issues, DOM inspector, Archive viewer, Data viewer, and both doctor
+  panes. A dozen packages had carried their own copies.
+- **Two behaviour fixes fell out of the merge**: the wheel no longer scrolls a
+  list's last page off the screen (nine panes used `maxTop = n-1`; the archive
+  and data viewers' `n-height` is now the rule), and a click on the footer row
+  or on the blank tail under a short list no longer selects a row (Structure,
+  the DOM inspector, the VCS changes list and GitHub Issues had no upper bound
+  on `y`).
+- **Gaps closed**: the Elasticsearch console (`internal/espane/mouse.go`) and
+  the SFTP remote browser (`internal/remote/mouse.go`) had no mouse handling
+  at all and now scroll, select and activate like the data viewer and the
+  archive viewer they mirror; the merge view gained a wheel that moves all
+  three columns (`internal/merge`); a floating-shell picker's viewport now
+  scrolls with the wheel (`ui.Floating.Wheel`).
+- **Tabs**: middle-click-closes reached the popup terminal box and the
+  floating panels (`popupBoxTabAt` / `floatPanelTabAt` now back both the left-
+  and middle-click paths), where only the `✕` zone had closed a tab.
+- **Convention and matrix**: /architecture/mouse.md records the one rule every
+  surface obeys — wheel scrolls (clamped), single click focuses and selects,
+  double click activates, affordances answer to one click, chrome is inert —
+  the tab rules, the looser single-click-picks rule transient overlays keep,
+  and the audited surface×gesture table with before/after state. Row clicks
+  inside floating-shell pickers stay open — the shell sees its content as
+  opaque text — and are named there as such, tracked in #2275.
+
 ## 2026-08-28 (Per-file test coverage: Test Results listing and status segment, #2246)
 
 - **Per-file percentages** (`internal/coverage`): the store gained

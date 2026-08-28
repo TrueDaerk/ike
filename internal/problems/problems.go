@@ -266,16 +266,15 @@ type Model struct {
 	warnCount int
 
 	// Double-click detection mirrors the VCS panel (#514): activating a row
-	// needs a second click on the same row within doubleClickWindow; now is
-	// injectable so tests control the clock.
-	lastClickRow int
-	lastClickAt  time.Time
-	now          func() time.Time
+	// needs a second click on the same row within ui.DoubleClickWindow; now
+	// is injectable so tests control the clock.
+	clicks ui.ClickTracker
+	now    func() time.Time
 }
 
 // New returns an empty panel; the store arrives via SetStore.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal, lastClickRow: -1, now: time.Now}
+	return Model{pal: pal, now: time.Now}
 }
 
 // SetStore shares the app-level diagnostics store and rebuilds the rows.

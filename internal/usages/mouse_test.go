@@ -59,9 +59,11 @@ func TestClickOutsideRowsIgnored(t *testing.T) {
 
 func TestWheelScrollsAndDragsCursor(t *testing.T) {
 	m, _ := mouseModel(t)
+	// 4 rows in a 3-row body: the window stops at top 1 so the last page
+	// stays full (#2259).
 	m.Wheel(2)
-	if m.top != 2 {
-		t.Fatalf("top = %d, want 2", m.top)
+	if m.top != 1 {
+		t.Fatalf("top = %d, want 1", m.top)
 	}
 	if m.Cursor() < m.top {
 		t.Fatalf("cursor %d left above the window (top %d)", m.Cursor(), m.top)

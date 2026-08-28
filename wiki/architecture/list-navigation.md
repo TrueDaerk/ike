@@ -4,7 +4,7 @@ title: Selection-List Navigation
 description: The shared cursor semantics every selectable list obeys — single steps wrap around, page keys jump one visible page and clamp, home/end go to the extremes, and the scroll window follows the selection.
 resource: internal/ui/listnav.go
 tags: [architecture, ui, lists, navigation, keys, reusable]
-timestamp: 2026-08-25T18:00:00Z
+timestamp: 2026-08-28T12:00:00Z
 ---
 
 # Selection-List Navigation
@@ -39,7 +39,11 @@ first/last entry. Lists that sit behind a text query — the palette, the finder
 — leave `home`/`end` to the query cursor; their page keys still page the list.
 
 The mouse wheel keeps **clamped** semantics everywhere: a wheel flick past the
-end must not teleport to the other end of the list.
+end must not teleport to the other end of the list — and, since #2259, must
+not scroll the last page off the screen either. The pointer side of a list
+lives in [Mouse Gestures](/architecture/mouse.md): `ui.WheelWindow`,
+`ui.RowAt` and `ui.ClickTracker` are to the wheel and the click what these
+primitives are to the keys.
 
 ## Scrolloff (#2041)
 
@@ -125,6 +129,7 @@ query's first rune.
 
 ## See also
 
+- [Mouse Gestures](/architecture/mouse.md)
 - [Picker Speed Search](/architecture/speed-search.md)
 - [Command Palette](/architecture/command-palette.md)
 - [Floating Shell](/architecture/floating-shell.md)

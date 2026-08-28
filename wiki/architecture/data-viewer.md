@@ -4,7 +4,7 @@ title: Data Viewer
 description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825/#1851/#1885/#1940 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table> (the head prefills through WHERE, so only the condition is typed), run inside a subquery so paging keeps working; 'P' profiles the focused column (nulls, distinct, min/max, top values, plus mean or length range) through SQL aggregates or a bounded scan, asynchronously and cancelably."
 resource: internal/dataview
 tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sql, mouse, paging, async, performance, profile, statistics]
-timestamp: 2026-08-18T16:00:00Z
+timestamp: 2026-08-28T12:00:00Z
 ---
 
 # Data Viewer (#1764, #1765, #1766, #1777, #1788, #1795, #1940)
@@ -351,6 +351,11 @@ rows 1 … `bodyHeight`, the sidebar owning `x < sidebarWidth`).
 - While the **filter line** is open it keeps the input (#1777): clicks are
   inert until `enter` or `esc` closes it, since loading another table would
   drop the half-typed clause.
+
+Since #2259 the arithmetic behind all three lives in `internal/ui/listmouse.go`
+(`WheelWindow`, `RowAt`, `ClickTracker`) — this pane's clamp-at-the-last-page
+wheel became the rule for every list-shaped surface; see
+/architecture/mouse.md.
 
 `s` shows the selected object's schema — the `CREATE` statement for SQLite and
 DuckDB, the schema view for Parquet — in a read-only editor tab under the
