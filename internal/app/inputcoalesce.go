@@ -241,7 +241,7 @@ func (m Model) overlayCapturesPaste() bool {
 	if m.overlayCapturesAbovePopup() {
 		return true
 	}
-	return !m.popupLayerOpen() && m.overlayCapturesBelowPopup()
+	return !m.popupLayerFocused() && m.overlayCapturesBelowPopup()
 }
 
 // handlePaste routes a bracketed-paste block (#603) to the focused editable
@@ -258,7 +258,7 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 		cmd, _ := m.routeOverlayPaste(text)
 		return m, cmd
 	}
-	if m.popupLayerOpen() {
+	if m.popupLayerFocused() {
 		// The open popup terminal layer (#1398, #1793) owns the keyboard:
 		// bracketed pastes go to its focused shell — under broadcast (#1427)
 		// to both box sides — never the surfaces underneath.

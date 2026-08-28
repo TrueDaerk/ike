@@ -324,10 +324,11 @@ func TestPopupBoxClickRaisesBox(t *testing.T) {
 	if m.popupBoxZ() != 0 || m.popupBoxAt(overlapX, overlapY) != f.inst {
 		t.Fatal("a panel click must raise it over the box again")
 	}
-	// A press outside every surface still dismisses the whole layer.
+	// A press outside every surface blurs the whole layer (#2309) — box and
+	// panels stay visible as one unit, the keyboard moves to the panes below.
 	m = step(m, press(1, m.height-2))
-	if m.popup.open {
-		t.Fatal("a press outside the layer must still hide it as one unit")
+	if !m.popup.open || !m.popup.blurred {
+		t.Fatal("a press outside the layer must blur it as one unit")
 	}
 }
 

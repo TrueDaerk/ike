@@ -55,6 +55,14 @@ type popupTerm struct {
 	focusRight bool           // keyboard owner: false = inst, true = split
 	broadcast  bool           // cmd+shift+i (#1427): input mirrors to both sides
 	open       bool
+	// blurred marks the layer visible but without the keyboard (#2309): a
+	// press outside every layer box blurs instead of hiding, so a copy round
+	// trip (click into the editor, copy, toggle back, paste) keeps the popup
+	// on screen. While blurred the panes below own keys and mouse; only
+	// events over a layer box reach the layer, and a press there — or the
+	// toggle chord — refocuses it. open == false implies the flag is
+	// meaningless (hidden is hidden).
+	blurred bool
 	// boxZ is the box's slot in the layer's z-order (#1806): the number of
 	// floating panels (#1793) drawn below it. 0 leaves the box at the bottom,
 	// len(floatTerms) puts it on top — where focusing it moves it, so the box
@@ -89,9 +97,16 @@ func (p popupTerm) instances() []*pane.Instance {
 // plus every floating panel (#1793) — as one unit (terminal.popup). The first
 // show with nothing retained spawns a shell; later shows reveal the retained
 // boxes unchanged (a layer whose box was fully torn out reveals just its
-// panels). Pane focus is never moved — while the layer is open the key funnel
-// routes to it before any pane, and hiding it falls back to the focused pane.
+// panels). Pane focus is never moved — while the layer is focused the key
+// funnel routes to it before any pane, and hiding it falls back to the
+// focused pane. A blurred layer (#2309 — visible without the keyboard, after
+// an outside press) is refocused instead of hidden: the toggle chord is the
+// way back into the copy-paste round trip, hiding stays a focused-layer act.
 func (m *Model) togglePopupTerminal() {
+	if m.popup.open && m.popup.blurred {
+		m.focusPopupLayer()
+		return
+	}
 	if m.popup.open {
 		m.popup.open = false
 		for _, inst := range m.popupLayerInstances() {
@@ -104,7 +119,37 @@ func (m *Model) togglePopupTerminal() {
 		m.popup.inst = pane.NewDetachedTerminalHost("popup", term, m.host.Config(), m.pal())
 	}
 	m.popup.open = true
+	m.popup.blurred = false
+	// Showing the layer is the "looked at it" moment for the statusbar
+	// activity indicator (#2309): whatever output piled up while hidden is on
+	// screen now.
+	m.popupUnseen = false
 	m.applyPopupSize()
+	if f := m.floatFocused(); f != nil {
+		m.setFloatFocus(f)
+		return
+	}
+	m.setPopupFocus(m.popup.focusRight)
+}
+
+// blurPopupLayer keeps the layer visible but hands the keyboard back to the
+// panes below (#2309): every layer host drops its focus mark (border and
+// cursor), and the funnel's popup branches go dormant until a press on a
+// layer box or the toggle chord refocuses the layer. The focused-surface
+// state (floatFocus, focusRight) is untouched, so refocusing restores the
+// exact keyboard owner the blur took it from.
+func (m *Model) blurPopupLayer() {
+	m.popup.blurred = true
+	for _, inst := range m.popupLayerInstances() {
+		inst.SetFocused(false)
+	}
+}
+
+// focusPopupLayer gives a blurred layer (#2309) the keyboard back, restoring
+// the surface that held it before the blur — content and scroll position were
+// never touched.
+func (m *Model) focusPopupLayer() {
+	m.popup.blurred = false
 	if f := m.floatFocused(); f != nil {
 		m.setFloatFocus(f)
 		return
@@ -413,8 +458,9 @@ func (m Model) renderPopupTerm() string {
 	_, h := m.popupSize()
 	wl, wr := m.popupSplitWidths()
 	// A focused floating panel (#1793) owns the keyboard, so no box side
-	// renders the focus border then.
-	boxFocus := m.floatFocused() == nil
+	// renders the focus border then — nor does any side of a blurred layer
+	// (#2309), whose keyboard sits with the panes below.
+	boxFocus := !m.popup.blurred && m.floatFocused() == nil
 	if m.popup.split == nil {
 		return m.renderPopupSide(m.popup.inst, wl, h, boxFocus)
 	}
