@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -309,6 +310,123 @@ func TestNotificationHistoryCommand(t *testing.T) {
 	}
 	if v := m.shell.View(); !strings.Contains(v, "server exploded") {
 		t.Fatalf("history view missing the entry: %q", v)
+	}
+}
+
+// TestNotifCenterListsNewestFirstWithAgeAndSeverity guards the center's list
+// rendering (#2152): newest entry first, severity glyph, relative age.
+func TestNotifCenterListsNewestFirstWithAgeAndSeverity(t *testing.T) {
+	m := newSized()
+	m, _ = notify(m, host.Info, "older one")
+	m, _ = notify(m, host.Error, "newest one")
+	// Backdate the older entry so its age is distinguishable from "now".
+	m.history[1].at = time.Now().Add(-2 * time.Hour)
+	view := m.historyView()
+	newest := strings.Index(view, "newest one")
+	older := strings.Index(view, "older one")
+	if newest < 0 || older < 0 {
+		t.Fatalf("both entries must be listed: %q", view)
+	}
+	if newest > older {
+		t.Fatalf("newest entry must come first: %q", view)
+	}
+	if !strings.Contains(view, toastIcon(host.Error)) || !strings.Contains(view, toastIcon(host.Info)) {
+		t.Fatalf("severity glyphs missing: %q", view)
+	}
+	if !strings.Contains(view, "2h") {
+		t.Fatalf("relative age missing for the backdated entry: %q", view)
+	}
+	if !strings.Contains(view, "now") {
+		t.Fatalf("relative age missing for the fresh entry: %q", view)
+	}
+	if !strings.Contains(view, "[c] clear all") {
+		t.Fatalf("clear-all legend missing: %q", view)
+	}
+}
+
+// TestNotifCenterUnreadCounter guards the unread semantics (#2152): the status
+// counter counts notifications arriving since the center was last opened, and
+// opening it resets the count.
+func TestNotifCenterUnreadCounter(t *testing.T) {
+	m := newSized()
+	if seg := m.notifSegment(); seg != "" {
+		t.Fatalf("no notifications yet, want empty segment, got %q", seg)
+	}
+	m, _ = notify(m, host.Info, "one")
+	m, _ = notify(m, host.Warn, "two")
+	if m.notifUnseen != 2 {
+		t.Fatalf("unseen = %d, want 2", m.notifUnseen)
+	}
+	if seg := m.notifSegment(); seg != "● 2" {
+		t.Fatalf("segment = %q, want %q", seg, "● 2")
+	}
+	tm, _ := m.Update(ShowNotificationHistoryMsg{})
+	m = tm.(Model)
+	if m.notifUnseen != 0 {
+		t.Fatalf("opening the center must reset the counter, got %d", m.notifUnseen)
+	}
+	if seg := m.notifSegment(); seg != "" {
+		t.Fatalf("segment = %q after open, want empty", seg)
+	}
+	// Everything opened stays readable; a later notification counts again.
+	m, _ = notify(m, host.Info, "three")
+	if m.notifUnseen != 1 {
+		t.Fatalf("unseen = %d after a new notification, want 1", m.notifUnseen)
+	}
+	if len(m.history) != 3 {
+		t.Fatalf("history = %d entries, want 3", len(m.history))
+	}
+}
+
+// TestNotifCenterClearAll guards the clear-all action (#2152): "c" empties the
+// ring while the center is open, and the view says so; the same key outside
+// the center never reaches it.
+func TestNotifCenterClearAll(t *testing.T) {
+	m := newSized()
+	m, _ = notify(m, host.Error, "server exploded")
+	if m.notifCenterOpen() {
+		t.Fatal("center must be closed before it is opened")
+	}
+	tm, _ := m.Update(ShowNotificationHistoryMsg{})
+	m = tm.(Model)
+	if !m.notifCenterOpen() {
+		t.Fatal("the history command must open the notification center")
+	}
+	tm, _ = m.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	m = tm.(Model)
+	if len(m.history) != 0 {
+		t.Fatalf("clear-all must empty the ring, %d left", len(m.history))
+	}
+	if m.notifUnseen != 0 {
+		t.Fatalf("clear-all must leave nothing unread, got %d", m.notifUnseen)
+	}
+	if v := m.shell.View(); strings.Contains(v, "server exploded") {
+		t.Fatalf("cleared entry still rendered: %q", v)
+	}
+	if v := m.shell.View(); !strings.Contains(v, "no notifications yet") {
+		t.Fatalf("empty center should say so: %q", v)
+	}
+}
+
+// TestNotifCenterEscClosesAndKeysPassThrough guards that the center consumes
+// only its own key: Esc still closes the shell.
+func TestNotifCenterEscClosesAndKeysPassThrough(t *testing.T) {
+	m := newSized()
+	m, _ = notify(m, host.Info, "saved")
+	tm, _ := m.Update(ShowNotificationHistoryMsg{})
+	m = tm.(Model)
+	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = tm.(Model)
+	if m.shell.IsOpen() {
+		t.Fatal("esc should close the notification center")
+	}
+	if len(m.history) != 1 {
+		t.Fatalf("esc must not clear the ring, %d entries left", len(m.history))
+	}
+	// With the center closed, "c" is an ordinary key again — the ring stands.
+	tm, _ = m.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	if m = tm.(Model); len(m.history) != 1 {
+		t.Fatalf("clear-all must not fire outside the center, %d entries", len(m.history))
 	}
 }
 
