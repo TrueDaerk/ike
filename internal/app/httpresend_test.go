@@ -17,6 +17,27 @@ import (
 	"ike/internal/pane"
 )
 
+// findMsg runs cmd (possibly a nested batch) and returns the first message of
+// type T it produces, discarding everything else.
+func findMsg[T tea.Msg](cmd tea.Cmd) (T, bool) {
+	queue := []tea.Cmd{cmd}
+	for len(queue) > 0 {
+		c := queue[0]
+		queue = queue[1:]
+		if c == nil {
+			continue
+		}
+		switch msg := c().(type) {
+		case T:
+			return msg, true
+		case tea.BatchMsg:
+			queue = append(queue, msg...)
+		}
+	}
+	var zero T
+	return zero, false
+}
+
 // recorded is one request a re-send test server saw.
 type recorded struct {
 	method string
@@ -82,9 +103,11 @@ func TestHTTPResendRepeatsStoredRequestAfterEdit(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("ctrl+r in the response pane must produce a command")
 	}
-	msg, ok := cmd().(httppane.ResendMsg)
+	// The settled pass may batch side commands (e.g. the symbol-refresh
+	// debounce, #2319) alongside the resend; find it in the batch.
+	msg, ok := findMsg[httppane.ResendMsg](cmd)
 	if !ok {
-		t.Fatalf("message type: %T", cmd())
+		t.Fatalf("no ResendMsg produced by %T", cmd())
 	}
 	out, cmd = m.Update(msg)
 	m = out.(Model)
