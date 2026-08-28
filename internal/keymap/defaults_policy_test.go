@@ -186,6 +186,45 @@ func TestAuditDefaultChords(t *testing.T) {
 	}
 }
 
+// TestAudit2305DefaultChords (#2305): the second unbound-command audit's new
+// defaults resolve on both platforms in their scoped context, and each of them
+// — all Cmd/Alt-modified, hence fragile — records its escape route.
+func TestAudit2305DefaultChords(t *testing.T) {
+	cases := []struct {
+		chord string
+		ctx   Context
+		cmd   string
+	}{
+		{"cmd+shift+c", Global, "file.copyPath"},
+		{"ctrl+alt+o", Editor, "lsp.organizeImports"},
+		{"ctrl+alt+j", Global, "json.jqPlayground"},
+		{"ctrl+alt+y", Global, "yaml.yqPlayground"},
+		{"cmd+alt+shift+n", Global, "scratch.generate"},
+		{"cmd+alt+d", Global, "vcs.diff"},
+		{"cmd+4", Global, "tests.toggle"},
+		{"cmd+5", Global, "debug.console"},
+		{"alt+shift+f10", Global, "run.select"},
+		{"alt+shift+f9", Editor, "debug.testAtCursor"},
+		{"ctrl+alt+w", Global, "pane.close"},
+		{"alt+shift+w", Editor, "view.toggleWrap"},
+		{"alt+shift+f12", Global, "window.layouts"},
+	}
+	for _, goos := range []string{"darwin", "linux"} {
+		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		for _, c := range cases {
+			chord := NormalizeChord(MustParseChord(c.chord), goos)
+			if b, ok := table.Lookup(chord, c.ctx); !ok || b.Command != c.cmd {
+				t.Errorf("%s: %s = %+v ok=%v, want %s", goos, c.chord, b, ok, c.cmd)
+			}
+		}
+	}
+	for _, c := range cases {
+		if reachableAlternatives[c.cmd] == "" {
+			t.Errorf("%s has no reachableAlternatives entry", c.cmd)
+		}
+	}
+}
+
 // TestDebugFKeyPlatformDefaults (#1374): the run/debug F-key family ships the
 // JetBrains macOS cmd form as the darwin primary with the Windows-scheme ctrl
 // form alongside; off macOS both fold onto the ctrl chord. Plain ctrl+F-keys

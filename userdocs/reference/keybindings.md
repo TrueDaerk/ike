@@ -34,13 +34,18 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Breakpoint properties | `ctrl+alt+f8` | `ctrl+alt+f8` | `debug.breakpointProperties` |
 | Breakpoints | `cmd+shift+f8` | `ctrl+shift+f8` | `debug.breakpoints` |
 | Close active tab | `cmd+w` | `ctrl+w` | `editor.closeTab` |
+| Close pane | `ctrl+alt+w` | `ctrl+alt+w` | `pane.close` |
 | Close project | `cmd+shift+w` | `ctrl+shift+w` | `project.close` |
 | Close project | `ctrl+shift+w` | `ctrl+shift+w` | `project.close` |
 | Continue (debug) | `f9` | `f9` | `debug.continue` |
+| Copy path | `cmd+shift+c` | `ctrl+shift+c` | `file.copyPath` |
+| Debug console tool window | `cmd+5` | `ctrl+5` | `debug.console` |
 | Debug file | `shift+f9` | `shift+f9` | `debug.start` |
+| Diff file against HEAD | `cmd+alt+d` | `ctrl+alt+d` | `vcs.diff` |
 | Evaluate expression | `alt+f8` | `alt+f8` | `debug.evaluate` |
 | Find in path | `cmd+shift+f` | `ctrl+shift+f` | `project.findInPath` |
 | Full query view | `ctrl+alt+e` | `ctrl+alt+e` | `json.jqQueryView` |
+| Generate test data | `cmd+alt+shift+n` | `ctrl+alt+shift+n` | `scratch.generate` |
 | Go to file | `cmd+shift+o` | `ctrl+shift+o` | `project.goToFile` |
 | Go to pinned file 1 | `ctrl+shift+1` | `ctrl+shift+1` | `nav.pinGoto1` |
 | Go to pinned file 2 | `ctrl+shift+2` | `ctrl+shift+2` | `nav.pinGoto2` |
@@ -95,6 +100,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Reveal open file in explorer | `alt+f1` | `alt+f1` | `explorer.reveal` |
 | Revert file | `cmd+alt+z` | `ctrl+alt+z` | `vcs.revertFile` |
 | Run file | `shift+f10` | `shift+f10` | `run.file` |
+| Run/Debug configurations | `alt+shift+f10` | `alt+shift+f10` | `run.select` |
 | Save all | `cmd+shift+s` | `ctrl+shift+s` | `editor.saveAll` |
 | Search everywhere | `cmd+shift+a` | `ctrl+shift+a` | `palette.searchEverywhere` |
 | Search everywhere (double-shift) | `shift shift` ⚠️ | `shift shift` ⚠️ | `palette.searchEverywhere` |
@@ -114,12 +120,16 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Switch project | `ctrl+shift+p` | `ctrl+shift+p` | `project.switch` |
 | Switch tab (recent tabs) | `alt+e` | `alt+e` | `editor.tab.picker` |
 | TODO index | `cmd+6` | `ctrl+6` | `todo.list` |
+| Test results tool window | `cmd+4` | `ctrl+4` | `tests.toggle` |
 | Toggle VCS tool window | `cmd+9` | `ctrl+9` | `vcs.panel` |
 | Toggle breakpoint | `cmd+f8` | `ctrl+f8` | `debug.toggleBreakpoint` |
 | Toggle breakpoint | `ctrl+f8` | `ctrl+f8` | `debug.toggleBreakpoint` |
 | Toggle project tree | `cmd+1` | `ctrl+1` | `explorer.toggle` |
 | Toggle terminal | `alt+f12` | `alt+f12` | `terminal.toggle` |
+| Window layouts | `alt+shift+f12` | `alt+shift+f12` | `window.layouts` |
 | Zen mode | `ctrl+alt+f` | `ctrl+alt+f` | `view.zenMode` |
+| jq playground | `ctrl+alt+j` | `ctrl+alt+j` | `json.jqPlayground` |
+| yq playground | `ctrl+alt+y` | `ctrl+alt+y` | `yaml.yqPlayground` |
 
 ## Editor
 
@@ -137,6 +147,7 @@ Active when an editor pane has focus.
 | Copy | `cmd+c` | `ctrl+c` | `editor.copy` |
 | Copy JSON/YAML path | `cmd+alt+shift+c` | `ctrl+alt+shift+c` | `editor.copyDocPath` |
 | Cut | `cmd+x` | `ctrl+x` | `editor.cut` |
+| Debug test at cursor | `alt+shift+f9` | `alt+shift+f9` | `debug.testAtCursor` |
 | Diagnostic under caret | `cmd+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
 | Diagnostic under caret | `ctrl+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
 | Diff HTTP response against previous run | `cmd+shift+d` | `ctrl+shift+d` | `http.diffPreviousRun` |
@@ -159,6 +170,7 @@ Active when an editor pane has focus.
 | New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
 | Next bookmark | `shift+f11` | `shift+f11` | `bookmark.next` |
 | Next diagnostic | `f2` | `f2` | `lsp.nextDiagnostic` |
+| Organize imports | `ctrl+alt+o` | `ctrl+alt+o` | `lsp.organizeImports` |
 | Parameter info | `cmd+p` | `ctrl+p` | `lsp.parameterInfo` |
 | Parameter info | `ctrl+p` | `ctrl+p` | `lsp.parameterInfo` |
 | Paste | `cmd+v` | `ctrl+v` | `editor.paste` |
@@ -187,6 +199,7 @@ Active when an editor pane has focus.
 | Toggle bookmark | `f11` | `f11` | `bookmark.toggle` |
 | Toggle bookmark with mnemonic | `alt+f3` | `alt+f3` | `bookmark.toggleMnemonic` |
 | Toggle follow (tail -f) | `alt+shift+f` | `alt+shift+f` | `view.toggleFollow` |
+| Toggle soft wrap | `alt+shift+w` | `alt+shift+w` | `view.toggleWrap` |
 | Type hierarchy | `ctrl+h` | `ctrl+h` | `lsp.typeHierarchy` |
 | Undo | `cmd+z` | `ctrl+z` | `editor.undo` |
 | Undo | `ctrl+z` | `ctrl+z` | `editor.undo` |

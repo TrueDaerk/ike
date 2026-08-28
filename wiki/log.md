@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-28 (Unbound-command audit: defaults for the useful ones, #2305)
+
+- Second pass over the commands that ship without a default keybind. Thirteen
+  everyday actions got one: `file.copyPath` (`cmd+shift+c`),
+  `lsp.organizeImports` (`ctrl+alt+o`), the jq/yq playgrounds (`ctrl+alt+j` /
+  `ctrl+alt+y`), the test-data wizard `scratch.generate`
+  (`cmd+alt+shift+n`), `vcs.diff` (`cmd+alt+d`), the `tests.toggle` and
+  `debug.console` tool windows (`cmd+4` / `cmd+5`), `run.select`
+  (`alt+shift+f10`), `debug.testAtCursor` (`alt+shift+f9`), `pane.close`
+  (`ctrl+alt+w`), `view.toggleWrap` (`alt+shift+w`) and `window.layouts`
+  (`alt+shift+f12`) — conflict- and shadow-free on both platforms, each with
+  its palette/menu escape route recorded in `reachableAlternatives`.
+- The remaining palette-only commands are keybind-less on purpose, and now say
+  so: the audit ledger in `cmd/ike/keybind_audit_test.go` records a reason per
+  command family (vim-native key, pane-local key, picker entry, flavour of a
+  bound command, intention doorway, menu home, one-off) and fails the build for
+  any registered command that is neither bound nor justified — and for any
+  stale entry.
+- Fallout of the bigger table: the Keymap Doctor's probe grid sizes each column
+  to its own longest chord and shrinks the inter-column gap until the grid fits
+  the box, instead of letting the rightmost column fall off the edge — a probe
+  target the user cannot see is one they cannot press.
+- Process: [Change Workflow](/process/change-workflow.md) now states that new
+  commands ship with a default keybind, keybind-less only with a recorded
+  reason.
+
 ## 2026-08-28 (Open in Browser: compressed HTML files, #2298)
 
 - "Open in Browser" now reaches into a plain gzip file (`report.html.gz`)

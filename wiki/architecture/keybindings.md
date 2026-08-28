@@ -834,6 +834,42 @@ equivalents, palette reach via esc-esc).
   whose command has no owner yet, with its dependency — never hidden,
   never silently inert.
 
+## Every command is bound or justified (#2305)
+
+Usage is overwhelmingly keybind-driven, so a command that ships palette-only is
+effectively invisible. The standing rule — written down in
+[Change Workflow](/process/change-workflow.md) — is that a **new command ships with a
+default keybind**, and staying keybind-less needs a **recorded reason**.
+
+The guardrail is the audit ledger in `cmd/ike/keybind_audit_test.go`, run against the exact
+plugin set the shipped binary compiles in. Every registered command must be bound in
+`Defaults()` or carry a ledger entry with one of the audit's reasons — vim-native key,
+pane-local single key, one entry of a picker, flavour of an already-bound command, an
+`alt+enter` intention doorway, a menu home, or a genuine one-off. A new command fails the
+build until someone decides; a ledger entry whose command disappeared fails too.
+
+The #2305 pass turned these palette-only commands into defaults:
+
+| command | chord | why it earned one |
+|---|---|---|
+| `file.copyPath` | `cmd+shift+c` | JetBrains' Copy Path verbatim; the everyday path action |
+| `lsp.organizeImports` | `ctrl+alt+o` | JetBrains Optimize Imports, both keymaps |
+| `json.jqPlayground` | `ctrl+alt+j` | the playground family next to its `ctrl+alt+e` query view |
+| `yaml.yqPlayground` | `ctrl+alt+y` | the yq twin of the row above |
+| `scratch.generate` | `cmd+alt+shift+n` | test-data wizard, one modifier past `cmd+shift+n` |
+| `vcs.diff` | `cmd+alt+d` | JetBrains' `cmd+d` Show Diff is taken by duplicate-line |
+| `tests.toggle` | `cmd+4` | JetBrains' Run tool window number |
+| `debug.console` | `cmd+5` | JetBrains' Debug tool window number |
+| `run.select` | `alt+shift+f10` | JetBrains' Run… popup verbatim |
+| `debug.testAtCursor` | `alt+shift+f9` | JetBrains' Debug… position; the debug twin of `ctrl+shift+f10` |
+| `pane.close` | `ctrl+alt+w` | closes the pane whole, next to `cmd+w`'s close-tab |
+| `view.toggleWrap` | `alt+shift+w` | the one view toggle flipped by the hour |
+| `window.layouts` | `alt+shift+f12` | the layout family's third F12 chord |
+
+All thirteen are Cmd/Alt-modified and therefore fragile; each records its palette (or menu)
+escape route in `reachableAlternatives`, and each shows up in the cheatsheet and the
+palette's shortcut column automatically.
+
 ## Per-binding status matrix (0081/50) — the acceptance ledger
 
 Generated from `keymap.StatusMatrix` against the shipped plugin set (run
@@ -847,6 +883,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `bookmark.toggleMnemonic` | `alt+f3` | fragile | `palette / Navigate menu` | live via palette / Navigate menu |
 | `debug.breakpointProperties` | `cmd+alt+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.breakpoints` | `cmd+shift+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
+| `debug.console` | `cmd+5` | fragile | `palette` | live via palette |
 | `debug.continue` | `f9` | delivered | `—` | live |
 | `debug.evaluate` | `alt+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.start` | `shift+f9` | delivered | `—` | live |
@@ -854,6 +891,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `debug.stepOut` | `shift+f8` | delivered | `—` | live |
 | `debug.stepOver` | `f8` | delivered | `—` | live |
 | `debug.stop` | `cmd+f2` | fragile | `palette / Run menu` | live via palette / Run menu |
+| `debug.testAtCursor` | `alt+shift+f9` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.toggleBreakpoint` | `cmd+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `diff.nextChange` | `f7` | delivered | `—` | live |
 | `diff.prevChange` | `shift+f7` | delivered | `—` | live |
@@ -904,12 +942,14 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `explorer.reveal` | `alt+f1` | fragile | `palette` | live via palette |
 | `explorer.toggle` | `cmd+1` | fragile | `palette` | live via palette |
 | `explorer.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
+| `file.copyPath` | `cmd+shift+c` | fragile | `palette / context menu` | live via palette / context menu |
 | `file.move` | `f6` | delivered | `—` | live |
 | `file.rename` | `shift+f6` | delivered | `—` | live |
 | `find.openInPanel` | `cmd+enter` | fragile | `ctrl+enter` | live via ctrl+enter |
 | `http.diffPreviousRun` | `cmd+shift+d` | fragile | `palette` | live via palette |
 | `http.run` | `ctrl+f9` | fragile | `palette` | live via palette |
 | `http.showResponse` | `cmd+shift+enter` | fragile | `ctrl+shift+f9` | live via ctrl+shift+f9 |
+| `json.jqPlayground` | `ctrl+alt+j` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `json.jqQueryView` | `ctrl+alt+e` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `palette` | live via palette |
 | `lsp.codeAction` | `alt+enter` | fragile | `palette` | live via palette |
@@ -921,6 +961,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `lsp.hover` | `ctrl+q` | delivered | `—` | live |
 | `lsp.implementations` | `cmd+alt+b` | fragile | `palette / Navigate menu / context menu` | live via palette / Navigate menu / context menu |
 | `lsp.nextDiagnostic` | `f2` | delivered | `—` | live |
+| `lsp.organizeImports` | `ctrl+alt+o` | fragile | `palette / context menu` | live via palette / context menu |
 | `lsp.parameterInfo` | `cmd+p` | fragile | `ctrl+p` | live via ctrl+p |
 | `lsp.peekDefinition` | `cmd+y` | fragile | `palette` | live via palette |
 | `lsp.prevDiagnostic` | `shift+f2` | delivered | `—` | live |
@@ -942,6 +983,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `palette.keymapHelp` | `f1` | delivered | `—` | live |
 | `palette.recentFiles` | `cmd+e` | fragile | `palette` | live via palette |
 | `palette.searchEverywhere` | `cmd+shift+a` | fragile | `palette (esc esc)` | live via palette (esc esc) |
+| `pane.close` | `ctrl+alt+w` | fragile | `palette / pane context menu` | live via palette / pane context menu |
 | `pane.maximize` | `cmd+k z` | fragile | `palette` | live via palette |
 | `pane.resizeMode` | `ctrl+alt+r` | fragile | `palette / pane context menu` | live via palette / pane context menu |
 | `pane.splitDown` | `cmd+k down` | fragile | `palette` | live via palette |
@@ -960,7 +1002,9 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `project.switch` | `cmd+shift+p` | fragile | `palette` | live via palette |
 | `run.file` | `shift+f10` | delivered | `—` | live |
 | `run.rerun` | `cmd+f5` | fragile | `palette / Run menu` | live via palette / Run menu |
+| `run.select` | `alt+shift+f10` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `run.testAtCursor` | `ctrl+shift+f10` | delivered | `—` | live |
+| `scratch.generate` | `cmd+alt+shift+n` | fragile | `palette / File menu` | live via palette / File menu |
 | `scratch.new` | `cmd+shift+n` | fragile | `palette` | live via palette |
 | `search.nextMatch` | `f3` | delivered | `—` | live |
 | `search.prevMatch` | `shift+f3` | delivered | `—` | live |
@@ -970,11 +1014,16 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `terminal.newTab` | `ctrl+t` | delivered | `—` | live |
 | `terminal.popup` | `cmd+alt+t` | fragile | `palette` | live via palette |
 | `terminal.toggle` | `alt+f12` | fragile | `palette` | live via palette |
+| `tests.toggle` | `cmd+4` | fragile | `palette / View menu` | live via palette / View menu |
 | `todo.list` | `cmd+6` | fragile | `palette` | live via palette |
+| `vcs.diff` | `cmd+alt+d` | fragile | `palette` | live via palette |
 | `vcs.panel` | `cmd+9` | fragile | `palette` | live via palette |
 | `vcs.revertFile` | `cmd+alt+z` | fragile | `palette` | live via palette |
 | `view.followFilter` | `alt+shift+g` | fragile | `palette` | live via palette |
 | `view.toggleFollow` | `alt+shift+f` | fragile | `palette` | live via palette |
+| `view.toggleWrap` | `alt+shift+w` | fragile | `palette` | live via palette |
 | `view.zenMode` | `ctrl+alt+f` | fragile | `palette / View menu` | live via palette / View menu |
 | `window.hideAllTools` | `cmd+shift+f12` | fragile | `palette` | live via palette |
+| `window.layouts` | `alt+shift+f12` | fragile | `palette` | live via palette |
 | `window.restoreLayout` | `shift+f12` | delivered | `—` | live |
+| `yaml.yqPlayground` | `ctrl+alt+y` | fragile | `palette / Tools menu` | live via palette / Tools menu |
