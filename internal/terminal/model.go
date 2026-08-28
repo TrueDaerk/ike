@@ -74,6 +74,13 @@ type Model struct {
 	comp           completion
 	autoSuggest    bool
 	pendingSuggest bool
+	// pendingManual marks a postponed refresh that came from ctrl+space
+	// (#2193): the PATH executable scan was still running, so the refresh
+	// re-runs on the scan's OutputMsg — with auto=false, as requested.
+	pendingManual bool
+	// exe caches the PATH executable set for command completion (#2193);
+	// behind a pointer so value-receiver copies share it.
+	exe *exeCache
 	// Scrollback search (#1169): open while non-nil; it owns the keyboard.
 	// Lives behind a pointer so value-receiver View copies share it.
 	search *termSearch
@@ -103,13 +110,16 @@ func (p vpos) before(q vpos) bool {
 // rendering the error instead of a grid — the pane stays usable (closable)
 // rather than crashing the layout.
 func New(key, shell, dir string, w, h int, extraEnv []string, send func(tea.Msg)) Model {
-	m := Model{w: w, h: h, send: send, env: extraEnv, autoSuggest: true}
+	m := Model{w: w, h: h, send: send, env: extraEnv, autoSuggest: true, exe: &exeCache{}}
 	sess, err := StartSession(key, shell, dir, m.gridW(), h, extraEnv, send)
 	if err != nil {
 		m.err = err.Error()
 		return m
 	}
 	m.sess = sess
+	// Prewarm the PATH executable cache (#2193) so the first completion popup
+	// does not wait for the background scan.
+	m.exeNames()
 	return m
 }
 

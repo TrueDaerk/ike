@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/vt"
@@ -36,6 +38,70 @@ import (
 
 // maxCompItems bounds the popup list (and the per-source candidate scan).
 const maxCompItems = 8
+
+// exeCacheTTL bounds how long a scanned PATH executable set is trusted before
+// a background rescan; a changed $PATH invalidates regardless of age.
+const exeCacheTTL = 30 * time.Second
+
+// exeCache caches the executable names on $PATH (#2193): with the popup open,
+// every coalesced output flush used to ReadDir every PATH entry synchronously
+// in Update — tens of ms per frame on nix/homebrew-heavy PATHs. The set is
+// scanned in a background goroutine and served from memory; a same-env stale
+// set is served while a rescan runs, a cold or PATH-changed cache postpones
+// command candidates until the scan lands. Behind a pointer on Model so
+// value-receiver copies share it.
+type exeCache struct {
+	mu       sync.Mutex
+	env      string
+	names    []string
+	when     time.Time
+	filled   bool
+	scanning bool
+}
+
+// cached returns the executable names for env when available. It starts one
+// background rescan when the cache is cold, holds a different env, or aged
+// past the TTL; done (if non-nil) runs after a started scan lands, so the
+// caller can schedule a popup refresh. While the rescan runs a same-env stale
+// set is still served; a cold or env-mismatched cache reports ok=false.
+func (c *exeCache) cached(env string, done func()) ([]string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	hit := c.filled && c.env == env
+	if hit && time.Since(c.when) < exeCacheTTL {
+		return c.names, true
+	}
+	if !c.scanning {
+		c.scanning = true
+		go func() {
+			names := scanPathExecutables(env)
+			c.mu.Lock()
+			c.env, c.names, c.when = env, names, time.Now()
+			c.filled, c.scanning = true, false
+			c.mu.Unlock()
+			if done != nil {
+				done()
+			}
+		}()
+	}
+	return c.names, hit
+}
+
+// exeNames returns the cached PATH executable names, kicking a background
+// rescan when needed (#2193). A scan started here reports back through the
+// session's OutputMsg path, so OnOutput re-runs a postponed popup refresh
+// once the names are in.
+func (m *Model) exeNames() ([]string, bool) {
+	if m.exe == nil {
+		m.exe = &exeCache{}
+	}
+	var done func()
+	if m.send != nil && m.sess != nil {
+		send, key := m.send, m.sess.key
+		done = func() { send(OutputMsg{Key: key}) }
+	}
+	return m.exe.cached(os.Getenv("PATH"), done)
+}
 
 // completion is the popup state: full replacement words for the current
 // prefix, the selected index, and whether the popup was opened by
@@ -159,11 +225,11 @@ func (m *Model) completionTyped(str, text string) {
 	switch {
 	case text != "" && !strings.ContainsAny(text, "\n\r"):
 		if m.autoSuggest || m.comp.open {
-			m.pendingSuggest = true
+			m.pendingSuggest, m.pendingManual = true, false
 		}
 	case str == "backspace":
 		if m.comp.open {
-			m.pendingSuggest = true
+			m.pendingSuggest, m.pendingManual = true, false
 		}
 	default:
 		// Any other key (arrows, ctrl chords, enter) invalidates the popup:
@@ -180,7 +246,12 @@ func (m *Model) OnOutput() {
 		return
 	}
 	auto := m.pendingSuggest || m.comp.auto
-	m.pendingSuggest = false
+	if m.pendingManual {
+		// The postponed refresh came from ctrl+space (#2193): re-run it as the
+		// explicit request it was.
+		auto = false
+	}
+	m.pendingSuggest, m.pendingManual = false, false
 	m.refreshCompletion(auto)
 }
 
@@ -202,10 +273,23 @@ func (m *Model) refreshCompletion(auto bool) {
 	// suggestions follow a `cd` instead of the session's start directory.
 	// Matching runs on the unescaped word (#1552): the line holds `My\ Doc`,
 	// the filesystem holds `My Documents`.
-	items := candidates(unescapeShellWord(cmd), unescapeShellWord(word), m.sess.Cwd(), os.Getenv("PATH"))
+	ucmd, uword := unescapeShellWord(cmd), unescapeShellWord(word)
+	var exes []string
+	if wantsCommand(ucmd, uword) {
+		// Command candidates come from the executable cache (#2193), never
+		// from a synchronous PATH walk in Update. A cold cache postpones the
+		// refresh: the scan's completion re-arrives through OnOutput.
+		var ok bool
+		if exes, ok = m.exeNames(); !ok {
+			m.comp = completion{}
+			m.pendingSuggest, m.pendingManual = true, !auto
+			return
+		}
+	}
+	items := candidates(ucmd, uword, m.sess.Cwd(), exes)
 	// A lone candidate identical to the typed word offers nothing to insert —
 	// except the trailing space a finished token still owes the line (#2261).
-	if len(items) == 0 || (len(items) == 1 && items[0].text == unescapeShellWord(word) &&
+	if len(items) == 0 || (len(items) == 1 && items[0].text == uword &&
 		(items[0].kind == candDir || m.spaceFollowsCursor())) {
 		m.comp = completion{}
 		return
@@ -278,7 +362,7 @@ func sameItems(a, b []candidate) bool {
 func (m *Model) acceptCompletion() {
 	c := m.comp
 	m.comp = completion{}
-	m.pendingSuggest = false
+	m.pendingSuggest, m.pendingManual = false, false
 	if c.sel >= len(c.items) {
 		return
 	}
@@ -518,15 +602,22 @@ func hasDanglingEscape(s string) bool {
 	return esc
 }
 
+// wantsCommand reports whether (cmd, word) completes the command itself —
+// the case served from the PATH executable cache (#2193).
+func wantsCommand(cmd, word string) bool {
+	return cmd == word && !strings.Contains(word, "/")
+}
+
 // candidates resolves the completion source for (cmd, word): PATH commands
-// while the first word is being typed, make targets after `make`, files and
-// directories relative to dir otherwise. Every candidate extends word (strict
-// prefix match), so accepting can paste the remainder, and carries its
-// source's accept semantics (candKind) along for the trailing space (#2261).
-func candidates(cmd, word, dir, pathEnv string) []candidate {
+// (filtered from the pre-scanned exes set, #2193) while the first word is
+// being typed, make targets after `make`, files and directories relative to
+// dir otherwise. Every candidate extends word (strict prefix match), so
+// accepting can paste the remainder, and carries its source's accept
+// semantics (candKind) along for the trailing space (#2261).
+func candidates(cmd, word, dir string, exes []string) []candidate {
 	switch {
-	case cmd == word && !strings.Contains(word, "/"):
-		return commandCandidates(pathEnv, word)
+	case wantsCommand(cmd, word):
+		return filterExecutables(exes, word)
 	case cmd == "make" && !strings.Contains(word, "/"):
 		return makeCandidates(dir, word)
 	default:
@@ -544,10 +635,18 @@ func hasFoldPrefix(s, prefix string) bool {
 	return strings.EqualFold(s[:len(prefix)], prefix)
 }
 
-// commandCandidates lists executables on pathEnv matching the prefix. A
-// command is a finished token: accepting it ends the word.
+// commandCandidates lists executables on pathEnv matching the prefix — the
+// synchronous scan-and-filter form kept for tests; the popup filters the
+// cached scan instead (#2193).
 func commandCandidates(pathEnv, prefix string) []candidate {
-	seen := map[string]candKind{}
+	return filterExecutables(scanPathExecutables(pathEnv), prefix)
+}
+
+// scanPathExecutables lists every executable name on pathEnv, sorted and
+// deduplicated — the cache-building scan (#2193), run off the Update
+// goroutine.
+func scanPathExecutables(pathEnv string) []string {
+	seen := map[string]bool{}
 	for _, d := range filepath.SplitList(pathEnv) {
 		ents, err := os.ReadDir(d)
 		if err != nil {
@@ -555,16 +654,37 @@ func commandCandidates(pathEnv, prefix string) []candidate {
 		}
 		for _, e := range ents {
 			name := e.Name()
-			if _, dup := seen[name]; !hasFoldPrefix(name, prefix) || dup || e.IsDir() {
+			if seen[name] || e.IsDir() {
 				continue
 			}
 			if info, err := e.Info(); err != nil || info.Mode()&0o111 == 0 {
 				continue
 			}
-			seen[name] = candFinal
+			seen[name] = true
 		}
 	}
-	return capSorted(seen)
+	names := make([]string, 0, len(seen))
+	for n := range seen {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// filterExecutables reduces the (sorted) cached name set to the popup's
+// candidates: prefix-matched final tokens, capped like every other source.
+func filterExecutables(names []string, prefix string) []candidate {
+	var out []candidate
+	for _, n := range names {
+		if !hasFoldPrefix(n, prefix) {
+			continue
+		}
+		out = append(out, candidate{text: n, kind: candFinal})
+		if len(out) >= maxCompItems {
+			break
+		}
+	}
+	return out
 }
 
 // makeCandidates lists targets of the Makefile in dir matching the prefix —

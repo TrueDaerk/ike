@@ -4,12 +4,67 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
 	"ike/internal/complete"
 	"ike/internal/host"
 )
+
+// TestObserveDuringCompleteNotLost (#2193): extraction runs outside the lock,
+// so Observe never blocks behind it — and an edit landing while a query
+// extracts must not be lost: the final query reflects the final text.
+func TestObserveDuringCompleteNotLost(t *testing.T) {
+	s := New("")
+	s.Observe(change("/a.go", "seed"))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			s.Observe(change("/a.go", "iteration"+strconv.Itoa(i)+" trailing"))
+		}
+	}()
+	for i := 0; i < 50; i++ {
+		if _, err := s.Complete(context.Background(), complete.Request{Path: "/a.go"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	<-done
+	got := labels(t, s, complete.Request{Path: "/a.go", Line: 0, Col: 0})
+	want := map[string]bool{"iteration199": true, "trailing": true}
+	if len(got) != 2 || !want[got[0]] || !want[got[1]] {
+		t.Fatalf("after concurrent edits got %v, want the final text's words", got)
+	}
+}
+
+// TestMidExtractionEditKeepsDirty (#2193): a re-install racing a newer edit
+// (generation moved between snapshot and install) must leave the buffer dirty
+// so the next query re-extracts the newer text.
+func TestMidExtractionEditKeepsDirty(t *testing.T) {
+	s := New("")
+	s.Observe(change("/a.go", "oldword"))
+	s.mu.Lock()
+	b := s.buffers["/a.go"]
+	gen := b.gen
+	s.mu.Unlock()
+	// The newer edit lands while (conceptually) extraction runs unlocked.
+	s.Observe(change("/a.go", "newword"))
+	// Install the stale extraction the way Complete does.
+	s.mu.Lock()
+	b.words = extractWords("oldword", nil)
+	if b.gen == gen {
+		b.dirty = false
+	}
+	dirty := b.dirty
+	s.mu.Unlock()
+	if !dirty {
+		t.Fatal("a mid-extraction edit must keep the buffer dirty")
+	}
+	if got := labels(t, s, complete.Request{Path: "/a.go", Line: 0, Col: 0}); len(got) != 1 || got[0] != "newword" {
+		t.Fatalf("next query = %v, want [newword]", got)
+	}
+}
 
 func change(path, text string) host.EditorEvent {
 	return host.EditorEvent{Kind: host.EditorChange, Path: path, Text: text}

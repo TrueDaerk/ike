@@ -71,6 +71,11 @@ type bridge struct {
 	// openDocs tracks the paths didOpen reached, so a workspace/*/refresh
 	// request knows which documents to re-request decorations for (#1912).
 	openDocs map[string]bool
+	// refreshCooling/refreshPending rate-limit workspace/*/refresh rounds per
+	// capability kind (#2193): while a kind cools down, further refreshes
+	// coalesce into one trailing round instead of re-requesting at wire speed.
+	refreshCooling map[string]bool
+	refreshPending map[string]bool
 	// inheritTimer debounces the gutter inheritance-mark batch per path;
 	// inheritInFlight/inheritPending coalesce the running batches (#1453).
 	inheritTimer    map[string]*time.Timer

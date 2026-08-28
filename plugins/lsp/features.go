@@ -301,11 +301,38 @@ func (b *bridge) flushAllChanges() {
 
 // --- workspace/*/refresh ---
 
+// refreshMinInterval is the per-capability floor between two refresh rounds
+// (#2193): a misbehaving server spamming workspace/*/refresh notifications
+// used to drive the pending/in-flight re-request loop at wire speed (a
+// docServer miss returns instantly, so per-path coalescing was no throttle at
+// all). The first notification runs immediately; further ones inside the
+// window coalesce into one trailing round.
+const refreshMinInterval = time.Second
+
 // onRefresh handles a server-initiated workspace/<kind>/refresh request
 // (#1912) by re-requesting that decoration for every open document. It runs
-// off the manager's dispatch goroutine, so the per-path request coalescing is
-// the only throttle needed.
+// off the manager's dispatch goroutine. Rounds are rate-limited per kind
+// (#2193): leading edge fires at once, refreshes arriving during the cooldown
+// collapse into a single trailing round when it expires.
 func (b *bridge) onRefresh(kind string) {
+	b.mu.Lock()
+	if b.refreshCooling == nil {
+		b.refreshCooling = map[string]bool{}
+		b.refreshPending = map[string]bool{}
+	}
+	if b.refreshCooling[kind] {
+		b.refreshPending[kind] = true
+		b.mu.Unlock()
+		return
+	}
+	b.refreshCooling[kind] = true
+	b.mu.Unlock()
+	b.refreshRound(kind)
+}
+
+// refreshRound runs one re-request round for kind and arms the cooldown timer
+// that either releases the rate limit or runs the coalesced trailing round.
+func (b *bridge) refreshRound(kind string) {
 	b.mu.Lock()
 	paths := make([]string, 0, len(b.openDocs))
 	for p := range b.openDocs {
@@ -322,4 +349,15 @@ func (b *bridge) onRefresh(kind string) {
 			b.requestInlayHints(p)
 		}
 	}
+	time.AfterFunc(refreshMinInterval, func() {
+		b.mu.Lock()
+		if !b.refreshPending[kind] {
+			b.refreshCooling[kind] = false
+			b.mu.Unlock()
+			return
+		}
+		b.refreshPending[kind] = false
+		b.mu.Unlock()
+		b.refreshRound(kind)
+	})
 }
