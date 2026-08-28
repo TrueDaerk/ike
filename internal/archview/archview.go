@@ -101,6 +101,20 @@ func New(key, p string, pal *theme.Palette) Model {
 // Path returns the archive file's path.
 func (m *Model) Path() string { return m.path }
 
+// Reload re-reads the archive from disk and rebuilds the tree (#2314): a file
+// that was rewritten while its viewer was open — a re-packed release archive,
+// a build artifact — shows its new members without closing and re-opening the
+// pane. The view state a user built up survives where it still makes sense:
+// collapsed directories keep their state (by path, so a member that vanished
+// simply stops mattering) and the cursor is clamped into the new row list. A
+// listing error replaces the entries the same way New treats one, so a
+// half-written archive degrades to the pane's notice instead of stale rows.
+func (m *Model) Reload() {
+	m.listing, m.err = archive.List(m.path)
+	m.build()
+	m.clampScroll()
+}
+
 // Format reports the detected archive format ("" when the listing failed).
 func (m *Model) Format() archive.Format { return m.listing.Format }
 
@@ -500,7 +514,7 @@ func HumanSize(n int64) string {
 
 // footer shows the key hints.
 func (m *Model) footer(pal *theme.Palette) string {
-	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open (read-only) · e/E extract entry/all · space fold · h/l collapse/expand · j/k move"))
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open (read-only) · e/E extract entry/all · ctrl+r reload · space fold · h/l collapse/expand · j/k move"))
 }
 
 // bodyHeight is the room between the header and footer lines.
