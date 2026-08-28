@@ -4,7 +4,7 @@ title: Status Line Segments
 description: Extensible left/right slot model behind the bottom status bar — mode, file, buffer language, diagnostics, host/LSP status, toolchain interpreter, csv column, json/yaml path, search match counter, notification counter, forge unread badge.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Status Line Segments
@@ -48,6 +48,15 @@ The drag hint and the non-editor focus branches (terminal/explorer, #381) keep
 their dedicated rendering; the terminal/explorer line appends the host status,
 the notification counter and the forge unread badge — the badge is persistent
 state, so it must stay visible wherever the focus is.
+
+A focused **merge view** names itself the same way and carries the
+remaining-conflict counter (#2258): `MERGE │ file.go │ conflict 2/3 │ 3/5
+unresolved` — the caret's place in the `]n`/`[n` cycle (dropped while the
+caret stands outside a block), then the unresolved count out of the total —
+flipping to `MERGE │ file.go │ ✓ all resolved — vcs.mergeApply to finish`
+once the last block is gone. Both readings come from the editor's cached
+conflict scan, so nothing is re-scanned per frame; see
+[Diff Viewer § Three-way merge view](/architecture/diff-viewer.md).
 
 The rendered bar is clamped to the terminal width (#659): lipgloss pads but
 does not clip, so without the guard an over-wide segment set would wrap the

@@ -797,6 +797,14 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		cmd := m.acceptConflict(action != "merge_accept_theirs", action != "merge_accept_ours")
 		m.scroll()
 		return m, cmd
+	case "merge_keep_manual":
+		// Keep the hand-merged block (#2258): only the marker lines go.
+		if m.insert.active {
+			m.commitInsert()
+		}
+		cmd := m.keepManualConflict()
+		m.scroll()
+		return m, cmd
 	case "merge_next_conflict", "merge_prev_conflict":
 		if m.insert.active {
 			m.commitInsert()

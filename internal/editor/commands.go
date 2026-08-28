@@ -191,14 +191,18 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// vim-style sequence like the fold commands, so it is surfaced as
 			// a doc hint and stays rebindable through the keymap layer.
 			action("editor.explainConceal", "Explain Concealed Value", "explain_conceal", "g?"),
-			// Merge-conflict resolution (#1149): palette-only (the cmd-chord
-			// budget is full, #711); the accepts also surface contextually in
-			// the editor context menu when the cursor is inside a block.
-			action("merge.acceptOurs", "Merge: Accept Ours", "merge_accept_ours", ""),
-			action("merge.acceptTheirs", "Merge: Accept Theirs", "merge_accept_theirs", ""),
-			action("merge.acceptBoth", "Merge: Accept Both", "merge_accept_both", ""),
-			action("merge.nextConflict", "Merge: Next Conflict", "merge_next_conflict", ""),
-			action("merge.prevConflict", "Merge: Previous Conflict", "merge_prev_conflict", ""),
+			// Merge-conflict resolution (#1149, #2258): vim-style sequences
+			// rather than cmd chords (that budget is full, #711) — go/gt/gb
+			// resolve the block at the caret, gm keeps a hand-merged one, and
+			// ]n/[n cycle the remaining blocks like ]c/[c cycle git hunks.
+			// The accepts also surface contextually in the editor context
+			// menu when the cursor is inside a block.
+			action("merge.acceptOurs", "Merge: Accept Ours", "merge_accept_ours", "go"),
+			action("merge.acceptTheirs", "Merge: Accept Theirs", "merge_accept_theirs", "gt"),
+			action("merge.acceptBoth", "Merge: Accept Both", "merge_accept_both", "gb"),
+			action("merge.keepManual", "Merge: Keep Manual Edit", "merge_keep_manual", "gm"),
+			action("merge.nextConflict", "Merge: Next Conflict", "merge_next_conflict", "]n"),
+			action("merge.prevConflict", "Merge: Previous Conflict", "merge_prev_conflict", "[n"),
 		},
 	}
 }

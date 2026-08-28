@@ -221,9 +221,10 @@ func vcsProvider() Provider {
 				items = append(items, Item{Title: "Revert Hunk Under Caret", Kind: "vcs", CommandID: "vcs.revertHunk"})
 			}
 			if cx.ConflictAtCaret && !cx.ReadOnly {
-				// The three accepts are pure rewrites of the conflict block,
-				// so each carries its preview (#2252): which side survives is
-				// exactly what one wants to see before committing to it.
+				// The resolutions are pure rewrites of the conflict block, so
+				// each carries its preview (#2252): what survives is exactly
+				// what one wants to see before committing to it. Keep Manual
+				// Edit (#2258) drops only the markers.
 				items = append(items,
 					Item{Title: "Accept Ours", Kind: "vcs", CommandID: "merge.acceptOurs",
 						Preview: cx.PreviewFor("merge.acceptOurs")},
@@ -231,6 +232,8 @@ func vcsProvider() Provider {
 						Preview: cx.PreviewFor("merge.acceptTheirs")},
 					Item{Title: "Accept Both", Kind: "vcs", CommandID: "merge.acceptBoth",
 						Preview: cx.PreviewFor("merge.acceptBoth")},
+					Item{Title: "Keep Manual Edit", Kind: "vcs", CommandID: "merge.keepManual",
+						Preview: cx.PreviewFor("merge.keepManual")},
 				)
 			}
 			if cx.InRepo {
