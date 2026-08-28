@@ -244,6 +244,9 @@ func defaults() *Config {
 		Todo: Todo{
 			Patterns: []string{"TODO", "FIXME", "HACK", "XXX"},
 		},
+		Diff: Diff{
+			Context: 3, // context lines kept around a change (0340, #494)
+		},
 		Run: Run{
 			Placement:    "bottom", // the Run tool docks at the bottom edge (#1905)
 			VSCodeLaunch: true,     // .vscode/launch.json entries join the picker (#1914)

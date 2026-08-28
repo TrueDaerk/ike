@@ -115,7 +115,7 @@ no-op until the filter clears, which restores the prior view.
 internal/help/
   source.go      snapshot registry Commands, join 08 resolver bindings, group by scope, deterministic sort; ContextSnapshot = focused scope first (#2182)
   essentials.go  hand-curated Essentials spec + EssentialsSnapshot join (#656)
-  layout.go      width -> column count; column-major balanced packing; min-column-width; single-column fallback
+  layout.go      column count + width for a budget (ColumnLayout); widest/typical column width; column-major balanced packing; single-column fallback
   help.go        ui.Content: Snapshot(ctxID) refresh; Title(); Render(width) -> column-packed body (max two columns);
                  withExtraLeading = Focused extra groups lead the context view (#2237)
 ```
@@ -161,23 +161,43 @@ terminals.
 
 `layout.go` is pure and unit-tested:
 
-- `ColumnCount(width, minColWidth)` = `width / (minColWidth + gutter)`, floored
-  at 1 — narrow terminals fall back to a single column.
 - `MinColumnWidth(cells, configMin)` derives the column width from the widest
   rendered cell, never below the configured minimum (config key
   `help.min_column_width`) or the built-in default.
+- `TypicalColumnWidth(cells, configMin, pct)` is its outlier-tolerant
+  counterpart: the narrowest width that still shows `pct` percent of the cells
+  in full (help uses 90%).
+- `ColumnLayout(width, natural, floor, maxCols)` picks the column count and the
+  width to render columns at: the largest count up to `maxCols` whose columns
+  stay at or above `floor`, using the fair share `(width - gutters) / cols` when
+  the natural width does not fit, and falling back to one budget-clamped column.
 - `Pack(cells, cols)` distributes entries **column-major** with
   `rows = ceil(n/cols)`, so columns differ in height by at most one (balanced).
 
 `Render(width)` lays the snapshot out to the width budget the shell supplies.
-The column count is `min(2, ColumnCount(...))` — capped at **two columns** — and
-a single shared column width keeps every group's columns aligned. Each column
-carries a fixed slack (`colSlack`) beyond its widest cell so the pane gets
-breathing room rather than hugging the text. Within a
-cell the title sits left and the shortcut is padded out to the column's right
-edge, so the keys line up as their own visual column; a minimum two-space gap
-is kept even when the column is clamped narrower than the entry. The shell
-handles fitting the result to the terminal and scrolling on overflow.
+The column count is capped at **two columns** and a single shared column width
+keeps every group's columns aligned. Each column carries a fixed slack
+(`colSlack`) beyond its cell width so the pane gets breathing room rather than
+hugging the text. Within a cell the title sits left and the shortcut is padded
+out to the column's right edge, so the keys line up as their own visual column;
+a minimum two-space gap is kept even when the column is clamped narrower than
+the entry. The shell handles fitting the result to the terminal and scrolling
+on overflow.
+
+### Sizing columns for the typical entry, not the longest (#2215)
+
+Columns aim at `TypicalColumnWidth` (+ slack), not at the widest cell. The
+context view (#2182) shows **every** scope at once, so the widest cell is drawn
+from hundreds of commands: one verbose title used to push the column width past
+half the terminal, `ColumnLayout` then had room for a single column, and the
+overlay degraded to one endlessly tall column in every section. Sizing to the
+90th-percentile width keeps two columns wherever the budget allows and costs
+only the handful of overlong rows an ellipsis — `renderEntry` truncates the
+*title* (never the shortcut) so each row stays one line and its key stays
+visible. A column with less than `minTitleWidth` room left for a title keeps the
+untruncated row and lets it overflow, since a bare `…` says nothing. When even
+one shrunken column would fall below the floor — genuinely narrow terminals —
+the sheet still falls back to a single column.
 
 ## Scrolling
 
@@ -191,7 +211,9 @@ ends and a position indicator (`▲ … ▼  NN%`) shows there is more off-scree
 
 - **Presentation only.** The overlay executes nothing and dispatches no command
   message; the only thing it emits is its own dismissal.
-- **Scroll, never truncate.** Overflow scrolls; content is never cut.
+- **Scroll vertically, ellipsise horizontally.** Vertical overflow scrolls and
+  no entry is ever dropped; only a title too long for its column is ellipsised,
+  and never its shortcut (#2215).
 - **Degrades gracefully.** Unbound commands render title-only; unknown registry
   fields are ignored.
 

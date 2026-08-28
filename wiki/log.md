@@ -27,6 +27,105 @@
 - **Wheel plumbing**: `wheelEditor.Wheel` and `settings.Model.Wheel` now
   return a `tea.Cmd`, because scrolling an option list can have an effect
   beyond redrawing it.
+## 2026-08-28 (Help overlay: multi-column layout restored in the context view, #2215)
+
+- **The column width now aims at the typical entry, not the longest one**
+  (`internal/help/layout.go`, `help.go`). Since #2182 the context view lists
+  *every* scope at once, so the widest rendered cell was drawn from hundreds of
+  commands: one verbose title pushed the shared column width past half the
+  terminal, only a single column fit, and the overlay degraded to one endlessly
+  tall column in every section. `TypicalColumnWidth(cells, configMin, pct)`
+  answers "how wide must a column be so almost nothing is clipped" (help asks
+  for 90%), and the new `ColumnLayout(width, natural, floor, maxCols)` takes the
+  largest column count whose columns stay at or above that floor, shrinking them
+  to their fair share of the budget when the natural width does not fit. On a
+  120-cell budget the sectioned sheet goes from 1 column / 62 rows back to 2
+  columns / 39 rows.
+- **Overlong rows are ellipsised, never wrapped** (`renderEntry`): the *title*
+  is truncated with `…` so the row stays one line and its shortcut stays
+  visible — the shortcut itself is never cut. A column with less than
+  `minTitleWidth` room left for a title keeps the untruncated row and lets it
+  overflow, since a bare `…` says nothing; that is also what keeps very narrow
+  budgets rendering as before.
+- **Unchanged:** the section structure and headings from #2182 (focused context
+  first, then global, then the rest), the `tab` view cycle, the two-column cap,
+  and the single-column fallback on genuinely narrow terminals. `ColumnCount`
+  is gone — `ColumnLayout` subsumes it and nothing else called it.
+- Tests: `internal/help/columns_test.go` covers `TypicalColumnWidth`,
+  `ColumnLayout`, the entry truncation, and the sectioned render at a wide and a
+  narrow budget. Wiki: [Help Overlay](/architecture/help-overlay.md).
+## 2026-08-28 (Change feed: batch reload/revert and per-process grouping, #2183)
+
+- **Batch actions** (`internal/app/changefeed.go`): `A` reloads and `V` reverts
+  a whole scope instead of a row. The scope is the marked rows when there are
+  any and the entire listed feed otherwise — marking refines a batch, it is not
+  a precondition for one. `space` marks a row, `m` marks the selection's whole
+  group, which is what makes a titled section's reload/revert one keystroke
+  without a second set of group-only keys; `m` unmarks only a fully marked
+  group, so it completes a partial selection rather than discarding it.
+- **Conflicts are never resolved by a batch** (`changeFeedConflict`): a file
+  changed externally *and* edited in IKE is left alone and named in the report
+  (`reloaded 3 file(s) · skipped 2 (unsaved changes): a.go, b.go`). The
+  per-entry `R`/`r` still exist for settling them one at a time. Reload also
+  skips what it cannot reach (not open, gone), revert what has no recorded
+  previous version.
+- **Revert-all is confirmed with the file list** (`openChangeFeedRevertAllPrompt`):
+  every file it will touch, plus what it is leaving alone and why. Undoing one
+  external write is a decision about one buffer; undoing an agent run is a
+  decision about the working tree. Confirmed, each file takes the same restore
+  path as the single revert (`revertChangeFeedPath`, now shared) and the batch
+  reports once — `applyBufferRestore` (split out of `restoreLocalHistory`) is
+  the quiet restore that makes one report possible instead of N toasts.
+- **Per-process grouping** (`internal/changefeed`: `Entry.Source`, `Groups`,
+  `Attributed`): entries carry a best-effort attribution and render as titled
+  sections, attributed groups first, the unattributed rows last under a plain
+  `unattributed` title. With nothing attributed the list stays flat.
+- **Attribution is only what IKE spawned** (`changeFeedSource`,
+  `terminal.Model.Argv`): a *busy* tool pane, Run task or terminal command at
+  the moment of the write. Exactly one candidate is an answer, two are not —
+  an ambiguous moment stays unattributed rather than blaming the formatter
+  that ran beside the agent. Resolved once per watcher flush.
+- Docs: `wiki/architecture/change-feed.md` (new "Batch actions" section,
+  attribution and grouping).
+
+## 2026-08-28 (Diff viewer: ignore-whitespace toggle, per-side intra-line emphasis, #2170)
+
+- **Ignore whitespace** (`internal/diff/engine.go`): `ComputeWith(left, right,
+  Options{IgnoreWhitespace: true})` compares lines by their whitespace-stripped
+  key, the way `git diff -w` does. A re-indented or re-wrapped line pairs up as
+  an unchanged row and drops out of the hunk list entirely, so a reformat-heavy
+  branch stops drowning the changes that carry meaning. The option changes what
+  is *compared*, never what is shown: each column keeps its own raw text, which
+  is why the edit script now carries both sides of an equal pair (`pairEdit`)
+  instead of one text. Intra-line refinement follows suit — every span is
+  trimmed to its non-whitespace core and the ones left empty are dropped, so a
+  re-indented *and* renamed line emphasizes the identifier, not the leading run.
+- **`w` toggles it live** (`model.go`, `recompute`): the pane re-diffs the
+  retained texts in place — scroll position kept, current hunk clamped to the
+  shorter list — and reports itself as `diff.IgnoreWhitespaceMsg`. The root
+  model persists that into `diff.ignore_whitespace` (`config.WriteAndReload`,
+  the #1998 conceal-rule shape) and the reload re-applies **both** diff keys to
+  every open diff pane through `Instance.configure`, so panes never drift apart
+  and the next diff starts on the last choice. The state is visible where it
+  matters: `DIFF │ … │ -w │ hunk i/n` in the status line, `[-w]` in the title
+  band.
+- **Intra-line emphasis is per side now** (`theme`, `DiffAddedEmph` /
+  `DiffRemovedEmph`): a changed range used to take the single `DiffChanged`
+  slot, which painted both halves of a changed pair the same colour — the
+  refinement read as noise rather than as "this is what changed on *this*
+  side". Each side now emphasizes in its own hue, one step stronger than its
+  line background. Every builtin declares both slots; a theme that omits them
+  gets them derived from its own diff backgrounds (pushed toward
+  `Success`/`Error`, then pulled back inside `emphHeadroom` of the line
+  background's own drift from `Surface` — the contrast audit covers the new
+  slots). The step stays inside the readability envelope by design, so the
+  renderer carries the rest as **bold** on the emphasized runes; underline was
+  the other candidate and is out because lipgloss emits it per grapheme.
+- **Settings** (`internal/settings/schema.go`): a new **Diff Viewer** page
+  exposes `diff.ignore_whitespace` and `diff.context` — the latter was read by
+  the pane registry but had no typed schema entry at all, so it was
+  file-only-and-undocumented until now. Docs: `wiki/architecture/diff-viewer.md`
+  (new "Ignore whitespace" section), `themes.md`, `settings-ui.md`.
 
 ## 2026-08-28 (Notifications: the history ring reads as a notification center, #2152)
 

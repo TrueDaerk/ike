@@ -19,8 +19,10 @@ import (
 // in wiki/architecture/performance.md; fsnotify keeps reporting on its own
 // either way, the poll is the safety net that bounds the follow latency.
 
-// followTickMsg is the follow poll deadline (#1928).
-type followTickMsg struct{}
+// followTickMsg is the follow poll deadline (#1928). gen names the model that
+// armed it (#2194): both chains of a park/resume race would self-sustain while
+// a view keeps following, so a tick from a departed model retires instead.
+type followTickMsg struct{ gen int64 }
 
 // armFollowTick schedules the next follow poll; at most one is in flight.
 func (m *Model) armFollowTick() tea.Cmd {
@@ -28,8 +30,9 @@ func (m *Model) armFollowTick() tea.Cmd {
 		return nil
 	}
 	m.followTickArmed = true
+	gen := m.modelGen
 	return tea.Tick(followInterval(m.host.Config()), func(time.Time) tea.Msg {
-		return followTickMsg{}
+		return followTickMsg{gen: gen}
 	})
 }
 

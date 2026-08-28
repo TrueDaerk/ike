@@ -24,7 +24,7 @@ func TestHTTPFlightTickSingleChain(t *testing.T) {
 		t.Fatal("second dispatch armed a duplicate tick chain")
 	}
 	// The in-flight tick lands: with a flight running it re-arms — once.
-	tm, cmd := m.Update(httpTickMsg{})
+	tm, cmd := m.Update(httpTickMsg{gen: m.modelGen})
 	m = tm.(Model)
 	if cmd == nil {
 		t.Fatal("tick must re-arm while a flight is running")
@@ -35,7 +35,7 @@ func TestHTTPFlightTickSingleChain(t *testing.T) {
 	// The flight ends and the final tick lands: the chain dies and the flag
 	// clears, so the next dispatch can arm again.
 	m.finishHTTPFlight("k2")
-	tm, cmd = m.Update(httpTickMsg{})
+	tm, cmd = m.Update(httpTickMsg{gen: m.modelGen})
 	m = tm.(Model)
 	if cmd != nil {
 		t.Fatal("tick must not re-arm with no flights")

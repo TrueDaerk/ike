@@ -329,6 +329,9 @@ func (c *Config) Flat() map[string]string {
 
 	put("todo.patterns", strings.Join(c.Todo.Patterns, ","))
 
+	put("diff.context", c.Diff.Context)
+	put("diff.ignore_whitespace", c.Diff.IgnoreWhitespace)
+
 	for id, kv := range c.Lang {
 		for k, v := range kv {
 			put("lang."+id+"."+k, v)

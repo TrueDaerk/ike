@@ -4,7 +4,7 @@ title: Themes / Color Schemes
 description: Named-palette system — one [theme].name recolors syntax, explorer, chrome and the integrated terminal ANSI palette together; one shared color resolver; plugin-extensible built-ins.
 resource: internal/theme
 tags: [architecture, themes, color, lipgloss]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-08-28T20:00:00Z
 ---
 
 # Themes / Color Schemes
@@ -30,7 +30,7 @@ set of **semantic color slots**, not a per-widget sheet. The IKE slot set
 `Ruler`, `Primary`, `Secondary`,
 `Success`, `Warning`, `Error`, `Info`, `Hint`, `MoveSource`, `DropTarget`,
 `Ghost`, `ScrollbarTrack`, `ScrollbarThumb`, `DiffAdded`, `DiffRemoved`,
-`DiffChanged`. The occurrence slots back the LSP
+`DiffChanged`, `DiffAddedEmph`, `DiffRemovedEmph`. The occurrence slots back the LSP
 document-highlight marks (#172); left empty they fall back to the theme's own
 `SelectionMuted` before the default theme's, so occurrences stay in-palette
 for sparse themes. `InlayHint` colours the inline LSP inlay-hint text (#171);
@@ -40,9 +40,16 @@ comment tone). `Whitespace` and `IndentGuide` colour the visible-whitespace
 glyphs and indent guides (#64), falling back to the theme's own `Border`;
 `Ruler` is the column-ruler background tint, falling back to the theme's own
 `Panel`. `DiffAdded`, `DiffRemoved`, and `DiffChanged` are the diff viewer's
-line and intra-line backgrounds (#60); left empty they derive from the theme's
-own `Success`/`Error`/`Warning` tinted toward its `Surface` via `theme.Mix`,
-so sparse themes get in-palette diff colors without declaring the slots.
+line backgrounds and the editor's `.diff`/`.patch` word highlight (#60); left
+empty they derive from the theme's own `Success`/`Error`/`Warning` tinted
+toward its `Surface` via `theme.Mix`, so sparse themes get in-palette diff
+colors without declaring the slots. `DiffAddedEmph` and `DiffRemovedEmph`
+(#2170) are the diff viewer's **intra-line** changed-range backgrounds, one
+per side, so an emphasized range stays in the colour of the line carrying it;
+left empty they derive from that theme's own `DiffAdded`/`DiffRemoved` pushed
+toward `Success`/`Error` and pulled back until they sit within `emphHeadroom`
+of the line background's own drift from `Surface` — the readability envelope
+the contrast audit holds every overlay to.
 
 ## Model
 

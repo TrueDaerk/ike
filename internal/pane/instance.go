@@ -1609,6 +1609,27 @@ func (i *Instance) configure(cfg host.Config) {
 		i.mg.Editor().Configure(cfg)
 	case KindIssues:
 		i.gi.Configure(cfg)
+	case KindDiff:
+		// A reload re-applies diff.context and diff.ignore_whitespace to the
+		// open panes too (#2170): the viewer's own w toggle persists through
+		// the config, so the write has to land back in every diff.
+		applyDiffCfg(cfg, i)
+	}
+}
+
+// applyDiffCfg threads the diff.* keys into one diff instance; absent or
+// malformed values leave the model's current state alone.
+func applyDiffCfg(cfg host.Config, inst *Instance) {
+	if cfg == nil || inst == nil || inst.kind != KindDiff {
+		return
+	}
+	if v, ok := cfg.Get("diff.context"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			inst.df.SetContext(n)
+		}
+	}
+	if v, ok := cfg.Get("diff.ignore_whitespace"); ok {
+		inst.df.SetIgnoreWhitespace(v == "true")
 	}
 }
 

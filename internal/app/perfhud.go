@@ -32,8 +32,9 @@ type TogglePerfHUDMsg struct{}
 // plain-text block. Dispatched by perf.snapshot.
 type PerfSnapshotMsg struct{}
 
-// perfTickMsg is the HUD's sampling deadline.
-type perfTickMsg struct{}
+// perfTickMsg is the HUD's sampling deadline. gen names the model that armed
+// it (#2194); another model's tick is dropped.
+type perfTickMsg struct{ gen int64 }
 
 // perfCommands builds the perf.* command family.
 func perfCommands() []plugin.Command {
@@ -66,8 +67,9 @@ func (m *Model) armPerfTick() tea.Cmd {
 		return nil
 	}
 	m.perfTickArmed = true
+	gen := m.modelGen
 	return tea.Tick(perfHUDInterval(m.host.Config()), func(time.Time) tea.Msg {
-		return perfTickMsg{}
+		return perfTickMsg{gen: gen}
 	})
 }
 

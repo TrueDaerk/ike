@@ -147,23 +147,6 @@ func TestSnapshotDeterministicEntryOrder(t *testing.T) {
 	}
 }
 
-func TestColumnCount(t *testing.T) {
-	cases := []struct {
-		width, minCol, want int
-	}{
-		{0, 10, 1},   // narrow -> single column
-		{11, 10, 1},  // one column + gutter fits once (10+2=12 > 11)
-		{24, 10, 2},  // two columns (12*2 = 24)
-		{120, 18, 6}, // 120/(18+2)=6
-		{5, 100, 1},  // floor
-	}
-	for _, c := range cases {
-		if got := ColumnCount(c.width, c.minCol); got != c.want {
-			t.Errorf("ColumnCount(%d,%d) = %d, want %d", c.width, c.minCol, got, c.want)
-		}
-	}
-}
-
 func TestPackColumnMajorBalanced(t *testing.T) {
 	cells := []string{"a", "b", "c", "d", "e"}
 	got := Pack(cells, 2)

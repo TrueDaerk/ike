@@ -452,6 +452,11 @@ func (m Model) statusLine() string {
 		case inst.Kind() == pane.KindDiff:
 			l, r := inst.Diff().Titles()
 			left += "DIFF │ " + l + " ⇄ " + r
+			if inst.Diff().IgnoreWhitespace() {
+				// The ignore-whitespace toggle (#2170) is state the reader has
+				// to see: it decides which changes are in the list at all.
+				left += " │ -w"
+			}
 			if n := inst.Diff().HunkCount(); n > 0 {
 				hunk := "–"
 				if c := inst.Diff().CurrentHunk(); c >= 0 {
