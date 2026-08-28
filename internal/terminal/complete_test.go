@@ -72,7 +72,7 @@ func TestCommandCandidates(t *testing.T) {
 		}
 	}
 	got := commandCandidates(dir, "make")
-	if len(got) != 1 || got[0] != "makeit" {
+	if len(got) != 1 || got[0] != (candidate{text: "makeit", kind: candFinal}) {
 		t.Fatalf("commandCandidates = %v, want [makeit] (executables only, prefix match)", got)
 	}
 }
@@ -85,10 +85,16 @@ func TestMakeCandidates(t *testing.T) {
 	}
 	got := makeCandidates(dir, "")
 	want := []string{"build", "docs", "lint"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
+	if strings.Join(candTexts(got), ",") != strings.Join(want, ",") {
 		t.Fatalf("makeCandidates = %v, want %v", got, want)
 	}
-	if got := makeCandidates(dir, "do"); len(got) != 1 || got[0] != "docs" {
+	// Make targets are atomic tokens: accepting one finishes the word (#2261).
+	for _, c := range got {
+		if c.kind != candFinal {
+			t.Fatalf("make target %q must be a final candidate, got kind %v", c.text, c.kind)
+		}
+	}
+	if got := makeCandidates(dir, "do"); len(got) != 1 || got[0].text != "docs" {
 		t.Fatalf("prefix filter = %v, want [docs]", got)
 	}
 	if got := makeCandidates(t.TempDir(), ""); len(got) != 0 {
@@ -107,23 +113,30 @@ func TestPathCandidates(t *testing.T) {
 		}
 	}
 	got := pathCandidates(dir, "ma")
-	if strings.Join(got, ",") != "main.go,map.txt" {
+	if strings.Join(candTexts(got), ",") != "main.go,map.txt" {
 		t.Fatalf("pathCandidates(ma) = %v", got)
 	}
-	// A directory keeps its trailing slash; the word's dir part is preserved.
+	// Files are final candidates (#2261): accepting one ends the argument.
+	for _, c := range got {
+		if c.kind != candFinal {
+			t.Fatalf("file %q must be a final candidate, got kind %v", c.text, c.kind)
+		}
+	}
+	// A directory keeps its trailing slash and its dir kind; the word's dir
+	// part is preserved.
 	got = pathCandidates(dir, "s")
-	if len(got) != 1 || got[0] != "src/" {
-		t.Fatalf("pathCandidates(s) = %v, want [src/]", got)
+	if len(got) != 1 || got[0] != (candidate{text: "src/", kind: candDir}) {
+		t.Fatalf("pathCandidates(s) = %v, want [{src/ dir}]", got)
 	}
 	got = pathCandidates(dir, "src/a")
-	if len(got) != 1 || got[0] != "src/app/" {
-		t.Fatalf("pathCandidates(src/a) = %v, want [src/app/]", got)
+	if len(got) != 1 || got[0] != (candidate{text: "src/app/", kind: candDir}) {
+		t.Fatalf("pathCandidates(src/a) = %v, want [{src/app/ dir}]", got)
 	}
 	// Dotfiles only on explicit request.
-	if got = pathCandidates(dir, ""); strings.Contains(strings.Join(got, ","), ".hidden") {
+	if got = pathCandidates(dir, ""); strings.Contains(strings.Join(candTexts(got), ","), ".hidden") {
 		t.Fatalf("dotfile leaked into %v", got)
 	}
-	if got = pathCandidates(dir, "."); len(got) != 1 || got[0] != ".hidden" {
+	if got = pathCandidates(dir, "."); len(got) != 1 || got[0].text != ".hidden" {
 		t.Fatalf("pathCandidates(.) = %v, want [.hidden]", got)
 	}
 }
@@ -137,21 +150,22 @@ func TestCandidatesSourceRouting(t *testing.T) {
 		t.Fatal(err)
 	}
 	// First word → commands; after make → targets; otherwise → paths.
-	if got := candidates("make", "bui", dir, t.TempDir()); len(got) != 1 || got[0] != "build" {
+	if got := candidates("make", "bui", dir, t.TempDir()); len(got) != 1 || got[0].text != "build" {
 		t.Fatalf("make routing = %v, want [build]", got)
 	}
-	if got := candidates("ls", "bui", dir, t.TempDir()); len(got) != 1 || got[0] != "bui.txt" {
+	if got := candidates("ls", "bui", dir, t.TempDir()); len(got) != 1 || got[0].text != "bui.txt" {
 		t.Fatalf("path routing = %v, want [bui.txt]", got)
 	}
 	binDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(binDir, "buildit"), []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := candidates("bui", "bui", dir, binDir); len(got) != 1 || got[0] != "buildit" {
-		t.Fatalf("command routing = %v, want [buildit]", got)
+	if got := candidates("bui", "bui", dir, binDir); len(got) != 1 ||
+		got[0] != (candidate{text: "buildit", kind: candFinal}) {
+		t.Fatalf("command routing = %v, want [{buildit final}]", got)
 	}
 	// A word with a slash always completes as a path, even as the first word.
-	if got := candidates("./bu", "./bu", dir, binDir); len(got) != 1 || got[0] != "./bui.txt" {
+	if got := candidates("./bu", "./bu", dir, binDir); len(got) != 1 || got[0].text != "./bui.txt" {
 		t.Fatalf("slash word must route to paths, got %v", got)
 	}
 }
@@ -192,7 +206,7 @@ func TestCtrlSpaceOpensPopupAndAccepts(t *testing.T) {
 	}
 	sel := -1
 	for i, it := range m.comp.items {
-		if it == "echo" {
+		if it.text == "echo" {
 			sel = i
 		}
 	}
@@ -204,14 +218,16 @@ func TestCtrlSpaceOpensPopupAndAccepts(t *testing.T) {
 	if m.comp.open {
 		t.Fatal("accepting must close the popup")
 	}
-	waitFor(t, "pasted remainder", func() bool {
-		_, word := parseCmdline(m.lineBeforeCursor())
-		return word == "echo"
+	// An executable is a finished token, so the accept ends it with a space
+	// (#2261): the word under the cursor is empty again, `echo ` is on the line.
+	waitFor(t, "pasted remainder and trailing space", func() bool {
+		cmd, word := parseCmdline(m.lineBeforeCursor())
+		return cmd == "echo" && word == "" && strings.HasSuffix(m.lineBeforeCursor(), "echo ")
 	})
 	// The popup renders into the view while open.
 	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
 	m.SetFocused(true)
-	if m.comp.open && !strings.Contains(m.View(), m.comp.items[0]) {
+	if m.comp.open && !strings.Contains(m.View(), m.comp.items[0].text) {
 		t.Fatal("open popup must render into the view")
 	}
 }
@@ -283,7 +299,7 @@ func TestCompletionFollowsCd(t *testing.T) {
 	waitFor(t, "cwd update", func() bool { return m.sess.Cwd() == other })
 	// Path candidates for "./ta" resolve in the live cwd.
 	got := candidates("./ta", "./ta", m.sess.Cwd(), "")
-	if len(got) != 1 || got[0] != "./target-file.txt" {
+	if len(got) != 1 || got[0].text != "./target-file.txt" {
 		t.Fatalf("candidates after cd = %v, want [./target-file.txt]", got)
 	}
 }
@@ -301,10 +317,10 @@ func TestCandidatesFoldCase(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := pathCandidates(dir, "./doc")
-	if len(got) != 1 || got[0] != "./Documents/" {
+	if len(got) != 1 || got[0].text != "./Documents/" {
 		t.Fatalf("fold path candidates = %v, want [./Documents/]", got)
 	}
-	if got := pathCandidates(dir, "./READ"); len(got) != 1 || got[0] != "./readme.md" {
+	if got := pathCandidates(dir, "./READ"); len(got) != 1 || got[0].text != "./readme.md" {
 		t.Fatalf("upper-typed fold = %v, want [./readme.md]", got)
 	}
 
@@ -315,7 +331,7 @@ func TestCandidatesFoldCase(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(mdir, "Makefile"), []byte("Build-All:\n\techo hi\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := makeCandidates(mdir, "build"); len(got) != 1 || got[0] != "Build-All" {
+	if got := makeCandidates(mdir, "build"); len(got) != 1 || got[0].text != "Build-All" {
 		t.Fatalf("fold make candidates = %v, want [Build-All]", got)
 	}
 
@@ -324,7 +340,7 @@ func TestCandidatesFoldCase(t *testing.T) {
 	if err := os.WriteFile(exe, []byte("#!"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := commandCandidates(bin, "myt"); len(got) != 1 || got[0] != "MyTool" {
+	if got := commandCandidates(bin, "myt"); len(got) != 1 || got[0].text != "MyTool" {
 		t.Fatalf("fold command candidates = %v, want [MyTool]", got)
 	}
 }
@@ -344,11 +360,10 @@ func TestAcceptCaseCorrects(t *testing.T) {
 		return word == "mak"
 	})
 	// Fake an open popup offering the case-different candidate.
-	m.comp = completion{open: true, items: []string{"Makefile"}, sel: 0, word: "mak"}
+	m.comp = completion{open: true, items: []candidate{{text: "Makefile"}}, sel: 0, word: "mak"}
 	m.acceptCompletion()
 	waitFor(t, "case-corrected line", func() bool {
-		_, word := parseCmdline(m.lineBeforeCursor())
-		return word == "Makefile"
+		return strings.HasSuffix(m.lineBeforeCursor(), "Makefile ")
 	})
 }
 
@@ -375,7 +390,7 @@ func TestAcceptDirectoryClosesPopup(t *testing.T) {
 		return word == "an"
 	})
 	m.OnOutput()
-	if !m.comp.open || m.comp.items[0] != "ansible/" {
+	if !m.comp.open || m.comp.items[0] != (candidate{text: "ansible/", kind: candDir}) {
 		t.Fatalf("auto popup must suggest ansible/, got open=%v items=%v", m.comp.open, m.comp.items)
 	}
 
@@ -386,6 +401,8 @@ func TestAcceptDirectoryClosesPopup(t *testing.T) {
 	if m.pendingSuggest {
 		t.Fatal("tab-accept must not arm an auto-suggest refresh")
 	}
+	// A directory ends in "/" and gets no trailing space (#2261) — the word
+	// stays open so completion can descend into it.
 	waitFor(t, "pasted directory", func() bool {
 		_, word := parseCmdline(m.lineBeforeCursor())
 		return word == "ansible/"
@@ -410,7 +427,7 @@ func TestAcceptDirectoryClosesPopup(t *testing.T) {
 		return word == "ansible/a"
 	})
 	m.OnOutput()
-	if !m.comp.open || m.comp.items[0] != "ansible/ansible.cfg" {
+	if !m.comp.open || m.comp.items[0].text != "ansible/ansible.cfg" {
 		t.Fatalf("continued typing must complete inside the directory, got open=%v items=%v", m.comp.open, m.comp.items)
 	}
 }
@@ -475,8 +492,8 @@ func TestEnterFocusRule(t *testing.T) {
 		t.Fatal("accepting must close the popup")
 	}
 	waitFor(t, "candidate inserted", func() bool {
-		_, word := parseCmdline(m.lineBeforeCursor())
-		return word != "ec" && strings.HasPrefix(strings.ToLower(word), "ec")
+		cmd, word := parseCmdline(m.lineBeforeCursor())
+		return cmd != "ec" && word == "" && strings.HasPrefix(strings.ToLower(cmd), "ec")
 	})
 	clearLine()
 
@@ -486,8 +503,8 @@ func TestEnterFocusRule(t *testing.T) {
 		t.Fatal("tab must accept regardless of focus")
 	}
 	waitFor(t, "candidate inserted by tab", func() bool {
-		_, word := parseCmdline(m.lineBeforeCursor())
-		return word != "ec" && strings.HasPrefix(strings.ToLower(word), "ec")
+		cmd, word := parseCmdline(m.lineBeforeCursor())
+		return cmd != "ec" && word == "" && strings.HasPrefix(strings.ToLower(cmd), "ec")
 	})
 	clearLine()
 
@@ -610,7 +627,7 @@ func TestWrappedLineCtrlSpaceCompletes(t *testing.T) {
 		return cmd == "echo" && w == "targ"
 	})
 	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
-	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0] != "target-file.txt" {
+	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0].text != "target-file.txt" {
 		t.Fatalf("ctrl+space on a wrapped line = open=%v items=%v, want [target-file.txt]",
 			m.comp.open, m.comp.items)
 	}
@@ -643,7 +660,7 @@ func TestWrappedLineAutoSuggestCompletes(t *testing.T) {
 		return cmd == "echo" && w == "targ"
 	})
 	m.OnOutput()
-	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0] != "target-file.txt" {
+	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0].text != "target-file.txt" {
 		t.Fatalf("auto-suggest on a wrapped word = open=%v items=%v, want [target-file.txt]",
 			m.comp.open, m.comp.items)
 	}
@@ -652,8 +669,7 @@ func TestWrappedLineAutoSuggestCompletes(t *testing.T) {
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	waitFor(t, "remainder pasted across the wrap", func() bool {
-		_, w := parseCmdline(m.lineBeforeCursor())
-		return w == "target-file.txt"
+		return strings.Contains(m.lineBeforeCursor(), "target-file.txt ")
 	})
 }
 
@@ -684,7 +700,7 @@ func TestWrappedLineAutoSuggestAfterWrap(t *testing.T) {
 		return cmd == "echo" && w == "targ"
 	})
 	m.OnOutput()
-	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0] != "target-file.txt" {
+	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0].text != "target-file.txt" {
 		t.Fatalf("auto-suggest after the wrap = open=%v items=%v, want [target-file.txt]",
 			m.comp.open, m.comp.items)
 	}
@@ -817,7 +833,7 @@ func TestWrappedCompletionAfterResize(t *testing.T) {
 		return cmd == "echo" && w == "targ"
 	})
 	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
-	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0] != "target-file.txt" {
+	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0].text != "target-file.txt" {
 		t.Fatalf("ctrl+space after resize = open=%v items=%v, want [target-file.txt]",
 			m.comp.open, m.comp.items)
 	}
@@ -883,7 +899,7 @@ func TestPopupNearRightEdgeStaysIntact(t *testing.T) {
 		t.Fatalf("line must not wrap for this test, cursor moved to row %d", y)
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
-	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0] != "target-file.txt" {
+	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0].text != "target-file.txt" {
 		t.Fatalf("popup = open=%v items=%v, want [target-file.txt]", m.comp.open, m.comp.items)
 	}
 	m.SetFocused(true)
@@ -962,7 +978,7 @@ func TestPopupInactiveWhileProgramRuns(t *testing.T) {
 		return word == "t"
 	})
 	m.OnOutput()
-	if !m.comp.open || m.comp.items[0] != "target-file.txt" {
+	if !m.comp.open || m.comp.items[0].text != "target-file.txt" {
 		t.Fatalf("completion must return with the prompt, got open=%v items=%v", m.comp.open, m.comp.items)
 	}
 }
@@ -974,7 +990,7 @@ func TestUnfocusedPopupNoHighlight(t *testing.T) {
 	c := &collector{}
 	m := startShModel(t, c)
 	base := strings.TrimSuffix(strings.Repeat(strings.Repeat(" ", 80)+"\n", 24), "\n")
-	m.comp = completion{open: true, items: []string{"alpha", "beta"}, sel: 0, word: "a", auto: true}
+	m.comp = completion{open: true, items: []candidate{{text: "alpha"}, {text: "beta"}}, sel: 0, word: "a", auto: true}
 	if v := m.completionView(base); strings.Contains(v, "\x1b[7m") {
 		t.Fatal("unfocused popup must not reverse-video any row")
 	}
@@ -1013,11 +1029,10 @@ func TestAcceptStaleSnapshotUsesLiveWord(t *testing.T) {
 		return word == "mkdi"
 	})
 	// Popup snapshot predates the last keystroke: computed at "mkd".
-	m.comp = completion{open: true, items: []string{"mkdir"}, sel: 0, word: "mkd"}
+	m.comp = completion{open: true, items: []candidate{{text: "mkdir"}}, sel: 0, word: "mkd"}
 	m.acceptCompletion()
 	waitFor(t, "line completes to mkdir", func() bool {
-		_, word := parseCmdline(m.lineBeforeCursor())
-		return word == "mkdir"
+		return strings.HasSuffix(m.lineBeforeCursor(), "mkdir ")
 	})
 }
 
@@ -1037,11 +1052,10 @@ func TestAcceptStaleSnapshotCaseCorrect(t *testing.T) {
 	// Snapshot at "mak"; the live word "makef" matches "Makefile" only
 	// case-insensitively, so the accept takes the erase-and-retype path and
 	// must backspace 5 characters, not the snapshot's 3.
-	m.comp = completion{open: true, items: []string{"Makefile"}, sel: 0, word: "mak"}
+	m.comp = completion{open: true, items: []candidate{{text: "Makefile"}}, sel: 0, word: "mak"}
 	m.acceptCompletion()
 	waitFor(t, "case-corrected full word", func() bool {
-		_, word := parseCmdline(m.lineBeforeCursor())
-		return word == "Makefile"
+		return strings.HasSuffix(m.lineBeforeCursor(), "Makefile ")
 	})
 }
 
@@ -1058,7 +1072,7 @@ func TestAcceptDivergedWordDropsAccept(t *testing.T) {
 		_, word := parseCmdline(m.lineBeforeCursor())
 		return word == "mx"
 	})
-	m.comp = completion{open: true, items: []string{"mkdir"}, sel: 0, word: "m"}
+	m.comp = completion{open: true, items: []candidate{{text: "mkdir"}}, sel: 0, word: "m"}
 	m.acceptCompletion()
 	// Any text the accept had sent would land before this probe keystroke, so
 	// the word settling at exactly "mxz" proves nothing stale was inserted.
@@ -1106,7 +1120,7 @@ func TestAcceptEscapesSpecialChars(t *testing.T) {
 		_, word := parseCmdline(m.lineBeforeCursor())
 		return word == "My"
 	})
-	m.comp = completion{open: true, items: []string{"My Documents/"}, sel: 0, word: "My"}
+	m.comp = completion{open: true, items: []candidate{{text: "My Documents/", kind: candDir}}, sel: 0, word: "My"}
 	m.acceptCompletion()
 	waitFor(t, "escaped remainder on the line", func() bool {
 		return strings.Contains(m.lineBeforeCursor(), `My\ Documents/`)
@@ -1126,7 +1140,7 @@ func TestAcceptContinuesEscapedWord(t *testing.T) {
 		_, word := parseCmdline(m.lineBeforeCursor())
 		return word == `My\ Doc`
 	})
-	m.comp = completion{open: true, items: []string{"My Documents/"}, sel: 0, word: `My\ Doc`}
+	m.comp = completion{open: true, items: []candidate{{text: "My Documents/", kind: candDir}}, sel: 0, word: `My\ Doc`}
 	m.acceptCompletion()
 	waitFor(t, "remainder extends escaped word", func() bool {
 		return strings.Contains(m.lineBeforeCursor(), `My\ Documents/`)
@@ -1145,9 +1159,184 @@ func TestAcceptCaseCorrectEscapes(t *testing.T) {
 		_, word := parseCmdline(m.lineBeforeCursor())
 		return word == "my"
 	})
-	m.comp = completion{open: true, items: []string{"My Documents/"}, sel: 0, word: "my"}
+	m.comp = completion{open: true, items: []candidate{{text: "My Documents/", kind: candDir}}, sel: 0, word: "my"}
 	m.acceptCompletion()
 	waitFor(t, "escaped case-corrected word", func() bool {
 		return strings.Contains(m.lineBeforeCursor(), `My\ Documents/`)
 	})
+}
+
+// candTexts is the plain-string view of a candidate list, for assertions that
+// only care about the offered words.
+func candTexts(cs []candidate) []string {
+	out := make([]string, len(cs))
+	for i, c := range cs {
+		out[i] = c.text
+	}
+	return out
+}
+
+// TestCandidateAccepted (#2261) is the accept rule itself: a final candidate
+// (file, executable, make target) gains a trailing space, a directory does
+// not, and an existing space right of the cursor suppresses the appended one.
+func TestCandidateAccepted(t *testing.T) {
+	cases := []struct {
+		c          candidate
+		spaceAhead bool
+		want       string
+	}{
+		{candidate{text: "main.go", kind: candFinal}, false, "main.go "},
+		{candidate{text: "main.go", kind: candFinal}, true, "main.go"},
+		{candidate{text: "build", kind: candFinal}, false, "build "},
+		{candidate{text: "src/", kind: candDir}, false, "src/"},
+		{candidate{text: "src/", kind: candDir}, true, "src/"},
+	}
+	for _, tc := range cases {
+		if got := tc.c.accepted(tc.spaceAhead); got != tc.want {
+			t.Errorf("%+v.accepted(%v) = %q, want %q", tc.c, tc.spaceAhead, got, tc.want)
+		}
+	}
+}
+
+// TestAcceptTrailingSpaceByType (#2261): accepting a file, a make target or a
+// PATH executable finishes the argument with a space; accepting a directory
+// inserts the trailing "/" alone so completion can continue inside it.
+func TestAcceptTrailingSpaceByType(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "ansible"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"target-file.txt", "Makefile"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte("build:\n\techo x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		name  string
+		typed string
+		word  string
+		want  string
+	}{
+		{"file", "ls ta", "ta", "target-file.txt "},
+		{"make target", "make bui", "bui", "build "},
+		{"executable", "ec", "ec", "echo "},
+		{"directory", "cd an", "an", "ansible/"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &collector{}
+			m := startShModelIn(t, c, dir)
+			for _, r := range tc.typed {
+				m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+			}
+			waitFor(t, "echo of "+tc.typed, func() bool {
+				_, word := parseCmdline(m.lineBeforeCursor())
+				return word == tc.word
+			})
+			m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+			sel := -1
+			for i, it := range m.comp.items {
+				if it.text == strings.TrimSuffix(tc.want, " ") {
+					sel = i
+				}
+			}
+			if sel < 0 {
+				t.Fatalf("candidates for %q must offer %q, got %v", tc.typed, tc.want, m.comp.items)
+			}
+			m.comp.sel = sel
+			m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+			waitFor(t, "accepted "+tc.name, func() bool {
+				return strings.HasSuffix(m.lineBeforeCursor(), tc.want)
+			})
+			// Nothing beyond the expected tail: a directory must not gain a
+			// space, a final candidate must not gain a second one.
+			if line := m.lineBeforeCursor(); strings.HasSuffix(line, tc.want+" ") {
+				t.Fatalf("accepted %s got an extra trailing space: %q", tc.name, line)
+			}
+		})
+	}
+}
+
+// TestAcceptNoDoubleSpaceMidLine (#2261): accepting where the line already has
+// a space right of the cursor inserts the candidate alone — the argument stays
+// separated by exactly one space.
+func TestAcceptNoDoubleSpaceMidLine(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "target-file.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &collector{}
+	m := startShModelIn(t, c, dir)
+	for _, r := range "ls ta zzz" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "echo of the line", func() bool {
+		return strings.HasSuffix(m.lineBeforeCursor(), "ls ta zzz")
+	})
+	// Move the cursor back in front of the space before "zzz".
+	for range "zzz " {
+		m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyLeft})
+	}
+	waitFor(t, "cursor back at the word", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "ta"
+	})
+	if m.spaceFollowsCursor() != true {
+		t.Fatal("a space right of the cursor must be detected")
+	}
+	m.comp = completion{open: true, items: []candidate{{text: "target-file.txt"}}, sel: 0, word: "ta"}
+	m.acceptCompletion()
+	waitFor(t, "candidate inserted", func() bool {
+		return strings.Contains(plainView(m.sess), "target-file.txt zzz")
+	})
+	if strings.Contains(plainView(m.sess), "target-file.txt  zzz") {
+		t.Fatal("accept must not double the existing space")
+	}
+}
+
+// TestAcceptExplicitShorterCandidate (#2261): a candidate that is a strict
+// prefix of other still-matching ones is an explicit pick and counts as final
+// — it gets its trailing space like any other finished token.
+func TestAcceptExplicitShorterCandidate(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []string{"target.txt", "target.txt.bak"} {
+		if err := os.WriteFile(filepath.Join(dir, f), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c := &collector{}
+	m := startShModelIn(t, c, dir)
+	for _, r := range "ls tar" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "echo of tar", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "tar"
+	})
+	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+	if len(m.comp.items) != 2 || m.comp.items[0].text != "target.txt" {
+		t.Fatalf("popup must offer both files, got %v", m.comp.items)
+	}
+	m.comp.sel = 0 // the shorter one, still a prefix of target.txt.bak
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	waitFor(t, "shorter pick finished with a space", func() bool {
+		return strings.HasSuffix(m.lineBeforeCursor(), "target.txt ")
+	})
+}
+
+// TestSpaceFollowsCursorAtLineEnd (#2261): at the end of the command line
+// nothing follows the cursor, so an accepted final candidate appends its
+// space.
+func TestSpaceFollowsCursorAtLineEnd(t *testing.T) {
+	c := &collector{}
+	m := startShModel(t, c)
+	for _, r := range "ls ta" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "echo of ta", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "ta"
+	})
+	if m.spaceFollowsCursor() {
+		t.Fatal("nothing follows the cursor at the end of the line")
+	}
 }

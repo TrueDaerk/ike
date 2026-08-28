@@ -639,6 +639,25 @@ canonical spelling (`mak` → `Makefile`). The accepted text goes in as
 **plain key presses, not a bracketed paste** (#1442): zsh standout-highlights
 a pasted region by default, which made the completed text sit on the command
 line with a background.
+**Accepting is type-aware** (#2261, the zsh/fish rule): every candidate
+carries its source (`candidate.kind`) through to the accept, and the kind
+decides what follows the inserted text. A **directory** ends in `/` and gets
+nothing more — the argument is unfinished, completion continues inside it. A
+**file**, a **PATH executable** or a **make target** is an atomic, finished
+token and gets a **trailing space**, so the next word can be typed straight
+away (`ls ta` → tab → `ls target-file.txt ` with the cursor past the space).
+Ambiguity does not enter into it: picking a candidate that is a strict prefix
+of other still-matching ones (`target.txt` while `target.txt.bak` exists) is
+an explicit choice and counts as final, so it too ends with a space; only
+directory semantics suppress it. The space is skipped when the grid already
+holds one right of the cursor (accepting mid-line), so it never doubles up —
+the check reads the rest of the joined soft-wrap chain, so a cursor on a
+row's last column sees the continuation row's first cell. Both accept paths
+(tab on an auto-suggest popup, enter on a focused one) go through the same
+rule. The cursor row is padded back to the cursor column when the line is
+read (`lineBeforeCursor`), because the emulator right-trims rows: without it
+the accepted (or typed) trailing space would be invisible and the finished
+word would still parse as the current one.
 Accepting always **ends** the interaction, directories included (#1335) — the
 popup closes and the pending refresh is cleared, so the echo of the typed
 remainder cannot reopen it and the next enter submits the command line
