@@ -33,6 +33,12 @@ import (
 // Readers filter on it; additions bump it only when a field changes meaning.
 const SchemaVersion = 1
 
+// defaultFlushInterval is how often the writer goroutine flushes the
+// bufio.Writer on its own, independent of buffer fill or explicit Flush
+// calls — so a frozen UI loop still leaves recent events on disk within a
+// few seconds.
+const defaultFlushInterval = 3 * time.Second
+
 // Event types.
 const (
 	TypeCommand = "command" // a registered command was dispatched
@@ -65,17 +71,20 @@ type Event struct {
 // records (telemetry off, or a model discarded on project switch) costs
 // nothing and leaves no file.
 type Recorder struct {
-	dir     string
-	enabled func() bool
-	now     func() time.Time
+	dir       string
+	enabled   func() bool
+	now       func() time.Time
+	newTicker func(d time.Duration) (<-chan time.Time, func())
 
 	// MaxBytes caps the session file; once written bytes exceed it the
 	// recorder goes dead and drops everything (bounded growth per session).
 	// KeepFiles caps the telemetry directory: opening a new session file
-	// prunes the oldest session files beyond KeepFiles-1. Both are set
-	// before the first event only.
-	MaxBytes  int64
-	KeepFiles int
+	// prunes the oldest session files beyond KeepFiles-1. FlushInterval sets
+	// how often the writer goroutine flushes on its own (see
+	// defaultFlushInterval). All three are set before the first event only.
+	MaxBytes      int64
+	KeepFiles     int
+	FlushInterval time.Duration
 
 	mu      sync.Mutex
 	started bool
@@ -100,12 +109,20 @@ func New(dir string, enabled func() bool) *Recorder {
 		return nil
 	}
 	return &Recorder{
-		dir:       dir,
-		enabled:   enabled,
-		now:       time.Now,
-		MaxBytes:  5 << 20,
-		KeepFiles: 20,
+		dir:           dir,
+		enabled:       enabled,
+		now:           time.Now,
+		newTicker:     realTicker,
+		MaxBytes:      5 << 20,
+		KeepFiles:     20,
+		FlushInterval: defaultFlushInterval,
 	}
+}
+
+// realTicker wraps a time.Ticker behind the newTicker seam.
+func realTicker(d time.Duration) (<-chan time.Time, func()) {
+	t := time.NewTicker(d)
+	return t.C, t.Stop
 }
 
 // SessionID returns the session id, minting it on first use.
@@ -265,6 +282,11 @@ func (r *Recorder) open() *os.File {
 // per-event disk I/O. All errors are swallowed — once anything fails (or the
 // size cap is hit) it keeps draining so senders never notice, it just stops
 // writing.
+//
+// A ticker flushes the buffer on its own cadence (FlushInterval), so events
+// already enqueued reach disk within a few seconds even if the render/update
+// loop that would otherwise drive Record/Flush calls is frozen — the writer
+// goroutine never depends on that loop running.
 func (r *Recorder) run(f *os.File) {
 	defer close(r.done)
 	var (
@@ -276,24 +298,38 @@ func (r *Recorder) run(f *os.File) {
 		w.Flush()
 		f.Close()
 	}()
-	for env := range r.ch {
-		if env.ack != nil {
-			w.Flush()
-			close(env.ack)
-			continue
-		}
-		if dead {
-			continue
-		}
-		line, err := json.Marshal(env.ev)
-		if err != nil {
-			continue
-		}
-		n, err := w.Write(append(line, '\n'))
-		written += int64(n)
-		if err != nil || (r.MaxBytes > 0 && written > r.MaxBytes) {
-			dead = true // cap reached or disk trouble: stop writing, keep draining
-			w.Flush()
+
+	tick, stop := r.newTicker(r.FlushInterval)
+	defer stop()
+
+	for {
+		select {
+		case env, ok := <-r.ch:
+			if !ok {
+				return
+			}
+			if env.ack != nil {
+				w.Flush()
+				close(env.ack)
+				continue
+			}
+			if dead {
+				continue
+			}
+			line, err := json.Marshal(env.ev)
+			if err != nil {
+				continue
+			}
+			n, err := w.Write(append(line, '\n'))
+			written += int64(n)
+			if err != nil || (r.MaxBytes > 0 && written > r.MaxBytes) {
+				dead = true // cap reached or disk trouble: stop writing, keep draining
+				w.Flush()
+			}
+		case <-tick:
+			if !dead {
+				w.Flush()
+			}
 		}
 	}
 }

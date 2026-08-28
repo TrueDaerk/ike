@@ -82,6 +82,16 @@ history).
   loop never blocks and a usage log never disrupts the session. The recorder
   opens its file lazily on the first accepted event and is flushed/closed in
   the quit path.
+- **Periodic flush (#2295)**: the writer goroutine also holds a ticker
+  (`Recorder.FlushInterval`, default 3s) and flushes the `bufio.Writer` on
+  every tick, independent of buffer fill or an explicit `Flush()`/`Close()`
+  call. It lives entirely inside the writer's own `select` over the event
+  channel and the ticker channel, so it keeps running even if the
+  render/update loop that would otherwise drive `Record` calls is frozen —
+  events already enqueued reach disk within a few seconds instead of waiting
+  on the next full buffer or session end. The ticker stops with the writer
+  goroutine on `Close`; `newTicker` is a seam so tests can drive a fake tick
+  channel instead of sleeping.
 - **Bounded growth**: the session file is capped (5 MiB; past it the recorder
   stops writing), and opening a new session prunes the directory down to the
   newest 20 session files.
