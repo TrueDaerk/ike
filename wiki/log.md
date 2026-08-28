@@ -1,5 +1,21 @@
 # Log
 
+## 2026-08-28 (cmd+c in the HTTP response pane and the explorer, #2315)
+
+- **The copy chord is bound where users pressed it**: unbound-chord telemetry
+  showed `cmd+c` in the `http` and `explorer` contexts. `Defaults()` now binds
+  it in both — `http.copyResponse` in the response viewer, `file.copyPath` in
+  the tree — so the key is listed in the cheatsheet, the keymap settings page
+  and the generated reference, and is rebindable like every other chord.
+- **`http.copyResponse` is the pane's copy key as a command**: it forwards to
+  the new exported `httppane.Model.CopyKeyCmd`, which is the pane-local
+  `copyKeyCmd` — the live selection when there is one, else the whole body. The
+  pane handled `cmd+c` itself before, invisibly to the keymap layer; both
+  entries now run one code path and cannot drift.
+- **No `ctrl+c` secondary**: on macOS `ctrl+c` stays the global quit chord that
+  only yields to a live selection (#2062); off macOS the `cmd+c` rows normalise
+  onto `ctrl+c` on their own, the same way the editor's copy row always has.
+
 ## 2026-08-28 (ctrl+r reruns in the response pane and the archive viewer, #2314)
 
 - **`ctrl+r` is a keybinding now** (`internal/keymap/defaults.go`): JetBrains

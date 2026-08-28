@@ -1036,6 +1036,16 @@ For a recognized stream:
   cannot be reserved the same way — inside the prompt it is query text — so
   it stays with whatever owns the keyboard, and `zy` keeps copying the target
   fold.
+- **The copy chord is a listed binding, not a pane secret** (#2315): telemetry
+  recorded `cmd+c` as *unbound* in the `http` context — the pane handled it,
+  but the keymap layer had never heard of it, so it appeared in no listing and
+  could not be rebound. `http.copyResponse` ("Copy HTTP Response Selection or
+  Body") is that key as a command: the default table binds `cmd+c` in the
+  `HTTP` context, the app forwards to `Model.CopyKeyCmd` and the pane makes
+  the same selection-else-body choice as the pane-local key, so both entries
+  mean one thing. No `ctrl+c` secondary is bound: on macOS `ctrl+c` must keep
+  quitting when there is no selection (#2062), and off macOS the `cmd+c` row
+  already normalises to `ctrl+c` — the same shape as the editor's copy row.
 - **Body highlighting depends on the build** (#1270): `contentTag` maps the
   Content-Type onto a fence tag (charset parameters and `+json`/`+xml`
   vendor suffixes stripped) and `highlight.HighlightFenced` resolves that tag

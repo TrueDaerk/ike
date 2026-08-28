@@ -486,12 +486,22 @@ Your own configuration adds to this list: every tool pane you define under
 bring their own.`))
 
 	chords := map[string]string{}
+	chordGlobal := map[string]bool{}
 	for _, bd := range keymap.Defaults(keymap.PresetJetBrains) {
 		// Several chords can share a command (a JetBrains primary plus a
 		// deliverable fallback); the shortest is the one worth advertising.
-		if cur, ok := chords[bd.Command]; !ok || len(bd.Chord.String()) < len(cur) {
-			chords[bd.Command] = bd.Chord.String()
+		// A globally bound chord beats a shorter pane-scoped one either way
+		// (#2315): file.copyPath answers cmd+shift+c everywhere but cmd+c
+		// only in the explorer, and this column has no room for the caveat.
+		global := bd.Context == keymap.Global
+		cur, ok := chords[bd.Command]
+		switch {
+		case !ok, global && !chordGlobal[bd.Command]:
+		case global == chordGlobal[bd.Command] && len(bd.Chord.String()) < len(cur):
+		default:
+			continue
 		}
+		chords[bd.Command], chordGlobal[bd.Command] = bd.Chord.String(), global
 	}
 
 	cmds := reg.Commands()

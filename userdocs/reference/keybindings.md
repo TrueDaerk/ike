@@ -210,6 +210,7 @@ Active when the file explorer has focus.
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| Copy path of the selected entry | `cmd+c` | `ctrl+c` | `file.copyPath` |
 | Redo file operation | `cmd+shift+z` | `ctrl+shift+z` | `explorer.redo` |
 | Redo file operation | `ctrl+shift+z` | `ctrl+shift+z` | `explorer.redo` |
 | Undo file operation | `cmd+z` | `ctrl+z` | `explorer.undo` |
@@ -247,6 +248,7 @@ Active when the HTTP response pane has focus.
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| Copy response selection or body | `cmd+c` | `ctrl+c` | `http.copyResponse` |
 | Re-send stored HTTP request | `ctrl+r` | `ctrl+r` | `http.resend` |
 
 ## Archive viewer

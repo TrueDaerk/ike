@@ -888,6 +888,38 @@ All thirteen are Cmd/Alt-modified and therefore fragile; each records its palett
 escape route in `reachableAlternatives`, and each shows up in the cheatsheet and the
 palette's shortcut column automatically.
 
+## The copy chord outside the editor (#2315)
+
+Unbound-chord telemetry recorded `cmd+c` in the `http` and `explorer` contexts:
+the editor has bound it since 06, and users expect the same key to mean "copy"
+wherever they are. The response pane in fact *handled* it already (its own
+`copyChord`, #2051/#2062), but the keymap layer had never heard of it — so it
+appeared in no listing, could not be rebound, and kept reporting as unbound.
+The explorer did nothing at all.
+
+| context | chord | command | what it copies |
+|---|---|---|---|
+| `http` | `cmd+c` | `http.copyResponse` | the live selection, else the whole response body |
+| `explorer` | `cmd+c` | `file.copyPath` | the selected entry's absolute path |
+
+Two things this pass deliberately did *not* do:
+
+- **No `ctrl+c` secondary rows.** On macOS `ctrl+c` is the global quit chord,
+  and #2062 already settled the compromise: it copies over a live selection and
+  quits otherwise. A row would take the key outright. Off macOS the point is
+  moot — `NormalizeChord` folds `cmd+c` onto `ctrl+c` anyway, exactly like the
+  editor's copy row, so those panes lose quit-by-`ctrl+c` there the way editors
+  already had.
+- **No file copy/paste pair in the explorer.** There is none to bind to; the
+  path is the copy the tree can actually make today. If a real file
+  copy/paste lands, this chord is where it belongs and `file.copyPath` moves
+  back to its `cmd+shift+c` home alone.
+
+`http.copyResponse` exists because binding `http.copyBody` would have been a
+*different* key: the pane's copy key prefers the selection. The command
+forwards to `httppane.Model.CopyKeyCmd`, the exported form of the pane-local
+`copyKeyCmd`, so the chord and the pane key cannot drift apart.
+
 ## Per-binding status matrix (0081/50) — the acceptance ledger
 
 Generated from `keymap.StatusMatrix` against the shipped plugin set (run
@@ -961,10 +993,11 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `explorer.reveal` | `alt+f1` | fragile | `palette` | live via palette |
 | `explorer.toggle` | `cmd+1` | fragile | `palette` | live via palette |
 | `explorer.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
-| `file.copyPath` | `cmd+shift+c` | fragile | `palette / context menu` | live via palette / context menu |
+| `file.copyPath` | `cmd+c` | fragile | `palette / context menu` | live via palette / context menu |
 | `file.move` | `f6` | delivered | `—` | live |
 | `file.rename` | `shift+f6` | delivered | `—` | live |
 | `find.openInPanel` | `cmd+enter` | fragile | `ctrl+enter` | live via ctrl+enter |
+| `http.copyResponse` | `cmd+c` | fragile | `response pane "y" / palette` | live via response pane "y" / palette |
 | `http.diffPreviousRun` | `cmd+shift+d` | fragile | `palette` | live via palette |
 | `http.resend` | `ctrl+r` | delivered | `—` | live |
 | `http.run` | `ctrl+f9` | fragile | `palette` | live via palette |

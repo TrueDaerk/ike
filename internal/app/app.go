@@ -4836,6 +4836,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// http.copyBody (palette, #1266): the shown body to the clipboard.
 		return m, m.copyHTTPResponse(false)
 
+	case HTTPCopyResponseMsg:
+		// http.copyResponse (cmd+c in the response pane, #2315): the pane's
+		// own copy key — selection when there is one, else the whole body.
+		return m, m.copyHTTPResponseOrSelection()
+
 	case HTTPCopyHeadersMsg:
 		// http.copyHeaders (palette, #1266): status line plus headers.
 		return m, m.copyHTTPResponse(true)

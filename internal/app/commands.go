@@ -532,6 +532,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("run.taskPromote", "Promote Task to Run Configuration…", TaskPromoteMsg{}),
 			appCommand("http.run", "Run HTTP Request", HTTPRunMsg{}),
 			appCommand("http.copyBody", "Copy HTTP Response Body", HTTPCopyBodyMsg{}),
+			appCommand("http.copyResponse", "Copy HTTP Response Selection or Body", HTTPCopyResponseMsg{}),
 			appCommand("http.copyHeaders", "Copy HTTP Response Headers", HTTPCopyHeadersMsg{}),
 			appCommand("http.copyFold", "Copy Folded Range (HTTP Response)", HTTPCopyFoldMsg{}),
 			appCommand("http.responseHistory", "Browse HTTP Response History", HTTPResponseHistoryMsg{}),

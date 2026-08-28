@@ -757,6 +757,12 @@ func (m *Model) copyKeyCmd() tea.Cmd {
 	return copyCmd(m.BodyText(), "response body")
 }
 
+// CopyKeyCmd is the host-side entry to the pane's copy key (#2315): the
+// keymap layer resolves cmd+c in the http context to http.copyResponse and
+// dispatches it here, so the bound chord means exactly what the pane-local
+// key means — the selection when there is one, else the whole body.
+func (m *Model) CopyKeyCmd() tea.Cmd { return m.copyKeyCmd() }
+
 // searchKey handles one key while the "/" prompt is open. esc/enter are
 // consumed here first; everything else — cursor motion, word ops, deletion,
 // insertion — delegates to ui.EditKey (#763/#1845), matching the terminal

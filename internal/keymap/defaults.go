@@ -74,6 +74,18 @@ var jetbrainsRows = []row{
 	{"ctrl+s", "editor.write", "Save", Editor, "Editor (06)"},
 	{"cmd+shift+s", "editor.saveAll", "Save all", Global, "Editor (06)"},
 	{"cmd+c", "editor.copy", "Copy", Editor, "Editor (06)"},
+	// The copy chord outside the editor (#2315): telemetry recorded cmd+c
+	// unbound in the response viewer and the explorer, where the panes either
+	// handled it silently (http) or did nothing (explorer). Binding it makes
+	// the meaning explicit, listed and rebindable. http.copyResponse is the
+	// pane's own copy key — the selection when there is one, else the whole
+	// body; the explorer has no file-copy/paste pair, so its copy is the
+	// selected entry's path. No ctrl+c secondary: on macOS ctrl+c stays the
+	// global quit chord (a selection-less press must keep quitting, #2062),
+	// and off macOS these rows already normalise to ctrl+c anyway, exactly
+	// like the editor's cmd+c row above.
+	{"cmd+c", "http.copyResponse", "Copy response selection or body", HTTP, "HTTP client (#2315)"},
+	{"cmd+c", "file.copyPath", "Copy path of the selected entry", Explorer, "Explorer (#2315)"},
 	// JetBrains' Copy Reference chord, applied to the position *inside* a
 	// JSON/YAML document rather than to the file (#1660). The jq and yq
 	// flavours stay palette-only — one chord for the everyday form.
