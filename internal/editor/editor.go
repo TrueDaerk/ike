@@ -266,6 +266,13 @@ type Model struct {
 	replayDepth int
 	lastMacro   rune
 
+	// keyHandled records whether the last routed key press did anything in the
+	// editor (#2303). The keymap layer feeds a chord to the resolver *before*
+	// the pane sees it, so an editor-owned chord like alt+delete looks unbound
+	// from up there; HandledLastKey lets the host tell "nobody wanted this key"
+	// apart from "the editor handled it itself" before logging telemetry.
+	keyHandled bool
+
 	dirty bool
 	stale bool // file changed on disk while dirty (Roadmap 0140, #82)
 	// pendingSave defers a manual write behind the LSP save chain (#1148:
@@ -1749,6 +1756,10 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.scroll()
 		return m.maybeReparse(before, nil)
 	case tea.KeyPressMsg:
+		// Assume the key lands somewhere in the editor; only the two
+		// fall-through defaults (unknown normal-mode command, unmatched
+		// insert-mode chord) revoke it (#2303).
+		m.keyHandled = true
 		if m.eval != nil {
 			// The evaluate popup (#2174) owns move/expand/esc; any other key
 			// closes it and falls through, like peek.

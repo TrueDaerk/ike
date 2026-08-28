@@ -1061,6 +1061,12 @@ func (r *Registry) Close(key string) {
 // be skipped without touching a single instance.
 func (r *Registry) ImagesMinted() bool { return r != nil && r.images > 0 }
 
+// PreviewsMinted reports whether this registry ever created a markdown
+// preview (#2180). Previews carry inline image placements of their own, so
+// the Kitty reconcile walk has to run for them too — and can still be skipped
+// entirely by a workspace that has neither kind.
+func (r *Registry) PreviewsMinted() bool { return r != nil && r.previews > 0 }
+
 // Keys returns the instance keys in insertion order.
 func (r *Registry) Keys() []string {
 	out := make([]string, len(r.order))

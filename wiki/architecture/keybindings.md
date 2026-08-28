@@ -234,6 +234,18 @@ function key records `unbound` — the expected-but-missing-keybind signal.
 Plain and shift-only presses are typing and are never recorded (see
 [usage telemetry](./usage-telemetry.md)).
 
+With an **editor focused the `unbound` verdict waits for the pane** (#2303).
+The keymap layer sees a chord before the editor does, and the editor owns
+editing chords the table never lists — `alt+delete`, `alt+backspace`,
+`ctrl+u`, the word motions. Those used to be logged as missing keybinds
+(`alt+delete` was the single most frequent one) and buried the real signal.
+`resolveKeymap` therefore parks the event in `pendUnbound` instead of writing
+it; `routeKey` writes it after dispatch only when `editor.HandledLastKey()`
+reports the editor ignored the key too. A chord consumed app-side before
+reaching a pane never reaches `routeKey` and is dropped on the next press —
+it was bound after all. Panes other than the editor are unchanged: their
+chords are recorded immediately.
+
 `fromkeymsg.go` adapts a Bubble Tea v2 `tea.KeyPressMsg` into a `Key`. It reads the
 press purely through `String()` — v2 still encodes modifiers as `ctrl+/alt+/shift+`
 tokens and names specials (`esc`, `space`, `f7`, `left`, …) — so the same code that

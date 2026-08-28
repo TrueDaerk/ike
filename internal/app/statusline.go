@@ -435,6 +435,13 @@ func (m Model) statusLine() string {
 			}
 		case inst.Kind() == pane.KindMarkdown:
 			left += "PREVIEW │ " + filepath.Base(inst.Preview().Path())
+			// The selected link (#2180) is what enter would follow and y
+			// would copy, so it belongs where the user looks before pressing.
+			if target, ok := inst.Preview().SelectedTarget(); ok {
+				left += " │ → " + target
+			} else if inst.Preview().HasLinks() {
+				left += " │ tab: links"
+			}
 		case inst.Kind() == pane.KindMerge:
 			// The remaining-conflict counter (#2258): the caret's place in
 			// the ]n/[n cycle while it stands in a block, the unresolved

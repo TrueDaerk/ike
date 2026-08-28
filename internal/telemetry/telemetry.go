@@ -31,7 +31,14 @@ import (
 
 // SchemaVersion is the event-schema version stamped into every line as "v".
 // Readers filter on it; additions bump it only when a field changes meaning.
-const SchemaVersion = 1
+//
+// v2 (#2304): internally triggered command dispatches (source "internal" —
+// polling/background funnels like the structure-panel's document-symbols
+// refresh) now land as their own type ("internal") instead of "command", so
+// "command" is exclusively user-triggered dispatches (keybind/palette/menu/
+// mouse) and a v1 reader that still expects "internal" under "command" must
+// check "v" first.
+const SchemaVersion = 2
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
@@ -41,9 +48,10 @@ const defaultFlushInterval = 3 * time.Second
 
 // Event types.
 const (
-	TypeCommand = "command" // a registered command was dispatched
-	TypeKey     = "key"     // a chord resolved, was blocked, or found no binding
-	TypeLayout  = "layout"  // a structural layout operation
+	TypeCommand  = "command"  // a user-triggered command was dispatched (keybind/palette/menu/mouse)
+	TypeInternal = "internal" // a command was dispatched internally (polling/background funnels), not by the user
+	TypeKey      = "key"      // a chord resolved, was blocked, or found no binding
+	TypeLayout   = "layout"   // a structural layout operation
 )
 
 // Command sources.
@@ -148,9 +156,18 @@ func (r *Recorder) sidLocked() string {
 }
 
 // Command records a command dispatch: the command id and how it was invoked
-// (one of the Source* constants).
+// (one of the Source* constants). Internally triggered dispatches (source
+// SourceInternal — polling/background funnels, e.g. the structure panel's
+// document-symbols refresh) land as TypeInternal instead of TypeCommand, so
+// TypeCommand stays exclusively user-triggered actions (#2304) — otherwise
+// high-frequency polling commands like lsp.documentSymbols dominate any
+// analysis of actual command usage.
 func (r *Recorder) Command(id, source string) {
-	r.record(TypeCommand, map[string]string{"id": id, "source": source})
+	typ := TypeCommand
+	if source == SourceInternal {
+		typ = TypeInternal
+	}
+	r.record(typ, map[string]string{"id": id, "source": source})
 }
 
 // Key records a keymap resolution: the canonical chord string, the focus

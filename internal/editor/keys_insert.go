@@ -130,6 +130,10 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 				m.desiredCol = m.cursor.Col
 			}
 			m.emit(EventCursorMove)
+		} else {
+			// No motion either: the key did nothing here, so the host may log
+			// it as an unbound chord (#2303).
+			m.keyHandled = false
 		}
 	}
 	// After typing/backspace, drop the popup if nothing matches the new prefix.

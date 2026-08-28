@@ -563,7 +563,16 @@ sequences `ESC b`/`ESC f`, which decode to those chords. `Alt+↑/↓` (and
 `Ctrl+↑/↓`) are paragraph jumps — all of these work in normal, visual and
 insert. In insert mode `alt+delete` (with `ctrl+delete` and readline
 `alt+d` as fallbacks) kills forward to the next word start, mirroring the
-`alt+backspace` word kill (#1583). `Shift+arrows` (plus `Shift+Home/End`) are selection keys: in normal
+`alt+backspace` word kill (#1583). The same word kills work in **normal mode**
+(#2303): `alt+delete`/`ctrl+delete` delete forward like `dw`,
+`alt+backspace` backward like `db`, both honoring a pending count and register
+(`2 alt+delete` eats two words) — a pending operator keeps its own meaning and
+cancels instead. In visual mode the chords delete the selection like plain
+`delete`/`backspace` (#979). `alt+d` and `ctrl+w` stay insert-only: in normal
+mode they would collide with the `d` operator and the window-command prefix.
+Because these chords never reach the keymap table, the host asks the editor
+whether it acted on a key before logging it as an unbound chord — see
+[keymap.md](keymap.md). `Shift+arrows` (plus `Shift+Home/End`) are selection keys: in normal
 mode they enter charwise visual mode anchored at the cursor and move; in visual
 mode they extend the selection like their plain counterparts.
 `Shift+Alt/Option+←/→` (and `Shift+Ctrl+←/→`) extend the selection by the same

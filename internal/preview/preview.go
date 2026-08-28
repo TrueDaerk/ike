@@ -3,8 +3,10 @@
 // root model pushes buffer text into it on every editor change (debounced) and
 // the current cursor line for scroll sync. Rendering goes through glamour with
 // the style picked off the active palette's dark flag, so the preview follows
-// the IDE theme. Images degrade to their alt-text links — terminal image
-// protocols are out of scope.
+// the IDE theme. The rendered document is not inert (#2180): links are
+// selectable and followable (links.go), and local images render as pixels
+// through the Kitty graphics path (images.go). Nothing here touches the
+// network — a remote link or image stays text until the user acts on it.
 package preview
 
 import (
@@ -44,6 +46,18 @@ type CursorMsg struct {
 	Line int
 }
 
+// LinkMsg is the user acting on the selected link (#2180): enter follows it,
+// the copy key puts the raw destination on the clipboard. The preview knows
+// where the link points but nothing about opening files, browsers or toasts,
+// so the root model owns the policy — resolve relative to Path, open through
+// the ordinary open funnel, scroll an in-document anchor back through Key.
+type LinkMsg struct {
+	Key    string // preview pane key, to route an anchor scroll back
+	Path   string // the previewed file, the resolution base for relative targets
+	Target string // raw markdown destination, exactly as written
+	Copy   bool   // copy the destination instead of following it
+}
+
 // heading is one scroll-sync anchor: a markdown heading's line in the source
 // buffer and the line its rendering starts on in the output.
 type heading struct {
@@ -68,12 +82,25 @@ type Model struct {
 	anchors []heading
 	cursor  int // last known source cursor line (0-based), for follow scroll
 	top     int // first rendered line shown
+
+	// Link following (#2180): the rendered document's hyperlinks in reading
+	// order and the selected one, -1 while nothing is selected.
+	links []link
+	sel   int
+
+	// Inline images (#2180): decoded local images keyed by resolved path —
+	// a map so value copies of the model share the pixels and the terminal's
+	// placement state — plus the ones the latest render actually placed, and
+	// the terminal's Kitty graphics capability as pushed by the app.
+	images map[string]*inlineImage
+	placed []*inlineImage
+	gfx    bool
 }
 
 // New returns a preview bound to path. Content arrives via SetSourceImmediate
 // (on open/restore) or SetSource (debounced live updates).
 func New(key, path string, pal *theme.Palette) Model {
-	return Model{key: key, path: path, pal: pal}
+	return Model{key: key, path: path, pal: pal, sel: -1, images: map[string]*inlineImage{}}
 }
 
 // Key returns the owning pane key.
@@ -129,7 +156,7 @@ func (m *Model) SetCursorLine(line int) {
 	m.follow()
 }
 
-// Update handles the debounce tick and, when focused, scroll keys.
+// Update handles the debounce tick and, when focused, scroll and link keys.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case RenderTickMsg:
@@ -137,14 +164,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.render()
 		}
 	case tea.KeyPressMsg:
-		m.handleKey(msg)
+		return m.handleKey(msg)
 	}
 	return nil
 }
 
-// handleKey scrolls the rendered document. The preview is read-only, so the
-// vim motions map straight to view movement.
-func (m *Model) handleKey(msg tea.KeyPressMsg) {
+// handleKey scrolls the rendered document and drives link selection. The
+// preview is read-only, so the vim motions map straight to view movement;
+// tab/shift+tab walk the links, enter follows the selected one and y copies
+// its destination (#2180), both as a LinkMsg the root model acts on.
+func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "up", "k":
 		m.scrollTo(m.top - 1)
@@ -158,6 +187,88 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) {
 		m.scrollTo(0)
 	case "end", "G":
 		m.scrollTo(len(m.lines))
+	case "tab":
+		m.selectLink(1)
+	case "shift+tab":
+		m.selectLink(-1)
+	case "enter":
+		return m.linkCmd(false)
+	case "y":
+		return m.linkCmd(true)
+	}
+	return nil
+}
+
+// selectLink moves the selection delta links along, wrapping, and scrolls the
+// chosen link into view. With no link in the document it is a no-op.
+func (m *Model) selectLink(delta int) {
+	if len(m.links) == 0 {
+		m.sel = -1
+		return
+	}
+	switch {
+	case m.sel < 0 && delta > 0:
+		m.sel = 0
+	case m.sel < 0:
+		m.sel = len(m.links) - 1
+	default:
+		m.sel = ((m.sel+delta)%len(m.links) + len(m.links)) % len(m.links)
+	}
+	m.reveal(m.links[m.sel].row)
+}
+
+// HasLinks reports whether the rendered document holds a followable link —
+// the condition under which the pane claims the tab key (#2180).
+func (m Model) HasLinks() bool { return len(m.links) > 0 }
+
+// SelectedTarget returns the destination of the selected link, if any. It is
+// the seam the root model's tests and the status line read.
+func (m Model) SelectedTarget() (string, bool) {
+	if m.sel < 0 || m.sel >= len(m.links) {
+		return "", false
+	}
+	return m.links[m.sel].target, true
+}
+
+// linkCmd turns the selected link into the LinkMsg the root model follows or
+// copies. Nothing selected yields no command — the key is inert rather than
+// guessing at a link.
+func (m Model) linkCmd(copy bool) tea.Cmd {
+	target, ok := m.SelectedTarget()
+	if !ok {
+		return nil
+	}
+	msg := LinkMsg{Key: m.key, Path: m.path, Target: target, Copy: copy}
+	return func() tea.Msg { return msg }
+}
+
+// ScrollToAnchor scrolls to the heading whose slug is slug and reports
+// whether one exists — how an in-document "#anchor" link lands (#2180).
+func (m *Model) ScrollToAnchor(slug string) bool {
+	line, ok := HeadingLine(m.src, slug)
+	if !ok {
+		return false
+	}
+	for _, a := range m.anchors {
+		if a.src == line && a.rendered >= 0 {
+			m.scrollTo(a.rendered)
+			return true
+		}
+	}
+	// The heading exists but its rendering could not be located; fall back on
+	// the proportional mapping rather than refusing the jump.
+	m.scrollTo(m.mapLine(line))
+	return true
+}
+
+// reveal scrolls the minimum amount that brings rendered line row into the
+// viewport, keeping a line of context on the side it entered from.
+func (m *Model) reveal(row int) {
+	switch {
+	case row < m.top:
+		m.scrollTo(row - 1)
+	case row >= m.top+m.h:
+		m.scrollTo(row - m.h + 2)
 	}
 }
 
@@ -188,14 +299,33 @@ func (m Model) View() string {
 			b.WriteByte('\n')
 		}
 		if i := m.top + row; i >= 0 && i < len(m.lines) {
-			b.WriteString(ansi.Truncate(m.lines[i], m.w, "…"))
+			b.WriteString(ansi.Truncate(m.highlightLinks(i), m.w, "…"))
 		}
 	}
 	return b.String()
 }
 
+// highlightLinks returns rendered line i with the selected link's label in
+// reverse video (#2180). The label's byte span is known exactly from the OSC 8
+// scan, so the marker is spliced into the raw line and every surrounding
+// colour, hyperlink and reset survives untouched.
+func (m Model) highlightLinks(i int) string {
+	if m.sel < 0 || m.sel >= len(m.links) {
+		return m.lines[i]
+	}
+	l := m.links[m.sel]
+	if l.row != i || l.end > len(m.lines[i]) {
+		return m.lines[i]
+	}
+	line := m.lines[i]
+	return line[:l.start] + "\x1b[7m" + line[l.start:l.end] + "\x1b[27m" + line[l.end:]
+}
+
 // render runs glamour over the pending source at the current width and theme,
-// rebuilds the scroll-sync anchors, and re-applies the follow scroll.
+// substitutes the inline image blocks, re-indexes the links, rebuilds the
+// scroll-sync anchors, and re-applies the follow scroll. Image blocks go in
+// *before* the anchors are built, so a heading's rendered line is the line it
+// really occupies and scroll sync stays correct around images (#2180).
 func (m *Model) render() {
 	if m.w <= 0 {
 		return
@@ -204,8 +334,14 @@ func (m *Model) render() {
 	if err != nil {
 		out = "preview error: " + err.Error()
 	}
-	m.lines = strings.Split(strings.TrimRight(out, "\n"), "\n")
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	lines, blocks := m.placeImages(lines)
+	m.lines = lines
 	m.anchors = anchorHeadings(m.src, m.lines)
+	m.links = m.indexLinks(blocks)
+	if m.sel >= len(m.links) {
+		m.sel = len(m.links) - 1
+	}
 	m.follow()
 }
 
@@ -233,10 +369,7 @@ func (m Model) renderMarkdown() (string, error) {
 // maps the heading and link colors onto the active palette, so the preview
 // reads as part of the theme instead of a foreign block.
 func (m Model) styleConfig() gansi.StyleConfig {
-	pal := m.pal
-	if pal == nil {
-		pal = theme.DefaultPalette()
-	}
+	pal := m.palette()
 	cfg := styles.LightStyleConfig
 	if pal.Dark {
 		cfg = styles.DarkStyleConfig
@@ -247,6 +380,15 @@ func (m Model) styleConfig() gansi.StyleConfig {
 	cfg.Link.Color = &link
 	cfg.LinkText.Color = &accent
 	return cfg
+}
+
+// palette returns the palette the preview styles against, falling back to the
+// default when the pane was built without one (zero-value models, tests).
+func (m Model) palette() *theme.Palette {
+	if m.pal == nil {
+		return theme.DefaultPalette()
+	}
+	return m.pal
 }
 
 // headingRe matches an ATX heading line; fenced code blocks are excluded by

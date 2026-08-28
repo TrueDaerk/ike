@@ -100,30 +100,54 @@ func (m *Model) imageSyncCmd() tea.Cmd {
 	// image pane cannot have anything to reconcile — the mint counter says so
 	// without touching an instance — and neither can one whose placements are
 	// already released.
-	if !m.activeWS().Panes.ImagesMinted() && len(m.liveImages) == 0 {
+	if !m.activeWS().Panes.ImagesMinted() && !m.activeWS().Panes.PreviewsMinted() && len(m.liveImages) == 0 {
 		return nil
 	}
 	supported := m.kittyGfx != nil && *m.kittyGfx
 	var live map[int]bool
 	var raw []string
 	hasImages := false
-	m.contentInstances(func(_ string, _ int, inst *pane.Instance) bool {
-		if inst.Kind() != pane.KindImage {
-			return true
-		}
-		hasImages = true
-		iv := inst.Image()
-		iv.SetGraphics(supported)
-		if !supported {
-			return true
-		}
+	mark := func(ids ...int) {
 		if live == nil {
 			live = map[int]bool{}
 		}
-		live[iv.ID()] = true
-		if seqs := iv.SyncSeqs(); len(seqs) > 0 {
-			raw = append(raw, seqs...)
-			m.liveImages[iv.ID()] = true
+		for _, id := range ids {
+			live[id] = true
+		}
+	}
+	m.contentInstances(func(_ string, _ int, inst *pane.Instance) bool {
+		switch inst.Kind() {
+		case pane.KindImage:
+			iv := inst.Image()
+			hasImages = true
+			iv.SetGraphics(supported)
+			if !supported {
+				return true
+			}
+			mark(iv.ID())
+			if seqs := iv.SyncSeqs(); len(seqs) > 0 {
+				raw = append(raw, seqs...)
+				m.liveImages[iv.ID()] = true
+			}
+		case pane.KindMarkdown:
+			// A markdown preview holds one placement per local image its
+			// buffer references (#2180) — same reconcile, several ids.
+			pv := inst.Preview()
+			pv.SetGraphics(supported)
+			if !pv.HasImages() {
+				return true
+			}
+			hasImages = true
+			if !supported {
+				return true
+			}
+			mark(pv.ImageIDs()...)
+			if seqs := pv.SyncSeqs(); len(seqs) > 0 {
+				raw = append(raw, seqs...)
+				for _, id := range pv.TransmittedIDs() {
+					m.liveImages[id] = true
+				}
+			}
 		}
 		return true
 	})
@@ -157,16 +181,25 @@ func (m *Model) releaseWorkspaceImages(w *workspace.Workspace) tea.Cmd {
 	}
 	var raw []string
 	forEachContent(w.Panes, func(_ string, _ int, inst *pane.Instance) bool {
-		if inst.Kind() != pane.KindImage {
-			return true
+		switch inst.Kind() {
+		case pane.KindImage:
+			iv := inst.Image()
+			if !iv.Transmitted() {
+				return true
+			}
+			raw = append(raw, imgview.Delete(iv.ID()))
+			iv.Reset()
+			delete(m.liveImages, iv.ID())
+		case pane.KindMarkdown:
+			// The preview's inline images (#2180) are placements too, and
+			// leak the same way if a parked workspace keeps them resident.
+			pv := inst.Preview()
+			for _, id := range pv.TransmittedIDs() {
+				raw = append(raw, imgview.Delete(id))
+				delete(m.liveImages, id)
+			}
+			pv.ResetImages()
 		}
-		iv := inst.Image()
-		if !iv.Transmitted() {
-			return true
-		}
-		raw = append(raw, imgview.Delete(iv.ID()))
-		iv.Reset()
-		delete(m.liveImages, iv.ID())
 		return true
 	})
 	if len(raw) == 0 {
