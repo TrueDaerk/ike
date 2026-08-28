@@ -191,6 +191,13 @@ sources, snapshots only or commits only, and ++shift+l++ loads older commits
 for long histories. Which sources it starts with is the *Timeline source
 filter* setting.
 
+**Show Project History Timeline** asks the other question: not what happened to
+*this* file, but what you changed *today*. It lists the snapshots of every file
+in the project, newest first, under day headings — Today, Yesterday, then the
+date. Typing narrows the list by path, ++enter++ opens the file's own local
+history at that snapshot (where ++r++ restores it), and ++ctrl+l++ reveals more
+rows in a long history.
+
 ## Which one to use
 
 | You know… | Use |

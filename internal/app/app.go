@@ -828,6 +828,11 @@ type Model struct {
 	lhDiff      diff.Result          // selected snapshot vs lhCur, for the inline diff pane
 	lhErr       string               // selection's snapshot load error, shown in place of the diff
 
+	// The project-wide local-history timeline (#2171): every file's snapshots
+	// on one day-grouped axis, handing a picked row to the per-file panel.
+	ph       projectHistoryState
+	phPicker bool // the project-wide timeline owns the modal shell
+
 	// feed is the session-scoped record of files changed by something other
 	// than IKE (#2000) — a coding agent, a git checkout, a formatter run in a
 	// tool pane. Recorded off every watcher file event (own saves already
@@ -6590,6 +6595,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// file.localHistory (#1023): list the focused file's snapshots.
 		m.openLocalHistoryPicker()
 		return m, nil
+	case ProjectHistoryMsg:
+		// history.projectTimeline (#2171): every file's snapshots on one
+		// day-grouped axis, newest first.
+		m.openProjectHistory()
+		return m, nil
 	case ChangeFeedMsg:
 		// watch.changeFeed (#2000): the session's external file changes with
 		// a mini-diff of the selected one.
@@ -7407,6 +7417,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The per-file Timeline (#1916) owns the keyboard the same way.
 		if m.timelineOpen() {
 			return m.updateTimeline(msg)
+		}
+		// The project-wide history timeline (#2171) owns the keyboard the
+		// same way; its printable keys type into its path filter.
+		if m.projectHistoryOpen() {
+			return m.updateProjectHistory(msg)
 		}
 		// The external-change feed (#2000) owns the keyboard the same way.
 		if m.changeFeedOpen() {

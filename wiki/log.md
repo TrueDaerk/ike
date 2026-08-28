@@ -17,6 +17,31 @@
   the next startup, so a kill or a crash never leaves unpacked copies
   behind. See [Gz Viewer](architecture/gz-viewer.md#open-in-browser-unpacks-not-previews-2298).
 
+## 2026-08-28 (Local history: project-wide timeline across files, #2171)
+
+- **Project-wide read side** (`internal/localhistory/project.go`): `Scan`
+  collects the whole index into one newest-first `Snapshot` list (an entry
+  plus its path), bounded by `DefaultScanCap` (2000) and reporting that it cut
+  the tail; `GroupByDay`/`DayLabel` bucket it into `Today` / `Yesterday` /
+  `Mon 2026-08-24`, on calendar days in the local zone. Ties break on path
+  then hash, so the order is total and a re-scan never reshuffles rows.
+- **The panel** (`history.projectTimeline`, "Show Project History Timeline",
+  `internal/app/projecthistory.go`): every file's snapshots on one day-grouped
+  axis — the answer to "what did I change today?", which the per-file panel
+  (#1023) and the per-file Timeline (#1916) cannot give. Printable keys narrow
+  by path substring (`ui.SpeedSearch`), so navigation is the arrows / page
+  keys / `ctrl+n`/`ctrl+p` and loading more is `ctrl+l`, not the Timeline's
+  bare `L`. Rows reveal 100 at a time (also as the selection walks toward the
+  end) and the rendered block windows to the terminal height, with a counts
+  line that always says what is held back and why.
+- **Handoff:** `enter` (or a click on the selected row, #2275) closes the
+  timeline, opens the row's file and raises the per-file panel with that
+  snapshot preselected — matched on time *and* hash. Opening the file first is
+  what makes `r` restore work from there; the shared `openLocalHistoryFor` is
+  the one open path both entry points use.
+- [architecture/local-history.md](architecture/local-history.md) grew the
+  project-wide section.
+
 ## 2026-08-28 (Transparent Ansible Vault editing, #2293)
 
 - **Native vault format** (`internal/ansiblevault`): the Vault 1.1/1.2
