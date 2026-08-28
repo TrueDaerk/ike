@@ -4,7 +4,7 @@ title: Intention Actions
 description: The alt+enter popup — LSP code actions merged with built-in caret-dependent intention actions through a plugin-registered provider seam, opened anchored at the caret, with a debounced diff preview of the highlighted action.
 resource: internal/intention
 tags: [architecture, intentions, code-actions, palette, plugins, shortcuts]
-timestamp: 2026-08-27T13:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Intention Actions
@@ -162,6 +162,7 @@ small — the entries that are pure buffer rewrites:
 |---|---|
 | `editor.toggleValue` | the caret line as it is → with the token flipped |
 | `merge.acceptOurs` / `acceptTheirs` / `acceptBoth` | the whole conflict block → the kept side(s), ours first |
+| `merge.keepManual` (#2258) | the whole conflict block → the same block with its marker lines stripped |
 
 Everything else (copies, playgrounds, HTTP runs, blame, tests, the type pick)
 previews nothing, which is the honest answer for an action whose effect is not
@@ -245,7 +246,7 @@ Each entry delegates to the existing command; applicability per caret:
 | JWT on the line (`jwt.At`) | `editor.decodeJWT` |
 | conceal stand-in under caret (`ConcealExplainAtCaret`) | `editor.explainConceal`; the family's `view.toggle*` via the `concealToggles` map |
 | ignorable diagnostic on caret line (`ilsp.IgnoreRuleFor`) | `lsp.ignoreDiagnostic` |
-| hunk under caret / conflict block / tracked file (+selection) | `vcs.revertHunk`; `merge.accept{Ours,Theirs,Both}` (the rewriting entries only in a writable buffer); `vcs.blameLine`, `vcs.historyForSelection` |
+| hunk under caret / conflict block / tracked file (+selection) | `vcs.revertHunk`; `merge.accept{Ours,Theirs,Both}` + `merge.keepManual` (the rewriting entries only in a writable buffer); `vcs.blameLine`, `vcs.historyForSelection` |
 | test at/above caret (`lang.HasTests` + `NearestTestAt`) | `run.testAtCursor`; `debug.testAtCursor` only with a debug adapter and no running session |
 | togglable caret word (writable buffer) / selection + non-empty clipboard | `editor.toggleValue`; `diff.compareWithClipboard` |
 | buffer with no file (`Fileless`, #2033) | `editor.setBufferLanguage` — "Treat Buffer as …", naming the current type |

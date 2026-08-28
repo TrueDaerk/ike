@@ -4,7 +4,7 @@ title: VCS / Git Integration
 description: "Epics 0320/0330, slimmed by #750 — git status snapshot behind explorer coloring, branch status-line segment, gutter diff markers, file-vs-HEAD diff, hunk/file revert, inline blame, and a read-only changes tool window; git *workflow* (staging, commits, branches, log) is delegated to custom tool panes, with lazygit preconfigured; all git calls async via tea.Cmd."
 resource: internal/vcs
 tags: [architecture, vcs, git]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # VCS / Git Integration (Epics 0320/0330, slimmed by #750)
@@ -86,10 +86,11 @@ enabled blame maps.
   toggleable dimmed EOL annotation on the cursor line ("author, when ·
   summary", "not committed yet"); whole-file porcelain blame cached per
   document, refreshed with each snapshot.
-- **Merge-conflict resolution** (#1149, `internal/editor/conflict.go`) —
-  conflict blocks are detected, tinted and resolvable (accept ours / theirs /
-  both) directly in the editor, with wrap-around navigation and
-  `VCSConflicted` overview-ruler marks; see
+- **Merge-conflict resolution** (#1149/#2258, `internal/editor/conflict.go`) —
+  conflict blocks are detected, tinted and resolvable directly in the editor:
+  `go`/`gt`/`gb` accept ours/theirs/both and `gm` keeps a hand-merged block,
+  each one undo unit, with `]n`/`[n` wrap-around navigation over the remaining
+  blocks and `VCSConflicted` overview-ruler marks; see
   [Editor § Merge-conflict resolution](/architecture/editor.md). Per #750
   this stays file-context native; the surrounding merge *workflow* remains
   lazygit's.
@@ -108,8 +109,10 @@ since the leader layer retired (#711):
 | `vcs.diff` | palette | Diff pane: live buffer vs HEAD blob (reuses the [Diff Viewer](/architecture/diff-viewer.md)). |
 | `vcs.blameLine` | palette | Toggle the inline blame annotation. |
 | `vcs.historyForSelection` | palette / editor context menu | JetBrains "Show History for Selection" (#1430): `git log -L` over the visual selection's lines (caret line fallback) — modal picker of the commits that touched exactly that range (`internal/vcs/rangelog.go`, capped at 200 commits); enter expands one commit to the patch git computed for the tracked range. Git follows the range across edits and renames itself. |
-| `vcs.mergeFile` | palette | Three-way merge view for the focused conflicted file (#1478): fetches the `:1`/`:2`/`:3` index stages (`internal/vcs/merge.go`) and opens the merge pane (see [Diff Viewer](/architecture/diff-viewer.md)). `enter` on a conflicted VCS-panel row opens it too. |
-| `vcs.mergeApply` | palette | Save the focused merge view's result to the file, `git add` it and close the view; blocked with a toast while conflicts remain unresolved. |
+| `vcs.mergeFile` | palette | Three-way merge view for the focused conflicted file (#1478): fetches the `:1`/`:2`/`:3` index stages (`internal/vcs/merge.go`) and opens the merge pane (see [Diff Viewer](/architecture/diff-viewer.md)). `enter` on a conflicted VCS-panel row opens it too, and opening a conflicted file in the editor offers it (#2258). |
+| `vcs.mergeApply` | palette | Save the focused merge view's result to the file, `git add` it and close the view; blocked with a toast while conflicts remain unresolved, so the written file is always marker-free. Resolving the last conflict offers this as the **Merge complete** dialog (#2258). |
+| `merge.acceptOurs` / `merge.acceptTheirs` / `merge.acceptBoth` / `merge.keepManual` | `go` / `gt` / `gb` / `gm` | Resolve the conflict block at the caret, one undo unit each (#1149, #2258) — see [Editor](/architecture/editor.md). |
+| `merge.nextConflict` / `merge.prevConflict` | `]n` / `[n` | Cycle the remaining conflict blocks with wrap-around (#2258). |
 | `vcs.panel` | `cmd+9` | Toggle the VCS tool window (below). |
 | `tool.lazygit` | palette | Open/focus the preconfigured lazygit tool pane (when lazygit is on PATH; a [#741 custom tool](/architecture/tool-panes.md), not part of `internal/vcs`). |
 
@@ -148,7 +151,9 @@ answers with `internal/vcs` commands. The layout slot persists (kind
 
 ## Later increments
 
-Whole-file blame gutter and merge-conflict resolution UI remain candidates as
-*editor* file-context features. Workflow features (staging, stash, branch
+The whole-file blame gutter remains a candidate as an *editor* file-context
+feature; merge-conflict resolution landed with #1149 (in-buffer blocks), #1478
+(the three-way view) and #2258 (navigation, resolution chords, counter and the
+offer/finish flow). Workflow features (staging, stash, branch
 graph, interactive rebase) are out of scope for the native integration —
 they belong to the delegated tool panes.

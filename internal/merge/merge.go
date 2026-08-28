@@ -87,6 +87,16 @@ func (m Model) Unresolved() int { return m.ed.ConflictCount() }
 // Total returns the number of conflict blocks the merge started with.
 func (m Model) Total() int { return m.total }
 
+// ConflictIndex returns the 1-based position of the block the result editor's
+// caret sits in among the remaining ones (0 outside a block) and how many are
+// left (#2258) — the "conflict 2/3" reading of the header and status line.
+func (m Model) ConflictIndex() (idx, remaining int) { return m.ed.ConflictIndexAtCursor() }
+
+// MarkerLines counts the conflict-marker lines left in the result, complete
+// blocks or not (#2258) — the finish guard's last check before the result is
+// written, so a half-edited block cannot reach the file.
+func (m Model) MarkerLines() int { return m.ed.ConflictMarkerLines() }
+
 // SetPalette re-threads the theme.
 func (m *Model) SetPalette(p *theme.Palette) {
 	m.pal = p
@@ -194,13 +204,20 @@ func (m Model) View() string {
 	return b.String()
 }
 
-// header renders the column titles and the unresolved-conflict count.
+// header renders the column titles and the conflict counter: how many blocks
+// are still unresolved out of the total, prefixed by the caret's position in
+// the cycle while it stands in one (#2258), and the finish hint once the last
+// block is gone.
 func (m Model) header(pal *theme.Palette, left, mid, right int) string {
 	title := lipgloss.NewStyle().Bold(true)
-	count := " ✓ resolved"
+	count := " ✓ resolved — apply to finish"
 	countStyle := lipgloss.NewStyle().Foreground(pal.Success)
 	if n := m.Unresolved(); n > 0 {
-		count = " ⚠ " + strconv.Itoa(n) + "/" + strconv.Itoa(m.total) + " unresolved"
+		count = " ⚠ "
+		if idx, _ := m.ConflictIndex(); idx > 0 {
+			count += "conflict " + strconv.Itoa(idx) + "/" + strconv.Itoa(n) + " · "
+		}
+		count += strconv.Itoa(n) + "/" + strconv.Itoa(m.total) + " unresolved"
 		countStyle = lipgloss.NewStyle().Foreground(pal.Warning)
 	}
 	mtitle := "Result (" + m.pathBase() + ")"

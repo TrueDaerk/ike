@@ -436,9 +436,19 @@ func (m Model) statusLine() string {
 		case inst.Kind() == pane.KindMarkdown:
 			left += "PREVIEW │ " + filepath.Base(inst.Preview().Path())
 		case inst.Kind() == pane.KindMerge:
+			// The remaining-conflict counter (#2258): the caret's place in
+			// the ]n/[n cycle while it stands in a block, the unresolved
+			// count out of the total, and the finish hint once none is left.
 			mg := inst.Merge()
-			left += "MERGE │ " + filepath.Base(mg.Path()) + " │ " +
-				strconv.Itoa(mg.Unresolved()) + "/" + strconv.Itoa(mg.Total()) + " unresolved"
+			left += "MERGE │ " + filepath.Base(mg.Path())
+			if n := mg.Unresolved(); n > 0 {
+				if idx, _ := mg.ConflictIndex(); idx > 0 {
+					left += " │ conflict " + strconv.Itoa(idx) + "/" + strconv.Itoa(n)
+				}
+				left += " │ " + strconv.Itoa(n) + "/" + strconv.Itoa(mg.Total()) + " unresolved"
+			} else {
+				left += " │ ✓ all resolved — vcs.mergeApply to finish"
+			}
 		case inst.Kind() == pane.KindDiff:
 			l, r := inst.Diff().Titles()
 			left += "DIFF │ " + l + " ⇄ " + r

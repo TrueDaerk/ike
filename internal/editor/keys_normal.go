@@ -34,12 +34,16 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.wait = awaitNone
 		return m.resolveAfterG(s, r, hasRune)
 	case awaitBracketF, awaitBracketB:
-		// ]c / [c: git hunk navigation (#1170); any other continuation is
-		// dropped, like the other pending states.
+		// ]c / [c: git hunk navigation (#1170); ]n / [n: merge-conflict
+		// navigation (#2258, vim-unimpaired's conflict motion). Any other
+		// continuation is dropped, like the other pending states.
 		forward := m.wait == awaitBracketF
 		m.wait = awaitNone
-		if s == "c" {
+		switch s {
+		case "c":
 			return m, m.hunkJump(forward)
+		case "n":
+			return m, m.conflictJump(forward)
 		}
 		return m, nil
 	case awaitZ:
@@ -801,6 +805,25 @@ func (m Model) resolveAfterG(s string, r rune, hasRune bool) (Model, tea.Cmd) {
 		}
 		m.pending.Reset()
 		m.startLabelJump()
+	case "o", "t", "b", "m":
+		// Merge-conflict resolution on the block at the caret (#2258): go
+		// ours, gt theirs, gb both (ours then theirs), gm keep the manual
+		// edit — each one undo unit. Off a conflict block they only notice,
+		// so the plain letters stay free of surprises in ordinary buffers.
+		// They are resolutions, not motions: a pending operator cancels.
+		if m.pending.HasOperator() {
+			m.pending.Reset()
+			return m, nil
+		}
+		m.pending.Reset()
+		var cmd tea.Cmd
+		if s == "m" {
+			cmd = m.keepManualConflict()
+		} else {
+			cmd = m.acceptConflict(s != "t", s != "o")
+		}
+		m.scroll()
+		return m, cmd
 	case "0", "$", "j", "k":
 		// Display-line motions (#1193): visual rows under soft wrap, their
 		// buffer-line counterparts otherwise.

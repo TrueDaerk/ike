@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Editor
@@ -1313,17 +1313,29 @@ a conflicts epoch that keys the scrollbar stripe memo.
   base section renders dim, marker lines dim bold. Roles change only with the
   document version, whose bumps always travel through Update and hence
   through the render epoch, so no extra invalidation is needed.
-- **Commands** (registry, palette-only — the chord budget is full, #711):
-  `merge.acceptOurs` / `merge.acceptTheirs` / `merge.acceptBoth` replace the
+- **Commands** (registry; the cmd-chord budget is full, #711, so the defaults
+  are vim-style sequences, #2258): `merge.acceptOurs` (`go`) /
+  `merge.acceptTheirs` (`gt`) / `merge.acceptBoth` (`gb`) replace the
   whole block containing the cursor with the kept side(s) — ours before
   theirs for acceptBoth, base never kept — as ONE undo unit through the
   standard mutate/Recorder path; the cursor lands on the block's start line.
-  Outside a block they answer with an ex-line notice. `merge.nextConflict` /
-  `merge.prevConflict` walk the block starts with wrap-around, the
-  diagnostic-jump pattern (#369).
+  `merge.keepManual` (`gm`) resolves the block the user hand-merged inside
+  the buffer: it drops **only** the marker lines and keeps everything between
+  them verbatim — the diff3 base section included, since after a manual merge
+  those lines are the user's, which is the one thing that distinguishes it
+  from acceptBoth. Outside a block all four answer with an ex-line notice and
+  leave the buffer untouched. `merge.nextConflict` (`]n`) /
+  `merge.prevConflict` (`[n`, the `]c`/`[c` hunk-motion family) walk the block
+  starts with wrap-around and report `merge conflict n/m (wrapped)`, the
+  diagnostic-jump pattern (#369). The resolutions are not motions: a pending
+  operator (`dgo`) cancels instead of deleting.
+- **Counter** — `ConflictCount()` is the remaining-block count and
+  `ConflictIndexAtCursor()` the caret's 1-based place among them; both read
+  the same cached scan, so the merge view's header and the status line
+  (#2258) stay exact as blocks are resolved and as an undo brings them back.
 - **Context menu** (#1020): a right-click first moves the caret, then the app
   asks the cheap `ConflictAtCursor()` query — inside a block the menu gains
-  the three accept entries; outside it keeps its static shape.
+  the accept and keep-manual entries; outside it keeps its static shape.
 - **Overview ruler** (#1131): conflict blocks mark their covered rows in the
   `VCSConflicted` colour (`◆`) as a third stripe source with its own epoch;
   cell precedence is diagnostics > conflicts > git, and a click on a marked
