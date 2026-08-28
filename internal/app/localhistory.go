@@ -397,6 +397,22 @@ func (m *Model) restoreLocalHistory(path string, at time.Time, snapshot string) 
 		m.host.Notify(host.Info, "buffer already matches this snapshot")
 		return nil
 	}
+	cmd, _ := m.applyBufferRestore(path, snapshot)
+	m.host.Notify(host.Info, fmt.Sprintf("restored %s from %s — undo reverts, save writes it",
+		baseName(path), project.RelTime(at, time.Now())))
+	return cmd
+}
+
+// applyBufferRestore is the restore edit without the talking: it replaces
+// path's buffer with snapshot through the normal edit path and reports whether
+// an edit happened (false when the file is not open, or already holds it). The
+// change feed's batch revert (#2183) reuses it to report once for a whole run
+// instead of once per file.
+func (m *Model) applyBufferRestore(path, snapshot string) (tea.Cmd, bool) {
+	ed := m.editorForPath(path)
+	if ed == nil || ed.Text() == snapshot {
+		return nil, false
+	}
 	lines := strings.Split(ed.Text(), "\n")
 	last := lines[len(lines)-1]
 	ed.ApplyTextEdits([]editor.TextEdit{{
@@ -404,9 +420,7 @@ func (m *Model) restoreLocalHistory(path string, at time.Time, snapshot string) 
 		EndLine: len(lines) - 1, EndCol: len([]rune(last)),
 		Text: snapshot,
 	}})
-	m.host.Notify(host.Info, fmt.Sprintf("restored %s from %s — undo reverts, save writes it",
-		baseName(path), project.RelTime(at, time.Now())))
 	// The restore bypassed the editor's Update loop; drop its stale
 	// highlight/conceal caches and reparse the new content (#1683).
-	return ed.ReparseEdits()
+	return ed.ReparseEdits(), true
 }

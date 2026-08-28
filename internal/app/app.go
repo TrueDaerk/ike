@@ -808,6 +808,13 @@ type Model struct {
 	cfDiff    diff.Result        // selected entry's before vs now, for the mini-diff
 	cfErr     string             // why the selection has no diff, shown in its place
 	cfRevert  string             // file awaiting the revert confirmation
+	// Batch state (#2183): the marked rows a batch action is scoped to, and
+	// the files a revert-all confirmation is holding — spelled out in the
+	// prompt, because reverting a whole agent run at once is the destructive
+	// end of the panel.
+	cfMarks       map[string]bool
+	cfRevertBatch []string
+	cfRevertSkip  []string
 
 	tl       timelineState // per-file Timeline data (#1916)
 	tlPicker bool          // the Timeline owns the modal shell

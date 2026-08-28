@@ -15,7 +15,9 @@ import (
 	"ike/internal/changefeed"
 	"ike/internal/diff"
 	"ike/internal/host"
+	"ike/internal/pane"
 	"ike/internal/project"
+	"ike/internal/terminal"
 	"ike/internal/ui"
 	"ike/internal/watch"
 )
@@ -62,6 +64,65 @@ func feedKind(k watch.Kind) changefeed.Kind {
 	}
 }
 
+// changeFeedSource attributes an external write to the process that most
+// likely made it (#2183) — best effort, "" when IKE cannot tell. The only
+// attribution IKE actually owns is the processes it spawned itself: a tool
+// pane running `claude`, a Run task, a command in a terminal pane. Exactly one
+// of them busy at the moment of the write is a usable answer; two are not, so
+// an ambiguous moment stays unattributed rather than pinning an agent's write
+// on the formatter that happened to run beside it.
+func (m Model) changeFeedSource() string {
+	ws := m.activeWS()
+	if ws == nil || ws.Panes == nil {
+		return ""
+	}
+	found := ""
+	for _, key := range ws.Panes.Keys() {
+		inst := ws.Panes.Get(key)
+		if inst == nil {
+			continue
+		}
+		terms := []*terminal.Model{}
+		switch inst.Kind() {
+		case pane.KindTerminal:
+			terms = append(terms, inst.Terminal())
+		case pane.KindEditor:
+			for i := range inst.TabCount() {
+				if t := inst.TabTerminal(i); t != nil {
+					terms = append(terms, t)
+				}
+			}
+		}
+		for _, t := range terms {
+			name := terminalSourceName(t)
+			if name == "" || name == found {
+				continue
+			}
+			if found != "" {
+				return "" // more than one candidate: no honest answer
+			}
+			found = name
+		}
+	}
+	return found
+}
+
+// terminalSourceName names the process a busy session runs, "" when the
+// session is idle, dead, or a plain shell sitting at its prompt — an idle
+// shell wrote nothing, and naming it would be a guess.
+func terminalSourceName(t *terminal.Model) string {
+	if t == nil || !t.Running() || !t.Busy() {
+		return ""
+	}
+	if tool := t.Tool(); tool != "" {
+		return tool
+	}
+	if argv := t.Argv(); len(argv) > 0 {
+		return baseName(argv[0])
+	}
+	return ""
+}
+
 // recordChangeFeed records one external file event. It runs on the watcher
 // event *before* the event is routed to the editors, so the pre-change content
 // is captured while the open buffer still holds it — the auto-reload that
@@ -93,6 +154,7 @@ func (m *Model) recordChangeFeed(msg watch.EventMsg) {
 		Kind:   feedKind(msg.Kind),
 		Before: before,
 		Origin: origin,
+		Source: m.changeFeedSource(),
 	}) {
 		return
 	}
@@ -111,7 +173,7 @@ func (m *Model) syncOpenChangeFeed() {
 	if e, ok := m.changeFeedSel(); ok {
 		selPath = e.Path
 	}
-	m.cfEntries = m.feed.Entries()
+	m.cfEntries = m.changeFeedList()
 	m.cfSel = 0
 	for i, e := range m.cfEntries {
 		if e.Path == selPath {
@@ -142,11 +204,16 @@ func (m *Model) recordChangeFeedBatch(events []watch.EventMsg) tea.Cmd {
 	// like every other, and lowering it has to trim the existing list too.
 	m.feed.SetLimit(m.changeFeedLimit())
 	type deferredCapture struct {
-		path string
-		kind changefeed.Kind
-		at   time.Time
+		path   string
+		kind   changefeed.Kind
+		at     time.Time
+		source string
 	}
 	var deferred []deferredCapture
+	// The attribution is resolved once per flush, not once per file: a busy
+	// tool pane is a property of the moment, and re-asking it per event would
+	// only cost pane walks for the same answer.
+	source := m.changeFeedSource()
 	added := false
 	for _, msg := range events {
 		switch msg.Kind {
@@ -165,7 +232,9 @@ func (m *Model) recordChangeFeedBatch(events []watch.EventMsg) tea.Cmd {
 				// No exact buffer content to save from the reload: the honest
 				// fallback is the newest local-history snapshot, which reads
 				// from disk — deferred off-loop.
-				deferred = append(deferred, deferredCapture{path: msg.Path, kind: feedKind(msg.Kind), at: m.clock()})
+				deferred = append(deferred, deferredCapture{
+					path: msg.Path, kind: feedKind(msg.Kind), at: m.clock(), source: source,
+				})
 				continue
 			}
 		}
@@ -176,6 +245,7 @@ func (m *Model) recordChangeFeedBatch(events []watch.EventMsg) tea.Cmd {
 			Kind:   feedKind(msg.Kind),
 			Before: before,
 			Origin: origin,
+			Source: source,
 		}) {
 			added = true
 		}
@@ -199,7 +269,7 @@ func (m *Model) recordChangeFeedBatch(events []watch.EventMsg) tea.Cmd {
 				}
 			}
 			entries = append(entries, changefeed.Entry{
-				Path: d.path, Time: d.at, Kind: d.kind, Before: before, Origin: origin,
+				Path: d.path, Time: d.at, Kind: d.kind, Before: before, Origin: origin, Source: d.source,
 			})
 		}
 		return changeFeedCapturedMsg{entries: entries}
@@ -255,12 +325,73 @@ func (m *Model) openChangeFeed() {
 		m.host.Notify(host.Info, "no external file changes recorded this session")
 		return
 	}
-	m.cfEntries = m.feed.Entries()
+	m.cfEntries = m.changeFeedList()
 	m.cfSel = 0
+	m.cfMarks = nil // a fresh review starts with nothing selected for a batch
 	m.cfPicker = true
 	m.refreshChangeFeedDiff()
 	m.setChangeFeedContent()
 	m.shell.Open()
+}
+
+// changeFeedList returns the feed in panel order: grouped by originating
+// process as soon as anything could be attributed (#2183), plain newest-first
+// otherwise — a feed with no attribution at all must not grow a header row
+// that says nothing.
+func (m Model) changeFeedList() []changefeed.Entry {
+	if !m.feed.Attributed() {
+		return m.feed.Entries()
+	}
+	out := make([]changefeed.Entry, 0, m.feed.Len())
+	for _, g := range m.feed.Groups() {
+		out = append(out, g.Entries...)
+	}
+	return out
+}
+
+// changeFeedGrouped reports whether the open panel renders titled groups.
+func (m Model) changeFeedGrouped() bool {
+	for _, e := range m.cfEntries {
+		if e.Source != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// changeFeedGroupTitle names a group in the list. The unknown bucket is
+// titled too — left bare it would read as part of the group above it, which
+// is exactly the attribution the feed refused to make.
+func changeFeedGroupTitle(source string) string {
+	if source == "" {
+		return "unattributed"
+	}
+	return source
+}
+
+// cfRow is one rendered line of the left column: a group title, or an entry
+// (its index into cfEntries). Only entry rows are selectable, so the group
+// headers cost the navigation nothing.
+type cfRow struct {
+	title string
+	entry int
+}
+
+// changeFeedRows lays the entries out as rendered lines, inserting a group
+// title wherever the source changes. cfEntries is already ordered by group,
+// so one pass is enough.
+func (m Model) changeFeedRows() []cfRow {
+	rows := make([]cfRow, 0, len(m.cfEntries)+2)
+	grouped := m.changeFeedGrouped()
+	prev, first := "", true
+	for i, e := range m.cfEntries {
+		if grouped && (first || e.Source != prev) {
+			rows = append(rows, cfRow{title: changeFeedGroupTitle(e.Source), entry: -1})
+			prev, first = e.Source, false
+		}
+		rows = append(rows, cfRow{entry: i})
+	}
+	return rows
 }
 
 // changeFeedContent implements ui.Content (not ModelContent) so the body
@@ -363,17 +494,34 @@ func (m Model) changeFeedBody(width int) string {
 	pal := m.pal()
 	sel := lipgloss.NewStyle().Foreground(pal.Foreground).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(pal.Hint)
+	head := dim.Bold(true) // group titles: present but never louder than a row
 
 	now := m.clock()
-	left := make([]string, 0, len(m.cfEntries))
+	rows := m.changeFeedRows()
+	left := make([]string, 0, len(rows))
+	heads := map[int]bool{} // rendered line -> it is a group title
+	selLine := -1
+	indent := ""
+	if m.changeFeedGrouped() {
+		indent = "  " // entries sit under their group title
+	}
 	leftW := 0
-	for i, e := range m.cfEntries {
-		// Name before directory: the column is truncated to half the panel,
-		// and the file name is the part that must survive that cut.
-		line := fmt.Sprintf("  %s %-9s %s  %s%s", e.Kind.Icon(),
-			project.RelTime(e.Time, now), baseName(e.Path), changeFeedDir(e.Path), changeFeedCount(e))
-		if i == m.cfSel {
-			line = "▍" + line[1:]
+	for _, row := range rows {
+		var line string
+		if row.entry < 0 {
+			heads[len(left)] = true
+			line = "  " + row.title
+		} else {
+			e := m.cfEntries[row.entry]
+			// Name before directory: the column is truncated to half the
+			// panel, and the file name is the part that must survive the cut.
+			line = fmt.Sprintf("  %s%s%s %-9s %s  %s%s", changeFeedMark(m.cfMarks, e), indent,
+				e.Kind.Icon(), project.RelTime(e.Time, now), baseName(e.Path),
+				changeFeedDir(e.Path), changeFeedCount(e))
+			if row.entry == m.cfSel {
+				selLine = len(left)
+				line = "▍" + line[1:]
+			}
 		}
 		leftW = max(leftW, lipgloss.Width(line))
 		left = append(left, line)
@@ -390,7 +538,10 @@ func (m Model) changeFeedBody(width int) string {
 		l := ""
 		if i < len(left) {
 			l = ansi.Truncate(left[i], leftW, "…")
-			if i == m.cfSel {
+			switch {
+			case heads[i]:
+				l = head.Render(l)
+			case i == selLine:
 				l = sel.Render(l)
 			}
 		}
@@ -402,12 +553,41 @@ func (m Model) changeFeedBody(width int) string {
 		b.WriteByte('\n')
 	}
 	if e, ok := m.changeFeedSel(); ok {
-		b.WriteString("\n" + dim.Render(fmt.Sprintf("%s %s · before: %s",
-			e.Kind.Label(), e.Time.Local().Format("2006-01-02 15:04:05"), e.Origin.Label())))
+		detail := fmt.Sprintf("%s %s · before: %s",
+			e.Kind.Label(), e.Time.Local().Format("2006-01-02 15:04:05"), e.Origin.Label())
+		if e.Source != "" {
+			detail += " · by: " + e.Source
+		}
+		b.WriteString("\n" + dim.Render(detail))
+	}
+	if n := m.changeFeedMarked(); n > 0 {
+		b.WriteString("\n" + dim.Render(fmt.Sprintf("%d file(s) marked — A / V act on the marks", n)))
 	}
 	b.WriteString("\nenter open · d diff pane · R reload buffer · r revert change · " +
 		"x dismiss · c clear feed · j/k move · esc close")
+	b.WriteString("\nspace mark · m mark group · A reload marked/all · V revert marked/all")
 	return b.String()
+}
+
+// changeFeedMark renders the batch-selection cell of a row: a filled dot for a
+// marked file, a blank of the same width otherwise, so the column below it
+// does not shift as marks come and go.
+func changeFeedMark(marks map[string]bool, e changefeed.Entry) string {
+	if marks[e.Path] {
+		return "●"
+	}
+	return " "
+}
+
+// changeFeedMarked counts the marked rows of the open panel.
+func (m Model) changeFeedMarked() int {
+	n := 0
+	for _, e := range m.cfEntries {
+		if m.cfMarks[e.Path] {
+			n++
+		}
+	}
+	return n
 }
 
 // changeFeedDir renders the directory column: the file's project-relative
@@ -466,15 +646,29 @@ func (m Model) updateChangeFeed(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.closeChangeFeed()
 		m.host.Notify(host.Info, "change feed cleared")
 		return m, nil
+	case "A":
+		return m.reloadChangeFeedBatch()
+	case "V":
+		m.openChangeFeedRevertAllPrompt()
+		return m, nil
 	}
 	e, ok := m.changeFeedSel()
 	if !ok {
 		return m, nil
 	}
 	switch msg.String() {
+	case "space", " ":
+		m.toggleChangeFeedMark(e.Path)
+		m.setChangeFeedContent()
+		return m, nil
+	case "m":
+		m.toggleChangeFeedGroupMarks(e.Source)
+		m.setChangeFeedContent()
+		return m, nil
 	case "x":
 		m.feed.Remove(e.Path)
-		m.cfEntries = m.feed.Entries()
+		delete(m.cfMarks, e.Path)
+		m.cfEntries = m.changeFeedList()
 		if m.cfSel >= len(m.cfEntries) {
 			m.cfSel = len(m.cfEntries) - 1
 		}
@@ -525,7 +719,258 @@ func (m Model) updateChangeFeed(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *Model) closeChangeFeed() {
 	m.cfPicker = false
 	m.cfEntries, m.cfDiff, m.cfErr = nil, diff.Result{}, ""
+	m.cfMarks = nil // the marks are the open panel's, not the session's
 	m.shell.Close()
+}
+
+// toggleChangeFeedMark flips one row's batch mark.
+func (m *Model) toggleChangeFeedMark(path string) {
+	if m.cfMarks[path] {
+		delete(m.cfMarks, path)
+		return
+	}
+	if m.cfMarks == nil {
+		m.cfMarks = map[string]bool{}
+	}
+	m.cfMarks[path] = true
+}
+
+// toggleChangeFeedGroupMarks marks (or unmarks) every row of one originating
+// process at once — the cheap way to say "everything this agent did" without a
+// second set of per-group keys. It unmarks only when the whole group is
+// already marked, so pressing it over a partly marked group completes it
+// rather than throwing the selection away.
+func (m *Model) toggleChangeFeedGroupMarks(source string) {
+	all := true
+	for _, e := range m.cfEntries {
+		if e.Source == source && !m.cfMarks[e.Path] {
+			all = false
+			break
+		}
+	}
+	for _, e := range m.cfEntries {
+		if e.Source != source {
+			continue
+		}
+		if all {
+			delete(m.cfMarks, e.Path)
+			continue
+		}
+		if m.cfMarks == nil {
+			m.cfMarks = map[string]bool{}
+		}
+		m.cfMarks[e.Path] = true
+	}
+}
+
+// changeFeedScope is what a batch action applies to: the marked rows when
+// there are any, the whole listed feed otherwise. "Reload all" with nothing
+// marked means all — marking is the refinement, not the precondition.
+func (m Model) changeFeedScope() []changefeed.Entry {
+	if m.changeFeedMarked() == 0 {
+		return m.cfEntries
+	}
+	out := make([]changefeed.Entry, 0, len(m.cfEntries))
+	for _, e := range m.cfEntries {
+		if m.cfMarks[e.Path] {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// changeFeedSkip is one file a batch action left alone, with the reason —
+// collected rather than notified per file, so a 200-file batch reports once.
+type changeFeedSkip struct {
+	path   string
+	reason string
+}
+
+// Reasons a batch action skips a file. The dirty one is the acceptance
+// criterion the batch exists for: a file changed externally *and* edited in
+// IKE is a conflict only the user can settle, so the batch never resolves it
+// on its own (#2183).
+const (
+	cfSkipDirty    = "unsaved changes"
+	cfSkipNotOpen  = "not open"
+	cfSkipGone     = "no longer exists"
+	cfSkipNoBefore = "no previous version"
+)
+
+// changeFeedConflict reports whether the file is also modified inside IKE, in
+// which case a batch reload or revert would silently throw the user's own
+// edits away.
+func (m Model) changeFeedConflict(path string) bool {
+	ed := m.editorForPath(path)
+	return ed != nil && ed.Dirty()
+}
+
+// changeFeedBatchReport renders the one-line outcome of a batch: what was
+// done, and what was left alone and why.
+func changeFeedBatchReport(verb string, done int, skipped []changeFeedSkip) (string, bool) {
+	msg := fmt.Sprintf("%s %d file(s)", verb, done)
+	if len(skipped) == 0 {
+		return msg, false
+	}
+	byReason := map[string][]string{}
+	order := []string{}
+	for _, s := range skipped {
+		if _, seen := byReason[s.reason]; !seen {
+			order = append(order, s.reason)
+		}
+		byReason[s.reason] = append(byReason[s.reason], baseName(s.path))
+	}
+	conflict := false
+	for _, reason := range order {
+		if reason == cfSkipDirty {
+			conflict = true
+		}
+		msg += fmt.Sprintf(" · skipped %d (%s): %s",
+			len(byReason[reason]), reason, changeFeedNames(byReason[reason]))
+	}
+	return msg, conflict
+}
+
+// changeFeedNames joins file names for a report, keeping it readable when a
+// batch touched a whole tree.
+func changeFeedNames(names []string) string {
+	const shown = 6
+	if len(names) <= shown {
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(names[:shown], ", "), len(names)-shown)
+}
+
+// reloadChangeFeedBatch re-reads every file in the scope into its open buffer
+// (#2183). A buffer with unsaved changes is never reloaded by a batch — the
+// per-entry R still exists for the user who decides, file by file, to drop
+// their edits — and neither is a file that is not open or no longer there. The
+// panel stays up with the report: the feed rows are records, and a batch
+// reload is exactly the moment the user wants to see what is left.
+func (m Model) reloadChangeFeedBatch() (tea.Model, tea.Cmd) {
+	var (
+		cmds    []tea.Cmd
+		skipped []changeFeedSkip
+		done    int
+	)
+	for _, e := range m.changeFeedScope() {
+		switch {
+		case e.Kind == changefeed.Removed:
+			skipped = append(skipped, changeFeedSkip{e.Path, cfSkipGone})
+		case m.editorForPath(e.Path) == nil:
+			skipped = append(skipped, changeFeedSkip{e.Path, cfSkipNotOpen})
+		case m.changeFeedConflict(e.Path):
+			skipped = append(skipped, changeFeedSkip{e.Path, cfSkipDirty})
+		default:
+			cmds = append(cmds, m.editorForPath(e.Path).ResolveConflictReload())
+			done++
+		}
+	}
+	msg, conflict := changeFeedBatchReport("reloaded", done, skipped)
+	level := host.Info
+	if conflict {
+		level = host.Warn
+	}
+	m.host.Notify(level, msg)
+	m.refreshChangeFeedDiff()
+	m.setChangeFeedContent()
+	return m, tea.Batch(cmds...)
+}
+
+// changeFeedRevertScope splits the scope into what a revert-all can restore
+// and what it must leave alone: a file with no recorded previous version, and
+// a file the user has unsaved edits in.
+func (m Model) changeFeedRevertScope() (paths []string, skipped []changeFeedSkip) {
+	for _, e := range m.changeFeedScope() {
+		switch {
+		// The conflict is reported before the missing pre-change content: it
+		// is the reason the user has to act on, and a dirty buffer is very
+		// often *why* there is no exact "before" to restore in the first place.
+		case m.changeFeedConflict(e.Path):
+			skipped = append(skipped, changeFeedSkip{e.Path, cfSkipDirty})
+		case !e.HasBefore():
+			skipped = append(skipped, changeFeedSkip{e.Path, cfSkipNoBefore})
+		default:
+			paths = append(paths, e.Path)
+		}
+	}
+	return paths, skipped
+}
+
+// openChangeFeedRevertAllPrompt asks before reverting a whole batch. The
+// prompt names every file it is about to touch: undoing one external write is
+// a decision about one buffer, undoing a hundred is a decision about the
+// working tree, and it must not be made from a row count alone.
+func (m *Model) openChangeFeedRevertAllPrompt() {
+	paths, skipped := m.changeFeedRevertScope()
+	if len(paths) == 0 {
+		// An action that cannot happen leaves the panel up (the per-entry
+		// rule): the list is what the user came for.
+		msg, _ := changeFeedBatchReport("nothing to revert —", 0, skipped)
+		m.host.Notify(host.Info, strings.Replace(msg, " 0 file(s)", "", 1))
+		return
+	}
+	m.cfRevertBatch, m.cfRevertSkip = paths, nil
+	for _, s := range skipped {
+		m.cfRevertSkip = append(m.cfRevertSkip, baseName(s.path)+" ("+s.reason+")")
+	}
+	scope := "every listed file"
+	if m.changeFeedMarked() > 0 {
+		scope = "the marked files"
+	}
+	m.closeChangeFeed()
+	files, skips := append([]string(nil), paths...), append([]string(nil), m.cfRevertSkip...)
+	m.shell.SetContent(ui.ModelContent{
+		Heading: "Revert external changes",
+		Body: func() string {
+			var b strings.Builder
+			fmt.Fprintf(&b, "Restore the pre-change content of %d file(s) — %s:\n\n", len(files), scope)
+			for _, p := range files {
+				b.WriteString("  · " + displayPath(p) + "\n")
+			}
+			if len(skips) > 0 {
+				b.WriteString("\nLeft alone (never overwritten by a batch):\n")
+				for _, s := range skips {
+					b.WriteString("  · " + s + "\n")
+				}
+			}
+			b.WriteString("\nOpen files are restored into their buffers as one undoable edit;\n" +
+				"a file deleted externally is written back to disk.\n\n" +
+				"  [enter] revert all\n  [esc]   cancel")
+			return b.String()
+		},
+	})
+	m.shell.SetSize(m.width, m.height)
+	m.shell.Open()
+}
+
+// applyChangeFeedRevertBatch restores every confirmed file, reporting once.
+func (m Model) applyChangeFeedRevertBatch(paths []string, skipped []string) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+	done := 0
+	var failed []changeFeedSkip
+	for _, path := range paths {
+		next, cmd, ok := m.revertChangeFeedPath(path, true)
+		m = next
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		if !ok {
+			failed = append(failed, changeFeedSkip{path, "could not be restored"})
+			continue
+		}
+		done++
+	}
+	msg, _ := changeFeedBatchReport("reverted", done, failed)
+	if len(skipped) > 0 {
+		msg += " · skipped " + changeFeedNames(skipped)
+	}
+	level := host.Info
+	if len(skipped) > 0 || len(failed) > 0 {
+		level = host.Warn
+	}
+	m.host.Notify(level, msg)
+	return m, tea.Batch(cmds...)
 }
 
 // changeFeedNoRevert explains why an entry cannot be reverted, naming the
@@ -617,23 +1062,34 @@ func (m *Model) openChangeFeedRevertPrompt(e changefeed.Entry) {
 	m.shell.Open()
 }
 
-// changeFeedRevertOpen reports whether the shell shows the revert confirmation.
-func (m Model) changeFeedRevertOpen() bool { return m.cfRevert != "" && m.shell.IsOpen() }
+// changeFeedRevertOpen reports whether the shell shows a revert confirmation —
+// the single-file one or the batch's.
+func (m Model) changeFeedRevertOpen() bool {
+	return (m.cfRevert != "" || len(m.cfRevertBatch) > 0) && m.shell.IsOpen()
+}
 
 // updateChangeFeedRevert consumes every key while the confirmation is open.
 func (m Model) updateChangeFeedRevert(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter", "y":
-		path := m.cfRevert
-		m.cfRevert = ""
+		path, batch, skipped := m.cfRevert, m.cfRevertBatch, m.cfRevertSkip
+		m.clearChangeFeedRevert()
 		m.shell.Close()
+		if len(batch) > 0 {
+			return m.applyChangeFeedRevertBatch(batch, skipped)
+		}
 		return m.applyChangeFeedRevert(path)
 	case "esc":
-		m.cfRevert = ""
+		m.clearChangeFeedRevert()
 		m.shell.Close()
 		return m, nil
 	}
 	return m, nil
+}
+
+// clearChangeFeedRevert drops the pending confirmation's state.
+func (m *Model) clearChangeFeedRevert() {
+	m.cfRevert, m.cfRevertBatch, m.cfRevertSkip = "", nil, nil
 }
 
 // applyChangeFeedRevert restores the entry's pre-change content. An open (or
@@ -643,38 +1099,63 @@ func (m Model) updateChangeFeedRevert(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 // so it is written back and opened; the write stamps the watcher's save epoch,
 // which keeps the restore from echoing back into the feed as a new change.
 func (m Model) applyChangeFeedRevert(path string) (tea.Model, tea.Cmd) {
+	next, cmd, _ := m.revertChangeFeedPath(path, false)
+	return next, cmd
+}
+
+// revertChangeFeedPath is the revert itself, shared by the single-file action
+// and the batch (#2183), and reports whether it restored anything. quiet
+// suppresses the per-file notifications: a batch says once what it did, and a
+// hundred toasts would bury exactly the skipped-conflict report the user needs
+// to read.
+func (m Model) revertChangeFeedPath(path string, quiet bool) (Model, tea.Cmd, bool) {
+	notify := func(level host.Severity, text string) {
+		if !quiet {
+			m.host.Notify(level, text)
+		}
+	}
 	e, ok := m.feed.Get(path)
 	if !ok || !e.HasBefore() {
-		m.host.Notify(host.Warn, "the feed entry for "+baseName(path)+" is gone")
-		return m, nil
+		notify(host.Warn, "the feed entry for "+baseName(path)+" is gone")
+		return m, nil, false
 	}
 	if e.Kind == changefeed.Removed {
 		if err := writeChangeFeedRevert(path, e.Before); err != nil {
-			m.host.Notify(host.Error, "revert: "+err.Error())
-			return m, nil
+			m.host.Notify(host.Error, "revert: "+err.Error()) // a failed write is never silent
+			return m, nil, false
 		}
 		m.watcher.MarkSaved(path)
 		m.feed.Remove(path)
-		m.host.Notify(host.Info, "restored "+displayPath(path)+" from the change feed")
-		return m.openPathInEditor(path)
+		notify(host.Info, "restored "+displayPath(path)+" from the change feed")
+		tm, cmd := m.openPathInEditor(path)
+		return tm.(Model), cmd, true
 	}
+	var openCmd tea.Cmd
 	if m.editorForPath(path) == nil {
 		// Not open: the restore path edits a buffer, so open one first. The
 		// open is synchronous enough for the edit below — its command only
 		// carries the parse/LSP follow-up.
-		tm, openCmd := m.openPathInEditor(path)
-		m = tm.(Model)
+		tm, cmd := m.openPathInEditor(path)
+		m, openCmd = tm.(Model), cmd
 		if m.editorForPath(path) == nil {
-			m.host.Notify(host.Warn, "could not open "+baseName(path)+" to revert it")
-			return m, openCmd
+			notify(host.Warn, "could not open "+baseName(path)+" to revert it")
+			return m, openCmd, false
 		}
-		cmd := m.restoreLocalHistory(path, e.Time, e.Before)
-		m.feed.Remove(path)
-		return m, tea.Batch(openCmd, cmd)
 	}
-	cmd := m.restoreLocalHistory(path, e.Time, e.Before)
+	cmd := m.restoreChangeFeedBuffer(path, e, quiet)
 	m.feed.Remove(path)
-	return m, cmd
+	return m, tea.Batch(openCmd, cmd), true
+}
+
+// restoreChangeFeedBuffer puts the pre-change content back into the buffer,
+// through the local-history restore path (one undoable edit, disk untouched
+// until the save) or its quiet twin when a batch reports for itself.
+func (m *Model) restoreChangeFeedBuffer(path string, e changefeed.Entry, quiet bool) tea.Cmd {
+	if quiet {
+		cmd, _ := m.applyBufferRestore(path, e.Before)
+		return cmd
+	}
+	return m.restoreLocalHistory(path, e.Time, e.Before)
 }
 
 // writeChangeFeedRevert writes the restored content back for a file that was
