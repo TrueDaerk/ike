@@ -99,6 +99,8 @@ func defaultTheme() Theme {
 			DiffAdded:       "#1e311e",
 			DiffRemoved:     "#432323",
 			DiffChanged:     "#2e2e0e",
+			DiffAddedEmph:   "#203720", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#4e2626",
 			VCSModified:     "#aac4e3", // vcs status foregrounds (Roadmap 0320)
 			VCSAdded:        "#71c57c",
 			VCSUntracked:    "#c880d5",
@@ -186,6 +188,8 @@ func tokyoNight() Theme {
 			DiffAdded:       "#2d352f",
 			DiffRemoved:     "#432c39",
 			DiffChanged:     "#383130",
+			DiffAddedEmph:   "#313b32", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#4e303e",
 			VCSModified:     "#95b6dc",
 			VCSAdded:        "#72c67e",
 			VCSUntracked:    "#c476d2",
@@ -273,6 +277,8 @@ func nord() Theme {
 			DiffAdded:       "#40494b",
 			DiffRemoved:     "#4a4551",
 			DiffChanged:     "#464749",
+			DiffAddedEmph:   "#434e4d", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#514a55",
 			VCSModified:     "#9bb3ce",
 			VCSAdded:        "#8cbe93",
 			VCSUntracked:    "#d59edf",
@@ -360,6 +366,8 @@ func gruvbox() Theme {
 			DiffAdded:       "#3d3e27",
 			DiffRemoved:     "#4e3734",
 			DiffChanged:     "#443c29",
+			DiffAddedEmph:   "#424326", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#593b37",
 			VCSModified:     "#8ea7c5",
 			VCSAdded:        "#53b961",
 			VCSUntracked:    "#ce8dd9",
@@ -427,6 +435,8 @@ func gruvboxLight() Theme {
 			DiffAdded:       "#dcd49f",
 			DiffRemoved:     "#efcba7",
 			DiffChanged:     "#e0d1a1",
+			DiffAddedEmph:   "#d3cc95", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#ebc19f",
 			VCSModified:     "#364e6a",
 			VCSAdded:        "#225328",
 			VCSUntracked:    "#61246b",
@@ -545,6 +555,8 @@ func rosePine() Theme {
 			DiffAdded:       "#2b313d",
 			DiffRemoved:     "#42283a",
 			DiffChanged:     "#372e2f",
+			DiffAddedEmph:   "#303744", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#4c2c3f",
 			VCSModified:     "#6393c9",
 			VCSAdded:        "#9dd7a5",
 			VCSUntracked:    "#d092db",
@@ -632,6 +644,8 @@ func rosePineDawn() Theme {
 			DiffAdded:       "#d1d6d3",
 			DiffRemoved:     "#e6d0d0",
 			DiffChanged:     "#e4d3bc",
+			DiffAddedEmph:   "#c7cfcc", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#e1c7c9",
 			VCSModified:     "#2b5380",
 			VCSAdded:        "#3f7346",
 			VCSUntracked:    "#6e297a",
@@ -719,6 +733,8 @@ func catppuccinMocha() Theme {
 			DiffAdded:       "#2f373c",
 			DiffRemoved:     "#413042",
 			DiffChanged:     "#37343d",
+			DiffAddedEmph:   "#333d40", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#4a3447",
 			VCSModified:     "#97b8dc",
 			VCSAdded:        "#a8dcaf",
 			VCSUntracked:    "#e3beea",
@@ -810,6 +826,8 @@ func kanagawa() Theme {
 			DiffAdded:       "#313732",
 			DiffRemoved:     "#4f2c34",
 			DiffChanged:     "#42332b",
+			DiffAddedEmph:   "#353c33", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#592e36",
 			VCSModified:     "#7fa2ca",
 			VCSAdded:        "#6cbb77",
 			VCSUntracked:    "#c477d2",
@@ -900,6 +918,8 @@ func oneDark() Theme {
 			DiffAdded:       "#38423e",
 			DiffRemoved:     "#4b3c43",
 			DiffChanged:     "#41403d",
+			DiffAddedEmph:   "#3c4740", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#554047",
 			VCSModified:     "#7da5d3",
 			VCSAdded:        "#79c383",
 			VCSUntracked:    "#cc89d8",
@@ -992,6 +1012,8 @@ func solarizedDark() Theme {
 			DiffAdded:       "#1d432a",
 			DiffRemoved:     "#333b43",
 			DiffChanged:     "#28412f",
+			DiffAddedEmph:   "#234826", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#403f46",
 			VCSModified:     "#729ed0",
 			VCSAdded:        "#48af55",
 			VCSUntracked:    "#c881d5",
@@ -1062,6 +1084,8 @@ func solarizedLight() Theme {
 			DiffAdded:       "#dcdab1",
 			DiffRemoved:     "#f2cfbf",
 			DiffChanged:     "#e2d6b1",
+			DiffAddedEmph:   "#d4d3a5", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#efc6b7",
 			VCSModified:     "#315e92",
 			VCSAdded:        "#204e26",
 			VCSUntracked:    "#592163",
@@ -1189,6 +1213,8 @@ func dracula() Theme {
 			DiffAdded:       "#2c433e",
 			DiffRemoved:     "#57333c",
 			DiffChanged:     "#3c3f3f",
+			DiffAddedEmph:   "#2d4a40", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#64353e",
 			VCSModified:     "#a9c4e3",
 			VCSAdded:        "#7fcb89",
 			VCSUntracked:    "#d8a5e1",
@@ -1276,6 +1302,8 @@ func catppuccinLatte() Theme {
 			DiffAdded:       "#c5d7c6",
 			DiffRemoved:     "#e4cbd4",
 			DiffChanged:     "#d8d1c7",
+			DiffAddedEmph:   "#bbcfbb", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#e0c0ca",
 			VCSModified:     "#214064",
 			VCSAdded:        "#255a2c",
 			VCSUntracked:    "#5e2369",
@@ -1367,6 +1395,8 @@ func darcula() Theme {
 			DiffAdded:       "#294436", // diff added line
 			DiffRemoved:     "#3d3f3f", // diff deleted #484a4a pulled toward Surface (overlay cap)
 			DiffChanged:     "#2b4155", // diff changed #385570 pulled toward Surface (overlay cap)
+			DiffAddedEmph:   "#2f4a39", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#484343",
 			VCSModified:     "#94afce", // VCS modified blue #6897bb lightened for AA on Panel
 			VCSAdded:        "#82b989", // VCS added green #629755 lightened for AA on Panel
 			VCSUntracked:    "#d298dd",
@@ -1458,6 +1488,8 @@ func intellijLight() Theme {
 			DiffAdded:       "#d4f0d4",
 			DiffRemoved:     "#f5d8d8",
 			DiffChanged:     "#f0ecd7",
+			DiffAddedEmph:   "#c8e7ca", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#f5cece",
 			VCSModified:     "#284d78", // VCS modified blue
 			VCSAdded:        "#265d2d",
 			VCSUntracked:    "#5e2368", // metadata gold darkened for AA on Panel
@@ -1549,6 +1581,8 @@ func everforestDark() Theme {
 			DiffAdded:       "#3d4a42", // bg_green, pulled toward Surface from #425047 (overlay cap)
 			DiffRemoved:     "#514045", // bg_red
 			DiffChanged:     "#354a55", // bg_blue, pulled toward Surface from #3a515d (overlay cap)
+			DiffAddedEmph:   "#424f45", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#58454a",
 			VCSModified:     "#95adc8",
 			VCSAdded:        "#80c089",
 			VCSUntracked:    "#d195dc",
@@ -1640,6 +1674,8 @@ func everforestLight() Theme {
 			DiffAdded:       "#e5efda", // bg_green tint
 			DiffRemoved:     "#fbe3da", // bg_red
 			DiffChanged:     "#faedcd", // bg_yellow
+			DiffAddedEmph:   "#e1e5c9", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#f8d8cc",
 			VCSModified:     "#315e92", // darkened for contrast from #3a94c5
 			VCSAdded:        "#215027", // darkened for contrast from #8da101
 			VCSUntracked:    "#5c2267", // darkened for contrast from #dfa000
@@ -1731,6 +1767,8 @@ func ayuDark() Theme {
 			DiffAdded:       "#142117",
 			DiffRemoved:     "#241317",
 			DiffChanged:     "#1f1c10",
+			DiffAddedEmph:   "#18281b", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#32191c",
 			VCSModified:     "#96b7dc",
 			VCSAdded:        "#75c67f",
 			VCSUntracked:    "#be69cd",
@@ -1822,6 +1860,8 @@ func ayuMirage() Theme {
 			DiffAdded:       "#26362a",
 			DiffRemoved:     "#3b2a30",
 			DiffChanged:     "#35322a",
+			DiffAddedEmph:   "#2a3c30", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#472e34",
 			VCSModified:     "#a0bddf",
 			VCSAdded:        "#7cc986",
 			VCSUntracked:    "#cd8cd9",
@@ -1913,6 +1953,8 @@ func ayuLight() Theme {
 			DiffAdded:       "#e0f0d4",
 			DiffRemoved:     "#fbe0e0",
 			DiffChanged:     "#faeed6",
+			DiffAddedEmph:   "#d6e6cb", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#f7d5d5",
 			VCSModified:     "#386ba7", // darkened for contrast from #478acc
 			VCSAdded:        "#2e7237", // darkened for contrast from #6cbf43
 			VCSUntracked:    "#6d297a", // darkened for contrast from #f2ae49
@@ -2004,6 +2046,8 @@ func githubDark() Theme {
 			DiffAdded:       "#122117", // solid form of the diff green alpha
 			DiffRemoved:     "#25171c",
 			DiffChanged:     "#221d10",
+			DiffAddedEmph:   "#142a1b", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#361b1f",
 			VCSModified:     "#82a9d5",
 			VCSAdded:        "#48b056",
 			VCSUntracked:    "#ba61ca",
@@ -2095,6 +2139,8 @@ func githubLight() Theme {
 			DiffAdded:       "#d8f3dc",
 			DiffRemoved:     "#ffd7d5",
 			DiffChanged:     "#fff3c2",
+			DiffAddedEmph:   "#cdead3", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#facdcc",
 			VCSModified:     "#396eaa",
 			VCSAdded:        "#2c6d35",
 			VCSUntracked:    "#682773",
@@ -2188,6 +2234,8 @@ func oxocarbon() Theme {
 			DiffAdded:       "#16281c",
 			DiffRemoved:     "#2d1a24",
 			DiffChanged:     "#252031",
+			DiffAddedEmph:   "#193020", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#3a1e2b",
 			VCSModified:     "#9ab9dd",
 			VCSAdded:        "#4bb559",
 			VCSUntracked:    "#d59edf", // no yellow in the palette
@@ -2279,6 +2327,8 @@ func monokaiPro() Theme {
 			DiffAdded:       "#37402f",
 			DiffRemoved:     "#452d36",
 			DiffChanged:     "#403a2b",
+			DiffAddedEmph:   "#3d4534", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#4f303a",
 			VCSModified:     "#89add8",
 			VCSAdded:        "#85cd8f",
 			VCSUntracked:    "#cd8cd9",
@@ -2371,6 +2421,8 @@ func zenburn() Theme {
 			DiffAdded:       "#3f4f3f",
 			DiffRemoved:     "#4f3f3f",
 			DiffChanged:     "#4f4f3f",
+			DiffAddedEmph:   "#485448", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#514646",
 			VCSModified:     "#adc7e4", // lightened for contrast from #94bff3
 			VCSAdded:        "#a9ccad", // green+2, lightened for contrast from #9fc59f
 			VCSUntracked:    "#e0b8e7",
@@ -2471,6 +2523,8 @@ func highContrastDark() Theme {
 			DiffAdded:       "#001a00",
 			DiffRemoved:     "#1a0000",
 			DiffChanged:     "#1a1a00",
+			DiffAddedEmph:   "#08230d", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#270b0b",
 			VCSModified:     "#a7c3e2",
 			VCSAdded:        "#8acf93",
 			VCSUntracked:    "#ca84d6",
@@ -2562,6 +2616,8 @@ func highContrastLight() Theme {
 			DiffAdded:       "#e0ffe0",
 			DiffRemoved:     "#ffe8e8",
 			DiffChanged:     "#fffbd6",
+			DiffAddedEmph:   "#dcf3de", // intra-line emphasis (#2170)
+			DiffRemovedEmph: "#f7e0e1",
 			VCSModified:     "#274b75",
 			VCSAdded:        "#1a3f1f",
 			VCSUntracked:    "#481b50",

@@ -50,6 +50,8 @@ type UI struct {
 	DiffAdded       string // diff viewer: added-line background (#60)
 	DiffRemoved     string // diff viewer: removed-line background
 	DiffChanged     string // diff viewer: intra-line changed-range background
+	DiffAddedEmph   string // diff viewer: intra-line changed range inside an added line (#2170)
+	DiffRemovedEmph string // diff viewer: intra-line changed range inside a removed line (#2170)
 	VCSModified     string // vcs status foreground: modified/renamed files (Roadmap 0320)
 	VCSAdded        string // vcs status foreground: added files
 	VCSUntracked    string // vcs status foreground: untracked files
@@ -113,6 +115,8 @@ type Palette struct {
 	DiffAdded       color.Color
 	DiffRemoved     color.Color
 	DiffChanged     color.Color
+	DiffAddedEmph   color.Color
+	DiffRemovedEmph color.Color
 	VCSModified     color.Color
 	VCSAdded        color.Color
 	VCSUntracked    color.Color
@@ -212,6 +216,14 @@ func NewPalette(t Theme) *Palette {
 	p.DiffAdded = slotOrMix(t.UI.DiffAdded, p.Success, p.Surface, 0.22)
 	p.DiffRemoved = slotOrMix(t.UI.DiffRemoved, p.Error, p.Surface, 0.22)
 	p.DiffChanged = slotOrMix(t.UI.DiffChanged, p.Warning, p.Surface, 0.42)
+	// The intra-line emphasis backgrounds (#2170) are the *same hue* as the
+	// line they sit in, pushed further away from Surface: a changed range
+	// then reads as a stronger patch of its own side's colour instead of
+	// borrowing a third one, which kept added and removed indistinguishable
+	// inside a changed pair. Sparse themes derive them from the line
+	// backgrounds resolved just above, so the pair always agrees.
+	p.DiffAddedEmph = emphSlot(t.UI.DiffAddedEmph, p.Success, p.DiffAdded, p.Surface)
+	p.DiffRemovedEmph = emphSlot(t.UI.DiffRemovedEmph, p.Error, p.DiffRemoved, p.Surface)
 	// VCS status foregrounds (Roadmap 0320) follow the git workflow (#1868):
 	// modified→info blue, added→success green, conflicted→error red. The two
 	// remaining roles have no semantic slot of their own, so sparse themes
@@ -229,6 +241,41 @@ func NewPalette(t Theme) *Palette {
 	// the semantic slots filled in above (#1363).
 	p.resolveTerminal(t.Terminal)
 	return p
+}
+
+const (
+	// emphMix is how far an intra-line emphasis background moves from its
+	// line background toward the side's semantic hue (#2170).
+	emphMix = 0.12
+	// emphHeadroom is how much further than its own line background an
+	// emphasis background may drift from Surface. The line backgrounds sit
+	// in the readability envelope every overlay lives in (contrast_test's
+	// overlay cap), so scaling *that* theme's own drift keeps strict themes
+	// strict and relaxed themes readable — a changed range stays a
+	// background, never a highlighter. The renderer carries the rest of the
+	// distinction as bold + underline, which every theme shows equally.
+	emphHeadroom = 1.10
+)
+
+// emphSlot resolves an intra-line emphasis background: the explicit token, or
+// the line background pushed toward hue and then pulled back toward surface
+// until it sits inside the line background's own envelope (emphHeadroom).
+// Deriving rather
+// than hand-tuning keeps every theme — built-in or third-party, light or dark
+// — in the same envelope automatically.
+func emphSlot(token string, hue, base, surface color.Color) color.Color {
+	if token != "" {
+		return Resolve(token)
+	}
+	maxRatio := ContrastRatio(base, surface) * emphHeadroom
+	c := Mix(hue, base, emphMix)
+	for frac := 1.0; frac > 0.05; frac -= 0.05 {
+		cand := Mix(c, surface, frac)
+		if ContrastRatio(cand, surface) <= maxRatio {
+			return cand
+		}
+	}
+	return base
 }
 
 // slotOrMix resolves a slot token, falling back to fg mixed over bg by frac

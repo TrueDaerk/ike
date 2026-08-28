@@ -34,6 +34,45 @@
 - Docs: `wiki/architecture/change-feed.md` (new "Batch actions" section,
   attribution and grouping).
 
+## 2026-08-28 (Diff viewer: ignore-whitespace toggle, per-side intra-line emphasis, #2170)
+
+- **Ignore whitespace** (`internal/diff/engine.go`): `ComputeWith(left, right,
+  Options{IgnoreWhitespace: true})` compares lines by their whitespace-stripped
+  key, the way `git diff -w` does. A re-indented or re-wrapped line pairs up as
+  an unchanged row and drops out of the hunk list entirely, so a reformat-heavy
+  branch stops drowning the changes that carry meaning. The option changes what
+  is *compared*, never what is shown: each column keeps its own raw text, which
+  is why the edit script now carries both sides of an equal pair (`pairEdit`)
+  instead of one text. Intra-line refinement follows suit — every span is
+  trimmed to its non-whitespace core and the ones left empty are dropped, so a
+  re-indented *and* renamed line emphasizes the identifier, not the leading run.
+- **`w` toggles it live** (`model.go`, `recompute`): the pane re-diffs the
+  retained texts in place — scroll position kept, current hunk clamped to the
+  shorter list — and reports itself as `diff.IgnoreWhitespaceMsg`. The root
+  model persists that into `diff.ignore_whitespace` (`config.WriteAndReload`,
+  the #1998 conceal-rule shape) and the reload re-applies **both** diff keys to
+  every open diff pane through `Instance.configure`, so panes never drift apart
+  and the next diff starts on the last choice. The state is visible where it
+  matters: `DIFF │ … │ -w │ hunk i/n` in the status line, `[-w]` in the title
+  band.
+- **Intra-line emphasis is per side now** (`theme`, `DiffAddedEmph` /
+  `DiffRemovedEmph`): a changed range used to take the single `DiffChanged`
+  slot, which painted both halves of a changed pair the same colour — the
+  refinement read as noise rather than as "this is what changed on *this*
+  side". Each side now emphasizes in its own hue, one step stronger than its
+  line background. Every builtin declares both slots; a theme that omits them
+  gets them derived from its own diff backgrounds (pushed toward
+  `Success`/`Error`, then pulled back inside `emphHeadroom` of the line
+  background's own drift from `Surface` — the contrast audit covers the new
+  slots). The step stays inside the readability envelope by design, so the
+  renderer carries the rest as **bold** on the emphasized runes; underline was
+  the other candidate and is out because lipgloss emits it per grapheme.
+- **Settings** (`internal/settings/schema.go`): a new **Diff Viewer** page
+  exposes `diff.ignore_whitespace` and `diff.context` — the latter was read by
+  the pane registry but had no typed schema entry at all, so it was
+  file-only-and-undocumented until now. Docs: `wiki/architecture/diff-viewer.md`
+  (new "Ignore whitespace" section), `themes.md`, `settings-ui.md`.
+
 ## 2026-08-28 (Notifications: the history ring reads as a notification center, #2152)
 
 - **Relative ages** (`internal/app/notifications.go`, `historyView`): the

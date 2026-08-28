@@ -303,7 +303,7 @@ func TestSpansSurviveHorizontalOffset(t *testing.T) {
 	prefix := strings.Repeat("x", 40)
 	m.SetContents(prefix+"L"+prefix, prefix+"R"+prefix)
 	m.ScrollXBy(35)
-	want := lipgloss.NewStyle().Background(pal.DiffChanged).Render("R")
+	want := lipgloss.NewStyle().Background(pal.DiffAddedEmph).Bold(true).Render("R")
 	if !strings.Contains(m.View(), want) {
 		t.Fatalf("changed rune should stay emphasized at a horizontal offset:\n%q", m.View())
 	}

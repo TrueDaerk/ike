@@ -183,6 +183,12 @@ func TestBuiltinThemeFullContrast(t *testing.T) {
 				{"DiffAdded", p.DiffAdded, tier.overlay},
 				{"DiffRemoved", p.DiffRemoved, tier.overlay},
 				{"DiffChanged", p.DiffChanged, tier.overlay},
+				// The intra-line emphasis backgrounds (#2170) are allowed one
+				// step beyond the overlay cap — emphHeadroom — because they
+				// mark a few characters inside an already-tinted line and
+				// must still read as a stronger patch of the same hue.
+				{"DiffAddedEmph", p.DiffAddedEmph, tier.overlay * 1.10},
+				{"DiffRemovedEmph", p.DiffRemovedEmph, tier.overlay * 1.10},
 				{"Selection", p.Selection, tier.selection},
 				{"Primary", p.Primary, tier.selection},
 			} {
@@ -208,6 +214,7 @@ func TestBuiltinThemeFullContrast(t *testing.T) {
 				{"Ruler", p.Ruler}, {"OccurrenceRead", p.OccurrenceRead},
 				{"OccurrenceWrite", p.OccurrenceWrite}, {"DiffAdded", p.DiffAdded},
 				{"DiffRemoved", p.DiffRemoved}, {"DiffChanged", p.DiffChanged},
+				{"DiffAddedEmph", p.DiffAddedEmph}, {"DiffRemovedEmph", p.DiffRemovedEmph},
 			}
 			audit := func(fg named, bases []named) {
 				want := tier.text

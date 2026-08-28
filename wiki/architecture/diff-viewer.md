@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Diff Viewer
-description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, side-by-side or unified rendering with theme diff slots and per-side tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070), diff.files palette command, layout persistence."
+description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070), diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
-timestamp: 2026-08-28T12:00:00Z
+timestamp: 2026-08-28T18:00:00Z
 ---
 
 # Diff Viewer (#60)
@@ -29,6 +29,15 @@ pairs are refined at rune level through the same Myers core into per-side
 the `Hunk` list used for navigation. `Lines(a, b)` exposes the raw line-level
 edit script for future consumers that need scripts rather than rows.
 
+`ComputeWith(left, right, Options)` is the same computation under options;
+`Compute` is it with the zero value. `Options.IgnoreWhitespace` (#2170) drops
+whitespace from every comparison the way `git diff -w` does: lines compare by
+their whitespace-stripped key, so a re-indented or re-wrapped line pairs up as
+a `RowSame` row (each side keeping its own **raw** text — the option changes
+what is compared, never what is shown), and intra-line refinement trims each
+span to its non-whitespace core, dropping the ones left empty. A hunk whose
+lines only moved sideways therefore disappears from the hunk list entirely.
+
 ## Pane model (`model.go`)
 
 `diff.Model` mirrors the other pane components (value type, pointer-receiver
@@ -49,10 +58,24 @@ toggle, or new content can never leave the view scrolled past the end. Spans
 and syntax captures are indexed in absolute display columns, so intra-line
 emphasis and highlighting stay on the right runes at any offset. `u` toggles the unified single-column
 layout, where a changed pair renders as its removed line followed by its added
-line under a dual old/new gutter. Line backgrounds come from three new theme
-`ui` slots — `DiffAdded`, `DiffRemoved`, `DiffChanged` (intra-line emphasis) —
-declared by every builtin and defaulted for sparse themes by tinting the
-theme's own `Success`/`Error`/`Warning` toward its `Surface` (`theme.Mix`).
+line under a dual old/new gutter. Line backgrounds come from the theme `ui`
+slots `DiffAdded` / `DiffRemoved` (and `DiffChanged`, which the editor's
+`.diff`/`.patch` word highlighting uses), declared by every builtin and
+defaulted for sparse themes by tinting the theme's own
+`Success`/`Error`/`Warning` toward its `Surface` (`theme.Mix`).
+
+Intra-line changed ranges (#2170) do **not** borrow a third colour: they use
+the side's own emphasis slot — `DiffAddedEmph` on an added line,
+`DiffRemovedEmph` on a removed one — so an emphasized range reads as a
+stronger patch of the line it sits in instead of turning both sides of a
+changed pair the same colour. Every builtin declares both; a theme that omits
+them gets them derived from its own diff backgrounds, pushed toward the side's
+semantic hue and then pulled back until the result stays inside that
+background's readability envelope (`emphHeadroom`, guarded by the theme
+contrast audit). Because that envelope keeps the background step deliberately
+small, the renderer carries the rest of the distinction as **bold +
+underline** on the emphasized runes — visible in every theme, in both layouts,
+and over the syntax foreground.
 
 Syntax highlighting (#1699) rides on top: both sides parse independently with
 the language resolved from the compared file's path (the editor's
@@ -75,11 +98,31 @@ and page keys page, `g`/`G` jump to the ends, the mouse wheel scrolls.
 half a column; `0` jumps back to column 0 and `$` to the widest line's end.
 The horizontal wheel and `shift`+wheel do the same through `ScrollXBy` — all
 of it moves both sides at once (#1700). `n`/`N`
-step through hunks (scrolling the hunk a third down the view); `enter`
+step through hunks (scrolling the hunk a third down the view); `w` toggles
+ignore-whitespace on the open diff (see below); `enter`
 dispatches `diff.JumpMsg` and the root model opens the right-hand file with
 the cursor on the hunk's first line. The view is read-only; hunk-level "take
 left/right" staging is a later increment for #28. The status line shows
-`DIFF │ left ⇄ right │ hunk i/n`.
+`DIFF │ left ⇄ right │ -w │ hunk i/n` (the `-w` segment only while whitespace
+is ignored) and the pane's title band `DIFF left ⇄ right [-w]`.
+
+## Ignore whitespace (#2170)
+
+`w` flips the pane between whitespace-significant and whitespace-insensitive
+comparison. The toggle re-diffs the retained texts in place — no reload, no
+lost scroll position — and the current hunk is clamped to the (usually
+shorter) new hunk list. `SetIgnoreWhitespace` is the same switch for
+non-interactive callers; `Rediff` and `SetContents` keep the mode, so edit
+mode and re-opened contents stay on the reader's choice.
+
+The state is persisted, not pane-local: the pane emits
+`diff.IgnoreWhitespaceMsg` and the root model writes `diff.ignore_whitespace`
+into the user settings (`config.WriteAndReload`, the conceal-rule shape from
+#1998). The reload that follows re-applies both diff keys — `diff.context` and
+`diff.ignore_whitespace` — to **every** open diff pane through
+`Instance.configure`, so panes never drift apart, and a fresh pane picks the
+value up in `Registry.applyDiffConfig`. Both keys are editable in the settings
+panel's **Diff Viewer** page.
 
 ## Text selection & copy (#2070)
 
