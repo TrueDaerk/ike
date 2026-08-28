@@ -183,6 +183,22 @@ var reachableAlternatives = map[string]string{
 	"coverage.toggle":       "palette",
 	"lsp.diagnosticInfo":    "palette",
 	"http.run":              "palette",
+	// Second unbound-command audit (#2305): every new default is a Cmd- or
+	// Alt-modified chord, so all of them escape through the palette; the ones
+	// with a menu or context-menu home name it too.
+	"file.copyPath":       "palette / context menu",
+	"lsp.organizeImports": "palette / context menu",
+	"json.jqPlayground":   "palette / Tools menu",
+	"yaml.yqPlayground":   "palette / Tools menu",
+	"scratch.generate":    "palette / File menu",
+	"vcs.diff":            "palette",
+	"tests.toggle":        "palette / View menu",
+	"debug.console":       "palette",
+	"run.select":          "palette / Run menu",
+	"debug.testAtCursor":  "palette / Run menu",
+	"pane.close":          "palette / pane context menu",
+	"view.toggleWrap":     "palette",
+	"window.layouts":      "palette",
 }
 
 // StatusMatrix builds the ledger over the default table. commandExists

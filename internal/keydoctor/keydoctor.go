@@ -231,7 +231,10 @@ func (m *Model) probeBody(w, h int) string {
 
 // targetGrid lays the targets out in as many columns as the height forces,
 // clipped to the width — the run is order-independent, so a clipped column
-// costs visibility, not correctness.
+// costs visibility, not correctness. Each column is only as wide as its own
+// longest target (#2305): a single global width made the rightmost column of
+// the grown default set fall off the edge, hiding chords the user still has
+// to press.
 func (m *Model) targetGrid(w, h int) string {
 	targets := m.sess.Targets()
 	next := m.sess.Next()
@@ -239,16 +242,36 @@ func (m *Model) targetGrid(w, h int) string {
 	okStyle := lipgloss.NewStyle().Foreground(m.theme().Success)
 	warnStyle := lipgloss.NewStyle().Foreground(m.theme().Warning)
 	dimStyle := lipgloss.NewStyle().Foreground(m.theme().Secondary).Faint(true)
-	colW := 0
-	for _, t := range targets {
-		if len(t) > colW {
-			colW = len(t)
-		}
-	}
-	colW += 5 // mark + gap
-	var cols []string
+	// Column text widths first, so the gap between them can shrink until the
+	// whole grid fits the box instead of spilling over its right edge.
+	var textW []int
 	for start := 0; start < len(targets); start += h {
 		end := min(start+h, len(targets))
+		maxLen := 0
+		for _, t := range targets[start:end] {
+			if len(t) > maxLen {
+				maxLen = len(t)
+			}
+		}
+		textW = append(textW, maxLen)
+	}
+	gap := 2
+	for ; gap > 0; gap-- {
+		total := 0
+		for i, tw := range textW {
+			total += 3 + tw // mark + label
+			if i < len(textW)-1 {
+				total += gap
+			}
+		}
+		if total <= w {
+			break
+		}
+	}
+	var cols []string
+	for i, start := 0, 0; start < len(targets); i, start = i+1, start+h {
+		end := min(start+h, len(targets))
+		colW := textW[i] + 3 + gap
 		var lines []string
 		for _, t := range targets[start:end] {
 			mark, style := " · ", lipgloss.NewStyle()

@@ -407,6 +407,54 @@ var jetbrainsRows = []row{
 	{"alt+f3", "bookmark.toggleMnemonic", "Toggle bookmark with mnemonic", Editor, "Bookmarks (#55)"},
 	{"shift+f11", "bookmark.next", "Next bookmark", Editor, "Bookmarks (#55)"},
 	{"ctrl+shift+f11", "bookmark.previous", "Previous bookmark", Editor, "Bookmarks (#55)"},
+	// Second unbound-command audit (#2305): commands are driven by keybind far
+	// more often than by the palette, so an everyday action that ships
+	// palette-only is effectively invisible. These are the palette-only
+	// commands that earned a chord — JetBrains' own where one exists and is
+	// free on both platforms, the ctrl+alt tool/view family otherwise. The
+	// remaining unbound commands are keybind-less on purpose; the audit ledger
+	// with their reasons lives in cmd/ike/keybind_audit_test.go.
+	// JetBrains' Copy Path (cmd+shift+c on the macOS keymap) verbatim; the
+	// relative-path and reference flavours stay palette-only, one chord for
+	// the everyday form like editor.copyDocPath's jq/yq siblings.
+	{"cmd+shift+c", "file.copyPath", "Copy path", Global, "App (#2305)"},
+	// JetBrains Optimize Imports (ctrl+alt+o in both keymaps).
+	{"ctrl+alt+o", "lsp.organizeImports", "Organize imports", Editor, "LSP (#2305)"},
+	// The playgrounds (#1936/#2039) join the ctrl+alt family next to their own
+	// ctrl+alt+e query-view toggle: j for jq, y for yq. Global for the same
+	// reason as that row — the playground owns the keyboard while its pane is
+	// focused and resolves unclaimed keys against the Global scope. The
+	// at-path variants stay doorway-only: alt+enter's intention popup offers
+	// them exactly where they apply (the caret on a JSON/YAML path).
+	{"ctrl+alt+j", "json.jqPlayground", "jq playground", Global, "jq/yq playground (#2305)"},
+	{"ctrl+alt+y", "yaml.yqPlayground", "yq playground", Global, "jq/yq playground (#2305)"},
+	// Test-data wizard (#2134): the scratch family's third chord, one modifier
+	// beyond cmd+shift+n's new scratch file — the wizard writes one too.
+	{"cmd+alt+shift+n", "scratch.generate", "Generate test data", Global, "Scratch files (#2305)"},
+	// JetBrains' Show Diff is cmd+d, taken here by editor.duplicateLine, so
+	// the diff-against-HEAD lands one modifier away on the free cmd+alt+d.
+	{"cmd+alt+d", "vcs.diff", "Diff file against HEAD", Global, "VCS (#2305)"},
+	// JetBrains' numeric tool-window family, continued on its own numbers:
+	// cmd+4 is the Run window (test results here), cmd+5 the Debug window
+	// (console/variables here).
+	{"cmd+4", "tests.toggle", "Test results tool window", Global, "Run (#2305)"},
+	{"cmd+5", "debug.console", "Debug console tool window", Global, "Run (#2305)"},
+	// JetBrains' Run… / Debug… popups (alt+shift+f10 / alt+shift+f9). The
+	// run-configuration picker takes the first verbatim; the second goes to
+	// debugging the test at the caret — the debug twin of run.testAtCursor,
+	// whose JetBrains chord (ctrl+shift+f9) is taken by http.showResponse.
+	{"alt+shift+f10", "run.select", "Run/Debug configurations", Global, "Run (#2305)"},
+	{"alt+shift+f9", "debug.testAtCursor", "Debug test at cursor", Editor, "Run (#2305)"},
+	// Closing the focused pane whole, next to cmd+w's close-tab: w for close
+	// in the ctrl+alt pane family (ctrl+alt+r resize, ctrl+alt+f zen).
+	{"ctrl+alt+w", "pane.close", "Close pane", Global, "App (#2305)"},
+	// Soft wrap is the one view toggle flipped by the hour; the other
+	// view.toggle* commands stay palette/View-menu affairs.
+	{"alt+shift+w", "view.toggleWrap", "Toggle soft wrap", Editor, "Editor (#2305)"},
+	// The layout family's third F12 chord: shift+f12 restores the default
+	// layout, cmd+shift+f12 hides all tool windows, alt+shift+f12 opens the
+	// saved-layout picker.
+	{"alt+shift+f12", "window.layouts", "Window layouts", Global, "Windowing (#2305)"},
 }
 
 // Defaults returns the default binding set for the named preset. Unknown presets
