@@ -1,10 +1,10 @@
 ---
 type: concept
 title: External-Change Feed
-description: Session-scoped list of files changed by other processes (coding agents, git, formatters) with a mini-diff per entry and open / reload / revert actions, filtered by the watcher's own ignore rules
+description: Session-scoped list of files changed by other processes (coding agents, git, formatters) with a mini-diff per entry, per-entry and batch open / reload / revert actions, per-process grouping, filtered by the watcher's own ignore rules
 resource: internal/changefeed/changefeed.go
 tags: [watch, agents, diff, revert, local-history, panel]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # External-Change Feed
@@ -38,6 +38,14 @@ pre-change text and the noise predicate.
   session stays "created" however often it is rewritten afterwards. An entry
   first recorded without pre-change content adopts a later event's, because
   some content beats none.
+- **`Source`** attributes the row to the process that made the change — best
+  effort, empty whenever IKE cannot tell. `Groups()` splits the feed by it:
+  attributed groups first (ordered by their newest entry), everything
+  unattributed together in the unknown bucket at the end. A source recorded
+  once is never rewritten by a later event — the row is one *file*, and the
+  process that first touched it is what the group is about — but an entry that
+  started out unattributed adopts a later event's source, because some
+  attribution beats none.
 - **Origin** records how far the revert can be trusted: `FromBuffer` (the open,
   unmodified buffer held exactly the bytes the write replaced), `FromSnapshot`
   (the newest local-history snapshot — what IKE last *wrote* there, so anything
@@ -79,6 +87,15 @@ never costs 300 disk reads on the Update loop.
   one; a dirty or stale buffer holds text that was never on disk, so the newest
   local-history snapshot (#1023) is the fallback. A created file had no previous
   content at all.
+- **Attribution is what IKE itself spawned** (#2183). `changeFeedSource` walks
+  the panes for a session that is *busy* at the moment of the write — a tool
+  pane running `claude`, a Run task, a command in a terminal pane — and names
+  it (the tool identity, else the program's base name). Exactly one busy
+  candidate is an answer; two are not, so an ambiguous moment stays
+  unattributed rather than pinning an agent's write on the formatter that
+  happened to run beside it. An idle shell is never a candidate: it wrote
+  nothing. The batch path resolves the source once per watcher flush, not once
+  per file.
 - The feed lives on the root model, not on the panel, so it survives pane
   switches, panel closes and focus moves for the whole session.
 
@@ -87,8 +104,9 @@ never costs 300 disk reads on the Update loop.
 `watch.changeFeed` opens the floating two-pane panel (the shared `ui.Floating`
 shell hosting a width-aware `ui.Content`, the Local History layout of #1969):
 
-- **Left:** one row per file — kind marker (`~` / `+` / `-`), humanized age,
-  file name, then its project-relative directory. The name comes before the
+- **Left:** one row per file — the batch mark cell (`●` when marked), the kind
+  marker (`~` / `+` / `-`), humanized age, file name, then its
+  project-relative directory. The name comes before the
   directory because the column is truncated to half the panel and the name is
   the part that has to survive the cut. A repeated write shows `(×N)`.
 - **Right:** the selected entry's mini-diff — its captured pre-change content
@@ -98,16 +116,24 @@ shell hosting a width-aware `ui.Content`, the Local History layout of #1969):
   green, removed red. An entry with no pre-change content renders the reason
   in place of the diff instead of notifying, so the selection can sweep across
   it without side effects.
-- A detail line under the panes names the kind, the absolute timestamp, and
-  where the "before" side came from.
+- **Groups.** As soon as anything in the feed carries a source, the list
+  renders as titled sections — one per originating process, the unattributed
+  rows last under a plain `unattributed` title (left bare they would read as
+  part of the group above, which is exactly the attribution the feed refused
+  to make). With no attribution anywhere the list stays flat: a header that
+  says nothing is worse than no header. Titles are not selectable, so
+  navigation is unchanged.
+- A detail line under the panes names the kind, the absolute timestamp, where
+  the "before" side came from, and the attributed process when there is one.
 - The list is **live**: the agent keeps writing while the panel is open, so a
   new event folds into the open list and the selection is re-found by path
   rather than sliding down as rows prepend.
 
 Keys: `j`/`k` move (the mini-diff follows the selection), `enter` opens the
 file, `d` sends the before/after pair to the reusable diff pane (#60), `R`
-reloads the buffer, `r` reverts the external change, `x` dismisses the row, `c`
-clears the feed, `esc`/`q` closes. An action that cannot apply — reverting a
+reloads the buffer, `r` reverts the external change, `space` marks a row for a
+batch, `m` marks the selection's whole group, `A` reloads and `V` reverts the
+batch, `x` dismisses the row, `c` clears the feed, `esc`/`q` closes. An action that cannot apply — reverting a
 created file, reloading one that is not open — notifies and leaves the panel
 up; closing a modal only to toast a refusal would cost the user the list they
 were reading.
@@ -138,6 +164,36 @@ The command is `watch.changeFeed`, reachable from the palette and from
   - An entry with no pre-change content (a created file, a released one) offers
     no revert; there is nothing to restore to.
 - A reverted entry leaves the feed — it has been dealt with.
+
+## Batch actions
+
+After an agent run touches forty files, acting row by row is the wrong shape.
+`A` (reload) and `V` (revert) apply to a whole **scope** (#2183):
+
+- **Scope** is the marked rows when there are any, the whole listed feed
+  otherwise. Marking refines a batch; it is not a precondition for one, so
+  `A` on a fresh panel means "reload everything". `space` marks the selected
+  row, `m` marks the selection's entire group — which is what makes the
+  per-group reload/revert of a titled section one keystroke, without a second
+  set of group-only keys. `m` only *unmarks* when the whole group is already
+  marked, so pressing it over a partly marked group completes the selection
+  instead of throwing it away.
+- **Dirty-buffer conflicts are never resolved by a batch.** A file changed
+  externally *and* edited in IKE is a decision only the user can make: the
+  batch leaves it alone and names it in the report. The per-entry `R` and `r`
+  are still there for the user who settles them one by one. Batch reload also
+  skips what it cannot reach — a file that is not open, or one that no longer
+  exists — and batch revert skips entries with no recorded previous version.
+- **Reload-all** keeps the panel up and reports once: `reloaded N file(s) ·
+  skipped M (unsaved changes): …`. The rows stay — they are records of what
+  happened, not a to-do list the reload consumes.
+- **Revert-all is confirmed first, listing every file it will touch**, plus
+  what it is leaving alone and why. Undoing one external write is a decision
+  about one buffer; undoing a whole agent run is a decision about the working
+  tree, and it must not be answered from a row count. Confirmed, each file
+  goes through the same restore as the single revert (buffer edit, or a
+  write-back for a deleted file) and leaves the feed; the batch reports once
+  instead of toasting per file.
 
 ## Configuration
 

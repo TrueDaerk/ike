@@ -96,6 +96,12 @@ type Entry struct {
 	Count  int    // external events coalesced into this row (>= 1)
 	Before string // pre-change content, empty unless Origin says otherwise
 	Origin Origin
+	// Source names the process the change is attributed to ("claude", a
+	// formatter, a task) — best effort, empty whenever the caller cannot
+	// tell. The feed never guesses one: an unattributed entry stays ungrouped
+	// rather than having somebody else's write pinned on whatever process
+	// happened to be running.
+	Source string
 }
 
 // HasBefore reports whether the entry can still produce a diff and a revert.
@@ -196,6 +202,13 @@ func (f *Feed) Add(e Entry) bool {
 		merged.Time = e.Time
 		merged.Kind = mergeKinds(old.Kind, e.Kind)
 		merged.Count = old.Count + e.Count
+		if merged.Source == "" {
+			// The first event landed with nothing to attribute it to; a later
+			// one could tell. Adopt that source — some attribution beats none.
+			// An existing one is never overwritten: a row is one file, and the
+			// process that first touched it is the one the group is about.
+			merged.Source = e.Source
+		}
 		if !old.HasBefore() && e.HasBefore() {
 			// The first event caught the file with nothing to compare
 			// against (never opened, never saved); a later one found a
@@ -261,6 +274,63 @@ func (f *Feed) Entries() []Entry {
 	out := make([]Entry, len(f.entries))
 	copy(out, f.entries)
 	return out
+}
+
+// Group is one titled section of the feed: the entries attributed to a single
+// originating process, newest first. An empty Source is the unknown bucket —
+// what nothing could be attributed to, which stays ungrouped.
+type Group struct {
+	Source  string
+	Entries []Entry
+}
+
+// Attributed reports whether the group names a process, i.e. whether it is a
+// real group rather than the unknown bucket.
+func (g Group) Attributed() bool { return g.Source != "" }
+
+// Groups splits the feed by originating process, newest first inside each
+// group. Attributed groups lead, ordered by their newest entry, and the
+// unknown bucket comes last: attribution is the exception, so the sections
+// that can be acted on as a unit come first and everything the feed could not
+// place stays together at the end, in plain feed order.
+func (f *Feed) Groups() []Group {
+	if f == nil || len(f.entries) == 0 {
+		return nil
+	}
+	var out []Group
+	at := map[string]int{} // source -> index in out
+	var unknown []Entry
+	for _, e := range f.entries {
+		if e.Source == "" {
+			unknown = append(unknown, e)
+			continue
+		}
+		if i, ok := at[e.Source]; ok {
+			out[i].Entries = append(out[i].Entries, e)
+			continue
+		}
+		at[e.Source] = len(out)
+		out = append(out, Group{Source: e.Source, Entries: []Entry{e}})
+	}
+	if len(unknown) > 0 {
+		out = append(out, Group{Entries: unknown})
+	}
+	return out
+}
+
+// Attributed reports whether any entry carries a source, i.e. whether grouping
+// has anything to show. A feed nothing could be attributed to renders as the
+// plain list it has always been.
+func (f *Feed) Attributed() bool {
+	if f == nil {
+		return false
+	}
+	for _, e := range f.entries {
+		if e.Source != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // Len reports how many files the feed lists.

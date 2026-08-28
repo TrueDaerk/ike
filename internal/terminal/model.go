@@ -269,6 +269,16 @@ func (m Model) SessionKey() string {
 // IsCommand reports whether the session runs a program rather than a shell.
 func (m Model) IsCommand() bool { return m.sess != nil && m.sess.IsCommand() }
 
+// Argv returns the program and arguments the session was spawned with, nil for
+// a shell session or a failed spawn. The change feed (#2183) reads it to name
+// the process an external write is attributed to.
+func (m Model) Argv() []string {
+	if m.sess == nil {
+		return nil
+	}
+	return m.sess.Argv()
+}
+
 // ExitCode proxies the session's exit status (ok=false while running).
 func (m Model) ExitCode() (int, bool) {
 	if m.sess == nil {
