@@ -531,10 +531,13 @@ for linewise, e.g. `guu`/`gugu`), `gv` (reselect the last visual selection),
 app-side), `g?` (explain the concealed or masked value at the caret, #1998),
 and the display-line motions `g0 g$ gj gk` (visual rows under soft
 wrap, plain line motions otherwise) — plus `zz zt zb` (scroll the cursor line
-to centre/top/bottom next to the `z` fold keys) and `ZZ`/`ZQ` (save-and-close /
+to centre/top/bottom next to the `z` fold keys; a count first moves the cursor
+to that line, vim's `[count]zt`, #2144) and `ZZ`/`ZQ` (save-and-close /
 force-close, mirroring `:x` / `:q!`). Visual mode gained `u U ~` (case), `J`
-(join), `r` (replace every selected character), `=`, and the `x`/`s` aliases
-for `d`/`c`. The `g` prefix stays available while an operator is pending, so
+(join), `r` (replace every selected character), `=`, the `x`/`s` aliases
+for `d`/`c`, and its own `g` layer (#2144): `gg` extends the selection to the
+first line (`{count}gg` to line count) and `gJ` joins the selected lines
+without inserting spaces. The `g` prefix stays available while an operator is pending, so
 `d ge` and `gu iw` compose. `Alt/Option+←/→` (and `Ctrl+←/→`) are
 word motions clamped to the current line (#303) — `.` inside identifiers counts
 as a stop point (`config.editor.tabWidth` yields sub-word stops), and past the

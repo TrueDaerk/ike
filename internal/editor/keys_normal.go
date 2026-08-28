@@ -859,11 +859,11 @@ func (m Model) resolveAfterZ(s string) (Model, tea.Cmd) {
 		m.pending.Reset()
 		return m, cmd
 	case "z":
-		m.scrollCursorLine(0)
+		m.scrollCountLine(0)
 	case "t":
-		m.scrollCursorLine(-1)
+		m.scrollCountLine(-1)
 	case "b":
-		m.scrollCursorLine(1)
+		m.scrollCountLine(1)
 	}
 	m.pending.Reset()
 	return m, nil
