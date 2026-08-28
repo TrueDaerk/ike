@@ -33,6 +33,22 @@
   Without Kitty graphics the alt-text line keeps its place and gains a dim
   format/size/dimensions caption; missing and undecodable targets degrade the
   same way.
+## 2026-08-28 (Open in Browser: compressed HTML files, #2298)
+
+- "Open in Browser" now reaches into a plain gzip file (`report.html.gz`)
+  whose *inner* content is browser-viewable: `gzipArchiveOf` resolves the
+  focused target back to the on-disk `.gz` — directly, or through an
+  already-open preview buffer's `<archive>!<inner>` path — and, when
+  `gzfile.IsPlain` claims it, decompresses into an ike-owned scratch
+  directory (`$TMPDIR/ike-open-in-browser`, one subdirectory per source
+  path so a reopen overwrites instead of accumulating) before opening the
+  unpacked file. A compressed tar stays with the archive viewer; a gzip
+  whose inner content is not browser-viewable (`app.log.gz`) still declines
+  with the same toast as before; decompressed content past
+  `files.large_file_kb` is refused with a clear notice instead of opening
+  partially. The scratch directory is swept on a clean exit and again at
+  the next startup, so a kill or a crash never leaves unpacked copies
+  behind. See [Gz Viewer](architecture/gz-viewer.md#open-in-browser-unpacks-not-previews-2298).
 
 ## 2026-08-28 (Local history: project-wide timeline across files, #2171)
 
