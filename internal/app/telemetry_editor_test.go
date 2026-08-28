@@ -59,6 +59,57 @@ func TestTelemetryEditorOwnedChordNotUnbound(t *testing.T) {
 	}
 }
 
+// TestWordChordsLanguageScopedEditor (#2313): the whole word-wise chord family
+// — motion (alt+left/right), selection (alt+shift+left/right) and deletion
+// (alt+backspace/alt+delete) — is editor-owned in every buffer regardless of
+// its language classification, in normal, insert and visual mode. The editor
+// consumes each chord and a telemetry replay records none of them as unbound.
+// (The unbound events that motivated #2313 were recorded by a pre-#2303 build,
+// which logged editor-owned chords as unbound even when they worked.)
+func TestWordChordsLanguageScopedEditor(t *testing.T) {
+	bufferLangLangs() // registers the http language, so a.http classifies
+	chords := []struct {
+		name string
+		msg  tea.KeyPressMsg
+	}{
+		{"alt+right", tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModAlt}},
+		{"alt+left", tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt}},
+		{"alt+shift+right", tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModAlt | tea.ModShift}},
+		{"alt+shift+left", tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt | tea.ModShift}},
+		{"alt+backspace", tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt}},
+		{"alt+delete", tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModAlt}},
+	}
+	for _, mode := range []string{"normal", "insert", "visual"} {
+		for _, c := range chords {
+			t.Run(mode+"/"+c.name, func(t *testing.T) {
+				m := telemetryModel(t, host.MapConfig{})
+				path := filepath.Join(t.TempDir(), "a.http")
+				if err := os.WriteFile(path, []byte("GET https://example.com/foo\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				tm, cmd := m.openPath(path, false)
+				m = drainCmd(tm.(Model), cmd)
+				if got := m.keyContext(); string(got) != "editor[http]" {
+					t.Fatalf("keyContext=%s want editor[http]", got)
+				}
+				switch mode {
+				case "insert":
+					m = drainKey(m, tea.KeyPressMsg{Code: 'i', Text: "i"})
+				case "visual":
+					m = drainKey(m, tea.KeyPressMsg{Code: 'v', Text: "v"})
+				}
+				m = drainKey(m, c.msg)
+				if !m.focusedEditor().HandledLastKey() {
+					t.Errorf("editor declined %s in %s mode", c.name, mode)
+				}
+				if got := unboundChords(t, m); len(got) != 0 {
+					t.Errorf("%s in %s mode recorded unbound: %v", c.name, mode, got)
+				}
+			})
+		}
+	}
+}
+
 // TestTelemetryUnboundChordInEditorStillRecorded keeps the missing-keybind
 // signal alive: a chord neither the keymap nor the editor wants is still
 // reported, even with an editor focused.

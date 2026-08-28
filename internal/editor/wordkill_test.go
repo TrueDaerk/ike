@@ -86,3 +86,31 @@ func TestHandledLastKey(t *testing.T) {
 		t.Fatal("unknown insert-mode chord ctrl+q must count as unhandled")
 	}
 }
+
+// TestWordChordsIgnoreLockModifiers (#2313): a Kitty-protocol terminal reports
+// caps/num lock alongside the real modifiers. The lock bits say nothing about
+// an editing chord and must not break the exact key.Mod comparisons — before
+// the strip, alt+backspace with num lock on degraded to a plain single-rune
+// backspace in insert mode.
+func TestWordChordsIgnoreLockModifiers(t *testing.T) {
+	locks := tea.ModCapsLock | tea.ModNumLock
+
+	m, _ := loaded(t, "alpha bravo charlie\n")
+	m = send(m, tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModAlt | locks})
+	if line(m, 0) != "bravo charlie" {
+		t.Fatalf("normal-mode alt+delete with lock mods=%q want %q", line(m, 0), "bravo charlie")
+	}
+
+	m, _ = loaded(t, "alpha bravo\n")
+	m = typeKeys(m, "A") // insert mode, caret at line end
+	m = send(m, tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt | locks})
+	if line(m, 0) != "alpha " {
+		t.Fatalf("insert-mode alt+backspace with lock mods=%q want %q", line(m, 0), "alpha ")
+	}
+
+	m, _ = loaded(t, "alpha bravo\n")
+	m = send(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModAlt | locks})
+	if m.cursor.Col != 6 {
+		t.Fatalf("alt+right with lock mods col=%d want 6", m.cursor.Col)
+	}
+}
