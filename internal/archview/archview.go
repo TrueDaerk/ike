@@ -30,6 +30,17 @@ type OpenEntryMsg struct {
 	Entry   string
 }
 
+// ExtractMsg asks the root model to extract members of the archive at Archive
+// to a directory on disk (#2249). Members holds the archive-relative names to
+// extract — a directory name stands for its whole subtree — and an empty slice
+// means the whole archive. The pane never writes anything itself: it names
+// what to extract, the root model asks for the target directory and owns the
+// safety checks.
+type ExtractMsg struct {
+	Archive string
+	Members []string
+}
+
 // row is one rendered line of the flattened tree.
 type row struct {
 	name  string // display label (the path segment)
@@ -243,6 +254,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.collapseOrParent()
 	case " ", "space":
 		m.toggleDir()
+	case "e":
+		return m.extractSelected()
+	case "E":
+		return m.extractAll()
 	}
 	m.clampScroll()
 	return nil
@@ -259,6 +274,23 @@ func (m *Model) activate() tea.Cmd {
 		return nil
 	}
 	msg := OpenEntryMsg{Archive: m.path, Entry: r.full}
+	return func() tea.Msg { return msg }
+}
+
+// extractSelected asks for the row under the cursor to be written to disk: one
+// file, or — on a directory row — that directory's whole subtree.
+func (m *Model) extractSelected() tea.Cmd {
+	r, ok := m.selected()
+	if !ok {
+		return nil
+	}
+	msg := ExtractMsg{Archive: m.path, Members: []string{r.full}}
+	return func() tea.Msg { return msg }
+}
+
+// extractAll asks for every member of the archive to be written to disk.
+func (m *Model) extractAll() tea.Cmd {
+	msg := ExtractMsg{Archive: m.path}
 	return func() tea.Msg { return msg }
 }
 
@@ -309,6 +341,16 @@ func (m *Model) selected() (row, bool) {
 func (m *Model) SelectedEntry() (string, bool) {
 	r, ok := m.selected()
 	if !ok || r.isDir {
+		return "", false
+	}
+	return r.full, true
+}
+
+// SelectedMember returns the full entry path under the cursor — a directory
+// included, which stands for its subtree when extracting (#2249).
+func (m *Model) SelectedMember() (string, bool) {
+	r, ok := m.selected()
+	if !ok {
 		return "", false
 	}
 	return r.full, true
@@ -458,7 +500,7 @@ func HumanSize(n int64) string {
 
 // footer shows the key hints.
 func (m *Model) footer(pal *theme.Palette) string {
-	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open (read-only) · space fold · h/l collapse/expand · j/k move"))
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open (read-only) · e/E extract entry/all · space fold · h/l collapse/expand · j/k move"))
 }
 
 // bodyHeight is the room between the header and footer lines.

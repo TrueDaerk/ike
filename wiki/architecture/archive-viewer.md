@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Archive Viewer
-description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name; gzip members open decompressed (#1948)."
+description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name; gzip members open decompressed (#1948); e/E write members or the whole archive to a directory on disk under path, overwrite and size guards (#2249)."
 resource: internal/archview
-tags: [architecture, archive, tar, viewer, pane, read-only, mouse]
-timestamp: 2026-08-18T00:00:00Z
+tags: [architecture, archive, tar, viewer, pane, read-only, mouse, extract]
+timestamp: 2026-08-28T00:00:00Z
 ---
 
 # Archive Viewer (#1762)
@@ -16,13 +16,16 @@ that one member into memory and shows it in a **read-only** editor tab.
 
 Three packages carry it, none of them tar-shaped in its API:
 
-- `internal/archive` — the format layer: sniff, list, extract one entry.
+- `internal/archive` — the format layer: sniff, list, read one entry into
+  memory, and write members out to disk (`PlanExtract`/`Extract`, #2249).
   Everything through the standard library (`archive/tar`, `compress/gzip`,
   `compress/bzip2`); no dependency was added.
 - `internal/archview` — the pane model: the tree, the cursor, the key handling,
   the rendering.
 - `internal/app/archives.go` — the plugin, the pane lifecycle, and the
   read-only entry open.
+- `internal/app/archextract.go` — the extraction UI: target-directory prompt,
+  overwrite guard, summary toast (#2249).
 
 ## Routing and the sniff
 
@@ -67,6 +70,8 @@ step and wrap, page keys clamp, `g`/`G` jump to the ends. On top of that:
 | `enter` / `l` / `right` | file: open read-only · directory: toggle fold |
 | `space` | toggle the fold under the cursor |
 | `h` / `left` | collapse an expanded directory, else jump to the parent |
+| `e` | extract the row under the cursor (a directory row: its whole subtree) |
+| `E` | extract the whole archive |
 
 The pane advertises the `archive` context id, so bindings can scope to it.
 
@@ -94,6 +99,54 @@ window and drags the cursor along, keeping the selection inside it —
 Double-click activation shares `activate()` with `enter`, so both emit the same
 `OpenEntryMsg` and reach the same read-only preview below; the window is the
 400 ms the explorer uses.
+
+## Extraction to disk (#2249)
+
+The pane stays read-only in both directions — it never writes into an archive,
+and it never writes *out* of one either: `e`/`E` (or the palette's
+`archive.extractEntry` / `archive.extractAll`, which act on the focused viewer)
+only emit `archview.ExtractMsg`, naming the archive and the members. Everything
+else is the root model's, in three steps:
+
+1. **Target-directory prompt** — one path line with tab completion, the same
+   shape as the HTTP response save (#2059). It is prefilled with a directory
+   *next to the archive*, named after it without its archive suffix
+   (`backup.tar.gz` → `./backup`), so the default never scatters members beside
+   the file. A relative path is project-relative, `~` expands, and the
+   directory is created if it does not exist.
+2. **Plan** — `archive.PlanExtract` reads headers only and reports what would
+   happen: the members selected (a directory name stands for its subtree), the
+   ones refused with a reason, the targets that already exist, and the declared
+   total size. Existing targets raise the overwrite guard
+   (`[s/enter]` skip them and extract the rest · `[o]` overwrite · `[esc]`
+   cancel); the answer is per run, not per file, and skipping is the primary
+   option so `enter` never destroys files the user already had.
+3. **Write and report** — `archive.Extract` streams the archive a second time
+   and writes the plan's members. The summary toast names the file count, the
+   bytes and the destination, plus `— n skipped (reasons)` when anything was
+   declined; a run with skips is a warning, not an info.
+
+The safety rules all live in `internal/archive/extract.go`, so they hold for
+any caller, not just the pane:
+
+- **Path sanitization.** `SafeTarget` refuses absolute member names, any `../`
+  component (after `path.Clean`, so `deep/../../x` is caught too) and Windows
+  volume names, and then re-checks that the joined path is still inside the
+  destination. A refused member is *skipped and reported* (`unsafe path`),
+  never silently clamped into the target dir.
+- **Links are never materialized.** A symlink or hard-link member is skipped
+  (`link entry`): a link pointing out of the tree is the second half of every
+  traversal escape. Device and fifo entries are skipped as `special file`. An
+  existing *symlink* at a target is replaced rather than written through, for
+  the same reason.
+- **Byte cap.** `DefaultExtractLimit` (1 GiB) bounds one extraction — the
+  tar-shaped twin of the gz bomb guard, because a few kilobytes of archive can
+  unpack to whatever it likes. It is enforced twice: the plan refuses a
+  declared total over the ceiling before anything is written, and the write
+  itself counts the *actual* bytes (a header size is untrusted), removing the
+  partial file and stopping with a message that names the cap.
+- **Overwrites are confirmed**, and a target that is a directory is skipped
+  rather than replaced.
 
 ## Read-only entry preview
 
@@ -192,8 +245,10 @@ the reopen ring (#158). Like a scratch tab, it is session-local.
 
 ## Boundaries
 
-- **Read-only, always.** There is no write-back into an archive, and none is
-  planned here; extraction to disk is the shell's job.
+- **Read-only, always.** There is no write-back *into* an archive, and none is
+  planned. Extraction out of one is supported (#2249) and is one-way.
+- **No per-file overwrite dialog.** The guard answers for the whole run;
+  cherry-picking is what extracting a single member is for.
 - **Zip is out of scope**, but nothing in the pane, the pane kind or the UI
   strings says "tar": `archive.Format` classifies, everything above speaks of
   archives, so a zip reader slots in beside `FormatTar`.
