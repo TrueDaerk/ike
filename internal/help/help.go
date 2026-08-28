@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/theme"
 	"ike/internal/version"
@@ -17,6 +18,16 @@ const maxColumns = 2
 // colSlack widens each column beyond its widest cell so the pane gets some
 // breathing room and the right-aligned shortcuts sit clear of the titles.
 const colSlack = 8
+
+// typicalCoverage is the share of entries (in percent) a column is sized to
+// show in full. The remaining tail — a handful of unusually verbose titles —
+// is truncated rather than allowed to widen every column (#2215).
+const typicalCoverage = 90
+
+// minTitleWidth is the shortest truncated title still worth showing. Columns
+// too narrow to leave that much room keep the untruncated row and let it
+// overflow, since an ellipsis alone tells the user nothing.
+const minTitleWidth = 8
 
 // Help is the read-only help content: it snapshots commands and lays them out
 // in width-responsive columns. It is a ui.Content provider — the floating shell
@@ -226,20 +237,27 @@ func (h *Help) Render(width int) string {
 	if len(groups) == 0 && h.filter != "" {
 		return "no matches for \"" + h.filter + "\"  (backspace edits, esc clears)"
 	}
-	colW := MinColumnWidth(h.allCells(groups), h.minCol) + colSlack
-	if colW > width {
-		colW = width
-	}
-	cols := ColumnCount(width, colW)
-	if cols > maxColumns {
-		cols = maxColumns
-	}
+	cols, colW := h.columnLayout(groups, width)
 	body := h.renderBody(groups, colW, cols)
 	if footer := h.footer(groups); footer != "" {
 		hintStyle := lipgloss.NewStyle().Foreground(h.theme().Border)
 		body = lipgloss.JoinVertical(lipgloss.Left, body, "", hintStyle.Render(footer))
 	}
 	return body
+}
+
+// columnLayout derives the column count and column width for the given groups
+// within a body budget of width cells. The width the columns aim for is the one
+// that shows the *typical* entry in full, not the single longest one: the
+// context view (#2182) shows every scope at once, so one verbose command title
+// used to blow the column width past half the terminal and collapse the whole
+// sheet into a single, endlessly tall column (#2215). Overlong rows are
+// truncated by renderEntry instead.
+func (h *Help) columnLayout(groups []Group, width int) (cols, colW int) {
+	cells := h.allCells(groups)
+	natural := MinColumnWidth(cells, h.minCol) + colSlack
+	floor := TypicalColumnWidth(cells, h.minCol, typicalCoverage) + colSlack
+	return ColumnLayout(width, natural, floor, maxColumns)
 }
 
 // footer renders the one-line view/filter legend under the body (#656, #2182).
@@ -375,18 +393,38 @@ const minKeyGap = 2
 // renderEntry formats one command row: the title left-aligned and the shortcut
 // pushed to the right edge of a colW-wide cell so the keys line up as their own
 // column. colW <= 0 renders at natural width (title, minimum gap, shortcut) —
-// the form used to derive the shared column width. Unbound commands render
-// title-only.
+// the form used to derive the shared column width. A title too long for the
+// column is truncated with an ellipsis so the row stays one line and its
+// shortcut stays visible (#2215); the shortcut itself is never cut. Unbound
+// commands render title-only.
 func (h *Help) renderEntry(e Entry, colW int) string {
-	if e.Shortcut == "" {
-		return e.Title
+	title := e.Title
+	if colW > 0 {
+		room := colW
+		if e.Shortcut != "" {
+			room -= lipgloss.Width(e.Shortcut) + minKeyGap
+		}
+		title = truncateTitle(title, room)
 	}
-	gap := colW - lipgloss.Width(e.Title) - lipgloss.Width(e.Shortcut)
+	if e.Shortcut == "" {
+		return title
+	}
+	gap := colW - lipgloss.Width(title) - lipgloss.Width(e.Shortcut)
 	if gap < minKeyGap {
 		gap = minKeyGap
 	}
 	keyStyle := lipgloss.NewStyle().Foreground(h.theme().Secondary)
-	return e.Title + strings.Repeat(" ", gap) + keyStyle.Render(e.Shortcut)
+	return title + strings.Repeat(" ", gap) + keyStyle.Render(e.Shortcut)
+}
+
+// truncateTitle shortens title to room cells with an ellipsis. A room too tight
+// for minTitleWidth leaves the title alone: the row then overflows its column,
+// which still says more than a lone "…".
+func truncateTitle(title string, room int) string {
+	if room < minTitleWidth || lipgloss.Width(title) <= room {
+		return title
+	}
+	return ansi.Truncate(title, room, "…")
 }
 
 // sectionTitle is a group's heading: the scope title, marked as the focused
