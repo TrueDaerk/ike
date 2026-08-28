@@ -366,6 +366,17 @@ var jetbrainsRows = []row{
 	// (reachableAlternatives in matrix.go).
 	{"cmd+shift+d", "http.diffPreviousRun", "Diff HTTP response against previous run", Editor, "HTTP client (0450)"},
 	{"ctrl+shift+d", "http.diffPreviousRun", "Diff HTTP response against previous run", Editor, "HTTP client (0450)"},
+	// ctrl+r is JetBrains' Rerun, and that is what users press in a focused
+	// response pane (#2314): the pane already answered it with a re-send of
+	// the shown response's stored request, but only as a pane-local key —
+	// invisible in the keymap listing, the help and the settings page, and
+	// logged as an unbound chord. The binding makes the same action the
+	// table's, scoped to the response pane, where it is the only meaning
+	// ctrl+r has. Delivered everywhere (plain ctrl+letter), so no fallback.
+	{"ctrl+r", "http.resend", "Re-send stored HTTP request", HTTP, "HTTP client (#1832)"},
+	// The same muscle memory in the archive viewer (#2314): "rerun" reads as
+	// "read the archive again" there, which is the listing reload.
+	{"ctrl+r", "archive.reload", "Reload archive listing", Archive, "Archive viewer (#1762)"},
 	// Rerun and Stop (#1048, #1374): JetBrains' macOS Rerun (cmd+r) is taken by
 	// editor.replace, so rerun keeps the Windows-scheme F5 position with a cmd
 	// primary on darwin; stop's cmd+f2 is the macOS keymap verbatim. The ctrl

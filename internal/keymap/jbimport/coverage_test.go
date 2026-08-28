@@ -18,6 +18,8 @@ var noCounterpart = map[string]string{
 	"file.rename":           "RenameElement covers symbol and file renames, mapped to lsp.rename",
 	"find.openInPanel":      "JetBrains' Open in Find Window is a popup-local chord, not a keymap action",
 	"http.run":              "JetBrains HTTP client runs via context Run, no dedicated keymap action",
+	"http.resend":           "IKE-only concept (#1832): repeating a captured request verbatim has no JetBrains keymap action",
+	"archive.reload":        "IKE-only concept (#1762): JetBrains re-reads an archive on focus, no keymap action",
 	"http.showResponse":     "IKE-only concept (stored response without dispatch), no JetBrains equivalent",
 	"http.diffPreviousRun":  "IKE-only concept (response history diff, #2060), no JetBrains equivalent",
 	"http.copyResponse":     "IKE-only concept (#2315): JetBrains' $Copy is the editor copy, already mapped to editor.copy",

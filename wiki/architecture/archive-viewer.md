@@ -1,9 +1,9 @@
 ---
 type: concept
 title: Archive Viewer
-description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name; gzip members open decompressed (#1948); e/E write members or the whole archive to a directory on disk under path, overwrite and size guards (#2249)."
+description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name; gzip members open decompressed (#1948); e/E write members or the whole archive to a directory on disk under path, overwrite and size guards (#2249); ctrl+r re-lists the file in place (archive.reload, #2314)."
 resource: internal/archview
-tags: [architecture, archive, tar, viewer, pane, read-only, mouse, extract]
+tags: [architecture, archive, tar, viewer, pane, read-only, mouse, extract, reload]
 timestamp: 2026-08-28T00:00:00Z
 ---
 
@@ -72,8 +72,17 @@ step and wrap, page keys clamp, `g`/`G` jump to the ends. On top of that:
 | `h` / `left` | collapse an expanded directory, else jump to the parent |
 | `e` | extract the row under the cursor (a directory row: its whole subtree) |
 | `E` | extract the whole archive |
+| `ctrl+r` | reload the listing from disk (`archive.reload`, #2314) |
 
-The pane advertises the `archive` context id, so bindings can scope to it.
+The pane advertises the `archive` context id, so bindings can scope to it —
+`ctrl+r` is the one default that does (JetBrains' Rerun chord, #2314). It
+resolves through the keymap layer to `archive.reload`, which asks the focused
+pane for `Reload()`: the archive is listed again, collapsed directories keep
+their state by path and the cursor is clamped into the new row list, so a
+re-packed file shows its new members without the pane being closed. A listing
+error replaces the entries the way opening a broken archive does, and the
+model reports the entry count (or the error) as a notification — a reload that
+found nothing new must not look like a dead key.
 
 ### Mouse (#1852)
 

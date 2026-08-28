@@ -239,8 +239,10 @@ reporting, which fewer terminals implement. See
 		{keymap.Editor, "Editor", "Active when an editor pane has focus."},
 		{keymap.Explorer, "Explorer", "Active when the file explorer has focus."},
 		{keymap.Diff, "Diff viewer", "Active when a diff pane has focus."},
-		{keymap.HTTP, "HTTP response viewer", "Active when the HTTP response pane has focus."},
 		{keymap.Palette, "Palette", "Active while the command palette is open."},
+		{keymap.Terminal, "Terminal", "Active when a terminal pane — or an editor tab holding a terminal — has focus."},
+		{keymap.HTTP, "HTTP response pane", "Active when the HTTP response pane has focus."},
+		{keymap.Archive, "Archive viewer", "Active when an archive viewer pane has focus."},
 	} {
 		rows := byContext[ctx.key]
 		if len(rows) == 0 {
@@ -280,8 +282,9 @@ the value is the command ID, and an empty value unbinds the chord:
 ` + "```" + `
 
 A chord may be qualified with the pane it applies in — ` + "`global`" + `, ` + "`editor`" + `,
-` + "`explorer`" + `, ` + "`palette`" + `, ` + "`diff`" + ` or ` + "`http`" + ` — so one chord can run different
-commands depending on what has focus. The qualified form only touches its own
+` + "`explorer`" + `, ` + "`palette`" + `, ` + "`diff`" + ` or any other pane context
+(` + "`terminal`" + `, ` + "`http`" + `, ` + "`archive`" + `, …) — so one chord can run
+different commands depending on what has focus. The qualified form only touches its own
 context; the bare form applies wherever the chord is bound:
 
 ` + "```toml" + `

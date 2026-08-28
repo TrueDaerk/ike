@@ -16,6 +16,27 @@
   only yields to a live selection (#2062); off macOS the `cmd+c` rows normalise
   onto `ctrl+c` on their own, the same way the editor's copy row always has.
 
+## 2026-08-28 (ctrl+r reruns in the response pane and the archive viewer, #2314)
+
+- **`ctrl+r` is a keybinding now** (`internal/keymap/defaults.go`): JetBrains
+  spends the chord on Rerun, and the usage log showed users pressing it in the
+  HTTP response pane and the archive viewer, where it was recorded as unbound.
+  The response pane answered it all along — as a pane-local key the keymap
+  layer neither listed, documented nor could rebind. The default set binds it
+  per context: `http.resend` in `http`, `archive.reload` in `archive`. Two
+  disjoint contexts, so it is neither a conflict nor a shadow, and a plain
+  ctrl+letter delivers everywhere.
+- **`archive.reload` is new** (`internal/archview`, `internal/app/archives.go`):
+  the viewer re-lists its file, keeping collapsed directories by path and
+  clamping the cursor into the new rows, so a re-packed archive shows its new
+  members without the pane being closed. A broken file degrades to the pane's
+  listing-error notice, and the model reports the entry count so a reload that
+  changed nothing does not read as a dead key.
+- **The keybindings reference grew its pane sections**: `cmd/docgen` listed
+  only global/editor/explorer/diff/palette bindings, so the terminal's
+  `ctrl+t` — and now both `ctrl+r` rows — were invisible there. The generated
+  page has a section per pane context with a binding.
+
 ## 2026-08-28 (Unified list-filter syntax, #2156)
 
 - **One filter language** (`internal/filterexpr`): the fielded-term syntax the

@@ -637,7 +637,7 @@ missing quietly.
 | Open Full HTTP Response Body as File | `http.openBodyFile` | — |
 | Browse HTTP Response History | `http.responseHistory` | — |
 | Show Stored HTTP Response | `http.showResponse` | — |
-| Re-send Stored HTTP Request | `http.resend` | — |
+| Re-send Stored HTTP Request | `http.resend` | ++ctrl+r++ (response pane) |
 | Re-run HTTP Request from History | `http.rerun` | — |
 | Compare Stored HTTP Responses | `http.diffResponses` | — |
 

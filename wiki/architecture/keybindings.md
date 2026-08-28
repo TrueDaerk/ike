@@ -64,7 +64,13 @@ is focused. The specificity order has three levels (#1876) —
 mutually disjoint — so one chord may carry a different command **per context**
 without any conflict: the shipped example is `ctrl+t`, a new terminal tab
 (`terminal.newTab`) in the `terminal` context and a new empty editor tab
-(`editor.tab.new`) in the `editor` context, unbound everywhere else.
+(`editor.tab.new`) in the `editor` context, unbound everywhere else. `ctrl+r`
+(#2314) is the second: JetBrains' Rerun chord re-sends the shown request
+(`http.resend`) in the `http` context and reloads the listing
+(`archive.reload`) in the `archive` one — the two panes that own a "do that
+again" action. Both were pane-local keys before, which the keymap layer could
+neither list nor rebind, and which the usage log therefore recorded as unbound
+presses.
 
 ### Language-scoped editor bindings (#1876)
 
@@ -921,6 +927,7 @@ Generated from `keymap.StatusMatrix` against the shipped plugin set (run
 regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | command | primary | reachability | fallback | status |
 |---|---|---|---|---|
+| `archive.reload` | `ctrl+r` | delivered | `—` | live |
 | `bookmark.next` | `shift+f11` | delivered | `—` | live |
 | `bookmark.previous` | `ctrl+shift+f11` | delivered | `—` | live |
 | `bookmark.toggle` | `f11` | delivered | `—` | live |
@@ -992,6 +999,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `find.openInPanel` | `cmd+enter` | fragile | `ctrl+enter` | live via ctrl+enter |
 | `http.copyResponse` | `cmd+c` | fragile | `response pane "y" / palette` | live via response pane "y" / palette |
 | `http.diffPreviousRun` | `cmd+shift+d` | fragile | `palette` | live via palette |
+| `http.resend` | `ctrl+r` | delivered | `—` | live |
 | `http.run` | `ctrl+f9` | fragile | `palette` | live via palette |
 | `http.showResponse` | `cmd+shift+enter` | fragile | `ctrl+shift+f9` | live via ctrl+shift+f9 |
 | `json.jqPlayground` | `ctrl+alt+j` | fragile | `palette / Tools menu` | live via palette / Tools menu |

@@ -549,6 +549,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.saveResponse", "Save HTTP Response Body to File…", HTTPSaveResponseMsg{}),
 			appCommand("archive.extractEntry", "Extract Selected Archive Entry…", ArchiveExtractEntryMsg{}),
 			appCommand("archive.extractAll", "Extract Whole Archive…", ArchiveExtractAllMsg{}),
+			appCommand("archive.reload", "Reload Archive Listing", ArchiveReloadMsg{}),
 			appCommand("http.toggleRawBody","Toggle Raw / Pretty HTTP Response Body", HTTPToggleRawBodyMsg{}),
 			appCommand("http.jqPlayground", "Open jq Playground on HTTP Response", HTTPJQPlaygroundMsg{}),
 			appCommand("http.loadMoreBody", "Load More of the HTTP Response Body", HTTPLoadMoreBodyMsg{}),
