@@ -371,6 +371,9 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 		{Title: "Screenshots", Description: "The in-IDE PNG export (#2001): Export Screenshot paints the focused pane — or the whole window — as it is rendered, and copies the written path to the clipboard.", Entries: []Entry{
 			{Key: "screenshot.directory", Type: Path, Dirs: true, Title: "Screenshot directory", Description: "Directory the exported PNGs are written to, created on the first capture; \"~\" expands and a relative path resolves against the project directory. Empty means the built-in default, ~/.ike/screenshots", Scope: config.UserScope},
 		}},
+		{Title: "Ansible Vault", Description: "Transparent Ansible Vault editing (#2293): a $ANSIBLE_VAULT; file opens decrypted into an editable buffer and is re-encrypted on save, so the plaintext never touches the disk. Needs a password source: the ANSIBLE_VAULT_PASSWORD or ANSIBLE_VAULT_PASSWORD_FILE environment variable, or the password file below.", Entries: []Entry{
+			{Key: "ansible.vault_password_file", Type: Path, Title: "Vault password file", Description: "File whose first line is the Ansible Vault password; \"~\" expands. The user-scope value is the global default and a project-scope value overrides it; the ANSIBLE_VAULT_PASSWORD and ANSIBLE_VAULT_PASSWORD_FILE environment variables beat both. Empty (and no variable set) leaves vault files opening as ciphertext", Scope: config.UserScope},
+		}},
 		{Title: "Remote Browsing", Description: "The SFTP remote file browser (#1997): an SSH host from ~/.ssh/config browsed as a pane, remote files downloaded into a local cache and opened read-only.", Entries: []Entry{
 			{Key: "remote.max_fetch_mb", Type: Int, Title: "Download size limit", Description: "Largest remote file the browser downloads into the local cache to preview, in MiB; opening a bigger file is refused with a notice instead of stalling the link", Scope: config.UserScope, Min: 1, Max: 4096},
 		}},

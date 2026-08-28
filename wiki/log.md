@@ -1,5 +1,32 @@
 # Log
 
+## 2026-08-28 (Transparent Ansible Vault editing, #2293)
+
+- **Native vault format** (`internal/ansiblevault`): the Vault 1.1/1.2
+  envelope (AES-256-CTR, PBKDF2-HMAC-SHA256, HMAC-SHA256) on the Go stdlib —
+  no dependency, no `ansible-vault` CLI needed; fixtures generated with real
+  ansible-core, interop verified both directions. Password resolution follows
+  Ansible's precedence: `ANSIBLE_VAULT_PASSWORD`,
+  `ANSIBLE_VAULT_PASSWORD_FILE`, then IKE's `ansible.vault_password_file`
+  (user scope = global default, project scope overrides; new Settings UI page
+  "Ansible Vault" with an existence-checked Path entry).
+- **The round-trip**: `Load` decrypts a `$ANSIBLE_VAULT;` file into the
+  buffer (diskHash keeps hashing the on-disk ciphertext), `saveAs` re-encrypts
+  before `os.WriteFile` — every save flavor funnels through it — and
+  `reloadFrom` decrypts external rewrites (adopting an externally encrypted
+  file, dropping the state for an externally decrypted one). Without a source
+  or with a wrong password the ciphertext opens as before, reason on the ex
+  line, file untouched.
+- **Plaintext never on disk**: persistent undo refuses vault documents in
+  both directions and the crash-recovery backup paths skip them; local
+  history and the TODO index re-read the file and thus see ciphertext. Vault
+  state is a document property (share-copied, SyncMsg-mirrored).
+- **"Treat as Vault File"** (`vault.treatAsFile`, `vaultProvider`, gated on
+  the new `Context.VaultReady`/`VaultBuffer` facts): a ciphertext buffer
+  decrypts in place (file untouched), a plaintext file is encrypted on disk
+  immediately.
+- New concept doc [architecture/ansible-vault.md](architecture/ansible-vault.md).
+
 ## 2026-08-28 (Marketplace: update notifications for installed plugins, #2257)
 
 - **Update diff** (`internal/market/update.go`): `FindUpdates` compares the

@@ -29,7 +29,9 @@ func (m *Model) restoreUndo(data []byte) {
 		return
 	}
 	m.diskHash = undostore.Hash(data)
-	if !m.persistentUndo() {
+	// A vault document (#2293) opts out of persistent undo entirely: the
+	// snapshots would carry decrypted text into ~/.ike in plaintext.
+	if m.vault || !m.persistentUndo() {
 		return
 	}
 	if snap, ok := undostore.Load(m.path, m.diskHash); ok {
@@ -44,7 +46,7 @@ func (m *Model) restoreUndo(data []byte) {
 // editor close and quit; the dirty no-op means a dirty close simply keeps the
 // undo file written at the last save, which still matches the file on disk.
 func (m *Model) PersistUndo() {
-	if !m.HasFile() || m.dirty || m.diskHash == "" || !m.persistentUndo() {
+	if !m.HasFile() || m.dirty || m.diskHash == "" || m.vault || !m.persistentUndo() {
 		return
 	}
 	undostore.Save(m.path, m.diskHash, m.hist.Snapshot())

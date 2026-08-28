@@ -4847,6 +4847,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// fresh scratch file.
 		return m.insertCurlAsRequest()
 
+	case TreatAsVaultFileMsg:
+		// vault.treatAsFile (intention popup, #2293): the open file becomes
+		// a vault-backed buffer — decrypted in place, or encrypted to disk
+		// right away when it was still plaintext.
+		return m.treatAsVaultFile()
+
 	case HTTPCopyFoldMsg:
 		// http.copyFold (palette, #1787): the target fold, hidden rows and all.
 		return m, m.copyHTTPFold()
@@ -6445,6 +6451,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				msg.EOL = textenc.LineEnding(ed.LineEnding())
 				msg.Enc = textenc.Encoding(ed.EncodingName())
 				msg.MixedEOL = ed.MixedEOL()
+				msg.Vault, msg.VaultPass, msg.VaultLabel = ed.VaultState()
 			}
 		}
 		var cmds []tea.Cmd

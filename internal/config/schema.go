@@ -83,6 +83,21 @@ type Config struct {
 	Forge Forge `toml:"forge"`
 	// Telemetry holds the local-only usage recording switch (#2235).
 	Telemetry Telemetry `toml:"telemetry"`
+	// Ansible holds Ansible integration settings (#2293): the vault password
+	// file transparent vault editing decrypts with.
+	Ansible Ansible `toml:"ansible"`
+}
+
+// Ansible holds the Ansible Vault integration settings (#2293).
+// VaultPasswordFile names the file whose first line is the vault password
+// used to transparently decrypt `$ANSIBLE_VAULT;` files into an editable
+// buffer and re-encrypt them on save. A `~` prefix expands to the home
+// directory. The user-scope value is the global default; a project-scope
+// value overrides it, and the ANSIBLE_VAULT_PASSWORD /
+// ANSIBLE_VAULT_PASSWORD_FILE environment variables take precedence over
+// both. Empty and without those variables, vault files open as ciphertext.
+type Ansible struct {
+	VaultPasswordFile string `toml:"vault_password_file"`
 }
 
 // Telemetry holds the local-only usage-telemetry settings (#2235). Enabled

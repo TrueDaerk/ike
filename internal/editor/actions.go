@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/ansiblevault"
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/history"
 	"ike/internal/editor/operator"
@@ -567,6 +568,15 @@ func (m *Model) saveAs(path string) error {
 	out, err := textenc.Encode(data, m.enc, m.eol)
 	if err != nil {
 		return err
+	}
+	if m.vault {
+		// Vault document (#2293): the plaintext never reaches the disk — the
+		// encoded bytes are re-encrypted with the password captured at
+		// decrypt time, preserving a 1.2 header's vault id. diskHash below
+		// then hashes the ciphertext, which is what the file holds.
+		if out, err = ansiblevault.Encrypt(out, m.vaultPass, m.vaultLabel); err != nil {
+			return err
+		}
 	}
 	if err := os.WriteFile(path, out, 0o644); err != nil {
 		return err

@@ -229,6 +229,7 @@ bring their own.
 | Regex Tester… | `tools.regexTester` | — | — | everywhere |
 | Set Up Tool Panes | `tools.setup` | — | — | everywhere |
 | Usages | `usages.toggle` | — | — | everywhere |
+| Treat as Vault File | `vault.treatAsFile` | — | — | everywhere |
 | Toggle Inline Blame | `vcs.blameLine` | — | — | everywhere |
 | Diff File Against HEAD | `vcs.diff` | — | — | everywhere |
 | Show History for Selection | `vcs.historyForSelection` | — | — | everywhere |

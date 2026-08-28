@@ -37,6 +37,11 @@ type SyncMsg struct {
 	EOL      textenc.LineEnding
 	Enc      textenc.Encoding
 	MixedEOL bool
+	// Vault document properties (#2293), same lifecycle as EOL/Enc — a
+	// "Treat as Vault File" in one view must save encrypted from every view.
+	Vault      bool
+	VaultPass  string
+	VaultLabel string
 }
 
 // ShareDocumentWith turns m into a second view of src's document: buffer and
@@ -66,6 +71,7 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.largeFile = src.largeFile
 	m.diskHash = src.diskHash
 	m.eol, m.enc, m.mixedEOL = src.eol, src.enc, src.mixedEOL
+	m.vault, m.vaultPass, m.vaultLabel = src.vault, src.vaultPass, src.vaultLabel
 	m.docVersion = src.docVersion
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
@@ -122,6 +128,7 @@ func (m Model) applySync(msg SyncMsg) (Model, tea.Cmd) {
 	m.largeFile = msg.Large
 	m.diskHash = msg.Hash
 	m.eol, m.enc, m.mixedEOL = msg.EOL, msg.Enc, msg.MixedEOL
+	m.vault, m.vaultPass, m.vaultLabel = msg.Vault, msg.VaultPass, msg.VaultLabel
 	m.docVersion++
 	// This view's collapsed folds (#144) survive the remote edit where they
 	// can: drop the ones out of range now, and let the reparse scheduled

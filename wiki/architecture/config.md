@@ -153,6 +153,13 @@ Sections and their default-bearing slots (`schema.go`):
   routes the `tasks.` prefix to the project file); consumed via the typed
   struct by the run-output tee — see
   [Tasks & Problem Matchers](./tasks.md).
+- `[ansible]` — `vault_password_file` (#2293, default empty): the file whose
+  first line decrypts `$ANSIBLE_VAULT;` files for transparent vault editing;
+  `~` expands. The user layer is the global default and a project layer
+  overrides it (plain scalar merge); the `ANSIBLE_VAULT_PASSWORD` /
+  `ANSIBLE_VAULT_PASSWORD_FILE` environment variables take precedence over
+  both. Validation reports a missing file or a directory but keeps the value
+  — the file may appear later. See [ansible-vault](./ansible-vault.md).
 
 ## Extension hook
 

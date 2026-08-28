@@ -230,6 +230,12 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Screenshot directory | `screenshot.directory` | path | *(empty)* | user | Directory the exported PNGs are written to, created on the first capture; "~" expands and a relative path resolves against the project directory. Empty means the built-in default, ~/.ike/screenshots |
 
+### Ansible Vault
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Vault password file | `ansible.vault_password_file` | path | *(empty)* | user | File whose first line is the Ansible Vault password; "~" expands. The user-scope value is the global default and a project-scope value overrides it; the ANSIBLE_VAULT_PASSWORD and ANSIBLE_VAULT_PASSWORD_FILE environment variables beat both. Empty (and no variable set) leaves vault files opening as ciphertext |
+
 ### Remote Browsing
 
 | Setting | Key | Type | Default | Scope | Description |

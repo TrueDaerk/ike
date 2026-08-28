@@ -246,6 +246,11 @@ any entry whose key the typed schema does not expose (no dead keys).
   matches a family). The header list carries `Entry.ValidateEntry`: a value
   that is not a header name — or a lone `*`, which would hide every header — is
   rejected in the form. See [HTTP client](./http-client.md).
+- **Ansible Vault** (#2293) — `ansible.vault_password_file`, the `Path` entry
+  (existence-checked in the form) naming the file whose first line decrypts
+  `$ANSIBLE_VAULT;` files for transparent editing: user scope is the global
+  default, a project-scope value overrides it, and the `ANSIBLE_VAULT_*`
+  environment variables beat both. See [ansible-vault](./ansible-vault.md).
 - **Terminal** — the shell override (#1663), command auto-suggest, scrollback.
 - **Notifications** — toast timeout, severity floor.
 - **TODO Index** (#1663) — `todo.patterns`, the tag words the project scan
