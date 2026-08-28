@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-28 (Undo tree: diff preview, relative timestamps, time jump, #2143)
+
+- **Diff preview** (`internal/undotree/preview.go`): the undo-tree overlay is
+  no longer a list of opaque states. Under the list it renders the inline diff
+  from the current buffer to the selected state — `-` lines vanish and `+`
+  lines appear when you restore it — so you can read a node before jumping to
+  it. The content comes from `History.ContentAt` (new `contentat.go` in
+  `internal/editor/history`), which replays the same inverse/forward walk
+  `JumpTo` does on a *scratch copy* of the buffer: the preview never moves the buffer or the
+  history, and a state broken out of the tree by pruning reports itself
+  instead of panicking. Rendering keeps one context line around each change,
+  marks the skipped regions `@@`, caps itself to a quarter of the screen
+  (3–10 rows, remainder as `… N more lines`) and memoizes per state seq, so
+  walking the list with `j`/`k` replays each state once; `SetNodes` (i.e. a
+  jump) drops the cache because every diff is then stale.
+- **Relative timestamps**: rows show the state's age (`just now`, `5m ago`,
+  `2h ago`, `3d ago`) instead of a wall-clock time — orientation in an undo
+  tree is about *how far back*, not about what o'clock it was. The root state
+  predates the history and stays blank.
+- **Time jump** (`t`, `internal/undotree/timejump.go`): type an age in minutes
+  and `enter` restores the newest state that is at least that old. The
+  untimestamped root always qualifies, so an age larger than the whole session
+  lands on the original content rather than failing; `esc` cancels the prompt
+  without closing the overlay, and the prompt swallows list keys so a stray
+  `j` cannot move the selection mid-typing.
+
 ## 2026-08-28 (Merge tool: conflict navigation, resolution chords, counter, offer/finish flow, #2258)
 
 - **Resolution chords** (`internal/editor/conflict.go`, `keys_normal.go`): the
