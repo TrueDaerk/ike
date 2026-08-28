@@ -138,7 +138,7 @@ func TestMouseHoverFireOpensDiagnosticPopupAndRequestsPosition(t *testing.T) {
 	}
 	// Let the deadline elapse and deliver the tick.
 	m.hoverIdle.deadline = time.Now().Add(-time.Millisecond)
-	m = step(m, mouseHoverTickMsg{})
+	m = step(m, mouseHoverTickMsg{gen: m.modelGen})
 
 	if !ed.HoverOpen() {
 		t.Fatal("the diagnostic under the pointer must open the popup without any LSP hover")
@@ -166,7 +166,7 @@ func TestMouseHoverTickBeforeDeadlineRearms(t *testing.T) {
 	m, r, gw := hoverIdleModel(t)
 	x, y := contentCell(r, gw, 0, 2)
 	m = step(m, motion(x, y))
-	m = step(m, mouseHoverTickMsg{}) // fires early (deadline not reached)
+	m = step(m, mouseHoverTickMsg{gen: m.modelGen}) // fires early (deadline not reached)
 	if !m.hoverIdle.pending || !m.hoverIdleTickArmed {
 		t.Fatal("an early tick must re-arm for the remaining wait")
 	}
@@ -188,7 +188,7 @@ func TestMouseHoverMotionOffCellDismissesPopup(t *testing.T) {
 	x, y := contentCell(r, gw, 0, 2)
 	m = step(m, motion(x, y))
 	m.hoverIdle.deadline = time.Now().Add(-time.Millisecond)
-	m = step(m, mouseHoverTickMsg{})
+	m = step(m, mouseHoverTickMsg{gen: m.modelGen})
 	if !ed.HoverOpen() {
 		t.Fatal("setup: popup must be open")
 	}

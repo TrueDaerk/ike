@@ -923,7 +923,7 @@ func TestHTTPInlineFlightMarker(t *testing.T) {
 	}
 
 	// The tick keeps the marker alive while the dispatch is out.
-	out, tick := m.Update(httpTickMsg{})
+	out, tick := m.Update(httpTickMsg{gen: m.modelGen})
 	m = out.(Model)
 	if tick == nil {
 		t.Error("the tick must reschedule while a request runs")
@@ -1013,7 +1013,7 @@ func TestHTTPInlineFlightMarkerFollowsEdits(t *testing.T) {
 	out, _ := m.Update(HTTPRunMsg{})
 	m = out.(Model)
 	m.activeEditor().ApplyTextEdits([]editor.TextEdit{{Text: "# note\n"}})
-	out, _ = m.Update(httpTickMsg{})
+	out, _ = m.Update(httpTickMsg{gen: m.modelGen})
 	m = out.(Model)
 	if mark := flightMarkAt(t, m, 2); mark == "" {
 		t.Errorf("the marker must follow the request line, got %q at line 2", mark)

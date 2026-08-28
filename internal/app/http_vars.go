@@ -37,8 +37,10 @@ const httpVarsSource = "http variables"
 // keystroke, short enough to read as immediate once the hands stop.
 var httpVarsQuiet = 400 * time.Millisecond
 
-// httpVarsTickMsg wakes the model to lint the buffers whose quiet period expired.
-type httpVarsTickMsg struct{}
+// httpVarsTickMsg wakes the model to lint the buffers whose quiet period
+// expired. gen names the model that armed it (#2194); another model's tick is
+// dropped.
+type httpVarsTickMsg struct{ gen int64 }
 
 // httpVarsOnSync is the change-seam hook (editor.SyncMsg, the autosave-idle
 // pattern of #731): an edited .http buffer (re)arms its lint deadline, so a
@@ -66,7 +68,8 @@ func (m *Model) armHTTPVarsTick() tea.Cmd {
 	if d < 0 {
 		d = 0
 	}
-	return tea.Tick(d, func(time.Time) tea.Msg { return httpVarsTickMsg{} })
+	gen := m.modelGen
+	return tea.Tick(d, func(time.Time) tea.Msg { return httpVarsTickMsg{gen: gen} })
 }
 
 // lintDueHTTPVars lints every buffer whose quiet period expired and re-arms
