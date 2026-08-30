@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"ike/internal/codepreview"
 	"ike/internal/ui"
 )
 
@@ -115,9 +115,11 @@ func TestUsagesPopupMaxHeight(t *testing.T) {
 	}
 }
 
-// listWidth is the result column's width for the current box.
+// listWidth is the result column's width for the current box — read through
+// the popup's own geometry, so the test follows the adaptive preview width
+// (#2327) exactly as the renderer does.
 func listWidth(p *Palette) (listW, previewW int) {
-	return codepreview.Split(p.boxWidth() - 4)
+	return p.previewSplit(p.boxWidth() - 4)
 }
 
 // previewColumn returns the text right of the vertical rule, asserting the
@@ -172,16 +174,65 @@ func TestUsagesPreviewMissingFile(t *testing.T) {
 	}
 }
 
-// TestPreviewClickIgnoresCodeColumn keeps presses on the excerpt inert — the
-// row behind it must not activate (#2047).
+// TestPreviewClickIgnoresCodeColumn keeps presses on the excerpt from
+// activating the row behind it (#2047); since #2327 such a press focuses the
+// column instead, and a press back in the list blurs it.
 func TestPreviewClickIgnoresCodeColumn(t *testing.T) {
 	p, _ := openUsages(t, 20, 40)
 	listW, _ := listWidth(p)
 	if cmd := p.Click(2+listW+4, 1+2); cmd != nil {
 		t.Fatal("a press in the preview column activated a row")
 	}
+	if !p.prev.Focused() {
+		t.Fatal("a press in the preview column must focus it")
+	}
 	if p.Click(2+1, 1+2) == nil {
 		t.Fatal("a press in the result column should activate its row")
+	}
+	if p.prev.Focused() {
+		t.Fatal("a press back in the result column must blur the preview")
+	}
+}
+
+// focusKey is the chord that hands the excerpt column the keyboard (#2327).
+func focusKey() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'p', Mod: tea.ModAlt} }
+
+// TestPreviewFocusScrolls is the scroll criterion in the popup: focused, the
+// editor motions walk the excerpt while the result selection stays put, and
+// esc hands the query field the keyboard back instead of closing.
+func TestPreviewFocusScrolls(t *testing.T) {
+	p, _ := openUsages(t, 20, 400)
+	for range 99 {
+		p.Update(downKey())
+	}
+	before := previewColumn(t, p)
+	p.Update(focusKey())
+	if !p.prev.Focused() {
+		t.Fatal("alt+p must focus the preview column")
+	}
+	sel := p.selected
+	p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	if scrolled := previewColumn(t, p); scrolled == before {
+		t.Fatalf("j did not scroll the excerpt:\n%s", scrolled)
+	}
+	if p.selected != sel {
+		t.Fatalf("the selection moved to %d while the preview had focus", p.selected)
+	}
+	if p.query != "" {
+		t.Fatalf("the motion leaked into the query: %q", p.query)
+	}
+	p.Update(tea.KeyPressMsg{Code: 'z', Text: "z"})
+	if again := previewColumn(t, p); again != before {
+		t.Fatalf("z did not return to the target:\n%s", again)
+	}
+	p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if p.prev.Focused() || !p.IsOpen() {
+		t.Fatal("esc must blur the preview and keep the popup open")
+	}
+	p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if p.IsOpen() {
+		t.Fatal("a second esc must close the popup")
 	}
 }
 

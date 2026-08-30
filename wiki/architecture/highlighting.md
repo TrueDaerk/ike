@@ -4,7 +4,7 @@ title: Syntax Highlighting
 description: The Tree-sitter lexical highlighting layer — per-language grammars parsed off the event loop into capture spans, cached by document version, resolved to theme colours, and applied per cell in the editor's renderLine; plus the pure-Go bracket-pair tracker behind rainbow brackets, unmatched-bracket errors and depth-coloured indent guides.
 resource: internal/highlight
 tags: [architecture, highlighting, tree-sitter, syntax, editor, theme, cgo, brackets]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-08-30T00:00:00Z
 ---
 
 # Syntax Highlighting
@@ -101,7 +101,7 @@ request's header line.
 
 `Highlight` also colours **embedded-language fragments** — an SQL string inside
 Python renders as SQL. The host grammar's `injections.scm` (embedded in the
-language plugin, capture convention `fragment.<lang>[.guess]`, shared with the
+language plugin, capture convention `fragment.<lang>[.guess|.partial]`, shared with the
 [LSP virtual-document seam](./lsp.md)) marks fragment ranges; each fragment is
 parsed with its own language's registered grammar and the resulting spans are
 shifted into host coordinates (`injection.go`). Injected spans are prepended to
@@ -112,7 +112,8 @@ back to the host colour. Hosts shipping an `injections.scm` today: **Python**
 strings, heredoc and nowdoc bodies, guess-gated), **Go** (#995: raw and
 interpreted string literals, guess-gated), **TypeScript** (#1625: HTML and SQL
 in template literals, guess-gated), **Markdown** (block injections, see below)
-and **HTML** (script/style). The `.guess` suffix defers to the Go-side content
+and **HTML** (script/style elements plus inline attributes, see below). The
+`.guess` suffix defers to the Go-side content
 heuristic in `fragment.go` — SQL keyword leaders, HTML tag shape (must open
 with a tag and, unless it is a doctype/comment, contain a closing or
 self-closing marker) — so plain strings never become fragments. Guessed
@@ -131,6 +132,37 @@ body as CSS — down to three nesting levels below the host
 styling so pathological nesting cannot blow up a parse.
 Fragment languages without a registered grammar degrade to plain host
 highlighting.
+
+### Partial fragments — inline code in HTML attributes (#2329)
+
+`.partial` marks a fragment that is a **snippet** of its language rather than a
+standalone document. HTML's injection query uses it for inline code in
+attributes: an event handler (`onclick="alert(1)"`, `oninput=…`) injects
+`typescript`, and `style="color: red"` injects `css`. Only the inner
+`attribute_value` node is captured, so the quotes keep their HTML colour, and
+the rule is gated on the attribute **name** by a tree-sitter text predicate —
+`#match? "(?i)^on[a-z]{3,}$"` for handlers, `"(?i)^style$"` for style. The
+binding evaluates text predicates while iterating matches, so name-conditional
+injections need no Go machinery of their own; the letter-run bound keeps
+hyphenated framework attributes (`data-on-tap`, `hx-on:click`) and the
+non-handler attributes `once`/`only` plain.
+
+A partial fragment differs from an ordinary one in two places:
+
+- **Parsing.** `fragmentWrapper` (in `fragment.go`) may register synthetic
+  lines for the language, and `injection.go` parses the snippet between them.
+  CSS registers `*{` / `}`: a `style` value is a declaration list without
+  selector or braces, which the CSS grammar otherwise reads as a selector plus
+  errors (`color` would colour as a `tag`). The wrapper occupies **whole lines
+  of its own**, so content shifts by exactly one line and no column at all —
+  `unwrapSpans`/`unwrapFolds` drop the wrapper's own spans and folds (including
+  the synthetic rule's fold) and shift the rest back, keeping the host↔fragment
+  mapping a pure offset shift. Languages without a wrapper parse as-is: a
+  handler body is already a valid JavaScript statement list.
+- **LSP.** The [virtual-document seam](./lsp.md) skips partial fragments. A
+  bare declaration list is not a document `vscode-css-language-server` can
+  own, so mirroring one would only produce spurious diagnostics; attribute
+  code is highlight-only.
 
 Hosts can also mark fragments **without a query** through the registry's
 Go-level region detector (`lang.Language.Regions`, #1303) — the seam for

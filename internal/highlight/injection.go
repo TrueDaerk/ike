@@ -59,8 +59,18 @@ func overlayFragmentsAt(l lang.Language, lines []string, host []Span, depth int)
 		if !ok || el.Grammar == nil {
 			continue
 		}
-		spans, _, ff := parseScoped(el.Grammar, nil, foldKinds(el), f.Lines)
-		spans, nested := overlayFragmentsAt(el, f.Lines, spans, depth+1)
+		// A partial fragment (#2329) parses inside the language's synthetic
+		// wrapper, on lines of its own, so the snippet reaches the grammar as
+		// the construct it expects; the wrapper lines are stripped back out
+		// before the spans return to host coordinates.
+		src, wrapped := wrapFragment(f)
+		spans, _, ff := parseScoped(el.Grammar, nil, foldKinds(el), src)
+		spans, nested := overlayFragmentsAt(el, src, spans, depth+1)
+		if wrapped {
+			spans = unwrapSpans(spans, len(f.Lines))
+			ff = unwrapFolds(ff, len(f.Lines))
+			nested = unwrapFolds(nested, len(f.Lines))
+		}
 		injected = append(injected, offsetSpans(spans, f)...)
 		folds = append(folds, offsetFolds(ff, f)...)
 		folds = append(folds, offsetFolds(nested, f)...)
@@ -69,6 +79,58 @@ func overlayFragmentsAt(l lang.Language, lines []string, host []Span, depth int)
 		return host, folds
 	}
 	return append(injected, host...), folds
+}
+
+// wrapFragment returns the lines to parse for fragment f: its own lines, or —
+// for a partial fragment whose language registers a wrapper (#2329) — the
+// wrapper's prefix line, the fragment's lines, and the wrapper's suffix line.
+// wrapped reports whether the wrapper was applied, i.e. whether the resulting
+// spans need unwrapSpans before they return to fragment coordinates.
+func wrapFragment(f Fragment) (lines []string, wrapped bool) {
+	if !f.Partial {
+		return f.Lines, false
+	}
+	prefix, suffix, ok := fragmentWrapper(f.Lang)
+	if !ok {
+		return f.Lines, false
+	}
+	out := make([]string, 0, len(f.Lines)+2)
+	out = append(out, prefix)
+	out = append(out, f.Lines...)
+	return append(out, suffix), true
+}
+
+// unwrapSpans maps spans of a wrapped parse back to fragment coordinates:
+// spans on the wrapper's own lines are dropped, the rest shift up by the one
+// prefix line. Columns need no correction — the wrapper occupies whole lines.
+func unwrapSpans(spans []Span, n int) []Span {
+	out := spans[:0]
+	for _, s := range spans {
+		if s.Line < 1 || s.Line > n {
+			continue
+		}
+		s.Line--
+		out = append(out, s)
+	}
+	return out
+}
+
+// unwrapFolds is unwrapSpans for folds: a fold anchored on a wrapper line (the
+// synthetic rule the wrapper introduces) is dropped, the rest shift up.
+func unwrapFolds(folds []Fold, n int) []Fold {
+	out := folds[:0]
+	for _, f := range folds {
+		if f.HeaderLine < 1 || f.HeaderLine > n {
+			continue
+		}
+		f.HeaderLine--
+		if f.EndLine > n {
+			f.EndLine = n
+		}
+		f.EndLine--
+		out = append(out, f)
+	}
+	return out
 }
 
 // foldKinds are the node kinds that fold in language l: its FoldNodes, falling

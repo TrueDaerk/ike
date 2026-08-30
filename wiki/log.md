@@ -1,5 +1,6 @@
 # Log
 
+<<<<<<< HEAD
 ## 2026-08-30 (embedded JS/CSS intelligence in HTML via shadow documents, #2330)
 
 - **`<script>`/`<style>` bodies in HTML get real LSP features**: the html
@@ -18,6 +19,68 @@
 - Inline `on*` attribute handlers stay without delegation (documented scope
   decision). See [lsp](/architecture/lsp.md) and
   [languages](/architecture/languages.md).
+
+## 2026-08-30 (inline code in HTML `on*` and `style` attributes highlights, #2329)
+
+- **The HTML injection query gates on the attribute name**: `onclick="alert(1)"`
+  and friends inject the typescript grammar, `style="color: red"` the css one.
+  Only the inner `attribute_value` node is captured, so the quotes stay HTML,
+  and the rule is conditional through a tree-sitter text predicate
+  (`#match? "(?i)^on[a-z]{3,}$"`, `"(?i)^style$"`). The go-tree-sitter binding
+  evaluates text predicates while iterating matches, so no Go machinery was
+  needed to make the fragment seam name-aware. The letter-run bound keeps
+  `data-on-tap`, `hx-on:click`, `once` and `only` plain.
+- **`.partial` is a third fragment mode** (`fragment.<lang>.partial`) for a
+  snippet that is not a document in its language. It changes two things:
+  `injection.go` parses it between the synthetic lines `fragmentWrapper`
+  registers — css gets `*{` / `}`, because the grammar reads a bare
+  declaration list as a selector and would colour `color` as a `tag` — and the
+  LSP virtual-document seam skips it, since no css server can own a bare
+  declaration list.
+- **The wrapper cannot shift columns**: it occupies whole lines of its own, so
+  `unwrapSpans`/`unwrapFolds` only drop the wrapper's own spans and the
+  synthetic rule's fold and shift the rest up by one line. Host↔fragment
+  mapping stays a pure offset shift, multi-line `style` values included.
+
+## 2026-08-30 (Search previews are a read-only mini editor, #2327)
+
+- **`internal/codepreview` renders code, not text**: the excerpt column every
+  picker carries now goes through the tree-sitter pipeline of
+  `internal/highlight` — the same standalone-excerpt parse the definition peek
+  and the hover code fences use — behind a dim line-number gutter. A language
+  with no grammar (or a build without the parser) falls back to plain text, so
+  nothing can fail the frame. Tabs expand to four cells *before* the parse, so
+  spans, match ranges and rendered cells share one coordinate system, and the
+  styled rows are memoised per window/hit/palette: walking a result list
+  re-parses only when the target actually moves.
+- **The hit line reads like the editor's current line**: it carries the
+  current-line background across the full column, gutter included, and
+  `Target.Ranges` — the finder's per-line match ranges (#1121) — render bold
+  and underlined *on top of* the capture colours instead of replacing them.
+- **The column scrolls** (`Cache.Key`, `Cache.Scroll`): `alt+p` (or `ctrl+e`,
+  the macOS alias, #422) focuses it in the find-in-path overlay, the palette
+  pickers and the call-hierarchy overlay alike; a mouse press inside it does
+  the same and the vertical rule turns accent-coloured. The motions are the
+  editor's, minus every edit — `j`/`k`, `ctrl+d`/`ctrl+u`, `ctrl+f`/`ctrl+b`,
+  `h`/`l`, `0`/`$`, `g`/`G`, and `z` back to the hit. Vertical scrolling walks
+  the whole file (a short read tells the viewport where the file ends, so no
+  full scan is needed to clamp the tail) and the horizontal offset slices the
+  *styled* rows with `ansi.Cut`, so colours survive it. `esc` blurs; moving
+  the result selection re-centers on the new hit and drops both offsets.
+- **The column adapts its width**: `Cache.Natural` measures the widest line of
+  the window around the hit plus its gutter, bounded to **50…120** cells, and
+  `SplitWidth` clamps that to half the content and to whatever leaves the list
+  40 cells. Measured around the *hit*, not the scrolled window, so scrolling
+  never resizes the columns under the cursor. `Split(inner)` stays as the
+  no-target shorthand; the popups keep their 40/11 rules from #2047.
+- **`ui.Typing` is EditKey's insertion guard, exported**: the finder and the
+  palette blur a focused excerpt the moment one types, so the query field
+  takes the key — and they ask the shared predicate instead of re-deriving
+  `msg.Text != ""`, which the #2002 sweep guard reads as a hand-rolled input.
+- **No new commands, so no new keybinds**: the focus toggle and the motions
+  are overlay-local keys, like the finder's `ctrl+c`/`ctrl+w`/`ctrl+x`
+  toggles — the keymap layer never sees them while an overlay owns the
+  keyboard.
 
 ## 2026-08-28 (cmd+c in the HTTP response pane and the explorer, #2315)
 

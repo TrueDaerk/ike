@@ -8,24 +8,108 @@ import (
 
 func TestFragmentCapture(t *testing.T) {
 	cases := []struct {
-		name  string
-		lang  string
-		guess bool
-		ok    bool
+		name string
+		lang string
+		mode string
+		ok   bool
 	}{
-		{"fragment.sql", "sql", false, true},
-		{"fragment.sql.guess", "sql", true, true},
-		{"fragment.css", "css", false, true},
-		{"fragment.", "", false, false},
-		{"fragment", "", false, false},
-		{"string.special", "", false, false},
+		{"fragment.sql", "sql", modePlain, true},
+		{"fragment.sql.guess", "sql", modeGuess, true},
+		{"fragment.css", "css", modePlain, true},
+		{"fragment.css.partial", "css", modePartial, true},
+		{"fragment.typescript.partial", "typescript", modePartial, true},
+		// An unknown mode weakens the rule to a plain fragment rather than
+		// dropping it, so a typo still highlights something.
+		{"fragment.sql.wat", "sql", modePlain, true},
+		{"fragment.", "", modePlain, false},
+		{"fragment", "", modePlain, false},
+		{"string.special", "", modePlain, false},
 	}
 	for _, c := range cases {
-		lang, guess, ok := fragmentCapture(c.name)
-		if lang != c.lang || guess != c.guess || ok != c.ok {
-			t.Errorf("fragmentCapture(%q) = (%q, %v, %v), want (%q, %v, %v)",
-				c.name, lang, guess, ok, c.lang, c.guess, c.ok)
+		lang, mode, ok := fragmentCapture(c.name)
+		if lang != c.lang || mode != c.mode || ok != c.ok {
+			t.Errorf("fragmentCapture(%q) = (%q, %q, %v), want (%q, %q, %v)",
+				c.name, lang, mode, ok, c.lang, c.mode, c.ok)
 		}
+	}
+}
+
+// TestFragmentWrapper: only languages whose snippets do not stand alone
+// register a wrapper (#2329).
+func TestFragmentWrapper(t *testing.T) {
+	prefix, suffix, ok := fragmentWrapper("css")
+	if !ok || prefix != "*{" || suffix != "}" {
+		t.Errorf("fragmentWrapper(css) = (%q, %q, %v), want (\"*{\", \"}\", true)", prefix, suffix, ok)
+	}
+	if _, _, ok := fragmentWrapper("typescript"); ok {
+		t.Error("fragmentWrapper(typescript) = ok, want none: a handler body is already valid TS")
+	}
+}
+
+// TestWrapFragment covers the wrapper's line arithmetic: content lines shift
+// by exactly one and columns never move, and a fragment that is not partial
+// (or whose language has no wrapper) parses unchanged.
+func TestWrapFragment(t *testing.T) {
+	f := Fragment{Lang: "css", Lines: []string{"color:", "  red"}, Partial: true}
+	lines, wrapped := wrapFragment(f)
+	if !wrapped {
+		t.Fatal("wrapFragment: wrapped = false, want true")
+	}
+	want := []string{"*{", "color:", "  red", "}"}
+	if len(lines) != len(want) {
+		t.Fatalf("wrapFragment = %q, want %q", lines, want)
+	}
+	for i := range want {
+		if lines[i] != want[i] {
+			t.Fatalf("wrapFragment = %q, want %q", lines, want)
+		}
+	}
+
+	for _, plain := range []Fragment{
+		{Lang: "css", Lines: []string{"a{}"}},
+		{Lang: "typescript", Lines: []string{"f()"}, Partial: true},
+	} {
+		if got, wrapped := wrapFragment(plain); wrapped || len(got) != 1 {
+			t.Errorf("wrapFragment(%+v) = (%q, %v), want the lines unchanged", plain, got, wrapped)
+		}
+	}
+}
+
+// TestUnwrapSpans: spans on the wrapper's own lines vanish, content spans
+// shift up one line and keep their columns.
+func TestUnwrapSpans(t *testing.T) {
+	spans := []Span{
+		{Line: 0, StartCol: 0, EndCol: 1, Capture: "tag"},               // the "*" of the wrapper
+		{Line: 1, StartCol: 0, EndCol: 5, Capture: "property"},          // content
+		{Line: 2, StartCol: 2, EndCol: 5, Capture: "number"},            // content
+		{Line: 3, StartCol: 0, EndCol: 1, Capture: "punctuation.brack"}, // the "}" of the wrapper
+	}
+	got := unwrapSpans(spans, 2)
+	if len(got) != 2 {
+		t.Fatalf("unwrapSpans = %+v, want 2 spans", got)
+	}
+	if got[0].Line != 0 || got[0].Capture != "property" || got[0].StartCol != 0 {
+		t.Errorf("first span = %+v, want line 0 col 0 property", got[0])
+	}
+	if got[1].Line != 1 || got[1].Capture != "number" || got[1].StartCol != 2 {
+		t.Errorf("second span = %+v, want line 1 col 2 number", got[1])
+	}
+}
+
+// TestUnwrapFolds: the synthetic rule's own fold is anchored on the wrapper's
+// header line and disappears with it; a fold inside the content survives,
+// clamped to the content's last line.
+func TestUnwrapFolds(t *testing.T) {
+	folds := []Fold{
+		{HeaderLine: 0, EndLine: 3}, // the synthetic *{…} rule
+		{HeaderLine: 1, EndLine: 2}, // a fold within the content
+	}
+	got := unwrapFolds(folds, 2)
+	if len(got) != 1 {
+		t.Fatalf("unwrapFolds = %+v, want 1 fold", got)
+	}
+	if got[0].HeaderLine != 0 || got[0].EndLine != 1 {
+		t.Errorf("fold = %+v, want {0, 1}", got[0])
 	}
 }
 

@@ -460,12 +460,17 @@ Beside the tree the overlay renders the shared **code-preview column**
 around its line, behind a dim vertical rule, following the cursor as one walks
 the tree — so a caller's context is readable without jumping into it. The tree
 block is blank-padded to the window height so the box no longer resizes as
-children load, `codepreview.Split` gives the excerpt two fifths of the content
-width (dropped entirely below 64 cells, where the tree keeps the full width),
-and the box may grow to 120 columns to carry both. A deleted or unreadable
-target degrades to a dim `preview unavailable` notice. Same component, same
-geometry as the [palette pickers](./command-palette.md) and the
-[find-in-path overlay](/architecture/search.md).
+children load, `Cache.SplitFor` sizes the excerpt to the code around the
+selected entry within 50 to 120 cells (dropped entirely below 64 cells of
+content, where the tree keeps the full width), and the box may grow to 120
+columns to carry both. Since #2327 the excerpt is a read-only mini editor —
+syntax-highlighted, line-numbered, the entry's line backgrounded — and
+`alt+p` / `ctrl+e` hands it the keyboard so one can scroll around the call
+site with the editor's own motions (`esc` gives the tree the keys back; the
+hint row follows the focus). A deleted or unreadable target degrades to a dim
+`preview unavailable` notice. Same component, same geometry and same motions
+as the [palette pickers](./command-palette.md) and the [find-in-path
+overlay](/architecture/search.md).
 
 **Inheritance analysis & navigation (0480, #1448).** Rides on two request
 families added M1-style beside call hierarchy: `textDocument/implementation`
@@ -845,9 +850,12 @@ detected fragment into a synthetic in-memory document (`ike-fragment:` URI,
 language's ordinary managed server. Detection comes from Tree-sitter
 *injection queries* (`highlight.Fragments`): a grammar built with
 `NewGrammarInjections` ships an `injections.scm` whose captures follow the
-`fragment.<lang>[.guess]` convention — `.guess` defers to a Go-side content
-heuristic (SQL statement-leading keywords), so plain strings never become
-fragments. Python's query captures `string_content`; the fragment text is
+`fragment.<lang>[.guess|.partial]` convention — `.guess` defers to a Go-side
+content heuristic (SQL statement-leading keywords), so plain strings never
+become fragments, and `.partial` marks a snippet rather than a document (HTML
+attribute code, #2329), which this seam skips entirely: mirroring a bare CSS
+declaration list would only hand a server a file it must reject, so partial
+fragments stay highlight-only. Python's query captures `string_content`; the fragment text is
 exactly the host text of its range, so host↔fragment position mapping is a
 pure offset shift. Lifecycle follows the host document: fragments re-detect
 after every open/change on a manager goroutine (generation-guarded — the

@@ -163,12 +163,14 @@ func TestFragmentsHTMLScriptAndStyle(t *testing.T) {
 }
 
 // TestFragmentsHTMLInlineHandlerExcluded documents the #2330 scope decision:
-// inline on* attribute handlers are not injection captures, so they get no
-// LSP delegation — expression context, little value.
+// inline on* attribute handlers highlight as *partial* fragments (#2329) and
+// the LSP virtual-document seam skips partials — expression context, little
+// value, so no delegation.
 func TestFragmentsHTMLInlineHandlerExcluded(t *testing.T) {
 	lines := []string{`<button onclick="doIt()">go</button>`}
-	if frags := highlight.Fragments("html", lines); len(frags) != 0 {
-		t.Fatalf("inline handler produced fragments: %+v", frags)
+	frags := highlight.Fragments("html", lines)
+	if len(frags) != 1 || frags[0].Lang != "typescript" || !frags[0].Partial {
+		t.Fatalf("inline handler = %+v, want one partial typescript fragment (highlight-only)", frags)
 	}
 }
 
@@ -239,6 +241,47 @@ func TestFragmentsBareRegExpCall(t *testing.T) {
 	}
 	if frags[0].Lang != "regex" {
 		t.Errorf("Lang = %q, want regex", frags[0].Lang)
+	}
+}
+
+// Attribute injections (#2329): the HTML injection query gates on the
+// attribute name, and the captured node is the inner attribute_value so the
+// quotes stay HTML.
+
+// TestFragmentsStyleAttributeMultiline: a style value wrapping across lines
+// still maps back cleanly — the CSS wrapper occupies whole lines of its own,
+// so content columns never shift and no synthetic fold escapes.
+func TestFragmentsStyleAttributeMultiline(t *testing.T) {
+	lines := []string{
+		`<p style="color: red;`,
+		`          margin: 0">x</p>`,
+	}
+	frags := highlight.Fragments("html", lines)
+	if len(frags) != 1 {
+		t.Fatalf("Fragments = %d, want 1: %+v", len(frags), frags)
+	}
+	f := frags[0]
+	if f.Lang != "css" || !f.Partial {
+		t.Fatalf("fragment = %+v, want a partial css fragment", f)
+	}
+	if f.StartLine != 0 || f.EndLine != 1 {
+		t.Errorf("fragment spans lines %d..%d, want 0..1", f.StartLine, f.EndLine)
+	}
+
+	spans, _, folds := highlight.HighlightScoped("page.html", lines)
+	ix := highlight.NewIndex(spans)
+	if got := ix.CaptureAt(1, strings.Index(lines[1], "margin")); got != "property" {
+		t.Errorf("second-line property: got %q, want property", got)
+	}
+	if got := ix.CaptureAt(1, strings.Index(lines[1], "0")); got != "number" {
+		t.Errorf("second-line value: got %q, want number", got)
+	}
+	// The synthetic *{…} rule must not surface as a foldable range; the only
+	// fold here is the host's own two-line <p> element.
+	for _, fold := range folds {
+		if fold.HeaderLine != 0 || fold.EndLine != 1 {
+			t.Errorf("unexpected fold %+v — the CSS wrapper leaked", fold)
+		}
 	}
 }
 

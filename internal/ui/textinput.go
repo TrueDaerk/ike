@@ -71,7 +71,7 @@ func EditKey(msg tea.KeyPressMsg, text string, cur int) (out string, ncur int, h
 		}
 		return text, cur, true, false
 	}
-	if msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper|tea.ModMeta) == 0 {
+	if Typing(msg) {
 		ins := []rune(msg.Text)
 		if hasLineBreak(ins) {
 			return text, cur, false, false
@@ -80,6 +80,16 @@ func EditKey(msg tea.KeyPressMsg, text string, cur int) (out string, ncur int, h
 		return out, cur + len(ins), true, true
 	}
 	return text, cur, false, false
+}
+
+// Typing reports whether a key press would insert printable text into a
+// single-line field: it carries text and no modifier that turns it into a
+// chord. It is EditKey's own insertion guard, exported (#2327) so a host that
+// has to decide something else about a typed key — hand the focus back to its
+// input before the insertion, drop a preselection — asks the same question
+// instead of re-deriving it from the key message.
+func Typing(msg tea.KeyPressMsg) bool {
+	return msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper|tea.ModMeta) == 0
 }
 
 // PasteText inserts a pasted block into a single-line input at rune cursor

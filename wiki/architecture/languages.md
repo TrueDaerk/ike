@@ -353,10 +353,13 @@ stays intact; the one casualty is legacy `<T>x` type assertions; its
 injection query (#1625) marks template-literal chunks as HTML/SQL fragments
 when the content heuristic agrees. `html` uses
 the official grammar with `<script>`/`<style>` injections into
-typescript/css — and registers `EmbeddedShadow` (#2330), so those regions
-also get LSP intelligence: the LSP manager merges them per embedded language
-into one blanked whole-buffer shadow document served by vtsls / the css
-server (see [lsp](./lsp.md), shadow documents); `css` uses the official
+typescript/css, plus inline-attribute injections (#2329): `on*` handler values
+inject typescript and `style` values inject css as *partial* fragments (see
+[highlighting](./highlighting.md)) — highlight-only, never LSP-mirrored. The
+`<script>`/`<style>` regions also get LSP intelligence: html registers
+`EmbeddedShadow` (#2330), so the LSP manager merges them per embedded
+language into one blanked whole-buffer shadow document served by vtsls / the
+css server (see [lsp](./lsp.md), shadow documents). `css` uses the official
 grammar (scss/less parse best-effort — error-tolerant spans still color the
 shared subset).
 The grammar/query for the first three moved here out of the highlight engine.

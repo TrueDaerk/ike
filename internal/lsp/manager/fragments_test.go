@@ -208,6 +208,39 @@ func TestFragmentSkippedWithoutServer(t *testing.T) {
 	}
 }
 
+// TestPartialFragmentNotMirrored guards #2329: a partial fragment is a
+// snippet of its language (an HTML style="…" declaration list, an onclick="…"
+// statement), not a document a server can own, so it never becomes a virtual
+// document even though its language resolves to one.
+func TestPartialFragmentNotMirrored(t *testing.T) {
+	opens := make(chan protocol.DidOpenTextDocumentParams, 8)
+	m := New(multiResolver(fragmentSpecs()...), fakeConnectorOpts(fakeOpts{syncKind: protocol.SyncFull, didOpens: opens}), Callbacks{})
+	defer m.Shutdown()
+	m.SetFragmentDetector(func(lang string, lines []string) []highlight.Fragment {
+		frags := lineDetector(lang, lines)
+		for i := range frags {
+			frags[i].Partial = true
+		}
+		return frags
+	})
+
+	path := filepath.Join(t.TempDir(), "app.py")
+	if err := m.Open(path, "python", "sql>SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+	waitOpen(t, opens, func(p protocol.DidOpenTextDocumentParams) bool {
+		return !isFragmentURI(p.TextDocument.URI)
+	})
+	select {
+	case p := <-opens:
+		t.Fatalf("partial fragment was mirrored: %+v", p.TextDocument)
+	case <-time.After(300 * time.Millisecond):
+	}
+	if _, _, ok := m.fragmentAt(path, buffer.Position{Line: 0, Col: 6}); ok {
+		t.Error("partial fragment must not route requests")
+	}
+}
+
 func TestFragmentPositionMapping(t *testing.T) {
 	fr := highlight.Fragment{Lang: "sql", StartLine: 2, StartCol: 5, EndLine: 4, EndCol: 3}
 

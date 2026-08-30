@@ -92,6 +92,7 @@ func (m *Model) Close() {
 	m.open = false
 	m.nodes = nil
 	m.pending = nil
+	m.prev.SetFocus(false)
 }
 
 // rebuild resets the tree to fresh root nodes for the current direction and
@@ -182,6 +183,22 @@ func (m *Model) listHeight() int {
 // Update handles one key while the overlay is open.
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	rows := m.visible()
+	// The excerpt column is a focusable read-only viewport (#2327): while it
+	// holds the focus its motions win over the tree's, and esc hands the
+	// keyboard back to the tree instead of closing the overlay.
+	if codepreview.IsFocusKey(msg.String()) {
+		m.prev.SetFocus(!m.prev.Focused())
+		return nil
+	}
+	if m.prev.Focused() {
+		if msg.String() == "esc" {
+			m.prev.SetFocus(false)
+			return nil
+		}
+		if m.prev.Key(msg.String()) {
+			return nil
+		}
+	}
 	// Shared list semantics (#1666): steps wrap, page jumps clamp.
 	if ui.ListNav(msg.String(), &m.cursor, len(rows), m.listHeight(), ui.NavFull) {
 		return nil
@@ -265,8 +282,11 @@ func (m *Model) View() string {
 	rows := []string{title, ""}
 
 	rows = append(rows, strings.Split(m.body(innerW, pal), "\n")...)
-	rows = append(rows, "", lipgloss.NewStyle().Faint(true).Render(
-		"enter jumps · space expands · tab callers/callees · esc closes"))
+	hint := "enter jumps · space expands · tab callers/callees · alt+p/ctrl+e preview · esc closes"
+	if m.prev.Focused() {
+		hint = "preview — j/k ctrl+d/u scroll · h/l scrolls right · z back to the entry · esc leaves"
+	}
+	rows = append(rows, "", lipgloss.NewStyle().Faint(true).Render(hint))
 
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -280,9 +300,15 @@ func (m *Model) View() string {
 // left, blank-padded to a stable height, and — when the box is wide enough to
 // split — an excerpt of the selected entry's file behind a vertical rule.
 func (m *Model) body(innerW int, pal *theme.Palette) string {
-	listW, previewW := codepreview.Split(innerW)
 	h := m.listHeight()
+	listW, previewW := m.previewSplit(innerW)
 	return m.prev.Columns(m.renderRows(listW, h, pal), listW, previewW, h, m.target(), pal)
+}
+
+// previewSplit is the overlay's column geometry: the excerpt column adapts to
+// the code around the selected entry, within the shared width bounds (#2327).
+func (m *Model) previewSplit(innerW int) (listW, previewW int) {
+	return m.prev.SplitFor(innerW, m.listHeight(), m.target())
 }
 
 // target is the selected row's source location, the zero Target when the tree

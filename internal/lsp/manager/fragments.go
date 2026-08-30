@@ -97,7 +97,19 @@ func (m *Manager) syncFragments(hostPath string) {
 	lines, hostLang := doc.lines, doc.langID
 	m.mu.Unlock()
 
-	dets := plainDetected(detect(hostLang, lines))
+	found := detect(hostLang, lines)
+	// Partial fragments (#2329) are snippets spliced into a host construct —
+	// an HTML style="…" declaration list, an onclick="…" statement — not
+	// documents in their language. Mirroring them would hand a server a file
+	// it must reject, so they stay highlight-only; filtering here also keeps
+	// them out of the shadow-document merge (#2330).
+	full := found[:0:0]
+	for _, fr := range found {
+		if !fr.Partial {
+			full = append(full, fr)
+		}
+	}
+	dets := plainDetected(full)
 	if hostShadow(hostLang) {
 		// Shadow host (#2330): merge the regions per embedded language into
 		// one blanked whole-buffer document each (shadow.go).
