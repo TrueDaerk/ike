@@ -1183,8 +1183,11 @@ func (b *bridge) maybeSignatureHelp(ev host.EditorEvent) {
 	b.mu.Unlock()
 	// The auto toggle (#523) only gates the initial open; a showing popup —
 	// however it was opened — keeps following the cursor.
+	// Trigger characters come from the server owning the position (#2330):
+	// inside an embedded fragment region the fragment server's, so "(" pops
+	// vtsls signature help inside an HTML <script>.
 	if !active && (!b.signatureAutoEnabled() ||
-		!isTriggerChar(typedChar(ev), mgr.SignatureTriggers(ev.Path))) {
+		!isTriggerChar(typedChar(ev), mgr.SignatureTriggersAt(ev.Path, buffer.Position{Line: ev.Line, Col: ev.Col}))) {
 		return
 	}
 	b.requestSignature(ev.Path, ev.Line, ev.Col, false)
@@ -1322,7 +1325,9 @@ func (b *bridge) shouldComplete(ev host.EditorEvent) bool {
 	if mgr == nil {
 		return false
 	}
-	return completionWarranted(ev.Char, mgr.CompletionTriggers(ev.Path), b.completionAutoEnabled())
+	// Position-aware triggers (#2330): an embedded fragment region answers
+	// with its own server's characters.
+	return completionWarranted(ev.Char, mgr.CompletionTriggersAt(ev.Path, buffer.Position{Line: ev.Line, Col: ev.Col}), b.completionAutoEnabled())
 }
 
 // identAutoTrigger reports whether ev is an identifier-rune auto-trigger —
@@ -1336,7 +1341,7 @@ func (b *bridge) identAutoTrigger(ev host.EditorEvent) bool {
 	if mgr == nil {
 		return false
 	}
-	triggers := mgr.CompletionTriggers(ev.Path)
+	triggers := mgr.CompletionTriggersAt(ev.Path, buffer.Position{Line: ev.Line, Col: ev.Col})
 	if len(triggers) == 0 {
 		triggers = []string{"."}
 	}

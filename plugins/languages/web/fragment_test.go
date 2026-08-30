@@ -119,6 +119,77 @@ func TestTemplateInjectionComposes(t *testing.T) {
 	}
 }
 
+// HTML embedded-language regions (#2330): <script> and <style> bodies are the
+// detection source for the LSP shadow documents, so the injection query must
+// yield typescript/css fragments with exact host ranges.
+
+func TestFragmentsHTMLScriptAndStyle(t *testing.T) {
+	lines := []string{
+		"<html><head>",
+		"<style>",
+		"body { margin: 0; }",
+		"</style>",
+		"<script>",
+		"const x = document.title;",
+		"x.length;",
+		"</script>",
+		"</head></html>",
+	}
+	frags := highlight.Fragments("html", lines)
+	if len(frags) != 2 {
+		t.Fatalf("Fragments = %d fragments, want css + typescript: %+v", len(frags), frags)
+	}
+	byLang := map[string]highlight.Fragment{}
+	for _, f := range frags {
+		byLang[f.Lang] = f
+	}
+	css, ok := byLang["css"]
+	if !ok {
+		t.Fatal("no css fragment for the <style> body")
+	}
+	if got := strings.Join(css.Lines, "\n"); !strings.Contains(got, "body { margin: 0; }") {
+		t.Errorf("css content = %q", got)
+	}
+	ts, ok := byLang["typescript"]
+	if !ok {
+		t.Fatal("no typescript fragment for the <script> body")
+	}
+	if ts.StartLine > 5 || ts.EndLine < 6 {
+		t.Errorf("script range = %d-%d, must cover lines 5-6", ts.StartLine, ts.EndLine)
+	}
+	if got := strings.Join(ts.Lines, "\n"); !strings.Contains(got, "const x = document.title;") {
+		t.Errorf("script content = %q", got)
+	}
+}
+
+// TestFragmentsHTMLInlineHandlerExcluded documents the #2330 scope decision:
+// inline on* attribute handlers are not injection captures, so they get no
+// LSP delegation — expression context, little value.
+func TestFragmentsHTMLInlineHandlerExcluded(t *testing.T) {
+	lines := []string{`<button onclick="doIt()">go</button>`}
+	if frags := highlight.Fragments("html", lines); len(frags) != 0 {
+		t.Fatalf("inline handler produced fragments: %+v", frags)
+	}
+}
+
+// TestHTMLEmbeddedShadowRegistered guards the #2330 wiring: the html host
+// opts into merged shadow documents and vtsls declares the untitled fragment
+// scheme it requires.
+func TestHTMLEmbeddedShadowRegistered(t *testing.T) {
+	h, ok := lang.ByID("html")
+	if !ok || !h.EmbeddedShadow {
+		t.Error("html must register EmbeddedShadow")
+	}
+	ts, ok := lang.ByID("typescript")
+	if !ok || ts.Server == nil || ts.Server.FragmentScheme != "untitled" {
+		t.Error("typescript server must declare the untitled fragment scheme")
+	}
+	c, ok := lang.ByID("css")
+	if !ok || c.Server == nil || c.Server.FragmentScheme != "" {
+		t.Error("css server accepts any URI and must keep the default scheme")
+	}
+}
+
 // Regex injections (#1631): /…/ literals and RegExp construction inject the
 // built-in regex mini-grammar.
 

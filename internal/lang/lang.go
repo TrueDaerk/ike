@@ -131,6 +131,19 @@ type Language struct {
 	// buffer, or naming an unregistered language, are ignored by the consumer.
 	Regions func(lines []string) []Region
 
+	// EmbeddedShadow opts this host language into per-language shadow
+	// documents for its embedded LSP fragments (#2330): instead of one
+	// virtual document per detected region, the LSP manager merges all
+	// regions of one embedded language into a single virtual document
+	// spanning the whole host buffer, with everything outside the regions
+	// blanked (one space per rune, newlines preserved) — VS Code's
+	// virtual-document trick. Positions map 1:1 between host and shadow, and
+	// all of a host's <script> regions share one scope, matching how a
+	// browser executes them. False — the default — keeps the per-region
+	// fragment documents (an SQL string in Python is a standalone statement;
+	// merging separate strings would produce parse errors).
+	EmbeddedShadow bool
+
 	// Test declares how the language's test functions are detected and run
 	// (#1150) — gutter run markers and run.testAtCursor. Nil means the
 	// language has no test runner. See test.go.

@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-08-27T13:00:00Z
+timestamp: 2026-08-30T12:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -874,6 +874,38 @@ publish. A
 fragment language with no configured server degrades silently. The
 `sql` language plugin registers `sqls` (also serving plain
 `.sql` files) so the pipeline works out of the box.
+
+**Shadow documents — merged embedded regions (#2330).** JS/CSS inside HTML
+needs a different document shape than SQL-in-Python: every `<script>` of a
+page shares one scope in a browser, and each SQL string is a standalone
+statement. A host language that registers `lang.Language.EmbeddedShadow`
+(html does) has its detected fragments merged per embedded language
+(`manager/shadow.go`): one virtual document per language spans the *whole*
+host buffer with every rune outside the regions blanked to a space (line and
+per-line rune counts preserved) — VS Code's virtual-document trick. The
+shadow fragment starts at 0:0, so the ordinary host↔fragment mapping
+degenerates to identity; request routing only enters the real regions
+(`fragmentDoc.regions`), the blanked filler stays with the host server. Slots
+follow the sorted embedded-language ids. Signature help routes like
+completion/hover (`fragmentSignatureHelp`), and the trigger characters that
+fire completion/signature popups are position-aware
+(`CompletionTriggersAt`/`SignatureTriggersAt`): inside a region the embedded
+server's characters apply — `.` pops vtsls completions inside a `<script>`
+even though the HTML server never declares it. Fragment URIs are
+server-negotiated: vtsls (the VS Code TypeScript extension behind an LSP
+facade) silently ignores documents whose URI scheme is off the extension's
+supported list, so its spec declares `FragmentScheme: "untitled"` and its
+virtual documents open as
+`untitled:/ike-embedded/<host-hash>/<slot>/<base>.<ext>` — a scheme tsserver
+serves via an inferred project (default libs included, so `document.`
+completes), shaped so the URI round-trips the server byte-identically and
+carries the extension for script-kind detection. Servers without the field
+keep the classic `ike-fragment:` URIs. Scope decisions: inline `on*`
+attribute handlers are not injection captures and get no delegation
+(expression context, little value); unsaved buffers work by construction (the
+shadow is synced from buffer text, no temp files); a missing vtsls degrades
+exactly like any absent fragment server — HTML behaves as before, and the
+install-hint/auto-install flow still runs when a real JS/TS file opens.
 
 ## File watching (workspace/didChangeWatchedFiles, #1144)
 

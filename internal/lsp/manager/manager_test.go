@@ -75,6 +75,10 @@ type fakeOpts struct {
 	// registerWatchers, when non-nil, is a registrations JSON array the fake
 	// sends as a client/registerCapability request upon "initialized" (#1144).
 	registerWatchers json.RawMessage
+	// completionTriggers overrides the advertised completion trigger
+	// characters (default "."), so the position-aware trigger lookup is
+	// observable (#2330).
+	completionTriggers []string
 }
 
 // fakeConnector returns a Connector backed by an in-memory scripted server. The
@@ -174,6 +178,15 @@ func workspaceCaps(opts fakeOpts) *protocol.WorkspaceServerCaps {
 	}}
 }
 
+// completionTriggers is the advertised completion trigger set: the override
+// when configured, "." otherwise (#2330).
+func completionTriggers(opts fakeOpts) []string {
+	if len(opts.completionTriggers) > 0 {
+		return opts.completionTriggers
+	}
+	return []string{"."}
+}
+
 // fakeConnectorOpts is fakeConnector with the server behaviour tuned.
 func fakeConnectorOpts(opts fakeOpts) Connector {
 	return func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), func() string, error) {
@@ -206,7 +219,7 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 			result := protocol.InitializeResult{Capabilities: protocol.ServerCapabilities{
 				PositionEncoding:   protocol.EncodingUTF16,
 				TextDocumentSync:   json.RawMessage(strconv.Itoa(opts.syncKind)),
-				CompletionProvider: &protocol.CompletionOptions{TriggerCharacters: []string{"."}},
+				CompletionProvider: &protocol.CompletionOptions{TriggerCharacters: completionTriggers(opts)},
 				HoverProvider:      json.RawMessage(`true`),
 				DefinitionProvider: json.RawMessage(`true`),
 				ReferencesProvider: json.RawMessage(`true`),

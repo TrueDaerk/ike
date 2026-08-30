@@ -1,5 +1,24 @@
 # Log
 
+## 2026-08-30 (embedded JS/CSS intelligence in HTML via shadow documents, #2330)
+
+- **`<script>`/`<style>` bodies in HTML get real LSP features**: the html
+  language registers `EmbeddedShadow`, so the LSP manager merges its detected
+  fragments per embedded language into one whole-buffer virtual document with
+  everything outside the regions blanked (`manager/shadow.go`) — identity
+  position mapping, and all script tags share one scope like in a browser.
+- **vtsls-compatible fragment URIs**: `ServerSpec.FragmentScheme` lets a
+  server pick the virtual-document URI scheme; vtsls declares `untitled`
+  (the VS Code TS extension drops documents on unsupported schemes), with the
+  fragment language's extension for script-kind detection. Other servers keep
+  `ike-fragment:`.
+- **Signature help routes into fragments** and completion/signature **trigger
+  characters are position-aware** (`CompletionTriggersAt`/`SignatureTriggersAt`)
+  — `.` pops vtsls completions inside a `<script>`.
+- Inline `on*` attribute handlers stay without delegation (documented scope
+  decision). See [lsp](/architecture/lsp.md) and
+  [languages](/architecture/languages.md).
+
 ## 2026-08-28 (cmd+c in the HTTP response pane and the explorer, #2315)
 
 - **The copy chord is bound where users pressed it**: unbound-chord telemetry
