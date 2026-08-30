@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-08-30T00:00:00Z
 ---
 
 # Editor
@@ -947,9 +947,11 @@ jumps (everything with a path through the open funnel), shift+delete or the
 picker renders the shared **code-preview column** (#2053): an excerpt of the
 selected mark's file around its line, following the cursor, so the marked
 line's surroundings are visible — which the one-line detail chip (or a
-bookmark's note, which replaces it) cannot show. A mark in a pathless scratch
-buffer has no target and leaves the column blank; a deleted file degrades to a
-dim `preview unavailable` notice. See `internal/app/bookmarks.go` and
+bookmark's note, which replaces it) cannot show. Since #2327 that excerpt is a
+read-only mini editor: syntax-highlighted and line-numbered, and `alt+p` /
+`ctrl+e` hands it the keyboard to scroll around the mark without leaving the
+picker. A mark in a pathless scratch buffer has no target and leaves the
+column blank; a deleted file degrades to a dim `preview unavailable` notice. See `internal/app/bookmarks.go` and
 [Command palette § code preview](./command-palette.md).
 
 ## Project bookmarks (#55)

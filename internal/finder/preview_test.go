@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/codepreview"
@@ -90,6 +91,32 @@ func TestResultsBlockMaxHeight(t *testing.T) {
 	}
 }
 
+// previewText returns the rendered excerpt column — everything right of the
+// vertical rule — asserting the rule sits in the same cell on every row.
+func previewText(t *testing.T, m *Model) string {
+	t.Helper()
+	rows := resultBlock(t, m) // renders the view, filling m.lay
+	listW := m.lay.listW
+	if listW <= 0 {
+		t.Fatalf("no preview column at width %d", m.width)
+	}
+	// Content starts two cells in (box border + padding); JoinColumns puts
+	// the rule one cell past the list column and the preview two past it.
+	const contentX = 2
+	var b strings.Builder
+	for _, ln := range rows {
+		r := []rune(ansi.Strip(ln))
+		if len(r) <= contentX+listW+1 {
+			t.Fatalf("results row is too short for the split: %q", string(r))
+		}
+		if got := r[contentX+listW+1]; got != '│' {
+			t.Fatalf("no vertical rule at the column split, got %q in %q", got, string(r))
+		}
+		b.WriteString(strings.TrimRight(string(r[contentX+listW+3:]), " │") + "\n")
+	}
+	return b.String()
+}
+
 // TestPreviewFollowsCursor is the preview-update criterion: the code column
 // beside the list re-renders around the newly selected match.
 func TestPreviewFollowsCursor(t *testing.T) {
@@ -99,35 +126,86 @@ func TestPreviewFollowsCursor(t *testing.T) {
 		{Path: path, Line: 10, Text: "row 10"},
 		{Path: path, Line: 100, Text: "row 100"},
 	})
-	listW, previewW := codepreview.Split(m.boxWidth() - 6)
-	if previewW <= 0 {
-		t.Fatalf("no preview column at width %d", m.width)
-	}
-	// Content starts two cells in (box border + padding); JoinColumns puts
-	// the rule one cell past the list column and the preview two past it.
-	const contentX = 2
-	right := func() string {
-		var b strings.Builder
-		for _, ln := range resultBlock(t, m) {
-			r := []rune(ansi.Strip(ln))
-			if len(r) <= contentX+listW+1 {
-				t.Fatalf("results row is too short for the split: %q", string(r))
-			}
-			if got := r[contentX+listW+1]; got != '│' {
-				t.Fatalf("no vertical rule at the column split, got %q in %q", got, string(r))
-			}
-			b.WriteString(strings.TrimRight(string(r[contentX+listW+3:]), " │") + "\n")
-		}
-		return b.String()
-	}
-	first := right()
+	first := previewText(t, m)
 	if !strings.Contains(first, "row 12") {
 		t.Fatalf("preview of the first match lacks its surroundings:\n%s", first)
 	}
 	m.list.Step(1)
-	second := right()
+	second := previewText(t, m)
 	if !strings.Contains(second, "row 102") {
 		t.Fatalf("preview did not follow the cursor:\n%s", second)
+	}
+}
+
+// focusKey is the chord that hands the excerpt column the keyboard (#2327).
+func focusKey() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'p', Mod: tea.ModAlt} }
+
+// TestPreviewFocusScrollsWithoutMovingTheSelection is the scroll criterion in
+// the overlay: focused, the editor motions walk the excerpt while the result
+// cursor stays put; esc gives the keyboard back rather than closing.
+func TestPreviewFocusScrollsWithoutMovingTheSelection(t *testing.T) {
+	path := sample(t, 200)
+	m := openFinder(t, 200, 60)
+	m.list.Append([]locations.Item{
+		{Path: path, Line: 100, Text: "row 100"},
+		{Path: path, Line: 150, Text: "row 150"},
+	})
+	before := previewText(t, m)
+	m.Update(focusKey())
+	if !m.prev.Focused() {
+		t.Fatal("alt+p must focus the preview column")
+	}
+	m.Update(key("j"))
+	m.Update(key("j"))
+	scrolled := previewText(t, m)
+	if scrolled == before {
+		t.Fatalf("j did not scroll the excerpt:\n%s", scrolled)
+	}
+	if m.list.Cursor() != 0 {
+		t.Fatalf("the result cursor moved to %d while the preview had focus", m.list.Cursor())
+	}
+	// Back to the hit, then out of the column: esc blurs, a second esc closes.
+	m.Update(key("z"))
+	if again := previewText(t, m); again != before {
+		t.Fatalf("z did not return to the match:\n%s", again)
+	}
+	m.Update(key("esc"))
+	if m.prev.Focused() || !m.IsOpen() {
+		t.Fatal("esc must blur the preview and keep the overlay open")
+	}
+	m.Update(key("esc"))
+	if m.IsOpen() {
+		t.Fatal("a second esc must close the overlay")
+	}
+}
+
+// TestPreviewWidthAdaptsToTheCode is the adaptive-width criterion in the
+// overlay: a file of long lines earns a wider excerpt column than one of
+// short lines, both inside the shared bounds.
+func TestPreviewWidthAdaptsToTheCode(t *testing.T) {
+	narrow := sample(t, 60)
+	wide := filepath.Join(t.TempDir(), "wide.go")
+	if err := os.WriteFile(wide, []byte(strings.Repeat(strings.Repeat("x", 200)+"\n", 60)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := openFinder(t, 200, 60)
+	m.list.Append([]locations.Item{{Path: narrow, Line: 30, Text: "row 30"}})
+	resultBlock(t, m)
+	narrowW := m.boxWidth() - 6 - m.lay.listW - 3
+
+	m2 := openFinder(t, 200, 60)
+	m2.list.Append([]locations.Item{{Path: wide, Line: 30, Text: "xxx"}})
+	resultBlock(t, m2)
+	wideW := m2.boxWidth() - 6 - m2.lay.listW - 3
+
+	if narrowW < codepreview.MinPreviewWidth || narrowW > codepreview.MaxPreviewWidth {
+		t.Fatalf("short-line preview is %d cells, outside the bounds", narrowW)
+	}
+	if wideW <= narrowW {
+		t.Fatalf("long lines earned no extra width: %d vs %d", wideW, narrowW)
+	}
+	if wideW > codepreview.MaxPreviewWidth {
+		t.Fatalf("long-line preview is %d cells, past the %d cap", wideW, codepreview.MaxPreviewWidth)
 	}
 }
 

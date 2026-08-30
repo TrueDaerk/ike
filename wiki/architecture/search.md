@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results.
 resource: internal/search
 tags: [architecture, search, find-in-path]
-timestamp: 2026-08-27T12:00:00Z
+timestamp: 2026-08-30T00:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -143,15 +143,30 @@ the palette):
   which the list scrolls instead of growing. Beside it, separated by a dim
   vertical rule, a **code preview** shows the selected match's file around its
   line; it follows the list cursor and degrades to a dim `preview unavailable`
-  notice when the file is gone or unreadable. The geometry comes from
-  `codepreview.Split` and the body from `Cache.Columns`: the preview takes two
-  fifths of the content width (capped at 60 cells) and is dropped below 64
-  cells, where the list keeps the full width; the box itself may now grow to
-  120 columns to carry both. `internal/codepreview` is the shared component
-  behind every picker with a preview column (#2053) — the [palette
-  pickers](/architecture/command-palette.md) (usages, symbols, files,
-  bookmarks) and the call-hierarchy overlay use the same three pieces
-  (`Target`, `Split`, `Cache`), so the columns line up and behave alike.
+  notice when the file is gone or unreadable. Since #2327 it is a **read-only
+  mini editor**, not a text dump: syntax-highlighted, with a line-number
+  gutter, the hit line backgrounded across the full column, the match ranges
+  emphasised on top of the syntax colours, and — once focused — scrollable
+  through the whole file (see [Command palette § code
+  preview](/architecture/command-palette.md)). The body comes from
+  `Cache.Columns`; the geometry from `Cache.SplitFor`, which sizes the column
+  to the code around the hit within **50 to 120** cells, never past half the
+  content and never leaving the list under 40 cells, and drops the column
+  below 64 cells of content, where the list keeps the full width. The box
+  itself may grow to 120 columns to carry both. `internal/codepreview` is the
+  shared component behind every picker with a preview column (#2053) — the
+  [palette pickers](/architecture/command-palette.md) (usages, symbols, files,
+  bookmarks) and the call-hierarchy overlay use the same pieces (`Target`,
+  `SplitWidth`/`Natural`, `Cache`), so the columns line up and behave alike.
+- **Preview focus (#2327):** `alt+p` (or `ctrl+e`, the macOS-safe alias) hands
+  the excerpt column the keyboard; a mouse press inside it does the same. The
+  rule turns accent-coloured, the status row spells the motions, and the
+  editor's own read-only motions apply: `j`/`k` and the arrows one line,
+  `ctrl+d`/`ctrl+u` half a page, `ctrl+f`/`ctrl+b` (and `pgup`/`pgdn`) a full
+  page, `h`/`l` four columns sideways, `0`/`$` to the line's ends, `g`/`G` to
+  the file's, and `z` back to the match. Nothing edits. `esc` blurs — a second
+  `esc` closes the overlay — and moving the result selection re-centres the
+  excerpt on the new hit, dropping the scroll offsets.
 - **Navigation:** `enter` opens the file at the match via the
   definition-jump path (`openPathAt`) and closes the overlay; the results
   survive closing, so `search.nextMatch` / `search.prevMatch` (f3/shift+f3,
@@ -170,8 +185,9 @@ the palette):
   input row focuses that field, on a toggle flips it (and rescans), on a
   result row selects the match — a second press on the selected match opens
   it (the settings panel's press-again-to-activate semantics, #127). Presses
-  in the code-preview column are inert — `layoutInfo.listW` bounds the
-  clickable region (#2047). The wheel scrolls the result list. `View` records the row layout in a
+  in the code-preview column never activate a row — `layoutInfo.listW` bounds
+  the clickable region (#2047) — they focus the excerpt instead (#2327). The
+  wheel scrolls the result list, or the focused excerpt. `View` records the row layout in a
   `layoutInfo` each render; `Click` maps panel-local coordinates through it
   and `locations.List.ItemAt` (window-relative row → item index).
 

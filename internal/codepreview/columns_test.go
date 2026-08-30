@@ -24,25 +24,56 @@ func TestSplitDropsColumnWhenNarrow(t *testing.T) {
 	}
 }
 
-// TestSplitBoundsAndSum: the preview takes two fifths, clamped to
-// [MinColumnWidth, MaxColumnWidth], and the two columns plus the divider
-// always account for exactly the inner width.
+// TestSplitBoundsAndSum: whatever a preview asks for, the geometry never
+// starves the list — the columns plus the divider always account for exactly
+// the inner width, the list keeps the larger share and never less than
+// MinListWidth, and the preview never exceeds MaxPreviewWidth (#2327).
 func TestSplitBoundsAndSum(t *testing.T) {
 	for inner := MinSplitWidth; inner <= 400; inner++ {
-		listW, previewW := Split(inner)
-		if previewW < MinColumnWidth || previewW > MaxColumnWidth {
-			t.Fatalf("Split(%d) previewW = %d, outside [%d, %d]", inner, previewW, MinColumnWidth, MaxColumnWidth)
-		}
-		if listW+previewW+dividerWidth != inner {
-			t.Fatalf("Split(%d) = (%d, %d): columns plus divider != %d", inner, listW, previewW, inner)
-		}
-		if listW < previewW {
-			t.Fatalf("Split(%d) = (%d, %d): the list must keep the larger share", inner, listW, previewW)
+		for _, want := range []int{0, MinPreviewWidth, 80, 400} {
+			listW, previewW := SplitWidth(inner, want)
+			if previewW == 0 {
+				if listW != inner {
+					t.Fatalf("SplitWidth(%d, %d): dropped column but listW = %d", inner, want, listW)
+				}
+				continue
+			}
+			if previewW > MaxPreviewWidth {
+				t.Fatalf("SplitWidth(%d, %d) previewW = %d, past the %d cap", inner, want, previewW, MaxPreviewWidth)
+			}
+			if listW+previewW+dividerWidth != inner {
+				t.Fatalf("SplitWidth(%d, %d) = (%d, %d): columns plus divider != %d", inner, want, listW, previewW, inner)
+			}
+			if listW < previewW {
+				t.Fatalf("SplitWidth(%d, %d) = (%d, %d): the list must keep the larger share", inner, want, listW, previewW)
+			}
+			if listW < MinListWidth {
+				t.Fatalf("SplitWidth(%d, %d) leaves the list %d cells, under the %d floor", inner, want, listW, MinListWidth)
+			}
 		}
 	}
-	// A wide box spends the extra cells on the list, not the excerpt.
-	if _, previewW := Split(400); previewW != MaxColumnWidth {
-		t.Fatalf("wide preview width = %d, want the %d cap", previewW, MaxColumnWidth)
+}
+
+// TestSplitHonoursPreviewFloor is the width criterion of #2327: as soon as the
+// box has room for two MinPreviewWidth columns, the preview is never rendered
+// below that floor — and never above MaxPreviewWidth however wide the box or
+// the code gets.
+func TestSplitHonoursPreviewFloor(t *testing.T) {
+	const roomy = 2*MinPreviewWidth + dividerWidth
+	for inner := roomy; inner <= 600; inner++ {
+		_, previewW := SplitWidth(inner, MaxPreviewWidth*4)
+		if previewW < MinPreviewWidth || previewW > MaxPreviewWidth {
+			t.Fatalf("SplitWidth(%d, huge) previewW = %d, outside [%d, %d]",
+				inner, previewW, MinPreviewWidth, MaxPreviewWidth)
+		}
+	}
+	// A box wide enough for everything gives the preview exactly what the
+	// code asks for, no more.
+	if _, previewW := SplitWidth(600, 73); previewW != 73 {
+		t.Fatalf("previewW = %d, want the requested 73", previewW)
+	}
+	if _, previewW := SplitWidth(600, 600); previewW != MaxPreviewWidth {
+		t.Fatalf("previewW = %d, want the %d cap", previewW, MaxPreviewWidth)
 	}
 }
 
@@ -53,8 +84,9 @@ func TestColumnsAlignsRuleAndPads(t *testing.T) {
 	path := writeLines(t, 40)
 	var c Cache
 	const inner, height = 100, 11
-	listW, previewW := Split(inner)
-	rows := strings.Split(c.Columns([]string{"first row", "second row"}, listW, previewW, height, Target{Path: path, Line: 20}, nil), "\n")
+	target := Target{Path: path, Line: 20}
+	listW, previewW := c.SplitFor(inner, height, target)
+	rows := strings.Split(c.Columns([]string{"first row", "second row"}, listW, previewW, height, target, nil), "\n")
 	if len(rows) != height {
 		t.Fatalf("got %d rows, want %d", len(rows), height)
 	}

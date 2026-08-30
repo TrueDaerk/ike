@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/codepreview"
@@ -36,7 +37,7 @@ func sampleFile(t *testing.T, n int) string {
 func previewColumn(t *testing.T, m *Model) string {
 	t.Helper()
 	innerW := m.width - 12 - 4
-	listW, previewW := codepreview.Split(innerW)
+	listW, previewW := m.previewSplit(innerW)
 	if previewW <= 0 {
 		t.Fatalf("no preview column at width %d", m.width)
 	}
@@ -125,5 +126,41 @@ func TestCallHierarchyNarrowBoxKeepsOneColumn(t *testing.T) {
 	}
 	if !strings.Contains(body, "First") {
 		t.Fatalf("the tree is missing from the narrow body: %q", body)
+	}
+}
+
+// focusKey is the chord that hands the excerpt column the keyboard (#2327).
+func focusKey() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'p', Mod: tea.ModAlt} }
+
+// TestCallHierarchyPreviewScrolls is the scroll criterion in this overlay:
+// focused, the editor motions walk the excerpt while the tree cursor stays
+// put, and esc gives the tree the keyboard back instead of closing.
+func TestCallHierarchyPreviewScrolls(t *testing.T) {
+	m, _ := openPreviewModel(t)
+	before := previewColumn(t, m)
+	m.Update(focusKey())
+	if !m.prev.Focused() {
+		t.Fatal("alt+p must focus the preview column")
+	}
+	m.Update(key("j"))
+	m.Update(key("j"))
+	scrolled := previewColumn(t, m)
+	if scrolled == before {
+		t.Fatalf("j did not scroll the excerpt:\n%s", scrolled)
+	}
+	if m.cursor != 0 {
+		t.Fatalf("the tree cursor moved to %d while the preview had focus", m.cursor)
+	}
+	m.Update(key("z"))
+	if again := previewColumn(t, m); again != before {
+		t.Fatalf("z did not return to the entry:\n%s", again)
+	}
+	m.Update(key("esc"))
+	if m.prev.Focused() || !m.IsOpen() {
+		t.Fatal("esc must blur the preview and keep the overlay open")
+	}
+	m.Update(key("esc"))
+	if m.IsOpen() {
+		t.Fatal("a second esc must close the overlay")
 	}
 }

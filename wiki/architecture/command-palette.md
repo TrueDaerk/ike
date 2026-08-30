@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-08-27T12:00:00Z
+timestamp: 2026-08-30T00:00:00Z
 ---
 
 # Command Palette
@@ -531,21 +531,47 @@ so does Search Everywhere, whose composed list mixes both kinds.
   scrolling inside it. The list block is blank-padded to that height, so the
   popup's size no longer flickers with the result count.
 - **Geometry.** The centered box takes three quarters of the terminal instead
-  of half (`ui.popup_max_width` still caps it); `codepreview.Split` gives the
-  excerpt two fifths of the content width (capped at 60 cells) and drops the
-  column entirely below 64 cells of content. Presses in the excerpt are inert
-  — `Click` rejects `x` past the list column so the row behind it never fires.
+  of half (`ui.popup_max_width` still caps it); `Cache.SplitFor` sizes the
+  excerpt to the code around the hit — the widest line of the window plus its
+  gutter, bounded to **50 to 120** cells (`MinPreviewWidth`/`MaxPreviewWidth`),
+  then clamped to half the content and to whatever leaves the list 40 cells —
+  and drops the column entirely below 64 cells of content. The click mapping
+  reads the same geometry, so a press never lands on the wrong column: one in
+  the excerpt focuses it (#2327) rather than firing the row behind it.
 - **Rendering.** `internal/codepreview` is the whole component: `Target` (the
-  per-row location), `Split` (the geometry both the renderer and the click
-  mapping read) and `Cache` (`Render` for the excerpt rows, `Columns` for the
-  finished list-rule-excerpt body). It reads only the window it needs (never
-  the whole file), caches the last one so walking the list re-reads only when
-  the target moves, centers the target line — clamped at the file's head —
-  highlights it, and returns exactly the requested number of rows. An
-  unreadable, deleted, or directory target renders a dim `preview unavailable`
-  notice instead of failing the frame. The same component backs the
-  [find-in-path overlay](/architecture/search.md) and the call-hierarchy
-  overlay ([LSP](./lsp.md)), which are not palette modes.
+  per-row location plus the match ranges on its line), the geometry
+  (`SplitWidth` with `Cache.Natural`, or `Cache.SplitFor` for both at once)
+  and `Cache` (`Render` for the excerpt rows, `Columns` for the finished
+  list-rule-excerpt body, `Key` for the scroll motions). It reads only the
+  window it needs (never the whole file), caches the last one — raw and
+  styled — so walking the list re-reads and re-parses only when the target
+  moves, centers the target line — clamped at the file's head — and returns
+  exactly the requested number of rows. An unreadable, deleted, or directory
+  target renders a dim `preview unavailable` notice instead of failing the
+  frame. The same component backs the [find-in-path
+  overlay](/architecture/search.md) and the call-hierarchy overlay
+  ([LSP](./lsp.md)), which are not palette modes.
+- **A read-only mini editor (#2327).** The excerpt renders through the
+  tree-sitter pipeline of `internal/highlight` — the standalone-excerpt parse
+  the [definition peek](./editor.md) and the hover code fences use, so a file
+  whose language has no grammar (or a build without the parser) falls back to
+  plain text instead of failing. Left of the code sits a dim line-number
+  gutter; the hit line carries the current-line background across the whole
+  column, gutter included, and its match ranges render bold and underlined on
+  top of the syntax colours. Tabs expand to four cells before the parse, so
+  spans, match ranges and rendered cells share one coordinate system.
+- **Focus and scrolling (#2327).** `alt+p` — or `ctrl+e`, the alias for macOS,
+  where Option never reaches the terminal (#422) — hands the column the
+  keyboard; a press inside it does the same, and the vertical rule turns
+  accent-coloured to say so. The motions are the editor's, minus every edit:
+  `j`/`k` and the arrows a line, `ctrl+d`/`ctrl+u` half a page,
+  `ctrl+f`/`ctrl+b` (and `pgup`/`pgdn`) a page, `h`/`l` four columns sideways,
+  `0`/`$` to the line's ends, `g`/`G` to the file's, `z` back to the hit.
+  Vertical scrolling walks the whole file — the window is re-read per frame
+  and clamped at the tail once a short read proves where the file ends — and
+  the horizontal offset slices the styled rows with `ansi.Cut`, so colours
+  survive scrolling. `esc` blurs; moving the result selection re-centers the
+  excerpt on the new hit and drops both offsets.
 
 ## Open in Find window (#2055)
 
