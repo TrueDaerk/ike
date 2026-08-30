@@ -171,6 +171,47 @@ func TestFragmentsBareRegExpCall(t *testing.T) {
 	}
 }
 
+// Attribute injections (#2329): the HTML injection query gates on the
+// attribute name, and the captured node is the inner attribute_value so the
+// quotes stay HTML.
+
+// TestFragmentsStyleAttributeMultiline: a style value wrapping across lines
+// still maps back cleanly — the CSS wrapper occupies whole lines of its own,
+// so content columns never shift and no synthetic fold escapes.
+func TestFragmentsStyleAttributeMultiline(t *testing.T) {
+	lines := []string{
+		`<p style="color: red;`,
+		`          margin: 0">x</p>`,
+	}
+	frags := highlight.Fragments("html", lines)
+	if len(frags) != 1 {
+		t.Fatalf("Fragments = %d, want 1: %+v", len(frags), frags)
+	}
+	f := frags[0]
+	if f.Lang != "css" || !f.Partial {
+		t.Fatalf("fragment = %+v, want a partial css fragment", f)
+	}
+	if f.StartLine != 0 || f.EndLine != 1 {
+		t.Errorf("fragment spans lines %d..%d, want 0..1", f.StartLine, f.EndLine)
+	}
+
+	spans, _, folds := highlight.HighlightScoped("page.html", lines)
+	ix := highlight.NewIndex(spans)
+	if got := ix.CaptureAt(1, strings.Index(lines[1], "margin")); got != "property" {
+		t.Errorf("second-line property: got %q, want property", got)
+	}
+	if got := ix.CaptureAt(1, strings.Index(lines[1], "0")); got != "number" {
+		t.Errorf("second-line value: got %q, want number", got)
+	}
+	// The synthetic *{…} rule must not surface as a foldable range; the only
+	// fold here is the host's own two-line <p> element.
+	for _, fold := range folds {
+		if fold.HeaderLine != 0 || fold.EndLine != 1 {
+			t.Errorf("unexpected fold %+v — the CSS wrapper leaked", fold)
+		}
+	}
+}
+
 func TestFragmentsPlainStringNotRegex(t *testing.T) {
 	lines := []string{
 		`const s = "a|b";`,

@@ -11,7 +11,7 @@ import (
 )
 
 // detectFragments parses lines with the host grammar and runs its injection
-// query, turning every @fragment.<lang>[.guess] capture — and every
+// query, turning every @fragment.<lang>[.guess|.partial] capture — and every
 // @fragment.language / @fragment.content pair (#880) — into a Fragment. Like
 // parse, it re-parses from scratch: fragment detection runs on the LSP sync
 // and highlight paths (off the Update goroutine), never per-keystroke render.
@@ -59,7 +59,7 @@ func detectFragments(g lang.Grammar, lines []string) []Fragment {
 	defer cursor.Close()
 	names := query.CaptureNames()
 
-	appendFrag := func(frags []Fragment, langID string, node *ts.Node) []Fragment {
+	appendFrag := func(frags []Fragment, langID string, partial bool, node *ts.Node) []Fragment {
 		content := string(src[node.StartByte():node.EndByte()])
 		if content == "" {
 			return frags
@@ -72,6 +72,7 @@ func detectFragments(g lang.Grammar, lines []string) []Fragment {
 			EndLine:   int(end.Row),
 			EndCol:    conv.runeCol(int(end.Row), int(end.Column)),
 			Lines:     strings.Split(content, "\n"),
+			Partial:   partial,
 		})
 	}
 
@@ -102,12 +103,12 @@ func detectFragments(g lang.Grammar, lines []string) []Fragment {
 			case "fragment.content":
 				contents = append(contents, cap.Node)
 			default:
-				langID, guess, ok := fragmentCapture(name)
+				langID, mode, ok := fragmentCapture(name)
 				if !ok {
 					continue
 				}
-				if !guess {
-					frags = appendFrag(frags, langID, &cap.Node)
+				if mode != modeGuess {
+					frags = appendFrag(frags, langID, mode == modePartial, &cap.Node)
 					continue
 				}
 				key := guessKey{name: name}
@@ -127,7 +128,7 @@ func detectFragments(g lang.Grammar, lines []string) []Fragment {
 		if langTag != "" && len(contents) > 0 {
 			if id, ok := resolveFragmentLang(langTag); ok {
 				for i := range contents {
-					frags = appendFrag(frags, id, &contents[i])
+					frags = appendFrag(frags, id, false, &contents[i])
 				}
 			}
 		}
@@ -137,7 +138,7 @@ func detectFragments(g lang.Grammar, lines []string) []Fragment {
 			continue
 		}
 		for i := range g.nodes {
-			frags = appendFrag(frags, g.langID, &g.nodes[i])
+			frags = appendFrag(frags, g.langID, false, &g.nodes[i])
 		}
 	}
 	return frags
