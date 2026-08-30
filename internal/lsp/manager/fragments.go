@@ -33,7 +33,9 @@ type FragmentDetector func(lang string, lines []string) []highlight.Fragment
 // fragmentDoc is one synthetic document mirroring a fragment of a host buffer.
 // slot is the fragment's ordinal in the detector output; it keys the URI, so a
 // re-detected fragment in the same slot continues the same server-side
-// document instead of churning open/close.
+// document instead of churning open/close. For a shadow document (#2330,
+// shadow.go) frag spans the whole host buffer with non-region text blanked,
+// and regions holds the embedded ranges request routing may enter.
 type fragmentDoc struct {
 	hostPath string
 	slot     int
@@ -41,6 +43,7 @@ type fragmentDoc struct {
 	lang     string
 	version  int
 	frag     highlight.Fragment
+	regions  []highlight.Fragment
 	srvKey   string
 }
 
@@ -52,8 +55,12 @@ func fragmentURI(hostPath string, slot int) string {
 	return fragmentScheme + "//" + strconv.Itoa(slot) + hostPath
 }
 
-// isFragmentURI reports whether uri belongs to a fragment document.
-func isFragmentURI(uri string) bool { return strings.HasPrefix(uri, fragmentScheme) }
+// isFragmentURI reports whether uri belongs to a fragment document — the
+// default ike-fragment scheme or a server-declared scheme carrying the
+// ike-embedded path marker (#2330, shadow.go).
+func isFragmentURI(uri string) bool {
+	return strings.HasPrefix(uri, fragmentScheme) || strings.Contains(uri, ":/"+fragmentPathMarker+"/")
+}
 
 // SetFragmentDetector installs the embedded-fragment detector. Without one the
 // manager never creates fragment documents.
@@ -87,10 +94,27 @@ func (m *Manager) syncFragments(hostPath string) {
 	}
 	m.fragGen[hostPath]++
 	gen := m.fragGen[hostPath]
-	lines, hostLang := doc.lines, doc.lang
+	lines, hostLang := doc.lines, doc.langID
 	m.mu.Unlock()
 
 	found := detect(hostLang, lines)
+	// Partial fragments (#2329) are snippets spliced into a host construct —
+	// an HTML style="…" declaration list, an onclick="…" statement — not
+	// documents in their language. Mirroring them would hand a server a file
+	// it must reject, so they stay highlight-only; filtering here also keeps
+	// them out of the shadow-document merge (#2330).
+	full := found[:0:0]
+	for _, fr := range found {
+		if !fr.Partial {
+			full = append(full, fr)
+		}
+	}
+	dets := plainDetected(full)
+	if hostShadow(hostLang) {
+		// Shadow host (#2330): merge the regions per embedded language into
+		// one blanked whole-buffer document each (shadow.go).
+		dets = shadowDetected(lines, dets)
+	}
 
 	// Serialize reconciliation; only the newest generation may proceed, and the
 	// host must still be open.
@@ -102,7 +126,7 @@ func (m *Manager) syncFragments(hostPath string) {
 	if stale {
 		return
 	}
-	m.reconcileFragments(hostPath, found)
+	m.reconcileFragments(hostPath, dets)
 }
 
 // reconcileFragments diffs the detected fragments against the tracked fragment
@@ -110,7 +134,7 @@ func (m *Manager) syncFragments(hostPath string) {
 // content change), anything else closes the old document and opens a new one.
 // Fragments whose language resolves to no server are skipped silently — the
 // host buffer just keeps its plain behavior. Caller holds fragMu.
-func (m *Manager) reconcileFragments(hostPath string, found []highlight.Fragment) {
+func (m *Manager) reconcileFragments(hostPath string, found []detectedFragment) {
 	m.mu.Lock()
 	old := m.frags[hostPath]
 	if old == nil {
@@ -122,14 +146,8 @@ func (m *Manager) reconcileFragments(hostPath string, found []highlight.Fragment
 	// diagnostics stay valid — anything else was closed or reopened fresh.
 	kept := map[int]bool{}
 
-	for slot, fr := range found {
-		// Partial fragments (#2329) are snippets spliced into a host
-		// construct — an HTML style="…" declaration list, an onclick="…"
-		// statement — not documents in their language. Mirroring them would
-		// hand a server a file it must reject, so they stay highlight-only.
-		if fr.Partial {
-			continue
-		}
+	for slot, det := range found {
+		fr := det.frag
 		spec, ok := m.resolve(fr.Lang)
 		if !ok {
 			continue
@@ -164,7 +182,8 @@ func (m *Manager) reconcileFragments(hostPath string, found []highlight.Fragment
 					}
 				}
 				m.mu.Lock()
-				fd.frag = fr // the range may shift even when the content did not
+				// The ranges may shift even when the content did not.
+				fd.frag, fd.regions = fr, det.regions
 				m.mu.Unlock()
 				delete(old, slot)
 				next[slot] = fd
@@ -175,7 +194,7 @@ func (m *Manager) reconcileFragments(hostPath string, found []highlight.Fragment
 			delete(old, slot)
 		}
 
-		fd := m.openFragment(hostPath, slot, fr, text, spec)
+		fd := m.openFragment(hostPath, slot, det, text, spec)
 		if fd != nil {
 			next[slot] = fd
 		}
@@ -217,7 +236,8 @@ func (m *Manager) reconcileFragments(hostPath string, found []highlight.Fragment
 
 // openFragment spawns/reuses the fragment language's server and sends didOpen.
 // A failed spawn degrades silently (nil): the fragment simply stays plain text.
-func (m *Manager) openFragment(hostPath string, slot int, fr highlight.Fragment, text string, spec lsp.ServerSpec) *fragmentDoc {
+func (m *Manager) openFragment(hostPath string, slot int, det detectedFragment, text string, spec lsp.ServerSpec) *fragmentDoc {
+	fr := det.frag
 	root := detectRoot(hostPath, spec.RootMarkers)
 	srv, err := m.ensureServer(fr.Lang, root, spec)
 	if err != nil {
@@ -226,10 +246,11 @@ func (m *Manager) openFragment(hostPath string, slot int, fr highlight.Fragment,
 	fd := &fragmentDoc{
 		hostPath: hostPath,
 		slot:     slot,
-		uri:      fragmentURI(hostPath, slot),
+		uri:      fragmentURIFor(spec, hostPath, slot, fr.Lang),
 		lang:     fr.Lang,
 		version:  1,
 		frag:     fr,
+		regions:  det.regions,
 		srvKey:   srv.key(),
 	}
 	_ = srv.cl.DidOpen(protocol.DidOpenTextDocumentParams{
@@ -274,11 +295,13 @@ func (m *Manager) closeFragmentsFor(hostPath string) {
 // fragmentAt returns the fragment document and its server covering an editor
 // position of the host buffer, when one exists. The end boundary is inclusive
 // so completion right before a closing quote still routes into the fragment.
+// A shadow document only claims positions inside its embedded regions (#2330)
+// — its blanked filler stays with the host server.
 func (m *Manager) fragmentAt(hostPath string, pos buffer.Position) (*server, *fragmentDoc, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, fd := range m.frags[hostPath] {
-		if !fragContains(fd.frag, pos) {
+		if !fd.contains(pos) {
 			continue
 		}
 		if srv := m.servers[fd.srvKey]; srv != nil {
@@ -353,6 +376,29 @@ func (m *Manager) fragmentHover(ctx context.Context, hostPath string, pos buffer
 		h.Range = &r
 	}
 	return h, true, nil
+}
+
+// fragmentSignatureHelp routes a signature-help request into the fragment
+// covering pos, when one exists (#2330). The result carries no positions, so
+// nothing maps back.
+func (m *Manager) fragmentSignatureHelp(ctx context.Context, hostPath string, pos buffer.Position) (sh *protocol.SignatureHelp, handled bool, err error) {
+	srv, fd, ok := m.fragmentAt(hostPath, pos)
+	if !ok {
+		return nil, false, nil
+	}
+	if !srv.cl.Caps().SignatureHelp {
+		return nil, true, nil
+	}
+	m.mu.Lock()
+	frag, uri := fd.frag, fd.uri
+	m.mu.Unlock()
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	sh, err = srv.cl.SignatureHelp(cctx, protocol.SignatureHelpParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+		Position:     protocol.ToLSPPosition(frag.Lines, hostToFrag(frag, pos), srv.cl.Encoding()),
+	})
+	return sh, true, err
 }
 
 // fragmentDefinition routes a definition request into the fragment covering

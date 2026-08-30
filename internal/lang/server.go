@@ -27,6 +27,16 @@ type ServerSpec struct {
 	// ["go", "install", "golang.org/x/tools/gopls@latest"]. Empty means the
 	// plugin ships no recipe and installation stays manual.
 	Install []string
+	// FragmentScheme names the URI scheme the LSP manager uses for this
+	// server's virtual fragment documents (#2330). Most servers accept any
+	// URI and get the default ike-fragment scheme (empty). vtsls — the VS
+	// Code TypeScript extension behind an LSP facade — silently drops
+	// documents whose scheme is not on its supported list (file, untitled,
+	// walkThroughSnippet, vscode-notebook-cell), so it declares "untitled";
+	// such URIs also carry the fragment language's file extension so script
+	// kind detection works.
+	FragmentScheme string
+
 	// Companions are optional tools the server delegates work to (#1067):
 	// the server starts fine without them but silently loses a capability
 	// (bash-language-server → shellcheck diagnostics). The LSP manager probes

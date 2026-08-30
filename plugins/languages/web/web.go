@@ -63,6 +63,13 @@ func init() {
 			Args:        []string{"--stdio"},
 			RootMarkers: []string{"tsconfig.json", "jsconfig.json", "package.json", ".git"},
 			Install:     []string{"npm", "install", "-g", "@vtsls/language-server"},
+			// Embedded <script> shadow documents (#2330): vtsls (the VS Code
+			// TypeScript extension behind an LSP facade) silently ignores
+			// documents whose URI scheme is not on the extension's supported
+			// list — untitled is, and untitled documents join an inferred
+			// tsserver project with the default libs, so document.<members>
+			// complete.
+			FragmentScheme: "untitled",
 		},
 		// Workspace-TypeScript detection (#1079): vendored TS wins.
 		Toolchain:    tsToolchain{},
@@ -102,6 +109,14 @@ func init() {
 		BlockComment: [2]string{"<!--", "-->"},
 		IndentAfter:  []string{">"},
 		FoldNodes:    []string{"element", "script_element", "style_element", "comment"},
+		// Embedded-language LSP (#2330): the <script>/<style> fragments the
+		// injection query detects merge into one blanked shadow document per
+		// embedded language (typescript → vtsls, css → the css server), so
+		// completion/hover/diagnostics work inside them and all script tags
+		// share one scope. Inline on* attribute handlers are not injection
+		// captures and stay without LSP delegation — expression context,
+		// little value.
+		EmbeddedShadow: true,
 		// Entity decoding (#1620): &amp;, &#x2026; and friends conceal as the
 		// decoded character — the full HTML named-entity table applies.
 		Spans: htmlEntitySpans,

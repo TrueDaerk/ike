@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-08-30T00:00:00Z
+timestamp: 2026-08-30T12:00:00Z
 ---
 
 # Language Registry
@@ -355,8 +355,13 @@ when the content heuristic agrees. `html` uses
 the official grammar with `<script>`/`<style>` injections into
 typescript/css, plus inline-attribute injections (#2329): `on*` handler values
 inject typescript and `style` values inject css as *partial* fragments (see
-[highlighting](./highlighting.md)); `css` uses the official grammar (scss/less parse best-effort
-— error-tolerant spans still color the shared subset).
+[highlighting](./highlighting.md)) — highlight-only, never LSP-mirrored. The
+`<script>`/`<style>` regions also get LSP intelligence: html registers
+`EmbeddedShadow` (#2330), so the LSP manager merges them per embedded
+language into one blanked whole-buffer shadow document served by vtsls / the
+css server (see [lsp](./lsp.md), shadow documents). `css` uses the official
+grammar (scss/less parse best-effort — error-tolerant spans still color the
+shared subset).
 The grammar/query for the first three moved here out of the highlight engine.
 And `make` (#1136, alemuller/tree-sitter-make — **vendored C source** under
 the plugin's `grammar/`, upstream ships no Go binding; matches
@@ -702,6 +707,15 @@ the embedded language. The detector runs on every highlight pass, so it must
 stay cheap. Second user: YAML's CI `run:` detector (#1625,
 `plugins/languages/yaml/regions.go`) — the gate (a `steps:` line somewhere in
 the buffer) is a buffer-level decision no injection query can express.
+
+Two related registry fields shape how the *LSP* side consumes embedded
+regions (#2330): `Language.EmbeddedShadow` on a host opts its fragments into
+merged per-language shadow documents (all `<script>` bodies of an HTML buffer
+become one blanked whole-buffer virtual document, identity position mapping);
+`ServerSpec.FragmentScheme` on an embedded server names the URI scheme its
+virtual documents must use (vtsls declares `"untitled"` — it drops documents
+on unsupported schemes). Both are documented in [lsp](./lsp.md), shadow
+documents.
 
 A sibling seam, `Spans func(lines []string) []lang.Span` (#1585), produces
 Go-computed highlight spans for structure the grammar does not expose: the

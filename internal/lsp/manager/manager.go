@@ -955,8 +955,12 @@ func convertEdits(lines []string, edits []protocol.TextEdit, enc string) []lsp.F
 	return out
 }
 
-// SignatureHelp requests call-signature info at an editor position.
+// SignatureHelp requests call-signature info at an editor position. Fragment
+// positions route to the fragment's server like Completion (#2330).
 func (m *Manager) SignatureHelp(ctx context.Context, path string, pos buffer.Position) (*protocol.SignatureHelp, error) {
+	if sh, handled, err := m.fragmentSignatureHelp(ctx, path, pos); handled {
+		return sh, err
+	}
 	srv, doc, ok := m.docServer(path)
 	if !ok || !srv.cl.Caps().SignatureHelp {
 		return nil, nil
@@ -997,6 +1001,26 @@ func (m *Manager) SignatureTriggers(path string) []string {
 		return srv.cl.Caps().SignatureTriggers
 	}
 	return nil
+}
+
+// CompletionTriggersAt returns the completion trigger characters that apply
+// at an editor position (#2330): inside an embedded fragment region the
+// fragment server's — "." must pop vtsls completions inside a <script> even
+// though the HTML host server never declares it — the host server's
+// everywhere else.
+func (m *Manager) CompletionTriggersAt(path string, pos buffer.Position) []string {
+	if srv, _, ok := m.fragmentAt(path, pos); ok {
+		return srv.cl.Caps().CompletionTriggers
+	}
+	return m.CompletionTriggers(path)
+}
+
+// SignatureTriggersAt is CompletionTriggersAt for signature help (#2330).
+func (m *Manager) SignatureTriggersAt(path string, pos buffer.Position) []string {
+	if srv, _, ok := m.fragmentAt(path, pos); ok {
+		return srv.cl.Caps().SignatureTriggers
+	}
+	return m.SignatureTriggers(path)
 }
 
 // SemanticTokens requests (or delta-updates) the document's semantic tokens
