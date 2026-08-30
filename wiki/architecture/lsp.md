@@ -850,9 +850,12 @@ detected fragment into a synthetic in-memory document (`ike-fragment:` URI,
 language's ordinary managed server. Detection comes from Tree-sitter
 *injection queries* (`highlight.Fragments`): a grammar built with
 `NewGrammarInjections` ships an `injections.scm` whose captures follow the
-`fragment.<lang>[.guess]` convention — `.guess` defers to a Go-side content
-heuristic (SQL statement-leading keywords), so plain strings never become
-fragments. Python's query captures `string_content`; the fragment text is
+`fragment.<lang>[.guess|.partial]` convention — `.guess` defers to a Go-side
+content heuristic (SQL statement-leading keywords), so plain strings never
+become fragments, and `.partial` marks a snippet rather than a document (HTML
+attribute code, #2329), which this seam skips entirely: mirroring a bare CSS
+declaration list would only hand a server a file it must reject, so partial
+fragments stay highlight-only. Python's query captures `string_content`; the fragment text is
 exactly the host text of its range, so host↔fragment position mapping is a
 pure offset shift. Lifecycle follows the host document: fragments re-detect
 after every open/change on a manager goroutine (generation-guarded — the

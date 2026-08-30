@@ -1,5 +1,27 @@
 # Log
 
+## 2026-08-30 (inline code in HTML `on*` and `style` attributes highlights, #2329)
+
+- **The HTML injection query gates on the attribute name**: `onclick="alert(1)"`
+  and friends inject the typescript grammar, `style="color: red"` the css one.
+  Only the inner `attribute_value` node is captured, so the quotes stay HTML,
+  and the rule is conditional through a tree-sitter text predicate
+  (`#match? "(?i)^on[a-z]{3,}$"`, `"(?i)^style$"`). The go-tree-sitter binding
+  evaluates text predicates while iterating matches, so no Go machinery was
+  needed to make the fragment seam name-aware. The letter-run bound keeps
+  `data-on-tap`, `hx-on:click`, `once` and `only` plain.
+- **`.partial` is a third fragment mode** (`fragment.<lang>.partial`) for a
+  snippet that is not a document in its language. It changes two things:
+  `injection.go` parses it between the synthetic lines `fragmentWrapper`
+  registers — css gets `*{` / `}`, because the grammar reads a bare
+  declaration list as a selector and would colour `color` as a `tag` — and the
+  LSP virtual-document seam skips it, since no css server can own a bare
+  declaration list.
+- **The wrapper cannot shift columns**: it occupies whole lines of its own, so
+  `unwrapSpans`/`unwrapFolds` only drop the wrapper's own spans and the
+  synthetic rule's fold and shift the rest up by one line. Host↔fragment
+  mapping stays a pure offset shift, multi-line `style` values included.
+
 ## 2026-08-30 (Search previews are a read-only mini editor, #2327)
 
 - **`internal/codepreview` renders code, not text**: the excerpt column every
@@ -39,7 +61,6 @@
   are overlay-local keys, like the finder's `ctrl+c`/`ctrl+w`/`ctrl+x`
   toggles — the keymap layer never sees them while an overlay owns the
   keyboard.
-
 ## 2026-08-28 (cmd+c in the HTTP response pane and the explorer, #2315)
 
 - **The copy chord is bound where users pressed it**: unbound-chord telemetry

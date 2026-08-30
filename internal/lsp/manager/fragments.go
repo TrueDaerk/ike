@@ -123,6 +123,13 @@ func (m *Manager) reconcileFragments(hostPath string, found []highlight.Fragment
 	kept := map[int]bool{}
 
 	for slot, fr := range found {
+		// Partial fragments (#2329) are snippets spliced into a host
+		// construct — an HTML style="…" declaration list, an onclick="…"
+		// statement — not documents in their language. Mirroring them would
+		// hand a server a file it must reject, so they stay highlight-only.
+		if fr.Partial {
+			continue
+		}
 		spec, ok := m.resolve(fr.Lang)
 		if !ok {
 			continue

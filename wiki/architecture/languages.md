@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-08-24T12:00:00Z
+timestamp: 2026-08-30T00:00:00Z
 ---
 
 # Language Registry
@@ -353,7 +353,9 @@ stays intact; the one casualty is legacy `<T>x` type assertions; its
 injection query (#1625) marks template-literal chunks as HTML/SQL fragments
 when the content heuristic agrees. `html` uses
 the official grammar with `<script>`/`<style>` injections into
-typescript/css; `css` uses the official grammar (scss/less parse best-effort
+typescript/css, plus inline-attribute injections (#2329): `on*` handler values
+inject typescript and `style` values inject css as *partial* fragments (see
+[highlighting](./highlighting.md)); `css` uses the official grammar (scss/less parse best-effort
 — error-tolerant spans still color the shared subset).
 The grammar/query for the first three moved here out of the highlight engine.
 And `make` (#1136, alemuller/tree-sitter-make — **vendored C source** under
