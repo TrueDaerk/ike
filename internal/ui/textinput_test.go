@@ -81,6 +81,34 @@ func TestEditKeyInsert(t *testing.T) {
 	}
 }
 
+// TestTyping is the guard on the exported insertion predicate (#2327): it
+// answers the same question EditKey's insertion branch does, so a host that
+// checks it before handing a key over cannot drift from the helper.
+func TestTyping(t *testing.T) {
+	cases := []struct {
+		name string
+		msg  tea.KeyPressMsg
+		want bool
+	}{
+		{"plain rune", tea.KeyPressMsg{Text: "x"}, true},
+		{"space", tea.KeyPressMsg{Text: " "}, true},
+		{"no text", tea.KeyPressMsg{Code: tea.KeyEnter}, false},
+		{"ctrl chord", tea.KeyPressMsg{Text: "c", Mod: tea.ModCtrl}, false},
+		{"alt chord", tea.KeyPressMsg{Text: "p", Mod: tea.ModAlt}, false},
+		{"cmd chord", tea.KeyPressMsg{Text: "v", Mod: tea.ModSuper}, false},
+	}
+	for _, tc := range cases {
+		if got := Typing(tc.msg); got != tc.want {
+			t.Errorf("Typing(%s) = %v, want %v", tc.name, got, tc.want)
+		}
+		// EditKey must agree: a key that types inserts.
+		_, _, handled, changed := EditKey(tc.msg, "", 0)
+		if tc.want && !(handled && changed) {
+			t.Errorf("EditKey(%s) did not insert though Typing says it types", tc.name)
+		}
+	}
+}
+
 func TestCursorView(t *testing.T) {
 	// Cursor at end renders an appended reversed cell.
 	if got := CursorView("ab", 2); !strings.HasPrefix(got, "ab") || got == "ab" {

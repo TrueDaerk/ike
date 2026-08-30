@@ -4,7 +4,7 @@ title: Single-Line Text Input
 description: The shared single-line editing helpers in internal/ui (EditKey, PasteText, CursorView) that every text field in the IDE routes through — plus the convention, the audit of every input site, and the guard test that keeps new fields from re-inventing them.
 resource: internal/ui/textinput.go
 tags: [ui, input, keys, paste, conventions]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-08-30T00:00:00Z
 ---
 
 # Single-Line Text Input
@@ -51,6 +51,14 @@ remainder and added a guard so the pattern cannot come back quietly.
   land in a one-line field.
 - **`CursorView(text, cur)`** — renders the text with a reverse-video cursor
   cell (end-of-text shows a reversed space).
+- **`Typing(msg) bool`** (#2327) — EditKey's own insertion guard, exported:
+  the key carries printable text and no modifier that would make it a chord.
+  A host that must decide *something else* about a typed key asks this rather
+  than re-deriving it — the find-in-path overlay and the palette use it to
+  blur a focused [code preview](/architecture/command-palette.md) the moment
+  one types, so the query field takes the key. The sweep guard below reads
+  `msg.Text != ""` as a hand-rolled input, which is exactly the drift this
+  predicate removes.
 
 `internal/settings` wraps them once more for its own use: `textField`
 (`text`+`cur` with `Handle`/`Paste`/`View`) for inline edits and forms, and

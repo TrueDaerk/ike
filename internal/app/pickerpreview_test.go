@@ -33,8 +33,10 @@ func TestSymbolPickerRowsCarryPreviewTargets(t *testing.T) {
 		"Helped": {Path: "sub/b.go", Line: 1},
 	}
 	for _, it := range items {
-		if got := it.Preview; got != want[it.Title] {
-			t.Fatalf("row %q preview = %+v, want %+v", it.Title, got, want[it.Title])
+		// Targets carry match ranges since #2327 and are no longer
+		// comparable; the picker rows only ever fill in path and line.
+		if got, w := it.Preview, want[it.Title]; got.Path != w.Path || got.Line != w.Line {
+			t.Fatalf("row %q preview = %+v, want %+v", it.Title, got, w)
 		}
 	}
 	// The class category is a filtered view of the same cache, so its rows
@@ -89,7 +91,7 @@ func TestBookmarksPickerRowsCarryPreviewTargets(t *testing.T) {
 // TestBookmarksPickerPathlessMarkHasNoTarget: a mark in a scratch buffer has
 // no file, so the row leaves the preview column empty (#2053).
 func TestBookmarksPickerPathlessMarkHasNoTarget(t *testing.T) {
-	if got := markTarget("", 7); got != (palette.PreviewTarget{}) {
+	if got := markTarget("", 7); got.Path != "" || got.Line != 0 {
 		t.Fatalf("pathless mark target = %+v, want the zero target", got)
 	}
 	if got := markTarget("a.go", 7); got.Line != 8 {

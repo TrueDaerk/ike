@@ -256,6 +256,7 @@ func (m *Model) Close() {
 	m.open = false
 	m.svc.Cancel()
 	m.scanning = false
+	m.prev.SetFocus(false)
 	if m.histStore != nil {
 		m.histStore.SaveFindState(histories.FindState{
 			Query:         m.query,
@@ -402,6 +403,27 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	// character replaces it; any other key keeps the text, drops the mark.
 	pre := m.preselect
 	m.preselect = false
+	// The excerpt column is a focusable read-only viewport (#2327): while it
+	// holds the focus the editor-like motions scroll it and esc hands the
+	// keyboard back to the query field.
+	if codepreview.IsFocusKey(msg.String()) {
+		m.prev.SetFocus(!m.prev.Focused())
+		return nil
+	}
+	if m.prev.Focused() {
+		switch {
+		case msg.String() == "esc":
+			m.prev.SetFocus(false)
+			return nil
+		case m.prev.Key(msg.String()):
+			return nil
+		case ui.Typing(msg) || msg.String() == "tab" || msg.String() == "shift+tab":
+			// A key the excerpt has no motion for, but the fields do: typing
+			// or cycling means the user is back at the inputs, so the focus
+			// follows before the key is handled below.
+			m.prev.SetFocus(false)
+		}
+	}
 	switch msg.String() {
 	case "esc":
 		m.Close()
@@ -561,11 +583,33 @@ func (m *Model) resultsBody(listW, previewW, listH int, pal *theme.Palette) stri
 	if body := m.list.Render(listW, listH, pal, m.displayPath); body != "" {
 		left = strings.Split(body, "\n")
 	}
-	var target codepreview.Target
-	if it, ok := m.list.Current(); ok {
-		target = codepreview.Target{Path: it.Path, Line: it.Line}
+	return m.prev.Columns(left, listW, previewW, listH, m.previewTarget(), pal)
+}
+
+// previewTarget is the selected match as the preview column's target: its
+// file, line and — so the hit keeps its match emphasis inside the excerpt
+// (#2327) — every match range on that line (#1121). The zero Target (no
+// selection) renders an empty column.
+func (m *Model) previewTarget() codepreview.Target {
+	it, ok := m.list.Current()
+	if !ok {
+		return codepreview.Target{}
 	}
-	return m.prev.Columns(left, listW, previewW, listH, target, pal)
+	src := it.Ranges()
+	ranges := make([]codepreview.Range, 0, len(src))
+	for _, r := range src {
+		if r.End > r.Start {
+			ranges = append(ranges, codepreview.Range{Start: r.Start, End: r.End})
+		}
+	}
+	return codepreview.Target{Path: it.Path, Line: it.Line, Ranges: ranges}
+}
+
+// previewSplit is the overlay's column geometry: the preview column adapts to
+// the code around the selected hit (#2327). View and Click both read it, so
+// the clickable region and the rendered rule agree.
+func (m *Model) previewSplit(innerW, listH int) (listW, previewW int) {
+	return m.prev.SplitFor(innerW, listH, m.previewTarget())
 }
 
 // toggleSpans mirrors togglesRow's layout: the half-open x range of each
@@ -623,7 +667,17 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		}
 	}
 	inList := m.lay.listW <= 0 || cx < m.lay.listW // right of it lies the preview (#2047)
-	if inList && m.lay.listTop >= 0 && cy >= m.lay.listTop && cy < m.lay.listTop+m.lay.listRows {
+	inRows := m.lay.listTop >= 0 && cy >= m.lay.listTop && cy < m.lay.listTop+m.lay.listRows
+	if !inList && inRows {
+		// A press in the excerpt column hands it the scroll keys (#2327)
+		// instead of activating the row behind it.
+		m.prev.SetFocus(true)
+		return nil
+	}
+	if inList {
+		m.prev.SetFocus(false)
+	}
+	if inList && inRows {
 		if idx, ok := m.list.ItemAt(cy - m.lay.listTop); ok {
 			if idx == m.list.Cursor() {
 				return m.openCurrent()
@@ -634,8 +688,15 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	return nil
 }
 
-// Wheel scrolls the results list by delta items.
-func (m *Model) Wheel(delta int) { m.list.Move(delta) }
+// Wheel scrolls the results list by delta items — or, with the preview
+// focused, the excerpt (#2327).
+func (m *Model) Wheel(delta int) {
+	if m.prev.Focused() {
+		m.prev.Scroll(delta)
+		return
+	}
+	m.list.Move(delta)
+}
 
 // openCurrent dispatches the selected match as a navigation and closes.
 func (m *Model) openCurrent() tea.Cmd {
@@ -787,7 +848,7 @@ func (m *Model) View() string {
 	}
 
 	listH := ui.ClampResultRows(m.height/2 - 9)
-	listW, previewW := codepreview.Split(innerW)
+	listW, previewW := m.previewSplit(innerW, listH)
 	lay.listTop = len(rows)
 	lay.listRows = listH
 	lay.listW = listW
@@ -895,6 +956,12 @@ func (m *Model) statusRow(width int) string {
 	pal := m.theme()
 	dim := lipgloss.NewStyle().Faint(true)
 	switch {
+	case m.prev.Focused():
+		// The excerpt owns the keyboard (#2327): spell its motions out
+		// instead of the scan counts, which the row shows again on blur.
+		return dim.Render(ansi.Truncate(
+			"preview — j/k ctrl+d/u scroll, h/l scrolls right, z back to the match, esc leaves",
+			width, "…"))
 	case m.errText != "":
 		return lipgloss.NewStyle().Foreground(pal.Error).Render(
 			ansi.Truncate("error: "+m.errText, width, "…"))
@@ -902,7 +969,9 @@ func (m *Model) statusRow(width int) string {
 		if m.replaceMode {
 			return dim.Render("type to search — enter replaces match, ctrl+f file, ctrl+a all, ctrl+t/g excludes, ctrl+enter opens")
 		}
-		return dim.Render("type to search — enter opens, esc closes, tab cycles fields")
+		return dim.Render(ansi.Truncate(
+			"type to search — enter opens, esc closes, tab cycles fields, alt+p/ctrl+e the preview",
+			width, "…"))
 	case m.scanning && m.list.Total() == 0:
 		return dim.Render("searching…")
 	case m.list.Total() == 0:

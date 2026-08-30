@@ -13,12 +13,23 @@ import (
 // writeLines writes a file whose n-th line reads "line <n>".
 func writeLines(t *testing.T, n int) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "sample.txt")
-	var b strings.Builder
+	return writeFile(t, "sample.txt", lines(n, func(i int) string { return "line " + strconv.Itoa(i) }))
+}
+
+// lines builds n lines from a generator.
+func lines(n int, gen func(i int) string) []string {
+	out := make([]string, 0, n)
 	for i := 1; i <= n; i++ {
-		b.WriteString("line " + strconv.Itoa(i) + "\n")
+		out = append(out, gen(i))
 	}
-	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+	return out
+}
+
+// writeFile writes rows as a file named name in a fresh temp dir.
+func writeFile(t *testing.T, name string, rows []string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte(strings.Join(rows, "\n")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return path
@@ -33,12 +44,17 @@ func plain(rows []string) []string {
 	return out
 }
 
+// at renders the preview of one target and returns its stripped rows.
+func at(c *Cache, path string, line, width, height int) []string {
+	return plain(c.Render(Target{Path: path, Line: line}, width, height, nil))
+}
+
 // TestRenderCentersTarget checks the excerpt is centered on the target line
 // and always fills exactly the requested height (#2047).
 func TestRenderCentersTarget(t *testing.T) {
 	path := writeLines(t, 100)
 	var c Cache
-	rows := plain(c.Render(path, 50, 40, 11, nil))
+	rows := at(&c, path, 50, 40, 11)
 	if len(rows) != 11 {
 		t.Fatalf("got %d rows, want 11", len(rows))
 	}
@@ -60,7 +76,7 @@ func TestRenderCentersTarget(t *testing.T) {
 func TestRenderNearFileStartAndEnd(t *testing.T) {
 	path := writeLines(t, 8)
 	var c Cache
-	rows := plain(c.Render(path, 2, 40, 11, nil))
+	rows := at(&c, path, 2, 40, 11)
 	if len(rows) != 11 {
 		t.Fatalf("got %d rows, want 11", len(rows))
 	}
@@ -77,8 +93,8 @@ func TestRenderNearFileStartAndEnd(t *testing.T) {
 func TestRenderFollowsCursor(t *testing.T) {
 	path := writeLines(t, 100)
 	var c Cache
-	first := plain(c.Render(path, 10, 40, 11, nil))
-	second := plain(c.Render(path, 60, 40, 11, nil))
+	first := at(&c, path, 10, 40, 11)
+	second := at(&c, path, 60, 40, 11)
 	if strings.Join(first, "\n") == strings.Join(second, "\n") {
 		t.Fatal("preview did not follow the cursor")
 	}
@@ -86,7 +102,7 @@ func TestRenderFollowsCursor(t *testing.T) {
 		t.Fatalf("row 5 = %q, want line 60", second[5])
 	}
 	// Re-rendering the first target must reproduce it exactly (cache hit).
-	if again := plain(c.Render(path, 10, 40, 11, nil)); strings.Join(again, "\n") != strings.Join(first, "\n") {
+	if again := at(&c, path, 10, 40, 11); strings.Join(again, "\n") != strings.Join(first, "\n") {
 		t.Fatal("re-render of the same target differs")
 	}
 }
@@ -95,7 +111,7 @@ func TestRenderFollowsCursor(t *testing.T) {
 // unreadable targets degrade to a notice instead of crashing.
 func TestRenderMissingFile(t *testing.T) {
 	var c Cache
-	rows := plain(c.Render(filepath.Join(t.TempDir(), "gone.txt"), 3, 40, 11, nil))
+	rows := at(&c, filepath.Join(t.TempDir(), "gone.txt"), 3, 40, 11)
 	if len(rows) != 11 {
 		t.Fatalf("got %d rows, want 11", len(rows))
 	}
@@ -107,26 +123,23 @@ func TestRenderMissingFile(t *testing.T) {
 // TestRenderDirectoryAndEmptyPath keeps the other degenerate targets silent.
 func TestRenderDirectoryAndEmptyPath(t *testing.T) {
 	var c Cache
-	if rows := plain(c.Render(t.TempDir(), 1, 40, 5, nil)); rows[0] != Unavailable {
+	if rows := at(&c, t.TempDir(), 1, 40, 5); rows[0] != Unavailable {
 		t.Fatalf("directory row 0 = %q, want %q", rows[0], Unavailable)
 	}
 	var empty Cache
-	for i, r := range plain(empty.Render("", 1, 40, 5, nil)) {
+	for i, r := range at(&empty, "", 1, 40, 5) {
 		if r != "" {
 			t.Fatalf("empty path row %d = %q, want blank", i, r)
 		}
 	}
 }
 
-// TestRenderFitsWidth guards the hard truncation: no rendered row may exceed
+// TestRenderFitsWidth guards the hard clipping: no rendered row may exceed
 // the column width, or the two-column popup layout breaks.
 func TestRenderFitsWidth(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "long.txt")
-	if err := os.WriteFile(path, []byte(strings.Repeat("x", 400)+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	path := writeFile(t, "long.txt", []string{strings.Repeat("x", 400)})
 	var c Cache
-	for i, r := range c.Render(path, 1, 30, 4, nil) {
+	for i, r := range c.Render(Target{Path: path, Line: 1}, 30, 4, nil) {
 		if w := ansi.StringWidth(r); w > 30 {
 			t.Fatalf("row %d width %d > 30", i, w)
 		}

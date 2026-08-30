@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-08-27T13:00:00Z
+timestamp: 2026-08-30T00:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -460,12 +460,17 @@ Beside the tree the overlay renders the shared **code-preview column**
 around its line, behind a dim vertical rule, following the cursor as one walks
 the tree — so a caller's context is readable without jumping into it. The tree
 block is blank-padded to the window height so the box no longer resizes as
-children load, `codepreview.Split` gives the excerpt two fifths of the content
-width (dropped entirely below 64 cells, where the tree keeps the full width),
-and the box may grow to 120 columns to carry both. A deleted or unreadable
-target degrades to a dim `preview unavailable` notice. Same component, same
-geometry as the [palette pickers](./command-palette.md) and the
-[find-in-path overlay](/architecture/search.md).
+children load, `Cache.SplitFor` sizes the excerpt to the code around the
+selected entry within 50 to 120 cells (dropped entirely below 64 cells of
+content, where the tree keeps the full width), and the box may grow to 120
+columns to carry both. Since #2327 the excerpt is a read-only mini editor —
+syntax-highlighted, line-numbered, the entry's line backgrounded — and
+`alt+p` / `ctrl+e` hands it the keyboard so one can scroll around the call
+site with the editor's own motions (`esc` gives the tree the keys back; the
+hint row follows the focus). A deleted or unreadable target degrades to a dim
+`preview unavailable` notice. Same component, same geometry and same motions
+as the [palette pickers](./command-palette.md) and the [find-in-path
+overlay](/architecture/search.md).
 
 **Inheritance analysis & navigation (0480, #1448).** Rides on two request
 families added M1-style beside call hierarchy: `textDocument/implementation`

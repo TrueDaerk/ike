@@ -1,5 +1,45 @@
 # Log
 
+## 2026-08-30 (Search previews are a read-only mini editor, #2327)
+
+- **`internal/codepreview` renders code, not text**: the excerpt column every
+  picker carries now goes through the tree-sitter pipeline of
+  `internal/highlight` — the same standalone-excerpt parse the definition peek
+  and the hover code fences use — behind a dim line-number gutter. A language
+  with no grammar (or a build without the parser) falls back to plain text, so
+  nothing can fail the frame. Tabs expand to four cells *before* the parse, so
+  spans, match ranges and rendered cells share one coordinate system, and the
+  styled rows are memoised per window/hit/palette: walking a result list
+  re-parses only when the target actually moves.
+- **The hit line reads like the editor's current line**: it carries the
+  current-line background across the full column, gutter included, and
+  `Target.Ranges` — the finder's per-line match ranges (#1121) — render bold
+  and underlined *on top of* the capture colours instead of replacing them.
+- **The column scrolls** (`Cache.Key`, `Cache.Scroll`): `alt+p` (or `ctrl+e`,
+  the macOS alias, #422) focuses it in the find-in-path overlay, the palette
+  pickers and the call-hierarchy overlay alike; a mouse press inside it does
+  the same and the vertical rule turns accent-coloured. The motions are the
+  editor's, minus every edit — `j`/`k`, `ctrl+d`/`ctrl+u`, `ctrl+f`/`ctrl+b`,
+  `h`/`l`, `0`/`$`, `g`/`G`, and `z` back to the hit. Vertical scrolling walks
+  the whole file (a short read tells the viewport where the file ends, so no
+  full scan is needed to clamp the tail) and the horizontal offset slices the
+  *styled* rows with `ansi.Cut`, so colours survive it. `esc` blurs; moving
+  the result selection re-centers on the new hit and drops both offsets.
+- **The column adapts its width**: `Cache.Natural` measures the widest line of
+  the window around the hit plus its gutter, bounded to **50…120** cells, and
+  `SplitWidth` clamps that to half the content and to whatever leaves the list
+  40 cells. Measured around the *hit*, not the scrolled window, so scrolling
+  never resizes the columns under the cursor. `Split(inner)` stays as the
+  no-target shorthand; the popups keep their 40/11 rules from #2047.
+- **`ui.Typing` is EditKey's insertion guard, exported**: the finder and the
+  palette blur a focused excerpt the moment one types, so the query field
+  takes the key — and they ask the shared predicate instead of re-deriving
+  `msg.Text != ""`, which the #2002 sweep guard reads as a hand-rolled input.
+- **No new commands, so no new keybinds**: the focus toggle and the motions
+  are overlay-local keys, like the finder's `ctrl+c`/`ctrl+w`/`ctrl+x`
+  toggles — the keymap layer never sees them while an overlay owns the
+  keyboard.
+
 ## 2026-08-28 (cmd+c in the HTTP response pane and the explorer, #2315)
 
 - **The copy chord is bound where users pressed it**: unbound-chord telemetry

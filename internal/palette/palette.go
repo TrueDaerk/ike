@@ -251,7 +251,12 @@ func (p *Palette) AnchorPos() (int, int) { return p.anchorX, p.anchorY }
 func (p *Palette) Query() string { return p.query }
 
 // Close hides the palette without side effects.
-func (p *Palette) Close() { p.open = false }
+func (p *Palette) Close() {
+	p.open = false
+	// The preview column starts fresh on the next open: no stale window, no
+	// leftover scroll offsets and no lingering focus (#2327).
+	p.prev.Reset()
+}
 
 // PanelResults reports the rows currently listed plus the panel heading of
 // the active mode, for the Find-panel hand-off (#2055). It reads state only —
@@ -360,6 +365,30 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 	// main enter cases, which match on Code alone and would swallow the chord.
 	if msg.Code == tea.KeyEnter && msg.Mod == tea.ModAlt {
 		return p.altActivate()
+	}
+	// The code-preview column is a focusable read-only viewport (#2327):
+	// alt+p / ctrl+e hands it the keyboard, its motions then scroll the
+	// excerpt, and esc gives the query field the keys back. Checked ahead of
+	// everything below, whose plain-key cases would swallow the motions.
+	if p.previewing() {
+		if codepreview.IsFocusKey(msg.String()) {
+			p.prev.SetFocus(!p.prev.Focused())
+			return nil
+		}
+		if p.prev.Focused() {
+			switch {
+			case msg.Code == tea.KeyEscape:
+				p.prev.SetFocus(false)
+				return nil
+			case p.prev.Key(msg.String()):
+				return nil
+			case ui.Typing(msg):
+				// A key the excerpt has no motion for but the query does:
+				// typing means the user is back at the filter, so the focus
+				// follows before the key is handled below.
+				p.prev.SetFocus(false)
+			}
+		}
 	}
 	// Column focus for a SideMode open (#778): tab toggles between the left
 	// (projects) and right (files) columns; on an empty query the plain
@@ -680,12 +709,15 @@ func (p *Palette) Click(x, y int) tea.Cmd {
 		}
 	}
 	if p.previewing() {
-		// Right of the result column lies the code preview (#2047), which is
-		// inert — a press there must not activate the row behind it.
-		if listW, previewW := codepreview.Split(inner); previewW > 0 {
+		// Right of the result column lies the code preview (#2047): a press
+		// there hands it the scroll keys (#2327) instead of activating the
+		// row behind it.
+		if listW, previewW := p.previewSplit(inner); previewW > 0 {
 			if x >= listW {
+				p.prev.SetFocus(true)
 				return nil
 			}
+			p.prev.SetFocus(false)
 			mainW = listW
 		}
 	}
@@ -713,6 +745,14 @@ func (p *Palette) previewTarget() PreviewTarget {
 		return PreviewTarget{}
 	}
 	return p.items[p.selected].Preview
+}
+
+// previewSplit is the popup's column geometry while a preview is open: the
+// excerpt column adapts to the code around the selected row's target, within
+// the shared width bounds (#2327). View and the click mapping both read it, so
+// they agree on where the columns lie.
+func (p *Palette) previewSplit(inner int) (listW, previewW int) {
+	return p.prev.SplitFor(inner, p.visibleRows(), p.previewTarget())
 }
 
 // sideWidth is the left column's width for an inner content width (#778),
@@ -860,7 +900,7 @@ func (p *Palette) View() string {
 	// is padded to the full result window, so the popup keeps its height with
 	// no matches at all.
 	if p.previewing() {
-		listW, previewW := codepreview.Split(inner)
+		listW, previewW := p.previewSplit(inner)
 		if previewW > 0 {
 			h := p.visibleRows()
 			left := strings.Split(p.list(listW, true), "\n")
