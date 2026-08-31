@@ -225,8 +225,16 @@ keys at all. A chord marked ⚠️ needs more than that: it relies on key-releas
 reporting, which fewer terminals implement. See
 [Troubleshooting](../troubleshooting.md) when a chord does nothing.`))
 
+	// The table is generated from the macOS default set — a superset — so the
+	// page is identical whatever platform docgen runs on. Rows that ship only
+	// on macOS get a "—" in the Linux/Windows column instead of their folded
+	// (and there unbound) chord.
+	onLinux := map[string]bool{}
+	for _, bd := range keymap.DefaultsFor(keymap.PresetJetBrains, "linux") {
+		onLinux[bd.Chord.String()+"\x00"+bd.Command] = true
+	}
 	byContext := map[keymap.Context][]keymap.Binding{}
-	for _, bd := range keymap.Defaults(keymap.PresetJetBrains) {
+	for _, bd := range keymap.DefaultsFor(keymap.PresetJetBrains, "darwin") {
 		byContext[bd.Context] = append(byContext[bd.Context], bd)
 	}
 
@@ -264,7 +272,10 @@ reporting, which fewer terminals implement. See
 			// taps needing key-up events) earn a per-row marker.
 			warn := keymap.Classify(bd.Chord) == keymap.Undetectable
 			mac := chordCell(keymap.NormalizeChord(bd.Chord, "darwin"), warn)
-			other := chordCell(keymap.NormalizeChord(bd.Chord, "linux"), warn)
+			other := "—"
+			if onLinux[bd.Chord.String()+"\x00"+bd.Command] {
+				other = chordCell(keymap.NormalizeChord(bd.Chord, "linux"), warn)
+			}
 			fmt.Fprintf(&b, "| %s | %s | %s | `%s` |\n", bd.Title, mac, other, bd.Command)
 		}
 		b.WriteString("\n")
@@ -487,7 +498,7 @@ bring their own.`))
 
 	chords := map[string]string{}
 	chordGlobal := map[string]bool{}
-	for _, bd := range keymap.Defaults(keymap.PresetJetBrains) {
+	for _, bd := range keymap.DefaultsFor(keymap.PresetJetBrains, "darwin") {
 		// Several chords can share a command (a JetBrains primary plus a
 		// deliverable fallback); the shortest is the one worth advertising.
 		// A globally bound chord beats a shorter pane-scoped one either way

@@ -116,7 +116,7 @@ func TestOptionKeyEncodingsDecodeToAltChords(t *testing.T) {
 // default set promises. This is the acceptance test for "alt+f7 fires Find
 // usages on a Mac".
 func TestOptionChordsResolveToDefaultCommands(t *testing.T) {
-	table := BuildTable(Defaults(PresetJetBrains), nil, "darwin")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin")
 	cases := []struct {
 		raw  string
 		ctx  Context

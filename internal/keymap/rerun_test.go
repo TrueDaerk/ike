@@ -11,7 +11,7 @@ import "testing"
 // neither conflict with it nor shadow it.
 func TestPerContextCtrlR(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux"} {
-		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
 		chord := NormalizeChord(MustParseChord("ctrl+r"), goos)
 		if b, ok := table.Lookup(chord, HTTP); !ok || b.Command != "http.resend" {
 			t.Errorf("%s: http ctrl+r = %+v ok=%v, want http.resend", goos, b, ok)
