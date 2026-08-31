@@ -189,6 +189,7 @@ var reachableAlternatives = map[string]string{
 	// Alt-modified chord, so all of them escape through the palette; the ones
 	// with a menu or context-menu home name it too.
 	"file.copyPath":       "palette / context menu",
+	"file.openInBrowser":  "palette / context menu",
 	"lsp.organizeImports": "palette / context menu",
 	"json.jqPlayground":   "palette / Tools menu",
 	"yaml.yqPlayground":   "palette / Tools menu",

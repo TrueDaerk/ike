@@ -225,6 +225,32 @@ func TestAudit2305DefaultChords(t *testing.T) {
 	}
 }
 
+// TestOpenInBrowserDefaultChord (#2365): file.openInBrowser shipped menu-only
+// until telemetry showed it in daily use; it now carries JetBrains'
+// WebOpenInAction chord verbatim. Global, so the one row covers the editor and
+// the explorer — the two places the menu offers it — and alt-modified, hence
+// fragile, so it records its escape route like every other Alt chord.
+func TestOpenInBrowserDefaultChord(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
+		chord := NormalizeChord(MustParseChord("alt+f2"), goos)
+		b, ok := table.Lookup(chord, Global)
+		if !ok || b.Command != "file.openInBrowser" {
+			t.Errorf("%s: alt+f2 = %+v ok=%v, want file.openInBrowser", goos, b, ok)
+		}
+		// Reachable from the explorer too, not just a Global fallback in name.
+		if b, ok := table.Lookup(chord, Explorer); !ok || b.Command != "file.openInBrowser" {
+			t.Errorf("%s: alt+f2 in the explorer = %+v ok=%v, want file.openInBrowser", goos, b, ok)
+		}
+		if b, ok := table.Lookup(chord, Editor); !ok || b.Command != "file.openInBrowser" {
+			t.Errorf("%s: alt+f2 in the editor = %+v ok=%v, want file.openInBrowser", goos, b, ok)
+		}
+	}
+	if reachableAlternatives["file.openInBrowser"] == "" {
+		t.Error("file.openInBrowser has no reachableAlternatives entry")
+	}
+}
+
 // TestDebugFKeyPlatformDefaults (#1374): the run/debug F-key family ships the
 // JetBrains macOS cmd form as the darwin primary with the Windows-scheme ctrl
 // form alongside; off macOS both fold onto the ctrl chord. Plain ctrl+F-keys

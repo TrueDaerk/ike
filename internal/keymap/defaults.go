@@ -495,6 +495,16 @@ var jetbrainsRows = []row{
 	// layout, cmd+shift+f12 hides all tool windows, alt+shift+f12 opens the
 	// saved-layout picker.
 	{"alt+shift+f12", "window.layouts", "Window layouts", Global, "Windowing (#2305)"},
+	// Open in Browser (#2365): shipped menu-only (#1429/#2298), but telemetry
+	// showed it invoked several times a day, always through the menu — the
+	// detour costs real time in HTML-preview work. JetBrains' own chord for
+	// WebOpenInAction is alt+f2 in both keymaps and it is free here (f2 and
+	// shift+f2 are the diagnostic steps, cmd/ctrl+f2 stops the debugger), so it
+	// ships verbatim; no bracket or slash key, so QWERTZ types it unchanged.
+	// Global, like file.copyPath: the command resolves its subject from the
+	// focused pane, so one row serves the editor and the explorer — exactly the
+	// two places the menu offers the action.
+	{"alt+f2", "file.openInBrowser", "Open in browser", Global, "App (#2365)"},
 }
 
 // darwinRows are default bindings that only ship on macOS: chords whose
