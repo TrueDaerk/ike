@@ -203,6 +203,11 @@ var reachableAlternatives = map[string]string{
 	// for the body, and ctrl+c once a selection exists (#2062) — either of
 	// which delivers on every terminal.
 	"http.copyResponse": "response pane \"y\" / palette",
+	// #2339: both scratch-store connectors sit on cmd+alt+shift chords, so
+	// the palette is their escape; promote additionally has the scratch
+	// manager's own ctrl+p, which delivers on every terminal.
+	"scratch.newFromSelection": "palette",
+	"scratch.promote":          "scratch manager ctrl+p / palette",
 }
 
 // StatusMatrix builds the ledger over the default table. commandExists

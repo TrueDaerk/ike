@@ -22,6 +22,16 @@ import (
 // path needs an id of its own (the picker's "Plain Text" row runs it).
 const scratchTextCommandID = "scratch.new.text"
 
+// The two commands that connect the store to the ordinary work flow (#2339):
+// one way in from a selection, one way out to a project path. Their ids sit
+// outside the "scratch.new." family prefix on purpose — that prefix is the
+// language picker's payload, audited as picker entries, and these two are
+// standalone commands with chords of their own.
+const (
+	scratchFromSelectionCommandID = "scratch.newFromSelection"
+	scratchPromoteCommandID       = "scratch.promote"
+)
+
 // scratchCommands builds the scratch.new command family. It runs on every
 // registry query (Capabilities is lazy), so languages registered later —
 // plugins, tests — appear without ordering constraints.
@@ -29,6 +39,9 @@ func scratchCommands() []plugin.Command {
 	cmds := []plugin.Command{
 		appCommand("scratch.new", "New Scratch File…", ShowNewScratchMsg{}),
 		appCommand(scratchTextCommandID, "New Scratch File: Plain Text", NewScratchMsg{Ext: "txt"}),
+		appCommand(scratchFromSelectionCommandID, "New Scratch from Selection",
+			NewScratchFromSelectionMsg{}),
+		appCommand(scratchPromoteCommandID, "Promote Scratch to File…", PromoteScratchMsg{}),
 		appCommand("scratch.list", "Open Scratch File…", ShowScratchFilesMsg{}),
 		appCommand(scratchManageCommandID, "Manage Scratch Files…", ShowScratchManagerMsg{}),
 	}
@@ -99,9 +112,17 @@ func scratchEntries() []palette.ScratchEntry {
 
 // newScratch creates a scratch with the requested extension and opens it
 // through the standard funnel, so highlighting, LSP, tabs and session restore
-// all apply unchanged and the new scratch ends focused.
-func (m Model) newScratch(ext string) (tea.Model, tea.Cmd) {
-	path, err := scratch.Create(ext)
+// all apply unchanged and the new scratch ends focused. An empty content
+// seeds the language's file template as before; a non-empty one is written
+// instead (#2339's selection route).
+func (m Model) newScratch(ext, content string) (tea.Model, tea.Cmd) {
+	create := scratch.Create
+	if content != "" {
+		create = func(ext string) (string, error) {
+			return scratch.CreateWithContent(ext, []byte(content))
+		}
+	}
+	path, err := create(ext)
 	if err != nil {
 		m.host.Notify(host.Warn, "scratch: "+err.Error())
 		return m, nil

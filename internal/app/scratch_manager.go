@@ -30,6 +30,11 @@ import (
 // ops announce — so open tabs re-point or close through the one path that
 // already exists (#175), tab titles follow the new name and the editor's
 // language state is reset by editor.SetPath. Nothing here re-implements that.
+//
+// Promote (ctrl+p, #2339) is the one action that leaves the manager: it takes
+// the scratch out of the store entirely, so it hands the selected row to
+// scratch.promote's own target-path prompt (scratch_promote.go) instead of
+// adding a step here.
 
 // Manager step indices; esc walks them backwards.
 const (
@@ -299,10 +304,11 @@ func (m *Model) renderScratchManager() {
 		}
 		add("")
 		addButtons([2]string{"open", enter}, [2]string{"rename", "\x12"},
-			[2]string{"language", "\x0c"}, [2]string{"delete", "\x04"}, [2]string{"close", esc})
+			[2]string{"language", "\x0c"}, [2]string{"promote", "\x10"},
+			[2]string{"delete", "\x04"}, [2]string{"close", esc})
 		add("")
 		add("type filters · ↑↓ select · enter open · esc close")
-		add("ctrl+r rename · ctrl+l language · ctrl+d delete")
+		add("ctrl+r rename · ctrl+l language · ctrl+p promote · ctrl+d delete")
 	case smStepRename:
 		e, _ := s.selected()
 		add("Rename " + e.name)
@@ -446,6 +452,14 @@ func (m Model) updateScratchManagerList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 	case "ctrl+l":
 		if _, ok := s.selected(); ok {
 			m.openScratchLangPicker()
+		}
+	case "ctrl+p":
+		// Promote (#2339) leaves the manager rather than adding a step: the
+		// scratch is on its way out of the store, and the target-path prompt
+		// is the same one the palette command opens.
+		if e, ok := s.selected(); ok {
+			m.closeScratchManager()
+			return m.Update(PromoteScratchMsg{Path: e.path})
 		}
 	default:
 		if handled, changed := s.search.Key(msg); handled {
@@ -685,6 +699,8 @@ func (m Model) mouseScratchManager(msg mouseEvent, x, y int) (tea.Model, tea.Cmd
 			key = tea.Key{Code: 'r', Mod: tea.ModCtrl}
 		case '\x0c':
 			key = tea.Key{Code: 'l', Mod: tea.ModCtrl}
+		case '\x10':
+			key = tea.Key{Code: 'p', Mod: tea.ModCtrl}
 		case '\x04':
 			key = tea.Key{Code: 'd', Mod: tea.ModCtrl}
 		}

@@ -23,7 +23,7 @@ import (
 // "public API" SemVer talks about is the settings-file format, the keymap
 // schema and the plugin ABI — not a Go package API, since IKE ships as a
 // binary and is not importable.
-var Version = "0.5.96"
+var Version = "0.5.97"
 
 // Commit is the short git commit the binary was built from, stamped at build
 // time. Empty when built without the Makefile.
