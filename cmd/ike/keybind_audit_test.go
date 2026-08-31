@@ -144,7 +144,6 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"history.projectTimeline", reasonMenu},       // VCS/File menu
 	{"file.localHistory", reasonMenu},             //
 	{"file.timeline", reasonMenu},                 //
-	{"file.openInBrowser", reasonMenu},            //
 	{"file.openPath", reasonFlavour},              // cmd+shift+o is the everyday open
 	{"issues.toggle", reasonOccasional},           //
 	{"log.openRotatedSet", reasonOccasional},      //

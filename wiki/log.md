@@ -1,5 +1,19 @@
 # Log
 
+## 2026-08-31 (Open in Browser gets a default keybind, #2365)
+
+- **`file.openInBrowser` is no longer menu-only**: telemetry showed the command
+  in daily use, every invocation routed through the File/context menu. It now
+  ships JetBrains' own `WebOpenInAction` chord verbatim — **`alt+f2`**, free on
+  both platforms next to `f2`/`shift+f2` (diagnostics) and `cmd`/`ctrl+f2`
+  (stop debugging), and typable on QWERTZ.
+- **One Global row covers both call sites**: the command resolves its subject
+  through `refactorTarget`, exactly like `file.copyPath`, so the editor and the
+  explorer are served without a per-context binding. Its audit-ledger entry in
+  `cmd/ike/keybind_audit_test.go` is gone; being Alt-modified it is fragile, so
+  it records the palette/context-menu escape route like every other Alt chord.
+  See [keybindings](/architecture/keybindings.md).
+
 ## 2026-08-31 (playground follows its source file, #2356)
 
 - **The snapshot is re-read on external change**: an open jq/yq playground

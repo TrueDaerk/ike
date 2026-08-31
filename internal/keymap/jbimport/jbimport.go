@@ -196,6 +196,7 @@ var actionMap = map[string]string{
 	"NewScratchFile":             "scratch.new",
 	"CloseProject":               "project.close",
 	"CopyPaths":                  "file.copyPath",
+	"WebOpenInAction":            "file.openInBrowser",
 	"EditorToggleUseSoftWraps":   "view.toggleWrap",
 
 	// Diff viewer.
