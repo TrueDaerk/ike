@@ -10023,6 +10023,16 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			// lands in the pane below — open popup, click into the editor,
 			// copy, toggle back, paste.
 			m.blurPopupLayer()
+		case msg.action == mouseWheel && !m.popupLayerHit(msg.X, msg.Y):
+			// The wheel outside every layer box scrolls the pane below
+			// (#2343). Scrolling is a reading gesture, not a focus gesture:
+			// unlike a press it neither blurs the layer nor changes the
+			// z-order — the floating terminal keeps keyboard and focus while
+			// the editor, explorer or tool pane under the pointer moves. Over
+			// a box the wheel still pages that box's scrollback (default).
+			// The coalescing stage (queueWheel) folds only events that share
+			// a cell, so a burst is either wholly inside or wholly outside
+			// and never splits between layer and pane.
 		default:
 			if tm, cmd, done := m.popupLayerMouse(msg); done {
 				return tm, cmd

@@ -1,5 +1,19 @@
 # Log
 
+## 2026-08-31 (wheel outside the popup layer scrolls the pane below, #2343)
+
+- **The wheel is a reading gesture, not a focus gesture**: with the popup
+  terminal or a torn-out floating panel (#1793) focused, a notch over no layer
+  box no longer vanishes into the layer — it falls through to the pane under
+  the pointer (editor, explorer, terminal, tool panes) via the ordinary wheel
+  route, with no per-pane special case. The layer keeps keyboard and focus:
+  nothing blurs, nothing rises, the z-order is untouched.
+- Presses outside the boxes still blur the layer (#2309), the wheel over a box
+  still pages that box's scrollback, and the exception skips while a drag
+  (selection, scrollbar, tab tear-out) is active. Coalescing (#238) folds only
+  events sharing a cell, so a burst never splits between layer and pane. See
+  [terminal](/architecture/terminal.md) and [mouse](/architecture/mouse.md).
+
 ## 2026-08-31 (scratch files findable by their own name in the `@` finder, #2341)
 
 - **`@notes` finds a scratch named `notes.go`**: `FileMode.scratchItems` now

@@ -502,8 +502,10 @@ func (m Model) renderFloatTerm(f *floatTerm) string {
 // (#1806), and anything over no box at all falls through to the popup box's
 // handler. Presses outside every layer box never reach this — the funnel's
 // layer branch blurs the layer and lets them fall through to the panes below
-// (#2309). done reports whether the event was consumed (always — over its
-// boxes the layer owns the mouse like it owns the keyboard).
+// (#2309), and wheel events outside every box never reach it either — they
+// scroll the pane under the pointer while the layer keeps focus (#2343). done
+// reports whether the event was consumed (always — over its boxes the layer
+// owns the mouse like it owns the keyboard).
 func (m Model) popupLayerMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 	if f := m.floatTermFor(m.popupBoxAt(msg.X, msg.Y)); f != nil {
 		return m.floatTermMouse(f, msg)
