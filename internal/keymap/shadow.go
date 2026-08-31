@@ -61,6 +61,12 @@ var intentionalDefaultShadows = map[string]string{
 	// secondary everywhere.
 	shadowKey("ctrl+left", "editor.lineStart", "editor.tab.prev"): "linux Cmd-fold: line start over tab-prev (ctrl+alt+left remains)",
 	shadowKey("ctrl+right", "editor.lineEnd", "editor.tab.next"):  "linux Cmd-fold: line end over tab-next (ctrl+alt+right remains)",
+	// Off macOS the Cmd→Ctrl fold lands the IntelliJ macOS find-next/previous
+	// aliases (#2359) on ctrl+g / ctrl+shift+g, where the editor's multi-caret
+	// commands deliberately win — accepted, since f3/shift+f3 stay the
+	// delivered match-stepping keys everywhere.
+	shadowKey("ctrl+g", "editor.caret.addNext", "search.nextMatch"):      "linux Cmd-fold: add-next-caret over find-next (f3 remains)",
+	shadowKey("ctrl+shift+g", "editor.caret.addAll", "search.prevMatch"): "linux Cmd-fold: add-all-carets over find-previous (shift+f3 remains)",
 }
 
 // detectShadows scans the effective (post-conflict) binding set for
