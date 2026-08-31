@@ -80,8 +80,11 @@ func (m *Model) routeWatchEvent(msg watch.EventMsg) tea.Cmd {
 			// Externally deleted, nothing unsaved: same as the
 			// explorer's delete flow — close the pane (#83). A dirty
 			// buffer instead stays open, marked stale by the editor.
+			// A playground following the file is told first (#2356): it
+			// reads the buffer that is about to be closed.
+			playCmd := m.playWatchEvent(msg)
 			m.closeEditorsForPath(msg.Path, false)
-			return tea.Batch(append(hookCmds, vcsCmd)...)
+			return tea.Batch(append(hookCmds, playCmd, vcsCmd)...)
 		}
 	}
 	if msg.Kind == watch.FileChanged || msg.Kind == watch.FileCreated {
@@ -95,5 +98,11 @@ func (m *Model) routeWatchEvent(msg watch.EventMsg) tea.Cmd {
 	// followers tail the set's newest member, so the event is routed by
 	// follow source rather than by path.
 	hookCmds = append(hookCmds, m.routeMergedLogFollow(msg))
-	return tea.Batch(append(hookCmds, m.routeToEditor(msg.Path, msg), vcsCmd)...)
+	// The editor first, the playground after it: an open playground re-reads
+	// its input off the buffer (#2356), which the routing above has just
+	// reloaded from disk. Both steps are sequenced here rather than left to
+	// tea.Batch's argument order.
+	edCmd := m.routeToEditor(msg.Path, msg)
+	playCmd := m.playWatchEvent(msg)
+	return tea.Batch(append(hookCmds, edCmd, playCmd, vcsCmd)...)
 }

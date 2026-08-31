@@ -1,7 +1,7 @@
 ---
 type: concept
 title: jq & yq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, inline compile/runtime errors, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context, `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context, `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, yaml, jq, yq, tools, inline, editor, http, completion, folding]
 timestamp: 2026-08-31T00:00:00Z
@@ -275,9 +275,11 @@ second name for one behavior.
 
 The input is **snapshotted and parsed once** when the playground opens — a jq
 program is written against the document that was on screen, and re-parsing a
-10 MB response on every rune would make the query line stutter for no gain. The
-snapshot is resolved in this order, and the mode mounts **in the pane the
-snapshot came from** (focus moves there):
+10 MB response on every rune would make the query line stutter for no gain.
+Once, that is, per *detected change*: an external write to the file the
+snapshot came from renews it (see [Following the source
+file](#following-the-source-file)). The snapshot is resolved in this order, and
+the mode mounts **in the pane the snapshot came from** (focus moves there):
 
 1. the **focused HTTP response pane**'s body ([HTTP Client](./http-client.md)) —
    the pane the user is looking at is the one they mean;
@@ -301,6 +303,54 @@ YAML file, and the program runs against every one, as jq's own stdin does
 inline message — for JSON naming the offending **line**, since a byte offset
 says nothing to the reader of a pretty-printed document; for YAML the decoder's
 own complaint, which already carries its line.
+
+## Following the source file
+
+#2356. The snapshot principle earns its keep against *typing*; against a file
+that changed underneath it, it produces a result describing a document that no
+longer exists — and says nothing about being stale. So the one exception: when
+the [external watcher](./editor.md#external-file-changes-roadmap-0140) reports a change to the file the snapshot
+came from, the playground re-reads its input and re-runs the current program
+against it.
+
+- **Automatic, not offered.** The alternative — "the input changed, press `r`
+  to reload" — buys nothing the machinery does not already give: parses past
+  `AsyncThreshold` run off the event loop, the watcher debounces bursts into
+  one flush, and superseded parses and runs are dropped on their generation
+  stamps. What it costs is an answer required before every look.
+- **The input is renewed, not the playground.** Query, caret, history
+  position, the expanded view and the result buffer's focus all stay where
+  they were. A refresh is the same path a program change takes — new
+  generation, cancel the run in flight, parse, run — with a new input instead
+  of a new program. Parses carry their **own** counter (`pgen`) beside the run
+  generation, because typing during a long parse bumps the run generation and
+  must not discard the input being decoded.
+- **Only a whole-file editor source.** An HTTP response is not a file and is
+  never followed. A **selection** is not followed either: after an edit its
+  character range names a different stretch of the file, so "re-read the
+  selection" has no honest answer, and re-querying something the user never
+  selected is worse than a snapshot they can refresh by reopening.
+- **The buffer is the truth, the event is the trigger.** The refreshed text is
+  read from the editor showing the file, after that editor has applied its own
+  reload — so a **dirty** buffer, which the editor deliberately does not
+  auto-reload (see [the editor's external-change handling](./editor.md)), does not get foreign content
+  pushed under its unsaved edits. A digest of the last parsed text makes that
+  case, an unchanged rewrite and a disabled auto-reload a no-op rather than a
+  wasted parse. IKE's own saves never arrive at all: the watcher suppresses
+  them through its save epoch.
+- **A broken new input keeps the last result.** A document saved mid-edit — a
+  `,` short, a key half written — reports its parse error on the info row while
+  the previous result stays on screen and the playground stays open. The next
+  change that parses picks the mode back up.
+- **A removed source ends the mode definitely.** File deleted or renamed away:
+  with unsaved edits the buffer is the only copy of the document left, so the
+  mode stays up over content that still exists and warns on its status line;
+  otherwise the hosting pane is closing with the file, and the playground
+  closes with a notification naming it rather than vanishing unexplained.
+- **The info row says it happened.** A `reloaded 15:04:05` segment next to the
+  input summary, plus the transient status line right after the refresh. The
+  stamp outlives the next keystroke — the status line does not, and "is this
+  still current?" would be unanswered again by the next key.
 
 ## What the query line opens on
 
@@ -869,8 +919,12 @@ library changed by another window — or by hand — is never stale.
   rewrite one is a `yq` invocation in a terminal.
 - **Two dialects, one open playground.** The mode replaces a pane's content,
   and that is one pane's worth of content; opening either closes the other.
-- **No live re-read of the buffer.** The snapshot is taken at open; editing the
-  file underneath and re-running means reopening the playground.
+- **No live re-read of the buffer.** #2356 narrowed this boundary to what it
+  was always about: the snapshot is not re-read *per keystroke*. It **is**
+  re-read when the source file changes on disk (see [Following the source
+  file](#following-the-source-file)). Unsaved edits in the buffer are still not
+  followed — nothing has happened yet that the watcher, or anybody else, could
+  call a change.
 - **In-pane, but not a pane.** #1970 revised the old "floating modal" boundary:
   the playground now lives inside the pane it queries — but it is still a
   *mode*, not a layout leaf. It has no key of its own, cannot be split, moved
