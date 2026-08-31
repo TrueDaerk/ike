@@ -1,5 +1,19 @@
 # Log
 
+## 2026-08-31 (scratch files findable by their own name in the `@` finder, #2341)
+
+- **`@notes` finds a scratch named `notes.go`**: `FileMode.scratchItems` now
+  fuzzy-matches every query against each scratch's **own file name**, not only
+  against the literal word "scratch" (#1812), which stays the way to list the
+  **whole store** newest-first.
+- **Project hits keep the top**: scratch rows are appended below the project
+  matches (ordered by fuzzy score, store order as tiebreak), like the
+  filesystem fallback (#1775); they take no part in frecency (#2155).
+- The existing `seen` map de-duplicates scratch paths against the filesystem
+  fallback, and path queries (`/`, `~/`, `./`) are untouched. See
+  [command palette](/architecture/command-palette.md) and
+  [scratch files](/architecture/scratch-files.md).
+
 ## 2026-08-31 (scratch from selection, promote scratch to a project file, #2339)
 
 - **`scratch.newFromSelection`** (`cmd+alt+shift+s`, palette + File menu)
