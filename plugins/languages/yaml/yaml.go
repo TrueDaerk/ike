@@ -75,7 +75,8 @@ func init() {
 // `mode: 644` carries no permission hint by construction, so the number hints
 // keep it and still warn with `= 01204`.
 func yamlSpans(lines []string) []lang.Span {
-	out := append(escapes.Base64YAMLSpans(lines), cronhint.YAMLSpans(lines)...)
+	out := append(escapes.Base64YAMLSpans(lines), escapes.UnicodeSpansIn(lines, escapes.UnicodeYAML)...)
+	out = append(out, cronhint.YAMLSpans(lines)...)
 	perms := permhint.YAMLSpans(lines)
 	out = append(out, perms...)
 	// Epoch timestamps (#1684): a YAML `key: value` is a value position like a

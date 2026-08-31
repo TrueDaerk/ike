@@ -161,7 +161,7 @@ func init() {
 // arithmetic, not a prefix — and the permission scan to the argument lists of
 // the mode APIs, where an octal literal is a file mode.
 func goSpans(lines []string) []lang.Span {
-	out := append(escapes.UnicodeSpans(lines), nethint.QuotedSpans(lines)...)
+	out := append(escapes.UnicodeSpansIn(lines, escapes.UnicodeGo), nethint.QuotedSpans(lines)...)
 	out = append(out, permhint.GoSpans(lines)...)
 	return append(out, consthint.GoSpans(lines)...)
 }

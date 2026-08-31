@@ -88,7 +88,7 @@ func jsonSpans(lines []string) []lang.Span {
 	// and win where the member name names the unit itself (#1685).
 	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.JSONValue))
 	out := append(maskSpans(lines), stamps...)
-	out = append(out, escapes.UnicodeSpans(lines)...)
+	out = append(out, escapes.UnicodeSpansIn(lines, escapes.UnicodeJSON)...)
 	out = append(out, cronhint.QuotedSpans(lines)...)
 	// Network literals (#1653): a CIDR prefix or a punycode host in a value.
 	out = append(out, nethint.Spans(lines)...)
