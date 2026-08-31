@@ -432,6 +432,29 @@ line runs that test (see /architecture/run-configurations.md).
   `\c`. `*`/`#` always match the word exactly, and `:s` keeps its own
   explicit `i`/`I` flags. The `\v`/`\c`/`\C` markers compose in any order at
   the start of the query.
+  **Structural mode** (#2363): in a JSON/YAML buffer (the languages
+  `internal/docpath` registers, `ndjson`/`ansible` included) a leading `\j`
+  marker — toggled with **ctrl+x**, ctrl+c-style — turns the query into a
+  **jq expression**: the matches are the document nodes it selects, mapped to
+  their source spans by `internal/jqpath`, which runs the program wrapped in
+  jq's `path(...)` (gojq, the playground's engine) against a
+  position-annotated parse of the buffer (hand-written for JSON,
+  `yaml.v3`-node-based for YAML; the decoded values mirror
+  `internal/jqplay`'s shapes, so a query selects what the playground shows).
+  Full jq works — `\j.users[] | select(.age > 40) | .name` — as long as the
+  result is document locations; a query computing fresh values fails
+  `path()`. A scalar highlights its token, a container its first line; a path
+  the document does not contain (jq's `path(.missing)` on `{}`) yields no
+  match. Matches feed the same span surface text search uses, so incsearch,
+  the counter, `n`/`N`, f3 and the highlight styles are all unchanged; the
+  spans are cached behind a shared pointer and re-evaluated per document
+  version (bounded by `search.StructuralTimeout` = 1 s, and capped at
+  `jqpath.MaxMatches` = 999, which renders as "999+"). An **invalid query
+  reports inline** in error colour on the open line (and as `E: jq: …` on
+  commit) instead of matching nothing silently; a buffer without a document
+  language, or one in large-file mode (`InsightOff`, the `docPathLang` gate),
+  reports why the mode is unavailable. The replace panel and `:s` stay
+  text-only.
   The input line is **incremental** (#255): each keystroke recompiles the
   pattern, jumps to the nearest match from the search origin and shows a live
   counter ("3/17", "no matches") on the `/` line; Esc restores cursor and
