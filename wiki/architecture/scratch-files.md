@@ -332,10 +332,13 @@ Scratches section below already deletes (with the confirm dialog) and renames
 scratches through the same store, so the picker stays a pure finder rather
 than duplicating that flow.
 
-**Reachable from the `@` file finder too (#1812).** A query that fuzzy-matches
-the word "scratch" surfaces the same `scratch.List` rows, newest-first, inline
-in the `@` finder below the project matches — no mode switch needed for the
-common case of typing "scratch" to find a scratch file. See [Command
+**Reachable from the `@` file finder too (#1812, #2341).** The `@` finder
+surfaces the same `scratch.List` rows inline, below the project matches, so no
+mode switch is needed: a query fuzzy-matching the word "scratch" lists the
+whole store newest-first, and **any other query is matched against each
+scratch's own file name** (#2341) — a scratch named `notes.go` is found by
+typing `@notes`. Scratch rows never displace a project hit and are
+de-duplicated against the filesystem fallback. See [Command
 Palette](/architecture/command-palette.md) for the file-mode ranking this
 slots into.
 
