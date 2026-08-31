@@ -335,9 +335,9 @@ func TestFileModeScratchQueryListsScratchFiles(t *testing.T) {
 }
 
 // TestFileModeScratchQueryDoesNotAffectNormalQueries guards #1812's other
-// acceptance criterion: a query unrelated to "scratch" is untouched, and an
-// empty query (which would fuzzy-match anything) does not pull scratch rows
-// in either.
+// acceptance criterion: a query matching neither "scratch" nor a scratch's own
+// name (#2341) is untouched, and an empty query (which would fuzzy-match
+// anything) does not pull scratch rows in either.
 func TestFileModeScratchQueryDoesNotAffectNormalQueries(t *testing.T) {
 	f := fileMode("app.go")
 	f.SetScratchList(func() []string { return []string{"/scratch/notes.go"} })
@@ -359,5 +359,120 @@ func TestFileModeScratchQueryNilSourceIsSafe(t *testing.T) {
 	f := fileMode("app.go")
 	if items := f.Results("scratch", Context{Root: "/proj"}); len(items) != 0 {
 		t.Fatalf("no scratch source: got %+v, want no rows", items)
+	}
+}
+
+// TestFileModeScratchFoundByOwnName guards #2341: a scratch is findable by its
+// own file name in the '@' finder, not only through the word "scratch", and
+// activates through the ordinary OpenFileMsg.
+func TestFileModeScratchFoundByOwnName(t *testing.T) {
+	f := fileMode("app.go")
+	f.SetScratchList(func() []string { return []string{"/scratch/notes.go", "/scratch/todo.md"} })
+
+	items := f.Results("notes", Context{Root: "/proj"})
+	var got []Item
+	for _, it := range items {
+		if it.Detail == "scratch" {
+			got = append(got, it)
+		}
+	}
+	if len(got) != 1 {
+		t.Fatalf("scratch rows = %d, want only the name match: %+v", len(got), items)
+	}
+	if got[0].Title != "notes.go" {
+		t.Fatalf("scratch row title = %q, want notes.go", got[0].Title)
+	}
+	if got[0].Msg != (OpenFileMsg{Path: "/scratch/notes.go"}) {
+		t.Fatalf("scratch row Msg = %+v, want OpenFileMsg to the scratch path", got[0].Msg)
+	}
+}
+
+// TestFileModeScratchNameMatchesRankBelowProject guards #2341's ranking rule:
+// a query matching both a project file and a scratch keeps the project file
+// on top — scratch rows are appended below, like the filesystem fallback.
+func TestFileModeScratchNameMatchesRankBelowProject(t *testing.T) {
+	f := fileMode("notes.go")
+	f.SetScratchList(func() []string { return []string{"/scratch/notes.go"} })
+
+	items := f.Results("notes", Context{Root: "/proj"})
+	if len(items) < 2 {
+		t.Fatalf("items = %+v, want the project file and the scratch", items)
+	}
+	if items[0].Detail == "scratch" {
+		t.Fatalf("scratch row displaced the project match: %+v", items)
+	}
+	if items[0].Msg != (OpenFileMsg{Path: filepath.Join("/proj", "notes.go")}) {
+		t.Fatalf("first row = %+v, want the project notes.go", items[0].Msg)
+	}
+	if items[1].Detail != "scratch" {
+		t.Fatalf("second row = %+v, want the scratch row below the project match", items[1])
+	}
+}
+
+// TestFileModeScratchNameMatchesRankByScore guards #2341's scratch-internal
+// ordering: among scratch rows the better name match leads; the store's
+// newest-first order only breaks ties.
+func TestFileModeScratchNameMatchesRankByScore(t *testing.T) {
+	f := fileMode()
+	f.SetScratchList(func() []string { return []string{"/scratch/xnotes.go", "/scratch/notes.go"} })
+
+	items := f.Results("notes", Context{Root: "/proj"})
+	if len(items) != 2 {
+		t.Fatalf("items = %+v, want both scratch matches", items)
+	}
+	if items[0].Title != "notes.go" {
+		t.Fatalf("scratch order = %q,%q; want the stronger match first", items[0].Title, items[1].Title)
+	}
+}
+
+// TestFileModeScratchNotListedTwice guards #2341: a scratch that also lies
+// under the project root — and would therefore be found again by the
+// filesystem fallback (#1775) — is offered exactly once.
+func TestFileModeScratchNotListedTwice(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "notes.go")
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := fileMode() // empty project walk: the row can only come from scratch or fallback
+	f.SetScratchList(func() []string { return []string{path} })
+
+	items := f.Results("notes", Context{Root: root})
+	hits := 0
+	for _, it := range items {
+		if m, ok := it.Msg.(OpenFileMsg); ok && m.Path == path {
+			hits++
+		}
+	}
+	if hits != 1 {
+		t.Fatalf("path listed %d times, want once: %+v", hits, items)
+	}
+}
+
+// TestFileModeScratchQueryStillListsWholeStore guards #2341's compatibility
+// clause: typing "scratch" keeps listing the entire store newest-first, even
+// though no scratch name matches that word.
+func TestFileModeScratchQueryStillListsWholeStore(t *testing.T) {
+	f := fileMode()
+	f.SetScratchList(func() []string { return []string{"/scratch/newest.go", "/scratch/older.txt"} })
+
+	items := f.Results("scratch", Context{Root: "/proj"})
+	if len(items) != 2 || items[0].Title != "newest.go" || items[1].Title != "older.txt" {
+		t.Fatalf("items = %+v, want the whole store newest-first", items)
+	}
+}
+
+// TestFileModeScratchPathQueryUnaffected guards #2341: a path query still goes
+// to pathcomplete only — scratch rows never leak into it.
+func TestFileModeScratchPathQueryUnaffected(t *testing.T) {
+	f := fileMode()
+	f.SetScratchList(func() []string { return []string{"/scratch/notes.go"} })
+
+	for _, q := range []string{"/notes", "~/notes", "./notes"} {
+		for _, it := range f.Results(q, Context{Root: "/proj"}) {
+			if it.Detail == "scratch" {
+				t.Fatalf("path query %q surfaced a scratch row: %+v", q, it)
+			}
+		}
 	}
 }
