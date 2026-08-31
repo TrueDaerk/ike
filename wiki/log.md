@@ -1,5 +1,22 @@
 # Log
 
+## 2026-08-31 (jq/yq playground bound to its document, not its pane, #2355)
+
+- **The mode belongs to the document it queries**: `playState` now keeps the
+  queried editor model (or HTTP response instance) beside its `paneKey`, and
+  `playSrcShown` gates rendering, header rows, mouse routing and key routing on
+  the pane *still showing that document* — one predicate, so no half-rendered
+  in-between state exists.
+- **Opening a file into the hosting pane shows it immediately**; the playground
+  is not closed by it but stays mounted, query, result and history intact — the
+  #1980 focus-change semantics — and reappears unchanged when its document's
+  tab is activated again. The HTTP response playground is matched by instance
+  and is unaffected.
+- **No playground outlives its document**: `syncPlaygroundSource` closes the
+  mode on the settled `Update` pass once the queried document is gone from the
+  workspace, covering tab closes, pane closes and explorer deletions in one
+  hook. See [jq & yq playground](/architecture/jq-playground.md).
+
 ## 2026-08-31 (http.run freeze fixed: linear column mapping, off-loop response highlighting, #2353)
 
 - **The #2348 freeze is root-caused and fixed**: `highlight.colMapper.runeCol`
