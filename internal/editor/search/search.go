@@ -46,12 +46,16 @@ type Query struct {
 	Regex   bool
 	fold    bool // matching ignores case (smartcase resolved at compile time)
 	re      *regexp.Regexp
+	jq      *jqState // structural (jq) mode (#2363, structural.go)
 }
 
 // ID identifies a compiled query for caching (#2145): two queries with equal
 // IDs match exactly the same text, so a tally computed for one is valid for
 // the other.
 func (q Query) ID() string {
+	if q.jq != nil {
+		return "j:" + q.jq.langID + ":" + q.Pattern
+	}
 	flags := "l"
 	if q.Regex {
 		flags = "r"
@@ -121,6 +125,9 @@ func (q Query) MatchesLine(text string) bool {
 
 // LineMatches returns every match on line i as rune-column spans.
 func (q Query) LineMatches(b *buffer.Buffer, i int) []Span {
+	if q.jq != nil {
+		return q.structuralLineMatches(i)
+	}
 	line := b.Line(i)
 	if q.Empty() {
 		return nil
@@ -230,6 +237,9 @@ func (q Query) ScanMatches(b *buffer.Buffer, maxMatches, maxLines int) (spans []
 	}
 	if q.Empty() {
 		return nil, false
+	}
+	if q.jq != nil {
+		return q.structuralScan()
 	}
 	lines := b.LineCount()
 	if lines > maxLines {

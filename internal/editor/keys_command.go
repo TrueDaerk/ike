@@ -71,6 +71,9 @@ func (m *Model) searchNextRepeat(reverse bool, count int) {
 	if reverse {
 		dir = opposite(dir)
 	}
+	// A structural query's matches follow the document (#2363): re-evaluate
+	// when edits moved the version since they were computed.
+	m.query.SyncStructural(m.buf, m.docVersion)
 	if p, ok := m.query.Next(m.buf, m.cursor, dir, count); ok {
 		if wrapped(m.cursor, p, dir) {
 			m.cmdMsg = "search wrapped"
@@ -211,6 +214,10 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		// editing the visible \c / \C marker — the marker is the state. The
 		// filter line shares the markers, so it shares the toggle (#2255).
 		m.toggleSearchCase()
+	case key.Code == 'x' && key.Mod == tea.ModCtrl && m.searching:
+		// ctrl+x toggles the structural jq mode on the search line (#2363)
+		// by editing the visible \j marker, ctrl+c-style.
+		m.toggleSearchStructural()
 	case m.cmdline == "" && (key.Code == tea.KeyBackspace || key.Code == 'h' && key.Mod == tea.ModCtrl):
 		// Backspacing an empty line leaves the command line, vim-style. An
 		// emptied filter line keeps its cleared state (#2255): the user
@@ -304,6 +311,35 @@ func (m *Model) cmdPreview() {
 	m.searchPreview()
 }
 
+// compileSearchLine compiles the open search line: a leading "\j" marker
+// selects the structural jq mode (#2363), whose pattern is a jq query over
+// the buffer's JSON/YAML document; anything else is the text search. The
+// structural query evaluates immediately against the current document
+// version, so its matches (or its error) are ready for the preview.
+func (m Model) compileSearchLine() search.Query {
+	if prog, ok := strings.CutPrefix(m.cmdline, `\j`); ok {
+		q := search.CompileStructural(m.docPathLang(), prog)
+		q.SyncStructural(m.buf, m.docVersion)
+		return q
+	}
+	return search.Compile(m.parseSearchPattern(m.cmdline))
+}
+
+// toggleSearchStructural flips the structural-mode marker "\j" on the open
+// search line (#2363), the way ctrl+c flips the case marker: the marker is
+// the state. Toggling on in a buffer without a JSON/YAML document is allowed —
+// the inline hint reports why the query cannot run.
+func (m *Model) toggleSearchStructural() {
+	if strings.HasPrefix(m.cmdline, `\j`) {
+		m.cmdline = m.cmdline[2:]
+		m.cmdCur = max(0, m.cmdCur-2)
+	} else {
+		m.cmdline = `\j` + m.cmdline
+		m.cmdCur += 2
+	}
+	m.cmdPreview()
+}
+
 // parseSearchPattern splits the typed line into pattern, regex flag and case
 // mode. Leading markers, in any order: "\v" enables regex (very-magic
 // toggle), "\c" forces case-insensitive matching, "\C" forces exact matching
@@ -335,7 +371,7 @@ func (m Model) parseSearchPattern(line string) (string, bool, search.Case) {
 // pattern) parks the cursor back at the origin; nothing lands on the nav
 // stack — only the committed jump does.
 func (m *Model) searchPreview() {
-	m.preview = search.Compile(m.parseSearchPattern(m.cmdline))
+	m.preview = m.compileSearchLine()
 	if !m.preview.Empty() {
 		if p, ok := m.preview.Next(m.buf, m.searchOrigin, m.searchDir, 1); ok {
 			m.cursor = p
@@ -367,10 +403,19 @@ func (m *Model) restoreSearchOrigin() {
 // the first match from the origin. Zero matches leave a "no matches" report on
 // the ex line and restore the origin.
 func (m *Model) commitSearch() {
-	m.preview = search.Compile(m.parseSearchPattern(m.cmdline))
+	m.preview = m.compileSearchLine()
 	m.query = m.preview
 	m.preview = search.Query{}
 	if m.query.Empty() {
+		m.restoreSearchOrigin()
+		return
+	}
+	if err := m.query.StructuralErr(); err != "" {
+		// A structural query that cannot run reports why (#2363) instead of
+		// committing zero silent matches; nothing is left for n/N to repeat.
+		m.query = search.Query{}
+		m.hlActive = false
+		m.cmdMsg = "E: " + err
 		m.restoreSearchOrigin()
 		return
 	}

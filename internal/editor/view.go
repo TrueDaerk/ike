@@ -807,7 +807,19 @@ func (m Model) suggestRow() string {
 // line or on an empty pattern; the status line keeps showing the same counter
 // after the line closes (SearchCounter, searchtally.go).
 func (m Model) searchCounter() string {
-	if !m.searching || m.preview.Empty() {
+	if !m.searching {
+		return ""
+	}
+	// Structural mode (#2363) trails its own state: the evaluation error in
+	// error colour — the inline report instead of zero silent matches — or a
+	// faint mode label while the query line is still empty.
+	if err := m.preview.StructuralErr(); err != "" {
+		return lipgloss.NewStyle().Foreground(m.theme().Error).Render("  " + err)
+	}
+	if m.preview.IsStructural() && m.preview.Empty() {
+		return lipgloss.NewStyle().Faint(true).Render("  structural (jq)")
+	}
+	if m.preview.Empty() {
 		return ""
 	}
 	return lipgloss.NewStyle().Faint(true).Render("  " + m.SearchCounter())
@@ -819,9 +831,14 @@ func (m Model) searchCounter() string {
 // them, #255).
 func (m Model) searchHLQuery() (search.Query, bool) {
 	if (m.searching || m.replPanel != nil) && !m.preview.Empty() {
+		m.preview.SyncStructural(m.buf, m.docVersion)
 		return m.preview, true
 	}
 	if m.hlActive && !m.query.Empty() {
+		// A structural query (#2363) re-evaluates when edits moved the
+		// document version; the shared state makes this visible to every
+		// copy of the query.
+		m.query.SyncStructural(m.buf, m.docVersion)
 		return m.query, true
 	}
 	return search.Query{}, false
