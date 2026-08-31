@@ -119,6 +119,9 @@ var jetbrainsRows = []row{
 	// next/previous-occurrence keys.
 	{"f3", "search.nextMatch", "Next search match", Global, "Search (0150)"},
 	{"shift+f3", "search.prevMatch", "Previous search match", Global, "Search (0150)"},
+	// IntelliJ macOS Find Next/Previous aliases (#2359).
+	{"cmd+g", "search.nextMatch", "Next search match", Global, "Search (0150)"},
+	{"cmd+shift+g", "search.prevMatch", "Previous search match", Global, "Search (0150)"},
 	// JetBrains "Select in Project View" (#242). Alt+F-key delivery depends on
 	// the terminal (fragile); the palette stays the delivered fallback.
 	{"alt+f1", "explorer.reveal", "Reveal open file in explorer", Global, "Explorer (05)"},
