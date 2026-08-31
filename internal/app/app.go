@@ -406,6 +406,14 @@ type Model struct {
 	promotePos   int
 	promoteErr   string
 
+	// scratchExtOpen marks the free-extension prompt of the scratch.new
+	// picker (#2340) while the shell shows it; scratchExtInput is the typed
+	// extension with its cursor and scratchExtErr the last refusal.
+	scratchExtOpen  bool
+	scratchExtInput string
+	scratchExtPos   int
+	scratchExtErr   string
+
 	// cloneOpen marks the clone-repository dialog (#1349) while the shell
 	// shows it; cloneURL/cloneName are the two inputs with their cursors,
 	// cloneField the focused one, cloneNameEdited stops the name from
@@ -4697,6 +4705,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}, scratchNewPrefix)
 		return m, nil
 
+	case ShowScratchCustomExtMsg:
+		// The picker's "Custom…" row (#2340): an extension the curated list
+		// does not offer is typed into a prompt of its own.
+		m.startScratchCustomExt()
+		return m, nil
+
 	case OpenPythonEnvWizardMsg:
 		// python.newEnvironment (palette, #884): open settings on the
 		// Toolchain page with the venv wizard pushed.
@@ -7749,6 +7763,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// line, enter accepts, esc cancels.
 		if m.promoteScratchOpen() {
 			return m.updateScratchPromote(msg)
+		}
+		// The free-extension prompt of the scratch.new picker (#2340) is one
+		// line too: enter creates, esc returns to the language list.
+		if m.scratchCustomExtOpen() {
+			return m.updateScratchCustomExt(msg)
 		}
 		// The save-layout pane-selection mini-map (#1568) owns the keyboard
 		// the same way: hjkl/arrows move, space toggles, enter continues.

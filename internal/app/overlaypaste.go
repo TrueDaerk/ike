@@ -82,6 +82,8 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		return nil, m.pasteSaveAsPrompt(text)
 	case m.promoteScratchOpen():
 		return nil, m.pasteScratchPromote(text)
+	case m.scratchCustomExtOpen():
+		return nil, m.pasteScratchCustomExt(text)
 	case m.bookmarkPromptOpen():
 		return nil, m.pasteBookmarkPrompt(text)
 	case m.layoutSavePromptOpen():
