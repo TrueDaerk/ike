@@ -97,14 +97,15 @@ late-registered languages appear without ordering constraints:
 - `scratch.new` ("New Scratch File…", `cmd+shift+n`, File menu) opens the
   **language picker** — `scratchNewMode` in `internal/app/scratch_new_mode.go`,
   prefix `+`, opened locked exactly like `scratch.list`. Rows: "Plain Text"
-  pinned first, then one per registered language that has an extension, fuzzy
-  matched on the title with the extension in the detail column. A row emits
+  pinned first, then the shared offering below, fuzzy matched on the title —
+  and, when the title does not match, on the extension, so `.js` finds
+  JavaScript — with the extension in the detail column. A row emits
   `palette.RunCommandMsg` for the matching command below, so the picker owns no
   creation logic.
 - `scratch.new.text` creates a plain `.txt` scratch with no prompt (what
   `scratch.new` used to do — a chord or script still needs the direct path).
-- `scratch.new.<id>` ("New Scratch File: Python") per registered language,
-  built from `lang.All()` with the language's first extension, no prompt.
+- `scratch.new.<id>` ("New Scratch File: Python") per offered row, no prompt;
+  a dialect row (below) gets `scratch.new.<id>.<ext>`.
 
 The handler creates via the store and opens through the standard funnel
 (`openPath`, absolute path): the new scratch lands as a focused tab with
@@ -134,6 +135,39 @@ for.
 - **No selection is a refusal, not an empty file**: the command says "scratch:
   select some text first" rather than creating a scratch that is
   indistinguishable from a lost selection.
+
+### The offering: a row is not a language (#2333)
+
+Every scratch surface — the commands above, the `scratch.new` picker and the
+manager's language step — reads one shared list,
+`scratchLangRows()` in `internal/app/scratch_langs.go`: `(title, extension,
+command)` triples, sorted by title, built per call from `lang.All()` so
+late-registered languages appear without ordering constraints.
+
+Each language contributes its **first extension** under `langTitle`'s
+acronym-or-capitalize title, plus the **curated dialect aliases** of
+`scratchAliasExts`, keyed by language id:
+
+| language | alias rows |
+| --- | --- |
+| `typescript` | JavaScript `.js`, JSX `.jsx`, TSX `.tsx` |
+| `css` | SCSS `.scss`, Less `.less` |
+
+Before the table, a surface offered only `Extensions[0]`, so a dialect sharing
+a language id — JavaScript, which the `typescript` language selects through its
+`.js`/`.jsx`/`.mjs` extensions — had no row at all: no `.js` scratch could be
+created and none switched to one. The table is deliberately curated rather than
+"every extension of every language": rows nobody looks for (`Typescript .mts`,
+`Html .htm`) would bloat the picker. An alias the language does not actually
+register is ignored, and an extension already claimed by an earlier row is
+skipped, so the list can neither invent an extension nor list one twice.
+
+Nothing about language *registration* changes — resolution stays path-keyed
+through the [language registry](./languages.md), so a `.js` scratch (and every
+`.js` file) highlights, indents and attaches to LSP exactly as before. A path's
+row title is `scratchRowTitle`: the alias title where one exists
+("JavaScript" for `.js`), the language title otherwise, "Plain Text" for an
+unregistered extension.
 
 ## Test-data generator (#2134)
 
@@ -287,9 +321,9 @@ file, so a large scratch still resolves a title cheaply — trimmed of
 whitespace, falling back to the placeholder "Empty scratch" when the file is
 empty or blank within the cap. This is the JetBrains scratch-view convention:
 a scratch reads by what it contains, not by its allocated `scratch-N.<ext>`
-name. The **Detail chip carries the language**, resolved via `lang.ByPath`
-and rendered with the same acronym-or-capitalize heuristic as the `scratch.new`
-language picker (`langTitle`), falling back to "Plain Text" for an
+name. The **Detail chip carries the language**, resolved from the path by
+`scratchRowTitle` — the same row title the `scratch.new` picker shows, so a
+`.js` scratch reads "JavaScript" — falling back to "Plain Text" for an
 unregistered extension. Fuzzy matching runs against the title, so typing part
 of a scratch's content finds it.
 
@@ -329,7 +363,7 @@ type-ahead:
 | --- | --- |
 | `enter` | open the scratch (closes the manager) |
 | `ctrl+r` / `f2` | rename — the prompt is prefilled with the current name |
-| `ctrl+l` | change language — a filterable list of the registered languages |
+| `ctrl+l` | change language — a filterable list of the offered rows, preselected on the scratch's current extension |
 | `ctrl+p` | promote to a project file (closes the manager, #2339) |
 | `ctrl+d` / `delete` | delete, after a confirmation |
 | `esc` | clear the query, walk a step back, then close |

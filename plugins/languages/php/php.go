@@ -6,6 +6,7 @@ import (
 	_ "embed"
 
 	"ike/internal/consthint"
+	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/plugins/languages/register"
 )
@@ -62,5 +63,9 @@ func init() {
 	})
 }
 
-// phpSpans is the lang.Language.Spans hook: the constant conceals (#1701).
-func phpSpans(lines []string) []lang.Span { return consthint.PHPSpans(lines) }
+// phpSpans is the lang.Language.Spans hook: the constant conceals (#1701) and
+// the unicode-escape stand-ins (#1620, #2334). Only double-quoted strings
+// decode — PHP's '…' passes a backslash through unchanged.
+func phpSpans(lines []string) []lang.Span {
+	return append(consthint.PHPSpans(lines), escapes.UnicodeSpansIn(lines, escapes.UnicodePHP)...)
+}

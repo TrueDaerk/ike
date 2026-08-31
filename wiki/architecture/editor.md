@@ -2284,12 +2284,36 @@ family has its own capture, conceal channel and toggle:
 
 - **Unicode escapes** (`escape.unicode`, `editor.unicode_escape_decoding` /
   `view.toggleUnicodeEscapeDecoding`): `\uXXXX` — UTF-16 surrogate pairs
-  combine into one span — and Go's `\UXXXXXXXX`, decoded only inside a
-  single-line `"`/`'` literal (that is where JSON, JS/TS and Go put them; the
-  scanner walks the quote state and consumes escapes pairwise, so `\\u0041`
-  stays raw). A truncated escape, a lone surrogate, a value beyond the
-  Unicode range or a non-graphic code point stays raw. Producers: `json`,
-  `ndjson`, `go`, `typescript`.
+  combine into one span —, `\UXXXXXXXX`, `\u{X…}` and `\xNN`, decoded only
+  inside a single-line quoted literal (the scanner walks the quote state and
+  consumes escapes pairwise, so `\\u0041` stays raw). A truncated escape, a
+  lone surrogate, a value beyond the Unicode range or a non-graphic code
+  point stays raw. Multi-line literals — Python triple quotes, PHP heredocs,
+  YAML block scalars — are out of scope: the span hook sees one line at a
+  time and cannot tell an opener from a closer.
+
+  Which quotes and which forms count is per language, carried by an
+  `escapes.UnicodeDialect` (#2334) — a quote only processes escapes where the
+  language says so, and a form only decodes where the language has it:
+
+  | Producer | escape quotes | raw quotes | `\uXXXX` `\UXXXXXXXX` | `\u{X…}` | `\xNN` |
+  | --- | --- | --- | --- | --- | --- |
+  | `go` | `"` `'` | `` ` `` | yes | no | no (a raw byte) |
+  | `json`, `ndjson` | `"` `'` | — | yes | no | no |
+  | `typescript` (JS/TS) | `"` `'` `` ` `` | — | yes | yes | yes |
+  | `python` | `"` `'` | `r"…"`, `b"…"` prefixes | yes | no | yes |
+  | `php` | `"` | `'` | yes | yes (PHP 7) | no (a raw byte) |
+  | `yaml` (and `ansible`) | `"` | `'` | yes | no | yes |
+  | `toml` | `"` | `'` | yes | no | no |
+
+  A raw literal is skipped whole rather than merely ignored, so a `"` inside
+  PHP's `'say "ü"'` cannot open a phantom escape-processing literal. `\xNN`
+  decodes only where it names a *code point*: in Go and PHP it is a raw byte,
+  so `"\xc3\xbc"` is one `ü` written as two escapes and decoding each alone
+  would render `Ã¼`. Python's `\N{NAME}` stays raw — resolving it needs the
+  Unicode character-name table, which the Go standard library does not carry.
+  Languages without `\u` escapes in their string literals (shell, INI, CSV,
+  Dockerfile, Make, SQL) have no producer.
 - **HTML/XML entities** (`escape.entity`, `editor.entity_decoding` /
   `view.toggleEntityDecoding`): `&name;`, `&#123;`, `&#x1F600;`. The `html`
   producer decodes by the full HTML named-entity table (stdlib

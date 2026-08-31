@@ -8,11 +8,12 @@
 //
 // Three families:
 //
-//   - Unicode escapes: \uXXXX (with UTF-16 surrogate pairs combined) and Go's
-//     \UXXXXXXXX inside single-line string or rune literals — JSON, JS/TS and
-//     Go all write non-ASCII text this way. An escape outside quotes, a
-//     truncated escape, a lone surrogate or a non-graphic code point stays
-//     raw.
+//   - Unicode escapes: \uXXXX (with UTF-16 surrogate pairs combined),
+//     \UXXXXXXXX, \u{X…} and \xNN inside single-line string or rune literals
+//     — Go, JS/TS, JSON, Python, PHP, YAML and TOML all write non-ASCII text
+//     this way. Which forms and which quotes count is per language, carried
+//     by a UnicodeDialect. An escape outside quotes, a truncated escape, a
+//     lone surrogate or a non-graphic code point stays raw.
 //   - HTML/XML entities: &name;, &#123; and &#x1F600;. HTML decodes the full
 //     named-entity table; XML only its five predefined entities (custom
 //     entities are document-defined, guessing HTML names there would lie).
@@ -47,13 +48,94 @@ const (
 
 // --- Unicode escapes -------------------------------------------------------
 
-// UnicodeSpans produces conceal-with-stand-in spans for the \uXXXX and
-// \UXXXXXXXX escapes in lines, ready to be appended to a language's
-// lang.Language.Spans output.
+// UnicodeDialect describes how one language writes escapes, so the otherwise
+// language-neutral scanner does not decode text a language leaves raw. Every
+// language ships its own value below; the zero value decodes nothing.
+//
+// Quotes split into two sets because most languages have one quote that
+// processes escapes and one that does not: PHP's '…', YAML's '…' and TOML's
+// literal '…' are all raw, and so is Go's `…`. A raw literal is skipped whole
+// rather than ignored, so a `"` inside it cannot open a phantom literal.
+type UnicodeDialect struct {
+	// EscapeQuotes are the quote runes opening a literal whose backslash
+	// escapes are processed.
+	EscapeQuotes string
+	// RawQuotes are the quote runes opening a literal without escape
+	// processing.
+	RawQuotes string
+	// RawEscapesQuote reports that a backslash inside a raw literal still
+	// escapes the following rune, so it cannot end the literal — true for
+	// PHP's '…' and Python's r"…", false for Go's `…`, YAML's '…' and TOML's
+	// '…'.
+	RawEscapesQuote bool
+	// StringPrefixes enables Python's literal prefixes: an r/R/b/B prefix on
+	// a literal (r"…", rb"…", b"…") turns the whole literal raw — in a raw
+	// string a backslash is literal text, and in a bytes literal \u is not an
+	// escape at all.
+	StringPrefixes bool
+	// Brace enables the ES6/PHP \u{X…} form, one to six hex digits.
+	Brace bool
+	// Hex enables \xNN, and only where it names a code point (Python, JS/TS,
+	// YAML). In Go and PHP a \xNN is a raw byte, so "\xc3\xbc" is one ü in
+	// two escapes — decoding them one by one would render "Ã¼" and lie.
+	Hex bool
+}
+
+// The per-language dialects. Rule of thumb: a quote is an escape quote only
+// when the language's own spec says backslash escapes are processed inside
+// it, and a form is enabled only when the language has it.
+var (
+	// UnicodeGo: "…" strings and '…' runes take \uXXXX and \UXXXXXXXX;
+	// `…` is raw; \xNN is a byte.
+	UnicodeGo = UnicodeDialect{EscapeQuotes: `"'`, RawQuotes: "`"}
+	// UnicodeJSON: only "…" exists, and only \uXXXX. The single quote stays
+	// an escape quote for the JSONC/JSON5 dialects that allow it.
+	UnicodeJSON = UnicodeDialect{EscapeQuotes: `"'`}
+	// UnicodeScript (JS/TS): "…", '…' and `…` templates all process escapes,
+	// and ES6 added \u{X…}; \xNN is a code point.
+	UnicodeScript = UnicodeDialect{EscapeQuotes: "\"'`", Brace: true, Hex: true}
+	// UnicodePython: "…" and '…' process escapes, r/b prefixes turn a literal
+	// raw, \xNN is a code point. \N{NAME} is deliberately absent — see
+	// namedEscapeNote.
+	UnicodePython = UnicodeDialect{
+		EscapeQuotes: `"'`, RawEscapesQuote: true, StringPrefixes: true, Hex: true,
+	}
+	// UnicodePHP: only "…" (and heredocs, which are multi-line and thus out
+	// of reach) processes escapes; '…' does not, though a backslash there
+	// still escapes the closing quote. \u{X…} arrived in PHP 7.0; \xNN is a
+	// byte.
+	UnicodePHP = UnicodeDialect{
+		EscapeQuotes: `"`, RawQuotes: `'`, RawEscapesQuote: true, Brace: true,
+	}
+	// UnicodeYAML: only the double-quoted scalar processes escapes; the
+	// single-quoted one escapes nothing (it doubles '' instead). YAML's \xNN
+	// names a code point.
+	UnicodeYAML = UnicodeDialect{EscapeQuotes: `"`, RawQuotes: `'`, Hex: true}
+	// UnicodeTOML: basic strings "…" take \uXXXX and \UXXXXXXXX; literal
+	// strings '…' take nothing, and TOML 1.0 has no \xNN.
+	UnicodeTOML = UnicodeDialect{EscapeQuotes: `"`, RawQuotes: `'`}
+)
+
+// namedEscapeNote records why Python's \N{LATIN SMALL LETTER A} stays raw:
+// resolving it needs the Unicode character-name table, which the Go standard
+// library does not carry (package unicode has no name lookup). Shipping the
+// ~34k names to decode a form that is rare in real code — it exists to make a
+// literal self-documenting, i.e. exactly where the raw text is the point — is
+// not worth the binary size.
+const namedEscapeNote = `\N{NAME} stays raw: no Unicode name table in the standard library`
+
+// UnicodeSpans produces conceal-with-stand-in spans for the unicode escapes
+// in lines, ready to be appended to a language's lang.Language.Spans output.
+// It scans in the Go dialect; UnicodeSpansIn takes the language's own.
 func UnicodeSpans(lines []string) []lang.Span {
+	return UnicodeSpansIn(lines, UnicodeGo)
+}
+
+// UnicodeSpansIn is UnicodeSpans in the dialect d.
+func UnicodeSpansIn(lines []string, d UnicodeDialect) []lang.Span {
 	var out []lang.Span
 	for li, line := range lines {
-		out = appendUnicodeSpans(out, li, line)
+		out = appendUnicodeSpans(out, li, line, d)
 	}
 	return out
 }
@@ -61,21 +143,37 @@ func UnicodeSpans(lines []string) []lang.Span {
 // UnicodeLineSpans is UnicodeSpans for a single line at index li — for
 // producers that scan only part of a buffer.
 func UnicodeLineSpans(li int, line string) []lang.Span {
-	return appendUnicodeSpans(nil, li, line)
+	return appendUnicodeSpans(nil, li, line, UnicodeGo)
+}
+
+// UnicodeLineSpansIn is UnicodeLineSpans in the dialect d.
+func UnicodeLineSpansIn(li int, line string, d UnicodeDialect) []lang.Span {
+	return appendUnicodeSpans(nil, li, line, d)
 }
 
 // appendUnicodeSpans scans one line. Escapes only decode inside a single-line
-// quoted literal (" or ') — that is where JSON, JS and Go put them, and it
-// keeps regex sources and prose out. The scanner walks the quote state and
-// consumes backslash escapes pairwise, so \\u0041 (an escaped backslash and
-// literal text) never decodes.
-func appendUnicodeSpans(out []lang.Span, li int, line string) []lang.Span {
+// quoted literal that the dialect says processes escapes — that is where the
+// languages put them, and it keeps regex sources and prose out. The scanner
+// walks the quote state and consumes backslash escapes pairwise, so \\u0041
+// (an escaped backslash and literal text) never decodes. Multi-line literals
+// (Python's triple quotes, PHP heredocs, YAML block scalars) stay out of
+// scope: the hook sees one line at a time and cannot tell an opener from a
+// closer.
+func appendUnicodeSpans(out []lang.Span, li int, line string, d UnicodeDialect) []lang.Span {
 	runes := []rune(line)
-	var quote rune // the enclosing quote while inside a literal, 0 outside
+	var quote rune // the enclosing escape-processing quote, 0 outside
 	for i := 0; i < len(runes); i++ {
 		r := runes[i]
 		if quote == 0 {
-			if r == '"' || r == '\'' {
+			switch {
+			case strings.ContainsRune(d.RawQuotes, r):
+				i = skipRawLiteral(runes, i, d.RawEscapesQuote)
+			case strings.ContainsRune(d.EscapeQuotes, r):
+				if d.StringPrefixes && rawPrefixed(runes, i) {
+					// r"…" / b"…" / rb"…": literal text, never a decode.
+					i = skipRawLiteral(runes, i, true)
+					continue
+				}
 				quote = r
 			}
 			continue
@@ -87,7 +185,7 @@ func appendUnicodeSpans(out []lang.Span, li int, line string) []lang.Span {
 		if r != '\\' {
 			continue
 		}
-		if end, text, ok := unicodeEscapeAt(runes, i); ok {
+		if end, text, ok := unicodeEscapeAt(runes, i, d); ok {
 			out = append(out, lang.Span{
 				Line: li, StartCol: i, EndCol: end,
 				Capture: UnicodeCapture, Replace: text,
@@ -100,14 +198,77 @@ func appendUnicodeSpans(out []lang.Span, li int, line string) []lang.Span {
 	return out
 }
 
+// skipRawLiteral returns the index of the closing quote of the raw literal
+// opened at runes[open] — or the end of the line when it never closes, which
+// leaves the rest unscanned rather than decoding inside an unterminated
+// literal. escaping says a backslash still escapes the next rune, so a \'
+// cannot close the literal.
+func skipRawLiteral(runes []rune, open int, escaping bool) int {
+	q := runes[open]
+	for i := open + 1; i < len(runes); i++ {
+		if escaping && runes[i] == '\\' {
+			i++
+			continue
+		}
+		if runes[i] == q {
+			return i
+		}
+	}
+	return len(runes)
+}
+
+// rawPrefixed reports whether the literal opening at runes[i] carries a
+// Python r/b prefix (r, R, b, B and the two-letter mixes rb, br, rf, fr…). An
+// f or u prefix alone still processes escapes, so only a prefix run
+// containing r or b counts, and the run must start a token — the quote in
+// `for"…"` does not follow a prefix.
+func rawPrefixed(runes []rune, i int) bool {
+	start := i
+	for start > 0 && isPrefixLetter(runes[start-1]) {
+		start--
+	}
+	if start == i || i-start > 2 {
+		return false
+	}
+	if start > 0 && isIdentRune(runes[start-1]) {
+		return false
+	}
+	for _, r := range runes[start:i] {
+		switch r {
+		case 'r', 'R', 'b', 'B':
+			return true
+		}
+	}
+	return false
+}
+
+// isPrefixLetter reports a letter that may appear in a Python string prefix.
+func isPrefixLetter(r rune) bool {
+	switch r {
+	case 'r', 'R', 'b', 'B', 'f', 'F', 'u', 'U':
+		return true
+	}
+	return false
+}
+
+// isIdentRune reports a rune that continues an identifier.
+func isIdentRune(r rune) bool {
+	return r == '_' || r >= '0' && r <= '9' ||
+		r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+}
+
 // unicodeEscapeAt decodes the escape starting at the backslash runes[i]:
 // \uXXXX (a high surrogate must pair with a following \uXXXX low surrogate —
-// the pair decodes as one span) or Go's \UXXXXXXXX. ok=false for anything
-// else: a truncated escape, a lone surrogate, a value beyond the Unicode
-// range or a non-graphic code point all stay raw.
-func unicodeEscapeAt(runes []rune, i int) (end int, text string, ok bool) {
+// the pair decodes as one span), Go's \UXXXXXXXX, and, where the dialect has
+// them, \u{X…} and \xNN. ok=false for anything else: a truncated escape, a
+// lone surrogate, a value beyond the Unicode range or a non-graphic code
+// point all stay raw.
+func unicodeEscapeAt(runes []rune, i int, d UnicodeDialect) (end int, text string, ok bool) {
 	switch charAt(runes, i+1) {
 	case 'u':
+		if d.Brace && charAt(runes, i+2) == '{' {
+			return braceEscapeAt(runes, i)
+		}
 		v, ok := hexVal(runes, i+2, 4)
 		if !ok {
 			return 0, "", false
@@ -136,6 +297,37 @@ func unicodeEscapeAt(runes []rune, i int) (end int, text string, ok bool) {
 			return 0, "", false
 		}
 		return i + 10, string(rune(v)), true
+	case 'x':
+		if !d.Hex {
+			return 0, "", false
+		}
+		v, ok := hexVal(runes, i+2, 2)
+		if !ok || !unicode.IsGraphic(rune(v)) {
+			return 0, "", false
+		}
+		return i + 4, string(rune(v)), true
+	}
+	return 0, "", false
+}
+
+// braceEscapeAt decodes \u{X…} at the backslash runes[i]: one to six hex
+// digits closed by "}". An empty, over-long, out-of-range, surrogate or
+// non-graphic value stays raw.
+func braceEscapeAt(runes []rune, i int) (end int, text string, ok bool) {
+	v, n := 0, 0
+	for j := i + 3; j < len(runes); j++ {
+		if runes[j] == '}' {
+			if n == 0 || v > unicode.MaxRune ||
+				utf16.IsSurrogate(rune(v)) || !unicode.IsGraphic(rune(v)) {
+				return 0, "", false
+			}
+			return j + 1, string(rune(v)), true
+		}
+		dg := hexDigit(runes[j])
+		if dg < 0 || n == 6 {
+			return 0, "", false
+		}
+		v, n = v<<4|dg, n+1
 	}
 	return 0, "", false
 }

@@ -198,7 +198,7 @@ Three families decode escapes in place, each with its own switch:
 
 | Family | Setting | Per-view toggle |
 |---|---|---|
-| `\uXXXX` in string literals | `editor.unicode_escape_decoding` | Toggle Unicode Escape Decoding |
+| Unicode escapes in string literals | `editor.unicode_escape_decoding` | Toggle Unicode Escape Decoding |
 | HTML/XML character references | `editor.entity_decoding` | Toggle Entity Decoding |
 | base64 values | `editor.base64_decoding` | Toggle Base64 Decoding |
 
@@ -211,11 +211,34 @@ Decoded — surrogate pairs combine into the one character they encode:
 
 ![The same escapes decoded in place](../screenshots/features/conceal-escapes-unicode.png)
 
-Decoding only happens inside a single-line `"` or `'` literal, which is where
-JSON, JavaScript/TypeScript and Go put escapes. The scanner walks the quote
-state and consumes escapes pairwise, so the `\\u0041` on the last line stays
-raw — it is a literal backslash, not an escape. A truncated escape, a lone
-surrogate, or a value that is not a printable character also stays raw.
+Decoding only happens inside a single-line quoted literal. Go, JSON, NDJSON,
+JavaScript/TypeScript, Python, PHP, YAML (and Ansible) and TOML all decode; a
+language without `\u` escapes in its strings — shell, INI, CSV, Dockerfile,
+Make, SQL — does not.
+
+Which quote counts, and which escape forms decode, follows the language:
+
+| Language | escape quotes | raw quotes | `\uXXXX` `\UXXXXXXXX` | `\u{X…}` | `\xNN` |
+|---|---|---|---|---|---|
+| Go | `"` `'` | `` ` `` | yes | no | no |
+| JSON, NDJSON | `"` `'` | — | yes | no | no |
+| JavaScript, TypeScript | `"` `'` `` ` `` | — | yes | yes | yes |
+| Python | `"` `'` | `r"…"`, `b"…"` prefixes | yes | no | yes |
+| PHP | `"` | `'` | yes | yes | no |
+| YAML, Ansible | `"` | `'` | yes | no | yes |
+| TOML | `"` | `'` | yes | no | no |
+
+So Python's `r"\u00fc"` and PHP's `'\u00fc'` stay raw — a backslash is literal
+text there. `\xNN` decodes only where it names a character: in Go and PHP it is
+a raw *byte*, where `"\xc3\xbc"` is one `ü` written as two escapes, so
+decoding either alone would show `Ã¼`. Python's `\N{LATIN SMALL LETTER A}`
+stays raw as well. Multi-line literals — Python triple quotes, PHP heredocs,
+YAML block scalars — are out of scope.
+
+The scanner walks the quote state and consumes escapes pairwise, so the
+`\\u0041` on the last line stays raw — it is a literal backslash, not an
+escape. A truncated escape, a lone surrogate, or a value that is not a
+printable character also stays raw.
 
 **HTML and XML entities.** `&amp;`, `&#37;`, `&#x2192;` and the rest draw as
 the characters they name:
