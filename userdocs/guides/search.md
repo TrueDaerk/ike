@@ -31,6 +31,26 @@ you would rather always ignore case, set `editor.search_ignore_case = true`.
 ++up++ and ++down++ recall previous queries, and the history survives
 restarts.
 
+### Structural search in JSON and YAML
+
+In a JSON or YAML buffer, prefix the query with `\j` — or press ++ctrl+x++ on
+the open search line — and it becomes a **jq expression**: the matches are
+the document nodes the query selects, not text occurrences. Searching
+`\j.users[].name` in a large export lands on each name value in turn, where a
+text search for `"name"` would stop on every key in the file. Full jq works,
+including filters:
+
+```
+\j.users[] | select(.age > 40) | .name
+```
+
+Everything else behaves like an ordinary search: the matches highlight, the
+counter counts them, and `n`/`N` and ++f3++ step through them. A query that
+is not valid jq (or that computes new values instead of selecting locations
+in the document) shows its error inline on the search line instead of quietly
+matching nothing. YAML documents resolve anchors, aliases and `<<:` merge
+keys the same way the yq playground does.
+
 ### Replacing in the file
 
 ++cmd+r++ opens replace, or use vim's substitute directly:

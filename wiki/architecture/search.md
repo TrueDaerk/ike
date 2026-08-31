@@ -170,8 +170,8 @@ the palette):
 - **Navigation:** `enter` opens the file at the match via the
   definition-jump path (`openPathAt`) and closes the overlay; the results
   survive closing, so `search.nextMatch` / `search.prevMatch` (f3/shift+f3,
-  also palette commands) keep stepping matches — wrapping across files —
-  without the overlay. The most recent search wins those keys (#376): a
+  plus the IntelliJ macOS aliases cmd+g/cmd+shift+g, also palette commands)
+  keep stepping matches — wrapping across files — without the overlay. The most recent search wins those keys (#376): a
   committed in-file search (`/`, `?`, cmd+f) makes f3/shift+f3 repeat it like
   `n`/`N` on the active editor (the editor announces the commit with
   `editor.SearchCommittedMsg`); the next find-in-path scan reclaims them.

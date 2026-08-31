@@ -8,7 +8,7 @@ import (
 func liveTable(t *testing.T) *LiveBindings {
 	t.Helper()
 	l := &LiveBindings{}
-	l.Set(BuildTable(Defaults(PresetJetBrains), nil, "darwin"))
+	l.Set(BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin"))
 	return l
 }
 
@@ -61,7 +61,7 @@ func TestLiveBindingsFollowReloads(t *testing.T) {
 }
 
 func TestContinuationsForHeldPrefix(t *testing.T) {
-	table := BuildTable(Defaults(PresetJetBrains), nil, "darwin")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin")
 	conts := table.Continuations(MustParseChord("cmd+k"), Global)
 	if len(conts) == 0 {
 		t.Fatal("cmd+k prefix should offer continuations")
@@ -192,7 +192,7 @@ func TestResolverContinues(t *testing.T) {
 }
 
 func TestResolverPendingContinuations(t *testing.T) {
-	r := NewResolver(BuildTable(Defaults(PresetJetBrains), nil, "darwin"))
+	r := NewResolver(BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin"))
 	if prefix, conts := r.PendingContinuations(Global); prefix != "" || conts != nil {
 		t.Fatal("idle resolver offers nothing")
 	}

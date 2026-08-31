@@ -84,6 +84,8 @@ var (
 	forgeNotifyStyles = map[string]bool{"dialog": true, "badge": true, "toast": true, "off": true}
 	// popupCwds are the terminal.popup_cwd values (#2316).
 	popupCwds = map[string]bool{"project": true, "file": true}
+	// popupOnSwitchModes are the terminal.popup_on_switch values (#2362).
+	popupOnSwitchModes = map[string]bool{"restore": true, "always-open": true}
 )
 
 // whichKeyMaxDelayMs caps keymap.which_key_delay_ms (#1909); the settings
@@ -322,6 +324,12 @@ func validate(c *Config) []Diagnostic {
 	if !popupCwds[c.Terminal.PopupCwd] {
 		diags = append(diags, Diagnostic{Field: "terminal.popup_cwd", Message: fmt.Sprintf("unknown mode %q, using \"project\"", c.Terminal.PopupCwd)})
 		c.Terminal.PopupCwd = "project"
+	}
+	// terminal.popup_on_switch (#2362) decides whether a project switch opens
+	// the incoming project's popup terminal unconditionally.
+	if !popupOnSwitchModes[c.Terminal.PopupOnSwitch] {
+		diags = append(diags, Diagnostic{Field: "terminal.popup_on_switch", Message: fmt.Sprintf("unknown mode %q, using \"restore\"", c.Terminal.PopupOnSwitch)})
+		c.Terminal.PopupOnSwitch = "restore"
 	}
 	// history.timeline_source (#1916) is the Timeline's default source filter.
 	if !timelineSources[c.History.TimelineSource] {

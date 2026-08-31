@@ -338,6 +338,16 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 			}
 		}
 	}
+	// With terminal.popup_on_switch = "always-open" (#2362) the incoming
+	// project's popup terminal opens no matter how it was left: the parked
+	// instance this switch just resumed comes back with its tabs and running
+	// shells, a project without a box gets a fresh shell. Run after the
+	// un-park above so a resumed popup is already live, and after the size
+	// pass so a freshly spawned box is measured against the real bounds.
+	// "restore" — the default — leaves the state #1407 restored untouched.
+	if sized.popupOnSwitchAlways() {
+		sized.ensurePopupTerminalOpen()
+	}
 	// An open global tool follows the switch (#1903): any session still
 	// parked after the rebuild — the target's layout restore did not
 	// re-attach it — splices into the workspace through the normal open path

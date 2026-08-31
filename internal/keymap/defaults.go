@@ -119,6 +119,9 @@ var jetbrainsRows = []row{
 	// next/previous-occurrence keys.
 	{"f3", "search.nextMatch", "Next search match", Global, "Search (0150)"},
 	{"shift+f3", "search.prevMatch", "Previous search match", Global, "Search (0150)"},
+	// IntelliJ macOS Find Next/Previous aliases (#2359).
+	{"cmd+g", "search.nextMatch", "Next search match", Global, "Search (0150)"},
+	{"cmd+shift+g", "search.prevMatch", "Previous search match", Global, "Search (0150)"},
 	// JetBrains "Select in Project View" (#242). Alt+F-key delivery depends on
 	// the terminal (fragile); the palette stays the delivered fallback.
 	{"alt+f1", "explorer.reveal", "Reveal open file in explorer", Global, "Explorer (05)"},
@@ -494,12 +497,37 @@ var jetbrainsRows = []row{
 	{"alt+shift+f12", "window.layouts", "Window layouts", Global, "Windowing (#2305)"},
 }
 
+// darwinRows are default bindings that only ship on macOS: chords whose
+// logical Cmd has no useful folded form elsewhere, because platform.go's
+// Cmd→Ctrl fold would land them on a chord another default already owns.
+var darwinRows = []row{
+	// IntelliJ's classic macOS Back/Forward chords (#2361): the bracket chords
+	// above need option-combos on a German QWERTZ layout, so these aliases keep
+	// navigation reachable there. They are free of macOS system shortcuts
+	// (unlike plain ctrl+left/right, which Mission Control takes). macOS only —
+	// elsewhere they would fold onto ctrl+alt+left/right, which editor tab
+	// cycling owns.
+	{"cmd+alt+left", "nav.back", "Navigate back", Global, "Editor (06)/app (01)"},
+	{"cmd+alt+right", "nav.forward", "Navigate forward", Global, "Editor (06)/app (01)"},
+}
+
 // Defaults returns the default binding set for the named preset. Unknown presets
 // fall back to JetBrains. Chords are parsed but not yet platform-normalised;
 // BuildTable normalises them for the target goos.
 func Defaults(preset string) []Binding {
+	return DefaultsFor(preset, GOOS)
+}
+
+// DefaultsFor is Defaults for an explicit target platform: the macOS-only rows
+// (darwinRows) ship only when goos is darwin. Tests and doc generators that
+// build the table for a platform other than the running one use it, so a
+// macOS-only chord is never judged under the Cmd→Ctrl fold.
+func DefaultsFor(preset, goos string) []Binding {
 	// Only one preset exists today; reserved for future presets (vscode, etc.).
 	rows := jetbrainsRows
+	if goos == "darwin" {
+		rows = append(append([]row{}, rows...), darwinRows...)
+	}
 	out := make([]Binding, 0, len(rows))
 	for _, r := range rows {
 		chord := MustParseChord(r.chord)

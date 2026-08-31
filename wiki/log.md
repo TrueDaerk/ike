@@ -1,5 +1,21 @@
 # Log
 
+## 2026-08-31 (playground follows its source file, #2356)
+
+- **The snapshot is re-read on external change**: an open jq/yq playground
+  whose source file is written by another process re-parses its input and
+  re-runs the current program against it — automatically, through the same
+  debounce/generation machinery a program change uses, so a burst of saves
+  leaves only the newest result. Query, caret and history position are
+  untouched: the input is renewed, not the playground.
+- **Scope and failure modes**: only whole-file editor sources are followed (an
+  HTTP response is no file, a selection's range means something else after an
+  edit); the text comes from the buffer *after* its own auto-reload, so unsaved
+  edits are never overwritten; a broken new input keeps the last valid result
+  and shows the parse error; a removed file closes the mode with a
+  notification, or — with unsaved edits — keeps it over the surviving buffer
+  with a warning. The info row carries a `reloaded HH:MM:SS` stamp.
+  See [jq & yq playground](/architecture/jq-playground.md).
 ## 2026-08-31 (jq/yq playground bound to its document, not its pane, #2355)
 
 - **The mode belongs to the document it queries**: `playState` now keeps the

@@ -13,7 +13,9 @@ Roadmap 0220, promoted from idea #51. `nav.back` / `nav.forward` return the
 caret to where it was before a jump and re-traverse after going back —
 JetBrains Navigate Back/Forward semantics. The commands back the
 `cmd+left-bracket` / `cmd+right-bracket` defaults (fragile on many
-terminals and awkward on QWERTZ), the **mouse back/forward buttons** (#816:
+terminals and awkward on QWERTZ, where the bracket keys need option-combos —
+hence the macOS-only `cmd+alt+left` / `cmd+alt+right` aliases, IntelliJ's
+classic Back/Forward chords, #2361), the **mouse back/forward buttons** (#816:
 buttons 4/5 arrive as the synthetic single-step chords `mouse-back` /
 `mouse-forward` and resolve through the normal keymap, so they rebind like
 keys; terminals without SGR extended buttons simply never deliver them, and

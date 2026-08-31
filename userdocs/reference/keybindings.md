@@ -67,14 +67,17 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Move file | `f6` | `f6` | `file.move` |
 | Move tab left | `ctrl+shift+pgup` | `ctrl+shift+pgup` | `editor.tab.moveLeft` |
 | Move tab right | `ctrl+shift+pgdown` | `ctrl+shift+pgdown` | `editor.tab.moveRight` |
+| Navigate back | `cmd+alt+left` | — | `nav.back` |
 | Navigate back | `cmd+left-bracket` | `ctrl+left-bracket` | `nav.back` |
 | Navigate back (mouse button 4) | `mouse-back` | `mouse-back` | `nav.back` |
+| Navigate forward | `cmd+alt+right` | — | `nav.forward` |
 | Navigate forward | `cmd+right-bracket` | `ctrl+right-bracket` | `nav.forward` |
 | Navigate forward (mouse button 5) | `mouse-forward` | `mouse-forward` | `nav.forward` |
 | New file | `cmd+n` | `ctrl+n` | `explorer.newFile` |
 | New scratch file | `cmd+shift+n` | `ctrl+shift+n` | `scratch.new` |
 | New scratch from selection | `cmd+alt+shift+s` | `ctrl+alt+shift+s` | `scratch.newFromSelection` |
 | New terminal | `cmd+alt+shift+t` | `ctrl+alt+shift+t` | `terminal.new` |
+| Next search match | `cmd+g` | `ctrl+g` | `search.nextMatch` |
 | Next search match | `f3` | `f3` | `search.nextMatch` |
 | Next tab | `cmd+ctrl+right` | `ctrl+right` | `editor.tab.next` |
 | Next tab | `ctrl+alt+right` | `ctrl+alt+right` | `editor.tab.next` |
@@ -83,6 +86,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Performance HUD | `ctrl+alt+p` | `ctrl+alt+p` | `perf.hud` |
 | Pinned files | `cmd+2` | `ctrl+2` | `nav.pins` |
 | Popup terminal | `cmd+alt+t` | `ctrl+alt+t` | `terminal.popup` |
+| Previous search match | `cmd+shift+g` | `ctrl+shift+g` | `search.prevMatch` |
 | Previous search match | `shift+f3` | `shift+f3` | `search.prevMatch` |
 | Previous tab | `cmd+ctrl+left` | `ctrl+left` | `editor.tab.prev` |
 | Previous tab | `ctrl+alt+left` | `ctrl+alt+left` | `editor.tab.prev` |
