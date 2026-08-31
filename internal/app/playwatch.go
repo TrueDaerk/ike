@@ -58,7 +58,7 @@ func (m *Model) playWatchEvent(msg watch.EventMsg) tea.Cmd {
 	default:
 		return nil
 	}
-	text, ok := m.playSourceText(s.srcPath)
+	text, ok := m.playSourceText(s)
 	if !ok || undostore.Hash([]byte(text)) == s.srcHash {
 		// Nothing readable, or the bytes the parser already saw: a stale
 		// dirty buffer, auto-reload switched off, or a touch that wrote the
@@ -69,15 +69,19 @@ func (m *Model) playWatchEvent(msg watch.EventMsg) tea.Cmd {
 	return m.playRefreshInput(text)
 }
 
-// playSourceText is the followed document's current text: the buffer showing
-// it when one is open — which is the input the playground was opened over —
-// and the file on disk otherwise, so a playground outliving its editor tab
-// still follows the file it names.
-func (m Model) playSourceText(path string) (string, bool) {
-	if ed := m.editorForPath(path); ed != nil {
+// playSourceText is the followed document's current text: the **queried
+// editor model** itself (#2355 pins it on the state, so this is the document
+// the playground was opened over even when its pane now shows another tab),
+// any other buffer holding the path if that model is gone, and the file on
+// disk as the last resort.
+func (m Model) playSourceText(s *playState) (string, bool) {
+	if s.srcEd != nil {
+		return s.srcEd.Text(), true
+	}
+	if ed := m.editorForPath(s.srcPath); ed != nil {
 		return ed.Text(), true
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(s.srcPath)
 	if err != nil {
 		return "", false
 	}
@@ -111,7 +115,11 @@ func (m *Model) playRefreshInput(text string) tea.Cmd {
 // than vanishing with the pane unexplained.
 func (m *Model) playSourceRemoved() {
 	s := m.play
-	if ed := m.editorForPath(s.srcPath); ed != nil && ed.Dirty() {
+	ed := s.srcEd
+	if ed == nil {
+		ed = m.editorForPath(s.srcPath)
+	}
+	if ed != nil && ed.Dirty() {
 		s.status = "source file removed on disk — the result is the unsaved buffer"
 		s.statusWarn = true
 		return

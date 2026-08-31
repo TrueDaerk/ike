@@ -1,7 +1,7 @@
 ---
 type: concept
 title: jq & yq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context, `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context, `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, yaml, jq, yq, tools, inline, editor, http, completion, folding]
 timestamp: 2026-08-31T00:00:00Z
@@ -114,6 +114,39 @@ normally, so another file can be edited with the filtered result still
 visible. Returning the focus to the pane resumes the query line as it was;
 the pane's `esc` remains the way to close the mode. The hosting pane closing
 from elsewhere closes the playground with it.
+
+## Bound to the document, not to the pane
+
+The mode is mounted in a pane, but it belongs to the **document it queries**
+(#2355). `playState` therefore keeps that document itself — `srcEd`, the
+queried editor model, or `srcInst`, the queried HTTP response instance —
+beside the `paneKey` it mounted in, and `playSrcShown` asks the pane whether it
+*still shows* that document: the active tab's editor must be the very model
+that was queried and still stand for the same document (an editor retargeted
+to another file keeps its pointer but changes its doc key), or the pane's
+active content must be the queried response instance.
+
+Everything that used to decide on the pane alone now goes through that
+question — rendering and pane title, the reserved header rows
+(`playHeaderRowsFor`, and with them the mouse translation and the result
+buffer's height), the pane's mouse routing, the wheel and the key routing
+(`playFocused`). Deciding it in one place is what keeps a half-rendered state —
+a query header over a foreign document, or reserved rows nobody draws — from
+existing at all.
+
+The consequence: opening another file into the hosting pane, or switching to
+another tab, shows that file **immediately**. The playground is not closed by
+it — it stays mounted with query, result and history position intact, exactly
+as it survives a focus change (#1980), and simply renders nothing while the
+pane shows something else. Switching back to the source document brings it
+back as it was. The HTTP response playground is unaffected: its source is a
+response instance, not a file document, and it is matched by that instance.
+
+A mounted playground never outlives its document: `syncPlaygroundSource` runs
+on the settled `Update` pass and closes the mode when the queried editor model
+(or response instance) is no longer anywhere in the workspace, so tab closes,
+pane closes and explorer deletions are all covered by one hook instead of each
+close path remembering the mode.
 
 ## Engine: gojq, not a jq binary
 
