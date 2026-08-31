@@ -14,6 +14,29 @@
   events sharing a cell, so a burst never splits between layer and pane. See
   [terminal](/architecture/terminal.md) and [mouse](/architecture/mouse.md).
 
+## 2026-08-31 (freeze diagnosis: session/heartbeat/flight telemetry, trace log, #2348)
+
+- **Telemetry schema v3**: three diagnostic event types join the usage log —
+  `session` (Ike version, OS, 12-hex hashed project token; deferred like
+  `pane.focus`, re-emitted on project switch), `heartbeat` (every 10 s, with
+  the update-loop pass count, so a log's end says *when* work stopped and
+  whether the loop or the process died), and `op` (lifecycle of
+  `http.flight`: `start`, then `ok`/`error`/`canceled` with duration, status
+  class, streaming flag). `Recorder.FlushSoon` puts everything up to the
+  flight start on disk before the exchange departs. Privacy line unchanged:
+  no paths, URLs, keys or content.
+- **`perf.trace_log`** (Settings UI, Performance HUD page; default off):
+  one structural line per processed update-loop message into `.ike/trace.log`
+  through a held handle (`heldLog`, generalized from the #2176 transcript).
+- **The `http.run` dispatch path was audited** for UI-freeze potential and
+  cleared: the exchange runs off-loop, each stream message re-arms exactly
+  one event-channel read, the coalescer's mutex pins chunk-before-final
+  ordering. The silent #2348 watchdog is explained by its scope (Update/View
+  passes only) — documented with a freeze-triage procedure in
+  [performance](/architecture/performance.md); event details in
+  [usage telemetry](/architecture/usage-telemetry.md) and
+  [http client](/architecture/http-client.md).
+
 ## 2026-08-31 (scratch files findable by their own name in the `@` finder, #2341)
 
 - **`@notes` finds a scratch named `notes.go`**: `FileMode.scratchItems` now

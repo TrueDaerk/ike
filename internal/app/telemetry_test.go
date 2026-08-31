@@ -1,23 +1,30 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
 	"ike/internal/explorer"
 	"ike/internal/host"
+	"ike/internal/httpclient"
 	"ike/internal/layout"
 	"ike/internal/menu"
 	"ike/internal/palette"
 	"ike/internal/plugin"
 	"ike/internal/registry"
 	"ike/internal/telemetry"
+	"ike/internal/version"
 )
 
 // usageEvents flushes m's recorder and returns every event written for this
@@ -262,6 +269,198 @@ func TestTelemetryNoClearTextPaths(t *testing.T) {
 		if strings.Contains(string(raw), "very-secret-name") || strings.Contains(string(raw), "content") {
 			t.Fatalf("telemetry leaked file path or content:\n%s", raw)
 		}
+	}
+}
+
+// TestTelemetrySessionMarker: the first meaningful event carries the deferred
+// session marker (#2348) ahead of it — version, OS and a hashed project token,
+// never the clear-text working directory.
+func TestTelemetrySessionMarker(t *testing.T) {
+	m := telemetryModel(t, host.MapConfig{"keymap.bindings.ctrl+y": "tm.fire"})
+	tm, _ := m.Update(tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
+	m = tm.(Model)
+
+	evs := usageEvents(t, m)
+	sessions := eventsOf(evs, telemetry.TypeSession)
+	if len(sessions) != 1 {
+		t.Fatalf("want one session marker, got %v", sessions)
+	}
+	s := sessions[0]
+	if s.Data["app"] != version.Short() || s.Data["os"] != runtime.GOOS {
+		t.Fatalf("session marker version/os wrong: %v", s.Data)
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := s.Data["project"]
+	if len(token) != 12 {
+		t.Fatalf("project token %q is not a 12-char hash", token)
+	}
+	if strings.Contains(wd, token) || strings.Contains(token, filepath.Base(wd)) {
+		t.Fatalf("project token %q leaks the working directory %q", token, wd)
+	}
+	if evs[0].Type != telemetry.TypeSession {
+		t.Fatalf("session marker must land first, got %v", evs[0])
+	}
+}
+
+// TestTelemetryHTTPFlightLifecycle: a dispatch leaves a start op (flushed
+// before the exchange departs, #2348) and its answer leaves the matching end
+// op with duration, status class and streaming flag — no URL, key or label.
+func TestTelemetryHTTPFlightLifecycle(t *testing.T) {
+	m := telemetryModel(t, host.MapConfig{})
+	send := func(ctx context.Context, source, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
+		return nil, nil // never executed: the returned tea.Cmd is not run
+	}
+	if cmd := m.dispatchHTTP("a.http", "GET /x", "GET /x", send); cmd == nil {
+		t.Fatal("dispatch refused")
+	}
+
+	// The start op — and the events before it — must reach disk without any
+	// explicit Flush: dispatchHTTP's FlushSoon is the only flusher here.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		found := false
+		for _, ev := range eventsOfNoFlush(t) {
+			if ev.Type == telemetry.TypeOp && ev.Data["phase"] == "start" {
+				found = true
+			}
+		}
+		if found {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("start op not flushed to disk before the exchange")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	tm, _ := m.Update(HTTPResponseMsg{Source: "a.http", Request: "GET /x",
+		Resp: &httpclient.Response{Status: "200 OK", StatusCode: 200}})
+	m = tm.(Model)
+
+	ops := eventsOf(usageEvents(t, m), telemetry.TypeOp)
+	if len(ops) != 2 {
+		t.Fatalf("want start + end ops, got %v", ops)
+	}
+	end := ops[1]
+	if end.Data["id"] != "http.flight" || end.Data["phase"] != "ok" ||
+		end.Data["class"] != "2xx" || end.Data["stream"] != "false" {
+		t.Fatalf("end op wrong: %v", end)
+	}
+	if _, err := strconv.Atoi(end.Data["ms"]); err != nil {
+		t.Fatalf("end op ms %q is not a number", end.Data["ms"])
+	}
+	for _, ev := range ops {
+		for k, v := range ev.Data {
+			if strings.Contains(v, "a.http") || strings.Contains(v, "/x") {
+				t.Fatalf("flight op leaks request detail: %s=%q", k, v)
+			}
+		}
+	}
+}
+
+// TestTelemetryHTTPFlightCancelAndError: a user abort records "canceled", a
+// transport failure "error" — and a stream marks its flag.
+func TestTelemetryHTTPFlightCancelAndError(t *testing.T) {
+	m := telemetryModel(t, host.MapConfig{})
+	send := func(ctx context.Context, source, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
+		return nil, nil
+	}
+	m.dispatchHTTP("a.http", "k1", "GET /1", send)
+	m.httpFlight[httpFlightKey("a.http", "k1")].canceled = true
+	tm, _ := m.Update(HTTPResponseMsg{Source: "a.http", Request: "k1", Err: context.Canceled})
+	m = tm.(Model)
+
+	m.dispatchHTTP("a.http", "k2", "GET /2", send)
+	tm, _ = m.Update(HTTPResponseMsg{Source: "a.http", Request: "k2", Err: errors.New("boom")})
+	m = tm.(Model)
+
+	m.dispatchHTTP("a.http", "k3", "GET /3", send)
+	m.httpFlight[httpFlightKey("a.http", "k3")].streamed = true
+	tm, _ = m.Update(HTTPResponseMsg{Source: "a.http", Request: "k3",
+		Resp: &httpclient.Response{Status: "200 OK", StatusCode: 200}})
+	m = tm.(Model)
+
+	var phases []string
+	var streams []string
+	for _, ev := range eventsOf(usageEvents(t, m), telemetry.TypeOp) {
+		if ev.Data["phase"] == "start" {
+			continue
+		}
+		phases = append(phases, ev.Data["phase"])
+		streams = append(streams, ev.Data["stream"])
+	}
+	if len(phases) != 3 || phases[0] != "canceled" || phases[1] != "error" || phases[2] != "ok" {
+		t.Fatalf("want canceled/error/ok end phases, got %v", phases)
+	}
+	if streams[2] != "true" {
+		t.Fatalf("streamed flight not flagged: %v", streams)
+	}
+}
+
+// eventsOfNoFlush reads the session file without flushing the recorder — the
+// seam for asserting FlushSoon put events on disk by itself.
+func eventsOfNoFlush(t *testing.T) []telemetry.Event {
+	t.Helper()
+	dir := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "telemetry")
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []telemetry.Event
+	for _, e := range entries {
+		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+			if line == "" {
+				continue
+			}
+			var ev telemetry.Event
+			if err := json.Unmarshal([]byte(line), &ev); err != nil {
+				continue // a partially flushed last line is fine here
+			}
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+// TestTraceLogFollowsSetting: off by default nothing is written; on, every
+// processed message leaves one structural line in trace.log (#2348).
+func TestTraceLogFollowsSetting(t *testing.T) {
+	m := telemetryModel(t, host.MapConfig{})
+	tm, _ := m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	m = tm.(Model)
+	trace := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "trace.log")
+	if _, err := os.Stat(trace); !os.IsNotExist(err) {
+		t.Fatalf("trace.log written with the setting off: %v", err)
+	}
+
+	prev := config.Get()
+	on := *prev
+	on.Perf.TraceLog = true
+	config.Set(&on)
+	t.Cleanup(func() { config.Set(prev) })
+	tm, _ = m.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	_ = tm
+
+	raw, err := os.ReadFile(trace)
+	if err != nil {
+		t.Fatalf("trace.log missing with the setting on: %v", err)
+	}
+	line := string(raw)
+	if !strings.Contains(line, "trace: tea.KeyPressMsg") || !strings.Contains(line, "flights=0") {
+		t.Fatalf("trace line wrong: %q", line)
+	}
+	if strings.Contains(line, `"y"`) || strings.Contains(line, "text") {
+		t.Fatalf("trace line leaks key content: %q", line)
 	}
 }
 

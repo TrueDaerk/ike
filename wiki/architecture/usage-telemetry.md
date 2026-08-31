@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Usage Telemetry
-description: Local-only usage recording — command, keybinding and layout events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
+description: Local-only usage recording — command, keybinding, layout, session, heartbeat and operation-lifecycle events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
-tags: [architecture, telemetry, usage, jsonl, privacy]
-timestamp: 2026-08-28T00:00:00Z
+tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
+timestamp: 2026-08-31T00:00:00Z
 ---
 
 # Usage Telemetry
@@ -33,7 +33,11 @@ paths.** Two guards enforce it:
 ## Event schema (the analysis interface)
 
 One JSON object per line. `v` is the schema version (`telemetry.SchemaVersion`,
-currently 2); readers must tolerate unknown fields and filter on `v`.
+currently 3); readers must tolerate unknown fields and filter on `v`. v3
+(#2348) added the diagnostic types `session`, `heartbeat` and `op` without
+changing any existing field — the bump mainly tells a reader that a v3 log
+ending without heartbeats is evidence, while a v2 log ending simply predates
+them.
 
 ```json
 {"v":2,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
@@ -65,6 +69,29 @@ currently 2); readers must tolerate unknown fields and filter on `v`.
     `pane.focus`, `resize`, `tab.switch`, `tab.move`, `project.switch`;
     `zone`/`direction` name an edge (`left`/`right`/`top`/`bottom`/`center`)
     where the op has one.
+  - `session` (#2348) — the attribution anchor: `app` (Ike version), `os`
+    (GOOS) and `project`, a 12-hex-char SHA-256 prefix of the project root
+    path — never the path itself, but stable per project and re-computable
+    from a candidate root, so a log can be matched to the project (and its
+    `.ike/debug.log`) after the fact. Emitted at startup and again on every
+    project switch; the token in effect is the last one recorded. Deferred
+    like `pane.focus`, so it alone never creates a file, and it survives the
+    pending trim.
+  - `heartbeat` (#2348) — a liveness stamp every 10s
+    (`telemetryHeartbeatInterval`, `internal/app/telemetry.go`) carrying
+    `passes`, the cumulative update-loop pass count (`diag.LoopPasses`). It
+    reads three ways: heartbeats continuing with a frozen count → the loop is
+    stuck (or starved); continuing with an advancing count → the freeze sits
+    outside the loop (input reader, renderer, terminal); stopping dead → the
+    process ended. The goroutine lives in the recorder, starts with the
+    session file and never depends on the update loop. Cost: ~1 MB per
+    day-long session, inside the 5 MiB cap.
+  - `op` (#2348) — the lifecycle of a long-running operation. `id` names it
+    (currently `http.flight` for every HTTP dispatch — run, re-send, re-run),
+    `phase` is `start`, `ok`, `error` or `canceled`; the end phases carry
+    `ms` (duration), `class` (`2xx`…`5xx`, when a response arrived) and
+    `stream` (`true`/`false`). No URL, request key, header or body — a start
+    without a matching end is the "dispatch never came back" signal.
 
 ## Where events come from
 
@@ -86,6 +113,12 @@ All hooks sit at the existing funnels, so coverage is by construction:
 - **Layout**: `SplitFocused`, `setFocus` (real focus transitions only),
   `commitMove`, divider drags and resize mode, `switchTab`/`moveTab`, and the
   project-switch transaction.
+- **Session**: `recordTelemetrySession` (`internal/app/telemetry.go`) in the
+  model constructor and after the project-switch chdir.
+- **HTTP flights**: `dispatchHTTP` (start) and `fillHTTPPanel` via
+  `recordHTTPFlightEnd` (`internal/app/http.go`) — the end phase derives from
+  the flight entry's canceled mark and the response/error, the streaming flag
+  is set when `HTTPStreamStartMsg` arrives.
 
 ## Storage, rotation, asynchrony
 
@@ -111,6 +144,12 @@ history).
   no file. The rule lives in `startsSession`
   (`internal/telemetry/telemetry.go`) — everything except a bare pane focus
   starts a session.
+- **Flush before risky work (#2348)**: `FlushSoon` enqueues a flush request
+  without waiting for it — never blocking the update loop — and `dispatchHTTP`
+  calls it right after the flight-start event, so everything up to and
+  including that start (the dispatching `command` event too) is on disk
+  before the exchange leaves. A dispatch that hangs the session still leaves
+  its trace.
 - **Periodic flush (#2295)**: the writer goroutine also holds a ticker
   (`Recorder.FlushInterval`, default 3s) and flushes the `bufio.Writer` on
   every tick, independent of buffer fill or an explicit `Flush()`/`Close()`

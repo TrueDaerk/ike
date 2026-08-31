@@ -275,6 +275,11 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// unstarted (it opens its file lazily, so it never existed on disk).
 	fresh.usage = m.usage
 	fresh.usage.Layout("project.switch", nil)
+	// Re-emit the session marker (#2348) with the new project's token — the
+	// cwd changed above, so events from here on attribute to the right state
+	// directory. buildModel emitted one on the discarded fresh recorder; this
+	// is the one that lands in the session file.
+	recordTelemetrySession(fresh.usage)
 	// The notification history is session state, not workspace state (#1514):
 	// it rides across the switch (entries carry their project root, so the
 	// history view can label foreign ones), as does the unseen counter.

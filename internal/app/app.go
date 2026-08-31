@@ -1376,6 +1376,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		focusKeys:       focusKeys(cfg),
 		keys:            buildKeymap(cfg, bindings),
 	}
+	// The session marker (#2348): version, OS and hashed project token anchor
+	// later freeze analysis. Deferred like pane.focus (#2318), so a launch
+	// that records nothing meaningful still leaves no file; a project switch
+	// re-emits it on the carried recorder (switch.go).
+	recordTelemetrySession(m.usage)
 	m.floats = ui.NewStack(m.shell)                 // z-ordered floating stack (#1237)
 	m.floats.SetSizeStore(winSizes)                 // resizable modal shell (#774)
 	m.palette.SetSizeStore(winSizes)                // resizable palette box (#774)
@@ -3788,6 +3793,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// LoopExit is a frozen loop, and the watchdog goroutine dumps stacks.
 	diag.LoopEnter(msg)
 	defer diag.LoopExit()
+	// The opt-in update-loop trace (#2348): one line per processed message,
+	// so a freeze investigation can read what the loop was doing and how many
+	// HTTP flights were open. Off by default — the check is one config load.
+	if c := config.Get(); c != nil && c.Perf.TraceLog {
+		logTrace(msg, len(m.httpFlight))
+	}
 	start := time.Now()
 	tm, cmd := m.updateMsg(msg)
 	if took := time.Since(start); took > slowUpdateThreshold {
