@@ -599,6 +599,12 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
 		}
 		p.SetHistory(items)
 	}
+	// The body composed plain; the syntax pass runs off-loop (#2353) and
+	// paints the rows via httppane.HighlightedMsg — the update pass never
+	// waits on a parse again.
+	if cmd := p.HighlightCmd(); cmd != nil {
+		report = tea.Batch(report, cmd)
+	}
 	// The response may just have captured a value (#1993), which defines a
 	// name that read as unknown until now — re-lint after the entry is
 	// stored, since that store is where the captured values are read from
@@ -675,34 +681,37 @@ func (m *Model) copyHTTPFold() tea.Cmd {
 
 // toggleHTTPRawBody runs http.toggleRawBody (#2157): the palette pendant of
 // the viewer's "t". It reports the new state, so the command is usable
-// without looking at the footer.
-func (m *Model) toggleHTTPRawBody() {
+// without looking at the footer, and carries the recompose's off-loop syntax
+// pass (#2353).
+func (m *Model) toggleHTTPRawBody() tea.Cmd {
 	p := m.httpPanel()
 	if p == nil {
 		m.host.Notify(host.Info, "http: no response pane open")
-		return
+		return nil
 	}
 	if p.ToggleRaw() {
 		m.host.Notify(host.Info, "http: showing the raw response body")
-		return
+	} else {
+		m.host.Notify(host.Info, "http: showing the pretty-printed response body")
 	}
-	m.host.Notify(host.Info, "http: showing the pretty-printed response body")
+	return p.HighlightCmd()
 }
 
 // loadMoreHTTPBody runs http.loadMoreBody (#2157): the palette pendant of the
 // viewer's "m". A body that is fully on screen says so rather than doing
-// nothing.
-func (m *Model) loadMoreHTTPBody() {
+// nothing; a grown one carries the recompose's off-loop syntax pass (#2353).
+func (m *Model) loadMoreHTTPBody() tea.Cmd {
 	p := m.httpPanel()
 	if p == nil {
 		m.host.Notify(host.Info, "http: no response pane open")
-		return
+		return nil
 	}
 	if !p.LoadMore() {
 		m.host.Notify(host.Info, "http: the whole response body is already shown")
-		return
+		return nil
 	}
 	m.host.Notify(host.Info, fmt.Sprintf("http: showing %d of %d body bytes", p.ShownBodyBytes(), p.TotalBodyBytes()))
+	return p.HighlightCmd()
 }
 
 // openHTTPBodyFile runs http.openBodyFile (#2157): the palette pendant of the
@@ -779,35 +788,35 @@ func (m *Model) showHTTPHistory() {
 // them in the viewer without dispatching anything — the way to look at what
 // request A answered while the pane still shows request B. The h/l browsing
 // then works exactly as after a dispatch (#1251).
-func (m *Model) showStoredHTTPResponse() {
+func (m *Model) showStoredHTTPResponse() tea.Cmd {
 	ed := m.activeEditor()
 	if ed == nil {
 		m.host.Notify(host.Info, "http: focus a file tab first")
-		return
+		return nil
 	}
 	if !isHTTPBuffer(ed) {
 		m.host.Notify(host.Info, "http: not an .http file")
-		return
+		return nil
 	}
 	f := httpfile.Parse(ed.Text())
 	line, _ := ed.CursorPos()
 	req, ok := f.RequestAt(line + 1)
 	if !ok {
 		m.host.Notify(host.Info, "http: no request under the cursor")
-		return
+		return nil
 	}
-	m.loadStoredHTTPResponse(httpSource(ed), req.Key())
+	return m.loadStoredHTTPResponse(httpSource(ed), req.Key())
 }
 
 // loadStoredHTTPResponse shows the stored responses of one request in the
 // viewer — the shared loading path of http.showResponse (#1492) and the
 // pane-local request picker (#1829), which differ only in how they name the
 // request.
-func (m *Model) loadStoredHTTPResponse(source, key string) {
+func (m *Model) loadStoredHTTPResponse(source, key string) tea.Cmd {
 	entries := httphistory.New(httpHistoryDir()).List(source, key)
 	if len(entries) == 0 {
 		m.host.Notify(host.Info, "http: no stored responses for "+key+" — dispatch it once with http.run")
-		return
+		return nil
 	}
 	if m.httpPanel() == nil {
 		m.openHTTPPanel()
@@ -816,7 +825,7 @@ func (m *Model) loadStoredHTTPResponse(source, key string) {
 	if p == nil {
 		// Same failure mode as fillHTTPPanel (#1271): never pretend silently.
 		m.host.Notify(host.Error, "http: stored responses exist but the viewer cannot open — "+key)
-		return
+		return nil
 	}
 	items := make([]httppane.HistoryItem, 0, len(entries))
 	for _, e := range entries {
@@ -828,6 +837,7 @@ func (m *Model) loadStoredHTTPResponse(source, key string) {
 	m.focusHTTPPanel()  // the viewer may live in a tab (#1778)
 	m.layout()
 	m.host.Notify(host.Info, fmt.Sprintf("http: %d stored response(s) for %s — ←/→ browse · r switch request", len(items), key))
+	return p.HighlightCmd() // the off-loop syntax pass of the shown entry (#2353)
 }
 
 // paneKeysHelpGroup lists the focused pane's local keys for the cheatsheet

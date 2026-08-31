@@ -408,6 +408,13 @@ func validate(c *Config) []Diagnostic {
 		}
 		c.HTTP.DiffIgnoreHeaders = kept
 	}
+	// The response viewer's highlight cap (#2353): a limit below 1 KiB would
+	// silently turn highlighting off, one past 64 MiB defeats the cap's
+	// purpose — both fall back to the default rather than either extreme.
+	if c.HTTP.HighlightLimitKB < 1 || c.HTTP.HighlightLimitKB > 65536 {
+		diags = append(diags, Diagnostic{Field: "http.highlight_limit_kb", Message: fmt.Sprintf("limit %d out of range (1–65536 KiB), using 2048", c.HTTP.HighlightLimitKB)})
+		c.HTTP.HighlightLimitKB = 2048
+	}
 	// Issues window (#2090): both defaults are fixed vocabularies; an unknown
 	// value falls back rather than opening the pane in an undefined state.
 	switch c.Issues.DefaultTab {

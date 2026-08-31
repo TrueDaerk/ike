@@ -245,7 +245,10 @@ any entry whose key the typed schema does not expose (no dead keys).
   diff leaves out (`date`, request/trace ids, timing fields; a trailing `*`
   matches a family). The header list carries `Entry.ValidateEntry`: a value
   that is not a header name — or a lone `*`, which would hide every header — is
-  rejected in the form. See [HTTP client](./http-client.md).
+  rejected in the form. `http.highlight_limit_kb` (#2353) is the largest
+  response body the viewer syntax-highlights (1–65536 KiB, default 2048); the
+  pass runs off the update loop either way, and past the limit the body stays
+  plain with a notice row in the pane. See [HTTP client](./http-client.md).
 - **Ansible Vault** (#2293) — `ansible.vault_password_file`, the `Path` entry
   (existence-checked in the form) naming the file whose first line decrypts
   `$ANSIBLE_VAULT;` files for transparent editing: user scope is the global

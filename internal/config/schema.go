@@ -118,10 +118,14 @@ type Telemetry struct {
 // ("x-amz-*"); an empty list compares every header. DiffAfterRerun opens the
 // previous-vs-new diff automatically once a re-run's answer has landed in the
 // history, which is what closes the "run it again and show me what changed"
-// loop in one key.
+// loop in one key. HighlightLimitKB is the largest response body (KiB, after
+// pretty-printing) the response viewer syntax-highlights (#2353): the pass
+// runs off the update loop either way, but a huge body still burns CPU for
+// colours, so past the limit the body renders plain with a visible notice.
 type HTTP struct {
 	DiffIgnoreHeaders []string `toml:"diff_ignore_headers"`
 	DiffAfterRerun    bool     `toml:"diff_after_rerun"`
+	HighlightLimitKB  int      `toml:"highlight_limit_kb"`
 }
 
 // Forge holds the code-forge settings (#2085, #2086). PollIntervalSeconds is

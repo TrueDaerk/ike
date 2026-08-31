@@ -51,4 +51,28 @@ func TestHTTPDefaults(t *testing.T) {
 	if !strings.Contains(m["http.diff_ignore_headers"], "date") {
 		t.Errorf("http.diff_ignore_headers = %q", m["http.diff_ignore_headers"])
 	}
+	if m["http.highlight_limit_kb"] != "2048" {
+		t.Errorf("http.highlight_limit_kb = %q", m["http.highlight_limit_kb"])
+	}
+}
+
+// The response viewer's highlight cap (#2353) defaults to 2 MiB and rejects
+// values that would silently disable highlighting or defeat the cap.
+func TestValidateHTTPHighlightLimit(t *testing.T) {
+	for _, bad := range []int{0, -5, 70000} {
+		c := defaults()
+		c.HTTP.HighlightLimitKB = bad
+		diags := validate(c)
+		if c.HTTP.HighlightLimitKB != 2048 {
+			t.Errorf("limit %d validated to %d, want the 2048 fallback", bad, c.HTTP.HighlightLimitKB)
+		}
+		if len(diagsFor(diags, "http.highlight_limit_kb")) != 1 {
+			t.Errorf("limit %d must be reported once, got %v", bad, diags)
+		}
+	}
+	c := defaults()
+	c.HTTP.HighlightLimitKB = 512
+	if diags := validate(c); len(diagsFor(diags, "http.highlight_limit_kb")) != 0 || c.HTTP.HighlightLimitKB != 512 {
+		t.Errorf("512 KiB is a valid limit: %d, %v", c.HTTP.HighlightLimitKB, diags)
+	}
 }

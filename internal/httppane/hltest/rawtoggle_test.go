@@ -10,8 +10,16 @@ import (
 	"ike/internal/httppane"
 )
 
-// pressT sends the raw-toggle key.
-func pressT(m *httppane.Model) { m.Update(tea.KeyPressMsg{Code: 't', Text: "t"}) }
+// pressT sends the raw-toggle key and pumps the returned command — the
+// recompose's off-loop syntax pass (#2353) — back in, as the app's update
+// loop would.
+func pressT(m *httppane.Model) {
+	if cmd := m.Update(tea.KeyPressMsg{Code: 't', Text: "t"}); cmd != nil {
+		if msg, ok := cmd().(httppane.HighlightedMsg); ok {
+			m.ApplyHighlight(msg)
+		}
+	}
+}
 
 // TestPrettyHighlightedAndFoldable guards the whole default reading path of
 // #2157: a minified JSON answer is indented, highlighted and foldable at once

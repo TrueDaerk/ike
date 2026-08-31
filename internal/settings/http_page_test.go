@@ -28,6 +28,15 @@ func TestHTTPClientPageEntries(t *testing.T) {
 	if e.ValidateEntry == nil {
 		t.Fatal("the header list must validate its elements")
 	}
+	// The highlight cap (#2353) is an Int with the same bounds the config
+	// validation enforces, so the form rejects what the loader would reset.
+	h, ok := byKey["http.highlight_limit_kb"]
+	if !ok || h.Type != Int {
+		t.Fatalf("http.highlight_limit_kb entry = %+v", h)
+	}
+	if h.Min != 1 || h.Max != 65536 {
+		t.Errorf("http.highlight_limit_kb bounds = %d–%d, want 1–65536", h.Min, h.Max)
+	}
 }
 
 // The header-list element check (#2247) accepts header names and wildcards,

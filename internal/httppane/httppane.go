@@ -78,8 +78,14 @@ type Model struct {
 	keepScroll map[string]bool
 
 	rows []row
-	// bodyIx indexes the highlight spans of the body lines only.
-	bodyIx highlight.Index
+	// bodyIx indexes the highlight spans of the body lines only. It starts
+	// empty on every compose: the syntax pass runs off-loop (#2353) and lands
+	// via ApplyHighlight, guarded by hlGen so only the pass belonging to the
+	// rows on show can paint them. hlPending is the scheduled pass the host
+	// picks up through HighlightCmd.
+	bodyIx    highlight.Index
+	hlGen     int
+	hlPending *pendingHighlight
 	// Folding (#1330): folds are the body's foldable ranges in row
 	// coordinates, folded the collapsed ones (header row -> end row), and
 	// visible the display projection the viewport scrolls over. See fold.go.
@@ -315,6 +321,8 @@ func (m *Model) StartStream(request, proto, status string, headers http.Header) 
 	m.left = 0
 	m.rows = nil
 	m.bodyIx = highlight.Index{}
+	m.hlGen++ // a pass still in flight belongs to rows that are gone now
+	m.hlPending = nil
 	m.folds, m.folded, m.visible = nil, nil, nil
 	m.streaming = true
 	m.streamTail = ""
@@ -436,7 +444,9 @@ func (m *Model) compose(resp *httpclient.Response) {
 // recompose rebuilds the display rows for the response already on show, with
 // whatever the raw toggle and "load more" currently say (#2157). Scroll and
 // selection reset like they do on a new response: the row count changed under
-// them, so keeping either would point at different content.
+// them, so keeping either would point at different content. The body composes
+// plain; the syntax pass is only scheduled here (#2353) and paints the rows
+// once the host has run HighlightCmd off-loop.
 func (m *Model) recompose(resp *httpclient.Response) {
 	m.loaded = true
 	m.streaming = false
@@ -446,6 +456,8 @@ func (m *Model) recompose(resp *httpclient.Response) {
 	m.left = 0
 	m.rows = nil
 	m.bodyIx = highlight.Index{}
+	m.hlGen++ // whatever pass is still out belongs to the previous rows
+	m.hlPending = nil
 	m.folds, m.folded, m.visible = nil, nil, nil
 	if resp == nil {
 		m.research()
@@ -481,15 +493,15 @@ func (m *Model) recompose(resp *httpclient.Response) {
 			// instead of failing silently (#1270).
 			m.rows = append(m.rows, row{kind: kindWarn, text: fmt.Sprintf("(no %s highlighter in this build — showing plain text)", view.tag)})
 		}
-		m.bodyIx = highlight.NewIndex(highlight.HighlightFenced(view.tag, view.lines))
-		bodyStart := len(m.rows)
+		// The syntax pass — spans and folds alike (#1330) — runs off-loop
+		// (#2353): scheduleHighlight arms it (or appends the cap notice), the
+		// rows compose plain either way, and ApplyHighlight paints them once
+		// the parse lands. A body past PrettyLimit carries no tag, so it is
+		// neither highlighted nor scanned for folds (#2157).
+		m.scheduleHighlight(view.tag, view.lines)
 		for i, line := range view.lines {
 			m.rows = append(m.rows, row{kind: kindBody, text: line, body: i})
 		}
-		// The body folds by its own language's rules (#1330). A body past
-		// PrettyLimit carries no tag, so it is neither highlighted nor
-		// scanned for folds (#2157).
-		m.setFolds(highlight.FencedFolds(view.tag, view.lines), bodyStart)
 	}
 	m.syncVisible()
 	m.ClearSelection() // the rows changed: an old selection means nothing
@@ -624,11 +636,15 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "h", "left":
 		// Older stored response of the same request (#1251). The arrows join
 		// h/l (#1471): they are the keys a user reaches for first, and the
-		// footer advertises history as the arrow-shaped action.
+		// footer advertises history as the arrow-shaped action. The recompose
+		// scheduled a fresh syntax pass (#2353), which rides back as the
+		// command.
 		m.showHistory(m.histIdx + 1)
+		return m.HighlightCmd()
 	case "l", "right":
 		// Newer stored response.
 		m.showHistory(m.histIdx - 1)
+		return m.HighlightCmd()
 	case "r":
 		// Switch the pane to another request's stored history (#1829). The
 		// pane knows neither the history store nor the .http file's requests,
@@ -652,6 +668,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// toggle is for the moments where the bytes themselves are the
 		// question (a whitespace-sensitive payload, a malformed JSON answer).
 		m.ToggleRaw()
+		return m.HighlightCmd()
 	case "q":
 		// Open the jq playground over this body (#2157). The pane holds the
 		// body, the host owns the mode — the CopyMsg seam again.
@@ -660,6 +677,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// One more window of a spooled body (#2157). Nothing to load is not
 		// an error: the footer only advertises the key while there is.
 		m.LoadMore()
+		return m.HighlightCmd()
 	case "o":
 		// Open the whole spooled body as a file (#2157).
 		return m.OpenBodyFileCmd()

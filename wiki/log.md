@@ -1,5 +1,23 @@
 # Log
 
+## 2026-08-31 (http.run freeze fixed: linear column mapping, off-loop response highlighting, #2353)
+
+- **The #2348 freeze is root-caused and fixed**: `highlight.colMapper.runeCol`
+  rescanned the line prefix per span — O(spans × line bytes), ~10¹⁰ byte
+  passes on a 2 MB minified non-ASCII single line — *and* the response
+  viewer's syntax pass ran synchronously inside `app.HTTPResponseMsg`. The
+  mapper now caches per line the first non-ASCII offset and a rune-count
+  prefix table (linear, benchmarked in `internal/highlight/colmap_test.go`).
+- **The response body highlights off the update loop**: compose shows the
+  body plain immediately and schedules the pass (`httppane.HighlightCmd`,
+  the editor's `parseCmd` arrangement); `httppane.HighlightedMsg` paints
+  spans and folds when the parse lands, generation-guarded so a newer
+  response never wears an older one's colours.
+- **`http.highlight_limit_kb`** (Settings UI, HTTP Client page; default
+  2048 KiB): past the limit no pass is scheduled and a notice row in the
+  pane says why. See [http client](/architecture/http-client.md) and
+  [settings UI](/architecture/settings-ui.md).
+
 ## 2026-08-31 (wheel outside the popup layer scrolls the pane below, #2343)
 
 - **The wheel is a reading gesture, not a focus gesture**: with the popup

@@ -815,10 +815,10 @@ For a recognized stream:
   editor (`auxZone`, #1588) on the first response
   and **reused** for every later dispatch. It shows status line + duration,
   sorted headers, warnings, and the body — JSON pretty-printed, JSON/XML/
-  HTML/CSS/JS highlighted through the fenced-highlight path, binary bodies
-  collapsed to a notice, truncated bodies flagged. Scrolls with j/k/g/G and
-  the mouse wheel; the pane persists across restarts as an empty singleton
-  slot like the Usages panel.
+  HTML/CSS/JS highlighted through the fenced-highlight path (asynchronously
+  since #2353, see below), binary bodies collapsed to a notice, truncated
+  bodies flagged. Scrolls with j/k/g/G and the mouse wheel; the pane persists
+  across restarts as an empty singleton slot like the Usages panel.
 - **Live streams** (#1776): a recognized streaming response (SSE/NDJSON, see
   the dispatch section) renders **incrementally** instead of leaving the pane
   empty until the connection ends. The dispatch goroutine feeds a buffered
@@ -890,6 +890,26 @@ For a recognized stream:
   index, no fold scan — with a warning row saying so. The cap is *surfaced,
   never silent*: without the notice a minified megabyte just looks like a
   viewer that forgot how to indent.
+- **Highlighting runs off the update loop** (#2353): compose only *schedules*
+  the body's syntax pass (`scheduleHighlight` in
+  `internal/httppane/highlight.go`) — the body shows immediately as plain
+  rows, the host runs `HighlightCmd` on a goroutine (the editor's `parseCmd`
+  arrangement) and the resulting `httppane.HighlightedMsg` paints spans *and*
+  fold ranges after the fact. A generation counter guards the round trip:
+  every recompose invalidates whatever pass is still in flight, so a newer
+  response is never coloured with an older response's spans. The update pass
+  never waits on a parse again — the `app.HTTPResponseMsg` watchdog stalls of
+  #2348 came from exactly that synchronous parse (made pathological by a
+  quadratic byte→rune column conversion in `highlight.colMapper`, fixed to
+  cached linear tables in the same change).
+- **Highlighting is capped separately** (`http.highlight_limit_kb`, default
+  2048 KiB, #2353): even off-loop, parsing a multi-megabyte body burns CPU
+  and memory for colours nobody asked to wait for. Past the limit — measured
+  over the composed (pretty-printed) lines — no pass is scheduled and a
+  warning row names the limit and the setting. The limit is configurable in
+  the Settings UI (HTTP Client page, 1–65536 KiB, validated and persisted);
+  the pane reads it through a package global (`httppane.SetHighlightLimit`,
+  the `idcolor` arrangement) pushed on startup and config reload.
 - **Large bodies are a window onto a file** (#2157): the dispatcher spools
   anything past `SpoolThreshold` (1 MiB) to disk (see
   [Large bodies are spooled to disk](#large-bodies-are-spooled-to-disk-2157)),
