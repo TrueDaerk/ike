@@ -172,3 +172,119 @@ func TestSpeedSearchFilterReturnsSourceIndices(t *testing.T) {
 		t.Fatalf("Filter must index the source rows, got %v", got)
 	}
 }
+
+// The word-edit chords a running query owes the user (#2360): before it, the
+// type-ahead rejected every modifier chord, so an alt+backspace typed inside
+// a picker fell through to the keymap and was logged unbound.
+func TestSpeedSearchRunningQueryEditsThroughEditKey(t *testing.T) {
+	cases := []struct {
+		name  string
+		keys  []tea.KeyPressMsg
+		query string
+		cur   int
+	}{
+		{"alt+backspace", []tea.KeyPressMsg{{Code: tea.KeyBackspace, Mod: tea.ModAlt}}, "area/", 5},
+		{"ctrl+w", []tea.KeyPressMsg{{Code: 'w', Mod: tea.ModCtrl}}, "area/", 5},
+		{"alt+delete deletes the word right", []tea.KeyPressMsg{
+			{Code: tea.KeyLeft, Mod: tea.ModAlt},
+			{Code: tea.KeyDelete, Mod: tea.ModAlt}}, "area/", 5},
+		{"super+backspace", []tea.KeyPressMsg{{Code: tea.KeyBackspace, Mod: tea.ModSuper}}, "", 0},
+		{"alt+left", []tea.KeyPressMsg{{Code: tea.KeyLeft, Mod: tea.ModAlt}}, "area/editor", 5},
+		{"ctrl+left", []tea.KeyPressMsg{{Code: tea.KeyLeft, Mod: tea.ModCtrl}}, "area/editor", 5},
+		{"alt+right after two lefts", []tea.KeyPressMsg{
+			{Code: tea.KeyLeft, Mod: tea.ModAlt}, {Code: tea.KeyLeft, Mod: tea.ModAlt},
+			{Code: tea.KeyRight, Mod: tea.ModAlt}}, "area/editor", 4},
+		{"ctrl+right after two lefts", []tea.KeyPressMsg{
+			{Code: tea.KeyLeft, Mod: tea.ModAlt}, {Code: tea.KeyLeft, Mod: tea.ModAlt},
+			{Code: tea.KeyRight, Mod: tea.ModCtrl}}, "area/editor", 4},
+		{"left", []tea.KeyPressMsg{{Code: tea.KeyLeft}}, "area/editor", 10},
+		{"right at the end", []tea.KeyPressMsg{{Code: tea.KeyRight}}, "area/editor", 11},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var s SpeedSearch
+			typeInto(&s, "area/editor")
+			for _, msg := range tc.keys {
+				if handled, _ := s.Key(msg); !handled {
+					t.Fatalf("%v must not leak past a running query", msg)
+				}
+			}
+			if s.Query() != tc.query || s.Cursor() != tc.cur {
+				t.Fatalf("query = %q cur = %d, want %q %d", s.Query(), s.Cursor(), tc.query, tc.cur)
+			}
+		})
+	}
+}
+
+// An idle search still starts on printable runes only: every chord — and
+// backspace itself — belongs to the picker while nothing is typed.
+func TestSpeedSearchIdleLeavesTheChordsToThePicker(t *testing.T) {
+	for _, msg := range []tea.KeyPressMsg{
+		{Code: tea.KeyBackspace, Mod: tea.ModAlt},
+		{Code: tea.KeyBackspace, Mod: tea.ModSuper},
+		{Code: tea.KeyLeft, Mod: tea.ModCtrl},
+		{Code: tea.KeyRight, Mod: tea.ModAlt},
+		{Code: tea.KeyLeft},
+	} {
+		var s SpeedSearch
+		if handled, _ := s.Key(msg); handled {
+			t.Fatalf("%v must stay with the picker while the search is idle", msg)
+		}
+		if s.Active() {
+			t.Fatalf("%v must not start a query", msg)
+		}
+	}
+}
+
+// The keys a host binds to list actions stay the host's even mid-query.
+func TestSpeedSearchReservesTheHostKeys(t *testing.T) {
+	for _, msg := range []tea.KeyPressMsg{
+		{Code: tea.KeySpace, Text: " "},
+		{Code: tea.KeyDelete},
+		{Code: tea.KeyHome},
+		{Code: tea.KeyEnd},
+		{Code: tea.KeyLeft, Mod: tea.ModSuper},
+		{Code: tea.KeyRight, Mod: tea.ModSuper},
+		{Code: tea.KeyTab, Text: "\t"},
+	} {
+		var s SpeedSearch
+		typeInto(&s, "bug")
+		if handled, _ := s.Key(msg); handled {
+			t.Fatalf("%v must stay with the picker, the query took it", msg)
+		}
+		if s.Query() != "bug" {
+			t.Fatalf("%v changed the query to %q", msg, s.Query())
+		}
+	}
+}
+
+// Typing lands at the caret, not at the end.
+func TestSpeedSearchTypesAtTheCaret(t *testing.T) {
+	var s SpeedSearch
+	typeInto(&s, "dc")
+	if handled, _ := s.Key(tea.KeyPressMsg{Code: tea.KeyLeft}); !handled {
+		t.Fatal("left must move the caret of a running query")
+	}
+	typeInto(&s, "o")
+	if s.Query() != "doc" || s.Cursor() != 2 {
+		t.Fatalf("query = %q cur = %d, want doc 2", s.Query(), s.Cursor())
+	}
+	if got := s.Hint(); got != "/do▏c" {
+		t.Fatalf("Hint() = %q, want /do▏c", got)
+	}
+}
+
+// Reset and EscClears take the caret with the query.
+func TestSpeedSearchResetRewindsTheCaret(t *testing.T) {
+	var s SpeedSearch
+	typeInto(&s, "bug")
+	s.Reset()
+	if s.Cursor() != 0 {
+		t.Fatalf("Reset must rewind the caret, got %d", s.Cursor())
+	}
+	typeInto(&s, "bug")
+	s.EscClears()
+	if s.Cursor() != 0 {
+		t.Fatalf("EscClears must rewind the caret, got %d", s.Cursor())
+	}
+}

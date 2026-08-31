@@ -280,6 +280,12 @@ so the other modal pickers in the IDE can adopt them unchanged:
 - printable keys are the query; `space` stays the **toggle** and `backspace`
   peels the query one rune at a time before falling back to the picker's own
   "clear the set";
+- a **running query edits like any other single-line field** (#2360): it has a
+  caret and routes through `ui.EditKey`, so `left`/`right`, the word motions
+  (`alt+left`/`ctrl+left`, `alt+right`/`ctrl+right`), word deletion
+  (`alt+backspace`/`ctrl+w`) and `super+backspace` all land in the query
+  instead of falling through to the keymap as unbound chords. `delete` and
+  `home`/`end` stay the picker's;
 - `esc` **clears the query first** and only closes (or reverts) on the second
   press;
 - the running query renders in the modal's heading (`Labels of #12  /bug▏`),

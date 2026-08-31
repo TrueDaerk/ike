@@ -462,6 +462,50 @@ func (m Model) httpPanel() *httppane.Model {
 	return inst.HTTP()
 }
 
+// httpResponseVisible reports whether the response viewer is on screen right
+// now (#2364) — a registered viewer under a visible layout leaf, which is
+// exactly what httpPanel resolves. window.hideAllTools (#1271) keeps the
+// instance registered but drops its leaf, and that is the case the completion
+// notice exists for: a viewer nobody can see reports nothing by itself.
+func (m Model) httpResponseVisible() bool { return m.httpPanel() != nil }
+
+// notifyHTTPCompletion announces a finished dispatch nobody was watching
+// (#2364). The response pane carries status and duration in its status row,
+// but dispatches are asynchronous and the answer usually lands after the focus
+// has moved on — a 404 or a five-second flight then reported itself only to
+// whoever happened to open the pane afterwards. Two triggers speak up through
+// the ordinary notification channel (and therefore into notifications.history
+// as well): a non-2xx status, always, and a wall clock past
+// http.notify_slow_ms, which 0 switches off. A visible pane stays quiet: the
+// status row already said it, and repeating that as a toast is noise.
+func (m *Model) notifyHTTPCompletion(e *httpFlightEntry, msg HTTPResponseMsg, visible bool) {
+	if visible || msg.Resp == nil || msg.Resp.StatusCode <= 0 {
+		return
+	}
+	failed := msg.Resp.StatusCode < 200 || msg.Resp.StatusCode >= 300
+	limit := config.Get().HTTP.NotifySlowMs
+	slow := limit > 0 && msg.Resp.Duration >= time.Duration(limit)*time.Millisecond
+	if !failed && !slow {
+		return
+	}
+	// The flight's label is the "METHOD /path" the indicator showed; without
+	// an entry (a response outliving the model that sent it, see
+	// finishHTTPFlight) the request key is the best name left.
+	what := msg.Request
+	if e != nil && e.label != "" {
+		what = e.label
+	}
+	sev, tail := host.Info, ""
+	if failed {
+		sev = host.Warn
+	}
+	if slow {
+		tail = fmt.Sprintf(", slower than %s", formatElapsed(time.Duration(limit)*time.Millisecond))
+	}
+	m.host.Notify(sev, fmt.Sprintf("http: %s → %s (%s%s)",
+		what, msg.Resp.Status, formatElapsed(msg.Resp.Duration), tail))
+}
+
 // focusHTTPPanel focuses the HTTP viewer wherever it lives — its own pane or
 // a tab of a host (#1778), activating that tab.
 func (m *Model) focusHTTPPanel() {
@@ -547,6 +591,10 @@ func (m *Model) appendHTTPStream(msg HTTPStreamChunkMsg) {
 // replaces the content of the existing pane. The returned command carries the
 // capture report (#1993) into the .http buffer.
 func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
+	// Read before the fill opens the viewer (#2364): what matters is whether
+	// the user was looking at the response pane when the answer arrived, not
+	// whether routing the answer put one on screen.
+	visible := m.httpResponseVisible()
 	flight := m.finishHTTPFlight(httpFlightKey(msg.Source, msg.Request))
 	m.recordHTTPFlightEnd(flight, msg)
 	canceled := flight != nil && flight.canceled
@@ -567,6 +615,10 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
 		// arrived stays visible and reaches the history, the notice says why
 		// the body ends where it does.
 		m.host.Notify(host.Info, "http: "+msg.Request+" canceled — keeping the partial response")
+	} else {
+		// An abort already reported itself above; everything else that failed
+		// or took too long while the pane was away reports here (#2364).
+		m.notifyHTTPCompletion(flight, msg, visible)
 	}
 	// A failed capture (#1993) is reported on its own directive line, whether
 	// or not the viewer opens — the next request depends on the value.
@@ -908,8 +960,13 @@ func (m Model) httpFlightSegment() string {
 }
 
 // elapsed formats a running duration for the indicator.
-func elapsed(since time.Time) string {
-	d := time.Since(since)
+func elapsed(since time.Time) string { return formatElapsed(time.Since(since)) }
+
+// formatElapsed is the indicator's duration spelling — milliseconds below a
+// second, one decimal of seconds above it. The completion notice (#2364)
+// speaks the same way, so a flight reads identically while it runs and once
+// it is reported.
+func formatElapsed(d time.Duration) string {
 	if d < time.Second {
 		return fmt.Sprintf("%dms", d.Milliseconds())
 	}

@@ -84,6 +84,8 @@ var (
 	forgeNotifyStyles = map[string]bool{"dialog": true, "badge": true, "toast": true, "off": true}
 	// popupCwds are the terminal.popup_cwd values (#2316).
 	popupCwds = map[string]bool{"project": true, "file": true}
+	// popupOnSwitchModes are the terminal.popup_on_switch values (#2362).
+	popupOnSwitchModes = map[string]bool{"restore": true, "always-open": true}
 )
 
 // whichKeyMaxDelayMs caps keymap.which_key_delay_ms (#1909); the settings
@@ -323,6 +325,12 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "terminal.popup_cwd", Message: fmt.Sprintf("unknown mode %q, using \"project\"", c.Terminal.PopupCwd)})
 		c.Terminal.PopupCwd = "project"
 	}
+	// terminal.popup_on_switch (#2362) decides whether a project switch opens
+	// the incoming project's popup terminal unconditionally.
+	if !popupOnSwitchModes[c.Terminal.PopupOnSwitch] {
+		diags = append(diags, Diagnostic{Field: "terminal.popup_on_switch", Message: fmt.Sprintf("unknown mode %q, using \"restore\"", c.Terminal.PopupOnSwitch)})
+		c.Terminal.PopupOnSwitch = "restore"
+	}
 	// history.timeline_source (#1916) is the Timeline's default source filter.
 	if !timelineSources[c.History.TimelineSource] {
 		diags = append(diags, Diagnostic{Field: "history.timeline_source", Message: fmt.Sprintf("unknown source %q, using \"both\"", c.History.TimelineSource)})
@@ -414,6 +422,14 @@ func validate(c *Config) []Diagnostic {
 	if c.HTTP.HighlightLimitKB < 1 || c.HTTP.HighlightLimitKB > 65536 {
 		diags = append(diags, Diagnostic{Field: "http.highlight_limit_kb", Message: fmt.Sprintf("limit %d out of range (1–65536 KiB), using 2048", c.HTTP.HighlightLimitKB)})
 		c.HTTP.HighlightLimitKB = 2048
+	}
+	// The slow-response notification threshold (#2364): 0 is the off switch,
+	// a negative value would notify on every single flight, and past ten
+	// minutes the notice fires later than any dispatch the user still waits
+	// for — both extremes fall back to the default instead of being honoured.
+	if c.HTTP.NotifySlowMs < 0 || c.HTTP.NotifySlowMs > 600000 {
+		diags = append(diags, Diagnostic{Field: "http.notify_slow_ms", Message: fmt.Sprintf("threshold %d out of range (0–600000 ms, 0 = off), using 3000", c.HTTP.NotifySlowMs)})
+		c.HTTP.NotifySlowMs = 3000
 	}
 	// Issues window (#2090): both defaults are fixed vocabularies; an unknown
 	// value falls back rather than opening the pane in an undefined state.

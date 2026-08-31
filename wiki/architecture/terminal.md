@@ -285,6 +285,17 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   parked popup's and panels' sessions (`parkedPopupInstances`), and the busy
   guards count popup activity — a running popup process prompts before
   dying unseen.
+- **Open on switch** (`terminal.popup_on_switch`, #2362): the open/closed
+  state restored above is what `restore` — the default — does. `always-open`
+  makes every project switch end with the popup terminal open:
+  `performSwitchOpts` calls `ensurePopupTerminalOpen` on the sized fresh model
+  (after the un-park, so a resumed popup is already live, and after the size
+  pass, so a fresh box measures against the real bounds). A parked instance
+  resumes with its tabs and running shells, a project without a box gets a
+  fresh shell (floating panels alone do not count as a box), an already
+  focused layer is left alone and a blurred one (#2309) takes the keyboard
+  back. `showPopupLayer` is the toggle's show half, shared by both paths, so
+  the auto-open and the chord land in the same state.
 - It is **not a `ui.Floating`** — the shell's dismiss/filter/scroll priority
   is the inverse of a PTY's raw pass-through (esc must reach vim). Instead it
   renders pane-style chrome (`paneBox` + the regular tab bar) placed via

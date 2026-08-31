@@ -14,6 +14,22 @@
   it records the palette/context-menu escape route like every other Alt chord.
   See [keybindings](/architecture/keybindings.md).
 
+## 2026-08-31 (a failed or slow HTTP response reports itself, #2364)
+
+- **The answer no longer waits to be found**: a dispatch that ends non-2xx, or
+  one whose wall clock passes `http.notify_slow_ms`, emits an ordinary
+  notification naming method, status and duration — so it toasts and lands in
+  `notifications.history` — whenever the response pane is not on screen when
+  the answer arrives. A visible pane stays quiet: its status row already said
+  it. Visibility is read *before* the fill opens a viewer, so routing the
+  answer cannot silence its own notice.
+- **The threshold is a setting** (`http.notify_slow_ms`, 0–600000 ms, default
+  3000, `0` = off), validated, persisted and editable on the Settings UI's
+  HTTP Client page. The non-2xx branch is not configurable — an unnoticed
+  failure is never wanted. Cancels and transport errors keep their existing
+  notices and add none.
+  See [HTTP client](/architecture/http-client.md).
+
 ## 2026-08-31 (playground follows its source file, #2356)
 
 - **The snapshot is re-read on external change**: an open jq/yq playground

@@ -284,6 +284,7 @@ func (c *Config) Flat() map[string]string {
 	put("terminal.autosuggest", c.Terminal.Autosuggest)
 	put("terminal.scrollback_lines", c.Terminal.ScrollbackLines)
 	put("terminal.popup_cwd", c.Terminal.PopupCwd)
+	put("terminal.popup_on_switch", c.Terminal.PopupOnSwitch)
 	put("terminal.ssh_hosts", strings.Join(c.Terminal.SSHHosts, ","))
 
 	put("run.placement", c.Run.Placement)
@@ -297,6 +298,7 @@ func (c *Config) Flat() map[string]string {
 	put("http.diff_ignore_headers", strings.Join(c.HTTP.DiffIgnoreHeaders, ","))
 	put("http.diff_after_rerun", c.HTTP.DiffAfterRerun)
 	put("http.highlight_limit_kb", c.HTTP.HighlightLimitKB)
+	put("http.notify_slow_ms", c.HTTP.NotifySlowMs)
 	put("issues.default_tab", c.Issues.DefaultTab)
 	put("issues.default_sort", c.Issues.DefaultSort)
 	put("issues.default_filter", c.Issues.DefaultFilter)

@@ -129,6 +129,7 @@ Every single-line text input in `internal/`, and what it uses.
 | GitHub issues filter | `internal/ghissues/ghissues.go` | shared (#1934); **paste routed (#2002)** |
 | Explorer name prompt (new/rename) | `internal/explorer/fileops.go` | **migrated (#2002)** |
 | Explorer speed search | `internal/explorer/search.go` | **migrated (#2002)** — was append-only, no cursor |
+| Picker type-ahead (issues pickers, action menu, scratch/bookmark/project lists) | `internal/ui/speedsearch.go` | **migrated (#2360)** — was append-only, rejected every chord |
 | Debug variables inline editor | `internal/debugpanel/debugpanel.go` | **migrated (#2002)**; paste routed |
 | Breakpoint refinement editor | `internal/breakpanel/meta.go` | **migrated (#2002)**; paste routed |
 

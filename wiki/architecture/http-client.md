@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, and a notification when a failed or slow response lands while the response pane is not on screen.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-31T00:00:00Z
+timestamp: 2026-08-31T12:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -1304,6 +1304,35 @@ dispatch's `context.CancelFunc`:
 
 Statusline indicator, inline marker, pane marker and tick all clear on
 response, error and cancel alike.
+
+### The answer reports itself when nobody is watching (#2364)
+
+A dispatch is asynchronous, and the focus usually moves on while it is out —
+the response pane carries status and duration in its status row, but only for
+whoever opens it. A failed or long flight therefore announces itself through
+the ordinary notification channel (`host.Notify`, so it toasts *and* lands in
+`notifications.history` like every other notice):
+
+- **Non-2xx**, always. The notice names the flight's label, the status line
+  and the wall clock: `http: GET /things → 404 Not Found (120ms)`.
+- **Slow**, past `http.notify_slow_ms` milliseconds, regardless of status:
+  `http: POST /search → 200 OK (4.5s, slower than 3.0s)`. `0` turns this
+  branch off; the failure branch is not configurable, since an unnoticed
+  failure is never wanted. The default is 3000 ms — past the window the
+  statusline indicator covers on its own.
+
+The gate is `httpResponseVisible`: the viewer must be registered *and* under a
+visible layout leaf, which is exactly what `httpPanel` resolves. It is read
+**before** the fill opens a viewer, so what counts is whether the user was
+looking at a response pane when the answer arrived, not whether routing the
+answer put one on screen. A visible pane stays quiet — the status row already
+said it. `window.hideAllTools` (#1271) keeps the viewer registered but drops
+its leaf, and that is precisely the case the notice exists for.
+
+A user-requested cancel and a transport error keep their existing notices and
+add none: the abort is a confirmation, and an error has no status or duration
+to report. Severity is `Warn` for a non-2xx and `Info` for a slow success, so
+`notifications.min_severity` can keep only the failures on screen.
 
 Every flight also leaves a lifecycle trail in the local usage telemetry
 (#2348): an `op`/`http.flight` `start` event — flushed to disk before the

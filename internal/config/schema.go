@@ -122,10 +122,15 @@ type Telemetry struct {
 // pretty-printing) the response viewer syntax-highlights (#2353): the pass
 // runs off the update loop either way, but a huge body still burns CPU for
 // colours, so past the limit the body renders plain with a visible notice.
+// NotifySlowMs is the wall-clock threshold in milliseconds past which a
+// finished dispatch announces itself through the notification channel while
+// the response pane is not on screen (#2364); 0 turns that slow branch off,
+// whereas a non-2xx answer always notifies.
 type HTTP struct {
 	DiffIgnoreHeaders []string `toml:"diff_ignore_headers"`
 	DiffAfterRerun    bool     `toml:"diff_after_rerun"`
 	HighlightLimitKB  int      `toml:"highlight_limit_kb"`
+	NotifySlowMs      int      `toml:"notify_slow_ms"`
 }
 
 // Forge holds the code-forge settings (#2085, #2086). PollIntervalSeconds is
@@ -470,6 +475,12 @@ type Terminal struct {
 	// directory (falling back to the project root when no file is open). Only
 	// spawn-time behaviour — the retained popup session keeps its live cwd.
 	PopupCwd string `toml:"popup_cwd"`
+	// PopupOnSwitch decides what the popup terminal does after a project
+	// switch (#2362): "restore" brings the incoming project's popup back
+	// exactly as it was left (#1407, the default), "always-open" opens it
+	// unconditionally — resuming the parked instance if one exists, spawning
+	// a fresh shell otherwise.
+	PopupOnSwitch string `toml:"popup_on_switch"`
 	// SSHHosts are extra aliases the SSH host picker (#1938) offers beyond
 	// the ones ~/.ssh/config declares — machines reachable by name that no
 	// ssh config entry mentions.
