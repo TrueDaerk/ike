@@ -368,6 +368,29 @@ func TestTerminalPopupCwdDefaultAndFallback(t *testing.T) {
 	}
 }
 
+// TestTerminalPopupOnSwitchDefaultAndFallback covers #2362: the default keeps
+// today's behaviour ("restore"), "always-open" loads clean, and an unknown
+// mode falls back with one diagnostic instead of reaching the switch path.
+func TestTerminalPopupOnSwitchDefaultAndFallback(t *testing.T) {
+	c, _ := Load(Options{})
+	if c.Terminal.PopupOnSwitch != "restore" {
+		t.Errorf("default popup_on_switch should be %q, got %q", "restore", c.Terminal.PopupOnSwitch)
+	}
+	proj := writeProject(t, "[terminal]\npopup_on_switch = \"always-open\"\n")
+	c, diags := Load(Options{ProjectRoot: proj})
+	if c.Terminal.PopupOnSwitch != "always-open" || len(diags) != 0 {
+		t.Errorf("popup_on_switch = %q (diags %v), want %q", c.Terminal.PopupOnSwitch, diags, "always-open")
+	}
+	proj = writeProject(t, "[terminal]\npopup_on_switch = \"sometimes\"\n")
+	c, diags = Load(Options{ProjectRoot: proj})
+	if c.Terminal.PopupOnSwitch != "restore" {
+		t.Errorf("unknown popup_on_switch should fall back to %q, got %q", "restore", c.Terminal.PopupOnSwitch)
+	}
+	if len(diags) != 1 {
+		t.Errorf("expected one fallback diagnostic, got %v", diags)
+	}
+}
+
 func TestTerminalScrollbackClampAndDefault(t *testing.T) {
 	c, _ := Load(Options{})
 	if c.Terminal.ScrollbackLines != 10000 {

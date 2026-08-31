@@ -239,6 +239,7 @@ func defaults() *Config {
 			Autosuggest:     true,
 			ScrollbackLines: 10000,
 			PopupCwd:        "project",
+			PopupOnSwitch:   "restore",
 		},
 		Lang:  map[string]map[string]string{},
 		Tools: Tools{Custom: defaultTools()},

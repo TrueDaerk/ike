@@ -36,6 +36,14 @@ Where a fresh popup shell starts is the `terminal.popup_cwd` setting
 `file` in the focused file's directory. It applies when the shell is spawned —
 the retained session keeps whatever directory you `cd`-ed to.
 
+The popup belongs to its project: switching projects parks it with everything
+running inside, and coming back restores it exactly as you left it — closed if
+it was closed. If your first move in a project is usually opening the terminal,
+set `terminal.popup_on_switch` (Settings → Terminal) to `always-open`: every
+project switch then leaves the popup open, resuming the project's parked
+terminal when there is one and spawning a fresh shell when there is not. The
+default, `restore`, keeps the as-you-left-it behaviour.
+
 A terminal can be a pane of its own or a tab inside an editor pane, so a pane
 can hold a mix of files and shells.
 

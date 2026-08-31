@@ -119,6 +119,14 @@ func (m *Model) togglePopupTerminal() {
 		term := m.newPopupShell()
 		m.popup.inst = pane.NewDetachedTerminalHost("popup", term, m.host.Config(), m.pal())
 	}
+	m.showPopupLayer()
+}
+
+// showPopupLayer reveals the layer and hands it the keyboard — the toggle's
+// show half, shared with the auto-open after a project switch (#2362). It
+// spawns nothing: the caller decides whether an absent box is created or the
+// layer is revealed with its floating panels alone.
+func (m *Model) showPopupLayer() {
 	m.popup.open = true
 	m.popup.blurred = false
 	// Showing the layer is the "looked at it" moment for the statusbar
@@ -131,6 +139,33 @@ func (m *Model) togglePopupTerminal() {
 		return
 	}
 	m.setPopupFocus(m.popup.focusRight)
+}
+
+// ensurePopupTerminalOpen opens the popup terminal unconditionally — the
+// terminal.popup_on_switch = "always-open" hook the project switch runs
+// (#2362). A parked instance the switch just resumed is reused with its tabs,
+// scrollback and running shells; a project whose layer has no box yet gets a
+// fresh shell, floating panels alone not counting as one (the setting is
+// about the popup terminal itself). An already-visible layer is left as it
+// is, except that a blurred one (#2309) takes the keyboard back, so the
+// arrive-and-type flow the setting exists for works on every switch.
+func (m *Model) ensurePopupTerminalOpen() {
+	if m.popup.inst == nil {
+		term := m.newPopupShell()
+		m.popup.inst = pane.NewDetachedTerminalHost("popup", term, m.host.Config(), m.pal())
+	}
+	if m.popup.open && !m.popup.blurred {
+		return
+	}
+	m.showPopupLayer()
+}
+
+// popupOnSwitchAlways reports whether terminal.popup_on_switch asks for the
+// popup terminal to open after every project switch (#2362); "restore" — the
+// default — leaves the incoming project's open/closed state as it was left.
+func (m Model) popupOnSwitchAlways() bool {
+	v, _ := m.host.Config().Get("terminal.popup_on_switch")
+	return v == "always-open"
 }
 
 // blurPopupLayer keeps the layer visible but hands the keyboard back to the

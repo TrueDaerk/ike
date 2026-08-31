@@ -470,6 +470,12 @@ type Terminal struct {
 	// directory (falling back to the project root when no file is open). Only
 	// spawn-time behaviour — the retained popup session keeps its live cwd.
 	PopupCwd string `toml:"popup_cwd"`
+	// PopupOnSwitch decides what the popup terminal does after a project
+	// switch (#2362): "restore" brings the incoming project's popup back
+	// exactly as it was left (#1407, the default), "always-open" opens it
+	// unconditionally — resuming the parked instance if one exists, spawning
+	// a fresh shell otherwise.
+	PopupOnSwitch string `toml:"popup_on_switch"`
 	// SSHHosts are extra aliases the SSH host picker (#1938) offers beyond
 	// the ones ~/.ssh/config declares — machines reachable by name that no
 	// ssh config entry mentions.
