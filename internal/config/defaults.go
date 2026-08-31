@@ -291,6 +291,11 @@ func defaults() *Config {
 			// The re-run's whole point is the comparison (#2247), so it opens
 			// on its own; off leaves the pane on the new response and "P".
 			DiffAfterRerun: true,
+			// The largest body the response viewer syntax-highlights (#2353),
+			// in KiB after pretty-printing. 2 MiB keeps every ordinary API
+			// answer coloured; the pathological cases — multi-megabyte search
+			// dumps — render plain with a notice instead of burning CPU.
+			HighlightLimitKB: 2048,
 		},
 		Issues: Issues{
 			// The issues window opens on its issue list, ordered the way the

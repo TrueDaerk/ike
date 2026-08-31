@@ -25,6 +25,7 @@ func foldViewer(t *testing.T) *httppane.Model {
 	// about what the projection hides, not about scrolling.
 	m.SetSize(80, 30)
 	m.Set("create", resp("application/json", foldBody))
+	m.FinishHighlight() // the syntax pass runs off-loop now (#2353)
 	return &m
 }
 

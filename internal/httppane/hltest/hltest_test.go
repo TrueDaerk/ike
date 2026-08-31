@@ -39,6 +39,7 @@ func viewer(t *testing.T, ct, body string) *httppane.Model {
 	m := httppane.New(theme.DefaultPalette())
 	m.SetSize(80, 20)
 	m.Set("one", resp(ct, body))
+	m.FinishHighlight() // the syntax pass runs off-loop now (#2353)
 	return &m
 }
 

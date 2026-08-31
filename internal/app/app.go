@@ -1396,6 +1396,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	highlight.SetRainbow(rainbowConfigured())       // rainbow brackets (#789)
 	unidiff.SetWordHighlight(diffWordsConfigured()) // word-level diff emphasis (#1630)
 	applyIDColorConfig()                            // identifier colors (#1626)
+	applyHTTPHighlightLimit()                       // response-body highlight cap (#2353)
 	applyNumberHintUnits()                          // number-hint field units (#1685)
 	applySecretMaskingKeys()                        // custom secret key patterns (#1712)
 	m.palette.SetMaxWidth(popupMaxWidth())
@@ -4860,8 +4861,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case HTTPShowResponseMsg:
 		// http.showResponse (palette, #1492): show the stored responses of
 		// the request under the cursor without dispatching it.
-		m.showStoredHTTPResponse()
-		return m, nil
+		return m, m.showStoredHTTPResponse()
 
 	case HTTPResendMsg:
 		// http.resend (palette, #1832): the shown response's stored request
@@ -4972,8 +4972,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case HTTPToggleRawBodyMsg:
 		// http.toggleRawBody (palette, #2157): the shown body switches between
 		// pretty-printed and as-received.
-		m.toggleHTTPRawBody()
-		return m, nil
+		return m, m.toggleHTTPRawBody()
 
 	case HTTPJQPlaygroundMsg, httppane.JQPlaygroundMsg:
 		// "q" in the response pane / http.jqPlayground (#2157): the jq
@@ -4986,8 +4985,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case HTTPLoadMoreBodyMsg:
 		// http.loadMoreBody (palette, #2157): one more window of a spooled
 		// body.
-		m.loadMoreHTTPBody()
-		return m, nil
+		return m, m.loadMoreHTTPBody()
 
 	case HTTPOpenBodyFileMsg:
 		// http.openBodyFile (palette, #2157): the whole spooled body as a
@@ -5023,7 +5021,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ShowStoredHTTPResponseMsg:
 		// A picker row was chosen (#1829): same loading path as
 		// http.showResponse, just named by the picker instead of the cursor.
-		m.loadStoredHTTPResponse(msg.Source, msg.Request)
+		return m, m.loadStoredHTTPResponse(msg.Source, msg.Request)
+
+	case httppane.HighlightedMsg:
+		// The response body's off-loop syntax pass landed (#2353): paint the
+		// composed rows. The pane drops a stale generation itself, and a
+		// hidden viewer (hideAllTools) still takes the spans — it renders
+		// them when it comes back.
+		if _, _, inst, ok := m.findContent(func(c *pane.Instance) bool {
+			return c.Kind() == pane.KindHTTP
+		}); ok {
+			if p := inst.HTTP(); p != nil {
+				p.ApplyHighlight(msg)
+			}
+		}
 		return m, nil
 
 	case httppane.CancelMsg:
@@ -6401,6 +6412,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// installing the other. The re-parse they need happens below.
 		changedUnits := applyNumberHintUnits()
 		changedSecrets := applySecretMaskingKeys()
+		// The response-body highlight cap (#2353) installs unconditionally
+		// too: the branches below may return early, and the next compose
+		// simply reads the global.
+		applyHTTPHighlightLimit()
 		diags := append(msg.Diags, associationDiags()...)
 		diags = append(diags, unitMappingDiags()...)
 		m.notifyConfigDiags(diags)
@@ -9527,6 +9542,15 @@ func applyIDColorConfig() {
 	}
 	idcolor.SetEnabled(c.Editor.IDColors)
 	idcolor.SetMinLength(c.Editor.IDColorMinLength)
+}
+
+// applyHTTPHighlightLimit pushes http.highlight_limit_kb (#2353) into the
+// response pane's package global — the same arrangement as
+// applyIDColorConfig: the pane has no config plumbing of its own.
+func applyHTTPHighlightLimit() {
+	if c := config.Get(); c != nil {
+		httppane.SetHighlightLimit(c.HTTP.HighlightLimitKB)
+	}
 }
 
 // applyNumberHintUnits pushes editor.number_hint_units (#1685) into the
