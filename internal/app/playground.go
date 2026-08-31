@@ -111,6 +111,14 @@ type playState struct {
 
 	source   string
 	srcKey   string
+	// srcEd / srcInst pin the *document* the playground queries, not just the
+	// pane it mounted in (#2355): srcEd is the queried editor model for a
+	// buffer source, srcInst the content instance for an HTTP response. The
+	// inline mode only renders while its pane still shows that document, so
+	// opening another file — or switching tabs — reveals the pane's own
+	// content instead of leaving the query header parked over it.
+	srcEd    *editor.Model
+	srcInst  *pane.Instance
 	input    *jqplay.Input
 	inputErr string
 	parsing  bool
@@ -189,7 +197,7 @@ func (m *Model) startPlayground(d jqplay.Dialect, atPath bool) tea.Cmd {
 		return nil
 	}
 	m.closePlayground()
-	s := &playState{dialect: d, paneKey: src.paneKey, source: src.label, srcKey: src.key, histIdx: -1, qgoal: -1, hist: m.playHist(), program: m.playSeedProgram(d, src, atPath)}
+	s := &playState{dialect: d, paneKey: src.paneKey, source: src.label, srcKey: src.key, srcEd: src.ed, srcInst: src.inst, histIdx: -1, qgoal: -1, hist: m.playHist(), program: m.playSeedProgram(d, src, atPath)}
 	s.pos = len([]rune(s.program))
 	ed := editor.New()
 	ed.SetRegisters(m.regs) // app-wide registers (#1540): yanks in the result reach every buffer
@@ -221,6 +229,12 @@ type playInputSource struct {
 	paneKey  string
 	tabIdx   int
 	fullFile bool
+	// ed / inst are the queried document itself (#2355): the editor model for
+	// a buffer source, the content instance for an HTTP response. Exactly one
+	// is set; playState keeps it so the mode can tell "my pane" from "my pane
+	// still showing my document".
+	ed   *editor.Model
+	inst *pane.Instance
 }
 
 // playSource resolves what the playground of dialect d queries. For jq the
@@ -244,7 +258,7 @@ func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
 		if c.HTTP().HasBodyText() {
 			if body := c.HTTP().JQInput(); strings.TrimSpace(body) != "" {
 				paneKey := m.activeWS().Panes.Focused()
-				return playInputSource{text: body, label: "HTTP response", key: "http:" + paneKey, paneKey: paneKey, tabIdx: -1}, true
+				return playInputSource{text: body, label: "HTTP response", key: "http:" + paneKey, paneKey: paneKey, tabIdx: -1, inst: c}, true
 			}
 		}
 	}
@@ -253,10 +267,10 @@ func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
 		key := m.activeEditorKey()
 		docKey := playDocKey(d, ed, key)
 		if sel, has := ed.SelectionText(); has && strings.TrimSpace(sel) != "" {
-			return playInputSource{text: sel, label: name + " (selection)", key: docKey, paneKey: key, tabIdx: -1}, true
+			return playInputSource{text: sel, label: name + " (selection)", key: docKey, paneKey: key, tabIdx: -1, ed: ed}, true
 		}
 		if body := ed.Text(); strings.TrimSpace(body) != "" {
-			return playInputSource{text: body, label: name, key: docKey, paneKey: key, tabIdx: -1, fullFile: true}, true
+			return playInputSource{text: body, label: name, key: docKey, paneKey: key, tabIdx: -1, fullFile: true, ed: ed}, true
 		}
 	}
 	// The response pane may be open without being focused — an editor holding
@@ -267,7 +281,7 @@ func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
 	}); ok && m.leafVisible(hostKey) {
 		if inst.HTTP().HasBodyText() {
 			if body := inst.HTTP().JQInput(); strings.TrimSpace(body) != "" {
-				return playInputSource{text: body, label: "HTTP response", key: "http:" + hostKey, paneKey: hostKey, tabIdx: tabIdx}, true
+				return playInputSource{text: body, label: "HTTP response", key: "http:" + hostKey, paneKey: hostKey, tabIdx: tabIdx, inst: inst}, true
 			}
 		}
 	}
@@ -368,8 +382,85 @@ func (m Model) playOpen() bool { return m.play != nil }
 // focus elsewhere leaves the playground mounted — query, result and history
 // position intact — while the other pane takes keys normally, and returning
 // the focus resumes the query line as it was.
+// The mode is bound to its *document*, not to the pane alone (#2355): a pane
+// that switched to another file takes keys as itself, and the mounted-but-
+// hidden playground routes nothing.
 func (m Model) playFocused() bool {
-	return m.play != nil && m.activeWS().Panes.Focused() == m.play.paneKey
+	return m.play != nil && m.activeWS().Panes.Focused() == m.play.paneKey && m.playSrcShown()
+}
+
+// playSrcShown reports whether the hosting pane still shows the document the
+// playground queries (#2355). Before this the mode rendered over whatever the
+// pane held, so opening a file into it left the file invisible behind the
+// query header and looked like a failed open.
+//
+// A buffer source matches when the pane's active tab still holds the very
+// editor model that was queried, and that model still stands for the same
+// document — an editor retargeted to another file (the empty-pane reuse path)
+// keeps its pointer but changes its doc key. An HTTP source matches when the
+// pane's active content is the response instance that was queried; the
+// response has no file document, so it is identified by instance alone.
+func (m Model) playSrcShown() bool {
+	s := m.play
+	if s == nil {
+		return false
+	}
+	inst := m.activeWS().Panes.Get(s.paneKey)
+	if inst == nil {
+		return false
+	}
+	if s.srcInst != nil {
+		content := inst
+		if c := inst.ActiveContent(); c != nil {
+			content = c
+		}
+		return content == s.srcInst
+	}
+	if s.srcEd == nil || inst.Kind() != pane.KindEditor || inst.ActiveContent() != nil {
+		return false
+	}
+	ed := inst.Editor()
+	return ed != nil && ed == s.srcEd && playDocKey(s.dialect, ed, s.paneKey) == s.srcKey
+}
+
+// playSrcAlive reports whether the queried document still exists anywhere in
+// the workspace (#2355). A playground whose document was closed points at
+// nothing and is dropped by syncPlaygroundSource.
+func (m Model) playSrcAlive() bool {
+	s := m.play
+	if s == nil {
+		return false
+	}
+	found := false
+	m.contentInstances(func(_ string, _ int, c *pane.Instance) bool {
+		if s.srcInst != nil {
+			if c == s.srcInst {
+				found = true
+			}
+		} else if c.Kind() == pane.KindEditor {
+			for _, ed := range c.Editors() {
+				if ed == s.srcEd {
+					found = true
+					break
+				}
+			}
+		}
+		return !found
+	})
+	return found
+}
+
+// syncPlaygroundSource drops a playground whose queried document left the
+// workspace (#2355) — a closed tab, a closed pane, a file deleted in the
+// explorer. It runs on the settled Update pass, so every close path is
+// covered by one hook instead of each one remembering the mode.
+func (m *Model) syncPlaygroundSource() {
+	if m.play == nil {
+		return
+	}
+	if !m.playSrcAlive() {
+		m.closePlayground()
+	}
 }
 
 // playHist returns the session-wide program history, allocating it on first use.
@@ -385,8 +476,13 @@ func (m *Model) playHist() *jqplay.History {
 // playInlineActive reports whether the inline playground owns pane key: its
 // content is then the query header plus the result buffer, not the pane's own
 // component.
+// It is bound to the document, not to the pane (#2355): while the pane shows
+// something else the playground stays mounted — query, result and history
+// position intact, exactly as it survives a focus change (#1980) — but renders
+// nothing, and the pane's own content is visible again. Returning to the
+// source document brings it back as it was.
 func (m Model) playInlineActive(key string) bool {
-	return m.play != nil && m.play.paneKey == key
+	return m.play != nil && m.play.paneKey == key && m.playSrcShown()
 }
 
 // playHeaderRowsFor is the vertical chrome the query header adds to pane key —

@@ -3875,6 +3875,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if poll := mm.armForgePoll(); poll != nil {
 		cmd = tea.Batch(cmd, poll)
 	}
+	// A playground whose queried document left the workspace closes here
+	// (#2355): tab closes, pane closes and explorer deletions all settle in
+	// this pass, so no mounted mode is left pointing at a gone document.
+	mm.syncPlaygroundSource()
 	// The merge views' remaining-conflict counters settle here too (#2258):
 	// a view whose last conflict just went — by chord, palette command or
 	// plain typing — offers save/finish.
@@ -8917,7 +8921,7 @@ func (m *Model) setFocus(key string) {
 	// substitute editor's cursor cell tracks whether the pane holds the
 	// keyboard, so an unfocused playground draws no caret.
 	if s := m.play; s != nil && s.resultEd != nil {
-		s.resultEd.SetFocused(key == s.paneKey && s.bufFocus)
+		s.resultEd.SetFocused(key == s.paneKey && s.bufFocus && m.playSrcShown())
 	}
 }
 
@@ -10140,7 +10144,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		// The wheel scrolls the inline playground result buffer (#1970) while the
 		// mode owns the pane; horizontal wheel and shift+wheel sideways,
 		// like the editor (#230).
-		if s := m.play; s != nil && s.paneKey == key {
+		if s := m.play; s != nil && m.playInlineActive(key) {
 			switch {
 			case msg.Button == tea.MouseWheelLeft:
 				s.resultEd.ScrollXBy(-lines)
@@ -11196,7 +11200,7 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	// the focus (#1980) — the playground stays mounted with its query and
 	// result intact, and its key routing is scoped to its pane, so the
 	// clicked pane takes typing normally.
-	if s := m.play; s != nil && key == s.paneKey {
+	if m.playInlineActive(key) {
 		return m.playPaneClick(key, msg, localX, localY)
 	}
 	// The breadcrumbs row (#1153) sits between the title row and the content
@@ -12710,7 +12714,7 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 		// navigating" — green insert, yellow visual, red replace, blue command.
 		// The playground result buffer signals its mode the same way while it holds
 		// the keyboard (#1970).
-		if s := m.play; s != nil && s.paneKey == key {
+		if s := m.play; s != nil && m.playInlineActive(key) {
 			if md := s.resultEd.ModeName(); s.bufFocus && md != editor.Normal {
 				border = editor.ModeColor(md, m.pal())
 			}
