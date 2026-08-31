@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-08-28T20:00:00Z
+timestamp: 2026-08-31T12:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -248,7 +248,11 @@ any entry whose key the typed schema does not expose (no dead keys).
   rejected in the form. `http.highlight_limit_kb` (#2353) is the largest
   response body the viewer syntax-highlights (1–65536 KiB, default 2048); the
   pass runs off the update loop either way, and past the limit the body stays
-  plain with a notice row in the pane. See [HTTP client](./http-client.md).
+  plain with a notice row in the pane. `http.notify_slow_ms` (#2364) is the
+  wall clock past which a finished dispatch announces itself as a notification
+  while the response pane is not on screen (0–600000 ms, default 3000, `0` =
+  off); a non-2xx answer notifies regardless of it.
+  See [HTTP client](./http-client.md).
 - **Ansible Vault** (#2293) — `ansible.vault_password_file`, the `Path` entry
   (existence-checked in the form) naming the file whose first line decrypts
   `$ANSIBLE_VAULT;` files for transparent editing: user scope is the global
