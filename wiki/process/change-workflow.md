@@ -1,10 +1,10 @@
 ---
 type: process
 title: Change Workflow
-description: The lifecycle of every change — issue first, issue branch, version bump, PR, merge, branch cleanup, plus the settings-UI and default-keybind obligations.
+description: The lifecycle of every change — issue first, issue branch, version bump, PR, merge, branch cleanup, plus the settings-UI, default-keybind and span-family-ledger obligations.
 tags: [process, git, release]
 resource: internal/version/version.go
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-08-31T00:00:00Z
 ---
 
 # Change Workflow
@@ -64,3 +64,23 @@ After changing the default table, refresh the generated documentation in the sam
 matrix embedded in [Keybindings & Shortcuts](/architecture/keybindings.md). New bindings show
 up in the cheatsheet (`f1`) and the palette's shortcut column automatically — both read the
 live binding table.
+
+## Languages account for every span family
+
+Language plugins wire their stand-in and hint families — unicode-escape decoding, entity
+decoding, base64 decoding, secret masking, network/permission/cron/number hints — by hand in
+their `lang.Language.Spans` hook, so a family a language *could* offer but does not is
+invisible until someone notices (that is how the unicode decoding of #1620 missed Python,
+PHP, YAML and TOML until #2334). The audit ledger in `cmd/ike/spanfamily_audit_test.go`
+(#2337) closes that hole: every registered language must, for every audited family, either
+**offer it** (verified behaviourally — the test runs the hook over a per-family probe buffer
+and looks for the family's capture) or carry a **ledger entry with a reason** from the
+ledger's small named set (no syntax for such literals, no marking convention in the format,
+foreign data rendered verbatim, injection helper, or a genuine gap linked to its tracking
+issue).
+
+Concretely: a **new language** fails the build until its row is filled in; **wiring a
+family** means moving its cell to `offeredSpanFamilies` (and extending the family's probe if
+the new producer needs a shape the probe lacks); a reason entry for a family the language
+has since started offering is **stale and fails**. Real gaps are never recorded as a bare
+reason — they are closed or linked as a follow-up issue (`reasonGap`, currently #2345).

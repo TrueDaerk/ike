@@ -196,6 +196,8 @@ bring their own.
 | Manage Scratch Files… | `scratch.manage` | — | — | everywhere |
 | New Scratch File… | `scratch.new` | `cmd+shift+n` | — | everywhere |
 | New Scratch File: CSS | `scratch.new.css` | — | — | everywhere |
+| New Scratch File: Less | `scratch.new.css.less` | — | — | everywhere |
+| New Scratch File: SCSS | `scratch.new.css.scss` | — | — | everywhere |
 | New Scratch File: CSV | `scratch.new.csv` | — | — | everywhere |
 | New Scratch File: Dockerfile | `scratch.new.dockerfile` | — | — | everywhere |
 | New Scratch File: GO | `scratch.new.go` | — | — | everywhere |
@@ -214,9 +216,14 @@ bring their own.
 | New Scratch File: Toml | `scratch.new.toml` | — | — | everywhere |
 | New Scratch File: TSV | `scratch.new.tsv` | — | — | everywhere |
 | New Scratch File: Typescript | `scratch.new.typescript` | — | — | everywhere |
+| New Scratch File: JavaScript | `scratch.new.typescript.js` | — | — | everywhere |
+| New Scratch File: JSX | `scratch.new.typescript.jsx` | — | — | everywhere |
+| New Scratch File: TSX | `scratch.new.typescript.tsx` | — | — | everywhere |
 | New Scratch File: XML | `scratch.new.xml` | — | — | everywhere |
 | New Scratch File: Yaml | `scratch.new.yaml` | — | — | everywhere |
+| New Scratch from Selection | `scratch.newFromSelection` | `cmd+alt+shift+s` | — | everywhere |
 | Scratch Files | `scratch.panel` | — | — | everywhere |
+| Promote Scratch to File… | `scratch.promote` | `cmd+alt+shift+p` | — | everywhere |
 | Next Search Match | `search.nextMatch` | `f3` | — | everywhere |
 | Previous Search Match | `search.prevMatch` | `shift+f3` | — | everywhere |
 | Settings | `settings.open` | `cmd+,` | — | everywhere |
