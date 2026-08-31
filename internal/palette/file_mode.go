@@ -193,7 +193,7 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 		}
 	}
 	if q := strings.TrimSpace(query); q != "" {
-		items = append(items, f.scratchItems(q)...)
+		items = append(items, f.scratchItems(q, seen)...)
 		items = append(items, f.fsFallbackItems(cx.Root, query, seen)...)
 	}
 	return items
@@ -208,30 +208,64 @@ func sameFrecency(a, b float64) bool {
 	return d < 1e-9 && d > -1e-9
 }
 
-// scratchItems offers the scratch store's files inline in the '@' finder
-// (#1812) when the query hints at "scratch" — fuzzy-matched against the
-// literal word "scratch" itself, not against each scratch file's own name.
-// That is the simplest disambiguation that satisfies "typing scratch lists
-// the scratch files" while leaving every query unrelated to that word
-// unaffected, at the cost of not surfacing a scratch file by its own name
-// (e.g. a scratch named "notes.go" needs the '~' mode or the word "scratch"
-// typed). Results are newest-first (the store's order), like ScratchMode,
-// and tagged with a Detail chip so they read as scratch, not project, files.
-func (f *FileMode) scratchItems(query string) []Item {
+// scratchItems offers the scratch store's files inline in the '@' finder,
+// below the project matches. Two kinds of query reach them (#1812, #2341):
+//
+//   - a query that fuzzy-matches the literal word "scratch" lists the *whole*
+//     store, newest-first (the store's order) — the way to survey the store
+//     without knowing a name;
+//   - any other query is fuzzy-matched against each scratch's own file name,
+//     so a scratch called "notes.go" is found by typing "notes", like a
+//     project file.
+//
+// Name matches rank among themselves by fuzzy score, newest-first on a tie,
+// and are appended *below* the project matches instead of being merged into
+// their ranking: scratch files are a side store, and a project hit must never
+// be pushed down by one — the same rule the filesystem fallback (#1775)
+// follows. Frecency (#2155) deliberately does not apply: it is keyed by
+// project paths, and the store carries its own recency order already. seen
+// holds the absolute paths already listed, so a scratch is never offered
+// twice — once as a store row and again through the filesystem fallback. Rows
+// keep the "scratch" Detail chip so they read as scratch, not project, files.
+func (f *FileMode) scratchItems(query string, seen map[string]bool) []Item {
 	if f.scratchList == nil {
 		return nil
 	}
-	if _, ok := fuzzy.Match(query, "scratch"); !ok {
-		return nil
-	}
 	paths := f.scratchList()
-	items := make([]Item, 0, len(paths))
+	_, wholeStore := fuzzy.Match(query, "scratch")
+	type scored struct {
+		path  string
+		score int
+		spans []int
+	}
+	out := make([]scored, 0, len(paths))
 	for _, p := range paths {
+		if seen[expandedAbs(p)] {
+			continue
+		}
+		if wholeStore {
+			out = append(out, scored{path: p})
+			continue
+		}
+		m, ok := fuzzy.Match(query, filepath.Base(p))
+		if !ok {
+			continue
+		}
+		out = append(out, scored{path: p, score: m.Score, spans: m.Positions})
+	}
+	if !wholeStore {
+		// Stable: equal scores keep the store's newest-first order.
+		sort.SliceStable(out, func(i, j int) bool { return out[i].score > out[j].score })
+	}
+	items := make([]Item, 0, len(out))
+	for _, s := range out {
+		seen[expandedAbs(s.path)] = true
 		items = append(items, Item{
-			Title:   filepath.Base(p),
+			Title:   filepath.Base(s.path),
+			Spans:   s.spans,
 			Detail:  "scratch",
-			Msg:     OpenFileMsg{Path: p},
-			Preview: PreviewTarget{Path: p, Line: 1},
+			Msg:     OpenFileMsg{Path: s.path},
+			Preview: PreviewTarget{Path: s.path, Line: 1},
 		})
 	}
 	return items
