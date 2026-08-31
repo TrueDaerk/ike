@@ -97,9 +97,10 @@ func TestNewScratchOpensLanguagePicker(t *testing.T) {
 		t.Fatalf("every registered language must be offered, got %+v", items)
 	}
 
-	// Filtering matches the language title.
+	// Filtering matches the language title; the "Custom…" row stays behind it
+	// as the way to any extension the offering does not list (#2340).
 	got := scratchNewMode{}.Results("sctest", palette.Context{})
-	if len(got) != 1 || got[0].Title != "Sctest" {
+	if len(got) != 2 || got[0].Title != "Sctest" || got[1].Title != scratchCustomTitle {
 		t.Fatalf("query must filter to the language, got %+v", got)
 	}
 }

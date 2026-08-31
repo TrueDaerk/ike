@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Scratch Files
-description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette, from the active selection or generated as synthetic test data in nine formats, managed from a floating manager and the explorer's Scratches section (open, rename, delete, change language, promote to a project file), surviving restarts as ordinary files.
+description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette (curated language rows plus a free "Custom…" extension), from the active selection or generated as synthetic test data in nine formats, managed from a floating manager and the explorer's Scratches section (open, rename, delete, change language, promote to a project file), surviving restarts as ordinary files.
 resource: internal/scratch
 tags: [architecture, scratch, palette, languages, explorer, testdata]
-timestamp: 2026-08-31T12:00:00Z
+timestamp: 2026-08-31T18:00:00Z
 ---
 
 # Scratch Files
@@ -101,7 +101,8 @@ late-registered languages appear without ordering constraints:
   and, when the title does not match, on the extension, so `.js` finds
   JavaScript — with the extension in the detail column. A row emits
   `palette.RunCommandMsg` for the matching command below, so the picker owns no
-  creation logic.
+  creation logic. The last row, "Custom…" (#2340), is the exception: it opens a
+  prompt for any extension the offering does not list.
 - `scratch.new.text` creates a plain `.txt` scratch with no prompt (what
   `scratch.new` used to do — a chord or script still needs the direct path).
 - `scratch.new.<id>` ("New Scratch File: Python") per offered row, no prompt;
@@ -161,6 +162,44 @@ created and none switched to one. The table is deliberately curated rather than
 `Html .htm`) would bloat the picker. An alias the language does not actually
 register is ignored, and an extension already claimed by an earlier row is
 skipped, so the list can neither invent an extension nor list one twice.
+
+### The free extension: "Custom…" (#2340)
+
+The curated table above has a price: every extension it does not list used to
+be a code change (#2333 was exactly that for `.js`, and `.mjs`, `.sql`, `.tf`
+or an in-house suffix would each be the next one). The **"Custom…" row** closes
+the list without growing it — it is offered by *both* language surfaces and
+leads to a one-line prompt for the extension
+(`internal/app/scratch_custom_ext.go`):
+
+- In the `scratch.new` picker it is the row that carries **no**
+  `scratch.new.<id>` command — it is not a creator but a doorway, so it emits
+  `ShowScratchCustomExtMsg` and the root model opens the prompt. `enter`
+  creates the scratch through the very same `newScratch` funnel a language row
+  uses (typing `py` is therefore not a special case but the "Python" row by
+  another route), `esc` returns to the language list rather than to the editor.
+- In the manager it is a **step** of the dialog (`smStepCustomExt`), modelled
+  on the rename step: the field is seeded with the scratch's current
+  extension, `enter` re-languages through `scratch.SetExt` like every language
+  row, and `esc` walks one step back into the row list — the manager's standing
+  esc semantics.
+
+**No filter ever hides the row.** It is needed precisely when the query matches
+nothing else, so the picker keeps it on a score floor below every real match
+(it sorts last as long as anything else is left) and the manager's
+`filteredLangs` narrows the languages and appends it unconditionally.
+
+The typed extension is **validated, never silently corrected**
+(`normalizeScratchExt`): the leading dot is optional (`tf` and `.tf` both mean
+`tf`), a dot *inside* is allowed (`d.ts`), and an empty input, a path separator,
+whitespace, a leading/trailing dot or any other character an extension is not
+made of is refused with a message that names the reason while the prompt stays
+open. The case is kept as typed; beyond these rules the store decides.
+
+Typed extensions are **not remembered**. A remembered extension would have to
+become a row of its own to be worth anything, which is the list growth the
+curated table exists to prevent — and re-typing `tf` costs two keys next to a
+row that would then sit in the list forever.
 
 Nothing about language *registration* changes — resolution stays path-keyed
 through the [language registry](./languages.md), so a `.js` scratch (and every
@@ -366,7 +405,7 @@ type-ahead:
 | --- | --- |
 | `enter` | open the scratch (closes the manager) |
 | `ctrl+r` / `f2` | rename — the prompt is prefilled with the current name |
-| `ctrl+l` | change language — a filterable list of the offered rows, preselected on the scratch's current extension |
+| `ctrl+l` | change language — a filterable list of the offered rows, preselected on the scratch's current extension, ending in "Custom…" for a free extension (#2340) |
 | `ctrl+p` | promote to a project file (closes the manager, #2339) |
 | `ctrl+d` / `delete` | delete, after a confirmation |
 | `esc` | clear the query, walk a step back, then close |

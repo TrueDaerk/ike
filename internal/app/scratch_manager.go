@@ -42,6 +42,9 @@ const (
 	smStepRename
 	smStepDelete
 	smStepLang
+	// smStepCustomExt is the language step's own free-extension prompt
+	// (#2340); esc walks back to the language list, not out of the dialog.
+	smStepCustomExt
 )
 
 // ShowScratchManagerMsg asks the root model to open the scratch manager
@@ -84,6 +87,9 @@ type smEntry struct {
 type smLang struct {
 	title string
 	ext   string
+	// custom marks the "Custom…" row (#2340): it carries no extension but
+	// opens the free-extension prompt, and it is never filtered away.
+	custom bool
 }
 
 // scratchMgrState is the open manager; nil when it is closed.
@@ -103,6 +109,11 @@ type scratchMgrState struct {
 	langPick   int
 	langTop    int
 	langSearch ui.SpeedSearch
+
+	// The custom-extension step types an extension the language list does not
+	// offer (#2340).
+	customInput string
+	customPos   int
 
 	// hits are the clickable regions of the last render, rebuilt by every
 	// renderScratchManager call.
@@ -198,21 +209,34 @@ func (s *scratchMgrState) selected() (smEntry, bool) {
 
 // scratchLangs builds the language-picker rows: plain text pinned first, then
 // the shared scratch offering (scratch_langs.go), which is already sorted by
-// title and free of duplicate extensions.
+// title and free of duplicate extensions, and "Custom…" pinned last (#2340)
+// for everything the curated offering does not list.
 func scratchLangs() []smLang {
 	rows := scratchLangRows()
-	out := make([]smLang, 0, len(rows)+1)
+	out := make([]smLang, 0, len(rows)+2)
 	out = append(out, smLang{title: "Plain Text", ext: "txt"})
 	for _, r := range rows {
 		out = append(out, smLang{title: r.Title, ext: r.Ext})
 	}
-	return out
+	return append(out, smLang{title: scratchCustomTitle, custom: true})
 }
 
 // filteredLangs is the language picker's row set, narrowed by its own
-// type-ahead over "title .ext".
+// type-ahead over "title .ext". The "Custom…" row survives every filter and
+// stays last: a query that matches no language is exactly when a free
+// extension is wanted, so the row must be there to be chosen.
 func (s *scratchMgrState) filteredLangs() []smLang {
-	return ui.Narrow(&s.langSearch, s.langs, func(l smLang) string { return l.title + " ." + l.ext })
+	langs := make([]smLang, 0, len(s.langs))
+	var custom []smLang
+	for _, l := range s.langs {
+		if l.custom {
+			custom = append(custom, l)
+			continue
+		}
+		langs = append(langs, l)
+	}
+	out := ui.Narrow(&s.langSearch, langs, func(l smLang) string { return l.title + " ." + l.ext })
+	return append(out, custom...)
 }
 
 // smListRows is the height budget of the manager's list: the shell's laid-out
@@ -358,7 +382,11 @@ func (m *Model) renderScratchManager() {
 			if i == s.langPick {
 				marker = "> "
 			}
-			addHit(tdTrunc(marker+smPad(l.title, 20)+"."+l.ext, avail), smHitLang, i)
+			detail := "." + l.ext
+			if l.custom {
+				detail = scratchCustomDetail
+			}
+			addHit(tdTrunc(marker+smPad(l.title, 20)+detail, avail), smHitLang, i)
 		}
 		if rest := len(filtered) - top - vis; rest > 0 {
 			add(fmt.Sprintf("  ↓ %d more", rest))
@@ -369,6 +397,17 @@ func (m *Model) renderScratchManager() {
 		addButtons([2]string{"back", esc}, [2]string{"choose", enter})
 		add("")
 		add("type filters · ↑↓ select · enter/click choose · esc back")
+	case smStepCustomExt:
+		e, _ := s.selected()
+		add("Extension of " + e.name)
+		add("")
+		add("  " + windowedInput(s.customInput, s.customPos, m.tdValueWidth()))
+		add("")
+		add("Any extension the list does not offer: \"tf\", \".mjs\", \"sql\".")
+		add("")
+		addButtons([2]string{"back", esc}, [2]string{"apply", enter})
+		add("")
+		add("enter apply · esc back to the language list")
 	}
 	if s.err != "" {
 		lines = append(lines, "", "E: "+s.err)
@@ -397,6 +436,11 @@ func (m Model) updateScratchManager(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.scratchMgr
 	if msg.Code == tea.KeyEscape {
 		switch {
+		case s.step == smStepCustomExt:
+			// One step back, not out of the dialog: the row list is where a
+			// wrong turn into the prompt is corrected (#2340).
+			s.step = smStepLang
+			s.err, s.note = "", ""
 		case s.step == smStepLang && s.langSearch.EscClears():
 			s.langPick, s.langTop = 0, 0
 		case s.step != smStepList:
@@ -420,6 +464,8 @@ func (m Model) updateScratchManager(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.updateScratchDelete(msg)
 	case smStepLang:
 		return m.updateScratchLang(msg)
+	case smStepCustomExt:
+		return m.updateScratchCustomLang(msg)
 	}
 	return m, nil
 }
@@ -597,7 +643,7 @@ func (m Model) updateScratchLang(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if len(filtered) == 0 {
 			return m, nil
 		}
-		return m.applyScratchLang(filtered[min(s.langPick, len(filtered)-1)].ext)
+		return m.chooseScratchLang(filtered[min(s.langPick, len(filtered)-1)])
 	}
 	if handled, changed := s.langSearch.Key(msg); handled {
 		if changed {
@@ -609,6 +655,49 @@ func (m Model) updateScratchLang(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	nav := s.langPick
 	if ui.ListNav(msg.String(), &nav, len(filtered), m.smListRows(len(filtered)), ui.NavDefault) {
 		s.langPick = nav
+	}
+	m.renderScratchManager()
+	return m, nil
+}
+
+// chooseScratchLang activates one language row: an ordinary row re-languages
+// the scratch right away, the "Custom…" row (#2340) opens the extension
+// prompt instead — it is a step, not an extension.
+func (m Model) chooseScratchLang(l smLang) (tea.Model, tea.Cmd) {
+	if !l.custom {
+		return m.applyScratchLang(l.ext)
+	}
+	s := m.scratchMgr
+	s.step = smStepCustomExt
+	// The current extension seeds the field, so the prompt starts from what
+	// the scratch is rather than from nothing.
+	e, _ := s.selected()
+	s.customInput = strings.ToLower(strings.TrimPrefix(filepath.Ext(e.name), "."))
+	s.customPos = len([]rune(s.customInput))
+	s.err, s.note = "", ""
+	m.renderScratchManager()
+	return m, nil
+}
+
+// updateScratchCustomLang drives the manager's extension prompt: enter
+// validates and re-languages through the very same store call the rows use, a
+// refusal keeps the prompt open with its reason (esc is the step walker's).
+func (m Model) updateScratchCustomLang(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	s := m.scratchMgr
+	if msg.Code == tea.KeyEnter {
+		ext, err := normalizeScratchExt(s.customInput)
+		if err != nil {
+			s.err = err.Error()
+			m.renderScratchManager()
+			return m, nil
+		}
+		return m.applyScratchLang(ext)
+	}
+	if out, pos, handled, changed := ui.EditKey(msg, s.customInput, s.customPos); handled {
+		s.customInput, s.customPos = out, pos
+		if changed {
+			s.err = ""
+		}
 	}
 	m.renderScratchManager()
 	return m, nil
@@ -718,7 +807,7 @@ func (m Model) mouseScratchManager(msg mouseEvent, x, y int) (tea.Model, tea.Cmd
 	case smHitLang:
 		filtered := s.filteredLangs()
 		if hit.arg >= 0 && hit.arg < len(filtered) {
-			out, cmd := m.applyScratchLang(filtered[hit.arg].ext)
+			out, cmd := m.chooseScratchLang(filtered[hit.arg])
 			return out.(Model), cmd, true
 		}
 	}
@@ -755,18 +844,26 @@ func (m *Model) wheelScratchManager(delta int) {
 	m.renderScratchManager()
 }
 
-// pasteScratchManager inserts a paste into the rename field (#1873); the list
-// steps have no input to paste into.
+// pasteScratchManager inserts a paste into the rename field (#1873) or the
+// extension field (#2340); the list steps have no input to paste into.
 func (m *Model) pasteScratchManager(text string) bool {
 	s := m.scratchMgr
-	if s == nil || s.step != smStepRename {
+	if s == nil || (s.step != smStepRename && s.step != smStepCustomExt) {
 		return false
 	}
-	out, pos, changed := ui.PasteText(s.renameInput, s.renamePos, text)
+	in, pos := s.renameInput, s.renamePos
+	if s.step == smStepCustomExt {
+		in, pos = s.customInput, s.customPos
+	}
+	out, pos, changed := ui.PasteText(in, pos, text)
 	if !changed {
 		return false
 	}
-	s.renameInput, s.renamePos = out, pos
+	if s.step == smStepCustomExt {
+		s.customInput, s.customPos = out, pos
+	} else {
+		s.renameInput, s.renamePos = out, pos
+	}
 	s.err = ""
 	m.renderScratchManager()
 	return true
