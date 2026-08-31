@@ -45,6 +45,31 @@ func key(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl}
 	case "ctrl+k":
 		return tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}
+	// The word-edit chords a text-entry surface owes the user (#2360).
+	case "left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft}
+	case "right":
+		return tea.KeyPressMsg{Code: tea.KeyRight}
+	case "home":
+		return tea.KeyPressMsg{Code: tea.KeyHome}
+	case "end":
+		return tea.KeyPressMsg{Code: tea.KeyEnd}
+	case "delete":
+		return tea.KeyPressMsg{Code: tea.KeyDelete}
+	case "alt+left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt}
+	case "ctrl+left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl}
+	case "alt+right":
+		return tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModAlt}
+	case "ctrl+right":
+		return tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl}
+	case "alt+backspace":
+		return tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt}
+	case "super+backspace":
+		return tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModSuper}
+	case "ctrl+w":
+		return tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl}
 	}
 	panic("unhandled key " + s)
 }

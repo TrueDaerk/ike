@@ -6,16 +6,25 @@ package ui
 // row by row. SpeedSearch gives any picker that renders a list of row labels
 // the same behaviour in one place:
 //
-//   - printable keys append to the query and narrow the visible rows live,
+//   - printable keys go into the query at its caret and narrow the visible
+//     rows live,
 //   - the narrowing keeps the picker's own row order (the query filters, it
 //     does not re-rank) so a row never jumps around under the cursor,
-//   - backspace deletes the last query rune, but only while a query is
+//   - backspace deletes the rune before the caret, but only while a query is
 //     running — with an empty query it falls through to whatever the picker
 //     assigned it (the mutation pickers clear their selection with it),
 //   - space is never consumed, because the pickers toggle the row under the
 //     cursor with it,
 //   - esc is left to the caller, which clears the query first and only closes
 //     the modal on the second press (EscClears).
+//
+// A running query is a one-line text input, so it edits like one (#2360): it
+// carries a caret and every editing key runs through EditKey, which is what
+// gives it left/right, the word motions (alt+left/ctrl+left,
+// alt+right/ctrl+right), word deletion (alt+backspace/ctrl+w) and
+// super+backspace. Before #2360 the query was append-only and rejected every
+// modifier chord, so a user deleting a word inside a picker's type-ahead had
+// the chord fall through to the keymap and logged as unbound.
 //
 // The type is a value: a picker embeds one, resets it when it opens, and asks
 // Filter for the rows it should render.
@@ -30,17 +39,22 @@ import (
 // search that matches everything.
 type SpeedSearch struct {
 	query string
+	cur   int // the caret, as a rune index into query
 }
 
 // Query returns the typed text, "" when the search is idle.
 func (s *SpeedSearch) Query() string { return s.query }
+
+// Cursor returns the caret's rune index into the query (#2360), for a host
+// that renders the query itself instead of through Hint.
+func (s *SpeedSearch) Cursor() int { return s.cur }
 
 // Active reports whether a query is narrowing the rows.
 func (s *SpeedSearch) Active() bool { return s.query != "" }
 
 // Reset drops the query. Pickers call it when they open, so a modal never
 // inherits the previous one's type-ahead.
-func (s *SpeedSearch) Reset() { s.query = "" }
+func (s *SpeedSearch) Reset() { s.query, s.cur = "", 0 }
 
 // EscClears is esc's first job: it drops a running query and reports true, so
 // the caller closes the modal only on the second press.
@@ -48,36 +62,62 @@ func (s *SpeedSearch) EscClears() bool {
 	if s.query == "" {
 		return false
 	}
-	s.query = ""
+	s.Reset()
 	return true
 }
 
-// Key feeds one key to the search. It consumes printable runes (never space,
-// never a modifier chord) and backspace while a query is running, and reports
-// whether it took the key and whether the query changed. A caller that sees
-// changed must re-clamp its cursor — the visible row set just moved.
+// ssReserved are the keys a running query leaves to its host even though
+// EditKey would take them (#2360). space toggles the row under the cursor;
+// plain delete is the pickers' "clear this row / this selection"; home/end
+// and their super+arrow aliases are the list extremes every host routes
+// through ListNav — a type-ahead must not swallow the way out of a long list.
+var ssReserved = map[string]bool{
+	"space": true, " ": true,
+	"delete":     true,
+	"home":       true,
+	"end":        true,
+	"super+left": true, "super+right": true,
+}
+
+// Key feeds one key to the search and reports whether it took the key and
+// whether the query changed. A caller that sees changed must re-clamp its
+// cursor — the visible row set just moved.
+//
+// An idle search only starts on a printable rune: with no query running every
+// other key — backspace, the arrows, the chords — belongs to the picker,
+// which is what keeps "backspace clears the selection" working. A running
+// query is a text input and edits through EditKey, minus the ssReserved keys
+// the host binds to list actions.
 func (s *SpeedSearch) Key(msg tea.KeyPressMsg) (handled, changed bool) {
-	switch msg.String() {
-	case "backspace":
-		if s.query == "" {
+	if s.query == "" {
+		if !ssTypable(msg) {
 			return false, false
 		}
-		r := []rune(s.query)
-		s.query = string(r[:len(r)-1])
+		s.query, s.cur = msg.Text, len([]rune(msg.Text))
 		return true, true
-	case "space", " ":
-		// The pickers toggle the row under the cursor with space.
+	}
+	if ssReserved[msg.String()] {
 		return false, false
 	}
-	if msg.Text == "" || msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper|tea.ModMeta) != 0 {
+	if Typing(msg) && !ssTypable(msg) {
+		// A printable the search will not take — a space, a tab — must not
+		// reach EditKey either, which would happily insert it. Only plain
+		// typing is screened, since that is all EditKey inserts.
 		return false, false
 	}
-	text := msg.Text
-	if strings.ContainsAny(text, " \t\r\n") {
+	out, cur, handled, changed := EditKey(msg, s.query, s.cur)
+	if !handled {
 		return false, false
 	}
-	s.query += text
-	return true, true
+	s.query, s.cur = out, cur
+	return true, changed
+}
+
+// ssTypable reports whether a key press is a plain printable rune the query
+// takes: text, no modifier chord, no whitespace (space toggles the row under
+// the cursor, and a tab is nobody's search term).
+func ssTypable(msg tea.KeyPressMsg) bool {
+	return Typing(msg) && !strings.ContainsAny(msg.Text, " \t\r\n")
 }
 
 // Matches reports whether text passes the query. The test is a
@@ -126,11 +166,20 @@ func NarrowStrings(s *SpeedSearch, rows []string) []string {
 }
 
 // Hint is the query rendered for a modal heading, "" while the search is
-// idle. The trailing block marks where the next rune lands, so the type-ahead
-// reads as an input rather than as part of the title.
+// idle. The block marks where the next rune lands, so the type-ahead reads as
+// an input rather than as part of the title; since the caret moves (#2360) it
+// sits wherever the caret is, not always at the end.
 func (s *SpeedSearch) Hint() string {
 	if s.query == "" {
 		return ""
 	}
-	return "/" + s.query + "▏"
+	r := []rune(s.query)
+	cur := s.cur
+	if cur < 0 {
+		cur = 0
+	}
+	if cur > len(r) {
+		cur = len(r)
+	}
+	return "/" + string(r[:cur]) + "▏" + string(r[cur:])
 }
