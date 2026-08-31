@@ -17,7 +17,7 @@ func key(t *testing.T, s string) Key {
 // same-context clashes on either platform.
 func TestNoSameContextConflicts(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux"} {
-		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
 		for _, c := range table.Conflicts() {
 			t.Errorf("%s: conflict %+v", goos, c)
 		}
@@ -30,7 +30,7 @@ func TestNoSameContextConflicts(t *testing.T) {
 // would silence a future accidental shadow.
 func TestDefaultShadowsAreIntentional(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux"} {
-		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
 		for _, s := range table.Shadows() {
 			t.Errorf("%s: unintentional default shadow: %s", goos, s)
 		}
@@ -40,7 +40,7 @@ func TestDefaultShadowsAreIntentional(t *testing.T) {
 	// checked with a raw, unfiltered scan.
 	used := map[string]bool{}
 	for _, goos := range []string{"darwin", "linux"} {
-		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
 		for _, w := range table.Bindings() {
 			if w.Context == Global {
 				continue
@@ -143,7 +143,7 @@ func TestRetiredDefaults(t *testing.T) {
 		{[]string{"cmd+k", "down"}, Global, "pane.splitDown"},
 	}
 	for _, c := range cases {
-		r := NewResolver(BuildTable(Defaults(PresetJetBrains), nil, "darwin"))
+		r := NewResolver(BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin"))
 		for i, k := range c.keys {
 			res := r.Feed(key(t, k), c.ctx)
 			if i < len(c.keys)-1 {
@@ -155,7 +155,7 @@ func TestRetiredDefaults(t *testing.T) {
 		}
 	}
 	// The leader prefix is gone: a bare space matches nothing at the top level.
-	r := NewResolver(BuildTable(Defaults(PresetJetBrains), nil, "darwin"))
+	r := NewResolver(BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin"))
 	if res := r.Feed(key(t, "space"), Global); res.Status == Pending {
 		t.Error("bare space must not open a pending sequence anymore")
 	}
@@ -176,7 +176,7 @@ func TestAuditDefaultChords(t *testing.T) {
 		{"cmd+f3", Global, "nav.bookmarks"},
 	}
 	for _, goos := range []string{"darwin", "linux"} {
-		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
 		for _, c := range cases {
 			chord := NormalizeChord(MustParseChord(c.chord), goos)
 			if b, ok := table.Lookup(chord, c.ctx); !ok || b.Command != c.cmd {
@@ -210,7 +210,7 @@ func TestAudit2305DefaultChords(t *testing.T) {
 		{"alt+shift+f12", Global, "window.layouts"},
 	}
 	for _, goos := range []string{"darwin", "linux"} {
-		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
 		for _, c := range cases {
 			chord := NormalizeChord(MustParseChord(c.chord), goos)
 			if b, ok := table.Lookup(chord, c.ctx); !ok || b.Command != c.cmd {
@@ -245,7 +245,7 @@ func TestDebugFKeyPlatformDefaults(t *testing.T) {
 	}
 	for _, goos := range []string{"darwin", "linux"} {
 		GOOS = goos
-		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
 		for _, p := range pairs {
 			for _, chord := range []string{p.cmd, p.ctrl} {
 				c := NormalizeChord(MustParseChord(chord), goos)
@@ -288,5 +288,30 @@ func TestCloseProjectDefaultChords(t *testing.T) {
 		if !found {
 			t.Errorf("project.close default %s missing", chord)
 		}
+	}
+}
+
+// TestNavAliasChordsDarwinOnly (#2361): cmd+alt+left/right run nav.back /
+// nav.forward on macOS — the reachable alternative to the bracket chords on a
+// German QWERTZ layout — and ship only there, since the Cmd→Ctrl fold would
+// otherwise take editor tab cycling's ctrl+alt+left/right.
+func TestNavAliasChordsDarwinOnly(t *testing.T) {
+	for chord, want := range map[string]string{"cmd+alt+left": "nav.back", "cmd+alt+right": "nav.forward"} {
+		r := NewResolver(BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin"))
+		if res := r.Feed(key(t, chord), Global); res.Status != Resolved || res.Command != want {
+			t.Errorf("darwin %s: got %+v, want %s", chord, res, want)
+		}
+	}
+	// Off macOS the chords stay with tab cycling.
+	for chord, want := range map[string]string{"ctrl+alt+left": "editor.tab.prev", "ctrl+alt+right": "editor.tab.next"} {
+		r := NewResolver(BuildTable(DefaultsFor(PresetJetBrains, "linux"), nil, "linux"))
+		if res := r.Feed(key(t, chord), Global); res.Status != Resolved || res.Command != want {
+			t.Errorf("linux %s: got %+v, want %s", chord, res, want)
+		}
+	}
+	// The bracket and mouse bindings are untouched.
+	r := NewResolver(BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin"))
+	if res := r.Feed(key(t, "cmd+left-bracket"), Global); res.Status != Resolved || res.Command != "nav.back" {
+		t.Errorf("cmd+left-bracket: got %+v, want nav.back", res)
 	}
 }

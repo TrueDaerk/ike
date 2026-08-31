@@ -68,7 +68,7 @@ func TestPlatformNormalisation(t *testing.T) {
 }
 
 func TestBuildTableLookupContextPrecedence(t *testing.T) {
-	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "linux"), nil, "linux")
 	// cmd+s → ctrl+s in Editor context.
 	chord := NormalizeChord(MustParseChord("cmd+s"), "linux")
 	if b, ok := table.Lookup(chord, Editor); !ok || b.Command != "editor.write" {
@@ -110,7 +110,7 @@ func TestDoubleShiftResolvesOffMacOS(t *testing.T) {
 	GOOS = "linux"
 	defer func() { GOOS = prev }()
 
-	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "linux"), nil, "linux")
 	r := NewResolver(table)
 	shift := MustParseChord("shift shift").Steps[0]
 
@@ -193,7 +193,7 @@ func TestConflictDetection(t *testing.T) {
 // actually registers (the ex-command ":w").
 func TestSaveBindsToCtrlS(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux", "windows"} {
-		r := NewResolver(BuildTable(Defaults(PresetJetBrains), nil, goos))
+		r := NewResolver(BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos))
 		if res := r.Feed(Key{Base: "s", Mods: ModCtrl}, Editor); res.Status != Resolved || res.Command != "editor.write" {
 			t.Fatalf("%s: ctrl+s in editor = %+v, want editor.write", goos, res)
 		}
@@ -206,7 +206,7 @@ func TestSaveBindsToCtrlS(t *testing.T) {
 // explorer.undo in the explorer.
 func TestUndoBindsToCtrlZ(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux", "windows"} {
-		r := NewResolver(BuildTable(Defaults(PresetJetBrains), nil, goos))
+		r := NewResolver(BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos))
 		if res := r.Feed(Key{Base: "z", Mods: ModCtrl}, Editor); res.Status != Resolved || res.Command != "editor.undo" {
 			t.Fatalf("%s: ctrl+z in editor = %+v, want editor.undo", goos, res)
 		}
@@ -222,7 +222,7 @@ func TestUndoBindsToCtrlZ(t *testing.T) {
 // chord classifies as delivered, so the palette shows a non-fragile primary.
 func TestHoverBindsToCtrlQ(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux", "windows"} {
-		r := NewResolver(BuildTable(Defaults(PresetJetBrains), nil, goos))
+		r := NewResolver(BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos))
 		if res := r.Feed(Key{Base: "q", Mods: ModCtrl}, Editor); res.Status != Resolved || res.Command != "lsp.hover" {
 			t.Fatalf("%s: ctrl+q in editor = %+v, want lsp.hover", goos, res)
 		}
@@ -238,7 +238,7 @@ func TestHoverBindsToCtrlQ(t *testing.T) {
 // collapse of both rows onto ctrl+p raises no conflict diagnostic.
 func TestParameterInfoBindsToCtrlP(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux", "windows"} {
-		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
 		r := NewResolver(table)
 		if res := r.Feed(Key{Base: "p", Mods: ModCtrl}, Editor); res.Status != Resolved || res.Command != "lsp.parameterInfo" {
 			t.Fatalf("%s: ctrl+p in editor = %+v, want lsp.parameterInfo", goos, res)
@@ -249,14 +249,14 @@ func TestParameterInfoBindsToCtrlP(t *testing.T) {
 			}
 		}
 	}
-	r := NewResolver(BuildTable(Defaults(PresetJetBrains), nil, "darwin"))
+	r := NewResolver(BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin"))
 	if res := r.Feed(Key{Base: "p", Mods: ModMeta}, Editor); res.Status != Resolved || res.Command != "lsp.parameterInfo" {
 		t.Fatalf("darwin: cmd+p in editor = %+v, want lsp.parameterInfo", res)
 	}
 }
 
 func TestMultiStepChordAndTimeout(t *testing.T) {
-	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "linux"), nil, "linux")
 	r := NewResolver(table)
 	// First step ctrl+k (cmd+k normalised) is a prefix of the ctrl+k
 	// split/maximize sequences → must wait.
@@ -293,7 +293,7 @@ func TestMultiStepChordAndTimeout(t *testing.T) {
 }
 
 func TestResolverNoMatchFallsThrough(t *testing.T) {
-	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "linux"), nil, "linux")
 	r := NewResolver(table)
 	res := r.Feed(Key{Base: "j"}, Editor) // plain j: no global binding
 	if res.Status != NoMatch {
@@ -305,7 +305,7 @@ func TestResolverNoMatchFallsThrough(t *testing.T) {
 }
 
 func TestResolverAbortedPrefixRestarts(t *testing.T) {
-	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "linux"), nil, "linux")
 	r := NewResolver(table)
 	r.Feed(Key{Base: "k", Mods: ModCtrl}, Global) // pending ctrl+k
 	// A key that neither extends ctrl+k nor matches restarts fresh: f1 resolves.
@@ -351,7 +351,7 @@ func TestInertBindingMetadataPreserved(t *testing.T) {
 	// (inert) so the help sheet can show it. Resolution returns the id
 	// regardless of whether a command is registered — that check is the
 	// caller's. cmd+alt+z → vcs.revertFile is a stable such row.
-	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "linux"), nil, "linux")
 	revert := NormalizeChord(MustParseChord("cmd+alt+z"), "linux")
 	if b, ok := table.Lookup(revert, Global); !ok || b.Command != "vcs.revertFile" {
 		t.Errorf("inert vcs.revertFile binding = %+v ok=%v", b, ok)
@@ -359,7 +359,7 @@ func TestInertBindingMetadataPreserved(t *testing.T) {
 }
 
 func TestHelpGroupsSorted(t *testing.T) {
-	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "linux"), nil, "linux")
 	groups := table.Help()
 	if len(groups) == 0 {
 		t.Fatal("no help groups")
@@ -405,7 +405,7 @@ func TestPageKeyAliases(t *testing.T) {
 // mouse-forward chords resolve to the navigation history by default and
 // rebind through the normal override mechanism like any key.
 func TestMouseNavButtonsBindAndRebind(t *testing.T) {
-	table := BuildTable(Defaults(PresetJetBrains), nil, "darwin")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin")
 	if b, ok := table.Lookup(MustParseChord("mouse-back"), Editor); !ok || b.Command != "nav.back" {
 		t.Fatalf("mouse-back = %+v ok=%v, want nav.back", b, ok)
 	}

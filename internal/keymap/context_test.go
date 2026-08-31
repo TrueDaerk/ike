@@ -64,7 +64,7 @@ func TestOverrideKeyPaneContexts(t *testing.T) {
 // neither a conflict nor a shadow.
 func TestPerContextCtrlT(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux"} {
-		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
 		chord := NormalizeChord(MustParseChord("ctrl+t"), goos)
 		if b, ok := table.Lookup(chord, Terminal); !ok || b.Command != "terminal.newTab" {
 			t.Errorf("%s: terminal ctrl+t = %+v ok=%v, want terminal.newTab", goos, b, ok)

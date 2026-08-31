@@ -67,8 +67,10 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Move file | `f6` | `f6` | `file.move` |
 | Move tab left | `ctrl+shift+pgup` | `ctrl+shift+pgup` | `editor.tab.moveLeft` |
 | Move tab right | `ctrl+shift+pgdown` | `ctrl+shift+pgdown` | `editor.tab.moveRight` |
+| Navigate back | `cmd+alt+left` | — | `nav.back` |
 | Navigate back | `cmd+left-bracket` | `ctrl+left-bracket` | `nav.back` |
 | Navigate back (mouse button 4) | `mouse-back` | `mouse-back` | `nav.back` |
+| Navigate forward | `cmd+alt+right` | — | `nav.forward` |
 | Navigate forward | `cmd+right-bracket` | `ctrl+right-bracket` | `nav.forward` |
 | Navigate forward (mouse button 5) | `mouse-forward` | `mouse-forward` | `nav.forward` |
 | New file | `cmd+n` | `ctrl+n` | `explorer.newFile` |
