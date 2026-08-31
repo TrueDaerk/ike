@@ -3,14 +3,12 @@ package app
 import (
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/explorer"
-	"ike/internal/lang"
 	"ike/internal/scratch"
 	"ike/internal/ui"
 )
@@ -166,13 +164,10 @@ func (s *scratchMgrState) reload(keep string) {
 
 // scratchLangTitle names the language of a scratch path for the metadata
 // column, falling back to "Plain Text" for an unregistered extension — the
-// same rendering scratch.list's Detail chip uses.
-func scratchLangTitle(path string) string {
-	if l, ok := lang.ByPath(path); ok {
-		return langTitle(l.ID)
-	}
-	return "Plain Text"
-}
+// same rendering scratch.list's Detail chip uses. It is the picker's own row
+// title, so a .js scratch reads "JavaScript" and not the id of the language
+// that happens to own the extension (#2333).
+func scratchLangTitle(path string) string { return scratchRowTitle(path) }
 
 // visible is the row set the list renders: the entries narrowed by the
 // type-ahead, matched over "name language" so typing either finds a scratch.
@@ -197,20 +192,16 @@ func (s *scratchMgrState) selected() (smEntry, bool) {
 }
 
 // scratchLangs builds the language-picker rows: plain text pinned first, then
-// every registered language that has an extension, alphabetically. Like
-// scratchNewMode it reads the registry per call, so late-registered languages
-// appear without ordering constraints.
+// the shared scratch offering (scratch_langs.go), which is already sorted by
+// title and free of duplicate extensions.
 func scratchLangs() []smLang {
-	out := []smLang{{title: "Plain Text", ext: "txt"}}
-	var rest []smLang
-	for _, l := range lang.All() {
-		if len(l.Extensions) == 0 {
-			continue
-		}
-		rest = append(rest, smLang{title: langTitle(l.ID), ext: l.Extensions[0]})
+	rows := scratchLangRows()
+	out := make([]smLang, 0, len(rows)+1)
+	out = append(out, smLang{title: "Plain Text", ext: "txt"})
+	for _, r := range rows {
+		out = append(out, smLang{title: r.Title, ext: r.Ext})
 	}
-	sort.Slice(rest, func(i, j int) bool { return rest[i].title < rest[j].title })
-	return append(out, rest...)
+	return out
 }
 
 // filteredLangs is the language picker's row set, narrowed by its own
@@ -481,8 +472,12 @@ func (m *Model) openScratchLangPicker() {
 	s.langSearch.Reset()
 	s.langPick, s.langTop = 0, 0
 	if e, ok := s.selected(); ok {
+		// Matched on the extension, not the title: several rows can share a
+		// language (#2333), and only the extension says which one the scratch
+		// currently is.
+		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(e.name), "."))
 		for i, l := range s.langs {
-			if l.title == e.lang {
+			if l.ext == ext {
 				s.langPick = i
 				break
 			}

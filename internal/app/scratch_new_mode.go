@@ -4,7 +4,6 @@ import (
 	"sort"
 
 	"ike/internal/fuzzy"
-	"ike/internal/lang"
 	"ike/internal/palette"
 )
 
@@ -58,16 +57,8 @@ func (scratchNewMode) Results(query string, _ palette.Context) []palette.Item {
 		{title: "Open existing scratch…", id: scratchManageCommandID,
 			detail: "rename · delete · language", rank: 2},
 	}
-	for _, l := range lang.All() {
-		if len(l.Extensions) == 0 {
-			continue
-		}
-		rows = append(rows, row{
-			title: langTitle(l.ID),
-			ext:   l.Extensions[0],
-			id:    "scratch.new." + l.ID,
-			rank:  1,
-		})
+	for _, r := range scratchLangRows() {
+		rows = append(rows, row{title: r.Title, ext: r.Ext, id: r.CmdID, rank: 1})
 	}
 	type scored struct {
 		item  palette.Item
@@ -78,6 +69,16 @@ func (scratchNewMode) Results(query string, _ palette.Context) []palette.Item {
 	var out []scored
 	for _, r := range rows {
 		m, ok := fuzzy.Match(query, r.title)
+		spans := m.Positions
+		if !ok && r.ext != "" {
+			// The extension is the other name of a language (#2333): typing
+			// ".js" must find the row just like "javascript" does. The match
+			// highlights nothing then — its positions index the extension,
+			// not the title the row renders.
+			if m, ok = fuzzy.Match(query, "."+r.ext); ok {
+				spans = nil
+			}
+		}
 		if !ok {
 			continue
 		}
@@ -89,7 +90,7 @@ func (scratchNewMode) Results(query string, _ palette.Context) []palette.Item {
 			item: palette.Item{
 				Title:  r.title,
 				Detail: detail,
-				Spans:  m.Positions,
+				Spans:  spans,
 				Score:  m.Score,
 				Msg:    palette.RunCommandMsg{ID: r.id},
 			},
