@@ -22,6 +22,7 @@ import (
 	"ike/internal/scratch"
 	"ike/internal/telemetry"
 	"ike/internal/ui"
+	"ike/internal/undostore"
 )
 
 // playground.go is the UI half of the jq and yq playgrounds (#1936, inline
@@ -45,7 +46,12 @@ import (
 //   - The **input is snapshotted and parsed once** when the playground opens,
 //     not re-read per keystroke. A jq program is written against the document
 //     that was on screen; re-parsing a 10 MB response on every rune would
-//     make the query line stutter for no gain.
+//     make the query line stutter for no gain. The one exception is an
+//     *external change* to the file the snapshot came from (#2356): the
+//     watcher's event re-reads and re-parses it, because a result quietly
+//     describing a document that no longer exists is worse than a parse. Not
+//     per keystroke, once per detected change — the same debounced,
+//     generation-stamped run a program change takes.
 //   - Evaluation is **debounced and generation-stamped**. Each program change
 //     schedules a tick; only the tick whose generation is still current
 //     starts a run, and only the run whose generation is still current
@@ -114,6 +120,23 @@ type playState struct {
 	input    *jqplay.Input
 	inputErr string
 	parsing  bool
+
+	// srcPath is the file the snapshot is followed on (#2356), empty when
+	// there is nothing to follow: an HTTP response, a selection, an unsaved
+	// buffer. srcHash is the digest of the text last handed to the parser,
+	// so an event whose content did not actually reach the buffer — a dirty
+	// buffer marked stale instead of reloaded, auto-reload off, a touch that
+	// changed no bytes — costs nothing. reloadedAt stamps the last refresh
+	// for the info row: "is this still the file on disk?" is the question the
+	// whole refresh exists to answer, and it must survive the next keystroke,
+	// which clears the transient status.
+	srcPath    string
+	srcHash    string
+	reloadedAt time.Time
+	// pgen stamps input parses the way gen stamps runs: a refresh started
+	// while an earlier parse of the same playground is still decoding must
+	// win, whichever of the two finishes first.
+	pgen int
 
 	program string
 	pos     int
@@ -189,7 +212,7 @@ func (m *Model) startPlayground(d jqplay.Dialect, atPath bool) tea.Cmd {
 		return nil
 	}
 	m.closePlayground()
-	s := &playState{dialect: d, paneKey: src.paneKey, source: src.label, srcKey: src.key, histIdx: -1, qgoal: -1, hist: m.playHist(), program: m.playSeedProgram(d, src, atPath)}
+	s := &playState{dialect: d, paneKey: src.paneKey, source: src.label, srcKey: src.key, srcPath: src.path, histIdx: -1, qgoal: -1, hist: m.playHist(), program: m.playSeedProgram(d, src, atPath)}
 	s.pos = len([]rune(s.program))
 	ed := editor.New()
 	ed.SetRegisters(m.regs) // app-wide registers (#1540): yanks in the result reach every buffer
@@ -214,10 +237,20 @@ func (m *Model) startPlayground(d jqplay.Dialect, atPath bool) tea.Cmd {
 // inline mode mounts in (with the tab to activate for a tab-nested response
 // viewer, -1 otherwise), and whether it is the *whole* focused buffer — the
 // only case in which the caret's document path is a valid program against it.
+//
+// path is the file the snapshot is *followed* on (#2356) and is set for that
+// whole-buffer case alone. A selection is deliberately not followed: after an
+// external change the character range it was taken from names a different
+// stretch of the file — possibly the middle of another value — so "re-read the
+// selection" has no honest answer, and silently re-querying something the user
+// never selected is worse than a stale result they can refresh by reopening.
+// An HTTP response is not a file at all, and an unsaved buffer has no path the
+// watcher reports on.
 type playInputSource struct {
 	text     string
 	label    string
 	key      string
+	path     string
 	paneKey  string
 	tabIdx   int
 	fullFile bool
@@ -256,7 +289,7 @@ func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
 			return playInputSource{text: sel, label: name + " (selection)", key: docKey, paneKey: key, tabIdx: -1}, true
 		}
 		if body := ed.Text(); strings.TrimSpace(body) != "" {
-			return playInputSource{text: body, label: name, key: docKey, paneKey: key, tabIdx: -1, fullFile: true}, true
+			return playInputSource{text: body, label: name, key: docKey, path: ed.Path(), paneKey: key, tabIdx: -1, fullFile: true}, true
 		}
 	}
 	// The response pane may be open without being focused — an editor holding
@@ -591,9 +624,13 @@ func (s *playState) cancelRun() {
 
 // playParseDoneMsg carries the parsed input snapshot back to the model. It
 // names the state it was started for, so a snapshot arriving after the
-// playground closed (or reopened over another buffer) is dropped.
+// playground closed (or reopened over another buffer) is dropped, and carries
+// the parse generation it was started under (#2356): with the input re-read
+// on external changes, two parses of a big file can be in flight at once, and
+// only the newest one may install itself.
 type playParseDoneMsg struct {
 	st  *playState
+	gen int
 	in  *jqplay.Input
 	err string
 }
@@ -620,15 +657,23 @@ func (m *Model) parsePlayInput(text string) tea.Cmd {
 	if s == nil {
 		return nil
 	}
-	d := s.dialect
+	// The digest of what the parser is about to see, recorded at dispatch:
+	// the next watcher event compares against it, so a second event carrying
+	// the same bytes does not start a second parse (#2356).
+	s.srcHash = undostore.Hash([]byte(text))
+	// Parses carry their own counter, not the run generation: typing during a
+	// long parse bumps gen (the debounce), and a parse dropped over that would
+	// never install the input it was started for.
+	s.pgen++
+	d, gen := s.dialect, s.pgen
 	if len(text) <= jqplay.AsyncThreshold {
 		in, err := d.Parse(text)
-		return m.finishPlayParse(playParseDoneMsg{st: s, in: in, err: errText(err)})
+		return m.finishPlayParse(playParseDoneMsg{st: s, gen: gen, in: in, err: errText(err)})
 	}
 	s.parsing = true
 	return func() tea.Msg {
 		in, err := d.Parse(text)
-		return playParseDoneMsg{st: s, in: in, err: errText(err)}
+		return playParseDoneMsg{st: s, gen: gen, in: in, err: errText(err)}
 	}
 }
 
@@ -641,16 +686,26 @@ func errText(err error) string {
 }
 
 // finishPlayParse installs the snapshot and runs the seeded program against it.
+// A parse superseded by a newer one is dropped on its generation stamp (#2356).
+//
+// A snapshot that failed to parse leaves the previous one in place instead of
+// clearing it: the input the playground follows can turn unparsable mid-edit
+// in the other editor — half a key written, a `,` short — and blanking the
+// result for every intermediate save would make the mode unusable next to a
+// hand-edited file. The error takes the info row (playErrorLine), so the last
+// good result stays on screen *and* is visibly not current.
 func (m *Model) finishPlayParse(msg playParseDoneMsg) tea.Cmd {
 	s := m.play
-	if s == nil || msg.st != s {
+	if s == nil || msg.st != s || msg.gen != s.pgen {
 		return nil
 	}
 	s.parsing = false
-	s.input, s.inputErr = msg.in, msg.err
+	s.inputErr = msg.err
 	if s.inputErr != "" {
+		s.pending = false // nothing will run against this text; no evaluation is in flight
 		return nil
 	}
+	s.input = msg.in
 	return m.runPlayNow()
 }
 
@@ -1434,6 +1489,12 @@ func (m Model) playInputSegment() string {
 	out := hint.Render(line)
 	if s.input.Truncated {
 		out += lipgloss.NewStyle().Foreground(pal.Warning).Render(fmt.Sprintf(" (first %d only)", jqplay.MaxInputValues))
+	}
+	// The refresh stamp (#2356) outlives the transient status line, which the
+	// next keystroke clears: "is this still the file on disk?" is answered by
+	// a time, not by a message that was on screen a minute ago.
+	if !s.reloadedAt.IsZero() {
+		out += hint.Render(" · reloaded " + s.reloadedAt.Format("15:04:05"))
 	}
 	return out
 }
