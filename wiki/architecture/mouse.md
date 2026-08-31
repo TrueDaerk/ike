@@ -186,7 +186,7 @@ and is listed so the next change has a baseline.
 | Context menu | — | ✅ hover, invoke, press outside dismisses | — |
 | Status line | — | ✅ clickable segments dispatch their command | — |
 | Large-file banner | — | ✅ `✕` dismisses, body forces code insight | — |
-| Popup terminal box / floating panels | ✅ scrollback per side | ✅ tab activate, `✕` closes, ❌ → ✅ middle closes, title drag moves, border resizes | — |
+| Popup terminal box / floating panels | ✅ scrollback per side; outside the boxes the notch falls through to the pane below, focus untouched (#2343) | ✅ tab activate, `✕` closes, ❌ → ✅ middle closes, title drag moves, border resizes | — |
 | Floating windows | ✅ per layer | ✅ title-bar drag moves, border ring resizes | — |
 
 ## See also

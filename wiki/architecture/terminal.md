@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
 timestamp: 2026-08-28T00:00:00Z
@@ -358,6 +358,17 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   list and the non-editor focus summary alike, and a click on it dispatches
   `terminal.popup` (`statusSegmentCommands`). Runtime state only — never
   persisted.
+- **Wheel outside the boxes** (#2343): the wheel is a **reading** gesture, so
+  a notch over no layer box scrolls the pane under the pointer — editor,
+  explorer, terminal or tool pane, through the ordinary wheel route, with no
+  per-pane special case — while the **focused** layer keeps keyboard and
+  focus: nothing blurs, nothing rises, the z-order is untouched. Over a layer
+  box the wheel still pages that box's scrollback, and presses outside keep
+  blurring (#2309) — the exception is wheel-only, and it skips while a drag
+  (selection, scrollbar, tab tear-out) is active. Wheel coalescing
+  (`queueWheel`, #238) folds only events sharing a cell, so a fast burst is
+  wholly inside or wholly outside and never splits between layer and pane;
+  a wheel builds no hover state either (`updateHover` runs on motion only).
 - **Mouse**: a press outside every layer box blurs the whole layer (#2309,
   state retained), the border ring starts a `popupterm` resize drag (centered
   doubled-delta math), the tab-bar row activates/closes tabs on its side —
