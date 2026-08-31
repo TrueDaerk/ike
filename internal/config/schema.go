@@ -633,9 +633,10 @@ type Editor struct {
 	// milliseconds) as their UTC form (#1618) in JSON values, log lines and
 	// .http request bodies; the raw number reappears under the caret.
 	TimestampDecoding bool `toml:"timestamp_decoding"`
-	// UnicodeEscapeDecoding renders \uXXXX escapes (surrogate pairs combined,
-	// Go's \UXXXXXXXX included) inside string literals as the escaped
-	// character (#1620); the raw escape reappears under the caret.
+	// UnicodeEscapeDecoding renders unicode escapes inside string literals as
+	// the escaped character (#1620, #2334): \uXXXX (surrogate pairs
+	// combined), \UXXXXXXXX, and, in the languages that have them, \u{X…}
+	// and \xNN; the raw escape reappears under the caret.
 	UnicodeEscapeDecoding bool `toml:"unicode_escape_decoding"`
 	// EntityDecoding renders HTML/XML character references (&amp;, &#x2026;)
 	// decoded (#1620) — the full named table in HTML, only the five

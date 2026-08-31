@@ -145,9 +145,10 @@ func init() {
 }
 
 // scriptSpans is the JavaScript/TypeScript lang.Language.Spans hook: the
-// unicode-escape stand-ins (#1620) plus the network-literal hints (#1653),
+// unicode-escape stand-ins (#1620) — including the ES6 \u{X…} form and \xNN,
+// and inside `…` templates (#2334) — plus the network-literal hints (#1653),
 // the latter restricted to string literals — a bare `10.0.0.0/8` in source is
 // arithmetic, not a prefix.
 func scriptSpans(lines []string) []lang.Span {
-	return append(escapes.UnicodeSpans(lines), nethint.QuotedSpans(lines)...)
+	return append(escapes.UnicodeSpansIn(lines, escapes.UnicodeScript), nethint.QuotedSpans(lines)...)
 }

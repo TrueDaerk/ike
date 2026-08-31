@@ -11,6 +11,7 @@ import (
 
 	"ike/internal/cronhint"
 	"ike/internal/epochtime"
+	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/internal/nethint"
 	"ike/internal/numhint"
@@ -52,7 +53,8 @@ func tomlSpans(lines []string) []lang.Span {
 	// producer: two stand-ins over one literal would fight for the same cells.
 	// A key that names the unit wins the other way round (#1685).
 	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.Value))
-	out := append(cronhint.QuotedSpans(lines), stamps...)
+	out := append(cronhint.QuotedSpans(lines), escapes.UnicodeSpansIn(lines, escapes.UnicodeTOML)...)
+	out = append(out, stamps...)
 	out = append(out, hints...)
 	return append(out, nethint.Spans(lines)...)
 }
