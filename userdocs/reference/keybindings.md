@@ -73,6 +73,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Navigate forward (mouse button 5) | `mouse-forward` | `mouse-forward` | `nav.forward` |
 | New file | `cmd+n` | `ctrl+n` | `explorer.newFile` |
 | New scratch file | `cmd+shift+n` | `ctrl+shift+n` | `scratch.new` |
+| New scratch from selection | `cmd+alt+shift+s` | `ctrl+alt+shift+s` | `scratch.newFromSelection` |
 | New terminal | `cmd+alt+shift+t` | `ctrl+alt+shift+t` | `terminal.new` |
 | Next search match | `f3` | `f3` | `search.nextMatch` |
 | Next tab | `cmd+ctrl+right` | `ctrl+right` | `editor.tab.next` |
@@ -86,6 +87,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Previous tab | `cmd+ctrl+left` | `ctrl+left` | `editor.tab.prev` |
 | Previous tab | `ctrl+alt+left` | `ctrl+alt+left` | `editor.tab.prev` |
 | Problems tool window | `cmd+8` | `ctrl+8` | `problems.toggle` |
+| Promote scratch to file | `cmd+alt+shift+p` | `ctrl+alt+shift+p` | `scratch.promote` |
 | Recent files | `cmd+e` | `ctrl+e` | `palette.recentFiles` |
 | Rename file | `shift+f6` | `shift+f6` | `file.rename` |
 | Reopen closed tab | `alt+shift+t` | `alt+shift+t` | `editor.tab.reopenClosed` |
