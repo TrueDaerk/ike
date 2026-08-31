@@ -8,6 +8,8 @@ func Defaults() []Menu {
 		{Title: "File", Items: []Item{
 			{Title: "New Project…", Command: "project.new"},
 			{Title: "New Scratch File", Command: "scratch.new"},
+			{Title: "New Scratch from Selection", Command: "scratch.newFromSelection"},
+			{Title: "Promote Scratch to File…", Command: "scratch.promote"},
 			{Title: "Open Scratch File…", Command: "scratch.list"},
 			{Title: "Manage Scratch Files…", Command: "scratch.manage"},
 			{Title: "Generate Test Data…", Command: "scratch.generate"},

@@ -399,6 +399,13 @@ type Model struct {
 	saveAsClose bool
 	saveAsErr   string
 
+	// promotePath is the scratch the promote prompt (#2339) is naming a
+	// project path for while the shell shows it; "" when it is closed.
+	promotePath  string
+	promoteInput string
+	promotePos   int
+	promoteErr   string
+
 	// cloneOpen marks the clone-repository dialog (#1349) while the shell
 	// shows it; cloneURL/cloneName are the two inputs with their cursors,
 	// cloneField the focused one, cloneNameEdited stops the name from
@@ -4636,8 +4643,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case NewScratchMsg:
 		// scratch.new.<lang> (#351): create under the scratch store, open
-		// through the standard funnel.
-		return m.newScratch(msg.Ext)
+		// through the standard funnel. A carried content seeds the file
+		// instead of the language template (#2339).
+		return m.newScratch(msg.Ext, msg.Content)
+
+	case NewScratchFromSelectionMsg:
+		// scratch.newFromSelection (cmd+alt+shift+s / palette, #2339): the
+		// selection becomes a scratch of the source file's extension.
+		return m.newScratchFromSelection()
+
+	case PromoteScratchMsg:
+		// scratch.promote (cmd+alt+shift+p / palette / the manager's ctrl+p,
+		// #2339): name a project path for a scratch, then move it there.
+		return m.promoteScratch(msg)
 
 	case ShowBufferLangMsg:
 		// editor.setBufferLanguage (alt+enter intention / palette, #2033):
@@ -7715,6 +7733,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The untitled save-as prompt (#730) mirrors it.
 		if m.saveAsOpen() {
 			return m.updateSaveAsPrompt(msg)
+		}
+		// The scratch promote prompt (#2339) is that prompt's twin: one path
+		// line, enter accepts, esc cancels.
+		if m.promoteScratchOpen() {
+			return m.updateScratchPromote(msg)
 		}
 		// The save-layout pane-selection mini-map (#1568) owns the keyboard
 		// the same way: hjkl/arrows move, space toggles, enter continues.

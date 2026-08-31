@@ -269,6 +269,104 @@ func SetExt(path, ext string) (string, error) {
 	return Rename(abs, stem+"."+ext)
 }
 
+// IsScratch reports whether path names a file directly inside the scratch
+// store. It is the predicate behind "promote this scratch" (#2339): a command
+// that only applies to a store file must be able to say so before acting,
+// instead of failing inside the move.
+func IsScratch(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := inStore(path)
+	return err == nil
+}
+
+// Promote moves one scratch out of the store to target (#2339): the exit the
+// store was missing, for a scratch that turned into something worth keeping.
+// The source must be a file directly inside the store — the same boundary
+// Delete and Rename enforce — and target must lie outside it, because moving
+// a scratch to another scratch name is a Rename, not a promotion. An existing
+// target is refused rather than overwritten, mirroring Rename; missing parent
+// directories of target are created.
+//
+// The move is os.Rename when it can be (atomic, keeps the inode) and a
+// copy-then-remove otherwise, since the store lives under the user state dir
+// and the project tree may well be on a different filesystem. The source is
+// only removed once the copy is durably written, so a failing write can never
+// leave the scratch half-promoted — a store entry gone with no file to show
+// for it is exactly the failure mode this ordering rules out.
+func Promote(path, target string) error {
+	abs, err := inStore(path)
+	if err != nil {
+		return err
+	}
+	info, err := os.Lstat(abs)
+	if err != nil {
+		return fmt.Errorf("promoting scratch: %w", err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("not a scratch file: %s", path)
+	}
+	if target == "" {
+		return fmt.Errorf("promoting scratch: the target path is required")
+	}
+	dst, err := filepath.Abs(target)
+	if err != nil {
+		return fmt.Errorf("resolving target path: %w", err)
+	}
+	dir, err := Dir()
+	if err != nil {
+		return err
+	}
+	if filepath.Dir(dst) == filepath.Clean(dir) {
+		return fmt.Errorf("target is inside the scratch store: %s", target)
+	}
+	if _, err := os.Lstat(dst); err == nil {
+		return fmt.Errorf("already exists: %s", target)
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("creating target directory: %w", err)
+	}
+	if err := os.Rename(abs, dst); err == nil {
+		return nil
+	}
+	// Cross-device (or any other rename refusal): copy, flush, then unlink.
+	if err := copyFile(abs, dst, info.Mode().Perm()); err != nil {
+		os.Remove(dst) // never leave a partial file behind
+		return err
+	}
+	if err := os.Remove(abs); err != nil {
+		return fmt.Errorf("removing promoted scratch: %w", err)
+	}
+	return nil
+}
+
+// copyFile writes src to dst with perm, flushing to disk before returning so
+// Promote can remove the source knowing the copy survived.
+func copyFile(src, dst string, perm os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("reading scratch: %w", err)
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, perm)
+	if err != nil {
+		return fmt.Errorf("writing target file: %w", err)
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return fmt.Errorf("writing target file: %w", err)
+	}
+	if err := out.Sync(); err != nil {
+		out.Close()
+		return fmt.Errorf("writing target file: %w", err)
+	}
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("writing target file: %w", err)
+	}
+	return nil
+}
+
 // inStore resolves path to absolute and verifies it names an entry directly
 // inside the scratch dir — the shared boundary guard of Delete and Rename.
 func inStore(path string) (string, error) {

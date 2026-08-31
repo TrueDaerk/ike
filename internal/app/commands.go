@@ -331,7 +331,26 @@ type ShowScratchFilesMsg struct{}
 // NewScratchMsg asks the root model to create a scratch file with the given
 // extension under the scratch store and open it (Roadmap 0280, #351).
 // Dispatched by scratch.new and the per-language scratch.new.<id> commands.
-type NewScratchMsg struct{ Ext string }
+//
+// Content seeds the new scratch (#2339: "New Scratch from Selection" hands
+// over the selected text). An empty Content means "no content of my own", and
+// the scratch is seeded with the language's file template as before — the
+// language creators all take that path.
+type NewScratchMsg struct {
+	Ext     string
+	Content string
+}
+
+// NewScratchFromSelectionMsg asks the root model to create a scratch from the
+// active selection, inheriting the source file's extension (#2339).
+// Dispatched by scratch.newFromSelection.
+type NewScratchFromSelectionMsg struct{}
+
+// PromoteScratchMsg asks the root model to promote a scratch to a project file
+// (#2339): the focused editor's scratch, or the one Path names when the
+// scratch manager dispatches it for its selected row. Dispatched by
+// scratch.promote.
+type PromoteScratchMsg struct{ Path string }
 
 // CopyPathMsg copies the focused file's path to the clipboard (#1173):
 // absolute, project-relative, or relpath:line at the cursor. With the

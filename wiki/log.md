@@ -1,6 +1,22 @@
 # Log
 
-<<<<<<< HEAD
+## 2026-08-31 (scratch from selection, promote scratch to a project file, #2339)
+
+- **`scratch.newFromSelection`** (`cmd+alt+shift+s`, palette + File menu)
+  creates a scratch holding the active selection and **inherits the source
+  file's extension**, so the language picker never opens. The store has no
+  whitelist, so an unregistered suffix is kept as-is; a source without one
+  falls back to `txt`, and no selection is a reported refusal rather than an
+  empty scratch. `NewScratchMsg` gained a `Content` field for it.
+- **`scratch.promote`** (`cmd+alt+shift+p`, palette + File menu, and `ctrl+p`
+  in the scratch manager) names a project path for a scratch and moves it
+  there: `scratch.Promote` refuses an occupied target, removes the source only
+  after the copy is durably written, and the move is announced as
+  `explorer.FileMovedMsg`, so the open tab keeps its history and saves to the
+  project file from then on.
+- Removed a stray `<<<<<<< HEAD` conflict marker left in this file by the
+  #2330 merge. See [scratch files](/architecture/scratch-files.md).
+
 ## 2026-08-30 (embedded JS/CSS intelligence in HTML via shadow documents, #2330)
 
 - **`<script>`/`<style>` bodies in HTML get real LSP features**: the html

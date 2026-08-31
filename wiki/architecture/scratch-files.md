@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Scratch Files
-description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette or generated as synthetic test data in nine formats, managed from a floating manager and the explorer's Scratches section (open, rename, delete, change language), surviving restarts as ordinary files.
+description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette, from the active selection or generated as synthetic test data in nine formats, managed from a floating manager and the explorer's Scratches section (open, rename, delete, change language, promote to a project file), surviving restarts as ordinary files.
 resource: internal/scratch
 tags: [architecture, scratch, palette, languages, explorer, testdata]
-timestamp: 2026-08-28T12:00:00Z
+timestamp: 2026-08-31T12:00:00Z
 ---
 
 # Scratch Files
@@ -32,6 +32,8 @@ func FirstLine(path string) string // first non-empty line, capped read, "" if e
 func Delete(path string) error    // remove one scratch; refuses anything outside the dir
 func Rename(path, name string) (string, error) // rename inside the dir; both ends guarded
 func SetExt(path, ext string) (string, error)  // keep the stem, swap the extension (the language change)
+func IsScratch(path string) bool  // does this path lie directly in the store?
+func Promote(path, target string) error // move one scratch out of the store to target
 ```
 
 `Dir` mirrors `config.Discover`'s user-layer override, so a sandboxed IKE
@@ -75,6 +77,18 @@ scratch *is* renaming `scratch-1.txt` to `scratch-1.py`. It keeps the stem
 (a name that is all extension, `.env`, counts as the stem) and runs `Rename`,
 inheriting its guards — an existing target is refused, never overwritten.
 
+`Promote` (#2339) is the store's **exit**, and the only operation whose target
+lies outside it. The source is guarded like `Delete`'s (a file directly in the
+store); the target must lie *outside* the store, because moving a scratch to
+another scratch name is a `Rename`, not a promotion; an existing target is
+refused rather than overwritten, and missing parent directories are created.
+The move is an `os.Rename` when the filesystem allows it and a copy-flush-unlink
+otherwise — the store lives under the user state dir and the project tree may
+sit on a different device — with the source removed **only after** the copy is
+durably written, so a failed write can never leave a store entry gone with no
+file to show for it. `IsScratch` is the location predicate the promote command
+gates on before it does anything.
+
 ## Creating (#351, #1223)
 
 Command family, rebuilt on every registry query (`Capabilities` is lazy) so
@@ -94,7 +108,32 @@ late-registered languages appear without ordering constraints:
 
 The handler creates via the store and opens through the standard funnel
 (`openPath`, absolute path): the new scratch lands as a focused tab with
-highlighting/LSP live.
+highlighting/LSP live. `NewScratchMsg` carries an optional **content** since
+#2339; an empty one keeps the language-template seeding above.
+
+### From the active selection (#2339)
+
+`scratch.newFromSelection` ("New Scratch from Selection",
+`cmd+alt+shift+s`, palette + File menu) skips both prompts of the flow above:
+the content is the **active selection** and the extension is **inherited from
+the file it came from**, because a selection already decides its own language.
+The four-step "copy, create, pick a language, paste" is the case this exists
+for.
+
+- The selection is `activeSelectionText` (`internal/app/selection.go`) — the
+  same seam Find in Path prefills from, so a selection in a diff pane or a
+  terminal works too; `internal/app/scratch_from_selection.go` walks those very
+  panes in the same order for the *extension*, so the suffix always belongs to
+  the buffer the text came from.
+- **No whitelist.** The store takes any extension, so a selection out of a
+  `.tf`, a `.bazel` or an in-house suffix with no picker row still produces a
+  scratch of that suffix — the only answer that keeps the scratch classified
+  like its source. A source with no extension at all (an untyped untitled
+  buffer, a `Dockerfile`) falls back to `txt`; a typed file-less buffer (#2033)
+  lends its synthetic language name's extension.
+- **No selection is a refusal, not an empty file**: the command says "scratch:
+  select some text first" rather than creating a scratch that is
+  indistinguishable from a lost selection.
 
 ## Test-data generator (#2134)
 
@@ -291,6 +330,7 @@ type-ahead:
 | `enter` | open the scratch (closes the manager) |
 | `ctrl+r` / `f2` | rename — the prompt is prefilled with the current name |
 | `ctrl+l` | change language — a filterable list of the registered languages |
+| `ctrl+p` | promote to a project file (closes the manager, #2339) |
 | `ctrl+d` / `delete` | delete, after a confirmation |
 | `esc` | clear the query, walk a step back, then close |
 
@@ -309,10 +349,52 @@ a deleted scratch's tab closes. After each mutation the list reloads and the
 cursor stays on the file that was acted on, and the explorer's Scratches
 section is refreshed.
 
+`ctrl+p` is the one action that **leaves** the manager rather than adding a
+step to it: the scratch is on its way out of the store, so the manager closes
+and hands its marked row to `scratch.promote`'s own prompt below.
+
 **Reachable from the creation flow**: the `scratch.new` language picker carries
 an "Open existing scratch…" row (sorted last, so it never displaces a
 language) that runs `scratch.manage` — "new scratch" is where one notices the
 wanted scratch already exists.
+
+## Promoting a scratch to a project file (#2339)
+
+The counterpart of creation: a scratch that turned into something worth keeping
+gets a real path. Before, the manager could rename, delete and re-language a
+scratch but never let it leave, so the last step of "quick experiment → actual
+code" was a manual copy through the file system.
+
+`scratch.promote` ("Promote Scratch to File…", `cmd+alt+shift+p`, palette +
+File menu, and the manager's `ctrl+p`) names the subject first: the scratch the
+manager marked, else the **focused editor's file** — which has to be a scratch,
+since promoting anything else is not a thing the command can mean, and it says
+so for a project file.
+
+The target-path prompt (`internal/app/scratch_promote.go`) is the [untitled
+save-as prompt](./editor.md)'s twin (#730): one line of path input, relative to
+the project root unless absolute, `enter` accepts, `esc` cancels, prefilled with
+the scratch's own file name. It is a separate state rather than a reuse of the
+save-as one because the two act on different things — save-as *binds an unnamed
+buffer*, promote *moves a named file that need not even be open*, which is the
+manager's case.
+
+Accepting, in order:
+
+1. **An existing target is refused** with `file exists: …` on the error line
+   and the prompt stays open — the same no-clobber rule save-as follows.
+2. An open, **dirty** buffer on the scratch is flushed first, so the promoted
+   file carries what is on screen rather than the last written state.
+3. `scratch.Promote` moves the file, source-removed-last (see the store above),
+   so a write error leaves the scratch and the tab untouched with the store's
+   own message on the error line.
+4. The move is announced as `explorer.FileMovedMsg` — the very message the
+   manager's rename emits — so open tabs and deferred ones re-point through
+   `followMovedFile`, the buffer keeps its undo history, the watcher follows,
+   bookmarks re-key and the tab title updates. **Saving after a promote writes
+   to the project file, not into the store.** The explorer's Scratches section
+   is refreshed (one row less) and the project tree picks the new file up
+   through its watcher like any other externally created file.
 
 ## The explorer's Scratches section (#1963)
 

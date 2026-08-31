@@ -454,6 +454,12 @@ var jetbrainsRows = []row{
 	// Test-data wizard (#2134): the scratch family's third chord, one modifier
 	// beyond cmd+shift+n's new scratch file — the wizard writes one too.
 	{"cmd+alt+shift+n", "scratch.generate", "Generate test data", Global, "Scratch files (#2305)"},
+	// The scratch store's two connections to the everyday work flow (#2339).
+	// Both keep the family's cmd+alt+shift layer but spell out what they act
+	// on rather than continuing the "…+n" run: n is "new scratch file" twice
+	// over already, and these two are "from the selection" and "promote".
+	{"cmd+alt+shift+s", "scratch.newFromSelection", "New scratch from selection", Global, "Scratch files (#2339)"},
+	{"cmd+alt+shift+p", "scratch.promote", "Promote scratch to file", Global, "Scratch files (#2339)"},
 	// JetBrains' Show Diff is cmd+d, taken here by editor.duplicateLine, so
 	// the diff-against-HEAD lands one modifier away on the free cmd+alt+d.
 	{"cmd+alt+d", "vcs.diff", "Diff file against HEAD", Global, "VCS (#2305)"},
