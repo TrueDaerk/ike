@@ -78,6 +78,12 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.increment", "Increment Number", "increment", "ctrl+a"),
 			action("editor.decrement", "Decrement Number", "decrement", "ctrl+x"),
 			action("editor.toggleValue", "Toggle Value Under Caret", "toggle_value", "g!"),
+			// Escape / unescape the selection (#2338): the writing direction
+			// of the #1620 escape decoding — the selection (or the string
+			// literal under the caret) is rewritten in the buffer language's
+			// escape form, and back.
+			action("editor.escapeSelection", "Escape Selection as Unicode", "escape_selection", ""),
+			action("editor.unescapeSelection", "Unescape Selection", "unescape_selection", ""),
 			// JSON/YAML path breadcrumb (#1660): the status line shows where
 			// the caret sits, these copy it — plain, or as an expression the
 			// matching CLI tool takes.

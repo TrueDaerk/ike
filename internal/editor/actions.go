@@ -765,6 +765,13 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		}
 		m.toggleValue()
 		m.scroll()
+	// Escape / unescape the selection (#2338): the rewriting counterpart of
+	// the #1620 decoding layer — the buffer really changes, in the escape
+	// dialect of its language.
+	case "escape_selection":
+		return m, m.escapeSelection(false)
+	case "unescape_selection":
+		return m, m.escapeSelection(true)
 	// JSON/YAML path at the caret (#1660), in the three copyable flavours.
 	case "copy_doc_path":
 		return m, m.copyDocPath(DocPathDotted)

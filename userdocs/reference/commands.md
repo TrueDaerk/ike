@@ -281,6 +281,7 @@ bring their own.
 | Decode JWT at Caret | `editor.decodeJWT` | — | — | `editor` pane |
 | Decrement Number | `editor.decrement` | — | `ctrl+x` | `editor` pane |
 | Duplicate Line | `editor.duplicateLine` | `cmd+d` | — | `editor` pane |
+| Escape Selection as Unicode | `editor.escapeSelection` | `cmd+alt+shift+e` | — | `editor` pane |
 | Explain Concealed Value | `editor.explainConceal` | — | `g?` | `editor` pane |
 | Find in File | `editor.find` | `cmd+f` | `/` | `editor` pane |
 | Close Fold | `editor.fold.close` | — | `zc` | `editor` pane |
@@ -305,6 +306,7 @@ bring their own.
 | Undo | `editor.undo` | `cmd+z` | `u` | `editor` pane |
 | Undo (Chronological) | `editor.undoChrono` | — | `g-` | `editor` pane |
 | Undo Tree | `editor.undoTree` | — | — | `editor` pane |
+| Unescape Selection | `editor.unescapeSelection` | `cmd+alt+shift+u` | — | `editor` pane |
 | Save File | `editor.write` | `cmd+s` | `:w` | `editor` pane |
 | Save and Close | `editor.write_quit` | — | `:wq` | `editor` pane |
 | Encoding: ISO 8859-1 | `file.setEncoding.latin1` | — | — | `editor` pane |

@@ -75,6 +75,12 @@ type UnicodeDialect struct {
 	StringPrefixes bool
 	// Brace enables the ES6/PHP \u{X…} form, one to six hex digits.
 	Brace bool
+	// Long records the eight-digit \UXXXXXXXX form — Go, Python, YAML and
+	// TOML have it, JS/TS, JSON and PHP do not. Only the *encoder*
+	// (encode.go) reads it, to pick the spelling for a code point above the
+	// BMP; decoding stays deliberately lenient and resolves a \U wherever it
+	// finds one, since a file may well have been escaped by another tool.
+	Long bool
 	// Hex enables \xNN, and only where it names a code point (Python, JS/TS,
 	// YAML). In Go and PHP a \xNN is a raw byte, so "\xc3\xbc" is one ü in
 	// two escapes — decoding them one by one would render "Ã¼" and lie.
@@ -87,7 +93,7 @@ type UnicodeDialect struct {
 var (
 	// UnicodeGo: "…" strings and '…' runes take \uXXXX and \UXXXXXXXX;
 	// `…` is raw; \xNN is a byte.
-	UnicodeGo = UnicodeDialect{EscapeQuotes: `"'`, RawQuotes: "`"}
+	UnicodeGo = UnicodeDialect{EscapeQuotes: `"'`, RawQuotes: "`", Long: true}
 	// UnicodeJSON: only "…" exists, and only \uXXXX. The single quote stays
 	// an escape quote for the JSONC/JSON5 dialects that allow it.
 	UnicodeJSON = UnicodeDialect{EscapeQuotes: `"'`}
@@ -98,7 +104,8 @@ var (
 	// raw, \xNN is a code point. \N{NAME} is deliberately absent — see
 	// namedEscapeNote.
 	UnicodePython = UnicodeDialect{
-		EscapeQuotes: `"'`, RawEscapesQuote: true, StringPrefixes: true, Hex: true,
+		EscapeQuotes: `"'`, RawEscapesQuote: true, StringPrefixes: true,
+		Hex: true, Long: true,
 	}
 	// UnicodePHP: only "…" (and heredocs, which are multi-line and thus out
 	// of reach) processes escapes; '…' does not, though a backslash there
@@ -110,10 +117,10 @@ var (
 	// UnicodeYAML: only the double-quoted scalar processes escapes; the
 	// single-quoted one escapes nothing (it doubles '' instead). YAML's \xNN
 	// names a code point.
-	UnicodeYAML = UnicodeDialect{EscapeQuotes: `"`, RawQuotes: `'`, Hex: true}
+	UnicodeYAML = UnicodeDialect{EscapeQuotes: `"`, RawQuotes: `'`, Hex: true, Long: true}
 	// UnicodeTOML: basic strings "…" take \uXXXX and \UXXXXXXXX; literal
 	// strings '…' take nothing, and TOML 1.0 has no \xNN.
-	UnicodeTOML = UnicodeDialect{EscapeQuotes: `"`, RawQuotes: `'`}
+	UnicodeTOML = UnicodeDialect{EscapeQuotes: `"`, RawQuotes: `'`, Long: true}
 )
 
 // namedEscapeNote records why Python's \N{LATIN SMALL LETTER A} stays raw:

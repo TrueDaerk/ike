@@ -155,6 +155,7 @@ Active when an editor pane has focus.
 | Diff HTTP response against previous run | `cmd+shift+d` | `ctrl+shift+d` | `http.diffPreviousRun` |
 | Diff HTTP response against previous run | `ctrl+shift+d` | `ctrl+shift+d` | `http.diffPreviousRun` |
 | Duplicate line(s) | `cmd+d` | `ctrl+d` | `editor.duplicateLine` |
+| Escape selection as unicode | `cmd+alt+shift+e` | `ctrl+alt+shift+e` | `editor.escapeSelection` |
 | Extend selection | `alt+up` | `alt+up` | `editor.selection.extend` |
 | File structure | `cmd+f12` | `ctrl+f12` | `lsp.documentSymbols` |
 | Filter followed output | `alt+shift+g` | `alt+shift+g` | `view.followFilter` |
@@ -205,6 +206,7 @@ Active when an editor pane has focus.
 | Type hierarchy | `ctrl+h` | `ctrl+h` | `lsp.typeHierarchy` |
 | Undo | `cmd+z` | `ctrl+z` | `editor.undo` |
 | Undo | `ctrl+z` | `ctrl+z` | `editor.undo` |
+| Unescape selection | `cmd+alt+shift+u` | `ctrl+alt+shift+u` | `editor.unescapeSelection` |
 
 ## Explorer
 
