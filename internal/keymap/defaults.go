@@ -276,6 +276,14 @@ var jetbrainsRows = []row{
 	// back down the same ladder.
 	{"alt+up", "editor.selection.extend", "Extend selection", Editor, "Selection (#1912)"},
 	{"alt+down", "editor.selection.shrink", "Shrink selection", Editor, "Selection (#1912)"},
+	// Escape / unescape the selection (#2338): "e" escapes, "u" unescapes,
+	// sharing the cmd+alt+shift layer of the other selection-rewriting
+	// commands. The plain cmd+alt+e/u layer is left free — it folds onto
+	// ctrl+alt+e off macOS, where the jq/yq query view already sits. Both are
+	// editor-scoped and act on the selection or the literal under the caret;
+	// the palette is the delivered fallback (matrix.go).
+	{"cmd+alt+shift+e", "editor.escapeSelection", "Escape selection as unicode", Editor, "Escapes (#2338)"},
+	{"cmd+alt+shift+u", "editor.unescapeSelection", "Unescape selection", Editor, "Escapes (#2338)"},
 	// Rendered markdown preview (#62): single chord since #711 (was cmd+k m).
 	{"cmd+alt+m", "markdown.preview", "Markdown preview", Editor, "Markdown preview (#62)"},
 	// TODO index (#61): cmd+6 is JetBrains' TODO tool-window chord.
