@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Picker Speed Search
-description: The shared type-ahead every modal picker narrows with — printable keys filter the visible rows live, space stays the toggle, backspace peels the query before it falls through, and esc clears the query before it closes the modal.
+description: The shared type-ahead every modal picker narrows with — printable keys filter the visible rows live, a running query edits like a one-line input through ui.EditKey (caret, word motions, word deletion), space stays the toggle, backspace peels the query before it falls through, and esc clears the query before it closes the modal.
 resource: internal/ui/speedsearch.go
 tags: [architecture, ui, lists, navigation, keys, reusable, pickers]
 timestamp: 2026-08-25T12:00:00Z
@@ -25,16 +25,32 @@ A picker embeds one `ui.SpeedSearch`, resets it when it opens, and asks it for
 the rows it should render. The key rules exist because the pickers already
 spent most of their keyboard:
 
-- **Printable keys are the query.** They append to it and re-narrow the rows
-  live. This is why a speed-searchable picker runs on `ui.NavDefault` rather
-  than `NavFull`: `j`/`k`/`g`/`G` would eat the query's first rune.
+- **Printable keys are the query.** They insert at the caret and re-narrow the
+  rows live. This is why a speed-searchable picker runs on `ui.NavDefault`
+  rather than `NavFull`: `j`/`k`/`g`/`G` would eat the query's first rune.
+- **A running query is a text input** (#2360). It carries a caret and routes
+  every editing key through [`ui.EditKey`](/architecture/text-input.md), so it
+  has `left`/`right`, the word motions (`alt+left`/`ctrl+left`,
+  `alt+right`/`ctrl+right`), word deletion (`alt+backspace`/`ctrl+w`) and
+  `super+backspace` — the same semantics as every other single-line field in
+  IKE. Before #2360 the query was append-only and rejected every modifier
+  chord, so a user deleting a word inside a picker had the chord fall through
+  to the keymap and get logged as *unbound*.
+- **An idle search only starts on a printable rune.** With no query running,
+  every other key — `backspace`, the arrows, the chords — belongs to the
+  picker. That is what keeps the pickers' own `backspace` meaning reachable.
 - **`space` is never consumed.** Every picker toggles the row under the cursor
   with it, and a type-ahead that stole the toggle would be a bad trade.
+- **The host keeps its list keys even mid-query.** Besides `space`, a running
+  query leaves `delete` (the pickers' "clear this row / this selection") and
+  `home`/`end` plus their `super+arrow` aliases (the list extremes, routed
+  through [`ui.ListNav`](/architecture/list-navigation.md)) alone — a
+  type-ahead must not swallow the way out of a long list.
 - **`backspace` peels one rune, then falls through.** While a query is running
-  it deletes its last rune; once the query is empty the picker gets the key
-  back and does its own thing with it (the mutation pickers clear the whole
-  selection, the filter overlay clears the row's section). So both meanings
-  stay reachable, in the order a user needs them.
+  it deletes the rune before the caret; once the query is empty the picker
+  gets the key back and does its own thing with it (the mutation pickers clear
+  the whole selection, the filter overlay clears the row's section). So both
+  meanings stay reachable, in the order a user needs them.
 - **`esc` clears before it closes.** The first press drops the query and
   restores every row, the second closes the modal. `EscClears()` reports which
   of the two happened, so the caller never has to track it.
@@ -58,13 +74,14 @@ spent most of their keyboard:
 type SpeedSearch struct{ /* … */ }          // the zero value is idle
 
 (*SpeedSearch) Query() string               // the typed text, "" when idle
+(*SpeedSearch) Cursor() int                 // the caret, a rune index into the query
 (*SpeedSearch) Active() bool                // is a query narrowing the rows?
 (*SpeedSearch) Reset()                      // drop it (call when a modal opens)
 (*SpeedSearch) EscClears() bool             // esc's first job; false = close the modal
 (*SpeedSearch) Key(msg) (handled, changed bool)
 (*SpeedSearch) Matches(text string) bool
 (*SpeedSearch) Filter(rows []string) []int  // matching indices, in row order
-(*SpeedSearch) Hint() string                // "/bug▏" for the modal's heading
+(*SpeedSearch) Hint() string                // "/bug▏" for the modal's heading, ▏ at the caret
 
 Narrow[T](s, items []T, label func(T) string) []T
 NarrowStrings(s, rows []string) []string
@@ -84,7 +101,10 @@ Two things a speed-searchable picker owes its user:
 
 - **The query is visible.** The heading carries `Hint()` (`Labels of #12
   /bug▏`) — the one line every picker already has, so no layout changes with
-  the query appearing.
+  the query appearing. The `▏` sits at the caret, not always at the end, and
+  the heading keeps the hint even when the query matches nothing (#2360): with
+  a movable caret the placeholder row's bare text no longer says where the
+  next rune would land.
 - **The footer says what typing does.** It reads `type to narrow · space
   toggle · …` while idle and switches to `typing narrows · backspace deletes ·
   … · esc clears the search` while a query runs.

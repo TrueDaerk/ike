@@ -1040,7 +1040,10 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 	case ovLabelEdit, ovAssignEdit:
 		rows := m.editViewRows()
 		if len(rows) == 0 {
-			return m.editorTitle(), []string{lipgloss.NewStyle().Faint(true).
+			// The heading keeps the query even when nothing matches: since
+			// the type-ahead has a movable caret (#2360), the placeholder's
+			// bare text no longer says where the next rune would land.
+			return m.editorTitle() + m.searchSuffix(), []string{lipgloss.NewStyle().Faint(true).
 				Render("(nothing matches " + m.ovSearch.Query() + ")")}
 		}
 		chips := map[string]forge.Label{}
