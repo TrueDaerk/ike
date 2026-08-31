@@ -6,7 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
-	"ike/internal/lang"
 	"ike/internal/palette"
 	"ike/internal/plugin"
 	"ike/internal/scratch"
@@ -36,14 +35,14 @@ func scratchCommands() []plugin.Command {
 	// The test-data generator (#2134) is a scratch producer too, so its
 	// command family is built alongside the creators.
 	cmds = append(cmds, generateCommands()...)
-	for _, l := range lang.All() {
-		if len(l.Extensions) == 0 {
-			continue
-		}
+	// One command per offered row, not per language: a dialect that shares a
+	// language id (JavaScript inside "typescript", #2333) needs its own
+	// no-prompt creator too, or the picker row would have nothing to run.
+	for _, r := range scratchLangRows() {
 		cmds = append(cmds, appCommand(
-			"scratch.new."+l.ID,
-			"New Scratch File: "+langTitle(l.ID),
-			NewScratchMsg{Ext: l.Extensions[0]},
+			r.CmdID,
+			"New Scratch File: "+r.Title,
+			NewScratchMsg{Ext: r.Ext},
 		))
 	}
 	return cmds
@@ -93,11 +92,7 @@ func scratchEntries() []palette.ScratchEntry {
 		if title == "" {
 			title = scratchEmptyTitle
 		}
-		langName := "Plain Text"
-		if l, ok := lang.ByPath(e.Path); ok {
-			langName = langTitle(l.ID)
-		}
-		out[i] = palette.ScratchEntry{Path: e.Path, Title: title, Lang: langName}
+		out[i] = palette.ScratchEntry{Path: e.Path, Title: title, Lang: scratchRowTitle(e.Path)}
 	}
 	return out
 }
