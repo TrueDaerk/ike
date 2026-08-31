@@ -307,6 +307,7 @@ func (c *Config) Flat() map[string]string {
 	put("perf.hud_interval_ms", c.Perf.HUDIntervalMs)
 	put("perf.hud_history_seconds", c.Perf.HUDHistorySeconds)
 	put("perf.watchdog_seconds", c.Perf.WatchdogSeconds)
+	put("perf.trace_log", c.Perf.TraceLog)
 	put("remote.max_fetch_mb", c.Remote.MaxFetchMB)
 	put("screenshot.directory", c.Screenshot.Directory)
 	put("forge.poll_interval_seconds", c.Forge.PollIntervalSeconds)

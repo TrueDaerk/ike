@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-08-31T00:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -1284,6 +1284,14 @@ dispatch's `context.CancelFunc`:
 
 Statusline indicator, inline marker, pane marker and tick all clear on
 response, error and cancel alike.
+
+Every flight also leaves a lifecycle trail in the local usage telemetry
+(#2348): an `op`/`http.flight` `start` event — flushed to disk before the
+exchange departs — and a matching `ok`/`error`/`canceled` end event carrying
+duration, status class and the streaming flag; structural only, never the
+URL, key, headers or body. A start without an end is the "dispatch never came
+back" marker a freeze investigation looks for (see
+[Usage Telemetry](/architecture/usage-telemetry.md)).
 
 ## Response history (#1251)
 

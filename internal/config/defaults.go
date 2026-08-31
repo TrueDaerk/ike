@@ -318,6 +318,10 @@ func defaults() *Config {
 			// that a frozen session leaves its goroutine dump within the
 			// first moments of the hang. 0 opts out.
 			WatchdogSeconds: 15,
+			// The update-loop trace (#2348) is a diagnosis tool, not a
+			// journal: off, it costs one config load per pass and nothing
+			// else.
+			TraceLog: false,
 		},
 		Remote: Remote{
 			// 64 MiB covers logs, configs and most artifacts without letting

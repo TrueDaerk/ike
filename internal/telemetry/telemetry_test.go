@@ -121,12 +121,17 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 	r.Command("a.b", SourcePalette)
 	r.Key("ctrl+x", "editor", "", "unbound")
 	r.Layout("tab.switch", nil)
+	r.Session("0.1.0", "darwin", "ab12cd34ef56")
+	r.Op("http.flight", "ok", map[string]string{"ms": "120", "class": "2xx", "stream": "false"})
 	r.Close()
 
 	allowed := map[string]bool{
 		"id": true, "source": true, // command
 		"chord": true, "context": true, "command": true, "status": true, // key
 		"op": true, "zone": true, "direction": true, // layout
+		"app": true, "os": true, "project": true, // session (#2348)
+		"passes": true, // heartbeat (#2348)
+		"phase": true, "ms": true, "class": true, "stream": true, // op (#2348)
 	}
 	for _, ev := range readSession(t, dir) {
 		for k := range ev.Data {
@@ -359,6 +364,170 @@ func TestPendingFocusEventsAreBounded(t *testing.T) {
 	evs := readSession(t, dir)
 	if len(evs) != maxPending+1 {
 		t.Fatalf("want %d events (capped pending plus the real one), got %d", maxPending+1, len(evs))
+	}
+}
+
+// The session marker (#2348) is deferred like pane.focus: alone it must not
+// create a file (#2318), but it lands first once a meaningful event arrives.
+func TestSessionMarkerDeferredUntilMeaningful(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.Session("0.1.0", "darwin", "ab12cd34ef56")
+	r.Flush()
+	if files := sessionFiles(t, dir); len(files) != 0 {
+		t.Fatalf("lone session marker created files: %v", files)
+	}
+	r.Command("editor.save", SourceKeybind)
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != 2 {
+		t.Fatalf("want session + command, got %v", evs)
+	}
+	if evs[0].Type != TypeSession || evs[0].Data["app"] != "0.1.0" ||
+		evs[0].Data["os"] != "darwin" || evs[0].Data["project"] != "ab12cd34ef56" {
+		t.Fatalf("session marker wrong: %v", evs[0])
+	}
+	if evs[1].Type != TypeCommand {
+		t.Fatalf("meaningful event wrong: %v", evs[1])
+	}
+}
+
+// The session marker survives the pending trim (#2348): a long stretch of
+// deferred focus events may not evict the attribution anchor.
+func TestSessionMarkerSurvivesPendingTrim(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.Session("0.1.0", "linux", "ab12cd34ef56")
+	for i := 0; i < maxPending*2; i++ {
+		r.Layout("pane.focus", nil)
+	}
+	r.Command("editor.save", SourceKeybind)
+	r.Close()
+
+	evs := readSession(t, dir)
+	if evs[0].Type != TypeSession {
+		t.Fatalf("session marker evicted; first event: %v", evs[0])
+	}
+	if len(evs) != maxPending+1 {
+		t.Fatalf("want %d events (bounded pending incl. marker, plus the real one), got %d", maxPending+1, len(evs))
+	}
+}
+
+// The heartbeat (#2348) starts with the session file, records what the
+// snapshot returns and skips nil snapshots — driven entirely through the
+// fake-ticker seam, no sleeping.
+func TestHeartbeatRecordsSnapshotPerTick(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	const hbInterval = 42 * time.Millisecond
+	hbTick := make(chan time.Time)
+	r.newTicker = func(d time.Duration) (<-chan time.Time, func()) {
+		if d == hbInterval {
+			return hbTick, func() {}
+		}
+		return make(chan time.Time), func() {} // writer's flush ticker: never fires
+	}
+	beat := 0
+	r.SetHeartbeat(hbInterval, func() map[string]string {
+		beat++
+		if beat == 2 {
+			return nil // an idle snapshot records nothing
+		}
+		return map[string]string{"passes": "7"}
+	})
+	r.Command("editor.save", SourceKeybind) // opens the file, spawns the heartbeat
+	hbTick <- time.Now()
+	hbTick <- time.Now() // the nil snapshot
+	hbTick <- time.Now()
+	// The third tick's send rendezvoused, but its record may still be in
+	// flight; a fourth rendezvous proves the loop completed the third pass.
+	hbTick <- time.Now()
+	r.Close()
+
+	var beats []Event
+	for _, ev := range readSession(t, dir) {
+		if ev.Type == TypeHeartbeat {
+			beats = append(beats, ev)
+		}
+	}
+	if len(beats) < 2 {
+		t.Fatalf("want at least 2 heartbeat events, got %v", beats)
+	}
+	for _, b := range beats {
+		if b.Data["passes"] != "7" {
+			t.Fatalf("heartbeat payload wrong: %v", b)
+		}
+	}
+}
+
+// A heartbeat before the session file exists neither creates the file nor
+// pollutes the pending buffer (#2348) — and Close ends the goroutine cleanly.
+func TestHeartbeatNeverStartsASession(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.SetHeartbeat(time.Minute, func() map[string]string {
+		return map[string]string{"passes": "1"}
+	})
+	// No meaningful event: the heartbeat goroutine never spawns, so a direct
+	// record of its type must be dropped, not pended.
+	r.record(TypeHeartbeat, map[string]string{"passes": "1"})
+	r.Command("editor.save", SourceKeybind)
+	r.Close()
+
+	for _, ev := range readSession(t, dir) {
+		if ev.Type == TypeHeartbeat {
+			t.Fatalf("pre-session heartbeat leaked into the file: %v", ev)
+		}
+	}
+}
+
+// FlushSoon puts already-enqueued events on disk without blocking and without
+// an explicit Flush/Close (#2348) — the guarantee that the events leading up
+// to a long-running operation are on the platter before it starts.
+func TestFlushSoonWritesWithoutBlocking(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.FlushInterval = time.Hour // the periodic flush must not be the one that saves us
+	r.Op("http.flight", "start", nil)
+	r.FlushSoon()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		files := sessionFiles(t, dir)
+		if len(files) == 1 {
+			raw, err := os.ReadFile(filepath.Join(dir, files[0]))
+			if err == nil && strings.Contains(string(raw), "http.flight") {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("FlushSoon did not put the enqueued event on disk")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	r.Close()
+}
+
+// Op events carry the operation id, the phase and the structural detail
+// (#2348).
+func TestOpEventShape(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.Op("http.flight", "start", nil)
+	r.Op("http.flight", "ok", map[string]string{"ms": "120", "class": "2xx", "stream": "true"})
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != 2 {
+		t.Fatalf("want 2 op events, got %v", evs)
+	}
+	if evs[0].Type != TypeOp || evs[0].Data["id"] != "http.flight" || evs[0].Data["phase"] != "start" {
+		t.Fatalf("start op wrong: %v", evs[0])
+	}
+	end := evs[1]
+	if end.Data["phase"] != "ok" || end.Data["ms"] != "120" || end.Data["class"] != "2xx" || end.Data["stream"] != "true" {
+		t.Fatalf("end op wrong: %v", end)
 	}
 }
 

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Performance & Diagnostics
-description: Idle-behavior rules (who may wake the render loop, and how often), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
+description: Idle-behavior rules (who may wake the render loop, and how often), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the opt-in update-loop trace log, the freeze-triage procedure, and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
-tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup]
-timestamp: 2026-08-28T00:00:00Z
+tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze]
+timestamp: 2026-08-31T00:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -210,6 +210,57 @@ threshold sits far above the 200ms slow-update log line, which keeps naming
 the merely-slow passes. The monitor's own cadence is threshold-derived
 (50ms–1s) and never touches the render loop — it is a plain sleeping
 goroutine, not a `tea.Tick`.
+
+**What the watchdog does not see (#2348).** It measures Update/View passes
+and nothing else. A freeze in the terminal input reader, the renderer's
+terminal write, or the terminal emulator itself leaves the loop idle-but-
+healthy — no stall, no dump, no `debug.log` line — which is exactly the
+signature of the #2348 incident. Its dumps also land in the *project's* state
+dir, so without knowing which project a session ran in there is nothing to
+find. Both gaps are covered by telemetry now: the `session` event's project
+token attributes a log to a project, and the `heartbeat` event's pass count
+is the loop-independent liveness stamp (see
+[Usage Telemetry](/architecture/usage-telemetry.md)).
+
+## The update-loop trace log (`perf.trace_log`, #2348)
+
+For "what is the IDE doing *right now*" during a live diagnosis, the opt-in
+trace (Settings UI, Performance HUD page; default off) appends one line per
+processed message to `.ike/trace.log` (or `IKE_CONFIG_DIR/trace.log`): the
+timestamp, the message's Go type and the number of open HTTP flights —
+structure only, never key text or content. It writes through a held file
+handle (`heldLog`, the #2176 transcript mechanism) so even a message flood
+pays one `write(2)` per line, and costs literally nothing while off (one
+config load per pass). It is a diagnosis tool, not a journal: the file grows
+with every keystroke, so switch it off when done.
+
+## Diagnosing a freeze (#2348)
+
+The evidence trail, in the order worth checking:
+
+1. **The telemetry session file** (`~/.ike/telemetry/*.jsonl`, newest): the
+   last `heartbeat` brackets when the process stopped working to within 10s.
+   Heartbeats that continue with a frozen `passes` count → the update loop is
+   stuck; with an advancing count → the loop is fine and the freeze sits
+   outside it (input reader, renderer, terminal); heartbeats stopping dead →
+   the process ended (crash, kill, exit). An `op` `http.flight` start without
+   its end phase means a dispatch never came back.
+2. **The project's state dir** — found via the `session` event's `project`
+   token (hash candidate roots to match): `debug.log` for watchdog stall/
+   recovery lines and slow-update entries, `ike-watchdog-*-goroutines.txt`
+   for the full stack dump of a loop stall.
+3. **If the session is still hung**: `SIGUSR1` (dump below) or, with
+   `IKE_PPROF` set, the live pprof endpoint.
+4. **If it reproduces**: flip `perf.trace_log` on and read `trace.log` up to
+   the freeze — the last line names the message the loop took on last.
+
+The #2348 incident itself (frozen right after an `http.run`, telemetry ending
+with the dispatch, no watchdog dump anywhere): the dispatch path was audited
+and cannot wedge the update loop — the exchange runs on its own goroutine,
+every stream message re-arms exactly one channel read, and the coalescer's
+mutex-held emit pins chunk-before-final ordering — so the silent watchdog
+points outside the loop (or to a project dir never located). The events above
+exist so the next occurrence answers this in minutes.
 
 ## The #2163 freeze audit
 

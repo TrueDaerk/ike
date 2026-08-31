@@ -183,6 +183,12 @@ type Perf struct {
 	// goroutine's stack to the state dir, so a frozen session leaves
 	// evidence. 0 disables the watchdog (the opt-out).
 	WatchdogSeconds int `toml:"watchdog_seconds"`
+	// TraceLog is the opt-in update-loop trace (#2348): every message the
+	// loop processes leaves one line (message type and open HTTP flight
+	// count — structure only, never content) in the state dir's trace.log,
+	// so "what is the IDE doing right now" is answerable while chasing a
+	// freeze. Off by default; on, the cost is one appended line per message.
+	TraceLog bool `toml:"trace_log"`
 }
 
 // SnippetEntry is one user live template ([[snippets]], #1152). Trigger is the

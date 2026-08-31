@@ -38,7 +38,14 @@ import (
 // "command" is exclusively user-triggered dispatches (keybind/palette/menu/
 // mouse) and a v1 reader that still expects "internal" under "command" must
 // check "v" first.
-const SchemaVersion = 2
+//
+// v3 (#2348): three diagnostic event types join — "session" (version, OS,
+// hashed project token), "heartbeat" (periodic liveness stamp carrying the
+// update-loop pass count) and "op" (lifecycle of a long-running operation:
+// start/ok/error/canceled with duration, status class, streaming flag). No
+// existing field changed meaning; the bump tells a reader that a log ending
+// without heartbeats predates them rather than evidencing a freeze.
+const SchemaVersion = 3
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
@@ -48,10 +55,13 @@ const defaultFlushInterval = 3 * time.Second
 
 // Event types.
 const (
-	TypeCommand  = "command"  // a user-triggered command was dispatched (keybind/palette/menu/mouse)
-	TypeInternal = "internal" // a command was dispatched internally (polling/background funnels), not by the user
-	TypeKey      = "key"      // a chord resolved, was blocked, or found no binding
-	TypeLayout   = "layout"   // a structural layout operation
+	TypeCommand   = "command"   // a user-triggered command was dispatched (keybind/palette/menu/mouse)
+	TypeInternal  = "internal"  // a command was dispatched internally (polling/background funnels), not by the user
+	TypeKey       = "key"       // a chord resolved, was blocked, or found no binding
+	TypeLayout    = "layout"    // a structural layout operation
+	TypeSession   = "session"   // session start / project switch: version, OS, hashed project token (#2348)
+	TypeHeartbeat = "heartbeat" // periodic liveness stamp with the update-loop pass count (#2348)
+	TypeOp        = "op"        // lifecycle of a long-running operation (#2348)
 )
 
 // Command sources.
@@ -107,6 +117,15 @@ type Recorder struct {
 	pending []*Event // low-signal events held until the file is opened
 	ch      chan envelope
 	done    chan struct{}
+
+	// Heartbeat (#2348): installed via SetHeartbeat before the first event,
+	// the goroutine spawns with the writer when the session file opens — an
+	// inert recorder never ticks. hbQuit/hbDone coordinate the shutdown with
+	// Close, which must not close ch while a heartbeat record is in flight.
+	hbInterval time.Duration
+	hbSnapshot func() map[string]string
+	hbQuit     chan struct{}
+	hbDone     chan struct{}
 }
 
 // envelope carries either an event or a flush request through the channel.
@@ -203,13 +222,76 @@ func (r *Recorder) Layout(op string, detail map[string]string) {
 	r.record(TypeLayout, d)
 }
 
+// Session records the session-start (or project-switch) marker (#2348): the
+// app version, the OS and a structural project token — a short hash, never a
+// clear-text path — so a later freeze analysis can tell which Ike, which
+// platform and which project state directory a log belongs to. Deferred like
+// pane.focus, so a launch that never records anything meaningful still leaves
+// no file (#2318).
+func (r *Recorder) Session(version, osName, project string) {
+	r.record(TypeSession, map[string]string{"app": version, "os": osName, "project": project})
+}
+
+// Op records one phase of a long-running operation's lifecycle (#2348): id
+// names the operation ("http.flight"), phase is "start", "ok", "error" or
+// "canceled", detail carries structural extras (duration in ms, status class,
+// streaming flag — never a URL, header or body).
+func (r *Recorder) Op(id, phase string, detail map[string]string) {
+	d := map[string]string{"id": id, "phase": phase}
+	for k, v := range detail {
+		d[k] = v
+	}
+	r.record(TypeOp, d)
+}
+
+// SetHeartbeat installs the periodic liveness stamp (#2348): every interval,
+// snapshot is asked for the heartbeat payload and a non-nil result lands as a
+// TypeHeartbeat event. The goroutine spawns only once the session file opens
+// (an inert recorder never ticks) and stops with Close. Must be called before
+// the first event; later calls are ignored.
+func (r *Recorder) SetHeartbeat(interval time.Duration, snapshot func() map[string]string) {
+	if r == nil || snapshot == nil || interval <= 0 {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.started || r.closed {
+		return
+	}
+	r.hbInterval, r.hbSnapshot = interval, snapshot
+}
+
+// heartbeat is the liveness goroutine: one event per tick, for as long as the
+// writer lives. Its record calls race Close by design, which is why Close
+// waits for hbDone before closing the event channel.
+func (r *Recorder) heartbeat() {
+	defer close(r.hbDone)
+	tick, stop := r.newTicker(r.hbInterval)
+	defer stop()
+	for {
+		select {
+		case <-r.hbQuit:
+			return
+		case <-tick:
+			if data := r.hbSnapshot(); data != nil {
+				r.record(TypeHeartbeat, data)
+			}
+		}
+	}
+}
+
 // startsSession reports whether an event is meaningful enough to create the
-// session file. Everything is, except a bare pane focus change: IKE emits one
+// session file. Everything is, except a bare pane focus change — IKE emits one
 // on startup when the session restore moves focus from the explorer to the
 // restored editor, so a launch that is immediately quit would otherwise leave
-// a ghost file holding that single event (#2318). Deferred events are not
-// lost — they are held in memory and written once a meaningful event arrives.
+// a ghost file holding that single event (#2318) — and the session marker
+// (#2348), which every launch emits and which must not resurrect exactly that
+// ghost file. Deferred events are not lost — they are held in memory and
+// written once a meaningful event arrives.
 func startsSession(typ string, data map[string]string) bool {
+	if typ == TypeSession {
+		return false
+	}
 	return !(typ == TypeLayout && data["op"] == "pane.focus")
 }
 
@@ -226,11 +308,23 @@ func (r *Recorder) record(typ string, data map[string]string) {
 		r.mu.Unlock()
 		return
 	}
+	if !r.started && typ == TypeHeartbeat {
+		// A heartbeat neither starts a session nor is worth holding: pending
+		// beats would only evict the deferred session marker (#2348).
+		r.mu.Unlock()
+		return
+	}
 	if !r.started && !startsSession(typ, data) {
 		// Hold it: this event alone must not create a file.
 		r.pending = append(r.pending, r.newEvent(typ, data))
 		if len(r.pending) > maxPending {
-			r.pending = r.pending[len(r.pending)-maxPending:]
+			// The session marker at index 0 survives the trim (#2348): it is
+			// the attribution anchor the whole file depends on.
+			if r.pending[0].Type == TypeSession {
+				r.pending = append(r.pending[:1], r.pending[len(r.pending)-maxPending+1:]...)
+			} else {
+				r.pending = r.pending[len(r.pending)-maxPending:]
+			}
 		}
 		r.mu.Unlock()
 		return
@@ -252,6 +346,13 @@ func (r *Recorder) record(typ string, data map[string]string) {
 		r.ch = make(chan envelope, 256)
 		r.done = make(chan struct{})
 		go r.run(f)
+		if r.hbSnapshot != nil {
+			// The liveness stamp starts with the session (#2348) — a recorder
+			// that never opens a file never ticks.
+			r.hbQuit = make(chan struct{})
+			r.hbDone = make(chan struct{})
+			go r.heartbeat()
+		}
 		// The deferred low-signal events precede this one in time, so they
 		// go in first — the log keeps its chronological order.
 		for _, p := range r.pending {
@@ -297,6 +398,28 @@ func (r *Recorder) Flush() {
 	<-ack
 }
 
+// FlushSoon asks the writer to put everything enqueued so far on disk without
+// waiting for it (#2348) — the call before a long-running operation starts, so
+// the events leading up to a potential hang are on the platter while the
+// answer is still out. Never blocks: a full channel drops the request, the
+// periodic flush covers it a few seconds later.
+func (r *Recorder) FlushSoon() {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	if !r.started || r.closed {
+		r.mu.Unlock()
+		return
+	}
+	ch := r.ch
+	r.mu.Unlock()
+	select {
+	case ch <- envelope{ack: make(chan struct{})}:
+	default: // full buffer: the ticker flush is close enough
+	}
+}
+
 // Close flushes and ends the writer. Further Record calls are dropped.
 func (r *Recorder) Close() {
 	if r == nil {
@@ -309,7 +432,15 @@ func (r *Recorder) Close() {
 	}
 	r.closed = true
 	started, ch, done := r.started, r.ch, r.done
+	hbQuit, hbDone := r.hbQuit, r.hbDone
 	r.mu.Unlock()
+	// The heartbeat goroutine ends first (#2348): its in-flight record call —
+	// if any — completes before the channel closes, so the send can never hit
+	// a closed channel.
+	if hbQuit != nil {
+		close(hbQuit)
+		<-hbDone
+	}
 	if !started {
 		return
 	}

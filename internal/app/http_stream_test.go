@@ -4,7 +4,51 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 )
+
+// TestHTTPStreamPumpDrainsProducer pins the #2348 freeze-audit invariant: the
+// update loop's event pump reads exactly one next event per stream message it
+// processes, all the way to the finalizing HTTPResponseMsg — so a producer
+// pushing far more chunks than the channel buffers is never left blocked on a
+// send (the wedge the audit looked for). A break in the chain (a handler that
+// stops returning nextHTTPEvent) fails this test by leaving the producer
+// goroutine stuck.
+func TestHTTPStreamPumpDrainsProducer(t *testing.T) {
+	m := httpApp(t)
+	events := make(chan tea.Msg, 4) // far smaller than the chunk count: backpressure is real
+	done := make(chan struct{})
+	go func() { // shaped like dispatchHTTP's producer goroutine
+		defer close(done)
+		events <- HTTPStreamStartMsg{Source: "a.http", Request: "k",
+			Status: "200 OK", Proto: "HTTP/1.1", events: events}
+		for i := 0; i < 64; i++ {
+			events <- HTTPStreamChunkMsg{Source: "a.http", Request: "k",
+				Chunk: []byte("data\n"), events: events}
+		}
+		events <- HTTPResponseMsg{Source: "a.http", Request: "k", Resp: sampleResponse("k")}
+		close(events)
+	}()
+
+	msg := <-events // what the dispatch command's own first read returns
+	for {
+		tm, cmd := m.updateMsg(msg)
+		m = tm.(Model)
+		if _, final := msg.(HTTPResponseMsg); final {
+			break // the chain ends here by design; the channel is closed
+		}
+		if cmd == nil {
+			t.Fatalf("pump chain broke: no follow-up read after %T", msg)
+		}
+		msg = cmd() // nextHTTPEvent: the one read this message re-armed
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("producer goroutine left blocked — the pump did not drain the channel")
+	}
+}
 
 // TestHTTPChunkCoalescerBatchesPerWindow (#2176): chunks inside one quiet
 // window fold into a single emitted buffer instead of one message per chunk.

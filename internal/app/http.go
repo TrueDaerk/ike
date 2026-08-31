@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -412,6 +413,13 @@ func (m *Model) dispatchHTTP(source, key, label string,
 		started: time.Now(),
 		cancel:  cancel,
 	})
+	// Flight lifecycle (#2348): the start event — plus everything enqueued
+	// before it, the dispatching command event included — is flushed to disk
+	// before the exchange leaves, so a dispatch that never comes back is still
+	// attributable ("start without end") instead of invisible. Structural
+	// only: no URL, no request key, no label.
+	m.usage.Op("http.flight", "start", nil)
+	m.usage.FlushSoon()
 	events := make(chan tea.Msg, 32)
 	// Chunks coalesce per quiet window (#2176): one message — one Update pass,
 	// one render, one viewer resync — per window instead of per received chunk.
@@ -511,6 +519,9 @@ func (m *Model) openHTTPPanel() {
 // grows via appendHTTPStream. A viewer that cannot open is no failure — the
 // finalizing HTTPResponseMsg still lands and reports.
 func (m *Model) beginHTTPStream(msg HTTPStreamStartMsg) {
+	if e, ok := m.httpFlight[httpFlightKey(msg.Source, msg.Request)]; ok {
+		e.streamed = true // the flight-end event says streaming happened (#2348)
+	}
 	if m.httpPanel() == nil {
 		m.openHTTPPanel()
 	}
@@ -536,7 +547,9 @@ func (m *Model) appendHTTPStream(msg HTTPStreamChunkMsg) {
 // replaces the content of the existing pane. The returned command carries the
 // capture report (#1993) into the .http buffer.
 func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
-	canceled := m.finishHTTPFlight(httpFlightKey(msg.Source, msg.Request))
+	flight := m.finishHTTPFlight(httpFlightKey(msg.Source, msg.Request))
+	m.recordHTTPFlightEnd(flight, msg)
+	canceled := flight != nil && flight.canceled
 	// Taken up front (#2247), so a failed or canceled re-run disarms too
 	// instead of leaving its diff waiting for the next unrelated dispatch.
 	rerun := m.takeHTTPRerunDiff(msg.Source, msg.Request)
@@ -844,6 +857,9 @@ type httpFlightEntry struct {
 	// canceled marks an abort the user asked for, so the resulting
 	// context.Canceled reads as a confirmation instead of a transport error.
 	canceled bool
+	// streamed marks a dispatch whose response was recognized as a stream
+	// (#1776) — the flight-end telemetry event carries it (#2348).
+	streamed bool
 }
 
 // httpTickMsg repaints the in-flight indicator while requests run. gen names
@@ -926,17 +942,44 @@ func (m *Model) startHTTPFlight(key string, e *httpFlightEntry) tea.Cmd {
 	return tea.Tick(httpFlightTick, func(time.Time) tea.Msg { return httpTickMsg{gen: gen} })
 }
 
-// finishHTTPFlight drops a finished dispatch and reports whether the user had
-// canceled it.
-func (m *Model) finishHTTPFlight(key string) (canceled bool) {
+// finishHTTPFlight drops a finished dispatch and returns its entry — nil when
+// no flight is registered under key (a response arriving after a project
+// switch rebuilt the model, #2235).
+func (m *Model) finishHTTPFlight(key string) *httpFlightEntry {
 	e, ok := m.httpFlight[key]
 	if !ok {
-		return false
+		return nil
 	}
 	delete(m.httpFlight, key)
 	m.markHTTPPending()
 	m.refreshHTTPFlightMarks()
-	return e.canceled
+	return e
+}
+
+// recordHTTPFlightEnd emits the flight's closing telemetry event (#2348):
+// how the dispatch ended ("ok" / "error" / "canceled"), how long it flew, the
+// status class and whether it streamed — all structural, nothing from the
+// request or response itself. A flight without an entry (foreign model, see
+// finishHTTPFlight) records nothing: there is no start to pair it with.
+func (m *Model) recordHTTPFlightEnd(e *httpFlightEntry, msg HTTPResponseMsg) {
+	if e == nil {
+		return
+	}
+	phase := "ok"
+	switch {
+	case e.canceled || errors.Is(msg.Err, context.Canceled):
+		phase = "canceled"
+	case msg.Err != nil:
+		phase = "error"
+	}
+	d := map[string]string{
+		"ms":     strconv.FormatInt(time.Since(e.started).Milliseconds(), 10),
+		"stream": strconv.FormatBool(e.streamed),
+	}
+	if msg.Resp != nil && msg.Resp.StatusCode > 0 {
+		d["class"] = fmt.Sprintf("%dxx", msg.Resp.StatusCode/100)
+	}
+	m.usage.Op("http.flight", phase, d)
 }
 
 // httpFlightMarks builds the inline indicators for one .http buffer (#1746):

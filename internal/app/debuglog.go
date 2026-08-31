@@ -53,6 +53,30 @@ func logSlowUpdate(msg tea.Msg, took time.Duration) {
 	logDiagnostic(fmt.Sprintf("slow update: %T took %s", msg, took.Round(time.Millisecond)))
 }
 
+// traceLogFile is the opt-in update-loop trace (#2348), a sibling of
+// debug.log — its own file, because the trace writes one line per processed
+// message and would drown debug.log's curated slow-op entries.
+func traceLogFile() string {
+	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, "trace.log")
+	}
+	return filepath.Join(".ike", "trace.log")
+}
+
+// traceLog holds the open trace.log handle across appends — the trace fires
+// per message, so the per-line MkdirAll+Open+Close of logDiagnostic would
+// dominate its cost (the same reasoning as the debug-session transcript,
+// #2176).
+var traceLog heldLog
+
+// logTrace appends one update-loop trace line (#2348): the message type and
+// the open HTTP flight count. Structure only — a %T name can never carry
+// typed text or a path.
+func logTrace(msg tea.Msg, flights int) {
+	traceLog.append(traceLogFile(),
+		fmt.Sprintf("%s trace: %T flights=%d\n", time.Now().Format("2006-01-02T15:04:05.000Z07:00"), msg, flights))
+}
+
 // logMouseNavButton records that the terminal delivered one of the dedicated
 // mouse navigation buttons (#816). The buttons degrade silently where they are
 // not reported, which makes "my terminal sends nothing" and "the binding is
@@ -148,28 +172,28 @@ func appendDebugSessionLog(text string) {
 	appendDebugSessionLogTo(debugSessionLogFile(), text)
 }
 
-// transcript holds the open debug-session.log handle (#2176): a debuggee
-// print loop used to pay MkdirAll+OpenFile+Close per output event on the
-// Update loop, which dominated the per-event cost. The handle stays open
-// across appends and re-opens when the target path changes (a project switch,
-// a parked workspace's transcript); a write failure drops it so the next
-// append retries from scratch. The mutex is defensive — appends run on the
-// Update loop today, but nothing enforces that here.
-var transcript struct {
+// heldLog is an append-only log file whose handle stays open across appends
+// (#2176): a per-line MkdirAll+OpenFile+Close on the Update loop dominated
+// the per-event cost of the debug transcript, and the update-loop trace
+// (#2348) fires even more often. The handle re-opens when the target path
+// changes (a project switch, a parked workspace's transcript); a write
+// failure drops it so the next append retries from scratch. The mutex is
+// defensive — appends run on the Update loop today, but nothing enforces
+// that here.
+type heldLog struct {
 	mu   sync.Mutex
 	path string
 	f    *os.File
 }
 
-// appendDebugSessionLogTo appends text to the given transcript file through
-// the held handle, best-effort.
-func appendDebugSessionLogTo(path, text string) {
-	transcript.mu.Lock()
-	defer transcript.mu.Unlock()
-	if transcript.f == nil || transcript.path != path {
-		if transcript.f != nil {
-			_ = transcript.f.Close()
-			transcript.f = nil
+// append writes text to path through the held handle, best-effort.
+func (l *heldLog) append(path, text string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.f == nil || l.path != path {
+		if l.f != nil {
+			_ = l.f.Close()
+			l.f = nil
 		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return
@@ -178,12 +202,21 @@ func appendDebugSessionLogTo(path, text string) {
 		if err != nil {
 			return
 		}
-		transcript.f, transcript.path = f, path
+		l.f, l.path = f, path
 	}
-	if _, err := transcript.f.WriteString(text); err != nil {
-		_ = transcript.f.Close()
-		transcript.f = nil
+	if _, err := l.f.WriteString(text); err != nil {
+		_ = l.f.Close()
+		l.f = nil
 	}
+}
+
+// transcript holds the open debug-session.log handle (#2176).
+var transcript heldLog
+
+// appendDebugSessionLogTo appends text to the given transcript file through
+// the held handle, best-effort.
+func appendDebugSessionLogTo(path, text string) {
+	transcript.append(path, text)
 }
 
 // prefixLines prefixes every non-empty line of s, preserving the trailing
