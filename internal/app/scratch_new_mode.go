@@ -1,6 +1,7 @@
 package app
 
 import (
+	"math"
 	"sort"
 
 	"ike/internal/fuzzy"
@@ -14,6 +15,12 @@ import (
 // scratch. The picker lists the registered languages and delegates to the
 // very same scratch.new.<id> commands, so there is still exactly one creation
 // path.
+
+// scratchCustomFloor is the score the unmatched "Custom…" row keeps so it
+// stays in the list without ever displacing a row the query actually matched.
+// It is below every score fuzzy.Match can return, not merely a large negative
+// number, so no long-lead penalty can undercut it.
+const scratchCustomFloor = math.MinInt / 2
 
 // scratchNewPrefix selects the language picker inside the palette; the root
 // model only ever opens it locked, so the rune has no user-facing prefix story
@@ -99,6 +106,29 @@ func (scratchNewMode) Results(query string, _ palette.Context) []palette.Item {
 			title: r.title,
 		})
 	}
+	// The "Custom…" row (#2340) is never filtered away: it is needed exactly
+	// when nothing else matches — a query for an extension the curated list
+	// does not offer — so a filter that empties the list must still leave it
+	// standing. It ranks by its title when the query does match it, and
+	// survives on a floor score below every real match otherwise, which sorts
+	// it last as long as anything else is left.
+	custom := scored{
+		item: palette.Item{
+			Title:  scratchCustomTitle,
+			Detail: scratchCustomDetail,
+			Score:  scratchCustomFloor,
+			// No command, unlike every other row: this one is not a creator
+			// but the doorway to the extension prompt (scratch_custom_ext.go).
+			Msg: ShowScratchCustomExtMsg{},
+		},
+		score: scratchCustomFloor,
+		rank:  3,
+		title: scratchCustomTitle,
+	}
+	if cm, ok := fuzzy.Match(query, scratchCustomTitle); ok {
+		custom.item.Spans, custom.item.Score, custom.score = cm.Positions, cm.Score, cm.Score
+	}
+	out = append(out, custom)
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].score != out[j].score {
 			return out[i].score > out[j].score

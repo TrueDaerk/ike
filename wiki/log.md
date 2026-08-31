@@ -18,6 +18,21 @@
   pane says why. See [http client](/architecture/http-client.md) and
   [settings UI](/architecture/settings-ui.md).
 
+## 2026-08-31 (free extension in the scratch language pickers, #2340)
+
+- **"Custom…" closes the curated list**: both scratch language surfaces — the
+  `scratch.new` picker and the manager's `ctrl+l` step — end in a row that is
+  no creator but a doorway to a one-line extension prompt, so `.tf`, `.mjs` or
+  an in-house suffix needs no code change while the offering stays curated.
+  Creating goes through the same funnel a language row uses, so typing `py` is
+  the "Python" row by another route.
+- The row **survives every filter** (it is needed exactly when nothing else
+  matches), the input is **validated, not corrected** — optional leading dot,
+  refusals name their reason for empty input, path separators, whitespace or a
+  dangling dot — and `esc` walks back to the row list, not out of the dialog.
+  Typed extensions are deliberately not remembered. See
+  [scratch files](/architecture/scratch-files.md).
+
 ## 2026-08-31 (wheel outside the popup layer scrolls the pane below, #2343)
 
 - **The wheel is a reading gesture, not a focus gesture**: with the popup

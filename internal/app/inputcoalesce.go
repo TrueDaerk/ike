@@ -225,6 +225,7 @@ func (m Model) overlayCapturesBelowPopup() bool {
 		m.playNamePromptOpen() || m.playFocused() ||
 		m.newProjectPromptOpen() || m.generateScratchOpen() ||
 		m.scratchManagerOpen() || m.saveAsOpen() || m.promoteScratchOpen() ||
+		m.scratchCustomExtOpen() ||
 		m.bookmarkPromptOpen() || m.bookmarkOverviewOpen() || m.layoutSavePromptOpen() ||
 		m.jbImportPromptOpen() || m.openAPIImportPromptOpen() ||
 		m.curlImportPromptOpen() || m.evalPromptOpen() || m.lspRenameOpen() ||

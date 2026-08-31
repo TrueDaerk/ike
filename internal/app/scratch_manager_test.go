@@ -327,8 +327,9 @@ func TestScratchManagerChangesLanguage(t *testing.T) {
 		t.Fatalf("step = %d, want the language picker", m.scratchMgr.step)
 	}
 	m = smTypeAll(m, "sctest")
-	if got := len(m.scratchMgr.filteredLangs()); got != 1 {
-		t.Fatalf("filtered languages = %d, want only the test language", got)
+	// The test language plus the "Custom…" row, which no filter hides (#2340).
+	if got := m.scratchMgr.filteredLangs(); len(got) != 2 || got[0].title != "Sctest" || !got[1].custom {
+		t.Fatalf("filtered languages = %+v, want the test language and the custom row", got)
 	}
 	m = smKey(m, tea.Key{Code: tea.KeyEnter})
 
