@@ -2336,6 +2336,59 @@ family has its own capture, conceal channel and toggle:
 families switch independently of each other and of the markdown/log layers.
 All toggles default on and stick per view like the #64 toggles.
 
+### Rewriting escapes (#2338)
+
+The decoding above is display-only. Two commands change the buffer itself, for
+the times an escape has to be *written*: i18n files, JSON fixtures, log
+excerpts pasted into an editor.
+
+- **`editor.escapeSelection`** ("Escape Selection as Unicode", `cmd+alt+shift+e`)
+  rewrites every non-ASCII character of the target as an escape of the buffer
+  language's form: `"über"` becomes `"\u00fcber"`.
+- **`editor.unescapeSelection`** ("Unescape Selection", `cmd+alt+shift+u`)
+  is the inverse: every escape the language knows becomes the character it
+  names.
+
+Both read the same `escapes.UnicodeDialect` as the detection side; the encoder
+lives in `internal/escapes/encode.go` (`EncodeUnicode`, `DecodeUnicode`,
+`LiteralAt`, `DialectFor`), the editor half in `internal/editor/escapeedit.go`.
+The decisions behind them:
+
+- **Which language.** `DialectFor` maps a `lang.Language.ID` onto the dialect
+  its span producer scans in — the mapping is keyed by id rather than carried
+  on `lang.Language`, because `internal/lang` is `internal/escapes`'
+  *dependency* (spans are `lang.Span`) and a field there would be a cycle.
+- **Which characters.** Everything above U+007F, nothing below. ASCII stays
+  ASCII, which is what keeps an existing escape from being escaped twice
+  (`\u00fc` is seven ASCII characters, `\\u00fc` likewise), and it keeps
+  the newlines of a multi-line selection out of the rewrite. Not configurable
+  until there is a reason.
+- **Which form.** `\uXXXX` for the BMP everywhere; above it `\UXXXXXXXX` where
+  the language has the long form (Go, Python, YAML, TOML — the `Long` dialect
+  flag), `\u{X…}` where it has braces (JS/TS, PHP), and a UTF-16 surrogate
+  pair where it has neither (JSON). Lowercase hex, the spelling the languages'
+  own formatters emit. Decoding stays lenient and resolves every form the
+  scanner knows, whichever dialect is active — escaped text often arrives from
+  another tool.
+- **What is acted on.** The visual selection when there is one (a linewise
+  selection covers its lines whole), else the *body* of the string literal
+  under the caret, quotes excluded — so the everyday "fix this one literal"
+  needs no selection gesture. A caret inside a raw literal (Go's `` `…` ``,
+  Python's `r"…"`, YAML's `'…'`) declines: a backslash is literal text there,
+  so writing an escape would change what the file says, not how it spells it.
+  Outside any literal the command notices instead of guessing.
+- **Multiple carets decline.** A caret is a position, not a range; escaping
+  "the literal under each caret" would fan one undo unit over places the user
+  cannot see at once.
+- **No dialect, no refusal.** A buffer whose language has no escape syntax (a
+  log, a `.txt`, an unsaved scratch) falls back to `escapes.UnicodeFallback` —
+  plain `\uXXXX`, both quote characters escape-processing. Unfolding escapes
+  in a log dump is one of the reasons the commands exist, so declining there
+  would miss the point.
+- **One undo unit.** The rewrite is a single `buffer.Edit` through `mutate`,
+  so undo restores the original in one step, and the commands are
+  dot-repeatable like the other caret transformations (`g!`, `ctrl+a`).
+
 ## Cron schedule hints (#1624)
 
 A cron expression draws with its English reading appended — `*/5 * * * *`
