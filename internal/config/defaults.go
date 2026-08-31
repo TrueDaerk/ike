@@ -297,6 +297,11 @@ func defaults() *Config {
 			// answer coloured; the pathological cases — multi-megabyte search
 			// dumps — render plain with a notice instead of burning CPU.
 			HighlightLimitKB: 2048,
+			// A dispatch the user has walked away from should still report
+			// itself (#2364). 3 s is past the window the statusline indicator
+			// covers on its own, and telemetry puts ordinary flights well
+			// below it, so the notice stays rare enough to mean something.
+			NotifySlowMs: 3000,
 		},
 		Issues: Issues{
 			// The issues window opens on its issue list, ordered the way the

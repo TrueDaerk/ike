@@ -423,6 +423,14 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "http.highlight_limit_kb", Message: fmt.Sprintf("limit %d out of range (1–65536 KiB), using 2048", c.HTTP.HighlightLimitKB)})
 		c.HTTP.HighlightLimitKB = 2048
 	}
+	// The slow-response notification threshold (#2364): 0 is the off switch,
+	// a negative value would notify on every single flight, and past ten
+	// minutes the notice fires later than any dispatch the user still waits
+	// for — both extremes fall back to the default instead of being honoured.
+	if c.HTTP.NotifySlowMs < 0 || c.HTTP.NotifySlowMs > 600000 {
+		diags = append(diags, Diagnostic{Field: "http.notify_slow_ms", Message: fmt.Sprintf("threshold %d out of range (0–600000 ms, 0 = off), using 3000", c.HTTP.NotifySlowMs)})
+		c.HTTP.NotifySlowMs = 3000
+	}
 	// Issues window (#2090): both defaults are fixed vocabularies; an unknown
 	// value falls back rather than opening the pane in an undefined state.
 	switch c.Issues.DefaultTab {

@@ -76,3 +76,35 @@ func TestValidateHTTPHighlightLimit(t *testing.T) {
 		t.Errorf("512 KiB is a valid limit: %d, %v", c.HTTP.HighlightLimitKB, diags)
 	}
 }
+
+// The completion-notice threshold (#2364) defaults to 3 s, keeps 0 as its off
+// switch and refuses values outside the accepted window.
+func TestValidateHTTPNotifySlowMs(t *testing.T) {
+	if c := defaults(); c.HTTP.NotifySlowMs != 3000 {
+		t.Errorf("default threshold = %d, want 3000", c.HTTP.NotifySlowMs)
+	}
+	for _, bad := range []int{-1, -3000, 600001} {
+		c := defaults()
+		c.HTTP.NotifySlowMs = bad
+		diags := validate(c)
+		if c.HTTP.NotifySlowMs != 3000 {
+			t.Errorf("threshold %d validated to %d, want the 3000 fallback", bad, c.HTTP.NotifySlowMs)
+		}
+		if len(diagsFor(diags, "http.notify_slow_ms")) != 1 {
+			t.Errorf("threshold %d must be reported once, got %v", bad, diags)
+		}
+	}
+	// 0 is the documented off switch and survives validation untouched.
+	for _, good := range []int{0, 1, 8000, 600000} {
+		c := defaults()
+		c.HTTP.NotifySlowMs = good
+		if diags := validate(c); len(diagsFor(diags, "http.notify_slow_ms")) != 0 || c.HTTP.NotifySlowMs != good {
+			t.Errorf("threshold %d is valid: %d, %v", good, c.HTTP.NotifySlowMs, diags)
+		}
+	}
+	// The key reads as a dotted string, which is what the settings panel and
+	// the config viewer render.
+	if got := defaults().Flat()["http.notify_slow_ms"]; got != "3000" {
+		t.Errorf("http.notify_slow_ms = %q", got)
+	}
+}

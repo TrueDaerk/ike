@@ -122,10 +122,15 @@ type Telemetry struct {
 // pretty-printing) the response viewer syntax-highlights (#2353): the pass
 // runs off the update loop either way, but a huge body still burns CPU for
 // colours, so past the limit the body renders plain with a visible notice.
+// NotifySlowMs is the wall-clock threshold in milliseconds past which a
+// finished dispatch announces itself through the notification channel while
+// the response pane is not on screen (#2364); 0 turns that slow branch off,
+// whereas a non-2xx answer always notifies.
 type HTTP struct {
 	DiffIgnoreHeaders []string `toml:"diff_ignore_headers"`
 	DiffAfterRerun    bool     `toml:"diff_after_rerun"`
 	HighlightLimitKB  int      `toml:"highlight_limit_kb"`
+	NotifySlowMs      int      `toml:"notify_slow_ms"`
 }
 
 // Forge holds the code-forge settings (#2085, #2086). PollIntervalSeconds is
