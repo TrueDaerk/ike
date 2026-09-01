@@ -155,6 +155,7 @@ secrets — are documented together, with screenshots, in
 | Light theme | `theme.light` | enum: `gruvbox-light`, `rose-pine-dawn`, `catppuccin-latte`, `solarized-light`, `intellij-light`, `everforest-light`, `ayu-light`, `github-light`, `high-contrast-light` | `intellij-light` | user | Theme used when auto sync sees a light terminal background |
 | Dark theme | `theme.dark` | enum: `default`, `tokyo-night`, `nord`, `gruvbox`, `rose-pine`, `catppuccin-mocha`, `kanagawa`, `one-dark`, `solarized-dark`, `dracula`, `darcula`, `everforest-dark`, `ayu-dark`, `ayu-mirage`, `github-dark`, `oxocarbon`, `monokai-pro`, `zenburn`, `high-contrast-dark` | `default` | user | Theme used when auto sync sees a dark terminal background |
 | Menu bar | `ui.menu_bar` | boolean | `true` | user | Show the File/Edit/… menu row above the panes |
+| Horizontal scroll marks | `ui.h_scroll_marks` | boolean | `true` | user | Mark the edges of a horizontally scrolled view — ‹ where content continues left, › where a line continues right — in the editor, diff, explorer and playground result |
 | Popup max width | `ui.popup_max_width` | integer | `110` | user | Cap centered popups (palette, dialogs, settings) at this width in columns; 0 disables |
 | Command palette key | `palette.toggle_key` | key chord | *(empty)* | user | Chord that opens the command palette |
 
