@@ -98,7 +98,7 @@ bring their own.
 | Copy Relative Path | `file.copyRelPath` | — | — | everywhere |
 | Show Local History | `file.localHistory` | — | — | everywhere |
 | Move File | `file.move` | `f6` | — | everywhere |
-| Open in Browser | `file.openInBrowser` | — | — | everywhere |
+| Open in Browser | `file.openInBrowser` | `alt+f2` | — | everywhere |
 | Open File… | `file.openPath` | — | — | everywhere |
 | Rename File | `file.rename` | `shift+f6` | — | everywhere |
 | Show Timeline | `file.timeline` | — | — | everywhere |

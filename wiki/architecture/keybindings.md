@@ -888,6 +888,25 @@ All thirteen are Cmd/Alt-modified and therefore fragile; each records its palett
 escape route in `reachableAlternatives`, and each shows up in the cheatsheet and the
 palette's shortcut column automatically.
 
+## Open in Browser earns its chord (#2365)
+
+`file.openInBrowser` (#1429, #2298) shipped deliberately menu-only: the #2305 pass left it in
+the ledger with the *menu home* reason. Telemetry then recorded it several times in a single
+day, **every** invocation through the File or context menu — the detour costs real time in
+HTML-preview work, which is exactly the signal the ledger reason was waiting on.
+
+| command | chord | why it earned one |
+|---|---|---|
+| `file.openInBrowser` | `alt+f2` | JetBrains' `WebOpenInAction` verbatim, free in both keymaps |
+
+`alt+f2` is free next to the F2 family already in use (`f2`/`shift+f2` step through
+diagnostics, `cmd`/`ctrl+f2` stops the debugger) and needs no bracket or slash key, so QWERTZ
+types it unchanged. The row is **Global**, not one row per context: the command resolves its
+subject through `refactorTarget` exactly like `file.copyPath`, so a single binding covers the
+editor and the explorer — the two places the menu offers the action. Being Alt-modified it is
+fragile, so it records its palette/context-menu escape route in `reachableAlternatives` like
+every chord in the table above, and its ledger entry is gone.
+
 ## The copy chord outside the editor (#2315)
 
 Unbound-chord telemetry recorded `cmd+c` in the `http` and `explorer` contexts:
