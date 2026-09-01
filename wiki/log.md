@@ -1,5 +1,20 @@
 # Log
 
+## 2026-09-01 (the playground searches its result with `cmd+f`, #2383)
+
+- **A search shortcut past the `tab`**: `cmd+f` (`editor.find`) opens the
+  result buffer's search from the jq/yq playground's query line as well as from
+  the result buffer itself, where it does exactly what `/` does. Searching a
+  result no longer costs a `tab` there and a `tab` back.
+- **The keyboard moves in with it**: `beginPlayResultSearch` sets the result
+  focus and sends the buffer `editor.ActionMsg{Action: "find"}`, so the prompt
+  gets the typing and `n` / `N` afterwards belong to the same focus — from both
+  starting points, including after `esc` closes the prompt.
+- **The chord is read live**: `playFindChord` resolves `editor.find` against the
+  editor context in the live binding table, like `playCopyChord` does for
+  `editor.copy`, so a rebound find key works in the playground too. Both focus
+  tables in `playhelp.go` list it with the resolved chord.
+
 ## 2026-09-01 (a request exports as httpie too, #2384)
 
 - **A second export format**: `http.copyAsHttpie` ("Copy as httpie") puts the
