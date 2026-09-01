@@ -25,6 +25,9 @@ The response side has the same two exits (#2059): `http.copyShownAsCurl`
 exports the *shown* exchange's stored request as curl and `http.saveResponse`
 writes the raw response body to a file (see
 [exporting the shown exchange](#exporting-the-shown-exchange-2059)).
+Both export paths speak a second format, httpie (#2384): `http.copyAsHttpie`
+on the caret's block and `http.copyShownAsHttpie` on the shown exchange (see
+[the httpie export](#the-httpie-export-internalhttpfilehttpiego-2384)).
 
 ## File format
 
@@ -522,6 +525,62 @@ guessed at.
 The conversions round-trip: importing a command and exporting it again yields
 the same request, flag order and quoting following the block rather than the
 original line.
+
+## The httpie export (`internal/httpfile/httpie.go`, #2384)
+
+curl is one way to hand a request to somebody else; [httpie](https://httpie.io/)
+is the other, and an httpie command is markedly easier to read in a ticket or
+a chat message. So the export has a **second format**, offered wherever the
+first one is: `http.copyAsHttpie` ("Copy as httpie", intention popup and
+palette) on the block under the caret, `http.copyShownAsHttpie` (`H` in the
+response viewer) on the shown exchange's snapshot.
+
+The split of #1994 and #2059 is kept: **two sources, one serialization**.
+`ExportHTTPie` is the only place that knows httpie's syntax; both callers
+reach it through the same `httpfile.Request` the curl exporters use, and the
+editor-side path (`copyHTTPRequestAs`) and the viewer-side path
+(`copyShownHTTPRequestAs`) are now format-parameterized rather than duplicated
+— the way to the request is the same, only the serializer differs.
+
+httpie is **not** curl with renamed flags, and the exporter does not pretend
+it is. It spells a request in httpie's item syntax:
+
+| request part | httpie |
+| --- | --- |
+| method | always explicit and uppercase (`http POST …`) — never left to httpie's body-based guess |
+| header | `Name:Value`, an empty value as `Name;` (`Name:` *unsets* a header in httpie, which is a different request) |
+| query parameter | `name==value`, decoded out of the target |
+| `Authorization: Basic` | `-a user:pass`, the same decode `ExportCurl` does |
+| JSON object body | one item per member: `name=value` for a string, `name:=raw` for anything else |
+| urlencoded body | `--form` plus one `name=value` per pair |
+| multipart body | `--form` plus `name=value` / `name@path` (with `;type=` and `;filename=`), the request's own `Content-Type` dropped since httpie writes the boundary |
+| external body file | `< path`, rebased onto the `.http` file's directory — httpie reads stdin as the raw body |
+| anything else | `--raw <body>`, the bytes unchanged |
+
+**How far the JSON translation goes** is the one real decision here. A JSON
+object becomes field items, because that readable spelling is what httpie
+exists for; the raw JSON of a non-string member is preserved verbatim behind
+`:=`, so a number stays a number and a nested object stays a structure, and
+the member order is the body's — the decoder is walked token by token
+precisely so a map cannot randomize it. Everything the field syntax cannot
+carry faithfully — a JSON array body, a key containing a separator (`=`, `:`,
+`@`), a body with trailing content, a non-JSON payload — falls back to
+`--raw`, which is always correct if less idiomatic. The same rule governs the
+query split: a bare flag parameter (`?verbose`) or an escape that does not
+decode leaves the **whole** query in the URL rather than being guessed at.
+
+A **binary body** takes the route `RequestSnapshot.Curl` already uses: a
+base64 heredoc piped into the command. httpie reads a non-tty stdin as the raw
+body, so it needs no flag for it — `base64 -d <<'IKE_BODY' | http POST … `
+transfers the payload byte for byte.
+
+Everything else follows the curl export's standing decisions: values are
+shell-quoted (single quotes unless a shell would pass the word through, so a
+value holding a space, `&`, `:` or `=` cannot split the command), snapshot
+header names are sorted through the shared `curlHeaders` so the same request
+always exports the same command, and **nothing is masked** — an `Authorization`
+header is exported exactly as sent, the same deliberate line drawn in #1994
+and #2059.
 
 ## Dispatch (`internal/httpclient`)
 
@@ -1086,9 +1145,10 @@ where it leaves the tool — as a curl command for someone else's shell, or as a
 file on disk. Both actions read the entry currently on show, history browsing
 (#1251) included, and both exist twice: as a pane-local key and as a palette
 command, the arrangement every response action uses. The pane itself neither
-writes files nor touches the clipboard: `C` emits `httppane.CopyCurlMsg` and
-`S` emits `httppane.SaveBodyMsg`, the host does the work — same seam as
-`CopyMsg` (#1266) and `ResendMsg` (#1832).
+writes files nor touches the clipboard: `C` emits `httppane.CopyCurlMsg`,
+`H` its httpie sibling `httppane.CopyHttpieMsg` (#2384) and `S` emits
+`httppane.SaveBodyMsg`, the host does the work — same seam as `CopyMsg`
+(#1266) and `ResendMsg` (#1832).
 
 **Copy as curl** — `C` / `http.copyShownAsCurl` ("Copy Shown HTTP Request as
 curl") renders the entry's [as-sent snapshot](#as-sent-request-snapshot-1832)
@@ -1110,6 +1170,16 @@ re-sent request, an older history entry, or a `.http` file edited since.
 Nothing is masked here either (same reasoning as the stored snapshot's), and
 a snapshot-less entry (a pre-#1832 history file, a live stream) reports that
 instead of copying a half command.
+
+**Copy as httpie** — `H` / `http.copyShownAsHttpie` (#2384) is the same export
+in the other format, through `RequestSnapshot.HTTPie`
+(`internal/httpclient/httpieexport.go`) and `httpfile.ExportHTTPie`. It shares
+this one's header sorting, its binary-body heredoc and its refusal to mask
+anything; only the spelling differs (see
+[the httpie export](#the-httpie-export-internalhttpfilehttpiego-2384)).
+Uppercase `H` sits next to `C` — lowercase `h` is the history step — and the
+host action behind both keys is the same `copyShownHTTPRequestAs`, told which
+serializer to use.
 
 **Save the body to a file** — `S` / `http.saveResponse` ("Save HTTP Response
 Body to File…", `internal/app/http_save.go`) writes `Response.Body`
