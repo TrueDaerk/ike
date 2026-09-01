@@ -21,6 +21,13 @@ import (
 // Keys whose chord is configurable are resolved live where that is cheap
 // (the query-view toggle, the palette); the rest are the mode's own fixed
 // keys, which no keymap can rebind.
+//
+// This file is the keyboard's sheet. The **language** has one too since
+// #2382 — syntax, one-line example programs and every builtin of the live
+// dialect, opened with `ctrl+g` (internal/app/playcheat.go, content in
+// jqplay.Cheatsheet) — and the two are listed side by side here so the help
+// overlay is a doorway to both: knowing which key runs the program is no use
+// to someone who does not know what to type into it.
 
 // playQueryHelpKeys documents the query line, the playground's default focus.
 var playQueryHelpKeys = []struct{ Key, Title string }{
@@ -35,6 +42,7 @@ var playQueryHelpKeys = []struct{ Key, Title string }{
 	{"pgup / pgdn", "Page the result without leaving the query line"},
 	{"ctrl+s", "Save the program as a named filter"},
 	{"ctrl+l", "Open the saved-filter picker"},
+	{"ctrl+g", "Open the language cheatsheet — syntax, examples, builtins"},
 	{"ctrl+y", "Copy the whole result"},
 	{"ctrl+o", "Open the result as a scratch file"},
 	{"esc", "Close the playground (the program is kept in the history)"},
@@ -54,6 +62,7 @@ var playResultHelpKeys = []struct{ Key, Title string }{
 	{"zM / zR", "Close / open every fold"},
 	{"ctrl+y", "Copy the whole result"},
 	{"ctrl+o", "Open the result as a scratch file"},
+	{"ctrl+g", "Open the language cheatsheet"},
 	{"esc", "Close the playground from resting normal mode"},
 	{"esc esc", "Close and open the command palette"},
 }

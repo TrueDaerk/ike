@@ -129,6 +129,7 @@ bring their own.
 | Show Stored HTTP Response | `http.showResponse` | `ctrl+shift+f9` | — | everywhere |
 | Toggle Raw / Pretty HTTP Response Body | `http.toggleRawBody` | — | — | everywhere |
 | GitHub Issues | `issues.toggle` | — | — | everywhere |
+| jq Cheatsheet… | `json.jqCheatsheet` | — | — | everywhere |
 | Saved jq Filters… | `json.jqFilters` | — | — | everywhere |
 | jq Playground… | `json.jqPlayground` | `ctrl+alt+j` | — | everywhere |
 | jq Playground at Cursor Path… | `json.jqPlaygroundAtPath` | — | — | everywhere |
@@ -258,6 +259,7 @@ bring their own.
 | Restore Default Layout | `window.restoreLayout` | `shift+f12` | — | everywhere |
 | Save Window Layout… | `window.saveLayout` | — | — | everywhere |
 | Set Default Window Layout… | `window.setDefaultLayout` | — | — | everywhere |
+| yq Cheatsheet… | `yaml.yqCheatsheet` | — | — | everywhere |
 | Saved yq Filters… | `yaml.yqFilters` | — | — | everywhere |
 | yq Playground… | `yaml.yqPlayground` | `ctrl+alt+y` | — | everywhere |
 | yq Playground at Cursor Path… | `yaml.yqPlaygroundAtPath` | — | — | everywhere |

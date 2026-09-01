@@ -532,6 +532,12 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("yaml.yqPlaygroundAtPath", "yq Playground at Cursor Path…", OpenPlaygroundAtPathMsg{Dialect: jqplay.DialectYQ}),
 			appCommand("yaml.yqFilters", "Saved yq Filters…", ShowFiltersMsg{Dialect: jqplay.DialectYQ}),
 			appCommand("yaml.yqRenameFilter", "Rename Saved yq Filter…", ShowFiltersMsg{Dialect: jqplay.DialectYQ, Rename: true}),
+			// The language cheatsheet (#2382), one command per dialect: the
+			// sheet's document-language rows and its wording differ, so
+			// "jq cheatsheet" and "yq cheatsheet" are two different sheets
+			// rather than one with a toggle.
+			appCommand("json.jqCheatsheet", "jq Cheatsheet…", ShowCheatsheetMsg{}),
+			appCommand("yaml.yqCheatsheet", "yq Cheatsheet…", ShowCheatsheetMsg{Dialect: jqplay.DialectYQ}),
 			appCommand("json.jqSaveFilter", "Save Playground Filter…", SaveFilterPromptMsg{}),
 			appCommand("json.jqQueryView", "Toggle Full Query View", TogglePlaygroundQueryViewMsg{}),
 			appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}),
@@ -569,7 +575,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("archive.extractEntry", "Extract Selected Archive Entry…", ArchiveExtractEntryMsg{}),
 			appCommand("archive.extractAll", "Extract Whole Archive…", ArchiveExtractAllMsg{}),
 			appCommand("archive.reload", "Reload Archive Listing", ArchiveReloadMsg{}),
-			appCommand("http.toggleRawBody","Toggle Raw / Pretty HTTP Response Body", HTTPToggleRawBodyMsg{}),
+			appCommand("http.toggleRawBody", "Toggle Raw / Pretty HTTP Response Body", HTTPToggleRawBodyMsg{}),
 			appCommand("http.jqPlayground", "Open jq Playground on HTTP Response", HTTPJQPlaygroundMsg{}),
 			appCommand("http.loadMoreBody", "Load More of the HTTP Response Body", HTTPLoadMoreBodyMsg{}),
 			appCommand("http.openBodyFile", "Open Full HTTP Response Body as File", HTTPOpenBodyFileMsg{}),

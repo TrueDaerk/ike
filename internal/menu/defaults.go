@@ -111,6 +111,8 @@ func Defaults() []Menu {
 			{Title: "yq Playground at Cursor Path…", Command: "yaml.yqPlaygroundAtPath"},
 			{Title: "Saved yq Filters…", Command: "yaml.yqFilters"},
 			{Title: "Rename Saved yq Filter…", Command: "yaml.yqRenameFilter"},
+			{Title: "jq Cheatsheet…", Command: "json.jqCheatsheet"},
+			{Title: "yq Cheatsheet…", Command: "yaml.yqCheatsheet"},
 			{Title: "Save Playground Filter…", Command: "json.jqSaveFilter"},
 			{Title: "Toggle Full Query View", Command: "json.jqQueryView"},
 			{Title: "Restart Language Servers", Command: "lsp.restart"},

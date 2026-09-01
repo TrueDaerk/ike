@@ -71,8 +71,10 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"json.jqFilters", reasonPaneKey},             // the playground's ctrl+l library
 	{"json.jqRenameFilter", reasonPaneKey},        // …and its rename flavour
 	{"json.jqSaveFilter", reasonPaneKey},          // the playground's ctrl+s
-	{"yaml.yqFilters", reasonPaneKey},             // the yq twins of the three above
+	{"json.jqCheatsheet", reasonPaneKey},          // the playground's ctrl+g language sheet (#2382)
+	{"yaml.yqFilters", reasonPaneKey},             // the yq twins of the four above
 	{"yaml.yqRenameFilter", reasonPaneKey},        //
+	{"yaml.yqCheatsheet", reasonPaneKey},          //
 	{"json.jqPlaygroundAtPath", reasonIntention},  // "jq Playground at Cursor Path"
 	{"yaml.yqPlaygroundAtPath", reasonIntention},  //
 	{"editor.copyDocPathJQ", reasonFlavour},       // cmd+alt+shift+c is the everyday form
