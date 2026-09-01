@@ -978,6 +978,16 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 	}
+	// The find chord (editor.find, default cmd+f) opens the search in the
+	// result buffer straight from the query line (#2383): searching a result
+	// used to cost a tab there and a tab back, while cmd+f is the search
+	// everywhere else in the IDE. It moves the keyboard into the result
+	// buffer with it — the search prompt has to receive the typing, and
+	// n/N afterwards belong to the same focus, so the shortcut lands where
+	// the searching continues instead of bouncing back after one match.
+	if m.playFindChord(msg) {
+		return m.beginPlayResultSearch()
+	}
 	// The open completion popup (#1979) owns its keys first: arrows step it,
 	// enter/tab accept, esc dismisses — the query line's own meaning of those
 	// keys comes back the moment it closes. Typing falls through and
@@ -1113,6 +1123,12 @@ func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		*s.resultEd, cmd = s.resultEd.Update(editor.ActionMsg{Action: "copy"})
 		return m, cmd
 	}
+	// The find chord does here what "/" does (#2383): the same search, so the
+	// chord works from either focus without the user having to remember which
+	// one they are in.
+	if m.playFindChord(msg) {
+		return m.beginPlayResultSearch()
+	}
 	switch msg.String() {
 	case "tab":
 		s.setBufFocus(false)
@@ -1173,6 +1189,32 @@ func (m Model) playCopyChord(msg tea.KeyPressMsg) bool {
 // matches it; recognizing it here is what lets the mode answer at all.
 func (m Model) playCodeActionChord(msg tea.KeyPressMsg) bool {
 	return m.playEditorChord(msg, "lsp.codeAction")
+}
+
+// playFindChord reports whether msg is the chord bound to editor.find
+// (default cmd+f) — the search key everywhere else in the IDE, which the
+// playground's modal routing kept from the keymap layer (#2383). Reading it
+// from the live table rather than hard-coding cmd+f means a rebound
+// editor.find is the chord that works here too.
+func (m Model) playFindChord(msg tea.KeyPressMsg) bool {
+	return m.playEditorChord(msg, "editor.find")
+}
+
+// beginPlayResultSearch opens the result buffer's search prompt and leaves the
+// keyboard there (#2383). Called from both focuses: from the query line it
+// moves the focus first — the prompt needs the keys, and so do n/N after it —
+// and from the result buffer it is exactly what "/" does. The buffer is
+// read-only (#1762), so a search never touches it, and neither the program,
+// the history nor the result are involved at all.
+func (m Model) beginPlayResultSearch() (tea.Model, tea.Cmd) {
+	s := m.play
+	if s == nil || s.resultEd == nil {
+		return m, nil
+	}
+	s.setBufFocus(true)
+	var cmd tea.Cmd
+	*s.resultEd, cmd = s.resultEd.Update(editor.ActionMsg{Action: "find"})
+	return m, cmd
 }
 
 // playEditorChord reports whether msg is the single-step chord bound to

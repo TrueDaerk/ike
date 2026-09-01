@@ -21,6 +21,20 @@
   Server log) plus user templates saved/deleted from the dialog, persisted
   next to the last-used spec in `~/.ike/testdata.json`. The old per-format
   preset schema reads as empty and starts over.
+## 2026-09-01 (the playground searches its result with `cmd+f`, #2383)
+
+- **A search shortcut past the `tab`**: `cmd+f` (`editor.find`) opens the
+  result buffer's search from the jq/yq playground's query line as well as from
+  the result buffer itself, where it does exactly what `/` does. Searching a
+  result no longer costs a `tab` there and a `tab` back.
+- **The keyboard moves in with it**: `beginPlayResultSearch` sets the result
+  focus and sends the buffer `editor.ActionMsg{Action: "find"}`, so the prompt
+  gets the typing and `n` / `N` afterwards belong to the same focus — from both
+  starting points, including after `esc` closes the prompt.
+- **The chord is read live**: `playFindChord` resolves `editor.find` against the
+  editor context in the live binding table, like `playCopyChord` does for
+  `editor.copy`, so a rebound find key works in the playground too. Both focus
+  tables in `playhelp.go` list it with the resolved chord.
 
 ## 2026-09-01 (large-response body files open reliably, #2385)
 

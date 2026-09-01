@@ -1,7 +1,7 @@
 ---
 type: concept
 title: jq & yq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, and inserting a picked row into the query line — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, and inserting a picked row into the query line — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the find chord opens the result buffer's search from either focus and leaves the keyboard there for `n`/`N`; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, yaml, jq, yq, tools, inline, editor, http, completion, folding]
 timestamp: 2026-09-01T00:00:00Z
@@ -675,6 +675,7 @@ above win):
 | `alt+↑` / `alt+↓` | walk the history from any row of the multi-line view |
 | `home` / `end` | ends of the program — of the caret's **row** in the multi-line view |
 | `tab` | move the keyboard into the result buffer |
+| `cmd+f` | search the **result buffer** from here (`editor.find`) — the keyboard moves in with it |
 | `ctrl+alt+e` | toggle the [multi-line view](#the-multi-line-view) (`json.jqQueryView`) |
 | `pgup` / `pgdn` | page the result buffer without leaving the query line |
 | `ctrl+s` | save the program as a **named filter** (`json.jqSaveFilter`) |
@@ -686,7 +687,7 @@ above win):
 | `esc esc` | close **and** open the command palette (#2237) |
 | `f1` | the cheatsheet, opened on the playground's own context (#2237) |
 
-`ctrl+alt+e` and `ctrl+g` work from the result buffer too.
+`ctrl+alt+e`, `ctrl+g` and `cmd+f` work from the result buffer too.
 
 Result buffer (after `tab`): the **full editor keymap** — motions, search,
 folds (`za` / `zc` / `zo` / `zM` / `zR`, see
@@ -749,6 +750,39 @@ that do the nearest thing it actually has — `ctrl+space` for completion and
 colour rather than its success green (`playState.statusWarn`); "that key does
 not apply here" is not a confirmation. Like every status it clears on the next
 key.
+
+### `cmd+f` searches the result from either focus
+
+#2383. Searching a result used to cost three keys' worth of focus work: `tab`
+into the result buffer, `/`, and `tab` back. `cmd+f` — the search key
+everywhere else in the IDE — did nothing at all, for the same reason
+`alt+enter` did: `editor.find` is bound in the **editor** context, and the
+mode's routing keeps editor-context chords from the keymap layer.
+
+`playFindChord` recognizes it the way `playCopyChord` recognizes the copy chord
+— resolved against the editor context in the **live** binding table, so a
+rebound `editor.find` is the chord that works here too; a hard-coded `cmd+f`
+would be a lie to anyone who changed it. `beginPlayResultSearch` then does one
+thing from both focuses: it moves the keyboard into the result buffer and sends
+the buffer an `editor.ActionMsg{Action: "find"}` — the very action `/` triggers
+there.
+
+**The focus goes into the result buffer, and stays there.** It has to: the
+search prompt needs the typing, and `n` / `N` afterwards are the result
+buffer's keys. Bouncing back to the query line after the first match would make
+the shortcut useful for exactly one match and then wrong for every following
+one, and it would leave the two starting focuses behaving differently. So
+closing the search with `esc` also leaves the keyboard in the result buffer —
+the same place, whichever focus the search was started from — and one more
+`esc` from resting normal mode closes the mode as always. `tab` is the way
+back to the query line, unchanged.
+
+`/` in the result buffer is untouched: the chord is a shortcut past the `tab`,
+not a replacement. The buffer stays read-only (#1762) — a search is a motion —
+and the program, the history and the result are not involved at all. The
+cheatsheet lists the chord in **both** focus tables (`playhelp.go`), resolved
+live from the binding table like the chords in the third group, since a key
+that works from two places and is documented in neither is a key nobody finds.
 
 ### The cheatsheet knows the playground
 
