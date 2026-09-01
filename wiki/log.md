@@ -1,5 +1,29 @@
 # Log
 
+## 2026-09-01 (horizontal scroll state is visible, #2377)
+
+- **Edge marks in every sideways-scrolling view**: the editor, the diff viewer,
+  the explorer and the playground result buffer now mark the edges of their
+  horizontal window — `‹` on the first cell while the view is scrolled, `›` on
+  the last cell of a row that continues past it. Horizontal scrolling used to
+  be invisible: a shifted view looked exactly like an unshifted one showing
+  different text, and only "Ln x, Col y" hinted at anything, about the cursor
+  rather than the window.
+- **One shared package, one language**: `internal/hscroll` owns the glyphs, the
+  "which edge hides content" predicate and the ANSI-aware stamping; each view
+  supplies its own row model. The explorer's older right-clip ellipsis (#1035)
+  folds into the shared `›` — same cell, same meaning.
+- **Overlays, not insertions**: a mark replaces an edge cell instead of adding
+  a column, the way the vertical scrollbar claims a pane's rightmost column
+  (#1022), so cursor positions, mouse hit zones and column reporting are
+  untouched. The editor additionally never covers the caret's own cell, keeps
+  `›` clear of the scrollbar column, and renders nothing under soft wrap
+  (#64), where there is no horizontal scroll to report. The editor's overflow
+  verdict comes from the render pass itself, so tabs, conceal stand-ins and
+  the sv table expansion (#1724) are counted as drawn, not re-counted.
+- **`ui.h_scroll_marks`** (default `true`) turns the marks off everywhere, in
+  the config and in the Settings UI.
+
 ## 2026-09-01 (an open issue's text selects with the mouse, #2374)
 
 - **Press, drag, release in the detail body**: both full-area details of the

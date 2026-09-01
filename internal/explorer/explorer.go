@@ -17,6 +17,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/hscroll"
 	"ike/internal/lsp"
 	"ike/internal/overlay"
 	"ike/internal/scratch"
@@ -60,8 +61,11 @@ type Model struct {
 	cursor  int     // index into rows
 	offset  int     // first visible row (vertical scroll)
 	offsetX int     // first visible column (horizontal scroll)
-	hover   int     // row index under the mouse pointer, -1 when none
-	active  string  // path of the file focused in the editor, "" when none
+	// hMarks draws the horizontal-scroll edge marks (#2377,
+	// ui.h_scroll_marks) on each row; see hscroll.go.
+	hMarks  bool
+	hover   int    // row index under the mouse pointer, -1 when none
+	active  string // path of the file focused in the editor, "" when none
 	width   int
 	height  int
 	focused bool
@@ -241,6 +245,7 @@ func New(dir string) Model {
 		selAnchor:   -1,
 		now:         time.Now,
 		autoRefresh: true,
+		hMarks:      true,
 		pollEvery:   2 * time.Second,
 		wcache:      &widthCache{},
 		scrEnabled:  true,
@@ -2369,6 +2374,12 @@ func (m Model) View() string {
 			// on it ("AM"/"MM", #1868); the reserved width follows the code.
 			letter := rv.letter()
 			lw := len(letter) // the codes are ASCII, one cell each
+			// Horizontal-scroll edge marks (#2377): "‹" where the row
+			// continues left of the window, "›" where it continues right.
+			// They subsume the right-clip ellipsis (#1035) — same cell, same
+			// meaning, now in the language every sideways-scrolling view
+			// speaks — and add the left cue the tree never had.
+			markL, markR := m.hMarks && offX > 0, m.hMarks && clipped
 			if letter != "" && textW >= lw+1 {
 				if visW >= textW-lw+1 {
 					vis = ansi.Cut(vis, 0, textW-lw)
@@ -2377,11 +2388,19 @@ func (m Model) View() string {
 				if pad := textW - lw - visW; pad > 0 {
 					vis += style.Render(strings.Repeat(" ", pad))
 				}
+				// The status code owns the last cells, so the marks work on
+				// the window left of it.
+				vis = hscroll.Stamp(vis, textW-lw, markL, markR, m.hMarkStyle())
 				ls := style.Bold(false)
 				if c := vcs.StatusColor(m.theme(), rv.status); c != nil {
 					ls = ls.Foreground(c)
 				}
 				vis += ls.Render(letter)
+			} else if markL || markR {
+				if pad := textW - visW; pad > 0 {
+					vis += style.Render(strings.Repeat(" ", pad))
+				}
+				vis = hscroll.Stamp(vis, textW, markL, markR, m.hMarkStyle())
 			} else if clipped && textW >= 2 {
 				vis = ansi.Cut(vis, 0, textW-1) + style.Bold(false).Render("…")
 			} else if pad := textW - visW; pad > 0 {

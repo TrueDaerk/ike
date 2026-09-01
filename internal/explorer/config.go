@@ -44,6 +44,11 @@ func (m *Model) Configure(cfg host.Config) {
 		m.showHidden = v == "true"
 		m.hiddenCfg = v
 	}
+	// The horizontal-scroll edge marks (#2377) are a UI-wide toggle, applied
+	// here like the [explorer] keys — the tree has no other config seam.
+	if v, ok := cfg.Get("ui.h_scroll_marks"); ok {
+		m.hMarks = v != "false"
+	}
 	if v, ok := cfg.Get(cfgTreeIndent); ok {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
 			m.indent = n

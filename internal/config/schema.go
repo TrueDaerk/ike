@@ -498,6 +498,12 @@ type UI struct {
 	// settings) at this outer width in columns on large terminals (#932);
 	// extra terminal width just adds margin. 0 disables the cap.
 	PopupMaxWidth int `toml:"popup_max_width"`
+	// HScrollMarks draws the horizontal-scroll edge marks (#2377) in every
+	// sideways-scrolling view — editor, diff, explorer, playground result: a
+	// dim "‹" on the left edge of a scrolled window and a "›" on the right
+	// edge of a row that continues past it. They overlay the edge cells, so
+	// turning them off changes nothing but the two glyphs.
+	HScrollMarks bool `toml:"h_scroll_marks"`
 }
 
 // Backup holds crash-recovery snapshot behaviour (Roadmap 0210). Enable turns

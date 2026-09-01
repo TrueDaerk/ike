@@ -29,15 +29,25 @@ type lineKey struct {
 // very large file would otherwise retain a body per line visited).
 const lineCacheCap = 4096
 
+// spanBody is one memoized render: the styled body plus whether the span ran
+// out of width with content still to come (#2377) — the horizontal-scroll
+// right-edge mark reads that from the render itself instead of re-measuring
+// the line, so tabs, conceal stand-ins and inlay hints are counted exactly as
+// they were drawn.
+type spanBody struct {
+	body string
+	over bool
+}
+
 type lineCacheStore struct {
 	epoch   uint64
 	caret   uint64
 	sv      uint64 // sv table layout hash (#1589); 0 for non-sv buffers
-	entries map[lineKey]string
+	entries map[lineKey]spanBody
 }
 
 func newLineCache() *lineCacheStore {
-	return &lineCacheStore{entries: make(map[lineKey]string)}
+	return &lineCacheStore{entries: make(map[lineKey]spanBody)}
 }
 
 // syncEpoch drops every entry when the render epoch or the caret state has moved
@@ -90,20 +100,21 @@ func (m Model) caretState() uint64 {
 	return h
 }
 
-// cachedSpan returns the memoized body for key and whether it was present. The
-// caller must have run syncEpoch this frame, so a hit is guaranteed current.
-func (m Model) cachedSpan(key lineKey) (string, bool) {
+// cachedSpan returns the memoized render for key and whether it was present.
+// The caller must have run syncEpoch this frame, so a hit is guaranteed
+// current.
+func (m Model) cachedSpan(key lineKey) (spanBody, bool) {
 	if m.lineCache == nil {
-		return "", false
+		return spanBody{}, false
 	}
-	body, ok := m.lineCache.entries[key]
-	return body, ok
+	sb, ok := m.lineCache.entries[key]
+	return sb, ok
 }
 
 // storeSpan memoizes a freshly rendered body.
-func (m Model) storeSpan(key lineKey, body string) {
+func (m Model) storeSpan(key lineKey, sb spanBody) {
 	if m.lineCache != nil {
-		m.lineCache.entries[key] = body
+		m.lineCache.entries[key] = sb
 	}
 }
 

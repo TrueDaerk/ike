@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-08-24T00:00:00Z
+timestamp: 2026-09-01T00:00:00Z
 ---
 
 # Configuration System
@@ -115,6 +115,11 @@ Sections and their default-bearing slots (`schema.go`):
   [project switching](./project-switching.md)). The entry semantics —
   validation, upsert, dedupe, cap — live in `internal/project` (Roadmap
   0090); config only fixes the persisted shape.
+- `[ui]` — `menu_bar`, `onboarded`, `popup_max_width` (#932), and
+  `h_scroll_marks` (#2377, default `true`): the horizontal-scroll edge marks
+  every sideways-scrolling view draws — `‹` where content continues left, `›`
+  where a row continues right — in the editor, the diff viewer, the explorer
+  and the playground result buffer. See [editor](./editor.md).
 - `[backup]` — `enable`, `debounce_ms`, `max_age_days` for crash-recovery
   snapshots (Roadmap 0210, see [crash recovery](./crash-recovery.md)).
 - `[forge]` — `poll_interval_seconds` (#2085): how often the code forge is

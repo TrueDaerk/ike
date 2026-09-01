@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/hscroll"
 )
 
 func navModel(t *testing.T, files int) Model {
@@ -147,19 +149,27 @@ func TestExpandAllRecursesThroughLazyLevels(t *testing.T) {
 	}
 }
 
-// TestClippedRowEndsInEllipsis guards #1035.
+// TestClippedRowEndsInEllipsis guards #1035: a right-clipped row says so at
+// the cell where it was cut. The cue is the shared horizontal-scroll mark
+// (#2377) while the marks are on, and the original ellipsis when they are off.
 func TestClippedRowEndsInEllipsis(t *testing.T) {
 	root := t.TempDir()
 	long := "this_is_a_very_long_file_name_that_overflows.txt"
 	if err := os.WriteFile(filepath.Join(root, long), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	m := New(root)
-	m.SetSize(14, 6)
-	m.applyScan(scanCmd(root)().(ScanDoneMsg))
-	v := m.View()
-	if !strings.Contains(v, "…") {
-		t.Fatalf("clipped row must end in an ellipsis:\n%s", v)
+	for _, tc := range []struct {
+		marks bool
+		want  string
+	}{{true, hscroll.RightGlyph}, {false, "…"}} {
+		m := New(root)
+		m.hMarks = tc.marks
+		m.SetSize(14, 6)
+		m.applyScan(scanCmd(root)().(ScanDoneMsg))
+		v := m.View()
+		if !strings.Contains(v, tc.want) {
+			t.Fatalf("marks=%v: clipped row must end in %q:\n%s", tc.marks, tc.want, v)
+		}
 	}
 }
 

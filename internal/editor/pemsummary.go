@@ -129,10 +129,11 @@ func (m Model) renderPemHeader(line int, b peminfo.Block, width int, cursorStyle
 	const gap = "  "
 	avail := width - lipgloss.Width(m.buf.Line(line)) - lipgloss.Width(gap)
 	if avail < pemMinSummary {
-		return m.renderLine(line, width, cursorStyle, selStyle)
+		row, _ := m.renderLine(line, width, cursorStyle, selStyle)
+		return row
 	}
 	tag := gap + truncate(b.Summary, avail)
-	body := m.renderLine(line, width-lipgloss.Width(tag), cursorStyle, selStyle)
+	body, _ := m.renderLine(line, width-lipgloss.Width(tag), cursorStyle, selStyle)
 	return body + m.pemStyle(b.Severity).Render(tag)
 }
 

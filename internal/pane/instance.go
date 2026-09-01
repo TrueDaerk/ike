@@ -1631,6 +1631,11 @@ func applyDiffCfg(cfg host.Config, inst *Instance) {
 	if v, ok := cfg.Get("diff.ignore_whitespace"); ok {
 		inst.df.SetIgnoreWhitespace(v == "true")
 	}
+	// The horizontal-scroll edge marks (#2377) are a UI-wide toggle, but the
+	// diff model has no config seam of its own — it rides the same apply.
+	if v, ok := cfg.Get("ui.h_scroll_marks"); ok {
+		inst.df.SetHScrollMarks(v != "false")
+	}
 }
 
 // autosuggestOn reads terminal.autosuggest ("true" unless explicitly off);

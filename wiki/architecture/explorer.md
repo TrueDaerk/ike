@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-09-01T00:00:00Z
 ---
 
 # File Explorer
@@ -600,6 +600,18 @@ Each bar is a dim track (`│` / `─`) with a brighter, heavier thumb (`┃` / 
 sized and positioned by the shared `scrollbar.Thumb` (`internal/scrollbar`,
 #1367), in the style of table TUIs. Bars are
 hidden when the content fits.
+
+**Per-row edge marks (#2377, `explorer/hscroll.go`).** The horizontal bar
+answers "the tree is shifted"; the edge marks answer "*this row* is cut off,
+and on which side". Each rendered row takes `‹` on its first cell while
+`offsetX > 0` and `›` on its last while the row runs past the window, drawn
+from the shared `internal/hscroll` package the editor and diff viewer use. The
+right mark subsumes the older right-clip ellipsis (#1035) — same cell, same
+meaning, now in the language every sideways-scrolling view speaks; `…` remains
+the fallback while the marks are off (`ui.h_scroll_marks = false`). A VCS
+status letter (#1051/#1868) keeps the cells it owns, so the marks work on the
+window left of it. The marks overlay cells rather than adding them, so row
+widths, the scrollbar column and the click-to-column mapping never move.
 
 **Cursor-anchored clamping is intentional (#1140).** A wheel scroll
 (`ScrollBy`) moves the viewport *without* the cursor, so the viewport clamp is
