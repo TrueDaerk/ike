@@ -47,6 +47,27 @@ func TestCopyCurlKeyEmitsMsg(t *testing.T) {
 	}
 }
 
+// TestCopyHttpieKeyEmitsMsg: "H" is "C"'s second format (#2384) — the same
+// snapshot, the httpie spelling; lowercase "h" stays the history step.
+func TestCopyHttpieKeyEmitsMsg(t *testing.T) {
+	m := New(nil)
+	m.SetSize(80, 20)
+	m.Set("create", exported())
+
+	cmd := m.Update(tea.KeyPressMsg{Code: 'H', Text: "H"})
+	if cmd == nil {
+		t.Fatal("H must emit a command")
+	}
+	if _, ok := cmd().(CopyHttpieMsg); !ok {
+		t.Fatalf("message type: %T", cmd())
+	}
+	if cmd := m.Update(tea.KeyPressMsg{Code: 'h', Text: "h"}); cmd != nil {
+		if _, ok := cmd().(CopyHttpieMsg); ok {
+			t.Error("lowercase h must stay the history step")
+		}
+	}
+}
+
 // TestSaveBodyKeyEmitsMsg: "S" asks the host for the save prompt; "s" stays
 // the keep-scroll toggle (#1493).
 func TestSaveBodyKeyEmitsMsg(t *testing.T) {
