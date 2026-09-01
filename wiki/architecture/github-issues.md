@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Issues Tool Window
-description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select with an any-of/all-of switch) with a permanent chip row whose chips clear individually and a structured qualifier layer in the match input (label:/is:/sort: with inline tab completion) writing the same filter model, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, a consolidated key table with one meaning per letter family across all modes, and the start-work action branching issue/<number>-<slug> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111, #2114, #2112, #2110).
+description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select with an any-of/all-of switch) with a permanent chip row whose chips clear individually and a structured qualifier layer in the match input (label:/is:/sort: with inline tab completion) writing the same filter model, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, a consolidated key table with one meaning per letter family across all modes, and the start-work action branching issue/<number> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111, #2114, #2112, #2110, #2376).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane, keymap]
-timestamp: 2026-08-28T12:00:00Z
+timestamp: 2026-09-01T00:00:00Z
 ---
 
 # Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104, #2110, #2111, #2112, #2114)
@@ -13,7 +13,7 @@ Development in this repository is issue-driven (see
 [Change Workflow](/process/change-workflow.md)); this pane brings that loop
 into the IDE: browse the issues and pull requests of the current project's
 forge repository, read one, and start work on it — creating the
-`issue/<number>-<slug>` branch — without leaving the terminal.
+`issue/<number>` branch — without leaving the terminal.
 
 `issues.toggle` ("GitHub Issues", Tools menu) drives the shared singleton
 state machine (no pane → open + first fetch; unfocused → focus; focused →
@@ -75,15 +75,15 @@ its own concept: [Forge Layer](/architecture/forge.md). What the pane sees:
   (#2087): the push a saved edit buffer runs, with the stale-base check in
   front of it. The pane never calls it — the app does, for the buffer it owns.
 - `forge.PRForIssue(prs, n)` joins PRs to issues by the branch convention:
-  head `issue/<n>` or `issue/<n>-…`, preferring open over merged over closed.
-  Each PR's `statusCheckRollup` (CheckRun and StatusContext shapes both)
-  folds into one `CheckState`: failing beats pending beats passing.
-- `forge.BranchName(n, title)` derives the branch: lower-cased title,
-  non-alphanumeric runs collapsed to one dash, capped at 50 characters —
-  exactly the convention of the existing branches.
-- `forge.StartWorkCmd(dir, n, title)` → `StartWorkDoneMsg`. The flow refuses
-  a dirty worktree with a clear message; resolves the default branch
-  (`origin/HEAD`, falling back to `main`/`master`); fetches it (30s
+  head `issue/<n>` or `issue/<n>-…` (older slugged branches still resolve),
+  preferring open over merged over closed. Each PR's `statusCheckRollup`
+  (CheckRun and StatusContext shapes both) folds into one `CheckState`:
+  failing beats pending beats passing.
+- `forge.StartWorkCmd(dir, n)` → `StartWorkDoneMsg`, branching plain
+  `issue/<n>` (#2376 dropped the title-derived slug — the number alone
+  identifies the issue). The flow refuses a dirty worktree and an
+  already-existing issue branch with a clear message; resolves the default
+  branch (`origin/HEAD`, falling back to `main`/`master`); fetches it (30s
   timeout); then `checkout -b` off `origin/<default>` — or, when the fetch
   fails (offline), off the local default with a warning instead of blocking.
 

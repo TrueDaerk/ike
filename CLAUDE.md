@@ -72,7 +72,7 @@ Every change follows the same loop (details in
 
 1. **Issue first** — before any change, make sure a GitHub issue exists (duplicate check!);
    create one otherwise.
-2. **Branch per issue** — work on `issue/<number>-<slug>`, branched from an up-to-date `main`.
+2. **Branch per issue** — work on `issue/<number>`, branched from an up-to-date `main`.
 3. **When done, bump the patch version** — raise the last component of `Version` in
    `internal/version/version.go` (e.g. `0.1.6` → `0.1.7`) in its own `chore(version)` commit.
 4. **Open a PR on GitHub** — body says `Closes #<number>`.
