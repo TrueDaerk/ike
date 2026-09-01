@@ -180,14 +180,14 @@ func (m *Model) SelectionText() string {
 	// that row copies the fold's whole content (#1741) — fold the hidden body
 	// back in by pulling the end down to the fold's last row, in full.
 	if row := m.expandFolded(start.row, end.row); row > end.row {
-		end = pos{row: row, col: len([]rune(m.rows[row].text))}
+		end = pos{row: row, col: len(m.rowRunes(row))}
 	}
 	var b strings.Builder
 	for r := start.row; r <= end.row && r < len(m.rows); r++ {
 		if r < 0 {
 			continue
 		}
-		text := []rune(m.rows[r].text)
+		text := m.rowRunes(r)
 		from, to := 0, len(text)
 		if r == start.row {
 			from = min(start.col, to)
@@ -248,7 +248,7 @@ func (m *Model) posAt(x, y int) pos {
 		col = 0
 	}
 	if row < len(m.rows) {
-		if n := len([]rune(m.rows[row].text)); col > n {
+		if n := len(m.rowRunes(row)); col > n {
 			col = n
 		}
 	}
@@ -275,7 +275,7 @@ func (m *Model) wordSpanAt(p pos) (a, b pos, ok bool) {
 	if p.row < 0 || p.row >= len(m.rows) {
 		return a, b, false
 	}
-	text := []rune(m.rows[p.row].text)
+	text := m.rowRunes(p.row)
 	if p.col >= len(text) {
 		return a, b, false
 	}
@@ -300,7 +300,7 @@ func (m *Model) lineSpanAt(row int) (a, b pos) {
 	if row >= len(m.rows) {
 		return pos{row, 0}, pos{row, 0}
 	}
-	return pos{row, 0}, pos{row, len([]rune(m.rows[row].text))}
+	return pos{row, 0}, pos{row, len(m.rowRunes(row))}
 }
 
 // selState reports whether column col of row is inside the selection.

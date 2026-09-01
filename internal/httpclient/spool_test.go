@@ -13,7 +13,7 @@ import (
 // TestBodySinkKeepsSmallBodiesInMemory: below the threshold nothing touches
 // the disk — the ordinary API answer must not pay for the large-body case.
 func TestBodySinkKeepsSmallBodiesInMemory(t *testing.T) {
-	s := newBodySink(64, 1024)
+	s := newBodySink(64, 1024, "")
 	if _, err := s.Write([]byte("hello world")); err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestBodySinkKeepsSmallBodiesInMemory(t *testing.T) {
 // holds the *whole* body — head included, so it is a complete artifact.
 func TestBodySinkSpillsPastThreshold(t *testing.T) {
 	t.Cleanup(CleanupSpool)
-	s := newBodySink(10, 1<<20)
+	s := newBodySink(10, 1<<20, "")
 	// Three writes, the middle one straddling the threshold.
 	for _, chunk := range []string{"0123456", "789abcdef", "ghij"} {
 		if _, err := s.Write([]byte(chunk)); err != nil {
@@ -60,7 +60,7 @@ func TestBodySinkSpillsPastThreshold(t *testing.T) {
 // the warning still names it.
 func TestBodySinkTruncatesAtMax(t *testing.T) {
 	t.Cleanup(CleanupSpool)
-	s := newBodySink(4, 12)
+	s := newBodySink(4, 12, "")
 	if kept := s.add([]byte(strings.Repeat("x", 20))); kept != 12 {
 		t.Errorf("kept = %d, want 12", kept)
 	}
@@ -80,6 +80,45 @@ func TestBodySinkTruncatesAtMax(t *testing.T) {
 	}
 	if w := s.warnings(); len(w) != 1 || !strings.Contains(w[0], "truncated") {
 		t.Errorf("warnings = %v", w)
+	}
+}
+
+// TestBodyFileExt: the spool file's extension follows the Content-Type
+// (#2385) — it is what the editor keys its language choice on.
+func TestBodyFileExt(t *testing.T) {
+	cases := []struct{ ct, want string }{
+		{"application/json", ".json"},
+		{"application/json; charset=utf-8", ".json"},
+		{"application/vnd.api+json", ".json"},
+		{"text/html", ".html"},
+		{"application/xhtml+xml", ".xml"}, // the +suffix wins, like the highlighter's mapping
+		{"application/xhtml", ".html"},
+		{"application/xml", ".xml"},
+		{"application/x-yaml", ".yaml"},
+		{"text/plain", ".txt"},
+		{"text/csv", ".csv"},
+		{"application/octet-stream", ".bin"},
+		{"", ".bin"},
+		{"nonsense", ".bin"},
+	}
+	for _, c := range cases {
+		if got := BodyFileExt(c.ct); got != c.want {
+			t.Errorf("BodyFileExt(%q) = %q, want %q", c.ct, got, c.want)
+		}
+	}
+}
+
+// TestBodySinkSpoolFileCarriesTheExtension: a spilled JSON body lands in a
+// .json file (#2385), so opening it applies the right language.
+func TestBodySinkSpoolFileCarriesTheExtension(t *testing.T) {
+	t.Cleanup(CleanupSpool)
+	s := newBodySink(4, 1<<20, ".json")
+	if _, err := s.Write([]byte(`{"a":"bcdefgh"}`)); err != nil {
+		t.Fatal(err)
+	}
+	_, path, _ := s.close()
+	if path == "" || filepath.Ext(path) != ".json" {
+		t.Errorf("spool path = %q, want a .json file", path)
 	}
 }
 

@@ -244,8 +244,17 @@ type Store struct {
 	Dir string
 }
 
-// New returns a store rooted at dir (created lazily on the first append).
-func New(dir string) *Store { return &Store{Dir: dir} }
+// New returns a store rooted at dir (created lazily on the first append). The
+// directory is resolved to an absolute path up front (#2385): every body-file
+// path the store hands out is derived from it, and a viewer holding on to a
+// path must be able to open it later, whatever the working directory is by
+// then.
+func New(dir string) *Store {
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	return &Store{Dir: dir}
+}
 
 // file maps a source file + request key onto the history file path. The name
 // stays debuggable (base name prefix) while the hash keeps it unique and
@@ -265,8 +274,12 @@ const bodiesDir = "bodies"
 
 // List returns the stored responses for one request, newest first. A missing
 // or unreadable file yields nil — history is always best effort. A spooled
-// body's file name is resolved against the store directory, so what callers
-// see is a path they can open.
+// body's file name is resolved to the absolute path of its file under the
+// store's bodies/ directory, so what callers see is a path they can open —
+// in-memory entries are *always* absolute (#2385); the store-relative form
+// exists only on disk. Resolving via the base name also heals entries written
+// while a bug recorded them as "../../bodies/…" (#2385): adopted bodies live
+// flat in bodies/, so the base name alone identifies the file.
 func (s *Store) List(source, key string) []Entry {
 	data, err := os.ReadFile(s.file(source, key))
 	if err != nil {
@@ -278,15 +291,18 @@ func (s *Store) List(source, key string) []Entry {
 	}
 	for i := range entries {
 		if entries[i].BodyFile != "" {
-			entries[i].BodyFile = filepath.Join(s.Dir, entries[i].BodyFile)
+			entries[i].BodyFile = filepath.Join(s.Dir, bodiesDir, filepath.Base(entries[i].BodyFile))
 		}
 	}
 	return entries
 }
 
 // adoptBody copies a dispatcher spool file (#2157) into the store's own
-// bodies/ directory and rewrites the entry's BodyFile to the name it should
-// be recorded under. The dispatcher's file is a per-process temp file that
+// bodies/ directory and rewrites the entry's BodyFile to the copy's absolute
+// path — the in-memory form every BodyFile keeps (#2385); only serialization
+// makes it store-relative. The copy keeps the spool file's extension, which
+// carries the response's Content-Type (a JSON body stays a .json file the
+// editor opens as JSON). The dispatcher's file is a per-process temp file that
 // disappears on exit, so the copy is what makes a large body outlive the
 // session the way every other part of an entry does. A copy that fails costs
 // the entry its full body — the stored head still shows — never the entry.
@@ -305,7 +321,11 @@ func (s *Store) adoptBody(e *Entry) {
 		e.BodyFile, e.BodySize = "", 0
 		return
 	}
-	dst, err := os.CreateTemp(dir, "body-*.bin")
+	ext := filepath.Ext(e.BodyFile)
+	if ext == "" {
+		ext = ".bin"
+	}
+	dst, err := os.CreateTemp(dir, "body-*"+ext)
 	if err != nil {
 		e.BodyFile, e.BodySize = "", 0
 		return
@@ -317,7 +337,7 @@ func (s *Store) adoptBody(e *Entry) {
 		e.BodyFile, e.BodySize = "", 0
 		return
 	}
-	e.BodyFile = filepath.Join(bodiesDir, filepath.Base(dst.Name()))
+	e.BodyFile = dst.Name()
 }
 
 // dropBodies removes the body files of entries the prune dropped, so bodies/
@@ -354,12 +374,15 @@ func (s *Store) Append(source, key string, e Entry) {
 	if len(entries) > MaxPerRequest {
 		entries, dropped = entries[:MaxPerRequest], entries[MaxPerRequest:]
 	}
-	// List handed back absolute body paths; they are stored relative.
+	// In memory every body path is absolute (adoptBody and List both hand out
+	// absolute paths, #2385); on disk it is "bodies/<name>", so moving a
+	// project does not strand it. Adopted bodies live flat in bodies/, which
+	// makes the base name the whole identity — deriving the stored form from
+	// it cannot produce a "../"-shaped path the way filepath.Rel against a
+	// relative store directory once did (#2385).
 	for i := range entries {
 		if entries[i].BodyFile != "" {
-			if rel, err := filepath.Rel(s.Dir, entries[i].BodyFile); err == nil {
-				entries[i].BodyFile = rel
-			}
+			entries[i].BodyFile = filepath.Join(bodiesDir, filepath.Base(entries[i].BodyFile))
 		}
 	}
 	// Indented so the file reads (and diffs) in the editor (#1267).

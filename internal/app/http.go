@@ -759,6 +759,13 @@ func (m *Model) loadMoreHTTPBody() tea.Cmd {
 		return nil
 	}
 	if !p.LoadMore() {
+		if p.BodyFileGone() {
+			// The rest of the body lived in a file that no longer exists
+			// (#2385) — pruned history, a cleaned temp dir. Say that instead
+			// of pretending everything is on screen.
+			m.host.Notify(host.Info, "http: the rest of this body is gone — its body file no longer exists")
+			return nil
+		}
 		m.host.Notify(host.Info, "http: the whole response body is already shown")
 		return nil
 	}
@@ -777,6 +784,12 @@ func (m *Model) openHTTPBodyFile() tea.Cmd {
 	}
 	cmd := p.OpenBodyFileCmd()
 	if cmd == nil {
+		if p.BodyFileGone() {
+			// There was a file once (#2385): explain its absence rather than
+			// let a raw "no such file" surface downstream.
+			m.host.Notify(host.Info, "http: this body's file no longer exists — only the stored head remains")
+			return nil
+		}
 		m.host.Notify(host.Info, "http: this response body is held in memory — save it with http.saveResponse")
 	}
 	return cmd

@@ -296,7 +296,7 @@ func (m *Model) foldCopyColumn(row int) (int, bool) {
 	if _, collapsed := m.folded[row]; !collapsed || row < 0 || row >= len(m.rows) {
 		return 0, false
 	}
-	runes := []rune(m.rows[row].text)
+	runes := m.rowRunes(row)
 	from := min(m.left, len(runes))
 	to, tail := len(runes), 0
 	if w := m.rowWidth(); to-from > w {

@@ -25,6 +25,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -112,20 +113,41 @@ func (m *Model) ShownBodyBytes() int {
 func (m *Model) TotalBodyBytes() int { return m.CurrentResponse().BodyBytes() }
 
 // CanLoadMore reports whether the shown response has body bytes beyond what is
-// composed — the gate for the "m" key and the footer hint.
+// composed — the gate for the "m" key and the footer hint. Bytes behind a body
+// file that has gone missing (#2385) do not count: advertising a load that
+// must fail helps nobody.
 func (m *Model) CanLoadMore() bool {
-	return !m.streaming && m.ShownBodyBytes() < m.TotalBodyBytes()
+	return !m.streaming && m.ShownBodyBytes() < m.TotalBodyBytes() && !m.BodyFileGone()
 }
 
 // BodyFilePath is the file holding the complete body of the shown response,
 // "" when there is none (the body is small enough to live in memory, or the
-// spool file is gone). It gates the "o" key.
+// spool file is gone — see BodyFileGone). It gates the "o" key and the footer
+// hint: a path that cannot be opened is not offered, so a pruned history or
+// an externally deleted file never surfaces as a raw "no such file" error
+// (#2385).
 func (m *Model) BodyFilePath() string {
 	resp := m.CurrentResponse()
 	if resp == nil || !resp.Spooled() {
 		return ""
 	}
+	if _, err := os.Stat(resp.SpoolPath); err != nil {
+		return ""
+	}
 	return resp.SpoolPath
+}
+
+// BodyFileGone reports that the shown response *had* a body file which no
+// longer exists (#2385) — the history was pruned, or the file was deleted
+// externally. Hosts use it to explain why "o" and "m" have nothing to offer
+// instead of claiming the body never had a file.
+func (m *Model) BodyFileGone() bool {
+	resp := m.CurrentResponse()
+	if resp == nil || !resp.Spooled() {
+		return false
+	}
+	_, err := os.Stat(resp.SpoolPath)
+	return err != nil
 }
 
 // LoadMore pulls the next window of a spooled body into the view and
@@ -248,8 +270,15 @@ func trimPartialRune(b []byte) []byte {
 
 // spoolNotice is the head-of-a-large-body row: how much of the body is on
 // screen, how much there is, and the two ways on — one more window, or the
-// whole thing as a file.
+// whole thing as a file. A body file that has gone missing (#2385) gets a row
+// that says so instead of advertising keys that must fail.
 func spoolNotice(resp *httpclient.Response, shown int) string {
+	if resp.Spooled() {
+		if _, err := os.Stat(resp.SpoolPath); err != nil {
+			return fmt.Sprintf("(showing the first %s of %s — the rest is gone: its body file no longer exists)",
+				byteSize(shown), byteSize(resp.BodyBytes()))
+		}
+	}
 	return fmt.Sprintf("(showing the first %s of %s — m load more · o open as file)",
 		byteSize(shown), byteSize(resp.BodyBytes()))
 }

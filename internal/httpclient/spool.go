@@ -118,6 +118,10 @@ type bodySink struct {
 	head      []byte
 	threshold int
 	max       int
+	// ext is the spool file's extension, derived from the response's
+	// Content-Type (#2385). The extension is what tells the editor which
+	// language to open the file under when the viewer's "o" opens it.
+	ext string
 
 	file  *os.File
 	path  string
@@ -131,9 +135,62 @@ type bodySink struct {
 }
 
 // newBodySink returns a sink capped at max total bytes, spilling past
-// threshold. A threshold at or above max means "never spool".
-func newBodySink(threshold, max int) *bodySink {
-	return &bodySink{threshold: threshold, max: max}
+// threshold into a file named with ext (#2385). A threshold at or above max
+// means "never spool".
+func newBodySink(threshold, max int, ext string) *bodySink {
+	if ext == "" {
+		ext = ".bin"
+	}
+	return &bodySink{threshold: threshold, max: max, ext: ext}
+}
+
+// BodyFileExt maps a Content-Type header value onto the extension a body file
+// is written under (#2385) — ".bin" for anything unrecognized. The parsing
+// mirrors the viewer's language resolution (plugins/languages/http/regions.go,
+// bodyLanguage): parameters are cut, a "+suffix" wins over the bare subtype,
+// and an "x-" prefix is the same thing under an older name. The extension
+// matters because it is what the editor keys its language choice on when the
+// file opens.
+func BodyFileExt(contentType string) string {
+	media, _, _ := strings.Cut(contentType, ";")
+	media = strings.ToLower(strings.TrimSpace(media))
+	_, subtype, ok := strings.Cut(media, "/")
+	if !ok {
+		return ".bin"
+	}
+	if _, suffix, hasSuffix := strings.Cut(subtype, "+"); hasSuffix {
+		if ext, known := bodyFileExts[suffix]; known {
+			return ext
+		}
+	}
+	subtype = strings.TrimPrefix(subtype, "x-")
+	if bare, _, hasSuffix := strings.Cut(subtype, "+"); hasSuffix {
+		subtype = bare
+	}
+	if ext, known := bodyFileExts[subtype]; known {
+		return ext
+	}
+	return ".bin"
+}
+
+// bodyFileExts is the subtype → extension table BodyFileExt consults — the
+// same subtypes regions.go maps onto languages, plus "plain" for text/plain.
+var bodyFileExts = map[string]string{
+	"json":       ".json",
+	"ndjson":     ".ndjson",
+	"xml":        ".xml",
+	"html":       ".html",
+	"xhtml":      ".html",
+	"css":        ".css",
+	"javascript": ".js",
+	"ecmascript": ".js",
+	"yaml":       ".yaml",
+	"toml":       ".toml",
+	"markdown":   ".md",
+	"sql":        ".sql",
+	"graphql":    ".graphql",
+	"csv":        ".csv",
+	"plain":      ".txt",
 }
 
 // Write makes the sink an io.Writer for the collect path. It always claims
@@ -181,7 +238,7 @@ func (s *bodySink) spill(p []byte) {
 			s.spoolErr = err
 			return
 		}
-		f, err := os.CreateTemp(dir, "body-*.bin")
+		f, err := os.CreateTemp(dir, "body-*"+s.ext)
 		if err != nil {
 			s.spoolErr = err
 			return

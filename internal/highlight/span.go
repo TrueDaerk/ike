@@ -81,5 +81,10 @@ func (ix Index) CaptureAt(line, col int) string {
 	return ""
 }
 
+// LineSpans returns every indexed span of one line, in iterator order — for
+// callers that render a narrow window of a very long line and want to filter
+// once instead of paying CaptureAt's linear scan per rune cell (#2386).
+func (ix Index) LineSpans(line int) []Span { return ix.byLine[line] }
+
 // Empty reports whether the index holds no spans.
 func (ix Index) Empty() bool { return len(ix.byLine) == 0 }

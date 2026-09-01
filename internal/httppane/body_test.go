@@ -298,6 +298,75 @@ func TestSpoolGoneKeepsTheHeadReadable(t *testing.T) {
 	}
 }
 
+// TestGoneBodyFileWithdrawsTheAffordances (#2385): a body file that no longer
+// exists must not be offered — no "o" path, no "m" hint, no raw "no such
+// file" downstream. The pane reports the state via BodyFileGone so the host
+// can explain it.
+func TestGoneBodyFileWithdrawsTheAffordances(t *testing.T) {
+	resp := spooledResponse(t, strings.Repeat("q", 4000), 80)
+	m := New(nil)
+	m.SetSize(80, 20)
+	m.Set("big", resp)
+	if m.BodyFilePath() == "" || m.BodyFileGone() {
+		t.Fatal("the file exists — the affordances must be on")
+	}
+
+	if err := os.Remove(resp.SpoolPath); err != nil {
+		t.Fatal(err)
+	}
+	if m.BodyFilePath() != "" {
+		t.Error("BodyFilePath handed out a path that cannot be opened")
+	}
+	if !m.BodyFileGone() {
+		t.Error("BodyFileGone did not report the missing file")
+	}
+	if cmd := key(t, &m, "o"); cmd != nil {
+		t.Errorf(`"o" offered the gone file: %v`, cmd())
+	}
+	if m.CanLoadMore() {
+		t.Error("CanLoadMore advertises bytes that cannot be read")
+	}
+	f := m.footerText()
+	if strings.Contains(f, "o open file") || strings.Contains(f, "m more") {
+		t.Errorf("footer still advertises the gone file:\n%s", f)
+	}
+}
+
+// TestSpooledResponseRestoredFromHistory (#2385): the o/m affordances work the
+// same on an entry restored from the stored history — the shape Entry.Response
+// produces — as on a fresh dispatch result.
+func TestSpooledResponseRestoredFromHistory(t *testing.T) {
+	body := strings.Repeat("row\n", 1000)
+	fresh := spooledResponse(t, body, 100)
+	// The restored shape carries the same absolute path the store's List
+	// resolves; nothing else about it differs from a fresh response.
+	restored := &httpclient.Response{
+		Status: fresh.Status, StatusCode: fresh.StatusCode, Proto: fresh.Proto,
+		Headers: fresh.Headers, Body: fresh.Body,
+		SpoolPath: fresh.SpoolPath, BodySize: fresh.BodySize,
+	}
+	m := New(nil)
+	m.SetSize(80, 20)
+	m.Set("big", restored)
+	m.SetHistory([]HistoryItem{{Resp: restored}})
+
+	cmd := key(t, &m, "o")
+	if cmd == nil {
+		t.Fatal(`"o" produced no command on a restored response`)
+	}
+	msg, ok := cmd().(OpenBodyFileMsg)
+	if !ok || msg.Path != fresh.SpoolPath {
+		t.Fatalf(`"o" produced %T (%v)`, cmd(), cmd())
+	}
+	if _, err := os.Stat(msg.Path); err != nil {
+		t.Errorf("the offered path does not open: %v", err)
+	}
+	shown := m.ShownBodyBytes()
+	if !m.LoadMore() || m.ShownBodyBytes() <= shown {
+		t.Error(`"m" did not grow the restored view`)
+	}
+}
+
 // TestPartialHeadIsNotMistakenForBinary: the head was cut at a byte offset, so
 // it may end inside a multi-byte rune — dropping that stump is what keeps a
 // perfectly good UTF-8 body from collapsing to the binary notice.

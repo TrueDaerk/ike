@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, and a notification when a failed or slow response lands while the response pane is not on screen.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-31T12:00:00Z
+timestamp: 2026-09-01T12:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -627,7 +627,13 @@ long as the response was on show, and up to five at a time once the
 stutter and never gave the memory back.
 
 A body past `SpoolThreshold` (1 MiB) is therefore **streamed to a spool file**
-while it is received (`internal/httpclient/spool.go`, `bodySink`):
+while it is received (`internal/httpclient/spool.go`, `bodySink`). The file is
+named `body-*<ext>` where the extension follows the response's `Content-Type`
+(`BodyFileExt`, #2385 — `body-123.json`, `body-456.html`, `.bin` for anything
+unrecognized): the extension is what the editor keys its language choice on
+when the viewer's `o` opens the file. The subtype parsing mirrors the
+highlighter's Content-Type → language mapping
+(`plugins/languages/http/regions.go`).
 
 - `Response.Body` holds the first `SpoolThreshold` bytes — the *head*, which
   is what the viewer renders.
@@ -654,13 +660,23 @@ leaves it behind, so *creating* a spool directory first sweeps the ones older
 than 24 hours — the same best-effort posture the history store takes.
 
 Because a temp file dies with the process, the **history store adopts it**: on
-`Append` the spool is copied into `.ike/http/bodies/` and the entry records
-the name relative to the store directory (`Entry.BodyFile`, `Entry.BodySize`).
-Pruning past `MaxPerRequest` deletes the dropped entries' body files, so
-`bodies/` follows the five-entry ring. The head stays inline in the history
-JSON as before, so showing a stored entry still costs no read; `FullBody()` is
-what reaches past it. An adoption that fails costs the entry its full body —
-the stored head still shows — never the entry itself.
+`Append` the spool is copied into `.ike/http/bodies/` — keeping its
+Content-Type extension — and the entry records where it went (`Entry.BodyFile`,
+`Entry.BodySize`). The path exists in exactly two shapes (#2385): **on disk**
+it is `bodies/<name>`, relative to the store directory so moving a project does
+not strand it; **in memory** it is always absolute — the store resolves its
+root with `filepath.Abs` at construction, `adoptBody` and `List` both hand out
+absolute paths, and only serialization in `Append` produces the relative form
+(derived from the base name — adopted bodies live flat in `bodies/`, so the
+base name is the whole identity, and `List` resolves through it too, which
+heals entries an earlier bug recorded as `../../bodies/…`). One shape per
+place is what keeps the viewer's `o` and `m` working whatever the working
+directory is by the time they are pressed. Pruning past `MaxPerRequest`
+deletes the dropped entries' body files, so `bodies/` follows the five-entry
+ring. The head stays inline in the history JSON as before, so showing a stored
+entry still costs no read; `FullBody()` is what reaches past it. An adoption
+that fails costs the entry its full body — the stored head still shows — never
+the entry itself.
 
 ### As-sent request snapshot (#1832)
 
@@ -969,6 +985,22 @@ For a recognized stream:
   the Settings UI (HTTP Client page, 1–65536 KiB, validated and persisted);
   the pane reads it through a package global (`httppane.SetHighlightLimit`,
   the `idcolor` arrangement) pushed on startup and config reload.
+- **Rendering pays for the window, not the line** (#2386): `View` runs after
+  *every* message, so its cost is what each click and keystroke pays for as
+  long as the response stays open. A spooled minified body composes as one
+  megabyte-long row, and three per-frame costs each scaled with that whole
+  line instead of the pane-width window on screen: the identifier scan
+  (`idcolor.Scan`, itself quadratic over a line with many hex IDs — fixed to
+  one incremental byte→rune walk), the per-cell `CaptureAt` over every
+  highlight span of the line, and the `[]rune` decode of the row text. Now the
+  row's runes decode once and stay on the row (`rowRunes` — mouse hit tests
+  and selection share the cache), `baseStyle` filters the line's spans and
+  scans identifiers over a padded window (`idScanPad`, so an ID overlapping
+  the edge still colours whole and keeps its slot), the search-match lookup
+  narrows to the row's window (`rowMatchFn`) and `maxLeft` caches the longest
+  row instead of re-counting every row per pan. `BenchmarkViewLargeSingleLine`
+  et al. (`internal/httppane/bench_test.go`) pin the path: one frame over a
+  1 MiB single-line head went from ~4.9 s to ~0.1 ms.
 - **Large bodies are a window onto a file** (#2157): the dispatcher spools
   anything past `SpoolThreshold` (1 MiB) to disk (see
   [Large bodies are spooled to disk](#large-bodies-are-spooled-to-disk-2157)),
@@ -981,12 +1013,17 @@ For a recognized stream:
     notice and the footer hint disappear once nothing is left behind the head.
   - `o` / `http.openBodyFile` opens the **whole** body as an editor tab. The
     pane resolves the path and emits `httppane.OpenBodyFileMsg`; the host opens
-    it through `openPathInEditor` — the `CopyMsg` seam again. A body held in
-    memory has no file and the key does nothing (`http.saveResponse` is the
-    action for that one).
-  - A spool file that has gone missing degrades to the head rather than
-    emptying the pane: `LoadMore` reports no progress and the composed rows
-    stay readable.
+    it through `openPathInEditor` — the `CopyMsg` seam again. The file's
+    extension follows the response's Content-Type (#2385), so a JSON answer
+    opens as JSON and an HTML answer as HTML. A body held in memory has no
+    file and the key does nothing (`http.saveResponse` is the action for that
+    one).
+  - A body file that has gone missing (pruned history, an externally cleaned
+    directory) **withdraws the affordances** instead of erroring (#2385):
+    `BodyFilePath` answers `""` for a path that cannot be opened,
+    `BodyFileGone` tells the host why, the notice row and footer stop
+    advertising `m`/`o`, and the palette pendants explain the absence — never
+    a raw "no such file". The composed head stays readable throughout.
 - **One key into the jq playground** (#2157): `q` / `http.jqPlayground` opens
   the [jq playground](./jq-playground.md) over the shown body, in the response
   pane itself — the mode already resolved a focused response as its input

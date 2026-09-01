@@ -92,7 +92,7 @@ func Clamp(n int) int {
 // is the minimum length of a bare hex run; values below the floor are clamped.
 func Scan(line string, minLen int) []Span {
 	minLen = Clamp(minLen)
-	var out []Span
+	var cands [][2]int              // accepted byte ranges, per pass in order
 	claimed := make([][2]int, 0, 4) // byte ranges the UUID pass took
 	for _, loc := range uuidRe.FindAllStringIndex(line, -1) {
 		// Claimed even when the UUID itself is not standalone, so the hex
@@ -101,7 +101,7 @@ func Scan(line string, minLen int) []Span {
 		if !standalone(line, loc[0], loc[1]) {
 			continue
 		}
-		out = append(out, span(line, loc[0], loc[1]))
+		cands = append(cands, [2]int{loc[0], loc[1]})
 	}
 	for _, loc := range hexRe.FindAllStringIndex(line, -1) {
 		if loc[1]-loc[0] < minLen || overlaps(claimed, loc[0], loc[1]) {
@@ -110,19 +110,22 @@ func Scan(line string, minLen int) []Span {
 		if !standalone(line, loc[0], loc[1]) || allDigits(line[loc[0]:loc[1]]) {
 			continue
 		}
-		out = append(out, span(line, loc[0], loc[1]))
+		cands = append(cands, [2]int{loc[0], loc[1]})
 	}
-	sortByStart(out)
+	sortByStart(cands)
+	// One incremental byte→rune walk over the whole line converts every
+	// candidate: counting from the line start per match made a line with many
+	// identifiers quadratic (#2386) — the response viewer paid it per frame.
+	out := make([]Span, 0, len(cands))
+	bytePos, runeCol := 0, 0
+	for _, c := range cands {
+		runeCol += utf8.RuneCountInString(line[bytePos:c[0]])
+		start := runeCol
+		runeCol += utf8.RuneCountInString(line[c[0]:c[1]])
+		bytePos = c[1]
+		out = append(out, Span{Start: start, End: runeCol, Slot: Slot(line[c[0]:c[1]])})
+	}
 	return out
-}
-
-// span builds the Span for the byte range [start, end) of line.
-func span(line string, start, end int) Span {
-	return Span{
-		Start: utf8.RuneCountInString(line[:start]),
-		End:   utf8.RuneCountInString(line[:end]),
-		Slot:  Slot(line[start:end]),
-	}
 }
 
 // standalone reports whether the byte range [start, end) is delimited on both
@@ -162,14 +165,35 @@ func overlaps(ranges [][2]int, start, end int) bool {
 	return false
 }
 
-// sortByStart keeps the merged UUID and hex results in column order; the two
-// passes each produce sorted output, so an insertion pass is enough.
-func sortByStart(spans []Span) {
-	for i := 1; i < len(spans); i++ {
-		for j := i; j > 0 && spans[j].Start < spans[j-1].Start; j-- {
-			spans[j], spans[j-1] = spans[j-1], spans[j]
+// sortByStart keeps the merged UUID and hex byte ranges in column order; the
+// two passes each produce sorted, non-overlapping output, so merging them is
+// one linear pass — an insertion sort over a line full of hex runs behind one
+// early UUID would degrade quadratically (#2386).
+func sortByStart(ranges [][2]int) {
+	if len(ranges) < 2 {
+		return
+	}
+	split := len(ranges)
+	for i := 1; i < len(ranges); i++ {
+		if ranges[i][0] < ranges[i-1][0] {
+			split = i // the first hex range sorting before a UUID range
+			break
 		}
 	}
+	if split == len(ranges) {
+		return
+	}
+	merged := make([][2]int, 0, len(ranges))
+	a, b := ranges[:split], ranges[split:]
+	for len(a) > 0 && len(b) > 0 {
+		if a[0][0] <= b[0][0] {
+			merged, a = append(merged, a[0]), a[1:]
+		} else {
+			merged, b = append(merged, b[0]), b[1:]
+		}
+	}
+	merged = append(append(merged, a...), b...)
+	copy(ranges, merged)
 }
 
 // Slot hashes an identifier onto a rainbow slot. Case folds first, so the same
