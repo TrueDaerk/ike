@@ -231,10 +231,21 @@ stale copies. The root is never markable, and the Scratches section has no
 multi-select at all (see below).
 
 Visually, a marked row takes the `rowMarked` kind — the same muted
-`SelectionMuted` recipe as a range member — and, while anything is marked, every
-tree row gains one leading marker cell (`selMarker`): `✓ ` on marked rows, two
-spaces elsewhere. With nothing marked the column does not exist, so the
-unmarked tree renders exactly as it always did.
+`SelectionMuted` recipe as a range member — and its **own indent-guide cell**
+carries the mark: `guideCell` renders `✓` where the row's guide line `│` would
+be, painted in the `Accent` slot so it never reads as a guide (#2380). The mark
+therefore costs **no column of its own** — a marked row is exactly as wide as an
+unmarked one, the tree never shifts, and clearing the last mark restores the
+previous rendering exactly. A depth-0 row has no guide cell to borrow; there
+the mark takes the expand marker's always-blank second cell, equally
+width-neutral (unreachable through the UI, since the root is never markable,
+but the rendering must not depend on that).
+
+The earlier design prepended a two-cell marker column while anything was
+marked. That changed every row's text without invalidating the memoized row
+widths, so the renderer clipped and padded against widths two cells too small
+and the terminal wrapped the whole pane (#2380); see *Content width memo*
+below for the second half of that fix.
 
 `opTargets` is the single resolution point every bulk-capable operation goes
 through: the **marks** first, then an active **range**, then the plain **cursor
@@ -401,7 +412,9 @@ of the terminal colour profile.
 Indent guides render in the semantic `IndentGuide` palette slot (#1050,
 mirroring the editor) over the row's background, and — with the expand
 marker — stay un-bold under the cursor so the caret column keeps its metrics
-(#1059). The `(empty)` placeholder uses the `InlayHint` slot instead of
+(#1059). `rowParts` splits the row's **own** guide cell off from its ancestors'
+so `View` can give it the `Accent` foreground when it carries a multi-select
+mark (#2380). The `(empty)` placeholder uses the `InlayHint` slot instead of
 terminal Faint (#1058).
 
 Independently of `rowKind`, **every** file open in any editor pane renders its
@@ -628,6 +641,27 @@ descent). `externalRefresh`'s stability snap — keeping the cursor on its entry
 across a watcher rebuild — deliberately sets `pendingSel` without the follow
 flag, so a background refresh never yanks the viewport back to an off-screen
 selection.
+
+### Content width memo (#1096, #2380)
+
+`contentWidth` measures the widest visible row from `rowText` — the single
+source of truth for clipping, padding, the horizontal scrollbar's geometry and
+the mouse hit tests — and caches both the maximum and each row's own `n.rowW`
+in `wcache`. `View` deliberately never re-parses the styled string, so a stale
+cached width does not merely mis-scroll: it makes the renderer emit lines wider
+than the pane, which the terminal then wraps.
+
+The memo used to carry only a `valid` flag, invalidated by hand from `rebuild`,
+`SetSize` and `Configure` under a *documented* assumption that every row-text
+mutation funnels through those three. `toggleMark` broke it (#2380). The cache
+now stores the **`widthKey` it was measured under** — the row-set epoch
+(`rowsEpoch`, bumped by every `rebuild`), `indent`, the pane `width`, the mark
+count and the `icons` flag, i.e. everything outside the row nodes that
+`rowText` reads. A mismatch simply re-measures, so forgetting to invalidate can
+no longer render a wrong width, and a new row-text input is a visible field to
+add rather than an invariant to remember. `invalidateWidth` stays for the
+inputs not worth fingerprinting (the exclude globs and colour table applied by
+`Configure`).
 
 ## Scratches section (#1963)
 

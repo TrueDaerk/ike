@@ -1613,38 +1613,58 @@ func (m *Model) clampOffset() {
 }
 
 // rowParts is the plain (unstyled) content of a row, split where styling
-// differs: the guides (one indent-guide segment per ancestor level), the
-// two-cell expand marker (plus, with explorer.icons on, a two-cell file-type
-// glyph, #1046), the name (directories gain a trailing slash), and — on the
-// root row only — the dimmed project-path context suffix (#1046). The split
-// lets View paint the guides in the semantic IndentGuide colour (#1050,
-// mirroring the editor), decorate just the name (the open-file underline)
-// and dim just the context, without touching guides or padding.
-func (m Model) rowParts(n *node) (guides, mark, name, ctx string) {
+// differs: the guides (one indent-guide segment per ancestor level above the
+// row's own), the row's own guide segment — which doubles as the multi-select
+// cell (#2166/#2380) — the two-cell expand marker (plus, with explorer.icons
+// on, a two-cell file-type glyph, #1046), the name (directories gain a
+// trailing slash), and — on the root row only — the dimmed project-path
+// context suffix (#1046). The split lets View paint the guides in the semantic
+// IndentGuide colour (#1050, mirroring the editor), the mark cell in the
+// accent colour, decorate just the name (the open-file underline) and dim just
+// the context, without touching guides or padding.
+//
+// The mark replaces the guide glyph instead of adding a column of its own
+// (#2380): a marked row is exactly as wide as an unmarked one, so marking
+// never shifts the tree and never invalidates the row widths the renderer,
+// the scrollbars and the hit tests all run on.
+func (m Model) rowParts(n *node) (guides, selCell, mark, name, ctx string) {
 	var b strings.Builder
-	for d := 0; d < n.depth; d++ {
+	// Every level but the row's own contributes a plain guide segment; the
+	// last one is split off as selCell so it can carry the mark and its own
+	// colour.
+	for d := 0; d < n.depth-1; d++ {
 		b.WriteString("│")
 		b.WriteString(strings.Repeat(" ", maxz(m.indent-1)))
+	}
+	if n.depth > 0 {
+		selCell = m.guideCell(n) + strings.Repeat(" ", maxz(m.indent-1))
 	}
 	name = n.name
 	if n.isDir {
 		name += "/"
 	}
-	mark = m.selMarker(n) + m.marker(n)
+	mark = m.marker(n)
+	if n.depth == 0 && m.marked(n.path) {
+		// A depth-0 row has no guide column to borrow. The expand marker's
+		// second cell is blank on every row, so the mark lands there —
+		// visible, and still width-neutral. Unreachable through the UI (the
+		// root is never markable) but the rendering must not depend on that.
+		mark = mark[:len(mark)-1] + markGlyph
+	}
 	if m.icons {
 		mark += typeGlyph(n) + " "
 	}
 	if n == m.root {
 		ctx = m.rootContext(ansi.StringWidth(mark) + ansi.StringWidth(name))
 	}
-	return b.String(), mark, name, ctx
+	return b.String(), selCell, mark, name, ctx
 }
 
 // rowText is the full plain content of a row. It is the single source of truth
 // for width measurement, so clipping and the scrollbars agree with rendering.
 func (m Model) rowText(n *node) string {
-	guides, mark, name, ctx := m.rowParts(n)
-	return guides + mark + name + ctx
+	guides, selCell, mark, name, ctx := m.rowParts(n)
+	return guides + selCell + mark + name + ctx
 }
 
 // minRootContextWidth is the narrowest pane that still shows the root row's
@@ -1690,18 +1710,16 @@ func abbrevHome(p string) string {
 // (#1039): a loaded dir with no (filter-surviving) children shows no
 // expander, JetBrains-style, instead of expanding to nothing. Unloaded dirs
 // keep the caret (contents unknown until the first scan).
-// selMarker is the multi-select column (#2166): a leading marker cell that
-// exists only while something is marked, so an unmarked tree renders exactly
-// as it always did — and, once marks exist, every row indents by the same
-// amount, keeping the tree's columns aligned.
-func (m Model) selMarker(n *node) string {
-	if len(m.marks) == 0 {
-		return ""
-	}
+// guideCell is the row's own indent-guide glyph, which doubles as the
+// multi-select cell (#2166/#2380): a marked row swaps the guide line for the
+// mark glyph rather than opening a column of its own, so the tree's width and
+// column alignment are identical marked and unmarked. View paints this cell in
+// the accent colour when it carries a mark, so it never reads as a guide.
+func (m Model) guideCell(n *node) string {
 	if m.marked(n.path) {
-		return markGlyph + " "
+		return markGlyph
 	}
-	return "  "
+	return "│"
 }
 
 func (m Model) marker(n *node) string {
@@ -1740,14 +1758,45 @@ func (m *Model) rebuildColorIndex() {
 }
 
 // widthCache memoizes the tree's content width across Model copies (#1096);
-// the single-threaded update loop is the only writer.
+// the single-threaded update loop is the only writer. The cached value is
+// tagged with the widthKey it was measured under, so a stale entry cannot
+// survive a state change that nobody remembered to invalidate (#2380).
 type widthCache struct {
 	w     int
+	key   widthKey
 	valid bool
 }
 
-// invalidateWidth drops the memoized content width; every row-text mutation
-// site funnels through rebuild/SetSize/Configure, which call this.
+// widthKey fingerprints everything outside the row nodes themselves that
+// rowText reads (#2380). Making the memo self-invalidating replaces the old
+// documented obligation ("every row-text mutation site funnels through
+// rebuild/SetSize/Configure") with something the code enforces: a new
+// row-text input is a compile-visible field here, and forgetting to call
+// invalidateWidth can no longer render a wrong width — the mismatch simply
+// re-measures. Node-level inputs (name, depth, expand state, visibility) all
+// change through rebuild, which bumps rowsEpoch.
+type widthKey struct {
+	epoch  int // rowsEpoch: the identity of the current row set
+	indent int // explorer.tree_indent: guide segment width
+	width  int // pane width: bounds the root row's path context (#1046)
+	marks  int // multi-select size: selects the guide/mark glyph (#2166)
+	icons  bool
+}
+
+func (m Model) widthKey() widthKey {
+	return widthKey{
+		epoch:  m.rowsEpoch,
+		indent: m.indent,
+		width:  m.width,
+		marks:  len(m.marks),
+		icons:  m.icons,
+	}
+}
+
+// invalidateWidth drops the memoized content width. The widthKey above covers
+// the state changes that alter row text; this stays for the inputs that are
+// not worth fingerprinting (the exclude globs and colour table applied by
+// Configure) and for tests that inject rows without a rebuild.
 func (m *Model) invalidateWidth() {
 	if m.wcache != nil {
 		m.wcache.valid = false
@@ -1755,7 +1804,8 @@ func (m *Model) invalidateWidth() {
 }
 
 func (m Model) contentWidth() int {
-	if m.wcache != nil && m.wcache.valid {
+	key := m.widthKey()
+	if m.wcache != nil && m.wcache.valid && m.wcache.key == key {
 		return m.wcache.w
 	}
 	w := 0
@@ -1767,7 +1817,7 @@ func (m Model) contentWidth() int {
 		}
 	}
 	if m.wcache != nil {
-		m.wcache.w, m.wcache.valid = w, true
+		m.wcache.w, m.wcache.key, m.wcache.valid = w, key, true
 	}
 	return w
 }
@@ -2310,7 +2360,7 @@ func (m Model) View() string {
 				// italics already mean "hidden entry" (#1055).
 				nameStyle = nameStyle.Underline(true)
 			}
-			guides, mark, name, rctx := m.rowParts(n)
+			guides, selCell, mark, name, rctx := m.rowParts(n)
 			// The suffix-tint model (#1051): on clean files whose row renders
 			// the plain foreground, the extension alone takes the filetype
 			// colour. Cursor/active rows keep their own foreground whole.
@@ -2346,6 +2396,7 @@ func (m Model) View() string {
 			// keeps its metrics while cursoring (#1059); both keep the row's
 			// background.
 			styled := m.guideStyle(style).Render(guides) +
+				m.selCellStyle(style, n).Render(selCell) +
 				style.Bold(false).Render(mark) + nameRendered
 			if rctx != "" {
 				// The root's path context dims to the InlayHint slot (#1046)
@@ -2517,6 +2568,17 @@ func (m Model) rowStyleSetVCS(i int, n *node, rv rowVCS, ss rowStyleSet) lipglos
 // semantic IndentGuide foreground over the row's background, never bold.
 func (m Model) guideStyle(row lipgloss.Style) lipgloss.Style {
 	return row.Foreground(m.theme().IndentGuide).Bold(false)
+}
+
+// selCellStyle resolves the style for the row's own guide/mark cell (#2380).
+// Unmarked it is an ordinary indent guide; marked it takes the accent
+// foreground, so the mark differs from a guide by glyph *and* colour instead
+// of hiding in the dimmed guide tint.
+func (m Model) selCellStyle(row lipgloss.Style, n *node) lipgloss.Style {
+	if m.marked(n.path) {
+		return row.Foreground(m.theme().Accent).Bold(false)
+	}
+	return m.guideStyle(row)
 }
 
 // rowKind classifies how visible row i is highlighted. Precedence, strongest
