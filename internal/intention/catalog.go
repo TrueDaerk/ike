@@ -103,6 +103,7 @@ func httpProvider() Provider {
 			items := []Item{
 				{Title: "Run Request", Kind: "http", CommandID: "http.run"},
 				{Title: "Copy as curl", Kind: "http", CommandID: "http.copyAsCurl"},
+				{Title: "Copy as httpie", Kind: "http", CommandID: "http.copyAsHttpie"},
 			}
 			if cx.HTTPResponseBody {
 				items = append(items, Item{Title: "Copy Response Body", Kind: "http", CommandID: "http.copyBody"})
@@ -116,6 +117,7 @@ func httpProvider() Provider {
 			if cx.HTTPResendable {
 				items = append(items, Item{Title: "Re-send Stored Request", Kind: "http", CommandID: "http.resend"})
 				items = append(items, Item{Title: "Copy Shown Request as curl", Kind: "http", CommandID: "http.copyShownAsCurl"})
+				items = append(items, Item{Title: "Copy Shown Request as httpie", Kind: "http", CommandID: "http.copyShownAsHttpie"})
 			}
 			if cx.HTTPEnvironments {
 				items = append(items, Item{Title: "Select Environment", Kind: "http", CommandID: "http.selectEnvironment"})

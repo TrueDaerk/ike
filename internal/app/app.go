@@ -4920,6 +4920,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// host renders and copies it.
 		return m, m.copyShownHTTPRequestAsCurl()
 
+	case HTTPCopyShownAsHttpieMsg:
+		// http.copyShownAsHttpie (palette, #2384): the same as-sent request,
+		// spelled as an httpie command.
+		return m, m.copyShownHTTPRequestAsHttpie()
+
+	case httppane.CopyHttpieMsg:
+		// "H" in the response pane (#2384): the httpie half of "C".
+		return m, m.copyShownHTTPRequestAsHttpie()
+
 	case HTTPSaveResponseMsg:
 		// http.saveResponse (palette, #2059): prompt for a path, then write
 		// the raw body there.
@@ -4935,6 +4944,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// http.copyAsCurl (palette, #1994): the request under the caret, with
 		// its variables substituted, as a runnable curl command.
 		return m, m.copyHTTPRequestAsCurl()
+
+	case HTTPCopyAsHttpieMsg:
+		// http.copyAsHttpie (palette / intention popup, #2384): the request
+		// under the caret as an httpie command, same substitution.
+		return m, m.copyHTTPRequestAsHttpie()
 
 	case InsertCurlAsRequestMsg:
 		// http.insertCurlAsRequest (intention popup, #2020): the caret
