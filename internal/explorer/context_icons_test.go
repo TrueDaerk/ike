@@ -87,7 +87,7 @@ func TestAbbrevHome(t *testing.T) {
 func TestIconsOffByDefault(t *testing.T) {
 	m := New(t.TempDir())
 	f := &node{name: "main.go", depth: 1}
-	_, mark, _, _ := m.rowParts(f)
+	_, _, mark, _, _ := m.rowParts(f)
 	if mark != "  " {
 		t.Fatalf("icons off: file marker = %q want two blank cells", mark)
 	}
@@ -118,7 +118,7 @@ func TestIconsGlyphColumn(t *testing.T) {
 		{&node{name: "sub", isDir: true}, classGlyphs[classDir]},
 	}
 	for _, c := range cases {
-		_, mark, _, _ := m.rowParts(c.n)
+		_, _, mark, _, _ := m.rowParts(c.n)
 		if !strings.HasSuffix(mark, c.glyph+" ") {
 			t.Errorf("%s: marker %q must end in glyph %q", c.n.name, mark, c.glyph)
 		}
