@@ -1,5 +1,21 @@
 # Log
 
+## 2026-09-01 (an open issue's text selects with the mouse, #2374)
+
+- **Press, drag, release in the detail body**: both full-area details of the
+  Issues window — the issue detail and the PR detail — now select text with the
+  mouse. The gesture is the shared one (`internal/textsel`, #2070): char on a
+  drag, word on a double click, line on a triple, and a wheel during a running
+  drag *grows* the span instead of dropping it. `y` / `cmd+c` put it on the
+  clipboard through the host, and the copy clears the selection.
+- **Rendered text, not the markdown source**: the body is wrapped and styled
+  through glamour and the user selects what they see, so that is what is
+  copied — trailing render padding trimmed. The selection is tied to the tab
+  and the issue/PR it was taken in, so walking on or closing the detail retires
+  it. The list views stay click-only (select, double-click-open, chips, tabs):
+  their rows are targets, not prose.
+  See [GitHub issues](/architecture/github-issues.md).
+
 ## 2026-08-31 (Open in Browser gets a default keybind, #2365)
 
 - **`file.openInBrowser` is no longer menu-only**: telemetry showed the command

@@ -43,6 +43,7 @@ import (
 	"ike/internal/forge"
 	"ike/internal/fuzzy"
 	"ike/internal/host"
+	"ike/internal/textsel"
 	"ike/internal/theme"
 	"ike/internal/ui"
 )
@@ -382,6 +383,18 @@ type Model struct {
 	// Double-click detection mirrors the Usages panel (#514).
 	clicks ui.ClickTracker
 	now    func() time.Time
+
+	// Mouse text selection in the two detail views (#2374, selection.go),
+	// on the shared engine the diff and merge views use. selTab/selNum are
+	// the view and the issue/PR number the span was taken in, so a stale
+	// selection retires itself; selDrag marks a drag in progress and
+	// selX/selY the last pointer cell, which a wheel during the drag
+	// re-resolves against the new scroll offset.
+	sel        textsel.Selection
+	selTab     Tab
+	selNum     int
+	selDrag    bool
+	selX, selY int
 }
 
 // New returns an empty pane; content arrives via SetResult.
@@ -981,7 +994,14 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.startWork()
 	case "o":
 		return m.openInBrowser()
+	case "y":
+		// The shared yank of the read-only surfaces (#2071, #2374): the mouse
+		// selection goes to the clipboard.
+		return m.copySelection()
 	default:
+		if ui.CopyChord(msg.String()) {
+			return m.copySelection()
+		}
 		if cmd := m.mutationKey(msg.String()); cmd != nil {
 			return cmd
 		}

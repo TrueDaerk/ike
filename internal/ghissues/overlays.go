@@ -52,6 +52,7 @@ func (m *Model) actions() []action {
 		if m.tlMore {
 			acts = append(acts, action{key: "p", hint: "more", label: "Load more activity (next page)", run: (*Model).loadMoreTimeline})
 		}
+		acts = append(acts, m.copyAction()...)
 		acts = append(acts, m.editAction()...)
 		acts = append(acts, m.mutationActions()...)
 		acts = append(acts, m.commentAction()...)
@@ -69,6 +70,7 @@ func (m *Model) actions() []action {
 			act("ctrl+k", "prev PR", "Previous pull request", func(m *Model) tea.Cmd { return m.stepPR(-1) }),
 			act("j/k", "scroll", "Scroll the body", nil),
 		}
+		acts = append(acts, m.copyAction()...)
 		acts = append(acts, m.prActionActions()...)
 		return append(acts,
 			act("o", "browser", "Open in browser", (*Model).openInBrowser),

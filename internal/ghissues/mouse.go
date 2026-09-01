@@ -4,7 +4,8 @@ package ghissues
 // Usages panel (#514) — activating a row needs a second click on the same row
 // within ui.DoubleClickWindow — extended in #2090 with the tab bar as a click
 // target and with hit-testing that accounts for the filter row and the
-// detail view's position header.
+// detail view's position header. The detail views' press/drag/release text
+// selection lives in selection.go (#2374); the wheel there feeds it too.
 
 import (
 	tea "charm.land/bubbletea/v2"
@@ -23,12 +24,16 @@ func (m *Model) Wheel(delta int) tea.Cmd {
 	case m.detail && m.tab == TabIssues:
 		m.detailTop += delta
 		m.clampDetail()
+		// A wheel during a selection drag grows the span instead of
+		// abandoning it (#2374): the resting pointer now covers new lines.
+		m.dragScroll()
 		if delta > 0 {
 			return m.autoLoadTimeline()
 		}
 	case m.prDetail && m.tab == TabPRs:
 		m.prdTop += delta
 		m.clampPRDetail()
+		m.dragScroll()
 	default:
 		rows := m.rowsOf(m.tab)
 		m.setCursor(snapRow(rows, m.Cursor()+delta, sign(delta)))

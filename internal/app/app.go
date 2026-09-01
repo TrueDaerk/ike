@@ -1042,6 +1042,7 @@ const (
 	dragTermScroll                  // dragging the terminal scrollback scrollbar thumb (#1368)
 	dragDiffSelect                  // dragging a text selection in a diff pane (#2070)
 	dragMergeSelect                 // dragging a text selection in a merge view's side column (#2070)
+	dragIssueSelect                 // dragging a text selection in an Issues detail view (#2374)
 )
 
 // dragState holds the in-flight mouse gesture. For a resize it carries the
@@ -5500,6 +5501,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ghissues.OpenURLMsg:
 		// The pane's 'o' action (#1934): the issue page in the browser.
 		return m, m.openIssueURL(msg.URL)
+
+	case ghissues.CopyMsg:
+		// A mouse selection in an Issues detail view (#2374) — the pane asks
+		// the host for the clipboard, like the response and diff viewers.
+		return m.copyPanelRow(msg.Text, msg.What)
 
 	case ghissues.EditTextRequestMsg:
 		// The pane's 'e'/'c' actions (#2087): open a markdown buffer bound to
@@ -10638,6 +10644,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					inst.Merge().MouseDrag(lx, ly)
 				}
 			}
+		case dragIssueSelect:
+			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.bodyContent(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindIssues {
+					inst.Issues().MouseDrag(lx, ly)
+				}
+			}
 		}
 	case mouseRelease:
 		if m.drag == nil {
@@ -10700,6 +10712,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case dragMergeSelect:
 			if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindMerge {
 				inst.Merge().MouseRelease()
+			}
+			m.drag = nil
+			return m, nil // a selection drag never moved the layout
+		case dragIssueSelect:
+			if inst := m.bodyContent(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindIssues {
+				inst.Issues().MouseRelease()
 			}
 			m.drag = nil
 			return m, nil // a selection drag never moved the layout
@@ -11406,8 +11424,15 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	case pane.KindIssues:
 		// Issues-window clicks (#1934, #2090): a click on the tab bar
 		// switches the view, a body click selects, a double-click opens the
-		// issue's detail (or the pull request's page).
+		// issue's detail (or the pull request's page). Inside an open detail
+		// the body press anchors a text selection instead (#2374), like the
+		// response and diff viewers; the chrome rows keep their clicks, so
+		// the model decides and only then is the drag armed.
 		if msg.Button == tea.MouseLeft {
+			if inst.Issues().MousePress(localX, localY) {
+				m.drag = &dragState{kind: dragIssueSelect, srcPane: key, curX: msg.X, curY: msg.Y}
+				return m, nil
+			}
 			return m, inst.Issues().Click(localX, localY)
 		}
 	case pane.KindBreakpoints:
