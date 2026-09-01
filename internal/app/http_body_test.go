@@ -177,6 +177,63 @@ func TestHTTPOpenBodyFileOpensTheSpool(t *testing.T) {
 	}
 }
 
+// TestHTTPSpooledBodySurvivesTheHistoryRoundTrip is the #2385 regression at
+// the app level: with the production-shaped *relative* config dir, a spooled
+// response is dispatched with a source (so it is stored and the viewer's
+// history is swapped in from the store), and "o" and "m" must work on the
+// fresh state, on the history-restored state, and after the working directory
+// changed.
+func TestHTTPSpooledBodySurvivesTheHistoryRoundTrip(t *testing.T) {
+	work := t.TempDir()
+	t.Chdir(work)
+	t.Setenv("IKE_CONFIG_DIR", ".ike") // relative on purpose — the production shape
+	m := httpApp(t)
+	t.Setenv("IKE_CONFIG_DIR", ".ike") // httpApp overrode it with an absolute dir
+
+	body := `{"items":[` + strings.Repeat(`"row",`, 2000) + `"end"]}`
+	resp := spooledHTTPResponse(t, body, 64)
+	out, _ := m.Update(HTTPResponseMsg{Source: "/p/req.http", Request: "one", Resp: resp})
+	m = out.(Model)
+	m.setFocus(pane.HTTPKey)
+	m.layout()
+
+	// The viewer now shows the store's history entry; the entry's body file
+	// must open from anywhere, so chdir away before asking.
+	t.Chdir(t.TempDir())
+	freshPath := m.httpPanel().BodyFilePath()
+	if freshPath == "" || !filepath.IsAbs(freshPath) {
+		t.Fatalf("fresh body file path = %q, want absolute", freshPath)
+	}
+	if _, err := os.Stat(freshPath); err != nil {
+		t.Fatalf("the offered path does not open: %v", err)
+	}
+	if !m.httpPanel().LoadMore() {
+		t.Error(`"m" loaded nothing on the fresh spooled response`)
+	}
+
+	// The restored state: load the stored responses back from the store, as a
+	// restart or a project switch would — from the project directory, where
+	// the relative store root resolves. The *path* it hands out must then
+	// open from anywhere.
+	t.Chdir(work)
+	m.loadStoredHTTPResponse("/p/req.http", "one")
+	t.Chdir(t.TempDir())
+	restoredPath := m.httpPanel().BodyFilePath()
+	if restoredPath == "" || !filepath.IsAbs(restoredPath) {
+		t.Fatalf("restored body file path = %q, want absolute", restoredPath)
+	}
+	got, err := os.ReadFile(restoredPath)
+	if err != nil {
+		t.Fatalf("the restored path does not open: %v", err)
+	}
+	if string(got) != body {
+		t.Errorf("restored body file holds %d bytes, want %d", len(got), len(body))
+	}
+	if !m.httpPanel().LoadMore() {
+		t.Error(`"m" loaded nothing on the restored response`)
+	}
+}
+
 // TestHTTPSaveSpooledBodyStreamsTheWholeThing: the raw-body save must write
 // the complete body, not the head the pane happens to hold (#2157).
 func TestHTTPSaveSpooledBodyStreamsTheWholeThing(t *testing.T) {

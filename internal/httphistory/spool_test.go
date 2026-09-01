@@ -1,6 +1,7 @@
 package httphistory
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -68,6 +69,100 @@ func TestAppendAdoptsTheSpoolFile(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), bodiesDir) {
 		t.Errorf("no bodyFile recorded:\n%s", raw)
+	}
+}
+
+// TestRelativeStoreDirYieldsOpenablePaths is the #2385 regression: the
+// production store is rooted at the *relative* ".ike/http", and appending a
+// spooled entry used to record "../../bodies/…" (filepath.Rel of an
+// already-relative adopted name against the store dir), which List then
+// collapsed to a bare "bodies/…" the viewer could not open. Every path the
+// store hands out must be absolute and openable — from any working directory.
+func TestRelativeStoreDirYieldsOpenablePaths(t *testing.T) {
+	work := t.TempDir()
+	t.Chdir(work)
+	s := New(filepath.Join(".ike", "http"))
+	body := strings.Repeat("payload ", 500)
+	s.Append("/p/req.http", "create", spoolEntry(t, 1, body))
+	// A second append pushes the first entry through the List → serialize
+	// round trip again — the loop the corruption used to happen in.
+	s.Append("/p/req.http", "create", spoolEntry(t, 2, body))
+
+	raw, err := os.ReadFile(filepath.Join(work, ".ike", "http", mustHistoryFileName(t, filepath.Join(work, ".ike", "http"))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "..") {
+		t.Errorf("the stored file records a ..-shaped body path:\n%s", raw)
+	}
+
+	// The viewer keeps paths across directory changes (#2385): what List
+	// handed out must still open after a chdir.
+	t.Chdir(t.TempDir())
+	for _, e := range s.List("/p/req.http", "create") {
+		if !filepath.IsAbs(e.BodyFile) {
+			t.Fatalf("List handed out a relative body path: %q", e.BodyFile)
+		}
+		resp := e.Response("create")
+		full, err := resp.FullBody()
+		if err != nil || string(full) != body {
+			t.Errorf("body file %q not openable after chdir: %v", resp.SpoolPath, err)
+		}
+	}
+}
+
+// TestListHealsLegacyDotDotPaths: entries written while #2385 corrupted the
+// stored name to "../../bodies/<name>" must resolve to the file that actually
+// exists in bodies/ — the base name is the whole identity of an adopted body.
+func TestListHealsLegacyDotDotPaths(t *testing.T) {
+	dir := t.TempDir() + "/http"
+	s := New(dir)
+	if err := os.MkdirAll(filepath.Join(dir, bodiesDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, bodiesDir, "body-legacy.bin"), []byte("whole body"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e := entry(1)
+	e.BodyFile = "../../bodies/body-legacy.bin"
+	e.BodySize = 10
+	data, err := json.Marshal([]Entry{e})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s.file("/p/req.http", "create"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := s.List("/p/req.http", "create")
+	if len(got) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(got))
+	}
+	if string(got[0].FullBody()) != "whole body" {
+		t.Errorf("legacy path %q did not heal to the bodies/ file", got[0].BodyFile)
+	}
+}
+
+// TestAdoptKeepsTheContentTypeExtension: the adopted copy keeps the spool
+// file's extension (#2385) — it decides which language the editor opens the
+// body under.
+func TestAdoptKeepsTheContentTypeExtension(t *testing.T) {
+	dir := t.TempDir() + "/http"
+	s := New(dir)
+	spool := filepath.Join(t.TempDir(), "body-123.json")
+	if err := os.WriteFile(spool, []byte(`{"a":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e := entry(1)
+	e.BodyFile, e.BodySize = spool, 7
+	s.Append("/p/req.http", "create", e)
+
+	got := s.List("/p/req.http", "create")
+	if len(got) != 1 {
+		t.Fatalf("want 1 entry, got %d", len(got))
+	}
+	if filepath.Ext(got[0].BodyFile) != ".json" {
+		t.Errorf("adopted body lost its extension: %q", got[0].BodyFile)
 	}
 }
 

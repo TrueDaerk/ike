@@ -1,5 +1,23 @@
 # Log
 
+## 2026-09-01 (large-response body files open reliably, #2385)
+
+- **`o` and `m` work on responses past 1 MiB**, fresh and restored: the
+  history store used to record a spooled body's path as `../../bodies/…`
+  (`filepath.Rel` of an already-relative adopted name against the relative
+  store root), which `List` collapsed to a bare `bodies/…` the viewer could
+  not open. A body path now exists in exactly two shapes — `bodies/<name>` on
+  disk, absolute in memory (the store resolves its root with `filepath.Abs`
+  at construction) — and `List` heals the corrupted legacy form via the base
+  name.
+- **Body files are named after the Content-Type** (`httpclient.BodyFileExt`):
+  the dispatcher spools to `body-*.json`/`.html`/…, adoption keeps the
+  extension, and the editor's language choice follows it when `o` opens the
+  file.
+- **A gone body file withdraws the affordances**: `BodyFilePath` answers `""`
+  for a path that cannot be opened, the notice/footer stop advertising
+  `m`/`o`, and the hosts explain the absence instead of a raw "no such file".
+
 ## 2026-09-01 (the playground documents its language, #2382)
 
 - **`ctrl+g` opens a language cheatsheet** in the jq/yq playground: the syntax

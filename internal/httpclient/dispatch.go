@@ -392,7 +392,7 @@ func (p *prepared) collectBody(key string, httpResp *http.Response, start time.T
 	// The body goes through a bodySink (#2157): the head stays in memory, a
 	// body past SpoolThreshold streams on to a spool file, and MaxBodyBytes
 	// still bounds the whole thing.
-	sink := newBodySink(SpoolThreshold, MaxBodyBytes)
+	sink := newBodySink(SpoolThreshold, MaxBodyBytes, BodyFileExt(httpResp.Header.Get("Content-Type")))
 	_, readErr := io.Copy(sink, io.LimitReader(httpResp.Body, MaxBodyBytes+1))
 	elapsed := p.now().Sub(start)
 	if readErr != nil {
@@ -525,7 +525,7 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 	watchdog := time.AfterFunc(idle, func() { idledOut.Store(true); cancel() })
 	defer watchdog.Stop()
 
-	sink := newBodySink(SpoolThreshold, MaxBodyBytes)
+	sink := newBodySink(SpoolThreshold, MaxBodyBytes, BodyFileExt(httpResp.Header.Get("Content-Type")))
 	var readErr error
 	buf := make([]byte, 32<<10)
 	for {
