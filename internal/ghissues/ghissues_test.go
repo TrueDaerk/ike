@@ -584,7 +584,7 @@ func TestStartWorkEmitsRequest(t *testing.T) {
 		t.Fatal("s must emit the start-work request")
 	}
 	msg, ok := cmd().(StartWorkRequestMsg)
-	if !ok || msg.Number != 2 || msg.Title != "add markdown preview" {
+	if !ok || msg.Number != 2 {
 		t.Fatalf("msg = %#v", msg)
 	}
 }

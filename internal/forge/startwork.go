@@ -1,10 +1,11 @@
 package forge
 
 // startwork.go implements the "start work on an issue" action of the change
-// workflow: branch issue/<number>-<slug> off an up-to-date default branch and
-// switch to it. The flow refuses a dirty worktree with a clear message, and
-// degrades to the local default branch (with a warning) when the fetch fails
-// — offline must never block starting work.
+// workflow: branch issue/<number> off an up-to-date default branch and
+// switch to it. The flow refuses a dirty worktree and an already-existing
+// issue branch with a clear message, and degrades to the local default
+// branch (with a warning) when the fetch fails — offline must never block
+// starting work.
 
 import (
 	"errors"
@@ -13,24 +14,27 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// StartWorkCmd creates and switches to the issue branch for (number, title)
-// in the repository containing dir, resolving to one StartWorkDoneMsg.
-func StartWorkCmd(dir string, number int, title string) tea.Cmd {
+// StartWorkCmd creates and switches to the issue branch for number in the
+// repository containing dir, resolving to one StartWorkDoneMsg.
+func StartWorkCmd(dir string, number int) tea.Cmd {
 	return func() tea.Msg {
-		branch, warning, err := startWork(dir, number, title)
+		branch, warning, err := startWork(dir, number)
 		return StartWorkDoneMsg{Branch: branch, Warning: warning, Err: err}
 	}
 }
 
 // startWork runs the flow synchronously; split out so tests drive it directly.
-func startWork(dir string, number int, title string) (branch, warning string, err error) {
-	branch = BranchName(number, title)
+func startWork(dir string, number int) (branch, warning string, err error) {
+	branch = branchPrefix(number)
 	dirty, err := worktreeDirty(dir)
 	if err != nil {
 		return branch, "", err
 	}
 	if dirty {
 		return branch, "", errors.New("working tree has uncommitted changes — commit or stash them before starting issue work")
+	}
+	if _, err := runGitQuick(dir, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch); err == nil {
+		return branch, "", errors.New("branch " + branch + " already exists")
 	}
 	def, err := defaultBranch(dir)
 	if err != nil {

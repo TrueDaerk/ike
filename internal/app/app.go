@@ -5491,9 +5491,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleForgeEvents(msg)
 
 	case ghissues.StartWorkRequestMsg:
-		// The pane's 's' action (#1934): branch issue/<n>-<slug> off an
+		// The pane's 's' action (#1934): branch issue/<n> off an
 		// up-to-date default branch.
-		return m, forge.StartWorkCmd(".", msg.Number, msg.Title)
+		return m, forge.StartWorkCmd(".", msg.Number)
 
 	case forge.StartWorkDoneMsg:
 		return m, m.finishStartWork(msg)

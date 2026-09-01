@@ -57,7 +57,6 @@ type OpenURLMsg struct {
 // selected issue ('s'); the app answers with forge.StartWorkCmd.
 type StartWorkRequestMsg struct {
 	Number int
-	Title  string
 }
 
 // Tab selects one of the pane's two full-area views (#2090). The tab bar is
@@ -1204,7 +1203,7 @@ func (m *Model) startWork() tea.Cmd {
 	if is == nil {
 		return nil
 	}
-	msg := StartWorkRequestMsg{Number: is.Number, Title: is.Title}
+	msg := StartWorkRequestMsg{Number: is.Number}
 	return func() tea.Msg { return msg }
 }
 

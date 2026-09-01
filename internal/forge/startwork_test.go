@@ -26,11 +26,11 @@ func gitIn(t *testing.T, dir string, args ...string) string {
 
 func TestStartWorkCreatesBranchFromOrigin(t *testing.T) {
 	dir := setupClone(t)
-	branch, warning, err := startWork(dir, 12, "project picker")
+	branch, warning, err := startWork(dir, 12)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if branch != "issue/12-project-picker" {
+	if branch != "issue/12" {
 		t.Fatalf("branch = %q", branch)
 	}
 	if warning != "" {
@@ -46,7 +46,7 @@ func TestStartWorkRefusesDirtyWorktree(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("changed\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err := startWork(dir, 13, "x")
+	_, _, err := startWork(dir, 13)
 	if err == nil || !strings.Contains(err.Error(), "uncommitted changes") {
 		t.Fatalf("err = %v, want the dirty-worktree message", err)
 	}
@@ -59,11 +59,11 @@ func TestStartWorkOfflineFallsBackToLocalDefault(t *testing.T) {
 	dir := setupClone(t)
 	// Point origin somewhere dead so the fetch fails like an offline run.
 	gitIn(t, dir, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "gone.git"))
-	branch, warning, err := startWork(dir, 14, "offline case")
+	branch, warning, err := startWork(dir, 14)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if branch != "issue/14-offline-case" {
+	if branch != "issue/14" {
 		t.Fatalf("branch = %q", branch)
 	}
 	if !strings.Contains(warning, "branching from local main") {
@@ -76,9 +76,10 @@ func TestStartWorkOfflineFallsBackToLocalDefault(t *testing.T) {
 
 func TestStartWorkExistingBranchErrors(t *testing.T) {
 	dir := setupClone(t)
-	gitIn(t, dir, "branch", "issue/15-taken")
-	if _, _, err := startWork(dir, 15, "taken"); err == nil {
-		t.Fatal("an existing branch must surface git's error")
+	gitIn(t, dir, "branch", "issue/15")
+	_, _, err := startWork(dir, 15)
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("err = %v, want a clear already-exists message", err)
 	}
 }
 
