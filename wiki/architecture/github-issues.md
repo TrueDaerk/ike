@@ -320,6 +320,41 @@ rendered through glamour with the preview pane's theme mapping (#62) and its
 hanging indent for wrapped list items (`ui.HangingIndent`, #2105), under
 an author/age/state line and — when one exists — the linked PR's state.
 
+### Selecting text with the mouse (#2374)
+
+Both full-area details — the issue detail and the PR detail — are lists of
+pre-rendered lines scrolled by an offset, the same shape the HTTP response
+viewer (#1266) and the diff viewer (#2070) select over, so they use the same
+engine: **`internal/textsel`**. A press in the body anchors, a drag extends,
+a release closes the span; the click streak cycles **char → word → line**
+(double click a word, triple click the line), and a **wheel during a running
+drag grows the selection** instead of abandoning it — the resting pointer cell
+is re-resolved against the new offset. `y` (and `cmd+c`, `ui.CopyChord`) put
+the span on the clipboard through a `CopyMsg` the host answers, exactly as the
+response and diff viewers do; the pane never touches the clipboard itself.
+The copy drops the selection, and without one the key is inert — it is
+advertised in the footer and the action menu only while a selection exists.
+
+Two decisions are worth naming. **What is copied is the rendered text**, not
+the markdown source underneath: the body is wrapped and styled through
+glamour, and the user selects what they see — the response viewer's rule for a
+pretty-printed body. Trailing render padding is trimmed off every line, so a
+whole-line selection copies the text, not the block's spaces. And the
+**selection belongs to one detail**: the tab and the issue/PR number it was
+taken in are recorded with it, so walking to the next issue, switching views
+or closing the detail retires it rather than leaving line indices pointing at
+lines that are no longer rendered.
+
+The list views are deliberately excluded: their rows are click targets
+(select, double-click-open, chip and tab-bar hits, #2090/#2104/#2259), not
+prose, and a drag there would have to contend with those gestures for nothing
+a row copy could not do better. In the detail the chrome rows keep their
+clicks too — the model refuses the press on the tab bar, the filter row and
+the position header, and only then does the root model arm its
+`dragIssuesSelect` drag (`internal/app/app.go`), so motion and release route
+through the same pane-crossing machinery every other selection drag uses. The
+terminal emulator's own ⌥/⇧-drag selection stays untouched as the fallback.
+
 ### Timeline (#2084)
 
 Under the body, behind a **full-width `── activity ───…` rule** (the pane's
@@ -510,7 +545,8 @@ a full sentence; `enter` runs the selected one. A key can therefore never be
 in one and missing from the other. Mouse: wheel scrolls the active view (or
 the open overlay / detail), a click selects, a second click on the same row
 within 400 ms activates it, and clicks on the tab bar or on an overlay row
-work too.
+work too. In an open detail the body press starts a **text selection**
+instead (#2374, above); the chrome rows keep their click targets.
 
 ### Settings
 

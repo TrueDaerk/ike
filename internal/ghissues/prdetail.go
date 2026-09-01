@@ -127,7 +127,14 @@ func (m *Model) prDetailKey(msg tea.KeyPressMsg) tea.Cmd {
 		return tea.Batch(m.startRefresh(), m.fetchPRDetail(m.prdFor))
 	case "o":
 		return m.openInBrowser()
+	case "y":
+		// The PR detail selects and copies exactly like the issue detail
+		// (#2374) — same lines, same gesture, same chord.
+		return m.copySelection()
 	default:
+		if ui.CopyChord(msg.String()) {
+			return m.copySelection()
+		}
 		return m.prActionKey(msg.String())
 	}
 	m.clampPRDetail()

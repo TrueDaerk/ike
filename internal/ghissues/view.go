@@ -625,7 +625,8 @@ func (m *Model) renderPRDetail(pal *theme.Palette, height int) string {
 	for k := 0; k < height; k++ {
 		i := m.prdTop + k
 		if i < len(m.prdLines) {
-			b.WriteString(m.prdLines[i])
+			// The PR detail selects exactly like the issue detail (#2374).
+			b.WriteString(m.highlightSel(m.prdLines[i], i))
 		}
 		b.WriteString("\n")
 	}
@@ -872,7 +873,8 @@ func (m *Model) renderDetail(pal *theme.Palette, height int) string {
 	for k := 0; k < height; k++ {
 		i := m.detailTop + k
 		if i < len(m.detailLines) {
-			b.WriteString(m.detailLines[i])
+			// A mouse selection paints over the rendered line (#2374).
+			b.WriteString(m.highlightSel(m.detailLines[i], i))
 		}
 		b.WriteString("\n")
 	}
