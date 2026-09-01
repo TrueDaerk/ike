@@ -77,10 +77,24 @@ func (m Model) playgroundHelpGroups() []help.Group {
 		return nil
 	}
 	name := m.play.dialect.Name()
-	groups := []help.Group{
-		playHelpGroup(name+" playground — query line", "play.query.", playQueryHelpKeys),
-		playHelpGroup(name+" playground — result buffer", "play.result.", playResultHelpKeys),
+	query := playHelpGroup(name+" playground — query line", "play.query.", playQueryHelpKeys)
+	result := playHelpGroup(name+" playground — result buffer", "play.result.", playResultHelpKeys)
+	// The find chord is appended to both tables rather than written into them
+	// (#2383): its key is whatever editor.find is bound to, so it is resolved
+	// live here — a hard-coded "cmd+f" would lie to anyone who rebound it.
+	if chord, ok := m.playChordFor("editor.find"); ok {
+		query.Entries = append(query.Entries, help.Entry{
+			ID:       "play.query.find",
+			Title:    "Search the result buffer — moves the keyboard there with it",
+			Shortcut: chord,
+		})
+		result.Entries = append(result.Entries, help.Entry{
+			ID:       "play.result.find",
+			Title:    "Search in the result — the same as \"/\", from either focus",
+			Shortcut: chord,
+		})
 	}
+	groups := []help.Group{query, result}
 	if extra := m.playgroundChordHelp(); len(extra.Entries) > 0 {
 		groups = append(groups, extra)
 	}
@@ -102,7 +116,9 @@ func playHelpGroup(label, prefix string, keys []struct{ Key, Title string }) hel
 // default being advertised: the full-query-view toggle, the copy chord the
 // result buffer's selection answers to (#2062), and the code-action chord —
 // which the playground answers with an honest "not available here" rather
-// than the silent nothing it used to do (#2237).
+// than the silent nothing it used to do (#2237). editor.find (#2383) is not
+// repeated here: it belongs to both focus tables above, where it is already
+// resolved live, and listing it a third time would only pad the sheet.
 func (m Model) playgroundChordHelp() help.Group {
 	g := help.Group{Label: "playground — keymap chords", Focused: true}
 	add := func(command, title string) {
