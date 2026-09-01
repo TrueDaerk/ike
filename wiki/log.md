@@ -28,6 +28,25 @@
   at the caret. It lives in the palette — searchable rather than paged — beside
   `ctrl+l`, which stays the place for *your own* programs.
 
+## 2026-09-01 (the explorer's mark moves into the guide column, #2380)
+
+- **Space no longer takes the tree apart**: the multi-select mark used to
+  prepend a two-cell column to every row while anything was marked. That
+  changed the row text behind the memoized row widths, so the renderer clipped
+  and padded against widths two cells too small and the terminal wrapped the
+  whole pane — blank lines between entries, VCS badges on their own lines,
+  stray indent guides. The mark now replaces the row's **own indent-guide
+  glyph** (`✓` for `│`, painted in `Accent` so it never reads as a guide), so a
+  marked row is exactly as wide as an unmarked one and the tree never shifts.
+  A depth-0 row, which has no guide cell, uses the expand marker's blank second
+  cell instead.
+- **The width memo re-measures itself**: `wcache` no longer relies on a
+  documented promise that every row-text mutation calls `invalidateWidth`. It
+  stores the `widthKey` it was measured under — row-set epoch, indent, pane
+  width, mark count, icons flag — and re-measures on a mismatch, so a future
+  state that changes row text cannot render a stale width.
+  See [File Explorer](/architecture/explorer.md).
+
 ## 2026-09-01 (horizontal scroll state is visible, #2377)
 
 - **Edge marks in every sideways-scrolling view**: the editor, the diff viewer,
