@@ -49,16 +49,19 @@ func TestBodyIdentifierColors(t *testing.T) {
 }
 
 // TestBodyIDsGate (#1626): bodyIDs is silent while the feature is off and
-// finds the identifier while it is on.
+// finds the identifier while it is on. Since #2386 the scan works on a padded
+// window of one composed row, so the test composes the line as a body row and
+// asks over its full width.
 func TestBodyIDsGate(t *testing.T) {
 	t.Cleanup(func() { idcolor.SetEnabled(true) })
 	m := New(nil)
 	line := `  "trace": "550e8400-e29b-41d4-a716-446655440000",`
-	if got := m.bodyIDs(line); len(got) != 1 {
+	m.rows = []row{{kind: kindBody, text: line}}
+	if got := m.bodyIDs(0, 0, len(line)); len(got) != 1 {
 		t.Fatalf("want one identifier, got %v", got)
 	}
 	idcolor.SetEnabled(false)
-	if got := m.bodyIDs(line); got != nil {
+	if got := m.bodyIDs(0, 0, len(line)); got != nil {
 		t.Fatalf("disabled scan must return nil, got %v", got)
 	}
 }
