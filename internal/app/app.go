@@ -296,7 +296,7 @@ type Model struct {
 	// own seam stays private); tests replace it before Init.
 	marketFetch settings.MarketFetcher
 	cfgOpts     config.Options
-	help       *help.Help
+	help        *help.Help
 	// shell is the base floating overlay (Roadmap 0035); floats is the
 	// z-ordered stack of floating panes it lives in (#1237) — shell is its
 	// persistent bottom layer, extra dialogs are pushed on top and the
@@ -479,6 +479,12 @@ type Model struct {
 	// themselves are on disk, re-read per open — nothing to cache here.
 	playFilters *playFiltersMode
 	playName    playNamePrompt
+	// playCheat is the palette mode listing the *language* cheatsheet
+	// (#2382) — syntax, one-line examples and every builtin of one dialect.
+	// Kept on the model for the same reason playFilters is: the dialect is
+	// flipped in before each locked open. Its content is generated from
+	// jqplay.Cheatsheet per open, so there is nothing to cache either.
+	playCheat *playCheatMode
 
 	renamePos int
 	// layoutSaveOpen marks the window.saveLayout name prompt (#1175) while the
@@ -1281,6 +1287,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	sshPicker := newSSHMode()                                // ssh_config host picker (#1938)
 	remotePicker := newRemoteMode()                          // SFTP browse host picker (#1997)
 	playFilters := newPlayFiltersMode()                      // named saved jq filters (#1995)
+	playCheat := newPlayCheatMode()                          // the jq/yq language cheatsheet (#2382)
 	projGit := project.NewGitCache()                         // picker branch/dirty context (#2178)
 	cmdUsage := palette.LoadUsage(usageFile())               // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile())          // most-used file ranking (#1419)
@@ -1356,7 +1363,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		shell:           ui.New(shellConfig(cfg)),
 		vcs:             vcsSt,
 		forgePoll:       forgeSt,
-		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, fileFrec, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters, projGit),
+		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, fileFrec, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters, playCheat, projGit),
 		projGit:         projGit,
 		layoutsPicker:   layoutsPicker,
 		httpRequests:    httpRequests,
@@ -1368,6 +1375,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		ssh:             sshPicker,
 		remote:          remotePicker,
 		playFilters:     playFilters,
+		playCheat:       playCheat,
 		httpEnv:         loadHTTPEnv(),                      // selected HTTP environments (#1867)
 		httpVarsDeb:     backup.NewDebouncer(httpVarsQuiet), // unknown-variable lint (#2158)
 		refs:            refs,
@@ -2810,7 +2818,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec, fileFrec *frecency.Store, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, projGit *project.GitCache) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec, fileFrec *frecency.Store, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, playCheat *playCheatMode, projGit *project.GitCache) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -2887,7 +2895,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, projPeek, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, ssh, remoteHosts, playFilters, bufLang)
+	return palette.New(pcfg, cmd, file, dir, proj, projPeek, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, ssh, remoteHosts, playFilters, playCheat, bufLang)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -6142,6 +6150,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// rename spelling.
 		m.openPlayFilterPicker(msg.Dialect, msg.Rename)
 		return m, nil
+
+	case ShowCheatsheetMsg:
+		// json.jqCheatsheet / yaml.yqCheatsheet (ctrl+g in the playground,
+		// palette / Tools menu, #2382): the language cheatsheet — syntax,
+		// one-line examples and every builtin of one dialect.
+		m.openPlayCheatsheet(msg.Dialect)
+		return m, nil
+
+	case InsertCheatMsg:
+		// A picked cheatsheet row reached the query line (#2382): a whole
+		// program replaces it, a builtin's name lands at the caret.
+		return m, m.insertPlayCheat(msg)
 
 	case TogglePlaygroundQueryViewMsg:
 		// json.jqQueryView (ctrl+alt+e, palette / Tools menu, #2032): show the

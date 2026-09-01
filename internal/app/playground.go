@@ -1052,6 +1052,13 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// playground's own library (#2039).
 		m.openPlayFilterPicker(s.dialect, false)
 		return m, nil
+	case "ctrl+g":
+		// The language cheatsheet (#2382) — json.jqCheatsheet's chord, the
+		// library's sibling: ctrl+l is where *your* programs live, ctrl+g
+		// where the language does. Opening it leaves the playground mounted,
+		// so esc comes back to the query line untouched.
+		m.openPlayCheatsheet(s.dialect)
+		return m, nil
 	}
 	out, pos, handled, changed := ui.EditKey(msg, s.program, s.pos)
 	if !handled {
@@ -1115,6 +1122,11 @@ func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "ctrl+o":
 		return m.openPlayResultAsScratch()
+	case "ctrl+g":
+		// The cheatsheet is reachable from both focuses (#2382): looking the
+		// language up is not something to have to tab back for.
+		m.openPlayCheatsheet(s.dialect)
+		return m, nil
 	case "esc":
 		if s.resultEd.ModeName() == editor.Normal {
 			m.leavePlaygroundOnEsc()
@@ -1193,7 +1205,7 @@ func (m *Model) playNoCodeActions() {
 	if s == nil {
 		return
 	}
-	s.status = "no code actions in the playground — ctrl+space completes, ctrl+l opens saved filters"
+	s.status = "no code actions in the playground — ctrl+space completes, ctrl+g is the cheatsheet, ctrl+l opens saved filters"
 	s.statusWarn = true
 }
 
@@ -1505,7 +1517,7 @@ func (m Model) playHints() []string {
 		// za/zM/zR are the editor's own fold keys (#1741), listed here
 		// because folding a big result (#2029) is the reason to be in the
 		// buffer at all — and nothing else on the row advertises them.
-		return []string{"tab query line", "za fold", "zM/zR fold all", view, "ctrl+y copy", "ctrl+o scratch", "esc close", playHelpHint}
+		return []string{"tab query line", "za fold", "zM/zR fold all", view, "ctrl+g cheatsheet", "ctrl+y copy", "ctrl+o scratch", "esc close", playHelpHint}
 	}
 	// The arrows change meaning with the view (#2038), so the hints say which
 	// one is in front of the user: rows to walk, or the history.
@@ -1515,7 +1527,7 @@ func (m Model) playHints() []string {
 	}
 	out := []string{"tab result", "enter run", view}
 	out = append(out, hist...)
-	return append(out, "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close", playHelpHint)
+	return append(out, "ctrl+s save filter", "ctrl+l filters", "ctrl+g cheatsheet", "ctrl+y copy", "ctrl+o scratch", "esc close", playHelpHint)
 }
 
 // playHelpHint is the hint tail's last segment (#2237): the one key that lists

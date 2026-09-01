@@ -1,5 +1,33 @@
 # Log
 
+## 2026-09-01 (the playground documents its language, #2382)
+
+- **`ctrl+g` opens a language cheatsheet** in the jq/yq playground: the syntax
+  that is not a function (pipe, `.[]`, `.[]?`, slices, construction, `//`,
+  interpolation, `as`, `reduce`, `if`, `try`, the update operators, `..`),
+  one-line **example programs** for the everyday operations — pick a field,
+  iterate, filter, map, sort, group, count, rebuild an object, walk nested
+  paths, default a missing value — and **every builtin** with its arities and
+  description. The keyboard had a sheet since #2237; the language had none, so
+  the completion popup only ever found what you already knew.
+- **Generated, not hand-listed**: the builtin section is `jqplay.Builtins()`
+  plus `builtinDocs`, the same list the engine prints and the popup offers, so
+  a gojq version with a new function shows it without an edit. `builtinDocs`
+  grew by ~60 commonly reached-for names it was missing, which the completion
+  popup gets for free.
+- **Every example is a tested program**: `cheatsheet_test.go` evaluates all of
+  them against a sample document in the package and fails on a compile error, a
+  runtime error or an empty result — a typo cannot live in the reference.
+- **Dialect-aware**: the title, the placeholder and the document-language rows
+  follow the open playground's dialect, never both side by side — a yq session
+  is told about `---` and merge keys, a jq session about `.jsonl` streams and
+  exact number spellings.
+- **A reference that is also a tool**: `enter` on a syntax or example row
+  replaces the query line and runs it (the replaced program goes into the
+  history first, so `↑` brings it back); `enter` on a builtin inserts its name
+  at the caret. It lives in the palette — searchable rather than paged — beside
+  `ctrl+l`, which stays the place for *your own* programs.
+
 ## 2026-09-01 (horizontal scroll state is visible, #2377)
 
 - **Edge marks in every sideways-scrolling view**: the editor, the diff viewer,

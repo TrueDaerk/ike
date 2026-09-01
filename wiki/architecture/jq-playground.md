@@ -1,10 +1,10 @@
 ---
 type: concept
 title: jq & yq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context, `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, and inserting a picked row into the query line — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, yaml, jq, yq, tools, inline, editor, http, completion, folding]
-timestamp: 2026-08-31T00:00:00Z
+timestamp: 2026-09-01T00:00:00Z
 ---
 
 # jq & yq Playground
@@ -42,14 +42,17 @@ internal/jqplay/
   highlight.go   the query line's jq scanner: Tokens/KindAt, single pass, never fails
   complete.go    the typing aid: Complete — snapshot keys at a path, gojq's builtin list
   library.go     the named saved-filter store: Library, Filter, Scope — path-agnostic, one type for every store
+  cheatsheet.go  the language sheet (#2382): Cheatsheet, CheatEntry, Sample — syntax, one-line examples, every builtin
   wrap.go        the multi-line view's line breaking and caret coordinates: Wrap/LineAt/RowCol/PosAt
 internal/app/
   playground.go   the inline mode: query header, result buffer, key routing, debounce and async eval
   playcomplete.go the completion popup: state, keys, rendering and compositing
   playfilters.go  the filter library's UI: the store paths, the name prompt, the palette picker
+  playcheat.go    the language cheatsheet's UI: the locked palette mode, the search, the two insertions (#2382)
   playhelp.go     the mode's key inventory for the cheatsheet: query line, result buffer, keymap chords (#2237)
   commands.go     json.jqPlayground / …AtPath and yaml.yqPlayground / …AtPath → the two open messages,
                   json.jqSaveFilter / {json.jq,yaml.yq}Filters / …RenameFilter → the libraries,
+                  {json.jq,yaml.yq}Cheatsheet → the language sheet,
                   json.jqQueryView → the multi-line view toggle
 ```
 
@@ -676,13 +679,14 @@ above win):
 | `pgup` / `pgdn` | page the result buffer without leaving the query line |
 | `ctrl+s` | save the program as a **named filter** (`json.jqSaveFilter`) |
 | `ctrl+l` | open the **saved-filter picker** over this playground's library (`json.jqFilters` / `yaml.yqFilters`) |
+| `ctrl+g` | open the **[language cheatsheet](#the-language-cheatsheet)** of this playground's dialect (`json.jqCheatsheet` / `yaml.yqCheatsheet`) |
 | `ctrl+y` | copy the **whole** result (not just the visible part) |
 | `ctrl+o` | open the result as a fresh scratch in the dialect's extension (`.json` / `.yaml`) |
 | `esc` | close (recording the program in the history) |
 | `esc esc` | close **and** open the command palette (#2237) |
 | `f1` | the cheatsheet, opened on the playground's own context (#2237) |
 
-`ctrl+alt+e` works from the result buffer too.
+`ctrl+alt+e` and `ctrl+g` work from the result buffer too.
 
 Result buffer (after `tab`): the **full editor keymap** — motions, search,
 folds (`za` / `zc` / `zo` / `zM` / `zR`, see
@@ -908,6 +912,111 @@ open playground's, each command its own:
 The list is re-read from both files on every open and after every delete, so a
 library changed by another window — or by hand — is never stale.
 
+## The language cheatsheet
+
+#2382. The keyboard has been documented since #2237; the **language** was not.
+Someone who does not already know jq could open the playground, see a query
+line, and have no way to find out that `group_by` exists — let alone what a
+program that uses it looks like. The completion popup only offers what you
+have already half-typed, so it finds what you know and nothing else.
+
+`ctrl+g` from either focus (or `json.jqCheatsheet` / `yaml.yqCheatsheet` from
+the palette and the Tools menu) opens a **locked palette mode** listing the
+whole language of the open playground's dialect, in three sections:
+
+| Badge | What | Where it comes from |
+| --- | --- | --- |
+| `syntax` | the parts of the language that are **not** functions: the pipe, `.[]`, `.[]?`, slices, `,`, object and array construction, `//`, string interpolation, `as`, `reduce`, `if`, `try`, `=` / `\|=`, `..` | authored in `cheatsheet.go` |
+| `example` | complete **one-line programs** for the everyday operations: pick a field, iterate, filter, map, sort, group, count per group, rebuild an object, walk nested paths, deduplicate, default a missing value, interpolate | authored in `cheatsheet.go` |
+| `builtin` | **every** function the engine accepts, with its arities and, where one is curated, its one-line description | `jqplay.Builtins()` + `builtinDocs` |
+
+The builtin section is **generated, never hand-listed**. A second copy of the
+function list would drift from the engine's the first time gojq gained one, and
+the whole point of the sheet is that it tells the truth about *this*
+playground — it is the same list `builtins` prints and the same list the
+completion popup offers, so the two views of a function never disagree. The
+long tail without a curated description is still listed: knowing that
+`truncate_stream` exists is worth more than the blank where its sentence would
+go, and the arity note still marks it as a function. #2382 also **grew
+`builtinDocs`** by some sixty commonly reached-for names it was missing
+(`ceil`, `walk`, `objects`, `setpath`, `strftime`, the type filters, …), which
+the completion popup gets for free.
+
+### Every example is a tested program
+
+`cheatsheet_test.go` evaluates **every authored program against a sample
+document that lives next to it** (`jqplay.Sample`), and fails on a compile
+error, a runtime error or an empty result. A typo in an example would otherwise
+sit in the reference forever, teaching the language wrong to exactly the reader
+who cannot tell — and prose about `map` is much easier to keep honest than a
+program is. The sample is a small `{users, meta, counts}` document in both
+languages, so a single list of programs serves both dialects; the placeholder
+line names it, so `.users[]` is not a field out of nowhere.
+
+### The dialect decides, and shows only one side
+
+The sheet's title, its placeholder and its document-language rows follow the
+**open playground's dialect** — never both side by side, which would make the
+sheet something to filter rather than something to read. Almost every row is
+shared (yq speaks jq for everything typed into a query line), and the handful
+that are genuinely about the document language are written twice, once per
+dialect:
+
+- jq only — *several values in one buffer* (a `.jsonl` stream), *a number keeps
+  its exact spelling* (a 19-digit id survives), *a JSON string field as data*.
+- yq only — *several documents in one file* (`---`), *aliases and merge keys
+  are resolved* (the decoder expands them before the program runs), *a JSON
+  string inside the YAML*.
+
+### Picking a row
+
+`enter` writes the row into the query line, in the shape the row actually is:
+
+- a **syntax or example** row is a whole program, so it **replaces** the query
+  line and runs, the way an inserted saved filter does. The program it replaced
+  is put in the **history first**, so `↑` brings it straight back: looking
+  something up must never be able to cost the work on the line. The status row
+  says the example's field names come from the sample document — a program
+  erroring with no explanation would read as a broken cheatsheet.
+- a **builtin** row is half a program, so its **name lands at the caret**,
+  exactly like accepting a completion. Replacing `.users | ` with `group_by`
+  would be the wrong half.
+
+Unlike the filter picker the sheet never *opens* a playground: a saved filter
+is written against the user's own documents and inserting one is a complete
+action anywhere, while an example is written against the sample document, and
+opening a playground over an unrelated buffer just to run `.users[]` against it
+would produce a red error line and call it a feature. With no playground up the
+sheet is still readable — it is a reference — and inserting says which
+playground to open.
+
+### Why the palette
+
+The playground already has two ways to show a list, and the sheet fits neither
+badly enough to justify a third. The **completion popup** is anchored on the
+caret and sized for eight rows; the sheet is several hundred rows long, and the
+one thing the issue insists on is that it be searchable rather than paged. The
+**palette** already *is* that — one fuzzy-matched, scrollable, mouse-aware list
+with a query line — and it is the same doorway `ctrl+l` uses for the other body
+of programs, so both land in one place instead of in two unrelated widgets. It
+also composes with the mode for free: opening the palette does not touch the
+playground, so the query, the result and the history are all still there when
+`esc` closes it.
+
+Rows are matched over the **title plus its description**, because the sheet is
+browsed by what one wants to do ("sort an array by a field"), not by the name
+of a function one does not know yet. A query matching no label is retried
+against the **program**, ranked below every title hit, so half-remembering
+`from_entries` still finds the example that uses it.
+
+`ctrl+l` and `ctrl+g` stay **disjoint on purpose**: the library is where the
+user's *own* programs live, the sheet is where the *language* lives. Neither
+ever lists the other's rows.
+
+Neither command carries a default keybind: like the library's, they are
+single-key bindings inside the owning mode and are recorded that way in the
+unbound-command audit ledger (`cmd/ike/keybind_audit_test.go`, #2305).
+
 ## Boundaries
 
 - **No raw output mode** (`jq -r`), no `--slurp`, no `--arg`: the playground is
@@ -939,6 +1048,13 @@ library changed by another window — or by hand — is never stale.
   would invite raising them past what the pane can render. The filter library
   has none either: it is data the user creates, not a preference to configure —
   the only knob is a `MaxFilters` runaway guard nobody should ever feel.
+- **The cheatsheet is a reference, not a tutorial.** It says what a construct
+  does in one line and shows one program that uses it; it does not explain jq.
+  Nor does it document `jq -r`, `--slurp` or `--arg`, which the playground does
+  not have — a sheet listing what the tool cannot do would be worse than none.
+- **No second builtin list, ever.** The function rows are `Builtins()`; the
+  descriptions are `builtinDocs`, the map the completion popup already reads.
+  Anything else would be a copy with its own decay schedule.
 - **The history is still not persisted.** #1995 gives the durable programs a
   *name* and a file; the anonymous ones stay in memory. Persisting the history
   too would put every half-typed experiment into the project state, which is
