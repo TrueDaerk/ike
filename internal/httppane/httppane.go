@@ -44,6 +44,10 @@ type row struct {
 	kind rowKind
 	text string
 	body int // body line index for highlight lookup (kindBody)
+	// runes is text decoded once, filled lazily by rowRunes (#2386): the view
+	// renders and hit-tests by rune column, and re-decoding a megabyte-long
+	// minified body line on every frame was a visible per-interaction cost.
+	runes []rune
 }
 
 // Model is the response viewer state. Value type with pointer-receiver
@@ -99,6 +103,11 @@ type Model struct {
 	// and long header values are wider than the pane, so the view pans
 	// sideways instead of clipping the rest away for good.
 	left int
+	// longest caches the rune length of the longest composed row (#2386):
+	// maxLeft runs on every sideways pan and clamp, and re-counting a huge
+	// body on each was a per-keystroke cost. -1 = not computed yet; any change
+	// to rows invalidates it.
+	longest int
 
 	// In-pane search (#1265) over the whole composed view — status line,
 	// headers and formatted body alike. searching marks the open "/" prompt,
@@ -146,9 +155,24 @@ type Model struct {
 
 // New returns an empty viewer; responses arrive via Set.
 func New(pal *theme.Palette) Model {
-	m := Model{pal: pal}
+	m := Model{pal: pal, longest: -1}
 	m.rebuildTheme()
 	return m
+}
+
+// rowRunes returns row i's text as runes, decoded once and kept on the row
+// (#2386). Everything that addresses a row by rune column — rendering, mouse
+// hit tests, selection — shares the one decode instead of each converting the
+// whole text again.
+func (m *Model) rowRunes(i int) []rune {
+	if i < 0 || i >= len(m.rows) {
+		return nil
+	}
+	r := &m.rows[i]
+	if r.runes == nil && r.text != "" {
+		r.runes = []rune(r.text)
+	}
+	return r.runes
 }
 
 // SetSize records the interior content size.
@@ -320,6 +344,7 @@ func (m *Model) StartStream(request, proto, status string, headers http.Header) 
 	m.top = 0
 	m.left = 0
 	m.rows = nil
+	m.longest = -1
 	m.bodyIx = highlight.Index{}
 	m.hlGen++ // a pass still in flight belongs to rows that are gone now
 	m.hlPending = nil
@@ -372,6 +397,7 @@ func (m *Model) AppendStream(chunk []byte) {
 	if len(m.rows) == first {
 		return // no completed line yet: nothing changed on screen
 	}
+	m.longest = -1 // the appended rows may be wider than anything before
 	// A stream only appends, so the projection and the search extend at the
 	// tail (#2176) instead of recomputing over every row — per-chunk O(all
 	// rows) work made a long stream quadratic in total.
@@ -455,6 +481,7 @@ func (m *Model) recompose(resp *httpclient.Response) {
 	m.top = 0
 	m.left = 0
 	m.rows = nil
+	m.longest = -1
 	m.bodyIx = highlight.Index{}
 	m.hlGen++ // whatever pass is still out belongs to the previous rows
 	m.hlPending = nil
@@ -870,18 +897,37 @@ func (m *Model) scrollToMatch() {
 	m.ScrollX(0) // clamp
 }
 
-// matchState reports whether column col of row i is inside a match (1) or
-// inside the current match (2); 0 otherwise.
-func (m *Model) matchState(rowIx, col int) int {
-	for i, s := range m.matches {
-		if s.Line == rowIx && col >= s.Start && col < s.End {
-			if i == m.cur {
-				return 2
-			}
-			return 1
+// rowMatchFn is matchState narrowed to one row's drawn window [from, to)
+// (#2386): the matches are sorted (research walks the rows in order), so the
+// row's slice is found by binary search and filtered to the window once —
+// paintRow then asks per rune cell without rescanning every match of every
+// row each time.
+func (m *Model) rowMatchFn(rowIx, from, to int) func(col int) int {
+	lo := sort.Search(len(m.matches), func(i int) bool { return m.matches[i].Line >= rowIx })
+	type winMatch struct {
+		span search.Span
+		cur  bool
+	}
+	var win []winMatch
+	for i := lo; i < len(m.matches) && m.matches[i].Line == rowIx; i++ {
+		if s := m.matches[i]; s.End > from && s.Start < to {
+			win = append(win, winMatch{span: s, cur: i == m.cur})
 		}
 	}
-	return 0
+	if len(win) == 0 {
+		return func(int) int { return 0 }
+	}
+	return func(col int) int {
+		for _, w := range win {
+			if col >= w.span.Start && col < w.span.End {
+				if w.cur {
+					return 2
+				}
+				return 1
+			}
+		}
+		return 0
+	}
 }
 
 // showHistory switches the viewer to history entry i, clamped to the range.
@@ -949,14 +995,18 @@ func (m *Model) maxTop() int {
 }
 
 // maxLeft is the offset at which the longest row's last rune is still shown.
+// The longest-row count is cached (#2386): this runs on every pan and clamp,
+// and rune-counting a large body each time was a per-keystroke cost.
 func (m *Model) maxLeft() int {
-	longest := 0
-	for _, r := range m.rows {
-		if n := len([]rune(r.text)); n > longest {
-			longest = n
+	if m.longest < 0 {
+		m.longest = 0
+		for _, r := range m.rows {
+			if n := utf8.RuneCountInString(r.text); n > m.longest {
+				m.longest = n
+			}
 		}
 	}
-	return max(0, longest-m.rowWidth())
+	return max(0, m.longest-m.rowWidth())
 }
 
 // rowWidth is the room one composed row has after the leading gutter space.
@@ -1240,7 +1290,7 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	// Only the window [left, left+width) of the row is on screen (#1290); the
 	// columns keep their absolute index so highlight, matches and selection
 	// stay aligned with the text they belong to.
-	runes := []rune(r.text)
+	runes := m.rowRunes(i)
 	from := min(m.left, len(runes))
 	to, tail := len(runes), ""
 	if w := m.rowWidth(); to-from > w {
@@ -1249,7 +1299,7 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	// The leading gutter cell carries the fold marker (#1330); a collapsed
 	// header states how many rows it hides, like the editor's placeholder.
 	gutter := lipgloss.NewStyle().Foreground(pal.Secondary).Render(m.foldGutter(i))
-	line := gutter + m.paintRow(i, runes[from:to], from, m.baseStyle(pal, r)) + tail
+	line := gutter + m.paintRow(i, runes[from:to], from, m.baseStyle(pal, i, from, to)) + tail
 	if ph := m.foldPlaceholder(i); ph != "" {
 		// A collapsed header also carries the copy affordance (#1787), one
 		// space behind the placeholder — the only copy target on the row, so
@@ -1264,8 +1314,13 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 // that groups adjacent columns sharing it into a single rendered segment.
 type styleFn func(col int) (lipgloss.Style, string)
 
-// baseStyle returns the per-kind column styling of a row.
-func (m *Model) baseStyle(pal *theme.Palette, r row) styleFn {
+// baseStyle returns the per-kind column styling of row i. from/to bound the
+// rune columns actually drawn (#2386): a body row can be a megabyte-long
+// minified line of which only a pane-width window is on screen, so all
+// per-column data — identifier spans, highlight spans — is gathered for the
+// window once instead of over the whole line on every frame.
+func (m *Model) baseStyle(pal *theme.Palette, i, from, to int) styleFn {
+	r := m.rows[i]
 	plain := lipgloss.NewStyle()
 	switch r.kind {
 	case kindStatus:
@@ -1295,9 +1350,27 @@ func (m *Model) baseStyle(pal *theme.Palette, r row) styleFn {
 		// the trace ID of this response matches the one in the log pane. The
 		// gate is the idcolor package global (editor.id_colors) — this pane
 		// has no config of its own.
-		ids := m.bodyIDs(r.text)
+		ids := m.bodyIDs(i, from, to)
+		// The window's highlight spans, filtered once from the line's span
+		// list (#2386): CaptureAt per rune cell over a minified line with
+		// hundreds of thousands of spans made every frame quadratic-ish.
+		var spans []highlight.Span
+		for _, s := range m.bodyIx.LineSpans(r.body) {
+			if s.EndCol > from && s.StartCol < to {
+				spans = append(spans, s)
+			}
+		}
+		captureAt := func(col int) string {
+			// First covering span wins — iterator order, CaptureAt's rule.
+			for _, s := range spans {
+				if col >= s.StartCol && col < s.EndCol {
+					return s.Capture
+				}
+			}
+			return ""
+		}
 		return func(col int) (lipgloss.Style, string) {
-			capture := m.bodyIx.CaptureAt(r.body, col)
+			capture := captureAt(col)
 			if id, ok := idAt(ids, col); ok {
 				if st, ok := m.hl.Style(idcolor.Capture(id.Slot)); ok {
 					return st, idcolor.Capture(id.Slot)
@@ -1312,13 +1385,32 @@ func (m *Model) baseStyle(pal *theme.Palette, r row) styleFn {
 	return func(int) (lipgloss.Style, string) { return plain, "" }
 }
 
-// bodyIDs scans one body row for identifiers (#1626); nil while the feature
-// is off. Only the rows the pane actually draws are scanned.
-func (m *Model) bodyIDs(text string) []idcolor.Span {
+// idScanPad is how far beyond the visible window the identifier scan reaches,
+// in runes (#2386): an identifier overlapping the window edge still colors
+// (and hashes) whole as long as it fits inside the margin — UUIDs are 36
+// runes, hex hashes rarely reach 128. Scanning the entire row instead made a
+// megabyte-long line cost the whole line on every frame.
+const idScanPad = 256
+
+// bodyIDs scans the drawn window [from, to) of body row i for identifiers
+// (#1626), padded by idScanPad on both sides; nil while the feature is off.
+// The returned spans carry absolute rune columns of the row.
+func (m *Model) bodyIDs(i, from, to int) []idcolor.Span {
 	if !idcolor.Enabled() {
 		return nil
 	}
-	return idcolor.Scan(text, idcolor.MinLength())
+	runes := m.rowRunes(i)
+	padFrom := max(0, from-idScanPad)
+	padTo := min(len(runes), to+idScanPad)
+	if padFrom >= padTo {
+		return nil
+	}
+	ids := idcolor.Scan(string(runes[padFrom:padTo]), idcolor.MinLength())
+	for j := range ids {
+		ids[j].Start += padFrom
+		ids[j].End += padFrom
+	}
+	return ids
 }
 
 // idAt returns the identifier span covering a column.
@@ -1339,13 +1431,14 @@ func idAt(spans []idcolor.Span, col int) (idcolor.Span, bool) {
 func (m *Model) paintRow(rowIx int, runes []rune, offset int, base styleFn) string {
 	var b strings.Builder
 	last := offset + len(runes)
+	matchAt := m.rowMatchFn(rowIx, offset, last)
 	for col := offset; col < last; {
 		st, key := base(col)
-		state := m.matchState(rowIx, col)
+		state := matchAt(col)
 		end := col + 1
 		selected := m.selState(rowIx, col)
 		for end < last {
-			if _, k := base(end); k != key || m.matchState(rowIx, end) != state || m.selState(rowIx, end) != selected {
+			if _, k := base(end); k != key || matchAt(end) != state || m.selState(rowIx, end) != selected {
 				break
 			}
 			end++

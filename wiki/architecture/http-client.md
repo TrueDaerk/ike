@@ -910,6 +910,22 @@ For a recognized stream:
   the Settings UI (HTTP Client page, 1–65536 KiB, validated and persisted);
   the pane reads it through a package global (`httppane.SetHighlightLimit`,
   the `idcolor` arrangement) pushed on startup and config reload.
+- **Rendering pays for the window, not the line** (#2386): `View` runs after
+  *every* message, so its cost is what each click and keystroke pays for as
+  long as the response stays open. A spooled minified body composes as one
+  megabyte-long row, and three per-frame costs each scaled with that whole
+  line instead of the pane-width window on screen: the identifier scan
+  (`idcolor.Scan`, itself quadratic over a line with many hex IDs — fixed to
+  one incremental byte→rune walk), the per-cell `CaptureAt` over every
+  highlight span of the line, and the `[]rune` decode of the row text. Now the
+  row's runes decode once and stay on the row (`rowRunes` — mouse hit tests
+  and selection share the cache), `baseStyle` filters the line's spans and
+  scans identifiers over a padded window (`idScanPad`, so an ID overlapping
+  the edge still colours whole and keeps its slot), the search-match lookup
+  narrows to the row's window (`rowMatchFn`) and `maxLeft` caches the longest
+  row instead of re-counting every row per pan. `BenchmarkViewLargeSingleLine`
+  et al. (`internal/httppane/bench_test.go`) pin the path: one frame over a
+  1 MiB single-line head went from ~4.9 s to ~0.1 ms.
 - **Large bodies are a window onto a file** (#2157): the dispatcher spools
   anything past `SpoolThreshold` (1 MiB) to disk (see
   [Large bodies are spooled to disk](#large-bodies-are-spooled-to-disk-2157)),
