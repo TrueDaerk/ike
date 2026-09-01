@@ -53,7 +53,6 @@ const (
 var unboundFamilies = []struct{ prefix, reason string }{
 	{"themes.select.", reasonPickerItem},          // the theme picker's entries
 	{"scratch.new.", reasonPickerItem},            // cmd+shift+n's language picker
-	{"scratch.generate.", reasonPickerItem},       // cmd+alt+shift+n's format step
 	{"file.setEncoding.", reasonPickerItem},       // the status line's encoding picker
 	{"file.setLineEndings.", reasonPickerItem},    // the status line's line-ending picker
 	{"editor.fold.", reasonVimKey},                // za / zo / zc / zR / zM / zy

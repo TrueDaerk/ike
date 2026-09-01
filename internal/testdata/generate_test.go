@@ -2,6 +2,7 @@ package testdata
 
 import (
 	"bytes"
+	"fmt"
 	"net"
 	"regexp"
 	"strings"
@@ -9,18 +10,19 @@ import (
 	"time"
 )
 
-// allKindsSpec is one field per catalog kind, each with its documented sample
-// parameter — the spec the catalog tests generate from.
-func allKindsSpec(format Format, rows int, seed uint64) Spec {
-	spec := Spec{Format: format, Rows: rows, Seed: seed, Table: "records"}
+// allKindsDSL is one field per catalog kind, each with its documented sample
+// parameter — the spec the catalog tests generate from. The field name is the
+// kind's own name.
+func allKindsDSL() string {
+	var b strings.Builder
 	for _, info := range Catalog() {
-		spec.Fields = append(spec.Fields, Field{
-			Name:  string(info.Kind),
-			Kind:  info.Kind,
-			Param: sampleParam(info.Kind),
-		})
+		fmt.Fprintf(&b, "%s = %s(%s)\n", info.Kind, info.Kind, sampleParam(info.Kind))
 	}
-	return spec
+	return b.String()
+}
+
+func allKindsSpec(format Format, rows int, seed uint64) Spec {
+	return dslSpec(format, rows, seed, allKindsDSL())
 }
 
 // TestSeedDeterminism is the acceptance criterion "same seed + same spec →
@@ -56,7 +58,7 @@ func TestSeedDeterminism(t *testing.T) {
 // TestZeroSeedVaries pins the documented meaning of seed 0: a fresh random
 // seed per run, so an unseeded generation is not the same file every time.
 func TestZeroSeedVaries(t *testing.T) {
-	spec := Spec{Format: FormatCSV, Rows: 20, Seed: 0, Fields: []Field{{Name: "u", Kind: KindUUID}}}
+	spec := dslSpec(FormatCSV, 20, 0, "u = uuid()")
 	a, err := Render(spec)
 	if err != nil {
 		t.Fatalf("Render: %v", err)
@@ -74,25 +76,22 @@ func TestZeroSeedVaries(t *testing.T) {
 // faker, not the package global: two generators alive at once must not steal
 // each other's draws.
 func TestGeneratorInterleavingIsSeeded(t *testing.T) {
-	spec := Spec{Format: FormatCSV, Rows: 3, Seed: 7, Fields: []Field{{Name: "n", Kind: KindFullName}}}
-	solo, err := NewGenerator(spec)
-	if err != nil {
-		t.Fatalf("NewGenerator: %v", err)
-	}
-	var want []string
-	for i := 0; i < 3; i++ {
-		want = append(want, solo.Row(i)[0].(string))
-	}
+	spec := dslSpec(FormatCSV, 3, 7, "n = full_name()")
+	want := rows(t, spec, 3)
 
 	a, _ := NewGenerator(spec)
 	b, _ := NewGenerator(spec)
-	var got []string
 	for i := 0; i < 3; i++ {
-		b.Row(i) // interleaved traffic on a second generator
-		got = append(got, a.Row(i)[0].(string))
-	}
-	if strings.Join(got, "|") != strings.Join(want, "|") {
-		t.Fatalf("interleaved generation changed the values: %v vs %v", got, want)
+		if _, err := b.Row(i); err != nil { // interleaved traffic on a second generator
+			t.Fatalf("Row: %v", err)
+		}
+		got, err := a.Row(i)
+		if err != nil {
+			t.Fatalf("Row: %v", err)
+		}
+		if got[0] != want[i][0] {
+			t.Fatalf("interleaved generation changed row %d: %v vs %v", i, got[0], want[i][0])
+		}
 	}
 }
 
@@ -100,18 +99,22 @@ func TestGeneratorInterleavingIsSeeded(t *testing.T) {
 // the typed kinds by Go type, the string kinds by not being empty, and the
 // constrained ones by their constraint.
 func TestKindValues(t *testing.T) {
-	const rows = 40
-	spec := allKindsSpec(FormatCSV, rows, 99)
+	const nrows = 40
+	spec := allKindsSpec(FormatCSV, nrows, 99)
 	g, err := NewGenerator(spec)
 	if err != nil {
 		t.Fatalf("NewGenerator: %v", err)
 	}
+	kinds := Kinds()
 	from, to, _ := parseDateRange(sampleParam(KindDate))
-	for r := 0; r < rows; r++ {
-		vals := g.Row(r)
-		for i, f := range spec.Fields {
+	for r := 0; r < nrows; r++ {
+		vals, err := g.Row(r)
+		if err != nil {
+			t.Fatalf("Row(%d): %v", r, err)
+		}
+		for i, k := range kinds {
 			v := vals[i]
-			switch f.Kind {
+			switch k {
 			case KindID:
 				if v.(int64) != int64(r+1) {
 					t.Fatalf("id row %d = %v, want %d", r, v, r+1)
@@ -176,7 +179,7 @@ func TestKindValues(t *testing.T) {
 				}
 			default:
 				if s, ok := v.(string); !ok || strings.TrimSpace(s) == "" {
-					t.Fatalf("kind %s produced %#v, want a non-empty string", f.Kind, v)
+					t.Fatalf("kind %s produced %#v, want a non-empty string", k, v)
 				}
 			}
 		}
@@ -186,17 +189,8 @@ func TestKindValues(t *testing.T) {
 // TestUnconstrainedNetworkKinds checks the parameterless spelling of the
 // domain-taking kinds still produces well-formed values.
 func TestUnconstrainedNetworkKinds(t *testing.T) {
-	spec := Spec{Format: FormatCSV, Rows: 20, Seed: 3, Fields: []Field{
-		{Name: "url", Kind: KindURL},
-		{Name: "host", Kind: KindHostname},
-		{Name: "mail", Kind: KindEmail},
-	}}
-	g, err := NewGenerator(spec)
-	if err != nil {
-		t.Fatalf("NewGenerator: %v", err)
-	}
-	for i := 0; i < spec.Rows; i++ {
-		vals := g.Row(i)
+	spec := dslSpec(FormatCSV, 20, 3, "url = url()\nhost = hostname()\nmail = email()")
+	for _, vals := range rows(t, spec, 20) {
 		if u := vals[0].(string); !strings.HasPrefix(u, "http") {
 			t.Fatalf("url %q is not a URL", u)
 		}
@@ -212,7 +206,7 @@ func TestUnconstrainedNetworkKinds(t *testing.T) {
 // TestLogEntriesAscend proves generated log timestamps move forward and the
 // level distribution actually spreads across the severities.
 func TestLogEntriesAscend(t *testing.T) {
-	g, err := NewGenerator(Spec{Format: FormatLog, Rows: 500, Seed: 11, Fields: []Field{{Name: "id", Kind: KindID}}})
+	g, err := NewGenerator(dslSpec(FormatLog, 500, 11, "id = id()"))
 	if err != nil {
 		t.Fatalf("NewGenerator: %v", err)
 	}
@@ -245,7 +239,7 @@ func TestGeneratorRejectsInvalidSpec(t *testing.T) {
 	if _, err := NewGenerator(Spec{Format: FormatCSV, Rows: 0}); err == nil {
 		t.Fatal("NewGenerator accepted a spec with no rows and no fields")
 	}
-	if _, err := Render(Spec{Format: FormatCSV, Rows: 1, Fields: []Field{{Name: "x", Kind: "nope"}}}); err == nil {
-		t.Fatal("Render accepted an unknown kind")
+	if _, err := Render(dslSpec(FormatCSV, 1, 0, "x = nope()")); err == nil {
+		t.Fatal("Render accepted an unknown generator")
 	}
 }

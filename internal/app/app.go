@@ -6224,12 +6224,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.finishNewProject(msg)
 
 	case GenerateScratchMsg:
-		// scratch.generate (#2134): the wizard, or — for the per-format
-		// commands — a straight generation from that format's preset.
-		if msg.Format != "" {
-			return m.startPresetGenerate(msg.Format)
-		}
-		m.startGenerateScratch()
+		// scratch.generate (#2134, DSL editor #2392): the generator dialog.
+		return m, m.startGenerateScratch()
+
+	case tdPreviewTickMsg:
+		// The generator dialog's spec went quiet long enough to re-render the
+		// live preview (#2392); a stale generation means the user kept typing.
+		return m, m.fireGeneratePreview(msg)
+
+	case tdPreviewDoneMsg:
+		// An off-loop preview render came back (#2392).
+		m.finishGeneratePreview(msg)
 		return m, nil
 
 	case ShowScratchManagerMsg:
@@ -10003,13 +10008,6 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.action == mouseWheel {
-			if top == m.shell && m.generateScratchOpen() {
-				// The test-data wizard (#2228) scrolls its list selections
-				// with the wheel; it outranks the shell's own viewport.
-				if out, cmd, handled := m.mouseGenerateScratch(msg, 0, 0); handled {
-					return out, cmd
-				}
-			}
 			if top == m.shell && m.scratchManagerOpen() {
 				// The scratch manager (#2256) scrolls its list the same way.
 				if out, cmd, handled := m.mouseScratchManager(msg, 0, 0); handled {

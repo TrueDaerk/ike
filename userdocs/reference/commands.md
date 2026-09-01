@@ -186,15 +186,6 @@ bring their own.
 | Run Tests in File | `run.testsInFile` | — | — | everywhere |
 | Run Tests in File with Coverage | `run.testsWithCoverage` | — | — | everywhere |
 | Generate Test Data… | `scratch.generate` | `cmd+alt+shift+n` | — | everywhere |
-| Generate Test Data: CSV | `scratch.generate.csv` | — | — | everywhere |
-| Generate Test Data: JSON | `scratch.generate.json` | — | — | everywhere |
-| Generate Test Data: Log lines (logfmt) | `scratch.generate.log` | — | — | everywhere |
-| Generate Test Data: NDJSON | `scratch.generate.ndjson` | — | — | everywhere |
-| Generate Test Data: SQL inserts | `scratch.generate.sql` | — | — | everywhere |
-| Generate Test Data: TOML | `scratch.generate.toml` | — | — | everywhere |
-| Generate Test Data: TSV | `scratch.generate.tsv` | — | — | everywhere |
-| Generate Test Data: XML | `scratch.generate.xml` | — | — | everywhere |
-| Generate Test Data: YAML | `scratch.generate.yaml` | — | — | everywhere |
 | Open Scratch File… | `scratch.list` | — | — | everywhere |
 | Manage Scratch Files… | `scratch.manage` | — | — | everywhere |
 | New Scratch File… | `scratch.new` | `cmd+shift+n` | — | everywhere |

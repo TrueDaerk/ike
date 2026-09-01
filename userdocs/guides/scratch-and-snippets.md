@@ -91,29 +91,47 @@ Sometimes what you want in a scratch is not your own text but a *file to try
 something on* — 2000 rows of CSV for the table view, a deep JSON document to
 fold and query, a log file to scroll. **Generate Test Data…** builds one.
 
-It asks four things in turn:
+The dialog is a single screen. At the top sit five knobs: a **template**
+picker, the **format** (CSV, TSV, JSON, NDJSON, XML, YAML, TOML, SQL inserts,
+or logfmt log lines), **rows** (1 to 1 000 000), the **seed**, and the
+**table** name the SQL and XML formats use. The seed is what makes a generated
+file *reproducible*: the same seed and the same spec give you a byte-identical
+file every time, so a bug you find in row 1732 is still there tomorrow. Leave
+it at `0` for fresh random data on every run.
 
-1. **The format** — CSV, TSV, JSON, NDJSON, XML, YAML, TOML, SQL inserts, or
-   logfmt log lines.
-2. **Rows, seed and table name.** The seed is what makes a generated file
-   *reproducible*: the same seed and the same fields give you a byte-identical
-   file every time, so a bug you find in row 1732 is still there tomorrow.
-   Leave the seed at `0` for fresh random data on every run. The table name is
-   used by the SQL and XML formats. Row counts run from 1 to 1 000 000.
-3. **The field list** — ++a++ adds a field, ++e++ edits the selected one, ++d++
-   deletes it, ++enter++ generates. A fresh list starts as `id`, `first_name`,
-   `last_name`, `email`.
-4. **A field** — its name, its kind, and the kind's parameter. On the **Kind**
-   row, ++up++ and ++down++ walk the catalog, so you never have to
-   remember a name.
+Below sits the **spec editor**: one line per field, written
+`name = expression`. Three kinds of expression exist:
+
+- **Generator calls** from the catalog — `first_name()`, `int(1..1000)`,
+  `date(2020-01-01..2026-01-01)`, `from_list(red, green, blue)`.
+- **Template strings** — a quoted string whose `{field}` placeholders take the
+  values of other fields of the same row:
+  `url = "https://{host}/api/v1/users/{id}"`.
+- **Weighted alternatives** — `weighted(60: "active", 20: "inactive",
+  20: "banned")`, over any expressions and any positive weights (they need not
+  sum to 100): `weighted(70: email({domain}), 30: "")`.
+
+`{field}` references also work as generator arguments — `host =
+hostname({domain})` keeps every host inside that row's generated domain.
+Fields may reference each other in any order; the generator evaluates them by
+their dependencies and rejects a reference cycle by naming it. While you type,
+**autocomplete** offers the generator names (with what each one produces and
+its parameter grammar) and the `{field}` references defined above the cursor —
+++enter++ or ++tab++ accepts, ++ctrl+space++ asks explicitly. Blank lines and
+`#` comments are fine.
+
+A **live preview** of the first five rows renders below the editor in the
+picked format and follows every edit. A spec that cannot generate — a mistyped
+generator, a bad range, a reference cycle — shows the error with its line
+number where the preview would be, and generating is refused until it parses.
 
 The catalog covers the usual sample-data shapes: `id` (the row number),
 `uuid`, `first_name`, `last_name`, `full_name`, `email`, `url`, `hostname`,
 `domain`, `ipv4`, `ipv6`, `mac`, `phone`, `street`, `city`, `country`,
 `company`, `job_title`, `sentence`, `paragraph`, `int`, `float`, `bool`,
-`date`, `hex_color` and `user_agent`.
+`date`, `hex_color`, `user_agent` and `from_list`.
 
-Four kinds take a parameter:
+Five kinds take a parameter:
 
 | Kind | Parameter | Example |
 | --- | --- | --- |
@@ -121,17 +139,19 @@ Four kinds take a parameter:
 | `int` | `min..max` | `1..99` |
 | `float` | `min..max` | `0..1.5` |
 | `date` | `from..to` | `2020-01-01..2024-12-31` |
+| `from_list` | comma-separated entries | `red, green, blue` |
 
-The finished file lands in the scratch store like any other scratch, opens in a
-tab with the right highlighting, and shows up in the explorer's Scratches
-section. Anything the form cannot use — a row count of zero, an empty field
-list, a kind you mistyped — is refused in the dialog with the reason, so you fix
-it in place.
+**Templates** are named, format-free specs. Built-ins ship for the common
+shapes — Person, Address, Order, URL / Web, Server log — and picking one loads
+its spec into the editor (the format stays whatever you chose). Save your own
+current spec under a name with ++ctrl+s++ or the *save template* button; your
+templates persist across restarts and can be deleted again from the dialog.
+Edits to the spec never write back into a template unless you save it again.
 
-Your last setup is remembered **per format**, so the next CSV starts from the
-fields of your previous CSV. Once you have one you like, the palette's
-per-format commands (**Generate Test Data: CSV**, **Generate Test Data: JSON**,
-…) skip the dialog entirely and generate straight from it.
+Generate with ++ctrl+g++ or the *generate* button. The finished file lands in
+the scratch store like any other scratch, opens in a tab with the right
+highlighting, and shows up in the explorer's Scratches section. Your last spec
+is remembered, so the next **Generate Test Data…** starts where you left off.
 
 ## Snippets
 

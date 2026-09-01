@@ -874,7 +874,7 @@ The #2305 pass turned these palette-only commands into defaults:
 | `lsp.organizeImports` | `ctrl+alt+o` | JetBrains Optimize Imports, both keymaps |
 | `json.jqPlayground` | `ctrl+alt+j` | the playground family next to its `ctrl+alt+e` query view |
 | `yaml.yqPlayground` | `ctrl+alt+y` | the yq twin of the row above |
-| `scratch.generate` | `cmd+alt+shift+n` | test-data wizard, one modifier past `cmd+shift+n` |
+| `scratch.generate` | `cmd+alt+shift+n` | test-data dialog, one modifier past `cmd+shift+n` |
 | `vcs.diff` | `cmd+alt+d` | JetBrains' `cmd+d` Show Diff is taken by duplicate-line |
 | `tests.toggle` | `cmd+4` | JetBrains' Run tool window number |
 | `debug.console` | `cmd+5` | JetBrains' Debug tool window number |
