@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/mode"
 	"ike/internal/lang"
@@ -327,10 +329,14 @@ func TestSVAlignmentAtHorizontalOffset(t *testing.T) {
 		rows := strings.Split(plainView(m), "\n")
 		cols := make([]int, 3)
 		for i, probe := range []string{"quantity", "3", "222"} {
-			cols[i] = strings.Index(rows[i], probe)
-			if cols[i] < 0 {
+			at := strings.Index(rows[i], probe)
+			if at < 0 {
 				t.Fatalf("offset %d: row %d misses %q:\n%s", left, i, probe, strings.Join(rows, "\n"))
 			}
+			// Display cells, not bytes: the scrolled window carries a
+			// multi-byte left-edge mark (#2377) that occupies exactly one
+			// cell, so a byte index would report a shift that is not there.
+			cols[i] = ansi.StringWidth(rows[i][:at])
 		}
 		if cols[0] != cols[1] || cols[1] != cols[2] {
 			t.Errorf("offset %d: column 2 edges drift: %v\n%s", left, cols, strings.Join(rows, "\n"))
@@ -424,6 +430,7 @@ func TestSVPaddingClipsAtRightEdge(t *testing.T) {
 		m := csvLoaded(t, clipDoc)
 		m.SetSize(width, 6)
 		m.cursor = buffer.Position{Line: 1} // on a field, so nothing is revealed
+		m.hMarks = false                    // the clip, not the edge mark (#2377)
 
 		rows := strings.Split(plainView(m), "\n")
 		for i, full := range clipAligned {
@@ -448,6 +455,7 @@ func TestSVPaddingClipsAtRightEdgeScrolled(t *testing.T) {
 			m := csvLoaded(t, clipDoc)
 			m.SetSize(width, 6)
 			m.cursor = buffer.Position{Line: 1}
+			m.hMarks = false // the clip, not the edge mark (#2377)
 			m.SetScroll(0, left)
 
 			rows := strings.Split(plainView(m), "\n")

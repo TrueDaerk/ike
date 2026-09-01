@@ -220,9 +220,18 @@ func TestHorizontalScrollMovesBothSidesInLockstep(t *testing.T) {
 		t.Fatalf("horizontal scrolling must not change the row count: %d vs %d", len(before), len(after))
 	}
 	// Row alignment: the separator sits in the same column on every row.
-	sepCol := strings.Index(after[0], "│")
+	// Measured in display cells, not bytes: a scrolled row carries the
+	// multi-byte, one-cell edge marks (#2377).
+	sepCell := func(l string) int {
+		at := strings.Index(l, "│")
+		if at < 0 {
+			return -1
+		}
+		return ansi.StringWidth(l[:at])
+	}
+	sepCol := sepCell(after[0])
 	for i, l := range after[:2] {
-		if got := strings.Index(l, "│"); got != sepCol {
+		if got := sepCell(l); got != sepCol {
 			t.Fatalf("row %d separator moved to column %d, want %d: %q", i, got, sepCol, l)
 		}
 	}
@@ -231,7 +240,9 @@ func TestHorizontalScrollMovesBothSidesInLockstep(t *testing.T) {
 	if strings.Contains(left, "abc") || strings.Contains(right, "abc") {
 		t.Fatalf("both sides should have scrolled past the first column: %q", after[1])
 	}
-	if !strings.Contains(left, "bcd") || !strings.Contains(right, "bcd") {
+	// The window opens one column later; its first cell carries the
+	// left-edge mark (#2377), so the text visible after it starts at "c".
+	if !strings.Contains(left, "cde") || !strings.Contains(right, "cde") {
 		t.Fatalf("both sides should start one column later: %q", after[1])
 	}
 }

@@ -508,11 +508,14 @@ func (m Model) renderFoldHeader(line, end, width int, cursorStyle, selStyle lipg
 	if !ok {
 		// No room for the affordance: the placeholder alone, as before.
 		if tw >= width {
-			return m.renderLine(line, width, cursorStyle, selStyle)
+			body, _ := m.renderLine(line, width, cursorStyle, selStyle)
+			return body
 		}
-		return m.renderLine(line, width-tw, cursorStyle, selStyle) + faint.Render(tag)
+		body, _ := m.renderLine(line, width-tw, cursorStyle, selStyle)
+		return body + faint.Render(tag)
 	}
-	body := m.renderLine(line, off-tw, cursorStyle, selStyle) + faint.Render(tag)
+	head, _ := m.renderLine(line, off-tw, cursorStyle, selStyle)
+	body := head + faint.Render(tag)
 	body = ansi.Truncate(body, off, "")
 	if pad := off - ansi.StringWidth(body); pad > 0 {
 		body += strings.Repeat(" ", pad)

@@ -760,10 +760,15 @@ type Model struct {
 	// the guides themselves are what a reader turns on and off.
 	rainbowGuides bool
 	rulers        []int
-	wrapSet       bool
-	wsSet         bool
-	guidesSet     bool
-	rulersRaw     string
+	// hMarks draws the horizontal-scroll edge marks (#2377, ui.h_scroll_marks):
+	// "‹" on the left edge of a scrolled window, "›" on the right edge of a
+	// line that continues past it. They overlay the edge cells the way the
+	// vertical scrollbar overlays the pane's last column, so no column shifts.
+	hMarks    bool
+	wrapSet   bool
+	wsSet     bool
+	guidesSet bool
+	rulersRaw string
 
 	// Per-source, per-severity decoration toggles (#1259): sevShow[1..4] gates
 	// LSP marks by severity, gitShow gates git change marks by kind, across the
@@ -832,6 +837,7 @@ func New() Model {
 		mdTables:           &mdTableState{},
 		mdLists:            &mdListState{},
 		rainbowGuides:      true,
+		hMarks:             true,
 		svRender:           true,
 		svTable:            &svState{},
 		docPathCache:       &docPathState{},
@@ -985,6 +991,7 @@ func (m *Model) applyConfig() {
 		m.indentGuides = boolOr(m.cfg, "editor.indent_guides", m.indentGuides)
 	}
 	m.rainbowGuides = boolOr(m.cfg, "editor.rainbow_indent_guides", m.rainbowGuides)
+	m.hMarks = boolOr(m.cfg, "ui.h_scroll_marks", m.hMarks)
 	if v, ok := m.cfg.Get("editor.rulers"); ok && v != m.rulersRaw {
 		m.rulersRaw = v
 		m.rulers = parseRulers(v)
@@ -1163,7 +1170,7 @@ func (m *Model) Load(path string) error {
 	}
 	m.hist = history.New()
 	m.changes = changeList{} // the change list follows the history (#1174)
-	m.restoreUndo(raw) // hash the on-disk bytes — for a vault file the ciphertext
+	m.restoreUndo(raw)       // hash the on-disk bytes — for a vault file the ciphertext
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil

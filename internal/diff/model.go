@@ -72,6 +72,9 @@ type Model struct {
 	hoff int
 	hmax int
 	hcol int
+	// hMarks draws the horizontal-scroll edge marks (#2377, ui.h_scroll_marks)
+	// on every rendered segment; see hscroll.go.
+	hMarks bool
 
 	// Collapsed context (0340, #494): unchanged runs longer than the context
 	// budget fold into separator rows. gaps records the foldable runs and
@@ -149,7 +152,7 @@ const minHidden = 3
 // rightPath, when non-empty, is the file enter jumps the editor to.
 func New(key, leftTitle, rightTitle, rightPath string, pal *theme.Palette) Model {
 	return Model{key: key, leftTitle: leftTitle, rightTitle: rightTitle, rightPath: rightPath,
-		pal: pal, cur: -1, ctx: defaultContext, collapsed: true}
+		pal: pal, cur: -1, ctx: defaultContext, collapsed: true, hMarks: true}
 }
 
 // NewFiles returns a diff view over two file paths, labelled by their base
@@ -537,10 +540,12 @@ func (m *Model) RenderEditSplit(edLines []string, topLine, height int) string {
 		left := strings.Repeat(" ", lw+1+colL)
 		if ri, ok := m.rightRow[bufLine]; ok {
 			row := m.res.Rows[ri]
+			runes := expand(row.Left)
+			gap := row.Kind == RowAdded
 			left = m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, st) +
-				renderSegment(expand(row.Left), row.Kind == RowAdded, m.hoff, colL,
+				m.stampHScroll(renderSegment(runes, gap, m.hoff, colL,
 					st.base(row.Kind, false), st.emph(row.Kind, false), expandSpans(row.Left, row.LeftSpans),
-					sideCaps(m.leftIx, row.LeftNo, row.Left), hl, 0, 0, st.sel)
+					sideCaps(m.leftIx, row.LeftNo, row.Left), hl, 0, 0, st.sel), runes, gap, colL)
 		}
 		b.WriteString(left)
 		b.WriteString(sep)
@@ -894,15 +899,17 @@ func (m *Model) renderSideBySide(items []displayItem) {
 		selL0, selL1 := m.selCols(line, false)
 		selR0, selR1 := m.selCols(line, true)
 		var b strings.Builder
+		runesL, gapL := expand(row.Left), row.Kind == RowAdded
+		runesR, gapR := expand(row.Right), row.Kind == RowRemoved
 		b.WriteString(m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, st))
-		b.WriteString(renderSegment(expand(row.Left), row.Kind == RowAdded, m.hoff, colL,
+		b.WriteString(m.stampHScroll(renderSegment(runesL, gapL, m.hoff, colL,
 			st.base(row.Kind, false), st.emph(row.Kind, false), expandSpans(row.Left, row.LeftSpans), capsL, hl,
-			selL0, selL1, st.sel))
+			selL0, selL1, st.sel), runesL, gapL, colL))
 		b.WriteString(sep)
 		b.WriteString(m.gutterCell(row.RightNo, rw, row.Kind != RowRemoved, st))
-		b.WriteString(renderSegment(expand(row.Right), row.Kind == RowRemoved, m.hoff, colR,
+		b.WriteString(m.stampHScroll(renderSegment(runesR, gapR, m.hoff, colR,
 			st.base(row.Kind, true), st.emph(row.Kind, true), expandSpans(row.Right, row.RightSpans), capsR, hl,
-			selR0, selR1, st.sel))
+			selR0, selR1, st.sel), runesR, gapR, colR))
 		m.lines = append(m.lines, b.String())
 	}
 }
@@ -920,8 +927,9 @@ func (m *Model) renderUnified(items []displayItem) {
 		var b strings.Builder
 		b.WriteString(m.gutterCell(leftNo, lw, true, st))
 		b.WriteString(m.gutterCell(rightNo, rw, true, st))
-		b.WriteString(renderSegment(expand(text), false, m.hoff, col, base, emph, expandSpans(text, spans), caps, hl,
-			sel0, sel1, st.sel))
+		runes := expand(text)
+		b.WriteString(m.stampHScroll(renderSegment(runes, false, m.hoff, col, base, emph, expandSpans(text, spans), caps, hl,
+			sel0, sel1, st.sel), runes, false, col))
 		m.lines = append(m.lines, b.String())
 	}
 	for _, it := range items {

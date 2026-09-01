@@ -314,12 +314,13 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "lsp.will_rename", Type: Bool, Title: "Refactor on file rename", Description: "Ask language servers for refactoring edits (updated import paths) before a rename or move in the explorer and apply them", Scope: config.UserScope},
 			{Key: "lsp.log_level", Type: Enum, Title: "Server log level", Description: "Verbosity of the language-server log the LSP: Show Server Log command opens", Scope: config.UserScope, Options: []string{"error", "warn", "info", "debug"}},
 		}},
-		{Title: "Appearance", Description: "How IKE looks: the color scheme, the menu bar and the size of centered popups.", Entries: []Entry{
+		{Title: "Appearance", Description: "How IKE looks: the color scheme, the menu bar, the horizontal scroll marks and the size of centered popups.", Entries: []Entry{
 			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; previews live while you scroll the list, esc restores the previous one (and selecting turns off auto sync)", Scope: config.UserScope, Options: themes, Preview: swatch, RowColors: rowColors},
 			{Key: "theme.auto", Type: Bool, Title: "Sync with terminal", Description: "Pick the light or dark theme below from the terminal's background colour (OSC 11); picking a theme explicitly turns this off", Scope: config.UserScope},
 			{Key: "theme.light", Type: Enum, Title: "Light theme", Description: "Theme used when auto sync sees a light terminal background", Scope: config.UserScope, Options: lightThemes, Preview: swatch, RowColors: rowColors},
 			{Key: "theme.dark", Type: Enum, Title: "Dark theme", Description: "Theme used when auto sync sees a dark terminal background", Scope: config.UserScope, Options: darkThemes, Preview: swatch, RowColors: rowColors},
 			{Key: "ui.menu_bar", Type: Bool, Title: "Menu bar", Description: "Show the File/Edit/… menu row above the panes", Scope: config.UserScope},
+			{Key: "ui.h_scroll_marks", Type: Bool, Title: "Horizontal scroll marks", Description: "Mark the edges of a horizontally scrolled view \u2014 \u2039 where content continues left, \u203a where a line continues right \u2014 in the editor, diff, explorer and playground result", Scope: config.UserScope},
 			{Key: "ui.popup_max_width", Type: Int, Title: "Popup max width", Description: "Cap centered popups (palette, dialogs, settings) at this width in columns; 0 disables", Scope: config.UserScope},
 			{Key: "palette.toggle_key", Type: Chord, Title: "Command palette key", Description: "Chord that opens the command palette", Scope: config.UserScope},
 		}},

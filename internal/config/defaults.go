@@ -223,6 +223,7 @@ func defaults() *Config {
 		UI: UI{
 			MenuBar:       true,
 			PopupMaxWidth: 110,
+			HScrollMarks:  true,
 		},
 		Backup: Backup{
 			Enable:     true,

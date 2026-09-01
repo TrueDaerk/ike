@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-30T00:00:00Z
+timestamp: 2026-09-01T00:00:00Z
 ---
 
 # Editor
@@ -870,6 +870,35 @@ width minus one while `scrollbarGeometry()` reports a visible bar. Without it
 the follow logic parks the caret in exactly the column the bar covers, and the
 user cannot tell whether the line continues behind it. `TextWidth` itself stays
 untouched: rendering fills the full width and the bar draws over it.
+
+**Horizontal scroll marks (#2377, `editor/hscroll.go`).** The horizontal axis
+has no bar; it carries per-row edge marks instead, drawn from the shared
+`internal/hscroll` package that the diff viewer, the explorer and the
+playground result buffer use as well, so all four views speak the same
+language. `‹` replaces the text area's leftmost cell whenever `view.Left` is
+past 0, and `›` its rightmost whenever the rendered line still had content when
+the width budget ran out. The overflow verdict comes from the render itself —
+`renderSpanUncached` returns it alongside the body and the line cache memoizes
+both (`spanBody`) — never from a re-count, so tabs, conceal stand-ins, inlay
+hints, double-width runes and the sv table expansion (#1724) are all counted
+exactly as they were drawn.
+
+Like the scrollbar's column, the marks are overlays: they take an edge cell
+instead of adding one, so cursor cells, mouse hit zones and the status line's
+column report are untouched. Three rules keep them honest:
+
+- The mark window is `hMarkWidth` — the text width minus the scrollbar's
+  column while a bar is visible, so `›` never lands underneath the bar.
+- A mark never covers the caret. `caretCell` locates the primary caret inside
+  the window (in sv display space when the buffer is table-rendered) and the
+  mark sharing its cell yields for that row; every other visible row still
+  carries it.
+- Under soft wrap there is no horizontal scroll (#64) and no segment runs past
+  the edge, so nothing renders at all.
+
+Collapsed-run headers — fold placeholders, log run `×N` badges, PEM summaries —
+end in a right-aligned tag of their own, which *is* their right edge; they take
+the left mark only. `ui.h_scroll_marks = false` turns the marks off everywhere.
 
 **Decoration toggles (#1259, `editor/marktoggles.go`).** The `editor.marks.*`
 config switches gate which mark classes decorate the buffer, per source and

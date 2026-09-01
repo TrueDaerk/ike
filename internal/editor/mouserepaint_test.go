@@ -88,7 +88,7 @@ func TestScrollKeepsTheLineCacheWarm(t *testing.T) {
 	}
 	m.ScrollBy(6)
 	_ = m.View()
-	if m.lineCache.entries[lineKey{line: 0, from: 0, to: -1, width: m.view.TextWidth(m.buf.LineCount())}] == "" {
+	if m.lineCache.entries[lineKey{line: 0, from: 0, to: -1, width: m.view.TextWidth(m.buf.LineCount())}].body == "" {
 		t.Fatal("a scroll must not drop the cached bodies of lines it scrolled past")
 	}
 }

@@ -280,7 +280,7 @@ func (m Model) renderLogRunHeader(line, end, width, annotWidth int, cursorStyle,
 	style := m.logRunMarkerStyle(n)
 	badgeW := ansi.StringWidth(badge)
 
-	row := m.renderLine(line, width, cursorStyle, selStyle)
+	row, _ := m.renderLine(line, width, cursorStyle, selStyle)
 	content := strings.TrimRight(ansi.Strip(row), " ")
 	// Two spaces of air between the log line and the badge, as for the hints.
 	if ansi.StringWidth(content)+badgeW+2 <= annotWidth {
@@ -293,5 +293,6 @@ func (m Model) renderLogRunHeader(line, end, width, annotWidth int, cursorStyle,
 	if badgeW >= width {
 		return row
 	}
-	return m.renderLine(line, width-badgeW, cursorStyle, selStyle) + style.Render(badge)
+	short, _ := m.renderLine(line, width-badgeW, cursorStyle, selStyle)
+	return short + style.Render(badge)
 }

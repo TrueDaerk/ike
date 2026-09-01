@@ -4,7 +4,7 @@ title: Diff Viewer
 description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070), diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
-timestamp: 2026-08-28T18:00:00Z
+timestamp: 2026-09-01T00:00:00Z
 ---
 
 # Diff Viewer (#60)
@@ -56,7 +56,16 @@ line length. The render pass measures the widest displayed line (`hmax`) and
 the visible column budget (`hcol`) and re-clamps `hoff`, so a resize, a layout
 toggle, or new content can never leave the view scrolled past the end. Spans
 and syntax captures are indexed in absolute display columns, so intra-line
-emphasis and highlighting stay on the right runes at any offset. `u` toggles the unified single-column
+emphasis and highlighting stay on the right runes at any offset. Each rendered
+segment carries the shared horizontal-scroll edge marks (#2377,
+`diff/hscroll.go`, `internal/hscroll`): `‹` on its first cell while `hoff > 0`
+and `›` on its last while the row runs past the column, so both sides of a
+side-by-side diff answer independently and a scrolled view stops looking like
+an unscrolled one showing different text. The blank counterpart of a one-sided
+row is not content and stays unmarked. The marks overlay edge cells instead of
+adding columns, so the click-to-column mapping in `selection.go` is untouched;
+`ui.h_scroll_marks = false` (threaded in by `applyDiffCfg` →
+`SetHScrollMarks`) turns them off. `u` toggles the unified single-column
 layout, where a changed pair renders as its removed line followed by its added
 line under a dual old/new gutter. Line backgrounds come from the theme `ui`
 slots `DiffAdded` / `DiffRemoved` (and `DiffChanged`, which the editor's

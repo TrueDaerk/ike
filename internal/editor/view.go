@@ -13,6 +13,7 @@ import (
 	"ike/internal/editor/search"
 	"ike/internal/editor/textobject"
 	"ike/internal/editor/viewport"
+	"ike/internal/hscroll"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 	"ike/internal/theme"
@@ -524,7 +525,11 @@ func (m Model) View() string {
 	sticky := m.stickyLines()
 	for si, line := range sticky {
 		gutter := gutterStyle.Render(m.view.Gutter(line, m.cursor.Line, lineCount))
-		body := m.renderLine(line, textWidth, cursorStyle, selStyle)
+		body, over := m.renderLine(line, textWidth, cursorStyle, selStyle)
+		// The pinned headers scroll with the buffer, so they carry the same
+		// edge marks (#2377) — applied before the separator, which styles the
+		// row as a whole.
+		body = m.stampHScroll(body, line, textWidth, over)
 		if si == len(sticky)-1 {
 			// The last pinned row carries the subtle separator (#1910).
 			body = m.stickySeparate(body, textWidth)
@@ -641,20 +646,26 @@ func (m Model) View() string {
 		} else {
 			gutter = gs.Render(raw)
 		}
+		// The collapsed-run headers below each end in a right-aligned tag of
+		// their own (fold placeholder, ×N badge, PEM summary); that tag *is*
+		// the row's right edge, so they take the left mark only (#2377).
 		if end, ok := m.foldedAt(i); ok {
-			out = append(out, gutter+m.renderFoldHeader(i, end, textWidth, cursorStyle, selStyle))
+			body := m.renderFoldHeader(i, end, textWidth, cursorStyle, selStyle)
+			out = append(out, gutter+m.stampHScroll(body, i, textWidth, false))
 			continue
 		}
 		// A run of identical log lines (#1650) collapses the same way, into
 		// its first line plus a ×N badge in the annotation column (#1734).
 		if end, ok := m.logRunAt(i); ok {
-			out = append(out, gutter+m.renderLogRunHeader(i, end, textWidth, annotWidth, cursorStyle, selStyle))
+			body := m.renderLogRunHeader(i, end, textWidth, annotWidth, cursorStyle, selStyle)
+			out = append(out, gutter+m.stampHScroll(body, i, textWidth, false))
 			continue
 		}
 		// A PEM block (#1652) collapses onto its BEGIN marker plus the decoded
 		// summary — CN, validity, issuer, key type — instead of a base64 wall.
 		if b, ok := m.pemBlockAt(i); ok {
-			out = append(out, gutter+m.renderPemHeader(i, b, textWidth, cursorStyle, selStyle))
+			body := m.renderPemHeader(i, b, textWidth, cursorStyle, selStyle)
+			out = append(out, gutter+m.stampHScroll(body, i, textWidth, false))
 			continue
 		}
 		if m.softWrap {
@@ -673,11 +684,15 @@ func (m Model) View() string {
 				if si > 0 {
 					g = gutterStyle.Render(m.view.GutterContinuation(lineCount))
 				}
-				out = append(out, g+m.renderSpan(i, segs[si], to, textWidth, cursorStyle, selStyle))
+				// No marks under soft wrap: there is no horizontal scroll and
+				// no segment runs past the edge (#2377, stampHScroll).
+				seg, _ := m.renderSpan(i, segs[si], to, textWidth, cursorStyle, selStyle)
+				out = append(out, g+seg)
 			}
 			continue
 		}
-		row := m.renderLine(i, textWidth, cursorStyle, selStyle)
+		row, over := m.renderLine(i, textWidth, cursorStyle, selStyle)
+		row = m.stampHScroll(row, i, textWidth, over)
 		if spanned, ok := m.logSpanAnnotate(row, i, annotWidth); ok {
 			// The span delta of a log selection (#1736) outranks both: it
 			// answers a question the user just asked, on the row they move.
@@ -852,7 +867,9 @@ func (m Model) searchHLQuery() (search.Query, bool) {
 // wrap, pushing the pane's bottom border off screen). It stops at the end of
 // meaningful content so trailing blanks are not emitted (unless a ruler column
 // lies past it, which pads with tinted blanks so the ruler stays visible).
-func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style) string {
+// It also reports whether the line ran past the window's right edge — the
+// signal the horizontal-scroll right mark rides on (#2377).
+func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style) (string, bool) {
 	return m.renderSpan(line, m.view.Left, -1, width, cursorStyle, selStyle)
 }
 
@@ -860,14 +877,14 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 // line cache (#614): within a render epoch the same span renders byte-identically,
 // so a vertical scroll — which changes no epoch input — reuses the cached body
 // instead of recomputing highlight, selection and width for every visible line.
-func (m Model) renderSpan(line, from, to, width int, cursorStyle, selStyle lipgloss.Style) string {
+func (m Model) renderSpan(line, from, to, width int, cursorStyle, selStyle lipgloss.Style) (string, bool) {
 	key := lineKey{line: line, from: from, to: to, width: width}
-	if body, ok := m.cachedSpan(key); ok {
-		return body
+	if sb, ok := m.cachedSpan(key); ok {
+		return sb.body, sb.over
 	}
-	body := m.renderSpanUncached(line, from, to, width, cursorStyle, selStyle)
-	m.storeSpan(key, body)
-	return body
+	body, over := m.renderSpanUncached(line, from, to, width, cursorStyle, selStyle)
+	m.storeSpan(key, spanBody{body: body, over: over})
+	return body, over
 }
 
 // renderSpanUncached renders the columns [from, to) of one buffer line (to < 0
@@ -875,12 +892,17 @@ func (m Model) renderSpan(line, from, to, width int, cursorStyle, selStyle lipgl
 // segment is one span; the unwrapped renderLine is the single span starting at
 // the horizontal scroll offset. Whitespace glyphs, indent guides, and ruler
 // tints (#64) overlay here so both paths share them.
-func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selStyle lipgloss.Style) string {
+// It returns the rendered body plus whether the span still had content when
+// the width budget ran out (#2377): the render is the only place that knows,
+// since tabs, conceal stand-ins and inlay hints all make a line's display
+// width something other than its rune count.
+func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selStyle lipgloss.Style) (string, bool) {
 	// Markdown pipe tables (#881): while the cursor is outside the block the
 	// whole row renders as its pre-built box-drawing form; the cell loop below
 	// never runs. Entering the block flips it back to raw pipe source.
 	if row, ok := m.mdTableRow(line); ok {
-		return m.renderTableRow(row, from, to, width)
+		_, over := hscroll.Cut(from, width, ansi.StringWidth(row))
+		return m.renderTableRow(row, from, to, width), over
 	}
 	runes := []rune(m.buf.Line(line))
 	left := from
@@ -1052,7 +1074,8 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	var b strings.Builder
 	disp := 0         // display cells emitted so far (buffer cells + inlay hints)
 	contentCells := 0 // buffer cells emitted so far (excludes inlay hints)
-	for col := left; disp < width && (to < 0 || col < to); col++ {
+	col := left
+	for ; disp < width && (to < 0 || col < to); col++ {
 		for hi < len(hints) && hints[hi].Col == col && disp < width {
 			disp = emitHint(&b, disp, hints[hi])
 			hi++
@@ -1365,7 +1388,12 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 			disp++
 		}
 	}
-	return b.String()
+	// The right-edge mark's condition (#2377): the width budget ran out with
+	// buffer cells or inlay hints still queued. Read off the cell loop rather
+	// than re-measured, so every width oddity it just handled — tabs, conceal
+	// stand-ins, sv alignment, double-width runes — is counted once.
+	over := disp >= width && (col < len(runes) || hi < len(hints))
+	return b.String(), over
 }
 
 // clipCells cuts s to at most w display cells (#1847): the hard cut a run of
