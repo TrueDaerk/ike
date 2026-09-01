@@ -1,5 +1,32 @@
 # Log
 
+## 2026-09-01 (a request exports as httpie too, #2384)
+
+- **A second export format**: `http.copyAsHttpie` ("Copy as httpie") puts the
+  request block under the caret on the clipboard as an
+  [httpie](https://httpie.io/) command, and `http.copyShownAsHttpie` (`H` in
+  the response viewer, next to `C`) does the same for the as-sent snapshot
+  behind the shown response. Both halves of the curl export (#1994, #2059) get
+  the second format, so neither one is stuck with a format the other has.
+- **httpie syntax, not renamed curl flags**: `httpfile.ExportHTTPie` spells a
+  request the way httpie reads it — a header as `Name:Value` (`Name;` when the
+  value is empty), a query parameter as `param==value`, a JSON member as
+  `field=value` or `field:=raw`, basic auth as `-a user:pass`, a form or
+  multipart body behind `--form`, and the method always explicit.
+- **The field syntax only where it is faithful**: a JSON object body becomes
+  field items in the body's own key order (the decoder is walked token by
+  token so a map cannot randomize it), with non-string members keeping their
+  raw JSON behind `:=`. A JSON array, a key holding a separator or a non-JSON
+  payload falls back to `--raw`, which is always correct; a binary body rides
+  the base64 heredoc `RequestSnapshot.Curl` already uses, since httpie reads a
+  non-tty stdin as the raw body. A query whose components are not all decodable
+  `name=value` pairs stays in the URL rather than being guessed at.
+- **Two sources, one serialization** — the #1994/#2059 split is kept:
+  `ExportHTTPie` is the only place that knows the format, and the editor- and
+  viewer-side app paths are now parameterized by serializer instead of
+  duplicated. Nothing is masked: an `Authorization` header exports as sent.
+  See [HTTP Client](/architecture/http-client.md).
+
 ## 2026-09-01 (the playground documents its language, #2382)
 
 - **`ctrl+g` opens a language cheatsheet** in the jq/yq playground: the syntax
@@ -27,7 +54,6 @@
   history first, so `↑` brings it back); `enter` on a builtin inserts its name
   at the caret. It lives in the palette — searchable rather than paged — beside
   `ctrl+l`, which stays the place for *your own* programs.
-
 ## 2026-09-01 (the explorer's mark moves into the guide column, #2380)
 
 - **Space no longer takes the tree apart**: the multi-select mark used to

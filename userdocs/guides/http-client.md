@@ -310,6 +310,25 @@ run it.
 If a variable cannot be resolved, nothing is copied and the notification says
 which one is missing (and which environment you may not have picked yet).
 
+### …or as httpie
+
+**Copy HTTP Request as httpie** (`http.copyAsHttpie`) does the same job in
+[httpie](https://httpie.io/)'s syntax, which is a good deal easier to read in
+a ticket or a chat message. It is not the curl command with renamed flags:
+headers become `Name:Value`, query parameters `param==value`, the fields of a
+JSON body `field=value` (or `field:=raw` for a number, a boolean, a list or a
+nested object), basic auth `-a user:pass`, and a form or multipart body rides
+`--form`. The method is always spelled out.
+
+Where httpie's field syntax cannot carry a body faithfully — a JSON array, a
+field name containing a separator, a payload that is not JSON — the body goes
+out as `--raw` instead, which is less pretty but always correct. A `< file`
+body is redirected on stdin, and a binary body is piped in through `base64 -d`.
+
+Both exports resolve variables the same way, carry the same secrets, and are
+offered on ++alt+enter++ where the cursor sits in a request block, as **Copy as
+curl** and **Copy as httpie**.
+
 ## Running one
 
 Put the cursor anywhere in a request block and press ++cmd+enter++
@@ -414,6 +433,7 @@ highlighted, binary bodies collapsed to a notice.
 | ++ctrl+r++ | Send this response's request again, unchanged |
 | `R` | Re-run this request from its `.http` file, with today's variables |
 | `C` | Copy this response's request as a curl command |
+| `H` | Copy this response's request as an httpie command |
 | `S` | Save the raw response body to a file |
 | `t` | Switch between the pretty-printed and the raw body |
 | `q` | Open the jq playground on this body |
@@ -501,6 +521,10 @@ from a re-send, or when you are browsing an older entry. Headers and body are
 shell-quoted, an `Authorization: Basic` header becomes `-u`, and a binary body
 is piped in through `base64 -d` so the command stays runnable. Nothing is
 masked — a token that went out is a token in the exported command.
+
+`H` (or **Copy Shown HTTP Request as httpie**, `http.copyShownAsHttpie`) is the
+same export in httpie's syntax — the format described under
+[Copying a request out as curl](#or-as-httpie), over the same stored snapshot.
 
 ### Saving the body to a file
 
@@ -626,10 +650,12 @@ missing quietly.
 | Import OpenAPI Spec… | `http.importOpenAPI` | — |
 | Import curl Command… | `http.importCurl` | — |
 | Copy HTTP Request as curl | `http.copyAsCurl` | — |
+| Copy HTTP Request as httpie | `http.copyAsHttpie` | — |
 | Select HTTP Environment | `http.selectEnvironment` | — |
 | Copy HTTP Response Body | `http.copyBody` | — |
 | Copy HTTP Response Headers | `http.copyHeaders` | — |
 | Copy Shown HTTP Request as curl | `http.copyShownAsCurl` | — |
+| Copy Shown HTTP Request as httpie | `http.copyShownAsHttpie` | — |
 | Save HTTP Response Body to File… | `http.saveResponse` | — |
 | Toggle Raw / Pretty HTTP Response Body | `http.toggleRawBody` | — |
 | Open jq Playground on HTTP Response | `http.jqPlayground` | — |

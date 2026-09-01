@@ -107,11 +107,13 @@ bring their own.
 | Show Project History Timeline | `history.projectTimeline` | — | — | everywhere |
 | Cancel Running HTTP Request | `http.cancel` | — | — | everywhere |
 | Copy HTTP Request as curl | `http.copyAsCurl` | — | — | everywhere |
+| Copy HTTP Request as httpie | `http.copyAsHttpie` | — | — | everywhere |
 | Copy HTTP Response Body | `http.copyBody` | — | — | everywhere |
 | Copy Folded Range (HTTP Response) | `http.copyFold` | — | — | everywhere |
 | Copy HTTP Response Headers | `http.copyHeaders` | — | — | everywhere |
 | Copy HTTP Response Selection or Body | `http.copyResponse` | `cmd+c` | — | everywhere |
 | Copy Shown HTTP Request as curl | `http.copyShownAsCurl` | — | — | everywhere |
+| Copy Shown HTTP Request as httpie | `http.copyShownAsHttpie` | — | — | everywhere |
 | Diff HTTP Response Against Previous Run | `http.diffPreviousRun` | `cmd+shift+d` | — | everywhere |
 | Compare Stored HTTP Responses | `http.diffResponses` | — | — | everywhere |
 | Import curl Command… | `http.importCurl` | — | — | everywhere |

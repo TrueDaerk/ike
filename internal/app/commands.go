@@ -571,6 +571,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.importCurl", "Import curl Command…", ImportCurlMsg{}),
 			appCommand("http.copyAsCurl", "Copy HTTP Request as curl", HTTPCopyAsCurlMsg{}),
 			appCommand("http.copyShownAsCurl", "Copy Shown HTTP Request as curl", HTTPCopyShownAsCurlMsg{}),
+			appCommand("http.copyAsHttpie", "Copy HTTP Request as httpie", HTTPCopyAsHttpieMsg{}),
+			appCommand("http.copyShownAsHttpie", "Copy Shown HTTP Request as httpie", HTTPCopyShownAsHttpieMsg{}),
 			appCommand("http.saveResponse", "Save HTTP Response Body to File…", HTTPSaveResponseMsg{}),
 			appCommand("archive.extractEntry", "Extract Selected Archive Entry…", ArchiveExtractEntryMsg{}),
 			appCommand("archive.extractAll", "Extract Whole Archive…", ArchiveExtractAllMsg{}),

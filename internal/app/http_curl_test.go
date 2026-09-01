@@ -269,3 +269,57 @@ func TestCopyRequestAsCurlRoundTripsMultipartAndAuth(t *testing.T) {
 		t.Errorf("round trip changed the request:\nfirst  %+v\nsecond %+v", first.Request, again.Request)
 	}
 }
+
+// TestCopyRequestAsHttpieSubstitutesVariables is the httpie half of
+// TestCopyRequestAsCurlSubstitutesVariables (#2384): the same block, the same
+// variable chain, the other format.
+func TestCopyRequestAsHttpieSubstitutesVariables(t *testing.T) {
+	src := "@host = api.example.com\n\n### thing\nPOST https://{{host}}/things\n" +
+		"Content-Type: application/json\nAuthorization: Bearer {{$env IKE_TEST_TOKEN}}\n\n{\"a\":1}\n"
+	m, _ := curlApp(t, src)
+	t.Setenv("IKE_TEST_TOKEN", "s3cr3t")
+	written := stubClipboard(t, "")
+
+	m.activeEditor().SetCursor(3, 0)
+	out, _ := m.Update(HTTPCopyAsHttpieMsg{})
+	m = out.(Model)
+
+	want := `http POST https://api.example.com/things Content-Type:application/json ` +
+		`'Authorization:Bearer s3cr3t' a:=1`
+	if *written != want {
+		t.Errorf("clipboard =\n%s\nwant\n%s", *written, want)
+	}
+	if n := lastNotification(t, m); !strings.Contains(n, "as httpie") {
+		t.Errorf("notification = %q", n)
+	}
+}
+
+// TestCopyRequestAsHttpieReportsUnresolved: the shared export path names the
+// format it failed in, and leaves the clipboard alone.
+func TestCopyRequestAsHttpieReportsUnresolved(t *testing.T) {
+	m, _ := curlApp(t, "### thing\nGET https://{{nowhere}}/things\n")
+	written := stubClipboard(t, "")
+	out, _ := m.Update(HTTPCopyAsHttpieMsg{})
+	m = out.(Model)
+	if *written != "" {
+		t.Errorf("clipboard written with %q", *written)
+	}
+	n := lastNotification(t, m)
+	if !strings.Contains(n, "unresolved placeholders") || !strings.Contains(n, "httpie:") {
+		t.Errorf("notification = %q", n)
+	}
+}
+
+// TestCopyRequestAsHttpieExternalBody rebases the external body the same way
+// the curl export does — httpie reads it off stdin.
+func TestCopyRequestAsHttpieExternalBody(t *testing.T) {
+	m, path := curlApp(t, "### up\nPOST https://example.com/up\n\n< ./payload.json\n")
+	written := stubClipboard(t, "")
+	out, _ := m.Update(HTTPCopyAsHttpieMsg{})
+	m = out.(Model)
+	want := "http POST https://example.com/up < " +
+		filepath.Join(filepath.Dir(path), "payload.json")
+	if *written != want {
+		t.Errorf("clipboard = %q, want %q", *written, want)
+	}
+}

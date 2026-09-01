@@ -10,6 +10,7 @@ import (
 
 	"ike/internal/editor"
 	"ike/internal/host"
+	"ike/internal/httpclient"
 	"ike/internal/httpfile"
 	"ike/internal/ui"
 )
@@ -225,7 +226,26 @@ func uniqueRequestName(f *httpfile.File, name string) string {
 // the caret, resolved through the same variable chain a dispatch uses, on the
 // clipboard as a runnable curl command.
 func (m *Model) copyHTTPRequestAsCurl() tea.Cmd {
-	ed, ok := m.httpEditor("curl")
+	return m.copyHTTPRequestAs("curl", httpfile.ExportCurl)
+}
+
+// HTTPCopyAsHttpieMsg runs http.copyAsHttpie (#2384): the request under the
+// caret to the clipboard as an httpie command — the same export as
+// http.copyAsCurl, in the other format.
+type HTTPCopyAsHttpieMsg struct{}
+
+// copyHTTPRequestAsHttpie runs http.copyAsHttpie (#2384): the block under the
+// caret again, rendered by httpfile.ExportHTTPie instead.
+func (m *Model) copyHTTPRequestAsHttpie() tea.Cmd {
+	return m.copyHTTPRequestAs("httpie", httpfile.ExportHTTPie)
+}
+
+// copyHTTPRequestAs is the editor-side export both formats run (#2384): find
+// the block under the caret, resolve its variables exactly as a dispatch
+// would, then hand it to the format's serializer. Only the serializer and the
+// name in the notices differ — the way to the request does not.
+func (m *Model) copyHTTPRequestAs(format string, export func(*httpfile.Request) string) tea.Cmd {
+	ed, ok := m.httpEditor(format)
 	if !ok {
 		return nil
 	}
@@ -233,30 +253,30 @@ func (m *Model) copyHTTPRequestAsCurl() tea.Cmd {
 	line, _ := ed.CursorPos()
 	req, found := f.RequestAt(line + 1)
 	if !found {
-		m.host.Notify(host.Info, "curl: no request under the cursor")
+		m.host.Notify(host.Info, format+": no request under the cursor")
 		return nil
 	}
 	vars, hint, err := m.httpVars(httpSource(ed), f)
 	if err != nil {
-		m.host.Notify(host.Error, "curl: "+err.Error())
+		m.host.Notify(host.Error, format+": "+err.Error())
 		return nil
 	}
 	vars.Lookup = os.LookupEnv // closes the chain, exactly as dispatch does
 	resolved, err := req.ResolveVars(vars)
 	if err != nil {
-		notice := "curl: " + err.Error()
+		notice := format + ": " + err.Error()
 		if hint != "" {
 			notice += " — " + hint
 		}
 		m.host.Notify(host.Error, notice)
 		return nil
 	}
-	// An external body is relative to the .http file (#1305) while curl
-	// resolves "@path" against the working directory, so the exported command
-	// carries the path from the file's directory.
+	// An external body is relative to the .http file (#1305) while the
+	// exported command resolves its path against the working directory, so
+	// the command carries the path from the file's directory.
 	resolved.BodyFile = curlBodyPath(ed.Path(), resolved.BodyFile)
-	m.copyToClipboard(httpfile.ExportCurl(resolved))
-	m.host.Notify(host.Info, "copied "+requestLabel(req)+" as curl")
+	m.copyToClipboard(export(resolved))
+	m.host.Notify(host.Info, "copied "+requestLabel(req)+" as "+format)
 	return nil
 }
 
@@ -272,6 +292,23 @@ type HTTPCopyShownAsCurlMsg struct{}
 // re-send. Secrets are exported as they were sent, exactly as in the
 // editor-side export.
 func (m *Model) copyShownHTTPRequestAsCurl() tea.Cmd {
+	return m.copyShownHTTPRequestAs("curl", "http.copyAsCurl", (*httpclient.RequestSnapshot).Curl)
+}
+
+// HTTPCopyShownAsHttpieMsg runs http.copyShownAsHttpie (#2384): the request
+// behind the *shown response* to the clipboard as an httpie command.
+type HTTPCopyShownAsHttpieMsg struct{}
+
+// copyShownHTTPRequestAsHttpie runs http.copyShownAsHttpie ("H" in the
+// focused response viewer, #2384) — the response-side pendant of
+// http.copyAsHttpie, over the as-sent snapshot (#1832).
+func (m *Model) copyShownHTTPRequestAsHttpie() tea.Cmd {
+	return m.copyShownHTTPRequestAs("httpie", "http.copyAsHttpie", (*httpclient.RequestSnapshot).HTTPie)
+}
+
+// copyShownHTTPRequestAs is the viewer-side export both formats run (#2384):
+// the pane holds the snapshot, the format only decides how it is spelled.
+func (m *Model) copyShownHTTPRequestAs(format, blockCommand string, export func(*httpclient.RequestSnapshot) string) tea.Cmd {
 	p := m.httpPanel()
 	if p == nil {
 		m.host.Notify(host.Info, "http: no response pane open")
@@ -281,11 +318,11 @@ func (m *Model) copyShownHTTPRequestAsCurl() tea.Cmd {
 	if snap == nil {
 		// A legacy history entry (stored before the snapshot existed) or a
 		// live stream — say which, never fail silently, as re-send does.
-		m.host.Notify(host.Info, "http: this response has no stored request — copy the block as curl with http.copyAsCurl")
+		m.host.Notify(host.Info, "http: this response has no stored request — copy the block as "+format+" with "+blockCommand)
 		return nil
 	}
-	m.copyToClipboard(snap.Curl())
-	m.host.Notify(host.Info, "copied "+snap.Label()+" as curl")
+	m.copyToClipboard(export(snap))
+	m.host.Notify(host.Info, "copied "+snap.Label()+" as "+format)
 	return nil
 }
 

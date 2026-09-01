@@ -239,6 +239,50 @@ func TestHTTPCopyShownAsCurlWithoutSnapshot(t *testing.T) {
 	}
 }
 
+// TestHTTPCopyShownAsHttpie: the palette command and the pane's "H" both put
+// the shown response's as-sent request on the clipboard as httpie (#2384).
+func TestHTTPCopyShownAsHttpie(t *testing.T) {
+	var copied string
+	orig := clipboardWrite
+	clipboardWrite = func(s string) { copied = s }
+	t.Cleanup(func() { clipboardWrite = orig })
+
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: savableResponse("https://api.test/things", "application/json", []byte(`{}`))})
+	m = out.(Model)
+
+	out, cmd := m.Update(HTTPCopyShownAsHttpieMsg{})
+	m = out.(Model)
+	if cmd != nil {
+		cmd()
+	}
+	want := `http POST https://api.test/things 'Authorization:Bearer tok-123' ` +
+		`Content-Type:application/json name=thing`
+	if copied != want {
+		t.Errorf("clipboard:\n got %q\nwant %q", copied, want)
+	}
+
+	// The pane key routes into the same host action.
+	copied = ""
+	m.setFocus(pane.HTTPKey)
+	m.layout()
+	out, cmd = m.Update(tea.KeyPressMsg{Code: 'H', Text: "H"})
+	m = out.(Model)
+	if cmd == nil {
+		t.Fatal("H must produce a command")
+	}
+	msg, ok := cmd().(httppane.CopyHttpieMsg)
+	if !ok {
+		t.Fatalf("message type: %T", cmd())
+	}
+	if _, cmd := m.Update(msg); cmd != nil {
+		cmd()
+	}
+	if copied != want {
+		t.Errorf("pane key clipboard:\n got %q\nwant %q", copied, want)
+	}
+}
+
 // TestHTTPResponseFileNameProposals covers the default-name derivation from
 // URL and Content-Type (#2059).
 func TestHTTPResponseFileNameProposals(t *testing.T) {

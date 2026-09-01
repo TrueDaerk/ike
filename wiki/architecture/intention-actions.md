@@ -252,7 +252,7 @@ Each entry delegates to the existing command; applicability per caret:
 | Context | Items (command ids) |
 |---|---|
 | JSON/YAML value (`DocPath`) | copy path as jq / yq / dotted (`editor.copyDocPath*`); `json.jqPlaygroundAtPath` (not for YAML — jq reads JSON — and not with a selection, which the caret's path does not index) |
-| caret in an HTTP request block (`isHTTPBuffer` + `httpfile.RequestAt` — an `.http`/`.rest` file or a buffer treated as HTTP, #2033) | `http.run`, `http.copyAsCurl`; with a shown response `http.copyBody` / `http.copyHeaders` / `http.resend`; with an env file `http.selectEnvironment` |
+| caret in an HTTP request block (`isHTTPBuffer` + `httpfile.RequestAt` — an `.http`/`.rest` file or a buffer treated as HTTP, #2033) | `http.run`, `http.copyAsCurl`, `http.copyAsHttpie` (#2384); with a shown response `http.copyBody` / `http.copyHeaders` / `http.resend` / `http.copyShownAsCurl` / `http.copyShownAsHttpie`; with an env file `http.selectEnvironment` |
 | curl command line that parses (`httpfile.CurlCommandAt` + `ParseCurl`, any buffer) | `http.insertCurlAsRequest` (new, see below) |
 | JWT on the line (`jwt.At`) | `editor.decodeJWT` |
 | conceal stand-in under caret (`ConcealExplainAtCaret`) | `editor.explainConceal`; the family's `view.toggle*` via the `concealToggles` map |
@@ -316,7 +316,7 @@ tightened:
 | `lsp.ignoreDiagnostic` | any diagnostic on the line | one `ilsp.IgnoreRuleFor` can build a rule from |
 
 Verified as already exact and left alone: the three `editor.copyDocPath*`
-flavours, `http.run` and `http.copyAsCurl` (the caret block *is* the
+flavours, `http.run` and the `http.copyAs*` exports (the caret block *is* the
 precondition; `http.run`'s "already running" refusal is a deliberate
 duplicate guard, not an inapplicable caret), `editor.decodeJWT` (the gate
 calls the same `jwt.At`), the `view.toggle*` family switches (always

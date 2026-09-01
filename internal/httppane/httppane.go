@@ -259,6 +259,11 @@ type RerunMsg struct{}
 // arrangement, one step further.
 type CopyCurlMsg struct{}
 
+// CopyHttpieMsg is CopyCurlMsg's second format (#2384), "H" in the focused
+// viewer: the same snapshot, spelled as an httpie command. The pane keeps the
+// two apart only by the message it sends; the host owns both serializations.
+type CopyHttpieMsg struct{}
+
 // SaveBodyMsg asks the host to write the shown response's raw body to a file
 // (#2059), "S" in the focused viewer. The host owns the path prompt and the
 // filesystem; the pane only names the moment.
@@ -632,6 +637,11 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Uppercase: "c" would be one keystroke away from the copy keys and
 		// the export is the rarer, deliberate action.
 		return func() tea.Msg { return CopyCurlMsg{} }
+	case "H":
+		// Copy the shown entry's request as an httpie command (#2384).
+		// Uppercase next to "C", the same deliberate export in the other
+		// format; lowercase "h" is the history step.
+		return func() tea.Msg { return CopyHttpieMsg{} }
 	case "S":
 		// Write the raw response body to a file (#2059). Uppercase because
 		// "s" is the keep-scroll toggle (#1493).
@@ -1240,11 +1250,12 @@ func (m *Model) footerText() string {
 	if m.BodyFilePath() != "" {
 		s += " · o open file"
 	}
-	// The curl export and the file save (#2059) need an entry on show; a
-	// live stream has neither a snapshot nor a finished body. They sit last:
+	// The curl/httpie exports (#2059, #2384) and the file save need an entry
+	// on show; a live stream has neither a snapshot nor a finished body. They
+	// sit last:
 	// they are the rarest actions, and the footer truncates from the right.
 	if !m.streaming && len(m.hist) > 0 {
-		s += " · C curl · S save"
+		s += " · C curl · H httpie · S save"
 	}
 	return s
 }
