@@ -1,5 +1,26 @@
 # Log
 
+## 2026-09-01 (test-data generator reworked around a DSL, #2392)
+
+- **One spec text instead of a five-step wizard**: `scratch.generate` now
+  opens a single-screen dialog — template/format/rows/seed/table header, a
+  multi-line DSL editor with autocomplete (catalog generators with their
+  grammars, `{field}` references defined above the cursor), and a debounced
+  live preview of the first five rows that shows line-numbered errors in its
+  place. The per-format `scratch.generate.<format>` quick commands are gone,
+  along with their keybind-audit family entry; `cmd+alt+shift+n` stays.
+- **The DSL** (`internal/testdata/dsl.go`): one field per line,
+  `name = expression` — generator calls with the old parameter grammars,
+  quoted template strings with `{field}` placeholders, and `weighted(...)`
+  alternatives over arbitrary expressions (positive weights, normalized).
+  References resolve by a stable topological sort; unknown references and
+  cycles are rejected naming the line and the cycle path. Weighted draws come
+  from the seeded instance faker (one draw, only the winner evaluates), so
+  "same seed + same spec → byte-identical output" still holds everywhere.
+- **Format-free templates**: built-ins (Person, Address, Order, URL / Web,
+  Server log) plus user templates saved/deleted from the dialog, persisted
+  next to the last-used spec in `~/.ike/testdata.json`. The old per-format
+  preset schema reads as empty and starts over.
 ## 2026-09-01 (the playground searches its result with `cmd+f`, #2383)
 
 - **A search shortcut past the `tab`**: `cmd+f` (`editor.find`) opens the

@@ -16,27 +16,35 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// hostileSpec exercises the escaping every writer hand-rolls: names carrying a
-// space, a double quote and a leading digit, and values covering all five
-// value types including multi-line paragraph text.
+// hostileDSL exercises the escaping every writer hand-rolls: names carrying
+// a leading digit, a dash and a dot, and values covering all five value types
+// including multi-line paragraph text and a template string full of grammar
+// characters (quotes, commas, newlines, '=').
+const hostileDSL = `id        = id()
+full-name = full_name()
+1st       = int(-50..50)
+when      = date(2021-06-01..2021-06-30)
+flag      = bool()
+ratio     = float(0..1)
+text      = paragraph()
+site      = url(example.com)
+qu.ote    = "he said \"hi, {full-name}\"\nthen left = done"
+`
+
+// hostileSpec wraps hostileDSL for one format.
 func hostileSpec(format Format) Spec {
-	return Spec{
-		Format: format,
-		Rows:   30,
-		Seed:   1234,
-		Table:  "sample rows",
-		Fields: []Field{
-			{Name: "id", Kind: KindID},
-			{Name: "full name", Kind: KindFullName},
-			{Name: `quote"key`, Kind: KindSentence},
-			{Name: "1st", Kind: KindInt, Param: "-50..50"},
-			{Name: "when", Kind: KindDate, Param: "2021-06-01..2021-06-30"},
-			{Name: "flag", Kind: KindBool},
-			{Name: "ratio", Kind: KindFloat, Param: "0..1"},
-			{Name: "text", Kind: KindParagraph},
-			{Name: "site", Kind: KindURL, Param: "example.com"},
-		},
+	return Spec{Format: format, Rows: 30, Seed: 1234, Table: "sample rows", DSL: hostileDSL}
+}
+
+// specNames parses the spec's field names — the header/keys a round-trip
+// checks against.
+func specNames(t *testing.T, spec Spec) []string {
+	t.Helper()
+	g, err := NewGenerator(spec)
+	if err != nil {
+		t.Fatalf("NewGenerator: %v", err)
 	}
+	return g.Names()
 }
 
 // expectRows regenerates the spec's values so a round-trip can be compared
@@ -49,7 +57,10 @@ func expectRows(t *testing.T, spec Spec) [][]any {
 	}
 	out := make([][]any, spec.Rows)
 	for i := range out {
-		out[i] = g.Row(i)
+		var err error
+		if out[i], err = g.Row(i); err != nil {
+			t.Fatalf("Row(%d): %v", i, err)
+		}
 	}
 	return out
 }
@@ -81,13 +92,14 @@ func TestCSVRoundTrip(t *testing.T) {
 			if len(recs) != spec.Rows+1 {
 				t.Fatalf("got %d records, want header + %d rows", len(recs), spec.Rows)
 			}
-			for i, fld := range spec.Fields {
-				if recs[0][i] != fld.Name {
-					t.Fatalf("header[%d] = %q, want %q", i, recs[0][i], fld.Name)
+			names := specNames(t, spec)
+			for i, name := range names {
+				if recs[0][i] != name {
+					t.Fatalf("header[%d] = %q, want %q", i, recs[0][i], name)
 				}
 			}
 			for r, rec := range recs[1:] {
-				for c := range spec.Fields {
+				for c := range names {
 					if got, w := rec[c], plainValue(want[r][c]); got != w {
 						t.Fatalf("row %d col %d = %q, want %q", r, c, got, w)
 					}
@@ -131,17 +143,18 @@ func checkObjects(t *testing.T, spec Spec, want [][]any, got []map[string]any) {
 	if len(got) != spec.Rows {
 		t.Fatalf("got %d objects, want %d", len(got), spec.Rows)
 	}
+	names := specNames(t, spec)
 	for r, obj := range got {
-		if len(obj) != len(spec.Fields) {
-			t.Fatalf("row %d has %d keys, want %d", r, len(obj), len(spec.Fields))
+		if len(obj) != len(names) {
+			t.Fatalf("row %d has %d keys, want %d", r, len(obj), len(names))
 		}
-		for c, fld := range spec.Fields {
-			v, ok := obj[fld.Name]
+		for c, name := range names {
+			v, ok := obj[name]
 			if !ok {
-				t.Fatalf("row %d missing key %q", r, fld.Name)
+				t.Fatalf("row %d missing key %q", r, name)
 			}
 			if err := sameValue(want[r][c], v); err != nil {
-				t.Fatalf("row %d key %q: %v", r, fld.Name, err)
+				t.Fatalf("row %d key %q: %v", r, name, err)
 			}
 		}
 	}
@@ -226,12 +239,13 @@ func TestXMLRoundTrip(t *testing.T) {
 	if len(doc.Rows) != spec.Rows {
 		t.Fatalf("got %d rows, want %d", len(doc.Rows), spec.Rows)
 	}
+	names := specNames(t, spec)
 	for r, row := range doc.Rows {
-		if len(row.Fields) != len(spec.Fields) {
-			t.Fatalf("row %d has %d elements, want %d", r, len(row.Fields), len(spec.Fields))
+		if len(row.Fields) != len(names) {
+			t.Fatalf("row %d has %d elements, want %d", r, len(row.Fields), len(names))
 		}
-		for c, fld := range spec.Fields {
-			if name, w := row.Fields[c].XMLName.Local, xmlName(fld.Name, "x"); name != w {
+		for c, fname := range names {
+			if name, w := row.Fields[c].XMLName.Local, xmlName(fname, "x"); name != w {
 				t.Fatalf("row %d element %d = %q, want %q", r, c, name, w)
 			}
 			if got, w := row.Fields[c].Value, plainValue(want[r][c]); got != w {
@@ -288,9 +302,10 @@ func TestSQLRoundTrip(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 	defer db.Close()
-	cols := make([]string, len(spec.Fields))
-	for i, f := range spec.Fields {
-		cols[i] = sqlIdent(f.Name) + " TEXT"
+	fnames := specNames(t, spec)
+	cols := make([]string, len(fnames))
+	for i, n := range fnames {
+		cols[i] = sqlIdent(n) + " TEXT"
 	}
 	if _, err := db.Exec("CREATE TABLE " + sqlIdent(spec.Table) + " (" + strings.Join(cols, ", ") + ")"); err != nil {
 		t.Fatalf("create: %v", err)
@@ -305,9 +320,9 @@ func TestSQLRoundTrip(t *testing.T) {
 		}
 	}
 
-	names := make([]string, len(spec.Fields))
-	for i, f := range spec.Fields {
-		names[i] = sqlIdent(f.Name)
+	names := make([]string, len(fnames))
+	for i, n := range fnames {
+		names[i] = sqlIdent(n)
 	}
 	rows, err := db.Query("SELECT " + strings.Join(names, ", ") + " FROM " + sqlIdent(spec.Table) + " ORDER BY rowid")
 	if err != nil {
@@ -316,7 +331,7 @@ func TestSQLRoundTrip(t *testing.T) {
 	defer rows.Close()
 	n := 0
 	for rows.Next() {
-		cells := make([]string, len(spec.Fields))
+		cells := make([]string, len(fnames))
 		ptrs := make([]any, len(cells))
 		for i := range cells {
 			ptrs[i] = &cells[i]
@@ -324,7 +339,7 @@ func TestSQLRoundTrip(t *testing.T) {
 		if err := rows.Scan(ptrs...); err != nil {
 			t.Fatalf("scan: %v", err)
 		}
-		for c := range spec.Fields {
+		for c := range fnames {
 			w := sqlPlain(want[n][c])
 			if cells[c] != w {
 				t.Fatalf("row %d col %d = %q, want %q", n, c, cells[c], w)
@@ -365,9 +380,13 @@ func TestLogRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewGenerator: %v", err)
 	}
+	names := g.Names()
 	var prev time.Time
 	for i, line := range lines {
-		want := g.Row(i)
+		want, err := g.Row(i)
+		if err != nil {
+			t.Fatalf("Row(%d): %v", i, err)
+		}
 		wantTS, wantLevel, wantMsg := g.logEntry()
 		pairs, err := parseLogfmt(line)
 		if err != nil {
@@ -390,8 +409,8 @@ func TestLogRoundTrip(t *testing.T) {
 		if pairs["msg"] != wantMsg {
 			t.Fatalf("line %d msg = %q, want %q", i, pairs["msg"], wantMsg)
 		}
-		for c, f := range spec.Fields {
-			key := logfmtKey(f.Name)
+		for c, fname := range names {
+			key := logfmtKey(fname)
 			got, ok := pairs[key]
 			if !ok {
 				t.Fatalf("line %d missing key %q", i, key)
@@ -460,9 +479,7 @@ func parseLogfmt(line string) (map[string]string, error) {
 func TestRowCountHonored(t *testing.T) {
 	for _, f := range Formats() {
 		for _, rows := range []int{1, 7} {
-			spec := Spec{Format: f, Rows: rows, Seed: 5, Table: "t", Fields: []Field{
-				{Name: "id", Kind: KindID}, {Name: "name", Kind: KindFirstName},
-			}}
+			spec := Spec{Format: f, Rows: rows, Seed: 5, Table: "t", DSL: "id = id()\nname = first_name()"}
 			out := render(t, spec)
 			if got := countRows(f, out); got != rows {
 				t.Fatalf("%s with %d rows produced %d", f, rows, got)

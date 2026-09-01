@@ -1,50 +1,36 @@
 package testdata
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
 
-// TestValidateRejects covers the messages the wizard surfaces: a bad row
-// count, an empty field list, an unknown kind and a malformed parameter.
+// dslSpec builds a spec around a DSL body — the shorthand every test here
+// uses.
+func dslSpec(format Format, rows int, seed uint64, dsl string) Spec {
+	return Spec{Format: format, Rows: rows, Seed: seed, Table: "records", DSL: dsl}
+}
+
+// TestValidateRejects covers the messages the dialog surfaces: a bad row
+// count, a bad format and a DSL that does not parse (the parser's own error
+// classes are covered in dsl_test.go).
 func TestValidateRejects(t *testing.T) {
-	base := Default(FormatCSV)
 	cases := []struct {
 		name string
 		spec Spec
 		want string
 	}{
-		{"zero rows", Spec{Format: FormatCSV, Rows: 0, Fields: base.Fields}, "at least 1"},
-		{"negative rows", Spec{Format: FormatCSV, Rows: -5, Fields: base.Fields}, "at least 1"},
-		{"too many rows", Spec{Format: FormatCSV, Rows: MaxRows + 1, Fields: base.Fields}, "at most"},
-		{"no fields", Spec{Format: FormatCSV, Rows: 10}, "at least one field"},
-		{"unknown format", Spec{Format: "parquet", Rows: 10, Fields: base.Fields}, "unknown format"},
-		{"unknown kind", Spec{Format: FormatCSV, Rows: 1, Fields: []Field{{Name: "x", Kind: "wat"}}}, `unknown kind "wat"`},
-		{"empty name", Spec{Format: FormatCSV, Rows: 1, Fields: []Field{{Kind: KindID}}}, "field name is required"},
-		{"duplicate name", Spec{Format: FormatCSV, Rows: 1, Fields: []Field{
-			{Name: "a", Kind: KindID}, {Name: "a", Kind: KindID},
-		}}, "duplicate field name"},
-		{"bad int range", Spec{Format: FormatCSV, Rows: 1, Fields: []Field{
-			{Name: "n", Kind: KindInt, Param: "10..1"},
-		}}, "above max"},
-		{"unparseable int range", Spec{Format: FormatCSV, Rows: 1, Fields: []Field{
-			{Name: "n", Kind: KindInt, Param: "1-10"},
-		}}, "min..max"},
-		{"bad date", Spec{Format: FormatCSV, Rows: 1, Fields: []Field{
-			{Name: "d", Kind: KindDate, Param: "yesterday..today"},
-		}}, "is not a date"},
-		{"bad domain", Spec{Format: FormatCSV, Rows: 1, Fields: []Field{
-			{Name: "u", Kind: KindURL, Param: "https://example.com"},
-		}}, "not a domain name"},
-		{"param on paramless kind", Spec{Format: FormatCSV, Rows: 1, Fields: []Field{
-			{Name: "c", Kind: KindCity, Param: "berlin"},
-		}}, "takes no parameter"},
-		{"empty from_list", Spec{Format: FormatCSV, Rows: 1, Fields: []Field{
-			{Name: "s", Kind: KindFromList},
-		}}, "at least one entry"},
-		{"blank from_list entries", Spec{Format: FormatCSV, Rows: 1, Fields: []Field{
-			{Name: "s", Kind: KindFromList, Param: " , ,"},
-		}}, "at least one entry"},
+		{"zero rows", dslSpec(FormatCSV, 0, 0, DefaultDSL), "at least 1"},
+		{"negative rows", dslSpec(FormatCSV, -5, 0, DefaultDSL), "at least 1"},
+		{"too many rows", dslSpec(FormatCSV, MaxRows+1, 0, DefaultDSL), "at most"},
+		{"unknown format", dslSpec("parquet", 10, 0, DefaultDSL), "unknown format"},
+		{"empty spec", dslSpec(FormatCSV, 10, 0, ""), "at least one field"},
+		{"unknown generator", dslSpec(FormatCSV, 1, 0, "x = wat()"), `unknown generator "wat"`},
+		{"bad int range", dslSpec(FormatCSV, 1, 0, "n = int(10..1)"), "above max"},
+		{"bad domain", dslSpec(FormatCSV, 1, 0, "u = url(https://example.com)"), "not a domain name"},
+		{"param on paramless kind", dslSpec(FormatCSV, 1, 0, "c = city(berlin)"), "takes no argument"},
+		{"empty from_list", dslSpec(FormatCSV, 1, 0, "s = from_list()"), "at least one entry"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,7 +52,7 @@ func TestValidateAccepts(t *testing.T) {
 		t.Fatalf("Default().Validate() = %v", err)
 	}
 	for _, info := range Catalog() {
-		spec := Spec{Format: FormatCSV, Rows: 1, Fields: []Field{{Name: "f", Kind: info.Kind, Param: sampleParam(info.Kind)}}}
+		spec := dslSpec(FormatCSV, 1, 0, fmt.Sprintf("f = %s(%s)", info.Kind, sampleParam(info.Kind)))
 		if err := spec.Validate(); err != nil {
 			t.Fatalf("kind %s: Validate() = %v", info.Kind, err)
 		}
@@ -119,20 +105,17 @@ func TestCatalogComplete(t *testing.T) {
 	if got, want := len(Kinds()), len(Catalog()); got != want {
 		t.Fatalf("Kinds() = %d entries, Catalog() = %d", got, want)
 	}
+	// weighted is reserved next to the catalog for the autocomplete.
+	if WeightedInfo().Desc == "" || WeightedInfo().Kind != Kind(WeightedName) {
+		t.Fatalf("WeightedInfo() = %+v, want a described weighted entry", WeightedInfo())
+	}
 }
 
 // TestNormalizedFillsTable proves the table default is applied once, centrally.
 func TestNormalizedFillsTable(t *testing.T) {
-	s := Spec{Format: FormatSQL, Rows: 1, Fields: []Field{{Name: " id ", Kind: KindID}}}
-	n := s.Normalized()
-	if n.Table != DefaultTable {
+	s := Spec{Format: FormatSQL, Rows: 1, DSL: "id = id()"}
+	if n := s.Normalized(); n.Table != DefaultTable {
 		t.Fatalf("Table = %q, want %q", n.Table, DefaultTable)
-	}
-	if n.Fields[0].Name != "id" {
-		t.Fatalf("field name = %q, want it trimmed", n.Fields[0].Name)
-	}
-	if s.Fields[0].Name != " id " {
-		t.Fatalf("Normalized mutated the receiver's fields")
 	}
 }
 

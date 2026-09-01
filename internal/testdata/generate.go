@@ -15,8 +15,8 @@ import (
 // fixed order, which is what makes a seeded run byte-identical on repeat.
 type Generator struct {
 	spec Spec
+	prog *Program
 	fake *gofakeit.Faker
-	gens []func(row int) any
 	// logAt is the log writer's running timestamp; it starts at logEpoch and
 	// only ever moves forward, so generated log files are ordered like real
 	// ones.
@@ -27,143 +27,145 @@ type Generator struct {
 // time.Now(), because a seeded run must not depend on when it ran.
 var logEpoch = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
-// defaultDateFrom / defaultDateTo bound the date kind when the field names no
+// defaultDateFrom / defaultDateTo bound the date kind when the call names no
 // range — again fixed, not "now ± something".
 var (
 	defaultDateFrom = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	defaultDateTo   = time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
 )
 
-// NewGenerator validates the spec and compiles each field into a closure, so
-// the per-row loop costs no parameter parsing and an invalid parameter is
-// reported once, up front.
+// NewGenerator validates the spec and parses its DSL, so an invalid spec is
+// reported once, up front, with its line.
 func NewGenerator(spec Spec) (*Generator, error) {
 	if err := spec.Validate(); err != nil {
 		return nil, err
 	}
 	spec = spec.Normalized()
-	g := &Generator{spec: spec, fake: gofakeit.New(spec.Seed), logAt: logEpoch}
-	g.gens = make([]func(row int) any, len(spec.Fields))
-	for i, f := range spec.Fields {
-		gen, err := g.compile(f)
-		if err != nil {
-			return nil, err
-		}
-		g.gens[i] = gen
+	prog, err := ParseDSL(spec.DSL)
+	if err != nil {
+		return nil, err // unreachable: Validate parsed it already
 	}
-	return g, nil
+	return &Generator{spec: spec, prog: prog, fake: gofakeit.New(spec.Seed), logAt: logEpoch}, nil
 }
 
 // Spec returns the normalized spec the generator runs.
 func (g *Generator) Spec() Spec { return g.spec }
 
-// Row generates the values of row (0-based) in field order. Values are typed —
-// string, int64, float64, bool or time.Time — so each writer can render them
-// in its own idiom (a JSON number, a TOML datetime, a quoted SQL literal)
-// instead of re-parsing pre-formatted strings.
-func (g *Generator) Row(row int) []any {
-	out := make([]any, len(g.gens))
-	for i, gen := range g.gens {
-		out[i] = gen(row)
+// Names lists the output field names in definition order — the CSV header,
+// the JSON keys, the SQL column list.
+func (g *Generator) Names() []string { return g.prog.Names() }
+
+// Row generates the values of row (0-based) in field order. Fields evaluate
+// in dependency order — a {reference} always sees its target's value — but
+// the returned slice follows definition order. Values are typed — string,
+// int64, float64, bool or time.Time — so each writer can render them in its
+// own idiom. An error only occurs when a per-row interpolated argument fails
+// its kind's grammar (e.g. a {ref} that is not a domain name).
+func (g *Generator) Row(row int) ([]any, error) {
+	ec := &evalCtx{g: g, row: row, vals: make(map[string]any, len(g.prog.fields))}
+	for _, idx := range g.prog.order {
+		f := g.prog.fields[idx]
+		v, err := f.expr.eval(ec)
+		if err != nil {
+			return nil, fmt.Errorf("line %d, field %q: %w", f.line, f.name, err)
+		}
+		ec.vals[f.name] = v
 	}
-	return out
+	out := make([]any, len(g.prog.fields))
+	for i, f := range g.prog.fields {
+		out[i] = ec.vals[f.name]
+	}
+	return out, nil
 }
 
-// compile builds one field's value closure, validating its parameter.
-func (g *Generator) compile(f Field) (func(row int) any, error) {
-	f.Param = strings.TrimSpace(f.Param)
-	if err := checkParam(f); err != nil {
-		return nil, fmt.Errorf("field %q: %w", f.Name, err)
-	}
+// kindValue draws one value for a catalog kind. The param is already trimmed
+// and validated (statically at parse time, or per row for interpolated
+// arguments). All randomness comes from the generator's instance faker.
+func (g *Generator) kindValue(k Kind, param string, row int) (any, error) {
 	fake := g.fake
-	switch f.Kind {
+	switch k {
 	case KindID:
-		return func(row int) any { return int64(row + 1) }, nil
+		return int64(row + 1), nil
 	case KindUUID:
-		return func(int) any { return fake.UUID() }, nil
+		return fake.UUID(), nil
 	case KindFirstName:
-		return func(int) any { return fake.FirstName() }, nil
+		return fake.FirstName(), nil
 	case KindLastName:
-		return func(int) any { return fake.LastName() }, nil
+		return fake.LastName(), nil
 	case KindFullName:
-		return func(int) any { return fake.Name() }, nil
+		return fake.Name(), nil
 	case KindEmail:
-		if f.Param == "" {
-			return func(int) any { return fake.Email() }, nil
+		if param == "" {
+			return fake.Email(), nil
 		}
-		domain := strings.ToLower(f.Param)
-		return func(int) any { return emailAt(fake, domain) }, nil
+		return emailAt(fake, strings.ToLower(param)), nil
 	case KindURL:
-		if f.Param == "" {
-			return func(int) any { return fake.URL() }, nil
+		if param == "" {
+			return fake.URL(), nil
 		}
-		domain := strings.ToLower(f.Param)
-		return func(int) any { return urlAt(fake, domain) }, nil
+		return urlAt(fake, strings.ToLower(param)), nil
 	case KindHostname:
-		domain := strings.ToLower(f.Param)
-		return func(int) any {
-			d := domain
-			if d == "" {
-				d = fake.DomainName()
-			}
-			return label(fake) + "." + d
-		}, nil
+		d := strings.ToLower(param)
+		if d == "" {
+			d = fake.DomainName()
+		}
+		return label(fake) + "." + d, nil
 	case KindDomain:
-		return func(int) any { return fake.DomainName() }, nil
+		return fake.DomainName(), nil
 	case KindIPv4:
-		return func(int) any { return fake.IPv4Address() }, nil
+		return fake.IPv4Address(), nil
 	case KindIPv6:
-		return func(int) any { return fake.IPv6Address() }, nil
+		return fake.IPv6Address(), nil
 	case KindMAC:
-		return func(int) any { return fake.MacAddress() }, nil
+		return fake.MacAddress(), nil
 	case KindPhone:
-		return func(int) any { return fake.PhoneFormatted() }, nil
+		return fake.PhoneFormatted(), nil
 	case KindStreet:
-		return func(int) any { return fake.Street() }, nil
+		return fake.Street(), nil
 	case KindCity:
-		return func(int) any { return fake.City() }, nil
+		return fake.City(), nil
 	case KindCountry:
-		return func(int) any { return fake.Country() }, nil
+		return fake.Country(), nil
 	case KindCompany:
-		return func(int) any { return fake.Company() }, nil
+		return fake.Company(), nil
 	case KindJobTitle:
-		return func(int) any { return fake.JobTitle() }, nil
+		return fake.JobTitle(), nil
 	case KindSentence:
-		return func(int) any { return fake.Sentence() }, nil
+		return fake.Sentence(), nil
 	case KindParagraph:
-		return func(int) any { return fake.Paragraph() }, nil
+		return fake.Paragraph(), nil
 	case KindBool:
-		return func(int) any { return fake.Bool() }, nil
+		return fake.Bool(), nil
 	case KindHexColor:
-		return func(int) any { return fake.HexColor() }, nil
+		return fake.HexColor(), nil
 	case KindUserAgent:
-		return func(int) any { return fake.UserAgent() }, nil
+		return fake.UserAgent(), nil
 	case KindInt:
 		lo, hi := 1, 1000
-		if f.Param != "" {
-			lo, hi, _ = parseIntRange(f.Param)
+		if param != "" {
+			lo, hi, _ = parseIntRange(param)
 		}
-		return func(int) any { return int64(fake.IntRange(lo, hi)) }, nil
+		return int64(fake.IntRange(lo, hi)), nil
 	case KindFloat:
 		lo, hi := 0.0, 1000.0
-		if f.Param != "" {
-			lo, hi, _ = parseFloatRange(f.Param)
+		if param != "" {
+			lo, hi, _ = parseFloatRange(param)
 		}
-		return func(int) any { return round2(fake.Float64Range(lo, hi)) }, nil
+		return round2(fake.Float64Range(lo, hi)), nil
 	case KindDate:
 		from, to := defaultDateFrom, defaultDateTo
-		if f.Param != "" {
-			from, to, _ = parseDateRange(f.Param)
+		if param != "" {
+			from, to, _ = parseDateRange(param)
 		}
-		return func(int) any { return fake.DateRange(from, to).UTC().Truncate(time.Second) }, nil
+		return fake.DateRange(from, to).UTC().Truncate(time.Second), nil
 	case KindFromList:
-		entries := parseList(f.Param)
-		return func(int) any { return entries[fake.IntRange(0, len(entries)-1)] }, nil
+		entries := parseList(param)
+		return entries[fake.IntRange(0, len(entries)-1)], nil
 	}
-	// Unreachable: Validate rejects unknown kinds before compile runs. Kept as
-	// a guard so a kind added to the catalog without a case here fails loudly
-	// instead of silently generating nothing.
-	return nil, fmt.Errorf("field %q: kind %q has no generator", f.Name, string(f.Kind))
+	// Unreachable: the parser rejects unknown generators. Kept as a guard so
+	// a kind added to the catalog without a case here fails loudly instead of
+	// silently generating nothing.
+	return nil, fmt.Errorf("kind %q has no generator", string(k))
 }
 
 // round2 trims a generated float to two decimals — the difference between a

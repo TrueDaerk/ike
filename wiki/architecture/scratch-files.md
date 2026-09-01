@@ -216,22 +216,48 @@ Exercising the CSV table, the [data viewer](./data-viewer.md), the
 in practice, asking an external agent for "a 2000-row CSV" and pasting it in.
 `internal/testdata` generates one instead, and drops it into the scratch store.
 
-**The spec is the whole model.** A generation is a list of named fields, each
-with a catalog *kind* and an optional parameter, plus a row count, a seed and a
-table name:
+**The spec is the whole model.** A generation is a DSL text defining the
+fields, plus a row count, a seed, a table name and the render format:
 
 ```go
-type Field struct{ Name string; Kind Kind; Param string }
-type Spec  struct{ Format Format; Rows int; Seed uint64; Table string; Fields []Field }
+type Spec struct{ Format Format; Rows int; Seed uint64; Table string; DSL string }
 ```
 
-`Spec.Validate` is the single definition of "valid" — the wizard, the quick
-commands and `Write` all run it, so a hand-edited preset cannot slip past the
+**The DSL (#2392)** is one field per line, `name = expression`; blank lines
+and `#` comments are skipped. An expression is one of three things:
+
+- a **generator call** from the catalog — `first_name()`, `int(1..1000)`,
+  `from_list(red, green, blue)` — with the same parameter grammars the
+  pre-#2392 wizard used;
+- a **template string** — a quoted literal whose `{field}` placeholders
+  interpolate other fields of the same row
+  (`url = "https://{host}/api/{id}"`; escapes `\" \\ \{ \} \n \t`);
+- **`weighted(...)`** — alternatives over arbitrary sub-expressions with
+  positive weights, normalized rather than required to sum to 100
+  (`weighted(70: email({domain}), 30: "")`).
+
+`{field}` references also work inside generator arguments
+(`host = hostname({domain})`). `ParseDSL` (`internal/testdata/dsl.go`)
+resolves the references into a **dependency order** — a stable topological
+sort, so definition order rules where no dependency does — and rejects an
+unknown reference or a cycle, naming the cycle path (`a → b → a`). Output
+columns always follow definition order; only evaluation is reordered. Every
+parse error is a `*ParseError` carrying its 1-based line, which is what the
+dialog's inline error shows. A generator argument that interpolates a
+reference can only be validated **per row**, when its text exists — a `{ref}`
+that turns out not to be a domain name fails the generation with the field
+and line named.
+
+`Spec.Validate` is the single definition of "valid" — the dialog, the live
+preview and `Write` all run it, so a hand-edited store cannot slip past the
 form's checks. It refuses a row count below 1 or above `MaxRows` (1 000 000),
-an empty field list, an empty or duplicate field name, an unknown kind, and a
-parameter that does not match its kind's grammar (or is given to a kind that
-takes none). The cap is a **constant, not a setting**: it exists to catch a
-typo in the row field, not to be tuned.
+an unknown format, and any DSL parse error. The cap is a **constant, not a
+setting**: it exists to catch a typo in the row field, not to be tuned.
+
+**Weighted draws stay seeded.** A `weighted(...)` makes exactly one draw from
+the spec's instance faker and then evaluates only the winning branch, so a
+seeded run is byte-identical regardless of which branches win, and the other
+branches consume no draws.
 
 **Values ride [gofakeit](https://github.com/brianvoe/gofakeit) v7**, always
 through an *instance* faker seeded from the spec — never the package global —
@@ -241,7 +267,7 @@ reads the wall clock: the `date` kind defaults to a fixed 2000–2030 window and
 generated log timestamps start at a fixed epoch. **Seed 0 means "draw a fresh
 random seed"**; any other seed repeats.
 
-The catalog (`testdata.Catalog()`, the wizard's kind picker and the docs'
+The catalog (`testdata.Catalog()`, the dialog's autocomplete and the docs'
 table): `id` (the 1-based row number, not random), `uuid`, `first_name`,
 `last_name`, `full_name`, `email`, `url`, `hostname`, `domain`, `ipv4`,
 `ipv6`, `mac`, `phone`, `street`, `city`, `country`, `company`, `job_title`,
@@ -254,7 +280,9 @@ range, `date` a `from..to` range (`YYYY-MM-DD` or RFC3339), and `from_list`
 (`red, green, blue`; entries are trimmed, empties dropped, a literal comma in
 an entry is out of scope). `from_list` is the one kind whose parameter is
 **required** — every other kind has a default, but a list to pick from cannot
-be invented.
+be invented. `weighted` is not a catalog kind — it wraps arbitrary
+sub-expressions — but is reserved next to the catalog (`WeightedName`,
+`WeightedInfo`) so the autocomplete offers it the same way.
 
 **Writers stream.** Each format is a `begin` / one call per row / `end` encoder
 over a 64 KiB buffer, so a million-row CSV never materializes as a million rows
@@ -285,53 +313,71 @@ values. Levels follow a service-log distribution (≈55 % info, 20 % debug, 15 %
 warn, 8 % error, 2 % fatal) and timestamps only ever move forward, so the
 generated file reads as a stream.
 
-### Commands and the wizard
+### The dialog
 
-- **`scratch.generate` ("Generate Test Data…", palette + File menu)** opens a
-  five-step shell dialog (`internal/app/scratch_generate.go`, reworked in
-  #2228), modelled on the [new-project wizard](./project-switching.md) rather
-  than a settings form, so it needs no page host: **format** (↑↓, enter) →
-  **rows / seed / table** (tab between fields; the row count is prompted with
-  its 1…1 000 000 bound stated and the preset's value prefilled) → **column
-  list** (`a` add, `e`/enter edit, `d` delete — announcing what it removed —
-  and the deliberate `g` generates, so the file-writing action is never the
-  reflex key) → **column editor** (name / kind / param; the Kind row is not a
-  text field — enter or a click on it opens the picker) → **kind picker** (the
-  whole catalog with descriptions, type-to-filter via `ui.SpeedSearch`, the
-  selected kind's parameter grammar under the list; enter/click chooses, and
-  choosing focuses the parameter when the kind takes one). Every accept
-  validates through `Spec.Validate`, and a failure keeps the dialog open with
-  the reason on its error line. `esc` walks the steps backwards (clearing an
-  active picker filter first) and closes on the first.
+**`scratch.generate` ("Generate Test Data…", palette + File menu,
+`cmd+alt+shift+n`)** is the one entry point — the pre-#2392 per-format quick
+commands (`scratch.generate.<format>`) are gone, along with their audit-ledger
+family entry; the palette keeps a single row and the format is picked inside
+the dialog. It opens a **single-screen** modal shell dialog
+(`internal/app/scratch_generate.go`), in the shell-dialog family of the
+[new-project wizard](./project-switching.md) and the scratch manager, so it
+needs no page host:
 
-  The wizard is **fully mouse-operable** (#2228): every rendered line records
-  a hit region while it renders, so a click acts on what it visibly hits —
-  list rows select on the first click and activate on a click at the selected
-  row, the Kind row and the catalog rows behave like a dropdown, and every
-  step carries a clickable `[button]` row that replays the key it is labelled
-  with. The wheel moves the list selections, and long lists (columns, the
-  catalog) window themselves to the shell's viewport with `↑/↓ n more`
-  indicators, so the dialog stays inside the screen at any window size.
-- **`scratch.generate.<format>`** — one per format, mirroring
-  `scratch.new.<lang>`: no prompt at all, generated straight from that format's
-  stored preset.
+- a **header** of five knobs — the *template* picker, the *format* picker
+  (←/→ cycle, a click on the focused picker cycles too), and the *rows* /
+  *seed* / *table* text fields — walked with tab/shift-tab;
+- the **DSL spec editor**, a multi-line text area with a gutter of line
+  numbers (matching the parse errors), full cursor movement, multi-line paste,
+  and **autocomplete**: typing after a line's `=` offers the catalog (name,
+  parameter grammar and description, `weighted` included), typing after `{`
+  offers the fields defined above the cursor; enter/tab accepts, `ctrl+space`
+  asks explicitly, esc dismisses the popup before it closes the dialog;
+- a **live preview** of the first `PreviewRows` (5) rows in the selected
+  format, re-rendered debounced (`tdPreviewDebounce`, generation-stamped so a
+  stale tick is dropped) as the spec or any header knob changes —
+  `testdata.Preview` runs the very same parser, evaluator and writers as the
+  generation, so the preview is byte-for-byte the head of the file a seeded
+  run writes. An invalid spec shows its line-numbered error in the preview's
+  place, and `ctrl+g` / the `[generate]` button refuse until it parses;
+- a **button row** — `[cancel]`, `[save template]`, `[delete template]`
+  (only over a deletable user template), `[generate]`.
+
+The dialog is **fully mouse-operable**: every rendered line records a hit
+region while it renders — header rows focus (and cycle, dropdown-style, when
+already focused), editor lines place the cursor where clicked, suggestion rows
+accept, buttons act. The wheel scrolls the shell's own viewport; there are no
+windowed lists left to steal it.
 
 Generation runs as a `tea.Cmd`, never on the update loop — `MaxRows` worth of
-faker calls has no business blocking the UI. The finished document is written
-with `scratch.CreateWithContent`, the explorer's Scratches section is refreshed
-and the file opens through the standard funnel, so it lands as a focused tab
-with the right language.
+faker calls has no business blocking the UI — and so does the preview render.
+The finished document is written with `scratch.CreateWithContent`, the
+explorer's Scratches section is refreshed and the file opens through the
+standard funnel, so it lands as a focused tab with the right language.
 
-### Presets (`~/.ike/testdata.json`)
+### Templates and the store (`~/.ike/testdata.json`)
 
-The spec that produced a file is remembered **per format**, in a user-level
-store following the same `IKE_CONFIG_DIR` seam as the layout store
-(`internal/app/layouts.go`) — a test-data shape is a habit, not a property of a
-project. Picking a format in the wizard loads that format's preset; a format
-with none starts from the stock default (100 rows; `id`, `first_name`,
-`last_name`, `email`). The store is validated **on read**: a hand-edited or
-stale entry falls back to the default instead of putting an unusable spec into
-the dialog, and a failed generation never overwrites a working preset.
+**Templates are format-free named specs** — a DSL body only, no
+format/rows/seed; the format is chosen in the dialog at generation time.
+Built-ins ship in `internal/testdata/templates.go` — *Person*, *Address*,
+*Order*, *URL / Web* (the issue's domain/host/url example), *Server log* —
+deliberately doubling as working examples of references, template strings and
+weighted alternatives; a test parses and renders every one. Picking a template
+loads its body into the editor; edits never write back unless saved again.
+`ctrl+s` (or `[save template]`) prompts for a name and saves the current spec
+via `testdata.SaveTemplate`, which refuses an empty name, a name shadowing a
+built-in, and a body that does not parse. `ctrl+d` / `[delete template]`
+removes a user template; built-ins refuse.
+
+The store is **user-level**, following the same `IKE_CONFIG_DIR` seam as the
+layout store (`internal/app/layouts.go`) — a test-data shape is a habit, not a
+property of a project. It holds the **last used spec** (the next dialog starts
+where the previous generation left off; validated on read, so a stale or
+hand-edited entry falls back to the stock default of 100 rows and
+`id`/`first_name`/`last_name`/`email`) and the **user templates** by name. A
+failed generation never overwrites the last spec. The pre-#2392 per-format
+preset schema is simply unreadable under the new one and reads as an empty
+store — those presets were low-value and start over.
 
 ## Running a scratch (#1223)
 
@@ -388,7 +434,7 @@ slots into.
 the explorer's Scratches section needs the explorer pane and `scratch.list` is
 a deliberate pure finder. It is a floating shell dialog
 (`internal/app/scratch_manager.go`) in the shape of the [test-data
-wizard](#commands-and-the-wizard): steps walked by enter/esc, type-ahead
+dialog](#the-dialog): steps walked by enter/esc, type-ahead
 narrowing through `ui.SpeedSearch`, clickable rows and buttons, wheel-scrolled
 lists.
 

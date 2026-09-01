@@ -1,9 +1,9 @@
-// Package testdata generates synthetic test data (#2134): a spec — a list of
-// named fields with a generator kind each, a row count and a seed — rendered
-// into one of the data formats IKE's viewers read (CSV/TSV, JSON, NDJSON,
-// XML, YAML, TOML, SQL inserts, logfmt log lines). It exists so exercising the
-// CSV table, the data grid, the log timeline or the jq/yq playgrounds needs no
-// hand-made sample file and no external agent.
+// Package testdata generates synthetic test data (#2134, DSL rework #2392):
+// a spec — a DSL text defining named fields, a row count and a seed —
+// rendered into one of the data formats IKE's viewers read (CSV/TSV, JSON,
+// NDJSON, XML, YAML, TOML, SQL inserts, logfmt log lines). It exists so
+// exercising the CSV table, the data grid, the log timeline or the jq/yq
+// playgrounds needs no hand-made sample file and no external agent.
 //
 // The value catalog rides github.com/brianvoe/gofakeit/v7 rather than
 // hand-rolled tables. Generation always runs on an **instance** faker seeded
@@ -90,8 +90,19 @@ func (f Format) Valid() bool {
 }
 
 // Kind selects a value generator from the catalog. Kinds are stable strings
-// because they are persisted in the preset store and typed into the wizard.
+// because they are the DSL's generator names, persisted inside saved specs.
 type Kind string
+
+// WeightedName is the DSL's weighted(...) construct — not a catalog kind (it
+// wraps arbitrary sub-expressions), but reserved next to them and offered by
+// the same autocomplete.
+const WeightedName = "weighted"
+
+// WeightedInfo describes weighted(...) KindInfo-shaped, so the autocomplete
+// lists it alongside the catalog.
+func WeightedInfo() KindInfo {
+	return KindInfo{Kind: WeightedName, Desc: "weighted alternatives", Param: "weight: expression, …"}
+}
 
 // The value catalog. Every kind maps to exactly one generator; the ones taking
 // a parameter document its grammar in kindCatalog below.
@@ -192,22 +203,14 @@ func Info(k Kind) (KindInfo, bool) {
 	return KindInfo{}, false
 }
 
-// Field is one column of the spec: the name it carries in the output (CSV
-// header, JSON key, XML element, SQL column) and the catalog kind producing
-// its values, plus the kind's optional parameter.
-type Field struct {
-	Name  string `json:"name"`
-	Kind  Kind   `json:"kind"`
-	Param string `json:"param,omitempty"`
-}
-
-// Spec is a complete generation request.
+// Spec is a complete generation request: the DSL text defining the fields,
+// plus the render target and its knobs.
 type Spec struct {
-	Format Format  `json:"format"`
-	Rows   int     `json:"rows"`
-	Seed   uint64  `json:"seed"` // 0 means "pick a random seed per run"
-	Table  string  `json:"table,omitempty"`
-	Fields []Field `json:"fields"`
+	Format Format `json:"format"`
+	Rows   int    `json:"rows"`
+	Seed   uint64 `json:"seed"` // 0 means "pick a random seed per run"
+	Table  string `json:"table,omitempty"`
+	DSL    string `json:"dsl"`
 }
 
 // MaxRows caps a generation. Well past any plausible viewer exercise, but low
@@ -223,26 +226,29 @@ const DefaultTable = "records"
 // table view scroll, small enough to render instantly.
 const defaultRows = 100
 
-// Default is the spec a format starts from when the preset store holds none:
-// a small people-ish table, the shape a sample file usually has.
+// DefaultDSL is the spec text a fresh dialog starts from: a small people-ish
+// table, the shape a sample file usually has.
+const DefaultDSL = `id         = id()
+first_name = first_name()
+last_name  = last_name()
+email      = email()
+`
+
+// Default is the spec the dialog starts from when the store holds none.
 func Default(format Format) Spec {
 	return Spec{
 		Format: format,
 		Rows:   defaultRows,
 		Table:  DefaultTable,
-		Fields: []Field{
-			{Name: "id", Kind: KindID},
-			{Name: "first_name", Kind: KindFirstName},
-			{Name: "last_name", Kind: KindLastName},
-			{Name: "email", Kind: KindEmail},
-		},
+		DSL:    DefaultDSL,
 	}
 }
 
 // Validate reports the first problem with the spec as a message fit for the
-// wizard's error line, or nil when the spec can be generated. It is the single
-// definition of "valid": the wizard, the quick commands and Write all run it,
-// so a spec restored from a hand-edited preset file cannot slip through.
+// dialog's error line, or nil when the spec can be generated. It is the
+// single definition of "valid": the dialog, the preview and Write all run it,
+// so a spec restored from a hand-edited store cannot slip through. A DSL
+// problem comes back as a *ParseError carrying its line.
 func (s Spec) Validate() error {
 	if !s.Format.Valid() {
 		return fmt.Errorf("unknown format %q", string(s.Format))
@@ -253,59 +259,36 @@ func (s Spec) Validate() error {
 	if s.Rows > MaxRows {
 		return fmt.Errorf("row count must be at most %d", MaxRows)
 	}
-	if len(s.Fields) == 0 {
-		return fmt.Errorf("at least one field is required")
-	}
-	seen := make(map[string]bool, len(s.Fields))
-	for _, f := range s.Fields {
-		name := strings.TrimSpace(f.Name)
-		if name == "" {
-			return fmt.Errorf("field name is required")
-		}
-		if seen[name] {
-			return fmt.Errorf("duplicate field name %q", name)
-		}
-		seen[name] = true
-		if _, ok := Info(f.Kind); !ok {
-			return fmt.Errorf("unknown kind %q in field %q", string(f.Kind), name)
-		}
-		if err := checkParam(f); err != nil {
-			return fmt.Errorf("field %q: %w", name, err)
-		}
-	}
-	return nil
+	_, err := ParseDSL(s.DSL)
+	return err
 }
 
 // Normalized returns the spec with the defaults filled in that Validate does
-// not enforce — a table name for the formats that need one, trimmed field
-// names — so writers never re-derive them.
+// not enforce — a table name for the formats that need one — so writers never
+// re-derive them.
 func (s Spec) Normalized() Spec {
 	out := s
 	out.Table = strings.TrimSpace(out.Table)
 	if out.Table == "" {
 		out.Table = DefaultTable
 	}
-	out.Fields = make([]Field, len(s.Fields))
-	for i, f := range s.Fields {
-		f.Name = strings.TrimSpace(f.Name)
-		f.Param = strings.TrimSpace(f.Param)
-		out.Fields[i] = f
-	}
 	return out
 }
 
-// checkParam validates a field's parameter against its kind's grammar. An
-// empty parameter is valid for every kind except from_list — the others all
-// have a default, but a list to pick from cannot be invented.
-func checkParam(f Field) error {
-	p := strings.TrimSpace(f.Param)
+// checkParam validates a generator argument against its kind's grammar. An
+// empty argument is valid for every parameterized kind except from_list — the
+// others all have a default, but a list to pick from cannot be invented.
+// Kinds without a parameter never reach it: the parser refuses their
+// arguments up front.
+func checkParam(k Kind, p string) error {
+	p = strings.TrimSpace(p)
 	if p == "" {
-		if f.Kind == KindFromList {
+		if k == KindFromList {
 			return fmt.Errorf("from_list needs at least one entry (comma-separated)")
 		}
 		return nil
 	}
-	switch f.Kind {
+	switch k {
 	case KindEmail, KindURL, KindHostname:
 		if !validDomain(p) {
 			return fmt.Errorf("%q is not a domain name", p)
@@ -323,8 +306,6 @@ func checkParam(f Field) error {
 		if len(parseList(p)) == 0 {
 			return fmt.Errorf("from_list needs at least one entry (comma-separated)")
 		}
-	default:
-		return fmt.Errorf("kind %q takes no parameter", string(f.Kind))
 	}
 	return nil
 }

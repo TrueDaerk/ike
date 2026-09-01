@@ -54,7 +54,11 @@ func Write(w io.Writer, spec Spec) error {
 		return err
 	}
 	for i := 0; i < g.Spec().Rows; i++ {
-		if err := fw.row(bw, g, i, g.Row(i)); err != nil {
+		vals, err := g.Row(i)
+		if err != nil {
+			return err
+		}
+		if err := fw.row(bw, g, i, vals); err != nil {
 			return err
 		}
 	}
@@ -72,6 +76,19 @@ func Render(spec Spec) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// PreviewRows caps the dialog's live preview.
+const PreviewRows = 5
+
+// Preview renders the spec capped to PreviewRows — the dialog's live preview.
+// It runs the very same parser, evaluator and writers as Render, so what the
+// preview shows is byte-for-byte what a generation with the same seed writes.
+func Preview(spec Spec) ([]byte, error) {
+	if spec.Rows > PreviewRows {
+		spec.Rows = PreviewRows
+	}
+	return Render(spec)
 }
 
 // formatWriter is one render target's streaming encoder.
@@ -120,11 +137,7 @@ type sepWriter struct {
 func (s *sepWriter) begin(bw *bufio.Writer, g *Generator) error {
 	s.w = csv.NewWriter(bw)
 	s.w.Comma = s.comma
-	fields := g.Spec().Fields
-	s.rec = make([]string, len(fields))
-	for i, f := range fields {
-		s.rec[i] = f.Name
-	}
+	s.rec = append([]string(nil), g.Names()...)
 	return s.w.Write(s.rec)
 }
 
@@ -177,13 +190,13 @@ func (jsonWriter) row(bw *bufio.Writer, g *Generator, idx int, vals []any) error
 	if _, err := bw.WriteString("  {\n"); err != nil {
 		return err
 	}
-	fields := g.Spec().Fields
-	for i, f := range fields {
+	names := g.Names()
+	for i, name := range names {
 		sep := ",\n"
-		if i == len(fields)-1 {
+		if i == len(names)-1 {
 			sep = "\n"
 		}
-		if _, err := bw.WriteString("    " + jsonString(f.Name) + ": " + jsonValue(vals[i]) + sep); err != nil {
+		if _, err := bw.WriteString("    " + jsonString(name) + ": " + jsonValue(vals[i]) + sep); err != nil {
 			return err
 		}
 	}
@@ -210,13 +223,13 @@ func (ndjsonWriter) row(bw *bufio.Writer, g *Generator, _ int, vals []any) error
 	if err := bw.WriteByte('{'); err != nil {
 		return err
 	}
-	for i, f := range g.Spec().Fields {
+	for i, name := range g.Names() {
 		if i > 0 {
 			if err := bw.WriteByte(','); err != nil {
 				return err
 			}
 		}
-		if _, err := bw.WriteString(jsonString(f.Name) + ":" + jsonValue(vals[i])); err != nil {
+		if _, err := bw.WriteString(jsonString(name) + ":" + jsonValue(vals[i])); err != nil {
 			return err
 		}
 	}
@@ -271,8 +284,8 @@ func (xmlWriter) row(bw *bufio.Writer, g *Generator, _ int, vals []any) error {
 	if _, err := bw.WriteString("  <row>\n"); err != nil {
 		return err
 	}
-	for i, f := range g.Spec().Fields {
-		name := xmlName(f.Name, "field"+strconv.Itoa(i+1))
+	for i, n := range g.Names() {
+		name := xmlName(n, "field"+strconv.Itoa(i+1))
 		if _, err := bw.WriteString("    <" + name + ">" + xmlEscape(plainValue(vals[i])) + "</" + name + ">\n"); err != nil {
 			return err
 		}
@@ -330,12 +343,12 @@ type yamlWriter struct{}
 func (yamlWriter) begin(*bufio.Writer, *Generator) error { return nil }
 
 func (yamlWriter) row(bw *bufio.Writer, g *Generator, _ int, vals []any) error {
-	for i, f := range g.Spec().Fields {
+	for i, name := range g.Names() {
 		lead := "  "
 		if i == 0 {
 			lead = "- "
 		}
-		if _, err := bw.WriteString(lead + yamlKey(f.Name) + ": " + yamlValue(vals[i]) + "\n"); err != nil {
+		if _, err := bw.WriteString(lead + yamlKey(name) + ": " + yamlValue(vals[i]) + "\n"); err != nil {
 			return err
 		}
 	}
@@ -418,8 +431,8 @@ func (tomlWriter) row(bw *bufio.Writer, g *Generator, idx int, vals []any) error
 	if _, err := bw.WriteString("[[" + tomlKey(g.Spec().Table) + "]]\n"); err != nil {
 		return err
 	}
-	for i, f := range g.Spec().Fields {
-		if _, err := bw.WriteString(tomlKey(f.Name) + " = " + tomlValue(vals[i]) + "\n"); err != nil {
+	for i, name := range g.Names() {
+		if _, err := bw.WriteString(tomlKey(name) + " = " + tomlValue(vals[i]) + "\n"); err != nil {
 			return err
 		}
 	}
@@ -476,11 +489,12 @@ type sqlWriter struct {
 }
 
 func (s *sqlWriter) begin(bw *bufio.Writer, g *Generator) error {
-	names := make([]string, len(g.Spec().Fields))
-	for i, f := range g.Spec().Fields {
-		names[i] = sqlIdent(f.Name)
+	names := g.Names()
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = sqlIdent(n)
 	}
-	s.cols = strings.Join(names, ", ")
+	s.cols = strings.Join(quoted, ", ")
 	_, err := bw.WriteString("-- " + strconv.Itoa(g.Spec().Rows) + " generated rows for " +
 		sqlIdent(g.Spec().Table) + "\n")
 	return err
@@ -546,8 +560,8 @@ func (logWriter) begin(*bufio.Writer, *Generator) error { return nil }
 func (logWriter) row(bw *bufio.Writer, g *Generator, _ int, vals []any) error {
 	ts, level, msg := g.logEntry()
 	line := "ts=" + ts.Format(logTimeLayout) + " level=" + level + " msg=" + logfmtValue(msg)
-	for i, f := range g.Spec().Fields {
-		line += " " + logfmtKey(f.Name) + "=" + logfmtValue(plainValue(vals[i]))
+	for i, name := range g.Names() {
+		line += " " + logfmtKey(name) + "=" + logfmtValue(plainValue(vals[i]))
 	}
 	_, err := bw.WriteString(line + "\n")
 	return err
