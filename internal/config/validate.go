@@ -203,6 +203,9 @@ func validate(c *Config) []Diagnostic {
 	clampMin("editor.sticky_scroll_depth", &c.Editor.StickyScrollDepth, 1)
 	clampMin("explorer.tree_indent", &c.Explorer.TreeIndent, 0)
 	clampMin("project.max_history", &c.Project.MaxHistory, 0)
+	// The all-projects search cap (#2394): the merged bound across roots.
+	// 0 would scan into nothing, so 1 is the floor.
+	clampMin("project.find_all.max_results", &c.Project.FindAll.MaxResults, 1)
 	// The external-change feed's cap (#2000). 0 is the legitimate "off"
 	// value, so only a negative count is a mistake worth reporting.
 	clampMin("files.change_feed_limit", &c.Files.ChangeFeedLimit, 0)
@@ -227,6 +230,30 @@ func validate(c *Config) []Diagnostic {
 			kept = append(kept, p)
 		}
 		c.Explorer.Exclude = kept
+	}
+
+	// The all-projects search globs (#2394) follow the same rule: a pattern
+	// filepath.Match cannot parse is dropped with a warning instead of
+	// erroring at scan time.
+	for _, l := range []struct {
+		field string
+		list  *[]string
+	}{
+		{"project.find_all.include", &c.Project.FindAll.Include},
+		{"project.find_all.exclude", &c.Project.FindAll.Exclude},
+	} {
+		if *l.list == nil {
+			continue
+		}
+		kept := (*l.list)[:0]
+		for _, p := range *l.list {
+			if _, err := filepath.Match(p, "x"); err != nil {
+				diags = append(diags, Diagnostic{Field: l.field, Message: fmt.Sprintf("invalid glob pattern %q, ignoring it", p)})
+				continue
+			}
+			kept = append(kept, p)
+		}
+		*l.list = kept
 	}
 
 	if !sortModes[c.Explorer.Sort] {

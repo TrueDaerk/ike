@@ -70,6 +70,11 @@ func EditKey(msg tea.KeyPressMsg, text string, cur int) (out string, ncur int, h
 			return string(r[cur:]), 0, true, true
 		}
 		return text, cur, true, false
+	case "super+delete":
+		if cur < len(r) {
+			return string(r[:cur]), cur, true, true
+		}
+		return text, cur, true, false
 	}
 	if Typing(msg) {
 		ins := []rune(msg.Text)

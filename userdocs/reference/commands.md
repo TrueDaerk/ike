@@ -171,6 +171,8 @@ bring their own.
 | Performance HUD | `perf.hud` | `ctrl+alt+p` | — | everywhere |
 | Copy Performance Snapshot | `perf.snapshot` | — | — | everywhere |
 | Problems | `problems.toggle` | `cmd+8` | — | everywhere |
+| Find in All Projects | `project.findInAllProjects` | `cmd+alt+shift+f` | — | everywhere |
+| Show All-Projects Search Results | `project.findInAllProjectsResults` | `cmd+alt+shift+r` | — | everywhere |
 | Find in Path | `project.findInPath` | `cmd+shift+f` | — | everywhere |
 | Go to File | `project.goToFile` | `cmd+shift+o` | — | everywhere |
 | Replace in Path | `project.replaceInPath` | `cmd+shift+r` | — | everywhere |

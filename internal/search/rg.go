@@ -36,7 +36,7 @@ type rgEvent struct {
 
 // scanRG streams matches from a ripgrep child process until it exits, the
 // collector refuses more results, or ctx is cancelled (which kills the child).
-func scanRG(ctx context.Context, rg string, q Query, c *collector) error {
+func scanRG(ctx context.Context, rg string, q Query, c sink) error {
 	// --no-require-git: respect .gitignore even outside a git repository, so
 	// the backends (and IKE's behavior in non-git projects) stay consistent.
 	args := []string{"--json", "--no-messages", "--no-require-git"}

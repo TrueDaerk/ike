@@ -21,7 +21,7 @@ import (
 const maxFileSize = 4 << 20 // 4 MiB
 
 // scanGo walks q.Root, matching every kept file line by line.
-func scanGo(ctx context.Context, q Query, c *collector) error {
+func scanGo(ctx context.Context, q Query, c sink) error {
 	re, err := compileQuery(q)
 	if err != nil {
 		return err
@@ -76,7 +76,7 @@ func compileQuery(q Query) (*regexp.Regexp, error) {
 
 // matchFile scans one file line by line, reporting every submatch. It returns
 // false once the collector refuses more results.
-func matchFile(ctx context.Context, path string, re *regexp.Regexp, c *collector) bool {
+func matchFile(ctx context.Context, path string, re *regexp.Regexp, c sink) bool {
 	fi, err := os.Stat(path)
 	if err != nil || !fi.Mode().IsRegular() || fi.Size() > maxFileSize {
 		return true

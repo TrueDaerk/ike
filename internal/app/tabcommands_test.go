@@ -178,7 +178,10 @@ func TestAltArrowReachesEditorWordMotion(t *testing.T) {
 
 func TestTabDefaultsConflictFree(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux"} {
-		tbl := keymap.BuildTable(keymap.Defaults(keymap.PresetJetBrains), nil, goos)
+		// DefaultsFor, not Defaults: the set must match the goos the table is
+		// folded for, or the darwin-only rows (#2361) fold onto linux chords
+		// they never ship with and the test fails on every Mac.
+		tbl := keymap.BuildTable(keymap.DefaultsFor(keymap.PresetJetBrains, goos), nil, goos)
 		for _, c := range tbl.Conflicts() {
 			t.Fatalf("default set must stay conflict-free on %s, found %v", goos, c)
 		}

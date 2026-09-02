@@ -23,6 +23,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/allfind"
 	"ike/internal/archive"
 	"ike/internal/archview"
 	"ike/internal/backup"
@@ -820,6 +821,19 @@ type Model struct {
 	// never mistake them for its own generations.
 	todo       *todoindex.Model
 	todoSearch *search.Service
+	// allFind is the Find-in-All-Projects form (#2394), allResults its
+	// non-focus-stealing results popup, and allSearch the multi-root scan
+	// service — separate from searcher so the open project's find-in-path
+	// state is never disturbed (its messages are distinct types, so no
+	// generation collision either). allFindGen filters streamed results;
+	// allPendingOpen parks a match to open once a project switch lands.
+	// allSearch/allResults/allFindGen/allPendingOpen are session state and
+	// ride across project switches (see performSwitchOpts).
+	allFind        *allfind.Form
+	allResults     *allfind.Popup
+	allSearch      *search.MultiService
+	allFindGen     int
+	allPendingOpen *allfind.OpenMatchMsg
 	// undoTree is the undo-tree overlay (#59): the focused editor's change
 	// tree; jumps route back into that editor as HistoryJumpMsg.
 	undoTree *undotree.Model
@@ -1429,6 +1443,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.rawDiags = map[string][]ilsp.Diagnostic{}
 	m.compileDiagIgnore()   // seed the ignore rules (#1259)
 	m.compileDiagSeverity() // seed the severity remap rules (#1503)
+	m.allSearch = search.NewMulti(m.host.Send)
+	m.allFind = allfind.NewForm()
+	m.allFind.SetPalette(themePal)
+	m.allResults = allfind.NewPopup()
+	m.allResults.SetPalette(themePal)
 	m.todoSearch = search.New(func(msg tea.Msg) { h.Send(todoindex.ScanMsg{Inner: msg}) })
 	m.todo = todoindex.New(m.todoSearch, ".", todoPatterns(cfg))
 	m.todo.SetPalette(themePal)
@@ -3197,29 +3216,31 @@ var terminalGlobalCommands = map[string]bool{
 	// focused too — a peek often ends while looking at a shell.
 	"project.peek.return": true,
 	// #973: IDE-level chords the shell can never meaningfully use.
-	"settings.open":         true,
-	"project.goToFile":      true,
-	"project.goToClass":     true,
-	"project.findInPath":    true,
-	"project.replaceInPath": true,
-	"explorer.toggle":       true,
-	"window.hideAllTools":   true,
-	"nav.pins":              true,
-	"nav.pinGoto1":          true,
-	"nav.pinGoto2":          true,
-	"nav.pinGoto3":          true,
-	"nav.pinGoto4":          true,
-	"todo.list":             true,
-	"vcs.panel":             true,
-	"problems.toggle":       true,
-	"tests.toggle":          true,
-	"issues.toggle":         true,
-	"structure.toggle":      true,
-	"dom.toggle":            true,
-	"debug.doctor":          true,
-	"lsp.doctor":            true,
-	"scratch.panel":         true,
-	"notifications.history": true,
+	"settings.open":                    true,
+	"project.goToFile":                 true,
+	"project.goToClass":                true,
+	"project.findInPath":               true,
+	"project.replaceInPath":            true,
+	"project.findInAllProjects":        true,
+	"project.findInAllProjectsResults": true,
+	"explorer.toggle":                  true,
+	"window.hideAllTools":              true,
+	"nav.pins":                         true,
+	"nav.pinGoto1":                     true,
+	"nav.pinGoto2":                     true,
+	"nav.pinGoto3":                     true,
+	"nav.pinGoto4":                     true,
+	"todo.list":                        true,
+	"vcs.panel":                        true,
+	"problems.toggle":                  true,
+	"tests.toggle":                     true,
+	"issues.toggle":                    true,
+	"structure.toggle":                 true,
+	"dom.toggle":                       true,
+	"debug.doctor":                     true,
+	"lsp.doctor":                       true,
+	"scratch.panel":                    true,
+	"notifications.history":            true,
 	// #997: tab switching stays reachable from a focused terminal/tool pane
 	// (the shell never meaningfully sees ctrl+cmd+arrows). The secondary
 	// ctrl+alt+arrow bindings stay with the shell — see terminalShellChords.
@@ -3974,6 +3995,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.floats.SetSize(m.width, m.height)
 		m.palette.SetSize(m.width, m.height)
 		m.finder.SetSize(m.width, m.height)
+		m.allFind.SetSize(m.width, m.height)
+		m.allResults.SetSize(m.width, m.height)
 		m.keyDoctor.SetSize(m.width, m.height)
 		m.todo.SetSize(m.width, m.height)
 		m.callhier.SetSize(m.width, m.height)
@@ -4209,6 +4232,39 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// reports the summary notification.
 		m.applyReplace(msg)
 		return m, nil
+
+	case OpenFindInAllProjectsMsg:
+		// project.findInAllProjects (cmd+alt+shift+f / palette): the
+		// all-projects search form (#2394), over every history root.
+		m.openAllFind()
+		return m, nil
+
+	case allfind.ConfirmMsg:
+		// The form confirmed and closed: persist the state and start the
+		// background multi-root scan (#2394). The editor already has the
+		// keyboard back.
+		return m, m.startAllFind(msg)
+
+	case search.MultiBatchMsg:
+		// Streamed all-projects results; stale generations drop (#2394).
+		if msg.Gen == m.allFindGen {
+			m.allResults.Append(msg.Root, msg.Matches)
+		}
+		return m, nil
+
+	case search.MultiDoneMsg:
+		// Scan finished: the popup appears without taking focus (#2394).
+		m.finishAllFind(msg)
+		return m, nil
+
+	case ShowAllFindResultsMsg:
+		// project.findInAllProjectsResults: bring the popup back, focused.
+		m.showAllFindResults()
+		return m, nil
+
+	case allfind.OpenMatchMsg:
+		// Enter on a match: open in place, or switch project first (#2394).
+		return m.openAllFindMatch(msg)
 
 	case search.BatchMsg, search.DoneMsg:
 		// Streamed scan results (generation-filtered inside the finder). A scan
@@ -6302,6 +6358,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case project.SwitchedMsg:
+		// A switch driven by an all-projects search match (#2394) finishes
+		// the job here: the pending open rode the model rebuild through the
+		// carry-over block in performSwitchOpts.
+		if po := m.allPendingOpen; po != nil && po.Root == msg.Root {
+			m.allPendingOpen = nil
+			m.host.Notify(host.Info, "switched to "+msg.Root)
+			return m.openPathAt(po.Path, po.Line-1, po.Col)
+		}
 		// A peek-enter announces itself with the way back (#2136); the marker
 		// is already set — the fresh model carried it out of the transaction.
 		if m.peek != nil && m.activeWS().Root == msg.Root {
@@ -7473,6 +7537,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.finder.IsOpen() {
 			// The find-in-path overlay owns the keyboard like the palette.
 			return m, m.finder.Update(msg)
+		}
+		if m.allFind.IsOpen() {
+			// The all-projects search form owns the keyboard the same way (#2394).
+			return m, m.allFind.Update(msg)
+		}
+		if m.allResults.Focused() {
+			// The results popup only owns the keyboard while explicitly
+			// focused (#2394); visible-but-blurred, every key stays with the
+			// editor — that is the popup's whole point.
+			return m, m.allResults.Update(msg)
 		}
 		if m.todo.IsOpen() {
 			// The TODO index overlay owns the keyboard the same way (#61).
@@ -9913,6 +9987,42 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		}
 		return m, func() tea.Msg { return ForceCodeInsightMsg{} }
 	}
+	// The all-projects results popup (#2394) mirrors the popup terminal
+	// layer's mouse contract: a press on the box focuses it (and selects /
+	// activates the row), a press outside blurs it but falls through so the
+	// click also lands below, a wheel over it scrolls it.
+	if m.allResults.Visible() && !m.allFind.IsOpen() {
+		if m.allResults.Contains(msg.X, msg.Y) {
+			switch {
+			case msg.action == mousePress && msg.Button == tea.MouseLeft:
+				m.allResults.Focus()
+				return m, m.allResults.Click(msg.X, msg.Y)
+			case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
+				m.allResults.Wheel(-wheelLines * msg.ticks())
+				return m, nil
+			case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
+				m.allResults.Wheel(wheelLines * msg.ticks())
+				return m, nil
+			}
+			return m, nil
+		}
+		if msg.action == mousePress && m.allResults.Focused() {
+			m.allResults.Blur() // the click falls through to the pane below
+		}
+	}
+	if m.allFind.IsOpen() {
+		// The all-projects search form hit-tests like the finder (#2394).
+		if clickOutside(msg, m.allFind.View(), m.width, m.height) {
+			m.allFind.Close()
+			return m, nil
+		}
+		if msg.action == mousePress && msg.Button == tea.MouseLeft {
+			v := m.allFind.View()
+			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
+			return m, m.allFind.Click(msg.X-bx, msg.Y-by)
+		}
+		return m, nil
+	}
 	// Floating overlays (#116): a click outside an open overlay dismisses it,
 	// a click inside stays with the overlay (never leaks to the panes below).
 	// The finder renders above every other overlay, so it hit-tests first (#424).
@@ -12133,6 +12243,14 @@ func (m Model) render() string {
 			base = overlay.Place(base, m.renderFloatTerm(f), f.x, f.y, m.width, m.height)
 		}
 	}
+	// The all-projects results popup (#2394): visible without focus, above
+	// the workspace and the popup terminal layer, below the exclusive modal
+	// overlays — a palette or form opened over it must draw on top.
+	if m.allResults.Visible() && !m.settings.IsOpen() {
+		if x, y, w, _ := m.allResults.Rect(); w > 0 {
+			base = overlay.Place(base, m.allResults.View(), x, y, m.width, m.height)
+		}
+	}
 	result := base
 	switch {
 	case m.largeDetail:
@@ -12144,6 +12262,8 @@ func (m Model) render() string {
 		result = overlay.Center(base, m.keyDoctor.View(), m.width, m.height)
 	case m.finder.IsOpen():
 		result = overlay.Center(base, m.finder.View(), m.width, m.height)
+	case m.allFind.IsOpen():
+		result = overlay.Center(base, m.allFind.View(), m.width, m.height)
 	case m.todo.IsOpen():
 		result = overlay.Center(base, m.todo.View(), m.width, m.height)
 	case m.undoTree.IsOpen():

@@ -156,6 +156,16 @@ type OpenFindInPathMsg struct{}
 // (cmd+shift+r / palette).
 type OpenReplaceInPathMsg struct{}
 
+// OpenFindInAllProjectsMsg asks the root model to open the all-projects
+// search form (#2394). Dispatched by project.findInAllProjects
+// (cmd+alt+shift+f / palette).
+type OpenFindInAllProjectsMsg struct{}
+
+// ShowAllFindResultsMsg asks the root model to show and focus the
+// all-projects search results popup (#2394). Dispatched by
+// project.findInAllProjectsResults (cmd+alt+shift+r / palette).
+type ShowAllFindResultsMsg struct{}
+
 // OpenTodoIndexMsg asks the root model to open the TODO/FIXME index overlay
 // (#61). Dispatched by todo.list (cmd+k t / palette).
 type OpenTodoIndexMsg struct{}
@@ -477,6 +487,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("palette.searchEverywhere", "Search Everywhere", ShowSearchEverywhereMsg{}),
 			appCommand("project.findInPath", "Find in Path", OpenFindInPathMsg{}),
 			appCommand("project.replaceInPath", "Replace in Path", OpenReplaceInPathMsg{}),
+			appCommand("project.findInAllProjects", "Find in All Projects", OpenFindInAllProjectsMsg{}),
+			appCommand("project.findInAllProjectsResults", "Show All-Projects Search Results", ShowAllFindResultsMsg{}),
 			appCommand("todo.list", "TODO Index", OpenTodoIndexMsg{}),
 			appCommand("search.nextMatch", "Next Search Match", MatchStepMsg{Delta: 1}),
 			appCommand("search.prevMatch", "Previous Search Match", MatchStepMsg{Delta: -1}),

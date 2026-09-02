@@ -115,6 +115,10 @@ var jetbrainsRows = []row{
 	{"cmd+r", "editor.replace", "Replace in file", Editor, "Editor (06)"},
 	{"cmd+shift+f", "project.findInPath", "Find in path", Global, "Project (09)"},
 	{"cmd+shift+r", "project.replaceInPath", "Replace in path", Global, "Project (09)"},
+	// Find in All Projects (#2394): one modifier layer above find-in-path,
+	// like copyDocPath sits above copy. The results chord mirrors it on r.
+	{"cmd+alt+shift+f", "project.findInAllProjects", "Find in all projects", Global, "Project (#2394)"},
+	{"cmd+alt+shift+r", "project.findInAllProjectsResults", "Show all-projects search results", Global, "Project (#2394)"},
 	// Retained find-in-path match stepping (0150, #242): the JetBrains
 	// next/previous-occurrence keys.
 	{"f3", "search.nextMatch", "Next search match", Global, "Search (0150)"},
