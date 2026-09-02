@@ -4,7 +4,7 @@ title: DOM Inspector
 description: "DOM inspector tool pane (#1929) — the focused HTML buffer's parsed DOM tree with a CSS selector tester: tokenizer-based tolerant parse with source offsets, async off the UI loop, cursor auto-follow, selector matches highlighted in tree and editor, copy shortest-unique selector / outer HTML."
 resource: internal/domview
 tags: [architecture, html, dom, tool-window]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # DOM Inspector (#1929)
@@ -50,7 +50,8 @@ the root model's `openPathAt` funnel (nav history records the jump);
 without unfolding (nearest visible ancestor inside a fold), scrolling only
 while the pane is unfocused.
 
-The selector line (`/`, or click it) is a `ui.EditKey` single-line input that
+The selector line (`/`, the shared find chord `cmd+f` / `ctrl+f` (#2409), or
+a click) is a `ui.EditKey` single-line input that
 re-matches on every keystroke: match rows highlight, the header shows
 `current/total matches`, a cascadia compile error renders as `✗ message`
 instead of matches. `n`/`N` step the current match (wrapping), select its row

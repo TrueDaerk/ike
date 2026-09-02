@@ -4,7 +4,7 @@ title: Diff Viewer
 description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070), diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
-timestamp: 2026-09-01T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Diff Viewer (#60)
@@ -107,13 +107,39 @@ and page keys page, `g`/`G` jump to the ends, the mouse wheel scrolls.
 half a column; `0` jumps back to column 0 and `$` to the widest line's end.
 The horizontal wheel and `shift`+wheel do the same through `ScrollXBy` — all
 of it moves both sides at once (#1700). `n`/`N`
-step through hunks (scrolling the hunk a third down the view); `w` toggles
+step through hunks (scrolling the hunk a third down the view) — unless a
+search is open, when they step its matches instead (see below); `w` toggles
 ignore-whitespace on the open diff (see below); `enter`
 dispatches `diff.JumpMsg` and the root model opens the right-hand file with
 the cursor on the hunk's first line. The view is read-only; hunk-level "take
 left/right" staging is a later increment for #28. The status line shows
 `DIFF │ left ⇄ right │ -w │ hunk i/n` (the `-w` segment only while whitespace
 is ignored) and the pane's title band `DIFF left ⇄ right [-w]`.
+
+## In-pane search (#2409)
+
+`/` — and the shared find chord `cmd+f` / `ctrl+f` — opens a one-line prompt on
+the pane's last row (`internal/diff/search.go`), the shape the explorer speed
+search and the response viewer's prompt already wear: the slash prefix, the
+query with its text cursor, and a `i/n` match counter (or `no matches`). Typing
+re-matches live, `enter` applies and leaves the prompt, `esc` abandons the
+search entirely.
+
+The match runs over the **diff rows** — a row's raw `Left`/`Right` text —
+rather than the rendered lines, so a query finds the same thing in both
+layouts, at any horizontal offset, and through the styling wrapped around the
+text. Matching is smartcase like the editor's `/` (#257): an all-lowercase
+pattern folds case, any uppercase rune makes it exact.
+
+While a search is open `n`/`N` walk its matches (wrapping at both ends,
+scrolling the match a third down the view like the hunk steps do); with no
+search open they keep their hunk meaning — a diff without a query is still
+navigated by change, which is what the pane is for. The prompt costs one row
+of the diff body while it is up (`viewHeight`), and `esc` gives it back.
+
+`OpenSearch` is the pane's `pane.Searchable` implementation, which is how the
+Global `search.open` command reaches the prompt (see
+[Keybindings](./keybindings.md)).
 
 ## Ignore whitespace (#2170)
 

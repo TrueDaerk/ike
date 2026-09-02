@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -939,6 +939,61 @@ Two things this pass deliberately did *not* do:
 forwards to `httppane.Model.CopyKeyCmd`, the exported form of the pane-local
 `copyKeyCmd`, so the chord and the pane key cannot drift apart.
 
+## The find chord outside the editor (#2409)
+
+`cmd+f` is the same story as the copy chord one section up. `/` starts a search
+or a filter in a dozen panes — the explorer speed search, the Problems / Usages
+/ TODO filter rows, the response viewer's prompt, the DOM selector, the data
+grid's filter, the Issues filter overlay, terminal copy mode, the settings
+pages — but only the response pane had ever heard of `cmd+f`, and telemetry
+recorded the chord pressed unbound in the `http` context.
+
+One Global command covers all of them:
+
+| command | chord | context | what it does |
+|---|---|---|---|
+| `search.open` | `cmd+f` | Global | asks the focused pane to open its own search |
+| `editor.find` | `cmd+f` | `editor` | the editor's own find — shadows the Global row while an editor has focus |
+
+`search.open` dispatches `OpenSearchMsg`; the root model asks the focused
+`pane.Instance` for the **`pane.Searchable`** capability
+(`internal/pane/searchable.go`) and calls `OpenSearch()`. A pane kind with no
+search of its own is not `Searchable`, and the root model notifies
+*"No search in this pane"* rather than swallowing the key — a silent no-op is
+indistinguishable from a broken binding (#267). An editor pane hosting a
+content tab (#1778) or a terminal (#573) delegates to what the tab holds, so
+the chord acts on what the pane actually shows.
+
+Two panes had no search at all and gained one in the same change:
+
+- **Archive viewer** — the shared filter row (#2156) over `name:` / `type:`
+  plus free match text, gating the *tree* so the directories a tar never named
+  filter like the ones it did (`internal/archview/filter.go`).
+- **Diff viewer** — a prompt on the pane's last row searching the diff *rows*
+  (raw left/right text, so the layout and horizontal scroll are irrelevant);
+  `n`/`N` walk the matches while a search is open and keep stepping hunks
+  while none is (`internal/diff/search.go`).
+
+The markdown preview gained the same prompt over its rendered lines
+(`internal/preview/search.go`), so every pane the issue listed answers the
+chord.
+
+### Why `ctrl+f` is not in the table
+
+The issue asked for `ctrl+f` in the Global context too. It is deliberately
+**not** bound: `ctrl+f` is vim's page-forward motion in the editor, including
+operator-pending (`d ctrl+f`), and a Global binding resolves *ahead* of the
+pane — modified chords are eligible even while an editor captures text — so it
+would silently take the motion away. Instead each searchable pane answers the
+chord itself (`ui.FindChord`, `internal/ui/findkey.go`), which works precisely
+because the keymap table leaves the chord unbound and it therefore reaches the
+pane intact. Off macOS the `Cmd`→`Ctrl` fold gives `ctrl+f` the `search.open`
+binding anyway, with the editor's own `editor.find` row shadowing it there — an
+allowlisted intentional shadow (`intentionalDefaultShadows`).
+
+The one casualty is the data grid, where `ctrl+f` used to page forward; `n` and
+`pgdown` still do, and the chord now filters like everywhere else.
+
 ## Per-binding status matrix (0081/50) — the acceptance ledger
 
 Generated from `keymap.StatusMatrix` against the shipped plugin set (run
@@ -1077,6 +1132,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `project.peek.return` | `cmd+shift+b` | fragile | `palette` | live via palette |
 | `project.replaceInPath` | `cmd+shift+r` | fragile | `palette` | live via palette |
 | `project.switch` | `cmd+shift+p` | fragile | `palette` | live via palette |
+| `project.switchLast` | `cmd+shift+e` | fragile | `palette` | live via palette |
 | `run.file` | `shift+f10` | delivered | `—` | live |
 | `run.rerun` | `cmd+f5` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `run.select` | `alt+shift+f10` | fragile | `palette / Run menu` | live via palette / Run menu |
@@ -1086,6 +1142,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `scratch.newFromSelection` | `cmd+alt+shift+s` | fragile | `palette` | live via palette |
 | `scratch.promote` | `cmd+alt+shift+p` | fragile | `scratch manager ctrl+p / palette` | live via scratch manager ctrl+p / palette |
 | `search.nextMatch` | `f3` | delivered | `—` | live |
+| `search.open` | `cmd+f` | fragile | `vim / (every pane binds it, #2409)` | live via vim / (every pane binds it, #2409) |
 | `search.prevMatch` | `shift+f3` | delivered | `—` | live |
 | `settings.open` | `cmd+,` | fragile | `palette` | live via palette |
 | `structure.toggle` | `cmd+3` | fragile | `palette` | live via palette |

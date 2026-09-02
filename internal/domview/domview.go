@@ -305,7 +305,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case "h", "left":
 		m.collapseOrParent()
 	case "/":
-		m.selEditing = true
+		m.openSelectorInput()
+	case "ctrl+f", "cmd+f", "super+f":
+		// ctrl+f is deliberately unbound in the keymap table (#2409) so
+		// vim's page-forward survives in the editor; the panes that have a
+		// search answer the chord themselves.
+		m.openSelectorInput()
 	case "n":
 		return m.stepMatch(1)
 	case "N":
@@ -328,6 +333,16 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 // keeps its global quit meaning here (#2062) — unlike in the response pane,
 // where a live selection claims it.
 func copyChord(key tea.KeyPressMsg) bool { return ui.CopyChord(key.String()) }
+
+// openSelectorInput puts the cursor in the selector line, the pane's search.
+func (m *Model) openSelectorInput() { m.selEditing = true }
+
+// OpenSearch implements the pane's Searchable capability (#2409): the shared
+// find chord opens the same selector input "/" does.
+func (m *Model) OpenSearch() bool {
+	m.openSelectorInput()
+	return true
+}
 
 // selectorKey edits the selector input; every change re-matches live.
 func (m *Model) selectorKey(key tea.KeyPressMsg) tea.Cmd {

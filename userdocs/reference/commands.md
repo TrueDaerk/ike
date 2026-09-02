@@ -221,6 +221,7 @@ bring their own.
 | Scratch Files | `scratch.panel` | — | — | everywhere |
 | Promote Scratch to File… | `scratch.promote` | `cmd+alt+shift+p` | — | everywhere |
 | Next Search Match | `search.nextMatch` | `f3` | — | everywhere |
+| Find in Pane | `search.open` | `cmd+f` | — | everywhere |
 | Previous Search Match | `search.prevMatch` | `shift+f3` | — | everywhere |
 | Settings | `settings.open` | `cmd+,` | — | everywhere |
 | Structure | `structure.toggle` | `cmd+3` | — | everywhere |

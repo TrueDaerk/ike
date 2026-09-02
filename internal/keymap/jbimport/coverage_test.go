@@ -28,6 +28,7 @@ var noCounterpart = map[string]string{
 	"editor.copyDocPath":               "JetBrains copies file references, not a path inside a JSON/YAML document",
 	"json.jqQueryView":                 "IKE-only concept (#2032): the inline jq playground has no JetBrains equivalent",
 	"markdown.preview":                 "no default JetBrains keymap action",
+	"search.open":                      "IKE-only concept (#2409): JetBrains' Find is the editor find, already mapped to editor.find; the pane-wide chord has no keymap action",
 	"view.toggleFollow":                "tail -f follow mode is an IKE concept; JetBrains consoles auto-scroll without a keymap action",
 	"view.followFilter":                "filtering a live tail (#2255) is an IKE concept; JetBrains console filtering is a tool-window control, not a keymap action",
 	"menu.open":                        "JetBrains main menu is not a keymap action",

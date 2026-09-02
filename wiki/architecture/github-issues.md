@@ -4,7 +4,7 @@ title: Issues Tool Window
 description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select with an any-of/all-of switch) with a permanent chip row whose chips clear individually and a structured qualifier layer in the match input (label:/is:/sort: with inline tab completion) writing the same filter model, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, a consolidated key table with one meaning per letter family across all modes, and the start-work action branching issue/<number> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111, #2114, #2112, #2110, #2376).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane, keymap]
-timestamp: 2026-09-01T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104, #2110, #2111, #2112, #2114)
@@ -111,7 +111,7 @@ QWERTZ-safe (#48): plain letters and delivered `ctrl+letter` chords only.
 | `g` / `G` | jump to the first / last row (list) or top / bottom (detail) | everywhere |
 | `ctrl+j` / `ctrl+k` | walk to the next / previous issue or PR | details |
 | `r` | refresh (the listing, plus the open detail's data) | everywhere |
-| `f` (alias `/`) | the filter overlay, on the match input | lists |
+| `f` (aliases `/`, `cmd+f` / `ctrl+f`) | the filter overlay, on the match input | lists |
 | `l` | the filter overlay's **label** section | issue list |
 | `t` | cycle the state filter (open / closed / all) | lists |
 | `a` | cycle the sort order | lists |
@@ -173,7 +173,8 @@ and closes, `esc` restores every section to what the overlay opened with.
 every printable key, the other rows toggle with `space` (or `left`/`right`)
 and clear with `backspace`.
 
-- **`f`** (with **`/`** kept as an alias) opens the overlay on the match
+- **`f`** (with **`/`** and the shared find chord `cmd+f` / `ctrl+f` (#2409)
+  kept as aliases) opens the overlay on the match
   input, which narrows live via `internal/fuzzy` over number, title, labels,
   assignees and author (head branch on the PR tab).
 - **`l`** opens the same overlay scrolled to the **label section** — the

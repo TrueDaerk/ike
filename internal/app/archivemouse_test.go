@@ -64,9 +64,10 @@ func TestArchiveWheelScrolls(t *testing.T) {
 // row under the pointer.
 func TestArchiveClickSelectsRow(t *testing.T) {
 	m, key, x, y, _ := archiveApp(t, 0)
-	// rows: cmd, cmd/main.go — y+0 is the header line, rows start at y+1.
+	// rows: cmd, cmd/main.go — y+0 header, y+1 filter row (#2409), rows
+	// start at y+2.
 	av := m.activeWS().Panes.Get(key).Archive()
-	m = step(m, tea.MouseClickMsg{X: x + 10, Y: y + 2, Button: tea.MouseLeft})
+	m = step(m, tea.MouseClickMsg{X: x + 10, Y: y + 3, Button: tea.MouseLeft})
 	if m.activeWS().Panes.Focused() != key {
 		t.Fatalf("the click did not focus the pane: %q", m.activeWS().Panes.Focused())
 	}
@@ -80,9 +81,9 @@ func TestArchiveClickSelectsRow(t *testing.T) {
 func TestArchiveDoubleClickOpensEntry(t *testing.T) {
 	m, key, x, y, p := archiveApp(t, 0)
 	_ = key
-	out, _ := m.Update(tea.MouseClickMsg{X: x + 10, Y: y + 2, Button: tea.MouseLeft})
+	out, _ := m.Update(tea.MouseClickMsg{X: x + 10, Y: y + 3, Button: tea.MouseLeft})
 	m = out.(Model)
-	out, cmd := m.Update(tea.MouseClickMsg{X: x + 10, Y: y + 2, Button: tea.MouseLeft})
+	out, cmd := m.Update(tea.MouseClickMsg{X: x + 10, Y: y + 3, Button: tea.MouseLeft})
 	m = out.(Model)
 	if cmd == nil {
 		t.Fatal("the double click emitted no command")
@@ -114,7 +115,7 @@ func TestArchiveFoldGlyphClickToggles(t *testing.T) {
 	if av.Rows() != 2 {
 		t.Fatalf("rows = %d, want 2", av.Rows())
 	}
-	m = step(m, tea.MouseClickMsg{X: x + 1, Y: y + 1, Button: tea.MouseLeft})
+	m = step(m, tea.MouseClickMsg{X: x + 1, Y: y + 2, Button: tea.MouseLeft})
 	if av.Rows() != 1 {
 		t.Fatalf("the glyph click did not collapse: rows = %d", av.Rows())
 	}

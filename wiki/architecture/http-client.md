@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, and a notification when a failed or slow response lands while the response pane is not on screen.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-09-01T12:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -1097,7 +1097,7 @@ For a recognized stream:
   of the track's world. Mouse: `ScrollbarHit` claims the column before the
   selection press; a thumb press starts a `dragHTTPScroll` drag whose motion
   feeds `ScrollbarDrag`, a track press jumps proportionally.
-- **In-pane search** (#1265): `/` (or `ctrl+f`/`cmd+f`, the muscle-memory
+- **In-pane search** (#1265, #2409): `/` (or `ctrl+f`/`cmd+f`, the muscle-memory
   chord used everywhere else in the app — editor find, terminal scrollback
   search — #1830) opens a search prompt in the pane footer, matching
   incrementally over the **whole composed view** — status line,

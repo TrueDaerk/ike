@@ -289,10 +289,13 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			k.filter, k.filterCur = string(r[:len(r)-1]), len(r)-1
 			k.sel = 0
 		}
-	case "/":
+	case "/", "ctrl+f", "cmd+f", "super+f":
 		// Explicit filter input (#531), mirroring the schema pages: while it
 		// is open every printable key is filter text, so terms containing the
 		// action letters (u/r/j/k) type instead of firing actions.
+		// The panel owns the keyboard ahead of the keymap layer, so the
+		// shared find chord (#2409) is answered here rather than through
+		// the Global search.open command.
 		k.filtering = true
 	case "p":
 		// Keymap doctor (#2080): stored per-terminal probe runs, viewable

@@ -4,7 +4,7 @@ title: Markdown Preview
 description: "#62 — rendered live preview pane for markdown buffers: glamour-rendered ANSI split beside the editor, debounced re-render off the editor change seam, heading-anchored cursor scroll sync, theme-aware styling, layout persistence; #2180 — followable links and inline Kitty-rendered local images."
 resource: internal/preview
 tags: [architecture, markdown, preview, pane, glamour, links, kitty]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Markdown Preview (#62)
@@ -33,6 +33,25 @@ id. Layout persistence saves `{kind: "markdown", path}`; restore rebuilds the
 pane and re-reads the file from disk (live re-binding to an editor buffer
 resumes with the first change event; a vanished file restores empty rather
 than breaking the layout).
+
+## In-pane search (#2409)
+
+`/` — and the shared find chord `cmd+f` / `ctrl+f` — opens a one-line prompt on
+the pane's last row (`internal/preview/search.go`): the slash prefix, the query
+with its text cursor, and a `i/n` match counter (or `no matches`). `enter`
+applies, `esc` abandons the search, and `n`/`N` walk the matches, wrapping at
+both ends.
+
+The match runs over the **plain text** of each rendered line — the styling
+glamour wrapped around it is stripped first (`ansi.Strip`), so a word split by
+a colour escape still matches what the reader sees. The preview is read-only
+and has no cursor, so a match is expressed as a scroll: the matching line comes
+to rest a third down the viewport, the landing the diff viewer uses. The prompt
+costs one row of the document while it is up (`viewHeight`).
+
+`OpenSearch` is the pane's `pane.Searchable` implementation, which is how the
+Global `search.open` command reaches the prompt (see
+[Keybindings](./keybindings.md)).
 
 ## Live updates (debounced)
 

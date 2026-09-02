@@ -886,8 +886,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case "/":
 			// Speed search (#1087): "/" is the dedicated activation key — the
 			// tree's single-letter file-op keys rule out bare typing.
-			m.exitScratch()
-			m.startSearch()
+			m.OpenSearch()
+		}
+		if ui.FindChord(key) {
+			// ctrl+f is deliberately unbound in the keymap table (#2409) so
+			// vim's page-forward survives in the editor; the panes that have a
+			// search answer the chord themselves. cmd+f arrives here too when
+			// the Global search.open binding was overridden.
+			m.OpenSearch()
 		}
 	}
 	return m, nil

@@ -4,7 +4,7 @@ title: Problems Tool Window
 description: Singleton bottom-split pane aggregating LSP diagnostics project-wide — grouped by file, errors first, enter/double-click jumps to the location, 'a' applies a code action without leaving the pane, '/' filters with the shared list-filter syntax and 'f' is its current-file sugar; consumes the publishDiagnostics flow plus the Go-computed lint notes and per-run task-matcher findings (#1024, part of #33; notes #1654; tasks #1915; quick fixes #2175; shared filter #2156).
 resource: internal/problems/problems.go
 tags: [architecture, lsp, diagnostics, tool-window, pane, tasks, code-actions, filter]
-timestamp: 2026-08-28T12:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Problems Tool Window (#1024)
@@ -105,7 +105,8 @@ their rendered text, since they share their parent's path and position.
   `copyToClipboard` seam (system clipboard + clipboard history, #2061) and
   confirms with a "copied problem" toast. `ctrl+c` stays the global quit: the
   list has no text selection that could claim it (#2062).
-- `/` focuses the **filter row** — see below.
+- `/` — or the shared find chord `cmd+f` / `ctrl+f` (#2409) — focuses the
+  **filter row**, see below.
 - `f` toggles **current file** vs **project** scope (named in the footer).
   Since #2156 it is sugar over the filter: it writes `scope:file` into it and
   removes it again. The active path tracks the focused editor via

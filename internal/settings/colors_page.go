@@ -213,7 +213,10 @@ func (c *ColorsPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			cur, _ := c.override(name)
 			c.input = newTextField(cur)
 		}
-	case "/":
+	case "/", "ctrl+f", "cmd+f", "super+f":
+		// The panel owns the keyboard ahead of the keymap layer, so the
+		// shared find chord (#2409) is answered here rather than through
+		// the Global search.open command.
 		c.filtering = true
 	}
 	return nil

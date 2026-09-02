@@ -4,7 +4,7 @@ title: Archive Viewer
 description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name; gzip members open decompressed (#1948); e/E write members or the whole archive to a directory on disk under path, overwrite and size guards (#2249); ctrl+r re-lists the file in place (archive.reload, #2314)."
 resource: internal/archview
 tags: [architecture, archive, tar, viewer, pane, read-only, mouse, extract, reload]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Archive Viewer (#1762)
@@ -72,6 +72,7 @@ step and wrap, page keys clamp, `g`/`G` jump to the ends. On top of that:
 | `h` / `left` | collapse an expanded directory, else jump to the parent |
 | `e` | extract the row under the cursor (a directory row: its whole subtree) |
 | `E` | extract the whole archive |
+| `/`, `cmd+f` / `ctrl+f` | put the cursor in the filter row (#2409) |
 | `ctrl+r` | reload the listing from disk (`archive.reload`, #2314) |
 
 The pane advertises the `archive` context id, so bindings can scope to it —
@@ -84,6 +85,30 @@ error replaces the entries the way opening a broken archive does, and the
 model reports the entry count (or the error) as a notification — a reload that
 found nothing new must not look like a dead key.
 
+### Filter row (#2409)
+
+The pane wears the shared filter row ([list-filters](./list-filters.md),
+`internal/filterbar` over `internal/filterexpr`), permanent like in every other
+list pane so a filter appearing never shifts the entries by a line. `/` and the
+shared find chord (`cmd+f`, `ctrl+f`) focus it; `enter` applies and leaves,
+`esc` clears and leaves.
+
+| Field | Takes |
+| --- | --- |
+| `name:` (alias `path:`) | a path substring or glob, matched against the entry path |
+| `type:` (alias `kind:`) | `file` or `dir` |
+
+Free match text is the same fuzzy gate the other panes use, run over the entry
+path. The gate runs over the **tree** (`Model.keeps`, `internal/archview/filter.go`)
+rather than the flat header list, so the directories a tar never named
+explicitly filter like the ones it did, and a directory survives exactly when
+it — or one of its members — matches. The tree itself never changes: a filter
+change only re-derives the rows, so folds and the cursor survive it.
+
+`OpenSearch` is the pane's `pane.Searchable` implementation, which is how the
+Global `search.open` command reaches the row (see
+[Keybindings](./keybindings.md)).
+
 ### Mouse (#1852)
 
 The pane takes mouse input the way the explorer tree does; the root model
@@ -94,13 +119,14 @@ never sees a `tea.MouseMsg`, so `Update` stays key-only.
 | Gesture | Effect |
 | --- | --- |
 | wheel up/down | scroll the entry list; clamps at both ends |
+| left click on the filter row | put the cursor in the filter (#2409) |
 | left click on a row | select it |
 | left click on a directory's fold glyph | toggle the fold |
 | double click | activate: file → open read-only, directory → toggle the fold |
 
 Row hit-testing reads the same `top` offset the renderer scrolls by, so a
-click lands on the row the user sees: content-local `y` 0 is the header line
-and the rows start at `y` 1. The fold glyph occupies two cells at
+click lands on the row the user sees: content-local `y` 0 is the header line,
+`y` 1 the filter row (#2409) and the rows start at `y` 2. The fold glyph occupies two cells at
 `1 + 2·depth`, matching `renderRow`'s indentation. Wheel scrolling moves the
 window and drags the cursor along, keeping the selection inside it —
 `clampScroll`'s invariant for the keyboard.

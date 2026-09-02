@@ -148,6 +148,14 @@ func (m *Model) openFilterOverlay(row int) {
 	m.clampOverlay()
 }
 
+// OpenSearch implements the pane's Searchable capability (#2409): the shared
+// find chord opens the filter overlay on its match-text row, exactly as "/"
+// (and "f") do.
+func (m *Model) OpenSearch() bool {
+	m.openFilterOverlay(fovMatch)
+	return true
+}
+
 // openLabelSection opens the overlay on the label section ('l'), landing on
 // the first selected label so the active filter reads first.
 func (m *Model) openLabelSection() {

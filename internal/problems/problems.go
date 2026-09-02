@@ -447,6 +447,17 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+// Filtering reports whether the filter row holds the keyboard — the seam
+// the root model's find-chord tests read (#2409).
+func (m *Model) Filtering() bool { return m.filter.Active() }
+
+// OpenSearch implements the pane's Searchable capability (#2409): the shared
+// find chord (cmd+f / ctrl+f) focuses the filter row, exactly as "/" does.
+func (m *Model) OpenSearch() bool {
+	m.filter.Focus()
+	return true
+}
+
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	// The focused filter row owns its editing keys (#2156); list navigation
 	// (up/down/page) falls through, so one can steer the list while typing.
@@ -458,6 +469,14 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		if handled {
 			return nil
 		}
+	}
+	if ui.FindChord(msg.String()) {
+		// ctrl+f is deliberately unbound in the keymap table (#2409) so
+		// vim's page-forward survives in the editor; the panes that do
+		// have a search answer the chord themselves. cmd+f arrives here
+		// too when the Global search.open binding was overridden.
+		m.OpenSearch()
+		return nil
 	}
 	// Shared list semantics (#1666): steps wrap, page jumps clamp.
 	if ui.ListNav(msg.String(), &m.cursor, len(m.rows), m.bodyHeight(), ui.NavFull) {

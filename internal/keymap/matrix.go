@@ -73,6 +73,7 @@ var reachableAlternatives = map[string]string{
 	"editor.lineStart":                 "vim 0",
 	"editor.lineEnd":                   "vim $",
 	"editor.find":                      "vim /",
+	"search.open":                      "vim / (every pane binds it, #2409)",
 	"editor.replace":                   "palette",
 	"editor.saveAll":                   "palette",
 	"editor.closeTab":                  "palette",

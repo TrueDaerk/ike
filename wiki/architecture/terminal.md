@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -471,7 +471,7 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 | `cmd+t` | new terminal tab (#729/#983, iTerm-style): a terminal tab hosted by an editor pane gets a sibling tab in the same pane (#573); a dedicated single-session terminal pane **converts into a tab host in place** (the same conversion a tab drop performs, #836) — its live shell becomes the first tab, the fresh one the second, with the regular tab bar on top. Outside terminals `cmd+t` has no global binding anymore (its former `vcs.updateProject` was removed in #750) |
 | `cmd+d` | split right (#982, iTerm-style): a fresh terminal pane opens to the right of the focused terminal's pane and takes focus — the same for dedicated terminal panes and editor-hosted terminal tabs. Outside terminals `cmd+d` keeps its global binding (`editor.duplicateLine`) |
 | `cmd+w` | close the terminal (#986): an idle shell gets an EOF (ctrl+d) — it exits and the regular exit path closes the pane/tab; a **busy** terminal (foreground process group ≠ shell, or a still-running command session — `Session.Busy`) raises a centered guard first: enter closes, esc cancels; a **finished** session (`Model.Exited`) is closed outright (#2192) — there is no child left to receive an EOF, so waiting for an exit that already happened would leave it unclosable. `ctrl+w` stays with the shell (delete word); outside terminals `cmd+w` keeps its global binding (`editor.closeTab`) |
-| `cmd+f` | open the scrollback search (#1504) — the muscle-memory entry point to the same inline search `/` starts from scrollback (#1169), working from the live view too (`Model.StartSearch`; esc then returns to the live view). Under an alt-screen or mouse-reporting child the chord stays with the child (vim/lazygit own their find); outside terminals `cmd+f` keeps its global binding (`editor.find`). The popup terminal reserves it too, on the focused split side |
+| `cmd+f` | open the scrollback search (#1504) — the muscle-memory entry point to the same inline search `/` starts from scrollback (#1169), working from the live view too (`Model.OpenSearch` → `StartSearch`; esc then returns to the live view). In **copy mode** (#2162) it opens that mode's own search instead (#2409). Under an alt-screen or mouse-reporting child the chord stays with the child (vim/lazygit own their find); outside terminals `cmd+f` keeps its global binding (`search.open`, or `editor.find` in an editor). The popup terminal reserves it too, on the focused split side |
 | `cmd+shift+c` | enter copy mode (#2162, Copy mode below) — the keyboard detaches from the PTY and vim motions cursor over the scrollback (`Model.StartCopyMode`). Under a live alt-screen or mouse-reporting child the chord stays with the child; outside terminals it has no global binding. The popup terminal reserves it too, on the focused split side |
 | `cmd+shift+l` | enter link hint mode (#2254) — label every resolvable `file:line` reference on the visible rows and open the one whose label is typed (`Model.StartLinkHints`/`LinkHintKey`, File:line links below). With no resolvable reference on screen, or under an alt-screen / mouse-reporting child, the chord stays with the child; outside terminals it has no global binding. The popup terminal reserves it too, on the focused split side |
 | `ctrl+arrows` | spatial focus moves out of the terminal (#228) — the same `keymap.bindings.focus_*` overrides apply; a disabled direction stays with the shell. Inside the popup layer left/right instead step through its surfaces — split sides and floating panels — raising the one they land on (#1806) |
@@ -703,7 +703,9 @@ mouse-reporting child (vim/lazygit own their keys); a finished session
   the system clipboard *and* the clipboard history. esc cancels the
   selection first, then exits; `q` exits outright. Exit always snaps the
   view back to live (scroll 0).
-- **Search inside the mode**: `/` (forward, toward newer lines) and `?`
+- **Search inside the mode**: `/` (forward, toward newer lines) — the shared
+  find chord `cmd+f` / `ctrl+f` opens the same forward prompt (#2409), which
+  copy mode can answer because its keyboard is detached from the PTY — and `?`
   (backward) open a query line on the status row — the scrollback search's
   matching rule (#1169): case-insensitive contains over the plain line text.
   enter jumps to the nearest match in the search's direction (the cursor

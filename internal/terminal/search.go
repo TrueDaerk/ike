@@ -79,6 +79,18 @@ func (m *Model) StartSearch() bool {
 	return true
 }
 
+// OpenSearch implements the pane's Searchable capability (#2409): the
+// shared find chord opens copy mode's own search when copy mode holds the
+// keyboard (#2162), and the scrollback search otherwise. It reports false
+// under an alt-screen or mouse-reporting child, which owns its own find.
+func (m *Model) OpenSearch() bool {
+	if m.copy != nil {
+		m.openCopySearch()
+		return true
+	}
+	return m.StartSearch()
+}
+
 // searchCaptures reports whether `/` opens the search in the current state:
 // only a plain shell scrolled into scrollback — never the live view (the
 // shell needs `/` for paths) and never an alt-screen or mouse-reporting child

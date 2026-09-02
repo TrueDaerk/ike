@@ -4,7 +4,7 @@ title: Data Viewer
 description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825/#1851/#1885/#1940/#2248 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table> (the head prefills through WHERE, so only the condition is typed), run inside a subquery so paging keeps working, and 'S' cycles the focused column through ascending/descending/none as an ORDER BY outside that subquery; 'E' exports the filtered, sorted result as CSV or JSON — streamed through the Source interface, bounded by a row cap that announces itself; 'P' profiles the focused column (nulls, distinct, min/max, top values, plus mean or length range) through SQL aggregates or a bounded scan, asynchronously and cancelably."
 resource: internal/dataview
 tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sort, export, csv, json, sql, mouse, paging, async, performance, profile, statistics]
-timestamp: 2026-08-28T12:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Data Viewer (#1764, #1765, #1766, #1777, #1788, #1795, #1940, #2248)
@@ -115,9 +115,10 @@ accepted over a cgo driver):
 - **Identifiers**: table names come from `sqlite_master` but are still quoted
   as identifiers, so a hostile name cannot escape its position.
 
-## The filter (#1777, #1885)
+## The filter (#1777, #1885, #2409)
 
-`/` in the grid opens a one-line field holding everything that follows
+`/` in the grid — or the shared find chord `cmd+f` / `ctrl+f` (#2409) — opens a
+one-line field holding everything that follows
 `SELECT * FROM <table>` — a `WHERE`, an `ORDER BY`, a `LIMIT`, or all three.
 The fixed head is drawn **dimmed in front of the input**, so what the clause
 completes is never a guess, and it carries the **`WHERE ` too** (#1885): a
@@ -410,7 +411,11 @@ The grid scrolls in two units, and the keys keep them apart:
 | Keys | Unit |
 |---|---|
 | `pgup` / `pgdown` | one **screenful** (`bodyHeight` minus the header row) inside the loaded page; only a cursor already on the page's edge crosses into the neighbour page |
-| `n` / `p`, `ctrl+f` / `ctrl+b` | one whole **DB page** (`PageSize` = 500 rows), a backend fetch; the status line's `rows X–Y of N` moves with it |
+| `n` / `p` (and `ctrl+b` backwards) | one whole **DB page** (`PageSize` = 500 rows), a backend fetch; the status line's `rows X–Y of N` moves with it |
+
+`ctrl+f` used to be the forward twin of `ctrl+b` here. Since #2409 it is the
+shared find chord and opens the filter, like it does in every other pane; `n`
+and `pgdown` still page forward.
 
 Mapping the page keys onto the fetch was the original behaviour and read as
 broken: a table under 500 rows has exactly one page, so `pgdown` did nothing at

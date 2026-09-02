@@ -55,6 +55,15 @@ func (m *Model) startFilter() {
 	m.clampScroll()
 }
 
+// OpenSearch implements the pane's Searchable capability (#2409): the shared
+// find chord opens the same filter line "/" does. It reports false with no
+// table selected — there is nothing to filter then, and the root model says
+// so rather than swallowing the chord.
+func (m *Model) OpenSearch() bool {
+	m.startFilter()
+	return m.fEditing
+}
+
 // filterKey feeds one key to the open filter line. The line owns the keyboard
 // while it is open — the grid's single-letter keys (j/k/n/p/s) are plain text
 // here — and only enter and esc close it.

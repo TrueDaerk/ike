@@ -44,6 +44,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Diff file against HEAD | `cmd+alt+d` | `ctrl+alt+d` | `vcs.diff` |
 | Evaluate expression | `alt+f8` | `alt+f8` | `debug.evaluate` |
 | Find in all projects | `cmd+alt+shift+f` | `ctrl+alt+shift+f` | `project.findInAllProjects` |
+| Find in pane | `cmd+f` | `ctrl+f` | `search.open` |
 | Find in path | `cmd+shift+f` | `ctrl+shift+f` | `project.findInPath` |
 | Full query view | `ctrl+alt+e` | `ctrl+alt+e` | `json.jqQueryView` |
 | Generate test data | `cmd+alt+shift+n` | `ctrl+alt+shift+n` | `scratch.generate` |

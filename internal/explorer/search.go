@@ -66,6 +66,14 @@ func (m *Model) startSearch() {
 	m.search = &searchState{prev: m.cursor}
 }
 
+// OpenSearch implements the pane's Searchable capability (#2409): the shared
+// find chord (cmd+f / ctrl+f) opens the same speed search "/" does.
+func (m *Model) OpenSearch() bool {
+	m.exitScratch()
+	m.startSearch()
+	return true
+}
+
 // handleSearchKey feeds one key to the open speed search. Every key is
 // consumed while the field is open; only enter/esc close it.
 func (m *Model) handleSearchKey(msg tea.KeyPressMsg) {

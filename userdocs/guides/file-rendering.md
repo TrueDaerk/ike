@@ -61,6 +61,9 @@ span shows its markers:
 Toggle it for the current view with **Toggle Markdown Rendering** from the
 palette; `editor.markdown_rendering` sets the default.
 
+In the separate **Markdown preview** pane, `/` — or ++cmd+f++ / ++ctrl+f++ —
+searches the rendered document, and `n` / `N` step through the matches.
+
 ## CSV and TSV
 
 `editor.csv_rendering` turns a delimited file into a table: fields aligned into

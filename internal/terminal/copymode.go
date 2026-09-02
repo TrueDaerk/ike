@@ -143,6 +143,12 @@ func (m *Model) copyKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	c.miss = false
+	if ui.FindChord(key) {
+		// Copy mode has the keyboard detached from the PTY, so the shared
+		// find chord (#2409) reaches it directly, alongside the bare key.
+		m.openCopySearch()
+		return nil
+	}
 	switch key {
 	case "esc":
 		if c.selting {
@@ -192,7 +198,7 @@ func (m *Model) copyKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "ctrl+d", "pgdown":
 		m.copyMove(m.pageSize(), 0)
 	case "/":
-		c.input, c.back, c.query, c.qpos = true, false, "", 0
+		m.openCopySearch()
 	case "?":
 		c.input, c.back, c.query, c.qpos = true, true, "", 0
 	case "n":
@@ -201,6 +207,12 @@ func (m *Model) copyKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.copySearchStep(true)
 	}
 	return nil
+}
+
+// openCopySearch puts the cursor in copy mode's forward search prompt.
+func (m *Model) openCopySearch() {
+	c := m.copy
+	c.input, c.back, c.query, c.qpos = true, false, "", 0
 }
 
 // copyYank extracts the selection, exits copy mode and hands the text to the
