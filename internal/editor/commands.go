@@ -61,6 +61,18 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.paste", "Paste", "paste", "p"),
 			action("editor.lineStart", "Move to Line Start", "line_start", "0"),
 			action("editor.lineEnd", "Move to Line End", "line_end", "$"),
+			// The line and document family (#2400): JetBrains' Move Line
+			// Up/Down, Delete Line and the document/line-edge motions. They
+			// existed as vim gestures only, so the JetBrains chords resolved
+			// to nothing; the doc hints name the gesture each one mirrors.
+			action("editor.moveLineUp", "Move Line Up", "move_line_up", ""),
+			action("editor.moveLineDown", "Move Line Down", "move_line_down", ""),
+			action("editor.deleteLine", "Delete Line", "delete_line", "dd"),
+			action("editor.deleteWordBackward", "Delete Word Backward", "delete_word_backward", "db"),
+			action("editor.docStart", "Go to Document Start", "doc_start", "gg"),
+			action("editor.docEnd", "Go to Document End", "doc_end", "G"),
+			action("editor.selectLineStart", "Select to Line Start", "select_line_start", "v0"),
+			action("editor.selectLineEnd", "Select to Line End", "select_line_end", "v$"),
 			action("editor.find", "Find in File", "find", "/"),
 			action("editor.replace", "Replace in File", "replace", ":s"),
 			// Label jump (#787): easymotion/leap-style motion — type 1-2

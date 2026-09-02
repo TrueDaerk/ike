@@ -227,6 +227,23 @@ type (
 // popup (#2174).
 type DebugEvaluateMsg struct{}
 
+// DebugCopyMsg runs debug.copy (cmd+c in the debug panel, #2400): the
+// selected variable value, watch, stack frame — or the console's mouse
+// selection — goes to the clipboard.
+type DebugCopyMsg struct{}
+
+// IssuesCopyMsg runs issues.copy (cmd+c in the issues window, #2400): the
+// selection when there is one, else the selected issue's URL.
+type IssuesCopyMsg struct{}
+
+// IssuesStepMsg runs issues.selectPrev / issues.selectNext (ctrl+up /
+// ctrl+down, #2400): walk the issues window's selection.
+type IssuesStepMsg struct{ Delta int }
+
+// HTTPSearchMsg runs http.search (cmd+f / ctrl+f in the response viewer,
+// #2400): open the pane's in-pane search prompt.
+type HTTPSearchMsg struct{}
+
 // DebugConsoleMsg toggles the combined debug area between its variables and
 // console views and focuses it (#2190) — the keyboard route that works even
 // while a PTY debuggee owns the raw keys.
@@ -610,6 +627,14 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("debug.continue", "Continue", DebugContinueMsg{}),
 			appCommand("debug.console", "Debug: Toggle Console/Variables View", DebugConsoleMsg{}),
 			appCommand("debug.evaluate", "Evaluate Expression", DebugEvaluateMsg{}),
+			// The pane-scoped copy/step chords of the #2400 audit: each one
+			// only means something while its own pane has the focus, so they
+			// are paneCommands rather than global ones.
+			paneCommand("debug.copy", "Debug: Copy Selected Value", "debug", DebugCopyMsg{}),
+			paneCommand("issues.copy", "Issues: Copy Issue Reference", "issues", IssuesCopyMsg{}),
+			paneCommand("issues.selectNext", "Issues: Next Issue", "issues", IssuesStepMsg{Delta: 1}),
+			paneCommand("issues.selectPrev", "Issues: Previous Issue", "issues", IssuesStepMsg{Delta: -1}),
+			paneCommand("http.search", "Search in HTTP Response", "http", HTTPSearchMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			appCommand("terminal.popup", "Popup Terminal", TerminalPopupMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),

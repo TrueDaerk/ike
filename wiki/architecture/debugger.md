@@ -4,7 +4,7 @@ title: Debugger
 description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit (with conditions, hit counts and logpoints), paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; a combined debug area (frames/variables panel + debuggee console behind internal tabs) with per-project watch expressions, an evaluate popup (Alt+F8) and inline variable values in the editor; Python via debugpy, Go via delve (dlv dap over a socket), PHP via the in-process Xdebug/DBGp bridge.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, dbgp, xdebug, delve, run, breakpoints, watches, evaluate]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Debugger (0350)
@@ -602,6 +602,15 @@ landscape host). A `[tools.layout]` slot assigned to `debug` (#1897, #1946)
 pins it to its template position instead — independent of a slot assigned to
 `run`. It is an ordinary pane: the whole area resizes, moves and closes as
 one unit through the normal windowing system.
+
+**Copying out of the panel** (#2400): `cmd+c` in a focused debug pane is the
+keymap table's `debug.copy`, which forwards to `debugpanel.Model.CopyKeyCmd`.
+It copies the selected row of the focused column — a variable or watch as
+`name = value`, a stack frame as `func — file:line` — or, while the console
+view shows, the terminal's mouse selection. The panel never touches the
+clipboard: it emits `debugpanel.CopyMsg` and the host answers through the
+shared `copyToClipboard` seam, like every other read-only surface (#2071).
+With nothing selected the chord stays inert.
 
 **View switching** (#2190): the tab bar renders as the panel's first content
 row once a console exists. `tab`/`shift+tab` cycle the views (on a pipe

@@ -72,6 +72,8 @@ var reachableAlternatives = map[string]string{
 	"editor.commentLine":               "palette",
 	"editor.lineStart":                 "vim 0",
 	"editor.lineEnd":                   "vim $",
+	"editor.deleteLine":                "vim dd",
+	"editor.deleteWordBackward":        "vim db",
 	"editor.find":                      "vim /",
 	"editor.replace":                   "palette",
 	"editor.saveAll":                   "palette",
@@ -213,6 +215,13 @@ var reachableAlternatives = map[string]string{
 	// manager's own ctrl+p, which delivers on every terminal.
 	"scratch.newFromSelection": "palette",
 	"scratch.promote":          "scratch manager ctrl+p / palette",
+	// #2400: the two pane copies join the cmd+c family above. Neither takes a
+	// ctrl+c secondary (that chord stays the global quit on macOS), so the
+	// escape is the palette — the commands are pane-scoped, so they are
+	// offered there exactly while their pane has the focus. The issues window
+	// additionally keeps its own "y" for the mouse selection.
+	"debug.copy":  "palette",
+	"issues.copy": "issues pane \"y\" / palette",
 }
 
 // StatusMatrix builds the ledger over the default table. commandExists

@@ -86,6 +86,13 @@ var jetbrainsRows = []row{
 	// like the editor's cmd+c row above.
 	{"cmd+c", "http.copyResponse", "Copy response selection or body", HTTP, "HTTP client (#2315)"},
 	{"cmd+c", "file.copyPath", "Copy path of the selected entry", Explorer, "Explorer (#2315)"},
+	// The same story one audit later (#2400): cmd+c in the debug panel and in
+	// the issues window. Neither pane could copy at all (the issues window
+	// only copied a mouse selection), so the chord was recorded unbound; the
+	// commands name what "copy" means in each pane. No ctrl+c secondary, for
+	// the reason above — it stays the global quit chord on macOS.
+	{"cmd+c", "debug.copy", "Copy selected value", Debug, "Debugger (#2400)"},
+	{"cmd+c", "issues.copy", "Copy issue reference", Issues, "GitHub issues (#2400)"},
 	// JetBrains' Copy Reference chord, applied to the position *inside* a
 	// JSON/YAML document rather than to the file (#1660). The jq and yq
 	// flavours stay palette-only — one chord for the everyday form.
@@ -132,6 +139,42 @@ var jetbrainsRows = []row{
 	{"cmd+left", "editor.lineStart", "Move to line start", Editor, "Editor (06)"},
 	{"home", "editor.lineStart", "Move to line start", Editor, "Editor (06)"},
 	{"cmd+right", "editor.lineEnd", "Move to line end", Editor, "Editor (06)"},
+	// The #2400 line/document family: chords telemetry recorded as unbound in
+	// the editor because the commands did not exist at all (lineops.go).
+	//
+	// Move Line Up/Down keeps JetBrains' cmd+shift+arrow as the darwin
+	// primary and adds ctrl+shift+arrow, which is delivered everywhere (the
+	// legacy CSI encoding carries the modifier bitset on arrows, so no
+	// ctrl+shift collapse). JetBrains' *other* chord for it, alt+shift+up /
+	// down, stays with caret cloning (#1481) — it has been bound there since
+	// before this audit, and one gesture cannot mean two things.
+	{"cmd+shift+up", "editor.moveLineUp", "Move line up", Editor, "Editor (#2400)"},
+	{"cmd+shift+down", "editor.moveLineDown", "Move line down", Editor, "Editor (#2400)"},
+	{"ctrl+shift+up", "editor.moveLineUp", "Move line up", Editor, "Editor (#2400)"},
+	{"ctrl+shift+down", "editor.moveLineDown", "Move line down", Editor, "Editor (#2400)"},
+	// Delete Line and the backward word kill, IntelliJ's chords verbatim.
+	// Both already worked inside an open insert session (#955, #246); the
+	// rows make them commands, so they work in normal mode too and are
+	// listed, rebindable and palette-reachable. vim dd / db stay the
+	// delivered fallback (matrix.go).
+	{"cmd+backspace", "editor.deleteLine", "Delete line", Editor, "Editor (#2400)"},
+	{"alt+backspace", "editor.deleteWordBackward", "Delete word backward", Editor, "Editor (#2400)"},
+	// Document start/end: the cmd form is the macOS convention (and what the
+	// telemetry saw pressed), the ctrl form is JetBrains' Windows/Linux
+	// scheme and delivered everywhere. The macOS text-field twins cmd+up /
+	// cmd+down are deliberately left alone: off macOS they fold onto
+	// ctrl+up / ctrl+down, which are the editor's paragraph jumps.
+	{"cmd+home", "editor.docStart", "Go to document start", Editor, "Editor (#2400)"},
+	{"cmd+end", "editor.docEnd", "Go to document end", Editor, "Editor (#2400)"},
+	{"ctrl+home", "editor.docStart", "Go to document start", Editor, "Editor (#2400)"},
+	{"ctrl+end", "editor.docEnd", "Go to document end", Editor, "Editor (#2400)"},
+	// Select to the line edge on shift+home / shift+end, both delivered. The
+	// cmd+shift+left/right pair is deliberately *not* bound: it is JetBrains'
+	// macOS chord for the same pair, but here the navigation family already
+	// layers on the cmd+shift arrows' neighbourhood, and nav.back/forward
+	// keep their chords (#2361).
+	{"shift+home", "editor.selectLineStart", "Select to line start", Editor, "Editor (#2400)"},
+	{"shift+end", "editor.selectLineEnd", "Select to line end", Editor, "Editor (#2400)"},
 	{"cmd+left-bracket", "nav.back", "Navigate back", Global, "Editor (06)/app (01)"},
 	{"cmd+right-bracket", "nav.forward", "Navigate forward", Global, "Editor (06)/app (01)"},
 	// Mouse back/forward buttons (#816): synthetic single-step chords fed
@@ -176,6 +219,11 @@ var jetbrainsRows = []row{
 	// The id predates the formatter registry (0470): the command now resolves
 	// config override → external tool → LSP → built-in, not only LSP.
 	{"cmd+alt+l", "lsp.format", "Reformat file or selection", Editor, "Format (0470)"},
+	// cmd+shift+l is what a JetBrains user with a customised keymap reached
+	// for (#2400) — the chord was free, and reformatting is the only thing
+	// "L" means in this table, so it aliases the same command rather than
+	// growing a second meaning.
+	{"cmd+shift+l", "lsp.format", "Reformat file or selection", Editor, "Format (#2400)"},
 	// JetBrains intention actions. Alt+enter delivery depends on the
 	// terminal's option-as-meta setting, hence fragile; 0081 owns the final
 	// reachability call.
@@ -389,6 +437,19 @@ var jetbrainsRows = []row{
 	// table's, scoped to the response pane, where it is the only meaning
 	// ctrl+r has. Delivered everywhere (plain ctrl+letter), so no fallback.
 	{"ctrl+r", "http.resend", "Re-send stored HTTP request", HTTP, "HTTP client (#1832)"},
+	// Search inside the response, the same story as ctrl+r above (#2400):
+	// cmd+f was the single most-pressed unbound chord in the telemetry
+	// export, always in a focused response viewer, where the pane had been
+	// opening its own search prompt all along. ctrl+f is the delivered twin
+	// (both are pane keys already, #1265/#1830).
+	{"cmd+f", "http.search", "Search in response", HTTP, "HTTP client (#2400)"},
+	{"ctrl+f", "http.search", "Search in response", HTTP, "HTTP client (#2400)"},
+	// Walking the issues list from the keyboard (#2400): ctrl+up / ctrl+down
+	// are what the telemetry saw pressed there. Both are delivered (arrows
+	// carry their modifiers in the legacy CSI encoding) and scoped to the
+	// issues window, so the editor's ctrl+arrow paragraph jumps are untouched.
+	{"ctrl+up", "issues.selectPrev", "Previous issue", Issues, "GitHub issues (#2400)"},
+	{"ctrl+down", "issues.selectNext", "Next issue", Issues, "GitHub issues (#2400)"},
 	// The same muscle memory in the archive viewer (#2314): "rerun" reads as
 	// "read the archive again" there, which is the listing reload.
 	{"ctrl+r", "archive.reload", "Reload archive listing", Archive, "Archive viewer (#1762)"},
