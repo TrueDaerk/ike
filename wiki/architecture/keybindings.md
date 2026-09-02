@@ -1153,6 +1153,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `project.peek.return` | `cmd+shift+b` | fragile | `palette` | live via palette |
 | `project.replaceInPath` | `cmd+shift+r` | fragile | `palette` | live via palette |
 | `project.switch` | `cmd+shift+p` | fragile | `palette` | live via palette |
+| `project.switchLast` | `cmd+shift+e` | fragile | `palette` | live via palette |
 | `run.file` | `shift+f10` | delivered | `—` | live |
 | `run.rerun` | `cmd+f5` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `run.select` | `alt+shift+f10` | fragile | `palette / Run menu` | live via palette / Run menu |

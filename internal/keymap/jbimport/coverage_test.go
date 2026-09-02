@@ -46,6 +46,7 @@ var noCounterpart = map[string]string{
 	"pane.splitRight":                  "JetBrains has only the two editor splits, mapped to editor.splitView*",
 	"pane.splitUp":                     "JetBrains has only the two editor splits, mapped to editor.splitView*",
 	"project.peek.return":              "quick-peek (#2136) is an IKE concept; JetBrains has no temporary project switch",
+	"project.switchLast":               "IKE-only concept (#2398): JetBrains only offers the Recent Projects popup, no last-project toggle action",
 	"run.testAtCursor":                 "RunClass is context-sensitive in JetBrains, mapped to run.file",
 	"debug.testAtCursor":               "DebugClass is context-sensitive in JetBrains, mapped to debug.start",
 	"json.jqPlayground":                "IKE-only concept (#1936): JetBrains has no jq playground",

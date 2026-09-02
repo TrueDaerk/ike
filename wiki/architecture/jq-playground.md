@@ -1,7 +1,7 @@
 ---
 type: concept
 title: jq & yq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, and inserting a picked row into the query line — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the find chord opens the result buffer's search from either focus and leaves the keyboard there for `n`/`N`; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, and inserting a picked row into the query line — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the find chord opens the result buffer's search from either focus and leaves the keyboard there for `n`/`N`; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, yaml, jq, yq, tools, inline, editor, http, completion, folding]
 timestamp: 2026-09-01T00:00:00Z
@@ -79,8 +79,9 @@ While the mode is active on a pane:
   query line, then one info row (input origin and size, result summary, key
   hints — or the error, or a transient status). The header height is fixed, so
   an error appearing mid-keystroke never resizes the buffer below it — the
-  [multi-line view](#the-multi-line-view) is the one thing that grows it, and
-  only on the user's key.
+  [multi-line view](#the-multi-line-view) and the one-row
+  [stale banner](#a-failed-run-keeps-the-last-good-result-2412) are the only
+  things that grow it.
 - The info row is composed of **styled segments** (#1978): the summary in the
   theme's Hint, the caps — `(stopped at 500)`, `(first 10000 only)` — and a
   zero-value result in **Warning** (the buffer is blank then, and the summary
@@ -342,9 +343,10 @@ against it.
   wasted parse. IKE's own saves never arrive at all: the watcher suppresses
   them through its save epoch.
 - **A broken new input keeps the last result.** A document saved mid-edit — a
-  `,` short, a key half written — reports its parse error on the info row while
-  the previous result stays on screen and the playground stays open. The next
-  change that parses picks the mode back up.
+  `,` short, a key half written — reports its parse error on the info row and
+  raises the [stale banner](#a-failed-run-keeps-the-last-good-result-2412)
+  while the previous result stays on screen and the playground stays open. The
+  next change that parses picks the mode back up.
 - **A removed source ends the mode definitely.** File deleted or renamed away:
   with unsaved edits the buffer is the only copy of the document left, so the
   mode stays up over content that still exists and warns on its status line;
@@ -433,11 +435,42 @@ error color:
   wat/0`, `variable not defined: $x`), which produces no output;
 - a **runtime** error, which may arrive *after* some values were produced —
   `.[] | .x` over `[{"x":1},3]` prints one value and then fails. `Err` and
-  `Outputs` are therefore not mutually exclusive, and the error row keeps the
-  count — `E: … · 1 value(s) before the error` — because those values are
-  sitting in the buffer below it (#1978).
+  `Outputs` are therefore not mutually exclusive.
 
 `halt` ends a run cleanly rather than as a diagnostic, as it does in jq.
+
+### A failed run keeps the last good result (#2412)
+
+**A failing run never touches the result buffer.** While a query is being
+typed it is invalid most of the time — `. | {a, b,` is a normal intermediate
+state — and clearing the output for every such keystroke defeats the lookup
+the playground is most often opened for: *what was that field called again?*
+So the model keeps two things apart: `result` is the last **successful**
+evaluation, `runErr` the error of the last run. A run that fails writes only
+`runErr`; the buffer's text, its scroll position and its find highlights stay
+exactly as the last good run left them. This is the same rule the
+[external refresh](#following-the-source-file) already applied to a broken
+**input** parse, now applied to the program as well — and the input error
+still beats the program error on the info row.
+
+The state is marked, not hidden, in two places:
+
+- the info row keeps the `E: …` message, followed by
+  `· showing the last good result (n value(s))` — the count is the *good*
+  result's, since the failed run's partial output was never installed;
+- a one-line **stale banner** in the palette's Warning sits between the info
+  row and the result buffer: `stale — the query has an error; showing the last
+  good result`, or `… the input has an error` when the snapshot is the broken
+  one. It is part of the header for geometry purposes (`playStaleRows` feeds
+  both `playHeaderRowsFor` and `sizePlayResult`), so the mouse translation and
+  the result editor's height never disagree with what is drawn. The banner
+  disappears with the next successful run.
+
+Staleness needs a good result to be stale *about*: before the first successful
+run the buffer is empty and no banner is claimed over it. Generation stamps do
+the rest — a late result from a superseded run is dropped before any of this,
+whether it succeeded or failed, so an old error can never raise a banner over
+a newer good result.
 
 ## Syntax highlighting
 
