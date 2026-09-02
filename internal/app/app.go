@@ -813,18 +813,21 @@ type Model struct {
 	todo       *todoindex.Model
 	todoSearch *search.Service
 	// allFind is the Find-in-All-Projects form (#2394), allResults its
-	// non-focus-stealing results popup, and allSearch the multi-root scan
-	// service — separate from searcher so the open project's find-in-path
-	// state is never disturbed (its messages are distinct types, so no
-	// generation collision either). allFindGen filters streamed results;
-	// allPendingOpen parks a match to open once a project switch lands.
-	// allSearch/allResults/allFindGen/allPendingOpen are session state and
-	// ride across project switches (see performSwitchOpts).
+	// results overlay — the find-in-path results UI, one grouping level
+	// deeper (#2413) — and allSearch the multi-root scan service, separate
+	// from searcher so the open project's find-in-path state is never
+	// disturbed (its messages are distinct types, so no generation collision
+	// either). allFindGen filters streamed results; allPendingOpen parks a
+	// match to open once a project switch lands; allFindRecent makes the
+	// all-projects hits the set cmd+g walks until the next find-in-path scan.
+	// allSearch/allResults/allFindGen/allPendingOpen/allFindRecent are
+	// session state and ride across project switches (see performSwitchOpts).
 	allFind        *allfind.Form
-	allResults     *allfind.Popup
+	allResults     *allfind.Results
 	allSearch      *search.MultiService
 	allFindGen     int
 	allPendingOpen *allfind.OpenMatchMsg
+	allFindRecent  bool
 	// Deep-link state (#2396). dlServer is this instance's ike:// socket
 	// endpoint (session state — Touch on terminal focus stamps this instance
 	// as the click target). dlPending parks a link's file/tool payload until
@@ -1453,7 +1456,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.allSearch = search.NewMulti(m.host.Send)
 	m.allFind = allfind.NewForm()
 	m.allFind.SetPalette(themePal)
-	m.allResults = allfind.NewPopup()
+	m.allResults = allfind.NewResults()
 	m.allResults.SetPalette(themePal)
 	m.todoSearch = search.New(func(msg tea.Msg) { h.Send(todoindex.ScanMsg{Inner: msg}) })
 	m.todo = todoindex.New(m.todoSearch, ".", todoPatterns(cfg))
@@ -4284,13 +4287,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case search.MultiProgressMsg:
+		// One root of the running all-projects scan finished (#2413): the
+		// status-line segment counts projects, not batches.
+		if msg.Gen == m.allFindGen {
+			m.allResults.Progress(msg.Done)
+		}
+		return m, nil
+
 	case search.MultiDoneMsg:
-		// Scan finished: the popup appears without taking focus (#2394).
+		// Scan finished: the results open in the find-in-path results
+		// overlay, grouped by project (#2413).
 		m.finishAllFind(msg)
 		return m, nil
 
 	case ShowAllFindResultsMsg:
-		// project.findInAllProjectsResults: bring the popup back, focused.
+		// project.findInAllProjectsResults: re-open the results overlay.
 		m.showAllFindResults()
 		return m, nil
 
@@ -4300,8 +4312,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case search.BatchMsg, search.DoneMsg:
 		// Streamed scan results (generation-filtered inside the finder). A scan
-		// makes find-in-path the most recent search again for f3/shift+f3.
+		// makes find-in-path the most recent search again for f3/shift+f3 —
+		// and for the retained-results reading of cmd+g (#2413).
 		m.inFileSearchRecent = false
+		m.allFindRecent = false
 		m.finder.Apply(msg)
 		return m, nil
 
@@ -4331,6 +4345,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if ed := m.activeEditor(); ed != nil && ed.HasSearch() {
 				ed.RepeatSearch(msg.Delta < 0)
 				return m, nil
+			}
+		}
+		if m.allFindRecent && m.allResults.Total() > 0 {
+			// The all-projects results are the most recent search (#2413):
+			// walk them instead, switching projects where a hit needs it.
+			if root, it, ok := m.allResults.Advance(msg.Delta); ok {
+				return m.openAllFindMatch(allfind.OpenMatchMsg{
+					Root: root, Path: it.Path, Line: it.Line, Col: it.StartCol,
+				})
 			}
 		}
 		if it, ok := m.finder.Advance(msg.Delta); ok {
@@ -7660,10 +7683,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The all-projects search form owns the keyboard the same way (#2394).
 			return m, m.allFind.Update(msg)
 		}
-		if m.allResults.Focused() {
-			// The results popup only owns the keyboard while explicitly
-			// focused (#2394); visible-but-blurred, every key stays with the
-			// editor — that is the popup's whole point.
+		if m.allResults.IsOpen() {
+			// The all-projects results overlay owns the keyboard like the
+			// find-in-path one it mirrors (#2413).
 			return m, m.allResults.Update(msg)
 		}
 		if m.todo.IsOpen() {
@@ -10140,29 +10162,6 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		}
 		return m, func() tea.Msg { return ForceCodeInsightMsg{} }
 	}
-	// The all-projects results popup (#2394) mirrors the popup terminal
-	// layer's mouse contract: a press on the box focuses it (and selects /
-	// activates the row), a press outside blurs it but falls through so the
-	// click also lands below, a wheel over it scrolls it.
-	if m.allResults.Visible() && !m.allFind.IsOpen() {
-		if m.allResults.Contains(msg.X, msg.Y) {
-			switch {
-			case msg.action == mousePress && msg.Button == tea.MouseLeft:
-				m.allResults.Focus()
-				return m, m.allResults.Click(msg.X, msg.Y)
-			case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
-				m.allResults.Wheel(-wheelLines * msg.ticks())
-				return m, nil
-			case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
-				m.allResults.Wheel(wheelLines * msg.ticks())
-				return m, nil
-			}
-			return m, nil
-		}
-		if msg.action == mousePress && m.allResults.Focused() {
-			m.allResults.Blur() // the click falls through to the pane below
-		}
-	}
 	if m.allFind.IsOpen() {
 		// The all-projects search form hit-tests like the finder (#2394).
 		if clickOutside(msg, m.allFind.View(), m.width, m.height) {
@@ -10193,6 +10192,27 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			m.finder.Wheel(-wheelLines * msg.ticks())
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
 			m.finder.Wheel(wheelLines * msg.ticks())
+		}
+		return m, nil
+	}
+	// The all-projects results overlay hit-tests the same way (#2413): a
+	// click outside closes it, a press on a row selects it, a second press
+	// opens it, the wheel scrolls. It sits below the finder and the form in
+	// the render order, so it is tested after them.
+	if m.allResults.IsOpen() {
+		if clickOutside(msg, m.allResults.View(), m.width, m.height) {
+			m.allResults.Close()
+			return m, nil
+		}
+		switch {
+		case msg.action == mousePress && msg.Button == tea.MouseLeft:
+			v := m.allResults.View()
+			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
+			return m, m.allResults.Click(msg.X-bx, msg.Y-by)
+		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
+			m.allResults.Wheel(-wheelLines * msg.ticks())
+		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
+			m.allResults.Wheel(wheelLines * msg.ticks())
 		}
 		return m, nil
 	}
@@ -12396,14 +12416,6 @@ func (m Model) render() string {
 			base = overlay.Place(base, m.renderFloatTerm(f), f.x, f.y, m.width, m.height)
 		}
 	}
-	// The all-projects results popup (#2394): visible without focus, above
-	// the workspace and the popup terminal layer, below the exclusive modal
-	// overlays — a palette or form opened over it must draw on top.
-	if m.allResults.Visible() && !m.settings.IsOpen() {
-		if x, y, w, _ := m.allResults.Rect(); w > 0 {
-			base = overlay.Place(base, m.allResults.View(), x, y, m.width, m.height)
-		}
-	}
 	result := base
 	switch {
 	case m.largeDetail:
@@ -12417,6 +12429,10 @@ func (m Model) render() string {
 		result = overlay.Center(base, m.finder.View(), m.width, m.height)
 	case m.allFind.IsOpen():
 		result = overlay.Center(base, m.allFind.View(), m.width, m.height)
+	case m.allResults.IsOpen():
+		// The all-projects results overlay (#2413) is a centered modal like
+		// the find-in-path results it mirrors.
+		result = overlay.Center(base, m.allResults.View(), m.width, m.height)
 	case m.todo.IsOpen():
 		result = overlay.Center(base, m.todo.View(), m.width, m.height)
 	case m.undoTree.IsOpen():

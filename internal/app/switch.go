@@ -287,15 +287,18 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	fresh.notifUnseen = m.notifUnseen
 	// The all-projects search (#2394) is session state on the same terms: its
 	// scan spans projects, so the service (an in-flight scan keeps streaming
-	// into the same host), the results popup and a pending match-open — the
-	// very reason for this switch, finished by the SwitchedMsg handler — ride
-	// across. Only the palette re-threads; the form does not carry (it is
-	// modal and closed before any switch can run).
+	// into the same host), the results overlay — the result set outlives the
+	// switch a hit caused, so the user walks on through the other projects'
+	// hits (#2413) — and a pending match-open, the very reason for this
+	// switch, finished by the SwitchedMsg handler, ride across. Only the
+	// palette re-threads; the form does not carry (it is modal and closed
+	// before any switch can run).
 	fresh.allSearch = m.allSearch
 	fresh.allResults = m.allResults
 	fresh.allResults.SetPalette(fresh.pal())
 	fresh.allFindGen = m.allFindGen
 	fresh.allPendingOpen = m.allPendingOpen
+	fresh.allFindRecent = m.allFindRecent
 	// Deep-link state (#2396) is session state on the same terms: the socket
 	// endpoint serves the whole run, and a link's parked payload — the very
 	// reason for this switch, finished by the SwitchedMsg handler — rides

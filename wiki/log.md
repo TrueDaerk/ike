@@ -1,5 +1,36 @@
 # Log
 
+## 2026-09-03 (all-projects results in the find-in-path pane, #2413)
+
+- **No corner popup any more**: Find in All Projects (#2394) shows its
+  finished hits in the *same* results overlay find-in-path uses — the shared
+  `internal/locations` list with the code-preview column beside it — grouped
+  project → file → matches, with find-in-path's keys: `enter` (and
+  `alt`/`ctrl+enter`) opens, `up`/`down` step with wrap, `pgup`/`pgdown` page,
+  `cmd+g` / `cmd+shift+g` step the matches with the shared `3/17` counter,
+  `alt+p`/`ctrl+e` focuses the excerpt, `esc` closes. A shared table test
+  drives both surfaces over the same match set and compares where `enter`
+  lands.
+- **The list learned sections**: `locations.Item.Section` adds one grouping
+  level above the file — a header row over the file headers of every
+  consecutive group that shares it, labelled by the host through
+  `List.SectionLabel(section, items)`. Cursor, paging, hit-testing and the
+  match-step chord all count the new rows; a sectionless list is byte-for-byte
+  what it was.
+- **Progress moved to the status line**: while the scan runs nothing covers
+  the editor — the new `allfind` segment counts
+  `⌕ all projects 3/12 · 41 hits` from the new
+  `search.MultiProgressMsg{Gen, Root, Done, Total}` (a root without matches
+  emits no batch, so the batches alone could not say how far the scan had
+  come), and a click on it opens the results.
+- **Across the switch**: opening a hit in another project switches as before,
+  but the result set rides the rebuild with the scan service, so
+  `cmd+alt+shift+r` brings it straight back and `cmd+g` keeps stepping the
+  hits — switching projects again where the next one needs it. A scan that
+  matched nothing never takes the keyboard; it toasts, and the show-results
+  command opens the empty set on demand. See
+  [Project Search](/architecture/search.md).
+
 ## 2026-09-02 (cmd+f finds wherever "/" does, #2409)
 
 - **One shared find chord**: the new Global command `search.open`

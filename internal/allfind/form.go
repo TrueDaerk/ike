@@ -1,10 +1,11 @@
 // Package allfind is the all-projects text search (#2394): a query form over
 // every root in the recent-projects history, a background multi-root scan
-// (internal/search.MultiService), and a non-intrusive results popup that
-// reports matches grouped by project without stealing the keyboard. The form
-// mirrors the find-in-path overlay (internal/finder) — same toggles, glob
+// (internal/search.MultiService), and — once the scan is through — the
+// find-in-path results overlay, grouped project → file → matches (#2413). The
+// form mirrors the find-in-path overlay (internal/finder) — same toggles, glob
 // fields and single-line editing — but confirming closes it immediately and
-// hands the scan to the root model; results arrive later, in the popup.
+// hands the scan to the root model; while it runs only a status-line segment
+// counts the projects, and the results open when it finishes.
 package allfind
 
 import (
