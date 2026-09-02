@@ -13,6 +13,7 @@ package archview
 
 import (
 	"ike/internal/filterexpr"
+	"ike/internal/ui"
 )
 
 // Kinds is the type gate's vocabulary: the entries that carry bytes, and the
@@ -32,6 +33,28 @@ var Schema = filterexpr.Schema{Fields: []filterexpr.Field{
 func (m *Model) OpenSearch() bool {
 	m.focusFilter()
 	return true
+}
+
+// NextMatch implements the pane's match-step capability (#2410). The pane's
+// search is a filter, so its "matches" are the entries that match it — not the
+// parent directories the tree keeps around them for context: cmd+g walks the
+// hits while the filter row keeps the keyboard and the expression stays
+// editable.
+func (m *Model) NextMatch() ui.MatchStep { return m.stepFiltered(1) }
+
+// PrevMatch steps backwards; see NextMatch.
+func (m *Model) PrevMatch() ui.MatchStep { return m.stepFiltered(-1) }
+
+func (m *Model) stepFiltered(delta int) ui.MatchStep {
+	if !m.filter.Active() {
+		return ui.NoStep
+	}
+	next, st := ui.StepOver(m.cursor, len(m.rows), delta, func(i int) bool {
+		return m.matches(m.rows[i].full, m.rows[i].isDir)
+	})
+	m.cursor = next
+	m.clampScroll()
+	return m.filter.ShowStep(st)
 }
 
 // focusFilter puts the cursor in the filter row. The completion source is

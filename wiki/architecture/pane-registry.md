@@ -4,7 +4,7 @@ title: Pane Registry & Multiple Editors
 description: The registry mapping layout-leaf instance keys to live pane components — the explorer singleton plus N editors — with focus as the focused leaf and open-in-new-pane intent.
 resource: internal/pane/registry.go
 tags: [architecture, panes, registry, editors, focus, open-target, persistence]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Pane Registry & Multiple Editors
@@ -31,15 +31,28 @@ wiring.
 
 Beside the context id, an instance advertises one **capability**:
 `Instance.Searchable()` (`searchable.go`, #2409) returns the focused
-component as a `pane.Searchable` — a single `OpenSearch() bool` — or `nil` for
-a kind with no search of its own. It is what the Global `search.open` command
-(`cmd+f`) asks for, so the find chord opens the explorer's speed search, a list
-pane's filter row or a viewer's find prompt without the root model growing a
-switch over every kind. A pane hosting a terminal (#573) or a content tab
-(#1778) delegates to what the tab holds, exactly as `ContextID` does; a plain
-editor tab is deliberately *not* searchable, because `editor.find` owns the
-chord in the more specific `editor` context. See
-[Keybindings](./keybindings.md).
+component as a `pane.Searchable` — or `nil` for a kind with no search of its
+own. It is what the Global `search.open` command (`cmd+f`) asks for, so the
+find chord opens the explorer's speed search, a list pane's filter row or a
+viewer's find prompt without the root model growing a switch over every kind.
+A pane hosting a terminal (#573) or a content tab (#1778) delegates to what
+the tab holds, exactly as `ContextID` does; a plain editor tab is deliberately
+*not* searchable, because `editor.find` owns the chord in the more specific
+`editor` context. See [Keybindings](./keybindings.md).
+
+The capability carries both halves of the gesture:
+
+| method | issue | what it does |
+|---|---|---|
+| `OpenSearch() bool` | #2409 | opens the pane's search; `false` = not available right now |
+| `NextMatch() ui.MatchStep` | #2410 | steps to the next match, input still focused |
+| `PrevMatch() ui.MatchStep` | #2410 | the same, backwards |
+
+`Instance.StepMatch(delta)` picks the direction and is what `search.nextMatch`
+/ `search.prevMatch` (`cmd+g` / `cmd+shift+g`) ask for. A pane whose search is
+*closed* returns `ui.NoStep`, and the root model falls back to what the chord
+meant before — repeating the editor's in-file search, walking the retained
+find-in-path results.
 
 ## Registry & instance keys
 

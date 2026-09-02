@@ -173,6 +173,37 @@ vim's page-forward motion.
 A pane with no search of its own says so ("No search in this pane") rather
 than doing nothing.
 
+### Stepping the matches
+
+++cmd+g++ and ++cmd+shift+g++ move to the next and previous match **while the
+input keeps the focus**. There is no need to press ++enter++ first: the query
+stays editable, so you can narrow it, look at where the next hit lands, and
+narrow it again without ever leaving the field.
+
+| Keys | What it does |
+|---|---|
+| ++cmd+g++ / ++cmd+shift+g++ | Next / previous match in the focused pane's search |
+| ++ctrl+g++ / ++ctrl+shift+g++ | The same, outside an editor |
+| ++f3++ / ++shift+f3++ | The same again, the JetBrains keys |
+
+What counts as a "match" is what the pane's search produces: a hit in the
+diff, response body or scrollback; a row in a filtered list; an element the
+CSS selector selected. Filter rows step their surviving rows, skipping the
+file headers between them.
+
+The walk wraps at both ends, and the pane's search line marks the step that
+came back around — `1/12 (wrapped)` — so a repeat is never mistaken for new
+ground. With nothing matching, the chord is a no-op with a short "No matches"
+hint rather than a silent one.
+
+++enter++ keeps its meaning next to all of this: it applies the filter and
+leaves the input, or opens the selected row. In the HTTP response viewer `n`
+and `N` still step the matches once the prompt has closed.
+
+Inside an **editor** the chords keep their editor meaning: they repeat the
+in-file search, or step the retained find-in-path results — which is what
+they always did, and what the pane chords are modelled on.
+
 ## Finding files and symbols
 
 Different problem, different keys:

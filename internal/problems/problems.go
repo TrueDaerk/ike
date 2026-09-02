@@ -458,6 +458,26 @@ func (m *Model) OpenSearch() bool {
 	return true
 }
 
+// NextMatch implements the pane's match-step capability (#2410). The pane's
+// search is a filter, so its "matches" are the diagnostic rows the filter left
+// standing: cmd+g walks them while the filter row keeps the keyboard and the
+// expression stays editable. The file headers are skipped — they are chrome,
+// not results.
+func (m *Model) NextMatch() ui.MatchStep { return m.stepFiltered(1) }
+
+// PrevMatch steps backwards; see NextMatch.
+func (m *Model) PrevMatch() ui.MatchStep { return m.stepFiltered(-1) }
+
+func (m *Model) stepFiltered(delta int) ui.MatchStep {
+	if !m.filter.Active() {
+		return ui.NoStep
+	}
+	next, st := ui.StepOver(m.cursor, len(m.rows), delta, func(i int) bool { return !m.rows[i].header })
+	m.cursor = next
+	m.clampScroll()
+	return m.filter.ShowStep(st)
+}
+
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	// The focused filter row owns its editing keys (#2156); list navigation
 	// (up/down/page) falls through, so one can steer the list while typing.

@@ -1,5 +1,7 @@
 package pane
 
+import "ike/internal/ui"
+
 // searchable.go is the pane-side half of the shared find chord (#2409). Every
 // pane that owns a search or a filter of its own binds "/" to it, but the
 // chord users reach for first is cmd+f — the one the editor and every other
@@ -18,6 +20,17 @@ type Searchable interface {
 	// chord to an alt-screen child, a viewer with nothing loaded — and the
 	// caller notifies rather than swallowing the key.
 	OpenSearch() bool
+
+	// NextMatch / PrevMatch step through the matches of the pane's *open*
+	// search (#2410), leaving the input focused and the query untouched:
+	// cmd+g and cmd+shift+g do in every pane what they always did in the
+	// editor, without enter having to apply and blur first.
+	//
+	// A pane whose search is closed returns ui.NoStep, and the chord keeps
+	// its older meaning at the root model — repeating the editor's in-file
+	// search, or walking the retained find-in-path results.
+	NextMatch() ui.MatchStep
+	PrevMatch() ui.MatchStep
 }
 
 // Searchable returns the focused component of the instance as a Searchable,
@@ -71,4 +84,19 @@ func (i *Instance) Searchable() Searchable {
 func (i *Instance) OpenSearch() bool {
 	s := i.Searchable()
 	return s != nil && s.OpenSearch()
+}
+
+// StepMatch moves the focused pane's open search by delta (#2410): +1 to the
+// next match, -1 to the previous one. It reports ui.NoStep for a pane kind
+// without a search and for one whose search is closed, so the caller can fall
+// back to what the chord meant before.
+func (i *Instance) StepMatch(delta int) ui.MatchStep {
+	s := i.Searchable()
+	if s == nil {
+		return ui.NoStep
+	}
+	if delta < 0 {
+		return s.PrevMatch()
+	}
+	return s.NextMatch()
 }

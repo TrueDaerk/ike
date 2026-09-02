@@ -93,6 +93,9 @@ type Model struct {
 	fInput   string
 	fCur     int
 	fErr     error
+	// fWrapped marks that the last cmd+g row step came back around the page
+	// (#2410), so the filter footer can say so.
+	fWrapped bool
 	hl       highlight.Theme
 
 	// Column sort (#2248): the ORDER BY the backend applies outside the
@@ -791,8 +794,13 @@ func (m *Model) footer(pal *theme.Palette) string {
 		if m.fErr != nil {
 			return lipgloss.NewStyle().Foreground(pal.Error).Render(clipTo(" "+m.fErr.Error(), m.w))
 		}
-		return lipgloss.NewStyle().Faint(true).Render(
-			clipTo(" enter apply · esc drop the filter · type the condition, it follows the dimmed prefix", m.w))
+		hint := " enter apply · esc drop the filter · type the condition, it follows the dimmed prefix"
+		if n := len(m.page.Rows); n > 0 {
+			// The cmd+g row walk reports where it stands, wrap included
+			// (#2410), the way every other pane's search line does.
+			hint = " " + ui.MatchCounter(m.rowCur+1, n, m.fWrapped) + " ·" + hint
+		}
+		return lipgloss.NewStyle().Faint(true).Render(clipTo(hint, m.w))
 	}
 	status := ""
 	switch {

@@ -373,6 +373,10 @@ func (m *Model) renderFilter() string {
 		// The header answers "how much did that match, and where" (#1297).
 		out += lipgloss.NewStyle().Foreground(pal.Secondary).Render(" · " + m.hitSummary())
 	}
+	if m.stepStatus != "" {
+		// Where the cmd+g walk stands, wrap included (#2410).
+		out += lipgloss.NewStyle().Faint(true).Render(" · " + m.stepStatus)
+	}
 	return out
 }
 

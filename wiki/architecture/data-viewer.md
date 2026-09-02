@@ -4,7 +4,7 @@ title: Data Viewer
 description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825/#1851/#1885/#1940/#2248 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table> (the head prefills through WHERE, so only the condition is typed), run inside a subquery so paging keeps working, and 'S' cycles the focused column through ascending/descending/none as an ORDER BY outside that subquery; 'E' exports the filtered, sorted result as CSV or JSON — streamed through the Source interface, bounded by a row cap that announces itself; 'P' profiles the focused column (nulls, distinct, min/max, top values, plus mean or length range) through SQL aggregates or a bounded scan, asynchronously and cancelably."
 resource: internal/dataview
 tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sort, export, csv, json, sql, mouse, paging, async, performance, profile, statistics]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Data Viewer (#1764, #1765, #1766, #1777, #1788, #1795, #1940, #2248)
@@ -138,6 +138,13 @@ clause with its head attached; the prefix's columns are then skipped).
 an applied filter stays visible in the pane header (`filter: WHERE …`).
 Switching tables drops it — a clause naming another table's columns could only
 fail.
+
+`cmd+g` / `cmd+shift+g` walk the **loaded page's rows** while the line keeps
+the keyboard and the clause stays editable (#2410) — the grid's "matches" are
+the rows a filter left standing. The walk is deliberately page-local: the pane
+fetches one page at a time, and a chord that silently paged would step over
+rows the user cannot see. The filter footer carries the counter, wrap marker
+included.
 
 One shape serves every engine: the clause goes into a **subquery** and the
 pane's own window — and its column sort (#2248) — sit outside it.

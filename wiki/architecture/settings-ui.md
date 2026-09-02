@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -122,7 +122,10 @@ box capped at ~110×32 cells above the workspace, laid out as the
   descriptions, page names, #2179); matches render as `Page › Title`, and the
   result list names the custom pages the filter cannot search
   (`(not searched: Keymap, …)`, #383). Esc clears the query, a second esc
-  leaves the search, and esc without a search closes the panel.
+  leaves the search, and esc without a search closes the panel. `cmd+g` /
+  `cmd+shift+g` walk the result rows while the input keeps the keyboard
+  (#2410) — answered by the panel for the same reason `cmd+f` is — and the
+  filter row carries the counter, `(wrapped)` marker included.
 - **Keys.** ↑↓/jk navigate, ←→ (and h/l) or tab switch columns, enter edits,
   esc cancels/closes (#383). On custom pages only arrow-left returns to the
   categories — plain `h` is forwarded to the page (it may be filter text

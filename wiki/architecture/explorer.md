@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # File Explorer
@@ -183,7 +183,10 @@ file-op prompt gets via `Prompting()` (`explorerCapturing` in the app routes
 keys ahead of the keymap layer), so the single-letter file-op bindings cannot
 fire mid-word. `enter` accepts (cursor stays, search closes); `esc` cancels
 (cursor returns to the anchor); `ctrl+n` / `down` step to the next match and
-`ctrl+p` / `up` to the previous, both wrapping; every other non-printable key
+`ctrl+p` / `up` to the previous, both wrapping; `cmd+g` / `cmd+shift+g` do the
+same (#2410), answered here because the field holds the keyboard ahead of the
+keymap layer (`ui.MatchStepChord`), with the counter marking the step that
+came back around as `1/12 (wrapped)`; every other non-printable key
 is consumed without effect — no silent passthrough while the field is
 visible. Mouse clicks still select rows normally (the prompt's
 `PromptMouseClick` routing applies only to real prompts).

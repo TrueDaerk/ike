@@ -4,7 +4,7 @@ title: TODO Index
 description: "#61 — JetBrains-style TODO tool window: project-wide comment-tag index (TODO/FIXME/HACK/XXX, configurable) as a centered overlay over the locations list, own search.Service scan, per-file rescan on save, the shared list-filter row with tag/file/scope fields (ctrl+t and ctrl+o as its sugar), status-line count."
 resource: internal/todoindex
 tags: [architecture, todo, comment-tags, overlay, search, filter]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # TODO Index (#61)
@@ -51,7 +51,11 @@ does ever rescans. Since #2156 they are one shared filter expression
 ([List Filter Syntax](./list-filters.md)), typed into the `internal/filterbar`
 row under the chips and focused with `/` — or the shared find chord
 `cmd+f` / `ctrl+f` (#2409), answered inside the overlay because it owns the
-keyboard ahead of the keymap layer — like in every other list pane:
+keyboard ahead of the keymap layer — like in every other list pane. `cmd+g` /
+`cmd+shift+g` are answered there for the same reason (#2410): they step the
+narrowed list while the row keeps the keyboard, ahead of the row's own keys
+(the chord is not filter text), and the row carries the counter with its wrap
+marker.
 
 | Field | Takes |
 | --- | --- |

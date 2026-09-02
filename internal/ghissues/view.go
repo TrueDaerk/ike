@@ -289,6 +289,11 @@ func (m *Model) matchRow(sel, plain lipgloss.Style) string {
 	if note := qualNote(m.fInput); note != "" {
 		line += faint.Render("  (" + note + ")")
 	}
+	if m.matchStatus != "" {
+		// Where the cmd+g walk over the narrowed list stands, wrap included
+		// (#2410) — the input keeps the keyboard while it moves.
+		line += faint.Render("  " + m.matchStatus)
+	}
 	return line
 }
 

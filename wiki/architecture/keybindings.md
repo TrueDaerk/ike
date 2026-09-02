@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -998,6 +998,93 @@ The `http` context keeps its own `http.search` row from #2400 — it names the
 same gesture (`httppane.Model.BeginSearch`) the Global command reaches through
 the capability, so which of the two wins there is immaterial; the pane row is
 the more specific one and is allowlisted as an intentional shadow.
+
+## Stepping the matches outside the editor (#2410)
+
+`cmd+f` opening a pane's search left the second half of the gesture behind.
+Inside the editor `cmd+g` / `cmd+shift+g` (`search.nextMatch` /
+`search.prevMatch`) walk the matches with the find widget still up; in every
+other search field the query had to be applied and the input blurred with
+`enter` first — the filter rows blur on `enter`, the response viewer's `n`/`N`
+are query text until then. Telemetry (2026-09-01/02) recorded 19
+`search.nextMatch` presses in streaks of up to 7, all in the editor: the other
+panes could not be measured because the chord never resolved there.
+
+The capability from #2409 carries the second half too:
+
+```go
+type Searchable interface {
+    OpenSearch() bool          // #2409
+    NextMatch() ui.MatchStep   // #2410
+    PrevMatch() ui.MatchStep
+}
+```
+
+`Instance.StepMatch(delta)` picks the direction; the root model's
+`MatchStepMsg` handler asks the focused pane **first** and only falls back to
+the older readings — repeat the editor's in-file search (#376), walk the
+retained find-in-path results — when the pane reports `ui.NoStep`. That is the
+whole gate: a pane whose search is closed is not claiming the chord, so the
+editor path is unchanged.
+
+`ui.MatchStep` (`internal/ui/matchstep.go`) is the shared outcome:
+
+| field | meaning |
+|---|---|
+| `Handled` | the pane's search was open and took the chord |
+| `Total` | matches the current query has |
+| `Index` | 1-based position within them |
+| `Wrapped` | the step ran off an end and came back around |
+| `Cmd` | anything the step has to emit (the DOM inspector jumps the editor) |
+
+`Handled` with `Total == 0` is the deliberate no-op the issue asks for: the
+pane owns the chord, there is nothing to step to, and the root model notifies
+*"No matches"* rather than moving something unrelated — the #267 rule again.
+
+Every pane keeps its own stepping code, because "one step" means a scroll in
+one pane and a tree cursor in the next. What they share are the primitives
+(`ui.StepWrap`, `ui.StepSorted`, `ui.StepOver`) and the counter
+(`ui.MatchCounter`), which is where `1/12 (wrapped)` comes from: the marker
+has to read identically everywhere or it reads as a bug in the pane that
+differs. It describes one step, so every query edit drops it.
+
+What counts as a match follows the pane's own search:
+
+| pane | matches |
+|---|---|
+| Explorer, terminal scrollback, terminal copy mode | the query's hits, stepped by row / virtual line |
+| Diff, markdown preview, HTTP response, DOM inspector | the query's hits, stepped by match index |
+| Problems, Usages, TODO index, archive viewer, Issues | the rows the filter left standing, group headers skipped (`ui.StepOver`) |
+| Data viewer | the rows of the loaded page (paging silently would step over rows nobody can see) |
+| Settings | the search result rows across all pages |
+
+The filter-row panes render the counter through `filterbar.Model.ShowStep`, so
+all four wear it identically.
+
+### Why `ctrl+g` is not in the table
+
+The same argument as `ctrl+f` one section up: `ctrl+g` / `ctrl+shift+g` are
+the editor's `editor.caret.addNext` / `editor.caret.addAll` (#145), and a
+Global binding would resolve ahead of the editor. The chords are answered
+outside the keymap table instead — by the root model for registry panes (only
+while the focused pane's search is open, so an editor-less context never loses
+anything) and by `ui.MatchStepChord` in the surfaces that own the keyboard
+first: the settings panel, the TODO index overlay, the explorer's speed
+search, the terminal. Off macOS the `Cmd`→`Ctrl` fold makes `ctrl+g` the
+`search.nextMatch` binding anyway, with the multi-caret rows shadowing it in
+the editor — already allowlisted in `intentionalDefaultShadows`.
+
+`ui.MatchStepChord` matches by *parts* rather than by spelling: bubbletea
+reports the Command key as `meta+` or `super+` depending on the terminal
+protocol, the keymap layer's canonical form is `cmd+`, and the modifier order
+differs between the two (`shift+meta+g` vs `cmd+shift+g`). Enumerating that
+product is how a chord ends up working in one terminal and not the next.
+
+The terminal reserves `cmd+g` / `cmd+shift+g` in `terminalReservedKey`
+alongside `cmd+f`, and only claims them when a search is actually open — with
+none open the chord stays with the child, which may own its own find. `ctrl+g`
+is deliberately *not* reserved there: it is a real control character the shell
+expects.
 
 ## The line-editing family and the pane chords (#2400)
 

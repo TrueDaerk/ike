@@ -196,6 +196,19 @@ func (l *List) Advance(delta int) (Item, bool) {
 // the up/down key primitive, as opposed to Move's clamped wheel semantics.
 func (l *List) Step(delta int) { l.cursor = ui.StepIndex(l.cursor, delta, l.total) }
 
+// StepMatch is Step in the shape the shared cmd+g chord reports (#2410): it
+// wraps the same way and says where the cursor landed, so the pane's filter
+// row can show "3/17" — or "1/12 (wrapped)" for the step that came back
+// around.
+func (l *List) StepMatch(delta int) ui.MatchStep {
+	if l.total == 0 {
+		return ui.NoMatches()
+	}
+	next, wrapped := ui.StepWrap(l.cursor, l.total, delta)
+	l.cursor = next
+	return ui.Stepped(next, l.total, wrapped)
+}
+
 // Page shifts the cursor by delta windows of the last Render height, clamped
 // at both ends (#1666). Header rows count towards the jump — the cursor lands
 // on the item nearest the target render row — so one pgdn scrolls exactly one

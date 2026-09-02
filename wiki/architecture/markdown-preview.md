@@ -4,7 +4,7 @@ title: Markdown Preview
 description: "#62 — rendered live preview pane for markdown buffers: glamour-rendered ANSI split beside the editor, debounced re-render off the editor change seam, heading-anchored cursor scroll sync, theme-aware styling, layout persistence; #2180 — followable links and inline Kitty-rendered local images."
 resource: internal/preview
 tags: [architecture, markdown, preview, pane, glamour, links, kitty]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Markdown Preview (#62)
@@ -52,6 +52,11 @@ costs one row of the document while it is up (`viewHeight`).
 `OpenSearch` is the pane's `pane.Searchable` implementation, which is how the
 Global `search.open` command reaches the prompt (see
 [Keybindings](./keybindings.md)).
+
+`NextMatch` / `PrevMatch` complete the capability (#2410): `cmd+g` /
+`cmd+shift+g` do what `n`/`N` do, but while the prompt still holds the
+keyboard, where those letters are query text. The counter marks the wrapped
+step — `1/12 (wrapped)` — and a query edit drops the marker.
 
 ## Live updates (debounced)
 
