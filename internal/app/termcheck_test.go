@@ -63,14 +63,21 @@ func TestInsideTmux(t *testing.T) {
 	}
 }
 
+// freeShell closes whatever first-start modal sized() left on the floating
+// shell (the LSP onboarding opens on machines where its Init command finds
+// install candidates), so termcheck tests start from a free surface.
+func freeShell(m *Model) {
+	m.onboarding = nil
+	m.shell.Close()
+}
+
 // TestRunTermCheckOpensReport: a deficient environment opens the floating
 // report once; the verdict never re-fires.
 func TestRunTermCheckOpensReport(t *testing.T) {
 	m := sized(t, 100, 30)
+	freeShell(&m)
 	m.caps.kitty = false // deficient: warns unless the guard holds
-	if cmd := m.runTermCheck(); cmd != nil {
-		t.Fatal("free shell: the verdict should open the report, not retry")
-	}
+	m.runTermCheck()
 	if !m.caps.done {
 		t.Fatal("verdict should mark done")
 	}
@@ -78,58 +85,54 @@ func TestRunTermCheckOpensReport(t *testing.T) {
 		t.Fatal("deficient terminal should open the floating report")
 	}
 	m.shell.Close()
-	if cmd := m.runTermCheck(); cmd != nil || m.shell.IsOpen() {
+	m.runTermCheck()
+	if m.shell.IsOpen() {
 		t.Fatal("second run must not re-open the report")
 	}
 }
 
-// TestRunTermCheckWaitsForBusyShell: an occupied modal surface defers the
-// report to a retry tick instead of stealing the shell.
+// TestRunTermCheckWaitsForBusyShell (#2402): an occupied modal surface parks
+// the report as pending — no retry tick, no wake — and the settled-pass drain
+// opens it once the surface frees up.
 func TestRunTermCheckWaitsForBusyShell(t *testing.T) {
 	m := sized(t, 100, 30)
+	freeShell(&m)
 	m.caps.kitty = false
 	m.shell.Open() // e.g. the welcome tour / another prompt owns the surface
-	if cmd := m.runTermCheck(); cmd == nil {
-		t.Fatal("busy shell: the verdict should schedule a retry")
-	}
+	m.runTermCheck()
 	if m.caps.done {
 		t.Fatal("a deferred verdict must stay pending")
 	}
-}
-
-// TestRunTermCheckGivesUpAfterMaxRetries (#2163): a modal parked open forever
-// (a user reading the welcome tour) must not keep the 2s retry tick alive for
-// the whole session — after the cap the report is dropped.
-func TestRunTermCheckGivesUpAfterMaxRetries(t *testing.T) {
-	m := sized(t, 100, 30)
-	m.caps.kitty = false
-	m.shell.Open()
-	for i := 0; i < termCheckMaxRetries; i++ {
-		if cmd := m.runTermCheck(); cmd == nil {
-			t.Fatalf("retry %d: verdict should still re-poll", i)
-		}
+	if !m.caps.pending {
+		t.Fatal("busy shell: the verdict should mark itself pending")
 	}
-	if cmd := m.runTermCheck(); cmd != nil {
-		t.Fatal("past the cap the retry chain must end")
+	// Still busy: the drain must keep waiting without giving up.
+	m.drainTermCheck()
+	if m.caps.done {
+		t.Fatal("drain must not steal an occupied shell")
 	}
-	if !m.caps.done {
-		t.Fatal("giving up must mark the verdict done so nothing re-arms it")
+	m.shell.Close()
+	m.drainTermCheck()
+	if !m.caps.done || !m.shell.IsOpen() {
+		t.Fatal("freed shell: the drain should open the deferred report")
 	}
 }
 
-// TestRunTermCheckSilentWhenCapable: no issues → no shell, no retry.
+// TestRunTermCheckSilentWhenCapable: no issues → no shell, nothing pending.
 func TestRunTermCheckSilentWhenCapable(t *testing.T) {
 	m := sized(t, 100, 30)
+	freeShell(&m)
 	m.caps = termCaps{kitty: true, profile: colorprofile.TrueColor, profileSeen: true}
 	t.Setenv("TMUX", "")
 	t.Setenv("TERM", "xterm-ghostty")
-	if cmd := m.runTermCheck(); cmd != nil {
-		t.Fatal("capable environment should not retry")
-	}
+	m.runTermCheck()
 	if m.shell.IsOpen() {
 		t.Fatal("capable environment should not open the report")
 	}
 	if !m.caps.done {
 		t.Fatal("verdict should mark done")
+	}
+	if m.caps.pending {
+		t.Fatal("capable environment must not park a pending verdict")
 	}
 }

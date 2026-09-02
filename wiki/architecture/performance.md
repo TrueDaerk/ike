@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Performance & Diagnostics
-description: Idle-behavior rules (who may wake the render loop, and how often), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the opt-in update-loop trace log, the freeze-triage procedure, and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
+description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the opt-in update-loop trace log, the freeze-triage procedure, and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
-tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze]
-timestamp: 2026-08-31T00:00:00Z
+tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -55,6 +55,25 @@ so with many panes each unnecessary wake is expensive. The standing rules:
 - **Caches stay bounded**: the editor line cache clears past `lineCacheCap`
   (4096) and on every render-epoch bump; terminal render caches key by
   mutation version, not history.
+- **Modal-deferred work waits event-driven, not on a ticker** (#2402): the
+  terminal-capability verdict due while another modal owns the floating shell
+  used to re-poll on a 2s tick (capped at ~a minute, #2163) — still the
+  loudest idle source in the #2402 telemetry, ~10 passes per 10s for the
+  first minute of every session parked in the tour/onboarding. It now parks
+  as a `pending` flag and Update's settled pass draws it on the very message
+  that closes the blocking modal — zero wakes while waiting, and no give-up
+  cap needed. The pattern generalizes: anything waiting for UI state to
+  change should ride the message that changes it, never poll for it.
+- **LSP servers cannot re-render an unchanged truth** (#2402): notifications
+  other than `publishDiagnostics` are dropped in the manager before any
+  message exists ($/progress, logMessage, telemetry — an idle server's
+  chatter never wakes the loop), diagnostics coalesce into one
+  `DiagnosticsBatchMsg` per 50ms window (#597), and since #2402 the bridge
+  also drops a publish whose converted set equals the last one delivered for
+  that path — including "still empty" for a path never delivered. Servers
+  that republish their whole workspace view on every watched-file round now
+  cost zero passes while nothing changed
+  (`TestNoChangeRepublishDropped`).
 - **The watcher never reports its own consequences** (#1886): IKE's VCS
   refresh runs `git status`, and every status run echoes back through the
   `.git` watch — an atime bump on `index` (kqueue `NOTE_ATTRIB`/Chmod),
@@ -72,6 +91,47 @@ so with many panes each unnecessary wake is expensive. The standing rules:
   change). Regression tests: `TestGitStatusEchoesStaySilent`,
   `TestRelativeRootClassifiesGitDir`.
 
+## The render budget & the idle pass count (#2402)
+
+The unit the idle rules are enforced in is the **pass**: one
+`diag.LoopEnter`/`LoopExit` bracket around an `Update` dispatch or a `View`
+composition. Every message costs **two** passes — bubbletea calls `View`
+after every accepted `Update` with no dirty check. Two framework facts,
+verified against bubbletea v2.0.7, bound what a fix can and cannot do:
+
+- **A `Cmd` returning `nil` costs nothing**: nil messages are dropped before
+  `Update` (tea.go's receive loop), so a poll that found no change should
+  return nil, not a "nothing changed" message.
+- **The renderer already dedups identical frames** (`viewEquals` in the
+  cursed renderer): composing the same string twice writes to the terminal
+  once. A frame hash inside IKE would therefore only save compose CPU, never
+  a pass — the way to cut the pass rate is to cut *messages at their source*,
+  not to short-circuit `View`.
+
+**The budget**: an idle session — editor, terminal tool printing nothing,
+LSP server running — targets **p50 ≤ 5 passes / 10s, p99 ≤ 60** (#2402
+telemetry targets). The measured steady state is 0 outside the documented
+exceptions (explorer keep-alive ~2 passes/min, forge poll ~6–9/min where a
+forge is configured). Rules for new code, in budget terms:
+
+- A repeating tick is 2 passes per firing, forever — demand-arm it (idle
+  rules above) or it is a standing spend no one approved.
+- A per-event message flood is 2 passes per event — coalesce at the producer
+  (the 8ms terminal quiet window + adaptive 16–66ms input coalescer, the
+  50ms diagnostics batch, the 100ms watch debounce are the patterns).
+- A message that changes nothing visible is 2 wasted passes — drop it before
+  `host.Send` (the #2402 no-change diagnostics drop), return a nil msg, or
+  wait event-driven on the pass that changes the state (the #2402 termcheck
+  deferral).
+
+**Accounting is always on** (#2402): `diag.LoopEnter` tallies every outermost
+pass under the message's Go type name (or the `view/render` label), two map
+operations per pass. `diag.MessageCounts` exposes the snapshot; the telemetry
+heartbeat diffs two snapshots and ships the interval's top 3 as the `top`
+field (`app.termCheckMsg:5,view/render:5,…`), so an idle regression in the
+field names its own culprit in the next telemetry export — the HUD (below)
+is the interactive view of the same question.
+
 ## The performance HUD (`internal/perfhud`, #1999)
 
 Every idle-CPU and memory regression so far (#1001, #1886, #1537) needed
@@ -82,9 +142,10 @@ top-right corner — above every overlay but the toasts, so it cannot be hidden
 by the very frames it explains — showing, per refresh interval:
 
 - **Message rate**, total and by coarse category (key, mouse, resize, tick,
-  other) plus the loudest *concrete* message type. The buckets say what kind of
-  thing wakes the loop; the type name (`followTickMsg`, `terminal.OutputMsg`)
-  is what actually named the culprit in the regressions above. Categories are
+  other) plus the loudest *concrete* message types (top 3 since #2402). The
+  buckets say what kind of thing wakes the loop; the type names
+  (`followTickMsg`, `terminal.OutputMsg`) are what actually named the
+  culprits in the regressions above. Categories are
   structural where bubbletea's own interfaces allow (`KeyMsg`, `MouseMsg`,
   `WindowSizeMsg`); a timer deadline is recognised by the `Tick` spelling every
   ticker in the codebase uses, and everything else is a Cmd result.
@@ -243,7 +304,9 @@ The evidence trail, in the order worth checking:
    Heartbeats that continue with a frozen `passes` count → the update loop is
    stuck; with an advancing count → the loop is fine and the freeze sits
    outside it (input reader, renderer, terminal); heartbeats stopping dead →
-   the process ended (crash, kill, exit). An `op` `http.flight` start without
+   the process ended (crash, kill, exit). The `top` field (#2402) names the
+   interval's three loudest message types — for a freeze, what the loop was
+   chewing on; for an idle-CPU report, the wake source, with no repro needed. An `op` `http.flight` start without
    its end phase means a dispatch never came back.
 2. **The project's state dir** — found via the `session` event's `project`
    token (hash candidate roots to match): `debug.log` for watchdog stall/

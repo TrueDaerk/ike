@@ -4,7 +4,7 @@ title: Usage Telemetry
 description: Local-only usage recording — command, keybinding, layout, session, heartbeat and operation-lifecycle events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
-timestamp: 2026-08-31T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Usage Telemetry
@@ -83,9 +83,16 @@ them.
     reads three ways: heartbeats continuing with a frozen count → the loop is
     stuck (or starved); continuing with an advancing count → the freeze sits
     outside the loop (input reader, renderer, terminal); stopping dead → the
-    process ended. The goroutine lives in the recorder, starts with the
-    session file and never depends on the update loop. Cost: ~1 MB per
-    day-long session, inside the 5 MiB cap.
+    process ended. Since #2402 it also carries `top`: the interval's three
+    loudest pass sources as `type:count` pairs
+    (`app.termCheckMsg:5,view/render:5`), diffed from the always-on
+    per-message-type counter (`diag.MessageCounts`) — the field that names
+    an idle-wake culprit in an export without a local repro. Omitted when
+    the interval was dead quiet, so a truly idle session stays cheap to
+    store. Structure only, never content — message *type names* are code
+    identifiers, not user data. The goroutine lives in the recorder, starts
+    with the session file and never depends on the update loop. Cost: ~1 MB
+    per day-long session, inside the 5 MiB cap.
   - `op` (#2348) — the lifecycle of a long-running operation. `id` names it
     (currently `http.flight` for every HTTP dispatch — run, re-send, re-run),
     `phase` is `start`, `ok`, `error` or `canceled`; the end phases carry

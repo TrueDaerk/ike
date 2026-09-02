@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime/pprof"
 	"sync"
 	"sync/atomic"
@@ -38,14 +39,27 @@ var wd struct {
 	thresholdNanos atomic.Int64
 
 	// mu guards the fields the monitor reads rarely and the loop writes per
-	// pass (what) or reconfiguration writes (dir, logf). Never held while
-	// dumping, so a slow disk cannot back-pressure LoopEnter.
+	// pass (what, the counters) or reconfiguration writes (dir, logf). Never
+	// held while dumping, so a slow disk cannot back-pressure LoopEnter.
 	mu   sync.Mutex
 	what any            // what the in-flight pass is handling (tea.Msg or label)
 	dir  func() string  // state dir for dump files, resolved at dump time
 	logf func(string)   // best-effort diagnostic logger (app's debug.log)
 
+	// counts tallies outermost passes by what started them — the message's Go
+	// type name, or the label for non-message passes ("view/render"). Always
+	// on (#2402): the idle-pass telemetry needs the breakdown from sessions
+	// that never opened the HUD. names caches the reflect.Type → string
+	// resolution so the per-pass cost stays two map operations, no formatting.
+	counts map[string]uint64
+	names  map[reflect.Type]string
+
 	once sync.Once // monitor goroutine spawn
+}
+
+func init() {
+	wd.counts = map[string]uint64{}
+	wd.names = map[reflect.Type]string{}
 }
 
 // LoopEnter marks the start of an update-loop pass (an Update dispatch or a
@@ -57,8 +71,40 @@ func LoopEnter(what any) {
 		wd.enterNanos.Store(time.Now().UnixNano())
 		wd.mu.Lock()
 		wd.what = what
+		wd.counts[passLabel(what)]++
 		wd.mu.Unlock()
 	}
+}
+
+// passLabel resolves what a pass handles to its counter key: a string label
+// stays itself, a message counts under its Go type name. The name cache keeps
+// repeat messages at one map hit instead of a fmt/reflect string build.
+// Caller holds wd.mu.
+func passLabel(what any) string {
+	if s, ok := what.(string); ok {
+		return s
+	}
+	t := reflect.TypeOf(what)
+	name, ok := wd.names[t]
+	if !ok {
+		name = fmt.Sprintf("%T", what)
+		wd.names[t] = name
+	}
+	return name
+}
+
+// MessageCounts returns a copy of the cumulative per-pass counters: message
+// Go type name (or pass label) → outermost passes it started. Consumers diff
+// two snapshots to get an interval's breakdown (the telemetry heartbeat's
+// top field).
+func MessageCounts() map[string]uint64 {
+	wd.mu.Lock()
+	defer wd.mu.Unlock()
+	out := make(map[string]uint64, len(wd.counts))
+	for k, v := range wd.counts {
+		out[k] = v
+	}
+	return out
 }
 
 // LoopExit marks the end of the pass opened by the matching LoopEnter.

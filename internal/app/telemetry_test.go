@@ -492,3 +492,20 @@ func TestTelemetryRecorderRidesProjectSwitch(t *testing.T) {
 		t.Fatalf("project switch not recorded; layout events: %v", evs)
 	}
 }
+
+// TestTopMessageDelta: the heartbeat's per-interval breakdown (#2402) counts
+// cur minus prev, keeps the n loudest, orders ties by name, and reports a
+// dead-quiet interval as empty rather than as "everything:0".
+func TestTopMessageDelta(t *testing.T) {
+	prev := map[string]uint64{"a.tick": 10, "b.key": 5}
+	cur := map[string]uint64{"a.tick": 14, "b.key": 5, "c.out": 9, "d.msg": 4}
+	if got, want := topMessageDelta(prev, cur, 3), "c.out:9,a.tick:4,d.msg:4"; got != want {
+		t.Errorf("topMessageDelta = %q, want %q", got, want)
+	}
+	if got := topMessageDelta(cur, cur, 3); got != "" {
+		t.Errorf("idle interval must be empty, got %q", got)
+	}
+	if got, want := topMessageDelta(nil, map[string]uint64{"x": 2}, 3), "x:2"; got != want {
+		t.Errorf("nil prev: got %q, want %q", got, want)
+	}
+}

@@ -26,18 +26,14 @@ import (
 // responds well within this.
 const termCheckGrace = 3 * time.Second
 
-// termCheckRetry re-polls when the verdict is due but the floating shell is
-// occupied (welcome tour, crash recovery, onboarding) — the report waits its
-// turn instead of stealing the modal surface.
-const termCheckRetry = 2 * time.Second
-
-// termCheckMaxRetries bounds the busy-shell re-poll (#2163): a user parked in
-// the welcome tour used to keep the retry tick alive forever — one forced
-// Update/View wake every 2s for the session's whole life, invisible to the
-// armed-timers count. After ~a minute the report is dropped instead; the
-// deficiencies it would have named are static, and the palette/menu still
-// reach every action it points at.
-const termCheckMaxRetries = 30
+// A verdict due while the floating shell is occupied (welcome tour, crash
+// recovery, onboarding) used to re-poll on a 2s tick — capped at 30 rounds
+// (#2163), but still ~10 idle passes per 10s for the first minute of every
+// session parked in a modal, the loudest source in the #2402 idle telemetry.
+// The wait is event-driven now: the deferred verdict is marked pending and
+// drained from Update's settled pass — closing the blocking modal takes a
+// message anyway, so the report opens on that very pass and the wait itself
+// costs zero wakes (and no longer needs a give-up cap).
 
 // termReportWidth caps the report body: long lines wrap here.
 const termReportWidth = 66
@@ -61,19 +57,16 @@ type termCaps struct {
 	scheduled bool
 	// done: the verdict fired; late reports must not re-open the shell.
 	done bool
-	// retries counts busy-shell re-polls; termCheckMaxRetries ends the chain.
-	retries int
+	// pending: the verdict was due while a modal owned the shell; the settled
+	// pass draws it once the surface frees up (no retry tick, #2402).
+	pending bool
 }
 
-// termCheckTick schedules the verdict; the retry variant re-polls a busy shell.
-// Both stamp the arming model's generation, so a tick outliving a project
-// switch retires on arrival.
+// termCheckTick schedules the verdict once the grace period elapses. It stamps
+// the arming model's generation, so a tick outliving a project switch retires
+// on arrival.
 func termCheckTick(gen int64) tea.Cmd {
 	return tea.Tick(termCheckGrace, func(time.Time) tea.Msg { return termCheckMsg{gen: gen} })
-}
-
-func termCheckRetryTick(gen int64) tea.Cmd {
-	return tea.Tick(termCheckRetry, func(time.Time) tea.Msg { return termCheckMsg{gen: gen} })
 }
 
 // insideTmux reports whether IKE runs under tmux (or screen), which consumes
@@ -126,31 +119,36 @@ func termCheckIssues(caps termCaps, tmux bool) []termIssue {
 // runTermCheck draws the verdict once. Deficiencies open a centered floating
 // report the user must dismiss (esc) — a bottom-corner toast proved too easy
 // to miss and truncated the fixes. When another modal owns the shell (tour,
-// recovery, onboarding), the verdict retries until the surface is free.
-func (m *Model) runTermCheck() tea.Cmd {
+// recovery, onboarding), the verdict parks as pending; drainTermCheck opens
+// it on the settled pass that frees the surface.
+func (m *Model) runTermCheck() {
 	if m.caps.done {
-		return nil
+		return
 	}
 	issues := termCheckIssues(m.caps, insideTmux(os.Getenv))
 	if len(issues) == 0 {
 		m.caps.done = true
-		return nil
+		return
 	}
 	if m.shell.IsOpen() || m.tourOpen() || m.recoveryOpen() || m.onboardingOpen() ||
 		m.themePickOpen() || m.toolchainInfoOpen() {
-		if m.caps.retries >= termCheckMaxRetries {
-			m.caps.done = true // give up rather than tick forever (#2163)
-			return nil
-		}
-		m.caps.retries++
-		return termCheckRetryTick(m.modelGen)
+		m.caps.pending = true
+		return
 	}
-	m.caps.done = true
+	m.caps.done, m.caps.pending = true, false
 	body := m.termReportBody(issues)
 	m.shell.SetContent(ui.ModelContent{Heading: "TERMINAL CHECK", Body: func() string { return body }})
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
-	return nil
+}
+
+// drainTermCheck re-runs a deferred verdict from Update's settled pass. The
+// cost while nothing is pending — the overwhelmingly common state — is one
+// bool check per message.
+func (m *Model) drainTermCheck() {
+	if m.caps.pending && !m.caps.done {
+		m.runTermCheck()
+	}
 }
 
 // termReportBody lays the issues out for the floating shell: warning-colored
