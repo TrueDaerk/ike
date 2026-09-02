@@ -4,7 +4,7 @@ title: DOM Inspector
 description: "DOM inspector tool pane (#1929) — the focused HTML buffer's parsed DOM tree with a CSS selector tester: tokenizer-based tolerant parse with source offsets, async off the UI loop, cursor auto-follow, selector matches highlighted in tree and editor, copy shortest-unique selector / outer HTML."
 resource: internal/domview
 tags: [architecture, html, dom, tool-window]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # DOM Inspector (#1929)
@@ -55,7 +55,10 @@ a click) is a `ui.EditKey` single-line input that
 re-matches on every keystroke: match rows highlight, the header shows
 `current/total matches`, a cascadia compile error renders as `✗ message`
 instead of matches. `n`/`N` step the current match (wrapping), select its row
-and jump the editor. `c` copies the node's `SelectorPath`, `Y` its outer
+and jump the editor; `cmd+g` / `cmd+shift+g` do the same **while the selector
+line still holds the keyboard** (#2410), where `n` and `N` are selector text,
+and the header marks the step that came back around as
+`1/2 matches (wrapped)`. `c` copies the node's `SelectorPath`, `Y` its outer
 HTML — both via `CopyMsg`, which the root model puts on the system clipboard
 with a toast. `cmd+c` aliases `c`, and it is the one key the selector line
 does *not* swallow (#2062): the node the copy acts on stays highlighted

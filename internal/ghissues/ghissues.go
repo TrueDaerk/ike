@@ -259,6 +259,9 @@ type Model struct {
 	// Shift on a QWERTZ layout (#48) — with '/' kept as an alias.
 	fInput string
 	fCur   int
+	// matchStatus is where the cmd+g walk over the narrowed list stands
+	// (#2410), shown on the match row; every edit of fInput drops it.
+	matchStatus string
 	// fSaved is what esc inside the filter overlay restores; fetched is the
 	// state the current listing was fetched for, so a state-filter change
 	// only refetches when the listing cannot answer it.

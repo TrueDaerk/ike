@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -472,6 +472,7 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 | `cmd+d` | split right (#982, iTerm-style): a fresh terminal pane opens to the right of the focused terminal's pane and takes focus — the same for dedicated terminal panes and editor-hosted terminal tabs. Outside terminals `cmd+d` keeps its global binding (`editor.duplicateLine`) |
 | `cmd+w` | close the terminal (#986): an idle shell gets an EOF (ctrl+d) — it exits and the regular exit path closes the pane/tab; a **busy** terminal (foreground process group ≠ shell, or a still-running command session — `Session.Busy`) raises a centered guard first: enter closes, esc cancels; a **finished** session (`Model.Exited`) is closed outright (#2192) — there is no child left to receive an EOF, so waiting for an exit that already happened would leave it unclosable. `ctrl+w` stays with the shell (delete word); outside terminals `cmd+w` keeps its global binding (`editor.closeTab`) |
 | `cmd+f` | open the scrollback search (#1504) — the muscle-memory entry point to the same inline search `/` starts from scrollback (#1169), working from the live view too (`Model.OpenSearch` → `StartSearch`; esc then returns to the live view). In **copy mode** (#2162) it opens that mode's own search instead (#2409). Under an alt-screen or mouse-reporting child the chord stays with the child (vim/lazygit own their find); outside terminals `cmd+f` keeps its global binding (`search.open`, or `editor.find` in an editor). The popup terminal reserves it too, on the focused split side |
+| `cmd+g` / `cmd+shift+g` | step the next/previous match of whichever search the terminal has open (#2410) — the scrollback field or copy mode's accepted query — without closing it (`Model.NextMatch`/`PrevMatch`). With **no** search open the chord stays with the child, which may own its own find. `ctrl+g` is deliberately not reserved: it is a real control character the shell expects |
 | `cmd+shift+c` | enter copy mode (#2162, Copy mode below) — the keyboard detaches from the PTY and vim motions cursor over the scrollback (`Model.StartCopyMode`). Under a live alt-screen or mouse-reporting child the chord stays with the child; outside terminals it has no global binding. The popup terminal reserves it too, on the focused split side |
 | `cmd+shift+l` | enter link hint mode (#2254) — label every resolvable `file:line` reference on the visible rows and open the one whose label is typed (`Model.StartLinkHints`/`LinkHintKey`, File:line links below). With no resolvable reference on screen, or under an alt-screen / mouse-reporting child, the chord stays with the child; outside terminals it has no global binding. The popup terminal reserves it too, on the focused split side |
 | `ctrl+arrows` | spatial focus moves out of the terminal (#228) — the same `keymap.bindings.focus_*` overrides apply; a disabled direction stays with the shell. Inside the popup layer left/right instead step through its surfaces — split sides and floating panels — raising the one they land on (#1806) |
@@ -654,9 +655,11 @@ pattern (#1087): case-insensitive contains over the plain line text, no
 regex. Typing jumps incrementally to the nearest match **at or above** the
 anchored view — history search goes backward — wrapping to the newest match
 when nothing older matches; `ctrl+p`/up step older, `ctrl+n`/down newer,
-both with wrap (plain `n`/`N` would collide with typing the query). Matches
-on the visible rows highlight reverse-video and the field carries a `3/17`
-counter (`no matches` in the Error colour on a miss). enter accepts and
+both with wrap (plain `n`/`N` would collide with typing the query), as do
+`cmd+g`/`cmd+shift+g` (#2410) — answered inside `searchKey` because the field
+owns the keyboard. Matches on the visible rows highlight reverse-video and the
+field carries a `3/17` counter, `1/12 (wrapped)` after a step that came back
+around (`no matches` in the Error colour on a miss). enter accepts and
 keeps the position, esc restores the offset the search opened on; every
 other key is consumed while the field is open — nothing leaks into the
 shell mid-query.
@@ -710,7 +713,10 @@ mouse-reporting child (vim/lazygit own their keys); a finished session
   matching rule (#1169): case-insensitive contains over the plain line text.
   enter jumps to the nearest match in the search's direction (the cursor
   lands on the match's column), `n` repeats, `N` reverses, both wrapping
-  around; visible occurrences highlight reverse-video (the query being typed
+  around — as do `cmd+g` / `cmd+shift+g` (#2410), which reach the accepted
+  search **even while a query line is open**, where `n` and `N` are text; the
+  status row marks the step that came back around as `1/12 (wrapped)`.
+  Visible occurrences highlight reverse-video (the query being typed
   highlights live) and a miss reports `no matches` in the Error colour with
   the cursor unmoved. A paste edits the open query line (#1882) and is inert
   anywhere else in the mode.

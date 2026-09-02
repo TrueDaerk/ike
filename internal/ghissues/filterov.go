@@ -156,6 +156,32 @@ func (m *Model) OpenSearch() bool {
 	return true
 }
 
+// NextMatch implements the pane's match-step capability (#2410). The pane's
+// search is the overlay's match input, so its "matches" are the issues (or
+// PRs) the pattern left standing: cmd+g walks them behind the open overlay
+// while the input keeps the keyboard and the pattern stays editable. The
+// group headers are skipped — they are chrome, not results.
+func (m *Model) NextMatch() ui.MatchStep { return m.stepFiltered(1) }
+
+// PrevMatch steps backwards; see NextMatch.
+func (m *Model) PrevMatch() ui.MatchStep { return m.stepFiltered(-1) }
+
+func (m *Model) stepFiltered(delta int) ui.MatchStep {
+	if !m.Filtering() {
+		return ui.NoStep
+	}
+	rows := m.rowsOf(m.tab)
+	next, st := ui.StepOver(m.Cursor(), len(rows), delta, func(i int) bool { return rows[i].idx >= 0 })
+	if st.Total == 0 {
+		m.matchStatus = ""
+		return st
+	}
+	m.setCursor(next)
+	m.clampScroll()
+	m.matchStatus = ui.MatchCounter(st.Index, st.Total, st.Wrapped)
+	return st
+}
+
 // openLabelSection opens the overlay on the label section ('l'), landing on
 // the first selected label so the active filter reads first.
 func (m *Model) openLabelSection() {
@@ -269,6 +295,7 @@ func (m *Model) matchRowKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.fInput, m.fCur = out, ncur
 		if changed {
 			m.filterTouched = true
+			m.matchStatus = "" // an edited pattern starts a fresh walk (#2410)
 			cmd := m.applyMatchQualifiers(false)
 			m.resetCursors()
 			m.applyFilter()

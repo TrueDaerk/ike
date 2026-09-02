@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, and a notification when a failed or slow response lands while the response pane is not on screen.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -1116,10 +1116,14 @@ For a recognized stream:
   stays independently copyable while the prompt is open (#2051).
   `n`/`N` step to the next/previous match with
   wrap-around and scroll it into view, `Enter` commits the pattern and closes
-  the prompt, `Esc` clears the search. Every match renders on the muted
+  the prompt, `Esc` clears the search. `cmd+g` / `cmd+shift+g` step the same
+  matches **while the prompt is still open** (#2410), where `n` and `N` are
+  query text — the query stays editable between steps, and `n`/`N` keep
+  working after `Enter` for the vim hands that learned them. Every match renders on the muted
   selection background, the current one on the selection background plus an
   underline (the editor's convention). The footer shows the position
-  (`/token  3/17 · n/N next/prev · esc clear`) or `no matches`. The search
+  (`/token  3/17 · n/N next/prev · esc clear`) or `no matches`, with
+  `(wrapped)` after the counter for the step that came back around (#2410). The search
   survives history browsing and new responses: matches recompute on every
   re-compose. The prompt is a full single-line editor via the shared
   `ui.EditKey`/`ui.CursorView` widget (#763, #1845), the same one behind the

@@ -4,7 +4,7 @@ title: Archive Viewer
 description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name; gzip members open decompressed (#1948); e/E write members or the whole archive to a directory on disk under path, overwrite and size guards (#2249); ctrl+r re-lists the file in place (archive.reload, #2314)."
 resource: internal/archview
 tags: [architecture, archive, tar, viewer, pane, read-only, mouse, extract, reload]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Archive Viewer (#1762)
@@ -92,6 +92,11 @@ The pane wears the shared filter row ([list-filters](./list-filters.md),
 list pane so a filter appearing never shifts the entries by a line. `/` and the
 shared find chord (`cmd+f`, `ctrl+f`) focus it; `enter` applies and leaves,
 `esc` clears and leaves.
+
+`cmd+g` / `cmd+shift+g` step the *matching entries* while the row keeps the
+keyboard (#2410) — not the parent directories the tree keeps around them for
+context. The counter, wrap marker included, rides in the filter row itself
+(`filterbar.Model.ShowStep`); see [Keybindings](./keybindings.md#stepping-the-matches-outside-the-editor-2410).
 
 | Field | Takes |
 | --- | --- |

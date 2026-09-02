@@ -383,10 +383,25 @@ func (m *Model) OpenSearch() bool {
 	return true
 }
 
+// stepMatch implements the overlay's half of the match-step chord (#2410).
+// The overlay's search is a filter, so its "matches" are the entries the
+// filter left standing: cmd+g walks them while the filter row keeps the
+// keyboard and the expression stays editable.
+func (m *Model) stepMatch(delta int) ui.MatchStep {
+	return m.filter.ShowStep(m.list.StepMatch(delta))
+}
+
 // Update handles one key while the overlay is open.
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	// The focused filter row owns its editing keys (#2156); the arrow and
 	// page keys fall through, so the list can be steered while typing.
+	if delta, ok := ui.MatchStepChord(msg.String()); ok {
+		// The shared match-step chord (#2410), ahead of the filter row's own
+		// keys: it walks the narrowed list without the row losing the
+		// keyboard, which is exactly what it is for while one is typing.
+		m.stepMatch(delta)
+		return nil
+	}
 	if m.filter.Active() {
 		handled, changed := m.filter.Key(msg)
 		if changed {

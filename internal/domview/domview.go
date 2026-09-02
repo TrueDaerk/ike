@@ -68,14 +68,15 @@ type Model struct {
 	top       int
 	current   int // node enclosing the editor cursor (-1 none)
 
-	selEditing bool
-	selector   string
-	selCursor  int
-	selErr     string
-	matches    []*html.Node
-	matchSet   map[*html.Node]bool
-	matchIdx   int // current match (-1 none)
-	matchesRev int // bumped whenever matches or the current match change
+	selEditing   bool
+	selector     string
+	selCursor    int
+	selErr       string
+	matches      []*html.Node
+	matchSet     map[*html.Node]bool
+	matchIdx     int  // current match (-1 none)
+	matchesRev   int  // bumped whenever matches or the current match change
+	matchWrapped bool // the last step came back around an end (#2410)
 
 	// Double-click detection: navigating to a node needs a second click on
 	// the same row within ui.DoubleClickWindow; now is injectable so tests
@@ -216,6 +217,7 @@ func (m *Model) rebuildRows() {
 // clearMatches empties the match state without touching the revision.
 func (m *Model) clearMatches() {
 	m.matches, m.matchIdx, m.selErr = nil, -1, ""
+	m.matchWrapped = false // a fresh match set starts a fresh walk (#2410)
 	m.matchSet = map[*html.Node]bool{}
 }
 
@@ -412,23 +414,47 @@ func (m *Model) collapseOrParent() {
 
 // stepMatch moves the current match by delta (wrapping), selects its row —
 // unfolding ancestors so it is visible — and jumps the editor to it.
-func (m *Model) stepMatch(delta int) tea.Cmd {
-	if len(m.matches) == 0 {
-		return nil
+func (m *Model) stepMatch(delta int) tea.Cmd { return m.stepMatchStat(delta).Cmd }
+
+// NextMatch implements the pane's match-step capability (#2410): cmd+g steps
+// the selector's matches while the selector line keeps the keyboard, so a
+// selector can be refined and walked without leaving the input. n / N do the
+// same once the line is closed.
+func (m *Model) NextMatch() ui.MatchStep { return m.stepSelector(1) }
+
+// PrevMatch steps backwards; see NextMatch.
+func (m *Model) PrevMatch() ui.MatchStep { return m.stepSelector(-1) }
+
+// stepSelector owns the chord whenever a selector exists at all — the open
+// input or the applied one the footer still counts.
+func (m *Model) stepSelector(delta int) ui.MatchStep {
+	if !m.selEditing && m.selector == "" {
+		return ui.NoStep
 	}
-	m.matchIdx = ((m.matchIdx+delta)%len(m.matches) + len(m.matches)) % len(m.matches)
+	return m.stepMatchStat(delta)
+}
+
+// stepMatchStat is stepMatch's reporting form: it says where the walk landed
+// and whether it wrapped, so the selector line can show it (#2410).
+func (m *Model) stepMatchStat(delta int) ui.MatchStep {
+	if len(m.matches) == 0 {
+		m.matchWrapped = false
+		return ui.NoMatches()
+	}
+	m.matchIdx, m.matchWrapped = ui.StepWrap(m.matchIdx, len(m.matches), delta)
 	m.matchesRev++ // the editor's current-match underline follows
 	n := m.matches[m.matchIdx]
 	for p := n.Parent; p != nil; p = p.Parent {
 		delete(m.collapsed, p)
 	}
 	m.rebuildRows()
+	st := ui.Stepped(m.matchIdx, len(m.matches), m.matchWrapped)
 	if i := m.rowIndexOf(n); i >= 0 {
 		m.cursor = i
 		m.scrollToCursor()
-		return m.navigate(i)
+		st.Cmd = m.navigate(i)
 	}
-	return nil
+	return st
 }
 
 // navigate emits the jump to row i's node source position.
@@ -588,7 +614,13 @@ func (m *Model) selectorLine(pal *theme.Palette) string {
 		if m.matchIdx >= 0 {
 			cur = strconv.Itoa(m.matchIdx+1) + "/"
 		}
-		note = " " + lipgloss.NewStyle().Foreground(pal.Secondary).Render(cur+strconv.Itoa(len(m.matches))+" matches")
+		count := cur + strconv.Itoa(len(m.matches)) + " matches"
+		if m.matchWrapped {
+			// The step that came back around says so, like every other
+			// pane's search line (#2410).
+			count += " (wrapped)"
+		}
+		note = " " + lipgloss.NewStyle().Foreground(pal.Secondary).Render(count)
 	}
 	return " " + label + body + note
 }

@@ -24,7 +24,6 @@ package terminal
 
 import (
 	"image/color"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -40,10 +39,11 @@ import (
 // upward from, and the current match's virtual line (-1 while none).
 type termSearch struct {
 	query      string
-	pos        int // rune cursor position within query (#1882)
-	prevScroll int // scroll offset when the search opened; esc returns here
-	anchor     int // bottom-most visible virtual line at activation
-	cur        int // virtual line of the current match, -1 without one
+	pos        int  // rune cursor position within query (#1882)
+	prevScroll int  // scroll offset when the search opened; esc returns here
+	anchor     int  // bottom-most visible virtual line at activation
+	cur        int  // virtual line of the current match, -1 without one
+	wrapped    bool // the last step came back around the scrollback (#2410)
 
 	// Match memo (#2163): searchMatches used to rescan the whole scrollback
 	// — 10k LineText calls, each taking gridMu and allocating twice — and
@@ -133,6 +133,14 @@ func (m *Model) searchKey(msg tea.KeyPressMsg) {
 	case msg.String() == "ctrl+p" || msg.Code == tea.KeyUp:
 		m.searchStep(-1)
 		return
+	case ui.PrevMatchChord(msg.String()):
+		// The shared match-step chord (#2410): the field owns the keyboard
+		// while it is open, so cmd+g / cmd+shift+g are answered here.
+		m.searchStep(-1)
+		return
+	case ui.NextMatchChord(msg.String()):
+		m.searchStep(1)
+		return
 	}
 	if out, ncur, handled, changed := ui.EditKey(msg, s.query, s.pos); handled {
 		s.query, s.pos = out, ncur
@@ -181,6 +189,7 @@ func (m *Model) searchJump() {
 	if s == nil {
 		return
 	}
+	s.wrapped = false // an edited query starts a fresh walk (#2410)
 	if s.query == "" {
 		s.cur = -1
 		m.scroll = clamp(s.prevScroll, 0, m.sess.ScrollbackLen())
@@ -204,36 +213,58 @@ func (m *Model) searchJump() {
 
 // searchStep moves to the next (dir > 0, toward newer) or previous (toward
 // older) match relative to the current one, wrapping around.
-func (m *Model) searchStep(dir int) {
+func (m *Model) searchStep(dir int) ui.MatchStep {
 	s := m.search
 	matches := m.searchMatches()
-	if s == nil || len(matches) == 0 {
-		return
+	if s == nil {
+		return ui.NoStep
+	}
+	if len(matches) == 0 {
+		s.wrapped = false
+		return ui.NoMatches()
 	}
 	if s.cur < 0 {
 		m.searchJump()
-		return
+		return m.searchStat()
 	}
-	if dir > 0 {
-		for _, v := range matches {
-			if v > s.cur {
-				s.cur = v
-				m.searchShow(v)
-				return
-			}
-		}
-		s.cur = matches[0] // wrap to the oldest match
-	} else {
-		for i := len(matches) - 1; i >= 0; i-- {
-			if matches[i] < s.cur {
-				s.cur = matches[i]
-				m.searchShow(matches[i])
-				return
-			}
-		}
-		s.cur = matches[len(matches)-1] // wrap to the newest match
+	val, idx, wrapped, _ := ui.StepSorted(matches, s.cur, dir)
+	s.cur, s.wrapped = val, wrapped
+	m.searchShow(val)
+	return ui.Stepped(idx, len(matches), wrapped)
+}
+
+// searchStat is where the field currently stands, without moving it.
+func (m *Model) searchStat() ui.MatchStep {
+	s := m.search
+	matches := m.searchMatches()
+	if len(matches) == 0 {
+		return ui.NoMatches()
 	}
-	m.searchShow(s.cur)
+	for i, v := range matches {
+		if v == s.cur {
+			return ui.Stepped(i, len(matches), s.wrapped)
+		}
+	}
+	return ui.Stepped(0, len(matches), s.wrapped)
+}
+
+// NextMatch implements the pane's match-step capability (#2410): cmd+g steps
+// copy mode's accepted search when copy mode holds the keyboard (#2162) and
+// the scrollback search otherwise, in both cases leaving the query line as it
+// was. With neither open the chord is not ours — it stays with the shell.
+func (m *Model) NextMatch() ui.MatchStep { return m.stepSearch(1) }
+
+// PrevMatch steps backwards; see NextMatch.
+func (m *Model) PrevMatch() ui.MatchStep { return m.stepSearch(-1) }
+
+func (m *Model) stepSearch(delta int) ui.MatchStep {
+	if m.copy != nil {
+		return m.copyStepMatch(delta)
+	}
+	if m.search == nil {
+		return ui.NoStep
+	}
+	return m.searchStep(delta)
 }
 
 // searchShow scrolls the view so virtual line v sits near the middle.
@@ -290,7 +321,7 @@ func (m Model) searchLine() string {
 				}
 			}
 			counter = lipgloss.NewStyle().Foreground(dimCol).
-				Render("  " + strconv.Itoa(cur) + "/" + strconv.Itoa(len(matches)))
+				Render("  " + ui.MatchCounter(cur, len(matches), s.wrapped))
 		}
 	}
 	w := m.w

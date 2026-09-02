@@ -4,7 +4,7 @@ title: Diff Viewer
 description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070), diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Diff Viewer (#60)
@@ -140,6 +140,12 @@ of the diff body while it is up (`viewHeight`), and `esc` gives it back.
 `OpenSearch` is the pane's `pane.Searchable` implementation, which is how the
 Global `search.open` command reaches the prompt (see
 [Keybindings](./keybindings.md)).
+
+`NextMatch` / `PrevMatch` complete the capability (#2410): `cmd+g` /
+`cmd+shift+g` do what `n`/`N` do, but **while the prompt still holds the
+keyboard**, where `n` and `N` are query text. The prompt's counter marks the
+step that came back around — `1/12 (wrapped)` — and every query edit drops the
+marker, which describes one step rather than the search.
 
 ## Ignore whitespace (#2170)
 

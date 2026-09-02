@@ -40,6 +40,13 @@ type Model struct {
 	query filterexpr.Query
 	err   string
 
+	// status is the match counter the focused row shows in front of its key
+	// hints (#2410): "3/17" after a cmd+g step, "1/12 (wrapped)" for the one
+	// that came back around. The pane owns the count — the bar holds no list
+	// state — and every text change drops it, so a stale number can never
+	// outlive the rows it counted.
+	status string
+
 	// Candidates supplies a field's completion values when the schema has no
 	// closed vocabulary for it (tag names the pane configured, the paths it
 	// currently lists). Unset falls back to the schema's own vocabulary.
@@ -66,7 +73,27 @@ func (m *Model) Active() bool { return m.active }
 func (m *Model) Focus() {
 	m.active = true
 	m.cur = len([]rune(m.text))
+	m.status = ""
 }
+
+// SetStatus records the match counter the focused row shows (#2410); the pane
+// writes it from its NextMatch/PrevMatch step. "" hides it again.
+func (m *Model) SetStatus(s string) { m.status = s }
+
+// ShowStep is SetStatus in the shape a pane's NextMatch/PrevMatch already
+// has, and returns it unchanged so the pane can `return m.filter.ShowStep(…)`.
+// A step over nothing shows no counter — the caller's hint says why.
+func (m *Model) ShowStep(st ui.MatchStep) ui.MatchStep {
+	if st.Total == 0 {
+		m.status = ""
+		return st
+	}
+	m.status = ui.MatchCounter(st.Index, st.Total, st.Wrapped)
+	return st
+}
+
+// Status returns the counter currently shown (tests).
+func (m *Model) Status() string { return m.status }
 
 // Blur leaves the input, keeping the filter.
 func (m *Model) Blur() { m.active = false }
@@ -187,6 +214,7 @@ func (m *Model) Paste(paste string) bool {
 // parse re-reads the text. A failing parse keeps the last good query and
 // records the message — the row explains it, the list stays put.
 func (m *Model) parse() {
+	m.status = "" // an edited filter starts a fresh walk (#2410)
 	q, err := m.schema.Parse(m.text)
 	if err != nil {
 		m.err = err.Error()
@@ -317,7 +345,13 @@ func (m *Model) View(width int, pal *theme.Palette) string {
 	if m.err != "" {
 		body += lipgloss.NewStyle().Foreground(pal.Error).Render("  " + m.err)
 	} else {
-		body += dim.Render("  enter apply · esc clear · tab complete")
+		hints := "enter apply · esc clear · tab complete"
+		if m.status != "" {
+			// Where the cmd+g walk stands, wrap included (#2410) — ahead of
+			// the hints, which are the first thing a narrow pane clips.
+			hints = m.status + " · " + hints
+		}
+		body += dim.Render("  " + hints)
 	}
 	return clip(body, width)
 }

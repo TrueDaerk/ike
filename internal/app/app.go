@@ -3153,6 +3153,27 @@ func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 			return true, m, nil
 		}
 		return false, m, nil
+	case "cmd+g", "cmd+shift+g":
+		// The shared match-step chord (#2410) steps whichever search the
+		// terminal has open — the scrollback field or copy mode's — without
+		// closing it. With none open the chord stays with the child, which
+		// may have a find of its own; ctrl+g is deliberately not reserved,
+		// being a real control character the shell expects.
+		term := m.activeWS().Panes.FocusedInstance().ActiveTerminal()
+		if term == nil {
+			return false, m, nil
+		}
+		st := term.NextMatch()
+		if keys == "cmd+shift+g" {
+			st = term.PrevMatch()
+		}
+		if !st.Handled {
+			return false, m, nil
+		}
+		if st.Total == 0 {
+			m.host.Notify(host.Info, noMatchesNotice)
+		}
+		return true, m, nil
 	case "cmd+shift+l":
 		// cmd+shift+l opens link hint mode (#2254): the keyboard route to
 		// the file:line references cmd+click opens. Under an alt-screen or
@@ -4296,9 +4317,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.openPathAt(msg.Path, msg.Line-1, msg.Col)
 
 	case MatchStepMsg:
-		// search.nextMatch / search.prevMatch: when an in-file search is the
-		// most recent one, repeat it on the active editor like n/N (#376);
-		// otherwise walk the retained find-in-path results without the overlay.
+		// search.nextMatch / search.prevMatch: the focused pane's own open
+		// search comes first (#2410) — cmd+g steps a filter row or a find
+		// prompt without it losing focus, which is what the chord means while
+		// one is up. With none open the chord keeps its older readings: when
+		// an in-file search is the most recent one, repeat it on the active
+		// editor like n/N (#376); otherwise walk the retained find-in-path
+		// results without the overlay.
+		if cmd, handled := m.stepPaneMatch(msg.Delta); handled {
+			return m, cmd
+		}
 		if m.inFileSearchRecent {
 			if ed := m.activeEditor(); ed != nil && ed.HasSearch() {
 				ed.RepeatSearch(msg.Delta < 0)
@@ -8130,6 +8158,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.editorCapturing() {
 			return m.routeKey(msg)
 		}
+		// The match-step chord's non-mac spelling (#2410): ctrl+g /
+		// ctrl+shift+g are deliberately NOT bound Globally — they are the
+		// editor's multi-caret keys, exactly as ctrl+f is vim's page-forward
+		// (#2409) — so the panes answer them here instead, and only while the
+		// focused pane actually has a search open. Anything else falls
+		// through with the chord untouched.
+		if delta, ok := ui.MatchStepChord(keys); ok {
+			if cmd, handled := m.stepPaneMatch(delta); handled {
+				return m, cmd
+			}
+		}
 		// "?" stays a plain non-capturing key outside the chord table; f1
 		// normally resolves through the keymap layer above (palette.keymapHelp)
 		// and only lands here when that command is not registered.
@@ -8910,6 +8949,31 @@ func (m Model) editorCapturing() bool {
 	}
 	ed := inst.Editor()
 	return ed != nil && ed.Capturing()
+}
+
+// noMatchesNotice is what the match-step chord says when it owns the key and
+// there is nothing to step to (#2410) — a short hint, so the chord is never a
+// silent no-op the user reads as a broken binding.
+const noMatchesNotice = "No matches"
+
+// stepPaneMatch asks the focused pane to step its open search by delta
+// (#2410), the pane.Searchable half of search.nextMatch / search.prevMatch.
+// handled is false when the pane has no search open at all, leaving the chord
+// to its older meanings; a handled step over an empty match set notifies
+// rather than moving something else.
+func (m *Model) stepPaneMatch(delta int) (tea.Cmd, bool) {
+	inst := m.activeWS().Panes.FocusedInstance()
+	if inst == nil {
+		return nil, false
+	}
+	st := inst.StepMatch(delta)
+	if !st.Handled {
+		return nil, false
+	}
+	if st.Total == 0 {
+		m.host.Notify(host.Info, noMatchesNotice)
+	}
+	return st.Cmd, true
 }
 
 // explorerCapturing reports whether the focused pane is the explorer with an

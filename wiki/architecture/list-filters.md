@@ -4,7 +4,7 @@ title: List Filter Syntax
 description: One filter expression language shared by every list pane — fielded terms plus free match text, parsed by internal/filterexpr against a per-pane schema and typed into the internal/filterbar row that Problems, Usages and the TODO index all wear; the Issues pane's saved filters are the same syntax, and each pane's single-key filters are sugar that writes into it (#2156).
 resource: internal/filterexpr/filterexpr.go
 tags: [architecture, filter, tool-window, pane, search, issues, problems, usages, todo]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # List Filter Syntax (#2156)
@@ -94,6 +94,13 @@ supplies the schema and nothing else about the widget differs between panes.
 - `SetTerm(field, value)` / `HasTerm(field, value)` are the quick-key seam:
   a single-key filter rewrites exactly its own field and leaves the rest of
   the expression — including the match text — alone.
+- **`cmd+g` / `cmd+shift+g` step the surviving rows** while the input keeps
+  the focus (#2410). The bar holds no list state, so the pane does the
+  stepping and hands the outcome back through `ShowStep(ui.MatchStep)`, which
+  renders the counter in front of the focused row's key hints — `3/17`, or
+  `1/12 (wrapped)` for the step that came back around. Every text change drops
+  it, so a stale number can never outlive the rows it counted. See
+  [Keybindings](./keybindings.md#stepping-the-matches-outside-the-editor-2410).
 
 ## Per-pane fields
 

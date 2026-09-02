@@ -64,6 +64,33 @@ func (m *Model) OpenSearch() bool {
 	return m.fEditing
 }
 
+// NextMatch implements the pane's match-step capability (#2410). The grid's
+// search is a filter, so its "matches" are the rows the filter left standing:
+// cmd+g walks the loaded page row by row while the filter line keeps the
+// keyboard and the clause stays editable. Enter still applies the clause and
+// closes the line, as it always did.
+func (m *Model) NextMatch() ui.MatchStep { return m.stepRow(1) }
+
+// PrevMatch steps backwards; see NextMatch.
+func (m *Model) PrevMatch() ui.MatchStep { return m.stepRow(-1) }
+
+// stepRow moves the row cursor by delta over the loaded page, wrapping. It is
+// deliberately page-local: the pane fetches one page at a time, and a chord
+// that silently paged would step over rows the user cannot see.
+func (m *Model) stepRow(delta int) ui.MatchStep {
+	if !m.fEditing {
+		return ui.NoStep
+	}
+	n := len(m.page.Rows)
+	if n == 0 {
+		m.fWrapped = false
+		return ui.NoMatches()
+	}
+	m.rowCur, m.fWrapped = ui.StepWrap(m.rowCur, n, delta)
+	m.clampScroll()
+	return ui.Stepped(m.rowCur, n, m.fWrapped)
+}
+
 // filterKey feeds one key to the open filter line. The line owns the keyboard
 // while it is open — the grid's single-letter keys (j/k/n/p/s) are plain text
 // here — and only enter and esc close it.
@@ -81,7 +108,8 @@ func (m *Model) filterKey(msg tea.KeyPressMsg) {
 		if out, ncur, handled, changed := ui.EditKey(msg, m.fInput, m.fCur); handled {
 			m.fInput, m.fCur = out, ncur
 			if changed {
-				m.fErr = nil // the error described the text that is now gone
+				m.fErr = nil       // the error described the text that is now gone
+				m.fWrapped = false // an edited clause starts a fresh walk (#2410)
 			}
 		}
 	}

@@ -14,11 +14,12 @@ package explorer
 // cannot fire mid-query. enter accepts (cursor stays, search closes), esc
 // cancels (cursor returns to where the search started), backspace edits,
 // ctrl+n / down step to the next match and ctrl+p / up to the previous one,
-// both wrapping. Every other key is consumed without effect — no silent
+// both wrapping — as do cmd+g / cmd+shift+g, the shared match-step chord
+// (#2410), which the field answers itself because it holds the keyboard ahead
+// of the keymap layer. Every other key is consumed without effect — no silent
 // passthrough while the field is visible.
 
 import (
-	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -40,6 +41,10 @@ type searchState struct {
 	query string
 	pos   int // rune cursor inside query (#2002)
 	prev  int // cursor row when the search opened; esc returns here
+
+	// wrapped marks that the last step came back around the row set (#2410),
+	// so the footer counter can say "1/12 (wrapped)".
+	wrapped bool
 
 	// Match memo (#2187): searchLine runs searchMatches per *frame* to render
 	// its counter, and the scan lowercases every flattened row — tens of
@@ -93,6 +98,14 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) {
 		m.searchStep(1)
 	case msg.String() == "ctrl+p" || msg.Code == tea.KeyUp:
 		m.searchStep(-1)
+	case ui.PrevMatchChord(msg.String()):
+		// The shared match-step chord (#2410): the same jump ctrl+p makes.
+		// The field captures every key ahead of the keymap layer, so cmd+g /
+		// cmd+shift+g are answered here rather than through the Global
+		// search.nextMatch command.
+		m.searchStep(-1)
+	case ui.NextMatchChord(msg.String()):
+		m.searchStep(1)
 	default:
 		// Everything else is shared line editing (#2002): a movable cursor
 		// with word motions, word/line kills and the macOS opt/cmd chords.
@@ -100,6 +113,7 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) {
 		if out, pos, handled, changed := ui.EditKey(msg, s.query, s.pos); handled {
 			s.query, s.pos = out, pos
 			if changed {
+				s.wrapped = false // an edited query starts a fresh walk (#2410)
 				m.searchJump()
 			}
 		}
@@ -145,32 +159,39 @@ func (m *Model) searchJump() {
 }
 
 // searchStep moves to the next (dir > 0) or previous match relative to the
-// cursor, wrapping around the row set.
-func (m *Model) searchStep(dir int) {
+// cursor, wrapping around the row set, and reports where it landed so the
+// footer can show the wrap (#2410).
+func (m *Model) searchStep(dir int) ui.MatchStep {
+	s := m.search
 	matches := m.searchMatches()
-	if len(matches) == 0 {
-		return
-	}
-	if dir > 0 {
-		for _, idx := range matches {
-			if idx > m.cursor {
-				m.cursor = idx
-				m.followCursor()
-				return
-			}
+	val, idx, wrapped, ok := ui.StepSorted(matches, m.cursor, dir)
+	if !ok {
+		if s != nil {
+			s.wrapped = false
 		}
-		m.cursor = matches[0] // wrap to the first match
-	} else {
-		for i := len(matches) - 1; i >= 0; i-- {
-			if matches[i] < m.cursor {
-				m.cursor = matches[i]
-				m.followCursor()
-				return
-			}
-		}
-		m.cursor = matches[len(matches)-1] // wrap to the last match
+		return ui.NoMatches()
 	}
+	m.cursor = val
 	m.followCursor()
+	if s != nil {
+		s.wrapped = wrapped
+	}
+	return ui.Stepped(idx, len(matches), wrapped)
+}
+
+// NextMatch implements the pane's match-step capability (#2410): cmd+g steps
+// the speed search's matches while the field keeps the keyboard, the same jump
+// ctrl+n makes, so the query stays editable between steps.
+func (m *Model) NextMatch() ui.MatchStep { return m.stepSearch(1) }
+
+// PrevMatch steps backwards; see NextMatch.
+func (m *Model) PrevMatch() ui.MatchStep { return m.stepSearch(-1) }
+
+func (m *Model) stepSearch(delta int) ui.MatchStep {
+	if m.search == nil {
+		return ui.NoStep
+	}
+	return m.searchStep(delta)
 }
 
 // searchMatches returns the visible-row indices whose names contain the
@@ -235,7 +256,7 @@ func (m Model) searchLine() string {
 					break
 				}
 			}
-			counter = dim.Render("  " + strconv.Itoa(cur) + "/" + strconv.Itoa(len(matches)))
+			counter = dim.Render("  " + ui.MatchCounter(cur, len(matches), s.wrapped))
 		}
 	}
 	return ansi.Truncate(line+counter, maxz(m.width), "…")

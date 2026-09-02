@@ -13,7 +13,6 @@ package diff
 // the pane is for.
 
 import (
-	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -32,6 +31,7 @@ type diffSearch struct {
 	matches []int // row indices, ascending
 	cur     int   // index into matches, -1 before the first step
 	miss    bool  // the applied query matched nothing
+	wrapped bool  // the last step came back around an end (#2410)
 }
 
 // Searching reports whether the search prompt holds the keyboard (tests).
@@ -121,17 +121,36 @@ func (m *Model) applySearch() {
 	m.scrollToMatch()
 }
 
-// stepMatch walks the matches by delta, wrapping at both ends.
-func (m *Model) stepMatch(delta int) {
+// stepMatch walks the matches by delta, wrapping at both ends and reporting
+// where it landed so the shared match-step chord can say so (#2410).
+func (m *Model) stepMatch(delta int) ui.MatchStep {
 	s := m.search
 	if len(s.matches) == 0 {
 		s.miss = s.query != ""
-		return
+		s.wrapped = false
+		return ui.NoMatches()
 	}
 	s.miss = false
-	n := len(s.matches)
-	s.cur = ((s.cur+delta)%n + n) % n
+	s.cur, s.wrapped = ui.StepWrap(s.cur, len(s.matches), delta)
 	m.scrollToMatch()
+	return ui.Stepped(s.cur, len(s.matches), s.wrapped)
+}
+
+// NextMatch implements the pane's match-step capability (#2410): cmd+g walks
+// the matches while the "/" prompt keeps the keyboard, so a query can be
+// refined and stepped through without enter applying it first. With no search
+// open the chord is not ours, and the root model falls back to what it meant
+// before.
+func (m *Model) NextMatch() ui.MatchStep { return m.stepSearch(1) }
+
+// PrevMatch steps backwards; see NextMatch.
+func (m *Model) PrevMatch() ui.MatchStep { return m.stepSearch(-1) }
+
+func (m *Model) stepSearch(delta int) ui.MatchStep {
+	if m.search == nil {
+		return ui.NoStep
+	}
+	return m.stepMatch(delta)
 }
 
 // scrollToMatch brings the current match a third down the viewport, like the
@@ -162,6 +181,7 @@ func (m *Model) recomputeMatches() {
 		prev = s.matches[s.cur]
 	}
 	s.matches = nil
+	s.wrapped = false // an edited query starts a fresh walk (#2410)
 	if s.query != "" {
 		for i, r := range m.res.Rows {
 			if searchHit(s.query, r.Left) || searchHit(s.query, r.Right) {
@@ -211,7 +231,7 @@ func (m Model) searchLine() string {
 	case s.miss:
 		line += dim.Render("  no matches")
 	case len(s.matches) > 0:
-		line += dim.Render("  " + strconv.Itoa(s.cur+1) + "/" + strconv.Itoa(len(s.matches)))
+		line += dim.Render("  " + ui.MatchCounter(s.cur+1, len(s.matches), s.wrapped))
 	}
 	return line
 }

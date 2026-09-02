@@ -64,6 +64,7 @@ type copyMode struct {
 	miss     bool // the last jump found no match
 	matchIdx int  // 1-based index of the current match, 0 without one
 	matchCnt int
+	wrapped  bool // the last jump came back around the scrollback (#2410)
 }
 
 // Copying reports whether copy mode is open.
@@ -129,11 +130,18 @@ func (m Model) copyTopMax() int {
 // CopiedMsg, nil otherwise.
 func (m *Model) copyKey(msg tea.KeyPressMsg) tea.Cmd {
 	c := m.copy
+	key := msg.String()
+	if delta, ok := ui.MatchStepChord(key); ok && c.last != "" {
+		// The shared match-step chord (#2410) steps the accepted search from
+		// anywhere in the mode — the open query line included, which is the
+		// whole point: n / N are query text while it is up.
+		m.copyStepMatch(delta)
+		return nil
+	}
 	if c.input {
 		m.copySearchKey(msg)
 		return nil
 	}
-	key := msg.String()
 	if c.pendingG {
 		c.pendingG = false
 		if key == "g" {
@@ -395,29 +403,12 @@ func (m *Model) copySearchJump(back bool) {
 		c.miss = true
 		return
 	}
-	pick, idx := -1, 0
+	dir := 1
 	if back {
-		for i := len(matches) - 1; i >= 0; i-- {
-			if matches[i] < c.cur.line {
-				pick, idx = matches[i], i
-				break
-			}
-		}
-		if pick < 0 {
-			pick, idx = matches[len(matches)-1], len(matches)-1 // wrap
-		}
-	} else {
-		for i, v := range matches {
-			if v > c.cur.line {
-				pick, idx = v, i
-				break
-			}
-		}
-		if pick < 0 {
-			pick, idx = matches[0], 0 // wrap
-		}
+		dir = -1
 	}
-	c.matchIdx = idx + 1
+	pick, idx, wrapped, _ := ui.StepSorted(matches, c.cur.line, dir)
+	c.matchIdx, c.wrapped = idx+1, wrapped
 	col := 0
 	if i := strings.Index(strings.ToLower(m.sess.LineText(pick)), strings.ToLower(c.last)); i > 0 {
 		col = utf8.RuneCountInString(m.sess.LineText(pick)[:i])
@@ -434,6 +425,22 @@ func (m *Model) copySearchStep(reverse bool) {
 		return
 	}
 	m.copySearchJump(c.lastBack != reverse)
+}
+
+// copyStepMatch is copySearchStep in the shape the shared cmd+g chord reports
+// (#2410): delta 1 walks the accepted search in its own direction, -1 against
+// it — the same n / N meaning, reachable while the query line is still open.
+// Without an accepted query the chord is not ours.
+func (m *Model) copyStepMatch(delta int) ui.MatchStep {
+	c := m.copy
+	if c == nil || c.last == "" {
+		return ui.NoStep
+	}
+	m.copySearchJump(c.lastBack != (delta < 0))
+	if c.matchCnt == 0 {
+		return ui.NoMatches()
+	}
+	return ui.Stepped(c.matchIdx-1, c.matchCnt, c.wrapped)
 }
 
 // copyView renders copy mode: the windowed buffer rows with selection and
@@ -528,7 +535,7 @@ func (m Model) copyStatusLine() string {
 		tail = lipgloss.NewStyle().Foreground(errCol).Render("  no matches")
 	case c.last != "" && c.matchCnt > 0:
 		tail = lipgloss.NewStyle().Foreground(dimCol).
-			Render("  /" + c.last + " " + strconv.Itoa(c.matchIdx) + "/" + strconv.Itoa(c.matchCnt))
+			Render("  /" + c.last + " " + ui.MatchCounter(c.matchIdx, c.matchCnt, c.wrapped))
 	case c.selting:
 		tail = lipgloss.NewStyle().Foreground(dimCol).Render("  VISUAL — y yanks")
 	}

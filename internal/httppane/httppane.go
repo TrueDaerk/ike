@@ -119,6 +119,9 @@ type Model struct {
 	qcur      int
 	matches   []search.Span
 	cur       int
+	// wrapped marks that the last step came back around an end (#2410), so
+	// the footer counter can say "1/12 (wrapped)".
+	wrapped bool
 
 	// pendingZ marks a typed "z" waiting for its fold command (#1330).
 	pendingZ bool
@@ -755,6 +758,7 @@ func (m *Model) MatchPosition() (int, int) {
 // response keeps the search live instead of pointing at stale lines.
 func (m *Model) research() {
 	m.matches = nil
+	m.wrapped = false // an edited query starts a fresh walk (#2410)
 	if m.query == "" {
 		m.cur = 0
 		return
@@ -890,13 +894,34 @@ func (m *Model) clearSearch() {
 	m.cur = 0
 }
 
-// step moves to the next (delta 1) or previous (-1) match, wrapping around.
-func (m *Model) step(delta int) {
+// step moves to the next (delta 1) or previous (-1) match, wrapping around,
+// and reports where it landed for the shared match-step chord (#2410).
+func (m *Model) step(delta int) ui.MatchStep {
 	if len(m.matches) == 0 {
-		return
+		m.wrapped = false
+		return ui.NoMatches()
 	}
-	m.cur = (m.cur + delta + len(m.matches)) % len(m.matches)
+	m.cur, m.wrapped = ui.StepWrap(m.cur, len(m.matches), delta)
 	m.scrollToMatch()
+	return ui.Stepped(m.cur, len(m.matches), m.wrapped)
+}
+
+// NextMatch implements the pane's match-step capability (#2410): cmd+g steps
+// the response search while the "/" prompt keeps the keyboard, so the query
+// stays editable — n / N keep doing the same once enter has blurred the
+// prompt, for the vim hands that learned them (#1265).
+func (m *Model) NextMatch() ui.MatchStep { return m.stepSearch(1) }
+
+// PrevMatch steps backwards; see NextMatch.
+func (m *Model) PrevMatch() ui.MatchStep { return m.stepSearch(-1) }
+
+// stepSearch owns the chord whenever a search exists at all — the open prompt
+// or the applied pattern the footer still shows.
+func (m *Model) stepSearch(delta int) ui.MatchStep {
+	if !m.searching && m.query == "" {
+		return ui.NoStep
+	}
+	return m.step(delta)
 }
 
 // scrollToMatch brings the current match into view, keeping the viewport
@@ -1296,10 +1321,7 @@ func runningFor(since time.Time) string {
 // matchCount renders the match position, "no matches" when the pattern hits
 // nothing (#1265).
 func (m *Model) matchCount() string {
-	if len(m.matches) == 0 {
-		return "no matches"
-	}
-	return fmt.Sprintf("%d/%d", m.cur+1, len(m.matches))
+	return ui.MatchCounter(m.cur+1, len(m.matches), m.wrapped)
 }
 
 func (m *Model) emptyText() string {

@@ -96,6 +96,9 @@ type Model struct {
 	filtering bool
 	filterCur int // rune cursor inside filter (#2002)
 	filter    string
+	// stepStatus is where the cmd+g walk over the results stands (#2410),
+	// shown on the filter row; every edit of the query drops it.
+	stepStatus string
 
 	// writeScope is the explicit write-target selector (0380, #794): auto
 	// follows each entry's conventional Scope, user/project force the layer
@@ -223,6 +226,7 @@ func (m *Model) Open() {
 	m.followCat, m.followForm = true, true
 	m.filtering = false
 	m.filter, m.filterCur, m.notice, m.writeErr = "", 0, "", ""
+	m.stepStatus = ""
 	m.editor, m.editorKey = nil, ""
 	m.stack = nil
 	m.browse = browseState{}
@@ -578,7 +582,7 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 	switch key.String() {
 	case "esc":
 		if m.filter != "" {
-			m.filter, m.filterCur = "", 0
+			m.filter, m.filterCur, m.stepStatus = "", 0, ""
 			m.sel = 0
 			return nil
 		}
@@ -613,6 +617,15 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 	case "?":
 		m.openKeyHelp()
 	default:
+		// The shared match-step chord (#2410): with a filter typed it walks
+		// the results, whether or not the input still holds the keyboard.
+		// The panel owns the keyboard ahead of the keymap layer, so the chord
+		// is answered here rather than through search.nextMatch.
+		if delta, ok := ui.MatchStepChord(key.String()); ok {
+			if m.stepMatch(delta).Handled {
+				return nil
+			}
+		}
 		// First-letter jump on the rail (#890, menu parity): a letter hops to
 		// the next page starting with it, cycling.
 		if m.focus == catColumn && m.filter == "" && len(key.String()) == 1 {
@@ -684,6 +697,27 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		m.focus = formColumn
 	}
 	return nil
+}
+
+// stepMatch moves the selection to the next (delta 1) or previous (-1) search
+// result, wrapping, and records where it landed for the filter row (#2410).
+// It reports the outcome so the caller can tell "nothing matched" from "the
+// panel is not filtering" — the chord is only ours while a query exists.
+func (m *Model) stepMatch(delta int) ui.MatchStep {
+	if m.filter == "" {
+		m.stepStatus = ""
+		return ui.NoStep
+	}
+	m.focus = formColumn
+	rows := m.rows()
+	if len(rows) == 0 {
+		m.stepStatus = ""
+		return ui.NoMatches()
+	}
+	next, wrapped := ui.StepWrap(m.sel, len(rows), delta)
+	m.sel = next
+	m.stepStatus = ui.MatchCounter(next+1, len(rows), wrapped)
+	return ui.Stepped(next, len(rows), wrapped)
 }
 
 // closeOrApply handles esc on the panel: with staged edits it opens the diff
@@ -900,10 +934,17 @@ func (m *Model) updateFilter(key tea.KeyPressMsg) tea.Cmd {
 	case tea.KeyEnter:
 		m.filtering = false
 	default:
+		// The match-step chord walks the results without the input losing
+		// the keyboard (#2410) — the point of the chord, and the reason it
+		// is tested ahead of the line editing below.
+		if delta, ok := ui.MatchStepChord(key.String()); ok {
+			m.stepMatch(delta)
+			return nil
+		}
 		// Shared line editing (#2002) — the byte-sliced backspace here used
 		// to corrupt a multi-byte filter.
 		if _, changed := filterKey(key, &m.filter, &m.filterCur); changed {
-			m.sel = 0
+			m.sel, m.stepStatus = 0, "" // an edited query starts a fresh walk
 		}
 	}
 	return nil
