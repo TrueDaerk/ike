@@ -32,6 +32,18 @@ type MultiBatchMsg struct {
 	Matches []Match
 }
 
+// MultiProgressMsg reports that one root of a multi scan finished (#2413):
+// Done roots of Total are through, Root being the one just completed. It is
+// what the status-line progress segment counts out while the scan runs — a
+// root with no matches emits no batch, so the batches alone cannot say how
+// far the scan has come.
+type MultiProgressMsg struct {
+	Gen   int
+	Root  string
+	Done  int
+	Total int
+}
+
 // MultiDoneMsg ends a multi scan. Total counts matches across all roots,
 // Truncated reports the shared cap stopped the scan early, and Errs maps each
 // failing root to its scan error (readable roots that simply had no matches
@@ -102,16 +114,25 @@ func (s *MultiService) Gen() int {
 func (s *MultiService) run(ctx context.Context, gen int, q MultiQuery) {
 	c := &multiCollector{service: s, gen: gen, max: q.maxResults()}
 	errs := map[string]error{}
-	for _, root := range q.Roots {
+	// progress reports a finished root to the status-line segment (#2413);
+	// a cancelled run stops reporting — its gen is stale anyway.
+	progress := func(i int, root string) {
+		if ctx.Err() == nil {
+			c.emit(MultiProgressMsg{Gen: gen, Root: root, Done: i + 1, Total: len(q.Roots)})
+		}
+	}
+	for i, root := range q.Roots {
 		if ctx.Err() != nil || c.capped() {
 			break
 		}
 		c.root = root
 		if fi, statErr := os.Stat(root); statErr != nil {
 			errs[root] = statErr
+			progress(i, root)
 			continue
 		} else if !fi.IsDir() {
 			errs[root] = fmt.Errorf("not a directory: %s", root)
+			progress(i, root)
 			continue
 		}
 		rq := q.Query
@@ -126,6 +147,7 @@ func (s *MultiService) run(ctx context.Context, gen int, q MultiQuery) {
 		if err != nil && ctx.Err() == nil {
 			errs[root] = err
 		}
+		progress(i, root)
 	}
 	if ctx.Err() != nil {
 		errs = nil // superseded/cancelled: the gen is stale anyway

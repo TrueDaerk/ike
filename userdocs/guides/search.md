@@ -128,6 +128,40 @@ Two things worth knowing about how replacements are applied:
   (`N replacements in M files (K stale matches skipped)`). It never applies a
   replacement to text it no longer recognises.
 
+## Across every project
+
+++cmd+alt+shift+f++ searches one text across **every project in your recent
+history**, in the background. The form takes the query, the same three
+toggles, include/exclude globs and the list of projects to search — a project
+you toggle off stays off next time, and a root that no longer exists on disk
+is greyed out and skipped.
+
+Confirming closes the form and hands the keyboard straight back: the scan runs
+behind you, and the only thing on screen is a status-line counter —
+`⌕ all projects 3/12 · 41 hits` — that you can click to look at what has been
+found so far.
+
+When the scan finishes, the hits open in the same results overlay as
+find-in-path, one level deeper: the project name heads each block, its files
+below it, their matches under those. Every key means what it means in
+find-in-path.
+
+| Keys | What it does |
+|---|---|
+| ++up++ / ++down++ | Step the matches, wrapping at both ends |
+| ++pgup++ / ++pgdown++ | Page through them |
+| ++cmd+g++ / ++cmd+shift+g++ | Step the matches, with the position counter |
+| ++enter++ | Open the selected match — switching projects if it lives in another one |
+| ++alt+p++ / ++ctrl+e++ | Focus the excerpt column beside the list |
+| ++esc++ | Close — the results stay |
+
+Opening a hit in another project switches IKE to that project and lands on the
+line. The result list survives the switch: ++cmd+alt+shift+r++ brings it back,
+and ++cmd+g++ keeps walking the hits from there — across project boundaries,
+switching again whenever the next hit lives elsewhere.
+
+A search that matched nothing anywhere just says so; nothing opens.
+
 ## The search backend
 
 If [ripgrep](https://github.com/BurntSushi/ripgrep) is on your `PATH`, IKE

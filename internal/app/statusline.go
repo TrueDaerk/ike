@@ -57,7 +57,15 @@ var statusLeft = []statusSegment{
 	{id: "forge", render: func(m Model, _ *editor.Model) string { return m.forgeBadgeSegment() }},
 	{id: "todo", render: func(m Model, _ *editor.Model) string { return m.todoSegment() }},
 	{id: "http", render: func(m Model, _ *editor.Model) string { return m.httpFlightSegment() }},
+	{id: "allfind", render: func(m Model, _ *editor.Model) string { return m.allFindSegment() }},
 }
+
+// allFindSegment is the Find-in-All-Projects progress indicator (#2413):
+// while the background scan runs it counts the projects it is through and the
+// hits so far ("⌕ all projects 3/12 · 41 hits"), and nothing else is on
+// screen — the results only open when the scan finishes. A click dispatches
+// project.findInAllProjectsResults (statusSegmentCommands).
+func (m Model) allFindSegment() string { return m.allResults.ProgressLabel() }
 
 // emptyHintSegment is the empty-editor discovery hint (#659): while the
 // focused editor pane has no file it points at the two entry surfaces. Keys
@@ -770,9 +778,11 @@ var statusSegmentCommands = map[string]string{
 	"notifications": "notifications.history",
 	// The popup activity indicator (#2309) opens what it announces.
 	"popupterm": "terminal.popup",
-	"lsp":           "lsp.doctor",
+	"lsp":       "lsp.doctor",
 	// The forge unread badge (#2086) opens what it announces.
 	"forge": "issues.toggle",
+	// The all-projects scan progress (#2413) opens the results it counts.
+	"allfind": "project.findInAllProjectsResults",
 }
 
 // statusSegmentAt returns the id of the segment rendered at cell x of the

@@ -167,8 +167,8 @@ type OpenReplaceInPathMsg struct{}
 // (cmd+alt+shift+f / palette).
 type OpenFindInAllProjectsMsg struct{}
 
-// ShowAllFindResultsMsg asks the root model to show and focus the
-// all-projects search results popup (#2394). Dispatched by
+// ShowAllFindResultsMsg asks the root model to open the all-projects search
+// results overlay (#2394, #2413). Dispatched by
 // project.findInAllProjectsResults (cmd+alt+shift+r / palette).
 type ShowAllFindResultsMsg struct{}
 

@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results.
 resource: internal/search
 tags: [architecture, search, find-in-path]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -135,7 +135,12 @@ the palette):
   The status row shows live counts, `…` while
   streaming, `(truncated)` at the result bound, and scan errors. The
   component is consumer-agnostic: the Problems window (#33) and TODO index
-  (#61) are its planned next hosts.
+  (#61) are its planned next hosts. An item may also carry an optional
+  **`Section`** (#2413) — one grouping level *above* the file, rendered as a
+  header row over the file headers of every consecutive group that shares it,
+  labelled through the host's `List.SectionLabel(section, items)` hook. Find in
+  All Projects groups by project that way; a sectionless list (find-in-path,
+  the TODO index) is unchanged, headers, row math and all.
 - **Layout (#2047):** the results block is a **fixed-height** region between
   `ui.MinResultRows` and `ui.MaxResultRows` (**11 to 40** rows, headers
   included): eleven rows even with no matches at all — so the overlay stops
@@ -249,11 +254,12 @@ single row but still every occurrence to rewrite — then routes per file:
   is non-capturing, so user group numbers are stable). Literal replacements
   never expand.
 
-## Find in All Projects (#2394)
+## Find in All Projects (#2394, #2413)
 
 `project.findInAllProjects` (`cmd+alt+shift+f` / palette) searches one text
 across **every root in the recent-projects history** (`project.history`), in
-the background, and reports into a popup that never steals the keyboard.
+the background, and opens the finished results in the find-in-path results
+overlay, one grouping level deeper.
 
 - **Form** (`internal/allfind/form.go`): query, the case/word/regex toggles,
   include/exclude glob fields (comma-separated, `search.Query` semantics —
@@ -274,22 +280,39 @@ the background, and reports into a popup that never steals the keyboard.
   (`project.find_all.max_results`, default `search.DefaultMaxResults`) and a
   truncation flag. Batches are `MultiBatchMsg{Gen, Root, Matches}`, the end is
   `MultiDoneMsg{Gen, Total, Truncated, Errs}` with per-root errors (an
-  unreadable root fails alone; the healthy ones still report). Distinct
-  message types and a separate service mean no generation collision with the
-  finder's `m.searcher`; a second invocation cancels the running scan exactly
-  like `Service`.
-- **Results popup** (`internal/allfind/popup.go`): opens on completion
-  **visible but not focused** — matches grouped by project (name + root, with
-  per-root errors inline), then by file, line numbers and highlighted hits,
-  headed by the total count, projects searched and the truncation marker. A
-  click, `cmd+alt+shift+r` or `project.findInAllProjectsResults` focuses it;
-  `esc` hides it and the show-results command brings the retained results
-  back. `enter` on a match in the current project jumps straight there; in
-  another project it parks the open on the model, runs the normal switch
-  transaction (`internal/project/switch.go` → `performSwitchOpts`) and the
-  `SwitchedMsg` handler finishes the open — the pending target rides the
-  model rebuild through the switch's session-state carry-over block, as do
-  the popup and the running scan service.
+  unreadable root fails alone; the healthy ones still report), plus a
+  `MultiProgressMsg{Gen, Root, Done, Total}` per finished root (#2413) — a
+  root without matches emits no batch, so the batches alone cannot say how far
+  the scan has come. Distinct message types and a separate service mean no
+  generation collision with the finder's `m.searcher`; a second invocation
+  cancels the running scan exactly like `Service`.
+- **Progress while it runs** (#2413): nothing is drawn over the editor. The
+  `allfind` status-line segment counts what the scan is through —
+  `⌕ all projects 3/12 · 41 hits`, fed by `MultiProgressMsg` — and clicking it
+  dispatches `project.findInAllProjectsResults`, like every other clickable
+  segment (`statusSegmentCommands`).
+- **Results overlay** (`internal/allfind/results.go`, #2413): the *same*
+  surface as find-in-path — the shared `locations.List` with the code-preview
+  column beside it (#2047, #2327) — with the project as the list's **section**
+  (`locations.Item.Section`, #2413): a header row naming the project, its root,
+  its match count and its scan error, above that project's file headers, whose
+  paths render project-relative. Key handling is find-in-path's: `enter` (and
+  `alt/ctrl+enter`) opens, `up`/`down` step with wrap, `pgup`/`pgdown` page,
+  `cmd+g` / `cmd+shift+g` step the matches through `ui.MatchStepChord` and show
+  the shared `3/17` counter, `alt+p`/`ctrl+e` hands the excerpt column the
+  scroll keys, `esc` closes. A completed scan with hits opens the overlay
+  focused; one that matched nothing only toasts —
+  `project.findInAllProjectsResults` (`cmd+alt+shift+r`) opens the retained set
+  on demand either way. `enter` on a match in the current project jumps
+  straight there; in another project it parks the open on the model, runs the
+  normal switch transaction (`internal/project/switch.go` →
+  `performSwitchOpts`) and the `SwitchedMsg` handler finishes the open — the
+  pending target rides the model rebuild through the switch's session-state
+  carry-over block, as do the result set and the running scan service. That is
+  what makes the hits walkable *across* the switch: with the all-projects
+  search the most recent one (`allFindRecent`), `cmd+g` keeps stepping them
+  with the overlay closed, switching projects again where the next hit needs
+  it — the find-in-path retained-results contract, one project boundary wider.
 - **Persistence** (`project.find_all.*`, user scope): query, toggles, globs
   and the excluded-roots set persist to `~/.ike/settings.toml` — like
   `project.history`, the memory spans projects, so it never lands in a

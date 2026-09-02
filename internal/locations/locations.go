@@ -4,6 +4,12 @@
 // first consumer; the Problems window (#33) and the TODO index (#61) are the
 // planned next ones — the component knows nothing about where its items come
 // from.
+//
+// Items may carry an optional Section (#2413) — one grouping level above the
+// file, rendered as a header row over the file headers of every consecutive
+// group that shares it. Find in All Projects groups its hits by project that
+// way, and keeps the cursor, paging and match-step behaviour of find-in-path
+// unchanged.
 package locations
 
 import (
@@ -40,6 +46,11 @@ type Item struct {
 	// Excluded toggles the item out of the apply set (replace-in-path
 	// selective apply, #2154): it renders dim and batch operations skip it.
 	Excluded bool
+	// Section is the optional grouping level above the file (#2413): items
+	// sharing it, arriving consecutively, render under one section header.
+	// The empty string (find-in-path, the TODO index) renders no header row
+	// at all, so the flat file grouping is unchanged.
+	Section string
 }
 
 // Ranges returns every match range of the item, ordered by start column.
@@ -51,10 +62,11 @@ func (it Item) Ranges() []Range {
 	return out
 }
 
-// group is one file's items, in arrival order.
+// group is one file's items, in arrival order, within its section (#2413).
 type group struct {
-	path  string
-	items []Item
+	path    string
+	section string
+	items   []Item
 }
 
 // List is the stateful component. Append streams items in; the cursor walks
@@ -66,6 +78,12 @@ type List struct {
 	top    int // first visible *row* (headers + items) of the render window
 	viewH  int // rows of the last Render window — the page-jump size (#1666)
 
+	// SectionLabel renders a section header row (#2413) from the section key
+	// and the number of items under it; nil renders the key itself in the
+	// file-header style. The host owns the styling — Find in All Projects
+	// spells the project name, its root and its scan error out there.
+	SectionLabel func(section string, items int) string
+
 	// Rewrite, when set, turns rows into replace previews (#2154): each match
 	// range renders struck through, followed by the text Rewrite returns for
 	// it. ok = false renders the match plainly (e.g. a template that no longer
@@ -74,7 +92,9 @@ type List struct {
 }
 
 // Reset clears all items and state, keeping the last render height so a page
-// jump before the first re-render still moves by a screenful.
+// jump before the first re-render still moves by a screenful. The render
+// hooks (Rewrite, SectionLabel) are host state re-set per frame, so they go
+// with it.
 func (l *List) Reset() { *l = List{viewH: l.viewH} }
 
 // Append adds a batch of items, grouping consecutive items of the same path
@@ -87,7 +107,7 @@ func (l *List) Reset() { *l = List{viewH: l.viewH} }
 // matches contiguously, so comparing against the group's last item suffices.
 func (l *List) Append(items []Item) {
 	for _, it := range items {
-		if n := len(l.groups); n > 0 && l.groups[n-1].path == it.Path {
+		if n := len(l.groups); n > 0 && l.groups[n-1].path == it.Path && l.groups[n-1].section == it.Section {
 			g := &l.groups[n-1]
 			if last := &g.items[len(g.items)-1]; last.Line == it.Line {
 				mergeRanges(last, it)
@@ -95,7 +115,7 @@ func (l *List) Append(items []Item) {
 			}
 			g.items = append(g.items, it)
 		} else {
-			l.groups = append(l.groups, group{path: it.Path, items: []Item{it}})
+			l.groups = append(l.groups, group{path: it.Path, section: it.Section, items: []Item{it}})
 		}
 		l.total++
 	}
@@ -156,9 +176,15 @@ func (l *List) ItemAt(visibleRow int) (int, bool) {
 	}
 	target := l.top + visibleRow
 	row, item := 0, 0
-	for _, g := range l.groups {
+	for gi, g := range l.groups {
+		if l.sectionHead(gi) {
+			if target == row {
+				return 0, false // section header row (#2413)
+			}
+			row++
+		}
 		if target == row {
-			return 0, false // header row
+			return 0, false // file header row
 		}
 		row++
 		if target < row+len(g.items) {
@@ -168,6 +194,35 @@ func (l *List) ItemAt(visibleRow int) (int, bool) {
 		item += len(g.items)
 	}
 	return 0, false
+}
+
+// sectionHead reports whether group gi opens a new section — the row rendered
+// above its file header (#2413). A group with an empty section never does, so
+// a sectionless list keeps its flat file layout.
+func (l *List) sectionHead(gi int) bool {
+	s := l.groups[gi].section
+	return s != "" && (gi == 0 || l.groups[gi-1].section != s)
+}
+
+// sectionItems counts the items of the section group gi opens: the run of
+// consecutive groups sharing its section key.
+func (l *List) sectionItems(gi int) int {
+	n := 0
+	for i := gi; i < len(l.groups) && l.groups[i].section == l.groups[gi].section; i++ {
+		n += len(l.groups[i].items)
+	}
+	return n
+}
+
+// sectionRows is the number of section header rows in the whole list.
+func (l *List) sectionRows() int {
+	n := 0
+	for gi := range l.groups {
+		if l.sectionHead(gi) {
+			n++
+		}
+	}
+	return n
 }
 
 // Move shifts the cursor by delta, clamped to the item range.
@@ -233,8 +288,11 @@ func (l *List) End()  { l.cursor = max(0, l.total-1) }
 // page jump that lands on a file header resolves to a real stop.
 func (l *List) itemNearRow(target int) int {
 	row, item, best, bestDist := 0, 0, 0, -1
-	for _, g := range l.groups {
-		row++ // header
+	for gi, g := range l.groups {
+		if l.sectionHead(gi) {
+			row++ // section header (#2413)
+		}
+		row++ // file header
 		for range g.items {
 			d := row - target
 			if d < 0 {
@@ -339,7 +397,7 @@ func (l *List) removeIncluded(only *group) []Item {
 			idx++
 		}
 		if len(keep) > 0 {
-			groups = append(groups, group{path: g.path, items: keep})
+			groups = append(groups, group{path: g.path, section: g.section, items: keep})
 		}
 	}
 	l.groups = groups
@@ -464,8 +522,11 @@ func (l *List) RemoveGroup(path string) {
 // the header row above each group).
 func (l *List) rowOfCursor() int {
 	i, row := l.cursor, 0
-	for _, g := range l.groups {
-		row++ // header
+	for gi, g := range l.groups {
+		if l.sectionHead(gi) {
+			row++ // section header (#2413)
+		}
+		row++ // file header
 		if i < len(g.items) {
 			return row + i
 		}
@@ -475,8 +536,9 @@ func (l *List) rowOfCursor() int {
 	return 0
 }
 
-// rowCount is the total number of render rows (headers + items).
-func (l *List) rowCount() int { return len(l.groups) + l.total }
+// rowCount is the total number of render rows (section headers, file headers
+// and items).
+func (l *List) rowCount() int { return len(l.groups) + l.total + l.sectionRows() }
 
 // Render lays the list out to width×height, scrolled so the cursor is
 // visible. displayPath shortens paths for the header rows (nil renders them
@@ -514,9 +576,18 @@ func (l *List) Render(width, height int, pal *theme.Palette, displayPath func(st
 
 	var out []string
 	row, item := 0, 0
-	for _, g := range l.groups {
+	for gi, g := range l.groups {
 		if row >= l.top+height {
 			break
+		}
+		if l.sectionHead(gi) {
+			if row >= l.top {
+				out = append(out, ansiClip(l.sectionRow(gi, width, pal), width))
+			}
+			row++
+			if row >= l.top+height {
+				break
+			}
 		}
 		if row >= l.top {
 			h := header.Render(truncateRunes(displayPath(g.path), width-8)) +
@@ -536,6 +607,16 @@ func (l *List) Render(width, height int, pal *theme.Palette, displayPath func(st
 		}
 	}
 	return strings.Join(out, "\n")
+}
+
+// sectionRow renders the section header of group gi (#2413) through the
+// host's SectionLabel hook, falling back to the key in the file-header style.
+func (l *List) sectionRow(gi, width int, pal *theme.Palette) string {
+	if l.SectionLabel != nil {
+		return l.SectionLabel(l.groups[gi].section, l.sectionItems(gi))
+	}
+	return lipgloss.NewStyle().Bold(true).Foreground(pal.BorderFocus).
+		Render(truncateRunes(l.groups[gi].section, width))
 }
 
 // rowStyles bundles the item-row styles Render builds once per frame.

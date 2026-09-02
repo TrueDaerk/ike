@@ -16,10 +16,11 @@ import (
 // allfind.go is the root-model side of Find in All Projects (#2394): the form
 // opens over the editor like the finder, confirming starts a background
 // multi-root scan (allSearch, a search.MultiService separate from m.searcher
-// so the open project's find-in-path is never disturbed), and the results
-// arrive in a popup that never steals the keyboard. The form state — query,
-// toggles, globs, excluded roots — persists in the user config layer
-// (project.find_all.*), like the project history it draws its list from.
+// so the open project's find-in-path is never disturbed), a status-line
+// segment counts the projects while it runs, and the finished results open in
+// the find-in-path results overlay, grouped by project (#2413). The form
+// state — query, toggles, globs, excluded roots — persists in the user config
+// layer (project.find_all.*), like the project history it draws its list from.
 
 // openAllFind seeds the form from the persisted state and the recent-projects
 // history and shows it.
@@ -59,7 +60,8 @@ func allFindProjects(entries []project.Entry, excluded []string, stat func(strin
 
 // startAllFind persists the confirmed form state to the user layer and starts
 // the background scan. The form already closed itself — the editor has the
-// keyboard back while the roots are scanned.
+// keyboard back while the roots are scanned, and the only thing the scan puts
+// on screen meanwhile is the status-line progress segment (#2413).
 func (m *Model) startAllFind(msg allfind.ConfirmMsg) tea.Cmd {
 	st := msg.State
 	roots := make([]string, len(msg.Roots))
@@ -80,6 +82,7 @@ func (m *Model) startAllFind(msg allfind.ConfirmMsg) tea.Cmd {
 		},
 		Roots: roots,
 	})
+	m.allFindRecent = true
 	m.host.Notify(host.Info, "searching "+plural(len(roots), "project", "projects")+" for \""+st.Query+"\"…")
 
 	// One batched write + reload for the whole remembered state (#2394):
@@ -114,31 +117,46 @@ func splitAllFindGlobs(s string) []string {
 }
 
 // finishAllFind consumes the scan's DoneMsg: stale generations drop, the
-// current one opens the popup — visible, never focused (#2394).
+// current one opens the results overlay — the find-in-path results UI,
+// grouped by project (#2413). A scan that matched nothing opens nothing and
+// toasts instead, so a background search never takes the keyboard away for an
+// empty box.
 func (m *Model) finishAllFind(msg search.MultiDoneMsg) {
 	if msg.Gen != m.allFindGen {
 		return
 	}
+	m.allFindRecent = true
 	m.allResults.SetSize(m.width, m.height)
 	m.allResults.Finish(msg.Truncated, msg.Errs)
+	if m.allResults.Total() == 0 {
+		m.host.Notify(host.Info, "no matches for \""+m.allResults.Query()+"\" in any project")
+	}
 }
 
-// showAllFindResults re-opens the popup with the keyboard — the show-results
-// command / keybind (#2394).
+// showAllFindResults re-opens the results overlay — the show-results command /
+// keybind (#2394), which is also how the user reaches the hits of a scan that
+// is still running (#2413).
 func (m *Model) showAllFindResults() {
 	if !m.allResults.HasResults() && !m.allResults.Scanning() {
 		m.host.Notify(host.Info, "no all-projects search results — run Find in All Projects first")
 		return
 	}
+	if m.allResults.Scanning() && m.allResults.Total() == 0 {
+		m.host.Notify(host.Info, "all-projects search still running — no hits yet")
+		return
+	}
+	m.allFindRecent = true
 	m.allResults.SetSize(m.width, m.height)
-	m.allResults.Focus()
+	m.allResults.Open()
 }
 
 // openAllFindMatch routes an activated match: in the current project it is a
 // plain open; in another project the open is parked on the model, the switch
 // runs, and the SwitchedMsg handler finishes the job — the pending open rides
-// the model rebuild via the carry-over block in performSwitchOpts.
+// the model rebuild via the carry-over block in performSwitchOpts, as does the
+// result set itself, so the hits stay walkable after the switch (#2413).
 func (m Model) openAllFindMatch(msg allfind.OpenMatchMsg) (tea.Model, tea.Cmd) {
+	m.allFindRecent = true
 	if cwd, err := os.Getwd(); err == nil && cwd == msg.Root {
 		return m.openPathAt(msg.Path, msg.Line-1, msg.Col)
 	}

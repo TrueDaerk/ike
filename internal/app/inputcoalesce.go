@@ -204,7 +204,7 @@ func (m Model) overlayCapturesKeyboard() bool {
 // pastes — back.
 func (m Model) overlayCapturesAbovePopup() bool {
 	return m.settings.IsOpen() || m.keyDoctor.IsOpen() || (m.menuEnabled() && m.menu.IsOpen()) ||
-		m.finder.IsOpen() || m.allFind.IsOpen() || m.allResults.Focused() ||
+		m.finder.IsOpen() || m.allFind.IsOpen() || m.allResults.IsOpen() ||
 		m.todo.IsOpen() || m.undoTree.IsOpen() ||
 		m.callhier.IsOpen() || m.typehier.IsOpen() || m.palette.IsOpen() ||
 		m.recoveryOpen() || m.onboardingOpen() || m.conflictOpen() ||
