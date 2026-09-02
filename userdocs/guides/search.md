@@ -146,6 +146,33 @@ Hidden dot-entries and `.git` are skipped by both.
     Go to file still see them. Use the exclude field, or `.gitignore`, to keep
     something out of search results.
 
+## In any other pane
+
+++cmd+f++ is not an editor key. Pressed anywhere else it opens **that pane's**
+search or filter — the same thing `/` has always opened there, so muscle
+memory works whichever pane happens to hold the focus:
+
+| Pane | What ++cmd+f++ opens |
+|---|---|
+| Explorer | The type-to-select speed search |
+| Problems, Usages, TODO index | The filter row (`severity:`, `file:`, `tag:`, …) |
+| GitHub Issues | The filter overlay, on its match input |
+| HTTP response | The in-pane search over status line, headers and body |
+| Archive viewer | The filter row (`name:`, `type:`) |
+| Diff viewer | A search over the diff, with `n` / `N` stepping matches |
+| Markdown preview | A search over the rendered document |
+| DOM inspector | The CSS selector line |
+| Data viewer | The SQL filter clause |
+| Terminal | The scrollback search — or copy mode's own search while copy mode is on |
+| Settings | The page filter |
+
+++ctrl+f++ does the same in every one of them. In an **editor** both chords
+keep their editor meaning: ++cmd+f++ is Find in File and ++ctrl+f++ stays
+vim's page-forward motion.
+
+A pane with no search of its own says so ("No search in this pane") rather
+than doing nothing.
+
 ## Finding files and symbols
 
 Different problem, different keys:

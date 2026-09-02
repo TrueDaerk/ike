@@ -3147,8 +3147,9 @@ func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 		// (#1169), working from the live view too. Under an alt-screen or
 		// mouse-reporting child (vim, lazygit) the chord stays with the
 		// child, which owns its own find; outside terminals cmd+f keeps
-		// its global binding (editor.find).
-		if term := m.activeWS().Panes.FocusedInstance().ActiveTerminal(); term != nil && term.StartSearch() {
+		// its global binding (search.open / editor.find). In copy mode
+		// (#2162) it opens that mode's own search instead (#2409).
+		if term := m.activeWS().Panes.FocusedInstance().ActiveTerminal(); term != nil && term.OpenSearch() {
 			return true, m, nil
 		}
 		return false, m, nil
@@ -5804,6 +5805,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		inst.StartDiffEdit(&ed)
 		m.host.Notify(host.Info, "editing "+displayPath(msg.Path)+" — ctrl+e returns to the diff")
 		return m, ed.Reparse()
+
+	case OpenSearchMsg:
+		// search.open (cmd+f, #2409): the focused pane opens whatever it
+		// calls its search — the explorer's speed search, a list pane's
+		// filter row, a viewer's find prompt. A pane without one says so
+		// rather than swallowing the chord, which is indistinguishable from
+		// a broken binding.
+		if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.OpenSearch() {
+			return m, nil
+		}
+		m.host.Notify(host.Info, "No search in this pane")
+		return m, nil
 
 	case DiffStepMsg:
 		// diff.nextChange / diff.prevChange (F7 / shift+F7, 0340 #495): step

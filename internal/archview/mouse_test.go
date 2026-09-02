@@ -33,7 +33,7 @@ func manyNames(n int) []string {
 func TestWheelScrollsAndClamps(t *testing.T) {
 	p := writeArchive(t, manyNames(20)...)
 	m := newPane(t, p)
-	m.SetSize(80, 8) // bodyHeight 6
+	m.SetSize(80, 8) // bodyHeight 5
 	if m.top != 0 {
 		t.Fatalf("top starts at %d", m.top)
 	}
@@ -41,24 +41,24 @@ func TestWheelScrollsAndClamps(t *testing.T) {
 	if m.top != 3 {
 		t.Fatalf("wheel down: top = %d, want 3", m.top)
 	}
-	if m.Cursor() < m.top || m.Cursor() >= m.top+6 {
-		t.Fatalf("cursor %d left the window [%d,%d)", m.Cursor(), m.top, m.top+6)
+	if m.Cursor() < m.top || m.Cursor() >= m.top+5 {
+		t.Fatalf("cursor %d left the window [%d,%d)", m.Cursor(), m.top, m.top+5)
 	}
-	// Down clamps at the last page: 20 rows, 6 visible.
+	// Down clamps at the last page: 20 rows, 5 visible.
 	m.Wheel(100)
-	if m.top != 14 {
-		t.Fatalf("clamped top = %d, want 14", m.top)
+	if m.top != 15 {
+		t.Fatalf("clamped top = %d, want 15", m.top)
 	}
-	if m.Cursor() != 14 {
-		t.Fatalf("cursor = %d, want the first visible row 14", m.Cursor())
+	if m.Cursor() != 15 {
+		t.Fatalf("cursor = %d, want the first visible row 15", m.Cursor())
 	}
 	// Up clamps at the top.
 	m.Wheel(-100)
 	if m.top != 0 {
 		t.Fatalf("clamped top = %d, want 0", m.top)
 	}
-	if m.Cursor() != 5 {
-		t.Fatalf("cursor = %d, want the last visible row 5", m.Cursor())
+	if m.Cursor() != 4 {
+		t.Fatalf("cursor = %d, want the last visible row 4", m.Cursor())
 	}
 }
 
@@ -78,14 +78,14 @@ func TestWheelNoOpWhenEverythingFits(t *testing.T) {
 func TestClickSelectsRow(t *testing.T) {
 	p := writeArchive(t, "README.md", "src/main.go")
 	m := newPane(t, p)
-	// rows: src, src/main.go, README.md
-	if cmd := m.Click(20, 3); cmd != nil {
+	// rows: src, src/main.go, README.md — y 0 header, y 1 filter row.
+	if cmd := m.Click(20, 4); cmd != nil {
 		t.Fatal("a single click must not activate")
 	}
 	if got := m.RowName(m.Cursor()); got != "README.md" {
 		t.Fatalf("click landed on %q", got)
 	}
-	m.Click(20, 2)
+	m.Click(20, 3)
 	if got := m.RowName(m.Cursor()); got != "src/main.go" {
 		t.Fatalf("click landed on %q", got)
 	}
@@ -95,7 +95,7 @@ func TestClickSelectsRow(t *testing.T) {
 		t.Fatalf("a header click moved the cursor to %q", got)
 	}
 	// Below the last row: nothing to select.
-	m.Click(20, 10)
+	m.Click(20, 12)
 	if got := m.RowName(m.Cursor()); got != "src/main.go" {
 		t.Fatalf("an empty-space click moved the cursor to %q", got)
 	}
@@ -108,7 +108,7 @@ func TestClickScrolledRowHitTest(t *testing.T) {
 	m := newPane(t, p)
 	m.SetSize(80, 8)
 	m.Wheel(4)
-	m.Click(20, 1)
+	m.Click(20, 2)
 	if got := m.RowName(m.Cursor()); got != m.RowName(4) {
 		t.Fatalf("first visible row = %q, want %q", got, m.RowName(4))
 	}
@@ -120,11 +120,11 @@ func TestDoubleClickOpensFile(t *testing.T) {
 	p := writeArchive(t, "README.md", "src/main.go")
 	m, now := clockPane(t, p, 80, 20)
 	// rows: src, src/main.go, README.md — click the file twice.
-	if cmd := m.Click(20, 2); cmd != nil {
+	if cmd := m.Click(20, 3); cmd != nil {
 		t.Fatal("the first click must not open")
 	}
 	*now = now.Add(100 * time.Millisecond)
-	cmd := m.Click(20, 2)
+	cmd := m.Click(20, 3)
 	if cmd == nil {
 		t.Fatal("a double click on a file must emit an open command")
 	}
@@ -137,7 +137,7 @@ func TestDoubleClickOpensFile(t *testing.T) {
 	}
 	// A third click starts a fresh pair instead of re-opening.
 	*now = now.Add(100 * time.Millisecond)
-	if cmd := m.Click(20, 2); cmd != nil {
+	if cmd := m.Click(20, 3); cmd != nil {
 		t.Fatal("the click after an activation must not open again")
 	}
 }
@@ -147,9 +147,9 @@ func TestDoubleClickOpensFile(t *testing.T) {
 func TestSlowSecondClickDoesNotOpen(t *testing.T) {
 	p := writeArchive(t, "README.md", "src/main.go")
 	m, now := clockPane(t, p, 80, 20)
-	m.Click(20, 2)
+	m.Click(20, 3)
 	*now = now.Add(2 * ui.DoubleClickWindow)
-	if cmd := m.Click(20, 2); cmd != nil {
+	if cmd := m.Click(20, 3); cmd != nil {
 		t.Fatal("a slow second click must not open")
 	}
 }
@@ -158,9 +158,9 @@ func TestSlowSecondClickDoesNotOpen(t *testing.T) {
 func TestDoubleClickOnOtherRowDoesNotOpen(t *testing.T) {
 	p := writeArchive(t, "README.md", "src/main.go")
 	m, now := clockPane(t, p, 80, 20)
-	m.Click(20, 2)
+	m.Click(20, 3)
 	*now = now.Add(50 * time.Millisecond)
-	if cmd := m.Click(20, 3); cmd != nil {
+	if cmd := m.Click(20, 4); cmd != nil {
 		t.Fatal("clicks on different rows must not open")
 	}
 }
@@ -171,20 +171,20 @@ func TestFoldGlyphClickTogglesDirectory(t *testing.T) {
 	p := writeArchive(t, "README.md", "src/main.go")
 	m, now := clockPane(t, p, 80, 20)
 	// row 0 is "src" at depth 0: the glyph sits at x 1..2.
-	m.Click(1, 1)
+	m.Click(1, 2)
 	if got := rowNames(&m); !equal(got, []string{"src", "README.md"}) {
 		t.Fatalf("the glyph click did not collapse: %v", got)
 	}
 	if m.RowName(m.Cursor()) != "src" {
 		t.Fatalf("the glyph click left the cursor on %q", m.RowName(m.Cursor()))
 	}
-	m.Click(2, 1)
+	m.Click(2, 2)
 	if got := rowNames(&m); !equal(got, []string{"src", "src/main.go", "README.md"}) {
 		t.Fatalf("the second glyph click did not expand: %v", got)
 	}
 	// The name only selects.
 	*now = now.Add(time.Second)
-	m.Click(6, 1)
+	m.Click(6, 2)
 	if got := rowNames(&m); !equal(got, []string{"src", "src/main.go", "README.md"}) {
 		t.Fatalf("a name click folded: %v", got)
 	}
@@ -195,9 +195,9 @@ func TestFoldGlyphClickTogglesDirectory(t *testing.T) {
 func TestDoubleClickOnDirectoryFolds(t *testing.T) {
 	p := writeArchive(t, "README.md", "src/main.go")
 	m, now := clockPane(t, p, 80, 20)
-	m.Click(6, 1)
+	m.Click(6, 2)
 	*now = now.Add(50 * time.Millisecond)
-	if cmd := m.Click(6, 1); cmd != nil {
+	if cmd := m.Click(6, 2); cmd != nil {
 		t.Fatal("a directory must not emit an open command")
 	}
 	if got := rowNames(&m); !equal(got, []string{"src", "README.md"}) {
@@ -213,14 +213,14 @@ func TestNestedFoldGlyphOffset(t *testing.T) {
 	// rows: src, src/deep, src/deep/a.go — "src/deep" sits at depth 1, so its
 	// glyph is at x 3..4; x 1 there is indentation and only selects.
 	*now = now.Add(time.Second)
-	m.Click(1, 2)
+	m.Click(1, 3)
 	if got := rowNames(&m); !equal(got, []string{"src", "src/deep", "src/deep/a.go"}) {
 		t.Fatalf("an indentation click folded: %v", got)
 	}
 	if m.RowName(m.Cursor()) != "src/deep" {
 		t.Fatalf("cursor on %q", m.RowName(m.Cursor()))
 	}
-	m.Click(3, 2)
+	m.Click(3, 3)
 	if got := rowNames(&m); !equal(got, []string{"src", "src/deep"}) {
 		t.Fatalf("the nested glyph click did not fold: %v", got)
 	}

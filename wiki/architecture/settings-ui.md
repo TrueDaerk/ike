@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-08-31T12:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -116,7 +116,9 @@ box capped at ~110×32 cells above the workspace, laid out as the
   back to the user/global value on the reload. Custom pages keep their own
   keys (`s` on the Tools page still opens suggestions — the panel's
   selector only applies to schema rows).
-- **Filter.** `/` starts a fuzzy search across all schema pages (keys, titles,
+- **Filter.** `/` — or the shared find chord `cmd+f` / `ctrl+f` (#2409),
+  answered by the panel itself because it owns the keyboard ahead of the
+  keymap layer — starts a fuzzy search across all schema pages (keys, titles,
   descriptions, page names, #2179); matches render as `Page › Title`, and the
   result list names the custom pages the filter cannot search
   (`(not searched: Keymap, …)`, #383). Esc clears the query, a second esc

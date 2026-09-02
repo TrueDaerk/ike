@@ -19,6 +19,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/archive"
+	"ike/internal/filterbar"
 	"ike/internal/theme"
 	"ike/internal/ui"
 )
@@ -81,6 +82,12 @@ type Model struct {
 	w, h    int
 	focused bool
 
+	// filter is the shared filter row (#2156, #2409): "/" and the find chord
+	// focus it, and every listed entry passes its gate before the tree is
+	// built. The row is permanent, like in the other list panes, so a filter
+	// appearing never shifts the entries by a line.
+	filter filterbar.Model
+
 	// Double-click detection (#1852) mirrors the explorer: activating a row
 	// with the mouse needs a second click on it within ui.DoubleClickWindow;
 	// now is injectable so tests control the clock.
@@ -92,7 +99,8 @@ type Model struct {
 // kept for View — the pane opens either way and explains itself, so a
 // truncated or corrupt archive degrades to a notice instead of a crash.
 func New(key, p string, pal *theme.Palette) Model {
-	m := Model{key: key, path: p, pal: pal, collapsed: map[string]bool{}, now: time.Now}
+	m := Model{key: key, path: p, pal: pal, collapsed: map[string]bool{}, now: time.Now,
+		filter: filterbar.New(Schema)}
 	m.listing, m.err = archive.List(p)
 	m.build()
 	return m
@@ -208,8 +216,14 @@ func (m *Model) flatten() {
 }
 
 // walk appends n's children as rows, recursing into expanded directories.
+// A child the filter (#2409) drops — itself and its whole subtree — is skipped
+// here rather than at insert time, so the tree keeps its shape and the filter
+// is a pure view over it.
 func (m *Model) walk(n *node, depth int) {
 	for _, c := range sortedChildren(n) {
+		if !m.keeps(c) {
+			continue
+		}
 		m.rows = append(m.rows, row{
 			name:  c.name,
 			full:  c.full,
@@ -256,12 +270,34 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	// The focused filter row owns its editing keys (#2156); list navigation
+	// (up/down/page) falls through, so one can steer the tree while typing.
+	if m.filter.Active() {
+		handled, changed := m.filter.Key(msg)
+		if changed {
+			m.flatten()
+		}
+		if handled {
+			return nil
+		}
+	}
+	if ui.FindChord(msg.String()) {
+		// ctrl+f is deliberately unbound in the keymap table (#2409) so
+		// vim's page-forward survives in the editor; the panes that do
+		// have a search answer the chord themselves. cmd+f arrives here
+		// too when the Global search.open binding was overridden.
+		m.OpenSearch()
+		return nil
+	}
 	// Shared list semantics (#1666): steps wrap, page jumps clamp.
 	if ui.ListNav(msg.String(), &m.cursor, len(m.rows), m.bodyHeight(), ui.NavFull) {
 		m.clampScroll()
 		return nil
 	}
 	switch msg.String() {
+	case "/":
+		// The shared focus key: every list pane opens its filter with it.
+		m.focusFilter()
 	case "enter", "l", "right":
 		return m.activate()
 	case "h", "left":
@@ -376,11 +412,13 @@ func (m *Model) View() string {
 		return ""
 	}
 	pal := m.theme()
-	if len(m.rows) == 0 {
+	if len(m.rows) == 0 && m.filter.Empty() && !m.filter.Active() {
 		return m.emptyView(pal)
 	}
 	var b strings.Builder
 	b.WriteString(m.headerLine(pal))
+	b.WriteString("\n")
+	b.WriteString(m.filter.View(m.w, pal))
 	b.WriteString("\n")
 	b.WriteString(m.renderRows(pal, m.bodyHeight()))
 	b.WriteString(m.footer(pal))
@@ -514,12 +552,13 @@ func HumanSize(n int64) string {
 
 // footer shows the key hints.
 func (m *Model) footer(pal *theme.Palette) string {
-	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open (read-only) · e/E extract entry/all · ctrl+r reload · space fold · h/l collapse/expand · j/k move"))
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter open (read-only) · e/E extract entry/all · / filter · ctrl+r reload · space fold · h/l collapse/expand · j/k move"))
 }
 
-// bodyHeight is the room between the header and footer lines.
+// bodyHeight is the room between the header, the filter row (#2409) and the
+// footer line.
 func (m *Model) bodyHeight() int {
-	h := m.h - 2
+	h := m.h - 3
 	if h < 1 {
 		h = 1
 	}

@@ -1,5 +1,33 @@
 # Log
 
+## 2026-09-02 (cmd+f finds wherever "/" does, #2409)
+
+- **One shared find chord**: the new Global command `search.open`
+  ("Find in Pane", `cmd+f`) asks the focused pane for the new
+  **`pane.Searchable`** capability (`internal/pane/searchable.go`,
+  `OpenSearch() bool`) and opens whatever that pane calls its search — the
+  explorer speed search, the Problems / Usages / TODO / Archive filter rows,
+  the HTTP prompt, the DOM selector, the data grid's filter, the Issues filter
+  overlay, the diff and markdown-preview prompts, terminal scrollback search
+  and copy mode. `editor.find` keeps the chord inside an editor (an
+  allowlisted intentional shadow); a pane with no search notifies
+  *"No search in this pane"* instead of swallowing the key. `/` is unchanged
+  everywhere.
+- **`ctrl+f` stays unbound in the keymap table on purpose** — it is vim's
+  page-forward motion in the editor, including operator-pending — so the
+  panes answer it themselves through `ui.FindChord`
+  (`internal/ui/findkey.go`), including the surfaces that own the keyboard
+  ahead of the keymap layer (settings pages, the TODO overlay, copy mode).
+  Off macOS the Cmd→Ctrl fold gives `ctrl+f` the same binding anyway. The one
+  behaviour change: the data grid's `ctrl+f` now filters instead of paging
+  (`n` / `pgdown` still page).
+- **Two panes gained a search**: the **archive viewer** wears the shared
+  filter row (`name:` / `type:` plus free text, gating the tree so
+  synthesized directories filter like named ones) and the **diff viewer**
+  gained a prompt over the diff rows, where `n`/`N` step matches while a
+  search is open and hunks while none is. The **markdown preview** gained the
+  same prompt over its rendered lines.
+
 ## 2026-09-02 (missing editor/pane chords, #2400)
 
 - **Line-editing family**: `editor.moveLineUp`/`moveLineDown`,

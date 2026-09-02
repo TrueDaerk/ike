@@ -1097,7 +1097,7 @@ For a recognized stream:
   of the track's world. Mouse: `ScrollbarHit` claims the column before the
   selection press; a thumb press starts a `dragHTTPScroll` drag whose motion
   feeds `ScrollbarDrag`, a track press jumps proportionally.
-- **In-pane search** (#1265): `/` (or `ctrl+f`/`cmd+f`, the muscle-memory
+- **In-pane search** (#1265, #2409): `/` (or `ctrl+f`/`cmd+f`, the muscle-memory
   chord used everywhere else in the app — editor find, terminal scrollback
   search — #1830; since #2400 the two chords are also the keymap table's
   `http.search` in the `http` context, dispatched into

@@ -676,7 +676,10 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 	case "s":
 		// Cycle the write-scope selector (0380, #794): auto → user → project.
 		m.writeScope = (m.writeScope + 1) % 3
-	case "/":
+	case "/", "ctrl+f", "cmd+f", "super+f":
+		// The panel owns the keyboard ahead of the keymap layer, so the
+		// shared find chord (#2409) is answered here rather than through
+		// the Global search.open command.
 		m.filtering = true
 		m.focus = formColumn
 	}

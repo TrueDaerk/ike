@@ -10,12 +10,17 @@ import (
 
 // Mouse control (#1852), mirroring the explorer tree (#1040) and the list
 // panels (#1024/#1155). Coordinates are pane-content-local: y 0 is the header
-// line, the rows start at y 1, the key hints occupy the last line. The wheel,
-// the hit-test and the double-click clock come from the shared list-mouse
-// layer (#2259).
+// line, y 1 the filter row (#2409), the rows start at y 2, and the key hints
+// occupy the last line. The wheel, the hit-test and the double-click clock
+// come from the shared list-mouse layer (#2259).
 
-// headerRows is how many lines sit above the first entry row.
-const headerRows = 1
+// headerRows is how many lines sit above the first entry row: the header and
+// the filter row.
+const headerRows = 2
+
+// filterRow is the content-local y of the filter row; clicking it puts the
+// cursor in the filter, like the TODO index does.
+const filterRow = 1
 
 // Wheel scrolls the entry list by delta rows (positive = down). The scroll
 // clamps at both ends — the last page never scrolls past its final row — and
@@ -29,9 +34,14 @@ func (m *Model) Wheel(delta int) {
 // pointer becomes the selection, a press on a directory's fold glyph toggles
 // it right away, and a second press on the same row within the double-click
 // window activates it — opening a file read-only, folding a directory —
-// exactly like enter. Presses on the header, the footer or empty space are
-// ignored.
+// exactly like enter. A press on the filter row puts the cursor in the filter
+// (#2409); presses on the header, the footer or empty space are ignored.
 func (m *Model) Click(x, y int) tea.Cmd {
+	if y == filterRow {
+		m.clicks.Reset()
+		m.focusFilter()
+		return nil
+	}
 	i, ok := ui.RowAt(y, m.top, headerRows, m.bodyHeight(), len(m.rows))
 	if !ok || x < 0 {
 		m.clicks.Reset()

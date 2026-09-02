@@ -4,7 +4,7 @@ title: List Filter Syntax
 description: One filter expression language shared by every list pane — fielded terms plus free match text, parsed by internal/filterexpr against a per-pane schema and typed into the internal/filterbar row that Problems, Usages and the TODO index all wear; the Issues pane's saved filters are the same syntax, and each pane's single-key filters are sugar that writes into it (#2156).
 resource: internal/filterexpr/filterexpr.go
 tags: [architecture, filter, tool-window, pane, search, issues, problems, usages, todo]
-timestamp: 2026-08-28T12:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # List Filter Syntax (#2156)
@@ -103,6 +103,7 @@ supplies the schema and nothing else about the widget differs between panes.
 | [Problems](./problems.md) | `severity:` (alias `sev:`) error/warning/info/hint · `file:` · `code:` · `source:` (alias `src:`) · `scope:` file/project |
 | [Usages](./usages.md) | `file:` · `text:` |
 | [TODO index](./todo-index.md) | `tag:` (the configured pattern words) · `file:` · `scope:` file/project |
+| [Archive viewer](./archive-viewer.md) | `name:` (alias `path:`) · `type:` (alias `kind:`) file/dir |
 
 The Issues dialect lives in `internal/issuefilter` — the schema plus the
 `Spec` shape the config validator and the settings form read; it is what

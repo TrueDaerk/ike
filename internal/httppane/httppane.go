@@ -611,7 +611,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Open the in-pane search prompt (#1265), editor conventions. ctrl+f /
 		// cmd+f alias the muscle-memory search chord used everywhere else in
 		// the app — editor find, terminal scrollback search (#1504) — since
-		// plain "/" alone doesn't match user expectations (#1830).
+		// plain "/" alone doesn't match user expectations (#1830). The same
+		// chords reach every other pane through search.open (#2409); the pane
+		// keeps its own cases so the keys work with the keymap table rebound.
 		m.BeginSearch()
 	case "n":
 		m.step(1)
@@ -767,6 +769,14 @@ func (m *Model) research() {
 	if m.cur >= len(m.matches) {
 		m.cur = 0
 	}
+}
+
+// OpenSearch implements the pane's Searchable capability (#2409): the shared
+// find chord opens the same in-pane search prompt "/" does, prefilled from a
+// live selection (#2122). It always opens, so it never falls back to a notice.
+func (m *Model) OpenSearch() bool {
+	m.BeginSearch()
+	return true
 }
 
 // searchCopyKey intercepts the copy chord while the "/" prompt is open

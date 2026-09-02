@@ -30,6 +30,7 @@ import (
 	"ike/internal/locations"
 	"ike/internal/search"
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // OpenLocationMsg asks the root model to open Path at the (1-based) Line and
@@ -375,6 +376,13 @@ func (m *Model) rebuildList() {
 	}
 }
 
+// OpenSearch implements the Searchable capability (#2409): the shared find
+// chord focuses the filter row, exactly as "/" does.
+func (m *Model) OpenSearch() bool {
+	m.filter.Focus()
+	return true
+}
+
 // Update handles one key while the overlay is open.
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	// The focused filter row owns its editing keys (#2156); the arrow and
@@ -387,6 +395,13 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		if handled {
 			return nil
 		}
+	}
+	if ui.FindChord(msg.String()) {
+		// The overlay owns the keyboard before the keymap layer runs, so the
+		// shared find chord (#2409) is answered here rather than through the
+		// Global search.open command.
+		m.OpenSearch()
+		return nil
 	}
 	switch msg.String() {
 	case "/":

@@ -67,6 +67,19 @@ var intentionalDefaultShadows = map[string]string{
 	// delivered match-stepping keys everywhere.
 	shadowKey("ctrl+g", "editor.caret.addNext", "search.nextMatch"):      "linux Cmd-fold: add-next-caret over find-next (f3 remains)",
 	shadowKey("ctrl+shift+g", "editor.caret.addAll", "search.prevMatch"): "linux Cmd-fold: add-all-carets over find-previous (shift+f3 remains)",
+	// The shared find chord (#2409): search.open is the Global fallback that
+	// opens whatever the focused pane calls its search, and with an editor
+	// focused the editor's own find deliberately wins — the editor *is* the
+	// pane with a search there. Off macOS the Cmd→Ctrl fold makes the same
+	// pair land on ctrl+f.
+	shadowKey("cmd+f", "editor.find", "search.open"):  "editor find over the pane find chord",
+	shadowKey("ctrl+f", "editor.find", "search.open"): "linux Cmd-fold: editor find over the pane find chord",
+	// The response viewer names its own search (#2400) so the chord is listed
+	// and rebindable there; it opens exactly what search.open would reach
+	// through pane.Searchable, so which of the two wins in the http context
+	// is immaterial.
+	shadowKey("cmd+f", "http.search", "search.open"):  "http names its own search; same gesture as the pane find chord",
+	shadowKey("ctrl+f", "http.search", "search.open"): "linux Cmd-fold: http names its own search; same gesture as the pane find chord",
 }
 
 // detectShadows scans the effective (post-conflict) binding set for

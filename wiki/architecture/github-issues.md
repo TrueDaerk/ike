@@ -112,7 +112,7 @@ QWERTZ-safe (#48): plain letters and delivered `ctrl+letter` chords only.
 | `ctrl+j` / `ctrl+k` | walk to the next / previous issue or PR | details |
 | `ctrl+up` / `ctrl+down` | walk the selection — the list cursor, or the shown detail (#2400) | everywhere |
 | `r` | refresh (the listing, plus the open detail's data) | everywhere |
-| `f` (alias `/`) | the filter overlay, on the match input | lists |
+| `f` (aliases `/`, `cmd+f` / `ctrl+f`) | the filter overlay, on the match input | lists |
 | `l` | the filter overlay's **label** section | issue list |
 | `t` | cycle the state filter (open / closed / all) | lists |
 | `a` | cycle the sort order | lists |
@@ -174,7 +174,8 @@ and closes, `esc` restores every section to what the overlay opened with.
 every printable key, the other rows toggle with `space` (or `left`/`right`)
 and clear with `backspace`.
 
-- **`f`** (with **`/`** kept as an alias) opens the overlay on the match
+- **`f`** (with **`/`** and the shared find chord `cmd+f` / `ctrl+f` (#2409)
+  kept as aliases) opens the overlay on the match
   input, which narrows live via `internal/fuzzy` over number, title, labels,
   assignees and author (head branch on the PR tab).
 - **`l`** opens the same overlay scrolled to the **label section** — the

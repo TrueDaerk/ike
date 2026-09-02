@@ -329,9 +329,10 @@ func (m *Model) sidebarKey(msg tea.KeyPressMsg) {
 }
 
 // gridKey navigates the loaded page: j/k rows (crossing a page edge fetches
-// the neighbour page), h/l columns, pgup/pgdown a screenful, n/p (ctrl+f /
-// ctrl+b) whole DB pages, g/G first/last page, P the column profile — the one
-// grid key with a command behind it (#1940).
+// the neighbour page), h/l columns, pgup/pgdown a screenful, n/p (ctrl+b for
+// the backward step) whole DB pages, g/G first/last page, P the column
+// profile — the one grid key with a command behind it (#1940). ctrl+f is no
+// longer a paging key: it is the shared find chord (#2409).
 func (m *Model) gridKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "j", "down":
@@ -350,7 +351,10 @@ func (m *Model) gridKey(msg tea.KeyPressMsg) tea.Cmd {
 		if m.colOff < len(m.page.Columns)-1 {
 			m.colOff++
 		}
-	case "n", "ctrl+f":
+	case "n":
+		// ctrl+f used to page forward here; since #2409 it is the shared
+		// find chord and opens the filter line, so "n" (and pgdown) are the
+		// paging keys.
 		m.pageStep(1)
 	case "p", "ctrl+b":
 		m.pageStep(-1)
@@ -363,7 +367,10 @@ func (m *Model) gridKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.rowCur = 0
 	case "G", "end":
 		m.lastPage()
-	case "/":
+	case "/", "ctrl+f", "cmd+f", "super+f":
+		// ctrl+f is deliberately unbound in the keymap table (#2409) so
+		// vim's page-forward survives in the editor; the panes that have a
+		// search answer the chord themselves.
 		m.startFilter()
 	case "S":
 		return m.sortColumnKey()

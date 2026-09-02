@@ -125,6 +125,17 @@ var jetbrainsRows = []row{
 	{"cmd+shift+z", "explorer.redo", "Redo file operation", Explorer, "Explorer (05)"},
 	{"ctrl+shift+z", "explorer.redo", "Redo file operation", Explorer, "Explorer (05)"},
 	{"cmd+f", "editor.find", "Find in file", Editor, "Editor (06)"},
+	// Find in the focused pane (#2409): the same chord opens whatever the
+	// focused pane calls its search — the explorer speed search, a list
+	// pane's filter row, the response viewer's prompt. It is Global, so the
+	// Editor-scoped editor.find above shadows it inside an editor.
+	//
+	// ctrl+f is deliberately NOT bound here: it is vim's page-forward
+	// motion in the editor (including operator-pending "d ctrl+f"), and a
+	// Global binding would resolve ahead of the editor and swallow it.
+	// The panes accept ctrl+f themselves instead (ui.FindChord), which
+	// reaches them intact precisely because the chord stays unbound.
+	{"cmd+f", "search.open", "Find in pane", Global, "Search (#2409)"},
 	{"cmd+r", "editor.replace", "Replace in file", Editor, "Editor (06)"},
 	{"cmd+shift+f", "project.findInPath", "Find in path", Global, "Project (09)"},
 	{"cmd+shift+r", "project.replaceInPath", "Replace in path", Global, "Project (09)"},

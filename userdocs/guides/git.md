@@ -59,7 +59,8 @@ diffs any two files against each other. Inside a diff pane:
 | Keys | What it does |
 |---|---|
 | ++f7++ / ++shift+f7++ | Next / previous change |
-| `n` / `N` | The same, vim-style |
+| `n` / `N` | The same, vim-style — or the next / previous search match while a search is open |
+| `/`, ++cmd+f++ / ++ctrl+f++ | Search the diff; ++esc++ closes the search again |
 | ++enter++ | Jump the editor to that change |
 | `h` / `l`, ++left++ / ++right++ | Scroll sideways by one column |
 | ++shift+left++ / ++shift+right++ | Scroll sideways by half a column |
@@ -67,6 +68,11 @@ diffs any two files against each other. Inside a diff pane:
 | `y`, ++ctrl+c++ / ++cmd+c++ | Copy the selection — or, without one, the current change as a patch |
 
 ![The diff viewer side by side with the editor](../screenshots/features/diff-viewer.png)
+
+The search runs over the text of both sides, so it finds the same thing in
+side-by-side and unified layouts and however far you have scrolled sideways.
+It is smartcase like the editor's: an all-lowercase query ignores case, any
+uppercase character makes it exact.
 
 The diff is line-level with intra-line refinement, so a one-character change
 highlights the character rather than the whole line. Side-by-side and unified

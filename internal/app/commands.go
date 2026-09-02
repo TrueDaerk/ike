@@ -74,6 +74,12 @@ type ForceCodeInsightMsg struct{}
 // the status line's large-file badge.
 type LargeFileDetailsMsg struct{}
 
+// OpenSearchMsg asks the focused pane to open its own search or filter
+// (#2409). Dispatched by search.open (cmd+f), the Global half of the shared
+// find chord: the root model asks the pane for the pane.Searchable capability
+// and notifies when the pane has no search of its own.
+type OpenSearchMsg struct{}
+
 // ShowKeymapHelpMsg asks the root model to open the keymap cheatsheet overlay,
 // the same view the hardcoded "?" opens. Dispatched by palette.keymapHelp.
 type ShowKeymapHelpMsg struct{}
@@ -655,6 +661,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("editor.forceCodeInsight", "Force Code Insight (Large File)", ForceCodeInsightMsg{}),
 			appCommand("editor.largeFileDetails", "Large File Details", LargeFileDetailsMsg{}),
 			appCommand("pane.maximize", "Maximize Pane", MaximizePaneMsg{}),
+			appCommand("search.open", "Find in Pane", OpenSearchMsg{}),
 			appCommand("pane.resizeMode", "Resize Pane (Keyboard Mode)", PaneResizeModeMsg{}),
 			appCommand("pane.close", "Close Pane", ClosePaneMsg{}),
 			appCommand("view.zenMode", "Zen Mode", ZenModeMsg{}),

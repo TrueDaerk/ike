@@ -801,7 +801,10 @@ func (m *Model) listKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch key {
 	case "r":
 		return m.startRefresh()
-	case "f", "/":
+	case "f", "/", "ctrl+f", "cmd+f", "super+f":
+		// ctrl+f is deliberately unbound in the keymap table (#2409) so
+		// vim's page-forward survives in the editor; the panes that have a
+		// search answer the chord themselves.
 		m.openFilterOverlay(fovMatch)
 	case "l":
 		m.openLabelSection()

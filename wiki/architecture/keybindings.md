@@ -939,6 +939,66 @@ Two things this pass deliberately did *not* do:
 forwards to `httppane.Model.CopyKeyCmd`, the exported form of the pane-local
 `copyKeyCmd`, so the chord and the pane key cannot drift apart.
 
+## The find chord outside the editor (#2409)
+
+`cmd+f` is the same story as the copy chord one section up. `/` starts a search
+or a filter in a dozen panes — the explorer speed search, the Problems / Usages
+/ TODO filter rows, the response viewer's prompt, the DOM selector, the data
+grid's filter, the Issues filter overlay, terminal copy mode, the settings
+pages — but only the response pane had ever heard of `cmd+f`, and telemetry
+recorded the chord pressed unbound in the `http` context.
+
+One Global command covers all of them:
+
+| command | chord | context | what it does |
+|---|---|---|---|
+| `search.open` | `cmd+f` | Global | asks the focused pane to open its own search |
+| `editor.find` | `cmd+f` | `editor` | the editor's own find — shadows the Global row while an editor has focus |
+
+`search.open` dispatches `OpenSearchMsg`; the root model asks the focused
+`pane.Instance` for the **`pane.Searchable`** capability
+(`internal/pane/searchable.go`) and calls `OpenSearch()`. A pane kind with no
+search of its own is not `Searchable`, and the root model notifies
+*"No search in this pane"* rather than swallowing the key — a silent no-op is
+indistinguishable from a broken binding (#267). An editor pane hosting a
+content tab (#1778) or a terminal (#573) delegates to what the tab holds, so
+the chord acts on what the pane actually shows.
+
+Two panes had no search at all and gained one in the same change:
+
+- **Archive viewer** — the shared filter row (#2156) over `name:` / `type:`
+  plus free match text, gating the *tree* so the directories a tar never named
+  filter like the ones it did (`internal/archview/filter.go`).
+- **Diff viewer** — a prompt on the pane's last row searching the diff *rows*
+  (raw left/right text, so the layout and horizontal scroll are irrelevant);
+  `n`/`N` walk the matches while a search is open and keep stepping hunks
+  while none is (`internal/diff/search.go`).
+
+The markdown preview gained the same prompt over its rendered lines
+(`internal/preview/search.go`), so every pane the issue listed answers the
+chord.
+
+### Why `ctrl+f` is not in the table
+
+The issue asked for `ctrl+f` in the Global context too. It is deliberately
+**not** bound: `ctrl+f` is vim's page-forward motion in the editor, including
+operator-pending (`d ctrl+f`), and a Global binding resolves *ahead* of the
+pane — modified chords are eligible even while an editor captures text — so it
+would silently take the motion away. Instead each searchable pane answers the
+chord itself (`ui.FindChord`, `internal/ui/findkey.go`), which works precisely
+because the keymap table leaves the chord unbound and it therefore reaches the
+pane intact. Off macOS the `Cmd`→`Ctrl` fold gives `ctrl+f` the `search.open`
+binding anyway, with the editor's own `editor.find` row shadowing it there — an
+allowlisted intentional shadow (`intentionalDefaultShadows`).
+
+The one casualty is the data grid, where `ctrl+f` used to page forward; `n` and
+`pgdown` still do, and the chord now filters like everywhere else.
+
+The `http` context keeps its own `http.search` row from #2400 — it names the
+same gesture (`httppane.Model.BeginSearch`) the Global command reaches through
+the capability, so which of the two wins there is immaterial; the pane row is
+the more specific one and is allowlisted as an intentional shadow.
+
 ## The line-editing family and the pane chords (#2400)
 
 A second telemetry export (two sessions, ~9,900 events) left 37 presses on
@@ -949,64 +1009,6 @@ vim gestures behind it, so the chord resolved to nothing at all. Each is now a
 registry command in `internal/editor` (`lineops.go`), selection-aware wherever
 JetBrains is:
 
-| command | primary | secondary | behaviour |
-|---|---|---|---|
-| `editor.moveLineUp` / `editor.moveLineDown` | `cmd+shift+up` / `down` | `ctrl+shift+up` / `down` | swaps the touched lines with the neighbour, in one edit; the selection rides along |
-| `editor.deleteLine` | `cmd+backspace` | — (`vim dd`) | the current line, or every line the selection touches; the cursor keeps its column |
-| `editor.deleteWordBackward` | `alt+backspace` | — (`vim db`) | the word before the cursor, in and out of insert mode |
-| `editor.docStart` / `editor.docEnd` | `cmd+home` / `cmd+end` | `ctrl+home` / `ctrl+end` | `gg` / `G` as commands, jumps, fold-opening |
-| `editor.selectLineStart` / `editor.selectLineEnd` | `shift+home` / `shift+end` | — | the shift-select path of the arrow keys, to the line edge |
-
-Two of them already worked *inside* an open insert session — the `#955` line
-kill and the `#246` word kill — and the commands defer to those paths while
-`insert.active`, so the deletion still joins the open undo unit instead of
-committing the insert first.
-
-Three chords the audit deliberately left where they were:
-
-- **`alt+shift+up` / `alt+shift+down`** are JetBrains' other Move Line chord,
-  but caret cloning (#1481) has had them since before this audit.
-- **`cmd+up` / `cmd+down`** (macOS text-field document start/end) fold onto
-  `ctrl+up` / `ctrl+down` off macOS, which are the editor's paragraph jumps.
-- **`cmd+shift+left` / `cmd+shift+right`** stay free rather than joining the
-  navigation family's neighbourhood; `shift+home` / `shift+end` deliver
-  everywhere anyway.
-
-`cmd+ctrl+down` ("move to next method" in JetBrains) has no counterpart to bind
-to: there is no symbol-stepping command, only `lsp.documentSymbols`' popup. It
-stays unbound until one exists. `shift+f2` in the explorer is likewise left
-alone — it is the previous-diagnostic key, which means nothing in a tree.
-
-**Chords the pane already handled.** As with `cmd+c` (#2315) and `ctrl+r`
-(#2314) above, the pane acted and the keymap table did not know, so the press
-was logged unbound, appeared in no listing and could not be rebound:
-
-| context | chord | command | what it does |
-|---|---|---|---|
-| `http` | `cmd+f` / `ctrl+f` | `http.search` | the response viewer's in-pane search (`httppane.Model.BeginSearch`) |
-| `debug` | `cmd+c` | `debug.copy` | the selected variable, watch or stack frame — the console's selection while the console shows |
-| `issues` | `cmd+c` | `issues.copy` | the mouse selection, else the selected item's URL |
-| `issues` | `ctrl+up` / `ctrl+down` | `issues.selectPrev` / `selectNext` | walk the list, or the shown detail |
-
-The two copies get no `ctrl+c` secondary, for the #2315 reason: on macOS that
-chord is the global quit. `cmd+shift+l` aliases `lsp.format`: it was free, and
-reformatting is the only thing "L" means in this table.
-
-`ctrl+e` — IntelliJ's Windows/Linux Recent Files chord, caught once in a
-focused archive pane — is **not** bound. It would have to be a Global row to
-help there, and Global rows resolve before the pane: `ctrl+e` is the diff
-view's "leave edit mode" gesture (`pane.Instance.Update`), which a
-`palette.recentFiles` row would swallow. `cmd+e` keeps the command on macOS,
-and off macOS it already folds onto `ctrl+e` anyway.
-
-`alt+backspace` in the HTTP search prompt needed no binding — every single-line
-input in the tree edits through `ui.EditKey` (#2002), which has handled the
-word kill all along. The keymap row for it is editor-scoped for that reason.
-## Per-binding status matrix (0081/50) — the acceptance ledger
-
-Generated from `keymap.StatusMatrix` against the shipped plugin set (run
-`IKE_GEN_MATRIX=<file> go test ./cmd/ike -run TestGenerateMatrixMarkdown` to
-regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | command | primary | reachability | fallback | status |
 |---|---|---|---|---|
 | `archive.reload` | `ctrl+r` | delivered | `—` | live |
@@ -1163,6 +1165,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `scratch.newFromSelection` | `cmd+alt+shift+s` | fragile | `palette` | live via palette |
 | `scratch.promote` | `cmd+alt+shift+p` | fragile | `scratch manager ctrl+p / palette` | live via scratch manager ctrl+p / palette |
 | `search.nextMatch` | `f3` | delivered | `—` | live |
+| `search.open` | `cmd+f` | fragile | `vim / (every pane binds it, #2409)` | live via vim / (every pane binds it, #2409) |
 | `search.prevMatch` | `shift+f3` | delivered | `—` | live |
 | `settings.open` | `cmd+,` | fragile | `palette` | live via palette |
 | `structure.toggle` | `cmd+3` | fragile | `palette` | live via palette |

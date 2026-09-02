@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-09-01T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # File Explorer
@@ -147,7 +147,8 @@ extensions and filenames the language plugins register; a drift test in
 - `space` — toggle the **selection mark** on the cursor row (#2166, see below).
 - `m` / `y` — move / copy the selection into a target directory (#2166).
 - `esc` — clear the multi-select: both the range and the marks.
-- `/` — open the type-to-select **speed search** (#1087, see below).
+- `/` (or `cmd+f` / `ctrl+f`, #2409) — open the type-to-select **speed
+  search** (#1087, see below).
 
 ## Speed search (#1087)
 
@@ -453,7 +454,7 @@ these are defaults.
 | `explorer.copy` | `y` | prompt for a target directory and copy the selection there (`CopySelectionMsg`, #2166) |
 | `explorer.toggleMark` | `space` | toggle the selection mark on the cursor row (`ToggleMarkMsg`, #2166) |
 | `explorer.clearMarks` | `esc` | clear the whole multi-select (`ClearMarksMsg`, #2166) |
-| `explorer.search` | `/` | open the type-to-select speed search (`SearchMsg`, #1087) |
+| `explorer.search` | `/` | open the type-to-select speed search (`SearchMsg`, #1087); the Global `search.open` chord reaches it through `pane.Searchable` (#2409) |
 | `explorer.undo` | `Ctrl+Z` | reverse the last file operation instantly (`UndoMsg`) |
 | `explorer.redo` | `Ctrl+Shift+Z` / `Cmd+Shift+Z` | re-apply the last undone file operation (`RedoMsg`) |
 

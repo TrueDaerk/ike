@@ -95,6 +95,12 @@ type Model struct {
 	images map[string]*inlineImage
 	placed []*inlineImage
 	gfx    bool
+
+	// In-pane search (#2409): the prompt on the last row and the matching
+	// rendered lines. It lives behind a pointer so the value-receiver View
+	// copies share it, like the explorer's speed search; nil means no
+	// search is open.
+	search *previewSearch
 }
 
 // New returns a preview bound to path. Content arrives via SetSourceImmediate
@@ -174,7 +180,28 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 // tab/shift+tab walk the links, enter follows the selected one and y copies
 // its destination (#2180), both as a LinkMsg the root model acts on.
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	// The open search prompt owns the keyboard (#2409): every key is query
+	// text until enter applies it or esc abandons the search.
+	if m.search != nil && m.search.input {
+		return m.searchKey(msg)
+	}
 	switch msg.String() {
+	case "/", "ctrl+f", "cmd+f", "super+f":
+		// The shared search key and the find chord open the same prompt.
+		// ctrl+f is deliberately unbound in the keymap table (#2409) so
+		// vim's page-forward survives in the editor; the panes that have a
+		// search answer the chord themselves.
+		m.openSearch()
+	case "n":
+		if m.search != nil {
+			m.stepMatch(1)
+		}
+	case "N":
+		if m.search != nil {
+			m.stepMatch(-1)
+		}
+	case "esc":
+		m.closeSearch()
 	case "up", "k":
 		m.scrollTo(m.top - 1)
 	case "down", "j":
@@ -285,7 +312,7 @@ func (m *Model) scrollTo(top int) {
 
 // maxTop is the largest top offset that still fills the viewport when the
 // document is long enough, and 0 otherwise.
-func (m Model) maxTop() int { return max(0, len(m.lines)-m.h) }
+func (m Model) maxTop() int { return max(0, len(m.lines)-m.viewHeight()) }
 
 // View renders the visible window of the rendered document, hard-clamped to
 // the pane interior.
@@ -294,7 +321,8 @@ func (m Model) View() string {
 		return ""
 	}
 	var b strings.Builder
-	for row := 0; row < m.h; row++ {
+	body := m.viewHeight()
+	for row := 0; row < body; row++ {
 		if row > 0 {
 			b.WriteByte('\n')
 		}
@@ -302,7 +330,20 @@ func (m Model) View() string {
 			b.WriteString(ansi.Truncate(m.highlightLinks(i), m.w, "…"))
 		}
 	}
+	if body < m.h {
+		b.WriteByte('\n')
+		b.WriteString(ansi.Truncate(m.searchLine(), m.w, "…"))
+	}
 	return b.String()
+}
+
+// viewHeight is the room the rendered document gets: the whole pane, minus
+// the search prompt row while a search is open (#2409).
+func (m Model) viewHeight() int {
+	if m.search == nil || m.h <= 1 {
+		return m.h
+	}
+	return m.h - 1
 }
 
 // highlightLinks returns rendered line i with the selected link's label in

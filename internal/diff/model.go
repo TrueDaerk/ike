@@ -116,6 +116,12 @@ type Model struct {
 	sel      textsel.Selection
 	selRight bool
 	vrows    []vrow
+
+	// In-pane search (#2409): "/" and the shared find chord open a prompt on
+	// the pane's last row and n/N walk the matching rows. It lives behind a
+	// pointer so the value-receiver View copies share it, like the explorer's
+	// speed search; nil means no search is open and n/N step hunks.
+	search *diffSearch
 }
 
 // IgnoreWhitespaceMsg reports that the diff pane Key flipped its
@@ -450,7 +456,18 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 // handleKey drives scrolling, layout toggle, and hunk navigation. The view is
 // read-only, so vim motions map straight to view movement.
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	// The open search prompt owns the keyboard (#2409): every key is query
+	// text until enter applies it or esc abandons the search.
+	if m.search != nil && m.search.input {
+		return m.searchKey(msg)
+	}
 	switch msg.String() {
+	case "/", "ctrl+f", "cmd+f", "super+f":
+		// The shared search key and the find chord open the same prompt.
+		// ctrl+f is deliberately unbound in the keymap table (#2409) so
+		// vim's page-forward survives in the editor; the panes that have a
+		// search answer the chord themselves.
+		m.openSearch()
 	case "up", "k":
 		m.scrollTo(m.top - 1)
 	case "down", "j":
@@ -476,8 +493,18 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "$":
 		m.scrollX(m.maxHOff())
 	case "n":
+		// With a search applied n/N walk its matches, vim-style; without one
+		// they keep their hunk meaning — a diff is navigated by change.
+		if m.search != nil {
+			m.stepMatch(1)
+			break
+		}
 		m.stepHunk(1)
 	case "N":
+		if m.search != nil {
+			m.stepMatch(-1)
+			break
+		}
 		m.stepHunk(-1)
 	case "u":
 		m.SetUnified(!m.unified)
@@ -499,6 +526,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Copy (#2070): the selection, else the current hunk as a patch.
 		return m.copyKey()
 	case "esc":
+		// esc closes the search first, then clears a selection: one escape
+		// per state, never both at once.
+		if m.search != nil {
+			m.closeSearch()
+			break
+		}
 		m.ClearSelection()
 	case "e":
 		// Edit mode (#496): the root model validates and mounts the editor.
@@ -673,7 +706,19 @@ func (m *Model) scrollX(off int) {
 
 // scrollTo clamps and applies a new top row.
 func (m *Model) scrollTo(top int) {
-	m.top = clamp(top, 0, max(0, len(m.lines)-m.h))
+	m.top = clamp(top, 0, max(0, len(m.lines)-m.viewHeight()))
+}
+
+// viewHeight is the room the diff rows get: the whole pane, minus the search
+// prompt row while a search is open (#2409).
+func (m Model) viewHeight() int {
+	if m.search == nil {
+		return m.h
+	}
+	if m.h <= 1 {
+		return m.h
+	}
+	return m.h - 1
 }
 
 // View renders the visible window, hard-clamped to the pane interior.
@@ -682,13 +727,18 @@ func (m Model) View() string {
 		return ""
 	}
 	var b strings.Builder
-	for row := 0; row < m.h; row++ {
+	body := m.viewHeight()
+	for row := 0; row < body; row++ {
 		if row > 0 {
 			b.WriteByte('\n')
 		}
 		if i := m.top + row; i >= 0 && i < len(m.lines) {
 			b.WriteString(ansi.Truncate(m.lines[i], m.w, "…"))
 		}
+	}
+	if body < m.h {
+		b.WriteByte('\n')
+		b.WriteString(ansi.Truncate(m.searchLine(), m.w, "…"))
 	}
 	return b.String()
 }
