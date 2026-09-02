@@ -43,6 +43,16 @@ func (commands) Capabilities() plugin.Capabilities {
 			Scope: plugin.GlobalScope(),
 			Run:   func(h host.API) tea.Cmd { return h.Dispatch(CloseProjectMsg{}) },
 		}, {
+			// Alt+tab between the two projects you actually work in (#2398):
+			// resume the MRU background workspace without the picker detour.
+			// Default chord cmd+shift+e (delivered ctrl+shift+e secondary),
+			// next to cmd+e's recent-files palette users were detouring
+			// through.
+			ID:    "project.switchLast",
+			Title: "Switch to last project",
+			Scope: plugin.GlobalScope(),
+			Run:   func(h host.API) tea.Cmd { return h.Dispatch(SwitchLastMsg{}) },
+		}, {
 			// Quick-peek (#2136): the picker where activation opens the
 			// selected project temporarily; project.peek.return switches back
 			// and unloads it again. No default chord — the normal picker
@@ -107,6 +117,12 @@ func (commands) Capabilities() plugin.Capabilities {
 			CommandID: "project.peek.return",
 			Priority:  plugin.CorePriority,
 			Action:    func(h host.API) tea.Cmd { return h.Dispatch(PeekReturnMsg{}) },
+		}, {
+			Keys:      "cmd+shift+e",
+			Scope:     plugin.GlobalScope(),
+			CommandID: "project.switchLast",
+			Priority:  plugin.CorePriority,
+			Action:    func(h host.API) tea.Cmd { return h.Dispatch(SwitchLastMsg{}) },
 		}, {
 			Keys:      "cmd+shift+w",
 			Scope:     plugin.GlobalScope(),

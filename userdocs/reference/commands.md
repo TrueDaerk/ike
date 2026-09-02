@@ -428,6 +428,7 @@ bring their own.
 | Keep Peeked Project | `project.peek.keep` | — | — | everywhere |
 | Return From Peek | `project.peek.return` | `cmd+shift+b` | — | everywhere |
 | Switch Project… | `project.switch` | `cmd+shift+p` | — | everywhere |
+| Switch to last project | `project.switchLast` | `cmd+shift+e` | — | everywhere |
 
 ## themes
 

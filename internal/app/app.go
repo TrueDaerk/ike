@@ -42,9 +42,9 @@ import (
 	"ike/internal/coverage"
 	"ike/internal/dataview"
 	"ike/internal/debug"
-	"ike/internal/deeplink"
 	"ike/internal/debugdoctor"
 	"ike/internal/debugpanel"
+	"ike/internal/deeplink"
 	"ike/internal/diag"
 	"ike/internal/diff"
 	"ike/internal/domview"
@@ -3218,7 +3218,10 @@ var terminalGlobalCommands = map[string]bool{
 	"palette.searchEverywhere": true,
 	"palette.recentFiles":      true,
 	"project.switch":           true,
-	"project.close":            true,
+	// #2398: the alt+tab between two projects must work with a terminal
+	// focused too — the bounce often happens while looking at a shell.
+	"project.switchLast": true,
+	"project.close":      true,
 	// #2136: the one-key way back from a peek must work with a terminal
 	// focused too — a peek often ends while looking at a shell.
 	"project.peek.return": true,
@@ -6332,6 +6335,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Picker selection: validate off the Update loop; the result comes
 		// back as SwitchProjectMsg or SwitchFailedMsg.
 		return m, project.SwitchTo(msg.Path)
+
+	case project.SwitchLastMsg:
+		// project.switchLast (#2398): resume the MRU background workspace as a
+		// normal switch; a notification when there is no previous project.
+		return m.handleSwitchLastProject()
 
 	case project.CloseProjectMsg:
 		// project.close (#1355): close the current project and resume the MRU
