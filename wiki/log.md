@@ -1,5 +1,16 @@
 # Log
 
+## 2026-09-02 (playgrounds keep the last good result, #2412)
+
+- **A failed jq/yq run no longer clears the result buffer**: `playState`
+  separates the last *successful* `result` from the last run's `runErr`, so a
+  compile or runtime error — and a broken **input** parse — leaves the output
+  on screen with its scroll position and find highlights intact. The error
+  keeps the info row (now `E: … · showing the last good result (n value(s))`)
+  and a one-row **stale banner** in Warning sits above the buffer, folded into
+  the header geometry so the mouse translation and the result editor's height
+  follow it; it clears with the next successful run.
+
 ## 2026-09-02 (ike:// deep links, #2396)
 
 - **ike:// URL scheme**: `ike://open?remote=…` / `ike://open?project=…`
