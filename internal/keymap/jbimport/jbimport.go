@@ -108,10 +108,23 @@ var actionMap = map[string]string{
 	"CommentByBlockComment": "editor.commentBlock",
 	"EditorLineStart":       "editor.lineStart",
 	"EditorLineEnd":         "editor.lineEnd",
-	"SelectNextOccurrence":  "editor.caret.addNext",
-	"SelectAllOccurrences":  "editor.caret.addAll",
-	"EditorCloneCaretAbove": "editor.caret.addAbove",
-	"EditorCloneCaretBelow": "editor.caret.addBelow",
+	// The #2400 line/document family. JetBrains has two move-line actions —
+	// the plain line move and the syntax-aware statement move — and both are
+	// "move this line up" to the user, so both import onto the same command.
+	"MoveLineUp":                   "editor.moveLineUp",
+	"MoveLineDown":                 "editor.moveLineDown",
+	"MoveStatementUp":              "editor.moveLineUp",
+	"MoveStatementDown":            "editor.moveLineDown",
+	"EditorDeleteLine":             "editor.deleteLine",
+	"EditorDeleteToWordStart":      "editor.deleteWordBackward",
+	"EditorTextStart":              "editor.docStart",
+	"EditorTextEnd":                "editor.docEnd",
+	"EditorLineStartWithSelection": "editor.selectLineStart",
+	"EditorLineEndWithSelection":   "editor.selectLineEnd",
+	"SelectNextOccurrence":         "editor.caret.addNext",
+	"SelectAllOccurrences":         "editor.caret.addAll",
+	"EditorCloneCaretAbove":        "editor.caret.addAbove",
+	"EditorCloneCaretBelow":        "editor.caret.addBelow",
 	// JetBrains' Extend/Shrink Selection (#1912): the historical action ids
 	// predate syntax-aware selection, hence the "word" names.
 	"EditorSelectWord":   "editor.selection.extend",

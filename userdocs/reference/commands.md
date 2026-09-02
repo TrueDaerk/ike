@@ -47,6 +47,7 @@ bring their own.
 | Breakpoints | `debug.breakpoints` | `cmd+shift+f8` | — | everywhere |
 | Debug: Toggle Console/Variables View | `debug.console` | `cmd+5` | — | everywhere |
 | Continue | `debug.continue` | `f9` | — | everywhere |
+| Debug: Copy Selected Value | `debug.copy` | `cmd+c` | — | `debug` pane |
 | Xdebug Doctor | `debug.doctor` | — | — | everywhere |
 | Evaluate Expression | `debug.evaluate` | `alt+f8` | — | everywhere |
 | Listen for PHP Debug Connections | `debug.listen` | — | — | everywhere |
@@ -127,9 +128,13 @@ bring their own.
 | Browse HTTP Response History | `http.responseHistory` | — | — | everywhere |
 | Run HTTP Request | `http.run` | `ctrl+f9` | — | everywhere |
 | Save HTTP Response Body to File… | `http.saveResponse` | — | — | everywhere |
+| Search in HTTP Response | `http.search` | `cmd+f` | — | `http` pane |
 | Select HTTP Environment | `http.selectEnvironment` | — | — | everywhere |
 | Show Stored HTTP Response | `http.showResponse` | `ctrl+shift+f9` | — | everywhere |
 | Toggle Raw / Pretty HTTP Response Body | `http.toggleRawBody` | — | — | everywhere |
+| Issues: Copy Issue Reference | `issues.copy` | `cmd+c` | — | `issues` pane |
+| Issues: Next Issue | `issues.selectNext` | `ctrl+down` | — | `issues` pane |
+| Issues: Previous Issue | `issues.selectPrev` | `ctrl+up` | — | `issues` pane |
 | GitHub Issues | `issues.toggle` | — | — | everywhere |
 | jq Cheatsheet… | `json.jqCheatsheet` | — | — | everywhere |
 | Saved jq Filters… | `json.jqFilters` | — | — | everywhere |
@@ -277,6 +282,10 @@ bring their own.
 | Cut | `editor.cut` | `cmd+x` | `d` | `editor` pane |
 | Decode JWT at Caret | `editor.decodeJWT` | — | — | `editor` pane |
 | Decrement Number | `editor.decrement` | — | `ctrl+x` | `editor` pane |
+| Delete Line | `editor.deleteLine` | `cmd+backspace` | `dd` | `editor` pane |
+| Delete Word Backward | `editor.deleteWordBackward` | `alt+backspace` | `db` | `editor` pane |
+| Go to Document End | `editor.docEnd` | `cmd+end` | `G` | `editor` pane |
+| Go to Document Start | `editor.docStart` | `cmd+home` | `gg` | `editor` pane |
 | Duplicate Line | `editor.duplicateLine` | `cmd+d` | — | `editor` pane |
 | Escape Selection as Unicode | `editor.escapeSelection` | `cmd+alt+shift+e` | — | `editor` pane |
 | Explain Concealed Value | `editor.explainConceal` | — | `g?` | `editor` pane |
@@ -291,12 +300,16 @@ bring their own.
 | Jump to Visible Text (Label Jump) | `editor.labelJump` | — | `gs` | `editor` pane |
 | Move to Line End | `editor.lineEnd` | `cmd+right` | `$` | `editor` pane |
 | Move to Line Start | `editor.lineStart` | `home` | `0` | `editor` pane |
+| Move Line Down | `editor.moveLineDown` | `cmd+shift+down` | — | `editor` pane |
+| Move Line Up | `editor.moveLineUp` | `cmd+shift+up` | — | `editor` pane |
 | Paste | `editor.paste` | `cmd+v` | `p` | `editor` pane |
 | Close Editor | `editor.quit` | — | `:q` | `editor` pane |
 | Redo | `editor.redo` | `cmd+shift+z` | `ctrl+r` | `editor` pane |
 | Redo (Chronological) | `editor.redoChrono` | — | `g+` | `editor` pane |
 | Replace in File | `editor.replace` | `cmd+r` | `:s` | `editor` pane |
 | Select All | `editor.selectAll` | `cmd+a` | `ggVG` | `editor` pane |
+| Select to Line End | `editor.selectLineEnd` | `shift+end` | `v$` | `editor` pane |
+| Select to Line Start | `editor.selectLineStart` | `shift+home` | `v0` | `editor` pane |
 | Extend Selection | `editor.selection.extend` | `alt+up` | — | `editor` pane |
 | Shrink Selection | `editor.selection.shrink` | `alt+down` | — | `editor` pane |
 | Toggle Value Under Caret | `editor.toggleValue` | — | `g!` | `editor` pane |

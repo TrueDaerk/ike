@@ -23,6 +23,12 @@ import (
 // entry for a command that has since been bound, or that no longer exists, is
 // stale and fails too.
 
+// The audit also records the reverse case — a *chord* users press for which no
+// command exists yet. #2400's telemetry caught `cmd+ctrl+down` in the editor,
+// JetBrains' "move to next method": there is no symbol-stepping command to
+// bind it to (only `lsp.documentSymbols`' popup), so the chord stays unbound
+// until one lands rather than being aliased onto something adjacent.
+
 // The reasons, grouped so the ledger reads as an audit rather than as an
 // opt-out list.
 const (

@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -939,6 +939,69 @@ Two things this pass deliberately did *not* do:
 forwards to `httppane.Model.CopyKeyCmd`, the exported form of the pane-local
 `copyKeyCmd`, so the chord and the pane key cannot drift apart.
 
+## The line-editing family and the pane chords (#2400)
+
+A second telemetry export (two sessions, ~9,900 events) left 37 presses on
+`unbound`. They split into two groups, and the group decides the fix.
+
+**Commands that did not exist.** The JetBrains line-editing family had only
+vim gestures behind it, so the chord resolved to nothing at all. Each is now a
+registry command in `internal/editor` (`lineops.go`), selection-aware wherever
+JetBrains is:
+
+| command | primary | secondary | behaviour |
+|---|---|---|---|
+| `editor.moveLineUp` / `editor.moveLineDown` | `cmd+shift+up` / `down` | `ctrl+shift+up` / `down` | swaps the touched lines with the neighbour, in one edit; the selection rides along |
+| `editor.deleteLine` | `cmd+backspace` | — (`vim dd`) | the current line, or every line the selection touches; the cursor keeps its column |
+| `editor.deleteWordBackward` | `alt+backspace` | — (`vim db`) | the word before the cursor, in and out of insert mode |
+| `editor.docStart` / `editor.docEnd` | `cmd+home` / `cmd+end` | `ctrl+home` / `ctrl+end` | `gg` / `G` as commands, jumps, fold-opening |
+| `editor.selectLineStart` / `editor.selectLineEnd` | `shift+home` / `shift+end` | — | the shift-select path of the arrow keys, to the line edge |
+
+Two of them already worked *inside* an open insert session — the `#955` line
+kill and the `#246` word kill — and the commands defer to those paths while
+`insert.active`, so the deletion still joins the open undo unit instead of
+committing the insert first.
+
+Three chords the audit deliberately left where they were:
+
+- **`alt+shift+up` / `alt+shift+down`** are JetBrains' other Move Line chord,
+  but caret cloning (#1481) has had them since before this audit.
+- **`cmd+up` / `cmd+down`** (macOS text-field document start/end) fold onto
+  `ctrl+up` / `ctrl+down` off macOS, which are the editor's paragraph jumps.
+- **`cmd+shift+left` / `cmd+shift+right`** stay free rather than joining the
+  navigation family's neighbourhood; `shift+home` / `shift+end` deliver
+  everywhere anyway.
+
+`cmd+ctrl+down` ("move to next method" in JetBrains) has no counterpart to bind
+to: there is no symbol-stepping command, only `lsp.documentSymbols`' popup. It
+stays unbound until one exists. `shift+f2` in the explorer is likewise left
+alone — it is the previous-diagnostic key, which means nothing in a tree.
+
+**Chords the pane already handled.** As with `cmd+c` (#2315) and `ctrl+r`
+(#2314) above, the pane acted and the keymap table did not know, so the press
+was logged unbound, appeared in no listing and could not be rebound:
+
+| context | chord | command | what it does |
+|---|---|---|---|
+| `http` | `cmd+f` / `ctrl+f` | `http.search` | the response viewer's in-pane search (`httppane.Model.BeginSearch`) |
+| `debug` | `cmd+c` | `debug.copy` | the selected variable, watch or stack frame — the console's selection while the console shows |
+| `issues` | `cmd+c` | `issues.copy` | the mouse selection, else the selected item's URL |
+| `issues` | `ctrl+up` / `ctrl+down` | `issues.selectPrev` / `selectNext` | walk the list, or the shown detail |
+
+The two copies get no `ctrl+c` secondary, for the #2315 reason: on macOS that
+chord is the global quit. `cmd+shift+l` aliases `lsp.format`: it was free, and
+reformatting is the only thing "L" means in this table.
+
+`ctrl+e` — IntelliJ's Windows/Linux Recent Files chord, caught once in a
+focused archive pane — is **not** bound. It would have to be a Global row to
+help there, and Global rows resolve before the pane: `ctrl+e` is the diff
+view's "leave edit mode" gesture (`pane.Instance.Update`), which a
+`palette.recentFiles` row would swallow. `cmd+e` keeps the command on macOS,
+and off macOS it already folds onto `ctrl+e` anyway.
+
+`alt+backspace` in the HTTP search prompt needed no binding — every single-line
+input in the tree edits through `ui.EditKey` (#2002), which has handled the
+word kill all along. The keymap row for it is editor-scoped for that reason.
 ## Per-binding status matrix (0081/50) — the acceptance ledger
 
 Generated from `keymap.StatusMatrix` against the shipped plugin set (run
@@ -955,6 +1018,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `debug.breakpoints` | `cmd+shift+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.console` | `cmd+5` | fragile | `palette` | live via palette |
 | `debug.continue` | `f9` | delivered | `—` | live |
+| `debug.copy` | `cmd+c` | fragile | `palette` | live via palette |
 | `debug.evaluate` | `alt+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.start` | `shift+f9` | delivered | `—` | live |
 | `debug.stepInto` | `f7` | delivered | `—` | live |
@@ -975,17 +1039,25 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `editor.copy` | `cmd+c` | fragile | `vim y` | live via vim y |
 | `editor.copyDocPath` | `cmd+alt+shift+c` | fragile | `palette` | live via palette |
 | `editor.cut` | `cmd+x` | fragile | `vim d` | live via vim d |
+| `editor.deleteLine` | `cmd+backspace` | fragile | `vim dd` | live via vim dd |
+| `editor.deleteWordBackward` | `alt+backspace` | fragile | `vim db` | live via vim db |
+| `editor.docEnd` | `cmd+end` | fragile | `ctrl+end` | live via ctrl+end |
+| `editor.docStart` | `cmd+home` | fragile | `ctrl+home` | live via ctrl+home |
 | `editor.duplicateLine` | `cmd+d` | fragile | `vim yyp` | live via vim yyp |
 | `editor.escapeSelection` | `cmd+alt+shift+e` | fragile | `palette` | live via palette |
 | `editor.find` | `cmd+f` | fragile | `vim /` | live via vim / |
 | `editor.lineEnd` | `cmd+right` | fragile | `vim $` | live via vim $ |
 | `editor.lineStart` | `cmd+left` | fragile | `home` | live via home |
+| `editor.moveLineDown` | `cmd+shift+down` | fragile | `ctrl+shift+down` | live via ctrl+shift+down |
+| `editor.moveLineUp` | `cmd+shift+up` | fragile | `ctrl+shift+up` | live via ctrl+shift+up |
 | `editor.paste` | `cmd+v` | fragile | `vim p` | live via vim p |
 | `editor.pasteFromHistory` | `cmd+shift+v` | fragile | `palette` | live via palette |
 | `editor.redo` | `cmd+shift+z` | fragile | `vim ctrl+r` | live via vim ctrl+r |
 | `editor.replace` | `cmd+r` | fragile | `palette` | live via palette |
 | `editor.saveAll` | `cmd+shift+s` | fragile | `palette` | live via palette |
 | `editor.selectAll` | `cmd+a` | fragile | `vim ggVG` | live via vim ggVG |
+| `editor.selectLineEnd` | `shift+end` | delivered | `—` | live |
+| `editor.selectLineStart` | `shift+home` | delivered | `—` | live |
 | `editor.selection.extend` | `alt+up` | fragile | `palette` | live via palette |
 | `editor.selection.shrink` | `alt+down` | fragile | `palette` | live via palette |
 | `editor.splitViewDown` | `cmd+alt+shift+down` | fragile | `palette` | live via palette |
@@ -1023,7 +1095,11 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `http.diffPreviousRun` | `cmd+shift+d` | fragile | `palette` | live via palette |
 | `http.resend` | `ctrl+r` | delivered | `—` | live |
 | `http.run` | `ctrl+f9` | fragile | `palette` | live via palette |
+| `http.search` | `cmd+f` | fragile | `ctrl+f` | live via ctrl+f |
 | `http.showResponse` | `cmd+shift+enter` | fragile | `ctrl+shift+f9` | live via ctrl+shift+f9 |
+| `issues.copy` | `cmd+c` | fragile | `issues pane "y" / palette` | live via issues pane "y" / palette |
+| `issues.selectNext` | `ctrl+down` | delivered | `—` | live |
+| `issues.selectPrev` | `ctrl+up` | delivered | `—` | live |
 | `json.jqPlayground` | `ctrl+alt+j` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `json.jqQueryView` | `ctrl+alt+e` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `palette` | live via palette |
@@ -1077,6 +1153,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `project.peek.return` | `cmd+shift+b` | fragile | `palette` | live via palette |
 | `project.replaceInPath` | `cmd+shift+r` | fragile | `palette` | live via palette |
 | `project.switch` | `cmd+shift+p` | fragile | `palette` | live via palette |
+| `project.switchLast` | `cmd+shift+e` | fragile | `palette` | live via palette |
 | `run.file` | `shift+f10` | delivered | `—` | live |
 | `run.rerun` | `cmd+f5` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `run.select` | `alt+shift+f10` | fragile | `palette / Run menu` | live via palette / Run menu |

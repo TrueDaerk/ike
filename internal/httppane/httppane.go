@@ -612,11 +612,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// cmd+f alias the muscle-memory search chord used everywhere else in
 		// the app — editor find, terminal scrollback search (#1504) — since
 		// plain "/" alone doesn't match user expectations (#1830).
-		m.searching = true
-		m.query = m.selectionSearchPrefill()
-		m.qcur = len([]rune(m.query))
-		m.cur = 0
-		m.research()
+		m.BeginSearch()
 	case "n":
 		m.step(1)
 	case "N":
@@ -817,6 +813,21 @@ func (m *Model) copyKeyCmd() tea.Cmd {
 // dispatches it here, so the bound chord means exactly what the pane-local
 // key means — the selection when there is one, else the whole body.
 func (m *Model) CopyKeyCmd() tea.Cmd { return m.copyKeyCmd() }
+
+// BeginSearch opens the in-pane search prompt, prefilled from the mouse
+// selection exactly like the pane-local "/" key. It is exported for the same
+// reason CopyKeyCmd is (#2400): the keymap layer resolves cmd+f / ctrl+f in
+// the http context to http.search and dispatches it here, so the bound chord
+// and the pane key cannot drift apart. Telemetry showed cmd+f pressed in the
+// response viewer ten times over two sessions and logged unbound every time —
+// the pane handled the key, the keymap table did not know about it.
+func (m *Model) BeginSearch() {
+	m.searching = true
+	m.query = m.selectionSearchPrefill()
+	m.qcur = len([]rune(m.query))
+	m.cur = 0
+	m.research()
+}
 
 // searchKey handles one key while the "/" prompt is open. esc/enter are
 // consumed here first; everything else — cursor motion, word ops, deletion,

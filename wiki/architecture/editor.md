@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-09-01T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Editor
@@ -656,6 +656,21 @@ following break instead), landing the caret at the end of the previous line —
 all inside the running undo segment. An `undo`/`redo`
 requested mid-insert (e.g. `Ctrl+Z` while typing) first **commits the open
 insert session**, so it behaves identically from insert and normal mode.
+
+The word and line kills are **commands** since #2400 (`lineops.go`), so they work
+outside insert mode too and are rebindable: `editor.deleteLine`
+(`cmd+backspace`), `editor.deleteWordBackward` (`alt+backspace`) and — the
+missing halves of the JetBrains line family — `editor.moveLineUp` /
+`editor.moveLineDown` (`cmd`/`ctrl+shift+up`/`down`), `editor.docStart` /
+`editor.docEnd` (`cmd`/`ctrl+home`/`end`, the `gg`/`G` motions) and
+`editor.selectLineStart` / `editor.selectLineEnd` (`shift+home`/`shift+end`).
+Each is **selection-aware** where JetBrains is: with a selection the line move
+carries every touched line (and the selection with it), and the delete removes
+all of them, leaving the caret in its original column on the line that moved
+up. With an insert session open the two kills defer to the paths above, so the
+deletion still joins the running undo segment; the motions commit the insert
+first, like every other command that leaves the caret elsewhere. See
+[keybindings](./keybindings.md#the-line-editing-family-and-the-pane-chords-2400).
 
 **Undo granularity inside an insert** (#1818/#2189, `insertundo.go`). A long
 insert used to commit as *one* change, so a single undo threw away everything

@@ -4972,6 +4972,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// own copy key — selection when there is one, else the whole body.
 		return m, m.copyHTTPResponseOrSelection()
 
+	case HTTPSearchMsg:
+		// http.search (cmd+f / ctrl+f in the response pane, #2400): the
+		// pane's own search key as a bound command.
+		return m, m.searchHTTPResponse()
+
 	case HTTPCopyHeadersMsg:
 		// http.copyHeaders (palette, #1266): status line plus headers.
 		return m, m.copyHTTPResponse(true)
@@ -5363,6 +5368,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fetchVariables(msg.Ref)
 		return m, nil
 
+	case DebugCopyMsg:
+		// debug.copy (cmd+c in the debug panel, #2400): the panel names what
+		// the copy means, the host owns the clipboard.
+		if p := m.debugPanel(); p != nil {
+			return m, p.CopyKeyCmd()
+		}
+		return m, nil
+
+	case debugpanel.CopyMsg:
+		// …and the resulting copy request, like every other pane copy.
+		return m.copyPanelRow(msg.Text, msg.What)
+
 	case debugpanel.AddWatchMsg, debugpanel.EditWatchMsg, debugpanel.RemoveWatchMsg:
 		// A watch mutation from the panel (#1914): the model owns the list.
 		m.handleWatchMsg(msg)
@@ -5589,6 +5606,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ghissues.OpenURLMsg:
 		// The pane's 'o' action (#1934): the issue page in the browser.
 		return m, m.openIssueURL(msg.URL)
+
+	case IssuesCopyMsg:
+		// issues.copy (cmd+c in the issues window, #2400): the pane's copy
+		// key as a bound command — the selection, else the item's URL.
+		if p := m.issuesPanel(); p != nil {
+			return m, p.CopyKeyCmd()
+		}
+		return m, nil
+
+	case IssuesStepMsg:
+		// issues.selectNext / issues.selectPrev (ctrl+down / ctrl+up, #2400).
+		if p := m.issuesPanel(); p != nil {
+			return m, p.StepSelection(msg.Delta)
+		}
+		return m, nil
 
 	case ghissues.CopyMsg:
 		// A mouse selection in an Issues detail view (#2374) — the pane asks
