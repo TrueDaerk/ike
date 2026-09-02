@@ -40,6 +40,18 @@ func (m *Model) startClonePrompt() {
 	m.shell.Open()
 }
 
+// startClonePromptURL opens the clone dialog pre-filled with url — the deep
+// link's remote, verbatim (#2396): the user sees exactly what was linked and
+// still confirms (or edits) before anything is cloned. The directory name
+// follows the URL like a hand-typed one would.
+func (m *Model) startClonePromptURL(url string) {
+	m.startClonePrompt()
+	m.cloneURL, m.cloneURLPos = url, len([]rune(url))
+	m.cloneName = vcs.CloneName(url)
+	m.cloneNamePos = len([]rune(m.cloneName))
+	m.renderClonePrompt()
+}
+
 // clonePromptOpen reports whether the shell currently shows the clone dialog.
 func (m Model) clonePromptOpen() bool { return m.cloneOpen && m.shell.IsOpen() }
 
@@ -52,6 +64,9 @@ func (m *Model) closeClonePrompt() {
 	m.cloneNameEdited = false
 	m.cloneField = cloneFieldURL
 	m.cloneErr = ""
+	// A deep link waiting on this dialog dies with it (#2396): cancelling the
+	// clone cancels the link's whole payload, not just the checkout.
+	m.dlAfterClone = nil
 	m.shell.Close()
 }
 
@@ -307,6 +322,12 @@ func (m Model) finishClone(msg vcs.CloneDoneMsg) (tea.Model, tea.Cmd) {
 		m.cloneField = cloneFieldURL
 		m.renderClonePrompt()
 		return m, nil
+	}
+	// A clone driven by an ike:// link (#2396) continues the link's job: park
+	// the payload before closeClonePrompt clears the marker, so the switch
+	// below still opens the linked file and tool in the fresh checkout.
+	if l := m.dlAfterClone; l != nil {
+		m.dlPending = pendingFor(*l, msg.Dest)
 	}
 	m.closeClonePrompt()
 	m.host.Notify(host.Info, "cloned into "+project.CompactPath(msg.Dest))

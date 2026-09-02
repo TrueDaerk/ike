@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"ike/internal/deeplink"
 )
 
 // detectCache holds one detected backend per workspace root (absolute path).
@@ -124,34 +126,12 @@ func isGitHubHost(host string) bool {
 	return h == "github.com" || strings.HasPrefix(h, "github.") || strings.Contains(h, ".github.")
 }
 
-// parseRemote splits one git remote URL into host and owner/repo. It handles
-// the three shapes git uses: https://host/owner/repo(.git),
-// ssh://git@host(:port)/owner/repo(.git), and the scp-like
-// git@host:owner/repo(.git).
+// parseRemote splits one git remote URL into host and owner/repo. The one
+// implementation lives in internal/deeplink (#2396 moved it there so the
+// ike:// link parser and this detection normalise remotes identically); this
+// wrapper keeps the established forge-internal name.
 func parseRemote(remote string) (host, owner, repo string, ok bool) {
-	var path string
-	if strings.Contains(remote, "://") {
-		u, err := url.Parse(remote)
-		if err != nil {
-			return "", "", "", false
-		}
-		host = u.Hostname()
-		path = strings.Trim(u.Path, "/")
-	} else if at := strings.Index(remote, "@"); at >= 0 && strings.Contains(remote[at:], ":") {
-		rest := remote[at+1:]
-		colon := strings.Index(rest, ":")
-		host = rest[:colon]
-		path = strings.Trim(rest[colon+1:], "/")
-	} else {
-		return "", "", "", false
-	}
-	path = strings.TrimSuffix(path, ".git")
-	parts := strings.Split(path, "/")
-	if host == "" || len(parts) < 2 || parts[len(parts)-2] == "" || parts[len(parts)-1] == "" {
-		return "", "", "", false
-	}
-	// Keep the last two segments: Gitea can serve under a path prefix.
-	return host, parts[len(parts)-2], parts[len(parts)-1], true
+	return deeplink.ParseRemote(remote)
 }
 
 // teaLogin is one entry of `tea logins list --output json`.

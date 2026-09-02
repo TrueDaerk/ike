@@ -105,3 +105,26 @@ func TestParseVersionFlagIsExact(t *testing.T) {
 		}
 	}
 }
+
+// TestParseDeepLinkURL covers the ike:// routing arguments (#2396).
+func TestParseDeepLinkURL(t *testing.T) {
+	inv, err := Parse([]string{"ike://open?remote=git@github.com:a/b"})
+	if err != nil || inv.URL != "ike://open?remote=git@github.com:a/b" || inv.URLSendOnly {
+		t.Fatalf("got %+v, %v", inv, err)
+	}
+	inv, err = Parse([]string{"--url-send-only", "ike://open?project=x"})
+	if err != nil || !inv.URLSendOnly || inv.URL != "ike://open?project=x" {
+		t.Fatalf("got %+v, %v", inv, err)
+	}
+	if _, err = Parse([]string{"ike://open?project=a", "ike://open?project=b"}); err == nil {
+		t.Error("duplicate URL accepted")
+	}
+	if _, err = Parse([]string{"--url-send-only"}); err == nil {
+		t.Error("--url-send-only without URL accepted")
+	}
+	// A path that merely contains "ike:" mid-string stays a file target.
+	inv, err = Parse([]string{"dir/ike:notes.txt"})
+	if err != nil || inv.URL != "" || len(inv.Targets) != 1 {
+		t.Fatalf("got %+v, %v", inv, err)
+	}
+}

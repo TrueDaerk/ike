@@ -1,5 +1,23 @@
 # Log
 
+## 2026-09-02 (ike:// deep links, #2396)
+
+- **ike:// URL scheme**: `ike://open?remote=…` / `ike://open?project=…`
+  (+ optional `file=path:line`, `tool=name`) switches the running IKE to the
+  matching project — resolution history → `project.directory` scan → Clone
+  dialog — then opens the file at the line and shows the tool window. New
+  leaf package `internal/deeplink` (parser, remote normalisation shared with
+  forge detection, git-config/worktree remote reading, per-instance unix
+  socket IPC); history entries carry normalised `remotes`; `ike ike://…` and
+  `--url-send-only` in the CLI; macOS/Linux scheme registration via the
+  desktop install script; new command `project.open_link`. New page
+  [Deep Links](/architecture/deep-links.md).
+- **Switching never asks** (#2396): the "Cannot save every buffer" and
+  "Background workspace limit" dialogs are gone. Unsaveable dirty buffers
+  park with the departing workspace; a busy LRU workspace is kept over the
+  cap and only idle ones evict silently. The quit guard remains the single
+  prompt about unsaved buffers / running processes.
+
 ## 2026-09-02 (Find in All Projects, #2394)
 
 - **Background text search across the recent-projects history**:

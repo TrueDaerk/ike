@@ -231,29 +231,3 @@ func TestProjectCloseGuardEnterSaves(t *testing.T) {
 		t.Fatalf("enter must write the dirty buffer, got %q", data)
 	}
 }
-
-// TestEvictGuardEnterEvicts (#1356): the eviction guard has a single confirm
-// option, so enter evicts and esc still keeps the workspace.
-func TestEvictGuardEnterEvicts(t *testing.T) {
-	m, root, _ := busyCloseFixture(t)
-	m.openEvictPrompt(root)
-	if !m.evictPromptOpen() {
-		t.Fatal("the eviction guard must be open")
-	}
-	if body := guardBody(m); !strings.Contains(body, "[e/enter]") {
-		t.Errorf("evict guard body must hint enter, got %q", body)
-	}
-
-	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	m = out.(Model)
-	if m.evictPromptOpen() || m.ws.Peek(root) == nil {
-		t.Fatal("esc must keep the workspace running")
-	}
-
-	m.openEvictPrompt(root)
-	out, _ = m.Update(enterKey)
-	m = out.(Model)
-	if m.evictPromptOpen() || m.ws.Peek(root) != nil {
-		t.Fatal("enter must evict the workspace")
-	}
-}

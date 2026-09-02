@@ -210,7 +210,7 @@ func (m Model) overlayCapturesAbovePopup() bool {
 		m.recoveryOpen() || m.onboardingOpen() || m.conflictOpen() ||
 		m.runConfigFormOpen() || m.breakpointFormOpen() ||
 		m.revertPromptOpen() || m.depEditPromptOpen() ||
-		m.switchPromptOpen() || m.switchBlockedPromptOpen() ||
+		m.switchPromptOpen() || m.deepLinkChooserOpen() ||
 		m.closePromptOpen() || m.forgeEditDialogOpen()
 }
 

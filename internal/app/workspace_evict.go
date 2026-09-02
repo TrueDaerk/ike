@@ -6,8 +6,6 @@ import (
 	"ike/internal/config"
 	"ike/internal/pane"
 	"ike/internal/plugin"
-	"ike/internal/project"
-	"ike/internal/ui"
 	"ike/internal/workspace"
 
 	tea "charm.land/bubbletea/v2"
@@ -15,10 +13,10 @@ import (
 
 // workspace_evict.go bounds the background workspace set (0370 M4, #780):
 // after every seamless switch the manager is held to project.max_workspaces
-// parked workspaces. The least-recently-used one is evicted — silently when
-// it is idle, behind a confirm prompt when unsaved buffers or running
-// processes would die (the 0090 unsaved-changes guard reborn at eviction
-// time; plain switching itself never prompts since #777).
+// parked workspaces. Least-recently-used idle workspaces are evicted
+// silently; a busy one (unsaved buffers or running processes) is kept even
+// over the cap — since #2396 a switch never prompts at all, and the quit
+// guard at exit is the single place that still asks about live state.
 
 // defaultMaxWorkspaces is the background cap when project.max_workspaces is
 // unset or invalid.
@@ -227,65 +225,28 @@ func (m Model) closeWorkspace(w *workspace.Workspace) tea.Cmd {
 }
 
 // enforceWorkspaceCap evicts least-recently-used background workspaces past
-// the cap: idle ones silently, the first busy one behind the confirm prompt
-// (one decision at a time; the cap re-checks after the next switch). The
-// returned cmd carries the evicted workspaces' close hooks (#825).
+// the cap — idle ones only, silently. A busy workspace (unsaved buffers,
+// running processes, a parked debug session) is skipped and kept even over
+// the cap (#2396): a switch never asks, and live state never dies for a
+// limit. Every switch re-runs the sweep, so the set shrinks back the moment
+// the busy workspaces go idle. The returned cmd carries the evicted
+// workspaces' close hooks (#825).
 func (m *Model) enforceWorkspaceCap() tea.Cmd {
 	cap := maxWorkspaces()
 	var cmds []tea.Cmd
-	for {
-		bg := m.ws.Background()
-		if len(bg) <= cap {
-			return tea.Batch(cmds...)
+	bg := m.ws.Background()
+	over := len(bg) - cap
+	for _, root := range bg { // LRU-first order
+		if over <= 0 {
+			break
 		}
-		lru := bg[0]
-		if workspaceBusy(m.ws.Peek(lru)) {
-			m.openEvictPrompt(lru)
-			return tea.Batch(cmds...)
+		if workspaceBusy(m.ws.Peek(root)) {
+			continue
 		}
-		if cmd := m.closeWorkspace(m.ws.Drop(lru)); cmd != nil {
+		if cmd := m.closeWorkspace(m.ws.Drop(root)); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		over--
 	}
-}
-
-// openEvictPrompt shows the eviction guard for the busy LRU workspace at
-// root: e evicts (killing its processes and discarding unsaved changes), esc
-// keeps it (the cap stays exceeded until the next switch re-asks).
-func (m *Model) openEvictPrompt(root string) {
-	m.evictPending = root
-	m.shell.SetContent(ui.ModelContent{
-		Heading: "Background workspace limit",
-		Body: func() string {
-			return "the background workspace\n" +
-				project.CompactPath(root) + "\nstill has unsaved changes or running processes\n" +
-				"(limit project.max_workspaces exceeded).\n\n" +
-				guardLine("e", "evict it — stop its processes, discard unsaved changes", true) +
-				guardCancel("keep it running (over the limit, asked again next switch)")
-		},
-	})
-	m.shell.SetSize(m.width, m.height)
-	m.shell.Open()
-}
-
-// evictPromptOpen reports whether the shell currently shows the guard.
-func (m Model) evictPromptOpen() bool { return m.evictPending != "" && m.shell.IsOpen() }
-
-// updateEvictPrompt consumes every key while the guard is open; enter answers
-// for the primary option, e (#1356).
-func (m Model) updateEvictPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch guardAnswer(msg, "e") {
-	case "e":
-		root := m.evictPending
-		m.evictPending = ""
-		m.shell.Close()
-		closeCmd := m.closeWorkspace(m.ws.Drop(root))
-		capCmd := m.enforceWorkspaceCap() // more may be over the cap
-		return m, tea.Batch(closeCmd, capCmd)
-	case "esc":
-		m.evictPending = ""
-		m.shell.Close()
-		return m, nil
-	}
-	return m, nil
+	return tea.Batch(cmds...)
 }

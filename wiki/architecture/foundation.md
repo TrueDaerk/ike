@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Foundation Slice
@@ -38,6 +38,10 @@ each pane's rectangle and supports mouse pane-edge resize and title-bar move.
 ## CLI open targets (Roadmap 0270)
 
 `ike path[:line[:col]]... [+N path]` opens files from the command line.
+`ike ike://open?…` routes a deep link (#2396): delivered to the most recently
+focused running instance over the deeplink socket, or resolved after startup
+when none answers; `--url-send-only` is the deliver-or-fail probe the OS URL
+handler uses (see [Deep Links](/architecture/deep-links.md)).
 `main.go` parses argv through the pure grammar in `internal/cli` (`cli.Parse`;
 a malformed invocation prints usage and exits before any UI), then calls
 `Model.OpenCLITargets` (`internal/app/cli_open.go`) **after** construction —

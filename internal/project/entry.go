@@ -12,21 +12,28 @@ import (
 	"time"
 
 	"ike/internal/config"
+	"ike/internal/deeplink"
 )
 
 // Entry is one recently opened project. Path is absolute and cleaned, Name is
-// the display name shown by the picker (default: base directory name), and
-// LastOpened orders the history most-recent-first.
+// the display name shown by the picker (default: base directory name),
+// LastOpened orders the history most-recent-first, and Remotes carries the
+// repository's canonical git-remote keys ("host/owner/repo", #2396) so an
+// ike:// link can find the project without touching the checkout.
 type Entry struct {
 	Path       string
 	Name       string
 	LastOpened time.Time
+	Remotes    []string
 }
 
 // NewEntry builds the entry recorded when the project at path (already
-// validated and absolute) is opened at openedAt.
+// validated and absolute) is opened at openedAt. The remotes are read from the
+// checkout's git config here — recording an open is the natural moment to keep
+// the link index fresh, and the read is a couple of file stats.
 func NewEntry(path string, openedAt time.Time) Entry {
-	return Entry{Path: path, Name: filepath.Base(path), LastOpened: openedAt}
+	return Entry{Path: path, Name: filepath.Base(path), LastOpened: openedAt,
+		Remotes: deeplink.Remotes(path)}
 }
 
 // fromConfig decodes a persisted history entry. A missing or unparseable
@@ -38,7 +45,7 @@ func fromConfig(e config.ProjectHistoryEntry) Entry {
 	if name == "" {
 		name = filepath.Base(e.Path)
 	}
-	return Entry{Path: e.Path, Name: name, LastOpened: t}
+	return Entry{Path: e.Path, Name: name, LastOpened: t, Remotes: e.Remotes}
 }
 
 // toConfig encodes the entry into the persisted [[project.history]] shape,
@@ -48,5 +55,6 @@ func (e Entry) toConfig() config.ProjectHistoryEntry {
 		Path:       e.Path,
 		Name:       e.Name,
 		LastOpened: e.LastOpened.UTC().Format(time.RFC3339),
+		Remotes:    e.Remotes,
 	}
 }

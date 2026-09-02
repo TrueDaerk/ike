@@ -296,6 +296,13 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	fresh.allResults.SetPalette(fresh.pal())
 	fresh.allFindGen = m.allFindGen
 	fresh.allPendingOpen = m.allPendingOpen
+	// Deep-link state (#2396) is session state on the same terms: the socket
+	// endpoint serves the whole run, and a link's parked payload — the very
+	// reason for this switch, finished by the SwitchedMsg handler — rides
+	// across, as does a link waiting on a running clone.
+	fresh.dlServer = m.dlServer
+	fresh.dlPending = m.dlPending
+	fresh.dlAfterClone = m.dlAfterClone
 	// Global floating terminals (#1793) are app state too: they ride across
 	// with their live sessions — process, scrollback, CWD — stacked above
 	// whatever popup layer the incoming project restores. A layer that was

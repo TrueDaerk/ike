@@ -77,6 +77,14 @@ func (commands) Capabilities() plugin.Capabilities {
 			Scope: plugin.GlobalScope(),
 			Run:   func(h host.API) tea.Cmd { return h.Dispatch(OpenCloneMsg{}) },
 		}, {
+			// Paste an ike:// deep link by hand (#2396) — the fallback when no
+			// OS URL handler delivered it. No default chord: rare,
+			// dialog-driven (palette), and the chord budget is full (#711).
+			ID:    "project.open_link",
+			Title: "Open ike:// Link…",
+			Scope: plugin.GlobalScope(),
+			Run:   func(h host.API) tea.Cmd { return h.Dispatch(OpenLinkMsg{}) },
+		}, {
 			// No default chord for the same reason (#711): creating a project
 			// is a rare, dialog-driven action (palette / File menu, #1718).
 			ID:    "project.new",

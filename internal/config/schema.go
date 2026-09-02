@@ -1041,11 +1041,14 @@ type FindAll struct {
 // ProjectHistoryEntry is one recently opened project as persisted in
 // [[project.history]]. Path is absolute and cleaned, Name is the display name
 // (default: base dir name), LastOpened is RFC3339 and used for ordering.
+// Remotes holds the repository's canonical git-remote keys ("host/owner/repo",
+// lower-case, no .git — #2396) so ike:// links resolve against the history.
 // internal/project owns the semantics; this struct only fixes the TOML shape.
 type ProjectHistoryEntry struct {
-	Path       string `toml:"path"`
-	Name       string `toml:"name"`
-	LastOpened string `toml:"last_opened"`
+	Path       string   `toml:"path"`
+	Name       string   `toml:"name"`
+	LastOpened string   `toml:"last_opened"`
+	Remotes    []string `toml:"remotes"`
 }
 
 // Notifications tunes the toast system (Roadmap 0130). TimeoutSeconds is the

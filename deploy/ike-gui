@@ -3,7 +3,26 @@
 # window with IKE-specific settings, running ike as the sole process. The
 # config is loaded exclusively (--config-default-files=false), so the user's
 # normal Ghostty setup never interferes. Installed by scripts/install-desktop.sh.
+#
+# An optional ike:// URL argument (#2396) is the deep-link hand-off from the
+# OS scheme handler (Linux: the .desktop's %u; macOS: the compiled link
+# handler applet). A running IKE receives it over its socket and no window
+# opens; otherwise a fresh IKE starts on the link.
 set -eu
+
+# The URL is untrusted input from a browser/mail click: accept only the ike
+# scheme and refuse quoting-hostile characters before it ever reaches a shell
+# string below.
+IKE_URL=""
+if [ "$#" -ge 1 ] && [ -n "$1" ]; then
+  case "$1" in
+    ike:*)
+      case "$1" in
+        *"'"*|*'"'*|*'\'*|*'`'*|*'$'*) echo "ike-gui: refusing suspicious URL" >&2; exit 1 ;;
+      esac
+      IKE_URL="$1" ;;
+  esac
+fi
 
 # A Dock/desktop launch carries the minimal launchd/session environment —
 # the shell profile never ran, so PATH lacks Homebrew, ~/.local/bin, etc.
@@ -26,13 +45,18 @@ if [ -z "${IKE_GUI_LOGIN:-}" ]; then
     esac
   fi
   # Single-quoted path (not "$0"/"$@") keeps the command portable across
-  # shells (fish has no "$@" in -c strings); ike-gui takes no arguments.
+  # shells (fish has no "$@" in -c strings); the only argument that must
+  # survive the re-exec is the ike:// URL, sanitised above so single-quoting
+  # it is safe.
   self="$0"
   case "$self" in
     */*) ;;
     *) self="$(command -v -- "$self" 2>/dev/null || printf '%s' "$self")" ;;
   esac
   if [ -n "$login_shell" ] && [ -x "$login_shell" ]; then
+    if [ -n "$IKE_URL" ]; then
+      exec "$login_shell" -i -l -c "exec '$self' '$IKE_URL'"
+    fi
     exec "$login_shell" -i -l -c "exec '$self'"
   fi
   # No usable login shell found: continue with the environment we have.
@@ -44,12 +68,29 @@ if [ ! -f "$CONF" ]; then
   exit 1
 fi
 
+# Deep link (#2396): a running instance takes the URL over its socket — no
+# window, the click lands in the existing IKE (raising the terminal window is
+# the terminal's business, best-effort). Only when nobody answers does a
+# fresh window start below, with the URL as ike's argument.
+if [ -n "$IKE_URL" ] && command -v ike >/dev/null 2>&1; then
+  if ike --url-send-only "$IKE_URL" 2>/dev/null; then
+    exit 0
+  fi
+fi
+
 case "$(uname -s)" in
   Darwin)
+    if [ -n "$IKE_URL" ]; then
+      exec open -na /Applications/Ghostty.app --args \
+        --config-default-files=false --config-file="$CONF" -e ike "$IKE_URL"
+    fi
     exec open -na /Applications/Ghostty.app --args \
       --config-default-files=false --config-file="$CONF" ;;
   *)
     if command -v ghostty >/dev/null 2>&1; then
+      if [ -n "$IKE_URL" ]; then
+        exec ghostty --config-default-files=false --config-file="$CONF" -e ike "$IKE_URL"
+      fi
       exec ghostty --config-default-files=false --config-file="$CONF"
     fi
     # Ghostty missing: fall back to another terminal running ike directly
@@ -57,6 +98,9 @@ case "$(uname -s)" in
     for term in "${TERMINAL:-}" kitty wezterm foot; do
       [ -n "$term" ] || continue
       if command -v "$term" >/dev/null 2>&1; then
+        if [ -n "$IKE_URL" ]; then
+          exec "$term" -e ike "$IKE_URL"
+        fi
         exec "$term" -e ike
       fi
     done

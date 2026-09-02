@@ -13,6 +13,7 @@ import (
 	"ike/internal/app"
 	"ike/internal/cli"
 	"ike/internal/config"
+	"ike/internal/deeplink"
 	"ike/internal/diag"
 	"ike/internal/host"
 	"ike/internal/httpclient"
@@ -109,6 +110,7 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ike:", err)
 		fmt.Fprintln(os.Stderr, "usage: ike [+N] [path[:line[:col]]]... [-]")
+		fmt.Fprintln(os.Stderr, "       ike [--url-send-only] ike://open?...")
 		fmt.Fprintln(os.Stderr, "       ike --version")
 		os.Exit(2)
 	}
@@ -118,6 +120,19 @@ func main() {
 	if inv.Version {
 		fmt.Println(version.Full())
 		return
+	}
+	// `ike ike://…` (#2396): hand the deep link to the most recently focused
+	// running instance over its socket; only when none answers does this
+	// process start the IDE itself and resolve the link after startup.
+	// --url-send-only (the OS handler's probe) never starts the IDE: exit 0
+	// on delivery, 1 when no instance is running.
+	if inv.URL != "" {
+		if err := deeplink.Send(deeplink.DefaultDir(), inv.URL); err == nil {
+			return
+		}
+		if inv.URLSendOnly {
+			os.Exit(1)
+		}
 	}
 	// `ike -` (#344): consume piped stdin up front; the UI reads its keyboard
 	// from /dev/tty instead, vim-style. Both failure modes abort before any UI.
@@ -201,6 +216,12 @@ func main() {
 	// program's Send, wired below. Installed as a message filter.
 	mouse := app.NewMouseCoalescer()
 	progOpts = append(progOpts, tea.WithFilter(mouse.Filter))
+	// The ike:// endpoint (#2396) opens before the program copies the model,
+	// so the running model holds the server (focus stamping). Incoming links
+	// arrive as app.DeepLinkMsg via the host's Send, wired below; the socket
+	// is removed on orderly exit.
+	m = m.StartDeepLink()
+	defer m.CloseDeepLink()
 	p := tea.NewProgram(m, progOpts...)
 	// Wire the program's Send into the host so background workers (the LSP bridge)
 	// can inject async results, and into the mouse coalescer's flush timer. The
@@ -208,6 +229,11 @@ func main() {
 	// effect for the running model.
 	m.SetSender(p.Send)
 	mouse.SetSender(p.Send)
+	// A link given on this command line resolves once the program runs.
+	if inv.URL != "" {
+		url := inv.URL
+		go m.Host().Send(app.DeepLinkMsg{URL: url})
+	}
 	// Watch the project root for external file changes (Roadmap 0140); events
 	// arrive through the host's Send as watch.EventMsg. Async (#2260): the
 	// recursive registration walks the whole tree and must not delay p.Run.
