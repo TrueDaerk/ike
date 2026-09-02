@@ -140,6 +140,8 @@ func (m *Model) applyTheme(p *theme.Palette) {
 	}
 	m.palette.SetPalette(p)
 	m.finder.SetPalette(p)
+	m.allFind.SetPalette(p)
+	m.allResults.SetPalette(p)
 	m.keyDoctor.SetPalette(p)
 	m.floats.SetPalette(p)
 	m.help.SetPalette(p)

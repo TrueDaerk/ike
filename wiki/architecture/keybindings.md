@@ -976,6 +976,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `editor.copyDocPath` | `cmd+alt+shift+c` | fragile | `palette` | live via palette |
 | `editor.cut` | `cmd+x` | fragile | `vim d` | live via vim d |
 | `editor.duplicateLine` | `cmd+d` | fragile | `vim yyp` | live via vim yyp |
+| `editor.escapeSelection` | `cmd+alt+shift+e` | fragile | `palette` | live via palette |
 | `editor.find` | `cmd+f` | fragile | `vim /` | live via vim / |
 | `editor.lineEnd` | `cmd+right` | fragile | `vim $` | live via vim $ |
 | `editor.lineStart` | `cmd+left` | fragile | `home` | live via home |
@@ -1006,6 +1007,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `editor.tab.select8` | `alt+8` | fragile | `palette` | live via palette |
 | `editor.tab.select9` | `alt+9` | fragile | `palette` | live via palette |
 | `editor.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
+| `editor.unescapeSelection` | `cmd+alt+shift+u` | fragile | `palette` | live via palette |
 | `editor.write` | `cmd+s` | fragile | `ctrl+s` | live via ctrl+s |
 | `explorer.newFile` | `cmd+n` | fragile | `palette (or a in the explorer)` | live via palette (or a in the explorer) |
 | `explorer.redo` | `cmd+shift+z` | fragile | `palette` | live via palette |
@@ -1014,6 +1016,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `explorer.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
 | `file.copyPath` | `cmd+c` | fragile | `palette / context menu` | live via palette / context menu |
 | `file.move` | `f6` | delivered | `—` | live |
+| `file.openInBrowser` | `alt+f2` | fragile | `palette / context menu` | live via palette / context menu |
 | `file.rename` | `shift+f6` | delivered | `—` | live |
 | `find.openInPanel` | `cmd+enter` | fragile | `ctrl+enter` | live via ctrl+enter |
 | `http.copyResponse` | `cmd+c` | fragile | `response pane "y" / palette` | live via response pane "y" / palette |
@@ -1043,9 +1046,9 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `lsp.typeHierarchy` | `ctrl+h` | delivered | `—` | live |
 | `markdown.preview` | `cmd+alt+m` | fragile | `palette` | live via palette |
 | `menu.open` | `f10` | delivered | `—` | live |
-| `nav.back` | `cmd+left-bracket` | fragile | `mouse-back` | live via mouse-back |
+| `nav.back` | `cmd+alt+left` | fragile | `mouse-back` | live via mouse-back |
 | `nav.bookmarks` | `cmd+f3` | fragile | `palette` | live via palette |
-| `nav.forward` | `cmd+right-bracket` | fragile | `mouse-forward` | live via mouse-forward |
+| `nav.forward` | `cmd+alt+right` | fragile | `mouse-forward` | live via mouse-forward |
 | `nav.pinGoto1` | `ctrl+shift+1` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
 | `nav.pinGoto2` | `ctrl+shift+2` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
 | `nav.pinGoto3` | `ctrl+shift+3` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
@@ -1066,6 +1069,8 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `perf.hud` | `ctrl+alt+p` | fragile | `palette / View menu` | live via palette / View menu |
 | `problems.toggle` | `cmd+8` | fragile | `palette` | live via palette |
 | `project.close` | `cmd+shift+w` | fragile | `palette / File menu` | live via palette / File menu |
+| `project.findInAllProjects` | `cmd+alt+shift+f` | fragile | `palette` | live via palette |
+| `project.findInAllProjectsResults` | `cmd+alt+shift+r` | fragile | `palette` | live via palette |
 | `project.findInPath` | `cmd+shift+f` | fragile | `palette` | live via palette |
 | `project.goToClass` | `cmd+o` | fragile | `palette` | live via palette |
 | `project.goToFile` | `cmd+shift+o` | fragile | `palette` | live via palette |
@@ -1078,6 +1083,8 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `run.testAtCursor` | `ctrl+shift+f10` | delivered | `—` | live |
 | `scratch.generate` | `cmd+alt+shift+n` | fragile | `palette / File menu` | live via palette / File menu |
 | `scratch.new` | `cmd+shift+n` | fragile | `palette` | live via palette |
+| `scratch.newFromSelection` | `cmd+alt+shift+s` | fragile | `palette` | live via palette |
+| `scratch.promote` | `cmd+alt+shift+p` | fragile | `scratch manager ctrl+p / palette` | live via scratch manager ctrl+p / palette |
 | `search.nextMatch` | `f3` | delivered | `—` | live |
 | `search.prevMatch` | `shift+f3` | delivered | `—` | live |
 | `settings.open` | `cmd+,` | fragile | `palette` | live via palette |

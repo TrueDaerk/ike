@@ -41,6 +41,12 @@ var internalKeys = map[string]string{
 	"lsp.onboarded":   "records that the first-start install dialog had its say",
 	"ui.onboarded":    "records that the welcome tour was shown",
 	"project.history": "the recent-projects list, maintained by internal/project",
+	// The all-projects search form's last-used state (#2394): remembered
+	// values, not settings a user tunes — the form itself is the surface.
+	"project.find_all.query":          "last-used search text, maintained by the Find in All Projects form",
+	"project.find_all.case_sensitive": "last-used toggle, maintained by the Find in All Projects form",
+	"project.find_all.whole_word":     "last-used toggle, maintained by the Find in All Projects form",
+	"project.find_all.regex":          "last-used toggle, maintained by the Find in All Projects form",
 	// Legacy #1932 tool-pane keys, kept decodable so old configs load
 	// without warnings; Validate migrates them onto scratch.section_* (#1963).
 	"scratch.panel":        "legacy #1932 key, migrated to scratch.section by Validate",

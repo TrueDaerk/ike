@@ -155,6 +155,14 @@ func rgPath() string {
 // first results appear immediately, large enough to not flood the update loop.
 const batchSize = 64
 
+// sink is what the backends stream matches into: add records one match and
+// returns false once no more results are wanted (bound reached, cancelled).
+// collector implements it for single-root scans, multiCollector for the
+// all-projects fan-out.
+type sink interface {
+	add(Match) bool
+}
+
 // collector accumulates matches and flushes them as BatchMsgs, enforcing the
 // total-result bound across both backends.
 type collector struct {

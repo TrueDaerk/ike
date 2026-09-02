@@ -40,6 +40,11 @@ func TestEditKeyMotions(t *testing.T) {
 		{"word backspace mid-word", key(tea.KeyBackspace, tea.ModAlt), "foo bar", 6, "foo r", 4, true},
 		{"word delete", key(tea.KeyDelete, tea.ModAlt), "foo bar", 0, " bar", 0, true},
 		{"kill to start", key(tea.KeyBackspace, tea.ModSuper), "foo bar", 4, "bar", 0, true},
+		{"kill to start at start", key(tea.KeyBackspace, tea.ModSuper), "foo bar", 0, "foo bar", 0, false},
+		{"kill to end", key(tea.KeyDelete, tea.ModSuper), "foo bar", 4, "foo ", 4, true},
+		{"kill to end at end", key(tea.KeyDelete, tea.ModSuper), "foo bar", 7, "foo bar", 7, false},
+		{"line start", key(tea.KeyLeft, tea.ModSuper), "abc", 2, "abc", 0, false},
+		{"line end", key(tea.KeyRight, tea.ModSuper), "abc", 1, "abc", 3, false},
 		{"clamp cursor", key(tea.KeyBackspace, 0), "ab", 99, "a", 1, true},
 		{"umlaut backspace", key(tea.KeyBackspace, 0), "über", 2, "üer", 1, true},
 	}

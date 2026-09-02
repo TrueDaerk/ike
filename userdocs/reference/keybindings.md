@@ -43,6 +43,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Debug file | `shift+f9` | `shift+f9` | `debug.start` |
 | Diff file against HEAD | `cmd+alt+d` | `ctrl+alt+d` | `vcs.diff` |
 | Evaluate expression | `alt+f8` | `alt+f8` | `debug.evaluate` |
+| Find in all projects | `cmd+alt+shift+f` | `ctrl+alt+shift+f` | `project.findInAllProjects` |
 | Find in path | `cmd+shift+f` | `ctrl+shift+f` | `project.findInPath` |
 | Full query view | `ctrl+alt+e` | `ctrl+alt+e` | `json.jqQueryView` |
 | Generate test data | `cmd+alt+shift+n` | `ctrl+alt+shift+n` | `scratch.generate` |
@@ -112,6 +113,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Search everywhere | `cmd+shift+a` | `ctrl+shift+a` | `palette.searchEverywhere` |
 | Search everywhere (double-shift) | `shift shift` ⚠️ | `shift shift` ⚠️ | `palette.searchEverywhere` |
 | Settings | `cmd+,` | `ctrl+,` | `settings.open` |
+| Show all-projects search results | `cmd+alt+shift+r` | `ctrl+alt+shift+r` | `project.findInAllProjectsResults` |
 | Split down | `cmd+k down` | `ctrl+k down` | `pane.splitDown` |
 | Split left | `cmd+k left` | `ctrl+k left` | `pane.splitLeft` |
 | Split right | `cmd+k right` | `ctrl+k right` | `pane.splitRight` |

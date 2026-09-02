@@ -9,6 +9,7 @@ package settings
 
 import (
 	"image/color"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -340,6 +341,10 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "project.max_history", Type: Int, Title: "Recent projects kept", Description: "How many entries the recent-projects list keeps; the oldest fall off", Scope: config.UserScope, Min: 0, Max: 200},
 			{Key: "project.max_workspaces", Type: Int, Title: "Background workspaces", Description: "Live background workspaces kept across seamless project switches; exceeding it evicts the least recently used one (confirming first when unsaved buffers or running processes would die). 0 selects the built-in default of 3", Scope: config.UserScope, Min: 0, Max: 20},
 			{Key: "project.background_lsp_timeout", Type: String, Title: "Background LSP timeout", Description: "How long a parked background workspace keeps its language servers alive, as a Go duration (\"5m\", \"90s\"); past it they stop and respawn lazily on resume. Empty selects 5m, \"off\" keeps them running", Scope: config.UserScope},
+			{Key: "project.find_all.include", Type: List, Title: "Find All: include globs", Description: "Default file-name include globs for Find in All Projects (project.findInAllProjects); empty keeps every file. The search form pre-fills and updates this list", Scope: config.UserScope, ValidateEntry: globValidate},
+			{Key: "project.find_all.exclude", Type: List, Title: "Find All: exclude globs", Description: "Default file-name exclude globs for Find in All Projects; exclude wins over include. The search form pre-fills and updates this list", Scope: config.UserScope, ValidateEntry: globValidate},
+			{Key: "project.find_all.excluded_roots", Type: List, Title: "Find All: excluded projects", Description: "Project roots (absolute paths) left out of Find in All Projects; the search form's project list toggles entries in and out", Scope: config.UserScope},
+			{Key: "project.find_all.max_results", Type: Int, Title: "Find All: result cap", Description: "Bound on the merged match count across all searched projects; hitting it stops the scan and flags the results as truncated", Scope: config.UserScope, Min: 1, Max: 100000},
 			{Key: "files.watch", Type: Bool, Title: "Watch files", Description: "Report external file changes (fsnotify on the project root)", Scope: config.UserScope},
 			{Key: "files.auto_reload", Type: Enum, Title: "Auto reload", Description: "Reload clean buffers when their file changes on disk", Scope: config.UserScope, Options: []string{"clean", "never"}},
 			{Key: "files.persistent_undo", Type: Bool, Title: "Persistent undo", Description: "Keep undo history across restarts while the file is unchanged", Scope: config.UserScope},
@@ -462,6 +467,17 @@ func issueFilterValidate(v string) string {
 	}
 	if _, err := issuefilter.Parse(v); err != nil {
 		return err.Error()
+	}
+	return ""
+}
+
+// globValidate is the form check for one glob of the all-projects search's
+// include/exclude lists (#2394): a pattern filepath.Match cannot parse is
+// refused here (strict, per the change workflow) where the config validator
+// would only drop it with a diagnostic.
+func globValidate(_ func(key string) string, text string) string {
+	if _, err := filepath.Match(strings.TrimSpace(text), "x"); err != nil {
+		return "invalid glob pattern"
 	}
 	return ""
 }

@@ -1,5 +1,21 @@
 # Log
 
+## 2026-09-02 (Find in All Projects, #2394)
+
+- **Background text search across the recent-projects history**:
+  `project.findInAllProjects` (`cmd+alt+shift+f`) opens a form — query,
+  case/word/regex, include/exclude globs, and a toggleable project list from
+  `project.history` (missing roots greyed out and skipped) — then scans every
+  kept root in the background (`internal/search/multi.go`, one shared result
+  cap, per-root `.gitignore` stacks and errors). Results arrive in a popup
+  that never steals focus, grouped by project then file;
+  `project.findInAllProjectsResults` (`cmd+alt+shift+r`) focuses it, `esc`
+  hides it, and `enter` on a foreign match switches projects before opening.
+  Form state persists user-scoped under `project.find_all.*` (globs, excluded
+  roots and the result cap editable on the Files & Session settings page).
+  `ui.EditKey` gained `cmd+delete` (delete to line end) for every single-line
+  input. See [Project Search](/architecture/search.md).
+
 ## 2026-09-01 (test-data generator reworked around a DSL, #2392)
 
 - **One spec text instead of a five-step wizard**: `scratch.generate` now

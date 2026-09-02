@@ -196,6 +196,14 @@ func defaults() *Config {
 			// The visible default mirrors JetBrains' ~/IdeaProjects; it is
 			// only materialised when a feature needs it (project.clone).
 			Directory: "~/IkeProjects",
+			FindAll: FindAll{
+				Include:       []string{},
+				Exclude:       []string{},
+				ExcludedRoots: []string{},
+				// The engine's own bound (search.DefaultMaxResults),
+				// spelled out so the Settings UI shows the real cap.
+				MaxResults: 2000,
+			},
 		},
 		Palette: Palette{
 			MaxResults:  12,

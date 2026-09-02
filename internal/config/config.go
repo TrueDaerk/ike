@@ -236,6 +236,14 @@ func (c *Config) Flat() map[string]string {
 		paths[i] = e.Path
 	}
 	put("project.history", strings.Join(paths, ","))
+	put("project.find_all.query", c.Project.FindAll.Query)
+	put("project.find_all.case_sensitive", c.Project.FindAll.CaseSensitive)
+	put("project.find_all.whole_word", c.Project.FindAll.WholeWord)
+	put("project.find_all.regex", c.Project.FindAll.Regex)
+	put("project.find_all.include", strings.Join(c.Project.FindAll.Include, ","))
+	put("project.find_all.exclude", strings.Join(c.Project.FindAll.Exclude, ","))
+	put("project.find_all.excluded_roots", strings.Join(c.Project.FindAll.ExcludedRoots, ","))
+	put("project.find_all.max_results", c.Project.FindAll.MaxResults)
 
 	// Per-capture colour overrides (#1318). Capture names contain dots
 	// ("constant.builtin", "rainbow.0"); the flat key keeps them verbatim and

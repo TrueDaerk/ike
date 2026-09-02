@@ -184,6 +184,10 @@ secrets — are documented together, with screenshots, in
 | Recent projects kept | `project.max_history` | integer (0–200) | `20` | user | How many entries the recent-projects list keeps; the oldest fall off |
 | Background workspaces | `project.max_workspaces` | integer (0–20) | `0` | user | Live background workspaces kept across seamless project switches; exceeding it evicts the least recently used one (confirming first when unsaved buffers or running processes would die). 0 selects the built-in default of 3 |
 | Background LSP timeout | `project.background_lsp_timeout` | string | *(empty)* | user | How long a parked background workspace keeps its language servers alive, as a Go duration ("5m", "90s"); past it they stop and respawn lazily on resume. Empty selects 5m, "off" keeps them running |
+| Find All: include globs | `project.find_all.include` | list | *(empty)* | user | Default file-name include globs for Find in All Projects (project.findInAllProjects); empty keeps every file. The search form pre-fills and updates this list |
+| Find All: exclude globs | `project.find_all.exclude` | list | *(empty)* | user | Default file-name exclude globs for Find in All Projects; exclude wins over include. The search form pre-fills and updates this list |
+| Find All: excluded projects | `project.find_all.excluded_roots` | list | *(empty)* | user | Project roots (absolute paths) left out of Find in All Projects; the search form's project list toggles entries in and out |
+| Find All: result cap | `project.find_all.max_results` | integer (1–100000) | `2000` | user | Bound on the merged match count across all searched projects; hitting it stops the scan and flags the results as truncated |
 | Watch files | `files.watch` | boolean | `true` | user | Report external file changes (fsnotify on the project root) |
 | Auto reload | `files.auto_reload` | enum: `clean`, `never` | `clean` | user | Reload clean buffers when their file changes on disk |
 | Persistent undo | `files.persistent_undo` | boolean | `true` | user | Keep undo history across restarts while the file is unchanged |

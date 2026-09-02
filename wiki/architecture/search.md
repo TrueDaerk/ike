@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results.
 resource: internal/search
 tags: [architecture, search, find-in-path]
-timestamp: 2026-08-30T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -248,3 +248,52 @@ single row but still every occurrence to rewrite — then routes per file:
   `search.RewriteRange` (Go regexp Expand semantics; the whole-word wrapper
   is non-capturing, so user group numbers are stable). Literal replacements
   never expand.
+
+## Find in All Projects (#2394)
+
+`project.findInAllProjects` (`cmd+alt+shift+f` / palette) searches one text
+across **every root in the recent-projects history** (`project.history`), in
+the background, and reports into a popup that never steals the keyboard.
+
+- **Form** (`internal/allfind/form.go`): query, the case/word/regex toggles,
+  include/exclude glob fields (comma-separated, `search.Query` semantics —
+  exclude wins), and a toggleable project list built from
+  `project.History(cfg)`. A root that no longer exists on disk renders greyed
+  out with a `(missing)` tag and is skipped. The query prefills from the
+  editor selection (single-line, escaped in regex mode) or the remembered
+  text, preselected like the finder's (#277). Every text field runs
+  `ui.EditKey` — including `cmd+left/right`, `alt+left/right`,
+  `alt+backspace/delete` and `cmd+backspace/delete` (`super+delete` was added
+  for this, so every single-line input in IKE gained delete-to-line-end).
+  Confirming closes the form immediately; the editor has the keyboard back
+  while the scan runs.
+- **Engine** (`internal/search/multi.go`): `MultiService.ScanMulti` fans a
+  `MultiQuery` out over the kept roots sequentially on one background
+  goroutine — each root reuses the single-root backends and therefore honours
+  its own `.gitignore` stack — sharing a single result cap
+  (`project.find_all.max_results`, default `search.DefaultMaxResults`) and a
+  truncation flag. Batches are `MultiBatchMsg{Gen, Root, Matches}`, the end is
+  `MultiDoneMsg{Gen, Total, Truncated, Errs}` with per-root errors (an
+  unreadable root fails alone; the healthy ones still report). Distinct
+  message types and a separate service mean no generation collision with the
+  finder's `m.searcher`; a second invocation cancels the running scan exactly
+  like `Service`.
+- **Results popup** (`internal/allfind/popup.go`): opens on completion
+  **visible but not focused** — matches grouped by project (name + root, with
+  per-root errors inline), then by file, line numbers and highlighted hits,
+  headed by the total count, projects searched and the truncation marker. A
+  click, `cmd+alt+shift+r` or `project.findInAllProjectsResults` focuses it;
+  `esc` hides it and the show-results command brings the retained results
+  back. `enter` on a match in the current project jumps straight there; in
+  another project it parks the open on the model, runs the normal switch
+  transaction (`internal/project/switch.go` → `performSwitchOpts`) and the
+  `SwitchedMsg` handler finishes the open — the pending target rides the
+  model rebuild through the switch's session-state carry-over block, as do
+  the popup and the running scan service.
+- **Persistence** (`project.find_all.*`, user scope): query, toggles, globs
+  and the excluded-roots set persist to `~/.ike/settings.toml` — like
+  `project.history`, the memory spans projects, so it never lands in a
+  project's `.ike/settings.toml`. The Settings UI (Files & Session) edits the
+  default include/exclude globs, the excluded projects list and the result
+  cap; the last-used query/toggles are form-maintained state and stay out of
+  the UI (excused in the settings coverage ledger).

@@ -1015,6 +1015,27 @@ type Project struct {
 	// default (~/IkeProjects). The directory is created on first use, never
 	// at startup. internal/project owns the resolution (ProjectsDir).
 	Directory string `toml:"directory"`
+	// FindAll persists the Find-in-All-Projects form (#2394). It lives in the
+	// user layer like project.history — the search spans projects on this
+	// machine, so a per-project copy would fracture the remembered state.
+	FindAll FindAll `toml:"find_all"`
+}
+
+// FindAll is the [project.find_all] table (#2394): the all-projects search's
+// remembered form state and its tunables. Query and the three toggles are the
+// last-used values (maintained by the form, like project.history); Include/
+// Exclude are the default file-name globs (Exclude wins on overlap),
+// ExcludedRoots lists history entries left out of the scan, and MaxResults
+// caps the merged match count across all roots.
+type FindAll struct {
+	Query         string   `toml:"query"`
+	CaseSensitive bool     `toml:"case_sensitive"`
+	WholeWord     bool     `toml:"whole_word"`
+	Regex         bool     `toml:"regex"`
+	Include       []string `toml:"include"`
+	Exclude       []string `toml:"exclude"`
+	ExcludedRoots []string `toml:"excluded_roots"`
+	MaxResults    int      `toml:"max_results"`
 }
 
 // ProjectHistoryEntry is one recently opened project as persisted in
