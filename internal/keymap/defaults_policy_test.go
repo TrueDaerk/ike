@@ -341,3 +341,75 @@ func TestNavAliasChordsDarwinOnly(t *testing.T) {
 		t.Errorf("cmd+left-bracket: got %+v, want nav.back", res)
 	}
 }
+
+// TestAudit2400DefaultChords (#2400): the third unbound-chord audit — the
+// telemetry export's 37 unbound presses — resolves in the context it was
+// pressed in, on both platforms. The editor family is new commands, the pane
+// rows name what an existing pane key already did.
+func TestAudit2400DefaultChords(t *testing.T) {
+	cases := []struct {
+		chord string
+		ctx   Context
+		cmd   string
+	}{
+		{"cmd+shift+up", Editor, "editor.moveLineUp"},
+		{"cmd+shift+down", Editor, "editor.moveLineDown"},
+		{"ctrl+shift+up", Editor, "editor.moveLineUp"},
+		{"ctrl+shift+down", Editor, "editor.moveLineDown"},
+		{"cmd+backspace", Editor, "editor.deleteLine"},
+		{"alt+backspace", Editor, "editor.deleteWordBackward"},
+		{"cmd+home", Editor, "editor.docStart"},
+		{"cmd+end", Editor, "editor.docEnd"},
+		{"ctrl+home", Editor, "editor.docStart"},
+		{"ctrl+end", Editor, "editor.docEnd"},
+		{"shift+home", Editor, "editor.selectLineStart"},
+		{"shift+end", Editor, "editor.selectLineEnd"},
+		{"cmd+shift+l", Editor, "lsp.format"},
+		{"cmd+f", HTTP, "http.search"},
+		{"ctrl+f", HTTP, "http.search"},
+		{"cmd+c", Debug, "debug.copy"},
+		{"cmd+c", Issues, "issues.copy"},
+		{"ctrl+up", Issues, "issues.selectPrev"},
+		{"ctrl+down", Issues, "issues.selectNext"},
+	}
+	for _, goos := range []string{"darwin", "linux"} {
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
+		for _, c := range cases {
+			chord := NormalizeChord(MustParseChord(c.chord), goos)
+			if b, ok := table.Lookup(chord, c.ctx); !ok || b.Command != c.cmd {
+				t.Errorf("%s: %s in %q = %+v ok=%v, want %s", goos, c.chord, c.ctx, b, ok, c.cmd)
+			}
+		}
+	}
+	// Every fragile-primary newcomer records its escape route.
+	for _, id := range []string{"editor.deleteLine", "editor.deleteWordBackward", "debug.copy", "issues.copy"} {
+		if reachableAlternatives[id] == "" {
+			t.Errorf("%s has no reachableAlternatives entry", id)
+		}
+	}
+}
+
+// TestAudit2400KeepsExistingOwners guards the chords this audit deliberately
+// left alone: alt+shift+up/down stay with caret cloning (#1481), and the
+// editor's ctrl+up/ctrl+down paragraph jumps stay out of the table, so the
+// cmd+up/cmd+down fold cannot take them off macOS.
+func TestAudit2400KeepsExistingOwners(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
+		for chord, want := range map[string]string{
+			"alt+shift+up":   "editor.caret.addAbove",
+			"alt+shift+down": "editor.caret.addBelow",
+		} {
+			c := NormalizeChord(MustParseChord(chord), goos)
+			if b, ok := table.Lookup(c, Editor); !ok || b.Command != want {
+				t.Errorf("%s: %s = %+v, want %s", goos, chord, b, want)
+			}
+		}
+		for _, chord := range []string{"ctrl+up", "ctrl+down"} {
+			c := NormalizeChord(MustParseChord(chord), goos)
+			if b, ok := table.Lookup(c, Editor); ok {
+				t.Errorf("%s: %s in the editor = %s, must stay the paragraph jump", goos, chord, b.Command)
+			}
+		}
+	}
+}

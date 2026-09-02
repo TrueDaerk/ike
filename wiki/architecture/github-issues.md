@@ -110,6 +110,7 @@ QWERTZ-safe (#48): plain letters and delivered `ctrl+letter` chords only.
 | `j`/`k`, arrows, paging | shared list navigation / detail scrolling (#1666) | everywhere |
 | `g` / `G` | jump to the first / last row (list) or top / bottom (detail) | everywhere |
 | `ctrl+j` / `ctrl+k` | walk to the next / previous issue or PR | details |
+| `ctrl+up` / `ctrl+down` | walk the selection — the list cursor, or the shown detail (#2400) | everywhere |
 | `r` | refresh (the listing, plus the open detail's data) | everywhere |
 | `f` (aliases `/`, `cmd+f` / `ctrl+f`) | the filter overlay, on the match input | lists |
 | `l` | the filter overlay's **label** section | issue list |
@@ -333,8 +334,12 @@ drag grows the selection** instead of abandoning it — the resting pointer cell
 is re-resolved against the new offset. `y` (and `cmd+c`, `ui.CopyChord`) put
 the span on the clipboard through a `CopyMsg` the host answers, exactly as the
 response and diff viewers do; the pane never touches the clipboard itself.
-The copy drops the selection, and without one the key is inert — it is
+The copy drops the selection, and without one `y` is inert — it is
 advertised in the footer and the action menu only while a selection exists.
+The bound chord `cmd+c` (`issues.copy`, #2400) goes one step further: with no
+selection it copies the selected item's **URL** — its number and title when the
+forge listing carries no URL — because "copy" with a list in front of you means
+the thing under the cursor, not nothing.
 
 Two decisions are worth naming. **What is copied is the rendered text**, not
 the markdown source underneath: the body is wrapped and styled through

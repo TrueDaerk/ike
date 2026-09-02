@@ -160,6 +160,8 @@ Active when an editor pane has focus.
 | Copy JSON/YAML path | `cmd+alt+shift+c` | `ctrl+alt+shift+c` | `editor.copyDocPath` |
 | Cut | `cmd+x` | `ctrl+x` | `editor.cut` |
 | Debug test at cursor | `alt+shift+f9` | `alt+shift+f9` | `debug.testAtCursor` |
+| Delete line | `cmd+backspace` | `ctrl+backspace` | `editor.deleteLine` |
+| Delete word backward | `alt+backspace` | `alt+backspace` | `editor.deleteWordBackward` |
 | Diagnostic under caret | `cmd+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
 | Diagnostic under caret | `ctrl+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
 | Diff HTTP response against previous run | `cmd+shift+d` | `ctrl+shift+d` | `http.diffPreviousRun` |
@@ -174,9 +176,17 @@ Active when an editor pane has focus.
 | Find usages (panel) | `cmd+alt+f7` | `ctrl+alt+f7` | `lsp.referencesPanel` |
 | Go to declaration | `cmd+b` | `ctrl+b` | `lsp.definition` |
 | Go to declaration | `f4` | `f4` | `lsp.definition` |
+| Go to document end | `cmd+end` | `ctrl+end` | `editor.docEnd` |
+| Go to document end | `ctrl+end` | `ctrl+end` | `editor.docEnd` |
+| Go to document start | `cmd+home` | `ctrl+home` | `editor.docStart` |
+| Go to document start | `ctrl+home` | `ctrl+home` | `editor.docStart` |
 | Go to implementations | `cmd+alt+b` | `ctrl+alt+b` | `lsp.implementations` |
 | Go to super | `cmd+u` | `ctrl+u` | `lsp.goToSuper` |
 | Markdown preview | `cmd+alt+m` | `ctrl+alt+m` | `markdown.preview` |
+| Move line down | `cmd+shift+down` | `ctrl+shift+down` | `editor.moveLineDown` |
+| Move line down | `ctrl+shift+down` | `ctrl+shift+down` | `editor.moveLineDown` |
+| Move line up | `cmd+shift+up` | `ctrl+shift+up` | `editor.moveLineUp` |
+| Move line up | `ctrl+shift+up` | `ctrl+shift+up` | `editor.moveLineUp` |
 | Move to line end | `cmd+right` | `ctrl+right` | `editor.lineEnd` |
 | Move to line start | `cmd+left` | `ctrl+left` | `editor.lineStart` |
 | Move to line start | `home` | `home` | `editor.lineStart` |
@@ -195,6 +205,7 @@ Active when an editor pane has focus.
 | Redo | `cmd+shift+z` | `ctrl+shift+z` | `editor.redo` |
 | Redo | `ctrl+shift+z` | `ctrl+shift+z` | `editor.redo` |
 | Reformat file or selection | `cmd+alt+l` | `ctrl+alt+l` | `lsp.format` |
+| Reformat file or selection | `cmd+shift+l` | `ctrl+shift+l` | `lsp.format` |
 | Rename symbol | `shift+f6` | `shift+f6` | `lsp.rename` |
 | Replace in file | `cmd+r` | `ctrl+r` | `editor.replace` |
 | Run HTTP request | `cmd+enter` | `ctrl+enter` | `http.run` |
@@ -203,6 +214,8 @@ Active when an editor pane has focus.
 | Save | `cmd+s` | `ctrl+s` | `editor.write` |
 | Save | `ctrl+s` | `ctrl+s` | `editor.write` |
 | Select All | `cmd+a` | `ctrl+a` | `editor.selectAll` |
+| Select to line end | `shift+end` | `shift+end` | `editor.selectLineEnd` |
+| Select to line start | `shift+home` | `shift+home` | `editor.selectLineStart` |
 | Show intention actions | `alt+enter` | `alt+enter` | `lsp.codeAction` |
 | Show stored HTTP response | `cmd+shift+enter` | `ctrl+shift+enter` | `http.showResponse` |
 | Show stored HTTP response | `ctrl+shift+f9` | `ctrl+shift+f9` | `http.showResponse` |
@@ -264,6 +277,8 @@ Active when the HTTP response pane has focus.
 |---|---|---|---|
 | Copy response selection or body | `cmd+c` | `ctrl+c` | `http.copyResponse` |
 | Re-send stored HTTP request | `ctrl+r` | `ctrl+r` | `http.resend` |
+| Search in response | `cmd+f` | `ctrl+f` | `http.search` |
+| Search in response | `ctrl+f` | `ctrl+f` | `http.search` |
 
 ## Archive viewer
 

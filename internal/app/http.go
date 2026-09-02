@@ -716,6 +716,20 @@ func (m *Model) copyHTTPResponseOrSelection() tea.Cmd {
 	return cmd
 }
 
+// searchHTTPResponse runs http.search (#2400): the response viewer's own
+// search key ("/" , cmd+f, ctrl+f) as a bound command, so the chord resolves
+// in the keymap table instead of being logged unbound while the pane quietly
+// handled it. Focus follows the search — typing belongs in the prompt.
+func (m *Model) searchHTTPResponse() tea.Cmd {
+	p := m.httpPanel()
+	if p == nil {
+		m.host.Notify(host.Info, "http: no response pane open")
+		return nil
+	}
+	p.BeginSearch()
+	return nil
+}
+
 // copyHTTPFold runs http.copyFold (#1787): the response viewer's target fold
 // goes to the clipboard whole, through the same CopyMsg path as "y"/"Y".
 func (m *Model) copyHTTPFold() tea.Cmd {

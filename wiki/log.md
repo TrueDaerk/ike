@@ -28,6 +28,23 @@
   search is open and hunks while none is. The **markdown preview** gained the
   same prompt over its rendered lines.
 
+## 2026-09-02 (missing editor/pane chords, #2400)
+
+- **Line-editing family**: `editor.moveLineUp`/`moveLineDown`,
+  `editor.deleteLine`, `editor.deleteWordBackward`, `editor.docStart`/`docEnd`
+  and `editor.selectLineStart`/`selectLineEnd` are commands now
+  (`internal/editor/lineops.go`), selection-aware and bound to their JetBrains
+  chords with a delivered secondary where the primary is `cmd`-modified. The
+  two kills defer to the open insert session's own paths (#246, #955).
+- **Pane chords named**: `http.search` (`cmd+f`/`ctrl+f`), `debug.copy`
+  (`cmd+c`), `issues.copy` (`cmd+c`) and `issues.selectPrev`/`selectNext`
+  (`ctrl+up`/`ctrl+down`) put chords the panes already handled — or could not
+  do at all — into the keymap table, so they are listed and rebindable.
+  `cmd+shift+l` aliases `lsp.format`.
+- Chords left alone with reasons recorded: `alt+shift+arrow` (caret cloning),
+  `cmd+up`/`cmd+down` (fold onto the paragraph jumps), `ctrl+e` (the diff
+  view's leave-edit gesture), `cmd+ctrl+down` (no symbol-nav command exists).
+
 ## 2026-09-02 (playgrounds keep the last good result, #2412)
 
 - **A failed jq/yq run no longer clears the result buffer**: `playState`

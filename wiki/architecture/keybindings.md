@@ -994,11 +994,21 @@ allowlisted intentional shadow (`intentionalDefaultShadows`).
 The one casualty is the data grid, where `ctrl+f` used to page forward; `n` and
 `pgdown` still do, and the chord now filters like everywhere else.
 
-## Per-binding status matrix (0081/50) — the acceptance ledger
+The `http` context keeps its own `http.search` row from #2400 — it names the
+same gesture (`httppane.Model.BeginSearch`) the Global command reaches through
+the capability, so which of the two wins there is immaterial; the pane row is
+the more specific one and is allowlisted as an intentional shadow.
 
-Generated from `keymap.StatusMatrix` against the shipped plugin set (run
-`IKE_GEN_MATRIX=<file> go test ./cmd/ike -run TestGenerateMatrixMarkdown` to
-regenerate); the final-gate test in `cmd/ike` fails the build if any row is
+## The line-editing family and the pane chords (#2400)
+
+A second telemetry export (two sessions, ~9,900 events) left 37 presses on
+`unbound`. They split into two groups, and the group decides the fix.
+
+**Commands that did not exist.** The JetBrains line-editing family had only
+vim gestures behind it, so the chord resolved to nothing at all. Each is now a
+registry command in `internal/editor` (`lineops.go`), selection-aware wherever
+JetBrains is:
+
 | command | primary | reachability | fallback | status |
 |---|---|---|---|---|
 | `archive.reload` | `ctrl+r` | delivered | `—` | live |
@@ -1010,6 +1020,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `debug.breakpoints` | `cmd+shift+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.console` | `cmd+5` | fragile | `palette` | live via palette |
 | `debug.continue` | `f9` | delivered | `—` | live |
+| `debug.copy` | `cmd+c` | fragile | `palette` | live via palette |
 | `debug.evaluate` | `alt+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.start` | `shift+f9` | delivered | `—` | live |
 | `debug.stepInto` | `f7` | delivered | `—` | live |
@@ -1030,17 +1041,25 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `editor.copy` | `cmd+c` | fragile | `vim y` | live via vim y |
 | `editor.copyDocPath` | `cmd+alt+shift+c` | fragile | `palette` | live via palette |
 | `editor.cut` | `cmd+x` | fragile | `vim d` | live via vim d |
+| `editor.deleteLine` | `cmd+backspace` | fragile | `vim dd` | live via vim dd |
+| `editor.deleteWordBackward` | `alt+backspace` | fragile | `vim db` | live via vim db |
+| `editor.docEnd` | `cmd+end` | fragile | `ctrl+end` | live via ctrl+end |
+| `editor.docStart` | `cmd+home` | fragile | `ctrl+home` | live via ctrl+home |
 | `editor.duplicateLine` | `cmd+d` | fragile | `vim yyp` | live via vim yyp |
 | `editor.escapeSelection` | `cmd+alt+shift+e` | fragile | `palette` | live via palette |
 | `editor.find` | `cmd+f` | fragile | `vim /` | live via vim / |
 | `editor.lineEnd` | `cmd+right` | fragile | `vim $` | live via vim $ |
 | `editor.lineStart` | `cmd+left` | fragile | `home` | live via home |
+| `editor.moveLineDown` | `cmd+shift+down` | fragile | `ctrl+shift+down` | live via ctrl+shift+down |
+| `editor.moveLineUp` | `cmd+shift+up` | fragile | `ctrl+shift+up` | live via ctrl+shift+up |
 | `editor.paste` | `cmd+v` | fragile | `vim p` | live via vim p |
 | `editor.pasteFromHistory` | `cmd+shift+v` | fragile | `palette` | live via palette |
 | `editor.redo` | `cmd+shift+z` | fragile | `vim ctrl+r` | live via vim ctrl+r |
 | `editor.replace` | `cmd+r` | fragile | `palette` | live via palette |
 | `editor.saveAll` | `cmd+shift+s` | fragile | `palette` | live via palette |
 | `editor.selectAll` | `cmd+a` | fragile | `vim ggVG` | live via vim ggVG |
+| `editor.selectLineEnd` | `shift+end` | delivered | `—` | live |
+| `editor.selectLineStart` | `shift+home` | delivered | `—` | live |
 | `editor.selection.extend` | `alt+up` | fragile | `palette` | live via palette |
 | `editor.selection.shrink` | `alt+down` | fragile | `palette` | live via palette |
 | `editor.splitViewDown` | `cmd+alt+shift+down` | fragile | `palette` | live via palette |
@@ -1078,7 +1097,11 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `http.diffPreviousRun` | `cmd+shift+d` | fragile | `palette` | live via palette |
 | `http.resend` | `ctrl+r` | delivered | `—` | live |
 | `http.run` | `ctrl+f9` | fragile | `palette` | live via palette |
+| `http.search` | `cmd+f` | fragile | `ctrl+f` | live via ctrl+f |
 | `http.showResponse` | `cmd+shift+enter` | fragile | `ctrl+shift+f9` | live via ctrl+shift+f9 |
+| `issues.copy` | `cmd+c` | fragile | `issues pane "y" / palette` | live via issues pane "y" / palette |
+| `issues.selectNext` | `ctrl+down` | delivered | `—` | live |
+| `issues.selectPrev` | `ctrl+up` | delivered | `—` | live |
 | `json.jqPlayground` | `ctrl+alt+j` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `json.jqQueryView` | `ctrl+alt+e` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `palette` | live via palette |

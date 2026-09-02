@@ -614,7 +614,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// plain "/" alone doesn't match user expectations (#1830). The same
 		// chords reach every other pane through search.open (#2409); the pane
 		// keeps its own cases so the keys work with the keymap table rebound.
-		m.OpenSearch()
+		m.BeginSearch()
 	case "n":
 		m.step(1)
 	case "N":
@@ -775,11 +775,7 @@ func (m *Model) research() {
 // find chord opens the same in-pane search prompt "/" does, prefilled from a
 // live selection (#2122). It always opens, so it never falls back to a notice.
 func (m *Model) OpenSearch() bool {
-	m.searching = true
-	m.query = m.selectionSearchPrefill()
-	m.qcur = len([]rune(m.query))
-	m.cur = 0
-	m.research()
+	m.BeginSearch()
 	return true
 }
 
@@ -827,6 +823,21 @@ func (m *Model) copyKeyCmd() tea.Cmd {
 // dispatches it here, so the bound chord means exactly what the pane-local
 // key means — the selection when there is one, else the whole body.
 func (m *Model) CopyKeyCmd() tea.Cmd { return m.copyKeyCmd() }
+
+// BeginSearch opens the in-pane search prompt, prefilled from the mouse
+// selection exactly like the pane-local "/" key. It is exported for the same
+// reason CopyKeyCmd is (#2400): the keymap layer resolves cmd+f / ctrl+f in
+// the http context to http.search and dispatches it here, so the bound chord
+// and the pane key cannot drift apart. Telemetry showed cmd+f pressed in the
+// response viewer ten times over two sessions and logged unbound every time —
+// the pane handled the key, the keymap table did not know about it.
+func (m *Model) BeginSearch() {
+	m.searching = true
+	m.query = m.selectionSearchPrefill()
+	m.qcur = len([]rune(m.query))
+	m.cur = 0
+	m.research()
+}
 
 // searchKey handles one key while the "/" prompt is open. esc/enter are
 // consumed here first; everything else — cursor motion, word ops, deletion,

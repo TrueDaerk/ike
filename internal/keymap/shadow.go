@@ -74,6 +74,12 @@ var intentionalDefaultShadows = map[string]string{
 	// pair land on ctrl+f.
 	shadowKey("cmd+f", "editor.find", "search.open"):  "editor find over the pane find chord",
 	shadowKey("ctrl+f", "editor.find", "search.open"): "linux Cmd-fold: editor find over the pane find chord",
+	// The response viewer names its own search (#2400) so the chord is listed
+	// and rebindable there; it opens exactly what search.open would reach
+	// through pane.Searchable, so which of the two wins in the http context
+	// is immaterial.
+	shadowKey("cmd+f", "http.search", "search.open"):  "http names its own search; same gesture as the pane find chord",
+	shadowKey("ctrl+f", "http.search", "search.open"): "linux Cmd-fold: http names its own search; same gesture as the pane find chord",
 }
 
 // detectShadows scans the effective (post-conflict) binding set for

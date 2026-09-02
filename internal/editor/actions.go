@@ -661,6 +661,24 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.lineStart()
 	case "line_end":
 		m.lineEnd()
+	// The #2400 line/document family: JetBrains chords that had no command at
+	// all, so the keymap layer logged every press as unbound (lineops.go).
+	case "move_line_up":
+		m.moveLines(-1)
+	case "move_line_down":
+		m.moveLines(1)
+	case "delete_line":
+		m.deleteLines()
+	case "delete_word_backward":
+		m.deleteWordBackward()
+	case "doc_start":
+		m.docEdge(false)
+	case "doc_end":
+		m.docEdge(true)
+	case "select_line_start":
+		m.selectToLineEdge(false)
+	case "select_line_end":
+		m.selectToLineEdge(true)
 	// View options (#64): per-view display toggles, overriding the [editor]
 	// config for this view.
 	case "toggle_wrap":
