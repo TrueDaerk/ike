@@ -161,8 +161,18 @@ type playState struct {
 	// one-line header is the resting layout, and growing it costs result rows.
 	expanded bool
 
-	result  jqplay.Result
-	pending bool
+	// result is the last *successful* evaluation — it is never replaced by a
+	// failed one (#2412). A compile or runtime error lands in runErr instead,
+	// so the buffer below keeps showing the last output the user could read:
+	// mid-typing a query is invalid most of the time (`. | {a, b,`), and
+	// blanking the result for every intermediate keystroke defeats the
+	// "what was that field called again?" lookup the playground exists for.
+	// haveResult records that a good result was installed at all, so the
+	// stale banner is only claimed over content that really is one.
+	result     jqplay.Result
+	runErr     string
+	haveResult bool
+	pending    bool
 
 	hist     *jqplay.History
 	histIdx  int
@@ -525,7 +535,7 @@ func (m Model) playInlineActive(key string) bool {
 // of assuming the two-row default.
 func (m Model) playHeaderRowsFor(key string) int {
 	if m.playInlineActive(key) {
-		return m.playQueryRowCount() + playInfoRows
+		return m.playQueryRowCount() + playInfoRows + m.playStaleRows()
 	}
 	return 0
 }
@@ -560,7 +570,7 @@ func (m Model) playQueryRowsFor(width int) int {
 	rows := len(jqplay.Wrap(s.program, m.playQueryWidth(width)))
 	limit := playMaxQueryRows
 	if r, ok := m.lay.Panes[s.paneKey]; ok {
-		if fits := paneInterior(r.H, paneChromeH) - playInfoRows - playMinResultRows; fits < limit {
+		if fits := paneInterior(r.H, paneChromeH) - playInfoRows - m.playStaleRows() - playMinResultRows; fits < limit {
 			limit = fits
 		}
 	}
@@ -680,7 +690,7 @@ func (m *Model) sizePlayResult() {
 	if !ok {
 		return
 	}
-	s.resultEd.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH+m.playQueryRowCount()+playInfoRows))
+	s.resultEd.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH+m.playQueryRowCount()+playInfoRows+m.playStaleRows()))
 }
 
 // closePlayground records the program in the session history, aborts a run
@@ -798,9 +808,11 @@ func (m *Model) finishPlayParse(msg playParseDoneMsg) tea.Cmd {
 	s.parsing = false
 	s.inputErr = msg.err
 	if s.inputErr != "" {
-		s.pending = false // nothing will run against this text; no evaluation is in flight
+		s.pending = false  // nothing will run against this text; no evaluation is in flight
+		m.sizePlayResult() // the stale banner (#2412) costs a row while it is up
 		return nil
 	}
+	m.sizePlayResult()
 	s.input = msg.in
 	return m.runPlayNow()
 }
@@ -873,11 +885,51 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 		return nil
 	}
 	s.pending, s.cancel = false, nil
-	s.result = msg.res
-	if msg.res.Err == "" {
-		m.rememberPlayProgram(s.srcKey, s.program)
+	if msg.res.Err != "" {
+		// A failed run keeps the previous result on screen (#2412): the error
+		// takes the info row and the stale banner marks the buffer, but the
+		// buffer itself — its text, its scroll position, its find highlights —
+		// is left exactly as the last good run left it.
+		s.runErr = msg.res.Err
+		m.sizePlayResult() // the banner costs a row while it is up
+		return nil
 	}
+	s.runErr = ""
+	s.result, s.haveResult = msg.res, true
+	m.rememberPlayProgram(s.srcKey, s.program)
+	m.sizePlayResult()
 	return m.syncPlayResultBuffer()
+}
+
+// playStale reports whether the result buffer is showing an output the current
+// query or input no longer produces (#2412) — the state the banner names. It
+// takes a good result to be stale: with nothing ever installed the buffer is
+// empty, and calling that "stale" would describe content that is not there.
+func (s *playState) playStale() bool {
+	return s != nil && s.haveResult && (s.inputErr != "" || s.runErr != "")
+}
+
+// playStaleRows is the vertical space the stale banner takes inside the hosting
+// pane. It is part of the header the same way the info row is, so the geometry,
+// the mouse translation and the result editor's height all agree on it.
+func (m Model) playStaleRows() int {
+	if m.play.playStale() {
+		return 1
+	}
+	return 0
+}
+
+// playStaleBanner is the one-line "the result below is not current" marker,
+// rendered in Warning above the result buffer. The info row already carries the
+// message; this says which *buffer* the message is about, which the row cannot.
+func (m Model) playStaleBanner(width int) string {
+	s := m.play
+	what := "the query has an error"
+	if s.inputErr != "" {
+		what = "the input has an error"
+	}
+	line := lipgloss.NewStyle().Foreground(m.pal().Warning).Render("stale — " + what + "; showing the last good result")
+	return ansi.Truncate(line, width, "…")
 }
 
 // syncPlayResultBuffer reinstalls the current result text into the substitute
@@ -1490,7 +1542,11 @@ func (m Model) playInlineBody(width int) string {
 	if width < 20 {
 		width = 20
 	}
-	return strings.Join(m.playQueryRows(width), "\n") + "\n" + m.playInfoRow(width) + "\n" + s.resultEd.View()
+	body := strings.Join(m.playQueryRows(width), "\n") + "\n" + m.playInfoRow(width) + "\n"
+	if s.playStale() {
+		body += m.playStaleBanner(width) + "\n"
+	}
+	return body + s.resultEd.View()
 }
 
 // playInfoRow is the header's second line: an error beats a transient status
@@ -1509,10 +1565,11 @@ func (m Model) playInfoRow(width int) string {
 	hint := lipgloss.NewStyle().Foreground(pal.Hint)
 	if err := m.playErrorLine(); err != "" {
 		line := lipgloss.NewStyle().Foreground(pal.Error).Render("E: " + err)
-		// A runtime error can arrive after values were produced; they are
-		// sitting in the buffer below, so say so instead of hiding the count.
-		if s.inputErr == "" && len(s.result.Outputs) > 0 {
-			line += hint.Render(fmt.Sprintf(" · %d value(s) before the error", len(s.result.Outputs)))
+		// The buffer below is the last good result, not this run's partial
+		// output (#2412) — say which one the reader is looking at rather than
+		// counting values the failed run never installed.
+		if s.playStale() {
+			line += hint.Render(fmt.Sprintf(" · showing the last good result (%d value(s))", len(s.result.Outputs)))
 		}
 		return ansi.Truncate(line, width, "…")
 	}
@@ -1615,7 +1672,7 @@ func (m Model) playErrorLine() string {
 	if s.inputErr != "" {
 		return s.inputErr
 	}
-	return s.result.Err
+	return s.runErr
 }
 
 // playInputSegment names the queried snapshot: where it came from, how big it

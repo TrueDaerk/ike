@@ -189,7 +189,7 @@ func TestJQPlaygroundDoesNotRecallBrokenProgram(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"foo":1}`))
 	m = runJQProgram(m, ".foo")
 	m = setProgram(m, ".foo[")
-	if m.play.result.Err == "" {
+	if m.play.runErr == "" {
 		t.Fatal("the broken program must report a compile error")
 	}
 	m = closeJQ(m)
@@ -205,7 +205,7 @@ func TestJQPlaygroundDoesNotRecallBrokenProgram(t *testing.T) {
 func TestJQPlaygroundInvalidProgramShowsError(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".foo[")
-	if m.play.result.Err == "" {
+	if m.play.runErr == "" {
 		t.Fatal("an invalid program must report an error")
 	}
 	v := ansi.Strip(m.render())
@@ -247,22 +247,94 @@ func TestJQPlaygroundCapsHugeResult(t *testing.T) {
 	}
 }
 
-// TestJQPlaygroundErrorKeepsValueCount (#1978): a runtime error arriving
-// after values were produced must not hide that count — the values sit in
-// the buffer below the error line.
-func TestJQPlaygroundErrorKeepsValueCount(t *testing.T) {
+// TestJQPlaygroundErrorKeepsLastGoodResult (#2412): a run that fails leaves
+// the previous result in the buffer and says on the info row which one the
+// reader is looking at, instead of counting the failed run's partial output.
+func TestJQPlaygroundErrorKeepsLastGoodResult(t *testing.T) {
 	m := openJQ(t, playApp(t, `[{"x":1},3]`))
+	m = setProgram(m, ".[0]")
+	good := m.play.result.Text()
 	m = setProgram(m, ".[] | .x")
 	s := m.play
-	if s.result.Err == "" || len(s.result.Outputs) != 1 {
-		t.Fatalf("want one value then an error, got err=%q outputs=%v", s.result.Err, s.result.Outputs)
+	if s.runErr == "" {
+		t.Fatal("the failing program must report a runtime error")
+	}
+	if got := s.result.Text(); got != good {
+		t.Errorf("result = %q, want the last good result %q", got, good)
+	}
+	if !s.playStale() {
+		t.Error("a failed run over a good result must be marked stale")
 	}
 	row := ansi.Strip(m.playInfoRow(200))
 	if !strings.HasPrefix(row, "E: ") {
 		t.Errorf("the error must render, got %q", row)
 	}
-	if !strings.Contains(row, "1 value(s) before the error") {
-		t.Errorf("the error row should keep the produced value count, got %q", row)
+	if !strings.Contains(row, "showing the last good result (1 value(s))") {
+		t.Errorf("the error row should name the result on screen, got %q", row)
+	}
+}
+
+// TestJQPlaygroundStaleBannerCycle (#2412) is the issue's acceptance case: a
+// valid -> invalid -> valid sequence keeps the result buffer readable
+// throughout, and the stale banner appears with the error and clears with the
+// next good run.
+func TestJQPlaygroundStaleBannerCycle(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"foo":"bar","baz":2}`))
+	const banner = "stale \u2014 the query has an error"
+
+	m = setProgram(m, ".foo")
+	if got := m.play.result.Text(); got != `"bar"` {
+		t.Fatalf("valid result = %q, want %q", got, `"bar"`)
+	}
+	if v := ansi.Strip(m.render()); strings.Contains(v, banner) {
+		t.Errorf("a good result must not show the stale banner, got:\n%s", v)
+	}
+
+	m = setProgram(m, ".foo | {a,")
+	if got := m.play.result.Text(); got != `"bar"` {
+		t.Errorf("an invalid query blanked the result: %q", got)
+	}
+	v := ansi.Strip(m.render())
+	if !strings.Contains(v, banner) {
+		t.Errorf("the invalid query should raise the stale banner, got:\n%s", v)
+	}
+	if !strings.Contains(v, "E: ") || !strings.Contains(v, `"bar"`) {
+		t.Errorf("the error and the last good result must both be on screen, got:\n%s", v)
+	}
+
+	m = setProgram(m, ".baz")
+	if got := m.play.result.Text(); got != "2" {
+		t.Errorf("result = %q, want the new value 2", got)
+	}
+	if m.play.runErr != "" || m.play.playStale() {
+		t.Errorf("a good run must clear the error state, got err=%q stale=%v", m.play.runErr, m.play.playStale())
+	}
+	if v := ansi.Strip(m.render()); strings.Contains(v, banner) {
+		t.Errorf("the banner must clear with the next good run, got:\n%s", v)
+	}
+}
+
+// TestJQPlaygroundInputErrorKeepsResult (#2412): the same holds when the
+// *input* stops parsing - the source buffer is edited into invalid JSON - and
+// the input error still takes precedence on the info row.
+func TestJQPlaygroundInputErrorKeepsResult(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"foo":"bar"}`))
+	m = setProgram(m, ".foo")
+	good := m.play.result.Text()
+
+	m = drainCmd(m, m.finishPlayParse(playParseDoneMsg{st: m.play, gen: m.play.pgen, err: "not valid JSON"}))
+	s := m.play
+	if got := s.result.Text(); got != good {
+		t.Errorf("a bad input blanked the result: got %q, want %q", got, good)
+	}
+	if !s.playStale() {
+		t.Error("a bad input over a good result must be marked stale")
+	}
+	if got := m.playErrorLine(); got != "not valid JSON" {
+		t.Errorf("the input error must take the info row, got %q", got)
+	}
+	if v := ansi.Strip(m.render()); !strings.Contains(v, "stale \u2014 the input has an error") {
+		t.Errorf("the banner should name the input error, got:\n%s", v)
 	}
 }
 
