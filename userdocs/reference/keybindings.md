@@ -128,6 +128,8 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Switch project | `cmd+shift+p` | `ctrl+shift+p` | `project.switch` |
 | Switch project | `ctrl+shift+p` | `ctrl+shift+p` | `project.switch` |
 | Switch tab (recent tabs) | `alt+e` | `alt+e` | `editor.tab.picker` |
+| Switch to last project | `cmd+shift+e` | `ctrl+shift+e` | `project.switchLast` |
+| Switch to last project | `ctrl+shift+e` | `ctrl+shift+e` | `project.switchLast` |
 | TODO index | `cmd+6` | `ctrl+6` | `todo.list` |
 | Test results tool window | `cmd+4` | `ctrl+4` | `tests.toggle` |
 | Toggle VCS tool window | `cmd+9` | `ctrl+9` | `vcs.panel` |

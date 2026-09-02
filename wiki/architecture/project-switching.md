@@ -140,6 +140,31 @@ directory, and open the scaffolded result.
   transaction. If the wizard was dismissed while the scaffold ran, the
   outcome only toasts.
 
+## Switch to last project (#2398)
+
+Telemetry showed project switching is a **ping-pong**: most switches bounce
+between the same two projects, and users reached them through the recent-files
+palette (`cmd+e`) instead of the picker. One chord removes the detour.
+
+- **`project.switchLast`** ("Switch to last project", global scope, default
+  chord `cmd+shift+e` with `ctrl+shift+e` as the delivered secondary — the
+  project.switch pattern, and deliberately next to `cmd+e`) dispatches
+  `SwitchLastMsg`; also reachable from the palette. The chord is on the #805
+  terminal allowlist (`terminalGlobalCommands`), like the other project-level
+  entry points.
+- **The pick** (`handleSwitchLastProject`, `internal/app/switch.go`) is the
+  **last element of `m.ws.Background()`** — the most recently used parked
+  workspace, the same pick `project.close` uses. Since the project just left
+  becomes the new MRU parked one, invoking the command again switches straight
+  back: an alt+tab between two projects.
+- **A normal switch, not a peek**: the request is routed through
+  `handleSwitchProject`, so the recent-projects history records the open and
+  the auto-save gate (#2186) runs exactly as for a palette-driven switch. The
+  resumed workspace comes back with its tabs, cursors and running terminals
+  intact (#777).
+- **No background workspace**: nothing changes and a `no previous project`
+  notification says why.
+
 ## Close Project (#1355)
 
 The inverse of a quick visit: instead of switching back and closing the

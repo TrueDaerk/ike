@@ -44,6 +44,13 @@ type PeekReturnMsg struct{}
 // marker. Dispatched by project.peek.keep.
 type PeekKeepMsg struct{}
 
+// SwitchLastMsg asks the root model to switch to the most recently used
+// background workspace (#2398): the alt+tab of project switching — pressing it
+// again comes back, since the project just left becomes the MRU parked one.
+// With no background workspace the request is a no-op with a notification.
+// Dispatched by project.switchLast.
+type SwitchLastMsg struct{}
+
 // CloseProjectMsg asks the root model to close the current project (#1355):
 // tear the active workspace down and resume the most recently used background
 // workspace; with no background workspace the request becomes an app quit.

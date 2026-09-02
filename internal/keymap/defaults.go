@@ -30,6 +30,12 @@ var jetbrainsRows = []row{
 	// keymap layer does not.
 	{"cmd+shift+p", "project.switch", "Switch project", Global, "Project (0090)"},
 	{"ctrl+shift+p", "project.switch", "Switch project", Global, "Project (0090)"},
+	// Switch to last project (#2398): the alt+tab between the two projects a
+	// session ping-pongs between — cmd+shift+e with the delivered ctrl
+	// secondary, same pattern as project.switch above. It sits next to cmd+e
+	// (recent files), the palette detour it replaces.
+	{"cmd+shift+e", "project.switchLast", "Switch to last project", Global, "Project (#2398)"},
+	{"ctrl+shift+e", "project.switchLast", "Switch to last project", Global, "Project (#2398)"},
 	// Close Project (#1355/#1358): cmd+shift+w with the delivered ctrl
 	// secondary, same pattern as project.switch above.
 	{"cmd+shift+w", "project.close", "Close project", Global, "Project (#1355)"},

@@ -489,3 +489,22 @@ func detachWorkspaceServices(w *workspace.Workspace) {
 		}
 	}
 }
+
+// handleSwitchLastProject routes project.switchLast (#2398): resume the most
+// recently used background workspace — the last element of the manager's MRU
+// order, the same pick project.close uses. Because the departing project
+// becomes the MRU parked one, invoking the command again switches straight
+// back: an alt+tab between the two projects a session ping-pongs between.
+//
+// The switch goes through handleSwitchProject, so it is a full switch and not
+// a peek (#2136): history is recorded and the auto-save gate (#2186) runs
+// exactly as for a palette-driven switch. With no background workspace nothing
+// changes and a notification says so.
+func (m Model) handleSwitchLastProject() (tea.Model, tea.Cmd) {
+	bg := m.ws.Background()
+	if len(bg) == 0 {
+		m.host.Notify(host.Info, "no previous project")
+		return m, nil
+	}
+	return m.handleSwitchProject(project.SwitchProjectMsg{Root: bg[len(bg)-1]})
+}
