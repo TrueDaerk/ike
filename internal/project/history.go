@@ -59,8 +59,7 @@ func RecordOpen(opts config.Options, root string, openedAt time.Time) error {
 
 	raw := make([]map[string]any, len(entries))
 	for i, e := range entries {
-		c := e.toConfig()
-		raw[i] = map[string]any{"path": c.Path, "name": c.Name, "last_opened": c.LastOpened}
+		raw[i] = historyRaw(e.toConfig())
 	}
 	return config.WriteKey(opts, config.UserScope, "project.history", raw)
 }
@@ -76,10 +75,20 @@ func RemoveFromHistory(opts config.Options, path string) error {
 		if e.Path == path {
 			continue
 		}
-		c := e.toConfig()
-		out = append(out, map[string]any{"path": c.Path, "name": c.Name, "last_opened": c.LastOpened})
+		out = append(out, historyRaw(e.toConfig()))
 	}
 	return config.WriteKey(opts, config.UserScope, "project.history", out)
+}
+
+// historyRaw is the map shape config.WriteKey persists for one history entry.
+// remotes is written only when present, so a repo-less project's entry stays
+// as compact as before #2396.
+func historyRaw(c config.ProjectHistoryEntry) map[string]any {
+	m := map[string]any{"path": c.Path, "name": c.Name, "last_opened": c.LastOpened}
+	if len(c.Remotes) > 0 {
+		m["remotes"] = c.Remotes
+	}
+	return m
 }
 
 // RemoveFromHistoryCmd wraps RemoveFromHistory as a tea.Cmd, mirroring

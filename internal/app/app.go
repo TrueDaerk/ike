@@ -42,6 +42,7 @@ import (
 	"ike/internal/coverage"
 	"ike/internal/dataview"
 	"ike/internal/debug"
+	"ike/internal/deeplink"
 	"ike/internal/debugdoctor"
 	"ike/internal/debugpanel"
 	"ike/internal/diag"
@@ -738,16 +739,6 @@ type Model struct {
 	// save chains of the auto-save-on-switch gate (#2186); nil when no
 	// switch waits for a write.
 	autoSaveSwitch *autoSaveSwitch
-	// switchBlocked is the aggregated dialog state of that gate (#2186): the
-	// pending root plus the buffers that could not be written.
-	switchBlocked *blockedSwitch
-	// switchSaveAsRoot is the pending switch root while the save-as prompt
-	// names one of those buffers (#2186); "" when the prompt was not opened
-	// by the gate.
-	switchSaveAsRoot string
-	// evictPending is the busy LRU background workspace root awaiting the
-	// eviction-guard answer (0370 M4, #780).
-	evictPending string
 	// debugMapPending is the server directory of a #832 path-mapping hint
 	// awaiting the user's answer ("" when no prompt is open): a listening
 	// debug session accepted a request whose entry file does not resolve
@@ -834,6 +825,22 @@ type Model struct {
 	allSearch      *search.MultiService
 	allFindGen     int
 	allPendingOpen *allfind.OpenMatchMsg
+	// Deep-link state (#2396). dlServer is this instance's ike:// socket
+	// endpoint (session state — Touch on terminal focus stamps this instance
+	// as the click target). dlPending parks a link's file/tool payload until
+	// the switch it caused lands, riding the model rebuild like
+	// allPendingOpen. dlChoose is the open multiple-matches chooser; nil when
+	// closed. dlAfterClone parks a link whose repository is being cloned via
+	// the clone dialog — consumed by finishClone on success, dropped when the
+	// dialog is cancelled.
+	dlServer     *deeplink.Server
+	dlPending    *deepLinkPending
+	dlChoose     *deepLinkChooser
+	dlAfterClone *deeplink.Link
+	// The project.open_link paste prompt (#2396): one URL line.
+	dlLinkOpen bool
+	dlLinkText string
+	dlLinkPos  int
 	// undoTree is the undo-tree overlay (#59): the focused editor's change
 	// tree; jumps route back into that editor as HistoryJumpMsg.
 	undoTree *undotree.Model
@@ -6177,6 +6184,25 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.startClonePrompt()
 		return m, nil
 
+	case project.OpenLinkMsg:
+		// project.open_link (#2396): paste an ike:// URL by hand.
+		m.startOpenLinkPrompt()
+		return m, nil
+
+	case DeepLinkMsg:
+		// An ike:// link arrived — socket, CLI argument, or the paste prompt.
+		return m.handleDeepLink(msg.URL)
+
+	case deepLinkResolvedMsg:
+		return m.handleDeepLinkResolved(msg)
+
+	case tea.FocusMsg:
+		// The terminal gained focus: stamp this instance as the one an OS
+		// ike:// click should reach (#2396). Best-effort — most terminals
+		// only report focus when the view requests it.
+		m.dlServer.Touch()
+		return m, nil
+
 	case vcs.CloneDoneMsg:
 		// The clone finished: switch to the fresh checkout or show the error.
 		return m.finishClone(msg)
@@ -6365,6 +6391,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.allPendingOpen = nil
 			m.host.Notify(host.Info, "switched to "+msg.Root)
 			return m.openPathAt(po.Path, po.Line-1, po.Col)
+		}
+		// A switch driven by an ike:// link (#2396) finishes the same way:
+		// the parked payload (file at line, tool window) applies in the
+		// resumed workspace. A pending payload for a different root was
+		// superseded by a competing switch and is dropped.
+		if dp := m.dlPending; dp != nil {
+			m.dlPending = nil
+			if dp.root == msg.Root {
+				m.host.Notify(host.Info, "switched to "+msg.Root)
+				return m.finishDeepLink(*dp)
+			}
 		}
 		// A peek-enter announces itself with the way back (#2136); the marker
 		// is already set — the fresh model carried it out of the transaction.
@@ -7686,14 +7723,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.switchPromptOpen() {
 			return m.updateSwitchPrompt(msg)
 		}
-		// The aggregated auto-save dialog before a project switch (#2186):
-		// s / d / esc answer it.
-		if m.switchBlockedPromptOpen() {
-			return m.updateSwitchBlockedPrompt(msg)
+		// The deep-link multiple-matches chooser (#2396): a digit / esc.
+		if m.deepLinkChooserOpen() {
+			return m.updateDeepLinkChooser(msg)
 		}
-		// The background-workspace eviction guard (0370 M4, #780): e / esc.
-		if m.evictPromptOpen() {
-			return m.updateEvictPrompt(msg)
+		// The open-link paste prompt (#2396): one line, enter / esc.
+		if m.openLinkPromptOpen() {
+			return m.updateOpenLinkPrompt(msg)
 		}
 		// The busy close-from-list guard (#821): s / d / esc answer it.
 		if m.wsClosePromptOpen() {

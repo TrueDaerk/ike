@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -15,7 +15,11 @@ layer (#2), the command + picker (#12) and the switch orchestration (#3).
 ## Recent-projects history
 
 - **Entry** (`entry.go`): `Path` (absolute, cleaned), `Name` (display name,
-  default: base directory name), `LastOpened` (orders the list). Persisted as
+  default: base directory name), `LastOpened` (orders the list), and
+  `Remotes` (#2396: the repository's canonical git-remote keys,
+  `host/owner/repo`, read from the checkout's git config on every recorded
+  open — the index [ike:// deep links](/architecture/deep-links.md) resolve
+  against; worktrees resolve through gitdir/commondir). Persisted as
   `[[project.history]]` with `last_opened` in RFC3339 UTC — the shape is fixed
   by `config.ProjectHistoryEntry`; the semantics live here.
 - **Validation** (`validate.go`): `Validate(path)` expands `~`, resolves to an
@@ -334,15 +338,15 @@ project's edits — `handleSwitchProject` runs the gate in
   `ilsp.SaveChainDoneMsg` lands, with a 3s backstop that writes whatever is
   still pending raw (format skipped) so a wedged server can never strand the
   switch.
-- Buffers with no writable home never block it silently: **untitled** ones, a
-  **read-only** buffer (#1762) and one **changed on disk** since the edits (a
-  stale buffer, whose overwrite is the conflict guard's decision, not the
-  switch's) — plus anything whose write failed — are collected into **one**
-  dialog naming each buffer and its reason: `[s]` save as… (names the untitled
-  buffers one at a time through the #730 prompt, re-running the gate after
-  each answer — a cancelled prompt brings the dialog back rather than
-  dead-ending), `[d]` switch anyway (they park unsaved with this workspace),
-  `[esc]` cancel — the project stays, nothing is lost.
+- Buffers with no writable home never block it at all (#2396): **untitled**
+  ones, a **read-only** buffer (#1762) and one **changed on disk** since the
+  edits (a stale buffer, whose overwrite is the conflict guard's decision,
+  not the switch's) — plus anything whose write failed — simply stay dirty
+  and **park with the departing workspace**, announced by one notification.
+  They come back exactly as left on the next visit; nothing is lost. The
+  former "Cannot save every buffer" dialog is gone — a project switch never
+  prompts; the quit guard at exit remains the single place that asks about
+  unsaved buffers.
 - `false` restores the pre-#2186 behaviour: dirty buffers simply park with
   their workspace (#777). The gate is on the plain `project.switch` path only;
   a quick peek (#2136), `project.close` and the peek-return keep their own

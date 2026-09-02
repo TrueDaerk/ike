@@ -16,6 +16,10 @@ import (
 // Dispatched by the project.clone command.
 type OpenCloneMsg struct{}
 
+// OpenLinkMsg asks the root model to open the ike://-link paste prompt
+// (#2396). Dispatched by project.open_link.
+type OpenLinkMsg struct{}
+
 // CloneTarget resolves the directory a clone named name would land in — the
 // shared Target rules.
 func CloneTarget(name string) (string, error) { return Target(name) }

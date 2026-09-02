@@ -27,6 +27,15 @@ type Invocation struct {
 	// Version reports that "--version" / "-v" was given. cmd/ike prints the
 	// banner and exits; every other field is then meaningless.
 	Version bool
+	// URL is an ike:// deep link (#2396): cmd/ike hands it to a running
+	// instance over the deeplink socket, or resolves it itself after startup.
+	// The link's grammar is internal/deeplink's business — the CLI only routes
+	// the argument.
+	URL string
+	// URLSendOnly reports "--url-send-only": deliver URL to a running instance
+	// and exit (success or failure), never start the IDE. The OS URL handler
+	// uses it to probe before spawning a terminal.
+	URLSendOnly bool
 }
 
 // Parse parses the arguments after the program name. Supported forms:
@@ -36,6 +45,9 @@ type Invocation struct {
 //	file.go:42:7       path + line + column
 //	+42 file.go        vim-style line for the following path
 //	-                  read stdin into a scratch buffer (at most once)
+//	ike://open?…       deep link (#2396): route to a running instance or
+//	                   resolve after startup (at most once)
+//	--url-send-only    with an ike:// URL: only deliver it, never start
 //	--version, -v      print the version banner instead of starting
 //
 // A suffix that is not a positive number stays part of the path ("weird:name"
@@ -57,6 +69,17 @@ func Parse(args []string) (Invocation, error) {
 				return Invocation{}, fmt.Errorf("duplicate stdin argument %q", a)
 			}
 			inv.Stdin = true
+		case a == "--url-send-only":
+			inv.URLSendOnly = true
+		case strings.HasPrefix(a, "ike:"):
+			// An ike:// deep link (#2396). One per invocation; the scheme
+			// prefix cannot collide with a file path's optional ":line" suffix
+			// grammar in practice, and files named literally "ike:…" can still
+			// be opened via "./ike:…".
+			if inv.URL != "" {
+				return Invocation{}, fmt.Errorf("duplicate ike:// URL %q", a)
+			}
+			inv.URL = a
 		case strings.HasPrefix(a, "+"):
 			n, ok := parseNum(a[1:])
 			if !ok {
@@ -76,6 +99,9 @@ func Parse(args []string) (Invocation, error) {
 	}
 	if pending > 0 {
 		return Invocation{}, fmt.Errorf("+%d is not followed by a file", pending)
+	}
+	if inv.URLSendOnly && inv.URL == "" {
+		return Invocation{}, fmt.Errorf("--url-send-only needs an ike:// URL")
 	}
 	return inv, nil
 }

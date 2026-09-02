@@ -2,8 +2,9 @@
 Type=Application
 Name=Ike
 Comment=Terminal IDE
-Exec=ike-gui
+Exec=ike-gui %u
 Icon=ike
 Terminal=false
 Categories=Development;IDE;
 StartupWMClass=ike
+MimeType=x-scheme-handler/ike;

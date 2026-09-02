@@ -2,7 +2,6 @@ package app
 
 import (
 	"path/filepath"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -10,8 +9,6 @@ import (
 	"ike/internal/editor"
 	"ike/internal/host"
 	"ike/internal/pane"
-	"ike/internal/project"
-	"ike/internal/ui"
 )
 
 // switch_autosave.go is the auto-save gate of an orderly project switch
@@ -22,8 +19,9 @@ import (
 // format-on-save and organize-imports-on-save run exactly as on a manual `:w`
 // — and only then does performSwitch swap the workspace. Buffers with no
 // writable home (untitled, read-only, changed on disk since the edits) never
-// block the switch silently: they are collected into one decision dialog
-// (save as… / switch anyway / cancel), per the prominent-dialog convention.
+// block the switch (#2396): they stay dirty and park with the departing
+// workspace — kept, not lost — announced by one notification. The quit guard
+// remains the single prompt that ever asks about unsaved buffers.
 //
 // The normal save path is asynchronous when the save chain applies (#1148):
 // the write is parked until the language server answered. A switch must not
@@ -46,13 +44,6 @@ type autoSaveSwitch struct{ root string }
 // autoSaveSwitchTimeoutMsg fires when the parked switch waited long enough.
 type autoSaveSwitchTimeoutMsg struct{}
 
-// blockedSwitch is the aggregated dialog state: the pending target root and
-// the buffers that could not be written.
-type blockedSwitch struct {
-	root  string
-	items []switchBuffer
-}
-
 // switchBuffer is one dirty buffer of the departing workspace. reason is empty
 // while the buffer is writable; a non-empty reason names why it is not.
 type switchBuffer struct {
@@ -62,10 +53,6 @@ type switchBuffer struct {
 	name   string
 	reason string
 }
-
-// untitled reports whether the buffer has no file to write to — the only
-// blocked kind the dialog can resolve, through save-as.
-func (b switchBuffer) untitled() bool { return b.path == "" }
 
 // autoSaveOnSwitch reads project.auto_save_on_switch. Unset reads as on: the
 // config default is true and a model built without a loaded config (tests,
@@ -201,133 +188,16 @@ func (m Model) forceSwitchAutoSave() (tea.Model, tea.Cmd) {
 	return next, tea.Batch(append(cmds, cmd)...)
 }
 
-// finishSwitchAutoSave runs the switch once the auto-save is through: with
-// every buffer written the workspace swaps without a prompt, otherwise the
-// aggregated dialog names what is left. A buffer that was writable and is
-// still dirty had its write fail (read-only file, full disk).
+// finishSwitchAutoSave runs the switch once the auto-save is through. Since
+// #2396 nothing is left to ask: buffers with no writable home (untitled,
+// read-only, changed on disk) and buffers whose write failed simply stay
+// dirty and park with the departing workspace — they come back exactly as
+// left on the next visit, and the quit guard still protects them at exit.
+// The "Cannot save every buffer" dialog is gone; a switch never prompts.
 func (m Model) finishSwitchAutoSave(root string) (tea.Model, tea.Cmd) {
-	blocked := m.switchDirtyBuffers()
-	for i := range blocked {
-		if blocked[i].reason == "" {
-			blocked[i].reason = "save failed"
-		}
+	if unsaved := m.switchDirtyBuffers(); len(unsaved) > 0 {
+		m.host.Notify(host.Info,
+			plural(len(unsaved), "buffer stays", "buffers stay")+" unsaved in the parked workspace")
 	}
-	if len(blocked) == 0 {
-		return m.performSwitch(root)
-	}
-	m.openBlockedSwitchPrompt(root, blocked)
-	return m, nil
-}
-
-// openBlockedSwitchPrompt shows the one aggregated decision dialog for the
-// buffers the auto-save could not write.
-func (m *Model) openBlockedSwitchPrompt(root string, items []switchBuffer) {
-	m.switchBlocked = &blockedSwitch{root: root, items: items}
-	var lines []string
-	for _, b := range items {
-		lines = append(lines, "  "+b.name+" — "+b.reason)
-	}
-	// CompactPath bounds the line width: the shell drops a box wider than the
-	// terminal, which a raw absolute root can force.
-	body := plural(len(items), "buffer could", "buffers could") + " not be saved for the switch to\n" +
-		project.CompactPath(root) + ":\n" + strings.Join(lines, "\n") + "\n\n"
-	if anyUntitled(items) {
-		body += guardLine("s", "save as… — name the untitled buffers, then switch", true)
-	}
-	body += guardLine("d", "switch anyway — they stay unsaved in this project", !anyUntitled(items)) +
-		guardCancel("cancel — stay in the current project")
-	m.shell.SetContent(ui.ModelContent{
-		Heading: "Cannot save every buffer",
-		Body:    func() string { return body },
-	})
-	m.shell.SetSize(m.width, m.height)
-	m.shell.Open()
-}
-
-// anyUntitled reports whether the dialog can offer save-as at all.
-func anyUntitled(items []switchBuffer) bool {
-	for _, b := range items {
-		if b.untitled() {
-			return true
-		}
-	}
-	return false
-}
-
-// switchBlockedPromptOpen reports whether the aggregated dialog owns the
-// keyboard.
-func (m Model) switchBlockedPromptOpen() bool {
-	return m.switchBlocked != nil && m.shell.IsOpen()
-}
-
-// updateSwitchBlockedPrompt consumes every key while the dialog is open: s —
-// or enter when it is offered — names the first untitled buffer through the
-// save-as prompt and re-runs the gate, d switches leaving the buffers unsaved
-// (they park with this project, nothing is lost), esc cancels the switch.
-func (m Model) updateSwitchBlockedPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	pending := m.switchBlocked
-	primary := "d"
-	if anyUntitled(pending.items) {
-		primary = "s"
-	}
-	switch guardAnswer(msg, primary) {
-	case "s":
-		if !anyUntitled(pending.items) {
-			return m, nil // no save-as offered: the key does nothing
-		}
-		m.switchBlocked = nil
-		m.shell.Close()
-		m.startSwitchSaveAs(pending)
-		return m, nil
-	case "d":
-		m.switchBlocked = nil
-		m.shell.Close()
-		return m.performSwitch(pending.root)
-	case "esc":
-		m.switchBlocked = nil
-		m.shell.Close()
-		m.host.Notify(host.Info, "switch cancelled — nothing was lost")
-		return m, nil
-	}
-	return m, nil
-}
-
-// startSwitchSaveAs focuses the first untitled buffer of the dialog and opens
-// the save-as prompt for it (the prompt works on the focused pane's buffer).
-// switchSaveAsRoot remembers the pending switch: whichever way the prompt ends,
-// the gate re-runs — a named buffer is one blocker less, an aborted one brings
-// the dialog back.
-func (m *Model) startSwitchSaveAs(pending *blockedSwitch) {
-	for _, b := range pending.items {
-		if !b.untitled() {
-			continue
-		}
-		inst := m.activeWS().Panes.Get(b.key)
-		if inst == nil {
-			continue
-		}
-		inst.ActivateTab(b.tab)
-		m.activeWS().Panes.SetFocused(b.key)
-		m.switchSaveAsRoot = pending.root
-		m.startSaveAsPrompt(false)
-		if m.saveAsOpen() {
-			return
-		}
-		m.switchSaveAsRoot = ""
-	}
-	// Nothing could be prompted for (the buffer vanished): fall back to the
-	// dialog so the switch never dead-ends.
-	m.openBlockedSwitchPrompt(pending.root, pending.items)
-}
-
-// resumeSwitchAfterSaveAs re-runs the auto-save gate after a save-as prompt
-// that a pending switch had opened; handled=false when no switch is waiting.
-func (m Model) resumeSwitchAfterSaveAs() (tea.Model, tea.Cmd, bool) {
-	if m.switchSaveAsRoot == "" {
-		return m, nil, false
-	}
-	root := m.switchSaveAsRoot
-	m.switchSaveAsRoot = ""
-	next, cmd := m.finishSwitchAutoSave(root)
-	return next, cmd, true
+	return m.performSwitch(root)
 }

@@ -130,6 +130,7 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"vcs.undoRevert", reasonOccasional},          //
 	{"project.clone", reasonOccasional},           // File menu, once per repository
 	{"project.new", reasonOccasional},             //
+	{"project.open_link", reasonOccasional},       // links normally arrive via the OS ike:// handler
 	{"project.peek", reasonOccasional},            // cmd+shift+b returns from a peek
 	{"run.editConfig", reasonMenu},                // reached from alt+shift+f10's picker
 	{"run.task", reasonMenu},                      // Run menu

@@ -18,6 +18,13 @@
 	<string>ike</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>11.0</string>
+	<!-- ike:// deep links (#2396) are NOT declared here on purpose: this
+	     bundle's executable is a shell script, and LaunchServices delivers
+	     URLs as an Apple Event (GetURL) a script cannot receive. The scheme
+	     is registered on the compiled "Ike Link Handler.app" applet that
+	     scripts/install-desktop.sh builds, which forwards the URL to
+	     ike-gui. Declaring it here too would let LaunchServices route
+	     clicks to a bundle that silently drops them. -->
 	<!-- LaunchServices runs a bundle whose executable is a shell script under
 	     Rosetta (arch → i386, proc_translated → 1); the translated preference
 	     is inherited down to the login shell ike-gui re-execs through, so an

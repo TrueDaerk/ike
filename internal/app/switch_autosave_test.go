@@ -3,10 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/project"
 )
@@ -43,7 +40,7 @@ func TestAutoSaveOnSwitchWritesDirtyBuffer(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("the switch must return its follow-up batch")
 	}
-	if m.switchBlockedPromptOpen() || m.switchPromptOpen() {
+	if m.switchPromptOpen() {
 		t.Fatal("a writable dirty buffer must not prompt")
 	}
 	if !sameDir(t, cwd(t), dst) {
@@ -71,130 +68,30 @@ func TestAutoSaveOnSwitchOffParksDirty(t *testing.T) {
 	}
 }
 
-// TestAutoSaveOnSwitchAggregatesUnsaveable (#2186): a buffer that cannot be
-// written — here an untitled one — holds the switch in one aggregated dialog
-// naming it and its reason, while the writable buffer is already saved.
-func TestAutoSaveOnSwitchAggregatesUnsaveable(t *testing.T) {
-	src, dst, _ := switchFixture(t)
-	m := autoSaveSwitchModel(t)
-	m = dirtyUntitled(t, m)
-
-	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
-	m = out.(Model)
-	if !m.switchBlockedPromptOpen() {
-		t.Fatal("an unsaveable buffer must open the aggregated dialog")
-	}
-	body := guardBody(m)
-	for _, want := range []string{"untitled", "no file path", "[s/enter]", "[d]", "[esc]"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("dialog body must mention %q, got %q", want, body)
-		}
-	}
-	if !sameDir(t, cwd(t), src) {
-		t.Fatalf("the switch must wait for the answer, cwd = %s", cwd(t))
-	}
-}
-
-// TestAutoSaveSwitchCancelAborts (#2186): esc on the dialog cancels the switch
-// and loses nothing — the project stays, the buffer stays dirty.
-func TestAutoSaveSwitchCancelAborts(t *testing.T) {
-	src, dst, _ := switchFixture(t)
-	m := autoSaveSwitchModel(t)
-	m = dirtyUntitled(t, m)
-	key := m.activeEditorKey()
-
-	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
-	m = out.(Model)
-	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	m = out.(Model)
-
-	if m.switchBlockedPromptOpen() {
-		t.Fatal("esc must close the dialog")
-	}
-	if !sameDir(t, cwd(t), src) {
-		t.Fatalf("esc must abort the switch, cwd = %s", cwd(t))
-	}
-	if ed := m.activeWS().Panes.Get(key).Editor(); ed == nil || !ed.Dirty() {
-		t.Fatal("the cancelled switch must leave the buffer untouched")
-	}
-}
-
-// TestAutoSaveSwitchDiscardProceeds (#2186): d switches anyway; the unsaveable
-// buffer parks with its workspace, still dirty and still unwritten.
-func TestAutoSaveSwitchDiscardProceeds(t *testing.T) {
+// TestAutoSaveOnSwitchUnsaveableParksSilently (#2186, reworked by #2396): a
+// buffer that cannot be written — here an untitled one — no longer holds the
+// switch behind a dialog. It parks dirty with the departing workspace and the
+// switch proceeds; the writable buffers were already saved by the gate.
+func TestAutoSaveOnSwitchUnsaveableParksSilently(t *testing.T) {
 	_, dst, _ := switchFixture(t)
 	m := autoSaveSwitchModel(t)
 	m = dirtyUntitled(t, m)
 
 	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
 	m = out.(Model)
-	out, _ = m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
-	m = out.(Model)
-
-	if m.switchBlockedPromptOpen() {
-		t.Fatal("d must close the dialog")
+	if m.shell.IsOpen() {
+		t.Fatal("an unsaveable buffer must not open any dialog (#2396)")
 	}
 	if !sameDir(t, cwd(t), dst) {
-		t.Fatalf("d must perform the switch, cwd = %s", cwd(t))
+		t.Fatalf("the switch must proceed, cwd = %s", cwd(t))
 	}
 }
 
-// TestAutoSaveSwitchSaveAsThenSwitches (#2186): s names the untitled buffer
-// through the save-as prompt; the accepted name removes the last blocker, so
-// the switch runs right after.
-func TestAutoSaveSwitchSaveAsThenSwitches(t *testing.T) {
-	src, dst, _ := switchFixture(t)
-	m := autoSaveSwitchModel(t)
-	m = dirtyUntitled(t, m)
-
-	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
-	m = out.(Model)
-	out, cmd := m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
-	m = drainCmd(out.(Model), cmd)
-	if !m.saveAsOpen() {
-		t.Fatal("s must open the save-as prompt for the untitled buffer")
-	}
-
-	m = typeInto(m, "named.txt")
-	out, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	m = drainCmd(out.(Model), cmd)
-
-	if data, err := os.ReadFile(filepath.Join(src, "named.txt")); err != nil {
-		t.Fatalf("the named buffer must be written: %v", err)
-	} else if !strings.HasPrefix(string(data), "hello") {
-		t.Fatalf("file content = %q", data)
-	}
-	if !sameDir(t, cwd(t), dst) {
-		t.Fatalf("naming the last blocker must resume the switch, cwd = %s", cwd(t))
-	}
-}
-
-// TestAutoSaveSwitchSaveAsCancelReopensDialog (#2186): aborting the save-as
-// prompt the dialog opened brings the dialog back — the switch never
-// dead-ends on a cancelled sub-prompt.
-func TestAutoSaveSwitchSaveAsCancelReopensDialog(t *testing.T) {
-	src, dst, _ := switchFixture(t)
-	m := autoSaveSwitchModel(t)
-	m = dirtyUntitled(t, m)
-
-	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
-	m = out.(Model)
-	out, cmd := m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
-	m = drainCmd(out.(Model), cmd)
-	out, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	m = drainCmd(out.(Model), cmd)
-
-	if !m.switchBlockedPromptOpen() {
-		t.Fatal("a cancelled save-as must bring the dialog back")
-	}
-	if !sameDir(t, cwd(t), src) {
-		t.Fatalf("nothing may have switched yet, cwd = %s", cwd(t))
-	}
-}
-
-// TestAutoSaveSwitchStaleBufferIsNotClobbered (#2186): a buffer whose file
-// changed on disk since the edits is never written by the switch — that
-// decision belongs to the conflict guard — so it lands in the dialog.
+// TestAutoSaveSwitchStaleBufferIsNotClobbered (#2186, reworked by #2396): a
+// buffer whose file changed on disk since the edits is never written by the
+// switch — that decision belongs to the conflict guard. The switch proceeds
+// and the external change survives; the dirty buffer parks with its
+// workspace.
 func TestAutoSaveSwitchStaleBufferIsNotClobbered(t *testing.T) {
 	_, dst, file := switchFixture(t)
 	m := autoSaveSwitchModel(t)
@@ -213,11 +110,11 @@ func TestAutoSaveSwitchStaleBufferIsNotClobbered(t *testing.T) {
 
 	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
 	m = out.(Model)
-	if !m.switchBlockedPromptOpen() {
-		t.Fatal("a stale buffer must reach the dialog instead of being written")
+	if m.shell.IsOpen() {
+		t.Fatal("a stale buffer must not open any dialog (#2396)")
 	}
-	if body := guardBody(m); !strings.Contains(body, "changed on disk") {
-		t.Errorf("dialog must name the reason, got %q", body)
+	if !sameDir(t, cwd(t), dst) {
+		t.Fatalf("the switch must proceed, cwd = %s", cwd(t))
 	}
 	if data, _ := os.ReadFile(file); string(data) != "external\n" {
 		t.Fatalf("the external change must survive, file = %q", data)

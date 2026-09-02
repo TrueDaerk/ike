@@ -4,7 +4,7 @@ title: Workspace
 description: Per-project UI state unit (pane registry, split tree, terminal return-focus) behind a Manager — the Roadmap 0370 seam for seamless project switching.
 resource: internal/workspace
 tags: [architecture, workspace, project-switching, panes, layout]
-timestamp: 2026-07-29T00:00:00Z
+timestamp: 2026-09-02T00:00:00Z
 ---
 
 # Workspace
@@ -128,16 +128,18 @@ lazily.
 
 `project.max_workspaces` (default 3, floor 1) bounds the background set.
 After every switch `enforceWorkspaceCap` (`internal/app/workspace_evict.go`)
-drops least-recently-used parked workspaces past the cap: an **idle** one
-(no dirty buffers, no running terminal/tool/command sessions or tabs, no
-parked debug session, no running popup-terminal session (#1407) —
-`workspaceBusy`) tears down silently
-(`teardownWorkspace` closes every terminal session — the parked popup's
-included — and disconnects a parked
-debug session; buffers need no teardown), a **busy** one opens the eviction
-guard — `e` (or `enter`, #1356) evicts, `esc` keeps it over the limit
-until the next switch re-asks. This is the 0090 unsaved-changes prompt reborn at eviction time;
-plain switching never prompts. Per-project layout/session persistence needs
+drops least-recently-used parked workspaces past the cap — **idle ones
+only**, silently: no dirty buffers, no running terminal/tool/command
+sessions or tabs, no parked debug session, no running popup-terminal session
+(#1407) — `workspaceBusy` — tears down (`teardownWorkspace` closes every
+terminal session — the parked popup's included — and disconnects a parked
+debug session; buffers need no teardown). A **busy** workspace is skipped
+and kept even over the cap (#2396): the former "Background workspace limit"
+prompt is gone — a switch never asks, live state never dies for a limit, and
+every subsequent switch re-runs the sweep so the set shrinks back the moment
+the busy workspaces go idle. The quit guard at exit remains the single
+prompt about unsaved buffers and running processes.
+Per-project layout/session persistence needs
 no extra machinery: every workspace's layout is saved at park time, so an
 evicted project restores from disk on its next visit like any first visit.
 

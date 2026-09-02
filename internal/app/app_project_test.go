@@ -438,7 +438,7 @@ func TestWorkspaceCapEvictsIdleLRU(t *testing.T) {
 	m = out.(Model)
 	out, _ = m.Update(project.SwitchProjectMsg{Root: c})
 	m = out.(Model)
-	if m.evictPromptOpen() {
+	if m.shell.IsOpen() {
 		t.Fatal("an idle workspace must evict without a prompt")
 	}
 	bg := m.ws.Background()
@@ -447,9 +447,10 @@ func TestWorkspaceCapEvictsIdleLRU(t *testing.T) {
 	}
 }
 
-// TestWorkspaceCapGuardsBusyEviction (#780): a busy LRU workspace (dirty
-// buffer) asks first; e evicts, esc keeps it over the limit.
-func TestWorkspaceCapGuardsBusyEviction(t *testing.T) {
+// TestWorkspaceCapKeepsBusyWorkspace (#780, reworked by #2396): a busy LRU
+// workspace (dirty buffer) is never prompted about and never evicted — it is
+// skipped and kept over the cap; the next idle workspace drops instead.
+func TestWorkspaceCapKeepsBusyWorkspace(t *testing.T) {
 	a, b, c := evictFixture(t)
 	file := filepath.Join(a, "a.txt")
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
@@ -462,34 +463,15 @@ func TestWorkspaceCapGuardsBusyEviction(t *testing.T) {
 	m = out.(Model)
 	out, _ = m.Update(project.SwitchProjectMsg{Root: c})
 	m = out.(Model)
-	if !m.evictPromptOpen() {
-		t.Fatal("a busy LRU workspace must open the eviction guard")
+	if m.shell.IsOpen() {
+		t.Fatal("a busy LRU workspace must not open any prompt (#2396)")
 	}
-	if len(m.ws.Background()) != 2 {
-		t.Fatal("nothing may be evicted before the answer")
-	}
-	// esc keeps it (over the limit).
-	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	m = out.(Model)
-	if m.evictPromptOpen() || len(m.ws.Background()) != 2 {
-		t.Fatal("esc must keep the busy workspace")
-	}
-	// Trigger again via another switch round and confirm with e.
-	out, _ = m.Update(project.SwitchProjectMsg{Root: b})
-	m = out.(Model)
-	out, _ = m.Update(project.SwitchProjectMsg{Root: c})
-	m = out.(Model)
-	if !m.evictPromptOpen() {
-		t.Fatal("the guard must re-ask on the next switch")
-	}
-	out, _ = m.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
-	m = out.(Model)
 	bg := m.ws.Background()
-	if len(bg) != 1 || !sameDir(t, bg[0], b) {
-		t.Fatalf("e must evict the busy workspace, background = %v", bg)
+	if len(bg) != 1 || !sameDir(t, bg[0], a) {
+		t.Fatalf("the busy workspace must be kept, the idle one evicted; background = %v", bg)
 	}
 	if data, _ := os.ReadFile(file); string(data) != "one\n" {
-		t.Fatalf("eviction discards, never writes, file = %q", data)
+		t.Fatalf("keeping a busy workspace never writes, file = %q", data)
 	}
 }
 
