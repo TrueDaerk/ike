@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"ike/internal/config"
@@ -56,10 +58,57 @@ const telemetryHeartbeatInterval = 10 * time.Second
 // ended — the distinction the #2348 freeze log could not make.
 func newUsageRecorder() *telemetry.Recorder {
 	r := telemetry.New(telemetryDir(), telemetryEnabled)
+	// prev is the counter snapshot the previous heartbeat took; the diff names
+	// what woke the loop *during* the interval (#2402) — the cumulative totals
+	// would only ever name the session's loudest type. Safe without a lock:
+	// telemetry calls the payload func from its single heartbeat goroutine.
+	var prev map[string]uint64
 	r.SetHeartbeat(telemetryHeartbeatInterval, func() map[string]string {
-		return map[string]string{"passes": strconv.FormatUint(diag.LoopPasses(), 10)}
+		cur := diag.MessageCounts()
+		p := map[string]string{"passes": strconv.FormatUint(diag.LoopPasses(), 10)}
+		if top := topMessageDelta(prev, cur, 3); top != "" {
+			p["top"] = top
+		}
+		prev = cur
+		return p
 	})
 	return r
+}
+
+// topMessageDelta formats the n loudest pass sources of an interval as
+// "type:count,type:count", counting cur minus prev. Most frequent first,
+// name-ordered on ties so equal intervals compare stably; empty when nothing
+// moved (the truly idle interval the #2402 target is about).
+func topMessageDelta(prev, cur map[string]uint64, n int) string {
+	type d struct {
+		name string
+		n    uint64
+	}
+	var ds []d
+	for name, c := range cur {
+		if delta := c - prev[name]; delta > 0 {
+			ds = append(ds, d{name, delta})
+		}
+	}
+	sort.Slice(ds, func(i, j int) bool {
+		if ds[i].n != ds[j].n {
+			return ds[i].n > ds[j].n
+		}
+		return ds[i].name < ds[j].name
+	})
+	if len(ds) > n {
+		ds = ds[:n]
+	}
+	var b strings.Builder
+	for i, e := range ds {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(e.name)
+		b.WriteByte(':')
+		b.WriteString(strconv.FormatUint(e.n, 10))
+	}
+	return b.String()
 }
 
 // recordTelemetrySession emits the session marker (#2348): the Ike version,

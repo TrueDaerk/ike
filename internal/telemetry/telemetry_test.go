@@ -130,8 +130,9 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 		"chord": true, "context": true, "command": true, "status": true, // key
 		"op": true, "zone": true, "direction": true, // layout
 		"app": true, "os": true, "project": true, // session (#2348)
-		"passes": true, // heartbeat (#2348)
-		"phase": true, "ms": true, "class": true, "stream": true, // op (#2348)
+		"passes": true,                                            // heartbeat (#2348)
+		"top":    true,                                            // heartbeat (#2402) — Go message type names, never content
+		"phase":  true, "ms": true, "class": true, "stream": true, // op (#2348)
 	}
 	for _, ev := range readSession(t, dir) {
 		for k := range ev.Data {

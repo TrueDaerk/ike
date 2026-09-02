@@ -33,8 +33,12 @@ func TestDiagnosticsCoalesceIntoOneBatch(t *testing.T) {
 	b := &bridge{h: h}
 
 	// A burst: 100 distinct library files, plus a re-publish of one of them.
+	// Each carries a diagnostic — an empty set for a never-delivered path is
+	// dropped before batching since #2402 and would not appear at all.
 	for i := 0; i < 100; i++ {
-		b.onDiagnostics(pathN(i), protocol.PublishDiagnosticsParams{}, nil, "")
+		b.onDiagnostics(pathN(i), protocol.PublishDiagnosticsParams{
+			Diagnostics: []protocol.Diagnostic{{Message: "first"}},
+		}, []string{"x"}, "")
 	}
 	b.onDiagnostics(pathN(0), protocol.PublishDiagnosticsParams{
 		Diagnostics: []protocol.Diagnostic{{Message: "latest"}},
@@ -98,6 +102,71 @@ func TestDiagsCacheDropsRetractedPaths(t *testing.T) {
 	if len(b.diags) != 0 {
 		t.Fatalf("empty publish for an unknown path must not create a key, cache = %v", b.diags)
 	}
+}
+
+// TestNoChangeRepublishDropped (#2402): a server republishing an unchanged
+// set — including "still empty" for a path never delivered — produces no
+// message and no render pass; a real retraction still goes through once.
+func TestNoChangeRepublishDropped(t *testing.T) {
+	var mu sync.Mutex
+	var batches []ilsp.DiagnosticsBatchMsg
+	h := host.New(nil)
+	h.SetSender(func(m tea.Msg) {
+		if v, ok := m.(ilsp.DiagnosticsBatchMsg); ok {
+			mu.Lock()
+			batches = append(batches, v)
+			mu.Unlock()
+		}
+	})
+	b := &bridge{h: h}
+	const p = "/x/a.go"
+	publish := func(diags ...protocol.Diagnostic) {
+		b.onDiagnostics(p, protocol.PublishDiagnosticsParams{Diagnostics: diags}, []string{"x"}, "")
+	}
+	waitBatches := func(want int, what string) {
+		t.Helper()
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			mu.Lock()
+			n := len(batches)
+			mu.Unlock()
+			if n >= want {
+				break
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if len(batches) != want {
+			t.Fatalf("%s: %d batches, want %d", what, len(batches), want)
+		}
+	}
+
+	// Empty publish for a never-delivered path: dropped entirely.
+	publish()
+	time.Sleep(3 * diagCoalesce)
+	waitBatches(0, "empty publish for unknown path")
+
+	// First real set: delivered.
+	publish(protocol.Diagnostic{Message: "boom"})
+	waitBatches(1, "first publish")
+
+	// Identical republish: dropped.
+	publish(protocol.Diagnostic{Message: "boom"})
+	time.Sleep(3 * diagCoalesce)
+	waitBatches(1, "identical republish")
+
+	// Changed set: delivered.
+	publish(protocol.Diagnostic{Message: "worse"})
+	waitBatches(2, "changed set")
+
+	// Retraction of a delivered set: delivered once...
+	publish()
+	waitBatches(3, "retraction")
+	// ...and the repeat retraction is dropped again.
+	publish()
+	time.Sleep(3 * diagCoalesce)
+	waitBatches(3, "repeat retraction")
 }
 
 // TestFileClosedDropsPerPathState (#1543): closing a file's last view releases

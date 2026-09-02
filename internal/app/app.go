@@ -3945,6 +3945,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// a view whose last conflict just went — by chord, palette command or
 	// plain typing — offers save/finish.
 	mm.syncMergeFinish()
+	// A terminal-check verdict deferred behind a modal (#2402) opens here on
+	// the pass that closed it — the event-driven replacement for the old 2s
+	// retry tick.
+	mm.drainTermCheck()
 	return mm, cmd
 }
 
@@ -3997,7 +4001,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.ownsTick(msg.gen) {
 			return m, nil
 		}
-		return m, m.runTermCheck()
+		m.runTermCheck()
+		return m, nil
 
 	case tea.BackgroundColorMsg:
 		// The OSC 11 reply (#1480): classify the terminal background and,

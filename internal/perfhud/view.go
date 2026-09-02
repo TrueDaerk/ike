@@ -82,9 +82,11 @@ func bodyLines(s Sample, hist []Sample) []string {
 		if cats := catLine(s); cats != "" {
 			out = append(out, "  "+cats)
 		}
-		for _, t := range s.Types {
+		for i, t := range s.Types {
+			if i >= hudTypeRows {
+				break // the clipboard snapshot carries the rest
+			}
 			out = append(out, fmt.Sprintf("  %s %s/s", shortType(t.Type), fmtRate(t.Rate)))
-			break // the loudest one; the clipboard snapshot carries the rest
 		}
 		out = append(out, fmt.Sprintf("frame %s avg  %s max  %s fps",
 			fmtDur(s.FrameAvg), fmtDur(s.FrameMax), fmtRate(s.FrameRate)))
@@ -114,6 +116,11 @@ func bodyLines(s Sample, hist []Sample) []string {
 	out = append(out, startupLines(hudStartupPhases)...)
 	return out
 }
+
+// hudTypeRows caps how many concrete message types the HUD box lists (#2402):
+// enough to see the pack chasing the leader — an idle-wake hunt needs the
+// second and third source, not just the loudest.
+const hudTypeRows = 3
 
 // hudStartupPhases caps how many startup phases the HUD box lists — the
 // costliest ones; the clipboard snapshot carries the whole sequence.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +45,13 @@ type bridge struct {
 	// diags caches the latest published protocol diagnostics per path, so a
 	// code-action request can pass the overlapping ones as context.
 	diags map[string][]protocol.Diagnostic
+	// sentDiags remembers, per path, the converted diagnostics the app was
+	// last handed (#2402): servers republish unchanged sets on their own
+	// cadence and on every watched-file round, and each such publish used to
+	// cost an Update pass + full re-render while the user did nothing. A
+	// publish equal to what the app already holds is dropped here; retractions
+	// for paths that were never delivered (or already retracted) likewise.
+	sentDiags map[string][]ilsp.Diagnostic
 	// rgate is the prepareRename verdict the intention popup's rename entry
 	// is gated on (renamegate.go, #2025).
 	rgate renameGate
@@ -372,6 +380,10 @@ func (b *bridge) fileClosed(path string) {
 	// useful once the file has no view, and nothing else prunes it.
 	b.mu.Lock()
 	delete(b.diags, path)
+	// The delivered-set memory goes with it (#2402): the app drops its
+	// diagnostics with the buffer, so a republish after a reopen must be
+	// treated as new even when the server's set never changed.
+	delete(b.sentDiags, path)
 	delete(b.sigActive, path)
 	delete(b.semInFlight, path)
 	delete(b.semPending, path)
@@ -1751,6 +1763,22 @@ func (b *bridge) onDiagnostics(path string, p protocol.PublishDiagnosticsParams,
 	// coalesce the delivery so a publish storm folds into one batched message.
 	msg := ilsp.DiagnosticsMsg{Path: path, Diagnostics: ilsp.ConvertDiagnostics(p, lines, enc)}
 	b.mu.Lock()
+	// No-change republishes stop here (#2402): equal to the last delivered set
+	// — including "still empty" for a path never delivered — means the app has
+	// nothing to redraw, so no message and no render pass.
+	if last, sent := b.sentDiags[path]; len(msg.Diagnostics) == 0 && !sent ||
+		sent && diagsEqual(last, msg.Diagnostics) {
+		b.mu.Unlock()
+		return
+	}
+	if len(msg.Diagnostics) == 0 {
+		delete(b.sentDiags, path)
+	} else {
+		if b.sentDiags == nil {
+			b.sentDiags = map[string][]ilsp.Diagnostic{}
+		}
+		b.sentDiags[path] = msg.Diagnostics
+	}
 	if b.pendingDiags == nil {
 		b.pendingDiags = map[string]ilsp.DiagnosticsMsg{}
 	}
@@ -1759,6 +1787,16 @@ func (b *bridge) onDiagnostics(path string, p protocol.PublishDiagnosticsParams,
 		b.diagTimer = time.AfterFunc(diagCoalesce, b.flushDiagnostics)
 	}
 	b.mu.Unlock()
+}
+
+// diagsEqual reports whether two converted diagnostic sets are identical —
+// the "republish changed nothing" test. reflect.DeepEqual keeps it honest
+// against every field the conversion fills; the sets are small (per file).
+func diagsEqual(a, b []ilsp.Diagnostic) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	return reflect.DeepEqual(a, b)
 }
 
 // flushDiagnostics sends every accumulated publish as one DiagnosticsBatchMsg, so
@@ -1860,6 +1898,7 @@ func (b *bridge) closeRootState(root string) tea.Cmd {
 	}
 	prunePaths(b.pendingChange, root)
 	prunePaths(b.diags, root)
+	prunePaths(b.sentDiags, root)
 	prunePaths(b.sigActive, root)
 	prunePaths(b.semInFlight, root)
 	prunePaths(b.semPending, root)

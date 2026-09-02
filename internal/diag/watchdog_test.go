@@ -139,3 +139,32 @@ func TestLoopPassesCounts(t *testing.T) {
 		t.Fatalf("want %d passes, got %d", before+1, got)
 	}
 }
+
+// TestMessageCounts: outermost passes tally under the message's Go type name
+// (or a string label verbatim), nested enters do not count, and the snapshot
+// is a copy — mutating it must not touch the live counters (#2402).
+func TestMessageCounts(t *testing.T) {
+	type fakeTickMsg struct{}
+	before := MessageCounts()
+	LoopEnter(fakeTickMsg{})
+	LoopEnter(fakeTickMsg{}) // nested: same pass, must not double-count
+	LoopExit()
+	LoopExit()
+	LoopEnter(fakeTickMsg{})
+	LoopExit()
+	LoopEnter("view/render")
+	LoopExit()
+
+	after := MessageCounts()
+	key := "diag.fakeTickMsg"
+	if got := after[key] - before[key]; got != 2 {
+		t.Errorf("want 2 %s passes counted, got %d", key, got)
+	}
+	if got := after["view/render"] - before["view/render"]; got != 1 {
+		t.Errorf("want 1 view/render pass counted, got %d", got)
+	}
+	after[key] += 100
+	if live := MessageCounts()[key]; live == after[key] {
+		t.Error("MessageCounts must return a copy, not the live map")
+	}
+}
