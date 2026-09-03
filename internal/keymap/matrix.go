@@ -155,6 +155,7 @@ var reachableAlternatives = map[string]string{
 	"terminal.toggle":                  "palette",
 	"terminal.new":                     "palette",
 	"terminal.popup":                   "palette",
+	"terminal.popup.pin":               "palette",
 	"notifications.history":            "palette",
 	"markdown.preview":                 "palette",
 	"todo.list":                        "palette",

@@ -257,6 +257,20 @@ func (m *Model) SendEOF() {
 	}
 }
 
+// SendLine types line into the child and submits it, as if it had been typed
+// at the prompt (#2406, the global popup's follow-along `cd`). Deliberately
+// not a paste: a programmatic command line should look typed, not arrive
+// highlighted as a pasted region. Callers gate on Busy() — a shell with a
+// foreground job is not reading command lines.
+func (m *Model) SendLine(line string) {
+	if m.sess == nil || !m.sess.Running() {
+		return
+	}
+	m.occupied = true
+	m.sess.SendText(line)
+	m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyEnter})
+}
+
 // SessionKey returns the underlying session's routing key ("" for a failed
 // spawn) — output/exit messages carry it.
 func (m Model) SessionKey() string {

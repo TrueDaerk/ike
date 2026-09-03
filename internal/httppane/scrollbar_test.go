@@ -108,6 +108,77 @@ func TestScrollbarPressJumpAndDrag(t *testing.T) {
 	}
 }
 
+// sbModelWithRequest is sbModel but with an as-sent request snapshot
+// attached (#1832), growing the header to two rows (#2424) — the scrollbar
+// hit-testing must follow the real header height, not a hard-coded one
+// (#2450).
+func sbModelWithRequest(n, w, h int) Model {
+	body := make([]string, n)
+	for i := range body {
+		body[i] = "line"
+	}
+	m := New(nil)
+	m.SetSize(w, h)
+	m.Set("req", &httpclient.Response{
+		Status:     "200 OK",
+		StatusCode: 200,
+		Proto:      "HTTP/1.1",
+		Headers:    http.Header{"Content-Type": {"text/plain"}},
+		Body:       []byte(strings.Join(body, "\n")),
+		Duration:   time.Millisecond,
+		Request:    &httpclient.RequestSnapshot{Method: "GET", URL: "https://example.test/r"},
+	})
+	return m
+}
+
+// TestScrollbarHitWithRequestLine mirrors TestScrollbarHit with a two-row
+// header: the track starts one row further down and hit-testing must move
+// with it (#2450).
+func TestScrollbarHitWithRequestLine(t *testing.T) {
+	m := sbModelWithRequest(100, 40, 12)
+	if got, want := m.headerLineCount(), 2; got != want {
+		t.Fatalf("headerLineCount = %d, want %d", got, want)
+	}
+	track := m.bodyHeight()
+
+	if !m.ScrollbarHit(39, 2) || !m.ScrollbarHit(39, 1+track) {
+		t.Error("rightmost column within the track should hit")
+	}
+	if m.ScrollbarHit(39, 1) {
+		t.Error("the request-line row should not hit")
+	}
+	if m.ScrollbarHit(39, 0) {
+		t.Error("the title row should not hit")
+	}
+	if m.ScrollbarHit(39, 2+track) {
+		t.Error("the footer row should not hit")
+	}
+}
+
+// TestScrollbarPressJumpAndDragWithRequestLine mirrors
+// TestScrollbarPressJumpAndDrag with the two-row header (#2450).
+func TestScrollbarPressJumpAndDragWithRequestLine(t *testing.T) {
+	m := sbModelWithRequest(100, 40, 12)
+	track, total, _, _, _ := m.scrollbarGeometry()
+
+	if m.ScrollbarPress(1 + track) {
+		t.Fatal("track press should not start a drag")
+	}
+	if m.top != total-track {
+		t.Errorf("bottom jump: top = %d, want %d", m.top, total-track)
+	}
+
+	_, _, start, _, _ := m.scrollbarGeometry()
+	if !m.ScrollbarPress(1 + start + 1) {
+		t.Fatal("thumb press should start a drag")
+	}
+
+	m.ScrollbarDrag(2)
+	if m.top != 0 {
+		t.Errorf("drag to top: top = %d, want 0", m.top)
+	}
+}
+
 func TestScrollbarRendered(t *testing.T) {
 	m := sbModel(100, 40, 12)
 	if !strings.Contains(m.View(), "│") {

@@ -362,6 +362,104 @@ as errors. Defaults otherwise: redirects followed, TLS verified, a 30 s
 timeout, and bodies capped at 10 MiB with a truncation warning so a huge
 download cannot freeze the UI.
 
+## GraphQL requests
+
+A GraphQL call is a `POST` of one JSON envelope, which means escaping a
+multi-line query into a JSON string by hand. Write `GRAPHQL` as the method
+instead and IKE builds the envelope for you: the body is the query as you write
+it, and an optional JSON `variables` object follows it after a blank line.
+
+```http
+### hero
+GRAPHQL https://example.com/graphql
+Authorization: Bearer {{token}}
+
+query Hero($episode: Episode) {
+  hero(episode: $episode) {
+    name
+  }
+}
+
+{
+  "episode": "EMPIRE"
+}
+```
+
+Running that sends
+
+```json
+{"query":"query Hero($episode: Episode) {\n  hero(episode: $episode) {\n    name\n  }\n}","variables":{"episode":"EMPIRE"},"operationName":"Hero"}
+```
+
+as a `POST` with `Content-Type: application/json`. The operation name is picked
+up from the first named operation, so a document with several operations still
+selects the right one; an anonymous `{ … }` query sends no name at all.
+Everything else about the block is an ordinary request: headers, `{{variables}}`,
+`# @capture` directives and `###` naming all work as usual, and so do
+**Copy as curl** and **Copy as httpie** — they export the `POST` that actually
+goes out.
+
+The variables object is the last blank-line separated `{ … }` block, so a query
+may hold blank lines of its own without being cut in half. Variables that are
+not valid JSON stop the request with a message instead of being sent.
+
+!!! tip "Sending the query without an envelope"
+    Set `Content-Type: application/graphql` and the body is the raw query text
+    — that media type carries the query itself. Variables then have nowhere to
+    travel, and the response pane says so rather than dropping them silently.
+
+Subscriptions are not supported: they are a WebSocket protocol rather than a
+`POST`.
+
+### When the answer is an error
+
+GraphQL servers answer a broken query with **HTTP 200** and an `errors` array
+in the body, which makes a failure look like a success at a glance. IKE lifts
+those messages out:
+
+- the status row says how many (`HTTP/1.1 200 OK (12ms) ✗ 2 errors`) and turns
+  the failure colour;
+- a red block above the body lists each message with the response path and the
+  `line:column` in your query, when the server sends them;
+- the run counts as **failed** for the "response landed while you were looking
+  elsewhere" notification.
+
+The `data` part still pretty-prints as JSON underneath, so a partial answer
+stays readable next to the errors that came with it.
+
+### Completing fields and arguments
+
+The server knows every field, argument and type — ask it once and IKE
+completes them for you. With the caret in a `GRAPHQL` block, run
+**Introspect GraphQL Schema** (`http.graphqlIntrospect`) from the command
+palette. It sends the introspection query to that block's URL, with that
+block's headers (so an endpoint behind a login answers), and caches the schema
+per host under `.ike/graphql/` in your project.
+
+From then on, inside the query section:
+
+- typing in a selection set offers the **fields** of the type you are in, with
+  each field's own type in the detail column (and a marker on deprecated ones);
+- typing inside a field's `(` offers its **arguments**, inserting the `: ` for
+  you;
+- typing after the `:` of a `query Foo($x: …)` variable definition, or after
+  `... on `, offers the schema's **types**.
+
+Nothing is sent while you type — completion reads the cache only. `{{variables}}`
+still complete inside a query, so a `{{token}}` in an argument behaves as it
+does anywhere else.
+
+**Open Cached GraphQL Schema (SDL)** (`http.graphqlSchema`) opens the cached
+schema as a readable `.graphql` scratch file — the whole type system, for the
+questions a popup cannot answer. Re-run the introspection whenever the API
+changes.
+
+!!! note "One schema per host"
+    If your request URL is a variable (`GRAPHQL {{host}}/graphql`) IKE cannot
+    tell which endpoint you mean — so when the project has exactly one cached
+    schema, that one is used. With two or more, introspect from a block whose
+    URL is spelled out, or resolve the variable first.
+
 ## Completion while you type
 
 `.http` files complete without any language server:
@@ -380,6 +478,9 @@ download cannot freeze the UI.
   the active environment's variables (whichever `http-client.env.json`
   environment you selected, or its only one); accepting closes the braces for
   you;
+- **GraphQL fields, arguments and types** inside a `GRAPHQL` block's query,
+  once the endpoint's schema is cached — see
+  [GraphQL requests](#completing-fields-and-arguments);
 - **nothing** else inside bodies, comments or `###` lines — deliberately, so
   a JSON body does not offer you every word in the file.
 
@@ -395,7 +496,9 @@ pressing enter after a `{` in a JSON body indents like JSON while the request
 and header lines above keep their own rules. Parameters (`; charset=utf-8`),
 `x-` prefixes and `+json`/`+xml` suffixes are handled, so
 `application/vnd.api+json` is JSON, and `application/graphql` highlights as
-GraphQL when your build links that language.
+GraphQL when your build links that language. A `GRAPHQL` block is a special
+case: its query is highlighted as GraphQL and its variables object as JSON,
+without needing a `Content-Type` at all.
 
 A media type that maps to no language keeps plain styling rather than a guess
 — with two exceptions that get their own treatment instead of a language's:
@@ -450,6 +553,7 @@ highlighted, binary bodies collapsed to a notice.
 | `U` | Copy the request line's full, untruncated URL |
 | `t` | Switch between the pretty-printed and the raw body |
 | `q` | Open the jq playground on this body |
+| ++cmd+shift+j++ / ++ctrl+shift+j++ | Open the playground this body's type speaks — jq, yq or xmq |
 | `m` | Load the next chunk of a large body |
 | `o` | Open the whole body as a file |
 | `x` | Cancel the request that is running |
@@ -540,6 +644,14 @@ in the response pane, with this body as its input — no copying it out first.
 The query line appears at the top of the pane and the body below is replaced
 by the live result until you press ++esc++. For a large, partly spooled
 response the playground still gets the whole body.
+
+++cmd+shift+j++ (++ctrl+shift+j++ off macOS, or **Open Playground for This
+File**) is the same thing for the *other* body types: it looks at the
+response's content type and opens the playground that speaks it — jq for JSON,
+yq for YAML, xmq for XML and HTML — over this body, in this pane. A body no
+playground speaks (plain text, binary, an empty response) is answered with a
+short "no playground …" notice and nothing opens. The chord works the same way
+on the file in an editor, so it is one key for "query what I am looking at".
 
 ### Copying the shown request as curl
 
@@ -690,6 +802,7 @@ missing quietly.
 | Save HTTP Response Body to File… | `http.saveResponse` | — |
 | Toggle Raw / Pretty HTTP Response Body | `http.toggleRawBody` | — |
 | Open jq Playground on HTTP Response | `http.jqPlayground` | — |
+| Open Playground for This File | `playground.open` | ++cmd+shift+j++ / ++ctrl+shift+j++ |
 | Load More of the HTTP Response Body | `http.loadMoreBody` | — |
 | Open Full HTTP Response Body as File | `http.openBodyFile` | — |
 | Browse HTTP Response History | `http.responseHistory` | — |
@@ -697,6 +810,8 @@ missing quietly.
 | Re-send Stored HTTP Request | `http.resend` | ++ctrl+r++ (response pane) |
 | Re-run HTTP Request from History | `http.rerun` | — |
 | Compare Stored HTTP Responses | `http.diffResponses` | — |
+| Introspect GraphQL Schema | `http.graphqlIntrospect` | — |
+| Open Cached GraphQL Schema (SDL) | `http.graphqlSchema` | — |
 
 A scratch file is a quick way to try something without adding a file to the
 repository: **New Scratch File: Http** (`scratch.new.http`).

@@ -30,6 +30,63 @@
   [project time report](/architecture/project-time.md) and
   [usage telemetry](/architecture/usage-telemetry.md).
 
+## 2026-09-03 (playground.open in the HTTP response pane, #2451)
+
+- **The chord is dispatched in the viewer.** `playground.open` (`cmd+shift+j`)
+  shipped `Editor`-scoped, so it never reached the focused response pane; the
+  default table now carries the row twice, `Editor` and `HTTP`
+  (`internal/keymap/defaults.go`) — a second row rather than a promotion to
+  `Global`, following the `http.*` rows, so the panes the command resolves
+  nothing in stay free to bind the chord.
+- **The response is a second source.** `openPlaygroundForBuffer`
+  (`internal/app/playgroundopen.go`) resolves a focused HTTP pane through
+  `httppane.Model.BodyLang()` — the Content-Type mapping the highlighter runs
+  under, not a new content sniff — and opens jq / yq / the xmq hook the way
+  `http.jqPlayground` does: `focusHTTPPanel` first, then `startPlayground`, so
+  the mode mounts over the response (#1970) instead of over a background
+  editor. The routing table itself is shared with the editor route; no branch
+  grew a second copy of the opening logic.
+- **`contentTag` learned YAML** (`*/yaml`, `*+yaml`, `application/x-yaml`,
+  `text/x-yaml`), which the yq route needs and the body highlighter gets for
+  free — and `playSource` now lets the yq playground resolve a *focused*
+  response whose body is typed as YAML. An unfocused response, or a JSON one,
+  still never outranks the YAML file the user has open (the rule #2039 set).
+- **Nothing to query says so**: a plain-text, binary or empty body takes the
+  existing `no playground …` notification, naming the type where it is known,
+  and moves no focus. The editor route is unchanged.
+
+## 2026-09-03 (GraphQL requests in the HTTP client, #2423)
+
+- **`GRAPHQL <url>` blocks** in `.http` files (`internal/httpfile/graphql.go`,
+  `internal/graphql`): the body is the query as written, an optional JSON
+  `variables` object follows it after a blank line, and `ResolveVars` rewrites
+  the block into the `POST` that goes out —
+  `{"query":…,"variables":…,"operationName":…}` with
+  `Content-Type: application/json` unless the author set one. The variables
+  object is the last blank-line delimited `{…}` chunk, so a query keeps blank
+  lines of its own. `Content-Type: application/graphql` sends the query alone
+  and warns that the variables block had nowhere to travel.
+- **A failed operation looks failed.** A GraphQL server answers a broken query
+  with HTTP 200 and an `errors` array; `Response.GraphQLErrors`
+  (`internal/httpclient/graphql.go`) lifts the messages out, the viewer puts
+  the count on the status row in the failure colour and a red block above the
+  body, and the completion notice (#2364) counts the run as failed. Detection
+  is two-sided — a GraphQL-shaped request *and* the three-member envelope — so
+  a REST endpoint answering `{"errors":[…]}` is untouched, and it reads the
+  as-sent snapshot, so history entries and re-sends behave alike with no
+  history-format change.
+- **Schema introspection and completion.** `http.graphqlIntrospect` posts the
+  introspection query to the block's endpoint with its own headers and caches
+  the trimmed schema per host under `.ike/graphql/`; the `.http` completion
+  source then offers fields, arguments and types inside the query section from
+  that cache, resolved by a caret walk rather than a parse.
+  `http.graphqlSchema` opens the cached schema as SDL in a scratch file. Both
+  are palette-only, with entries in the unbound-command ledger.
+- **Highlighting.** The query section becomes a `graphql` region when a build
+  registers that language and is painted by a Go lexer otherwise; the variables
+  object is always a JSON region.
+- Subscriptions stay out of scope — they are a WebSocket protocol, not a POST.
+
 ## 2026-09-03 (mermaid diagrams in the markdown preview, #2421)
 
 - **```mermaid fences render as pictures** in the markdown preview instead of

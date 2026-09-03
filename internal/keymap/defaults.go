@@ -384,6 +384,12 @@ var jetbrainsRows = []row{
 	// focused pane terminals) the reserved-set handlers intercept it before
 	// raw pass-through.
 	{"cmd+alt+t", "terminal.popup", "Popup terminal", Global, "Terminal (#1398)"},
+	// Pinned popup (#2406): the popup stays visible beside the editor and the
+	// toggle chord above becomes a focus switch. The whole t family is spent —
+	// cmd+alt+shift+t is terminal.new (since #711) and its cmd→ctrl fold makes
+	// ctrl+alt+shift+t the same binding on Linux — so the pin takes the free
+	// k ("keep it on screen"), unclaimed on both platforms.
+	{"cmd+alt+shift+k", "terminal.popup.pin", "Pin popup terminal", Global, "Terminal (#2406)"},
 	// Per-context ctrl+t (#1794), the showcase of one chord doing the
 	// pane-appropriate thing per context: a new terminal tab with a terminal
 	// focused, a new empty editor tab with an editor focused. Disjoint
@@ -590,6 +596,13 @@ var jetbrainsRows = []row{
 	// first idea and is out — ctrl+alt+p is the perf HUD, which cmd+alt+p
 	// folds onto on Linux.
 	{"cmd+shift+j", "playground.open", "Open playground for this file", Editor, "Playground dispatcher (#2415)"},
+	// The HTTP response pane is the second place the dispatcher has something
+	// to resolve (#2451): the shown body is the document on screen there, and
+	// the jq playground already runs over it ("q" / http.jqPlayground, #2157).
+	// A second row rather than a Global binding, following the http.* rows
+	// above: the two contexts the chord means something in are named, and the
+	// panes it would do nothing in stay free to bind it.
+	{"cmd+shift+j", "playground.open", "Open playground for this file", HTTP, "Playground dispatcher (#2451)"},
 	// Test-data wizard (#2134): the scratch family's third chord, one modifier
 	// beyond cmd+shift+n's new scratch file — the wizard writes one too.
 	{"cmd+alt+shift+n", "scratch.generate", "Generate test data", Global, "Scratch files (#2305)"},

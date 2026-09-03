@@ -9,7 +9,7 @@ Component-level concepts for the IKE codebase.
 * [Dependencies Tool Window](/architecture/dependencies.md) - project dependencies per manifest with latest versions and vulnerabilities via the go/npm/composer/cargo/pip toolchains; manifest hovers, update code action, Problems feed, confirmed-only installs (#2419)
 * [Plugin Extension Contract](/architecture/plugins.md) - compile-in registry, extension points, host API
 * [Configuration System](/architecture/config.md) - typed TOML config, defaults < user < project merge, validation, extension hook, host integration (Roadmap 0040)
-* [HTTP Client (.http files)](/architecture/http-client.md) - plain-text .http request files: RFC 9112 blocks with ### separation, env and user-defined variables, OpenAPI 3.x import, dispatch + response viewer + history (Roadmap 0450)
+* [HTTP Client (.http files)](/architecture/http-client.md) - plain-text .http request files: RFC 9112 blocks with ### separation, env and user-defined variables, OpenAPI 3.x import, GRAPHQL blocks with schema-aware completion, dispatch + response viewer + history (Roadmap 0450)
 * [Help Overlay](/architecture/help-overlay.md) - command & shortcut cheat sheet, responsive columns, vertical scroll
 * [Welcome Tour](/architecture/welcome-tour.md) - passive paged first-orientation walkthrough in the floating shell
 * [Notifications](/architecture/notifications.md) - toast notifications: severities, expiry, stacking, Esc dismissal

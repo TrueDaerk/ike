@@ -111,6 +111,7 @@ func Defaults() []Menu {
 			{Title: "Scratch Files", Command: "scratch.panel"},
 			{Title: "Terminal", Command: "terminal.toggle"},
 			{Title: "Popup Terminal", Command: "terminal.popup"},
+			{Title: "Pin Popup Terminal", Command: "terminal.popup.pin"},
 			{Title: "New Terminal", Command: "terminal.new"},
 			{Title: "New Terminal Tab", Command: "terminal.newTab"},
 			{Title: "SSH Host…", Command: "terminal.ssh"},

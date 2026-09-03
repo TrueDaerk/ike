@@ -234,6 +234,7 @@ secrets — are documented together, with screenshots, in
 | Scrollback lines | `terminal.scrollback_lines` | integer (100–1000000) | `10000` | user | Lines of scrollback each terminal session keeps (#1545); the main memory cost per terminal pane. Applies to new sessions and, on lowering, trims live ones forward — already-trimmed history is not restored by raising it |
 | Popup terminal directory | `terminal.popup_cwd` | enum: `project`, `file` | `project` | user | Directory new popup-terminal shells start in: the project root, or the focused file's directory (project root when no file is open). Applies when a shell is spawned — the retained popup session keeps its own working directory across hide/show |
 | Popup terminal on project switch | `terminal.popup_on_switch` | enum: `restore`, `always-open` | `restore` | user | What the popup terminal does after a project switch: "restore" brings the incoming project's popup back exactly as it was left, "always-open" opens it every time — resuming the parked instance if one exists, spawning a fresh shell otherwise |
+| Popup terminal scope | `terminal.popup_scope` | enum: `project`, `global` | `project` | user | Who owns the popup terminal: "project" gives every project its own popup, parked with the project and back exactly as left; "global" keeps one popup shell for the whole app — it follows you across project switches with its scrollback and running processes, and is asked to cd into the new project root whenever its shell sits idle at a prompt |
 
 ### Screenshots
 

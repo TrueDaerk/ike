@@ -36,13 +36,30 @@ Where a fresh popup shell starts is the `terminal.popup_cwd` setting
 `file` in the focused file's directory. It applies when the shell is spawned —
 the retained session keeps whatever directory you `cd`-ed to.
 
+**Pin it** with ++cmd+alt+shift+k++ (++ctrl+alt+shift+k++ on Linux/Windows) to
+keep it beside your work: the box docks to the bottom edge across the full
+width, at the height you sized it to, and stays there while you edit. The popup
+chord then only moves the keyboard — press it to type in the shell, press it
+again to go back to the editor, without the box ever disappearing. Pressing the
+pin chord again unpins and hides it.
+
 The popup belongs to its project: switching projects parks it with everything
 running inside, and coming back restores it exactly as you left it — closed if
-it was closed. If your first move in a project is usually opening the terminal,
-set `terminal.popup_on_switch` (Settings → Terminal) to `always-open`: every
-project switch then leaves the popup open, resuming the project's parked
-terminal when there is one and spawning a fresh shell when there is not. The
-default, `restore`, keeps the as-you-left-it behaviour.
+it was closed, pinned if it was pinned. If your first move in a project is
+usually opening the terminal, set `terminal.popup_on_switch`
+(Settings → Terminal) to `always-open`: every project switch then leaves the
+popup open, resuming the project's parked terminal when there is one and
+spawning a fresh shell when there is not. The default, `restore`, keeps the
+as-you-left-it behaviour.
+
+If you would rather have **one popup terminal for everything**, set
+`terminal.popup_scope` (Settings → Terminal) to `global`. That single shell —
+with its scrollback and whatever is running in it — follows you from project to
+project instead of parking, and whenever it sits idle at its prompt a switch
+sends it a `cd` into the new project root. A shell busy with a foreground job
+keeps it: the line would land in the job, not the prompt, so the terminal stays
+where it is and catches up on the next switch it is idle for. The default,
+`project`, is the per-project popup described above.
 
 A terminal can be a pane of its own or a tab inside an editor pane, so a pane
 can hold a mix of files and shells.

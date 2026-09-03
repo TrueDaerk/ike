@@ -485,7 +485,10 @@ func (m *Model) notifyHTTPCompletion(e *httpFlightEntry, msg HTTPResponseMsg, vi
 	if visible || msg.Resp == nil || msg.Resp.StatusCode <= 0 {
 		return
 	}
-	failed := msg.Resp.StatusCode < 200 || msg.Resp.StatusCode >= 300
+	// A GraphQL operation that failed answers with HTTP 200 and an `errors`
+	// array (#2423), so the status code alone would report it as a success.
+	gqlErrors := msg.Resp.GraphQLErrors()
+	failed := msg.Resp.StatusCode < 200 || msg.Resp.StatusCode >= 300 || len(gqlErrors) > 0
 	limit := config.Get().HTTP.NotifySlowMs
 	slow := limit > 0 && msg.Resp.Duration >= time.Duration(limit)*time.Millisecond
 	if !failed && !slow {
@@ -504,6 +507,11 @@ func (m *Model) notifyHTTPCompletion(e *httpFlightEntry, msg HTTPResponseMsg, vi
 	}
 	if slow {
 		tail = fmt.Sprintf(", slower than %s", formatElapsed(time.Duration(limit)*time.Millisecond))
+	}
+	if n := len(gqlErrors); n > 0 {
+		// The status is 200: without naming the GraphQL errors the notice
+		// would read as a success that merely took a while.
+		tail += fmt.Sprintf(", %d GraphQL error(s)", n)
 	}
 	m.host.Notify(sev, fmt.Sprintf("http: %s → %s (%s%s)",
 		what, msg.Resp.Status, formatElapsed(msg.Resp.Duration), tail))

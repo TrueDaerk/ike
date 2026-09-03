@@ -326,6 +326,12 @@ type TerminalToggleMsg struct{}
 // terminal overlay outside the pane layout. Dispatched by terminal.popup.
 type TerminalPopupMsg struct{}
 
+// TerminalPopupPinMsg toggles the popup terminal's pinned mode (#2406): the
+// popup stays visible while the keyboard goes back to the editor, anchored to
+// the bottom edge, and the popup chord then only moves focus. Dispatched by
+// terminal.popup.pin.
+type TerminalPopupPinMsg struct{}
+
 // TerminalClearMsg clears the focused (else first) terminal's scrollback and
 // repaints its screen (#97). Dispatched by terminal.clear.
 type TerminalClearMsg struct{}
@@ -650,6 +656,11 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.copyAsHttpie", "Copy HTTP Request as httpie", HTTPCopyAsHttpieMsg{}),
 			appCommand("http.copyShownAsHttpie", "Copy Shown HTTP Request as httpie", HTTPCopyShownAsHttpieMsg{}),
 			appCommand("http.saveResponse", "Save HTTP Response Body to File…", HTTPSaveResponseMsg{}),
+			// The two GraphQL schema commands (#2423): one asks the endpoint
+			// what it offers, the other shows the answer. Both act on the
+			// GRAPHQL block under the caret, so neither needs a prompt.
+			appCommand("http.graphqlIntrospect", "Introspect GraphQL Schema", HTTPGraphQLIntrospectMsg{}),
+			appCommand("http.graphqlSchema", "Open Cached GraphQL Schema (SDL)", HTTPGraphQLSchemaMsg{}),
 			appCommand("archive.extractEntry", "Extract Selected Archive Entry…", ArchiveExtractEntryMsg{}),
 			appCommand("archive.extractAll", "Extract Whole Archive…", ArchiveExtractAllMsg{}),
 			appCommand("archive.reload", "Reload Archive Listing", ArchiveReloadMsg{}),
@@ -686,6 +697,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			paneCommand("http.search", "Search in HTTP Response", "http", HTTPSearchMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			appCommand("terminal.popup", "Popup Terminal", TerminalPopupMsg{}),
+			appCommand("terminal.popup.pin", "Pin Popup Terminal", TerminalPopupPinMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
 			appCommand("menu.open", "Open Menu Bar", ToggleMenuMsg{}),

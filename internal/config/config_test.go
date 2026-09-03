@@ -391,6 +391,29 @@ func TestTerminalPopupOnSwitchDefaultAndFallback(t *testing.T) {
 	}
 }
 
+// TestTerminalPopupScopeDefaultAndFallback covers #2406: the default keeps the
+// per-project popup ("project"), "global" loads clean, and an unknown scope
+// falls back with one diagnostic instead of reaching the switch path.
+func TestTerminalPopupScopeDefaultAndFallback(t *testing.T) {
+	c, _ := Load(Options{})
+	if c.Terminal.PopupScope != "project" {
+		t.Errorf("default popup_scope should be %q, got %q", "project", c.Terminal.PopupScope)
+	}
+	proj := writeProject(t, "[terminal]\npopup_scope = \"global\"\n")
+	c, diags := Load(Options{ProjectRoot: proj})
+	if c.Terminal.PopupScope != "global" || len(diags) != 0 {
+		t.Errorf("popup_scope = %q (diags %v), want %q", c.Terminal.PopupScope, diags, "global")
+	}
+	proj = writeProject(t, "[terminal]\npopup_scope = \"everywhere\"\n")
+	c, diags = Load(Options{ProjectRoot: proj})
+	if c.Terminal.PopupScope != "project" {
+		t.Errorf("unknown popup_scope should fall back to %q, got %q", "project", c.Terminal.PopupScope)
+	}
+	if len(diags) != 1 {
+		t.Errorf("expected one fallback diagnostic, got %v", diags)
+	}
+}
+
 func TestTerminalScrollbackClampAndDefault(t *testing.T) {
 	c, _ := Load(Options{})
 	if c.Terminal.ScrollbackLines != 10000 {

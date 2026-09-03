@@ -90,6 +90,8 @@ var (
 	popupCwds = map[string]bool{"project": true, "file": true}
 	// popupOnSwitchModes are the terminal.popup_on_switch values (#2362).
 	popupOnSwitchModes = map[string]bool{"restore": true, "always-open": true}
+	// popupScopes are the terminal.popup_scope values (#2406).
+	popupScopes = map[string]bool{"project": true, "global": true}
 	// onOffModes are the statusline.project_time values (#2426).
 	onOffModes = map[string]bool{"on": true, "off": true}
 )
@@ -368,6 +370,12 @@ func validate(c *Config) []Diagnostic {
 	if !popupOnSwitchModes[c.Terminal.PopupOnSwitch] {
 		diags = append(diags, Diagnostic{Field: "terminal.popup_on_switch", Message: fmt.Sprintf("unknown mode %q, using \"restore\"", c.Terminal.PopupOnSwitch)})
 		c.Terminal.PopupOnSwitch = "restore"
+	}
+	// terminal.popup_scope (#2406) decides whether the popup terminal belongs
+	// to its project or to the app.
+	if !popupScopes[c.Terminal.PopupScope] {
+		diags = append(diags, Diagnostic{Field: "terminal.popup_scope", Message: fmt.Sprintf("unknown scope %q, using \"project\"", c.Terminal.PopupScope)})
+		c.Terminal.PopupScope = "project"
 	}
 	// statusline.project_time (#2426) opts into the project-time segment.
 	if !onOffModes[c.StatusLine.ProjectTime] {

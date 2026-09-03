@@ -75,13 +75,19 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// time.toggle (#2426) has cmd+alt+0; the reload is the pane's own 'r'.
 	{"time.refresh", reasonPaneKey},
 	{"deps.updateLatest", reasonIntention},
-	{"http.", reasonPaneKey},                   // the response pane's single keys
-	{"view.toggle", reasonMenu},                // the View menu's rendering toggles
-	{"data.", reasonPaneKey},                   // the grid pane's keys
-	{"csv.", reasonPaneKey},                    // the CSV grid's keys
-	{"archive.", reasonPaneKey},                // the archive pane's entry list
-	{"nav.pinSlot", reasonMenu},                // pinning goes through cmd+2's picker (#788)
-	{"bookmark.", reasonFlavour},               // mnemonic/annotation flavours of f11
+	{"http.", reasonPaneKey}, // the response pane's single keys
+	// #2423's GraphQL schema commands carve themselves out of that family:
+	// neither is a pane key. Introspection runs once per endpoint (and again
+	// when the schema moves), and the SDL export is the "what else is there?"
+	// lookup behind it — both are palette work, not muscle memory.
+	{"http.graphqlIntrospect", reasonOccasional},
+	{"http.graphqlSchema", reasonOccasional},
+	{"view.toggle", reasonMenu},  // the View menu's rendering toggles
+	{"data.", reasonPaneKey},     // the grid pane's keys
+	{"csv.", reasonPaneKey},      // the CSV grid's keys
+	{"archive.", reasonPaneKey},  // the archive pane's entry list
+	{"nav.pinSlot", reasonMenu},  // pinning goes through cmd+2's picker (#788)
+	{"bookmark.", reasonFlavour}, // mnemonic/annotation flavours of f11
 	// #2407's pane numbers: ctrl+1…9 is a darwinRows family (off macOS those
 	// chords are what the cmd+digit tool-window bindings fold onto), and the
 	// typed flavour is the palette doorway on every platform.

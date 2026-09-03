@@ -19,9 +19,9 @@ import (
 // bar maps the display projection (m.visible), so collapsed rows are not part
 // of the track's world.
 //
-// Coordinates: the pane renders a title row above the body, so the
-// content-local y the app hands in is 1-based relative to the track; the
-// methods translate.
+// Coordinates: the pane renders headerLineCount() fixed rows above the body,
+// so the content-local y the app hands in is offset from the track by that
+// many rows; the methods translate through bodyRowAt (#2450).
 
 // scrollbarGeometry resolves the bar's layout: the track length in rows, the
 // total display-row count it maps, and the thumb's start/length. ok is false
@@ -41,7 +41,8 @@ func (m *Model) scrollbarGeometry() (track, total, thumbStart, thumbLen int, ok 
 // app checks this before the selection press so the bar outranks text there.
 func (m *Model) ScrollbarHit(x, y int) bool {
 	track, _, _, _, ok := m.scrollbarGeometry()
-	return ok && x == m.width-1 && y >= 1 && y < 1+track
+	by := m.bodyRowAt(y)
+	return ok && x == m.width-1 && by >= 0 && by < track
 }
 
 // ScrollbarPress handles a left press at content-local row y. On the thumb it
@@ -53,7 +54,7 @@ func (m *Model) ScrollbarPress(y int) (drag bool) {
 	if !ok {
 		return false
 	}
-	y-- // title row above the track
+	y = m.bodyRowAt(y) // fixed header rows above the track
 	if y >= start && y < start+length {
 		m.sbGrab = y - start
 		return true
@@ -69,7 +70,7 @@ func (m *Model) ScrollbarDrag(y int) {
 	if !ok {
 		return
 	}
-	m.top = scrollbar.Drag(y-1, m.sbGrab, track, total, track, m.top)
+	m.top = scrollbar.Drag(m.bodyRowAt(y), m.sbGrab, track, total, track, m.top)
 }
 
 // overlayScrollbar draws the bar over the rightmost cell of the rendered body

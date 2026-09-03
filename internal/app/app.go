@@ -3469,6 +3469,9 @@ var terminalGlobalCommands = map[string]bool{
 	"view.zenMode": true,
 	// #1398: the popup terminal must open from a focused pane terminal too.
 	"terminal.popup": true,
+	// #2406: pinning it is the same kind of layer act, and the shell never
+	// meaningfully sees the chord.
+	"terminal.popup.pin": true,
 	// #2150: a terminal pane is resized by keyboard like any other, and the
 	// shell never meaningfully sees the mode chord.
 	"pane.resizeMode": true,
@@ -5288,6 +5291,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.startHTTPSaveResponse()
 		return m, nil
 
+	case HTTPGraphQLIntrospectMsg:
+		// http.graphqlIntrospect (palette, #2423): ask the GRAPHQL block's
+		// endpoint for its schema and cache it for completion.
+		return m, m.introspectGraphQLSchema()
+
+	case httpGraphQLSchemaMsg:
+		// The introspection dispatch came back (#2423): cache it, or say why
+		// there is nothing to cache.
+		m.storeGraphQLSchema(msg)
+		return m, nil
+
+	case HTTPGraphQLSchemaMsg:
+		// http.graphqlSchema (palette, #2423): the cached schema as SDL in a
+		// scratch file.
+		return m.openGraphQLSchema()
+
 	case HTTPCopyAsCurlMsg:
 		// http.copyAsCurl (palette, #1994): the request under the caret, with
 		// its variables substituted, as a runnable curl command.
@@ -6236,6 +6255,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TerminalPopupMsg:
 		// terminal.popup: show/hide the floating popup terminal (#1398).
 		m.togglePopupTerminal()
+		return m, nil
+
+	case TerminalPopupPinMsg:
+		// terminal.popup.pin: pin the popup beside the editor (#2406) — or
+		// unpin it, which hides it again.
+		m.togglePopupPin()
 		return m, nil
 
 	case TerminalClearMsg:

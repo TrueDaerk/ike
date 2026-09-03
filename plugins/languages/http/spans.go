@@ -72,6 +72,11 @@ func querySpans(lines []string) []lang.Span {
 	// ("Content-Disposition: form-data; name=\"{{field}}\"") still reads as
 	// a placeholder first — placeholderSpans ran before it in this slice.
 	out = append(out, multipartSpans(lines)...)
+	// GRAPHQL query sections (#2423), when no grammar claims them as a region
+	// (graphql.go). Appended after the placeholder pass so a "{{token}}" inside
+	// a query keeps its own capture: the lexer would otherwise paint the braces
+	// as punctuation and the name as a field.
+	out = append(out, graphQLSpans(f, lines)...)
 	// The value ranges collected along the way, for the number hints below
 	// (#1684). Every entry is a stretch of a line that holds values rather
 	// than structure: a query string, a header value, an inline body line.

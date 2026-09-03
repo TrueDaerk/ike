@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-03T18:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -117,11 +117,19 @@ differ only in which dialect they name are three places to edit for every
 later language (jsonc, ansible, html …), and the language→playground mapping
 would then live in the keymap instead of next to the playgrounds. The default
 table ships **one** row instead — the dispatcher command `playground.open`
-(`cmd+shift+j`, `Editor` context, "Open playground for this file") — which
-resolves the dialect from the focused buffer's `LangID` in
-`internal/app/playgroundopen.go`: `json`/`jsonc`/`ndjson` → jq,
-`yaml`/`ansible` → yq, `xml`/`html` → xmq, anything else → the notification
-`no playground for <lang>`.
+(`cmd+shift+j`, "Open playground for this file") — which resolves the dialect
+from the focused buffer's `LangID` in `internal/app/playgroundopen.go`:
+`json`/`jsonc`/`ndjson` → jq, `yaml`/`ansible` → yq, `xml`/`html` → xmq,
+anything else → the notification `no playground for <lang>`.
+
+That row is written **twice**, once per context the chord means something in:
+`Editor` and `HTTP` (#2451). The response pane is a second source of documents
+to query — `q` already opens jq over the shown body (#2157) — and a
+context-scoped binding is only dispatched while that context has focus, so an
+`Editor`-only row left the chord dead in the viewer. A second row rather than
+promoting it to `Global`, following the `http.*` rows: the two places the
+command resolves something are named, and every other pane stays free to bind
+`cmd+shift+j` to its own thing.
 
 *Collision check for the chord:* `cmd+shift+j` is unclaimed in the defaults,
 and so is `ctrl+shift+j`, which it folds onto off macOS. `cmd+alt+p` — the
@@ -1319,6 +1327,7 @@ JetBrains is:
 | `terminal.new` | `cmd+alt+shift+t` | fragile | `palette` | live via palette |
 | `terminal.newTab` | `ctrl+t` | delivered | `—` | live |
 | `terminal.popup` | `cmd+alt+t` | fragile | `palette` | live via palette |
+| `terminal.popup.pin` | `cmd+alt+shift+k` | fragile | `palette` | live via palette |
 | `terminal.toggle` | `alt+f12` | fragile | `palette` | live via palette |
 | `tests.toggle` | `cmd+4` | fragile | `palette / View menu` | live via palette / View menu |
 | `time.toggle` | `cmd+alt+0` | fragile | `palette / Tools menu` | live via palette / Tools menu |

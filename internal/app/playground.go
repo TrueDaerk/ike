@@ -299,15 +299,17 @@ type playInputSource struct {
 // single embedded JSON blob in a log file is queryable without extracting it
 // first.
 //
-// The yq playground (#2039) resolves the **editor only**. A response body is
-// JSON in every workflow the .http client serves, and letting a focused
-// response outrank the YAML file the user has open would answer "yq
-// Playground" with a parse error over somebody else's pane. Selection and
+// The yq playground (#2039) resolves the editor, plus the one response that is
+// unambiguously its input: a *focused* viewer whose body is typed as YAML
+// (#2451). An unfocused response never outranks the YAML file the user has
+// open, and a JSON one never does either — that pairing is what would answer
+// "yq Playground" with a parse error over somebody else's pane. Selection and
 // whole buffer work there exactly as they do for jq — a YAML block embedded
 // in a Markdown file is queryable by selecting it.
 func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
 	httpOK := d != jqplay.DialectYQ
-	if c := m.focusedContent(); httpOK && c != nil && c.Kind() == pane.KindHTTP {
+	if c := m.focusedContent(); c != nil && c.Kind() == pane.KindHTTP &&
+		(httpOK || c.HTTP().BodyLang() == "yaml") {
 		// JQInput, not BodyText (#2157): a spooled body is only partly in the
 		// pane, and a program written against its head would answer questions
 		// about a document that never arrived.

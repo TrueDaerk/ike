@@ -38,8 +38,13 @@ func (m Model) handleCloseProject() (tea.Model, tea.Cmd) {
 	// The active popup terminal and project-owned floating panels live on the
 	// model (#1407, #1793) and die with the close; global panels ride to the
 	// resumed project and don't count.
-	for _, inst := range m.popup.instances() {
-		act.addPopup(inst)
+	// A global-scope popup (#2406) is app state: the close carries it to the
+	// resumed project like a global panel, so its shells are not activity this
+	// close would end and must not raise the guard.
+	if !m.popupScopeGlobal() {
+		for _, inst := range m.popup.instances() {
+			act.addPopup(inst)
+		}
 	}
 	for _, f := range projectFloatTerms(m.floatTerms) {
 		act.addPopup(f.inst)

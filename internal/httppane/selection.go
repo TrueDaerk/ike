@@ -79,8 +79,8 @@ type selection struct {
 func (m *Model) MousePress(x, y int) {
 	// The gutter column toggles a fold instead of starting a selection
 	// (#1330): it is the marker the glyph sits in, nothing selectable.
-	if x == 0 && y > 0 {
-		if row := m.rowAt(m.top + y - 1); row >= 0 && m.Foldable(row) {
+	if by := m.bodyRowAt(y); x == 0 && by >= 0 {
+		if row := m.rowAt(m.top + by); row >= 0 && m.Foldable(row) {
 			m.ToggleFold(row)
 			return
 		}
@@ -230,16 +230,17 @@ func (m *Model) selectionSearchPrefill() string {
 }
 
 // posAt maps a pane-local cell onto a position in the composed rows. The
-// content starts one line below the title bar and one column right of the
-// leading gutter space every row renders with.
+// content starts headerLineCount() lines below the top of the pane and one
+// column right of the leading gutter space every row renders with.
 func (m *Model) posAt(x, y int) pos {
 	// y maps through the display projection: a collapsed fold's body rows are
-	// not on screen, so the row under the pointer is visible[top + y - 1]
-	// (the title line occupies y == 0).
-	row := m.rowAt(m.top + y - 1)
+	// not on screen, so the row under the pointer is visible[top + by] (by is
+	// negative while the pointer sits in the header).
+	by := m.bodyRowAt(y)
+	row := m.rowAt(m.top + by)
 	if row < 0 {
 		row = len(m.rows)
-		if y <= 0 {
+		if by < 0 {
 			row = 0
 		}
 	}
