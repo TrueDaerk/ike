@@ -270,6 +270,11 @@ func defaults() *Config {
 			// Without a configured catalog the check does nothing at all.
 			AutoCheck: true,
 		},
+		Deps: Deps{
+			// The Dependencies scan runs on project open when manifests
+			// exist (#2419); it only shells out to the local toolchain.
+			AutoScan: true,
+		},
 		Diff: Diff{
 			Context: 3, // context lines kept around a change (0340, #494)
 		},

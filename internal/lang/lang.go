@@ -177,6 +177,14 @@ type Language struct {
 	// it must be cheap; nil — the normal case — means the language has no
 	// linter. See Note.
 	Lint func(lines []string) []Note
+
+	// DepManifests optionally names the dependency manifest base names this
+	// language owns (#2419) — go.mod, package.json, composer.json,
+	// Cargo.toml, requirements.txt, pyproject.toml. The Dependencies tool
+	// window only scans manifests some registered language declares, so
+	// disabling a language plugin also silences its dependency scan. Nil —
+	// the normal case — declares none.
+	DepManifests []string
 }
 
 // Note is one Go-computed diagnostic (#1623): the half-open rune-column range

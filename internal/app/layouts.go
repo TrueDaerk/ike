@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 
+	"ike/internal/deps"
 	"ike/internal/forge"
 	"ike/internal/host"
 	"ike/internal/layout"
@@ -240,6 +241,8 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 		return singleton(pane.DebugKey, "debug")
 	case pane.KindProblems:
 		return singleton(pane.ProblemsKey, "problems")
+	case pane.KindDeps:
+		return singleton(pane.DepsKey, "deps")
 	case pane.KindTests:
 		return singleton(pane.TestsKey, "tests")
 	case pane.KindIssues:
@@ -802,6 +805,16 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 			p := reg.Get(key).Problems()
 			p.SetDisplayPath(displayPath)
 			p.SetStore(m.probStore)
+		}
+		return key, ok
+	case "deps":
+		key, ok := singleton(reg.AddDeps)
+		if ok {
+			// A restored pane re-seeds from the last snapshot; the
+			// auto-scan (or 'r') refreshes it (#2419).
+			p := reg.Get(key).Deps()
+			p.SetDisplayPath(displayPath)
+			p.Set(deps.Snapshot())
 		}
 		return key, ok
 	case "structure":

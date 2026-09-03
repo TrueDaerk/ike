@@ -504,6 +504,10 @@ var jetbrainsRows = []row{
 	// delivered fallback, like the other Cmd-primary tool windows.
 	{"cmd+8", "problems.toggle", "Problems tool window", Global, "Problems (#1024)"},
 	{"cmd+3", "structure.toggle", "Structure tool window", Global, "Structure (#1025)"},
+	// Dependencies tool window (#2419): cmd+8/alt+8 named in the issue are
+	// taken (Problems, tab jump 8), so the free cmd+0 completes the numeric
+	// tool-window family; the palette is the delivered fallback.
+	{"cmd+0", "deps.toggle", "Dependencies tool window", Global, "Dependencies (#2419)"},
 	{"f10", "menu.open", "Open menu bar", Global, "Menu (0160)"},
 	{"cmd+,", "settings.open", "Settings", Global, "Menu (0160)"},
 	// Unbound-command audit (#1378): JetBrains chords for palette-only

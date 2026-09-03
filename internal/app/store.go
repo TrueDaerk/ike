@@ -384,6 +384,10 @@ func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
 		case pane.KindProblems:
 			// The panel restores empty (#1024): diagnostics are session state.
 			ids[key] = paneIdentity{Kind: "problems"}
+		case pane.KindDeps:
+			// The panel restores empty (#2419): the auto-scan (or 'r')
+			// re-fills it.
+			ids[key] = paneIdentity{Kind: "deps"}
 		case pane.KindTests:
 			// The panel restores empty (#1911): test results are session state.
 			ids[key] = paneIdentity{Kind: "tests"}

@@ -355,6 +355,12 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Tag words | `todo.patterns` | list | `TODO,FIXME,HACK,XXX` | user | Comment tag words the project scan matches as whole words, case-insensitively (TODO, FIXME, HACK, XXX); entries are literals, not regexes |
 
+### Dependencies
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Scan dependencies on project open | `deps.auto_scan` | boolean | `true` | user | Run one background toolchain scan (outdated versions and vulnerability audit) when a project with dependency manifests opens (#2419); off leaves scans to the deps.refresh and deps.audit commands |
+
 ### Marketplace Catalog
 
 | Setting | Key | Type | Default | Scope | Description |

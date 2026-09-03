@@ -12,6 +12,7 @@ import (
 	"ike/internal/dataview"
 	"ike/internal/debugdoctor"
 	"ike/internal/debugpanel"
+	"ike/internal/depspanel"
 	"ike/internal/diff"
 	"ike/internal/domview"
 	"ike/internal/editor/register"
@@ -108,6 +109,9 @@ const DoctorKey = "xdoctor"
 
 // LSPDoctorKey is the stable key of the singleton LSP Doctor tool window (#2164).
 const LSPDoctorKey = "lspdoctor"
+
+// DepsKey is the stable key of the singleton Dependencies tool window (#2419).
+const DepsKey = "deps"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -742,6 +746,18 @@ func (r *Registry) AddLSPDoctor() string {
 	inst.ld = lspdoctor.New(r.pal)
 	r.put(inst)
 	return LSPDoctorKey
+}
+
+// AddDeps creates the singleton Dependencies tool window under DepsKey
+// (#2419) and returns its key; a second call returns the existing key.
+func (r *Registry) AddDeps() string {
+	if _, ok := r.instances[DepsKey]; ok {
+		return DepsKey
+	}
+	inst := &Instance{key: DepsKey, kind: KindDeps, cfg: r.cfg, pal: r.pal}
+	inst.dep = depspanel.New(r.pal)
+	r.put(inst)
+	return DepsKey
 }
 
 // AddBreakpoints creates the singleton Breakpoints tool window under

@@ -60,6 +60,10 @@ bring their own.
 | Stop Debug Session | `debug.stop` | `cmd+f2` | — | everywhere |
 | Debug Test at Cursor | `debug.testAtCursor` | `alt+shift+f9` | — | everywhere |
 | Toggle Breakpoint | `debug.toggleBreakpoint` | `cmd+f8` | — | everywhere |
+| Dependencies: Audit Vulnerabilities | `deps.audit` | — | — | everywhere |
+| Dependencies: Refresh Scan | `deps.refresh` | — | — | everywhere |
+| Dependencies | `deps.toggle` | `cmd+0` | — | everywhere |
+| Update Dependency to Latest | `deps.updateLatest` | — | — | everywhere |
 | Write Heap Dump | `diag.heapDump` | — | — | everywhere |
 | Memory Statistics | `diag.memoryStats` | — | — | everywhere |
 | Compare with Clipboard | `diff.compareWithClipboard` | — | — | everywhere |

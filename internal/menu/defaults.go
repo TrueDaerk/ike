@@ -99,6 +99,7 @@ func Defaults() []Menu {
 		}},
 		{Title: "Tools", Items: []Item{
 			{Title: "Problems", Command: "problems.toggle"},
+			{Title: "Dependencies", Command: "deps.toggle"},
 			{Title: "Test Results", Command: "tests.toggle"},
 			{Title: "GitHub Issues", Command: "issues.toggle"},
 			{Title: "DOM Inspector", Command: "dom.toggle"},

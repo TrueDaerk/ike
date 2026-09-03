@@ -24,6 +24,9 @@ func init() {
 		// Shebang fallback (#893): extensionless CLI scripts.
 		Interpreters: []string{"php"},
 		Grammar:      grammar(),
+		// The Composer dependency manifest (#2419): the Dependencies tool
+		// window scans it via composer outdated + audit.
+		DepManifests: []string{"composer.json"},
 		Server: &lang.ServerSpec{
 			Language:    "php",
 			Command:     "intelephense",

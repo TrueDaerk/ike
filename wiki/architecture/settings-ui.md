@@ -267,6 +267,8 @@ any entry whose key the typed schema does not expose (no dead keys).
 - **Notifications** — toast timeout, severity floor.
 - **TODO Index** (#1663) — `todo.patterns`, the tag words the project scan
   matches (see [TODO index](./todo-index.md)).
+- **Dependencies** (#2419) — `deps.auto_scan`, the background dependency
+  scan on project open (see [dependencies](./dependencies.md)).
 - **Marketplace Catalog** (#1663) — `marketplace.catalog_url`, the index the
   Marketplace page installs from, and `marketplace.auto_check` (#2257), the
   daily background update check (see [marketplace](./marketplace.md)).

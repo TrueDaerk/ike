@@ -20,6 +20,9 @@ Task-oriented pages, one per feature area.
   keeps, scrollback, clickable file references, and tool panes.
 - **[Git](git.md)** — status colours, gutter markers, diffs, reverting a hunk,
   inline blame — and why the Git *workflow* is delegated to a tool pane.
+- **[Dependencies](dependencies.md)** — the project's declared dependencies
+  per manifest: latest versions, vulnerabilities, one-key updates with a
+  confirmed install step.
 - **[Running and debugging](run-and-debug.md)** — run configurations, tests,
   where output goes, breakpoints, stepping, and PHP/Xdebug.
 - **[The HTTP client](http-client.md)** — `.http` files in the repository,
