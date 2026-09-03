@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"ike/internal/lang"
+	"ike/internal/linescan"
 )
 
 // spans.go is the context half of the cron hint (#1624): where in a buffer a
@@ -54,14 +55,14 @@ func CrontabSpans(lines []string) []lang.Span {
 
 // crontabSpan finds the schedule on one crontab line.
 func crontabSpan(li int, runes []rune) (lang.Span, bool) {
-	start := skipSpace(runes, 0)
+	start := linescan.SkipSpace(runes, 0)
 	if start >= len(runes) || runes[start] == '#' {
 		return lang.Span{}, false
 	}
 	if isAssignment(runes, start) {
 		return lang.Span{}, false
 	}
-	words := words(runes, start)
+	words := linescan.Words(runes, start)
 	if len(words) == 0 {
 		return lang.Span{}, false
 	}
@@ -113,9 +114,9 @@ var cronKeys = map[string]bool{"cron": true, "schedule": true, "crontab": true}
 // accepted — the key already says the value is a schedule, so no shape guard
 // applies.
 func yamlKeySpan(li int, runes []rune) (lang.Span, bool) {
-	i := skipSpace(runes, 0)
-	for i < len(runes) && runes[i] == '-' && i+1 < len(runes) && isSpace(runes[i+1]) {
-		i = skipSpace(runes, i+1)
+	i := linescan.SkipSpace(runes, 0)
+	for i < len(runes) && runes[i] == '-' && i+1 < len(runes) && linescan.IsSpace(runes[i+1]) {
+		i = linescan.SkipSpace(runes, i+1)
 	}
 	if i >= len(runes) || runes[i] == '#' {
 		return lang.Span{}, false
@@ -134,8 +135,8 @@ func yamlKeySpan(li int, runes []rune) (lang.Span, bool) {
 	if !cronKeys[strings.ToLower(key)] {
 		return lang.Span{}, false
 	}
-	start := skipSpace(runes, colon+1)
-	end := trimEnd(runes, start, commentStart(runes, start))
+	start := linescan.SkipSpace(runes, colon+1)
+	end := trimEnd(runes, start, linescan.CommentStart(runes, start))
 	if start >= end {
 		return lang.Span{}, false
 	}
@@ -198,25 +199,6 @@ func looksCron(text string) bool {
 	return false
 }
 
-// words returns the [start, end) rune-column ranges of the whitespace-
-// separated words of runes from index i on.
-func words(runes []rune, i int) [][2]int {
-	var out [][2]int
-	for i < len(runes) {
-		i = skipSpace(runes, i)
-		if i >= len(runes) {
-			break
-		}
-		j := i
-		for j < len(runes) && !isSpace(runes[j]) {
-			j++
-		}
-		out = append(out, [2]int{i, j})
-		i = j
-	}
-	return out
-}
-
 // isAssignment reports whether the line starting at i is a crontab
 // environment assignment (`SHELL=/bin/sh`, `MAILTO=""`).
 func isAssignment(runes []rune, i int) bool {
@@ -227,45 +209,16 @@ func isAssignment(runes []rune, i int) bool {
 	if j == i {
 		return false
 	}
-	j = skipSpace(runes, j)
+	j = linescan.SkipSpace(runes, j)
 	return j < len(runes) && runes[j] == '='
 }
 
-// commentStart returns the column of a trailing " #" comment on a YAML line,
-// or the line end. Quoted regions are respected so a "#" inside a scalar does
-// not truncate the value.
-func commentStart(runes []rune, from int) int {
-	var quote rune
-	for i := from; i < len(runes); i++ {
-		switch {
-		case quote != 0:
-			if runes[i] == quote {
-				quote = 0
-			}
-		case runes[i] == '"' || runes[i] == '\'':
-			quote = runes[i]
-		case runes[i] == '#' && i > from && isSpace(runes[i-1]):
-			return i
-		}
-	}
-	return len(runes)
-}
-
-func skipSpace(runes []rune, i int) int {
-	for i < len(runes) && isSpace(runes[i]) {
-		i++
-	}
-	return i
-}
-
 func trimEnd(runes []rune, start, end int) int {
-	for end > start && isSpace(runes[end-1]) {
+	for end > start && linescan.IsSpace(runes[end-1]) {
 		end--
 	}
 	return end
 }
-
-func isSpace(r rune) bool { return r == ' ' || r == '\t' }
 
 func isDigit(r rune) bool { return r >= '0' && r <= '9' }
 
