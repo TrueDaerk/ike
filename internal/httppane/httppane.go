@@ -147,6 +147,13 @@ type Model struct {
 	raw  bool
 	more []byte
 
+	// reqDetails expands the request line (#2424) into a block listing the
+	// as-sent request headers and, for a small one, the body — collapsed by
+	// default since the method+URL line already answers the common question
+	// ("what did this actually hit?"). Like raw it belongs to the view and
+	// survives history browsing and new responses.
+	reqDetails bool
+
 	// Streaming (#1776): while a recognized stream is live the viewer shows
 	// status, headers and the body lines received so far — plaintext, no
 	// highlight/folds until the finalizing Set. streamTail buffers the
@@ -647,6 +654,22 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Write the raw response body to a file (#2059). Uppercase because
 		// "s" is the keep-scroll toggle (#1493).
 		return func() tea.Msg { return SaveBodyMsg{} }
+	case "U":
+		// Copy the shown entry's final request URL (#2424). The request line
+		// truncates a long one in the middle, so the full text needs its own
+		// route to the clipboard; "u" itself is already page-up in this pane,
+		// so the copy sits uppercase next to the other exports (C curl, H
+		// httpie, S save).
+		if _, url, ok := m.requestLine(); ok {
+			return copyCmd(url, "request URL")
+		}
+		return nil
+	case "i":
+		// Expand/collapse the request headers (and small body) beneath the
+		// request line (#2424) — collapsed by default so the common case
+		// (just the path that was hit) stays a single line.
+		m.reqDetails = !m.reqDetails
+		return nil
 	case "ctrl+r":
 		// Re-send the shown entry's stored request (#1832). The message goes
 		// out even without a snapshot — the host says why nothing happened
@@ -1016,6 +1039,10 @@ func (m *Model) ToggleKeepScroll() bool {
 // while stepping through history (#1493).
 func (m *Model) KeepScroll() bool { return m.keepScroll[m.request] }
 
+// RequestDetailsOpen reports whether the expanded request-details block is
+// on show beneath the request line (tests, #2424).
+func (m *Model) RequestDetailsOpen() bool { return m.reqDetails }
+
 // Scroll moves the viewport by delta lines (mouse wheel + keys).
 func (m *Model) Scroll(delta int) {
 	m.top += delta
@@ -1070,9 +1097,11 @@ func (m *Model) rowWidth() int {
 	return max(1, m.width-1)
 }
 
-// bodyHeight is the room between the header and footer lines.
+// bodyHeight is the room between the fixed header lines (#2424: the summary
+// line, plus the request line and its optional details block) and the
+// footer line.
 func (m *Model) bodyHeight() int {
-	h := m.height - 2
+	h := m.height - m.headerLineCount() - 1
 	if h < 1 {
 		h = 1
 	}
@@ -1145,7 +1174,9 @@ func (m *Model) headerSegs(pal *theme.Palette) []headerSeg {
 
 // ResendHit reports whether the pane-local cell (x, y) sits on the header's
 // re-send affordance (#1832). Like the fold's copy glyph (#1787) it is tested
-// before the selection press, so the label is the only re-send target.
+// before the selection press, so the label is the only re-send target. The
+// affordance always lives on the summary line, row 0, whether or not the
+// request line beneath it is on show.
 func (m *Model) ResendHit(x, y int) bool {
 	if y != 0 {
 		return false
@@ -1161,14 +1192,169 @@ func (m *Model) ResendHit(x, y int) bool {
 	return false
 }
 
-// View renders the title header, the scrolled rows, and the key-hint footer.
-func (m *Model) View() string {
-	pal := m.theme()
+// requestLine reports the method and final (post-substitution) URL of the
+// entry on show (#2424), the same snapshot the resend/curl/httpie exports
+// already read. ok is false for a live stream, an empty pane or a history
+// entry stored before the snapshot existed — exactly CurrentRequest's gate.
+func (m *Model) requestLine() (method, url string, ok bool) {
+	req := m.CurrentRequest()
+	if req == nil {
+		return "", "", false
+	}
+	return req.Method, req.URL, true
+}
+
+// requestDetailMaxLines caps the expanded request-details block (#2424) so a
+// request with dozens of headers cannot push the scrollable body out of a
+// small pane; the rest is a one-line count instead of silently missing.
+const requestDetailMaxLines = 20
+
+// requestDetailBodyLimit is the largest request body the expanded view prints
+// inline (#2424) — past it the block names the size instead, matching the
+// spirit of the response body's own pretty-print cap (see body.go).
+const requestDetailBodyLimit = 2048
+
+// requestDetailLines renders the expanded request-details block: the as-sent
+// headers, sorted, and — for a small one — the body. nil while collapsed or
+// without a snapshot.
+func (m *Model) requestDetailLines() []string {
+	req := m.CurrentRequest()
+	if req == nil {
+		return nil
+	}
+	var lines []string
+	names := make([]string, 0, len(req.Headers))
+	for n := range req.Headers {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		for _, v := range req.Headers[n] {
+			lines = append(lines, "    "+n+": "+v)
+		}
+	}
+	switch {
+	case len(req.Body) == 0:
+	case isBinary(req.Body):
+		lines = append(lines, fmt.Sprintf("    (binary body, %d bytes)", len(req.Body)))
+	case len(req.Body) <= requestDetailBodyLimit:
+		lines = append(lines, "")
+		for _, l := range strings.Split(string(req.Body), "\n") {
+			lines = append(lines, "    "+l)
+		}
+	default:
+		lines = append(lines, fmt.Sprintf("    (body: %d bytes — too large to show inline; C/H export it in full)", len(req.Body)))
+	}
+	if len(lines) > requestDetailMaxLines {
+		hidden := len(lines) - requestDetailMaxLines
+		lines = append(lines[:requestDetailMaxLines], fmt.Sprintf("    … %d more line(s) — C/H export it in full", hidden))
+	}
+	style := lipgloss.NewStyle().Faint(true)
+	for i, l := range lines {
+		lines[i] = style.Render(m.clip(l))
+	}
+	return lines
+}
+
+// headerLineCount is how many fixed lines sit above the scrollable body: the
+// summary line always, the request line when a snapshot exists, and the
+// expanded details block on top of that (#2424).
+func (m *Model) headerLineCount() int {
+	n := 1
+	if _, _, ok := m.requestLine(); ok {
+		n++
+		if m.reqDetails {
+			n += len(m.requestDetailLines())
+		}
+	}
+	return n
+}
+
+// headerLines composes every fixed line rendered above the scrollable body:
+// the existing summary line (title, status, markers, resend affordance),
+// then the request line — method and final URL, truncated in the middle so
+// the host and the tail of the query stay legible (#2424) — and, toggled by
+// "i", the expanded headers/body block.
+func (m *Model) headerLines(pal *theme.Palette) []string {
+	lines := []string{m.renderHeaderSegs(pal)}
+	method, url, ok := m.requestLine()
+	if !ok {
+		return lines
+	}
+	prefix := " " + method + " "
+	avail := m.width - len([]rune(prefix))
+	if avail < 1 {
+		avail = 1
+	}
+	reqLine := prefix + middleTruncateURL(url, avail)
+	lines = append(lines, lipgloss.NewStyle().Foreground(pal.Secondary).Render(reqLine))
+	if m.reqDetails {
+		lines = append(lines, m.requestDetailLines()...)
+	}
+	return lines
+}
+
+// renderHeaderSegs draws the header's styled segments into one line.
+func (m *Model) renderHeaderSegs(pal *theme.Palette) string {
 	var b strings.Builder
 	for _, s := range m.headerSegs(pal) {
 		b.WriteString(s.style.Render(s.text))
 	}
-	b.WriteString("\n")
+	return b.String()
+}
+
+// middleTruncateURL shortens s to width runes, eliding the middle instead of
+// the tail (#2424): a scheme+host prefix and the end of the path/query — the
+// two places an environment difference usually shows up — both stay visible,
+// where a right-truncated URL would hide the query behind "…" for anything
+// longer than the pane.
+func middleTruncateURL(s string, width int) string {
+	r := []rune(s)
+	if width <= 0 {
+		return ""
+	}
+	if len(r) <= width {
+		return s
+	}
+	if width == 1 {
+		return "…"
+	}
+	avail := width - 1 // one column for the ellipsis
+	head := avail / 3
+	if hostEnd := hostBoundary(s); hostEnd > 0 && hostEnd < avail {
+		head = hostEnd
+	}
+	if head > avail {
+		head = avail
+	}
+	tail := avail - head
+	return string(r[:head]) + "…" + string(r[len(r)-tail:])
+}
+
+// hostBoundary returns the rune length of a URL's scheme+authority prefix
+// ("https://host"), 0 when s carries none.
+func hostBoundary(s string) int {
+	i := strings.Index(s, "://")
+	if i < 0 {
+		return 0
+	}
+	rest := s[i+3:]
+	j := strings.IndexAny(rest, "/?#")
+	if j < 0 {
+		return len([]rune(s))
+	}
+	return len([]rune(s[:i+3+j]))
+}
+
+// View renders the fixed header lines, the scrolled rows, and the key-hint
+// footer.
+func (m *Model) View() string {
+	pal := m.theme()
+	var b strings.Builder
+	for _, l := range m.headerLines(pal) {
+		b.WriteString(l)
+		b.WriteString("\n")
+	}
 
 	height := m.bodyHeight()
 	if len(m.rows) == 0 {
@@ -1302,6 +1488,16 @@ func (m *Model) footerText() string {
 	// they are the rarest actions, and the footer truncates from the right.
 	if !m.streaming && len(m.hist) > 0 {
 		s += " · C curl · H httpie · S save"
+	}
+	// The request line's own actions (#2424) need a snapshot, same gate as
+	// resend/curl/httpie above.
+	if _, _, ok := m.requestLine(); ok {
+		if m.reqDetails {
+			s += " · i hide request"
+		} else {
+			s += " · i request details"
+		}
+		s += " · U copy url"
 	}
 	return s
 }
