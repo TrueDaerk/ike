@@ -352,8 +352,8 @@ func TestSearchOpenPrefillsFromSelection(t *testing.T) {
 	if q != "alpha" {
 		t.Fatalf("prefilled query: %q, want %q", q, "alpha")
 	}
-	if m.qcur != len([]rune("alpha")) {
-		t.Fatalf("cursor after prefill: %d, want end of query", m.qcur)
+	if m.search.Field.Cur != len([]rune("alpha")) {
+		t.Fatalf("cursor after prefill: %d, want end of query", m.search.Field.Cur)
 	}
 	if _, total := m.MatchPosition(); total == 0 {
 		t.Error("matches must be computed immediately for the prefilled query")
@@ -412,7 +412,7 @@ func TestCopySelectionWhileSearching(t *testing.T) {
 	press(m, r, 0)
 	drag(m, r, 5)
 	m.handleKey(keyPress("/"))
-	if !m.searching {
+	if !m.search.Open {
 		t.Fatal("/ must open the search prompt")
 	}
 
@@ -430,7 +430,7 @@ func TestCopySelectionWhileSearching(t *testing.T) {
 	if m.HasSelection() {
 		t.Error("copying must clear the selection")
 	}
-	if !m.searching {
+	if !m.search.Open {
 		t.Error("copying must not close the search prompt")
 	}
 
@@ -450,7 +450,7 @@ func TestCopySelectionWhileSearching(t *testing.T) {
 	if cmd := m.handleKey(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}); cmd != nil {
 		t.Errorf("ctrl+c without a selection must not copy: %+v", cmd())
 	}
-	if !m.searching {
+	if !m.search.Open {
 		t.Error("ctrl+c without a selection must leave the prompt open")
 	}
 }

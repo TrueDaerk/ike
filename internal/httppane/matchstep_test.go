@@ -53,9 +53,9 @@ func TestHTTPMatchStepAfterEnter(t *testing.T) {
 		t.Fatalf("NextMatch after enter = %+v", st)
 	}
 	// n keeps its vim meaning there too.
-	before := m.cur
+	before := m.search.Cur
 	m.handleKey(keyPress("n"))
-	if m.cur == before {
+	if m.search.Cur == before {
 		t.Fatal("n must still step the match after the prompt blurred")
 	}
 }
@@ -83,7 +83,7 @@ func TestHTTPEditDropsTheWrapMarker(t *testing.T) {
 	typeSearch(m, "token")
 	m.PrevMatch()
 	m.handleKey(keyPress("-"))
-	if m.wrapped {
+	if m.search.Wrapped {
 		t.Fatal("an edited query must start a fresh walk")
 	}
 }
