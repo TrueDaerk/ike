@@ -182,8 +182,7 @@ type Model struct {
 	// line) and wsDraft stashes that fresh line while browsing.
 	ws        bool
 	wsInput   bool
-	wsText    string
-	wsCur     int
+	wsText    ui.Field
 	wsSent    []string
 	wsSentIdx int
 	wsDraft   string
@@ -994,8 +993,7 @@ func (m *Model) PasteText(text string) {
 	// The open websocket input line takes a paste like the search prompt does
 	// (#2422) — multi-line blocks flatten into the single-line field.
 	if m.wsInput {
-		if t, cur, changed := ui.PasteText(m.wsText, m.wsCur, text); changed {
-			m.wsText, m.wsCur = t, cur
+		if m.wsText.Paste(text) {
 			m.wsSentIdx = -1
 		}
 		return

@@ -2,8 +2,6 @@ package httppane
 
 import (
 	tea "charm.land/bubbletea/v2"
-
-	"ike/internal/ui"
 )
 
 // websocket.go is the pane side of a live WebSocket session (#2422): while the
@@ -40,7 +38,7 @@ func (m *Model) WSSentHistory() []string { return m.wsSent }
 func (m *Model) openWSInput() {
 	m.wsInput = true
 	m.wsSentIdx = -1
-	m.wsCur = len([]rune(m.wsText))
+	m.wsText.Cur = m.wsText.Len()
 }
 
 // wsInputKey handles one key while the input line is open. enter sends and
@@ -52,7 +50,7 @@ func (m *Model) wsInputKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.wsInput = false
 		return nil
 	case "enter":
-		text := m.wsText
+		text := m.wsText.Text
 		if text == "" {
 			return nil
 		}
@@ -60,18 +58,18 @@ func (m *Model) wsInputKey(msg tea.KeyPressMsg) tea.Cmd {
 		if n := len(m.wsSent); n == 0 || m.wsSent[n-1] != text {
 			m.wsSent = append(m.wsSent, text)
 		}
-		m.wsText, m.wsCur, m.wsSentIdx, m.wsDraft = "", 0, -1, ""
+		m.wsText.Clear()
+		m.wsSentIdx, m.wsDraft = -1, ""
 		return func() tea.Msg { return WSSendMsg{Text: text} }
 	case "up":
 		if m.wsSentIdx+1 >= len(m.wsSent) {
 			return nil
 		}
 		if m.wsSentIdx == -1 {
-			m.wsDraft = m.wsText // the fresh line survives the browse
+			m.wsDraft = m.wsText.Text // the fresh line survives the browse
 		}
 		m.wsSentIdx++
-		m.wsText = m.wsSent[len(m.wsSent)-1-m.wsSentIdx]
-		m.wsCur = len([]rune(m.wsText))
+		m.wsText.Set(m.wsSent[len(m.wsSent)-1-m.wsSentIdx])
 		return nil
 	case "down":
 		if m.wsSentIdx < 0 {
@@ -79,15 +77,13 @@ func (m *Model) wsInputKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		m.wsSentIdx--
 		if m.wsSentIdx == -1 {
-			m.wsText = m.wsDraft
+			m.wsText.Set(m.wsDraft)
 		} else {
-			m.wsText = m.wsSent[len(m.wsSent)-1-m.wsSentIdx]
+			m.wsText.Set(m.wsSent[len(m.wsSent)-1-m.wsSentIdx])
 		}
-		m.wsCur = len([]rune(m.wsText))
 		return nil
 	}
-	if t, cur, handled, changed := ui.EditKey(msg, m.wsText, m.wsCur); handled {
-		m.wsText, m.wsCur = t, cur
+	if handled, changed := m.wsText.Key(msg); handled {
 		if changed {
 			m.wsSentIdx = -1 // an edit leaves the history walk
 		}
@@ -97,5 +93,5 @@ func (m *Model) wsInputKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // wsFooter is the footer line while the input prompt is open (#2422).
 func (m *Model) wsFooter() string {
-	return " ➤ " + ui.CursorView(m.wsText, m.wsCur) + "  ↩ send · ↑/↓ history · esc close input"
+	return " ➤ " + m.wsText.View() + "  ↩ send · ↑/↓ history · esc close input"
 }
