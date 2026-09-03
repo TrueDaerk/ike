@@ -1139,7 +1139,6 @@ A second telemetry export (two sessions, ~9,900 events) left 37 presses on
 vim gestures behind it, so the chord resolved to nothing at all. Each is now a
 registry command in `internal/editor` (`lineops.go`), selection-aware wherever
 JetBrains is:
-
 | command | primary | reachability | fallback | status |
 |---|---|---|---|---|
 | `archive.reload` | `ctrl+r` | delivered | `—` | live |
@@ -1271,6 +1270,15 @@ JetBrains is:
 | `palette.recentFiles` | `cmd+e` | fragile | `palette` | live via palette |
 | `palette.searchEverywhere` | `cmd+shift+a` | fragile | `palette (esc esc)` | live via palette (esc esc) |
 | `pane.close` | `ctrl+alt+w` | fragile | `palette / pane context menu` | live via palette / pane context menu |
+| `pane.focus1` | `ctrl+1` | delivered | `—` | live |
+| `pane.focus2` | `ctrl+2` | delivered | `—` | live |
+| `pane.focus3` | `ctrl+3` | delivered | `—` | live |
+| `pane.focus4` | `ctrl+4` | delivered | `—` | live |
+| `pane.focus5` | `ctrl+5` | delivered | `—` | live |
+| `pane.focus6` | `ctrl+6` | delivered | `—` | live |
+| `pane.focus7` | `ctrl+7` | delivered | `—` | live |
+| `pane.focus8` | `ctrl+8` | delivered | `—` | live |
+| `pane.focus9` | `ctrl+9` | delivered | `—` | live |
 | `pane.maximize` | `cmd+k z` | fragile | `palette` | live via palette |
 | `pane.resizeMode` | `ctrl+alt+r` | fragile | `palette / pane context menu` | live via palette / pane context menu |
 | `pane.splitDown` | `cmd+k down` | fragile | `palette` | live via palette |

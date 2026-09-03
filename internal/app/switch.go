@@ -257,8 +257,12 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// (#1793) park with it; global ones stay out of Aux and are carried into
 	// the fresh model below. The fresh model starts with a zero popup of its
 	// own.
+	// The documentSymbol cache rides along (#2401): it is keyed by this
+	// project's file paths, so parking it lets a resumed project refeed the
+	// Structure panel, breadcrumbs and sticky scopes from memory instead of
+	// re-asking the language server for every unchanged buffer.
 	m.activeWS().Aux = wsExtras{dbg: m.dbg, dbgLaunching: m.dbgLaunching, dbgLaunchGen: m.dbgLaunchGen,
-		popup: m.popup, floats: projectFloatTerms(m.floatTerms)}
+		popup: m.popup, floats: projectFloatTerms(m.floatTerms), docSymbols: m.docSymbols}
 	parkedRoot := m.activeWS().Root
 	m.ws.Park()
 	// Arm the background LSP idle shutdown for the workspace just parked

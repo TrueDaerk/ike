@@ -582,6 +582,16 @@ type Model struct {
 	runToLineOpen  bool
 	runToLineInput string
 	runToLinePos   int
+	// paneNumOpen marks pane.focusByIndex's prompt (#2407) while the shell
+	// shows it; paneNumInput/paneNumPos hold its single line. paneNumHint is
+	// the which-pane hint of the focus-only mode — up while a pane switch is
+	// being made, taken down again by paneNumberHintMsg; paneNumHintGen tells
+	// the newest timer from the ones a faster switch has already outrun.
+	paneNumOpen    bool
+	paneNumInput   string
+	paneNumPos     int
+	paneNumHint    bool
+	paneNumHintGen int
 	// curlImportOpen marks the curl import prompt (#1994) while the shell
 	// shows it; curlImportInput/curlImportPos are the typed command and
 	// cursor.
@@ -720,6 +730,9 @@ type Model struct {
 	// marks a save-triggered refresh that must re-request the unchanged path.
 	// structDeb* track the armed debounce: the pending target and the seq
 	// that lets a newer target invalidate an older timer's tick.
+	// structLast* remember the last dispatch (target and wall clock) for the
+	// burst dedup (#2401): an identical (path, DocVersion) inside
+	// structBurstWindow never reaches RunCommand.
 	structReturnFocus string
 	structReqPath     string
 	structReqVersion  int
@@ -727,12 +740,17 @@ type Model struct {
 	structDebPath     string
 	structDebVersion  int
 	structDebSeq      int
+	structLastPath    string
+	structLastVersion int
+	structLastAt      time.Time
 	// docSymbols caches each file's documentSymbol reply (#1153/#2319): the
 	// hierarchical tree the breadcrumbs bar derives the cursor's enclosing
 	// chain from at render time (the Structure pane keeps its own flattened
 	// rows), stamped with the buffer DocVersion it was requested at so an
 	// unchanged buffer never re-requests. Fed by applyDocumentSymbols,
-	// evicted when the file's last view closes.
+	// evicted when the file's last view closes, and parked with the workspace
+	// across a project switch (#2401) so a resumed project's unchanged buffers
+	// never re-request what they already answered.
 	// crumbSig is the last applied breadcrumb geometry signature; the settled
 	// pass (syncBreadcrumbLayout) re-runs layout() when it changes.
 	docSymbols map[string]docSymEntry
@@ -1615,6 +1633,10 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		// carries them model-to-model.
 		m.popup = extras.popup
 		m.floatTerms = extras.floats
+		// The documentSymbol cache comes back too (#2401): the settled pass
+		// refeeds the Structure panel, breadcrumbs and sticky scopes from it,
+		// and only a buffer edited past its cached version re-requests.
+		m.docSymbols = extras.docSymbols
 		for _, inst := range m.popupLayerInstances() {
 			inst.SetPalette(themePal)
 		}
@@ -1661,6 +1683,11 @@ type wsExtras struct {
 	dbgLaunchGen int
 	popup        popupTerm    // popup terminal (#1398) is per-project state (#1407)
 	floats       []*floatTerm // project-owned floating terminal panels (#1793); global ones never park
+	// docSymbols is the workspace's documentSymbol cache (#2401): it belongs
+	// to this project's buffers, so it parks and resumes with them instead of
+	// dying with the model performSwitch discards — coming back to a project
+	// re-requested every resumed file's tree for nothing.
+	docSymbols map[string]docSymEntry
 }
 
 // SetSender wires the program's Send into the host so background workers (the LSP
@@ -4677,7 +4704,28 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case CyclePaneFocusMsg:
 		// pane.switcher (ctrl+tab / palette): same cycle as the hardcoded tab.
+		// In focus-only mode the switch raises the pane-number hint (#2407),
+		// so the badges are readable while the focus is being moved.
 		m.cycleFocus()
+		return m, m.raisePaneNumberHint()
+
+	case PaneFocusIndexMsg:
+		// pane.focus1…9 (ctrl+digit on macOS / palette): focus the pane
+		// carrying that number in the chrome (#2407).
+		m.focusPaneNumber(msg.Index)
+		return m, m.raisePaneNumberHint()
+
+	case PaneFocusByIndexMsg:
+		// pane.focusByIndex (palette): the typed flavour, for panes past nine
+		// and for terminals the digit chords do not reach (#2407).
+		return m, m.startPaneFocusByIndex()
+
+	case paneNumberHintMsg:
+		// The which-pane hint expired (#2407); a newer switch has its own
+		// timer and this one is stale.
+		if msg.gen == m.paneNumHintGen {
+			m.paneNumHint = false
+		}
 		return m, nil
 
 	case SaveAllMsg:
@@ -8187,6 +8235,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// enter/esc.
 		if m.runToLinePromptOpen() {
 			return m.updateRunToLinePrompt(msg)
+		}
+		// pane.focusByIndex's prompt (#2407) likewise.
+		if m.paneNumPromptOpen() {
+			return m.updatePaneNumPrompt(msg)
 		}
 		// The response-body save prompt (#2059) mirrors the JetBrains import:
 		// one path line with tab completion.
@@ -13093,12 +13145,16 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 	inst := m.activeWS().Panes.Get(key)
 	// Title (chrome) is computed without touching the content, so a cached pane
 	// never calls inst.View() (#612). Content is pulled lazily inside paneBox.
+	focused := inst != nil && m.activeWS().Panes.Focused() == key
+	// The pane-number badge (#2407) prefixes the title; the tab bar, which
+	// takes the title row over when the pane holds several tabs, is measured
+	// against the width the badge leaves it.
+	badgeText := m.paneNumberBadgeText(key)
+	badgeW := lipgloss.Width(badgeText)
 	var title string
-	var focused bool
 	if inst == nil {
 		title = strings.ToUpper(key)
 	} else {
-		focused = m.activeWS().Panes.Focused() == key
 		switch inst.Kind() {
 		case pane.KindExplorer:
 			title = "EXPLORER"
@@ -13121,7 +13177,7 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 			}
 			// The tab bar takes over the title row once the pane holds
 			// multiple tabs (#157); paneBox draws it like any title.
-			if bar, ok := m.tabBar(inst, r.W-paneChromeW); ok {
+			if bar, ok := m.tabBar(inst, r.W-paneChromeW-badgeW); ok {
 				title = bar
 			}
 		case pane.KindTerminal:
@@ -13198,6 +13254,11 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 			}
 		}
 	}
+	// The number goes leftmost, ahead of the drag markers: it names the pane,
+	// the markers describe what is being done to it. It takes the border's own
+	// color — dim when the pane is not focused — so it never contradicts the
+	// frame around it (an unfocused pane's badge stays dim: its border is).
+	title = paneNumberBadge(badgeText, border) + title
 
 	if inst == nil {
 		return paneBox(title, "", r.W, r.H, border)

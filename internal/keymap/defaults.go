@@ -635,6 +635,22 @@ var darwinRows = []row{
 	// cycling owns.
 	{"cmd+alt+left", "nav.back", "Navigate back", Global, "Editor (06)/app (01)"},
 	{"cmd+alt+right", "nav.forward", "Navigate forward", Global, "Editor (06)/app (01)"},
+	// Focus the pane carrying that number in its title bar (#2407). ctrl+digit
+	// is delivered by every terminal and free of macOS system shortcuts, and
+	// the tool-window numbering keeps cmd+digit — so the two digit families do
+	// not collide. macOS only: off macOS the Cmd→Ctrl fold would land
+	// explorer.toggle (cmd+1), nav.pins (cmd+2) and vcs.panel (cmd+9) on
+	// exactly these chords, which is why ctrl+digit stays free there and
+	// pane.focusByIndex ("Focus Pane by Number…") is the doorway instead.
+	{"ctrl+1", "pane.focus1", "Focus pane 1", Global, "Pane numbers (#2407)"},
+	{"ctrl+2", "pane.focus2", "Focus pane 2", Global, "Pane numbers (#2407)"},
+	{"ctrl+3", "pane.focus3", "Focus pane 3", Global, "Pane numbers (#2407)"},
+	{"ctrl+4", "pane.focus4", "Focus pane 4", Global, "Pane numbers (#2407)"},
+	{"ctrl+5", "pane.focus5", "Focus pane 5", Global, "Pane numbers (#2407)"},
+	{"ctrl+6", "pane.focus6", "Focus pane 6", Global, "Pane numbers (#2407)"},
+	{"ctrl+7", "pane.focus7", "Focus pane 7", Global, "Pane numbers (#2407)"},
+	{"ctrl+8", "pane.focus8", "Focus pane 8", Global, "Pane numbers (#2407)"},
+	{"ctrl+9", "pane.focus9", "Focus pane 9", Global, "Pane numbers (#2407)"},
 }
 
 // Defaults returns the default binding set for the named preset. Unknown presets

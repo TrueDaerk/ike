@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Structure View
-description: "Structure tool pane (#1025) — the focused buffer's symbol tree from LSP textDocument/documentSymbol: singleton right-split pane, capability-gated request through the manager, version-stamped per-buffer cache with debounced refresh (#2319), cursor auto-follow, enter/double-click navigates via the open funnel."
+description: "Structure tool pane (#1025) — the focused buffer's symbol tree from LSP textDocument/documentSymbol: singleton right-split pane, capability-gated request through the manager, version-stamped per-buffer cache with debounced refresh (#2319) that parks with the workspace and collapses dispatch bursts (#2401), cursor auto-follow, enter/double-click navigates via the open funnel."
 resource: internal/structpanel
 tags: [architecture, lsp, structure, tool-window]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Structure View (#1025)
@@ -97,7 +97,23 @@ unreachable from the app:
   tree; the debounced refresh above updates the pane in the background once
   typing pauses.
 - **Save**: the `todoSavedMsg` handler sets `structForce`, which bypasses
-  cache, dedup and debounce for the unchanged path.
+  dedup and debounce — but not the cache (#2401): a write whose content the
+  cached tree already covers (its stamp equals the buffer's current
+  `DocVersion`) consumes the flag and asks nothing, because the server sees
+  the very document it answered for. A save past the cached version — the
+  usual case, an edit then a write — dispatches immediately as before.
+- **Burst dedup**: every dispatch passes `structBurstWindow` (150 ms, #2401):
+  a repeat for the same (path, `DocVersion`) inside the window is dropped
+  before `RunCommand`, so no LSP request leaves and no `internal` telemetry
+  event is recorded for it. Focus and tab-switch flurries — the telemetry
+  behind #2401 saw 2–4 dispatches inside one second — therefore cost one
+  request; anything whose state really differs re-arms on the next settled
+  pass.
+- **Project switch**: the cache parks with the workspace (#2401,
+  `wsExtras.docSymbols`) instead of dying with the model `performSwitch`
+  discards, and the resumed model installs it back. Coming back to a project
+  refeeds pane, breadcrumbs and sticky scopes from memory; only a buffer
+  edited past its cached version re-requests.
 - **Cursor follow**: the same settled pass hands the active editor's cursor
   line to `Model.Follow`, which highlights the enclosing symbol (last
   containing row in depth-first order; nearest preceding row as fallback) and
