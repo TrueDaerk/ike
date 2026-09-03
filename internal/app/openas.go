@@ -10,6 +10,7 @@ import (
 	"ike/internal/fuzzy"
 	"ike/internal/host"
 	"ike/internal/layout"
+	"ike/internal/nbview"
 	"ike/internal/palette"
 	"ike/internal/pane"
 )
@@ -42,6 +43,7 @@ const (
 	openAsData     = "data"
 	openAsMarkdown = "markdown"
 	openAsGzip     = "gzip"
+	openAsNotebook = "notebook"
 )
 
 // openAsMode is the palette Mode listing the open targets. The rows are the
@@ -67,6 +69,7 @@ func (openAsMode) Results(query string, _ palette.Context) []palette.Item {
 		{"Archive", "tar, tgz, zip-like listings", openAsArchive},
 		{"Data", "SQLite, DuckDB, Parquet", openAsData},
 		{"Markdown preview", "rendered markdown", openAsMarkdown},
+		{"Notebook", "Jupyter .ipynb cells and outputs", openAsNotebook},
 		{"Gzip", "plain .gz, decompressed text", openAsGzip},
 	}
 	var items []palette.Item
@@ -142,6 +145,20 @@ func (m Model) openFileAs(msg OpenAsMsg) (tea.Model, tea.Cmd) {
 	case openAsMarkdown:
 		m.openMarkdownPaneFor(path)
 		return m, nil
+	case openAsNotebook:
+		// The parse is the content contract here (#2425): a file that is not
+		// an nbformat 4 notebook refuses before a pane exists, rather than
+		// opening one that shows only its own error.
+		data, err := os.ReadFile(path)
+		if err != nil {
+			m.host.Notify(host.Warn, "cannot read "+baseName(path)+": "+err.Error())
+			return m, nil
+		}
+		if _, err := nbview.Parse(data); err != nil {
+			m.host.Notify(host.Warn, baseName(path)+" is not a Jupyter notebook: "+err.Error())
+			return m, nil
+		}
+		return m, m.host.Dispatch(OpenNotebookMsg{Path: path})
 	case openAsGzip:
 		if len(head) < 2 || head[0] != 0x1f || head[1] != 0x8b {
 			m.host.Notify(host.Warn, baseName(path)+" is not gzip data")

@@ -80,6 +80,38 @@
 - The privacy line is unchanged: query *lengths* and prefix runes, project
   *hashes*, never text or paths.
 
+## 2026-09-03 (Jupyter notebook viewer, #2425)
+
+- **`.ipynb` files open as their cells** (`internal/nbview`, `KindNotebook`)
+  instead of as the JSON they are stored in: the `notebook.view` handler
+  claims the extension, `openNotebookPane` opens the pane the way every other
+  viewer does, and persistence/restore re-read the file. Markdown cells render
+  through the markdown preview's renderer — extracted as `preview.Render`, the
+  pane-free half of `renderMarkdown` — and code cells are highlighted under
+  `metadata.language_info.name` via `highlight.HighlightFenced`. The gutter
+  carries each cell's index, type and execution count (`2 code [1]`,
+  `6 code [ ]`).
+- **Outputs render below their cell**: streams (stderr in the warning colour),
+  `text/plain` results as `Out[3]`, `text/html` degraded to text by a small
+  tag scanner, `image/png` / `image/jpeg` as pixels through the Kitty
+  graphics path the image pane and the preview's inline images share (ids from
+  60000; metadata label where the terminal cannot composite), and error
+  outputs as `ename: evalue` plus an ANSI-stripped traceback in the error
+  colour.
+- **Navigation and actions**: `j`/`k` step cells, `g`/`G` the ends, arrows and
+  the wheel scroll rows without moving the cell cursor; `enter` folds a cell's
+  outputs; `/` (and cmd+f, `n`/`N`, cmd+g via the shared `Searchable`
+  capability) searches the cell *sources*; `e` opens the cursor cell in a
+  scratch of the notebook's language, `y`/cmd+c copies it, `o` saves an image
+  output next to the notebook without ever overwriting.
+- **External changes re-render**: the viewer holds no editor buffer, so
+  `routeWatchEvent` calls `refreshNotebooks` directly — a kernel rewriting the
+  file updates the pane, keeping the fold set and clamping the cursor. A
+  malformed notebook is an error pane naming the JSON parse error and pointing
+  at **Open File As… → Text editor**, which the chooser's new **Notebook** row
+  complements in the other direction (a notebook saved as `.json` opens as
+  cells; a plain JSON document refuses with a notification).
+
 ## 2026-09-03 (hex viewer pane and "Open file as…" chooser, #2420)
 
 - **Binary files open in a hex viewer** (`internal/hexview`, `KindHex`)

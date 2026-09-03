@@ -69,6 +69,8 @@ func (i *Instance) Searchable() Searchable {
 		return &i.dv
 	case KindHex:
 		return &i.hv
+	case KindNotebook:
+		return &i.nv
 	case KindIssues:
 		return &i.gi
 	case KindDOM:

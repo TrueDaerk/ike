@@ -41,7 +41,6 @@ import (
 	"ike/internal/config"
 	"ike/internal/coverage"
 	"ike/internal/dataview"
-	"ike/internal/hexview"
 	"ike/internal/debug"
 	"ike/internal/debugdoctor"
 	"ike/internal/debugpanel"
@@ -62,6 +61,7 @@ import (
 	"ike/internal/frecency"
 	"ike/internal/ghissues"
 	"ike/internal/help"
+	"ike/internal/hexview"
 	"ike/internal/highlight"
 	"ike/internal/histories"
 	"ike/internal/host"
@@ -80,6 +80,7 @@ import (
 	"ike/internal/marks"
 	"ike/internal/menu"
 	"ike/internal/nav"
+	"ike/internal/nbview"
 	"ike/internal/numhint"
 	"ike/internal/openapi"
 	"ike/internal/overlay"
@@ -243,8 +244,8 @@ type Model struct {
 	// openAsPath is the subject the open "Open file as…" chooser acts on
 	// (#2420): remembered when the chooser opens, read when a row activates.
 	openAsPath string
-	host          *host.Host
-	reg           *registry.Registry
+	host       *host.Host
+	reg        *registry.Registry
 	// toasts is the active notification stack (Roadmap 0130): drained from the
 	// host after every Update pass, rendered bottom-right above the status line.
 	toasts   []toast
@@ -1946,6 +1947,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below re-opening the database file (#1764)
 		} else if ids[key].Kind == "hex" {
 			continue // restored below re-opening the file for windowed reads (#2420)
+		} else if ids[key].Kind == "notebook" {
+			continue // restored below re-reading the .ipynb file (#2425)
 		} else if ids[key].Kind == "diff" {
 			continue // restored below re-reading both files (#60; fix #490)
 		} else if ids[key].Kind == "vcs" {
@@ -2234,6 +2237,14 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// reads (#2420); a vanished file restores as the pane's own
 			// error notice.
 			panes.AddHexKey(key, id.Path)
+			continue
+		}
+		if id := ids[key]; id.Kind == "notebook" {
+			// A notebook viewer restores by re-reading and re-parsing the
+			// .ipynb file (#2425); a vanished or broken file restores as the
+			// pane's own error notice.
+			panes.AddNotebookKey(key, id.Path)
+			m.trackNotebook(id.Path)
 			continue
 		}
 		if id := ids[key]; id.Kind == "es" {
@@ -6834,6 +6845,29 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.host.Notify(host.Info, "copied "+msg.What)
 		return m, nil
 
+	case OpenNotebookMsg:
+		// notebook.view (#2425): an .ipynb opens as its cells, never as the
+		// JSON it is stored in — "Open file as… → Text editor" is the way to
+		// the raw document.
+		m.openNotebookPane(msg.Path)
+		return m, nil
+
+	case nbview.CopyMsg:
+		// y / cmd+c on a notebook cell (#2425).
+		m.copyToClipboard(msg.Text)
+		m.host.Notify(host.Info, "copied "+msg.What)
+		return m, nil
+
+	case nbview.ScratchMsg:
+		// e on a notebook cell (#2425): its source as a scratch file in the
+		// notebook's language.
+		return m.notebookScratch(msg)
+
+	case nbview.SaveImageMsg:
+		// o on a notebook cell with an image output (#2425).
+		m.saveNotebookImage(msg)
+		return m, nil
+
 	case OpenDataMsg:
 		// data.view (#1764): a database file opens as a table browser,
 		// never as a raw text buffer. The database itself opens in the
@@ -10957,6 +10991,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Hex().Wheel(lines)
 			}
+		case pane.KindNotebook:
+			// The wheel scrolls the notebook's rendered rows (#2425); the
+			// cell cursor stays where it is, exactly like a keyboard scroll.
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Notebook().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Notebook().Wheel(lines)
+			}
 		case pane.KindRemote:
 			// The wheel scrolls the remote browser's entry list (#2259),
 			// exactly like the archive viewer it borrows its tree shape from.
@@ -13367,7 +13410,7 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 			} else {
 				title = m.terminalTitle(inst)
 			}
-		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindHex, pane.KindES, pane.KindDiff, pane.KindRemote:
+		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindHex, pane.KindNotebook, pane.KindES, pane.KindDiff, pane.KindRemote:
 			title = contentPaneTitle(inst)
 		case pane.KindVCS:
 			title = "VCS"
@@ -13490,6 +13533,8 @@ func contentPaneTitle(inst *pane.Instance) string {
 		return "DATA " + baseName(inst.Data().Path())
 	case pane.KindHex:
 		return "HEX " + baseName(inst.Hex().Path())
+	case pane.KindNotebook:
+		return "NOTEBOOK " + baseName(inst.Notebook().Path())
 	case pane.KindES:
 		return "ES " + inst.ES().Endpoint()
 	case pane.KindRemote:

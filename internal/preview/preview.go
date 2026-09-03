@@ -389,16 +389,22 @@ func (m *Model) render() {
 // renderMarkdown renders the source through a fresh width- and theme-bound
 // renderer. Glamour renderers are cheap to build relative to a render, and a
 // fresh one per render keeps width/theme changes trivially correct.
-func (m Model) renderMarkdown() (string, error) {
-	wrap := max(10, m.w-2)
+func (m Model) renderMarkdown() (string, error) { return Render(m.src, m.w, m.palette()) }
+
+// Render renders markdown source for a pane of the given interior width in
+// the palette's style — the pane-free half of renderMarkdown, so anything
+// else showing markdown reads exactly like the preview does. The notebook
+// viewer renders its markdown cells through it (#2425).
+func Render(src string, width int, pal *theme.Palette) (string, error) {
+	wrap := max(10, width-2)
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStyles(m.styleConfig()),
+		glamour.WithStyles(styleConfigFor(pal)),
 		glamour.WithWordWrap(wrap),
 	)
 	if err != nil {
 		return "", err
 	}
-	out, err := r.Render(m.src)
+	out, err := r.Render(src)
 	if err != nil {
 		return "", err
 	}
@@ -409,8 +415,15 @@ func (m Model) renderMarkdown() (string, error) {
 // styleConfig picks the stock glamour style off the palette's dark flag and
 // maps the heading and link colors onto the active palette, so the preview
 // reads as part of the theme instead of a foreign block.
-func (m Model) styleConfig() gansi.StyleConfig {
-	pal := m.palette()
+func (m Model) styleConfig() gansi.StyleConfig { return styleConfigFor(m.palette()) }
+
+// styleConfigFor is styleConfig for an explicit palette, so a caller without a
+// preview model (Render) themes its output the same way. A nil palette falls
+// back to the default, exactly like the model's own accessor.
+func styleConfigFor(pal *theme.Palette) gansi.StyleConfig {
+	if pal == nil {
+		pal = theme.DefaultPalette()
+	}
 	cfg := styles.LightStyleConfig
 	if pal.Dark {
 		cfg = styles.DarkStyleConfig

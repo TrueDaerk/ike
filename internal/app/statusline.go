@@ -524,6 +524,15 @@ func (m Model) statusLine() string {
 			left += "HEX │ " + filepath.Base(hv.Path()) +
 				" │ " + strconv.FormatInt(hv.Cursor(), 10) +
 				" (0x" + strconv.FormatInt(hv.Cursor(), 16) + ")"
+		case inst.Kind() == pane.KindNotebook:
+			// The cell cursor's position (#2425) — the notebook counterpart
+			// of the editor's line:column.
+			nv := inst.Notebook()
+			left += "NOTEBOOK │ " + filepath.Base(nv.Path()) +
+				" │ cell " + strconv.Itoa(nv.Cursor()+1) + "/" + strconv.Itoa(len(nv.Cells()))
+			if l := nv.Lang(); l != "" {
+				left += " │ " + l
+			}
 		case inst.Kind() == pane.KindDebug:
 			left += "DEBUG"
 		case inst.Kind() == pane.KindProblems:

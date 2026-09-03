@@ -93,6 +93,9 @@ func (m *Model) routeWatchEvent(msg watch.EventMsg) tea.Cmd {
 		// changed: re-decompress it here. The command it returns re-runs
 		// the parse the fresh content needs (#1853).
 		hookCmds = append(hookCmds, m.refreshGzipBuffers(msg.Path))
+		// A notebook viewer holds no buffer either (#2425): a kernel writing
+		// the .ipynb re-renders the pane here, or nowhere.
+		m.refreshNotebooks(msg.Path)
 	}
 	// A merged rotation set's buffer path names no file either (#1996): its
 	// followers tail the set's newest member, so the event is routed by

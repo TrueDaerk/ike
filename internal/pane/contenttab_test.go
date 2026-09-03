@@ -31,6 +31,7 @@ func viewerPanes(t *testing.T, r *Registry) map[Kind]string {
 	arch := tmpFile(t, "a.zip", "zip")
 	db := tmpFile(t, "d.sqlite", "db")
 	bin := tmpFile(t, "b.bin", "\x00\x01\x02")
+	nb := tmpFile(t, "n.ipynb", `{"cells": [], "nbformat": 4, "metadata": {}}`)
 	return map[Kind]string{
 		KindMarkdown: r.AddMarkdownPreview(md),
 		KindImage:    r.AddImagePreview(img),
@@ -38,6 +39,7 @@ func viewerPanes(t *testing.T, r *Registry) map[Kind]string {
 		KindArchive:  r.AddArchiveView(arch),
 		KindData:     r.AddDataView(db),
 		KindHex:      r.AddHexView(bin),
+		KindNotebook: r.AddNotebookView(nb),
 	}
 }
 
@@ -45,7 +47,7 @@ func viewerPanes(t *testing.T, r *Registry) map[Kind]string {
 // kinds are in; the explorer, the singleton tool windows — the HTTP response
 // viewer included (#2042) — and the merge view stay out.
 func TestKindTabbable(t *testing.T) {
-	in := []Kind{KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindHex}
+	in := []Kind{KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindHex, KindNotebook}
 	out := []Kind{KindExplorer, KindVCS, KindDebug, KindProblems, KindStructure, KindUsages, KindBreakpoints, KindMerge, KindHTTP}
 	for _, k := range in {
 		if !KindTabbable(k) {
