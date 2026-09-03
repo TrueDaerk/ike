@@ -52,7 +52,7 @@ func TestPrefixRouting(t *testing.T) {
 		{"", cmd, ""},
 	}
 	for _, tc := range cases {
-		p.query = tc.query
+		p.query.Set(tc.query)
 		m, body := p.mode()
 		if m != tc.wantMode {
 			t.Errorf("query %q: wrong mode", tc.query)
@@ -490,8 +490,8 @@ func TestTabAsksModeToComplete(t *testing.T) {
 	p.Open(Context{})
 	p.Update(runes("#~/Dev"))
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if p.query != "#~/Development/" {
-		t.Fatalf("tab must extend the query body keeping the prefix, got %q", p.query)
+	if p.query.Text != "#~/Development/" {
+		t.Fatalf("tab must extend the query body keeping the prefix, got %q", p.query.Text)
 	}
 }
 
@@ -501,8 +501,8 @@ func TestTabInertWithoutCompletion(t *testing.T) {
 	p.Open(Context{})
 	p.Update(runes("#~/zzz"))
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if p.query != "#~/zzz" {
-		t.Fatalf("tab with nothing to complete must be inert, got %q", p.query)
+	if p.query.Text != "#~/zzz" {
+		t.Fatalf("tab with nothing to complete must be inert, got %q", p.query.Text)
 	}
 }
 
@@ -512,8 +512,8 @@ func TestTabInertOnNonCompleterMode(t *testing.T) {
 	p.Open(Context{})
 	p.Update(runes(":wri"))
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if p.query != ":wri" {
-		t.Fatalf("tab on a non-completer mode must be inert, got %q", p.query)
+	if p.query.Text != ":wri" {
+		t.Fatalf("tab on a non-completer mode must be inert, got %q", p.query.Text)
 	}
 }
 
@@ -531,11 +531,11 @@ func TestTabCompletesFromSelectionInAnchoredFinder(t *testing.T) {
 		t.Fatal("query must produce a candidate to complete from")
 	}
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if p.query != "internal/app/app.go" {
-		t.Fatalf("tab must adopt the selected candidate, got %q", p.query)
+	if p.query.Text != "internal/app/app.go" {
+		t.Fatalf("tab must adopt the selected candidate, got %q", p.query.Text)
 	}
-	if p.cur != len([]rune(p.query)) {
-		t.Fatalf("cursor = %d, want end of the completed query", p.cur)
+	if p.query.Cur != len([]rune(p.query.Text)) {
+		t.Fatalf("cursor = %d, want end of the completed query", p.query.Cur)
 	}
 	if len(p.items) == 0 || p.items[0].Title != "internal/app/app.go" {
 		t.Fatalf("completed query must still select the file, got %v", p.items)
@@ -557,8 +557,8 @@ func TestTabCompletesFromSelectionDescendsDirectory(t *testing.T) {
 	p.Update(runes("outside"))
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	wantQuery := filepath.Join(root, "outside-dir") + string(filepath.Separator)
-	if p.query != wantQuery {
-		t.Fatalf("tab on a directory row = %q, want %q", p.query, wantQuery)
+	if p.query.Text != wantQuery {
+		t.Fatalf("tab on a directory row = %q, want %q", p.query.Text, wantQuery)
 	}
 	if len(p.items) != 1 || !strings.HasSuffix(p.items[0].Title, "inner"+string(filepath.Separator)) {
 		t.Fatalf("completed directory query must list its contents, got %v", p.items)
@@ -574,10 +574,10 @@ func TestSideModeTabStillTogglesColumns(t *testing.T) {
 	p.sideItems = []Item{{Title: "left"}}
 	p.Update(runes("a"))
 	p.sideItems = []Item{{Title: "left"}}
-	before := p.query
+	before := p.query.Text
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if !p.sideFocus || p.query != before {
-		t.Fatalf("side-column tab must toggle focus, not complete: focus=%v query=%q", p.sideFocus, p.query)
+	if !p.sideFocus || p.query.Text != before {
+		t.Fatalf("side-column tab must toggle focus, not complete: focus=%v query=%q", p.sideFocus, p.query.Text)
 	}
 }
 
@@ -594,19 +594,19 @@ func TestCursorEditing(t *testing.T) {
 	p.Update(runes("helo"))
 	p.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	p.Update(runes("l"))
-	if p.query != "hello" {
-		t.Fatalf("insert at cursor: query = %q, want %q", p.query, "hello")
+	if p.query.Text != "hello" {
+		t.Fatalf("insert at cursor: query = %q, want %q", p.query.Text, "hello")
 	}
 	p.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
 	p.Update(runes(" world"))
 	p.Update(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt})
-	if p.query != "hello " {
-		t.Fatalf("word delete: query = %q, want %q", p.query, "hello ")
+	if p.query.Text != "hello " {
+		t.Fatalf("word delete: query = %q, want %q", p.query.Text, "hello ")
 	}
 	p.Update(tea.KeyPressMsg{Code: tea.KeyHome})
 	p.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
-	if p.query != "ello " {
-		t.Fatalf("forward delete at home: query = %q, want %q", p.query, "ello ")
+	if p.query.Text != "ello " {
+		t.Fatalf("forward delete at home: query = %q, want %q", p.query.Text, "ello ")
 	}
 }
 

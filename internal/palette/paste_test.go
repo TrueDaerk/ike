@@ -30,11 +30,11 @@ func TestPasteIntoQuery(t *testing.T) {
 	if _, ok := p.Paste("lo world"); !ok {
 		t.Fatal("Paste reported not handled")
 	}
-	if p.query != "hello world" {
-		t.Fatalf("query = %q, want %q", p.query, "hello world")
+	if p.query.Text != "hello world" {
+		t.Fatalf("query = %q, want %q", p.query.Text, "hello world")
 	}
-	if p.cur != len([]rune("hello world")) {
-		t.Fatalf("cursor = %d, want it after the pasted text", p.cur)
+	if p.query.Cur != len([]rune("hello world")) {
+		t.Fatalf("cursor = %d, want it after the pasted text", p.query.Cur)
 	}
 }
 
@@ -46,8 +46,8 @@ func TestPasteAtCursor(t *testing.T) {
 	if _, ok := p.Paste("ell"); !ok {
 		t.Fatal("Paste reported not handled")
 	}
-	if p.query != "hello" {
-		t.Fatalf("query = %q, want %q", p.query, "hello")
+	if p.query.Text != "hello" {
+		t.Fatalf("query = %q, want %q", p.query.Text, "hello")
 	}
 }
 
@@ -59,8 +59,8 @@ func TestPasteKeepsPrefix(t *testing.T) {
 	if _, ok := p.Paste(".go"); !ok {
 		t.Fatal("Paste reported not handled")
 	}
-	if p.query != "@main.go" {
-		t.Fatalf("query = %q, want the prefix kept", p.query)
+	if p.query.Text != "@main.go" {
+		t.Fatalf("query = %q, want the prefix kept", p.query.Text)
 	}
 }
 
@@ -77,8 +77,8 @@ func TestPasteFlattensMultiline(t *testing.T) {
 		if _, ok := p.Paste(tc.in); !ok {
 			t.Fatalf("Paste(%q) reported not handled", tc.in)
 		}
-		if p.query != tc.want {
-			t.Fatalf("Paste(%q): query = %q, want %q", tc.in, p.query, tc.want)
+		if p.query.Text != tc.want {
+			t.Fatalf("Paste(%q): query = %q, want %q", tc.in, p.query.Text, tc.want)
 		}
 	}
 }
@@ -91,7 +91,7 @@ func TestPasteEmptyIsNoOp(t *testing.T) {
 	if _, ok := p.Paste(" \n\t\n "); ok {
 		t.Fatal("Paste of a blank block should report not handled")
 	}
-	if p.query != "keep" {
-		t.Fatalf("query = %q, want it unchanged", p.query)
+	if p.query.Text != "keep" {
+		t.Fatalf("query = %q, want it unchanged", p.query.Text)
 	}
 }
