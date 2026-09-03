@@ -31,6 +31,7 @@ var noCounterpart = map[string]string{
 	"issues.selectPrev":                "IKE-only concept (#2400): the issues window has no JetBrains counterpart",
 	"issues.selectNext":                "IKE-only concept (#2400): the issues window has no JetBrains counterpart",
 	"editor.copyDocPath":               "JetBrains copies file references, not a path inside a JSON/YAML document",
+	"editor.sortLines":                 "IntelliJ ships no Sort Lines keymap action (#2417); it lives in the String Manipulation plugin, which an exported keymap does not carry",
 	"json.jqQueryView":                 "IKE-only concept (#2032): the inline jq playground has no JetBrains equivalent",
 	"markdown.preview":                 "no default JetBrains keymap action",
 	"search.open":                      "IKE-only concept (#2409): JetBrains' Find is the editor find, already mapped to editor.find; the pane-wide chord has no keymap action",

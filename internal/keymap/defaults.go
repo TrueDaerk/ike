@@ -573,6 +573,11 @@ var jetbrainsRows = []row{
 	// Soft wrap is the one view toggle flipped by the hour; the other
 	// view.toggle* commands stay palette/View-menu affairs.
 	{"alt+shift+w", "view.toggleWrap", "Toggle soft wrap", Editor, "Editor (#2305)"},
+	// Sort Lines (#2417) has no JetBrains chord to mirror; cmd+alt+shift+s is
+	// already scratch.newFromSelection (#2339), so the plain sort takes the
+	// free alt+shift+s next to the other editor-scoped alt+shift keys. Its
+	// variants stay palette-only (keybind_audit_test.go).
+	{"alt+shift+s", "editor.sortLines", "Sort lines", Editor, "Editor (#2417)"},
 	// The layout family's third F12 chord: shift+f12 restores the default
 	// layout, cmd+shift+f12 hides all tool windows, alt+shift+f12 opens the
 	// saved-layout picker.

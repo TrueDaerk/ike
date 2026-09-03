@@ -80,6 +80,18 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// and the label key moves the caret there.
 			action("editor.labelJump", "Jump to Visible Text (Label Jump)", "label_jump", "gs"),
 			action("editor.duplicateLine", "Duplicate Line", "duplicate_line", ""),
+			// Line-set commands (#2417): the selection's lines — or the whole
+			// buffer without a selection — reordered or thinned in one undo
+			// step, the palette/keybind half of the ":sort" family. The doc
+			// hints name the ex-command each flavour mirrors.
+			action("editor.sortLines", "Sort Lines", "sort_lines", ":sort"),
+			action("editor.sortLinesIgnoreCase", "Sort Lines (Ignore Case)", "sort_lines_ignore_case", ":sort i"),
+			action("editor.sortLinesNatural", "Sort Lines (Natural Order)", "sort_lines_natural", ""),
+			action("editor.sortLinesDescending", "Sort Lines (Descending)", "sort_lines_descending", ":sort!"),
+			action("editor.sortLinesByLength", "Sort Lines by Length", "sort_lines_by_length", ""),
+			action("editor.uniqueLines", "Remove Duplicate Lines", "unique_lines", ""),
+			action("editor.reverseLines", "Reverse Lines", "reverse_lines", ""),
+			action("editor.shuffleLines", "Shuffle Lines", "shuffle_lines", ""),
 			action("editor.caret.addNext", "Add Caret at Next Occurrence", "caret_add_next", ""),
 			action("editor.caret.addAll", "Add Carets at All Occurrences", "caret_add_all", ""),
 			action("editor.caret.addAbove", "Clone Caret Above", "caret_add_above", ""),

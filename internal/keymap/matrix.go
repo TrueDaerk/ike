@@ -84,6 +84,7 @@ var reachableAlternatives = map[string]string{
 	"editor.caret.addBelow":            "palette",
 	"editor.selection.extend":          "palette",
 	"editor.selection.shrink":          "palette",
+	"editor.sortLines":                 "vim :sort / Edit menu",
 	"editor.escapeSelection":           "palette",
 	"editor.unescapeSelection":         "palette",
 	"debug.evaluate":                   "palette / Run menu",

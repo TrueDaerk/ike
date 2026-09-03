@@ -37,6 +37,15 @@ func TestExSortRangeLeavesRestUntouched(t *testing.T) {
 	}
 }
 
+// "%" is the explicit spelling of the whole-buffer default (#2417).
+func TestExSortWholeFileRange(t *testing.T) {
+	m, _ := loaded(t, "pear\napple\ncherry\n")
+	m = runEx(m, "%sort")
+	if got, want := bufLines(m), "apple\ncherry\npear"; got != want {
+		t.Fatalf(":%%sort = %q, want %q", got, want)
+	}
+}
+
 func TestExSortVisualRange(t *testing.T) {
 	m, _ := loaded(t, "z\nc\na\nb\n")
 	m.visualStart, m.visualEnd = 1, 3
