@@ -58,7 +58,7 @@ func (m *Model) seedFilter(expr string) {
 		// unfiltered rather than half filtered.
 		return
 	}
-	m.fInput, m.fCur = spec.Match, len([]rune(spec.Match))
+	m.fInput.Set(spec.Match)
 	m.labelSel = map[string]bool{}
 	m.labelAll = false // an expression's labels are any-of (#2112)
 	for _, name := range spec.Labels {
@@ -136,7 +136,7 @@ func (m *Model) matchesSpec(spec issuefilter.Spec) bool {
 	if !ok {
 		state = FilterOpen
 	}
-	if m.state != state || m.fInput != spec.Match || m.labelAll {
+	if m.state != state || m.fInput.Text != spec.Match || m.labelAll {
 		return false
 	}
 	if spec.Sort != "" && m.sort != parseSort(spec.Sort) {
@@ -188,7 +188,7 @@ func (m *Model) applySaved(i int) tea.Cmd {
 		spec = m.saved[i-1].spec
 	}
 	m.filterTouched = true
-	m.fInput, m.fCur = spec.Match, len([]rune(spec.Match))
+	m.fInput.Set(spec.Match)
 	m.labelSel = map[string]bool{}
 	m.labelAll = false // an expression's labels are any-of (#2112)
 	for _, name := range spec.Labels {

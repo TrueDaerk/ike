@@ -430,7 +430,7 @@ func (m *Model) openCommentPrompt() tea.Cmd {
 		return nil
 	}
 	m.ov, m.editFor = ovComment, is.Number
-	m.cmInput, m.cmCur = "", 0
+	m.cmInput.Clear()
 	return nil
 }
 
@@ -440,20 +440,18 @@ func (m *Model) commentPromptKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc":
 		m.closeOverlay()
-		m.cmInput, m.cmCur = "", 0
+		m.cmInput.Clear()
 	case "enter":
-		body := strings.TrimSpace(m.cmInput)
+		body := strings.TrimSpace(m.cmInput.Text)
 		m.closeOverlay()
-		m.cmInput, m.cmCur = "", 0
+		m.cmInput.Clear()
 		if body == "" {
 			m.mutErr = "empty comment — nothing was changed"
 			return nil
 		}
 		return m.stateMutation(body)
 	default:
-		if out, ncur, handled, _ := ui.EditKey(msg, m.cmInput, m.cmCur); handled {
-			m.cmInput, m.cmCur = out, ncur
-		}
+		m.cmInput.Key(msg)
 	}
 	return nil
 }
