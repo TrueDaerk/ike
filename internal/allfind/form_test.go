@@ -45,7 +45,7 @@ func confirmMsg(t *testing.T, cmd tea.Cmd) ConfirmMsg {
 
 func TestFormOpensWithRememberedState(t *testing.T) {
 	f := openedForm("")
-	if !f.IsOpen() || f.query != "remembered" || f.include != "*.go" || f.exclude != "vendor/*" {
+	if !f.IsOpen() || f.query.Text != "remembered" || f.include.Text != "*.go" || f.exclude.Text != "vendor/*" {
 		t.Fatalf("state not seeded: %+v", f.State())
 	}
 	if !f.preselect {
@@ -53,20 +53,20 @@ func TestFormOpensWithRememberedState(t *testing.T) {
 	}
 	// The first typed character replaces the preselected query wholesale.
 	f.Update(typed("x"))
-	if f.query != "x" {
-		t.Fatalf("typed char must replace the prefill, got %q", f.query)
+	if f.query.Text != "x" {
+		t.Fatalf("typed char must replace the prefill, got %q", f.query.Text)
 	}
 }
 
 func TestFormSelectionPrefillOutranksRemembered(t *testing.T) {
 	f := openedForm("needle")
-	if f.query != "needle" {
-		t.Fatalf("selection must prefill the query, got %q", f.query)
+	if f.query.Text != "needle" {
+		t.Fatalf("selection must prefill the query, got %q", f.query.Text)
 	}
 	// Multi-line selections prefill nothing.
 	f2 := openedForm("a\nb")
-	if f2.query != "remembered" {
-		t.Fatalf("line-spanning selection must keep the remembered query, got %q", f2.query)
+	if f2.query.Text != "remembered" {
+		t.Fatalf("line-spanning selection must keep the remembered query, got %q", f2.query.Text)
 	}
 }
 
@@ -145,10 +145,10 @@ func TestFormTogglesAndEditKeys(t *testing.T) {
 	}
 	// cmd+backspace clears to line start via ui.EditKey (#2394).
 	f.preselect = false
-	f.cur = len([]rune(f.query))
+	f.query.Cur = f.query.Len()
 	f.Update(key(tea.KeyBackspace, tea.ModSuper))
-	if f.query != "" {
-		t.Fatalf("super+backspace must clear the query, got %q", f.query)
+	if f.query.Text != "" {
+		t.Fatalf("super+backspace must clear the query, got %q", f.query.Text)
 	}
 }
 
@@ -178,7 +178,7 @@ func TestFormPasteReplacesPrefill(t *testing.T) {
 	if !f.Paste("pasted") {
 		t.Fatal("paste not handled")
 	}
-	if f.query != "pasted" {
-		t.Fatalf("paste must replace the preselected query, got %q", f.query)
+	if f.query.Text != "pasted" {
+		t.Fatalf("paste must replace the preselected query, got %q", f.query.Text)
 	}
 }
