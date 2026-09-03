@@ -1,7 +1,7 @@
 ---
 type: concept
 title: jq & yq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, and inserting a picked row into the query line — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the find chord opens the result buffer's search from either focus and leaves the keyboard there for `n`/`N`; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, and inserting a picked row into the query line — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, yaml, jq, yq, tools, inline, editor, http, completion, folding]
 timestamp: 2026-09-01T00:00:00Z
@@ -742,7 +742,8 @@ above win):
 | `alt+↑` / `alt+↓` | walk the history from any row of the multi-line view |
 | `home` / `end` | ends of the program — of the caret's **row** in the multi-line view |
 | `tab` | move the keyboard into the result buffer |
-| `cmd+f` | search the **result buffer** from here (`editor.find`) — the keyboard moves in with it |
+| `cmd+f` | search the **result buffer** from here (`editor.find`) — the keyboard moves in with it, and `esc` brings it back |
+| `cmd+g` / `cmd+shift+g` | step the result's matches without leaving the query line (`search.nextMatch` / `search.prevMatch`) |
 | `ctrl+alt+e` | toggle the [multi-line view](#the-multi-line-view) (`json.jqQueryView`) |
 | `pgup` / `pgdn` | page the result buffer without leaving the query line |
 | `ctrl+s` | save the program as a **named filter** (`json.jqSaveFilter`) |
@@ -754,7 +755,8 @@ above win):
 | `esc esc` | close **and** open the command palette (#2237) |
 | `f1` | the cheatsheet, opened on the playground's own context (#2237) |
 
-`ctrl+alt+e`, `ctrl+g` and `cmd+f` work from the result buffer too.
+`ctrl+alt+e`, `ctrl+g`, `cmd+f` and the match-step chords work from the result
+buffer too.
 
 Result buffer (after `tab`): the **full editor keymap** — motions, search,
 folds (`za` / `zc` / `zo` / `zM` / `zR`, see
@@ -834,22 +836,61 @@ thing from both focuses: it moves the keyboard into the result buffer and sends
 the buffer an `editor.ActionMsg{Action: "find"}` — the very action `/` triggers
 there.
 
-**The focus goes into the result buffer, and stays there.** It has to: the
-search prompt needs the typing, and `n` / `N` afterwards are the result
-buffer's keys. Bouncing back to the query line after the first match would make
-the shortcut useful for exactly one match and then wrong for every following
-one, and it would leave the two starting focuses behaving differently. So
-closing the search with `esc` also leaves the keyboard in the result buffer —
-the same place, whichever focus the search was started from — and one more
-`esc` from resting normal mode closes the mode as always. `tab` is the way
-back to the query line, unchanged.
+**The focus goes into the result buffer while the search is being made.** It
+has to: the search prompt needs the typing. Bouncing back to the query line
+mid-prompt would send the pattern into the program.
+
+### `esc` hands the keyboard back to the query line
+
+#2411, correcting where the round trip ends. The chord's whole purpose is a
+**lookup**: "what was that field called again?" is asked while writing a
+program, and the answer belongs back in the query line. Leaving the keyboard
+in the result buffer afterwards (as #2383 first did) made the user pay a `tab`
+for the return trip the chord had promised to save.
+
+`playState.findQuery` marks a search the find chord opened **from the query
+line**; `setBufFocus` clears it, so every other focus change (a `tab`, a click,
+a paste) ends the trip and `beginPlayResultSearch` re-arms it right after
+moving the focus itself. With it armed, `esc` in the result buffer runs
+`endPlayFindReturnToQuery`:
+
+- an **open prompt** (or a visual selection made while searching) gets the
+  `esc` first, so the editor closes it exactly as it would in any buffer;
+- a **committed** search does *not* forward the key — a normal-mode `esc` is
+  vim's `:noh` and would drop the very highlights the user came back to read;
+- either way `setBufFocus(false)` returns the keyboard to the query line, whose
+  program and caret were never touched: the query line's state lives in
+  `playState`, not in a widget that lost focus.
+
+The match highlights therefore **stay painted** while the query line is edited
+again — `searchHLQuery` does not care whether the buffer is focused — and live
+exactly until the result they were found in is replaced: `syncPlayResultBuffer`
+calls the editor's `ClearSearch` right after `ShowReadOnly`, so matches of the
+previous output are never left over the next one.
+
+A search the user started **in** the result buffer is unaffected: `findQuery`
+is false there, so `esc` keeps its old meaning — close the prompt, then close
+the mode from resting normal mode.
+
+### `cmd+g` / `cmd+shift+g` step the result's matches
+
+#2411. The match-step chords are **Global** bindings, so in the playground they
+would dispatch `MatchStepMsg` against the *hosting pane* — which shows the
+document the playground **queries**, not its result. `playMatchStepChord`
+recognizes them off the live table (both `cmd+g` / `cmd+shift+g` and the older
+`f3` / `shift+f3`), and `stepPlayResultSearch` repeats the result buffer's
+committed search instead, from **either** focus and without moving it: stepping
+from the query line keeps the program and its caret in hand, which is the point
+of the round trip. With nothing committed the chords fall through to their
+ordinary Global meaning, so find-in-path stepping is not swallowed.
 
 `/` in the result buffer is untouched: the chord is a shortcut past the `tab`,
 not a replacement. The buffer stays read-only (#1762) — a search is a motion —
 and the program, the history and the result are not involved at all. The
-cheatsheet lists the chord in **both** focus tables (`playhelp.go`), resolved
-live from the binding table like the chords in the third group, since a key
-that works from two places and is documented in neither is a key nobody finds.
+cheatsheet lists the chord — and the two match-step chords — in **both** focus
+tables (`playhelp.go`), resolved live from the binding table like the chords in
+the third group, since a key that works from two places and is documented in
+neither is a key nobody finds.
 
 ### The cheatsheet knows the playground
 

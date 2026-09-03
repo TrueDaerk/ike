@@ -63,7 +63,7 @@ var playResultHelpKeys = []struct{ Key, Title string }{
 	{"ctrl+y", "Copy the whole result"},
 	{"ctrl+o", "Open the result as a scratch file"},
 	{"ctrl+g", "Open the language cheatsheet"},
-	{"esc", "Close the playground from resting normal mode"},
+	{"esc", "Close the playground from resting normal mode — back to the query line after a find opened from there"},
 	{"esc esc", "Close and open the command palette"},
 }
 
@@ -85,7 +85,7 @@ func (m Model) playgroundHelpGroups() []help.Group {
 	if chord, ok := m.playChordFor("editor.find"); ok {
 		query.Entries = append(query.Entries, help.Entry{
 			ID:       "play.query.find",
-			Title:    "Search the result buffer — moves the keyboard there with it",
+			Title:    "Search the result buffer — esc comes back to the query line",
 			Shortcut: chord,
 		})
 		result.Entries = append(result.Entries, help.Entry{
@@ -93,6 +93,19 @@ func (m Model) playgroundHelpGroups() []help.Group {
 			Title:    "Search in the result — the same as \"/\", from either focus",
 			Shortcut: chord,
 		})
+	}
+	// The match-step chords (#2411) walk the result's search from either
+	// focus, so both tables name them — live, like the find chord.
+	for _, ms := range []struct{ command, title string }{
+		{"search.nextMatch", "Next match in the result — from either focus"},
+		{"search.prevMatch", "Previous match in the result — from either focus"},
+	} {
+		chord, ok := m.playChordFor(ms.command)
+		if !ok {
+			continue
+		}
+		query.Entries = append(query.Entries, help.Entry{ID: "play.query." + ms.command, Title: ms.title, Shortcut: chord})
+		result.Entries = append(result.Entries, help.Entry{ID: "play.result." + ms.command, Title: ms.title, Shortcut: chord})
 	}
 	groups := []help.Group{query, result}
 	if extra := m.playgroundChordHelp(); len(extra.Entries) > 0 {
