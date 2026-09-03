@@ -64,6 +64,34 @@ palette; `editor.markdown_rendering` sets the default.
 In the separate **Markdown preview** pane, `/` — or ++cmd+f++ / ++ctrl+f++ —
 searches the rendered document, and `n` / `N` step through the matches.
 
+### Mermaid diagrams in the preview
+
+The preview draws ```` ```mermaid ```` fences instead of printing them. It
+needs an external renderer, which IKE never installs for you:
+
+```sh
+go install github.com/AlexanderGrooff/mermaid-ascii@latest   # preview.diagrams = ascii
+npm install -g @mermaid-js/mermaid-cli                       # preview.diagrams = image
+```
+
+`preview.diagrams` picks what happens:
+
+| Value | Effect |
+| --- | --- |
+| `ascii` *(default)* | The fence is rendered to text by `mermaid-ascii` and replaces the code block. |
+| `image` | `mmdc` renders a PNG at the pane's width and it is drawn as pixels on a terminal with Kitty graphics; anywhere else this behaves like `ascii`. |
+| `off` | Fences stay syntax-highlighted code blocks. |
+
+Rendering runs in the background and is cached per fence, so typing around a
+diagram never re-runs the renderer — only editing the diagram itself does.
+Until the picture arrives the code block stays put. If the renderer is not
+installed, the block keeps a one-line hint naming what to install (said once
+per session as a notification, not once per keystroke); if the renderer
+rejects the diagram, its error appears under the block.
+
+Installed a renderer while IKE was already running? **Re-render Preview
+Diagrams** from the palette throws away every cached picture and tries again.
+
 ## CSV and TSV
 
 `editor.csv_rendering` turns a delimited file into a table: fields aligned into

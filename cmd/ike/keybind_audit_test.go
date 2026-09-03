@@ -85,6 +85,9 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// typed flavour is the palette doorway on every platform.
 	{"pane.focus", reasonPlatformChord},
 	{"pane.focusByIndex", reasonFlavour},
+	// #2421's diagram fences render by themselves and cache; the manual
+	// re-render is for the day a renderer is installed mid-session.
+	{"preview.rerenderDiagrams", reasonOccasional},
 	{"keymap.", reasonOccasional},                // keymap doctor and the JetBrains import
 	{"diag.", reasonOccasional},                  // heap dump and memory statistics
 	{"json.jqFilters", reasonPaneKey},            // the playground's ctrl+l library

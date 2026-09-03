@@ -91,6 +91,19 @@ type Config struct {
 	// Ansible holds Ansible integration settings (#2293): the vault password
 	// file transparent vault editing decrypts with.
 	Ansible Ansible `toml:"ansible"`
+	// Preview holds the markdown preview's settings (#2421): how fenced
+	// diagram blocks (mermaid today) are rendered inside the pane.
+	Preview Preview `toml:"preview"`
+}
+
+// Preview holds the markdown preview pane's settings (#2421). Diagrams picks
+// how a fenced diagram block is rendered: "ascii" shells out to a text
+// renderer (mermaid-ascii) and shows its output in place of the fence,
+// "image" renders a PNG through mermaid-cli and embeds it over the Kitty
+// graphics path — falling back to ascii wherever the terminal cannot show
+// pixels — and "off" leaves every fence the code block it is without them.
+type Preview struct {
+	Diagrams string `toml:"diagrams"`
 }
 
 // Ansible holds the Ansible Vault integration settings (#2293).

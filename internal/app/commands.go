@@ -342,6 +342,11 @@ type DiffFilesMsg struct{}
 // Dispatched by markdown.preview.
 type MarkdownPreviewMsg struct{}
 
+// RerenderDiagramsMsg asks every open markdown preview to forget its cached
+// diagram renderings and run the external renderers again (#2421). Dispatched
+// by preview.rerenderDiagrams.
+type RerenderDiagramsMsg struct{}
+
 // ToggleExplorerFocusMsg asks the root model to move focus to the explorer, or
 // back to the active editor when the explorer already holds focus (the
 // terminal approximation of JetBrains' Cmd+1 tool-window toggle). Dispatched
@@ -570,6 +575,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("file.move", "Move File", MoveFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}),
+			appCommand("preview.rerenderDiagrams", "Re-render Preview Diagrams", RerenderDiagramsMsg{}),
 			appCommand("editor.setBufferLanguage", "Treat Buffer as…", ShowBufferLangMsg{}),
 			appCommand("editor.materializeBuffer", "Materialize Buffer to File", MaterializeBufferMsg{}),
 			appCommand("diff.files", "Diff Two Files…", DiffFilesMsg{}),
