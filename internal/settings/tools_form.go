@@ -22,15 +22,15 @@ type toolForm struct {
 	host SubPanelHost
 	idx  int // entry being edited, -1 for a new one
 
-	field int
-	cur   int // cursor within the focused field (#888)
-	form  [toolFieldCount]string
-	note  string
+	fieldNav // focused field + cursor within it (#888, #2466)
+	form     [toolFieldCount]string
+	note     string
 }
 
 // newToolForm seeds the form from the entry at idx (-1 = blank).
 func newToolForm(page *ToolsPage, host SubPanelHost, idx int) *toolForm {
 	f := &toolForm{page: page, host: host, idx: idx}
+	f.fieldNav = newFieldNav(toolFieldCount, func(i int) string { return f.form[i] })
 	if idx >= 0 {
 		e := page.entries()[idx]
 		multiple, global := "", ""
@@ -73,12 +73,7 @@ func (f *toolForm) Update(key tea.KeyPressMsg) tea.Cmd {
 		f.host.Pop()
 	case key.Code == tea.KeyEnter:
 		return f.save()
-	case key.Code == tea.KeyTab && key.Mod&tea.ModShift != 0, key.Code == tea.KeyUp:
-		f.field = (f.field + toolFieldCount - 1) % toolFieldCount
-		f.cur = len([]rune(f.form[f.field]))
-	case key.Code == tea.KeyTab, key.Code == tea.KeyDown:
-		f.field = (f.field + 1) % toolFieldCount
-		f.cur = len([]rune(f.form[f.field]))
+	case f.fieldNav.Update(key): // shared field motion (#2466)
 	default:
 		// Shared cursor input (#888).
 		tf := newTextFieldAt(f.form[f.field], f.cur)

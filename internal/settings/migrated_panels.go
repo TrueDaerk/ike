@@ -541,14 +541,14 @@ type debugMapForm struct {
 	host SubPanelHost
 	idx  int
 
-	field int
-	cur   int
-	form  [mapFieldCount]string
-	note  string
+	fieldNav // focused field + cursor within it (#888, #2466)
+	form     [mapFieldCount]string
+	note     string
 }
 
 func newDebugMapForm(page *DebugMapPage, host SubPanelHost, idx int) *debugMapForm {
 	f := &debugMapForm{page: page, host: host, idx: idx}
+	f.fieldNav = newFieldNav(mapFieldCount, func(i int) string { return f.form[i] })
 	if idx >= 0 {
 		e := page.entries()[idx]
 		f.form = [mapFieldCount]string{e.Server, e.Local}
@@ -578,12 +578,7 @@ func (f *debugMapForm) Update(key tea.KeyPressMsg) tea.Cmd {
 		f.host.Pop()
 	case key.Code == tea.KeyEnter:
 		return f.save()
-	case key.Code == tea.KeyTab && key.Mod&tea.ModShift != 0, key.Code == tea.KeyUp:
-		f.field = (f.field + mapFieldCount - 1) % mapFieldCount
-		f.cur = len([]rune(f.form[f.field]))
-	case key.Code == tea.KeyTab, key.Code == tea.KeyDown:
-		f.field = (f.field + 1) % mapFieldCount
-		f.cur = len([]rune(f.form[f.field]))
+	case f.fieldNav.Update(key): // shared field motion (#2466)
 	default:
 		tf := newTextFieldAt(f.form[f.field], f.cur)
 		if handled, _ := tf.Handle(key); handled {
@@ -595,10 +590,7 @@ func (f *debugMapForm) Update(key tea.KeyPressMsg) tea.Cmd {
 
 // Click focuses a field row.
 func (f *debugMapForm) Click(_, y int) tea.Cmd {
-	if y >= 0 && y < mapFieldCount {
-		f.field = y
-		f.cur = len([]rune(f.form[f.field]))
-	}
+	f.fieldNav.Focus(y)
 	return nil
 }
 

@@ -72,20 +72,16 @@ func (t *ESPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if listNav(key.String(), &t.sel, len(t.entries()), t.navPageSize()) {
 		return nil
 	}
+	// Shared add·edit·delete actions (#2466); the scope key is this page's own.
+	if pageActionKey(key.String(), pageActions{
+		host: t.host, pal: t.pal, sel: t.sel, n: len(t.entries()),
+		open:    t.openForm,
+		confirm: func(idx int) string { return "delete the endpoint " + t.entries()[idx].Name },
+		remove:  t.deleteEntry,
+	}) {
+		return nil
+	}
 	switch key.String() {
-	case "a":
-		t.openForm(-1)
-	case "enter":
-		if t.sel >= 0 && t.sel < len(t.entries()) {
-			t.openForm(t.sel)
-		}
-	case "d":
-		if t.sel >= 0 && t.sel < len(t.entries()) && t.host != nil {
-			idx, name := t.sel, t.entries()[t.sel].Name
-			t.host.Push(newConfirm(t.host, "delete the endpoint "+name, "Delete", t.pal, func() tea.Cmd {
-				return t.deleteEntry(idx)
-			}))
-		}
 	case "s":
 		// Flip the write target. Only future writes are affected — nothing is
 		// moved between layers, mirroring how the schema pages pick a scope.
@@ -220,20 +216,7 @@ func (t *ESPage) View(w, h int) string {
 // it, a press on the selected row opens the edit form sub-panel (enter
 // semantics).
 func (t *ESPage) Click(_, y int) tea.Cmd {
-	row := y - 1
-	if row < 0 || (t.listH > 0 && row >= t.listH) {
-		return nil
-	}
-	idx := row + t.off
-	if idx >= len(t.entries()) {
-		return nil
-	}
-	if idx == t.sel {
-		t.openForm(idx)
-		return nil
-	}
-	t.sel = idx
-	return nil
+	return pageClick(y, t.off, t.listH, len(t.entries()), &t.sel, t.openForm)
 }
 
 // Wheel implements the optional PageWheeler seam.

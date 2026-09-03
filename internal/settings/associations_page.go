@@ -75,22 +75,16 @@ func (t *AssocPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if listNav(key.String(), &t.sel, len(t.entries()), t.navPageSize()) {
 		return nil
 	}
-	switch key.String() {
-	case "a":
-		t.openForm(-1)
-	case "enter":
-		if t.sel >= 0 && t.sel < len(t.entries()) {
-			t.openForm(t.sel)
-		}
-	case "d":
-		if t.sel >= 0 && t.sel < len(t.entries()) && t.host != nil {
-			idx := t.sel
+	// Shared add·edit·delete actions (#2466).
+	pageActionKey(key.String(), pageActions{
+		host: t.host, pal: t.pal, sel: t.sel, n: len(t.entries()),
+		open: t.openForm,
+		confirm: func(idx int) string {
 			e := t.entries()[idx]
-			t.host.Push(newConfirm(t.host, "delete the association "+e.Pattern+" → "+e.Lang, "Delete", t.pal, func() tea.Cmd {
-				return t.deleteEntry(idx)
-			}))
-		}
-	}
+			return "delete the association " + e.Pattern + " → " + e.Lang
+		},
+		remove: t.deleteEntry,
+	})
 	return nil
 }
 
@@ -182,20 +176,7 @@ func (t *AssocPage) View(w, h int) string {
 // Click implements the optional PageClicker seam (enter semantics on the
 // selected row).
 func (t *AssocPage) Click(_, y int) tea.Cmd {
-	row := y - 1
-	if row < 0 || (t.listH > 0 && row >= t.listH) {
-		return nil
-	}
-	idx := row + t.off
-	if idx >= len(t.entries()) {
-		return nil
-	}
-	if idx == t.sel {
-		t.openForm(idx)
-		return nil
-	}
-	t.sel = idx
-	return nil
+	return pageClick(y, t.off, t.listH, len(t.entries()), &t.sel, t.openForm)
 }
 
 // Wheel implements the optional PageWheeler seam.
@@ -226,14 +207,14 @@ type assocForm struct {
 	host SubPanelHost
 	idx  int
 
-	field int
-	cur   int
-	form  [assocFieldCount]string
-	note  string
+	fieldNav // focused field + cursor within it (#888, #2466)
+	form     [assocFieldCount]string
+	note     string
 }
 
 func newAssocForm(page *AssocPage, host SubPanelHost, idx int) *assocForm {
 	f := &assocForm{page: page, host: host, idx: idx}
+	f.fieldNav = newFieldNav(assocFieldCount, func(i int) string { return f.form[i] })
 	if idx >= 0 {
 		e := page.entries()[idx]
 		f.form = [assocFieldCount]string{e.Pattern, e.Lang}
@@ -263,12 +244,7 @@ func (f *assocForm) Update(key tea.KeyPressMsg) tea.Cmd {
 		f.host.Pop()
 	case key.Code == tea.KeyEnter:
 		return f.save()
-	case key.Code == tea.KeyTab && key.Mod&tea.ModShift != 0, key.Code == tea.KeyUp:
-		f.field = (f.field + assocFieldCount - 1) % assocFieldCount
-		f.cur = len([]rune(f.form[f.field]))
-	case key.Code == tea.KeyTab, key.Code == tea.KeyDown:
-		f.field = (f.field + 1) % assocFieldCount
-		f.cur = len([]rune(f.form[f.field]))
+	case f.fieldNav.Update(key): // shared field motion (#2466)
 	default:
 		tf := newTextFieldAt(f.form[f.field], f.cur)
 		if handled, _ := tf.Handle(key); handled {
@@ -280,10 +256,7 @@ func (f *assocForm) Update(key tea.KeyPressMsg) tea.Cmd {
 
 // Click focuses a field row.
 func (f *assocForm) Click(_, y int) tea.Cmd {
-	if y >= 0 && y < assocFieldCount {
-		f.field = y
-		f.cur = len([]rune(f.form[f.field]))
-	}
+	f.fieldNav.Focus(y)
 	return nil
 }
 

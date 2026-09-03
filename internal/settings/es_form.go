@@ -24,15 +24,15 @@ type esForm struct {
 	host SubPanelHost
 	idx  int // entry being edited, -1 for a new one
 
-	field int
-	cur   int // cursor within the focused field (#888)
-	form  [esFieldCount]string
-	note  string
+	fieldNav // focused field + cursor within it (#888, #2466)
+	form     [esFieldCount]string
+	note     string
 }
 
 // newESForm seeds the form from the entry at idx (-1 = blank).
 func newESForm(page *ESPage, host SubPanelHost, idx int) *esForm {
 	f := &esForm{page: page, host: host, idx: idx}
+	f.fieldNav = newFieldNav(esFieldCount, func(i int) string { return f.form[i] })
 	if idx >= 0 {
 		e := page.entries()[idx]
 		f.form = [esFieldCount]string{e.Name, e.URL, e.Username, e.Password, e.APIKey}
@@ -68,12 +68,7 @@ func (f *esForm) Update(key tea.KeyPressMsg) tea.Cmd {
 		f.host.Pop()
 	case key.Code == tea.KeyEnter:
 		return f.save()
-	case key.Code == tea.KeyTab && key.Mod&tea.ModShift != 0, key.Code == tea.KeyUp:
-		f.field = (f.field + esFieldCount - 1) % esFieldCount
-		f.cur = len([]rune(f.form[f.field]))
-	case key.Code == tea.KeyTab, key.Code == tea.KeyDown:
-		f.field = (f.field + 1) % esFieldCount
-		f.cur = len([]rune(f.form[f.field]))
+	case f.fieldNav.Update(key): // shared field motion (#2466)
 	default:
 		// Shared cursor input (#888).
 		tf := newTextFieldAt(f.form[f.field], f.cur)
