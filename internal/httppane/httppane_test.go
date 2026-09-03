@@ -234,7 +234,34 @@ func TestFormatHistoryTime(t *testing.T) {
 	}
 }
 
+// keyPress builds a key message from a name. Named keys get their real
+// tea.Key* code: since #2459 the shared input matches Code + Mod, so a
+// fixture spelling "backspace" as literal text is typing, not a backspace.
 func keyPress(s string) tea.KeyPressMsg {
+	switch s {
+	case "enter":
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "esc":
+		return tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "tab":
+		return tea.KeyPressMsg{Code: tea.KeyTab}
+	case "backspace":
+		return tea.KeyPressMsg{Code: tea.KeyBackspace}
+	case "delete":
+		return tea.KeyPressMsg{Code: tea.KeyDelete}
+	case "up":
+		return tea.KeyPressMsg{Code: tea.KeyUp}
+	case "down":
+		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft}
+	case "right":
+		return tea.KeyPressMsg{Code: tea.KeyRight}
+	case "home":
+		return tea.KeyPressMsg{Code: tea.KeyHome}
+	case "end":
+		return tea.KeyPressMsg{Code: tea.KeyEnd}
+	}
 	return tea.KeyPressMsg{Code: rune(s[0]), Text: s}
 }
 

@@ -73,7 +73,7 @@ func (f *esForm) Update(key tea.KeyPressMsg) tea.Cmd {
 		// Shared cursor input (#888).
 		tf := newTextFieldAt(f.form[f.field], f.cur)
 		if handled, _ := tf.Handle(key); handled {
-			f.form[f.field], f.cur = tf.text, tf.cur
+			f.form[f.field], f.cur = tf.Text, tf.Cur
 		}
 	}
 	return nil
@@ -190,6 +190,6 @@ func (f *esForm) Paste(text string) bool {
 	if !tf.Paste(text) {
 		return false
 	}
-	f.form[f.field], f.cur = tf.text, tf.cur
+	f.form[f.field], f.cur = tf.Text, tf.Cur
 	return true
 }

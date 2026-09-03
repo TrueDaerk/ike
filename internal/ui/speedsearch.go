@@ -38,45 +38,56 @@ import (
 // SpeedSearch is one picker's type-ahead query. The zero value is an idle
 // search that matches everything.
 type SpeedSearch struct {
-	query string
-	cur   int // the caret, as a rune index into query
+	field Field // the query text and its caret (#2459)
 }
 
 // Query returns the typed text, "" when the search is idle.
-func (s *SpeedSearch) Query() string { return s.query }
+func (s *SpeedSearch) Query() string { return s.field.Text }
 
 // Cursor returns the caret's rune index into the query (#2360), for a host
 // that renders the query itself instead of through Hint.
-func (s *SpeedSearch) Cursor() int { return s.cur }
+func (s *SpeedSearch) Cursor() int { return s.field.Cur }
 
 // Active reports whether a query is narrowing the rows.
-func (s *SpeedSearch) Active() bool { return s.query != "" }
+func (s *SpeedSearch) Active() bool { return !s.field.Empty() }
 
 // Reset drops the query. Pickers call it when they open, so a modal never
 // inherits the previous one's type-ahead.
-func (s *SpeedSearch) Reset() { s.query, s.cur = "", 0 }
+func (s *SpeedSearch) Reset() { s.field.Clear() }
 
 // EscClears is esc's first job: it drops a running query and reports true, so
 // the caller closes the modal only on the second press.
 func (s *SpeedSearch) EscClears() bool {
-	if s.query == "" {
+	if s.field.Empty() {
 		return false
 	}
 	s.Reset()
 	return true
 }
 
-// ssReserved are the keys a running query leaves to its host even though
+// ssReserved reports the keys a running query leaves to its host even though
 // EditKey would take them (#2360). space toggles the row under the cursor;
 // plain delete is the pickers' "clear this row / this selection"; home/end
-// and their super+arrow aliases are the list extremes every host routes
-// through ListNav — a type-ahead must not swallow the way out of a long list.
-var ssReserved = map[string]bool{
-	"space": true, " ": true,
-	"delete":     true,
-	"home":       true,
-	"end":        true,
-	"super+left": true, "super+right": true,
+// and their cmd+arrow aliases are the list extremes every host routes through
+// ListNav — a type-ahead must not swallow the way out of a long list.
+//
+// Matched on Code + Mod like EditKey itself (#2459), so the Command key is
+// reserved in every spelling a terminal reports it in (super+, meta+) rather
+// than only in the one msg.String() happened to produce.
+func ssReserved(msg tea.KeyPressMsg) bool {
+	mod := msg.Mod &^ tea.ModShift
+	isCmd := mod == tea.ModSuper || mod == tea.ModMeta
+	switch {
+	case msg.Code == tea.KeySpace && msg.Mod == 0:
+		return true
+	case msg.Code == tea.KeyDelete && msg.Mod == 0:
+		return true
+	case msg.Code == tea.KeyHome && msg.Mod == 0, msg.Code == tea.KeyEnd && msg.Mod == 0:
+		return true
+	case isCmd && (msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight):
+		return true
+	}
+	return false
 }
 
 // Key feeds one key to the search and reports whether it took the key and
@@ -89,14 +100,14 @@ var ssReserved = map[string]bool{
 // query is a text input and edits through EditKey, minus the ssReserved keys
 // the host binds to list actions.
 func (s *SpeedSearch) Key(msg tea.KeyPressMsg) (handled, changed bool) {
-	if s.query == "" {
+	if s.field.Empty() {
 		if !ssTypable(msg) {
 			return false, false
 		}
-		s.query, s.cur = msg.Text, len([]rune(msg.Text))
+		s.field.Set(msg.Text)
 		return true, true
 	}
-	if ssReserved[msg.String()] {
+	if ssReserved(msg) {
 		return false, false
 	}
 	if Typing(msg) && !ssTypable(msg) {
@@ -105,12 +116,7 @@ func (s *SpeedSearch) Key(msg tea.KeyPressMsg) (handled, changed bool) {
 		// typing is screened, since that is all EditKey inserts.
 		return false, false
 	}
-	out, cur, handled, changed := EditKey(msg, s.query, s.cur)
-	if !handled {
-		return false, false
-	}
-	s.query, s.cur = out, cur
-	return true, changed
+	return s.field.Key(msg)
 }
 
 // ssTypable reports whether a key press is a plain printable rune the query
@@ -126,10 +132,10 @@ func ssTypable(msg tea.KeyPressMsg) bool {
 // typing, and a subsequence match turns "bro" into a hit on "Filter by label
 // (the filter's label section)" — narrowing that surprises rather than helps.
 func (s *SpeedSearch) Matches(text string) bool {
-	if s.query == "" {
+	if s.field.Empty() {
 		return true
 	}
-	return strings.Contains(strings.ToLower(text), strings.ToLower(s.query))
+	return strings.Contains(strings.ToLower(text), strings.ToLower(s.field.Text))
 }
 
 // Filter returns the indices of rows the query matches, in row order. An idle
@@ -170,11 +176,11 @@ func NarrowStrings(s *SpeedSearch, rows []string) []string {
 // an input rather than as part of the title; since the caret moves (#2360) it
 // sits wherever the caret is, not always at the end.
 func (s *SpeedSearch) Hint() string {
-	if s.query == "" {
+	if s.field.Empty() {
 		return ""
 	}
-	r := []rune(s.query)
-	cur := s.cur
+	r := s.field.Runes()
+	cur := s.field.Cur
 	if cur < 0 {
 		cur = 0
 	}

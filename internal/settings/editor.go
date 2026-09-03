@@ -74,7 +74,7 @@ func newEditor(m *Model, e Entry) Editor {
 	case Path:
 		ed := &pathEditor{m: m, e: e, tf: newTextField(m.value(e.Key))}
 		ed.suggest.dirs = e.Dirs
-		ed.suggest.refresh(ed.tf.text)
+		ed.suggest.refresh(ed.tf.Text)
 		return ed
 	default:
 		return &textEditor{m: m, e: e, tf: newTextField(m.value(e.Key))}
@@ -401,14 +401,14 @@ type intEditor struct {
 }
 
 func (n *intEditor) Value() any {
-	v, err := strconv.Atoi(strings.TrimSpace(n.tf.text))
+	v, err := strconv.Atoi(strings.TrimSpace(n.tf.Text))
 	if err != nil {
 		return n.m.value(n.e.Key)
 	}
 	return v
 }
 func (n *intEditor) Capturing() bool        { return true }
-func (n *intEditor) Dirty() bool            { return strings.TrimSpace(n.tf.text) != n.m.value(n.e.Key) }
+func (n *intEditor) Dirty() bool            { return strings.TrimSpace(n.tf.Text) != n.m.value(n.e.Key) }
 func (n *intEditor) Paste(text string) bool { return n.tf.Paste(text) }
 
 // snapInt walks v on in delta's direction until the entry's ValidateInt hook
@@ -447,7 +447,7 @@ func (n *intEditor) clampToBounds(v int) int {
 
 // step adds delta to the current number and writes the result.
 func (n *intEditor) step(delta int) tea.Cmd {
-	cur, err := strconv.Atoi(strings.TrimSpace(n.tf.text))
+	cur, err := strconv.Atoi(strings.TrimSpace(n.tf.Text))
 	if err != nil {
 		cur, _ = strconv.Atoi(strings.TrimSpace(n.m.value(n.e.Key)))
 	}
@@ -470,7 +470,7 @@ func (n *intEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	case "right", "+", "=":
 		return n.step(1)
 	case "enter":
-		v, err := strconv.Atoi(strings.TrimSpace(n.tf.text))
+		v, err := strconv.Atoi(strings.TrimSpace(n.tf.Text))
 		if err != nil {
 			n.err = "not a number"
 			return nil
@@ -533,9 +533,9 @@ type textEditor struct {
 	err string // the entry's ValidateString message, shown until the value parses
 }
 
-func (t *textEditor) Value() any             { return t.tf.text }
+func (t *textEditor) Value() any             { return t.tf.Text }
 func (t *textEditor) Capturing() bool        { return true }
-func (t *textEditor) Dirty() bool            { return t.tf.text != t.m.value(t.e.Key) }
+func (t *textEditor) Dirty() bool            { return t.tf.Text != t.m.value(t.e.Key) }
 func (t *textEditor) Paste(text string) bool { return t.tf.Paste(text) }
 
 func (t *textEditor) Update(key tea.KeyPressMsg) tea.Cmd {
@@ -550,13 +550,13 @@ func (t *textEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 		// refused with the parser's message rather than written half-broken —
 		// the user is editing interactively and can fix it in place.
 		if t.e.ValidateString != nil {
-			if msg := t.e.ValidateString(t.tf.text); msg != "" {
+			if msg := t.e.ValidateString(t.tf.Text); msg != "" {
 				t.err = msg
 				return nil
 			}
 		}
 		t.err = ""
-		return t.m.writeValue(t.e, t.tf.text)
+		return t.m.writeValue(t.e, t.tf.Text)
 	}
 	t.tf.Handle(key)
 	return nil
@@ -618,9 +618,9 @@ func resolvableDir(path string) bool {
 	return err == nil && st.IsDir()
 }
 
-func (p *pathEditor) Value() any      { return strings.TrimSpace(p.tf.text) }
+func (p *pathEditor) Value() any      { return strings.TrimSpace(p.tf.Text) }
 func (p *pathEditor) Capturing() bool { return true }
-func (p *pathEditor) Dirty() bool     { return p.tf.text != p.m.value(p.e.Key) }
+func (p *pathEditor) Dirty() bool     { return p.tf.Text != p.m.value(p.e.Key) }
 
 // valid is the entry's commit check: directories only for a Dirs entry, any
 // resolvable path otherwise.
@@ -635,7 +635,7 @@ func (p *pathEditor) Paste(text string) bool {
 	if !p.tf.Paste(text) {
 		return false
 	}
-	p.suggest.refresh(p.tf.text)
+	p.suggest.refresh(p.tf.Text)
 	return true
 }
 
@@ -647,10 +647,10 @@ func (p *pathEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 		p.m.leaveEditor()
 		return nil
 	case tea.KeyTab:
-		p.tf.Set(p.suggest.complete(p.tf.text))
+		p.tf.Set(p.suggest.complete(p.tf.Text))
 		return nil
 	case tea.KeyEnter:
-		path := strings.TrimSpace(p.tf.text)
+		path := strings.TrimSpace(p.tf.Text)
 		if path != "" && !p.valid(path) {
 			p.err = "path does not exist"
 			if p.e.Dirs {
@@ -663,7 +663,7 @@ func (p *pathEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 		return p.m.writeValue(p.e, path)
 	}
 	if _, changed := p.tf.Handle(key); changed {
-		p.suggest.refresh(p.tf.text)
+		p.suggest.refresh(p.tf.Text)
 	}
 	return nil
 }
@@ -678,7 +678,7 @@ func (p *pathEditor) Click(_, y int) tea.Cmd {
 	}
 	if idx := y - first; idx >= 0 && idx < len(p.suggest.candidates) && idx < maxSuggestLines {
 		p.tf.Set(p.suggest.candidates[idx])
-		p.suggest.refresh(p.tf.text)
+		p.suggest.refresh(p.tf.Text)
 	}
 	return nil
 }
@@ -844,7 +844,7 @@ func (l *listEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 			l.editing, l.err = false, ""
 			return nil
 		case tea.KeyEnter:
-			text := strings.TrimSpace(l.tf.text)
+			text := strings.TrimSpace(l.tf.Text)
 			// An IntList element must be a number: reject in place instead of
 			// staging a value the typed decode would refuse (#1663).
 			if l.numeric && text != "" {
@@ -957,7 +957,7 @@ func (l *listEditor) View(w, h int) []string {
 	// Value hints while typing (#1946): the schema-declared candidates for
 	// the element under edit, re-narrowed on every keystroke.
 	if l.editing && l.e.EntryHints != nil {
-		for _, row := range hintRows(l.e.EntryHints(l.m.value, strings.TrimSpace(l.tf.text))) {
+		for _, row := range hintRows(l.e.EntryHints(l.m.value, strings.TrimSpace(l.tf.Text))) {
 			if len(out) >= h {
 				break
 			}

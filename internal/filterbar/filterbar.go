@@ -33,8 +33,7 @@ import (
 type Model struct {
 	schema filterexpr.Schema
 
-	text   string
-	cur    int
+	field  ui.Field // the expression text and its caret (#2459)
 	active bool
 
 	query filterexpr.Query
@@ -72,7 +71,7 @@ func (m *Model) Active() bool { return m.active }
 // Focus moves the cursor into the input, at the end of the text.
 func (m *Model) Focus() {
 	m.active = true
-	m.cur = len([]rune(m.text))
+	m.field.Cur = m.field.Len()
 	m.status = ""
 }
 
@@ -99,7 +98,7 @@ func (m *Model) Status() string { return m.status }
 func (m *Model) Blur() { m.active = false }
 
 // Text is the raw expression.
-func (m *Model) Text() string { return m.text }
+func (m *Model) Text() string { return m.field.Text }
 
 // Query is the last successful parse. A half-written expression keeps the
 // previous query, so the list does not empty out mid-token.
@@ -115,11 +114,10 @@ func (m *Model) Empty() bool { return m.query.Empty() }
 // the seam the single-key shortcuts write through, so a quick filter and a
 // typed one are the same filter (#2156).
 func (m *Model) SetText(s string) bool {
-	if s == m.text {
+	if s == m.field.Text {
 		return false
 	}
-	m.text = s
-	m.cur = len([]rune(m.text))
+	m.field.Set(s)
 	m.parse()
 	return true
 }
@@ -179,18 +177,16 @@ func (m *Model) Key(msg tea.KeyPressMsg) (handled, changed bool) {
 		return true, m.Clear()
 	case "tab":
 		if ghost := m.Completion(); ghost != "" {
-			m.text += ghost
-			m.cur = len([]rune(m.text))
+			m.field.Set(m.field.Text + ghost)
 			m.parse()
 			return true, true
 		}
 		return true, false
 	}
-	text, cur, ok, ch := ui.EditKey(msg, m.text, m.cur)
+	ok, ch := m.field.Key(msg)
 	if !ok {
 		return false, false
 	}
-	m.text, m.cur = text, cur
 	if ch {
 		m.parse()
 	}
@@ -203,8 +199,7 @@ func (m *Model) Paste(paste string) bool {
 	if !m.active {
 		return false
 	}
-	text, cur, changed := ui.PasteText(m.text, m.cur, paste)
-	m.text, m.cur = text, cur
+	changed := m.field.Paste(paste)
 	if changed {
 		m.parse()
 	}
@@ -215,7 +210,7 @@ func (m *Model) Paste(paste string) bool {
 // records the message — the row explains it, the list stays put.
 func (m *Model) parse() {
 	m.status = "" // an edited filter starts a fresh walk (#2410)
-	q, err := m.schema.Parse(m.text)
+	q, err := m.schema.Parse(m.field.Text)
 	if err != nil {
 		m.err = err.Error()
 		return
@@ -229,10 +224,10 @@ func (m *Model) parse() {
 // with the cursor at the end of the input, on the first candidate the typed
 // prefix matches. A completed value ends in the terminating space.
 func (m *Model) Completion() string {
-	if !m.active || m.cur != len([]rune(m.text)) || m.text == "" {
+	if !m.active || m.field.Cur != m.field.Len() || m.field.Empty() {
 		return ""
 	}
-	tok, ok := lastToken(m.text)
+	tok, ok := lastToken(m.field.Text)
 	if !ok {
 		return ""
 	}
@@ -329,16 +324,16 @@ func (m *Model) View(width int, pal *theme.Palette) string {
 	}
 	dim := lipgloss.NewStyle().Faint(true)
 	if !m.active {
-		if m.text == "" {
+		if m.field.Empty() {
 			return clip(dim.Render(" "+m.Hint()), width)
 		}
-		body := lipgloss.NewStyle().Foreground(pal.Accent).Render(" filter: " + m.text)
+		body := lipgloss.NewStyle().Foreground(pal.Accent).Render(" filter: " + m.field.Text)
 		if m.err != "" {
 			body += dim.Render("  " + m.err)
 		}
 		return clip(body, width)
 	}
-	body := " filter: " + ui.CursorView(m.text, m.cur)
+	body := " filter: " + m.field.View()
 	if ghost := m.Completion(); ghost != "" {
 		body += dim.Render(ghost)
 	}
