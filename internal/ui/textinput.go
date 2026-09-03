@@ -11,11 +11,30 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// chordMods are the modifiers that turn a key press into a chord rather than
+// typing. Matching on msg.String() cannot see them reliably: bubbletea's
+// String() prefers the literal text a terminal reported over the keystroke
+// form, so with the Kitty protocol's "report associated text" flag (or the
+// Windows Console API) alt+d arrives as a bare "d" and ctrl+w as "w" — the
+// chord is masked and no string case can ever match it (#2064). EditKey
+// therefore matches Code + Mod, the way the terminal pane (motionKey) and the
+// editor's insert mode already do; Code is the physical key and survives the
+// masking that Keystroke() exists to work around.
+const chordMods = tea.ModCtrl | tea.ModAlt | tea.ModMeta | tea.ModSuper | tea.ModHyper
+
 // EditKey applies a single-line editing key to text with a rune cursor at
 // cur (clamped into range first). It returns the new text and cursor,
 // whether the key was consumed, and whether the text changed. Callers run
 // their own chords first — EditKey only sees what they left over — so a
 // caller-level ctrl+w toggle keeps priority over the word-delete here.
+//
+// The Command key is accepted in every spelling a terminal may report it in:
+// bubbletea calls it super+ under one protocol and meta+ under another, and
+// the keymap layer's canonical name for it is cmd+ — all three are the same
+// physical key, so all three mean "line start / line end / kill the line".
+// shift is tolerated on the modified chords (shift+cmd+left is still line
+// start), exactly like the terminal pane's motionKey: a one-line field has no
+// selection a shift could extend.
 func EditKey(msg tea.KeyPressMsg, text string, cur int) (out string, ncur int, handled, changed bool) {
 	r := []rune(text)
 	if cur < 0 {
@@ -24,55 +43,74 @@ func EditKey(msg tea.KeyPressMsg, text string, cur int) (out string, ncur int, h
 	if cur > len(r) {
 		cur = len(r)
 	}
-	switch msg.String() {
-	case "left":
+	// mod is the chord's modifier set with shift dropped; plain (unmodified)
+	// keys are matched against msg.Mod itself, so shift+left stays the
+	// caller's to interpret as a selection key.
+	mod := msg.Mod &^ tea.ModShift
+	isCmd := mod == tea.ModSuper || mod == tea.ModMeta
+	isCtrl := mod == tea.ModCtrl
+	isAlt := mod == tea.ModAlt
+	code := msg.Code
+	switch {
+	case code == tea.KeyLeft && msg.Mod == 0:
 		if cur > 0 {
 			cur--
 		}
 		return text, cur, true, false
-	case "right":
+	case code == tea.KeyRight && msg.Mod == 0:
 		if cur < len(r) {
 			cur++
 		}
 		return text, cur, true, false
-	case "home", "super+left":
+	case code == tea.KeyHome && msg.Mod == 0, isCmd && code == tea.KeyLeft:
 		return text, 0, true, false
-	case "end", "super+right":
+	case code == tea.KeyEnd && msg.Mod == 0, isCmd && code == tea.KeyRight:
 		return text, len(r), true, false
-	case "alt+left", "ctrl+left":
+	case (isAlt || isCtrl) && code == tea.KeyLeft:
 		return text, wordLeft(r, cur), true, false
-	case "alt+right", "ctrl+right":
+	case (isAlt || isCtrl) && code == tea.KeyRight:
 		return text, wordRight(r, cur), true, false
-	case "backspace":
+	// The kills come before the plain backspace/delete cases, which only
+	// match an unmodified press.
+	//
+	// cmd+backspace / cmd+delete kill to the line start / end; ctrl+u and
+	// ctrl+k are the readline twins (#2459). A caller that binds ctrl+u
+	// itself — the palette's "clear the query", the LSP rename prompt, the
+	// find/replace panel — runs its own chord first and keeps it.
+	case isCmd && code == tea.KeyBackspace, isCtrl && code == 'u':
 		if cur > 0 {
-			return string(r[:cur-1]) + string(r[cur:]), cur - 1, true, true
+			return string(r[cur:]), 0, true, true
 		}
 		return text, cur, true, false
-	case "alt+backspace", "ctrl+w":
+	case isCmd && code == tea.KeyDelete, isCtrl && code == 'k':
+		if cur < len(r) {
+			return string(r[:cur]), cur, true, true
+		}
+		return text, cur, true, false
+	// Word kill left: alt+backspace is the macOS convention, ctrl+backspace
+	// the everywhere-deliverable alias (#2459), ctrl+w the vim/readline twin.
+	case (isAlt || isCtrl) && code == tea.KeyBackspace, isCtrl && code == 'w':
 		if cur > 0 {
 			s := wordLeft(r, cur)
 			return string(r[:s]) + string(r[cur:]), s, true, true
 		}
 		return text, cur, true, false
-	case "delete":
-		if cur < len(r) {
-			return string(r[:cur]) + string(r[cur+1:]), cur, true, true
-		}
-		return text, cur, true, false
-	case "alt+delete", "alt+d":
+	// Word kill right: alt+delete (macOS), ctrl+delete (#2459) and alt+d,
+	// the ESC d sequence terminals synthesize for Option+Forward-Delete.
+	case (isAlt || isCtrl) && code == tea.KeyDelete, isAlt && code == 'd':
 		if cur < len(r) {
 			e := wordRight(r, cur)
 			return string(r[:cur]) + string(r[e:]), cur, true, true
 		}
 		return text, cur, true, false
-	case "super+backspace":
+	case code == tea.KeyBackspace && msg.Mod == 0, isCtrl && code == 'h':
 		if cur > 0 {
-			return string(r[cur:]), 0, true, true
+			return string(r[:cur-1]) + string(r[cur:]), cur - 1, true, true
 		}
 		return text, cur, true, false
-	case "super+delete":
+	case code == tea.KeyDelete && msg.Mod == 0:
 		if cur < len(r) {
-			return string(r[:cur]), cur, true, true
+			return string(r[:cur]) + string(r[cur+1:]), cur, true, true
 		}
 		return text, cur, true, false
 	}
@@ -94,7 +132,7 @@ func EditKey(msg tea.KeyPressMsg, text string, cur int) (out string, ncur int, h
 // input before the insertion, drop a preselection — asks the same question
 // instead of re-deriving it from the key message.
 func Typing(msg tea.KeyPressMsg) bool {
-	return msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper|tea.ModMeta) == 0
+	return msg.Text != "" && msg.Mod&chordMods == 0
 }
 
 // PasteText inserts a pasted block into a single-line input at rune cursor
