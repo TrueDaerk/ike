@@ -1193,6 +1193,7 @@ JetBrains is:
 | `editor.selectLineStart` | `shift+home` | delivered | `—` | live |
 | `editor.selection.extend` | `alt+up` | fragile | `palette` | live via palette |
 | `editor.selection.shrink` | `alt+down` | fragile | `palette` | live via palette |
+| `editor.sortLines` | `alt+shift+s` | fragile | `vim :sort / Edit menu` | live via vim :sort / Edit menu |
 | `editor.splitViewDown` | `cmd+alt+shift+down` | fragile | `palette` | live via palette |
 | `editor.splitViewRight` | `cmd+alt+shift+right` | fragile | `palette` | live via palette |
 | `editor.tab.moveLeft` | `ctrl+shift+pgup` | delivered | `—` | live |

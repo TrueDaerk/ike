@@ -765,6 +765,24 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 			m.commitInsert()
 		}
 		m.duplicateLine()
+	// Line-set commands (#2417, lineset.go): the selection's lines, or the
+	// whole buffer, reordered in one edit and left selected.
+	case "sort_lines":
+		m.runLineSet(opSort)
+	case "sort_lines_ignore_case":
+		m.runLineSet(opSortIgnoreCase)
+	case "sort_lines_natural":
+		m.runLineSet(opSortNatural)
+	case "sort_lines_descending":
+		m.runLineSet(opSortDescending)
+	case "sort_lines_by_length":
+		m.runLineSet(opSortByLength)
+	case "unique_lines":
+		m.runLineSet(opUnique)
+	case "reverse_lines":
+		m.runLineSet(opReverse)
+	case "shuffle_lines":
+		m.runLineSet(opShuffle)
 	case "increment", "decrement":
 		// ctrl+a / ctrl+x as commands (#1658): one step, since a palette or
 		// keymap invocation carries no vim count.

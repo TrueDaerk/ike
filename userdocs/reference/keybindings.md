@@ -221,6 +221,7 @@ Active when an editor pane has focus.
 | Show stored HTTP response | `cmd+shift+enter` | `ctrl+shift+enter` | `http.showResponse` |
 | Show stored HTTP response | `ctrl+shift+f9` | `ctrl+shift+f9` | `http.showResponse` |
 | Shrink selection | `alt+down` | `alt+down` | `editor.selection.shrink` |
+| Sort lines | `alt+shift+s` | `alt+shift+s` | `editor.sortLines` |
 | Split view down | `cmd+alt+shift+down` | `ctrl+alt+shift+down` | `editor.splitViewDown` |
 | Split view right | `cmd+alt+shift+right` | `ctrl+alt+shift+right` | `editor.splitViewRight` |
 | Toggle bookmark | `f11` | `f11` | `bookmark.toggle` |

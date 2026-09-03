@@ -101,6 +101,15 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"terminal.ssh", reasonOccasional},            //
 	{"vcs.nextChange", reasonVimKey},              // ]c
 	{"vcs.prevChange", reasonVimKey},              // [c
+	// #2417's line-set family: alt+shift+s is the everyday sort, and the seven
+	// siblings are flavours of it (or, for shuffle, a once-in-a-while tool).
+	{"editor.sortLinesIgnoreCase", reasonFlavour},
+	{"editor.sortLinesNatural", reasonFlavour},
+	{"editor.sortLinesDescending", reasonFlavour},
+	{"editor.sortLinesByLength", reasonFlavour},
+	{"editor.uniqueLines", reasonFlavour},
+	{"editor.reverseLines", reasonFlavour},
+	{"editor.shuffleLines", reasonOccasional},
 	{"editor.increment", reasonVimKey},            // ctrl+a
 	{"editor.decrement", reasonVimKey},            // ctrl+x
 	{"editor.toggleValue", reasonVimKey},          // g!

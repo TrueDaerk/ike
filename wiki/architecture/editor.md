@@ -1282,6 +1282,41 @@ current line, matching vim — sorting one line is never what was meant.
   the message is *sorted N lines[, M duplicates removed]*. The cursor lands on
   the range's first line.
 
+## Line-set commands (#2417)
+
+`lineset.go` is the palette/keybind half of the `:sort` family: eight commands
+that reorder or thin a contiguous block of lines. Where the ex-command takes a
+range, these take the **selection** — the lines a visual selection touches, or
+the **whole buffer** when nothing is selected, which is what JetBrains' *Sort
+Lines* does too.
+
+- **The family:** `editor.sortLines` (byte order, ascending — alt+shift+s),
+  `editor.sortLinesIgnoreCase`, `editor.sortLinesNatural`,
+  `editor.sortLinesDescending`, `editor.sortLinesByLength`,
+  `editor.uniqueLines`, `editor.reverseLines`, `editor.shuffleLines`. Only the
+  plain sort carries a chord; the rest are palette-only with entries in the
+  keybind ledger (`cmd/ike/keybind_audit_test.go`). *Sort Lines*, *Remove
+  Duplicate Lines* and *Reverse Lines* also sit in the **Edit** menu.
+- **Natural order** compares the two lines in parallel and reads a digit run on
+  both sides as a *number*, so `a2` sorts before `a10`. Leading zeros only break
+  a tie between otherwise equal numbers (`a1` before `a01`), which keeps the
+  order total.
+- **Ties are resolved on the text**, never on position: the case-insensitive and
+  by-length flavours fall back to the raw line, so the same block always yields
+  the same order. Every sort is otherwise stable.
+- **`editor.uniqueLines` keeps the first occurrence** and preserves the
+  surviving lines' order — unlike `:sort u`, which only collapses *neighbours*
+  because sorting has already grouped them. It does not sort.
+- **One undo step:** the block is rewritten as a single `buffer.Edit`, exactly
+  like `:sort`. A reordering that changes nothing records no undo entry and
+  leaves the buffer clean. Sorting the whole buffer neither adds nor drops the
+  final newline — the block ends at the last line's last column, and the
+  newline policy stays with the writer.
+- **The result stays selected** linewise (shrinking with `uniqueLines`), so a
+  second command in the family chains onto the same lines.
+- **Multi-caret collapses first:** only the primary selection's line range takes
+  part.
+
 ## Comment toggling (Roadmap 0120)
 
 `editor.commentLine` (cmd+7, alias `cmd+k cmd+c`) toggles the language's line
