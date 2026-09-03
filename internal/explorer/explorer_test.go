@@ -257,8 +257,8 @@ func TestRenamePrefillsAndRenames(t *testing.T) {
 	if !m.Prompting() {
 		t.Fatal("expected rename prompt to open")
 	}
-	if m.prompt.input != "a.txt" {
-		t.Fatalf("prompt input = %q want prefilled %q", m.prompt.input, "a.txt")
+	if m.prompt.input.Text != "a.txt" {
+		t.Fatalf("prompt input = %q want prefilled %q", m.prompt.input.Text, "a.txt")
 	}
 	// clear the prefilled name and type a new one (End first: it drops the
 	// stem preselection, #1047, so every backspace removes one rune).
@@ -288,42 +288,42 @@ func TestRenameArrowKeysMoveCursor(t *testing.T) {
 	m, _ = send(m, key("j"), key("j")) // a.txt
 	m, cmd := m.Update(RenameMsg{})
 	m, _ = pumpScans(m, cmd)
-	if m.prompt.pos != len("a") {
-		t.Fatalf("pos = %d want %d (end of the preselected stem)", m.prompt.pos, len("a"))
+	if m.prompt.input.Cur != len("a") {
+		t.Fatalf("pos = %d want %d (end of the preselected stem)", m.prompt.input.Cur, len("a"))
 	}
 	// the first arrow key drops the stem preselection (#1047) and then moves
 	// normally; the prefilled text stays intact.
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
-	if m.prompt.pos != len("a.txt") {
-		t.Fatalf("pos after End = %d want %d (end)", m.prompt.pos, len("a.txt"))
+	if m.prompt.input.Cur != len("a.txt") {
+		t.Fatalf("pos after End = %d want %d (end)", m.prompt.input.Cur, len("a.txt"))
 	}
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
-	if m.prompt.pos != len("a.txt")-2 {
-		t.Fatalf("pos after 2x left = %d want %d", m.prompt.pos, len("a.txt")-2)
+	if m.prompt.input.Cur != len("a.txt")-2 {
+		t.Fatalf("pos after 2x left = %d want %d", m.prompt.input.Cur, len("a.txt")-2)
 	}
-	if m.prompt.input != "a.txt" {
-		t.Fatalf("arrow keys must keep the text, input = %q", m.prompt.input)
+	if m.prompt.input.Text != "a.txt" {
+		t.Fatalf("arrow keys must keep the text, input = %q", m.prompt.input.Text)
 	}
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyHome})
-	if m.prompt.pos != 0 {
-		t.Fatalf("pos after Home = %d want 0", m.prompt.pos)
+	if m.prompt.input.Cur != 0 {
+		t.Fatalf("pos after Home = %d want 0", m.prompt.input.Cur)
 	}
 	// typing at pos 0 inserts before the existing text.
 	m, _ = send(m, key("x"))
-	if m.prompt.input != "xa.txt" || m.prompt.pos != 1 {
-		t.Fatalf("input = %q pos = %d, want %q pos 1", m.prompt.input, m.prompt.pos, "xa.txt")
+	if m.prompt.input.Text != "xa.txt" || m.prompt.input.Cur != 1 {
+		t.Fatalf("input = %q pos = %d, want %q pos 1", m.prompt.input.Text, m.prompt.input.Cur, "xa.txt")
 	}
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
-	if m.prompt.pos != len("xa.txt") {
-		t.Fatalf("pos after End = %d want %d", m.prompt.pos, len("xa.txt"))
+	if m.prompt.input.Cur != len("xa.txt") {
+		t.Fatalf("pos after End = %d want %d", m.prompt.input.Cur, len("xa.txt"))
 	}
 	// forward-delete at End is a no-op; Left then Delete removes "t".
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
-	if m.prompt.input != "xa.tx" {
-		t.Fatalf("input after Left+Delete = %q want %q", m.prompt.input, "xa.tx")
+	if m.prompt.input.Text != "xa.tx" {
+		t.Fatalf("input after Left+Delete = %q want %q", m.prompt.input.Text, "xa.tx")
 	}
 }
 
@@ -341,18 +341,18 @@ func TestPromptMouseClickMovesCursor(t *testing.T) {
 	inputRow := by + 2
 	textX := bx + 2 + len(promptInputPrefix)
 	m.PromptMouseClick(textX+2, inputRow)
-	if m.prompt.pos != 2 {
-		t.Fatalf("pos after click at col 2 = %d want 2", m.prompt.pos)
+	if m.prompt.input.Cur != 2 {
+		t.Fatalf("pos after click at col 2 = %d want 2", m.prompt.input.Cur)
 	}
 	// clicking past the end of the text clamps to the text length.
 	m.PromptMouseClick(textX+999, inputRow)
-	if m.prompt.pos != len("a.txt") {
-		t.Fatalf("pos after far click = %d want %d", m.prompt.pos, len("a.txt"))
+	if m.prompt.input.Cur != len("a.txt") {
+		t.Fatalf("pos after far click = %d want %d", m.prompt.input.Cur, len("a.txt"))
 	}
 	// clicking off the input row is a no-op.
 	m.PromptMouseClick(textX+2, inputRow+1)
-	if m.prompt.pos != len("a.txt") {
-		t.Fatalf("click off input row should not move cursor, pos = %d", m.prompt.pos)
+	if m.prompt.input.Cur != len("a.txt") {
+		t.Fatalf("click off input row should not move cursor, pos = %d", m.prompt.input.Cur)
 	}
 }
 
@@ -405,16 +405,16 @@ func TestRenameArrowKeyDropsPreselection(t *testing.T) {
 	m, cmd := m.Update(RenameMsg{})
 	m, _ = pumpScans(m, cmd)
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
-	if m.prompt.input != "a.txt" {
-		t.Fatalf("arrow key must keep the text, input = %q", m.prompt.input)
+	if m.prompt.input.Text != "a.txt" {
+		t.Fatalf("arrow key must keep the text, input = %q", m.prompt.input.Text)
 	}
 	if m.prompt.selStart != m.prompt.selEnd {
 		t.Fatalf("arrow key must drop the selection, got [%d,%d)",
 			m.prompt.selStart, m.prompt.selEnd)
 	}
 	m, _ = send(m, key("x"))
-	if m.prompt.input != "xa.txt" {
-		t.Fatalf("typing after dropping the selection must insert, input = %q", m.prompt.input)
+	if m.prompt.input.Text != "xa.txt" {
+		t.Fatalf("typing after dropping the selection must insert, input = %q", m.prompt.input.Text)
 	}
 }
 
@@ -428,8 +428,8 @@ func TestRenameBackspaceDeletesPreselectedStem(t *testing.T) {
 	m, cmd := m.Update(RenameMsg{})
 	m, _ = pumpScans(m, cmd)
 	m, _ = send(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
-	if m.prompt.input != ".txt" || m.prompt.pos != 0 {
-		t.Fatalf("input = %q pos = %d, want %q pos 0", m.prompt.input, m.prompt.pos, ".txt")
+	if m.prompt.input.Text != ".txt" || m.prompt.input.Cur != 0 {
+		t.Fatalf("input = %q pos = %d, want %q pos 0", m.prompt.input.Text, m.prompt.input.Cur, ".txt")
 	}
 	if m.prompt.selStart != m.prompt.selEnd {
 		t.Fatal("backspace must consume the selection")
@@ -466,7 +466,7 @@ func TestRenameDotfilePreselectsWholeName(t *testing.T) {
 	m, _ = send(m, key("j"), key("j")) // .gitignore (sorted before a.txt)
 	m, cmd = m.Update(RenameMsg{})
 	m, _ = pumpScans(m, cmd)
-	if got := m.prompt.input; got != ".gitignore" {
+	if got := m.prompt.input.Text; got != ".gitignore" {
 		t.Fatalf("test setup: rename prompt on %q, want .gitignore", got)
 	}
 	if m.prompt.selStart != 0 || m.prompt.selEnd != len(".gitignore") {
@@ -1028,7 +1028,7 @@ func TestRenamePromptWindowsLongInput(t *testing.T) {
 	m, _ = send(m, key("j"))
 	m, cmd := m.Update(RenameMsg{})
 	m, _ = pumpScans(m, cmd)
-	if m.prompt == nil || m.prompt.input != long {
+	if m.prompt == nil || m.prompt.input.Text != long {
 		t.Fatalf("rename prompt should be open prefilled with %q", long)
 	}
 	_, _, w, _, ok := m.promptBoxOrigin()
@@ -1042,8 +1042,8 @@ func TestRenamePromptWindowsLongInput(t *testing.T) {
 		t.Fatalf("input window should show the text around the cursor:\n%s", m.View())
 	}
 	m, _ = send(m, key("z"))
-	if m.prompt.input != long+"z" {
-		t.Fatalf("input after typing = %q want %q", m.prompt.input, long+"z")
+	if m.prompt.input.Text != long+"z" {
+		t.Fatalf("input after typing = %q want %q", m.prompt.input.Text, long+"z")
 	}
 }
 
@@ -1066,8 +1066,8 @@ func TestPromptMouseClickWithWindowOffset(t *testing.T) {
 	inputRow := by + 2
 	textX := bx + 2 + len(promptInputPrefix)
 	m.PromptMouseClick(textX+3, inputRow)
-	if want := off + 3; m.prompt.pos != want {
-		t.Fatalf("pos after click = %d want %d", m.prompt.pos, want)
+	if want := off + 3; m.prompt.input.Cur != want {
+		t.Fatalf("pos after click = %d want %d", m.prompt.input.Cur, want)
 	}
 }
 

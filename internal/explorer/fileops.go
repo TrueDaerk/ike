@@ -58,8 +58,7 @@ type prompt struct {
 	kind     promptKind
 	title    string
 	lines    []string
-	input    string
-	pos      int
+	input    ui.Field
 	selStart int
 	selEnd   int
 	anchor   string
@@ -72,7 +71,7 @@ type prompt struct {
 // Any key dismisses.
 func (m *Model) fail(err error) {
 	m.err = err
-	m.prompt = &prompt{kind: promptNotice, title: "error", input: err.Error()}
+	m.prompt = &prompt{kind: promptNotice, title: "error", input: ui.NewField(err.Error())}
 }
 
 // opKind distinguishes the reversible file operations.
@@ -113,10 +112,10 @@ func (m *Model) Paste(text string) (handled bool) {
 		if p.kind != promptInput {
 			return false
 		}
-		at, into := p.pos, p.input
+		at, into := p.input.Cur, p.input.Text
 		if p.selStart < p.selEnd {
 			// A preselected range (rename's name stem, #1047) is replaced.
-			r := []rune(p.input)
+			r := p.input.Runes()
 			into = string(r[:p.selStart]) + string(r[p.selEnd:])
 			at = p.selStart
 		}
@@ -124,7 +123,7 @@ func (m *Model) Paste(text string) (handled bool) {
 		if !changed {
 			return false
 		}
-		p.input, p.pos = out, ncur
+		p.input.Text, p.input.Cur = out, ncur
 		p.selStart, p.selEnd = 0, 0
 		return true
 	}
@@ -161,9 +160,9 @@ func (m *Model) handlePromptKey(msg tea.KeyPressMsg) tea.Cmd {
 		// falls through to the normal cursor mechanics below.
 		switch {
 		case msg.Code == tea.KeyBackspace || msg.Code == tea.KeyDelete:
-			r := []rune(p.input)
-			p.input = string(append(r[:p.selStart:p.selStart], r[p.selEnd:]...))
-			p.pos = p.selStart
+			r := p.input.Runes()
+			p.input.Text = string(append(r[:p.selStart:p.selStart], r[p.selEnd:]...))
+			p.input.Cur = p.selStart
 			p.selStart, p.selEnd = 0, 0
 			return nil
 		case msg.Code == tea.KeyEnter || msg.Code == tea.KeyEscape:
@@ -171,9 +170,9 @@ func (m *Model) handlePromptKey(msg tea.KeyPressMsg) tea.Cmd {
 		case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper|tea.ModMeta) == 0:
 			// Typing replaces the selection: drop it here, then fall through
 			// to the shared editor below, which inserts at the new cursor.
-			r := []rune(p.input)
-			p.input = string(append(r[:p.selStart:p.selStart], r[p.selEnd:]...))
-			p.pos = p.selStart
+			r := p.input.Runes()
+			p.input.Text = string(append(r[:p.selStart:p.selStart], r[p.selEnd:]...))
+			p.input.Cur = p.selStart
 			p.selStart, p.selEnd = 0, 0
 		default:
 			p.selStart, p.selEnd = 0, 0
@@ -181,7 +180,7 @@ func (m *Model) handlePromptKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	switch {
 	case msg.Code == tea.KeyEnter:
-		name := trimSpace(p.input)
+		name := trimSpace(p.input.Text)
 		m.prompt = nil
 		if name == "" {
 			return nil
@@ -193,9 +192,7 @@ func (m *Model) handlePromptKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Everything else is shared line editing (#2002): cursor and word
 		// motions, word/line kills and the macOS opt/cmd chords, plus
 		// printable insertion at the cursor (a bare space included).
-		if out, pos, handled, _ := ui.EditKey(msg, p.input, p.pos); handled {
-			p.input, p.pos = out, pos
-		}
+		p.input.Key(msg)
 	}
 	return nil
 }
@@ -465,8 +462,7 @@ func (m *Model) promptRename() {
 	m.prompt = &prompt{
 		kind:   promptInput,
 		title:  fmt.Sprintf("Rename %s %q to:", what, n.name),
-		input:  n.name,
-		pos:    sel,
+		input:  ui.Field{Text: n.name, Cur: sel},
 		selEnd: sel,
 		anchor: path,
 		accept: func(mm *Model, name string) tea.Cmd {
@@ -794,8 +790,8 @@ func (m Model) promptInputWindow() (off, avail int) {
 	if avail < 1 {
 		avail = 1
 	}
-	if m.prompt.pos+1 > avail {
-		off = m.prompt.pos + 1 - avail
+	if m.prompt.input.Cur+1 > avail {
+		off = m.prompt.input.Cur + 1 - avail
 	}
 	return off, avail
 }
@@ -819,12 +815,12 @@ func (m Model) promptBox() string {
 		// Dismissable error dialog (#1030): message in the Error colour,
 		// hint row mirrors the confirm prompt's affordance line.
 		msg := lipgloss.NewStyle().Foreground(m.theme().Error).
-			Render(ansi.Truncate(p.input, inner, "…"))
+			Render(ansi.Truncate(p.input.Text, inner, "…"))
 		body += "\n" + msg + "\n" + ansi.Truncate("any key to dismiss", inner, "…")
 	case promptInput:
-		r := []rune(p.input)
+		r := p.input.Runes()
 		off, avail := m.promptInputWindow()
-		before := string(r[off:p.pos])
+		before := string(r[off:p.input.Cur])
 		if p.selStart < p.selEnd {
 			// Preselected stem (#1047): render the visible selected slice on
 			// the theme's selection colours so the replace-on-type affordance
@@ -832,15 +828,15 @@ func (m Model) promptBox() string {
 			// "before" part needs splitting.
 			selStyle := lipgloss.NewStyle().
 				Background(m.theme().Selection).Foreground(m.theme().SelectionText)
-			s, e := clamp(p.selStart, off, p.pos), clamp(p.selEnd, off, p.pos)
-			before = string(r[off:s]) + selStyle.Render(string(r[s:e])) + string(r[e:p.pos])
+			s, e := clamp(p.selStart, off, p.input.Cur), clamp(p.selEnd, off, p.input.Cur)
+			before = string(r[off:s]) + selStyle.Render(string(r[s:e])) + string(r[e:p.input.Cur])
 		}
 		after := ""
 		cur := " " // past the last rune: a blank cursor cell
-		if p.pos < len(r) {
-			cur = string(r[p.pos])
-			if end := off + avail; p.pos+1 < end {
-				after = string(r[p.pos+1 : min(end, len(r))])
+		if p.input.Cur < len(r) {
+			cur = string(r[p.input.Cur])
+			if end := off + avail; p.input.Cur+1 < end {
+				after = string(r[p.input.Cur+1 : min(end, len(r))])
 			}
 		}
 		body += "\n" + promptInputPrefix + before + promptCursorStyle.Render(cur) + after
@@ -954,8 +950,8 @@ func (m *Model) PromptMouseClick(x, y int) {
 		return
 	}
 	off, _ := m.promptInputWindow()
-	r := []rune(p.input)
-	p.pos = clamp(x-textX+off, 0, len(r))
+	r := p.input.Runes()
+	p.input.Cur = clamp(x-textX+off, 0, len(r))
 	p.selStart, p.selEnd = 0, 0 // a click drops rename's preselection (#1047)
 }
 
