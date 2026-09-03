@@ -99,17 +99,17 @@ func TestSearchStepsMatchesWithNAndN(t *testing.T) {
 	if m.SearchMatches() != 2 {
 		t.Fatalf("matches = %d, want 2", m.SearchMatches())
 	}
-	first := m.search.cur
+	first := m.search.Cur
 	m.Update(key("n"))
-	if m.search.cur == first {
+	if m.search.Cur == first {
 		t.Fatal("n must step to the next match")
 	}
 	m.Update(key("n"))
-	if m.search.cur != first {
+	if m.search.Cur != first {
 		t.Fatal("n must wrap back to the first match")
 	}
 	m.Update(key("N"))
-	if m.search.cur == first {
+	if m.search.Cur == first {
 		t.Fatal("N must step back")
 	}
 }

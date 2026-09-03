@@ -110,7 +110,7 @@ type Model struct {
 	// rendered lines. It lives behind a pointer so the value-receiver View
 	// copies share it, like the explorer's speed search; nil means no
 	// search is open.
-	search *previewSearch
+	search *ui.LineSearch
 }
 
 // New returns a preview bound to path. Content arrives via SetSourceImmediate
@@ -199,7 +199,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	// The open search prompt owns the keyboard (#2409): every key is query
 	// text until enter applies it or esc abandons the search.
-	if m.search != nil && m.search.input {
+	if m.search != nil && m.search.Open {
 		return m.searchKey(msg)
 	}
 	switch msg.String() {
