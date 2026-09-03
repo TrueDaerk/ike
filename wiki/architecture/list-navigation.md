@@ -93,6 +93,68 @@ letter.
 An empty list consumes nothing; a one-entry list consumes the key and stays at
 0.
 
+## The list-pane window layer (#2462)
+
+`listnav.go` fixed the *cursor*; every tool panel still kept its own copy of
+the surrounding window arithmetic. Fifteen panes carried a
+character-identical `clampScroll()` — Problems, Usages, Dependencies,
+Timeline, Archives, Remote, Test Results, Breakpoints, the two Doctors,
+GitHub Issues, the VCS changes list, the DOM and Structure panes, the undo
+tree. `internal/ui/listnav.go` and `internal/ui/listpane.go` now hold that
+layer too:
+
+```go
+// internal/ui/listnav.go
+ClampWindow(cursor, top *int, n, height int)   // cursor into the list, window onto the cursor
+
+// internal/ui/listpane.go
+RenderWindow(top, height, n int, empty string, row func(i int) string) string
+ListPaneView(header, second, rows, footer string) string
+FileHeader(pal *theme.Palette, path string, count int, focused bool) string
+BaseName(path string) string
+TargetRow[T](rows []T, i int, isHeader func(T) bool) (T, bool)
+StepFiltered(f FilterStepper, cursor, top *int, n, height, delta int, keep func(i int) bool) MatchStep
+```
+
+- **`ClampWindow`** is `ClampIndex` followed by `ScrollToShow`. A pane keeps
+  its `clampScroll()` name where the call sites read better for it; the body
+  is one line.
+- **`RenderWindow`** draws the `height`-row window and pads it out with blank
+  lines, so the block is always exactly `height` lines whatever the list
+  length; an empty list renders the pane's own empty notice instead.
+- **`ListPaneView`** composes the four blocks every tool panel's `View`
+  builds: header line, second line (a filter row or a status line), the row
+  window, the footer of key hints.
+- **`TargetRow`** resolves a row to the entry an action acts on — a group
+  header stands for the first entry beneath it — and **`StepFiltered`** walks
+  `next-match`/`prev-match` over the entries the filter left standing,
+  skipping the headers, which are chrome rather than results.
+- **`FileHeader`** is the header line of a pane bound to one file (Structure,
+  the DOM inspector): base name, accented while focused, plus the row count.
+
+### Behaviour change: no trailing blank rows
+
+The hand-written clamps only ever pushed the window *towards* the cursor. They
+never checked `top` against the end of the list, so a window parked deep in a
+long list stayed there when the list shrank under it — refresh a filtered
+Problems list down to three rows while scrolled to row 40 and the pane drew a
+screen of blanks until the next cursor move. `ScrollToShow` clamps `top` to
+`n - height`, so the shared clamp pulls the window back up: the last page is
+always full, exactly as `WheelWindow` already guaranteed for the wheel.
+
+### The sweep guard
+
+`internal/ui/scrollsweep_test.go` keeps the layer from re-growing copies. It
+walks `internal/` and fails when a non-test file outside `internal/ui`
+contains the shape of a hand-written window follow (`if …top > …cursor` /
+`…top = …cursor - h + 1`). It matches on that *shape*, not on function names,
+so a pane may keep a `clampScroll()` wrapper as long as the body delegates.
+Scrollers that legitimately differ are listed in `allowedScroll` with a
+reason — the editor's line viewports, the explorer's offset-anchored scratch
+section, and the call/type hierarchies while #2465 moves them — and a second
+test fails when an allowlist entry stops matching, so the list cannot go
+stale. It is the same shape as the text-input guard in `inputsweep_test.go`.
+
 ## Page size
 
 The page-jump distance is the list's visible height, which every view already

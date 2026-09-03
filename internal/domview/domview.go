@@ -584,15 +584,7 @@ func (m *Model) View() string {
 
 // header names the file the tree belongs to plus the node count.
 func (m *Model) header(pal *theme.Palette) string {
-	name := "(no file)"
-	if m.path != "" {
-		name = baseName(m.path)
-	}
-	s := lipgloss.NewStyle().Foreground(pal.Secondary)
-	if m.focused {
-		s = lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
-	}
-	return " " + s.Render(name) + " " + lipgloss.NewStyle().Faint(true).Render("("+strconv.Itoa(len(m.rows))+")")
+	return ui.FileHeader(pal, m.path, len(m.rows), m.focused)
 }
 
 // selectorLine renders the selector input with its match count or error.
@@ -712,16 +704,7 @@ func truncate(s string, max int) string {
 
 // scrollToCursor keeps the selected row inside the visible window.
 func (m *Model) scrollToCursor() {
-	height := m.bodyHeight()
-	if m.cursor < m.top {
-		m.top = m.cursor
-	}
-	if m.cursor >= m.top+height {
-		m.top = m.cursor - height + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	m.top = ui.ScrollToShow(m.top, m.cursor, m.bodyHeight(), len(m.rows))
 }
 
 // bodyHeight is the room below the header and selector lines.

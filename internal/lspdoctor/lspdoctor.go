@@ -295,14 +295,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 // footer.
 func (m *Model) View() string {
 	pal := m.theme()
-	var b strings.Builder
-	b.WriteString(m.headerLine(pal))
-	b.WriteString("\n")
-	b.WriteString(m.statusLine(pal))
-	b.WriteString("\n")
-	b.WriteString(m.renderRows(pal, m.bodyHeight()))
-	b.WriteString(m.footer(pal))
-	return b.String()
+	return ui.ListPaneView(m.headerLine(pal), m.statusLine(pal), m.renderRows(pal, m.bodyHeight()), m.footer(pal))
 }
 
 // headerLine is the panel title with the server / failure counts.
@@ -425,22 +418,7 @@ func (m *Model) bodyHeight() int {
 
 // clampScroll keeps the cursor valid and inside the visible window.
 func (m *Model) clampScroll() {
-	n := len(m.rows())
-	if m.cursor > n-1 {
-		m.cursor = n - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.top > m.cursor {
-		m.top = m.cursor
-	}
-	if h := m.bodyHeight(); m.cursor >= m.top+h {
-		m.top = m.cursor - h + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	ui.ClampWindow(&m.cursor, &m.top, len(m.rows()), m.bodyHeight())
 }
 
 // clip bounds one rendered line to the panel width.

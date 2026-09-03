@@ -1273,25 +1273,11 @@ func (m *Model) bodyTop() int {
 // clampScroll keeps the active view's cursor valid and inside its window.
 func (m *Model) clampScroll() {
 	rows := m.rowsOf(m.tab)
-	cur, top := m.Cursor(), m.Top()
-	if cur > len(rows)-1 {
-		cur = len(rows) - 1
-	}
-	if cur < 0 {
-		cur = 0
-	}
-	if len(rows) > 0 && cur < len(rows) && rows[cur].idx < 0 {
+	cur, top := ui.ClampIndex(m.Cursor(), len(rows)), m.Top()
+	if len(rows) > 0 && rows[cur].idx < 0 {
 		cur = snapRow(rows, cur, 1)
 	}
-	if top > cur {
-		top = cur
-	}
-	if h := m.bodyHeight(); cur >= top+h {
-		top = cur - h + 1
-	}
-	if top < 0 {
-		top = 0
-	}
+	ui.ClampWindow(&cur, &top, len(rows), m.bodyHeight())
 	m.setCursor(cur)
 	m.setTop(top)
 }

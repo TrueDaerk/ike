@@ -4,7 +4,7 @@ title: Mouse Gestures
 description: The one convention every surface obeys for the wheel, the click and the double click, the shared list-mouse helpers behind it, and the audited surface×gesture matrix.
 resource: internal/ui/listmouse.go
 tags: [architecture, ui, mouse, lists, navigation, reusable]
-timestamp: 2026-08-28T18:00:00Z
+timestamp: 2026-09-03T18:00:00Z
 ---
 
 # Mouse Gestures
@@ -88,6 +88,11 @@ RowAt(y, top, headerRows, height, n int) (int, bool)     // content-local y → 
 type ClickTracker struct{ … }
     (*ClickTracker).Double(row int, now time.Time) bool  // second click on the same row?
     (*ClickTracker).Reset()                              // after an activation, or off a row
+
+// The whole gesture in one call (#2462)
+    (*ClickTracker).ClickRow(y, top, headerRows, height, n int, now time.Time,
+                             cursor *int, activate func(int) tea.Cmd) tea.Cmd
+SelectClick(y, top, headerRows, height, n int, cursor *int) bool
 ```
 
 - `WheelWindow` is the clamp that used to differ: nine panes used
@@ -102,6 +107,13 @@ type ClickTracker struct{ … }
   remember to seed `lastClickRow: -1`. Row identity is the caller's to define:
   the explorer offsets its scratch rows past the tree rows so a tree click and
   a section click never pair up.
+- `ClickRow` (#2462) is the three of them composed: hit-test, select, activate
+  on a second click on the same row, reset when the click lands off a row. It
+  is what a pane's `Click(x, y)` now delegates to in one line — Problems,
+  Usages, Dependencies and Structure had written that body out identically.
+  `activate` may be nil for a list whose rows have no enter action;
+  `SelectClick` is the same gesture without the double-click clock, for the
+  read-only report panes (the two Doctors).
 
 Coordinates are **pane-content-local** throughout — `y 0` is the pane's first
 rendered line — and the app translates screen cells into them once, in

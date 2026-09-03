@@ -244,21 +244,7 @@ func (m *Model) overlayHeight() int {
 // clampOverlay keeps the modal's cursor valid and scrolled into view.
 func (m *Model) clampOverlay() {
 	n := m.overlayItems()
-	if m.ovCursor > n-1 {
-		m.ovCursor = n - 1
-	}
-	if m.ovCursor < 0 {
-		m.ovCursor = 0
-	}
-	if m.ovTop > m.ovCursor {
-		m.ovTop = m.ovCursor
-	}
-	if h := m.overlayHeight(); m.ovCursor >= m.ovTop+h {
-		m.ovTop = m.ovCursor - h + 1
-	}
-	if m.ovTop < 0 {
-		m.ovTop = 0
-	}
+	ui.ClampWindow(&m.ovCursor, &m.ovTop, n, m.overlayHeight())
 }
 
 // overlayKey routes one key to the open modal.

@@ -469,13 +469,8 @@ func (m *Model) NextMatch() ui.MatchStep { return m.stepFiltered(1) }
 func (m *Model) PrevMatch() ui.MatchStep { return m.stepFiltered(-1) }
 
 func (m *Model) stepFiltered(delta int) ui.MatchStep {
-	if !m.filter.Active() {
-		return ui.NoStep
-	}
-	next, st := ui.StepOver(m.cursor, len(m.rows), delta, func(i int) bool { return !m.rows[i].header })
-	m.cursor = next
-	m.clampScroll()
-	return m.filter.ShowStep(st)
+	return ui.StepFiltered(&m.filter, &m.cursor, &m.top, len(m.rows), m.bodyHeight(), delta,
+		func(i int) bool { return !m.rows[i].header })
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -585,17 +580,7 @@ func (m *Model) activate(i int) tea.Cmd {
 // for its first (most severe) diagnostic, everything else for itself. ok is
 // false past the list's ends and on a header with nothing beneath it.
 func (m *Model) targetRow(i int) (row, bool) {
-	if i < 0 || i >= len(m.rows) {
-		return row{}, false
-	}
-	r := m.rows[i]
-	if r.header {
-		if i+1 >= len(m.rows) || m.rows[i+1].header {
-			return row{}, false
-		}
-		r = m.rows[i+1]
-	}
-	return r, true
+	return ui.TargetRow(m.rows, i, func(r row) bool { return r.header })
 }
 
 // quickFix asks the app for the marked row's code actions (#2175); an empty
@@ -642,14 +627,7 @@ func rowRelLabel(r row) string {
 // View renders the scope header, the scrolled rows, and the key-hint footer.
 func (m *Model) View() string {
 	pal := m.theme()
-	var b strings.Builder
-	b.WriteString(m.headerLine(pal))
-	b.WriteString("\n")
-	b.WriteString(m.filter.View(m.width, pal))
-	b.WriteString("\n")
-	b.WriteString(m.renderRows(pal, m.bodyHeight()))
-	b.WriteString(m.footer(pal))
-	return b.String()
+	return ui.ListPaneView(m.headerLine(pal), m.filter.View(m.width, pal), m.renderRows(pal, m.bodyHeight()), m.footer(pal))
 }
 
 // headerLine names the scope and totals the visible problems.
@@ -831,21 +809,7 @@ func (m *Model) bodyHeight() int {
 
 // clampScroll keeps the cursor valid and inside the visible window.
 func (m *Model) clampScroll() {
-	if m.cursor > len(m.rows)-1 {
-		m.cursor = len(m.rows) - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.top > m.cursor {
-		m.top = m.cursor
-	}
-	if h := m.bodyHeight(); m.cursor >= m.top+h {
-		m.top = m.cursor - h + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	ui.ClampWindow(&m.cursor, &m.top, len(m.rows), m.bodyHeight())
 }
 
 // clip bounds one rendered line to the panel width.

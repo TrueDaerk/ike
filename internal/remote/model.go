@@ -544,14 +544,7 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 // renderRows draws the flattened tree scrolled around the cursor.
 func (m *Model) renderRows(pal *theme.Palette, height int) string {
 	m.clampScroll()
-	var b strings.Builder
-	for k := 0; k < height; k++ {
-		if i := m.top + k; i < len(m.rows) {
-			b.WriteString(m.renderRow(pal, i))
-		}
-		b.WriteString("\n")
-	}
-	return b.String()
+	return ui.RenderWindow(m.top, height, len(m.rows), "", func(i int) string { return m.renderRow(pal, i) })
 }
 
 // renderRow draws one entry: caret and name on the left, size and mtime
@@ -639,21 +632,7 @@ func (m *Model) bodyHeight() int {
 
 // clampScroll keeps the cursor valid and inside the visible window.
 func (m *Model) clampScroll() {
-	if m.cursor > len(m.rows)-1 {
-		m.cursor = len(m.rows) - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.top > m.cursor {
-		m.top = m.cursor
-	}
-	if h := m.bodyHeight(); m.cursor >= m.top+h {
-		m.top = m.cursor - h + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	ui.ClampWindow(&m.cursor, &m.top, len(m.rows), m.bodyHeight())
 }
 
 // clip bounds one rendered line to the pane width.

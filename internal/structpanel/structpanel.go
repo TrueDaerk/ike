@@ -8,7 +8,6 @@
 package structpanel
 
 import (
-	"strconv"
 	"strings"
 	"time"
 
@@ -204,18 +203,7 @@ func (m *Model) Wheel(delta int) {
 // Click handles one left click at content-local (x, y): a row click selects,
 // a second click on the same row within the double-click window navigates.
 func (m *Model) Click(x, y int) tea.Cmd {
-	i, ok := ui.RowAt(y, m.top, headerRows, m.bodyHeight(), len(m.rows))
-	if !ok {
-		m.clicks.Reset()
-		return nil
-	}
-	double := m.clicks.Double(i, m.now())
-	m.cursor = i
-	if double {
-		m.clicks.Reset()
-		return m.navigate(i)
-	}
-	return nil
+	return m.clicks.ClickRow(y, m.top, headerRows, m.bodyHeight(), len(m.rows), m.now(), &m.cursor, m.navigate)
 }
 
 // View renders the header line plus the symbol rows.
@@ -246,15 +234,7 @@ func (m *Model) View() string {
 
 // header names the file the tree belongs to.
 func (m *Model) header(pal *theme.Palette) string {
-	name := "(no file)"
-	if m.path != "" {
-		name = baseName(m.path)
-	}
-	s := lipgloss.NewStyle().Foreground(pal.Secondary)
-	if m.focused {
-		s = lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
-	}
-	return " " + s.Render(name) + " " + lipgloss.NewStyle().Faint(true).Render("("+strconv.Itoa(len(m.rows))+")")
+	return ui.FileHeader(pal, m.path, len(m.rows), m.focused)
 }
 
 // emptyNotice explains an empty list.
@@ -295,16 +275,7 @@ func (m *Model) renderRow(pal *theme.Palette, base lipgloss.Style, i int) string
 
 // scrollToCursor keeps the selected row inside the visible window.
 func (m *Model) scrollToCursor() {
-	height := m.bodyHeight()
-	if m.cursor < m.top {
-		m.top = m.cursor
-	}
-	if m.cursor >= m.top+height {
-		m.top = m.cursor - height + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	m.top = ui.ScrollToShow(m.top, m.cursor, m.bodyHeight(), len(m.rows))
 }
 
 // bodyHeight is the room below the header line.
