@@ -91,6 +91,15 @@ func (m Model) intentionContext() (intention.Context, bool) {
 		snap.Contains(ed.Path()) && snap.Status(ed.Path()) != vcs.StatusUntracked {
 		cx.InRepo = true
 	}
+	if ed.HasFile() {
+		// A breakpoint on the caret line brings its refinements into the
+		// popup (#2405): the condition form, discoverable where it applies.
+		key := bpKey(ed.Path())
+		if m.bpts != nil && m.bpts.Has(key, line) {
+			cx.BreakpointAtCaret = true
+			cx.BreakpointConditional = m.bpts.MetaAt(key, line).Condition != ""
+		}
+	}
 	if ed.HasFile() && lang.HasTests(ed.Path()) {
 		if _, ok := ed.NearestTestAt(line); ok {
 			cx.TestAtCaret = true

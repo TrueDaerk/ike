@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Debugger
-description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit (with conditions, hit counts and logpoints), paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; a combined debug area (frames/variables panel + debuggee console behind internal tabs) with per-project watch expressions, an evaluate popup (Alt+F8) and inline variable values in the editor; Python via debugpy, Go via delve (dlv dap over a socket), PHP via the in-process Xdebug/DBGp bridge.
+description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit (with conditions, hit counts and logpoints), paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8) plus run-to-cursor (Alt+F9), one session at a time; a combined debug area (frames/variables panel + debuggee console behind internal tabs) with per-project watch expressions, an evaluate popup (Alt+F8) and inline variable values in the editor; Python via debugpy, Go via delve (dlv dap over a socket), PHP via the in-process Xdebug/DBGp bridge.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, dbgp, xdebug, delve, run, breakpoints, watches, evaluate]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Debugger (0350)
@@ -231,11 +231,26 @@ document version — the testmarks discipline) and the annotation branch sits
 in the view chain after log spans.
 
 The push rides the existing Locals fetch: `fetchScopes` additionally sends
-`debugLocalsMsg{sess, path, vars}`, and the app fans it out to every editor
-view of the file — following the selected frame, so activating another frame
-moves the values there. `clearPausedMarker` clears them (continue, steps,
-stop, session end): inline values describe a paused state and never outlive
-it. Gated by `debug.inline_values` (Settings › Debug, default on).
+`debugLocalsMsg{sess, path, line, vars}`, and the app fans it out to every
+editor view of the file — following the selected frame, so activating another
+frame moves the values there. The fetch runs on every stop, panel open or not:
+the annotations are the debug surface of a user who never opens the tool
+window. `clearPausedMarker` clears them (continue, steps, stop, session end):
+inline values describe a paused state and never outlive it. Gated by
+`debug.inline_values` (Settings › Debug, default on).
+
+Two corrections came out of the stepping telemetry (#2405):
+
+- **Sigil names.** Locals were filtered to plain identifiers, which dropped
+  every PHP local — xdebug reports them as `$name` — so an Xdebug session
+  showed no inline values at all. One leading sigil is now part of the name
+  and part of the whole-word match (`$s` annotates `$s`, never `$sum`).
+- **The focus window.** The frame's own line and the two above it are the
+  *focus* (`editor.SetDebugFocus`, cleared with the values). An annotation
+  that does not fit is dropped off the window as before — a hint is not worth
+  truncating code for — but inside it the hint shrinks with an ellipsis
+  instead of vanishing: on the line the debugger is stopped at, the value is
+  what the step was for.
 
 ## PHP: in-process Xdebug/DBGp bridge (0360, epic #697)
 
@@ -556,7 +571,40 @@ instead of running it under the adapter's `/dev/null` stdin.
   set to the adapter immediately (`syncSessionBreakpoints`); list-side
   enable/disable/delete actions (#1377) sync the same way.
 
+### Run to cursor (#2405)
+
+Streaks of eight to eleven consecutive `debug.stepOver` presses said what
+stepping is really used for: reaching a line, not inspecting each step.
+`debug.runToCursor` (alt+F9, JetBrains' chord; Run menu and palette are the
+delivered escape) resumes the debuggee towards the focused editor's cursor
+line, `debug.runToLine` asks for a line number first — the same mechanism from
+the palette.
+
+The mechanism is one **temporary breakpoint** (`internal/app/runtocursor.go`):
+
+- It lives on the session state (`debugState.tempBP`), never in the persisted
+  store — so a user breakpoint on the same line can never be removed by the
+  cleanup, and nothing survives into `.ike/breakpoints.json`.
+- DAP `setBreakpoints` replaces a file's *whole* list, so the temporary line
+  is merged into it on the wire: `sessionSpecs(key)` returns the enabled
+  stored specs plus the temporary line (deduplicated, line-ordered), and every
+  push path — the `initialized` configuration sweep, `syncSessionBreakpoints`,
+  the run itself — goes through it.
+- An enabled user breakpoint on the target line means **no** temporary one is
+  installed: the stop is already guaranteed, and there is nothing to clean up.
+- The push and the `continue` run in one goroutine, in that order, so the
+  resume can never overtake the breakpoint it depends on.
+- The next `stopped` event retires it (`clearTempBreakpoint`, from
+  `applyDebugStop`) and re-pushes the file's real list — whether the run
+  reached the line or another breakpoint won the race. A session that stops or
+  disconnects takes it along: the state dies with `m.dbg`, and the store never
+  knew about it.
+
 ## Breakpoints list (#1377)
+
+An `alt+enter` intention on a breakpoint line offers the same form as
+**Add Condition…** (**Edit Condition…** when one exists, #2405): the chord
+alone left conditional breakpoints undiscovered.
 
 `internal/breakpanel` + `pane.KindBreakpoints` (singleton key `breakpoints`,
 Problems-panel pattern) is the Breakpoints tool window — JetBrains'

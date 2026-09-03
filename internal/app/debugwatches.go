@@ -29,10 +29,12 @@ type debugWatchesMsg struct {
 }
 
 // debugLocalsMsg carries the selected frame's Locals for the inline values;
-// path is the frame's source file, sess guards like debugWatchesMsg.
+// path is the frame's source file, line its 0-based line (the focus window of
+// #2405), sess guards like debugWatchesMsg.
 type debugLocalsMsg struct {
 	sess *dap.Session
 	path string
+	line int
 	vars []dap.Variable
 }
 
@@ -187,6 +189,7 @@ func (m *Model) applyInlineValues(msg debugLocalsMsg) {
 	if dbg.inlinePath != "" && dbg.inlinePath != path {
 		for _, ed := range m.editorViewsForPath(dbg.inlinePath) {
 			ed.SetDebugLocals(nil)
+			ed.SetDebugFocus(-1)
 		}
 	}
 	locals := make([]editor.DebugLocal, 0, len(msg.vars))
@@ -195,6 +198,9 @@ func (m *Model) applyInlineValues(msg debugLocalsMsg) {
 	}
 	for _, ed := range m.editorViewsForPath(path) {
 		ed.SetDebugLocals(locals)
+		// The frame's own line and the two above it are the focus window
+		// (#2405): their hints survive a line too long to append to.
+		ed.SetDebugFocus(msg.line)
 	}
 	dbg.inlinePath = path
 }
@@ -207,6 +213,7 @@ func (m *Model) clearInlineValues() {
 	}
 	for _, ed := range m.editorViewsForPath(m.dbg.inlinePath) {
 		ed.SetDebugLocals(nil)
+		ed.SetDebugFocus(-1)
 	}
 	m.dbg.inlinePath = ""
 }

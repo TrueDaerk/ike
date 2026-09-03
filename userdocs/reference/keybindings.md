@@ -109,6 +109,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Reveal open file in explorer | `alt+f1` | `alt+f1` | `explorer.reveal` |
 | Revert file | `cmd+alt+z` | `ctrl+alt+z` | `vcs.revertFile` |
 | Run file | `shift+f10` | `shift+f10` | `run.file` |
+| Run to cursor | `alt+f9` | `alt+f9` | `debug.runToCursor` |
 | Run/Debug configurations | `alt+shift+f10` | `alt+shift+f10` | `run.select` |
 | Save all | `cmd+shift+s` | `ctrl+shift+s` | `editor.saveAll` |
 | Search everywhere | `cmd+shift+a` | `ctrl+shift+a` | `palette.searchEverywhere` |

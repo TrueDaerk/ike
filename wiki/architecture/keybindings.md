@@ -1153,6 +1153,7 @@ JetBrains is:
 | `debug.continue` | `f9` | delivered | `—` | live |
 | `debug.copy` | `cmd+c` | fragile | `palette` | live via palette |
 | `debug.evaluate` | `alt+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
+| `debug.runToCursor` | `alt+f9` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.start` | `shift+f9` | delivered | `—` | live |
 | `debug.stepInto` | `f7` | delivered | `—` | live |
 | `debug.stepOut` | `shift+f8` | delivered | `—` | live |

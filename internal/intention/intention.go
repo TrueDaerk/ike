@@ -102,6 +102,13 @@ type Context struct {
 	// the debugger: the language has a debug adapter (lang.SupportsDebug)
 	// and no session is running or launching (#2026).
 	CanDebug bool
+	// BreakpointAtCaret reports a breakpoint on the caret line (#2405), so
+	// the intention popup can offer its refinements — the condition form is
+	// otherwise only reachable through a chord nobody finds by accident.
+	// BreakpointConditional reports that this breakpoint already carries a
+	// condition, which turns the entry from "Add" into "Edit".
+	BreakpointAtCaret     bool
+	BreakpointConditional bool
 	// CanToggleValue reports that the caret word is a known toggle pair
 	// (true/false, on/off, …; #1658).
 	CanToggleValue bool

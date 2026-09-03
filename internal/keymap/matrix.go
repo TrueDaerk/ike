@@ -185,6 +185,9 @@ var reachableAlternatives = map[string]string{
 	"debug.stop":                 "palette / Run menu",
 	"debug.toggleBreakpoint":     "palette / Run menu",
 	"debug.breakpointProperties": "palette / Run menu",
+	// #2405: run-to-cursor joins that family — alt+f9 is the JetBrains chord
+	// and cmd+f9 the darwin primary, and both are fragile in a terminal.
+	"debug.runToCursor": "palette / Run menu",
 	"run.rerun":                  "palette / Run menu",
 	// #2081: coverage runs and the mark toggle are palette-only — the run
 	// family's chord budget is spent and coverage is an occasional action.
@@ -209,6 +212,9 @@ var reachableAlternatives = map[string]string{
 	"debug.console":      "palette",
 	"run.select":         "palette / Run menu",
 	"debug.testAtCursor": "palette / Run menu",
+	// #2405: the prompt flavour of run-to-cursor has no chord of its own —
+	// the cursor flavour carries alt+f9/cmd+f9 — so the palette is its door.
+	"debug.runToLine": "palette / Run menu",
 	"pane.close":         "palette / pane context menu",
 	"view.toggleWrap":    "palette",
 	"window.layouts":     "palette",

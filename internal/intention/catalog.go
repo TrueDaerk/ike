@@ -24,6 +24,7 @@ func Builtins() []Provider {
 		diagnosticProvider(),
 		vcsProvider(),
 		testProvider(),
+		breakpointProvider(),
 		editProvider(),
 		vaultProvider(),
 		bufferLangProvider(),
@@ -284,6 +285,27 @@ func testProvider() Provider {
 				items = append(items, Item{Title: "Debug Test at Cursor", Kind: "test", CommandID: "debug.testAtCursor"})
 			}
 			return items
+		},
+	}
+}
+
+// breakpointProvider offers the breakpoint refinements on a line that
+// carries one (#2405): the condition form behind debug.breakpointProperties,
+// which the telemetry showed nobody discovers from its cmd+alt+f8 chord. The
+// title says whether a condition exists already, so the entry reads as what
+// it will do.
+func breakpointProvider() Provider {
+	return Provider{
+		ID: "app.breakpoint",
+		Items: func(cx Context) []Item {
+			if !cx.BreakpointAtCaret {
+				return nil
+			}
+			title := "Add Condition…"
+			if cx.BreakpointConditional {
+				title = "Edit Condition…"
+			}
+			return []Item{{Title: title, Kind: "debug", CommandID: "debug.breakpointProperties"}}
 		},
 	}
 }

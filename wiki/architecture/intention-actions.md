@@ -40,8 +40,8 @@ position, the caret line's text, whole-buffer line access, selection and
 read-only-ness — plus **precomputed caret facts** (doc-path presence,
 http-request block plus the response/environment facts beside it,
 diagnostic/hunk/conflict at caret, tracked-in-repo, test at caret and its
-debuggability, togglable word, conceal stand-in and its family, clipboard
-occupancy). The facts come from state the editor and the app already cache, so
+debuggability, breakpoint at caret and whether it carries a condition (#2405),
+togglable word, conceal stand-in and its family, clipboard occupancy). The facts come from state the editor and the app already cache, so
 providers stay cheap and table-testable; the snapshot is built once per open
 (`Model.intentionContext`).
 

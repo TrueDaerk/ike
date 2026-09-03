@@ -36,7 +36,19 @@ type debugValueStore struct {
 	version int            // docVersion the values map was computed for
 	locals  []DebugLocal   // the filtered push, kept for the per-edit rescan
 	values  map[int]string // 0-based buffer line -> annotation text
+	// focus is the paused frame's line (0-based, -1 for none) and how many
+	// lines above it share the focus (#2405). A focused line's annotation is
+	// shown even when it does not fit, truncated rather than dropped: while
+	// stepping, the value hint of the line the debugger is *on* is the one
+	// the user came for, and a long line silently hid it.
+	focus     int
+	focusBack int
 }
+
+// debugFocusBack is how far the focus reaches above the paused line (#2405):
+// the frame's line and the two lines above it, the window a stepping user
+// reads.
+const debugFocusBack = 2
 
 // SetDebugLocals replaces the inline debugger values of this buffer with the
 // current frame's locals. Nil or empty clears them. Locals whose name is not
@@ -57,7 +69,7 @@ func (m *Model) SetDebugLocals(locals []DebugLocal) {
 		return
 	}
 	if m.debugVals == nil {
-		m.debugVals = &debugValueStore{version: -1}
+		m.debugVals = &debugValueStore{version: -1, focus: -1}
 	}
 	kept := make([]DebugLocal, 0, len(locals))
 	for _, l := range locals {
@@ -76,6 +88,35 @@ func (m *Model) SetDebugLocals(locals []DebugLocal) {
 	if !sameFlightMarks(old, values) {
 		m.bumpRender()
 	}
+}
+
+// SetDebugFocus marks the paused frame's line (0-based) as the focus of the
+// inline values (#2405); -1 clears it. The focus spans that line and the two
+// above it — the window the stepping user is reading — and only decides
+// whether an annotation may truncate to fit, never what it says.
+func (m *Model) SetDebugFocus(line int) {
+	if m.debugVals == nil {
+		if line < 0 {
+			return
+		}
+		m.debugVals = &debugValueStore{version: -1, focus: -1}
+	}
+	if m.debugVals.focus == line {
+		return
+	}
+	m.debugVals.focus, m.debugVals.focusBack = line, debugFocusBack
+	if len(m.debugVals.values) > 0 {
+		m.bumpRender()
+	}
+}
+
+// debugValueFocused reports whether line sits in the focus window.
+func (m Model) debugValueFocused(line int) bool {
+	s := m.debugVals
+	if s == nil || s.focus < 0 {
+		return false
+	}
+	return line <= s.focus && line >= s.focus-s.focusBack
 }
 
 // DebugValueAt returns the annotation text of a line, empty when it carries
@@ -112,7 +153,18 @@ func (m Model) debugValueAnnotate(row string, line, textWidth int) (string, bool
 	content := strings.TrimRight(ansi.Strip(row), " ")
 	// Two spaces of air between the code and the annotation.
 	if ansi.StringWidth(content)+annW+2 > textWidth {
-		return row, false
+		// Off the focus window a value hint is not worth truncating code for;
+		// on it, the hint is what the step was for, so it shrinks instead of
+		// vanishing (#2405).
+		if !m.debugValueFocused(line) {
+			return row, false
+		}
+		room := textWidth - ansi.StringWidth(content) - 2
+		if room < 8 {
+			return row, false
+		}
+		ann = ansi.Truncate(" ▏ "+text, room, "…")
+		annW = ansi.StringWidth(ann)
 	}
 	style := lipgloss.NewStyle().Foreground(m.theme().InlayHint).Italic(true).Faint(true)
 	return ansi.Truncate(row, textWidth-annW, "") + style.Render(ann), true
@@ -184,9 +236,15 @@ func mentionsWord(line, name string) bool {
 }
 
 // isPlainIdentifier reports whether a name is worth scanning for: a letter or
-// underscore followed by letters, digits or underscores. Synthesized names
-// like "(*Struct).field" can never match a whole word and would only cost.
+// underscore followed by letters, digits or underscores, optionally behind
+// one sigil. Synthesized names like "(*Struct).field" can never match a whole
+// word and would only cost. The sigil matters for the languages that spell it
+// (#2405): xdebug reports PHP locals as "$name", and dropping them left PHP
+// sessions — the ones the stepping telemetry came from — without any inline
+// values at all. The sigil is a non-word rune, so mentionsWord still anchors
+// the match on the identifier's boundaries.
 func isPlainIdentifier(name string) bool {
+	name = strings.TrimPrefix(name, "$")
 	for i, r := range name {
 		if r == '_' || unicode.IsLetter(r) || (i > 0 && unicode.IsDigit(r)) {
 			continue

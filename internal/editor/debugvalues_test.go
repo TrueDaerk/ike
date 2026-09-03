@@ -162,3 +162,59 @@ func TestDebugValuesSkipNonIdentifiers(t *testing.T) {
 		t.Errorf("only the plain identifier may annotate: %q", got)
 	}
 }
+
+// TestDebugValuesPHPSigilNames covers #2405: xdebug reports PHP locals as
+// "$name", and those used to be dropped as non-identifiers — a PHP session
+// showed no inline values at all. The sigil is part of the name and part of
+// the match, so "$s" annotates "$s" without matching "$sum".
+func TestDebugValuesPHPSigilNames(t *testing.T) {
+	m := debugLoaded(t, "$s = \"hi\";\n$sum = 1;\n")
+	m.SetDebugLocals([]DebugLocal{{Name: "$s", Value: "\"hi\""}})
+
+	if got := m.DebugValueAt(0); got != "$s = \"hi\"" {
+		t.Errorf("the PHP local must annotate its line: %q", got)
+	}
+	if got := m.DebugValueAt(1); got != "" {
+		t.Errorf("$sum must not match $s: %q", got)
+	}
+}
+
+// TestDebugValuesFocusedLineTruncates covers the #2405 focus window: on the
+// paused frame's line (and the two above it) a hint that does not fit shrinks
+// instead of disappearing, which is exactly where a stepping user looks.
+func TestDebugValuesFocusedLineTruncates(t *testing.T) {
+	long := "x := " + strings.Repeat("y", 50)
+	m := debugLoaded(t, long+"\n"+long+"\n")
+	m.SetDebugLocals([]DebugLocal{{Name: "x", Value: strings.Repeat("v", 40)}})
+
+	rows := strings.Split(ansi.Strip(m.View()), "\n")
+	if strings.Contains(rows[0], "\u258f") {
+		t.Fatalf("without a focus the tight line stays unannotated: %q", rows[0])
+	}
+
+	m.SetDebugFocus(0)
+	rows = strings.Split(ansi.Strip(m.View()), "\n")
+	if !strings.Contains(rows[0], "x = vvv") || !strings.Contains(rows[0], "\u2026") {
+		t.Errorf("the focused line must carry a truncated hint: %q", rows[0])
+	}
+	if strings.Contains(rows[1], "\u258f") {
+		t.Errorf("a line below the focus stays unannotated: %q", rows[1])
+	}
+}
+
+// TestDebugValuesFocusWindowSpansTwoLinesAbove pins the window itself: the
+// frame line and the two above it, nothing further.
+func TestDebugValuesFocusWindowSpansTwoLinesAbove(t *testing.T) {
+	m := debugLoaded(t, "a\nb\nc\nd\ne\n")
+	m.SetDebugLocals([]DebugLocal{{Name: "a", Value: "1"}})
+	m.SetDebugFocus(3)
+	for line, want := range map[int]bool{0: false, 1: true, 2: true, 3: true, 4: false} {
+		if got := m.debugValueFocused(line); got != want {
+			t.Errorf("focus at line %d = %v, want %v", line, got, want)
+		}
+	}
+	m.SetDebugFocus(-1)
+	if m.debugValueFocused(3) {
+		t.Error("clearing the focus must empty the window")
+	}
+}
