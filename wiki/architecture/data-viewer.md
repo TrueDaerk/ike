@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Data Viewer
-description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825/#1851/#1885/#1940/#2248 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table> (the head prefills through WHERE, so only the condition is typed), run inside a subquery so paging keeps working, and 'S' cycles the focused column through ascending/descending/none as an ORDER BY outside that subquery; 'E' exports the filtered, sorted result as CSV or JSON — streamed through the Source interface, bounded by a row cap that announces itself; 'P' profiles the focused column (nulls, distinct, min/max, top values, plus mean or length range) through SQL aggregates or a bounded scan, asynchronously and cancelably."
+description: "#1764/#1765/#1766/#1777/#1788/#1795/#1825/#1851/#1885/#1940/#2248/#2468 — table files (SQLite .db/.sqlite/.sqlite3, DuckDB .duckdb/.ddb and Parquet .parquet/.pqt, by extension or magic) open as a table sidebar plus a paged read-only grid instead of a binary text buffer; the pane speaks a small backend interface, SQLite and Parquet ride pure-Go readers and DuckDB the duckdb CLI so the build stays cgo-free; the engine open and the exact row counts run as background commands so a multi-gigabyte database opens instantly; '/' filters the grid with a SQL clause appended to SELECT * FROM <table> (the head prefills through WHERE, so only the condition is typed), run inside a subquery so paging keeps working, and 'S' cycles the focused column through ascending/descending/none as an ORDER BY outside that subquery; 'E' exports the filtered, sorted result as CSV or JSON — streamed through the Source interface, bounded by a row cap that announces itself; 'P' profiles the focused column (nulls, distinct, min/max, top values, plus mean or length range) through SQL aggregates or a bounded scan, asynchronously and cancelably; the sidebar and grid rows are drawn by the shared internal/gridview renderer."
 resource: internal/dataview
 tags: [architecture, database, sqlite, duckdb, parquet, viewer, pane, read-only, grid, filter, sort, export, csv, json, sql, mouse, paging, async, performance, profile, statistics]
 timestamp: 2026-09-03T00:00:00Z
@@ -32,6 +32,11 @@ Three packages carry it, and only one of them knows SQL:
   and Parquet share.
 - `internal/dataview` — the pane model: sidebar and grid regions, cursors,
   paging state, rendering.
+- `internal/gridview` — the shared sidebar-plus-grid renderer (#2468): one
+  data row inside a width budget, the header row, the list column with its
+  blank filler, and the pad/clip helpers. A leaf with no notion of tables or
+  cursors; the [Elasticsearch console](/architecture/elasticsearch-console.md)
+  draws through the same functions.
 - `internal/app/datafiles.go` — the plugin, the pane lifecycle, and the
   read-only schema buffer.
 
@@ -405,6 +410,33 @@ column profile (below). The filter line owns the keyboard while it is open: the
 grid's single-letter keys are plain text inside a clause, and the export line
 and the profile popup own it the same way. Column widths derive from the loaded page, clamped with an
 ellipsis like the csv grid.
+
+### The shared renderer (#2468)
+
+The pane owns *what* is selected; *how* a row is drawn belongs to
+`internal/gridview`, which the Elasticsearch console shares verbatim:
+
+- `DataRow(pal, cells, widths, colOff, w, selected, focused)` draws one row
+  from the first visible column on inside a `w`-cell budget — a leading
+  space, each cell padded to its column width, two spaces between columns,
+  an ellipsis where the budget runs out. A `Null` cell draws `∅`, faint. A
+  selected row takes the selection background (muted while the pane is
+  blurred) and extends it over the unused budget, so the highlight spans the
+  grid.
+- `HeaderRow(pal, labels, widths, colOff, w)` draws the labels bold in the
+  accent colour; this pane's labels carry the sort arrow (#2248), so the
+  arrow is sized inside its column rather than as an overflow.
+- `Sidebar(top, height, n, width, row)` is the list column: `height` lines,
+  the pane's own `sidebarRow` for each listed object and unstyled blanks
+  below the last one, joined without a trailing newline so it sits beside
+  the grid.
+
+`gridview.Cell` is the renderer's own type; the pane converts the one row it
+is about to draw from `datasrc.Cell`, so the backend package never depends on
+the UI. Both cursors keep their windows through `ui.ClampWindow` (#2462),
+which — unlike the pane's former hand-written clamp — pulls a window parked
+past the end back up when a shorter page lands under it. Golden views in
+`internal/dataview/testdata` pin the rendering byte-for-byte.
 
 `tab` reaches the pane because a focused data viewer is an exception to the
 IDE's global tab (#1788), which otherwise cycles the pane focus before any pane
