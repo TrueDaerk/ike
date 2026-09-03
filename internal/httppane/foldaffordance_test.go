@@ -105,6 +105,45 @@ func TestHeaderClickOutsideGlyphStillToggles(t *testing.T) {
 	}
 }
 
+// TestFoldCopyHitWithRequestLine mirrors TestFoldCopyHitIsOnlyTheGlyphCell
+// with a two-row header: the extra request-line row must shift the hit test
+// down with it (#2450).
+func TestFoldCopyHitWithRequestLine(t *testing.T) {
+	m := foldViewerWithRequest(t)
+	if got, want := m.headerLineCount(), 2; got != want {
+		t.Fatalf("headerLineCount = %d, want %d", got, want)
+	}
+	header := bodyRow(m, "  \"mapping\": {")
+	m.ToggleFold(header)
+	x, ok := m.foldCopyColumn(header)
+	if !ok {
+		t.Fatal("a collapsed header must have a copy column")
+	}
+	y := m.DisplayRow(header) - m.top + m.headerLineCount()
+
+	if row, hit := m.FoldCopyHit(x, y); !hit || row != header {
+		t.Fatalf("the glyph cell: hit=%v row=%d, want true/%d", hit, row, header)
+	}
+	// One row up — where the click would land under the old, hard-coded
+	// single-row header offset — must miss.
+	if _, hit := m.FoldCopyHit(x, y-1); hit {
+		t.Error("the request-line row must not report a copy hit")
+	}
+}
+
+// TestGutterToggleWithRequestLine mirrors TestHeaderClickOutsideGlyphStillToggles
+// with a two-row header: the gutter toggle must hit the row under the
+// pointer, not the row above it (#2450).
+func TestGutterToggleWithRequestLine(t *testing.T) {
+	m := foldViewerWithRequest(t)
+	header := bodyRow(m, "  \"mapping\": {")
+	y := m.DisplayRow(header) - m.top + m.headerLineCount()
+	m.MousePress(0, y)
+	if _, folded := m.FoldedAt(header); !folded {
+		t.Error("a gutter click on the row under the pointer should fold it")
+	}
+}
+
 // TestCopyFoldAtOpenFoldIsNoOp: no affordance, no copy.
 func TestCopyFoldAtOpenFoldIsNoOp(t *testing.T) {
 	m := foldViewer(t)
