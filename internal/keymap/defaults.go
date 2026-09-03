@@ -356,6 +356,15 @@ var jetbrainsRows = []row{
 	// the palette is the delivered fallback (matrix.go).
 	{"cmd+alt+shift+e", "editor.escapeSelection", "Escape selection as unicode", Editor, "Escapes (#2338)"},
 	{"cmd+alt+shift+u", "editor.unescapeSelection", "Unescape selection", Editor, "Escapes (#2338)"},
+	// Case conversion (#2418): cmd+shift+u is JetBrains' Toggle Case verbatim,
+	// with the delivered ctrl secondary like project.switch above. The
+	// identifier-style rotation wanted cmd+alt+shift+u to sit beside it, but
+	// that chord is editor.unescapeSelection's (#2338) — so the cycle takes
+	// the free alt+shift+u, next to the other editor-scoped alt+shift keys
+	// (alt+shift+s sorts, alt+shift+w wraps).
+	{"cmd+shift+u", "editor.case.toggle", "Toggle case", Editor, "Editor (#2418)"},
+	{"ctrl+shift+u", "editor.case.toggle", "Toggle case", Editor, "Editor (#2418)"},
+	{"alt+shift+u", "editor.case.cycle", "Cycle case (camel/snake/kebab)", Editor, "Editor (#2418)"},
 	// Rendered markdown preview (#62): single chord since #711 (was cmd+k m).
 	{"cmd+alt+m", "markdown.preview", "Markdown preview", Editor, "Markdown preview (#62)"},
 	// TODO index (#61): cmd+6 is JetBrains' TODO tool-window chord.

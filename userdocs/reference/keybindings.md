@@ -171,6 +171,7 @@ Active when an editor pane has focus.
 | Copy | `cmd+c` | `ctrl+c` | `editor.copy` |
 | Copy JSON/YAML path | `cmd+alt+shift+c` | `ctrl+alt+shift+c` | `editor.copyDocPath` |
 | Cut | `cmd+x` | `ctrl+x` | `editor.cut` |
+| Cycle case (camel/snake/kebab) | `alt+shift+u` | `alt+shift+u` | `editor.case.cycle` |
 | Debug test at cursor | `alt+shift+f9` | `alt+shift+f9` | `debug.testAtCursor` |
 | Delete line | `cmd+backspace` | `ctrl+backspace` | `editor.deleteLine` |
 | Delete word backward | `alt+backspace` | `alt+backspace` | `editor.deleteWordBackward` |
@@ -238,6 +239,8 @@ Active when an editor pane has focus.
 | Split view right | `cmd+alt+shift+right` | `ctrl+alt+shift+right` | `editor.splitViewRight` |
 | Toggle bookmark | `f11` | `f11` | `bookmark.toggle` |
 | Toggle bookmark with mnemonic | `alt+f3` | `alt+f3` | `bookmark.toggleMnemonic` |
+| Toggle case | `cmd+shift+u` | `ctrl+shift+u` | `editor.case.toggle` |
+| Toggle case | `ctrl+shift+u` | `ctrl+shift+u` | `editor.case.toggle` |
 | Toggle follow (tail -f) | `alt+shift+f` | `alt+shift+f` | `view.toggleFollow` |
 | Toggle soft wrap | `alt+shift+w` | `alt+shift+w` | `view.toggleWrap` |
 | Type hierarchy | `ctrl+h` | `ctrl+h` | `lsp.typeHierarchy` |

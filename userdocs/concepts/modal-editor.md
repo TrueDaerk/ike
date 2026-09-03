@@ -61,7 +61,12 @@ gets you every combination of them.
 / `g~` lowercase / uppercase / toggle case, `=` reindent, `gq` reflow (hard-wrap
 at `editor.text_width`). Doubling an operator makes it linewise (`dd`, `guu`,
 `gqq`, `==`). Commenting is a command (++cmd+7++) rather than an operator, and
-`~` on its own toggles the case of the character under the cursor.
+`~` on its own toggles the case of the character under the cursor. ++cmd+shift+u++
+is the same case toggle for people who reach for JetBrains' chord — it takes
+the selection, or the word under every caret — and ++alt+shift+u++ rotates the
+identifier under each caret through `camelCase` → `snake_case` → `kebab-case` →
+`PascalCase` → `SCREAMING_SNAKE` and back. Text that is not an identifier is
+left alone.
 
 **Motions:** `h j k l`, `w b e` by word and `W B E` by WORD (whitespace-
 delimited, so `foo.bar()` is one), `ge` / `gE` back to the previous word's end,

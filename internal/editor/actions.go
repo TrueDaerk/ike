@@ -801,6 +801,17 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		}
 		m.toggleValue()
 		m.scroll()
+	// The case family as commands (#2418, caseops.go): the JetBrains-flavoured
+	// counterpart of the gu/gU/g~ operators, acting on the selection or on the
+	// word under every caret. editor.case.cycle rotates identifier styles.
+	case "case_lower":
+		return m, m.runCaseCommand(caseLower)
+	case "case_upper":
+		return m, m.runCaseCommand(caseUpper)
+	case "case_toggle":
+		return m, m.runCaseCommand(caseToggle)
+	case "case_cycle":
+		return m, m.runCaseCommand(caseCycle)
 	// Escape / unescape the selection (#2338): the rewriting counterpart of
 	// the #1620 decoding layer — the buffer really changes, in the escape
 	// dialect of its language.

@@ -85,7 +85,12 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	case awaitObject:
 		m.wait = awaitNone
 		if hasRune {
+			around := m.around
+			m.armCaseRedo(func(op, reg rune) func(*Model) {
+				return func(mm *Model) { mm.replayCaseObject(op, reg, r, around) }
+			})
 			m.applyTextObject(r)
+			m.opRedo = nil
 		}
 		m.pending.Reset()
 		return m, nil
@@ -312,7 +317,11 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		if !m.pending.HasOperator() {
 			m.fanMotionSecondaries(s, r, count, false)
 		}
+		m.armCaseRedo(func(op, reg rune) func(*Model) {
+			return func(mm *Model) { mm.replayCaseMotion(op, reg, s, r, count) }
+		})
 		m.applyMotionOrOperator(res, count)
+		m.opRedo = nil
 		return m, nil
 	}
 
