@@ -124,6 +124,8 @@ bring their own.
 | Copy Shown HTTP Request as httpie | `http.copyShownAsHttpie` | — | — | everywhere |
 | Diff HTTP Response Against Previous Run | `http.diffPreviousRun` | `cmd+shift+d` | — | everywhere |
 | Compare Stored HTTP Responses | `http.diffResponses` | — | — | everywhere |
+| Introspect GraphQL Schema | `http.graphqlIntrospect` | — | — | everywhere |
+| Open Cached GraphQL Schema (SDL) | `http.graphqlSchema` | — | — | everywhere |
 | Import curl Command… | `http.importCurl` | — | — | everywhere |
 | Import OpenAPI Spec… | `http.importOpenAPI` | — | — | everywhere |
 | Insert curl as HTTP Request | `http.insertCurlAsRequest` | — | — | everywhere |

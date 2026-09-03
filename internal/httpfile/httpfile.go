@@ -65,6 +65,11 @@ type Request struct {
 	// (#1993), in file order. They are evaluated against the response after
 	// dispatch; the parser only collects them.
 	Captures []Capture
+	// GraphQL is the split of a `GRAPHQL <url>` block's body (#2423) — query,
+	// variables, operation name and their line ranges. nil for every other
+	// method, so `req.GraphQL != nil` is the test for "this is a GraphQL
+	// request". See graphql.go.
+	GraphQL *GraphQLSpec
 	// BodyStart/BodyEnd delimit the body's lines (1-based, inclusive), with
 	// the surrounding blank lines excluded — 0 when the request has no body.
 	// Consumers that need the body *in* the file rather than as a string use
@@ -325,6 +330,13 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 		}
 	}
 
+	// A GRAPHQL block's body is a query plus an optional JSON variables
+	// object (#2423); the split is part of the parse so highlighting,
+	// completion and dispatch all read the same sections.
+	if strings.EqualFold(req.Method, GraphQLMethod) {
+		req.GraphQL = graphQLSpec(req.Body, req.BodyStart, req.BodyEnd)
+	}
+
 	req.Captures = captures
 	f.Requests = append(f.Requests, req)
 }
@@ -484,6 +496,16 @@ func (r *Request) ResolveVars(vars *Vars) (*Request, error) {
 	out.Body = sub(r.Body)
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("request %s: %s", r.Key(), strings.Join(dedup(errs), "; "))
+	}
+	// A GRAPHQL block becomes its wire form here (#2423), after substitution:
+	// the envelope must carry the *resolved* query and variables, and every
+	// consumer of a resolved request — dispatch, the curl and httpie exports —
+	// then sees the POST that actually goes out.
+	if out.GraphQL != nil {
+		out.GraphQL = graphQLSpec(out.Body, r.BodyStart, r.BodyEnd)
+		if err := out.applyGraphQL(); err != nil {
+			return nil, fmt.Errorf("request %s: %v", r.Key(), err)
+		}
 	}
 	return &out, nil
 }

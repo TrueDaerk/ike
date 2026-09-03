@@ -97,6 +97,20 @@ func (s *httpSource) Complete(_ context.Context, req complete.Request) ([]ilsp.C
 	col := clampCol(line, req.Col)
 	before := string([]rune(line)[:col])
 
+	// A GRAPHQL block's query section is decided by the parser rather than by
+	// classify (#2423): the sections are a *parse* of the block, not something
+	// the lines above the caret reveal. The placeholder context still wins
+	// inside it — a "{{token}}" in a query completes the file's variables like
+	// it does anywhere else.
+	if block, ok := graphQLQueryAt(lines, req.Line); ok {
+		if isPlaceholderOpen(before) {
+			after := string([]rune(line)[col:])
+			return placeholderItems(req.Path, lines, placeholderTyped(before),
+				!strings.HasPrefix(after, "}}")), nil
+		}
+		return graphQLItems(block, lines, req.Line, before), nil
+	}
+
 	switch classify(lines, req.Line, before) {
 	case ctxMethod:
 		return fuzzyItems(methods, strings.TrimLeft(before, " \t"), "method"), nil

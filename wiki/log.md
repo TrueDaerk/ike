@@ -1,5 +1,37 @@
 # Log
 
+## 2026-09-03 (GraphQL requests in the HTTP client, #2423)
+
+- **`GRAPHQL <url>` blocks** in `.http` files (`internal/httpfile/graphql.go`,
+  `internal/graphql`): the body is the query as written, an optional JSON
+  `variables` object follows it after a blank line, and `ResolveVars` rewrites
+  the block into the `POST` that goes out —
+  `{"query":…,"variables":…,"operationName":…}` with
+  `Content-Type: application/json` unless the author set one. The variables
+  object is the last blank-line delimited `{…}` chunk, so a query keeps blank
+  lines of its own. `Content-Type: application/graphql` sends the query alone
+  and warns that the variables block had nowhere to travel.
+- **A failed operation looks failed.** A GraphQL server answers a broken query
+  with HTTP 200 and an `errors` array; `Response.GraphQLErrors`
+  (`internal/httpclient/graphql.go`) lifts the messages out, the viewer puts
+  the count on the status row in the failure colour and a red block above the
+  body, and the completion notice (#2364) counts the run as failed. Detection
+  is two-sided — a GraphQL-shaped request *and* the three-member envelope — so
+  a REST endpoint answering `{"errors":[…]}` is untouched, and it reads the
+  as-sent snapshot, so history entries and re-sends behave alike with no
+  history-format change.
+- **Schema introspection and completion.** `http.graphqlIntrospect` posts the
+  introspection query to the block's endpoint with its own headers and caches
+  the trimmed schema per host under `.ike/graphql/`; the `.http` completion
+  source then offers fields, arguments and types inside the query section from
+  that cache, resolved by a caret walk rather than a parse.
+  `http.graphqlSchema` opens the cached schema as SDL in a scratch file. Both
+  are palette-only, with entries in the unbound-command ledger.
+- **Highlighting.** The query section becomes a `graphql` region when a build
+  registers that language and is painted by a Go lexer otherwise; the variables
+  object is always a JSON region.
+- Subscriptions stay out of scope — they are a WebSocket protocol, not a POST.
+
 ## 2026-09-03 (mermaid diagrams in the markdown preview, #2421)
 
 - **```mermaid fences render as pictures** in the markdown preview instead of

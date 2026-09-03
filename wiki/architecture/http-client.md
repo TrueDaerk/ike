@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, and a notification when a failed or slow response lands while the response pane is not on screen.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, and GraphQL errors lifted out of a 200 answer into a red block above the body.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-03T12:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -28,6 +28,11 @@ writes the raw response body to a file (see
 Both export paths speak a second format, httpie (#2384): `http.copyAsHttpie`
 on the caret's block and `http.copyShownAsHttpie` on the shown exchange (see
 [the httpie export](#the-httpie-export-internalhttpfilehttpiego-2384)).
+A request need not be REST either: a `GRAPHQL <url>` block (#2423) writes the
+query as the body, sends the JSON envelope, lifts a failed operation's
+`errors` out of its HTTP 200 answer, and — once `http.graphqlIntrospect` has
+cached the endpoint's schema — completes fields, arguments and types inside the
+query (see [GraphQL requests](#graphql-requests-internalgraphql-2423)).
 
 ## File format
 
@@ -126,6 +131,10 @@ Authorization: Bearer {{$env TOKEN}}
   inside a request block store a value out of *its response* under `name`, for
   the `{{name}}` placeholders of later requests — see
   [capturing values from a response](#capturing-values-from-a-response-1993).
+- **GraphQL blocks** (#2423): a request line spelled `GRAPHQL <url>` takes the
+  query as its body and an optional JSON `variables` object after a blank line,
+  and sends the `POST` envelope for both — see
+  [GraphQL requests](#graphql-requests-internalgraphql-2423).
 
 ## Parser (`internal/httpfile`)
 
@@ -581,6 +590,160 @@ header names are sorted through the shared `curlHeaders` so the same request
 always exports the same command, and **nothing is masked** — an `Authorization`
 header is exported exactly as sent, the same deliberate line drawn in #1994
 and #2059.
+
+## GraphQL requests (`internal/graphql`, #2423)
+
+GraphQL over HTTP is a `POST` of one JSON envelope —
+`{"query": …, "variables": …, "operationName": …}` — and writing that by hand
+means escaping a multi-line query into a JSON string. The
+`GRAPHQL <url>` block, the JetBrains spelling, removes that step: the body is
+the query as it is written, and an optional JSON `variables` object follows it
+after a blank line.
+
+```
+### hero
+GRAPHQL https://example.com/graphql
+Authorization: Bearer {{token}}
+
+query Hero($episode: Episode) {
+  hero(episode: $episode) {
+    name
+  }
+}
+
+{
+  "episode": "EMPIRE"
+}
+```
+
+- **Parsing.** `GRAPHQL` is an ordinary request-line method to the parser, so
+  every existing rule — folded query lines, headers, comments, capture
+  directives, `###` naming — applies unchanged. The block's body is then split
+  into `Request.GraphQL` (`internal/httpfile/graphql.go`), which carries the
+  query, the variables, the operation name and the **1-based line ranges** of
+  both sections; every other method leaves the field nil, so
+  `req.GraphQL != nil` is the test for "this is a GraphQL request".
+- **Where the split falls.** The variables object is the *last* blank-line
+  delimited chunk that opens with `{` and closes with `}`. Scanning from the
+  end is what lets a query keep blank lines of its own — two operations in one
+  document, a paragraph inside a selection set — because the chunk behind such
+  a blank line does not start with `{`.
+- **Operation name.** The first named operation in the document
+  (`graphql.OperationName`), taken from the text *before* the first selection
+  set, so a field called `query` inside a set is never read as a keyword. An
+  anonymous `{ … }` shorthand sends no `operationName` at all rather than an
+  empty one, which some servers reject.
+- **What goes on the wire.** `Request.ResolveVars` rewrites the block *after*
+  substitution — the envelope must carry the resolved query and variables — so
+  every consumer of a resolved request sees the same `POST`: the dispatcher,
+  the curl export (#1994) and the httpie export (#2384) alike. The method
+  becomes `POST` and `Content-Type: application/json` is added when the author
+  set none. Variables that are not valid JSON fail the request there, naming
+  the problem, instead of being posted.
+- **`Content-Type: application/graphql`.** That media type carries the query
+  *itself*, so the body is the raw query text and no envelope is built. There
+  is then nowhere for variables to travel: a block that declares both gets a
+  response warning saying the variables block was not sent, rather than a
+  silent strip that looks like a server ignoring them.
+- **An external query** (`< ./hero.graphql`, #1305) works too: the file is read
+  at dispatch, split like an inline body and enveloped the same way.
+
+### The answer (`internal/httpclient/graphql.go`)
+
+A GraphQL server answers a *failed* operation with **HTTP 200** and an `errors`
+array in the body. The status line therefore says nothing, and before #2423 a
+query with a typo looked exactly like a successful one. `Response.GraphQLErrors`
+lifts the messages out, and the viewer puts them where the eye is:
+
+- the status row gains the count (`HTTP/1.1 200 OK   (12ms)   ✗ 2 errors`) and
+  turns the failure colour;
+- a red block of one row per error — message, response path and query
+  `line:column` when the server sent them — sits directly **above** the body;
+- the body itself pretty-prints as the JSON it is, so `data` reads normally
+  underneath.
+
+A non-empty `errors` array also makes the run count as **failed** for the
+completion notice (#2364), which would otherwise report a 200 as a success that
+merely took a while.
+
+Detection is deliberately two-sided: the *request* must look like a GraphQL
+call **and** the body must be the three-member (`data`/`errors`/`extensions`)
+envelope with well-formed error entries. An ordinary REST endpoint answering
+`{"errors":[…]}` therefore keeps its old behaviour. The request side reads the
+as-sent snapshot (#1832) rather than a flag on the response, which means a
+browsed history entry and a re-sent request are recognised exactly like a fresh
+dispatch — no history file format change.
+
+### Schema introspection and the cache
+
+A schema is what makes a query writable, and a server hands one out through the
+introspection query. Two palette commands own that (`internal/app/http_graphql.go`);
+both act on the `GRAPHQL` block under the caret, so neither needs a prompt:
+
+- **`http.graphqlIntrospect`** posts `graphql.IntrospectionQuery` to the block's
+  endpoint with the block's own headers — `Authorization` above all, since a
+  schema behind a login is the common case — and folds the answer into the
+  trimmed model in `internal/graphql/schema.go`. Type references are flattened
+  at parse time into the two forms a consumer asks for: the rendered signature
+  (`[Character!]!`) and the named type behind it (`Character`), which is what a
+  selection set continues from. A server that refuses introspection reports
+  *its own* message rather than leaving an empty schema behind.
+- **`http.graphqlSchema`** renders the cached schema back as **SDL** and opens
+  it as a scratch file (`scratch.CreateWithContent`, #2134's route) — the
+  readable form, for the questions a completion popup cannot answer.
+  Introspection meta types and the five built-in scalars are left out; they are
+  the same in every schema.
+
+The cache is one JSON file per host under the project state directory
+(`.ike/graphql/<host>.json`, `IKE_CONFIG_DIR` redirects it as everywhere),
+following the `internal/httphistory` conventions: readable, diffable,
+best-effort. One file per host is the right grain — a schema belongs to an
+endpoint, and one `.http` file often talks to several — and it is what lets the
+completion source answer without a dispatch of its own. Types are stored sorted
+by name, so re-introspecting an unchanged schema produces an unchanged file.
+
+### Schema-aware completion (`plugins/languages/http/graphql_complete.go`)
+
+Inside a query section the completion source answers from the cache, never from
+the network. What applies is decided by `graphql.Analyze`, a *walk* of the query
+text up to the caret rather than a parse — a query being typed is by definition
+unfinished, and a parser that insists on a closed document says nothing exactly
+when help is wanted. The walk keeps a stack of type names: entering a selection
+set pushes the type of the field that opened it, leaving one pops, and an inline
+fragment's `... on Type` pushes that type instead.
+
+| Where the caret is | What is offered |
+| --- | --- |
+| a selection set | the fields of the set's type, plus `__typename`; the detail column carries each field's own type, and a deprecated field is offered *with* the marker |
+| inside a field's `(` | that field's arguments, inserting the `": "` separator so the caret lands where the value goes — the header-name rule, one grammar down |
+| after the `:` of a variable definition, or after `... on` | every named type of the schema |
+| the value side of an argument, a string, a comment | nothing — the schema cannot say what a literal should be |
+
+Which schema answers is resolved from the block's own target; when that still
+carries an unresolved `{{host}}` — the common shape of a one-endpoint request
+file — the project's **single** cached schema answers anyway. Two or more are
+ambiguous and answer nothing. No cached schema means an empty batch, which
+closes the popup rather than filling it with noise.
+
+The placeholder context keeps precedence inside a query: a `{{token}}` there
+completes the file's variables (#2135) exactly as it does in a header value.
+
+### Highlighting the query
+
+A `GRAPHQL` block is two languages, not one, and it has no `Content-Type` of its
+own to resolve — the envelope's `application/json` describes the *wire* body,
+not what is written in the file. `plugins/languages/http/graphql.go` therefore
+claims the two sections directly through the same region seam #1303 uses: the
+variables object is JSON in every build, and the query section becomes a
+`graphql` region **when a build registers that language** (a vendored
+tree-sitter-graphql grammar). No build does today, so a minimal Go lexer paints
+the same lines instead — operation keywords, type conditions, `$variables`,
+directives, field names, argument names, strings, numbers and punctuation. The
+two never overlap: the lexer stands down as soon as a region claims the lines,
+so vendoring the grammar later switches the route with no further change.
+
+**Out of scope:** subscriptions. They are a WebSocket protocol, not an HTTP
+`POST`, and wait on the WebSocket work.
 
 ## Dispatch (`internal/httpclient`)
 
@@ -1357,6 +1520,13 @@ belong to:
   part's own body is left plain; it may be text, JSON, or a binary file's
   bytes with no way to tell from the boundary structure alone.
 
+A `GRAPHQL` block (#2423) is claimed by the same seam but without asking the
+`Content-Type`, which describes the *wire* body rather than what is written:
+the query section becomes a `graphql` region when a build registers that
+language and is painted by a Go lexer otherwise, and the variables object
+becomes a JSON region — see
+[highlighting the query](#highlighting-the-query).
+
 `internal/highlight` consults a host's `Regions` before its `injections.scm`,
 and `lang.RegionAt` answers "which language is this line" for consumers that
 need it outside highlighting.
@@ -1380,7 +1550,10 @@ edits without stale ranges.
 
 Completion inside a body stays deliberately off: the source claims the buffer
 exclusively (#1302), so a JSON body offers nothing rather than every identifier
-in the file.
+in the file. The one body that *does* complete is a `GRAPHQL` block's query
+section (#2423), and it completes from the cached schema rather than from the
+buffer — see
+[schema-aware completion](#schema-aware-completion-pluginslanguageshttpgraphql_completego).
 
 ## Completion is exclusive (#1302)
 
