@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -255,6 +256,32 @@ func TestEscCloses(t *testing.T) {
 	p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if d, _ := p.TakeDismissal(); d.QueryLen != 2 {
 		t.Fatalf("query length = %d, want 2 (the body without the prefix)", d.QueryLen)
+	}
+}
+
+// TestDismissalCarriesOpenDuration is the #2408 addition: a dismissal reports
+// how long the box stood, so an export can tell a glance-and-esc from a minute
+// of fruitless searching. Each open is timed on its own.
+func TestDismissalCarriesOpenDuration(t *testing.T) {
+	p := New(Config{}, NewCommandMode(fakeSource{}, nil, false), fileMode())
+	now := time.Unix(1_700_000_000, 0)
+	p.now = func() time.Time { return now }
+	p.SetSize(80, 24)
+
+	p.Open(Context{})
+	now = now.Add(3 * time.Second)
+	p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	d, ok := p.TakeDismissal()
+	if !ok || d.Open != 3*time.Second {
+		t.Fatalf("dismissal = (%+v, %v), want a 3s open", d, ok)
+	}
+
+	// The second open starts its own clock — durations never accumulate.
+	p.Open(Context{})
+	now = now.Add(time.Second)
+	p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if d, _ := p.TakeDismissal(); d.Open != time.Second {
+		t.Fatalf("second open = %v, want 1s", d.Open)
 	}
 }
 

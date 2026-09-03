@@ -160,6 +160,10 @@ type switchOpts struct {
 	// peekEnter marks the fresh model as a peek of the departing root and
 	// snapshots the target's session/layout state for the unchanged check.
 	peekEnter bool
+	// closing marks the switch as the tail of a project close (#1355), so the
+	// departing project's project.leave event says "close" rather than
+	// "switch" (#2408) — the same transaction, a different intent.
+	closing bool
 	// skipUnchangedPeekSave skips persisting the departing peeked project's
 	// session/layout when nothing changed since peek-enter, so a ten-second
 	// look-up never plants a .ike directory in a repo it only read.
@@ -205,9 +209,21 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// still be recoverable — and carry this session's ownership token, so
 	// coming back does not offer them as crash recovery.
 	m.backupFlushWorkspace(m.activeWS())
+	// The departing project's token must be taken before the chdir — it hashes
+	// the working directory (#2408).
+	leaveToken := telemetryProjectToken()
 	if err := os.Chdir(root); err != nil {
 		return m, func() tea.Msg { return project.SwitchFailedMsg{Path: root, Err: err} }
 	}
+	// The departing project's time budget closes here: after the chdir
+	// committed the switch — a failed one leaves nothing to report — and
+	// before the fresh model below starts its own clock, so the spans of two
+	// projects never overlap.
+	leaveReason := "switch"
+	if opts.closing {
+		leaveReason = "close"
+	}
+	m.recordProjectLeave(leaveToken, leaveReason)
 	invalidateCwd() // the render hot path caches the working directory (#608)
 	// Global tool sessions (#1890) detach from the departing workspace and
 	// park on the manager: the parked workspace never holds them, so eviction

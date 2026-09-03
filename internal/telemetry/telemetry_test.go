@@ -123,6 +123,9 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 	r.Layout("tab.switch", nil)
 	r.Session("0.1.0", "darwin", "ab12cd34ef56")
 	r.Op("http.flight", "ok", map[string]string{"ms": "120", "class": "2xx", "stream": "false"})
+	r.CommandOutcome("editor.save", SourceKeybind, false, 0)
+	r.PaletteDismiss("%", 4, 900*time.Millisecond)
+	r.ProjectLeave("ab12cd34ef56", "switch", time.Minute)
 	r.Close()
 
 	allowed := map[string]bool{
@@ -133,6 +136,10 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 		"passes": true,                                            // heartbeat (#2348)
 		"top":    true,                                            // heartbeat (#2402) — Go message type names, never content
 		"phase":  true, "ms": true, "class": true, "stream": true, // op (#2348)
+		"ok":        true, // command outcome (#2408)
+		"mode":      true, // palette.dismiss (#2408) — a prefix rune, never the query
+		"query_len": true, // palette.dismiss (#2408) — the length, never the text
+		"reason":    true, // project.leave (#2408)
 	}
 	for _, ev := range readSession(t, dir) {
 		for k := range ev.Data {
@@ -555,5 +562,98 @@ func TestPruneDeletesEmptySessionFiles(t *testing.T) {
 		if f == "20250101T000000-aaa.jsonl" {
 			t.Fatal("empty session file survived the prune")
 		}
+	}
+}
+
+// TestCommandOutcomeShapes is the #2408 acceptance criterion for the command
+// event: a fast success keeps the v3 shape, a slow one and a failure both
+// carry "ok" and "ms".
+func TestCommandOutcomeShapes(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.CommandOutcome("editor.save", SourceKeybind, true, time.Millisecond)        // fast success
+	r.CommandOutcome("project.switch", SourcePalette, true, 400*time.Millisecond) // slow success
+	r.CommandOutcome("gone.command", SourceMenu, false, 0)                        // failed dispatch
+	r.CommandOutcome("lsp.documentSymbols", SourceInternal, true, 2*time.Second)  // slow internal
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != 4 {
+		t.Fatalf("want 4 events, got %d: %v", len(evs), evs)
+	}
+	if _, ok := evs[0].Data["ok"]; ok {
+		t.Errorf("a fast success must keep the plain shape: %v", evs[0])
+	}
+	if _, ok := evs[0].Data["ms"]; ok {
+		t.Errorf("a fast success must not carry ms: %v", evs[0])
+	}
+	if evs[1].Data["ok"] != "true" || evs[1].Data["ms"] != "400" {
+		t.Errorf("slow success: ok/ms = %q/%q, want true/400", evs[1].Data["ok"], evs[1].Data["ms"])
+	}
+	if evs[2].Data["ok"] != "false" || evs[2].Data["ms"] != "0" {
+		t.Errorf("failed dispatch: ok/ms = %q/%q, want false/0", evs[2].Data["ok"], evs[2].Data["ms"])
+	}
+	if evs[3].Type != TypeInternal || evs[3].Data["ms"] != "2000" {
+		t.Errorf("an internal dispatch keeps its own type and gains ms: %v", evs[3])
+	}
+}
+
+// A dismissal is its own event type carrying the mode, the query *length* and
+// how long the box stood open (#2408).
+func TestPaletteDismissEvent(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.PaletteDismiss("%", 4, 1500*time.Millisecond)
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != 1 || evs[0].Type != TypePaletteDismiss {
+		t.Fatalf("want one %s event, got %v", TypePaletteDismiss, evs)
+	}
+	d := evs[0].Data
+	if d["mode"] != "%" || d["query_len"] != "4" || d["ms"] != "1500" {
+		t.Fatalf("payload = %v, want mode %%, query_len 4, ms 1500", d)
+	}
+}
+
+// project.leave carries the hashed token, the reason and the foreground time
+// (#2408) — and, like the session marker, never opens a file on its own: a
+// launch that only leaves again must stay a ghost (#2318).
+func TestProjectLeaveEvent(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.ProjectLeave("ab12cd34ef56", "quit", 90*time.Second)
+	r.Close()
+	if files := sessionFiles(t, dir); len(files) != 0 {
+		t.Fatalf("a lone project.leave opened a session file: %v", files)
+	}
+
+	dir = t.TempDir()
+	r = New(dir, nil)
+	r.Command("editor.save", SourceKeybind)
+	r.ProjectLeave("ab12cd34ef56", "switch", 90*time.Second)
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != 2 || evs[1].Type != TypeProjectLeave {
+		t.Fatalf("want a %s event after the command, got %v", TypeProjectLeave, evs)
+	}
+	d := evs[1].Data
+	if d["project"] != "ab12cd34ef56" || d["reason"] != "switch" || d["ms"] != "90000" {
+		t.Fatalf("payload = %v, want the token, reason switch and ms 90000", d)
+	}
+}
+
+// The version analysis scripts branch on (#2408).
+func TestSchemaVersionIsFour(t *testing.T) {
+	if SchemaVersion != 4 {
+		t.Fatalf("SchemaVersion = %d, want 4", SchemaVersion)
+	}
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.Command("editor.save", SourceKeybind)
+	r.Close()
+	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 4 {
+		t.Fatalf("events must be stamped v4, got %v", evs)
 	}
 }

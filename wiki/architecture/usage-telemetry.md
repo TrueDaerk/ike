@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Usage Telemetry
-description: Local-only usage recording — command, keybinding, layout, session, heartbeat and operation-lifecycle events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
+description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, operation-lifecycle, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
 timestamp: 2026-09-03T00:00:00Z
@@ -33,22 +33,39 @@ paths.** Two guards enforce it:
 ## Event schema (the analysis interface)
 
 One JSON object per line. `v` is the schema version (`telemetry.SchemaVersion`,
-currently 3); readers must tolerate unknown fields and filter on `v`. v3
-(#2348) added the diagnostic types `session`, `heartbeat` and `op` without
-changing any existing field — the bump mainly tells a reader that a v3 log
-ending without heartbeats is evidence, while a v2 log ending simply predates
-them.
+currently 4); readers must tolerate unknown fields and filter on `v`.
 
 ```json
-{"v":2,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
-{"v":2,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
+{"v":4,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
+{"v":4,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
 ```
+
+### Version history (what an analysis script must branch on)
+
+| `v` | Issue | What changed |
+| --- | ----- | ------------ |
+| 1 | #2235 | The original `command`/`key`/`layout` types. Internal dispatches sit under `command` with `data.source == "internal"`. |
+| 2 | #2304 | Internal dispatches move to their own `internal` type; nothing else changes. |
+| 3 | #2348 | The diagnostic types `session`, `heartbeat` and `op` join; no existing field changes meaning. A v3 log ending without heartbeats is evidence of a hard stop, a v2 log ending simply predates them. |
+| 4 | #2408 | Heartbeats slow from 10s to 60s (any per-hour rate must branch on `v`); `command`/`internal` events gain `ok` and `ms` when the dispatch failed or was slow; the types `palette.dismiss` and `project.leave` join; the v3 pseudo-command `palette.recentFiles.dismiss` (#2399, `data.qlen`) is gone — its successor is `palette.dismiss` with `data.query_len`. |
+
+An export spanning versions therefore needs three guards: filter v1 `command`
+events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
+"succeeded, under 50 ms" (and as "unknown" below v4), and normalise heartbeat
+counts by the version's interval before comparing sessions.
 
 - `ts` — event time, UTC, millisecond RFC 3339.
 - `sid` — random per-session id; also part of the file name.
 - `type` + `data`:
   - `command` — a **user-triggered** command dispatch. `id` is the command
-    id, `source` one of `palette`, `menu`, `keybind`, `mouse`.
+    id, `source` one of `palette`, `menu`, `keybind`, `mouse`. Since v4
+    (#2408) the event also carries the *outcome*, but only when there is
+    something to say: `ok` (`"true"`/`"false"`) and `ms` appear when the
+    dispatch failed — an id nothing registers, the dispatch funnel's one
+    failure mode — or when its synchronous part took at least
+    `telemetry.CommandSlowThreshold` (50 ms). Their absence means "succeeded,
+    under the threshold". `ms` measures the part that blocks the update loop;
+    work the returned `tea.Cmd` does off-loop belongs to the `op` events.
   - `internal` — a command dispatched by an internal funnel, not the user
     (polling/background work — e.g. the structure panel's/breadcrumbs'
     `lsp.documentSymbols` refresh on cursor move or save). Same `data` shape
@@ -77,8 +94,10 @@ them.
     project switch; the token in effect is the last one recorded. Deferred
     like `pane.focus`, so it alone never creates a file, and it survives the
     pending trim.
-  - `heartbeat` (#2348) — a liveness stamp every 10s
-    (`telemetryHeartbeatInterval`, `internal/app/telemetry.go`) carrying
+  - `heartbeat` (#2348) — a liveness stamp every 60s
+    (`telemetryHeartbeatInterval`, `internal/app/telemetry.go`; 10s before
+    v4 — at that cadence the beats were 61% of a two-day export and buried
+    the usage data they accompany) carrying
     `passes`, the cumulative update-loop pass count (`diag.LoopPasses`). It
     reads three ways: heartbeats continuing with a frozen count → the loop is
     stuck (or starved); continuing with an advancing count → the freeze sits
@@ -99,6 +118,23 @@ them.
     `ms` (duration), `class` (`2xx`…`5xx`, when a response arrived) and
     `stream` (`true`/`false`). No URL, request key, header or body — a start
     without a matching end is the "dispatch never came back" signal.
+  - `palette.dismiss` (#2408) — a palette mode closed with esc instead of a
+    pick, the one palette outcome that otherwise leaves no trace at all.
+    `mode` is the mode's prefix rune (`":"`, `"@"`, `"%"`, …), `query_len` the
+    number of runes typed — **never the query itself** — and `ms` how long the
+    box stood open. Picks keep going through the ordinary command funnel, so
+    the dismissal rate per mode is `palette.dismiss` over its opens. A mode
+    that re-opens itself with a seeded query (the directory descend) starts a
+    new open and is timed on its own.
+  - `project.leave` (#2408) — how long a project was actually worked in.
+    `project` is the same hashed token the session marker carries, `reason` is
+    `switch`, `close` or `quit`, and `ms` is the **foreground** time since the
+    matching session marker: the clock pauses while the terminal window
+    reports itself blurred (`tea.BlurMsg`), so a project left open in a
+    background tab overnight does not read as a night of work. Terminals that
+    never report focus simply never pause it. Like the session marker it never
+    opens a session file on its own (#2318) — a launch that only leaves again
+    stays a ghost.
 
 ## Where events come from
 
@@ -122,6 +158,18 @@ All hooks sit at the existing funnels, so coverage is by construction:
   project-switch transaction.
 - **Session**: `recordTelemetrySession` (`internal/app/telemetry.go`) in the
   model constructor and after the project-switch chdir.
+- **Palette dismissals**: `recordPaletteDismissal` (`internal/app/app.go`) runs
+  after every palette `Update` in the overlay's key branch and takes the record
+  the palette left behind (`Palette.TakeDismissal`, `internal/palette`), which
+  carries the mode prefix, the query length and the open duration.
+- **Project time**: `projectClock` (`internal/app/telemetry.go`) — a pointer on
+  the model, because the model is copied by value on every Update pass — starts
+  with `buildModel`, pauses/resumes on `tea.BlurMsg`/`tea.FocusMsg`, and is read
+  by `recordProjectLeave` in the switch transaction (`internal/app/switch.go`,
+  after the chdir committed and before the fresh model's clock starts; the
+  departing token is taken *before* the chdir) and in the quit teardown. A
+  project close runs through the same switch transaction with
+  `switchOpts.closing`, which only changes the event's `reason`.
 - **HTTP flights**: `dispatchHTTP` (start) and `fillHTTPPanel` via
   `recordHTTPFlightEnd` (`internal/app/http.go`) — the end phase derives from
   the flight entry's canceled mark and the response/error, the streaming flag
@@ -181,6 +229,12 @@ history).
 jq -r 'select(.type=="command") | .data.source' ~/.ike/telemetry/*.jsonl | sort | uniq -c
 jq -r 'select(.type=="internal") | .data.id' ~/.ike/telemetry/*.jsonl | sort | uniq -c | sort -rn
 jq -r 'select(.data.status=="unbound") | .data.chord' ~/.ike/telemetry/*.jsonl | sort | uniq -c | sort -rn
+# slow or failed dispatches (v4+)
+jq -r 'select(.type=="command" and .data.ms) | [.data.id, .data.ok, .data.ms] | @tsv' ~/.ike/telemetry/*.jsonl
+# dismissals per palette mode (v4+)
+jq -r 'select(.type=="palette.dismiss") | .data.mode' ~/.ike/telemetry/*.jsonl | sort | uniq -c | sort -rn
+# minutes per project (v4+)
+jq -r 'select(.type=="project.leave") | [.data.project, (.data.ms|tonumber/60000|floor)] | @tsv' ~/.ike/telemetry/*.jsonl
 ```
 
 Evaluation/statistics UI is explicitly out of scope; the JSONL schema above is

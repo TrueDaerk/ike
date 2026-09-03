@@ -79,6 +79,14 @@ func telemetryModel(t *testing.T, cfg host.MapConfig) Model {
 	reg.Add(fakePlugin{id: "tm", caps: plugin.Capabilities{Commands: []plugin.Command{{
 		ID: "tm.fire", Title: "Fire", Scope: plugin.GlobalScope(),
 		Run: func(host.API) tea.Cmd { return nil },
+	}, {
+		// A dispatch that blocks the update loop past the outcome threshold
+		// (#2408), so the "ms" field has something to report.
+		ID: "tm.slow", Title: "Slow", Scope: plugin.GlobalScope(),
+		Run: func(host.API) tea.Cmd {
+			time.Sleep(telemetry.CommandSlowThreshold + 10*time.Millisecond)
+			return nil
+		},
 	}}}})
 	m := NewWith(reg, cfg)
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
@@ -507,5 +515,118 @@ func TestTopMessageDelta(t *testing.T) {
 	}
 	if got, want := topMessageDelta(nil, map[string]uint64{"x": 2}, 3), "x:2"; got != want {
 		t.Errorf("nil prev: got %q, want %q", got, want)
+	}
+}
+
+// TestTelemetryHeartbeatIntervalIsAMinute pins the #2408 acceptance criterion:
+// at the old 10s cadence the beats were 61% of a two-day export, drowning the
+// usage data they were supposed to accompany; a minute puts them near 20%.
+func TestTelemetryHeartbeatIntervalIsAMinute(t *testing.T) {
+	if telemetryHeartbeatInterval != 60*time.Second {
+		t.Fatalf("telemetryHeartbeatInterval = %v, want 60s", telemetryHeartbeatInterval)
+	}
+}
+
+// TestTelemetryCommandOutcome is the #2408 command-event criterion, in both
+// shapes: a fast dispatch keeps id/source only, a slow one carries ok/ms, and
+// an invocation of an unregistered id — the dispatch funnel's one failure
+// mode — is recorded with ok=false instead of vanishing.
+func TestTelemetryCommandOutcome(t *testing.T) {
+	m := telemetryModel(t, host.MapConfig{})
+	tm, _ := m.Update(palette.RunCommandMsg{ID: "tm.fire"})
+	m = tm.(Model)
+	tm, _ = m.Update(palette.RunCommandMsg{ID: "tm.slow"})
+	m = tm.(Model)
+	m.RunCommandFrom("tm.gone", telemetry.SourceMenu)
+
+	byID := map[string]telemetry.Event{}
+	for _, ev := range eventsOf(usageEvents(t, m), telemetry.TypeCommand) {
+		byID[ev.Data["id"]] = ev
+	}
+	fast, ok := byID["tm.fire"]
+	if !ok {
+		t.Fatalf("no command event for tm.fire: %v", byID)
+	}
+	if _, has := fast.Data["ok"]; has {
+		t.Errorf("a fast dispatch must keep the plain shape: %v", fast)
+	}
+	slow, ok := byID["tm.slow"]
+	if !ok {
+		t.Fatalf("no command event for tm.slow: %v", byID)
+	}
+	if slow.Data["ok"] != "true" {
+		t.Errorf("slow dispatch: ok = %q, want true", slow.Data["ok"])
+	}
+	if ms, err := strconv.Atoi(slow.Data["ms"]); err != nil || ms < 50 {
+		t.Errorf("slow dispatch: ms = %q, want at least 50", slow.Data["ms"])
+	}
+	gone, ok := byID["tm.gone"]
+	if !ok {
+		t.Fatalf("an unregistered command id must still be recorded: %v", byID)
+	}
+	if gone.Data["ok"] != "false" || gone.Data["source"] != telemetry.SourceMenu {
+		t.Errorf("failed dispatch = %v, want ok=false from the menu", gone)
+	}
+}
+
+// TestProjectClockPausesWhileBlurred: foreground time only. A terminal that
+// reports focus lets a project sitting in a background window stop counting;
+// a repeated focus report must not restart a running span (#2408).
+func TestProjectClockPausesWhileBlurred(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	c := &projectClock{now: func() time.Time { return now }}
+	c.focus()
+
+	now = now.Add(10 * time.Second)
+	c.blur()
+	now = now.Add(time.Hour) // the window sat in the background
+	c.focus()
+	c.focus() // a second focus report changes nothing
+	now = now.Add(5 * time.Second)
+
+	if got, want := c.elapsed(), 15*time.Second; got != want {
+		t.Fatalf("elapsed = %v, want %v (background time excluded)", got, want)
+	}
+	c.blur()
+	if got, want := c.elapsed(), 15*time.Second; got != want {
+		t.Fatalf("elapsed after blur = %v, want %v", got, want)
+	}
+}
+
+// TestTelemetryProjectLeaveEvents is the #2408 per-project time criterion: a
+// switch closes the departing project's budget, the quit closes the last one's,
+// and both carry the hashed token — never a path.
+func TestTelemetryProjectLeaveEvents(t *testing.T) {
+	m := telemetryModel(t, host.MapConfig{})
+	m.usage.Command("before.switch", telemetry.SourceInternal) // open the session file
+	leaving := telemetryProjectToken()
+
+	other := t.TempDir()
+	tm, _ := m.performSwitch(other)
+	fresh := tm.(Model)
+	fresh.quit()
+
+	var leaves []telemetry.Event
+	for _, ev := range usageEvents(t, fresh) {
+		if ev.Type == telemetry.TypeProjectLeave {
+			leaves = append(leaves, ev)
+		}
+	}
+	if len(leaves) != 2 {
+		t.Fatalf("want a leave event per project, got %v", leaves)
+	}
+	if leaves[0].Data["reason"] != "switch" || leaves[0].Data["project"] != leaving {
+		t.Errorf("switch leave = %v, want reason switch for the departing token %q", leaves[0], leaving)
+	}
+	if leaves[1].Data["reason"] != "quit" {
+		t.Errorf("quit leave = %v, want reason quit", leaves[1])
+	}
+	for _, ev := range leaves {
+		if _, ok := ev.Data["ms"]; !ok {
+			t.Errorf("leave event without an active time: %v", ev)
+		}
+		if strings.Contains(ev.Data["project"], string(os.PathSeparator)) {
+			t.Errorf("leave event carries a path: %v", ev)
+		}
 	}
 }

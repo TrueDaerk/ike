@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -45,7 +46,17 @@ import (
 // start/ok/error/canceled with duration, status class, streaming flag). No
 // existing field changed meaning; the bump tells a reader that a log ending
 // without heartbeats predates them rather than evidencing a freeze.
-const SchemaVersion = 3
+//
+// v4 (#2408): the heartbeat interval widens from 10s to 60s — a v4 log holds
+// roughly a sixth of the beats per hour, so any rate computed across versions
+// must branch on "v"; "command"/"internal" events gain "ok" and "ms" whenever
+// the dispatch failed or took longer than CommandSlowThreshold (their absence
+// means "fast and fine", not "unknown"); and two types join —
+// "palette.dismiss" (a palette mode closed without a pick) and "project.leave"
+// (foreground time spent in a project). The recent-files dismissal that v3
+// recorded as the pseudo-command "palette.recentFiles.dismiss" is gone: every
+// mode now reports its dismissals under "palette.dismiss".
+const SchemaVersion = 4
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
@@ -62,7 +73,16 @@ const (
 	TypeSession   = "session"   // session start / project switch: version, OS, hashed project token (#2348)
 	TypeHeartbeat = "heartbeat" // periodic liveness stamp with the update-loop pass count (#2348)
 	TypeOp        = "op"        // lifecycle of a long-running operation (#2348)
+
+	TypePaletteDismiss = "palette.dismiss" // a palette mode closed without a pick (#2408)
+	TypeProjectLeave   = "project.leave"   // foreground time spent in the project being left (#2408)
 )
+
+// CommandSlowThreshold is the dispatch duration from which a command event
+// carries its outcome fields (#2408). Below it a successful dispatch keeps the
+// v3 shape — id and source only — so the common case costs no extra bytes; at
+// or above it the event is worth a latency look.
+const CommandSlowThreshold = 50 * time.Millisecond
 
 // Command sources.
 const (
@@ -213,6 +233,58 @@ func (r *Recorder) CommandDetail(id, source string, detail map[string]string) {
 	r.record(typ, d)
 }
 
+// CommandOutcome is Command with the dispatch's outcome (#2408): ok is false
+// when the command could not run at all (an unknown id — the app's dispatch
+// funnel has no other failure mode), d is how long the synchronous dispatch
+// took. Both land in the event as "ok"/"ms", but only when the dispatch failed
+// or was slow (CommandSlowThreshold); a fast success keeps the plain v3 shape,
+// so the fields read as "worth a look" markers instead of per-event noise.
+func (r *Recorder) CommandOutcome(id, source string, ok bool, d time.Duration) {
+	if ok && d < CommandSlowThreshold {
+		r.CommandDetail(id, source, nil)
+		return
+	}
+	if d < 0 {
+		d = 0
+	}
+	r.CommandDetail(id, source, map[string]string{
+		"ok": strconv.FormatBool(ok),
+		"ms": strconv.FormatInt(d.Milliseconds(), 10),
+	})
+}
+
+// PaletteDismiss records a palette mode closed without a pick (#2408): mode is
+// the mode's prefix rune as a string (":", "%", "@"), queryLen the number of
+// runes typed — never the query itself — and d how long the box was open. A
+// dismissal is the one palette outcome that otherwise leaves no trace at all,
+// so re-open streaks ("wrong entry, esc, try again") stay invisible without it.
+func (r *Recorder) PaletteDismiss(mode string, queryLen int, d time.Duration) {
+	if d < 0 {
+		d = 0
+	}
+	r.record(TypePaletteDismiss, map[string]string{
+		"mode":      mode,
+		"query_len": strconv.Itoa(queryLen),
+		"ms":        strconv.FormatInt(d.Milliseconds(), 10),
+	})
+}
+
+// ProjectLeave records the foreground time spent in a project as it is left
+// (#2408): project is the same hashed token the session marker carries, reason
+// is "switch", "close" or "quit", and d is the time the project was active
+// with the terminal window focused. It does not start a session file (see
+// startsSession) — a launch that only ever leaves again must stay a ghost.
+func (r *Recorder) ProjectLeave(project, reason string, d time.Duration) {
+	if d < 0 {
+		d = 0
+	}
+	r.record(TypeProjectLeave, map[string]string{
+		"project": project,
+		"reason":  reason,
+		"ms":      strconv.FormatInt(d.Milliseconds(), 10),
+	})
+}
+
 // Key records a keymap resolution: the canonical chord string, the focus
 // context it resolved in, the command it resolved to (empty when none) and
 // the outcome ("resolved", "blocked" or "unbound"). Callers must pre-filter
@@ -307,6 +379,12 @@ func (r *Recorder) heartbeat() {
 // written once a meaningful event arrives.
 func startsSession(typ string, data map[string]string) bool {
 	if typ == TypeSession {
+		return false
+	}
+	if typ == TypeProjectLeave {
+		// Leaving is not using (#2408): a launch that opens a project and
+		// quits again without doing anything would otherwise resurrect
+		// exactly the ghost file the deferred pane.focus rule avoids.
 		return false
 	}
 	return !(typ == TypeLayout && data["op"] == "pane.focus")
