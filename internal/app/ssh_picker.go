@@ -3,7 +3,6 @@ package app
 import (
 	"strings"
 
-	"ike/internal/fuzzy"
 	"ike/internal/layout"
 	"ike/internal/palette"
 	"ike/internal/sshconf"
@@ -52,21 +51,15 @@ func (s *sshMode) Placeholder() string {
 // Results implements palette.Mode: rows fuzzy-matched over the alias,
 // detailing the block's user@hostname:port where the config spells it out.
 func (s *sshMode) Results(query string, _ palette.Context) []palette.Item {
-	var items []palette.Item
-	for _, h := range s.entries {
-		res, ok := fuzzy.Match(query, h.Alias)
-		if !ok {
-			continue
-		}
-		items = append(items, palette.Item{
-			Title:  h.Alias,
-			Spans:  res.Positions,
-			Score:  res.Score,
-			Detail: h.Detail(),
-			Msg:    SSHHostPickedMsg{Host: h.Alias},
+	return palette.FuzzyItems(query, s.entries,
+		func(h sshconf.Host) string { return h.Alias },
+		func(h sshconf.Host) palette.Item {
+			return palette.Item{
+				Title:  h.Alias,
+				Detail: h.Detail(),
+				Msg:    SSHHostPickedMsg{Host: h.Alias},
+			}
 		})
-	}
-	return items
 }
 
 // sshArgv assembles the command a picked host runs. The alias goes to ssh
