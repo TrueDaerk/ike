@@ -461,6 +461,18 @@ var jetbrainsRows = []row{
 	// (both are pane keys already, #1265/#1830).
 	{"cmd+f", "http.search", "Search in response", HTTP, "HTTP client (#2400)"},
 	{"ctrl+f", "http.search", "Search in response", HTTP, "HTTP client (#2400)"},
+	// http.cancel default keybinding (#2404): the telemetry export saw flights
+	// of up to 19 s, and aborting one was reachable only through the response
+	// pane's own "x" — nothing at all with the .http editor still focused,
+	// which is where a slow request is usually watched from. cmd+. is
+	// JetBrains' Stop, and the period reads as "stop" the way ctrl+c does in a
+	// shell (which is spent on copy here, #1266). Bound in both the editor and
+	// the response pane, the two places a running request is visible; ctrl+.
+	// is the delivered twin of the fragile Cmd chord.
+	{"cmd+.", "http.cancel", "Cancel running HTTP request", Editor, "HTTP client (#2404)"},
+	{"ctrl+.", "http.cancel", "Cancel running HTTP request", Editor, "HTTP client (#2404)"},
+	{"cmd+.", "http.cancel", "Cancel running HTTP request", HTTP, "HTTP client (#2404)"},
+	{"ctrl+.", "http.cancel", "Cancel running HTTP request", HTTP, "HTTP client (#2404)"},
 	// Walking the issues list from the keyboard (#2400): ctrl+up / ctrl+down
 	// are what the telemetry saw pressed there. Both are delivered (arrows
 	// carry their modifiers in the legacy CSI encoding) and scoped to the

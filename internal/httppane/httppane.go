@@ -37,6 +37,9 @@ const (
 	kindWarn
 	kindBlank
 	kindBody
+	// kindTiming is the phase breakdown line under the status line (#2404):
+	// dns / connect / tls / ttfb / transfer of the shown exchange.
+	kindTiming
 )
 
 // row is one pre-composed display line.
@@ -138,6 +141,10 @@ type Model struct {
 	// content as the current answer. pendingSince drives the elapsed time.
 	pending      string
 	pendingSince time.Time
+	// cancelChord is the keymap chord bound to http.cancel, as the host
+	// resolved it (#2404). It only feeds the in-flight hint line — "x /
+	// <chord> cancels" — so an unbound command simply names "x" alone.
+	cancelChord string
 
 	// raw shows the body as it arrived instead of pretty-printed (#2157), and
 	// more holds the spool bytes "load more" has pulled in beyond the
@@ -465,6 +472,11 @@ func (m *Model) SetPending(request string, at time.Time) {
 	m.pending, m.pendingSince = request, at
 }
 
+// SetCancelChord records the keymap chord bound to http.cancel (#2404), so
+// the in-flight hint can name it next to the pane-local "x". "" (the command
+// is unbound, or the host never told the pane) leaves the hint at "x".
+func (m *Model) SetCancelChord(chord string) { m.cancelChord = chord }
+
 // ClearPending drops the in-flight marker (response, error or cancel).
 func (m *Model) ClearPending() { m.pending, m.pendingSince = "", time.Time{} }
 
@@ -508,6 +520,13 @@ func (m *Model) recompose(resp *httpclient.Response) {
 
 	m.status = fmt.Sprintf("%s %s", resp.Proto, resp.Status)
 	m.rows = append(m.rows, row{kind: kindStatus, text: fmt.Sprintf("%s %s   (%s)", resp.Proto, resp.Status, roundDuration(resp.Duration))})
+	if line := resp.Timing.String(); line != "" {
+		// The phase breakdown (#2404) sits directly under the status line, so
+		// "2 s" and "2 s of which 1.9 s waiting for the first byte" are read
+		// in one glance. It travels with the history entry, so a browsed
+		// response and a D/P diff show it too.
+		m.rows = append(m.rows, row{kind: kindTiming, text: line})
+	}
 
 	names := make([]string, 0, len(resp.Headers))
 	for n := range resp.Headers {
@@ -1267,7 +1286,33 @@ func (m *Model) headerLineCount() int {
 			n += len(m.requestDetailLines())
 		}
 	}
+	if m.cancelHint() != "" {
+		n++
+	}
 	return n
+}
+
+// cancelHintAfter is how long a flight has to run before the pane spells out
+// how to abort it (#2404). Most requests finish inside half a second — a hint
+// on every dispatch would be noise that flashes past — but past a second the
+// user is waiting, and waiting is when "can I stop this?" gets asked.
+const cancelHintAfter = time.Second
+
+// cancelHint is the "x / <chord> cancels" line shown while a dispatch has
+// been running for longer than cancelHintAfter; "" when nothing is in flight
+// or the flight is still young.
+func (m *Model) cancelHint() string {
+	if !m.streaming && m.pending == "" {
+		return ""
+	}
+	if m.pendingSince.IsZero() || time.Since(m.pendingSince) < cancelHintAfter {
+		return ""
+	}
+	keys := "x"
+	if m.cancelChord != "" {
+		keys += " / " + m.cancelChord
+	}
+	return " " + keys + " cancels"
 }
 
 // headerLines composes every fixed line rendered above the scrollable body:
@@ -1277,19 +1322,23 @@ func (m *Model) headerLineCount() int {
 // "i", the expanded headers/body block.
 func (m *Model) headerLines(pal *theme.Palette) []string {
 	lines := []string{m.renderHeaderSegs(pal)}
-	method, url, ok := m.requestLine()
-	if !ok {
-		return lines
+	if method, url, ok := m.requestLine(); ok {
+		prefix := " " + method + " "
+		avail := m.width - len([]rune(prefix))
+		if avail < 1 {
+			avail = 1
+		}
+		reqLine := prefix + middleTruncateURL(url, avail)
+		lines = append(lines, lipgloss.NewStyle().Foreground(pal.Secondary).Render(reqLine))
+		if m.reqDetails {
+			lines = append(lines, m.requestDetailLines()...)
+		}
 	}
-	prefix := " " + method + " "
-	avail := m.width - len([]rune(prefix))
-	if avail < 1 {
-		avail = 1
-	}
-	reqLine := prefix + middleTruncateURL(url, avail)
-	lines = append(lines, lipgloss.NewStyle().Foreground(pal.Secondary).Render(reqLine))
-	if m.reqDetails {
-		lines = append(lines, m.requestDetailLines()...)
+	if hint := m.cancelHint(); hint != "" {
+		// Last of the fixed lines (#2404): it appears while a slow flight is
+		// out and disappears with it, so it may not push the request line —
+		// which is stable — around under the reader's eye.
+		lines = append(lines, lipgloss.NewStyle().Foreground(pal.Warning).Render(m.clip(hint)))
 	}
 	return lines
 }
@@ -1579,6 +1628,9 @@ func (m *Model) baseStyle(pal *theme.Palette, i, from, to int) styleFn {
 	case kindWarn:
 		st := lipgloss.NewStyle().Foreground(pal.Warning)
 		return func(int) (lipgloss.Style, string) { return st, "warn" }
+	case kindTiming:
+		st := lipgloss.NewStyle().Foreground(pal.Secondary)
+		return func(int) (lipgloss.Style, string) { return st, "timing" }
 	case kindHeader:
 		// The name (up to and including the colon) reads as a constant, the
 		// value plain — the pre-#1265 look, now column-addressed.

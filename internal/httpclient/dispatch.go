@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -70,6 +71,11 @@ type Response struct {
 	Truncated bool
 	// Duration is the wall-clock time of the exchange.
 	Duration time.Duration
+	// Timing is the phase breakdown of the exchange (#2404) — DNS, connect,
+	// TLS, time to first byte and transfer. nil when nothing was measured:
+	// a response restored from a history file written before the capture
+	// existed, or one composed by a test.
+	Timing *Timing
 	// RequestKey identifies the originating request (httpfile.Request.Key).
 	RequestKey string
 	// Warnings lists non-fatal issues (e.g. ignored .curlrc options).
@@ -378,23 +384,33 @@ func Dispatch(ctx context.Context, req *httpfile.Request, opts Options) (*Respon
 // for a response that turns out not to be a stream.
 func (p *prepared) collect(key string) (*Response, error) {
 	start := p.now()
-	httpResp, err := p.client.Do(p.httpReq)
+	// The phase breakdown (#2404) rides along on every dispatch: the hooks
+	// only record timestamps, so there is nothing to switch on.
+	tr := newTimingTrace(p.now, start)
+	httpResp, err := p.client.Do(p.traced(tr))
 	if err != nil {
 		return nil, fmt.Errorf("request %s: %v", key, err)
 	}
 	defer httpResp.Body.Close()
-	return p.collectBody(key, httpResp, start)
+	return p.collectBody(key, httpResp, start, tr)
+}
+
+// traced returns the prepared request with the timing hooks (#2404) hung
+// into its context.
+func (p *prepared) traced(tr *timingTrace) *http.Request {
+	return p.httpReq.WithContext(httptrace.WithClientTrace(p.httpReq.Context(), tr.clientTrace()))
 }
 
 // collectBody reads a started exchange's body to the cap and composes the
 // Response; start is when the exchange began.
-func (p *prepared) collectBody(key string, httpResp *http.Response, start time.Time) (*Response, error) {
+func (p *prepared) collectBody(key string, httpResp *http.Response, start time.Time, tr *timingTrace) (*Response, error) {
 	// The body goes through a bodySink (#2157): the head stays in memory, a
 	// body past SpoolThreshold streams on to a spool file, and MaxBodyBytes
 	// still bounds the whole thing.
 	sink := newBodySink(SpoolThreshold, MaxBodyBytes, BodyFileExt(httpResp.Header.Get("Content-Type")))
 	_, readErr := io.Copy(sink, io.LimitReader(httpResp.Body, MaxBodyBytes+1))
-	elapsed := p.now().Sub(start)
+	end := p.now()
+	elapsed := end.Sub(start)
 	if readErr != nil {
 		sink.fail(readErr)
 		return nil, fmt.Errorf("request %s: reading response: %v", key, readErr)
@@ -410,6 +426,7 @@ func (p *prepared) collectBody(key string, httpResp *http.Response, start time.T
 		BodySize:   total,
 		Truncated:  sink.truncated,
 		Duration:   elapsed,
+		Timing:     tr.result(end),
 		RequestKey: key,
 		Warnings:   append(p.warnings, sink.warnings()...),
 		Request:    p.snapshot,
@@ -496,7 +513,8 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 	defer deadline.Stop()
 
 	start := p.now()
-	httpResp, err := p.client.Do(p.httpReq.WithContext(ctx))
+	tr := newTimingTrace(p.now, start)
+	httpResp, err := p.client.Do(p.httpReq.WithContext(httptrace.WithClientTrace(ctx, tr.clientTrace())))
 	if err != nil {
 		return nil, fmt.Errorf("request %s: %v", key, err)
 	}
@@ -506,7 +524,7 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 	if !IsStreamContentType(httpResp.Header.Get("Content-Type")) {
 		// Collect mode — the overall deadline stays armed, the behavior is
 		// Dispatch's to the letter.
-		return p.collectBody(key, httpResp, start)
+		return p.collectBody(key, httpResp, start, tr)
 	}
 
 	// Stream mode: the headers are the first visible result, the body arrives
@@ -549,7 +567,8 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 			break
 		}
 	}
-	elapsed := p.now().Sub(start)
+	end := p.now()
+	elapsed := end.Sub(start)
 	body, spool, total := sink.close()
 	truncated := sink.truncated
 	warnings = append(warnings, sink.warnings()...)
@@ -572,6 +591,7 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 		BodySize:   total,
 		Truncated:  truncated,
 		Duration:   elapsed,
+		Timing:     tr.result(end),
 		RequestKey: key,
 		Warnings:   warnings,
 		Request:    p.snapshot,

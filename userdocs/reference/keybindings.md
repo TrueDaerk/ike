@@ -152,6 +152,8 @@ Active when an editor pane has focus.
 | Add caret at next occurrence | `ctrl+g` | `ctrl+g` | `editor.caret.addNext` |
 | Add carets at all occurrences | `ctrl+shift+g` | `ctrl+shift+g` | `editor.caret.addAll` |
 | Call hierarchy | `ctrl+alt+h` | `ctrl+alt+h` | `lsp.callHierarchy` |
+| Cancel running HTTP request | `cmd+.` | `ctrl+.` | `http.cancel` |
+| Cancel running HTTP request | `ctrl+.` | `ctrl+.` | `http.cancel` |
 | Clone caret above | `alt+shift+up` | `alt+shift+up` | `editor.caret.addAbove` |
 | Clone caret below | `alt+shift+down` | `alt+shift+down` | `editor.caret.addBelow` |
 | Comment block | `cmd+shift+7` | `ctrl+shift+7` | `editor.commentBlock` |
@@ -277,6 +279,8 @@ Active when the HTTP response pane has focus.
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| Cancel running HTTP request | `cmd+.` | `ctrl+.` | `http.cancel` |
+| Cancel running HTTP request | `ctrl+.` | `ctrl+.` | `http.cancel` |
 | Copy response selection or body | `cmd+c` | `ctrl+c` | `http.copyResponse` |
 | Re-send stored HTTP request | `ctrl+r` | `ctrl+r` | `http.resend` |
 | Search in response | `cmd+f` | `ctrl+f` | `http.search` |
