@@ -1,0 +1,24 @@
+[1;38;2;215;175;135m app.db[m[2m   3 objects[m
+[38;2;208;208;208m ▸ users              ~1200 [m[2m│[m[1;38;2;215;175;135m note     description                     [m                             
+[38;2;208;208;208m   empty                  0 [m[2m│[m[38;2;208;208;208m [m[38;2;208;208;208mnote 1   [m[38;2;208;208;208mlong text long text long text l…[m                             
+[38;2;215;175;135m   named                ? v [m[2m│[m[38;2;208;208;208m [m[2m∅        [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[38;2;208;208;208m [m[38;2;208;208;208mnote 3   [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[1;38;2;208;208;208;48;2;31;48;101m [m[2;48;2;31;48;101m∅        [m[1;38;2;208;208;208;48;2;31;48;101mlong text long text long text l…[m[1;38;2;208;208;208;48;2;31;48;101m                             [m
+                            [2m│[m[38;2;208;208;208m [m[38;2;208;208;208mnote 5   [m[38;2;208;208;208m                                [m                             
+                            [2m│[m[38;2;208;208;208m [m[2m∅        [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[38;2;208;208;208m [m[38;2;208;208;208mnote 7   [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[38;2;208;208;208m [m[2m∅        [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[38;2;208;208;208m [m[38;2;208;208;208mnote 9   [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[38;2;208;208;208m [m[2m∅        [m[38;2;208;208;208m                                [m                             
+                            [2m│[m[38;2;208;208;208m [m[38;2;208;208;208mnote 11  [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[38;2;208;208;208m [m[2m∅        [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[38;2;208;208;208m [m[38;2;208;208;208mnote 13  [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[38;2;208;208;208m [m[2m∅        [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[38;2;208;208;208m [m[38;2;208;208;208mnote 15  [m[38;2;208;208;208m                                [m                             
+                            [2m│[m[38;2;208;208;208m [m[2m∅        [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[38;2;208;208;208m [m[38;2;208;208;208mnote 17  [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[38;2;208;208;208m [m[2m∅        [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[38;2;208;208;208m [m[38;2;208;208;208mnote 19  [m[38;2;208;208;208mlong text long text long text l…[m                             
+                            [2m│[m[38;2;208;208;208m [m[2m∅        [m[38;2;208;208;208m                                [m                             
+                            [2m│[m[38;2;208;208;208m [m[38;2;208;208;208mnote 21  [m[38;2;208;208;208mlong text long text long text l…[m                             
+[2m rows 1–30 of ? · tab switch · j/k row · h/l column · n/p page · / filter · S sort · E export · P p…[m
