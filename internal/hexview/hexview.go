@@ -66,16 +66,16 @@ type Model struct {
 	cur    int64 // cursor byte offset
 	anchor int64 // selection anchor offset, -1 while nothing is selected
 
-	// search line state (#2409/#2410 shape shared with the other panes).
-	sEditing bool
-	sInput   string
-	sCur     int
-	sErr     string
-	needle   []byte  // applied byte sequence, nil while no search applies
-	matches  []int64 // enumerated match offsets, capped at maxMatches
-	capped   bool    // true when the enumeration hit the cap
-	mIdx     int     // index of the current match in matches, -1 none
-	wrapped  bool
+	// search is the shared in-pane search (#2461): the open line, the query
+	// with its caret, the enumerated match offsets (as int — every platform
+	// IKE builds for has a 64-bit int) and the current one. The matcher is
+	// the pane's own: ParseQuery turns the query into needle, findAll
+	// enumerates it.
+	search ui.LineSearch
+	sErr   string // ParseQuery's complaint about the typed query, "" when it parses
+	needle []byte // enumerated byte sequence, nil while no search applies
+	capped bool   // true when the enumeration hit maxMatches
+	stale  bool   // the query changed but the file is too large to rescan per keystroke
 
 	// copy menu state: a two-row picker over the selection's copy format.
 	copyMenu bool
@@ -89,7 +89,7 @@ type Model struct {
 // New opens the file at path for windowed reading. Open/stat errors are kept
 // for View — the pane opens either way and explains itself.
 func New(key, path string, pal *theme.Palette) Model {
-	m := Model{key: key, path: path, pal: pal, perRow: 16, anchor: -1, mIdx: -1}
+	m := Model{key: key, path: path, pal: pal, perRow: 16, anchor: -1}
 	f, err := os.Open(path)
 	if err != nil {
 		m.err = err
@@ -134,10 +134,16 @@ func (m *Model) Selection() (from, to int64, ok bool) {
 }
 
 // Matches returns the enumerated search-match offsets (tests).
-func (m *Model) Matches() []int64 { return m.matches }
+func (m *Model) Matches() []int64 {
+	out := make([]int64, len(m.search.Matches))
+	for i, off := range m.search.Matches {
+		out[i] = int64(off)
+	}
+	return out
+}
 
 // Searching reports whether the search line is open (tests).
-func (m *Model) Searching() bool { return m.sEditing }
+func (m *Model) Searching() bool { return m.search.Open }
 
 // Close releases the file handle. A zero-value model (after a tab detach
 // moved the live one) holds nothing and releases nothing.
@@ -283,7 +289,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if m.copyMenu {
 		return m.copyMenuKey(key)
 	}
-	if m.sEditing {
+	if m.search.Open {
 		return m.searchKey(key)
 	}
 	per := int64(m.perRow)
@@ -321,8 +327,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		switch {
 		case m.anchor >= 0:
 			m.anchor = -1
-		case m.needle != nil:
-			m.needle, m.matches, m.capped, m.mIdx = nil, nil, false, -1
+		case m.search.Active():
+			m.clearSearch()
 		}
 	case "y", "cmd+c", "super+c":
 		if m.size > 0 {
@@ -339,16 +345,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// PasteText inserts a paste into the open search line (#2002); with the line
-// closed the text is dropped rather than leaking into navigation keys.
+// PasteText inserts a paste into the open search line (#2002), re-matching
+// like a typed edit; with the line closed the text is dropped rather than
+// leaking into navigation keys.
 func (m *Model) PasteText(text string) {
-	if !m.sEditing || text == "" {
-		return
+	if m.search.Open && m.search.Paste(text) {
+		m.recomputeMatches(false)
 	}
-	r := []rune(m.sInput)
-	m.sInput = string(r[:m.sCur]) + text + string(r[m.sCur:])
-	m.sCur += len([]rune(text))
-	m.sErr = ""
 }
 
 // Wheel scrolls the viewport by delta rows, moving the cursor along so it
@@ -358,120 +361,135 @@ func (m *Model) Wheel(delta int) {
 	m.clampScroll()
 }
 
-// startSearch opens the search line, seeded with the applied query.
+// liveScanMax bounds the file size the search rescans on every keystroke
+// (#2461). findAll streams the whole file per query, so a live search over
+// a multi-gigabyte file would stall typing; above the bound the matches are
+// enumerated on enter and on a match step instead, and the line says so.
+const liveScanMax = 16 << 20
+
+// startSearch opens the search line, seeded with the last query.
 func (m *Model) startSearch() {
 	if m.err != nil || m.size == 0 {
 		return
 	}
-	m.sEditing = true
-	m.sCur = len([]rune(m.sInput))
-	m.sErr = ""
+	m.search.Start()
 }
 
 // OpenSearch implements the pane's Searchable capability (#2409): cmd+f opens
 // the same line "/" does.
 func (m *Model) OpenSearch() bool {
 	m.startSearch()
-	return m.sEditing
+	return m.search.Open
 }
 
-// NextMatch implements the pane's match-step capability (#2410).
+// NextMatch implements the pane's match-step capability (#2410): cmd+g steps
+// the matches while the search line is open, where n and N are query text,
+// and keeps stepping the applied query once enter closed it.
 func (m *Model) NextMatch() ui.MatchStep { return m.searchStep(1) }
 
 // PrevMatch steps backwards; see NextMatch.
 func (m *Model) PrevMatch() ui.MatchStep { return m.searchStep(-1) }
 
-// searchStep serves cmd+g / cmd+shift+g while the search line is open: it
-// applies the typed query if it changed and steps the current match.
 func (m *Model) searchStep(delta int) ui.MatchStep {
-	if !m.sEditing {
+	if !m.search.Active() {
 		return ui.NoStep
 	}
-	if !m.applySearch() {
-		return ui.NoMatches()
+	if m.stale {
+		m.recomputeMatches(true) // a step is an explicit search: pay the scan
 	}
-	if len(m.matches) == 0 {
-		return ui.NoMatches()
-	}
-	m.stepMatch(delta)
-	total := len(m.matches)
-	return ui.Stepped(m.mIdx, total, m.wrapped)
+	return m.stepMatch(delta)
 }
 
-// searchKey feeds one key to the open search line, which owns the keyboard.
+// searchKey feeds one key to the open search line, which owns the keyboard,
+// through the shared prompt (#2461): typing re-matches live (within
+// liveScanMax), enter applies the query and jumps to the first match at or
+// after the cursor, esc drops the search.
 func (m *Model) searchKey(key tea.KeyPressMsg) tea.Cmd {
-	switch key.String() {
-	case "esc":
-		m.sEditing, m.sErr = false, ""
-	case "enter":
-		if m.applySearch() {
-			m.sEditing = false
-			if len(m.matches) == 0 {
-				m.sErr = ""
-			}
-		}
+	_, changed, action := m.search.Key(key)
+	switch action {
+	case ui.SearchCancel:
+		m.clearSearch()
+	case ui.SearchAccept:
+		m.applySearch()
 	default:
-		if out, ncur, handled, changed := ui.EditKey(key, m.sInput, m.sCur); handled {
-			m.sInput, m.sCur = out, ncur
-			if changed {
-				m.sErr = ""
-				m.wrapped = false
-			}
+		if changed {
+			m.recomputeMatches(false)
 		}
 	}
 	m.clampScroll()
 	return nil
 }
 
-// applySearch parses the typed query, enumerates its matches and jumps to the
-// first one at or after the cursor. It reports false on a malformed query.
-func (m *Model) applySearch() bool {
-	needle, err := ParseQuery(m.sInput)
+// clearSearch drops the query, the needle and every match.
+func (m *Model) clearSearch() {
+	m.search.Reset()
+	m.sErr, m.needle, m.capped, m.stale = "", nil, false, false
+}
+
+// applySearch enumerates the query's matches (if the live scan skipped it)
+// and jumps to the first one at or after the cursor, wrapping to the first
+// when the cursor sits past the last. A query that does not parse keeps the
+// line open so its complaint stays readable.
+func (m *Model) applySearch() {
+	m.recomputeMatches(true)
+	if m.sErr != "" {
+		m.search.Open = true
+		return
+	}
+	if m.search.Apply(int(m.cur)) {
+		m.jumpToMatch()
+	}
+}
+
+// recomputeMatches parses the typed query and enumerates its matches; the
+// enumeration only runs when the needle changed. Unless force is set, a file
+// past liveScanMax defers the scan to enter / the match step and marks the
+// set stale.
+func (m *Model) recomputeMatches(force bool) {
+	needle, err := ParseQuery(m.search.Text)
 	if err != nil {
 		m.sErr = err.Error()
-		return false
-	}
-	if len(needle) == 0 {
-		m.sErr = "empty search"
-		return false
-	}
-	if !bytesEqual(needle, m.needle) || m.matches == nil {
-		m.needle = needle
-		m.matches, m.capped = m.findAll(needle)
-		m.mIdx = -1
-		m.wrapped = false
-	}
-	if len(m.matches) == 0 {
-		m.sErr = "no matches"
-		return true
+		m.needle, m.capped, m.stale = nil, false, false
+		m.search.SetMatches(nil)
+		return
 	}
 	m.sErr = ""
-	if m.mIdx < 0 {
-		m.mIdx = 0
-		for i, off := range m.matches {
-			if off >= m.cur {
-				m.mIdx = i
-				break
-			}
-		}
-		m.cur = m.matches[m.mIdx]
+	if len(needle) == 0 {
+		m.needle, m.capped, m.stale = nil, false, false
+		m.search.SetMatches(nil)
+		return
 	}
-	return true
+	if bytesEqual(needle, m.needle) && !m.stale {
+		return
+	}
+	if !force && m.size > liveScanMax {
+		m.stale = true
+		return
+	}
+	m.needle, m.stale = needle, false
+	offs, capped := m.findAll(needle)
+	m.capped = capped
+	matches := make([]int, len(offs))
+	for i, off := range offs {
+		matches[i] = int(off)
+	}
+	m.search.SetMatches(matches)
 }
 
 // stepMatch moves the current match by delta, wrapping over the enumerated
-// set, and puts the cursor on it.
-func (m *Model) stepMatch(delta int) {
-	if len(m.matches) == 0 {
-		return
+// set, puts the cursor on it and reports where it landed (#2410).
+func (m *Model) stepMatch(delta int) ui.MatchStep {
+	st := m.search.Step(delta)
+	m.jumpToMatch()
+	return st
+}
+
+// jumpToMatch puts the byte cursor on the current match.
+func (m *Model) jumpToMatch() {
+	if off, ok := m.search.Current(); ok {
+		m.cur = int64(off)
+		m.clampScroll()
 	}
-	if m.mIdx < 0 {
-		m.mIdx = 0
-	} else {
-		m.mIdx, m.wrapped = ui.StepWrap(m.mIdx, len(m.matches), delta)
-	}
-	m.cur = m.matches[m.mIdx]
-	m.clampScroll()
 }
 
 // findAll streams over the file in overlapping chunks and collects the
@@ -657,13 +675,14 @@ func (m *Model) classify(off int64) byteClass {
 // inMatch reports whether off lies inside any enumerated match. Matches are
 // sorted, so a binary search over the starts bounds the check.
 func (m *Model) inMatch(off int64) bool {
-	if len(m.matches) == 0 || m.needle == nil {
+	matches := m.search.Matches
+	if len(matches) == 0 || m.needle == nil {
 		return false
 	}
-	lo, hi := 0, len(m.matches)
+	lo, hi := 0, len(matches)
 	for lo < hi {
 		mid := (lo + hi) / 2
-		if m.matches[mid] <= off {
+		if int64(matches[mid]) <= off {
 			lo = mid + 1
 		} else {
 			hi = mid
@@ -672,7 +691,7 @@ func (m *Model) inMatch(off int64) bool {
 	if lo == 0 {
 		return false
 	}
-	start := m.matches[lo-1]
+	start := int64(matches[lo-1])
 	return off < start+int64(len(m.needle))
 }
 
@@ -740,27 +759,32 @@ func (m *Model) footer() string {
 		return lipgloss.NewStyle().Foreground(m.pal.Accent).Render(
 			clipTo(" copy as: "+strings.Join(rows, "   ")+"   · enter copy · esc cancel", m.w))
 	}
-	if m.sEditing {
-		if m.sErr != "" {
-			return lipgloss.NewStyle().Foreground(m.pal.Error).Render(clipTo(" /"+m.sInput+" — "+m.sErr, m.w))
+	if m.search.Open {
+		// The shared prompt row (#2461): the slash, the query with its caret
+		// and the live counter — except for the two states only this pane
+		// has: a query that does not parse, and a file too large to rescan
+		// per keystroke.
+		dim := lipgloss.NewStyle().Faint(true)
+		switch {
+		case m.sErr != "":
+			return clipTo(" /"+m.search.Field.View()+
+				lipgloss.NewStyle().Foreground(m.pal.Error).Render("  "+m.sErr), m.w)
+		case m.stale:
+			return clipTo(" /"+m.search.Field.View()+dim.Render("  enter to search"), m.w)
 		}
-		hint := " enter search · esc close · text, 0x…, or \\xNN bytes"
-		if len(m.matches) > 0 && m.needle != nil {
-			total := fmt.Sprintf("%d", len(m.matches))
-			if m.capped {
-				total += "+"
-			}
-			hint = fmt.Sprintf(" %d/%s ·%s", m.mIdx+1, total, hint)
+		line := " " + m.search.Line()
+		if m.capped {
+			line += dim.Render("+")
 		}
-		return lipgloss.NewStyle().Faint(true).Render(clipTo(" /"+m.sInput+" ·"+hint, m.w))
+		return clipTo(line, m.w)
 	}
 	status := fmt.Sprintf(" offset %d (0x%x) of %d", m.cur, m.cur, m.size)
-	if len(m.matches) > 0 {
-		total := fmt.Sprintf("%d", len(m.matches))
+	if n := len(m.search.Matches); n > 0 {
+		total := fmt.Sprintf("%d", n)
 		if m.capped {
 			total += "+"
 		}
-		status += fmt.Sprintf(" · match %d/%s", m.mIdx+1, total)
+		status += fmt.Sprintf(" · match %d/%s", m.search.Cur+1, total)
 	}
 	hints := "j/k/h/l move · g/G ends · ctrl+d/u half page · v select · y copy · / search · n/N match"
 	return lipgloss.NewStyle().Faint(true).Render(clipTo(status+" · "+hints, m.w))
