@@ -413,3 +413,19 @@ func TestAudit2400KeepsExistingOwners(t *testing.T) {
 		}
 	}
 }
+
+// TestPlaygroundOpenReachesTheResponsePane (#2451): the dialect dispatcher's
+// chord is bound in the HTTP viewer as well as in the editor — the response
+// body is a document one queries (jq over it is "q", #2157), so the chord has
+// to be dispatched there. Both contexts, on both platforms, after the fold.
+func TestPlaygroundOpenReachesTheResponsePane(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
+		c := NormalizeChord(MustParseChord("cmd+shift+j"), goos)
+		for _, ctx := range []Context{Editor, HTTP} {
+			if b, ok := table.Lookup(c, ctx); !ok || b.Command != "playground.open" {
+				t.Errorf("%s: cmd+shift+j in %q = %+v ok=%v, want playground.open", goos, ctx, b, ok)
+			}
+		}
+	}
+}

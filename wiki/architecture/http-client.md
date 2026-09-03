@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, and GraphQL errors lifted out of a 200 answer into a red block above the body.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-09-03T12:00:00Z
+timestamp: 2026-09-03T18:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -1257,6 +1257,14 @@ For a recognized stream:
   screen: a program written against a truncated document answers questions
   about a document that never arrived. The playground snapshots its input
   once, so that copy lives no longer than the parse.
+- **The dialect dispatcher reaches the pane too** (#2451): `playground.open`
+  (`cmd+shift+j`) is bound in the `HTTP` context as well as the editor's, and
+  with the viewer focused it resolves the dialect from `Model.BodyLang()` —
+  the Content-Type mapping the highlighter uses (`json`, `yaml`, `xml`,
+  `html`, …), which is why YAML is one of its tags. jq, yq and the xmq hook
+  all open exactly the way `q` does, over this body in this pane; a body no
+  playground speaks answers `no playground …` and moves nothing. See
+  [jq playground](./jq-playground.md#the-response-pane-is-a-second-source-2451).
 - **Identifier colors** (#1626): UUIDs and long hex hashes in the **body**
   rows take a color hashed from the identifier itself (`internal/idcolor`,
   drawn from the shared rainbow palette), so the trace id of this response
@@ -1392,8 +1400,10 @@ For a recognized stream:
   quitting when there is no selection (#2062), and off macOS the `cmd+c` row
   already normalises to `ctrl+c` — the same shape as the editor's copy row.
 - **Body highlighting depends on the build** (#1270): `contentTag` maps the
-  Content-Type onto a fence tag (charset parameters and `+json`/`+xml`
-  vendor suffixes stripped) and `highlight.HighlightFenced` resolves that tag
+  Content-Type onto a fence tag (charset parameters and `+json`/`+xml`/`+yaml`
+  vendor suffixes stripped; `*/yaml`, `application/x-yaml` and `text/x-yaml`
+  were added with #2451, which needed the tag for the yq route and gets the
+  highlighting with it) and `highlight.HighlightFenced` resolves that tag
   through the **language registry** — so a body only highlights when the
   matching grammar plugin is both linked into the binary
   (`cmd/ike/main.go` blank imports `json`, `web`, `xml`, …) and compiled with

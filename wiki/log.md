@@ -1,5 +1,30 @@
 # Log
 
+## 2026-09-03 (playground.open in the HTTP response pane, #2451)
+
+- **The chord is dispatched in the viewer.** `playground.open` (`cmd+shift+j`)
+  shipped `Editor`-scoped, so it never reached the focused response pane; the
+  default table now carries the row twice, `Editor` and `HTTP`
+  (`internal/keymap/defaults.go`) — a second row rather than a promotion to
+  `Global`, following the `http.*` rows, so the panes the command resolves
+  nothing in stay free to bind the chord.
+- **The response is a second source.** `openPlaygroundForBuffer`
+  (`internal/app/playgroundopen.go`) resolves a focused HTTP pane through
+  `httppane.Model.BodyLang()` — the Content-Type mapping the highlighter runs
+  under, not a new content sniff — and opens jq / yq / the xmq hook the way
+  `http.jqPlayground` does: `focusHTTPPanel` first, then `startPlayground`, so
+  the mode mounts over the response (#1970) instead of over a background
+  editor. The routing table itself is shared with the editor route; no branch
+  grew a second copy of the opening logic.
+- **`contentTag` learned YAML** (`*/yaml`, `*+yaml`, `application/x-yaml`,
+  `text/x-yaml`), which the yq route needs and the body highlighter gets for
+  free — and `playSource` now lets the yq playground resolve a *focused*
+  response whose body is typed as YAML. An unfocused response, or a JSON one,
+  still never outranks the YAML file the user has open (the rule #2039 set).
+- **Nothing to query says so**: a plain-text, binary or empty body takes the
+  existing `no playground …` notification, naming the type where it is known,
+  and moves no focus. The editor route is unchanged.
+
 ## 2026-09-03 (GraphQL requests in the HTTP client, #2423)
 
 - **`GRAPHQL <url>` blocks** in `.http` files (`internal/httpfile/graphql.go`,

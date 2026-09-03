@@ -201,6 +201,23 @@ func (m *Model) JQInput() string {
 	return string(full)
 }
 
+// BodyLang names the language of the shown body, the same tag the highlight
+// pass runs under: "json", "yaml", "xml", "html", … or "" when the body is
+// binary, empty or of a type the viewer does not classify (#2451). It is the
+// Content-Type mapping, not a content sniff, and deliberately does *not*
+// follow the PrettyLimit cap that drops the tag for highlighting: a body too
+// large to paint is still a document the playground can query.
+func (m *Model) BodyLang() string {
+	if !m.HasBodyText() {
+		return ""
+	}
+	resp := m.CurrentResponse()
+	if resp == nil {
+		return ""
+	}
+	return contentTag(resp.Headers.Get("Content-Type"))
+}
+
 // formatBody renders the response body for display: pretty-printed JSON, raw
 // text for other recognized/unknown text types, a notice instead of content
 // for binary bodies. body is what the viewer holds (head plus loaded windows),

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: jq & yq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers), gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, and inserting a picked row into the query line — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers and a focused YAML response), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, and inserting a picked row into the query line — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, yaml, jq, yq, tools, inline, editor, http, completion, folding]
-timestamp: 2026-09-01T00:00:00Z
+timestamp: 2026-09-03T18:00:00Z
 ---
 
 # jq & yq Playground
@@ -279,8 +279,8 @@ second name for one behavior.
 
 Three dialects mean three commands to remember, so there is a fourth in front
 of them: **`playground.open`** ("Open Playground for This File",
-`cmd+shift+j`, Editor context) resolves the playground from the focused
-buffer's language and opens it —
+`cmd+shift+j`, Editor **and** HTTP context) resolves the playground from the
+focused document's language and opens it —
 
 | buffer language id | playground |
 |---|---|
@@ -297,12 +297,35 @@ answered with "the xmq playground is not available yet" rather than being
 opened in the wrong dialect, and the route is covered by a test that installs
 a stub.
 
+### The response pane is a second source (#2451)
+
+"This buffer" is whatever the focus is on, and the **HTTP response pane** is
+the second place that means a document: the shown body is what `q` already
+opens the jq playground over (#2157). With the viewer focused the dispatcher
+therefore resolves the dialect from the body's language — `httppane.BodyLang`,
+the Content-Type mapping the highlighter runs under (`json`, `yaml`, `xml`,
+`html`, …), not a fresh content sniff — and opens the playground the way
+`http.jqPlayground` does: `focusHTTPPanel` first, so `playSource` resolves the
+response and the mode mounts *over it* (#1970) instead of over a background
+editor. A body no playground speaks (plain text, binary, empty) gets the same
+`no playground …` notification as an unsupported buffer, naming the type where
+it is known, and moves no focus.
+
+Two consequences worth naming:
+
+- The default keymap carries the chord **twice**, `Editor` and `HTTP` — see
+  [Keybindings & Shortcuts](/architecture/keybindings.md#one-chord-three-playgrounds-2415).
+- `playSource` lets the yq playground resolve a *focused* response whose body
+  is typed as YAML. An unfocused response still never outranks the YAML file
+  the user has open, and a JSON one never does either — that pairing is what
+  the editor-only rule of #2039 was protecting against.
+
 The per-dialect commands are deliberately **not** replaced. `json.jqPlayground`
 (`ctrl+alt+j`) and `yaml.yqPlayground` (`ctrl+alt+y`) keep their own chords,
 stay separately rebindable, and count separately in the palette's frecency
 (#2153) — someone who works in one dialect all day wants that command on its
-own key, and "open jq on this HTTP response" is not a question about the
-focused buffer's file type at all. The keymap's own answer to the same
+own key, and "open jq on this YAML file" is a question the dispatcher answers
+with yq. The keymap's own answer to the same
 question — whether the *chord* could be shared instead, one per
 `editor[lang]` — is recorded in
 [Keybindings & Shortcuts](/architecture/keybindings.md#one-chord-three-playgrounds-2415):
