@@ -61,7 +61,7 @@ func (m Model) performCloseAndSwitch(target string) (tea.Model, tea.Cmd) {
 	}
 	// No peek escalation (#2136): closing a peeked active project discards
 	// it, so its root must not be recorded into project.history on the way.
-	next, cmd := m.performSwitchOpts(target, switchOpts{record: true})
+	next, cmd := m.performSwitchOpts(target, switchOpts{record: true, closing: true})
 	sized, ok := next.(Model)
 	if !ok {
 		return next, cmd

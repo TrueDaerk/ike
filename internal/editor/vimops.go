@@ -40,11 +40,71 @@ func caseFunc(op rune) func(rune) rune {
 	}
 }
 
-// caseTarget applies a case operator over target, recording a dot.
+// armCaseRedo arms opRedo with the gesture behind a pending *case* operator,
+// so its dot repeats the gesture rather than the resolved span (#2418). Only
+// the case operators take part: d/c/y record their dot elsewhere, and the
+// other reshaping operators (>, <, =, gq) keep their span-replaying dots.
+// build receives the operator and register the gesture ran with.
+func (m *Model) armCaseRedo(build func(op, reg rune) func(*Model)) {
+	if !m.pending.HasOperator() {
+		return
+	}
+	switch m.pending.Operator {
+	case 'u', 'U', '~':
+		m.opRedo = build(m.pending.Operator, m.pending.Register)
+	}
+}
+
+// replayCaseMotion re-runs a case operator with its motion at the cursor "."
+// was pressed at, re-arming itself so a second "." repeats again.
+func (m *Model) replayCaseMotion(op, reg rune, s string, r rune, count int) {
+	res, ok := m.resolveMotion(s, r, count)
+	if !ok {
+		return
+	}
+	m.opRedo = func(mm *Model) { mm.replayCaseMotion(op, reg, s, r, count) }
+	m.runOperator(op, operator.Compose(m.buf, m.cursor, res.Pos, res.Kind), reg)
+	m.opRedo = nil
+}
+
+// replayCaseObject is replayCaseMotion for a text object (gUiw and friends);
+// around distinguishes "iw" from "aw".
+func (m *Model) replayCaseObject(op, reg rune, r rune, around bool) {
+	saved := m.around
+	m.around = around
+	res := m.resolveTextObject(r)
+	m.around = saved
+	if !res.OK {
+		return
+	}
+	m.opRedo = func(mm *Model) { mm.replayCaseObject(op, reg, r, around) }
+	m.runOperator(op, objectTarget(res), reg)
+	m.opRedo = nil
+}
+
+// replayCaseLinewise re-runs a linewise case double (guu/gUU/g~~) over count
+// lines from the cursor, re-arming itself like the two above.
+func (m *Model) replayCaseLinewise(op rune, count int) {
+	end := m.cursor.Line + count - 1
+	if last := m.buf.LineCount() - 1; end > last {
+		end = last
+	}
+	m.opRedo = func(mm *Model) { mm.replayCaseLinewise(op, count) }
+	m.runOperator(op, operator.LineTarget(m.cursor.Line, end), m.pending.Register)
+	m.opRedo = nil
+}
+
+// caseTarget applies a case operator over target, recording a dot. When the
+// key layer armed opRedo the dot replays the gesture (gUw at the *next* word,
+// like vim); otherwise — a visual selection, a command — it replays the span.
 func (m *Model) caseTarget(target operator.Target, op rune) {
 	m.mutate(func(rec *history.Recorder) buffer.Position {
 		return operator.Transform(m.buf, rec, target, caseFunc(op))
 	})
+	if redo := m.opRedo; redo != nil {
+		m.dot = &dotCommand{run: redo}
+		return
+	}
 	m.dot = &dotCommand{run: func(mm *Model) { mm.caseTarget(target, op) }}
 }
 

@@ -28,6 +28,38 @@
   and vulnerable entries feed the Problems store as warnings under source
   `deps`.
 
+## 2026-09-03 (telemetry v4: 60s heartbeat, command outcomes, dismissals, project time, #2408)
+
+- **The heartbeat beats once a minute, not every ten seconds.** At the old
+  cadence the liveness stamps were 61% of a two-day export — the diagnostic
+  was burying the usage data it was meant to accompany. A minute still
+  brackets a freeze closely enough to tell "the loop is stuck" from "the
+  process ended", and the per-interval `top` breakdown (#2402) names an idle
+  session's loudest wake sources just as well from a coarser beat.
+- **`command` events now say whether the dispatch worked and how long it
+  took** — but only when there is something to say: `ok` and `ms` appear when
+  the command id resolves to nothing (the dispatch funnel's one failure mode,
+  previously a silent no-op) or when the synchronous dispatch took at least
+  50 ms. A fast success keeps the old two-field shape, so the fields read as
+  markers rather than noise.
+- **Every palette mode reports its dismissals**, as the new `palette.dismiss`
+  type carrying the mode prefix, the typed query's *length* and how long the
+  box stood open. #2399 recorded this for the recent-files dialog only, as a
+  pseudo-command; a dismissal is the single palette outcome that leaves no
+  other trace, and the re-open streaks it exists to make visible are not a
+  recent-files-only phenomenon.
+- **`project.leave` gives per-project time a real number** instead of an
+  inference from session markers: emitted on switch, close and quit with the
+  hashed project token and the **foreground** milliseconds spent there. The
+  clock pauses while the terminal reports itself blurred, so a project parked
+  in a background tab overnight does not read as a night of work.
+- **Schema `v` is 4**, and the wiki's event catalogue now carries a version
+  table an analysis script can branch on: v1 files hide internal dispatches
+  under `command`, pre-v4 files have no outcome fields and six times the
+  heartbeats per hour.
+- The privacy line is unchanged: query *lengths* and prefix runes, project
+  *hashes*, never text or paths.
+
 ## 2026-09-03 (pane numbers in the chrome, focus by number, #2407)
 
 - **Every visible pane wears its number.** The pane title bars carry a lazygit

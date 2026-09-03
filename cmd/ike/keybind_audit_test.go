@@ -124,6 +124,10 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"editor.uniqueLines", reasonFlavour},
 	{"editor.reverseLines", reasonFlavour},
 	{"editor.shuffleLines", reasonOccasional},
+	// #2418's case family: cmd+shift+u toggles and alt+shift+u cycles; the
+	// one-directional pair is the gu/gU gesture users already have.
+	{"editor.case.lower", reasonVimKey},           // gu
+	{"editor.case.upper", reasonVimKey},           // gU
 	{"editor.increment", reasonVimKey},            // ctrl+a
 	{"editor.decrement", reasonVimKey},            // ctrl+x
 	{"editor.toggleValue", reasonVimKey},          // g!

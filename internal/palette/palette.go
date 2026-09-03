@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"image/color"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -88,6 +89,10 @@ type Palette struct {
 	// dismissed holds the esc-without-a-pick the host has not taken yet
 	// (#2399, TakeDismissal). Nil means the palette did not just get dismissed.
 	dismissed *Dismissal
+	// openedAt stamps the current open, so a dismissal can report how long the
+	// box stood (#2408). now is the clock seam tests drive.
+	openedAt time.Time
+	now      func() time.Time
 
 	// prev caches the code-preview window of a PreviewMode open (#2047), so
 	// walking the result list re-reads a file only when the target moves.
@@ -123,6 +128,7 @@ func New(cfg Config, modes ...Mode) *Palette {
 		byPrefix:   make(map[rune]Mode, len(modes)),
 		maxResults: cfg.MaxResults,
 		accent:     cfg.Accent,
+		now:        time.Now,
 	}
 	if p.maxResults <= 0 {
 		p.maxResults = defaultMaxResults
@@ -224,6 +230,7 @@ func (p *Palette) reset(cx Context) {
 		}
 	}
 	p.open = true
+	p.openedAt = p.clock()
 	p.query = ""
 	p.cur = 0
 	p.selected = 0
@@ -600,9 +607,14 @@ func (p *Palette) activate() tea.Cmd {
 // it in the same Update pass that closed the overlay — the dismissal-sensitive
 // flows already there (diff.files' two-step pick) read a closed palette
 // synchronously and must not be raced by a message that lands a pass later.
+// Since #2408 it also carries how long the box stood open, so an export can
+// tell a glance-and-esc from a minute of fruitless searching. A mode that
+// re-opens itself with a seeded query (the directory descend) starts a new
+// open and therefore a new duration — each box is timed on its own.
 type Dismissal struct {
 	Prefix   rune
 	QueryLen int
+	Open     time.Duration
 }
 
 // dismiss closes the palette on esc and records the dismissal (#2399). The
@@ -612,11 +624,25 @@ type Dismissal struct {
 // caller.
 func (p *Palette) dismiss() tea.Cmd {
 	m, body := p.mode()
+	opened := p.openedAt
 	p.Close()
 	if m != nil {
-		p.dismissed = &Dismissal{Prefix: m.Prefix(), QueryLen: len([]rune(body))}
+		d := &Dismissal{Prefix: m.Prefix(), QueryLen: len([]rune(body))}
+		if !opened.IsZero() {
+			d.Open = p.clock().Sub(opened)
+		}
+		p.dismissed = d
 	}
 	return nil
+}
+
+// clock reads the injectable now (a zero-value Palette built without New still
+// works, as the rest of the type does).
+func (p *Palette) clock() time.Time {
+	if p.now == nil {
+		return time.Now()
+	}
+	return p.now()
 }
 
 // TakeDismissal reports and clears a pending esc-without-a-pick (#2399); ok is

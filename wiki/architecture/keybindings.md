@@ -1167,6 +1167,8 @@ JetBrains is:
 | `editor.caret.addAll` | `ctrl+shift+g` | fragile | `palette` | live via palette |
 | `editor.caret.addBelow` | `alt+shift+down` | fragile | `palette` | live via palette |
 | `editor.caret.addNext` | `ctrl+g` | delivered | `—` | live |
+| `editor.case.cycle` | `alt+shift+u` | fragile | `palette` | live via palette |
+| `editor.case.toggle` | `cmd+shift+u` | fragile | `vim g~ (g~~ linewise, ~ on a selection)` | live via vim g~ (g~~ linewise, ~ on a selection) |
 | `editor.closeTab` | `cmd+w` | fragile | `palette` | live via palette |
 | `editor.commentBlock` | `cmd+shift+7` | fragile | `palette` | live via palette |
 | `editor.commentLine` | `cmd+7` | fragile | `palette` | live via palette |

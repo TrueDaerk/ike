@@ -129,6 +129,11 @@ var actionMap = map[string]string{
 	// predate syntax-aware selection, hence the "word" names.
 	"EditorSelectWord":   "editor.selection.extend",
 	"EditorUnSelectWord": "editor.selection.shrink",
+	// Toggle Case (#2418). The one-directional Convert to Upper/Lower Case
+	// actions import onto the same family's commands.
+	"EditorToggleCase":  "editor.case.toggle",
+	"EditorToLowerCase": "editor.case.lower",
+	"EditorToUpperCase": "editor.case.upper",
 
 	// Find & replace.
 	"Find":          "editor.find",

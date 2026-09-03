@@ -253,6 +253,12 @@ type Model struct {
 	insert  insertSession
 	dot     *dotCommand
 	typeNow func() time.Time
+	// opRedo is how the *gesture* behind the operator currently running can be
+	// re-run at wherever the cursor is when "." is pressed (#2418). The
+	// reshaping operators (case, indent, reflow) record their dot from the
+	// resolved target, which would replay the original span; the key layer
+	// arms this so they replay the motion or text object instead, like vim.
+	opRedo func(*Model)
 
 	// Macro recording & replay (#58). Macros are keystroke lists, not text, so
 	// they live beside the register store rather than in it; like registers

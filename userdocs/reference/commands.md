@@ -291,6 +291,10 @@ bring their own.
 | Add Carets at All Occurrences | `editor.caret.addAll` | `ctrl+shift+g` | — | `editor` pane |
 | Clone Caret Below | `editor.caret.addBelow` | `alt+shift+down` | — | `editor` pane |
 | Add Caret at Next Occurrence | `editor.caret.addNext` | `ctrl+g` | — | `editor` pane |
+| Cycle Case (camel/snake/kebab) | `editor.case.cycle` | `alt+shift+u` | — | `editor` pane |
+| Lower Case | `editor.case.lower` | — | `gu` | `editor` pane |
+| Toggle Case | `editor.case.toggle` | `cmd+shift+u` | `g~` | `editor` pane |
+| Upper Case | `editor.case.upper` | — | `gU` | `editor` pane |
 | Toggle Block Comment | `editor.commentBlock` | `cmd+shift+7` | — | `editor` pane |
 | Toggle Line Comment | `editor.commentLine` | `cmd+7` | — | `editor` pane |
 | Copy | `editor.copy` | `cmd+c` | `y` | `editor` pane |

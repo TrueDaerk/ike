@@ -18,8 +18,8 @@ import (
 
 // TestRecentDismissRecordsTelemetry is the acceptance criterion for the
 // dismissal event: esc out of the recent-files dialog lands as its own
-// "command" event carrying the typed query length, and the pick path's own
-// command events are untouched by it.
+// "palette.dismiss" event (#2408 moved it off the pseudo-command #2399 used)
+// carrying the mode and the typed query length.
 func TestRecentDismissRecordsTelemetry(t *testing.T) {
 	m := telemetryModel(t, host.MapConfig{})
 	tm, _ := m.Update(ShowRecentFilesMsg{})
@@ -36,28 +36,25 @@ func TestRecentDismissRecordsTelemetry(t *testing.T) {
 		t.Fatal("esc must close the dialog")
 	}
 
-	cmds := eventsOf(usageEvents(t, m), telemetry.TypeCommand)
-	var got []telemetry.Event
-	for _, ev := range cmds {
-		if ev.Data["id"] == recentDismissEvent {
-			got = append(got, ev)
-		}
-	}
+	got := eventsOf(usageEvents(t, m), telemetry.TypePaletteDismiss)
 	if len(got) != 1 {
-		t.Fatalf("want one %s event, got %v", recentDismissEvent, cmds)
+		t.Fatalf("want one %s event, got %v", telemetry.TypePaletteDismiss, got)
 	}
-	if got[0].Data["qlen"] != "4" {
-		t.Fatalf("qlen = %q, want \"4\"", got[0].Data["qlen"])
+	if want := string(palette.RecentPrefix); got[0].Data["mode"] != want {
+		t.Fatalf("mode = %q, want %q", got[0].Data["mode"], want)
 	}
-	if got[0].Data["source"] != telemetry.SourcePalette {
-		t.Fatalf("source = %q, want %q", got[0].Data["source"], telemetry.SourcePalette)
+	if got[0].Data["query_len"] != "4" {
+		t.Fatalf("query_len = %q, want \"4\"", got[0].Data["query_len"])
+	}
+	if _, ok := got[0].Data["ms"]; !ok {
+		t.Fatalf("dismissal must carry the open duration: %v", got[0])
 	}
 }
 
-// TestOtherPaletteDismissalsAreQuiet guards the scope: only the recent-files
-// dialog reports its dismissals, so the event volume of every other palette
-// mode is unchanged.
-func TestOtherPaletteDismissalsAreQuiet(t *testing.T) {
+// TestOtherPaletteDismissalsRecordTheirMode is the #2408 widening: every mode
+// reports its dismissals, each stamped with its own prefix — the command
+// palette's esc must not be filed as a recent-files one.
+func TestOtherPaletteDismissalsRecordTheirMode(t *testing.T) {
 	m := telemetryModel(t, host.MapConfig{})
 	m.palette.SetSize(100, 40)
 	m.palette.Open(palette.Context{})
@@ -67,10 +64,15 @@ func TestOtherPaletteDismissalsAreQuiet(t *testing.T) {
 		t.Fatal("esc must close the palette")
 	}
 
-	for _, ev := range eventsOf(usageEvents(t, m), telemetry.TypeCommand) {
-		if ev.Data["id"] == recentDismissEvent {
-			t.Fatalf("a command-mode dismissal recorded a recent-files event: %v", ev)
-		}
+	got := eventsOf(usageEvents(t, m), telemetry.TypePaletteDismiss)
+	if len(got) != 1 {
+		t.Fatalf("want one %s event, got %v", telemetry.TypePaletteDismiss, got)
+	}
+	if got[0].Data["mode"] == string(palette.RecentPrefix) {
+		t.Fatalf("a command-mode dismissal was filed as recent-files: %v", got[0])
+	}
+	if got[0].Data["query_len"] != "0" {
+		t.Fatalf("query_len = %q, want \"0\"", got[0].Data["query_len"])
 	}
 }
 

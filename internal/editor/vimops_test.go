@@ -74,6 +74,58 @@ func TestCaseOperatorTextObjectAndDot(t *testing.T) {
 	}
 }
 
+func TestCaseOperatorMotionsAndCounts(t *testing.T) {
+	// $ is inclusive: it covers the rest of the line.
+	m, _ := loaded(t, "one two three\n")
+	m = typeKeys(m, "wgU$")
+	if line(m, 0) != "one TWO THREE" {
+		t.Fatalf("gU$ got %q", line(m, 0))
+	}
+	// j is linewise: both lines, whole.
+	m, _ = loaded(t, "aa bb\ncc dd\nee\n")
+	m = typeKeys(m, "gUj")
+	if line(m, 0) != "AA BB" || line(m, 1) != "CC DD" || line(m, 2) != "ee" {
+		t.Fatalf("gUj got %q / %q / %q", line(m, 0), line(m, 1), line(m, 2))
+	}
+	// A count on the motion widens the span.
+	m, _ = loaded(t, "one two three four\n")
+	m = typeKeys(m, "gU2w")
+	if line(m, 0) != "ONE TWO three four" {
+		t.Fatalf("gU2w got %q", line(m, 0))
+	}
+	// A count before a linewise double takes that many lines.
+	m, _ = loaded(t, "aa\nbb\ncc\n")
+	m = typeKeys(m, "2gUU")
+	if line(m, 0) != "AA" || line(m, 1) != "BB" || line(m, 2) != "cc" {
+		t.Fatalf("2gUU got %q / %q / %q", line(m, 0), line(m, 1), line(m, 2))
+	}
+}
+
+func TestCaseOperatorDotRepeatsTheGesture(t *testing.T) {
+	// Vim's "." re-resolves the motion where it is pressed (#2418) — it does
+	// not replay the original span.
+	m, _ := loaded(t, "one two three\n")
+	m = typeKeys(m, "gUw")
+	m = typeKeys(m, "w.")
+	if line(m, 0) != "ONE TWO three" {
+		t.Fatalf("gUw w. got %q", line(m, 0))
+	}
+	// Text objects repeat the same way.
+	m, _ = loaded(t, "foo bar\n")
+	m = typeKeys(m, "gUiw")
+	m = typeKeys(m, "w.")
+	if line(m, 0) != "FOO BAR" {
+		t.Fatalf("gUiw w. got %q", line(m, 0))
+	}
+	// …and so does the linewise double, at the cursor's line.
+	m, _ = loaded(t, "aa\nbb\n")
+	m = typeKeys(m, "gUU")
+	m = typeKeys(m, "j.")
+	if line(m, 0) != "AA" || line(m, 1) != "BB" {
+		t.Fatalf("gUU j. got %q / %q", line(m, 0), line(m, 1))
+	}
+}
+
 func TestVisualCaseOps(t *testing.T) {
 	m, _ := loaded(t, "foo bar\n")
 	m = typeKeys(m, "vllU")

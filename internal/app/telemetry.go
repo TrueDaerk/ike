@@ -44,9 +44,16 @@ func telemetryEnabled() bool {
 }
 
 // telemetryHeartbeatInterval paces the liveness stamp (#2348): frequent
-// enough that the last heartbeat brackets a freeze to within seconds, sparse
+// enough that the last heartbeat brackets a freeze to within a minute, sparse
 // enough that a day-long session costs well under a megabyte.
-const telemetryHeartbeatInterval = 10 * time.Second
+//
+// Widened from 10s to 60s in #2408: at 10s the beats were 61% of all events in
+// a two-day export — the diagnostic that was supposed to sit beside the usage
+// data was burying it. A minute still brackets a freeze closely enough to tell
+// "the loop is stuck" from "the process ended", and the `top` payload (#2402)
+// now names an interval's loudest wake sources, which a coarser beat reports
+// just as well.
+const telemetryHeartbeatInterval = 60 * time.Second
 
 // newUsageRecorder builds the session's usage recorder. It is inert until
 // the first event, so a model discarded on project switch never opens a file.
@@ -119,6 +126,70 @@ func topMessageDelta(prev, cur map[string]uint64, n int) string {
 // recorded.
 func recordTelemetrySession(r *telemetry.Recorder) {
 	r.Session(version.Short(), runtime.GOOS, telemetryProjectToken())
+}
+
+// projectClock measures how long the current project was actually worked in
+// (#2408): the foreground time between the session marker that opened it and
+// the project.leave event that closes it. Terminals that report focus let it
+// pause while the window is in the background, so a project left open in
+// another tab overnight does not read as a night of work; terminals that never
+// report focus simply never pause, which is the same wall-clock answer the
+// session markers already gave.
+//
+// It is a pointer on the Model because the model is copied by value on every
+// Update pass — the clock must be the one object all copies share. A project
+// switch builds a fresh model and therefore a fresh clock, which is exactly
+// the reset the new project needs.
+type projectClock struct {
+	now    func() time.Time
+	since  time.Time     // start of the running foreground span; zero while blurred
+	active time.Duration // foreground time banked before the running span
+}
+
+func newProjectClock() *projectClock {
+	c := &projectClock{now: time.Now}
+	c.since = c.now()
+	return c
+}
+
+// blur banks the running span and stops the clock (terminal window lost focus).
+func (c *projectClock) blur() {
+	if c == nil || c.since.IsZero() {
+		return
+	}
+	c.active += c.now().Sub(c.since)
+	c.since = time.Time{}
+}
+
+// focus restarts the clock (terminal window regained focus). Idempotent: a
+// terminal that reports focus twice must not restart a running span.
+func (c *projectClock) focus() {
+	if c == nil || !c.since.IsZero() {
+		return
+	}
+	c.since = c.now()
+}
+
+// elapsed is the foreground time so far, running span included.
+func (c *projectClock) elapsed() time.Duration {
+	if c == nil {
+		return 0
+	}
+	d := c.active
+	if !c.since.IsZero() {
+		d += c.now().Sub(c.since)
+	}
+	return d
+}
+
+// recordProjectLeave closes the current project's time budget (#2408): project
+// is the departing project's token (the caller takes it before any chdir, as
+// telemetryProjectToken hashes the working directory), reason is "switch",
+// "close" or "quit". Called once per departure — the switch transaction, which
+// the project-close path also runs through, and the quit teardown — always
+// before the next model's clock starts, so two projects' spans never overlap.
+func (m Model) recordProjectLeave(project, reason string) {
+	m.usage.ProjectLeave(project, reason, m.projClock.elapsed())
 }
 
 // telemetryProjectToken names the current project structurally: a short hash

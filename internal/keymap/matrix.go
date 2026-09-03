@@ -85,6 +85,8 @@ var reachableAlternatives = map[string]string{
 	"editor.selection.extend":          "palette",
 	"editor.selection.shrink":          "palette",
 	"editor.sortLines":                 "vim :sort / Edit menu",
+	"editor.case.toggle":               "vim g~ (g~~ linewise, ~ on a selection)",
+	"editor.case.cycle":                "palette",
 	"editor.escapeSelection":           "palette",
 	"editor.unescapeSelection":         "palette",
 	"debug.evaluate":                   "palette / Run menu",
