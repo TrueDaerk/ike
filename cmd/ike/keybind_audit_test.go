@@ -72,6 +72,8 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// palette); the update action is the manifest line's alt+enter offer.
 	{"deps.refresh", reasonPaneKey},
 	{"deps.audit", reasonOccasional},
+	// time.toggle (#2426) has cmd+alt+0; the reload is the pane's own 'r'.
+	{"time.refresh", reasonPaneKey},
 	{"deps.updateLatest", reasonIntention},
 	{"http.", reasonPaneKey},                   // the response pane's single keys
 	{"view.toggle", reasonMenu},                // the View menu's rendering toggles

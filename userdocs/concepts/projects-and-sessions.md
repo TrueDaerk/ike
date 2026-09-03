@@ -106,6 +106,9 @@ A few things follow you instead of the workspace, and live under `~/.ike`:
 - Named window layouts.
 - Scratch files — deliberately outside any project tree, so a throwaway buffer
   never ends up in a commit.
+- The local usage log under `~/.ike/telemetry`, which is what the
+  [project time report](../guides/project-time.md) reads back into "how long
+  did I work on which project".
 
 ## Files IKE writes
 

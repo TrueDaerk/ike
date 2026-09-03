@@ -35,6 +35,7 @@ var noCounterpart = map[string]string{
 	"editor.sortLines":                 "IntelliJ ships no Sort Lines keymap action (#2417); it lives in the String Manipulation plugin, which an exported keymap does not carry",
 	"editor.case.cycle":                "IKE-only concept (#2418): IntelliJ toggles case but never rotates identifier styles; that lives in the String Manipulation plugin, which an exported keymap does not carry",
 	"json.jqQueryView":                 "IKE-only concept (#2032): the inline jq playground has no JetBrains equivalent",
+	"time.toggle":                      "IKE-only concept (#2426): JetBrains has no time report; time tracking lives in third-party plugins an exported keymap does not carry",
 	"markdown.preview":                 "no default JetBrains keymap action",
 	"file.openAs":                      "IKE-only concept (#2420): JetBrains' Override File Type is a context-menu popup, not a keymap action",
 	"search.open":                      "IKE-only concept (#2409): JetBrains' Find is the editor find, already mapped to editor.find; the pane-wide chord has no keymap action",

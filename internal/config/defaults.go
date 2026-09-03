@@ -404,6 +404,12 @@ func defaults() *Config {
 			// is actually used. The settings UI switches it off.
 			Enabled: true,
 		},
+		StatusLine: StatusLine{
+			// Off by default (#2426): the time report is something you go
+			// and look at, and a permanent clock on the status line is a
+			// choice rather than a default.
+			ProjectTime: "off",
+		},
 		// No vault password file by default (#2293): vault files open as
 		// ciphertext until a source is configured.
 		Ansible: Ansible{VaultPasswordFile: ""},

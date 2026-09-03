@@ -162,6 +162,7 @@ var reachableAlternatives = map[string]string{
 	"vcs.panel":                        "palette",
 	"problems.toggle":                  "palette",
 	"deps.toggle":                      "palette",
+	"time.toggle":                      "palette / Tools menu",
 	"lsp.ignoreDiagnostic":             "palette",
 	"structure.toggle":                 "palette",
 	"dom.toggle":                       "palette",

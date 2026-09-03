@@ -23,6 +23,9 @@ Task-oriented pages, one per feature area.
 - **[Dependencies](dependencies.md)** — the project's declared dependencies
   per manifest: latest versions, vulnerabilities, one-key updates with a
   confirmed install step.
+- **[Project time](project-time.md)** — how long you worked on which project
+  today, this week or this month, from the local usage log: the Time window,
+  CSV export, and the optional status-line clock.
 - **[Running and debugging](run-and-debug.md)** — run configurations, tests,
   where output goes, breakpoints, stepping, and PHP/Xdebug.
 - **[The HTTP client](http-client.md)** — `.http` files in the repository,

@@ -94,6 +94,7 @@ nav:
       - The integrated terminal: guides/terminal.md
       - Git: guides/git.md
       - Dependencies: guides/dependencies.md
+      - Project time: guides/project-time.md
       - Running and debugging: guides/run-and-debug.md
       - The HTTP client: guides/http-client.md
       - Scratch files and snippets: guides/scratch-and-snippets.md

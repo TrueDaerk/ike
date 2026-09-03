@@ -1,8 +1,6 @@
 package app
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -224,14 +222,15 @@ func (m *Model) noteSwitchLSPReady() {
 // of the working directory (the project root — main.go and performSwitch
 // chdir there). The privacy line (#2235) forbids the clear-text path; the
 // hash still lets an analyst equate "this session ran in the same project as
-// that one" and rehash a candidate root to match a log to a known project.
+// that one" and rehash a candidate root to match a log to a known project —
+// which is exactly what the Time report does (#2426), hashing every entry of
+// the recent-projects history to put names back on the tokens.
 func telemetryProjectToken() string {
 	wd, err := os.Getwd()
 	if err != nil {
 		return "unknown"
 	}
-	sum := sha256.Sum256([]byte(wd))
-	return hex.EncodeToString(sum[:6])
+	return telemetry.ProjectToken(wd)
 }
 
 // telemetryFnKey matches function-key bases (f1..f24).

@@ -256,6 +256,8 @@ bring their own.
 | SSH Host… | `terminal.ssh` | — | — | everywhere |
 | Toggle Terminal | `terminal.toggle` | `alt+f12` | — | everywhere |
 | Test Results | `tests.toggle` | `cmd+4` | — | everywhere |
+| Project Time: Reload Usage Log | `time.refresh` | — | — | everywhere |
+| Project Time Report | `time.toggle` | `cmd+alt+0` | — | everywhere |
 | TODO Index | `todo.list` | `cmd+6` | — | everywhere |
 | Regex Tester… | `tools.regexTester` | — | — | everywhere |
 | Set Up Tool Panes | `tools.setup` | — | — | everywhere |

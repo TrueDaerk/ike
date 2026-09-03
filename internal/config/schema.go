@@ -88,6 +88,8 @@ type Config struct {
 	Forge Forge `toml:"forge"`
 	// Telemetry holds the local-only usage recording switch (#2235).
 	Telemetry Telemetry `toml:"telemetry"`
+	// StatusLine holds the opt-in status-line segments (#2426).
+	StatusLine StatusLine `toml:"statusline"`
 	// Ansible holds Ansible integration settings (#2293): the vault password
 	// file transparent vault editing decrypts with.
 	Ansible Ansible `toml:"ansible"`
@@ -125,6 +127,16 @@ type Ansible struct {
 // carries content (no typed text, no clear-text paths); off writes nothing.
 type Telemetry struct {
 	Enabled bool `toml:"enabled"`
+}
+
+// StatusLine holds the status-line segments that stay off unless asked for.
+// ProjectTime ("on"/"off", default "off") shows today's active time in the
+// current project, read back from the local usage log by the Time tool
+// window's aggregator (#2426). It is opt-in because a permanent clock on the
+// status line is a working-hours display, and whether that reads as
+// motivating or as oppressive is not something IKE gets to decide for anyone.
+type StatusLine struct {
+	ProjectTime string `toml:"project_time"`
 }
 
 // HTTP holds the HTTP client's re-run/compare settings (#2247).

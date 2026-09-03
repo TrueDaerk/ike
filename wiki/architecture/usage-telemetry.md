@@ -254,6 +254,50 @@ history).
   read live per event, so a settings flip applies immediately; off, nothing
   is written at all. A nil recorder is inert, mirroring the frecency store.
 
+## Reading the log back: the project time report (#2426)
+
+The recorder only ever appends; `internal/telemetry/report.go` is the one
+reader. It answers "how long did I work on which project, today / this week /
+this month" without an external tracker, and it is the source behind the
+**Time** tool window (`time.toggle`, default `cmd+alt+0`, Tools menu) and the
+opt-in `statusline.project_time` segment.
+
+- **Reader**: `telemetry.NewReader(dir)` streams every `*.jsonl` in the
+  telemetry directory line by line — session files reach megabytes, so nothing
+  is ever slurped — and caches each file's aggregate by its **modification
+  time and size**. Only the live session's file changes, so a refresh re-reads
+  one file and re-stats the rest. Entries for files the retention pass deleted
+  are evicted on the next read. Unparsable lines are skipped rather than
+  failing the report: a torn last line is the normal shape of the file the
+  running session is still writing.
+- **Aggregation unit**: active time, session count and per-command counts, per
+  **project token** and per **local calendar day**. A span opens at a `session`
+  marker and closes at the next marker, at a `project.leave`, or at the end of
+  the file.
+- **Two log shapes, one number**:
+  - v4 and later close a span with `project.leave`, whose `ms` is the
+    *foreground* time spent there. That number wins: it already excludes time
+    the terminal window sat in the background, which no timestamp arithmetic
+    can recover.
+  - v1–v3 have session markers and nothing else. Measuring the raw span would
+    read an hour of lunch as an hour of work, so the span is walked over its
+    marks — the marker, every `key` and `command` event, the file's last
+    event — and every gap longer than `telemetry.IdleGap` (5 minutes) is
+    dropped whole. Heartbeats are liveness, not activity: they extend the
+    span's end but never count as a mark.
+- **Names come back the other way round.** The log carries only the hashed
+  token (the privacy line forbids the path), so the report hashes every path
+  it *does* know — the recent-projects history plus the currently open root —
+  with `telemetry.ProjectToken` and matches. Tokens nothing hashes to are
+  grouped into a single `(unknown)` row: a project this machine no longer
+  knows is the same answer however many of them there are. Rows group by
+  resolved name, so one project opened under two roots reads as one project.
+- **Read-only, local, no upload.** The reader opens files and closes them; the
+  Time window's `e` writes a CSV *scratch* file, which is the only thing the
+  feature ever creates.
+
+The tool window itself is [Project Time Report](/architecture/project-time.md).
+
 ## Analysis examples
 
 ```sh
@@ -268,9 +312,11 @@ jq -r 'select(.type=="palette.dismiss") | .data.mode' ~/.ike/telemetry/*.jsonl |
 jq -r 'select(.type=="project.leave") | [.data.project, (.data.ms|tonumber/60000|floor)] | @tsv' ~/.ike/telemetry/*.jsonl
 ```
 
-Evaluation/statistics UI is explicitly out of scope; the JSONL schema above is
-the stable interface.
+The JSONL schema above stays the stable interface. The one evaluation UI IKE
+ships is the project time report (#2426) described above — everything else an
+analysis wants is a jq one-liner away.
 
-Related: [Configuration System](/architecture/config.md),
+Related: [Project Time Report](/architecture/project-time.md),
+[Configuration System](/architecture/config.md),
 [Settings UI & Menu Bar](/architecture/settings-ui.md),
 [Keybindings](/architecture/keybindings.md).

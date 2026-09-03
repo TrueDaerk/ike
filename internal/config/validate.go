@@ -90,6 +90,8 @@ var (
 	popupCwds = map[string]bool{"project": true, "file": true}
 	// popupOnSwitchModes are the terminal.popup_on_switch values (#2362).
 	popupOnSwitchModes = map[string]bool{"restore": true, "always-open": true}
+	// onOffModes are the statusline.project_time values (#2426).
+	onOffModes = map[string]bool{"on": true, "off": true}
 )
 
 // whichKeyMaxDelayMs caps keymap.which_key_delay_ms (#1909); the settings
@@ -366,6 +368,11 @@ func validate(c *Config) []Diagnostic {
 	if !popupOnSwitchModes[c.Terminal.PopupOnSwitch] {
 		diags = append(diags, Diagnostic{Field: "terminal.popup_on_switch", Message: fmt.Sprintf("unknown mode %q, using \"restore\"", c.Terminal.PopupOnSwitch)})
 		c.Terminal.PopupOnSwitch = "restore"
+	}
+	// statusline.project_time (#2426) opts into the project-time segment.
+	if !onOffModes[c.StatusLine.ProjectTime] {
+		diags = append(diags, Diagnostic{Field: "statusline.project_time", Message: fmt.Sprintf("expected \"on\" or \"off\", got %q, using \"off\"", c.StatusLine.ProjectTime)})
+		c.StatusLine.ProjectTime = "off"
 	}
 	// history.timeline_source (#1916) is the Timeline's default source filter.
 	if !timelineSources[c.History.TimelineSource] {

@@ -58,6 +58,7 @@ var statusLeft = []statusSegment{
 	{id: "todo", render: func(m Model, _ *editor.Model) string { return m.todoSegment() }},
 	{id: "http", render: func(m Model, _ *editor.Model) string { return m.httpFlightSegment() }},
 	{id: "deps", render: func(m Model, _ *editor.Model) string { return m.depsSegment() }},
+	{id: "projecttime", render: func(m Model, _ *editor.Model) string { return m.projectTimeSegment() }},
 	{id: "allfind", render: func(m Model, _ *editor.Model) string { return m.allFindSegment() }},
 }
 
@@ -539,6 +540,8 @@ func (m Model) statusLine() string {
 			left += "PROBLEMS"
 		case inst.Kind() == pane.KindDeps:
 			left += "DEPENDENCIES"
+		case inst.Kind() == pane.KindTime:
+			left += "TIME"
 		case inst.Kind() == pane.KindTests:
 			left += "TESTS"
 		case inst.Kind() == pane.KindIssues:
@@ -804,6 +807,8 @@ var statusSegmentCommands = map[string]string{
 	"allfind": "project.findInAllProjectsResults",
 	// The dependency scan indicator (#2419) opens the pane it fills.
 	"deps": "deps.toggle",
+	// The project-time segment (#2426) opens the report it summarises.
+	"projecttime": "time.toggle",
 }
 
 // statusSegmentAt returns the id of the segment rendered at cell x of the

@@ -1,5 +1,35 @@
 # Log
 
+## 2026-09-03 (project time report from the local usage log, #2426)
+
+- **The usage log is read back for the first time.**
+  `internal/telemetry/report.go` streams every `*.jsonl` under
+  `~/.ike/telemetry` and aggregates active time, sessions and command counts
+  per project token and local day, caching each file's aggregate by mtime and
+  size (only the live session's file ever changes). Torn last lines are
+  skipped, not fatal.
+- **Two log shapes, one number.** A v4 span closes on `project.leave`, whose
+  `ms` is authoritative foreground time; a pre-v4 span is walked over its
+  marks (session marker, `key`/`command` events, last event) with every gap
+  over `telemetry.IdleGap` (5 min) dropped whole. Heartbeats extend a span but
+  never count as activity.
+- **Names join the other way round**: the log carries only the hashed token,
+  so the report hashes the recent-projects history plus the open root with the
+  new `telemetry.ProjectToken` (which `telemetryProjectToken` now uses too)
+  and matches. Unmatched tokens group into one `(unknown)` row.
+- **A singleton Time pane** (`time.toggle`, `cmd+alt+0`, Tools menu,
+  `internal/timepanel`) with Today/Week/Month tabs, rows of
+  active/sessions/top-5-commands, a per-day ASCII bar for the selected
+  project, `/` + the shared find chord as the filter row, `r` to re-read and
+  `e` to export the current view as a CSV scratch. The numeric tool-window
+  family `cmd+0..9` was full, hence the alt-neighbour.
+- **`statusline.project_time`** (`on`/`off`, default `off`, Settings ▸ Usage
+  Telemetry) shows today's active time in the current project, refreshed by a
+  60-second ticker that is not armed at all while the setting is off; a click
+  opens the pane. See
+  [project time report](/architecture/project-time.md) and
+  [usage telemetry](/architecture/usage-telemetry.md).
+
 ## 2026-09-03 (mermaid diagrams in the markdown preview, #2421)
 
 - **```mermaid fences render as pictures** in the markdown preview instead of

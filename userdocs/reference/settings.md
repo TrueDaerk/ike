@@ -216,6 +216,7 @@ secrets — are documented together, with screenshots, in
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Local usage telemetry | `telemetry.enabled` | boolean | `true` | user | Record command, keybinding and layout usage events into per-session JSONL files under ~/.ike/telemetry; off writes nothing. The data stays on this machine |
+| Project time in the status line | `statusline.project_time` | enum: `off`, `on` | `off` | user | Show today's active time in the current project as a status-line segment, aggregated from the same local usage log the Time tool window reports on (time.toggle). Needs telemetry.enabled to have anything to read; the segment refreshes about once a minute and clicking it opens the Time window |
 
 ### Timeline
 
