@@ -18,8 +18,11 @@ type Config struct {
 	Notifications Notifications `toml:"notifications"`
 	Files         Files         `toml:"files"`
 	UI            UI            `toml:"ui"`
-	Backup        Backup        `toml:"backup"`
-	History       History       `toml:"history"`
+	// Layout holds the pane-layout chrome settings (#2407): today only the
+	// pane-number badges the focus-by-number chords address.
+	Layout  Layout  `toml:"layout"`
+	Backup  Backup  `toml:"backup"`
+	History History `toml:"history"`
 	// Lang holds per-language settings as a free-form slot (Roadmap 0160,
 	// mirrors LSP.Servers): [lang.python] interpreter = "/path/to/python".
 	// The toolchain settings page writes it; lang.Interpreter resolution and
@@ -504,6 +507,20 @@ type UI struct {
 	// edge of a row that continues past it. They overlay the edge cells, so
 	// turning them off changes nothing but the two glyphs.
 	HScrollMarks bool `toml:"h_scroll_marks"`
+}
+
+// Layout holds the pane-layout chrome settings (#2407). PaneNumbers decides
+// whether the visible panes carry their layout-order number in the title bar
+// ("[1] EDITOR", lazygit style) — the number the pane.focus1…9 chords and the
+// Focus Pane by Number command address:
+//
+//	on          always draw the badges (default)
+//	off         never draw them
+//	focus-only  draw them only while the "which pane" hint is up — a pane
+//	            switch (pane.switcher, a focus-by-number chord) raises it for
+//	            a moment, so the numbers appear exactly when they are used
+type Layout struct {
+	PaneNumbers string `toml:"pane_numbers"`
 }
 
 // Backup holds crash-recovery snapshot behaviour (Roadmap 0210). Enable turns

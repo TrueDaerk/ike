@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Pane Layout & Drag
-description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — plus a sticky keyboard resize mode (#2150) stepping the same dividers with hjkl/arrows, with per-project geometry persisted in a dedicated state store and named user-scoped saved layouts that are the whole truth on apply (#2042), tools and multi-tool tab hosts included; slot templates (#1897) only govern runtime tool opens.
+description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — plus a sticky keyboard resize mode (#2150) stepping the same dividers with hjkl/arrows, plus numbered pane chrome with focus-by-number chords (#2407), with per-project geometry persisted in a dedicated state store and named user-scoped saved layouts that are the whole truth on apply (#2042), tools and multi-tool tab hosts included; slot templates (#1897) only govern runtime tool opens.
 resource: internal/layout/tree.go
-tags: [architecture, layout, panes, mouse, drag, resize, split, close, keyboard, persistence, bubbletea]
-timestamp: 2026-08-27T12:00:00Z
+tags: [architecture, layout, panes, mouse, drag, resize, split, close, keyboard, focus, numbers, persistence, bubbletea]
+timestamp: 2026-09-03T12:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -304,6 +304,50 @@ merge label — labelled with the dragged pane. It is drawn with `overlay.Place`
 sibling of `overlay.Center` (both splice ANSI-aware rows so styling survives the
 seam). Resize feedback is the shared pane edge tracking the cursor in real time
 as the ratio updates per motion frame.
+
+## Pane numbers & focus by number (#2407)
+
+Pane focus is the most frequent layout event, and before this the keyboard
+could only *cycle* (`pane.switcher`, `ctrl+tab`): reaching the third of four
+panes meant pressing the chord until it happened, which is why the telemetry
+found most focus changes going through the mouse. The panes are numbered and
+the number is addressable.
+
+- **Numbering is derived, never stored.** `paneNumberOrder`
+  (`internal/app/panenumbers.go`) sorts the *visible* panes — the keys of
+  `m.lay.Panes` — by their computed rectangle in reading order: top row first,
+  left to right within a row. Reading over the rectangles rather than over the
+  tree keeps the numbers geometric, so nested splits stay numbered the way
+  they look. Because it reads `m.lay`, every layout change renumbers with no
+  invalidation step: a split, move, close or restore is visible in the badges
+  on the next frame, a zoomed pane (#358) is the only numbered one, and a tool
+  window counts exactly while it is on screen. The popup terminal and the
+  floating panels are not layout leaves and never take a number.
+- **The badge is chrome.** `renderPaneBox` prefixes the title row with
+  `paneNumberBadge` — lazygit's `[1] EDITOR` — in the focus border colour for
+  the focused pane and the dim border colour for the rest. When the pane holds
+  several tabs the tab bar takes the title row over; it is measured against
+  the width the badge leaves, so the box still fills its rect exactly. Only
+  the first nine panes carry a badge: those are the ones a chord can address,
+  and a number nobody can press would be a lie.
+- **Commands.** `pane.focus1`…`pane.focus9` (`PaneFocusIndexMsg`) focus the
+  pane carrying that number; out of range is a no-op **with a notification**,
+  never a silent dead chord (#275). `pane.focusByIndex` ("Focus Pane by
+  Number…") is the typed flavour in a shell prompt, for the panes past nine
+  and for terminals the digit chords do not reach.
+- **`ctrl+1`…`ctrl+9`, macOS only.** The chords are delivered — plain ctrl
+  chords, free of macOS system shortcuts — and deliberately *not* `cmd+digit`,
+  which is the JetBrains tool-window numbering (`cmd+1` toggles the project
+  tree). They live in `keymap.darwinRows`: off macOS the Cmd→Ctrl fold lands
+  `explorer.toggle`, `nav.pins` and `vcs.panel` on exactly these chords, so
+  there `pane.focusByIndex` is the doorway, recorded in the keybind audit
+  ledger.
+- **`layout.pane_numbers`** (Settings → Appearance) is `on` (default), `off`,
+  or `focus-only`. `focus-only` draws the badges only while the *which-pane
+  hint* is up: a keyboard pane switch — the switcher, a focus-by-number chord,
+  the prompt — raises it and schedules its own expiry message, generation-
+  tagged so a faster second switch outruns the older timer. The numbers are
+  therefore on screen exactly while panes are being switched.
 
 ## Keyboard resize mode (#2150)
 

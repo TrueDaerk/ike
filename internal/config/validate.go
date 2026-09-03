@@ -395,6 +395,17 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "debug.session_end", Message: fmt.Sprintf("unknown mode %q, using \"keep\"", c.Debug.SessionEnd)})
 		c.Debug.SessionEnd = "keep"
 	}
+	// layout.pane_numbers (#2407) decides whether the pane title bars carry
+	// their layout-order number, always or only while the which-pane hint is
+	// up. An empty value is the unset default, not a typo.
+	switch c.Layout.PaneNumbers {
+	case "on", "off", "focus-only":
+	case "":
+		c.Layout.PaneNumbers = "on"
+	default:
+		diags = append(diags, Diagnostic{Field: "layout.pane_numbers", Message: fmt.Sprintf("unknown mode %q, using \"on\"", c.Layout.PaneNumbers)})
+		c.Layout.PaneNumbers = "on"
+	}
 	// The #1932 scratch tool pane became the explorer's Scratches section
 	// (#1963). Old configs still carry [scratch] panel / panel_height; both
 	// migrate silently, like new_terminal: panel_height seeds section_height

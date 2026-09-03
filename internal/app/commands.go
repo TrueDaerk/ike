@@ -99,6 +99,16 @@ type KeymapDeadBindingsMsg struct{}
 // same behavior as the hardcoded tab. Dispatched by pane.switcher.
 type CyclePaneFocusMsg struct{}
 
+// PaneFocusIndexMsg asks the root model to focus the pane carrying Index in
+// the chrome (#2407): the numbers run in layout reading order and are drawn in
+// the pane title bars. Dispatched by pane.focus1…pane.focus9.
+type PaneFocusIndexMsg struct{ Index int }
+
+// PaneFocusByIndexMsg asks the root model to open the pane-number prompt
+// (#2407), the typed flavour of the digit chords — for the panes past nine and
+// for terminals that swallow the chords. Dispatched by pane.focusByIndex.
+type PaneFocusByIndexMsg struct{}
+
 // OpenFilePathMsg asks the root model to open the palette locked to the
 // open-path picker (#999): a filesystem browser for absolute/~ paths, so
 // files outside the workspace open without switching projects.
@@ -505,6 +515,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 	for i := 1; i <= 9; i++ {
 		n := strconv.Itoa(i)
 		cmds = append(cmds, appCommand("editor.tab.select"+n, "Go to Tab "+n, TabSelectMsg{Index: i - 1}))
+		// The pane twins of the tab jumps (#2407): the number is the one the
+		// pane's title bar shows.
+		cmds = append(cmds, appCommand("pane.focus"+n, "Focus Pane "+n, PaneFocusIndexMsg{Index: i}))
 	}
 	return plugin.Capabilities{
 		// The [[elasticsearch.endpoints]] list editor (#1927): registered as a
@@ -520,6 +533,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("palette.keymapHelp", "Keymap Cheatsheet", ShowKeymapHelpMsg{}),
 			appCommand("help.welcomeTour", "Welcome Tour", ShowWelcomeTourMsg{}),
 			appCommand("pane.switcher", "Switch Pane Focus", CyclePaneFocusMsg{}),
+			appCommand("pane.focusByIndex", "Focus Pane by Number…", PaneFocusByIndexMsg{}),
 			appCommand("project.goToFile", "Go to File", GoToFileMsg{}),
 			appCommand("palette.recentFiles", "Recent Files", ShowRecentFilesMsg{}),
 			appCommand("palette.searchEverywhere", "Search Everywhere", ShowSearchEverywhereMsg{}),
