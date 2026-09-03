@@ -1,7 +1,7 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, and GraphQL errors lifted out of a 200 answer into a red block above the body.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, and GraphQL errors lifted out of a 200 answer into a red block above the body.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
 timestamp: 2026-09-03T18:00:00Z
@@ -135,6 +135,10 @@ Authorization: Bearer {{$env TOKEN}}
   query as its body and an optional JSON `variables` object after a blank line,
   and sends the `POST` envelope for both — see
   [GraphQL requests](#graphql-requests-internalgraphql-2423).
+- **WebSocket blocks** (#2422): a request line spelled `WEBSOCKET <url>` opens
+  a live session; the body holds the initial messages, separated by `===`
+  lines, with `=== wait-for-server` pausing until a server message arrives —
+  see [WebSocket sessions](#websocket-sessions-internalhttpclientwebsocketgo-2422).
 
 ## Parser (`internal/httpfile`)
 
@@ -931,6 +935,78 @@ For a recognized stream:
   with a warning saying why the body ends there — never an error — so what
   arrived stays visible and reaches the history. `MaxBodyBytes` still caps
   the body: the stream stops at 10 MiB with the usual truncation warning.
+
+## WebSocket sessions (`internal/httpclient/websocket.go`, #2422)
+
+A `ws://` / `wss://` endpoint is a *session*, not an exchange, and before
+#2422 such a URL simply failed. The `WEBSOCKET <url>` block — the JetBrains
+spelling — opens one:
+
+```
+### chat
+WEBSOCKET wss://example.com/socket
+Sec-WebSocket-Protocol: chat
+
+{"join": "lobby"}
+=== wait-for-server
+{"say": "hello"}
+```
+
+- **Parsing** (`internal/httpfile/websocket.go`): `WEBSOCKET` is an ordinary
+  request-line method to the parser, so headers, comments, `###` naming and
+  folded query lines all apply unchanged. The body splits on lines holding
+  `===` into `Request.WebSocket.Messages`; a separator spelled
+  `=== wait-for-server` marks the *following* message as wait-gated — it only
+  goes out after a server message has arrived since the previous send. Blank
+  lines around each message are trimmed, and a section left empty carries its
+  wait flag over to the next one. Placeholders in the URL and in every message
+  resolve through the same variable chain as HTTP (`ResolveVars` re-splits the
+  substituted body), and the environment files apply identically.
+- **Dispatch**: `httpclient.DispatchWS` (gorilla/websocket) resolves the
+  target — `http(s)` schemes map onto `ws(s)`, a bare host defaults to `ws` —
+  performs the handshake with the block's headers
+  (`Sec-WebSocket-Protocol` becomes the dialer's subprotocol list; the
+  reserved `Sec-WebSocket-*`/`Connection`/`Upgrade` fields are the
+  handshake's own and are warned about instead of sent twice), and hands the
+  101 answer to the same `OnHeaders` callback a stream uses. A refused
+  upgrade is an error naming the server's status.
+- **The transcript is the body.** Every frame — sent and received — appends
+  one line through the streaming chunk path: a direction marker (`→` sent,
+  `←` received), a `15:04:05.000` timestamp, and the payload — text verbatim
+  (embedded newlines flattened to `\n` so one frame stays one row), binary as
+  `(binary N bytes)` plus hex. The transcript goes through the shared
+  `bodySink`, so a huge session spools to disk (#2157) and caps at
+  `MaxBodyBytes` like any body. When the session ends the transcript *is* the
+  `Response.Body` under the 101 status, which is what makes history,
+  `http.showResponse` and the `D`/`P` diffs work on sessions with no new
+  storage format. `Response.Frames` counts the frames for telemetry.
+- **Lifetime**: there is no idle watchdog — an open session legitimately says
+  nothing for minutes. It ends when the user closes it (`http.cancel` / `x`
+  in the pane, the exact cancel path every dispatch has), when the server
+  closes, or on a transport failure; each leaves a warning row saying which.
+  Like a canceled stream (#1776), a closed session is a regular response, not
+  an error.
+- **Interactive sending**: while the session is open the response pane
+  (`internal/httppane/websocket.go`) unlocks an input line — `enter` or `i`
+  opens it, `enter` sends (the prompt stays open; a session is a
+  conversation), `↑`/`↓` step through the sent-message history
+  (consecutive duplicates collapse, an edit leaves the walk), `esc` closes
+  the input keeping the draft. The pane cannot reach the connection: enter
+  emits `WSSendMsg`, and the host resolves the open session — the handle
+  arrived over the flight's event channel as `HTTPWSSessionMsg` and lives on
+  the flight entry — and writes off-loop (`WSSession.Send`, write-mutex
+  serialized against the initial-message loop). The sent frame echoes back
+  into the view through the ordinary chunk path.
+- **Re-send and re-run**: the snapshot (#1832) stores method `WEBSOCKET`, the
+  resolved URL and headers, and the initial messages as the `===`-separated
+  body text (`JoinWebSocketBody`), so `http.resend` re-opens the session and
+  replays them verbatim (`httpclient.ResendWS`) — wait gates included — and
+  `http.rerun` re-reads the block with the current variables like any request.
+- **Telemetry** (#2348): the flight-end `http.flight` event carries
+  `kind: ws` and the structural `frames` count — nothing of what was said.
+- The 101 status is a success for the completion notice (#2364), not a "1xx
+  failure"; the pane's header marker says `⟳ websocket session…` while it is
+  open, and the footer leads with `↩/i send message · x close session`.
 
 ## Editor UX (#1250)
 

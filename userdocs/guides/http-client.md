@@ -460,6 +460,42 @@ changes.
     schema, that one is used. With two or more, introspect from a block whose
     URL is spelled out, or resolve the variable first.
 
+## WebSocket sessions
+
+A `ws://` or `wss://` endpoint is a conversation, not a request. Write
+`WEBSOCKET` as the method and the body becomes the messages that open it,
+separated by `===` lines:
+
+```http
+### chat
+WEBSOCKET wss://example.com/socket
+Sec-WebSocket-Protocol: chat
+
+{"join": "lobby"}
+=== wait-for-server
+{"say": "hello"}
+```
+
+Running it connects, sends the messages in order — `=== wait-for-server`
+pauses until the server has said something before the next message goes out —
+and streams every frame into the response pane live, one row per frame:
+`→` for what you sent, `←` for what arrived, each with a timestamp. Text
+frames show verbatim; binary frames show as `(binary N bytes)` plus hex.
+Variables and the selected environment resolve in the URL and in every
+message exactly as for an HTTP request.
+
+While the session is open, the pane header shows `⟳ websocket session…` and
+you can talk back: press ++enter++ (or `i`) to open the input line, type,
+++enter++ sends — the line stays open for the next message — and ++up++ /
+++down++ step through what you already sent. ++esc++ closes the input, `x`
+(or **Cancel Running HTTP Request**) closes the session.
+
+The finished transcript is stored as the response body under the `101`
+status, so history browsing, **Show HTTP Response** and the `D`/`P` diffs
+work on sessions like on any response. ++ctrl+r++ re-send opens the session
+again and replays the same initial messages; `R` re-runs the block with
+today's variables.
+
 ## Completion while you type
 
 `.http` files complete without any language server:
@@ -556,7 +592,8 @@ highlighted, binary bodies collapsed to a notice.
 | ++cmd+shift+j++ / ++ctrl+shift+j++ | Open the playground this body's type speaks — jq, yq or xmq |
 | `m` | Load the next chunk of a large body |
 | `o` | Open the whole body as a file |
-| `x` | Cancel the request that is running |
+| `x` | Cancel the request that is running (or close the websocket session) |
+| ++enter++ / `i` (websocket session) | Open the input line, then send with ++enter++; ++up++ / ++down++ recall sent messages |
 | `za` / `zc` / `zo` | Toggle / close / open the fold at the top of the view |
 | `zM` / `zR` | Collapse every fold / open them all |
 | ++esc++ | Clear the search |

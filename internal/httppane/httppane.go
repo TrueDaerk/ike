@@ -179,6 +179,20 @@ type Model struct {
 	streaming  bool
 	streamTail string
 	streamBody int
+
+	// WebSocket session UI (#2422): ws marks the live stream as an open
+	// websocket session, which is what unlocks the interactive input line.
+	// wsInput is the open prompt, wsText/wsCur its content and rune cursor.
+	// wsSent is the history of sent messages (oldest first); wsSentIdx is the
+	// up/down position counted back from the newest (-1 = editing a fresh
+	// line) and wsDraft stashes that fresh line while browsing.
+	ws        bool
+	wsInput   bool
+	wsText    string
+	wsCur     int
+	wsSent    []string
+	wsSentIdx int
+	wsDraft   string
 }
 
 // New returns an empty viewer; responses arrive via Set.
@@ -386,6 +400,8 @@ func (m *Model) StartStream(request, proto, status string, headers http.Header) 
 	m.streaming = true
 	m.streamTail = ""
 	m.streamBody = 0
+	m.ws = false // a websocket flight marks itself via SetWSLive after this
+	m.wsInput = false
 
 	m.status = fmt.Sprintf("%s %s", proto, status)
 	m.rows = append(m.rows, row{kind: kindStatus, text: m.status})
@@ -517,6 +533,8 @@ func (m *Model) recompose(resp *httpclient.Response) {
 	m.streaming = false
 	m.streamTail = ""
 	m.streamBody = 0
+	m.ws = false // the session (if any) ended with the stream (#2422)
+	m.wsInput = false
 	m.top = 0
 	m.left = 0
 	m.rows = nil
@@ -661,6 +679,14 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.searchKey(msg)
 		return nil
 	}
+	if m.wsInput {
+		// The open websocket input line (#2422) captures keys like the search
+		// prompt does; the modified copy chords stay reserved the same way.
+		if cmd := m.searchCopyKey(msg); cmd != nil {
+			return cmd
+		}
+		return m.wsInputKey(msg)
+	}
 	if m.pendingZ {
 		m.pendingZ = false
 		// The copy chord outranks a half-typed fold sequence (#2062): "z"
@@ -722,10 +748,23 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	case "i":
+		// While a websocket session is open (#2422), "i" opens the input line
+		// instead of the request details — a live session has no snapshot to
+		// expand anyway.
+		if m.WSLive() {
+			m.openWSInput()
+			return nil
+		}
 		// Expand/collapse the request headers (and small body) beneath the
 		// request line (#2424) — collapsed by default so the common case
 		// (just the path that was hit) stays a single line.
 		m.reqDetails = !m.reqDetails
+		return nil
+	case "enter":
+		// enter is the second way into the session input line (#2422).
+		if m.WSLive() {
+			m.openWSInput()
+		}
 		return nil
 	case "ctrl+r":
 		// Re-send the shown entry's stored request (#1832). The message goes
@@ -953,6 +992,15 @@ func (m *Model) searchKey(msg tea.KeyPressMsg) {
 // scrollToMatch() — keeps matches and viewport live. A closed prompt has no
 // text field to paste into, so the call is a no-op.
 func (m *Model) PasteText(text string) {
+	// The open websocket input line takes a paste like the search prompt does
+	// (#2422) — multi-line blocks flatten into the single-line field.
+	if m.wsInput {
+		if t, cur, changed := ui.PasteText(m.wsText, m.wsCur, text); changed {
+			m.wsText, m.wsCur = t, cur
+			m.wsSentIdx = -1
+		}
+		return
+	}
 	if !m.searching {
 		return
 	}
@@ -1199,9 +1247,14 @@ func (m *Model) headerSegs(pal *theme.Palette) []headerSeg {
 	switch {
 	case m.streaming:
 		// A live stream (#1776): the rows below grow while the connection is
-		// open; the marker replaces the generic pending one.
+		// open; the marker replaces the generic pending one. A websocket
+		// session (#2422) names itself — it ends on request, not by itself.
+		label := "streaming"
+		if m.ws {
+			label = "websocket session"
+		}
 		segs = append(segs, headerSeg{
-			text:  fmt.Sprintf("   ⟳ streaming… (%s)", runningFor(m.pendingSince)),
+			text:  fmt.Sprintf("   ⟳ %s… (%s)", label, runningFor(m.pendingSince)),
 			style: lipgloss.NewStyle().Foreground(pal.Warning)})
 	case m.pending != "":
 		// An in-flight dispatch (#1272): the rows below are the *previous*
@@ -1511,6 +1564,10 @@ func (m *Model) footerText() string {
 		}
 		return s
 	}
+	// The open websocket input line owns the footer the same way (#2422).
+	if m.wsInput {
+		return m.wsFooter()
+	}
 	if m.query != "" {
 		return " /" + m.query + "  " + m.matchCount() + " · n/N next/prev · esc clear"
 	}
@@ -1522,6 +1579,10 @@ func (m *Model) footerText() string {
 	if m.streaming {
 		// A live stream (#1776): the abort key leads, history is empty anyway.
 		s = " x cancel stream ·"
+		if m.ws {
+			// An open websocket session (#2422): sending is the point.
+			s = " ↩/i send message · x close session ·"
+		}
 	}
 	if len(m.hist) > 0 {
 		s = fmt.Sprintf(" ←/→ history %d/%d", m.histIdx+1, len(m.hist))
