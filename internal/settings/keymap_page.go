@@ -308,9 +308,9 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		if k.host != nil {
 			k.host.Push(newKeymapImport(k, k.host))
 		}
-		k.importField.text = "~" + string(filepath.Separator)
+		k.importField.Text = "~" + string(filepath.Separator)
 		k.importNote = ""
-		k.importSug.refresh(k.importField.text)
+		k.importSug.refresh(k.importField.Text)
 	}
 	return nil
 }

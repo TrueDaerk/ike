@@ -11,8 +11,8 @@ import (
 func TestTextFieldUmlautBackspace(t *testing.T) {
 	f := newTextField("grün")
 	f.Handle(tea.KeyPressMsg{Code: tea.KeyBackspace})
-	if f.text != "grü" {
-		t.Fatalf("after backspace = %q, want grü", f.text)
+	if f.Text != "grü" {
+		t.Fatalf("after backspace = %q, want grü", f.Text)
 	}
 }
 
@@ -22,13 +22,13 @@ func TestTextFieldCursorAndWordOps(t *testing.T) {
 	f := newTextField("hello world")
 	f.Handle(tea.KeyPressMsg{Code: tea.KeyHome})
 	f.Handle(tea.KeyPressMsg{Code: 'X', Text: "X"})
-	if f.text != "Xhello world" || f.cur != 1 {
-		t.Fatalf("insert at home = %q cur %d", f.text, f.cur)
+	if f.Text != "Xhello world" || f.Cur != 1 {
+		t.Fatalf("insert at home = %q cur %d", f.Text, f.Cur)
 	}
 	f.Handle(tea.KeyPressMsg{Code: tea.KeyEnd})
 	f.Handle(tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl})
-	if f.text != "Xhello " {
-		t.Fatalf("ctrl+w = %q, want the last word gone", f.text)
+	if f.Text != "Xhello " {
+		t.Fatalf("ctrl+w = %q, want the last word gone", f.Text)
 	}
 }
 
@@ -46,7 +46,7 @@ func TestSchemaEditCursorInsert(t *testing.T) {
 	ed.tf = newTextField("100")
 	m.Update(key("home"))
 	m.Update(keyRune('8'))
-	if ed.tf.text != "8100" || ed.tf.cur != 1 {
-		t.Fatalf("mid-edit insert = %q cur %d", ed.tf.text, ed.tf.cur)
+	if ed.tf.Text != "8100" || ed.tf.Cur != 1 {
+		t.Fatalf("mid-edit insert = %q cur %d", ed.tf.Text, ed.tf.Cur)
 	}
 }

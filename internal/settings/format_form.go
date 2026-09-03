@@ -154,7 +154,7 @@ func (f *formatForm) Update(key tea.KeyPressMsg) tea.Cmd {
 	default:
 		tf := newTextFieldAt(f.values[f.field], f.cur)
 		if handled, changed := tf.Handle(key); handled {
-			f.values[f.field], f.cur = tf.text, tf.cur
+			f.values[f.field], f.cur = tf.Text, tf.Cur
 			if changed && f.fields[f.field].key == "command" {
 				f.suggest.refresh(f.values[f.field])
 			}
@@ -356,7 +356,7 @@ func (f *formatForm) Paste(text string) bool {
 	if !tf.Paste(text) {
 		return false
 	}
-	f.values[f.field], f.cur = tf.text, tf.cur
+	f.values[f.field], f.cur = tf.Text, tf.Cur
 	if f.fields[f.field].key == "command" {
 		f.suggest.refresh(f.values[f.field])
 	}

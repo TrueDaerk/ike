@@ -293,7 +293,7 @@ func (c *ColorsPage) updateCustom(key tea.KeyPressMsg) tea.Cmd {
 	case tea.KeyEscape:
 		c.custom, c.invalid = false, ""
 	case tea.KeyEnter:
-		token := strings.TrimSpace(c.input.text)
+		token := strings.TrimSpace(c.input.Text)
 		if token == "" {
 			return c.clear(name)
 		}

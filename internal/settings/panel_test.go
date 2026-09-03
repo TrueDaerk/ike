@@ -51,6 +51,12 @@ func key(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyLeft}
 	case "right":
 		return tea.KeyPressMsg{Code: tea.KeyRight}
+	case "home":
+		return tea.KeyPressMsg{Code: tea.KeyHome}
+	case "end":
+		return tea.KeyPressMsg{Code: tea.KeyEnd}
+	case "delete":
+		return tea.KeyPressMsg{Code: tea.KeyDelete}
 	}
 	return tea.KeyPressMsg{Text: s, Code: rune(s[0])}
 }
@@ -699,8 +705,8 @@ func TestDetailEditorKeysRoute(t *testing.T) {
 	}
 	// "r" would reset in the settings column; here it is text input.
 	m.Update(key("r"))
-	if !strings.Contains(ed.tf.text, "r") {
-		t.Fatalf("keys must reach the editor, text = %q", ed.tf.text)
+	if !strings.Contains(ed.tf.Text, "r") {
+		t.Fatalf("keys must reach the editor, text = %q", ed.tf.Text)
 	}
 	m.Update(key("esc"))
 	if m.focus != formColumn {

@@ -146,7 +146,7 @@ func (t *ToolchainPage) Paste(text string) bool {
 		if !t.inputField.Paste(text) {
 			return false
 		}
-		t.suggest.refresh(t.inputField.text)
+		t.suggest.refresh(t.inputField.Text)
 		return true
 	}
 	return false
@@ -469,7 +469,7 @@ func (t *ToolchainPage) updatePkgView(key tea.KeyPressMsg) tea.Cmd {
 		t.pkgViewing = false
 	case "+":
 		if t.pkgBusy == "" {
-			t.pkgMode, t.pkgInput.text, t.pkgState = "input", "", ""
+			t.pkgMode, t.pkgInput.Text, t.pkgState = "input", "", ""
 			t.pkgInput.Set("")
 		}
 	case "-":
@@ -521,7 +521,7 @@ func (t *ToolchainPage) updatePkgInput(key tea.KeyPressMsg) tea.Cmd {
 	case tea.KeyEscape:
 		t.pkgMode = ""
 	case tea.KeyEnter:
-		name := strings.TrimSpace(t.pkgInput.text)
+		name := strings.TrimSpace(t.pkgInput.Text)
 		t.pkgMode = ""
 		if name == "" {
 			return nil
@@ -620,7 +620,7 @@ func (t *ToolchainPage) updatePicker(key tea.KeyPressMsg) tea.Cmd {
 		t.picking = false
 	case "enter":
 		if t.pick >= len(t.candidates) {
-			t.picking, t.custom, t.inputField.text = false, true, ""
+			t.picking, t.custom, t.inputField.Text = false, true, ""
 			return nil
 		}
 		if len(t.candidates) == 0 {
@@ -638,7 +638,7 @@ func (t *ToolchainPage) updateCustom(key tea.KeyPressMsg) tea.Cmd {
 		t.custom, t.invalid = false, ""
 		t.suggest.clear()
 	case tea.KeyEnter:
-		p := strings.TrimSpace(t.inputField.text)
+		p := strings.TrimSpace(t.inputField.Text)
 		if p == "" {
 			t.custom = false
 			t.suggest.clear()
@@ -652,11 +652,11 @@ func (t *ToolchainPage) updateCustom(key tea.KeyPressMsg) tea.Cmd {
 		t.suggest.clear()
 		return t.choose(p)
 	case tea.KeyTab:
-		t.inputField.Set(t.suggest.complete(t.inputField.text))
+		t.inputField.Set(t.suggest.complete(t.inputField.Text))
 	default:
 		// Shared cursor input (#888).
 		if _, changed := t.inputField.Handle(key); changed {
-			t.suggest.refresh(t.inputField.text)
+			t.suggest.refresh(t.inputField.Text)
 		}
 	}
 	return nil
@@ -788,7 +788,7 @@ func (t *ToolchainPage) Click(x, y int) tea.Cmd {
 		case opt < 0 || opt > len(t.candidates):
 			return nil
 		case opt == len(t.candidates): // "enter a path manually…"
-			t.picking, t.custom, t.inputField.text = false, true, ""
+			t.picking, t.custom, t.inputField.Text = false, true, ""
 		default:
 			t.pick = opt
 			return t.choose(t.candidates[opt])
@@ -808,7 +808,7 @@ func (t *ToolchainPage) Click(x, y int) tea.Cmd {
 		case opt < 0 || opt > len(t.candidates):
 			t.picking = false
 		case opt == len(t.candidates): // "custom path…"
-			t.picking, t.custom, t.inputField.text = false, true, ""
+			t.picking, t.custom, t.inputField.Text = false, true, ""
 		default:
 			t.pick = opt
 			return t.choose(t.candidates[opt])
