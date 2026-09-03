@@ -684,8 +684,10 @@ keyboard (`hints.go`):
 
 `/` while the pane is **scrolled into scrollback** opens a one-line search
 field on the pane's bottom row (`search.go`), the explorer speed-search
-pattern (#1087): case-insensitive contains over the plain line text, no
-regex. Typing jumps incrementally to the nearest match **at or above** the
+pattern (#1087) on the shared in-pane search state (`ui.LineSearch`, #2461 —
+see [Project Search § In-pane search](./search.md)): smartcase substring
+(`ui.SmartCaseContains`) over the plain line text, no regex. Typing jumps
+incrementally to the nearest match **at or above** the
 anchored view — history search goes backward — wrapping to the newest match
 when nothing older matches; `ctrl+p`/up step older, `ctrl+n`/down newer,
 both with wrap (plain `n`/`N` would collide with typing the query), as do
@@ -743,7 +745,8 @@ mouse-reporting child (vim/lazygit own their keys); a finished session
   find chord `cmd+f` / `ctrl+f` opens the same forward prompt (#2409), which
   copy mode can answer because its keyboard is detached from the PTY — and `?`
   (backward) open a query line on the status row — the scrollback search's
-  matching rule (#1169): case-insensitive contains over the plain line text.
+  own matching rule: case-insensitive contains over the plain line text (the
+  scrollback search's pre-#2461 rule; that one now matches smartcase).
   enter jumps to the nearest match in the search's direction (the cursor
   lands on the match's column), `n` repeats, `N` reverses, both wrapping
   around — as do `cmd+g` / `cmd+shift+g` (#2410), which reach the accepted

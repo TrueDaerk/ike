@@ -166,8 +166,10 @@ editor's `/` command line: the slash prefix, the query with a block cursor
 Error colour). It outranks the error banner while open.
 
 Typing filters incrementally over the **currently visible rows** (no
-auto-expansion): the cursor jumps to the row whose *name* contains the query,
-case-insensitively — scanning forward with wrap-around from the stable anchor
+auto-expansion): the cursor jumps to the row whose *name* contains the query
+under the in-pane search's smartcase rule (`ui.SmartCaseContains`, #2461 —
+the field's state is the shared `ui.LineSearch`, see [Project Search §
+In-pane search](./search.md)) — scanning forward with wrap-around from the stable anchor
 (the row the search opened on), with **prefix matches ranked first** (a later
 prefix match beats an earlier contains match). A miss leaves the cursor put
 and flags `no matches`. The query is an ordinary single-line input
