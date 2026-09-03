@@ -614,12 +614,21 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("yaml.yqPlaygroundAtPath", "yq Playground at Cursor Path…", OpenPlaygroundAtPathMsg{Dialect: jqplay.DialectYQ}),
 			appCommand("yaml.yqFilters", "Saved yq Filters…", ShowFiltersMsg{Dialect: jqplay.DialectYQ}),
 			appCommand("yaml.yqRenameFilter", "Rename Saved yq Filter…", ShowFiltersMsg{Dialect: jqplay.DialectYQ, Rename: true}),
+			// The xmq playground (#2414) — same mode over XML/HTML, engine
+			// the external xmq CLI — under the xml namespace: the same five
+			// commands as its siblings, with the at-path flavour seeding a
+			// `select <xpath>` over the caret's element.
+			appCommand("xml.xmqPlayground", "xmq Playground…", OpenPlaygroundMsg{Dialect: jqplay.DialectXMQ}),
+			appCommand("xml.xmqPlaygroundAtPath", "xmq Playground at Element XPath…", OpenPlaygroundAtPathMsg{Dialect: jqplay.DialectXMQ}),
+			appCommand("xml.xmqFilters", "Saved xmq Filters…", ShowFiltersMsg{Dialect: jqplay.DialectXMQ}),
+			appCommand("xml.xmqRenameFilter", "Rename Saved xmq Filter…", ShowFiltersMsg{Dialect: jqplay.DialectXMQ, Rename: true}),
 			// The language cheatsheet (#2382), one command per dialect: the
 			// sheet's document-language rows and its wording differ, so
 			// "jq cheatsheet" and "yq cheatsheet" are two different sheets
 			// rather than one with a toggle.
 			appCommand("json.jqCheatsheet", "jq Cheatsheet…", ShowCheatsheetMsg{}),
 			appCommand("yaml.yqCheatsheet", "yq Cheatsheet…", ShowCheatsheetMsg{Dialect: jqplay.DialectYQ}),
+			appCommand("xml.xmqCheatsheet", "xmq Cheatsheet…", ShowCheatsheetMsg{Dialect: jqplay.DialectXMQ}),
 			appCommand("json.jqSaveFilter", "Save Playground Filter…", SaveFilterPromptMsg{}),
 			appCommand("json.jqQueryView", "Toggle Full Query View", TogglePlaygroundQueryViewMsg{}),
 			appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}),

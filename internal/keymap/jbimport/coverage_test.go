@@ -58,6 +58,7 @@ var noCounterpart = map[string]string{
 	"playground.open":                  "IKE-only concept (#2415): JetBrains has no playground, let alone a dialect dispatcher over one",
 	"json.jqPlayground":                "IKE-only concept (#1936): JetBrains has no jq playground",
 	"yaml.yqPlayground":                "IKE-only concept (#2039): JetBrains has no yq playground",
+	"xml.xmqPlayground":                "IKE-only concept (#2414): JetBrains has no xmq playground",
 	"scratch.generate":                 "IKE-only concept (#2134): JetBrains scratch files carry no test-data generator",
 	"scratch.newFromSelection":         "IKE-only concept (#2339): JetBrains' New Scratch File takes no selection",
 	"scratch.promote":                  "IKE-only concept (#2339): JetBrains has no scratch-to-project action",

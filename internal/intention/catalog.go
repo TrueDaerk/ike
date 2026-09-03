@@ -17,6 +17,7 @@ import (
 func Builtins() []Provider {
 	return []Provider{
 		docPathProvider(),
+		xmqProvider(),
 		httpProvider(),
 		curlProvider(),
 		jwtProvider(),
@@ -81,6 +82,24 @@ func docPathProvider() Provider {
 				}
 			}
 			return items
+		},
+	}
+}
+
+// xmqProvider offers the xmq playground over the caret's element (#2414) —
+// the markup sibling of docPathProvider's jq/yq entries. XMLElement is
+// precomputed by the app (an element under the caret in an XML/HTML buffer),
+// so the entry promising "at Element XPath" only appears where a `select`
+// over that element exists (#2026); a selection queries the selected
+// fragment instead, against which the caret's path names nothing.
+func xmqProvider() Provider {
+	return Provider{
+		ID: "app.xmq",
+		Items: func(cx Context) []Item {
+			if !cx.XMLElement || cx.HasSelection {
+				return nil
+			}
+			return []Item{{Title: "xmq Playground at Element XPath", Kind: "xmq", CommandID: "xml.xmqPlaygroundAtPath"}}
 		},
 	}
 }

@@ -1,5 +1,35 @@
 # Log
 
+## 2026-09-03 (xmq playground for XML and HTML buffers, #2414)
+
+- **The third playground dialect.** `jqplay.DialectXMQ` joins jq and yq behind
+  the same seam, so the host, history, library, debounce and stale-result
+  machinery serve XML/HTML unchanged. The engine is the external
+  [xmq](https://github.com/libxmq/xmq) CLI (`internal/jqplay/xmq.go`): the
+  buffer on stdin, the query line split into arguments with shell-word rules
+  (`ShellWords`), the shared 5 s timeout killing the process and the shared
+  256 KiB cap on stdout.
+- **Output language per command.** `to-json`/`to-html`/`to-xml`/`to-text` name
+  the result's extension on the `Result` (`Result.Ext`/`ResultPath`/`Folds`),
+  which drives the result buffer's highlighting, its folds and the `ctrl+o`
+  scratch; without a `to-*` command the CLI's own `.xmq` notation is shown
+  plain. The empty command line is the identity program (xmq pretty-print).
+- **Missing binary is answered, not crashed into.** The open resolves the
+  binary first (`LookupXMQ`); a miss opens a centered dialog with the install
+  hint (`brew install xmq`) and the new **`playground.xmq.path`** setting
+  (Settings UI → Playgrounds, Path-typed, validated, diagnosed at config
+  load) for a non-PATH install.
+- **`xml.xmqPlayground` (`ctrl+alt+x`, Global)** continues the ctrl+alt
+  family; **`xml.xmqPlaygroundAtPath`** stays doorway-only (intention menu on
+  an element via the precomputed `Context.XMLElement`) and seeds
+  `select <xpath>` — HTML through the DOM inspector's tree
+  (`htmldom.Document.XPath`), XML scanned as itself (`htmldom.XMLXPathAt`).
+  Filters/rename/cheatsheet twins land under the `xml.` namespace; the
+  dispatcher's `startXMQPlayground` hook (#2415) is assigned.
+- **Authored completion and cheatsheet** (`XMQCommands`) instead of gojq's
+  builtins, and the query label's window math now reads `playPrefixW()` —
+  `xmq` is the first three-cell dialect name.
+
 ## 2026-09-03 (project time report from the local usage log, #2426)
 
 - **The usage log is read back for the first time.**

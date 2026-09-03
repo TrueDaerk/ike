@@ -4,7 +4,7 @@ title: Intention Actions
 description: The alt+enter popup — LSP code actions merged with built-in caret-dependent intention actions through a plugin-registered provider seam, opened anchored at the caret, with a debounced diff preview of the highlighted action.
 resource: internal/intention
 tags: [architecture, intentions, code-actions, palette, plugins, shortcuts]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-09-03T21:00:00Z
 ---
 
 # Intention Actions
@@ -252,6 +252,7 @@ Each entry delegates to the existing command; applicability per caret:
 | Context | Items (command ids) |
 |---|---|
 | JSON/YAML value (`DocPath`) | copy path as jq / yq / dotted (`editor.copyDocPath*`); `json.jqPlaygroundAtPath` (not for YAML — jq reads JSON — and not with a selection, which the caret's path does not index) |
+| element in an XML/HTML buffer (`XMLElement`, #2414) | `xml.xmqPlaygroundAtPath` — seeds `select <xpath>` over the caret's element; not with a selection, per the same rule as the doc-path opens |
 | caret in an HTTP request block (`isHTTPBuffer` + `httpfile.RequestAt` — an `.http`/`.rest` file or a buffer treated as HTTP, #2033) | `http.run`, `http.copyAsCurl`, `http.copyAsHttpie` (#2384); with a shown response `http.copyBody` / `http.copyHeaders` / `http.resend` / `http.copyShownAsCurl` / `http.copyShownAsHttpie`; with an env file `http.selectEnvironment` |
 | curl command line that parses (`httpfile.CurlCommandAt` + `ParseCurl`, any buffer) | `http.insertCurlAsRequest` (new, see below) |
 | JWT on the line (`jwt.At`) | `editor.decodeJWT` |
@@ -309,6 +310,7 @@ tightened:
 | `http.selectEnvironment` | the caret's request block | an `http-client(.private).env.json` beside the buffer defining ≥ 1 environment |
 | `http.insertCurlAsRequest` | the `curl ` prefix on the caret line | the gathered command to parse (`ParseCurl`) — no URL, a dangling flag value or an unterminated quote is no offer |
 | `json.jqPlaygroundAtPath` | any non-YAML doc path | no selection — against one the caret's path indexes a document the input does not contain, and the seeded open silently degrades to the plain one |
+| `xml.xmqPlaygroundAtPath` | an element under the caret of an XML/HTML buffer (`Context.XMLElement`, precomputed by the same XPath probe the seed runs, #2414) | no selection — same reasoning as the row above |
 | `debug.testAtCursor` | a test at the caret | `lang.SupportsDebug` for the file *and* no session running or launching |
 | `vcs.blameLine` / `vcs.historyForSelection` / `vcs.revertHunk` | `snap.Status(path) != untracked`, which a file from outside the repo also satisfies | `snap.Contains(path)` |
 | `editor.toggleValue`, `merge.accept*`, `vcs.revertHunk` | the caret fact alone | a writable buffer |

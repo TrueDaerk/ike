@@ -63,6 +63,11 @@ type Context struct {
 	// DocPath reports that the caret sits on a JSON/YAML value with a
 	// non-root document path (the status-line breadcrumb, #1660).
 	DocPath bool
+	// XMLElement reports that the caret sits inside an element of an
+	// XML/HTML buffer — precomputed by the app the way DocPath is, so the
+	// xmq at-XPath entry (#2414) is offered exactly where a `select` over
+	// the caret's element exists (#2026).
+	XMLElement bool
 	// HTTPRequest reports that the buffer is an .http file and the caret
 	// sits inside a request block.
 	HTTPRequest bool

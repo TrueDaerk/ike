@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"unicode"
@@ -158,6 +160,15 @@ func validate(c *Config) []Diagnostic {
 	// may appear later (a mounted secret, a git-ignored path).
 	if msg := ansiblevault.PasswordFileError(c.Ansible.VaultPasswordFile); msg != "" {
 		diags = append(diags, Diagnostic{Field: "ansible.vault_password_file", Message: msg})
+	}
+
+	// xmq binary path (#2414): a path that resolves to nothing would only
+	// surface as the missing-binary dialog at open time, so say so at load.
+	// The value is kept — the binary may be installed later.
+	if p := c.Playground.XMQ.Path; p != "" {
+		if msg := binaryPathError(p); msg != "" {
+			diags = append(diags, Diagnostic{Field: "playground.xmq.path", Message: msg})
+		}
 	}
 
 	// Per-family conceal rules (#1704): an entry naming no conceal family, or
@@ -753,6 +764,32 @@ func validate(c *Config) []Diagnostic {
 		}
 	}
 	return diags
+}
+
+// binaryPathError explains why p cannot serve as the xmq engine binary
+// (#2414), or returns "" when it can: an existing file (after `~`
+// expansion), or a bare name that resolves on PATH. Shared in spirit with
+// ansiblevault.PasswordFileError — lenient loading reports it as a
+// diagnostic, the settings form rejects it outright.
+func binaryPathError(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	if !strings.ContainsRune(p, os.PathSeparator) {
+		if _, err := exec.LookPath(p); err != nil {
+			return "xmq binary not found on PATH: " + p
+		}
+		return ""
+	}
+	info, err := os.Stat(ansiblevault.ExpandHome(p))
+	switch {
+	case err != nil:
+		return "xmq binary not found: " + p
+	case info.IsDir():
+		return "xmq binary path is a directory: " + p
+	}
+	return ""
 }
 
 // validTerminalSlot reports whether name addresses a `[theme.terminal]` slot:

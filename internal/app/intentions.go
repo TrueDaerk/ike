@@ -73,6 +73,15 @@ func (m Model) intentionContext() (intention.Context, bool) {
 	if _, ok := ed.DocPath(editor.DocPathJQ); ok {
 		cx.DocPath = true
 	}
+	// The markup analogue (#2414): an element under the caret of an XML/HTML
+	// buffer is what the xmq at-XPath entry selects over. The probe is the
+	// same XPath computation the seed uses, so the entry appears exactly
+	// where the command has something to prefill (#2026).
+	if ed.LangID() == "xml" || ed.LangID() == "html" {
+		if _, ok := xmqXPathAtCursor(ed); ok {
+			cx.XMLElement = true
+		}
+	}
 	cx.ConcealFamily, cx.ConcealValue = ed.ConcealExplainAtCaret()
 	// The HTTP entries follow the buffer's *type*, so a file-less buffer
 	// treated as HTTP (#2033) offers them too.

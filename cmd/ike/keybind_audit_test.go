@@ -105,8 +105,12 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"yaml.yqFilters", reasonPaneKey},            // the yq twins of the four above
 	{"yaml.yqRenameFilter", reasonPaneKey},       //
 	{"yaml.yqCheatsheet", reasonPaneKey},         //
+	{"xml.xmqFilters", reasonPaneKey},            // the xmq twins of the same four (#2414)
+	{"xml.xmqRenameFilter", reasonPaneKey},       //
+	{"xml.xmqCheatsheet", reasonPaneKey},         //
 	{"json.jqPlaygroundAtPath", reasonIntention}, // "jq Playground at Cursor Path"
 	{"yaml.yqPlaygroundAtPath", reasonIntention}, //
+	{"xml.xmqPlaygroundAtPath", reasonIntention}, // "xmq Playground at Element XPath" (#2414)
 	{"editor.copyDocPathJQ", reasonFlavour},      // cmd+alt+shift+c is the everyday form
 	{"editor.copyDocPathYQ", reasonFlavour},      //
 	{"editor.undoChrono", reasonVimKey},          // g-

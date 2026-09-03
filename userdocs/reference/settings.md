@@ -248,6 +248,12 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Vault password file | `ansible.vault_password_file` | path | *(empty)* | user | File whose first line is the Ansible Vault password; "~" expands. The user-scope value is the global default and a project-scope value overrides it; the ANSIBLE_VAULT_PASSWORD and ANSIBLE_VAULT_PASSWORD_FILE environment variables beat both. Empty (and no variable set) leaves vault files opening as ciphertext |
 
+### Playgrounds
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| xmq binary | `playground.xmq.path` | path | *(empty)* | user | The xmq executable the XML/HTML playground runs; "~" expands, and a bare name resolves on PATH. Empty resolves "xmq" on PATH. With no resolvable binary the playground answers its open with an install-hint dialog (brew install xmq) instead of opening |
+
 ### Remote Browsing
 
 | Setting | Key | Type | Default | Scope | Description |

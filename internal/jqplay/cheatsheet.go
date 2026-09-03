@@ -105,6 +105,13 @@ type CheatEntry struct {
 // reading order — a caller that ranks them (the picker fuzzy-matches) may
 // reorder freely; a caller that just prints them gets a sheet.
 func Cheatsheet(d Dialect) []CheatEntry {
+	if d == DialectXMQ {
+		// The xmq sheet is authored (#2414): the engine is an external CLI
+		// with no machine-readable builtin list, and its query line holds a
+		// command line rather than a jq program — none of the rows below
+		// apply to it.
+		return xmqCheatsheet()
+	}
 	out := make([]CheatEntry, 0, len(cheatSyntax)+len(cheatExamples)+len(Builtins()))
 	out = append(out, cheatRows(d, cheatSyntax)...)
 	out = append(out, cheatRows(d, cheatExamples)...)
@@ -299,8 +306,11 @@ service:
 // a reader can see where `.users` and `.meta.page` come from instead of
 // having to guess which document the examples imagine.
 func Sample(d Dialect) string {
-	if d == DialectYQ {
+	switch d {
+	case DialectYQ:
 		return cheatSampleYAML
+	case DialectXMQ:
+		return cheatSampleXML
 	}
 	return cheatSampleJSON
 }

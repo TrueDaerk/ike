@@ -71,6 +71,10 @@ type Input struct {
 	values  []any
 	size    int
 	dialect Dialect
+	// raw is the input text verbatim, kept only by the xmq dialect (#2414):
+	// its engine is the external `xmq` binary, which reads the document
+	// itself from stdin — there is nothing to decode on this side.
+	raw string
 	// Truncated reports that the stream held more than MaxInputValues values
 	// and the tail was dropped.
 	Truncated bool
@@ -190,10 +194,42 @@ type Result struct {
 	// Result built by hand for a failure the host phrases itself stays
 	// JSON-shaped.
 	dialect Dialect
+	// ext overrides the dialect's default result extension (#2414): an xmq
+	// run names its output language per command — `to-json` writes JSON,
+	// `to-html` HTML — where the gojq dialects always write their own format.
+	// Empty means the dialect's default.
+	ext string
 }
 
 // Dialect reports which document language the outputs are written in.
 func (r Result) Dialect() Dialect { return r.dialect }
+
+// Ext is the file extension this result's text is written under — the
+// dialect's default unless the run named its own output language (#2414).
+func (r Result) Ext() string {
+	if r.ext != "" {
+		return r.ext
+	}
+	return r.dialect.Ext()
+}
+
+// ResultPath is Dialect.ResultPath with this result's own extension: the
+// display path the substitute result editor shows the text under, which is
+// what resolves its highlighting.
+func (r Result) ResultPath() string { return r.dialect.Name() + " result." + r.Ext() }
+
+// Folds returns the result's foldable nodes. The gojq dialects scan the text
+// their own encoder wrote; an xmq result folds only when its command produced
+// a language the structural scans read (`to-json`, #2414).
+func (r Result) Folds() []Fold {
+	if r.dialect == DialectXMQ {
+		if r.ext == "json" {
+			return jsonFolds(r.Text())
+		}
+		return nil
+	}
+	return r.dialect.Folds(r.Text())
+}
 
 // Text joins the outputs into the document the result buffer shows, which is
 // also what the copy and open-as-scratch actions write: jq's stdout puts one
@@ -235,6 +271,12 @@ func EvaluateWith(d Dialect, program, text string) Result {
 // anything to compile.
 func Run(ctx context.Context, program string, in *Input) Result {
 	program = strings.TrimSpace(program)
+	if in.Dialect() == DialectXMQ {
+		// The xmq dialect (#2414) runs the external binary instead of gojq —
+		// including on an empty program, which is `xmq` with no command:
+		// the input pretty-printed in xmq's own notation.
+		return runXMQ(ctx, program, in)
+	}
 	if program == "" {
 		return Result{dialect: in.Dialect()}
 	}

@@ -212,6 +212,7 @@ var reachableAlternatives = map[string]string{
 	"playground.open":    "palette / Tools menu",
 	"json.jqPlayground":  "palette / Tools menu",
 	"yaml.yqPlayground":  "palette / Tools menu",
+	"xml.xmqPlayground":  "palette / Tools menu",
 	"scratch.generate":   "palette / File menu",
 	"vcs.diff":           "palette",
 	"tests.toggle":       "palette / View menu",
