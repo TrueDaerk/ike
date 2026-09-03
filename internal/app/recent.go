@@ -1,6 +1,8 @@
 package app
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"time"
 )
@@ -103,4 +105,66 @@ func (r *recentFiles) Set(entries []RecentEntry) {
 			break
 		}
 	}
+}
+
+// recentPick is the recent-files dialog's preselection memory (#2399): the
+// row the dialog was last used to activate in this project, so the next open
+// comes back up on it and a repeated cmd+e + enter bounces between the two
+// targets one is switching between instead of walking the list down.
+//
+// It is held by pointer on the model for the same reason recentFiles is —
+// value-receiver update paths must land in the one shared record — and it
+// persists in its own small per-project file rather than in session.json: a
+// pick is recorded from inside the palette, which has no model to snapshot the
+// rest of the session from, and the memory is worthless if a kill loses it.
+// Key is a frecency.Key-normalized file path, or a project path when Project
+// is set (the pick came from the Recent Projects column).
+type recentPick struct {
+	path    string
+	Key     string `json:"key,omitempty"`
+	Project bool   `json:"project,omitempty"`
+}
+
+// loadRecentPick reads the memory at path, tolerating a missing or malformed
+// file (no preselection). A ranking aid must never disrupt the session.
+func loadRecentPick(path string) *recentPick {
+	p := &recentPick{path: path}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return p
+	}
+	var stored recentPick
+	if json.Unmarshal(data, &stored) == nil {
+		p.Key, p.Project = stored.Key, stored.Project
+	}
+	return p
+}
+
+// Set records one activation and persists it. Errors are swallowed, like the
+// usage counter's: failing to persist must never disrupt the session.
+func (r *recentPick) Set(key string, project bool) {
+	if r == nil {
+		return
+	}
+	r.Key, r.Project = key, project
+	if r.path == "" {
+		return
+	}
+	data, err := json.Marshal(r)
+	if err != nil {
+		return
+	}
+	if dir := filepath.Dir(r.path); dir != "." {
+		_ = os.MkdirAll(dir, 0o755)
+	}
+	_ = os.WriteFile(r.path, data, 0o644)
+}
+
+// Get returns the remembered pick; the zero value means "none", which
+// preselects nothing.
+func (r *recentPick) Get() (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	return r.Key, r.Project
 }

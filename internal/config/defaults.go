@@ -212,6 +212,10 @@ func defaults() *Config {
 			// No default toggle chord: the palette opens via esc-esc, "@" and
 			// searchEverywhere; ctrl+p belongs to lsp.parameterInfo (#523).
 			ToggleKey: "",
+			// The recent-files dialog ranks by frecency (#2399): the telemetry
+			// behind it showed cmd+e re-opened in streaks because plain MRU
+			// order rarely had the wanted file on top.
+			Recent: RecentPalette{Ranking: "frecency"},
 		},
 		Notifications: Notifications{
 			TimeoutSeconds: 4,

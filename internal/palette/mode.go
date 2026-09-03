@@ -54,6 +54,18 @@ type Item struct {
 	// positioned rows with positionless ones (#2053) — the file picker's
 	// directory candidates, a scratch buffer's local mark.
 	Preview PreviewTarget
+	// Key is the row's stable identity across opens (#2399), independent of
+	// the rendered Title: the recent-files mode sets the file path, the
+	// injected recent-projects column the project path. The palette never
+	// renders it; PreselectMode uses it to put the selection back on the row
+	// that was picked last time. "" means the row cannot be preselected.
+	Key string
+	// Rank is an optional externally supplied ranking weight (#2399) — a
+	// frecency score for rows the mode cannot score itself, because their
+	// identity lives outside the palette package (the recent-projects column
+	// is built by the root model). A mode blends it into its own ordering; 0
+	// means "no usage history", which falls back to the input order.
+	Rank float64
 }
 
 // PreviewTarget is a row's source location for the palette's code-preview
@@ -101,6 +113,28 @@ type Completer interface {
 // returning false leaves the tab press inert as before.
 type ItemCompleter interface {
 	CompleteItem(query string, sel Item) (string, bool)
+}
+
+// PreselectMode is an optional Mode extension (#2399): a locked mode that
+// names the row the selection should start on instead of the first one. The
+// recent-files dialog uses it to come back up on the entry it was used to
+// open last time, so a repeated cmd+e + enter bounces between the two targets
+// one is actually switching between.
+type PreselectMode interface {
+	// Preselect returns the Item.Key to select for the query body, and
+	// whether that key belongs to the side column. "" keeps the default
+	// (first row of the main list); a key that no listed row carries is
+	// ignored the same way.
+	Preselect(query string) (key string, side bool)
+}
+
+// PickRecorder is an optional Mode extension (#2399): a locked mode that wants
+// to know which of its rows was activated. The palette calls it on enter (both
+// columns) just before it closes, so the mode can remember the pick for the
+// next open's PreselectMode answer.
+type PickRecorder interface {
+	// RecordPick reports the activated row and which column it came from.
+	RecordPick(it Item, side bool)
 }
 
 // PreviewMode is an optional Mode extension (#2047): a locked mode whose rows

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // selection.go is the palette's highlighted-row plumbing (#2252), the
@@ -82,6 +83,30 @@ type FooterMode interface {
 	// Footer returns the lines to render for the selected row, already
 	// clipped to width. Nil renders nothing at all — no rule, no gap.
 	Footer(sel Item, width int) []string
+}
+
+// HintMode is an optional Mode extension (#2399): a locked mode that documents
+// its own keyboard affordances in one dim line at the bottom of the box. Unlike
+// FooterMode it is row-independent and the palette owns the styling and the
+// clipping, so a mode only has to say what it offers.
+type HintMode interface {
+	// Hint returns the line for the current query body; "" renders nothing.
+	Hint(query string) string
+}
+
+// hintLine asks a locked HintMode for its footer hint, clipped to width. An
+// unlocked palette or another mode renders nothing.
+func (p *Palette) hintLine(width int) string {
+	hm, ok := p.locked.(HintMode)
+	if !ok || width <= 0 {
+		return ""
+	}
+	_, body := p.mode()
+	hint := hm.Hint(body)
+	if hint == "" {
+		return ""
+	}
+	return ansi.Truncate(hint, width, "…")
 }
 
 // footerLines asks a locked FooterMode for the selected row's extra lines. An

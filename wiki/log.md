@@ -1,5 +1,42 @@
 # Log
 
+## 2026-09-03 (recent files ranks by frecency and reopens on the last pick, #2399)
+
+- **Both lists of the `cmd+e` dialog rank by frecency** — frequency blended
+  with a recency decay, the `internal/frecency` store the `@` finder already
+  uses (#2155). The file list reads that same file-open history, so the two
+  windows agree on what the project works on; the projects column is ranked by
+  its own **user-scoped** store (`~/.ike/projfrecency.json`), because a
+  per-project copy would forget every switch the moment it was made.
+- **Historyless entries keep plain MRU order** — they score 0 and the blend
+  leaves the input order intact. That is the pure-recency fallback, and it is
+  the whole listing on a fresh project.
+- **`palette.recent.ranking` (`frecency`|`recency`)** turns the blend off, in
+  the config, the Settings form and the generated settings reference. The gate
+  is consulted per listing, so a flip applies to the very next open.
+- **The dialog reopens on the row it was last used to activate**, via two new
+  generic Mode extensions: `PreselectMode` (a mode names the `Item.Key` to
+  start on) and `PickRecorder` (the palette reports the activated row). The
+  memory lives in `.ike/recentpick.json`, its own file rather than
+  `session.json`, because a pick is recorded from inside the palette — which
+  has no model to snapshot the session from — and a memory a kill can lose is
+  worthless. A remembered row that is no longer listed leaves the default
+  first-row selection.
+- **`p:` filters the projects column alone.** The prefix empties the file list,
+  so the existing automatic focus placement (#819) hands the keyboard to the
+  projects column. `tab` stays the way *to* the column; `p:` is the way to
+  filter it. A third extension, `HintMode`, documents both in one dim line
+  under the box, styled and clipped by the palette.
+- **Dismissals are now visible in telemetry.** `esc` leaves a
+  `Dismissal{Prefix, QueryLen}` record the root model pulls with
+  `TakeDismissal` in the same Update pass (a pulled record, not a dispatched
+  msg, so `diff.files`' dismissal-sensitive two-step pick is not raced); a
+  recent-files one lands as the `command`
+  event `palette.recentFiles.dismiss` carrying the query's *length* (structure
+  only, never the text) through the new `Recorder.CommandDetail`. Picks keep
+  going through the ordinary command funnel, so their event count is unchanged,
+  and no other palette mode reports its dismissals.
+
 ## 2026-09-03 (HTTP response pane shows the request line, #2424)
 
 - **The request that actually went out**: the response pane header now shows

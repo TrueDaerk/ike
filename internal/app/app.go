@@ -219,6 +219,9 @@ type Model struct {
 	// (Roadmap 0230). Held by pointer so value-receiver open paths mutate the
 	// one shared store; persisted with the session.
 	recent *recentFiles
+	// recentPick is that dialog's preselection memory (#2399), held by
+	// pointer and persisted with the session for the same reasons.
+	recentPick *recentPick
 	// closedTabs is the reopen ring (0190, #158): the last few closed tabs'
 	// paths and carets, newest last, popped by editor.tab.reopenClosed.
 	closedTabs []closedTab
@@ -870,6 +873,7 @@ type Model struct {
 	usage       *telemetry.Recorder  // local-only usage telemetry (#2235); session state, rides across project switches
 	pendUnbound *unboundKey          // unbound chord awaiting the focused editor's verdict (#2303)
 	fileFrec    *frecency.Store      // file-open frecency ranking in the "@" finder (#2155)
+	projFrec    *frecency.Store      // project-switch frecency, user-scoped: the Recent Projects column (#2399)
 	winSizes    *ui.WinSizes         // persisted floating-window resize deltas (#774)
 	winSizesAll *ui.WinSizes         // user-scoped last-resize deltas, fallback for fresh projects (#1714)
 	floatDrag   *floatResizeDrag     // live mouse resize of a floating window (#933)
@@ -1317,7 +1321,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	fileUsage := palette.LoadUsage(fileUsageFile())          // most-used file ranking (#1419)
 	cmdFrec := palette.LoadFrecency(cmdFrecencyFile())       // execution frecency (#2153)
 	fileFrec := palette.LoadFileFrecency(fileFrecencyFile()) // file-open frecency (#2155)
-	winSizes := ui.LoadWinSizes(winSizeFile())               // resizable floats (#774)
+	projFrec := palette.LoadProjectFrecency(projFrecencyFile())
+	pick := loadRecentPick(recentPickFile())   // recent-files preselection memory (#2399)
+	winSizes := ui.LoadWinSizes(winSizeFile()) // resizable floats (#774)
 	winSizesAll := ui.LoadWinSizes(globalWinSizeFile())
 	// Background forge polling (#2085) is anchored to the project root the
 	// process just chdir'd into: a switch rebuilds the model, and with it a
@@ -1354,6 +1360,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		cmdFrec:         cmdFrec,
 		usage:           newUsageRecorder(), // local-only usage telemetry (#2235)
 		fileFrec:        fileFrec,
+		projFrec:        projFrec,
+		recentPick:      pick,
 		winSizes:        winSizes,
 		winSizesAll:     winSizesAll,
 		pins:            loadPins(),                          // pinned file slots (#788)
@@ -1387,7 +1395,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		shell:           ui.New(shellConfig(cfg)),
 		vcs:             vcsSt,
 		forgePoll:       forgeSt,
-		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, fileFrec, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters, playCheat, projGit),
+		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, fileFrec, projFrec, pick, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters, playCheat, projGit),
 		projGit:         projGit,
 		layoutsPicker:   layoutsPicker,
 		httpRequests:    httpRequests,
@@ -2847,7 +2855,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec, fileFrec *frecency.Store, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, playCheat *playCheatMode, projGit *project.GitCache) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec, fileFrec, projFrec *frecency.Store, pick *recentPick, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, playCheat *playCheatMode, projGit *project.GitCache) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -2868,6 +2876,24 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 			out[i] = palette.RecentEntry{Path: e.Path, LastOpened: e.LastOpened}
 		}
 		return out
+	})
+	// Frecency ranking for both of the dialog's lists (#2399): the files share
+	// the '@' finder's open history (#2155), the projects have their own,
+	// user-scoped store, and palette.recent.ranking can put either list back on
+	// plain MRU order. The gate is a func so a settings flip applies to the
+	// very next open.
+	mru.SetFrecency(fileFrec)
+	mru.SetRanking(func() bool { return recentRankingFrecency(config.Get()) })
+	// The preselection memory (#2399): the dialog reopens on the row it was
+	// last used to activate, and every activation is persisted with the
+	// session — plus, for a project row, recorded in the project frecency the
+	// column ranks by (a file pick is already recorded by the open itself).
+	mru.SetLastPick(pick.Get)
+	mru.SetPickRecorder(func(key string, side bool) {
+		pick.Set(key, side)
+		if side {
+			projFrec.Record(key)
+		}
 	})
 	// The Recent Files dialog grows a Recent Projects column (#778): entries
 	// from project.history (current project excluded), whose activation goes
@@ -2897,6 +2923,11 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 				Msg:   project.PickedMsg{Path: e.Path},
 				// Right-aligned last-opened column (#842, #1114).
 				Time: project.RelTime(e.LastOpened, time.Now()),
+				// Stable row identity and frecency weight (#2399): the
+				// palette cannot key a project itself, so the ranking input
+				// travels with the item.
+				Key:  frecency.Key(e.Path),
+				Rank: projFrec.Score(frecency.Key(e.Path)),
 			}
 			if openInMemory(e.Path) {
 				it.Badge = "●"
@@ -2964,6 +2995,40 @@ func paletteHideOff(cfg host.Config) bool {
 		return strings.EqualFold(strings.TrimSpace(v), "hide")
 	}
 	return false
+}
+
+// recordPaletteDismissal turns an esc out of the palette without a pick into
+// a telemetry event (#2399). Only the recent-files dialog reports one: its
+// telemetry showed cmd+e opened in streaks of six to ten — "wrong entry, esc,
+// try again" — and a dismissal is otherwise the single palette outcome that
+// leaves no trace at all, so an export cannot tell whether the streaks shrank.
+// Picks keep going through the ordinary command funnel, so their event count
+// is untouched, and the typed query's *length* travels, never the query.
+func (m Model) recordPaletteDismissal() {
+	d, ok := m.palette.TakeDismissal()
+	if !ok || d.Prefix != palette.RecentPrefix {
+		return
+	}
+	m.usage.CommandDetail(recentDismissEvent, telemetry.SourcePalette,
+		map[string]string{"qlen": strconv.Itoa(d.QueryLen)})
+}
+
+// recentDismissEvent is the telemetry id of a recent-files dialog closed with
+// esc instead of a pick (#2399). It is deliberately not a registered command —
+// nothing dispatches it, it only names the outcome in the event log — and it
+// derives from the command's own id so an export can pair the two.
+const recentDismissEvent = "palette.recentFiles.dismiss"
+
+// recentRankingFrecency reads palette.recent.ranking (#2399): whether the
+// recent-files dialog blends frecency into its two lists or keeps plain MRU
+// order. It reads the live config (not the build-time host.Config) so a
+// settings flip applies to the very next open, and defaults to frecency —
+// which is also what validation rewrites an unknown value to.
+func recentRankingFrecency(c *config.Config) bool {
+	if c == nil {
+		return true
+	}
+	return !strings.EqualFold(strings.TrimSpace(c.Palette.Recent.Ranking), "recency")
 }
 
 // paletteToggleKey reads palette.toggle_key. Empty means no toggle chord: the
@@ -7723,6 +7788,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 			cmd := m.palette.Update(msg)
+			m.recordPaletteDismissal()
 			if !m.palette.IsOpen() && cmd == nil && m.diffPick != 0 {
 				// The picker was dismissed mid diff.files flow (#60): abandon
 				// the pending picks so a later "@" open is a plain file open.

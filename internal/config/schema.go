@@ -1065,8 +1065,17 @@ type Notifications struct {
 // context: "rank" lists them last, "hide" omits them. ToggleKey is the default
 // key that opens the palette (Roadmap 0080 owns the final keymap).
 type Palette struct {
-	MaxResults  int    `toml:"max_results"`
-	DefaultMode string `toml:"default_mode"`
-	OffContext  string `toml:"off_context"`
-	ToggleKey   string `toml:"toggle_key"`
+	MaxResults  int           `toml:"max_results"`
+	DefaultMode string        `toml:"default_mode"`
+	OffContext  string        `toml:"off_context"`
+	ToggleKey   string        `toml:"toggle_key"`
+	Recent      RecentPalette `toml:"recent"`
+}
+
+// RecentPalette tunes the recent-files dialog (cmd+e, #2399). Ranking selects
+// how its two lists are ordered: "frecency" blends how often and how recently
+// a file or project was opened (the default — it is what one keeps coming back
+// to), "recency" restores the plain most-recently-used order.
+type RecentPalette struct {
+	Ranking string `toml:"ranking"`
 }

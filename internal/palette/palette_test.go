@@ -230,6 +230,32 @@ func TestEscCloses(t *testing.T) {
 	if p.IsOpen() {
 		t.Fatal("esc should close the palette")
 	}
+	// The dismissal is recorded for the host to take (#2399): the mode that
+	// was listing and how much query was typed, nothing else. It is taken
+	// once — a second call has nothing to report.
+	d, ok := p.TakeDismissal()
+	if !ok {
+		t.Fatal("esc should record a dismissal")
+	}
+	if d.Prefix != ':' || d.QueryLen != 0 {
+		t.Fatalf("dismissal = %+v, want the command mode with an empty query", d)
+	}
+	if _, ok := p.TakeDismissal(); ok {
+		t.Fatal("a dismissal must only be reported once")
+	}
+	// An activation is not a dismissal.
+	p.Open(Context{})
+	p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if _, ok := p.TakeDismissal(); ok {
+		t.Fatal("enter must not record a dismissal")
+	}
+	// The typed query's length travels with it, the query itself never does.
+	p.Open(Context{})
+	p.Update(runes(":ab"))
+	p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if d, _ := p.TakeDismissal(); d.QueryLen != 2 {
+		t.Fatalf("query length = %d, want 2 (the body without the prefix)", d.QueryLen)
+	}
 }
 
 func TestNavigation(t *testing.T) {

@@ -183,6 +183,34 @@ func fileFrecencyFile() string {
 	return filepath.Join(".ike", "filefrecency.json")
 }
 
+// recentPickFile returns the path of the per-project recent-files
+// preselection memory (#2399), following the layout store's IKE_CONFIG_DIR
+// redirection seam. It is per project because the entry one bounces to is: the
+// dialog lists this project's files.
+func recentPickFile() string {
+	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, "recentpick.json")
+	}
+	return filepath.Join(".ike", "recentpick.json")
+}
+
+// projFrecencyFile returns the path of the project-switch history (#2399)
+// backing the recent-files dialog's Recent Projects ranking. It follows the
+// IKE_CONFIG_DIR redirection seam like every other state file but otherwise
+// lives in ~/.ike — NOT the project's .ike directory, because the column
+// itself spans projects: a per-project copy would forget every switch the
+// moment it was made.
+func projFrecencyFile() string {
+	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, "projfrecency.json")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".ike", "projfrecency.json")
+}
+
 // winSizeFile returns the path of the per-project floating-window size store
 // (#774), following the layout store's IKE_CONFIG_DIR redirection seam.
 func winSizeFile() string {

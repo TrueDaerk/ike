@@ -189,11 +189,28 @@ func (r *Recorder) sidLocked() string {
 // high-frequency polling commands like lsp.documentSymbols dominate any
 // analysis of actual command usage.
 func (r *Recorder) Command(id, source string) {
+	r.CommandDetail(id, source, nil)
+}
+
+// CommandDetail is Command with extra structural payload (#2399): the
+// recent-files palette records its dismissals as "palette.recentFiles.dismiss"
+// carrying the typed query *length*, so the next export shows whether the
+// re-open streaks shrink. Detail values must stay structural — a count, a mode
+// token — never typed text; the "id" and "source" keys are reserved and any
+// entry using them is ignored.
+func (r *Recorder) CommandDetail(id, source string, detail map[string]string) {
 	typ := TypeCommand
 	if source == SourceInternal {
 		typ = TypeInternal
 	}
-	r.record(typ, map[string]string{"id": id, "source": source})
+	d := map[string]string{"id": id, "source": source}
+	for k, v := range detail {
+		if k == "id" || k == "source" {
+			continue
+		}
+		d[k] = v
+	}
+	r.record(typ, d)
 }
 
 // Key records a keymap resolution: the canonical chord string, the focus

@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-08-31T12:00:00Z
+timestamp: 2026-09-03T12:00:00Z
 ---
 
 # Command Palette
@@ -311,10 +311,9 @@ resumed-workspace path of a project switch, which skips the rest of
 `restoreSession` — before the fix that path started empty and the next
 session save wiped the persisted history.
 
-With an empty query the items keep MRU order — most recent first — with the
-**currently active file excluded**, so `cmd+e` + `enter` jumps to the previous
-file (the `Context.ActivePath` field carries the exclusion). A query
-fuzzy-matches the project-relative path; equal scores keep MRU order. Files
+The **currently active file is excluded**, so `cmd+e` + `enter` jumps away from
+where one is (the `Context.ActivePath` field carries the exclusion). A query
+fuzzy-matches the project-relative path; equal ranks keep MRU order. Files
 that vanished from disk are dropped from the listing. Activation emits the same
 `OpenFileMsg` as the `@` mode. Each row shows its relative last-opened time
 (`ui.RelTime`: "just now", "5m ago", …) right-aligned in the `Item.Time`
@@ -323,6 +322,78 @@ project picker's #842 prune: `shift+delete` on the selected row or a click on
 its right-pinned `✕` zone emits `RemoveRecentFileMsg{Path}` — the root model
 removes the entry from the MRU, persists the session immediately and
 refreshes the still-open palette.
+
+### Frecency ranking, preselection and the projects filter (#2399)
+
+`palette.recentFiles` is the most-used command in the usage export, and it was
+being opened in streaks of six to ten, re-opened within ten seconds forty-two
+times — the shape of "wrong entry, esc, try again". Plain MRU order is the
+reason: the file one wants next is the one worked on *often*, not the one
+touched most recently. Three changes address it.
+
+**Ranking is frecency.** Both lists blend frequency with a recency decay, the
+`internal/frecency` store the `'@'` finder ranks with (#2155) and command mode
+before it (#2153). The file list reads that same file-open history — the two
+windows agree on what the project works on — keyed by `frecency.Key` of the
+entry path; `recentKey` resolves the working directory **once per listing**
+rather than per entry, the way `file_mode.go` hoists its `frecRoot`. The blend
+is the shared `frecencyBoost` policy: on an empty query every fuzzy score is 0
+so history alone orders the listing, and each typed rune halves the boost until
+match quality leads. **An entry with no history scores 0**, so it keeps plain
+MRU order among the other historyless entries — that is the pure-recency
+fallback, and it is the whole listing on a fresh project.
+
+The Recent Projects column ranks the same way, but the palette cannot key a
+project itself (project paths live in the root model), so the score travels on
+the item as `Item.Rank` and the mode blends it exactly like a file's. Its store
+is `~/.ike/projfrecency.json` — **user-scoped, not per project**: a per-project
+copy would forget every switch the moment it was made.
+
+`palette.recent.ranking = frecency|recency` turns the blend off for both lists,
+restoring the pre-#2399 listing. The gate is a func consulted per listing, so a
+settings flip applies to the very next open.
+
+**The previous pick is preselected.** `PreselectMode` is a generic Mode
+extension: a locked mode names the `Item.Key` the selection should start on
+(and whether it is a side-column row), and `recompute` moves the selection —
+and, unless the user pressed `tab`, the column focus — onto it. `PickRecorder`
+is the inbound half: `activate`/`activateSide` report the row before closing.
+The recent-files mode wires both to `internal/app`'s `recentPick`, persisted in
+`.ike/recentpick.json`. It is **its own file, not part of `session.json`**: a
+pick is recorded from inside the palette, which has no model to snapshot the
+rest of the session from, and a memory a kill can lose is worthless. A `Key` no
+listed row carries (a pruned or vanished entry) simply leaves the default
+first-row selection. A typed query is a fresh intent and ranks normally.
+
+`Item.Key` is a stable row identity, deliberately not the `Title` — the title
+is root-relative and changes under a project switch.
+
+**`p:` filters the projects column alone.** One query used to filter both
+columns at once, which made a project hard to reach whenever a file matched the
+same letters better. `ProjectsOnlyPrefix` (`"p:"`) makes `Results` return no
+files at all, so the automatic focus placement (#819, "side column when the
+main list is empty") hands the keyboard to the projects column, and the rest of
+the query filters projects. `tab` stays the way to the column with an empty
+query; the prefix is the way to *filter* it. `HintMode` — another generic Mode
+extension — documents both in one dim line under the box, styled and clipped by
+the palette so a mode only says what it offers.
+
+**Dismissals are recorded.** `esc` leaves a `Dismissal{Prefix, QueryLen}`
+behind instead of closing silently; the root model pulls it with
+`TakeDismissal` in the *same* Update pass and turns a recent-files one into the
+telemetry `command` event `palette.recentFiles.dismiss` via
+`Recorder.CommandDetail`, carrying the typed query's **length** (structure
+only — never the query). A dismissal is otherwise the one palette outcome that
+leaves no trace, so an export cannot tell whether the re-open streaks shrank.
+Picks keep going through the ordinary command funnel, so their event count is
+unchanged, and no other palette mode reports its dismissals.
+
+A pulled record rather than a dispatched `tea.Msg` on purpose: the
+dismissal-sensitive flow already there — `diff.files`' two-step pick, which
+abandons its pending picks when the picker closes without an activation — reads
+the closed palette synchronously, and a message landing a pass later would race
+it. `esc` also still returns no command, so that flow's "closed and returned
+nothing" test stays the truth.
 
 ### Alternate activation (#2136)
 
@@ -359,7 +430,8 @@ row keeps a dimmed marker and its background band — so it is always clear
 whether `enter` opens a project or a file.
 `enter` on a project emits `project.PickedMsg` — the normal validated
 path into the seamless workspace switch (#777), so terminals and runs keep
-running. The query fuzzy-filters both columns at once. Anchored palettes
+running. The query fuzzy-filters both columns at once, unless it starts with
+`p:` — then it filters the projects alone (#2399, above). Anchored palettes
 and search everywhere never show the column.
 
 **The column has its own scroll window (#2041).** `sideTop` is to the column

@@ -72,6 +72,34 @@ first, then all commands — so it doubles as "what was I just working on".
 The palette itself executes nothing. It ranks, you pick, and the choice is
 dispatched to whatever owns that action.
 
+## Recent files
+
+++cmd+e++ opens the recent-files dialog: the files you have had open on the
+right, the projects you have had open on the left. The file you are looking at
+is left out, so ++cmd+e++ then ++enter++ always takes you somewhere else.
+
+Both lists are ordered by **frecency** — how often *and* how recently you
+opened each one, not just how recently. The file you keep coming back to stays
+near the top even if you glanced at three others since; something you have not
+touched in a fortnight fades. Entries IKE has no history for fall back to plain
+most-recent-first order, which is also what a brand-new project looks like. If
+you prefer the old behaviour, set **Recent files ranking** to `recency` in
+Settings (`palette.recent.ranking`).
+
+The dialog also **reopens on whatever you picked last time**, so pressing
+++cmd+e++ ++enter++ repeatedly bounces between the two files you are working
+between instead of walking the list down. Start typing and that goes away —
+a query ranks from the best match, as usual.
+
+Two keys worth knowing, both spelled out in the hint line at the bottom of the
+dialog:
+
+| Keys | What it does |
+|---|---|
+| ++tab++ | Switch between the files and the projects column |
+| `p:` | Search the projects only — everything after it filters project names |
+| ++shift+delete++ | Forget the highlighted entry |
+
 ## Scopes
 
 A command is either global or scoped to a pane type. `editor.write` is scoped
