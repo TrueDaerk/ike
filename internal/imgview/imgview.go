@@ -22,6 +22,7 @@ import (
 	_ "golang.org/x/image/webp"
 
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // nextID mints session-unique Kitty image ids. The base keeps IKE's ids out
@@ -182,14 +183,7 @@ func (m *Model) metadataView() string {
 }
 
 // HumanSize formats a byte count for the metadata line; the markdown
-// preview's inline-image captions (#2180) share it.
-func HumanSize(n int64) string {
-	switch {
-	case n >= 1<<20:
-		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
-	default:
-		return fmt.Sprintf("%d B", n)
-	}
-}
+// preview's inline-image captions (#2180) share it. It delegates to
+// ui.HumanSize (which also covers a GB branch this package never hit in
+// practice), kept as a thin alias for its external callers.
+func HumanSize(n int64) string { return ui.HumanSize(n) }

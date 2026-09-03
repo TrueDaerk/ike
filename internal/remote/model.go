@@ -595,21 +595,7 @@ func (m *Model) metaColumns(r row) string {
 	if !r.entry.ModTime.IsZero() {
 		stamp = r.entry.ModTime.Local().Format("2006-01-02 15:04")
 	}
-	return fmt.Sprintf("%10s  %s", humanSize(r.entry.Size), stamp)
-}
-
-// humanSize formats a byte count for the size column.
-func humanSize(n int64) string {
-	switch {
-	case n >= 1<<30:
-		return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
-	case n >= 1<<20:
-		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
-	default:
-		return fmt.Sprintf("%d B", n)
-	}
+	return fmt.Sprintf("%10s  %s", ui.HumanSize(r.entry.Size), stamp)
 }
 
 // footer shows the key hints — or the last scan error, which outranks them
