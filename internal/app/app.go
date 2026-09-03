@@ -45,6 +45,8 @@ import (
 	"ike/internal/debugdoctor"
 	"ike/internal/debugpanel"
 	"ike/internal/deeplink"
+	"ike/internal/deps"
+	"ike/internal/depspanel"
 	"ike/internal/diag"
 	"ike/internal/diff"
 	"ike/internal/domview"
@@ -643,6 +645,18 @@ type Model struct {
 	// from every publish — files without an open editor included.
 	problemsReturnFocus string
 	probStore           *problems.Store
+	// depsReturnFocus is the same dance for the Dependencies tool window
+	// (#2419); depsScanner holds the per-manifest mtime scan cache,
+	// depsScanning flags an in-flight background scan for the status-line
+	// segment, and the remaining fields carry the open centered dialogs
+	// (install confirmation, vulnerability details, missing tools).
+	depsReturnFocus    string
+	depsScanner        *deps.Scanner
+	depsScanning       bool
+	depsInstallPending []string
+	depsInstallDir     string
+	depsVulnsOpen      bool
+	depsMissingOpen    bool
 	// breakpointsReturnFocus is the same dance for the Breakpoints tool
 	// window (#1377).
 	breakpointsReturnFocus string
@@ -1483,6 +1497,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.finder.SetHistories(m.qhist) // persistent query recall (#1171)
 	m.finder.SetDisplayPath(displayPath)
 	m.probStore = problems.NewStore()
+	m.depsScanner = deps.NewScanner()
 	m.rawDiags = map[string][]ilsp.Diagnostic{}
 	m.compileDiagIgnore()   // seed the ignore rules (#1259)
 	m.compileDiagSeverity() // seed the severity remap rules (#1503)
@@ -2079,6 +2094,13 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			p := panes.Get(panes.AddProblems()).Problems()
 			p.SetDisplayPath(displayPath)
 			p.SetStore(m.probStore)
+			continue
+		}
+		if id := ids[key]; id.Kind == "deps" {
+			// The Dependencies panel restores empty in its saved slot
+			// (#2419): the auto-scan (or 'r') re-fills it.
+			p := panes.Get(panes.AddDeps()).Deps()
+			p.SetDisplayPath(displayPath)
 			continue
 		}
 		if id := ids[key]; id.Kind == "usages" {
@@ -3365,6 +3387,7 @@ var terminalGlobalCommands = map[string]bool{
 	"todo.list":                        true,
 	"vcs.panel":                        true,
 	"problems.toggle":                  true,
+	"deps.toggle":                      true,
 	"tests.toggle":                     true,
 	"issues.toggle":                    true,
 	"structure.toggle":                 true,
@@ -3921,6 +3944,9 @@ func (m Model) Init() tea.Cmd {
 	// once a day, nil whenever the setting is off, no catalog is configured
 	// or the rate limit has not elapsed.
 	cmds = append(cmds, m.marketUpdateCheckCmd())
+	// The dependencies auto-scan (#2419): one background toolchain scan when
+	// the setting is on and the project root holds any manifest.
+	cmds = append(cmds, m.depsAutoScanCmd())
 	// Highlight any files restored from the previous session at startup, before
 	// the user edits them, and announce each to the plugin hooks (#332): the
 	// restore paths (restoreLayout/restoreSession) load editors directly via
@@ -5706,6 +5732,48 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// problems.toggle (#1024): same state machine for the Problems pane.
 		m.toggleProblemsPanel()
 		return m, nil
+
+	case DepsToggleMsg:
+		// deps.toggle (#2419): same state machine for the Dependencies pane;
+		// the first open with no snapshot starts a background scan.
+		return m, m.toggleDepsPanel()
+
+	case DepsRefreshMsg:
+		// deps.refresh (#2419): a forced rescan past the mtime cache.
+		return m, m.depsScanCmd(true, true)
+
+	case DepsAuditMsg:
+		// deps.audit (#2419): the same forced rescan under its security name.
+		return m, m.depsScanCmd(true, true)
+
+	case DepsUpdateLatestMsg:
+		// deps.updateLatest (#2419): the manifest code action.
+		return m.handleDepsUpdateLatest()
+
+	case DepsScanStartedMsg:
+		return m.handleDepsScanStarted()
+
+	case DepsScanMsg:
+		return m.handleDepsScan(msg)
+
+	case DepsInstallDoneMsg:
+		return m.handleDepsInstallDone(msg)
+
+	case depspanel.OpenLocationMsg:
+		// Enter in the Dependencies pane (#2419): open the manifest at the
+		// dependency's declaration line.
+		return m.openPathAt(msg.Path, msg.Line, 0)
+
+	case depspanel.BumpMsg:
+		return m.handleDepsBump(msg)
+
+	case depspanel.VulnsMsg:
+		m.openDepsVulnsDialog(msg.Dep)
+		return m, nil
+
+	case depspanel.RefreshMsg:
+		// 'r' in the pane (#2419): the deps.refresh flow.
+		return m, m.depsScanCmd(true, true)
 
 	case TestsToggleMsg:
 		// tests.toggle (#1911): same state machine for the Test Results pane.
@@ -7970,6 +8038,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.depEditPromptOpen() {
 			return m.updateDepEditPrompt(msg)
 		}
+		// The deps install confirmation (#2419): enter / esc answer it.
+		if m.depsInstallPromptOpen() {
+			return m.updateDepsInstallPrompt(msg)
+		}
+		// The deps vulnerability details (#2419): esc closes.
+		if m.depsVulnsDialogOpen() {
+			return m.updateDepsVulnsDialog(msg)
+		}
+		// The deps missing-tools report (#2419): esc closes.
+		if m.depsMissingDialogOpen() {
+			return m.updateDepsMissingDialog(msg)
+		}
 		// The unsaved-changes guard before a project switch (0090, #3) owns the
 		// keyboard the same way: s / d / esc answer it.
 		if m.switchPromptOpen() {
@@ -9318,7 +9398,7 @@ func (m Model) viewerSplitTarget() string {
 		switch inst.Kind() {
 		case pane.KindExplorer, pane.KindVCS, pane.KindDebug, pane.KindProblems,
 			pane.KindStructure, pane.KindUsages, pane.KindHTTP, pane.KindBreakpoints,
-			pane.KindTests, pane.KindIssues, pane.KindDOM, pane.KindDoctor:
+			pane.KindTests, pane.KindIssues, pane.KindDOM, pane.KindDoctor, pane.KindDeps:
 			return false
 		}
 		return true
@@ -10741,6 +10821,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Problems().Wheel(lines)
 			}
+		case pane.KindDeps:
+			// The wheel scrolls the Dependencies list (#2419).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Deps().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Deps().Wheel(lines)
+			}
 		case pane.KindTests:
 			// The wheel scrolls the Test Results tree or detail (#1911).
 			switch msg.Button {
@@ -11900,6 +11988,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// the row opens the diagnostic's location, mirroring the VCS panel.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Problems().Click(localX, localY)
+		}
+	case pane.KindDeps:
+		// Dependencies-list clicks (#2419): a click selects, a double-click
+		// opens the manifest at the dependency's line.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Deps().Click(localX, localY)
 		}
 	case pane.KindTests:
 		// Test-tree clicks (#1911): a click selects (a detail-column click
@@ -13199,6 +13293,8 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 			title = "DEBUG" + termExitedTitle(inst.Debug().Term())
 		case pane.KindProblems:
 			title = "PROBLEMS"
+		case pane.KindDeps:
+			title = "DEPENDENCIES"
 		case pane.KindTests:
 			title = "TESTS"
 		case pane.KindIssues:

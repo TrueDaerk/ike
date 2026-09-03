@@ -528,7 +528,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 		},
 		// The built-in intention catalog (#2020): caret-dependent doorways
 		// into the commands above, merged into alt+enter's popup.
-		Intentions: intention.Builtins(),
+		Intentions: append(intention.Builtins(), depsIntention()),
 		Commands: append(append(cmds,
 			appCommand("palette.keymapHelp", "Keymap Cheatsheet", ShowKeymapHelpMsg{}),
 			appCommand("help.welcomeTour", "Welcome Tour", ShowWelcomeTourMsg{}),
@@ -718,6 +718,10 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("vcs.historyForSelection", "Show History for Selection", HistoryForSelectionMsg{}),
 			appCommand("vcs.panel", "Toggle VCS Tool Window", VCSPanelToggleMsg{}),
 			appCommand("problems.toggle", "Problems", ProblemsToggleMsg{}),
+			appCommand("deps.toggle", "Dependencies", DepsToggleMsg{}),
+			appCommand("deps.refresh", "Dependencies: Refresh Scan", DepsRefreshMsg{}),
+			appCommand("deps.audit", "Dependencies: Audit Vulnerabilities", DepsAuditMsg{}),
+			appCommand("deps.updateLatest", "Update Dependency to Latest", DepsUpdateLatestMsg{}),
 			appCommand("structure.toggle", "Structure", StructureToggleMsg{}),
 			appCommand("dom.toggle", "DOM Inspector", DOMToggleMsg{}),
 			appCommand("scratch.panel", "Scratch Files", ScratchSectionFocusMsg{}),

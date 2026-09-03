@@ -30,6 +30,9 @@ func init() {
 		// version suffixes are stripped by the lookup.
 		Interpreters: []string{"python", "python3"},
 		Grammar:      grammar(),
+		// The Python dependency manifests (#2419): the Dependencies tool
+		// window scans them via pip/uv list --outdated + pip-audit.
+		DepManifests: []string{"requirements.txt", "pyproject.toml"},
 		Server: &lang.ServerSpec{
 			Language:    "python",
 			Command:     "pyright-langserver",

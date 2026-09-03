@@ -452,6 +452,9 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 		{Title: "TODO Index", Description: "The project-wide comment-tag index behind the TODO tool window.", Entries: []Entry{
 			{Key: "todo.patterns", Type: List, Title: "Tag words", Description: "Comment tag words the project scan matches as whole words, case-insensitively (TODO, FIXME, HACK, XXX); entries are literals, not regexes", Scope: config.UserScope},
 		}},
+		{Title: "Dependencies", Description: "The Dependencies tool window's project scan (#2419): declared dependencies per manifest with latest versions and vulnerabilities from the local toolchain.", Entries: []Entry{
+			{Key: "deps.auto_scan", Type: Bool, Title: "Scan dependencies on project open", Description: "Run one background toolchain scan (outdated versions and vulnerability audit) when a project with dependency manifests opens (#2419); off leaves scans to the deps.refresh and deps.audit commands", Scope: config.UserScope},
+		}},
 		{Title: "Marketplace Catalog", Description: "Where the plugin marketplace fetches its catalog from. The Marketplace page installs from whatever this URL serves.", Entries: []Entry{
 			{Key: "marketplace.catalog_url", Type: String, Title: "Catalog URL", Description: "HTTPS location of the marketplace index.json; empty falls back to the built-in default, which may itself be empty — then the marketplace stays disabled", Scope: config.UserScope},
 			{Key: "marketplace.auto_check", Type: Bool, Title: "Check for plugin updates", Description: "Compare installed plugins against the catalog on IDE start and announce how many updates are available (#2257). The check runs in the background at most once a day and stays silent when the catalog cannot be reached; opening the Marketplace page always checks regardless", Scope: config.UserScope},

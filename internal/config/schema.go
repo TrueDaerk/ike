@@ -37,6 +37,8 @@ type Config struct {
 	Plugins map[string]map[string]any `toml:"plugins"`
 	// Marketplace holds plugin-marketplace settings (Roadmap 0310).
 	Marketplace Marketplace `toml:"marketplace"`
+	// Deps holds the Dependencies tool window's settings (#2419).
+	Deps Deps `toml:"deps"`
 	// Todo holds the TODO/FIXME index settings (#61).
 	Todo Todo `toml:"todo"`
 	// Diff holds the diff viewer's defaults (0340, #2170).
@@ -462,6 +464,13 @@ type Todo struct {
 type Marketplace struct {
 	CatalogURL string `toml:"catalog_url"`
 	AutoCheck  bool   `toml:"auto_check"`
+}
+
+// Deps holds Dependencies tool-window settings (#2419). AutoScan runs one
+// background toolchain scan on project open when the project root holds any
+// dependency manifest; off leaves scans to deps.refresh / deps.audit.
+type Deps struct {
+	AutoScan bool `toml:"auto_scan"`
 }
 
 // Terminal holds integrated-terminal behaviour (Roadmap 0170). Autosuggest

@@ -26,6 +26,10 @@ func init() {
 		ID:         "toml",
 		Extensions: []string{"toml"},
 		Grammar:    grammar(),
+		// The Cargo dependency manifest (#2419): there is no dedicated rust
+		// plugin, so the toml language — which already renders Cargo.toml —
+		// declares it for the Dependencies tool window (cargo outdated/audit).
+		DepManifests: []string{"Cargo.toml"},
 		Server: &lang.ServerSpec{
 			Language:    "toml",
 			Command:     "taplo",

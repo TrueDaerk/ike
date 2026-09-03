@@ -137,6 +137,9 @@ func init() {
 		LineComment:    "//",
 		IndentAfter:    []string{"("},
 		UseTabs:        &tabs,
+		// The Go dependency manifest (#2419): the Dependencies tool window
+		// scans it via `go list -m -u` / govulncheck.
+		DepManifests: []string{"go.mod"},
 	})
 	lang.Register(lang.Language{
 		ID:             "go.work",

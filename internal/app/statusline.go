@@ -57,6 +57,7 @@ var statusLeft = []statusSegment{
 	{id: "forge", render: func(m Model, _ *editor.Model) string { return m.forgeBadgeSegment() }},
 	{id: "todo", render: func(m Model, _ *editor.Model) string { return m.todoSegment() }},
 	{id: "http", render: func(m Model, _ *editor.Model) string { return m.httpFlightSegment() }},
+	{id: "deps", render: func(m Model, _ *editor.Model) string { return m.depsSegment() }},
 	{id: "allfind", render: func(m Model, _ *editor.Model) string { return m.allFindSegment() }},
 }
 
@@ -520,6 +521,8 @@ func (m Model) statusLine() string {
 			left += "DEBUG"
 		case inst.Kind() == pane.KindProblems:
 			left += "PROBLEMS"
+		case inst.Kind() == pane.KindDeps:
+			left += "DEPENDENCIES"
 		case inst.Kind() == pane.KindTests:
 			left += "TESTS"
 		case inst.Kind() == pane.KindIssues:
@@ -783,6 +786,8 @@ var statusSegmentCommands = map[string]string{
 	"forge": "issues.toggle",
 	// The all-projects scan progress (#2413) opens the results it counts.
 	"allfind": "project.findInAllProjectsResults",
+	// The dependency scan indicator (#2419) opens the pane it fills.
+	"deps": "deps.toggle",
 }
 
 // statusSegmentAt returns the id of the segment rendered at cell x of the

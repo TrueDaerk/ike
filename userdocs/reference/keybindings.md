@@ -41,6 +41,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Copy path | `cmd+shift+c` | `ctrl+shift+c` | `file.copyPath` |
 | Debug console tool window | `cmd+5` | `ctrl+5` | `debug.console` |
 | Debug file | `shift+f9` | `shift+f9` | `debug.start` |
+| Dependencies tool window | `cmd+0` | `ctrl+0` | `deps.toggle` |
 | Diff file against HEAD | `cmd+alt+d` | `ctrl+alt+d` | `vcs.diff` |
 | Evaluate expression | `alt+f8` | `alt+f8` | `debug.evaluate` |
 | Find in all projects | `cmd+alt+shift+f` | `ctrl+alt+shift+f` | `project.findInAllProjects` |

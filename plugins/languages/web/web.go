@@ -57,6 +57,9 @@ func init() {
 		ID:         "typescript",
 		Extensions: []string{"ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"},
 		Grammar:    tsGrammar(),
+		// The npm dependency manifest (#2419): the Dependencies tool window
+		// scans it via npm/pnpm/yarn outdated + audit.
+		DepManifests: []string{"package.json"},
 		Server: &lang.ServerSpec{
 			Language:    "typescript",
 			Command:     "vtsls",

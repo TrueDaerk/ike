@@ -68,6 +68,11 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"editor.fold.", reasonVimKey},             // za / zo / zc / zR / zM / zy
 	{"merge.", reasonVimKey},                   // go / gt / … in the merge view
 	{"explorer.", reasonPaneKey},               // the tree's own keys while it is focused
+	// #2419's Dependencies window: refresh/audit are the pane's 'r' (and the
+	// palette); the update action is the manifest line's alt+enter offer.
+	{"deps.refresh", reasonPaneKey},
+	{"deps.audit", reasonOccasional},
+	{"deps.updateLatest", reasonIntention},
 	{"http.", reasonPaneKey},                   // the response pane's single keys
 	{"view.toggle", reasonMenu},                // the View menu's rendering toggles
 	{"data.", reasonPaneKey},                   // the grid pane's keys

@@ -191,6 +191,7 @@ var actionMap = map[string]string{
 	"ActivateTerminalToolWindow":       "terminal.toggle",
 	"ActivateTODOToolWindow":           "todo.list",
 	"ActivateProblemsViewToolWindow":   "problems.toggle",
+	"ActivateDependenciesToolWindow":   "deps.toggle",
 	"ActivateStructureToolWindow":      "structure.toggle",
 	"ActivateVersionControlToolWindow": "vcs.panel",
 	// #2305: the Run and Debug tool windows are IKE's test-results and

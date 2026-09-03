@@ -1,5 +1,33 @@
 # Log
 
+## 2026-09-03 (Dependencies tool window, #2419)
+
+- **A singleton Dependencies pane** (`deps.toggle`, `cmd+0`, bottom zone)
+  lists the project's declared dependencies per manifest — name, current,
+  latest, direct/indirect, vulnerability count — grouped by manifest file.
+  One provider per ecosystem (`internal/deps`) shells out to the toolchain:
+  `go list -m -u`/govulncheck, npm/pnpm/yarn (package manager by lockfile),
+  composer, cargo (with cargo-outdated/cargo-audit when installed), and
+  pip/uv with pip-audit. Missing tools are reported with install hints in
+  the centered dialog, never as a crash; all network traffic stays inside
+  the toolchain.
+- **Background scans with an mtime cache.** Scans run in a `tea.Cmd` with a
+  `⟳ deps: scanning` status-line segment; results cache per manifest mtime
+  and `deps.refresh`/`deps.audit` force past it. `deps.auto_scan` (Settings
+  ▸ Dependencies, default on) scans on project open when manifests exist.
+  Manifests count only while a registered language declares them
+  (`lang.Language.DepManifests`), so disabling a language plugin silences
+  its ecosystem.
+- **In the pane**: `enter` opens the manifest at the dependency's line, `u`
+  rewrites the version (constraint prefixes preserved) and offers the
+  install step behind a confirmation — never unasked — `v` shows the
+  advisory details, `r` rescans, `/`+find chord filter (`manifest:`,
+  `state:`).
+- **In the editor**: manifest hovers show `current → latest` plus
+  advisories, alt+enter offers "Update … to latest" (`deps.updateLatest`),
+  and vulnerable entries feed the Problems store as warnings under source
+  `deps`.
+
 ## 2026-09-03 (telemetry v4: 60s heartbeat, command outcomes, dismissals, project time, #2408)
 
 - **The heartbeat beats once a minute, not every ten seconds.** At the old
