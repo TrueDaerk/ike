@@ -215,34 +215,9 @@ func parseSub(args string) (pat, repl, flags string, hasBody bool, errMsg string
 		return "", "", "", false, "invalid substitute delimiter: " + string(d)
 	}
 	s := args[1:]
-	pat, s = scanDelim(s, d)
-	repl, s = scanDelim(s, d)
+	pat, s = excmd.ScanDelim(s, d)
+	repl, s = excmd.ScanDelim(s, d)
 	return pat, repl, strings.TrimSpace(s), true, ""
-}
-
-// scanDelim reads up to the first unescaped delim (or end of input), turning
-// "\<delim>" into a literal delim and keeping every other backslash pair intact
-// so the regex / replacement layers see them. It returns the text after delim.
-func scanDelim(s string, delim byte) (string, string) {
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '\\' && i+1 < len(s) {
-			if s[i+1] == delim {
-				b.WriteByte(delim)
-			} else {
-				b.WriteByte(c)
-				b.WriteByte(s[i+1])
-			}
-			i++
-			continue
-		}
-		if c == delim {
-			return b.String(), s[i+1:]
-		}
-		b.WriteByte(c)
-	}
-	return b.String(), ""
 }
 
 // parseSubFlags reads the g/i/I/n/c flag letters; an unknown letter is an error.

@@ -126,7 +126,7 @@ func parseAddress(s string) (Address, string, bool, string) {
 		a.Kind, s, matched = AddrVisualEnd, s[2:], true
 	case strings.HasPrefix(s, "/"), strings.HasPrefix(s, "?"):
 		delim := s[0]
-		pat, rest := scanPattern(s[1:], delim)
+		pat, rest := ScanDelim(s[1:], delim)
 		if delim == '/' {
 			a.Kind = AddrPatternNext
 		} else {
@@ -175,10 +175,12 @@ func parseName(s string) (name string, bang bool, args string) {
 	return name, bang, strings.TrimSpace(rest)
 }
 
-// scanPattern reads a pattern up to the first unescaped delim (or end of input);
-// "\<delim>" contributes a literal delim, every other backslash is kept verbatim
-// so the regex layer sees it. It returns the pattern and the text after delim.
-func scanPattern(s string, delim byte) (string, string) {
+// ScanDelim reads text up to the first unescaped delim (or end of input);
+// "\<delim>" contributes a literal delim, every other backslash pair is kept
+// verbatim so the regex / replacement layers see it. It returns the text and
+// the remainder of s after delim. Shared by address-pattern parsing here and
+// by ":s" pattern/replacement parsing in the editor package.
+func ScanDelim(s string, delim byte) (string, string) {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
 		c := s[i]
