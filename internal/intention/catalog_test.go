@@ -217,6 +217,18 @@ func TestCatalogApplicability(t *testing.T) {
 			wantNot: []string{"debug.testAtCursor"},
 		},
 		{
+			// #2405: the condition form is otherwise only reachable through
+			// cmd+alt+f8, which the telemetry showed nobody presses.
+			name: "caret on a plain breakpoint line",
+			cx:   Context{BreakpointAtCaret: true},
+			want: []string{"debug.breakpointProperties"},
+		},
+		{
+			name:    "caret on a line without a breakpoint",
+			cx:      Context{LangID: "php"},
+			wantNot: []string{"debug.breakpointProperties"},
+		},
+		{
 			name:    "outside a test function",
 			cx:      Context{LangID: "go"},
 			wantNot: []string{"run.testAtCursor", "debug.testAtCursor"},
@@ -316,5 +328,19 @@ func TestConcealTogglesNameRealFamilies(t *testing.T) {
 		if !concealfilter.IsFamily(fam) {
 			t.Errorf("concealToggles keys unknown family %q", fam)
 		}
+	}
+}
+
+// TestBreakpointIntentionTitleFollowsTheCondition: the entry says what it
+// will do — add a condition, or edit the one already there (#2405).
+func TestBreakpointIntentionTitleFollowsTheCondition(t *testing.T) {
+	p := breakpointProvider()
+	plain := p.Items(Context{BreakpointAtCaret: true})
+	if len(plain) != 1 || plain[0].Title != "Add Condition…" {
+		t.Fatalf("plain breakpoint entry = %+v", plain)
+	}
+	conditional := p.Items(Context{BreakpointAtCaret: true, BreakpointConditional: true})
+	if len(conditional) != 1 || conditional[0].Title != "Edit Condition…" {
+		t.Fatalf("conditional breakpoint entry = %+v", conditional)
 	}
 }

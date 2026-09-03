@@ -577,6 +577,11 @@ type Model struct {
 	evalOpen  bool
 	evalInput string
 	evalPos   int
+	// runToLineOpen marks the debugger's run-to-line prompt (#2405) while the
+	// shell shows it; runToLineInput/runToLinePos hold its single line.
+	runToLineOpen  bool
+	runToLineInput string
+	runToLinePos   int
 	// curlImportOpen marks the curl import prompt (#1994) while the shell
 	// shows it; curlImportInput/curlImportPos are the typed command and
 	// cursor.
@@ -5414,6 +5419,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.debugStep("continue")
 		return m, nil
 
+	case DebugRunToCursorMsg:
+		// debug.runToCursor (alt+f9 / cmd+f9, #2405): a temporary breakpoint
+		// on the cursor line, then continue.
+		m.runToCursor()
+		return m, nil
+	case DebugRunToLineMsg:
+		// debug.runToLine (palette, #2405): the same, for a typed line.
+		m.startRunToLine()
+		return m, nil
+
 	case debugEventMsg:
 		// Raw adapter events (initialized, stopped, output, terminated, …),
 		// routed by owning session (#1523): a parked workspace's events never
@@ -5450,7 +5465,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// picked a view themselves this session.
 				p.AutoTab(debugpanel.TabVariables)
 			}
-			mm.fetchScopes(top.ID, top.Source.Path)
+			mm.fetchScopes(top.ID, top.Source.Path, top.Line-1)
 			mm.refreshWatches()
 			return mm, cmd
 		}
@@ -5475,7 +5490,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.dbg != nil {
 			m.dbg.curFrameID = msg.Frame.ID
 		}
-		m.fetchScopes(msg.Frame.ID, msg.Frame.Source.Path)
+		m.fetchScopes(msg.Frame.ID, msg.Frame.Source.Path, msg.Frame.Line-1)
 		m.refreshWatches()
 		if msg.Frame.Source.Path != "" {
 			col := msg.Frame.Column - 1
@@ -8158,6 +8173,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The debugger's evaluate-expression prompt (#2174) mirrors it.
 		if m.evalPromptOpen() {
 			return m.updateEvalPrompt(msg)
+		}
+		// The debugger's run-to-line prompt (#2405) likewise: one line,
+		// enter/esc.
+		if m.runToLinePromptOpen() {
+			return m.updateRunToLinePrompt(msg)
 		}
 		// The response-body save prompt (#2059) mirrors the JetBrains import:
 		// one path line with tab completion.

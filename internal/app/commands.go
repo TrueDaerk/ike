@@ -228,6 +228,14 @@ type (
 	DebugContinueMsg struct{}
 )
 
+// DebugRunToCursorMsg resumes the paused debuggee towards the focused
+// editor's cursor line (#2405); DebugRunToLineMsg asks for the line number
+// first. Both install one temporary breakpoint that never enters the store.
+type (
+	DebugRunToCursorMsg struct{}
+	DebugRunToLineMsg   struct{}
+)
+
 // DebugEvaluateMsg evaluates the editor's selection — or an expression the
 // prompt asks for — in the paused frame and shows the result in the evaluate
 // popup (#2174).
@@ -643,6 +651,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("debug.stepInto", "Step Into", DebugStepIntoMsg{}),
 			appCommand("debug.stepOut", "Step Out", DebugStepOutMsg{}),
 			appCommand("debug.continue", "Continue", DebugContinueMsg{}),
+			appCommand("debug.runToCursor", "Run to Cursor", DebugRunToCursorMsg{}),
+			appCommand("debug.runToLine", "Run to Line…", DebugRunToLineMsg{}),
 			appCommand("debug.console", "Debug: Toggle Console/Variables View", DebugConsoleMsg{}),
 			appCommand("debug.evaluate", "Evaluate Expression", DebugEvaluateMsg{}),
 			// The pane-scoped copy/step chords of the #2400 audit: each one

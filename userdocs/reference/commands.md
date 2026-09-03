@@ -51,6 +51,8 @@ bring their own.
 | Xdebug Doctor | `debug.doctor` | — | — | everywhere |
 | Evaluate Expression | `debug.evaluate` | `alt+f8` | — | everywhere |
 | Listen for PHP Debug Connections | `debug.listen` | — | — | everywhere |
+| Run to Cursor | `debug.runToCursor` | `alt+f9` | — | everywhere |
+| Run to Line… | `debug.runToLine` | — | — | everywhere |
 | Debug File | `debug.start` | `shift+f9` | — | everywhere |
 | Step Into | `debug.stepInto` | `f7` | — | everywhere |
 | Step Out | `debug.stepOut` | `shift+f8` | — | everywhere |

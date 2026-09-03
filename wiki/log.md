@@ -1,5 +1,33 @@
 # Log
 
+## 2026-09-03 (run to cursor, PHP inline values, "Add Condition…", #2405)
+
+- **`debug.runToCursor` (alt+F9) resumes towards the cursor line** instead of
+  making the user press F8 eight times to get there — the streaks the stepping
+  telemetry recorded. `debug.runToLine` is the palette flavour, asking for a
+  line number. Both install one temporary breakpoint that lives on the session
+  state, is merged into the file's `setBreakpoints` list on the wire and is
+  retired on the next stop; the persisted store never sees it, so a user
+  breakpoint on the same line survives the cleanup untouched (and needs no
+  temporary one at all). The push and the resume share one goroutine, in that
+  order, so `continue` can never overtake its own breakpoint.
+- **Only alt+F9.** The obvious darwin partner, cmd+F9, folds onto ctrl+F9 off
+  macOS, where the editor already runs the HTTP request under the cursor — the
+  shadow the keymap policy test rejects. The Run menu and the palette are the
+  delivered escape, recorded in the reachability ledger.
+- **PHP sessions show inline values again.** Locals were filtered to plain
+  identifiers, which dropped every xdebug local — they arrive as `$name` — so
+  an Xdebug session had no inline values at all. One leading sigil is now part
+  of the name and of the whole-word match (`$s` matches `$s`, never `$sum`).
+- **The frame's line and the two above it are a focus window.** A hint that
+  does not fit is still dropped elsewhere (code is never truncated for a
+  value), but inside the window it shrinks with an ellipsis instead of
+  vanishing: on the line the debugger stopped at, the value is what the step
+  was for.
+- **alt+enter offers "Add Condition…" on a breakpoint line** ("Edit
+  Condition…" when one exists), so `debug.breakpointProperties` is discovered
+  where it applies rather than through a chord nobody presses.
+
 ## 2026-09-03 (recent files ranks by frecency and reopens on the last pick, #2399)
 
 - **Both lists of the `cmd+e` dialog rank by frecency** — frequency blended

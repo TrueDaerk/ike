@@ -420,6 +420,14 @@ var jetbrainsRows = []row{
 	{"f7", "debug.stepInto", "Step into", Global, "Run (0350)"},
 	{"shift+f8", "debug.stepOut", "Step out", Global, "Run (0350)"},
 	{"f9", "debug.continue", "Continue (debug)", Global, "Run (0350)"},
+	// JetBrains Run to Cursor (alt+f9 on both keymaps, #2405): the debuggee
+	// resumes towards the cursor line instead of being stepped there. It
+	// stays a lone alt chord: the obvious darwin partner, cmd+f9, folds onto
+	// ctrl+f9 off macOS, where the editor already runs the HTTP request under
+	// the cursor with it — a shadow the policy test rejects, and rightly so.
+	// The escape is the Run menu and the palette (matrix.go), like the
+	// toggle-breakpoint family above.
+	{"alt+f9", "debug.runToCursor", "Run to cursor", Global, "Run (#2405)"},
 	// JetBrains Evaluate Expression (alt+f8 on both keymaps): the selection,
 	// or a typed expression, evaluated in the paused frame (#2174).
 	{"alt+f8", "debug.evaluate", "Evaluate expression", Global, "Run (0350)"},

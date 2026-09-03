@@ -179,7 +179,7 @@ func (m *Model) syncSessionBreakpoints(abs string) tea.Cmd {
 	if dbg == nil {
 		return nil
 	}
-	bps := dapBreakpoints(m.bpts.EnabledSpecs(bpKey(abs)))
+	bps := dapBreakpoints(m.sessionSpecs(bpKey(abs)))
 	send := m.host.Send
 	sess := dbg.sess
 	go func() {

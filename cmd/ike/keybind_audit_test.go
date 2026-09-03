@@ -135,6 +135,7 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"lsp.showLog", reasonOccasional},             //
 	{"debug.doctor", reasonOccasional},            //
 	{"debug.listen", reasonOccasional},            //
+	{"debug.runToLine", reasonFlavour},            // #2405: debug.runToCursor has alt+f9
 	{"diff.files", reasonMenu},                    //
 	{"diff.compareWithClipboard", reasonMenu},     //
 	{"vcs.blameLine", reasonMenu},                 // the gutter's context menu

@@ -92,6 +92,8 @@ func Defaults() []Menu {
 			{Title: "Step Into", Command: "debug.stepInto"},
 			{Title: "Step Out", Command: "debug.stepOut"},
 			{Title: "Continue", Command: "debug.continue"},
+			{Title: "Run to Cursor", Command: "debug.runToCursor"},
+			{Title: "Run to Line…", Command: "debug.runToLine"},
 			{Title: "Evaluate Expression", Command: "debug.evaluate"},
 			{Title: "Stop Debug Session", Command: "debug.stop"},
 		}},

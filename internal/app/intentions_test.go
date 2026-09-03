@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"ike/internal/debug"
 	"ike/internal/httpfile"
 )
 
@@ -93,5 +94,34 @@ func TestInsertCurlAsRequestReadOnlyFallsBackToScratch(t *testing.T) {
 	}
 	if !strings.Contains(ed.Text(), "GET https://example.com/a") {
 		t.Fatalf("scratch content = %q", ed.Text())
+	}
+}
+
+// TestIntentionContextCarriesTheBreakpointFacts covers #2405: a breakpoint on
+// the caret line brings the condition form into the alt+enter popup, and its
+// condition decides whether the entry adds or edits.
+func TestIntentionContextCarriesTheBreakpointFacts(t *testing.T) {
+	m := intentionModel(t, "prog.php", "<?php\n$a = 1;\n$b = 2;\n", 1, 0)
+	ed := m.activeEditor()
+	key := bpKey(ed.Path())
+
+	cx, ok := m.intentionContext()
+	if !ok {
+		t.Fatal("an open editor must yield a context")
+	}
+	if cx.BreakpointAtCaret {
+		t.Fatal("no breakpoint yet")
+	}
+
+	m.bpts.Toggle(key, 1)
+	cx, _ = m.intentionContext()
+	if !cx.BreakpointAtCaret || cx.BreakpointConditional {
+		t.Fatalf("plain breakpoint facts = %v/%v", cx.BreakpointAtCaret, cx.BreakpointConditional)
+	}
+
+	m.bpts.SetMeta(key, 1, debug.Meta{Condition: "$a > 1"})
+	cx, _ = m.intentionContext()
+	if !cx.BreakpointConditional {
+		t.Fatal("a conditional breakpoint must be reported as one")
 	}
 }

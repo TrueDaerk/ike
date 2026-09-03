@@ -54,6 +54,12 @@ type debugState struct {
 	curFrameID int    // frame watches evaluate against (#1914): top of the stop, or the selected frame
 	inlinePath string // file carrying the inline variable values (#1914)
 
+	// tempBP is the pending run-to-cursor breakpoint (#2405): a line the
+	// adapter stops at once, merged into its file's breakpoint list on the
+	// wire and never written to the persisted store. Cleared on the next
+	// stop; a session that ends takes it with it.
+	tempBP *tempBreakpoint
+
 	// pendingOut buffers debuggee output that arrived before the tool window
 	// opened (output can precede the first stop); openDebugPanel flushes it into
 	// the panel so nothing is lost from the live console (#624). Capped at
@@ -555,7 +561,7 @@ func (m *Model) handleDebugEvent(evSess *dap.Session, ev dap.Event) {
 		// along), then finish.
 		files := map[string][]dap.SourceBreakpoint{}
 		for file := range m.bpts.All() {
-			files[file] = dapBreakpoints(m.bpts.EnabledSpecs(file))
+			files[file] = dapBreakpoints(m.sessionSpecs(file))
 		}
 		// The capabilities are known now, so the list can gate its edit
 		// actions, and a refinement this adapter will not honour is said out
@@ -745,6 +751,9 @@ func (m *Model) applyDebugStop(msg debugStoppedMsg) *dap.StackFrame {
 		// belongs to a session that is no longer the active one.
 		return nil
 	}
+	// The stop retires the run-to-cursor breakpoint (#2405): reached, or
+	// beaten to it by a real one — either way it leaves the adapter now.
+	m.clearTempBreakpoint()
 	dbg.threadID = msg.threadID
 	dbg.paused = true
 	dbg.frames = msg.frames
@@ -1051,9 +1060,12 @@ func (m *Model) flushDebugOutput() {
 }
 
 // fetchScopes loads a frame's scopes plus the first scope's variables and
-// feeds the panel via messages. path is the frame's source file: the first
-// scope's variables double as the inline values there (#1914).
-func (m *Model) fetchScopes(frameID int, path string) {
+// feeds the panel via messages. path is the frame's source file and line its
+// 0-based line: the first scope's variables double as the inline values there
+// (#1914), focused on the frame's own line (#2405). The fetch runs on every
+// stop, panel or no panel — the inline values are the debug surface of a user
+// who never opens the tool window.
+func (m *Model) fetchScopes(frameID int, path string, line int) {
 	dbg := m.dbg
 	if dbg == nil {
 		return
@@ -1071,7 +1083,7 @@ func (m *Model) fetchScopes(frameID int, path string) {
 			if vars, err := sess.Variables(scopes[0].VariablesReference); err == nil {
 				send(debugVarsMsg{ref: scopes[0].VariablesReference, vars: vars})
 				if path != "" {
-					send(debugLocalsMsg{sess: sess, path: path, vars: vars})
+					send(debugLocalsMsg{sess: sess, path: path, line: line, vars: vars})
 				}
 			}
 		}
