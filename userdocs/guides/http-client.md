@@ -414,8 +414,9 @@ requests.
 
 The first response opens a read-only pane split off the editor (below, or to
 the right of a wide landscape pane), and every later
-response reuses it. It shows the status line and duration, the headers,
-any warnings, and the body — JSON pretty-printed, JSON/XML/HTML/CSS/JS
+response reuses it. It shows the status line and duration, the **request
+line actually sent** (method + final URL, right under the status), the
+headers, any warnings, and the body — JSON pretty-printed, JSON/XML/HTML/CSS/JS
 highlighted, binary bodies collapsed to a notice.
 
 | Key | What it does |
@@ -435,6 +436,8 @@ highlighted, binary bodies collapsed to a notice.
 | `C` | Copy this response's request as a curl command |
 | `H` | Copy this response's request as an httpie command |
 | `S` | Save the raw response body to a file |
+| `i` | Expand/collapse the request line into its headers and (small) body |
+| `U` | Copy the request line's full, untruncated URL |
 | `t` | Switch between the pretty-printed and the raw body |
 | `q` | Open the jq playground on this body |
 | `m` | Load the next chunk of a large body |
@@ -447,6 +450,24 @@ highlighted, binary bodies collapsed to a notice.
 Search uses the editor's smartcase rule: an all-lowercase pattern ignores
 case, any uppercase letter makes it exact. The footer shows the position
 (`/token  3/17`).
+
+### The request line
+
+Right under the status line, the pane shows exactly what went out: the
+method and the final URL, **after** placeholder substitution. This is what
+makes an edited-and-re-run request, or an older history entry, honest about
+which path and query parameters were really used — the status line alone
+never told you that. A URL longer than the pane is shortened in the
+**middle**, not at the end, so both the host and the tail of the query stay
+readable (`https://api.example.test/…&filter=active` instead of losing the
+query behind a trailing `…`). `U` copies the full URL regardless of how much
+of it is showing.
+
+`i` expands the line into the as-sent request headers and, for a body under
+2 KiB, the body itself — collapsed by default, since the method and URL
+already answer the common question. A response stored before this feature
+existed carries no request snapshot, so its pane shows no request line; only
+`ctrl+r` re-send is affected the same way (see below).
 
 ### Pretty or raw
 

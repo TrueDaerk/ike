@@ -1,5 +1,25 @@
 # Log
 
+## 2026-09-03 (HTTP response pane shows the request line, #2424)
+
+- **The request that actually went out**: the response pane header now shows
+  a line under the status — method and final URL, after placeholder
+  substitution — for the live response and for every browsed history entry,
+  read off the same `RequestSnapshot` the resend/curl/httpie exports already
+  use (`Model.requestLine`). Editing a request and re-running it, or
+  stepping back through history, used to leave the path and query invisible;
+  the status line alone never said which one was actually hit.
+- **Middle truncation, not tail**: a URL longer than the pane elides its
+  middle (`middleTruncateURL`) so the host and the tail of the query both
+  stay legible — the two places an environment difference usually shows up —
+  instead of the tail disappearing behind a trailing `…`. `U` copies the
+  full, untruncated URL regardless of what is on screen.
+- **`i` expands the line** into the as-sent request headers and, under 2 KiB,
+  the body — collapsed by default, capped at 20 lines, and belonging to the
+  view rather than to one entry, so it survives history browsing like the
+  raw/pretty toggle (#2157) does. A legacy entry with no snapshot shows no
+  request line, same gate as `CanResend`.
+
 ## 2026-09-03 (one chord that opens the right playground, #2415)
 
 - **`playground.open`** ("Open Playground for This File", `cmd+shift+j`,

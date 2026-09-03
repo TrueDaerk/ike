@@ -945,6 +945,24 @@ For a recognized stream:
   re-sent answer is stored under the same history key, and `dispatchHTTP`
   carries the duplicate guard, in-flight bookkeeping and event pump for
   `http.run` and `http.resend` alike.
+- **Request line** (#2424): directly under the summary line, the header shows
+  the method and final URL of the entry on show — `req.Method`/`req.URL` off
+  the same `RequestSnapshot` the resend/curl/httpie exports already read
+  (`Model.requestLine`, `internal/httppane/httppane.go`). It follows history
+  (`h`/`l`) exactly like the resend affordance does, so an older entry's path
+  and query parameters are visible while browsing rather than only for the
+  latest response — the gap the issue closes: editing a request and
+  re-running it, or stepping back through history, used to hide which path
+  and query were actually sent. A URL longer than the pane elides its
+  **middle** rather than its tail (`middleTruncateURL`): the scheme+host and
+  the tail of the query — the two places an environment difference usually
+  shows up — both stay legible instead of one hiding behind "…". `U` copies
+  the untruncated URL regardless of what is on screen; `i` expands the line
+  into a block with the as-sent request headers and, under 2 KiB, the body,
+  collapsed by default and capped at 20 lines so a request with dozens of
+  headers cannot crowd out the response itself. Legacy entries stored before
+  #1832 carry no snapshot, so `requestLine` reports `ok=false` and the header
+  stays the one line it always was.
 - **Pretty by default, raw on request** (#2157): a JSON body is indented
   before it is composed, so the common case — an API answering minified —
   reads without a keystroke, and the fold ranges (below) have lines to attach
