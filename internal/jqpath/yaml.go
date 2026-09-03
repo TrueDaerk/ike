@@ -13,17 +13,15 @@ package jqpath
 // anchored source the key is written at.
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math"
-	"math/big"
-	"strconv"
 	"strings"
 
 	"github.com/itchyny/gojq"
 	"gopkg.in/yaml.v3"
+
+	"ike/internal/yamljson"
 )
 
 // maxYAMLNodes caps the alias expansion, the same guard (and the same reason)
@@ -227,61 +225,6 @@ func yamlScalarSpan(n *yaml.Node) Span {
 	return s
 }
 
-// yamlScalar mirrors jqplay's scalar conversion so both features decode a
-// value identically: nulls, bools, ints and floats resolve by tag with
-// json.Number keeping every digit; everything else stays the string it was
-// written as.
-func yamlScalar(n *yaml.Node) any {
-	switch n.Tag {
-	case "!!null":
-		return nil
-	case "!!bool":
-		var b bool
-		if err := n.Decode(&b); err == nil {
-			return b
-		}
-		return n.Value
-	case "!!int":
-		var i int64
-		if err := n.Decode(&i); err == nil {
-			return json.Number(strconv.FormatInt(i, 10))
-		}
-		var u uint64
-		if err := n.Decode(&u); err == nil {
-			return json.Number(strconv.FormatUint(u, 10))
-		}
-		if _, ok := new(big.Int).SetString(n.Value, 10); ok {
-			return json.Number(n.Value)
-		}
-		return n.Value
-	case "!!float":
-		var f float64
-		if err := n.Decode(&f); err != nil {
-			return n.Value
-		}
-		if math.IsInf(f, 0) || math.IsNaN(f) {
-			return f
-		}
-		if isDecimal(n.Value) {
-			return json.Number(n.Value)
-		}
-		return json.Number(strconv.FormatFloat(f, 'g', -1, 64))
-	}
-	return n.Value
-}
-
-// isDecimal reports whether s is already a JSON number literal (jqplay's rule).
-func isDecimal(s string) bool {
-	if s == "" {
-		return false
-	}
-	if _, err := strconv.ParseFloat(s, 64); err != nil {
-		return false
-	}
-	for _, r := range s {
-		if !(r >= '0' && r <= '9') && r != '-' && r != '+' && r != '.' && r != 'e' && r != 'E' {
-			return false
-		}
-	}
-	return true
-}
+// yamlScalar delegates to yamljson.Scalar, shared with the yq playground
+// (internal/jqplay) so both features decode a value identically.
+func yamlScalar(n *yaml.Node) any { return yamljson.Scalar(n) }

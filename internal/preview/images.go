@@ -50,18 +50,14 @@ func Remote(target string) bool {
 }
 
 // inlineImage is one decoded local image plus the state of its Kitty
-// placement: the grid the latest render wants and the grid the terminal
-// actually holds, diffed by SyncSeqs like the image pane's own reconcile.
+// placement (imgview.PlacedImage), diffed by imgview.SyncSeqs like the image
+// pane's own reconcile.
 type inlineImage struct {
-	id     int
-	img    image.Image
+	imgview.PlacedImage
 	imgW   int
 	imgH   int
 	format string
 	size   int64
-
-	cols, rows         int // grid the latest render placed, 0 when unplaced
-	sentCols, sentRows int // grid the terminal holds, 0 when nothing is resident
 }
 
 // meta is the fallback caption: format, pixel size and file size, shown where
@@ -138,8 +134,8 @@ func decodeImage(path string) *inlineImage {
 	}
 	b := img.Bounds()
 	return &inlineImage{
-		id: int(nextInlineID.Add(1)), img: img,
-		imgW: b.Dx(), imgH: b.Dy(), format: format, size: st.Size(),
+		PlacedImage: imgview.PlacedImage{ID: int(nextInlineID.Add(1)), Img: img},
+		imgW:        b.Dx(), imgH: b.Dy(), format: format, size: st.Size(),
 	}
 }
 
@@ -205,12 +201,12 @@ func (m *Model) placeImages(lines []string, subs map[string]*diagramSub) ([]stri
 			// Fallback: keep glamour's "Image: alt → target" line and add
 			// what the pixels would have shown. Nothing is placed, so the
 			// grid is cleared — the id must not look live to the reconcile.
-			im.cols, im.rows = 0, 0
+			im.Cols, im.Rows = 0, 0
 			out = append(out, line, "  "+m.dim().Render(im.meta()))
 			continue
 		}
-		im.cols, im.rows = imgview.FitGrid(im.imgW, im.imgH, maxCols, maxRows)
-		for _, grid := range imgview.PlaceholderGrid(im.id, im.cols, im.rows) {
+		im.Cols, im.Rows = imgview.FitGrid(im.imgW, im.imgH, maxCols, maxRows)
+		for _, grid := range imgview.PlaceholderGrid(im.ID, im.Cols, im.Rows) {
 			blocks[len(out)] = true
 			out = append(out, "  "+grid)
 		}
@@ -238,14 +234,14 @@ func findLinkRow(lines []string, target string, from int) (int, bool) {
 func (m *Model) forgetUnplaced() {
 	placed := make(map[int]bool, len(m.placed))
 	for _, im := range m.placed {
-		placed[im.id] = true
+		placed[im.ID] = true
 	}
 	for _, im := range m.images {
-		if placed[im.id] {
+		if placed[im.ID] {
 			continue
 		}
-		im.cols, im.rows = 0, 0
-		im.sentCols, im.sentRows = 0, 0
+		im.Cols, im.Rows = 0, 0
+		im.SentCols, im.SentRows = 0, 0
 	}
 }
 
@@ -271,8 +267,8 @@ func (m *Model) HasImages() bool { return len(m.placed) > 0 }
 func (m *Model) ImageIDs() []int {
 	var out []int
 	for _, im := range m.placed {
-		if im.cols > 0 {
-			out = append(out, im.id)
+		if im.Cols > 0 {
+			out = append(out, im.ID)
 		}
 	}
 	return out
@@ -282,34 +278,22 @@ func (m *Model) ImageIDs() []int {
 func (m *Model) TransmittedIDs() []int {
 	var out []int
 	for _, im := range m.placed {
-		if im.sentCols > 0 {
-			out = append(out, im.id)
+		if im.SentCols > 0 {
+			out = append(out, im.ID)
 		}
 	}
 	return out
 }
 
 // SyncSeqs returns the raw sequences bringing the terminal's placements in
-// line with the latest render — transmit on first show, delete + transmit
-// after a resize, nothing when already current — and records the applied
-// state. Called by the app's reconcile pass, only on supporting terminals.
+// line with the latest render (imgview.SyncSeqs). Called by the app's
+// reconcile pass, only on supporting terminals.
 func (m *Model) SyncSeqs() []string {
-	var out []string
-	for _, im := range m.placed {
-		if im.cols == 0 || (im.cols == im.sentCols && im.rows == im.sentRows) {
-			continue
-		}
-		if im.sentCols > 0 {
-			out = append(out, imgview.Delete(im.id))
-		}
-		seq, err := imgview.Transmit(im.id, im.img, im.cols, im.rows)
-		if err != nil {
-			continue
-		}
-		im.sentCols, im.sentRows = im.cols, im.rows
-		out = append(out, seq)
+	placed := make([]*imgview.PlacedImage, len(m.placed))
+	for i, im := range m.placed {
+		placed[i] = &im.PlacedImage
 	}
-	return out
+	return imgview.SyncSeqs(placed)
 }
 
 // ResetImages forgets every applied transmission (#1547's rule for the image
@@ -317,7 +301,7 @@ func (m *Model) SyncSeqs() []string {
 // parked or was torn down, so the next reconcile pass must transmit again.
 func (m *Model) ResetImages() {
 	for _, im := range m.images {
-		im.sentCols, im.sentRows = 0, 0
+		im.SentCols, im.SentRows = 0, 0
 	}
 }
 

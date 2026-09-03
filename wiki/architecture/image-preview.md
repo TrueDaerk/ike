@@ -4,7 +4,7 @@ title: Image Preview
 description: "#1479 — image files render in a preview pane via the Kitty graphics protocol (Unicode placeholders): capability probe with metadata fallback, per-pass transmit/delete reconcile, decode of PNG/JPEG/GIF/WebP, layout persistence."
 resource: internal/imgview
 tags: [architecture, image, preview, pane, kitty, graphics]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Image Preview (#1479)
@@ -72,11 +72,16 @@ reset makes the resume's reconcile pass transmit again.
 
 ## Boundaries
 
-- This pane handles image *files*. The markdown preview renders the images a
-  buffer references through the same protocol layer (#2180) — `FitGrid`,
-  `PlaceholderGrid`, `Transmit`, `Delete` and `HumanSize` are shared, and
-  `imageSyncCmd` / `releaseWorkspaceImages` reconcile both kinds — but it owns
-  its own placements; see [markdown-preview](./markdown-preview.md).
+- This pane handles image *files*. The markdown preview and the notebook
+  viewer render the images they reference/embed through the same protocol
+  layer (#2180, #2425) — `FitGrid`, `PlaceholderGrid`, `Transmit`, `Delete`
+  and `HumanSize` are shared, and `imageSyncCmd` / `releaseWorkspaceImages`
+  reconcile all three kinds — but each owns its own placements; see
+  [markdown-preview](./markdown-preview.md) and
+  [notebook-viewer](./notebook-viewer.md). Since #2464, both features' own
+  per-image record embeds `imgview.PlacedImage` (id plus the wanted-vs-sent
+  grid) and their `SyncSeqs` delegates to `imgview.SyncSeqs` over it, so the
+  transmit/delete diff itself is one implementation, not two.
 - No animation: a GIF shows its first frame (stdlib decode).
 - Sixel / iTerm2 inline-image protocols are out of scope; terminals without
   Kitty graphics get the metadata card.

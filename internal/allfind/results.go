@@ -395,14 +395,9 @@ func (r *Results) previewTarget() codepreview.Target {
 	if !ok {
 		return codepreview.Target{}
 	}
-	src := it.Ranges()
-	ranges := make([]codepreview.Range, 0, len(src))
-	for _, rg := range src {
-		if rg.End > rg.Start {
-			ranges = append(ranges, codepreview.Range{Start: rg.Start, End: rg.End})
-		}
-	}
-	return codepreview.Target{Path: it.Path, Line: it.Line, Ranges: ranges}
+	return codepreview.TargetFrom(it.Path, it.Line, it.Ranges(), func(rg locations.Range) (int, int) {
+		return rg.Start, rg.End
+	})
 }
 
 // sectionLabel renders one project header: the display name, its root, the

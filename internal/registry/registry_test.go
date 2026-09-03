@@ -102,6 +102,19 @@ func TestCommandConflictDetected(t *testing.T) {
 	}
 }
 
+// TestPaneConflictDetected mirrors TestCommandConflictDetected but for Panes,
+// exercising the shared collect() dedupe helper from its second call site.
+func TestPaneConflictDetected(t *testing.T) {
+	r := New()
+	r.Add(fake{id: "a", caps: plugin.Capabilities{Panes: []plugin.Pane{{ID: "dup"}}}})
+	r.Add(fake{id: "b", caps: plugin.Capabilities{Panes: []plugin.Pane{{ID: "dup"}}}})
+
+	// First owner by sorted plugin order wins; duplicate dropped.
+	if got := r.Panes(); len(got) != 1 || got[0].Owner != "a" {
+		t.Fatalf("dedupe failed: %+v", got)
+	}
+}
+
 func TestKeymapLayeringAndConflict(t *testing.T) {
 	r := New()
 	r.Add(fake{id: "low", caps: plugin.Capabilities{Keymaps: []plugin.Keymap{{

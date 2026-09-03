@@ -595,14 +595,9 @@ func (m *Model) previewTarget() codepreview.Target {
 	if !ok {
 		return codepreview.Target{}
 	}
-	src := it.Ranges()
-	ranges := make([]codepreview.Range, 0, len(src))
-	for _, r := range src {
-		if r.End > r.Start {
-			ranges = append(ranges, codepreview.Range{Start: r.Start, End: r.End})
-		}
-	}
-	return codepreview.Target{Path: it.Path, Line: it.Line, Ranges: ranges}
+	return codepreview.TargetFrom(it.Path, it.Line, it.Ranges(), func(rg locations.Range) (int, int) {
+		return rg.Start, rg.End
+	})
 }
 
 // previewSplit is the overlay's column geometry: the preview column adapts to
@@ -871,26 +866,10 @@ func (m *Model) View() string {
 // inputRow renders one labelled input line with a block cursor on the focused
 // field.
 func (m *Model) inputRow(label, value string, f field, width int) string {
-	pal := m.theme()
-	lab := lipgloss.NewStyle().Faint(true).Render(label + " ")
-	text := value
-	switch {
-	case f == fieldQuery && m.preselect && value != "":
-		// The remembered query is "selected" (#277): render it inverted so
-		// it reads as replace-on-type.
-		text = lipgloss.NewStyle().Reverse(true).Render(value)
-		if m.focus == f {
-			text += lipgloss.NewStyle().Reverse(true).Render(" ")
-		}
-	case m.focus == f:
-		text = ui.CursorView(value, m.cur)
-	}
-	row := lab + text
-	if m.focus == f {
-		row = lipgloss.NewStyle().Foreground(pal.Foreground).Render(lab) + text
-	}
-	// Hard truncate: lipgloss MaxWidth WRAPS overlong content (#971).
-	return ansi.Truncate(row, width, "…")
+	// The remembered query is "selected" (#277): rendered inverted so it
+	// reads as replace-on-type. Hard truncate: lipgloss MaxWidth WRAPS
+	// overlong content (#971) — both handled by ui.InputRow.
+	return ui.InputRow(m.theme(), label, value, f == fieldQuery, m.preselect, m.focus == f, m.cur, width)
 }
 
 // The toggle row's fixed pieces; toggleSpans derives the click ranges from
@@ -905,19 +884,11 @@ const (
 // togglesRow renders the three match-mode toggles with their key hints
 // (ctrl is the delivered primary on macOS, #422; alt still works elsewhere).
 func (m *Model) togglesRow(width int) string {
-	pal := m.theme()
-	on := lipgloss.NewStyle().Foreground(pal.BorderFocus).Bold(true)
-	off := lipgloss.NewStyle().Faint(true)
-	part := func(label string, active bool) string {
-		if active {
-			return on.Render("[x] " + label)
-		}
-		return off.Render("[ ] " + label)
-	}
-	row := togglesIndent + part(caseLabel, m.caseSensitive) +
-		"  " + part(wordLabel, m.wholeWord) +
-		"  " + part(regexLabel, m.regex)
-	return ansi.Truncate(row, width, "…")
+	return ui.TogglesRow(m.theme(), togglesIndent, width,
+		ui.Toggle{Label: caseLabel, Active: m.caseSensitive},
+		ui.Toggle{Label: wordLabel, Active: m.wholeWord},
+		ui.Toggle{Label: regexLabel, Active: m.regex},
+	)
 }
 
 // previewRows renders the before/after preview for the selected match in

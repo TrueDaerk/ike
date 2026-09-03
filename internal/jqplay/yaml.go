@@ -42,6 +42,8 @@ import (
 
 	"github.com/itchyny/gojq"
 	"gopkg.in/yaml.v3"
+
+	"ike/internal/yamljson"
 )
 
 // MaxYAMLNodes caps how many values one YAML stream may expand into. Aliases
@@ -223,61 +225,12 @@ func yamlKey(n *yaml.Node, budget *int) (string, error) {
 // schema does not cover (a timestamp, a `!Ref`, a binary blob) stays the
 // string it was written as: a query language has nothing better to do with a
 // value it cannot compute on, and dropping to a string keeps it visible.
-func yamlScalar(n *yaml.Node) any {
-	switch n.Tag {
-	case "!!null":
-		return nil
-	case "!!bool":
-		var b bool
-		if err := n.Decode(&b); err == nil {
-			return b
-		}
-		return n.Value
-	case "!!int":
-		var i int64
-		if err := n.Decode(&i); err == nil {
-			return json.Number(strconv.FormatInt(i, 10))
-		}
-		var u uint64
-		if err := n.Decode(&u); err == nil {
-			return json.Number(strconv.FormatUint(u, 10))
-		}
-		if _, ok := new(big.Int).SetString(n.Value, 10); ok {
-			return json.Number(n.Value) // wider than int64: keep every digit
-		}
-		return n.Value
-	case "!!float":
-		var f float64
-		if err := n.Decode(&f); err != nil {
-			return n.Value
-		}
-		if math.IsInf(f, 0) || math.IsNaN(f) {
-			return f // `.inf` / `.nan`: no decimal spelling, but gojq has them
-		}
-		if isDecimal(n.Value) {
-			return json.Number(n.Value) // keep `1.50` as written
-		}
-		return json.Number(strconv.FormatFloat(f, 'g', -1, 64))
-	}
-	return n.Value
-}
+func yamlScalar(n *yaml.Node) any { return yamljson.Scalar(n) }
 
 // isDecimal reports whether s is already a JSON number literal, in which case
-// it can be carried as json.Number unchanged.
-func isDecimal(s string) bool {
-	if s == "" {
-		return false
-	}
-	if _, err := strconv.ParseFloat(s, 64); err != nil {
-		return false
-	}
-	for _, r := range s {
-		if !(r >= '0' && r <= '9') && r != '-' && r != '+' && r != '.' && r != 'e' && r != 'E' {
-			return false
-		}
-	}
-	return true
-}
+// it can be carried as json.Number unchanged. Delegates to yamljson.IsDecimal,
+// shared with the jq path finder (internal/jqpath).
+func isDecimal(s string) bool { return yamljson.IsDecimal(s) }
 
 // encodeYAML renders one output value as a YAML document, without the
 // trailing newline the encoder adds — the result buffer joins the documents

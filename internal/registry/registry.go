@@ -118,20 +118,35 @@ func (r *Registry) SettingsPages() []settings.Page {
 	return out
 }
 
+// collect gathers items of type T from every active plugin's capabilities via
+// get, dropping duplicates by the key id returns (first owner by sorted
+// plugin order wins), and wraps each survivor with its owning plugin id via
+// wrap. Shared by Commands and Panes, whose dedupe-by-id-first-owner-wins
+// shape is otherwise identical.
+func collect[T, O any](r *Registry, get func(plugin.Plugin) []T, id func(T) string, wrap func(owner string, t T) O) []O {
+	seen := map[string]bool{}
+	var out []O
+	for _, p := range r.activePlugins() {
+		for _, item := range get(p) {
+			key := id(item)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, wrap(p.ID(), item))
+		}
+	}
+	return out
+}
+
 // Commands returns enabled commands, ordered by id. Conflicting duplicates are
 // dropped (first owner by sorted plugin order wins); see Conflicts.
 func (r *Registry) Commands() []OwnedCommand {
-	seen := map[string]bool{}
-	var out []OwnedCommand
-	for _, p := range r.activePlugins() {
-		for _, c := range p.Capabilities().Commands {
-			if seen[c.ID] {
-				continue
-			}
-			seen[c.ID] = true
-			out = append(out, OwnedCommand{Owner: p.ID(), Command: c})
-		}
-	}
+	out := collect(r,
+		func(p plugin.Plugin) []plugin.Command { return p.Capabilities().Commands },
+		func(c plugin.Command) string { return c.ID },
+		func(owner string, c plugin.Command) OwnedCommand { return OwnedCommand{Owner: owner, Command: c} },
+	)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
@@ -228,17 +243,11 @@ func (r *Registry) ResolveKey(keys, ctxID string) (OwnedKeymap, bool) {
 
 // Panes returns enabled panes, ordered by id. Duplicate ids are dropped.
 func (r *Registry) Panes() []OwnedPane {
-	seen := map[string]bool{}
-	var out []OwnedPane
-	for _, p := range r.activePlugins() {
-		for _, pane := range p.Capabilities().Panes {
-			if seen[pane.ID] {
-				continue
-			}
-			seen[pane.ID] = true
-			out = append(out, OwnedPane{Owner: p.ID(), Pane: pane})
-		}
-	}
+	out := collect(r,
+		func(p plugin.Plugin) []plugin.Pane { return p.Capabilities().Panes },
+		func(pane plugin.Pane) string { return pane.ID },
+		func(owner string, pane plugin.Pane) OwnedPane { return OwnedPane{Owner: owner, Pane: pane} },
+	)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }

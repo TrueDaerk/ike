@@ -436,23 +436,7 @@ func (f *Form) theme() *theme.Palette {
 // inputRow renders one labelled input line with a block cursor on the focused
 // field, on the finder's terms.
 func (f *Form) inputRow(label, value string, fld field, width int) string {
-	pal := f.theme()
-	lab := lipgloss.NewStyle().Faint(true).Render(label + " ")
-	text := value
-	switch {
-	case fld == fieldQuery && f.preselect && value != "":
-		text = lipgloss.NewStyle().Reverse(true).Render(value)
-		if f.focus == fld {
-			text += lipgloss.NewStyle().Reverse(true).Render(" ")
-		}
-	case f.focus == fld:
-		text = ui.CursorView(value, f.cur)
-	}
-	row := lab + text
-	if f.focus == fld {
-		row = lipgloss.NewStyle().Foreground(pal.Foreground).Render(lab) + text
-	}
-	return ansi.Truncate(row, width, "…")
+	return ui.InputRow(f.theme(), label, value, fld == fieldQuery, f.preselect, f.focus == fld, f.cur, width)
 }
 
 // The toggle row's fixed pieces; toggleSpans derives the click ranges.
@@ -479,19 +463,11 @@ func toggleSpans() [3][2]int {
 
 // togglesRow renders the three match-mode toggles with their key hints.
 func (f *Form) togglesRow(width int) string {
-	pal := f.theme()
-	on := lipgloss.NewStyle().Foreground(pal.BorderFocus).Bold(true)
-	off := lipgloss.NewStyle().Faint(true)
-	part := func(label string, active bool) string {
-		if active {
-			return on.Render("[x] " + label)
-		}
-		return off.Render("[ ] " + label)
-	}
-	row := togglesIndent + part(caseLabel, f.caseSensitive) +
-		"  " + part(wordLabel, f.wholeWord) +
-		"  " + part(regexLabel, f.regex)
-	return ansi.Truncate(row, width, "…")
+	return ui.TogglesRow(f.theme(), togglesIndent, width,
+		ui.Toggle{Label: caseLabel, Active: f.caseSensitive},
+		ui.Toggle{Label: wordLabel, Active: f.wholeWord},
+		ui.Toggle{Label: regexLabel, Active: f.regex},
+	)
 }
 
 // projectsHeading labels the project list with the kept/total count.

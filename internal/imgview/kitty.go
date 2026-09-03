@@ -105,6 +105,46 @@ func PlaceholderGrid(id, cols, rows int) []string {
 	return out
 }
 
+// PlacedImage is the per-image Kitty placement state a buffer compositing
+// more than one image keeps: the grid the latest render wants versus the
+// grid the terminal actually holds, diffed by SyncSeqs. The notebook viewer
+// (one entry per cell output) and the markdown preview's inline images (one
+// per referenced file) each embed it in their own per-image record, which
+// also carries the decoded image, its dimensions and its byte size — none of
+// that is needed to drive the reconcile, so it stays out of PlacedImage.
+type PlacedImage struct {
+	ID                 int
+	Img                image.Image
+	Cols, Rows         int // grid the latest render placed, 0 when unplaced
+	SentCols, SentRows int // grid the terminal holds, 0 when nothing is resident
+}
+
+// SyncSeqs returns the raw sequences bringing the terminal's placements in
+// line with the latest render — transmit on first show, delete + transmit
+// after a resize, nothing when already current — and records the applied
+// state on each entry. Called by the app's reconcile pass, only on
+// supporting terminals. Shared by the notebook viewer and the markdown
+// preview's inline images, whose own SyncSeqs was otherwise byte-for-byte the
+// same function.
+func SyncSeqs(images []*PlacedImage) []string {
+	var out []string
+	for _, im := range images {
+		if im.Cols == 0 || (im.Cols == im.SentCols && im.Rows == im.SentRows) {
+			continue
+		}
+		if im.SentCols > 0 {
+			out = append(out, Delete(im.ID))
+		}
+		seq, err := Transmit(im.ID, im.Img, im.Cols, im.Rows)
+		if err != nil {
+			continue
+		}
+		im.SentCols, im.SentRows = im.Cols, im.Rows
+		out = append(out, seq)
+	}
+	return out
+}
+
 // FitGrid computes the largest cols×rows cell grid inside maxCols×maxRows
 // that preserves the pixel aspect ratio of imgW×imgH, assuming terminal
 // cells are twice as tall as wide. Both dimensions are at least 1.

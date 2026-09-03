@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"ike/internal/pathglob"
 )
 
 // units.go is the user-configurable half of the field context (#1685). The
@@ -279,29 +281,6 @@ func (u Unit) Label() string {
 	return ""
 }
 
-// globMatch reports whether s matches pattern, where `*` stands for any run of
-// characters (including none) and every other character matches itself. Own
-// matcher rather than path.Match: `/` and `\` must be ordinary characters here
-// — a field name may hold either.
-func globMatch(pattern, s string) bool {
-	parts := strings.Split(pattern, "*")
-	if len(parts) == 1 {
-		return pattern == s
-	}
-	if !strings.HasPrefix(s, parts[0]) {
-		return false
-	}
-	s = s[len(parts[0]):]
-	last := parts[len(parts)-1]
-	for _, p := range parts[1 : len(parts)-1] {
-		i := strings.Index(s, p)
-		if i < 0 {
-			return false
-		}
-		s = s[i+len(p):]
-	}
-	if len(last) > len(s) {
-		return false
-	}
-	return strings.HasSuffix(s, last)
-}
+// globMatch delegates to pathglob.StarMatch, shared with the secret-pattern
+// key matcher (internal/secret).
+func globMatch(pattern, s string) bool { return pathglob.StarMatch(pattern, s) }
