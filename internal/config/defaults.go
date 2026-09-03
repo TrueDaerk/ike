@@ -237,6 +237,11 @@ func defaults() *Config {
 			PopupMaxWidth: 110,
 			HScrollMarks:  true,
 		},
+		Layout: Layout{
+			// Pane numbers are on by default (#2407): the badge is what makes
+			// the focus-by-number chords usable without counting panes.
+			PaneNumbers: "on",
+		},
 		Backup: Backup{
 			Enable:     true,
 			DebounceMs: 2000,

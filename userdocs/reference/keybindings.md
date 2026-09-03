@@ -46,6 +46,15 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Find in all projects | `cmd+alt+shift+f` | `ctrl+alt+shift+f` | `project.findInAllProjects` |
 | Find in pane | `cmd+f` | `ctrl+f` | `search.open` |
 | Find in path | `cmd+shift+f` | `ctrl+shift+f` | `project.findInPath` |
+| Focus pane 1 | `ctrl+1` | — | `pane.focus1` |
+| Focus pane 2 | `ctrl+2` | — | `pane.focus2` |
+| Focus pane 3 | `ctrl+3` | — | `pane.focus3` |
+| Focus pane 4 | `ctrl+4` | — | `pane.focus4` |
+| Focus pane 5 | `ctrl+5` | — | `pane.focus5` |
+| Focus pane 6 | `ctrl+6` | — | `pane.focus6` |
+| Focus pane 7 | `ctrl+7` | — | `pane.focus7` |
+| Focus pane 8 | `ctrl+8` | — | `pane.focus8` |
+| Focus pane 9 | `ctrl+9` | — | `pane.focus9` |
 | Full query view | `ctrl+alt+e` | `ctrl+alt+e` | `json.jqQueryView` |
 | Generate test data | `cmd+alt+shift+n` | `ctrl+alt+shift+n` | `scratch.generate` |
 | Go to file | `cmd+shift+o` | `ctrl+shift+o` | `project.goToFile` |

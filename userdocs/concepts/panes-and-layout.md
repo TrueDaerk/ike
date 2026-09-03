@@ -58,6 +58,7 @@ Overlays — the palette, the settings panel, the cheatsheet — are neither: se
 | ++cmd+k++ then ++z++ | Maximize the focused pane, and back |
 | ++ctrl+alt+r++ | Resize the focused pane (see below) |
 | ++ctrl+tab++ | Cycle pane focus (++ctrl++ + arrows moves directionally) |
+| ++ctrl+1++ … ++ctrl+9++ | Focus the pane with that number (macOS; see below) |
 | ++cmd+shift+f12++ | Hide all tool windows |
 | ++shift+f12++ | Restore the default layout |
 
@@ -87,6 +88,25 @@ With the mouse: drag a divider to resize, drag a pane's title bar to move the
 pane somewhere else, right-click a title bar for the pane's context menu. A
 drag only engages after the pointer travels a little, so a plain click on a
 title bar just focuses.
+
+### Focusing a pane by its number
+
+Every visible pane shows a number in its title bar — `[1] EDITOR` — counted in
+reading order: the top row left to right, then the row below it. The numbers
+follow the layout, so splitting, moving or closing a pane renumbers the rest
+immediately, and a maximized pane is simply pane 1 on its own.
+
+On macOS ++ctrl+1++ … ++ctrl+9++ jump straight to the pane with that number.
+(They are deliberately not ++cmd+1++ … ++cmd+9++, which toggle the tool
+windows.) On Linux and Windows those chords are what the ++cmd++ tool-window
+shortcuts fold onto, so the numbers are reached through the command palette
+instead: **Focus Pane by Number…** asks for one. Asking for a pane that is not
+open says so rather than doing nothing.
+
+If the badges are noise to you, `layout.pane_numbers` (Settings →
+**Appearance** → *Pane numbers*) turns them `off`, or sets them to
+`focus-only` — then they appear for a moment whenever you switch panes with
+the keyboard, and stay out of the way otherwise.
 
 !!! note "`ctrl+tab` inside tmux"
     tmux consumes ++ctrl+tab++ for its own tab switching and never forwards

@@ -168,6 +168,16 @@ bring their own.
 | Recent Files | `palette.recentFiles` | `cmd+e` | — | everywhere |
 | Search Everywhere | `palette.searchEverywhere` | `cmd+shift+a` | — | everywhere |
 | Close Pane | `pane.close` | `ctrl+alt+w` | — | everywhere |
+| Focus Pane 1 | `pane.focus1` | `ctrl+1` | — | everywhere |
+| Focus Pane 2 | `pane.focus2` | `ctrl+2` | — | everywhere |
+| Focus Pane 3 | `pane.focus3` | `ctrl+3` | — | everywhere |
+| Focus Pane 4 | `pane.focus4` | `ctrl+4` | — | everywhere |
+| Focus Pane 5 | `pane.focus5` | `ctrl+5` | — | everywhere |
+| Focus Pane 6 | `pane.focus6` | `ctrl+6` | — | everywhere |
+| Focus Pane 7 | `pane.focus7` | `ctrl+7` | — | everywhere |
+| Focus Pane 8 | `pane.focus8` | `ctrl+8` | — | everywhere |
+| Focus Pane 9 | `pane.focus9` | `ctrl+9` | — | everywhere |
+| Focus Pane by Number… | `pane.focusByIndex` | — | — | everywhere |
 | Maximize Pane | `pane.maximize` | `cmd+k z` | — | everywhere |
 | Resize Pane (Keyboard Mode) | `pane.resizeMode` | `ctrl+alt+r` | — | everywhere |
 | Split Down | `pane.splitDown` | `cmd+k down` | — | everywhere |

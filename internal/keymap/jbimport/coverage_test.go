@@ -26,6 +26,7 @@ var noCounterpart = map[string]string{
 	"http.diffPreviousRun":             "IKE-only concept (response history diff, #2060), no JetBrains equivalent",
 	"http.copyResponse":                "IKE-only concept (#2315): JetBrains' $Copy is the editor copy, already mapped to editor.copy",
 	"http.search":                      "IKE-only concept (#2400): the response viewer's in-pane search is a pane key, not a JetBrains keymap action",
+	"http.cancel":                      "IKE-only concept (#2404): JetBrains stops a request from the run tool's button, no keymap action",
 	"debug.copy":                       "IKE-only concept (#2400): JetBrains' debugger copies from its own context menu, no keymap action",
 	"issues.copy":                      "IKE-only concept (#2400): the issues window has no JetBrains counterpart",
 	"issues.selectPrev":                "IKE-only concept (#2400): the issues window has no JetBrains counterpart",
@@ -79,6 +80,15 @@ var noCounterpart = map[string]string{
 	"editor.tab.select7":               "JetBrains has no select-tab-N keymap actions",
 	"editor.tab.select8":               "JetBrains has no select-tab-N keymap actions",
 	"editor.tab.select9":               "JetBrains has no select-tab-N keymap actions",
+	"pane.focus1":                      "numbered panes (#2407) are an IKE concept; JetBrains numbers tool windows, not layout panes",
+	"pane.focus2":                      "numbered panes (#2407) are an IKE concept; JetBrains numbers tool windows, not layout panes",
+	"pane.focus3":                      "numbered panes (#2407) are an IKE concept; JetBrains numbers tool windows, not layout panes",
+	"pane.focus4":                      "numbered panes (#2407) are an IKE concept; JetBrains numbers tool windows, not layout panes",
+	"pane.focus5":                      "numbered panes (#2407) are an IKE concept; JetBrains numbers tool windows, not layout panes",
+	"pane.focus6":                      "numbered panes (#2407) are an IKE concept; JetBrains numbers tool windows, not layout panes",
+	"pane.focus7":                      "numbered panes (#2407) are an IKE concept; JetBrains numbers tool windows, not layout panes",
+	"pane.focus8":                      "numbered panes (#2407) are an IKE concept; JetBrains numbers tool windows, not layout panes",
+	"pane.focus9":                      "numbered panes (#2407) are an IKE concept; JetBrains numbers tool windows, not layout panes",
 }
 
 // TestActionMapCoversDefaults asserts the doc-comment contract on actionMap:
@@ -90,7 +100,15 @@ func TestActionMapCoversDefaults(t *testing.T) {
 		mapped[cmd] = true
 	}
 	seen := make(map[string]bool)
-	for _, b := range keymap.Defaults(keymap.PresetJetBrains) {
+	// Both platforms: the macOS-only rows (keymap.darwinRows) are defaults
+	// too, and the ledger above is platform-independent — judging it against
+	// one platform's table alone would demand an entry on macOS and call the
+	// same entry stale on Linux (#2407).
+	var defaults []keymap.Binding
+	for _, goos := range []string{"darwin", "linux"} {
+		defaults = append(defaults, keymap.DefaultsFor(keymap.PresetJetBrains, goos)...)
+	}
+	for _, b := range defaults {
 		if seen[b.Command] {
 			continue
 		}

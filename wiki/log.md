@@ -1,5 +1,28 @@
 # Log
 
+## 2026-09-03 (pane numbers in the chrome, focus by number, #2407)
+
+- **Every visible pane wears its number.** The pane title bars carry a lazygit
+  style `[1] EDITOR` badge — focus colour on the focused pane, dim on the
+  rest — numbered in reading order over the *computed rectangles*, so nested
+  splits are numbered the way they look. The order is derived from `m.lay` on
+  every read: a split, move, close, restore or zoom renumbers on the next
+  frame with nothing to invalidate. Tool windows count while they are on
+  screen; the popup terminal and the floating panels are not layout leaves and
+  never take a number.
+- **`ctrl+1`…`ctrl+9` focus that pane** (`pane.focus1`…`pane.focus9`), with an
+  out-of-range number answered by a notification rather than by silence. The
+  chords are delivered plain ctrl chords and stay clear of JetBrains'
+  `cmd+digit` tool-window numbering. They are macOS-only rows: off macOS the
+  Cmd→Ctrl fold puts `explorer.toggle`, `nav.pins` and `vcs.panel` on exactly
+  those chords, so there the new `pane.focusByIndex` ("Focus Pane by Number…")
+  prompt is the doorway — the reason is recorded in the keybind audit ledger.
+- **`layout.pane_numbers` = `on` / `off` / `focus-only`** (Settings →
+  Appearance). `focus-only` shows the badges only while the which-pane hint is
+  up: a keyboard pane switch raises it and schedules a generation-tagged
+  expiry, so a faster second switch outruns the older timer and the numbers
+  are on screen exactly while panes are being switched.
+
 ## 2026-09-03 (run to cursor, PHP inline values, "Add Condition…", #2405)
 
 - **`debug.runToCursor` (alt+F9) resumes towards the cursor line** instead of

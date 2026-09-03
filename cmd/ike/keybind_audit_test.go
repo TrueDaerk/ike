@@ -52,55 +52,64 @@ const (
 	reasonMenu = "lives in the menu or a context menu where it acts"
 	// Run once in a blue moon — setup, diagnostics, one-off maintenance.
 	reasonOccasional = "occasional one-off; the palette is the right doorway"
+	// The chord ships on one platform only (keymap.darwinRows): elsewhere the
+	// Cmd→Ctrl fold would land it on a chord another default already owns, so
+	// the palette is the doorway there.
+	reasonPlatformChord = "platform-specific chord; palette on the other platforms"
 )
 
 // unboundFamilies covers whole command families by id prefix. A family entry
 // must match at least one registered, unbound command.
 var unboundFamilies = []struct{ prefix, reason string }{
-	{"themes.select.", reasonPickerItem},          // the theme picker's entries
-	{"scratch.new.", reasonPickerItem},            // cmd+shift+n's language picker
-	{"file.setEncoding.", reasonPickerItem},       // the status line's encoding picker
-	{"file.setLineEndings.", reasonPickerItem},    // the status line's line-ending picker
-	{"editor.fold.", reasonVimKey},                // za / zo / zc / zR / zM / zy
-	{"merge.", reasonVimKey},                      // go / gt / … in the merge view
-	{"explorer.", reasonPaneKey},                  // the tree's own keys while it is focused
-	{"http.", reasonPaneKey},                      // the response pane's single keys
-	{"view.toggle", reasonMenu},                   // the View menu's rendering toggles
-	{"data.", reasonPaneKey},                      // the grid pane's keys
-	{"csv.", reasonPaneKey},                       // the CSV grid's keys
-	{"archive.", reasonPaneKey},                   // the archive pane's entry list
-	{"nav.pinSlot", reasonMenu},                   // pinning goes through cmd+2's picker (#788)
-	{"bookmark.", reasonFlavour},                  // mnemonic/annotation flavours of f11
-	{"keymap.", reasonOccasional},                 // keymap doctor and the JetBrains import
-	{"diag.", reasonOccasional},                   // heap dump and memory statistics
-	{"json.jqFilters", reasonPaneKey},             // the playground's ctrl+l library
-	{"json.jqRenameFilter", reasonPaneKey},        // …and its rename flavour
-	{"json.jqSaveFilter", reasonPaneKey},          // the playground's ctrl+s
-	{"json.jqCheatsheet", reasonPaneKey},          // the playground's ctrl+g language sheet (#2382)
-	{"yaml.yqFilters", reasonPaneKey},             // the yq twins of the four above
-	{"yaml.yqRenameFilter", reasonPaneKey},        //
-	{"yaml.yqCheatsheet", reasonPaneKey},          //
-	{"json.jqPlaygroundAtPath", reasonIntention},  // "jq Playground at Cursor Path"
-	{"yaml.yqPlaygroundAtPath", reasonIntention},  //
-	{"editor.copyDocPathJQ", reasonFlavour},       // cmd+alt+shift+c is the everyday form
-	{"editor.copyDocPathYQ", reasonFlavour},       //
-	{"editor.undoChrono", reasonVimKey},           // g-
-	{"editor.redoChrono", reasonVimKey},           // g+
-	{"file.copyRelPath", reasonFlavour},           // cmd+shift+c is the everyday form
-	{"file.copyReference", reasonFlavour},         //
-	{"run.testsWithCoverage", reasonOccasional},   // #2081: the run family's chord budget is spent
-	{"lsp.formatRange", reasonFlavour},            // cmd+alt+l already reformats a selection
-	{"project.peek.keep", reasonMenu},             // offered by the peek pane itself
-	{"view.exportWindowScreenshot", reasonMenu},   // View menu, next to the pane flavour
-	{"view.exportScreenshot", reasonMenu},         //
-	{"view.clearFollowFilter", reasonFlavour},     // alt+shift+g sets and clears the filter
-	{"view.followHighlight", reasonFlavour},       // the highlight-only flavour of alt+shift+g
-	{"window.saveLayout", reasonMenu},             // saved from the layout picker
-	{"window.setDefaultLayout", reasonMenu},       //
-	{"terminal.clear", reasonPaneKey},             // the terminal's own clear
-	{"terminal.ssh", reasonOccasional},            //
-	{"vcs.nextChange", reasonVimKey},              // ]c
-	{"vcs.prevChange", reasonVimKey},              // [c
+	{"themes.select.", reasonPickerItem},       // the theme picker's entries
+	{"scratch.new.", reasonPickerItem},         // cmd+shift+n's language picker
+	{"file.setEncoding.", reasonPickerItem},    // the status line's encoding picker
+	{"file.setLineEndings.", reasonPickerItem}, // the status line's line-ending picker
+	{"editor.fold.", reasonVimKey},             // za / zo / zc / zR / zM / zy
+	{"merge.", reasonVimKey},                   // go / gt / … in the merge view
+	{"explorer.", reasonPaneKey},               // the tree's own keys while it is focused
+	{"http.", reasonPaneKey},                   // the response pane's single keys
+	{"view.toggle", reasonMenu},                // the View menu's rendering toggles
+	{"data.", reasonPaneKey},                   // the grid pane's keys
+	{"csv.", reasonPaneKey},                    // the CSV grid's keys
+	{"archive.", reasonPaneKey},                // the archive pane's entry list
+	{"nav.pinSlot", reasonMenu},                // pinning goes through cmd+2's picker (#788)
+	{"bookmark.", reasonFlavour},               // mnemonic/annotation flavours of f11
+	// #2407's pane numbers: ctrl+1…9 is a darwinRows family (off macOS those
+	// chords are what the cmd+digit tool-window bindings fold onto), and the
+	// typed flavour is the palette doorway on every platform.
+	{"pane.focus", reasonPlatformChord},
+	{"pane.focusByIndex", reasonFlavour},
+	{"keymap.", reasonOccasional},                // keymap doctor and the JetBrains import
+	{"diag.", reasonOccasional},                  // heap dump and memory statistics
+	{"json.jqFilters", reasonPaneKey},            // the playground's ctrl+l library
+	{"json.jqRenameFilter", reasonPaneKey},       // …and its rename flavour
+	{"json.jqSaveFilter", reasonPaneKey},         // the playground's ctrl+s
+	{"json.jqCheatsheet", reasonPaneKey},         // the playground's ctrl+g language sheet (#2382)
+	{"yaml.yqFilters", reasonPaneKey},            // the yq twins of the four above
+	{"yaml.yqRenameFilter", reasonPaneKey},       //
+	{"yaml.yqCheatsheet", reasonPaneKey},         //
+	{"json.jqPlaygroundAtPath", reasonIntention}, // "jq Playground at Cursor Path"
+	{"yaml.yqPlaygroundAtPath", reasonIntention}, //
+	{"editor.copyDocPathJQ", reasonFlavour},      // cmd+alt+shift+c is the everyday form
+	{"editor.copyDocPathYQ", reasonFlavour},      //
+	{"editor.undoChrono", reasonVimKey},          // g-
+	{"editor.redoChrono", reasonVimKey},          // g+
+	{"file.copyRelPath", reasonFlavour},          // cmd+shift+c is the everyday form
+	{"file.copyReference", reasonFlavour},        //
+	{"run.testsWithCoverage", reasonOccasional},  // #2081: the run family's chord budget is spent
+	{"lsp.formatRange", reasonFlavour},           // cmd+alt+l already reformats a selection
+	{"project.peek.keep", reasonMenu},            // offered by the peek pane itself
+	{"view.exportWindowScreenshot", reasonMenu},  // View menu, next to the pane flavour
+	{"view.exportScreenshot", reasonMenu},        //
+	{"view.clearFollowFilter", reasonFlavour},    // alt+shift+g sets and clears the filter
+	{"view.followHighlight", reasonFlavour},      // the highlight-only flavour of alt+shift+g
+	{"window.saveLayout", reasonMenu},            // saved from the layout picker
+	{"window.setDefaultLayout", reasonMenu},      //
+	{"terminal.clear", reasonPaneKey},            // the terminal's own clear
+	{"terminal.ssh", reasonOccasional},           //
+	{"vcs.nextChange", reasonVimKey},             // ]c
+	{"vcs.prevChange", reasonVimKey},             // [c
 	// #2417's line-set family: alt+shift+s is the everyday sort, and the seven
 	// siblings are flavours of it (or, for shuffle, a once-in-a-while tool).
 	{"editor.sortLinesIgnoreCase", reasonFlavour},
