@@ -36,8 +36,6 @@ var handRolledScroll = regexp.MustCompile(
 var allowedScroll = map[string]string{
 	// Extracted into a shared hierarchy package by #2465, which adopts
 	// ui.ScrollToShow there; kept out of the #2462 sweep to avoid the clash.
-	"internal/callhier/callhier.go": "moving to the shared hierarchy package (#2465)",
-	"internal/typehier/typehier.go": "moving to the shared hierarchy package (#2465)",
 	// The explorer's scratch section scrolls independently of the tree above
 	// it and has its own documented stability contract (scroll_stability_test.go):
 	// the window is offset-anchored, not cursor-anchored, and a cursor of -1
