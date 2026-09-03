@@ -25,6 +25,7 @@ import (
 	"ike/internal/httppane"
 	"ike/internal/layout"
 	"ike/internal/pane"
+	"ike/internal/telemetry"
 )
 
 // http.go wires the HTTP client UX (#1250, epic #1247): http.run dispatches
@@ -407,18 +408,20 @@ func (m *Model) dispatchHTTP(source, key, label string,
 		return nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	// Flight lifecycle (#2348, timed through the shared helper since #2403):
+	// the start event — plus everything enqueued before it, the dispatching
+	// command event included — is flushed to disk before the exchange leaves,
+	// so a dispatch that never comes back is still attributable ("start
+	// without end") instead of invisible. Structural only: no URL, no request
+	// key, no label.
+	endOp := m.usage.OpTimer(telemetry.OpHTTPFlight)
 	tick := m.startHTTPFlight(flightKey, &httpFlightEntry{
 		label:   label,
 		request: key,
 		started: time.Now(),
 		cancel:  cancel,
+		endOp:   endOp,
 	})
-	// Flight lifecycle (#2348): the start event — plus everything enqueued
-	// before it, the dispatching command event included — is flushed to disk
-	// before the exchange leaves, so a dispatch that never comes back is still
-	// attributable ("start without end") instead of invisible. Structural
-	// only: no URL, no request key, no label.
-	m.usage.Op("http.flight", "start", nil)
 	m.usage.FlushSoon()
 	events := make(chan tea.Msg, 32)
 	// Chunks coalesce per quiet window (#2176): one message — one Update pass,
@@ -949,6 +952,10 @@ type httpFlightEntry struct {
 	// streamed marks a dispatch whose response was recognized as a stream
 	// (#1776) — the flight-end telemetry event carries it (#2348).
 	streamed bool
+	// endOp closes the flight's op lifecycle event (#2403): the closer
+	// telemetry.OpTimer handed out when the dispatch left, which stamps the
+	// elapsed ms into the end phase. Nil for a foreign entry.
+	endOp func(phase string, detail map[string]string)
 }
 
 // httpTickMsg repaints the in-flight indicator while requests run. gen names
@@ -1066,10 +1073,7 @@ func (m *Model) recordHTTPFlightEnd(e *httpFlightEntry, msg HTTPResponseMsg) {
 	case msg.Err != nil:
 		phase = "error"
 	}
-	d := map[string]string{
-		"ms":     strconv.FormatInt(time.Since(e.started).Milliseconds(), 10),
-		"stream": strconv.FormatBool(e.streamed),
-	}
+	d := map[string]string{"stream": strconv.FormatBool(e.streamed)}
 	if msg.Resp != nil && msg.Resp.StatusCode > 0 {
 		d["class"] = fmt.Sprintf("%dxx", msg.Resp.StatusCode/100)
 	}
@@ -1088,7 +1092,15 @@ func (m *Model) recordHTTPFlightEnd(e *httpFlightEntry, msg HTTPResponseMsg) {
 		d["transfer_ms"] = ms(t.Transfer)
 		d["reused"] = strconv.FormatBool(t.Reused)
 	}
-	m.usage.Op("http.flight", phase, d)
+	// The timer carries the ms field (#2403); an entry without one — a foreign
+	// model's, or a test-built stub — falls back to its own start stamp so the
+	// event keeps its shape.
+	if e.endOp != nil {
+		e.endOp(phase, d)
+		return
+	}
+	d["ms"] = strconv.FormatInt(time.Since(e.started).Milliseconds(), 10)
+	m.usage.Op(telemetry.OpHTTPFlight, phase, d)
 }
 
 // httpFlightMarks builds the inline indicators for one .http buffer (#1746):

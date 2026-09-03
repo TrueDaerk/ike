@@ -187,7 +187,9 @@ func TestTelemetryHTTPFlightCarriesTiming(t *testing.T) {
 		}}})
 	m = tm.(Model)
 
-	ops := eventsOf(usageEvents(t, m), telemetry.TypeOp)
+	// Only this flight's ops: the launch also records its session.restore
+	// span (#2403).
+	ops := opsOf(usageEvents(t, m), telemetry.OpHTTPFlight)
 	if len(ops) != 2 {
 		t.Fatalf("want start + end ops, got %v", ops)
 	}

@@ -13,6 +13,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/pane"
 	"ike/internal/project"
+	"ike/internal/telemetry"
 	"ike/internal/ui"
 	"ike/internal/workspace"
 )
@@ -191,6 +192,17 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 // marker, and the departing state save.
 func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.Cmd) {
 	departing := m.activeWS().Root
+	// The switch is a timed operation (#2403): telemetry only ever held the
+	// layout marker and the session marker, so the seconds between them —
+	// chdir, state persistence, layout restore, LSP warm-up — were invisible.
+	// The op pair brackets exactly the transaction below; a failed chdir ends
+	// it as "error", the ready model as "ok".
+	switchStart := time.Now()
+	endOp := m.usage.OpTimer(telemetry.OpProjectSwitch)
+	// Whether the target is a workspace coming back from the background is
+	// known before the rebuild consumes it, and it is the first thing that
+	// explains a fast switch from a slow one.
+	parked := m.ws.Peek(root) != nil
 	// The departing peeked project's state stays unwritten when the peek
 	// changed nothing (#2136): a never-visited project keeps no .ike residue
 	// from a quick look-up.
@@ -213,6 +225,7 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// the working directory (#2408).
 	leaveToken := telemetryProjectToken()
 	if err := os.Chdir(root); err != nil {
+		endOp("error", map[string]string{"parked": strconv.FormatBool(parked)})
 		return m, func() tea.Msg { return project.SwitchFailedMsg{Path: root, Err: err} }
 	}
 	// The departing project's time budget closes here: after the chdir
@@ -436,6 +449,19 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	case opts.record:
 		recordCmd = project.RecordOpenCmd(config.Discover("."), root, time.Now())
 	}
+	// The switch transaction ends here: the new model is built, sized,
+	// reconciled and ready to render (#2403). panes counts what had to be
+	// restored or resumed — the main cost driver next to the parked flag. The
+	// language servers are not part of this span: their first publish for the
+	// new root arrives asynchronously long after the model is ready, so lsp is
+	// -1 here and the armed wait reports the real number as its own "lsp"
+	// phase on the same op id (telemetry.go).
+	sized.switchLSPWait = &switchLSPWait{start: switchStart}
+	endOp("ok", map[string]string{
+		"parked": strconv.FormatBool(parked),
+		"panes":  strconv.Itoa(len(sized.activeWS().Panes.Keys())),
+		"lsp":    "-1",
+	})
 	return sized, tea.Batch(
 		fresh.Init(),
 		sizeCmd,

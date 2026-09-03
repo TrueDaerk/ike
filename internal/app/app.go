@@ -902,33 +902,34 @@ type Model struct {
 	// palette is the command palette overlay (Roadmap 0070): a modal input that
 	// fronts registered commands (":") and file search ("@"). paletteKey is the
 	// default key that opens it (the final binding is Roadmap 0080's).
-	palette     *palette.Palette
-	projGit     *project.GitCache    // async branch/dirty context of picker rows (#2178)
-	cmdUsage    *palette.Usage       // most-used command ranking (#773)
-	fileUsage   *palette.Usage       // most-used file ranking in the ranked palettes (#1419)
-	cmdFrec     *frecency.Store      // command-execution frecency boost (#2153)
-	usage       *telemetry.Recorder  // local-only usage telemetry (#2235); session state, rides across project switches
-	projClock   *projectClock        // foreground time in the current project, for project.leave (#2408); per-project, not carried across a switch
-	pendUnbound *unboundKey          // unbound chord awaiting the focused editor's verdict (#2303)
-	fileFrec    *frecency.Store      // file-open frecency ranking in the "@" finder (#2155)
-	projFrec    *frecency.Store      // project-switch frecency, user-scoped: the Recent Projects column (#2399)
-	winSizes    *ui.WinSizes         // persisted floating-window resize deltas (#774)
-	winSizesAll *ui.WinSizes         // user-scoped last-resize deltas, fallback for fresh projects (#1714)
-	floatDrag   *floatResizeDrag     // live mouse resize of a floating window (#933)
-	floatMove   *floatMoveDrag       // live titlebar move of a floating terminal (#1793)
-	pins        *pinStore            // harpoon-style pinned file slots (#788)
-	toolHide    *toolHideSnapshot    // hide-all-tool-windows snapshot (#791)
-	termShiftAt time.Time            // last bare-shift tap in a terminal (#973)
-	pinSel      int                  // pin-picker selection
-	pinPicker   bool                 // pin picker owns the modal shell
-	lhStore     *localhistory.Store  // local-history snapshot store (#1023)
-	lhSel       int                  // local-history panel selection
-	lhPicker    bool                 // local-history panel owns the modal shell
-	lhPath      string               // file the open panel lists
-	lhEntries   []localhistory.Entry // its snapshots, newest-first
-	lhCur       string               // buffer text the open panel diffs against
-	lhDiff      diff.Result          // selected snapshot vs lhCur, for the inline diff pane
-	lhErr       string               // selection's snapshot load error, shown in place of the diff
+	palette       *palette.Palette
+	projGit       *project.GitCache    // async branch/dirty context of picker rows (#2178)
+	cmdUsage      *palette.Usage       // most-used command ranking (#773)
+	fileUsage     *palette.Usage       // most-used file ranking in the ranked palettes (#1419)
+	cmdFrec       *frecency.Store      // command-execution frecency boost (#2153)
+	usage         *telemetry.Recorder  // local-only usage telemetry (#2235); session state, rides across project switches
+	projClock     *projectClock        // foreground time in the current project, for project.leave (#2408); per-project, not carried across a switch
+	switchLSPWait *switchLSPWait       // LSP warm-up timer of the project just switched into (#2403); nil once reported
+	pendUnbound   *unboundKey          // unbound chord awaiting the focused editor's verdict (#2303)
+	fileFrec      *frecency.Store      // file-open frecency ranking in the "@" finder (#2155)
+	projFrec      *frecency.Store      // project-switch frecency, user-scoped: the Recent Projects column (#2399)
+	winSizes      *ui.WinSizes         // persisted floating-window resize deltas (#774)
+	winSizesAll   *ui.WinSizes         // user-scoped last-resize deltas, fallback for fresh projects (#1714)
+	floatDrag     *floatResizeDrag     // live mouse resize of a floating window (#933)
+	floatMove     *floatMoveDrag       // live titlebar move of a floating terminal (#1793)
+	pins          *pinStore            // harpoon-style pinned file slots (#788)
+	toolHide      *toolHideSnapshot    // hide-all-tool-windows snapshot (#791)
+	termShiftAt   time.Time            // last bare-shift tap in a terminal (#973)
+	pinSel        int                  // pin-picker selection
+	pinPicker     bool                 // pin picker owns the modal shell
+	lhStore       *localhistory.Store  // local-history snapshot store (#1023)
+	lhSel         int                  // local-history panel selection
+	lhPicker      bool                 // local-history panel owns the modal shell
+	lhPath        string               // file the open panel lists
+	lhEntries     []localhistory.Entry // its snapshots, newest-first
+	lhCur         string               // buffer text the open panel diffs against
+	lhDiff        diff.Result          // selected snapshot vs lhCur, for the inline diff pane
+	lhErr         string               // selection's snapshot load error, shown in place of the diff
 
 	// The project-wide local-history timeline (#2171): every file's snapshots
 	// on one day-grouped axis, handing a picked row to the per-file panel.
@@ -1634,8 +1635,16 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		m.tabViews = tabViewIndex(s.Panes)
 	}
 	if resumed == nil {
+		// Reading layout.json and session.json back — panes, tabs, editors,
+		// caret framing — is the one startup phase whose cost scales with what
+		// the user left open, so it gets its own op span (#2403). Only the
+		// startup model's recorder ever writes it: a project switch builds its
+		// model on a recorder that is discarded right after (switch.go), and
+		// the event alone never opens a session file (startsSession).
+		endOp := m.usage.OpTimer(telemetry.OpSessionRestore)
 		m.restoreLayout(cfg)
 		m.restoreSession()
+		endOp("ok", map[string]string{"panes": strconv.Itoa(len(m.activeWS().Panes.Keys()))})
 	} else if extras, ok := resumed.Aux.(wsExtras); ok {
 		// The debug session parked with the workspace re-attaches (#777).
 		m.dbg = extras.dbg
@@ -7107,6 +7116,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the ignore filter first (#1259, diag_ignore.go).
 		cmd := m.applyDiagnostics(msg.Path, msg.Diagnostics)
 		m.refreshProblemsPanel()
+		// First publish after a project switch closes the warm-up span (#2403).
+		m.noteSwitchLSPReady()
 		return m, cmd
 
 	case ilsp.DiagnosticsBatchMsg:
@@ -7122,6 +7133,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.refreshProblemsPanel()
+		m.noteSwitchLSPReady() // warm-up span, as above (#2403)
 		return m, tea.Batch(cmds...)
 
 	case ilsp.IgnoreDiagnosticMsg:
