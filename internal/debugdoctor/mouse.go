@@ -23,8 +23,6 @@ func (m *Model) Wheel(delta int) {
 
 // Click selects the row under content-local (x, y).
 func (m *Model) Click(x, y int) tea.Cmd {
-	if i, ok := ui.RowAt(y, m.top, headerRows, m.bodyHeight(), len(m.entries())); ok {
-		m.cursor = i
-	}
+	ui.SelectClick(y, m.top, headerRows, m.bodyHeight(), len(m.entries()), &m.cursor)
 	return nil
 }

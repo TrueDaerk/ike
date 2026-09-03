@@ -584,15 +584,7 @@ func (m *Model) View() string {
 
 // header names the file the tree belongs to plus the node count.
 func (m *Model) header(pal *theme.Palette) string {
-	name := "(no file)"
-	if m.path != "" {
-		name = baseName(m.path)
-	}
-	s := lipgloss.NewStyle().Foreground(pal.Secondary)
-	if m.focused {
-		s = lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
-	}
-	return " " + s.Render(name) + " " + lipgloss.NewStyle().Faint(true).Render("("+strconv.Itoa(len(m.rows))+")")
+	return ui.FileHeader(pal, m.path, len(m.rows), m.focused)
 }
 
 // selectorLine renders the selector input with its match count or error.

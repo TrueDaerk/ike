@@ -314,23 +314,14 @@ func stateRadio(s StateFilter) string {
 
 // renderRows draws the filtered issue list scrolled around the cursor.
 func (m *Model) renderRows(pal *theme.Palette, height int) string {
-	if len(m.rows) == 0 {
-		return lipgloss.NewStyle().Faint(true).Render(" "+m.emptyText()) + strings.Repeat("\n", height)
-	}
 	m.clampScroll()
-	var b strings.Builder
-	for k := 0; k < height; k++ {
-		i := m.top + k
-		if i < len(m.rows) {
-			if h := m.rows[i].header; h != "" {
-				b.WriteString(m.renderGroupHeader(pal, h))
-			} else {
-				b.WriteString(m.renderRow(pal, i))
-			}
+	empty := lipgloss.NewStyle().Faint(true).Render(" " + m.emptyText())
+	return ui.RenderWindow(m.top, height, len(m.rows), empty, func(i int) string {
+		if h := m.rows[i].header; h != "" {
+			return m.renderGroupHeader(pal, h)
 		}
-		b.WriteString("\n")
-	}
-	return b.String()
+		return m.renderRow(pal, i)
+	})
 }
 
 // renderGroupHeader draws one "group by label" divider row.

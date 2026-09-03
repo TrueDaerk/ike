@@ -95,6 +95,20 @@ func ScrollToShowOff(top, sel, height, n, off int) int {
 	return top
 }
 
+// ClampWindow is the whole keyboard-side scroll invariant of a list pane in
+// one call (#2462): it confines the cursor to the list and then moves the
+// height-row window so the cursor is inside it. Every list pane used to carry
+// its own hand-written clampScroll for this; they were character-identical
+// apart from how they counted their rows.
+//
+// Against those copies it fixes one case they all missed: a window whose top
+// sits past the last full page is pulled back up, so a list that shrinks
+// under a parked window no longer renders a screen of blank rows.
+func ClampWindow(cursor, top *int, n, height int) {
+	*cursor = ClampIndex(*cursor, n)
+	*top = ScrollToShow(*top, *cursor, height, n)
+}
+
 // NavKeys selects which key aliases ListNav recognises. Views differ in what
 // they can spare: a list behind a text query cannot claim j/k or home/end,
 // a modal picker can.
