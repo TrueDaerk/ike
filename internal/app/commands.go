@@ -430,6 +430,13 @@ type OpenPlaygroundMsg struct{ Dialect jqplay.Dialect }
 // yaml.yqPlaygroundAtPath.
 type OpenPlaygroundAtPathMsg struct{ Dialect jqplay.Dialect }
 
+// OpenPlaygroundForBufferMsg opens whichever playground speaks the focused
+// buffer's language (#2415): jq for JSON, yq for YAML, xmq for XML/HTML —
+// one chord for "query this file", with the per-dialect commands still there
+// for anyone who wants them bound separately. A language no playground speaks
+// answers in a notification. Dispatched by playground.open.
+type OpenPlaygroundForBufferMsg struct{}
+
 // TogglePlaygroundQueryViewMsg toggles the playground's expanded query view (#2032):
 // the query line lays the whole program out over several wrapped rows —
 // broken at its `|` stages, highlighted like the one-line view — instead of
@@ -554,6 +561,11 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("file.openInBrowser", "Open in Browser", OpenInBrowserMsg{}),
 			appCommand("tools.setup", "Set Up Tool Panes", ShowToolSetupMsg{}),
 			appCommand("tools.regexTester", "Regex Tester…", OpenRegexTesterMsg{}),
+			// The dialect dispatcher (#2415): one command in front of the
+			// per-dialect ones, resolving jq/yq/xmq from the buffer's
+			// language. The dialect commands stay separate entries — bindable
+			// and frecency-counted on their own (#2153).
+			appCommand("playground.open", "Open Playground for This File", OpenPlaygroundForBufferMsg{}),
 			appCommand("json.jqPlayground", "jq Playground…", OpenPlaygroundMsg{}),
 			appCommand("json.jqPlaygroundAtPath", "jq Playground at Cursor Path…", OpenPlaygroundAtPathMsg{}),
 			appCommand("json.jqFilters", "Saved jq Filters…", ShowFiltersMsg{}),

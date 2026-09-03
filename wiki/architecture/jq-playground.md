@@ -275,6 +275,40 @@ Playground Filter…") writes into whichever playground is open, because the
 program being named is that playground's. A `yaml.yqSaveFilter` would be a
 second name for one behavior.
 
+## Opening by file type (#2415)
+
+Three dialects mean three commands to remember, so there is a fourth in front
+of them: **`playground.open`** ("Open Playground for This File",
+`cmd+shift+j`, Editor context) resolves the playground from the focused
+buffer's language and opens it —
+
+| buffer language id | playground |
+|---|---|
+| `json`, `jsonc`, `ndjson` | jq |
+| `yaml`, `ansible` | yq |
+| `xml`, `html` | xmq |
+| anything else | none — the notification `no playground for <lang>` |
+
+— in `internal/app/playgroundopen.go`. It only *routes*: every branch ends in
+`startPlayground`, so how a playground mounts stays one implementation. The
+xmq route is wired ahead of the playground itself through the
+`startXMQPlayground` hook; while that hook is nil, an XML or HTML buffer is
+answered with "the xmq playground is not available yet" rather than being
+opened in the wrong dialect, and the route is covered by a test that installs
+a stub.
+
+The per-dialect commands are deliberately **not** replaced. `json.jqPlayground`
+(`ctrl+alt+j`) and `yaml.yqPlayground` (`ctrl+alt+y`) keep their own chords,
+stay separately rebindable, and count separately in the palette's frecency
+(#2153) — someone who works in one dialect all day wants that command on its
+own key, and "open jq on this HTTP response" is not a question about the
+focused buffer's file type at all. The keymap's own answer to the same
+question — whether the *chord* could be shared instead, one per
+`editor[lang]` — is recorded in
+[Keybindings & Shortcuts](/architecture/keybindings.md#one-chord-three-playgrounds-2415):
+it can be, and a user can write it, but the defaults keep the mapping next to
+the playgrounds instead of in the keymap.
+
 ## What is queried
 
 The input is **snapshotted and parsed once** when the playground opens — a jq

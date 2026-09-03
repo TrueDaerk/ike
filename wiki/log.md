@@ -1,5 +1,26 @@
 # Log
 
+## 2026-09-03 (one chord that opens the right playground, #2415)
+
+- **`playground.open`** ("Open Playground for This File", `cmd+shift+j`,
+  Editor context) resolves the playground from the focused buffer's language:
+  `json`/`jsonc`/`ndjson` → jq, `yaml`/`ansible` → yq, `xml`/`html` → xmq,
+  anything else → the notification `no playground for <lang>`. It only routes;
+  every branch ends in the existing `startPlayground`.
+- **The xmq route is wired ahead of its playground** through the
+  `startXMQPlayground` hook (`internal/app/playgroundopen.go`): nil means "not
+  available yet" and is answered as such instead of opening the wrong dialect;
+  a test installs a stub to cover the route today.
+- **The per-dialect commands are untouched**: `json.jqPlayground`
+  (`ctrl+alt+j`) and `yaml.yqPlayground` (`ctrl+alt+y`) keep their chords, stay
+  separately rebindable and keep counting separately in the palette's frecency.
+- **Shared-chord check recorded**: language-scoped contexts *can* share one
+  chord (`editor[json]` vs `editor[yaml]` are disjoint siblings — no conflict,
+  no shadow), so a user may write it; the defaults keep the mapping next to the
+  playgrounds instead. Written up in Keybindings & Shortcuts along with the
+  collision check for `cmd+shift+j` (free, and `cmd+alt+p` is out because it
+  folds onto the perf HUD's `ctrl+alt+p` off macOS).
+
 ## 2026-09-03 (all-projects results in the find-in-path pane, #2413)
 
 - **No corner popup any more**: Find in All Projects (#2394) shows its

@@ -6329,6 +6329,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// program (#1982).
 		return m, m.startPlayground(msg.Dialect, false)
 
+	case OpenPlaygroundForBufferMsg:
+		// playground.open (cmd+shift+j, palette / Tools menu, #2415): the
+		// dialect dispatcher — jq for a JSON buffer, yq for YAML, xmq for
+		// XML/HTML once that playground exists.
+		return m, m.openPlaygroundForBuffer()
+
 	case OpenPlaygroundAtPathMsg:
 		// json.jqPlaygroundAtPath / yaml.yqPlaygroundAtPath (palette / Tools
 		// menu, #1982): the same mode, prefilled with the caret's document

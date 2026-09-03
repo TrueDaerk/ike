@@ -197,17 +197,20 @@ var reachableAlternatives = map[string]string{
 	"file.copyPath":       "palette / context menu",
 	"file.openInBrowser":  "palette / context menu",
 	"lsp.organizeImports": "palette / context menu",
-	"json.jqPlayground":   "palette / Tools menu",
-	"yaml.yqPlayground":   "palette / Tools menu",
-	"scratch.generate":    "palette / File menu",
-	"vcs.diff":            "palette",
-	"tests.toggle":        "palette / View menu",
-	"debug.console":       "palette",
-	"run.select":          "palette / Run menu",
-	"debug.testAtCursor":  "palette / Run menu",
-	"pane.close":          "palette / pane context menu",
-	"view.toggleWrap":     "palette",
-	"window.layouts":      "palette",
+	// #2415: the dispatcher sits on a Cmd chord like its dialect commands and
+	// escapes the same way; the Tools menu names it above them.
+	"playground.open":    "palette / Tools menu",
+	"json.jqPlayground":  "palette / Tools menu",
+	"yaml.yqPlayground":  "palette / Tools menu",
+	"scratch.generate":   "palette / File menu",
+	"vcs.diff":           "palette",
+	"tests.toggle":       "palette / View menu",
+	"debug.console":      "palette",
+	"run.select":         "palette / Run menu",
+	"debug.testAtCursor": "palette / Run menu",
+	"pane.close":         "palette / pane context menu",
+	"view.toggleWrap":    "palette",
+	"window.layouts":     "palette",
 	// #2315: the response viewer's copy also has its pane-local keys — "y"
 	// for the body, and ctrl+c once a selection exists (#2062) — either of
 	// which delivers on every terminal.
