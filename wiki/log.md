@@ -1,5 +1,25 @@
 # Log
 
+## 2026-09-03 (project switch as a timed op event, #2403)
+
+- **`Recorder.OpTimer(id)`** is now the one way an `op` lifecycle is timed:
+  it emits the `start` phase and returns the closer that stamps `ms` into the
+  end phase. `http.flight` moved onto it with no behaviour change — the
+  closer rides on the flight entry until the response lands.
+- **`project.switch`** is measured (#2403): the whole transaction — state
+  persistence, chdir, parking, model rebuild, size pass, reconcile — is
+  bracketed by `start`/`ok` (or `error` on a failed chdir), with `parked`,
+  `panes` and `lsp`. The incoming root's language servers publish long after
+  the model is ready, so the warm-up comes back as an extra `lsp` phase on
+  the same id, timed to the first `publishDiagnostics`. Before this the
+  export held only the layout marker and the session marker, and the 11.7 s
+  median between a switch and the next key press could not be split into
+  work and thinking.
+- **`project.close` and `session.restore`** use the same helper; the restore
+  span never opens a session file on its own, so the ghost-launch rule
+  (#2318) still holds. See
+  [usage telemetry](/architecture/usage-telemetry.md).
+
 ## 2026-09-03 (Dependencies tool window, #2419)
 
 - **A singleton Dependencies pane** (`deps.toggle`, `cmd+0`, bottom zone)

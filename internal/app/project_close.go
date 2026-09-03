@@ -7,6 +7,7 @@ import (
 
 	"ike/internal/host"
 	"ike/internal/project"
+	"ike/internal/telemetry"
 	"ike/internal/ui"
 )
 
@@ -55,6 +56,10 @@ func (m Model) handleCloseProject() (tea.Model, tea.Cmd) {
 // drops and tears the parked workspace down. On a failed switch (chdir error)
 // nothing was parked and the current project stays untouched.
 func (m Model) performCloseAndSwitch(target string) (tea.Model, tea.Cmd) {
+	// The close is a timed operation of its own (#2403): it wraps a whole
+	// project.switch plus the departing workspace's teardown, so the two op
+	// spans nest and the difference is what tearing the old project down cost.
+	endOp := m.usage.OpTimer(telemetry.OpProjectClose)
 	oldRoot := ""
 	if w := m.ws.Active(); w != nil {
 		oldRoot = w.Root
@@ -64,13 +69,16 @@ func (m Model) performCloseAndSwitch(target string) (tea.Model, tea.Cmd) {
 	next, cmd := m.performSwitchOpts(target, switchOpts{record: true, closing: true})
 	sized, ok := next.(Model)
 	if !ok {
+		endOp("error", nil)
 		return next, cmd
 	}
 	w := sized.ws.Drop(oldRoot)
 	if w == nil {
+		endOp("error", nil)
 		return sized, cmd // switch failed; the close never happened
 	}
 	closeCmd := sized.closeWorkspace(w)
+	endOp("ok", nil)
 	sized.host.Notify(host.Info, "closed project "+project.CompactPath(oldRoot))
 	return sized, tea.Batch(cmd, closeCmd)
 }

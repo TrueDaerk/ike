@@ -348,7 +348,9 @@ func TestTelemetryHTTPFlightLifecycle(t *testing.T) {
 		Resp: &httpclient.Response{Status: "200 OK", StatusCode: 200}})
 	m = tm.(Model)
 
-	ops := eventsOf(usageEvents(t, m), telemetry.TypeOp)
+	// Only this flight's ops: the launch also records its session.restore span
+	// (#2403).
+	ops := opsOf(usageEvents(t, m), telemetry.OpHTTPFlight)
 	if len(ops) != 2 {
 		t.Fatalf("want start + end ops, got %v", ops)
 	}
@@ -393,7 +395,7 @@ func TestTelemetryHTTPFlightCancelAndError(t *testing.T) {
 
 	var phases []string
 	var streams []string
-	for _, ev := range eventsOf(usageEvents(t, m), telemetry.TypeOp) {
+	for _, ev := range opsOf(usageEvents(t, m), telemetry.OpHTTPFlight) {
 		if ev.Data["phase"] == "start" {
 			continue
 		}

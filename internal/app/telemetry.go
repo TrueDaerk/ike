@@ -192,6 +192,34 @@ func (m Model) recordProjectLeave(project, reason string) {
 	m.usage.ProjectLeave(project, reason, m.projClock.elapsed())
 }
 
+// switchLSPWait times the language-server warm-up of a project the session
+// just switched into (#2403). The switch op closes when the model is ready,
+// which is long before the incoming root's servers publish anything; this
+// holds the switch's start stamp until the first publishDiagnostics arrives,
+// so the export can tell "the switch was slow" from "the switch was instant
+// and the editor stayed diagnostic-blind for eight seconds".
+type switchLSPWait struct{ start time.Time }
+
+// noteSwitchLSPReady records the first LSP publish after a project switch as
+// the op's "lsp" phase (#2403), carrying the ms from the switch's start. It
+// fires at most once per switch — the wait disarms on the first publish — and
+// no-ops when no switch is pending, which is every launch that never switched.
+// A deliberately separate phase, not a second "ok": the start/ok pairing that
+// measures the transaction itself must stay unambiguous.
+func (m *Model) noteSwitchLSPReady() {
+	if m.switchLSPWait == nil {
+		return
+	}
+	ms := time.Since(m.switchLSPWait.start)
+	m.switchLSPWait = nil
+	if ms < 0 {
+		ms = 0
+	}
+	m.usage.Op(telemetry.OpProjectSwitch, "lsp", map[string]string{
+		"ms": strconv.FormatInt(ms.Milliseconds(), 10),
+	})
+}
+
 // telemetryProjectToken names the current project structurally: a short hash
 // of the working directory (the project root — main.go and performSwitch
 // chdir there). The privacy line (#2235) forbids the clear-text path; the

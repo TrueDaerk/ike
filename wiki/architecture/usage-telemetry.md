@@ -112,12 +112,43 @@ counts by the version's interval before comparing sessions.
     identifiers, not user data. The goroutine lives in the recorder, starts
     with the session file and never depends on the update loop. Cost: ~1 MB
     per day-long session, inside the 5 MiB cap.
-  - `op` (#2348) — the lifecycle of a long-running operation. `id` names it
-    (currently `http.flight` for every HTTP dispatch — run, re-send, re-run),
-    `phase` is `start`, `ok`, `error` or `canceled`; the end phases carry
-    `ms` (duration), `class` (`2xx`…`5xx`, when a response arrived) and
-    `stream` (`true`/`false`). No URL, request key, header or body — a start
-    without a matching end is the "dispatch never came back" signal.
+  - `op` (#2348) — the lifecycle of a long-running operation. `id` names it,
+    `phase` is `start`, `ok`, `error` or `canceled`, and every end phase
+    carries `ms`. All of them are timed through one helper,
+    `Recorder.OpTimer(id)` (#2403): it emits the `start` phase and returns the
+    closer that stamps the elapsed time into the end phase, so no call site
+    computes a duration of its own. A start without a matching end is the
+    "it never came back" signal and is kept as exactly that. The ids:
+    - `http.flight` — one HTTP dispatch (run, re-send, re-run). The end
+      phases add `class` (`2xx`…`5xx`, when a response arrived) and `stream`
+      (`true`/`false`). No URL, request key, header or body.
+    - `project.switch` (#2403) — the seamless switch transaction
+      (`performSwitchOpts`, `internal/app/switch.go`): persisting the
+      departing project's session and layout, the chdir, parking the old
+      workspace, and building, sizing and reconciling the new model. It ends
+      `ok` when that model is ready, `error` when the chdir failed. The `ok`
+      event carries `parked` (`true` when the target came back from the
+      background set instead of being restored from disk), `panes` (the pane
+      count of the model that was built) and `lsp`, which is `-1`: the
+      incoming root's language servers publish long after the model is ready,
+      so the warm-up is reported separately as an extra `lsp` phase on the
+      same id, whose `ms` counts from the switch's start to the first
+      `publishDiagnostics` for the new root. Deliberately a distinct phase
+      and not a second `ok`, so the `start`/`ok` pairing that prices the
+      transaction itself stays unambiguous. Before this the export held only
+      the `layout` marker and the session marker, and the seconds between a
+      switch and the next key press could not be split into work and thinking.
+    - `project.close` (#2403) — closing the current project
+      (`performCloseAndSwitch`, `internal/app/project_close.go`). Its span
+      wraps a whole `project.switch` plus the departing workspace's teardown,
+      so the two nest and the difference is what the teardown cost.
+    - `session.restore` (#2403) — the startup layout/session restore
+      (`restoreLayout` + `restoreSession` in `buildModel`), the one startup
+      phase whose cost scales with what the user left open; `panes` is what
+      came back. Only the startup model records it — a project switch builds
+      its model on a recorder that is discarded right after — and like the
+      session marker it never opens a session file on its own, so a launch
+      that only restores and quits stays a ghost (#2318).
   - `palette.dismiss` (#2408) — a palette mode closed with esc instead of a
     pick, the one palette outcome that otherwise leaves no trace at all.
     `mode` is the mode's prefix rune (`":"`, `"@"`, `"%"`, …), `query_len` the

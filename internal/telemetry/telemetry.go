@@ -78,6 +78,15 @@ const (
 	TypeProjectLeave   = "project.leave"   // foreground time spent in the project being left (#2408)
 )
 
+// Operation ids for the op lifecycle events (#2348, #2403). Callers outside
+// this package use them so the export's vocabulary stays in one place.
+const (
+	OpHTTPFlight     = "http.flight"     // one .http request dispatch (#2348)
+	OpProjectSwitch  = "project.switch"  // the seamless project switch transaction (#2403)
+	OpProjectClose   = "project.close"   // closing a project and resuming the MRU one (#2403)
+	OpSessionRestore = "session.restore" // the startup layout/session restore (#2403)
+)
+
 // CommandSlowThreshold is the dispatch duration from which a command event
 // carries its outcome fields (#2408). Below it a successful dispatch keeps the
 // v3 shape — id and source only — so the common case costs no extra bytes; at
@@ -333,6 +342,35 @@ func (r *Recorder) Op(id, phase string, detail map[string]string) {
 	r.record(TypeOp, d)
 }
 
+// OpTimer starts a timed operation (#2403): it records the "start" phase of
+// id right away and returns the closer for the end phase — "ok", "error" or
+// "canceled" — which stamps the elapsed time into the detail map as "ms".
+// Callers keep the closer for as long as the operation flies (an HTTP request
+// stores it on its flight entry, a project switch calls it in the same pass)
+// and must call it exactly once; a start without an end stays visible in the
+// export as exactly that.
+func (r *Recorder) OpTimer(id string) func(phase string, detail map[string]string) {
+	start := time.Now()
+	if r != nil && r.now != nil {
+		start = r.now()
+	}
+	r.Op(id, "start", nil)
+	return func(phase string, detail map[string]string) {
+		since := time.Since(start)
+		if r != nil && r.now != nil {
+			since = r.now().Sub(start)
+		}
+		if since < 0 {
+			since = 0
+		}
+		d := map[string]string{"ms": strconv.FormatInt(since.Milliseconds(), 10)}
+		for k, v := range detail {
+			d[k] = v
+		}
+		r.Op(id, phase, d)
+	}
+}
+
 // SetHeartbeat installs the periodic liveness stamp (#2348): every interval,
 // snapshot is asked for the heartbeat payload and a non-nil result lands as a
 // TypeHeartbeat event. The goroutine spawns only once the session file opens
@@ -385,6 +423,13 @@ func startsSession(typ string, data map[string]string) bool {
 		// Leaving is not using (#2408): a launch that opens a project and
 		// quits again without doing anything would otherwise resurrect
 		// exactly the ghost file the deferred pane.focus rule avoids.
+		return false
+	}
+	if typ == TypeOp && data["id"] == OpSessionRestore {
+		// The startup restore (#2403) is not usage either: it runs on every
+		// launch, so letting it open the file would resurrect the very ghost
+		// the deferred pane.focus and session rules avoid. Held like them, it
+		// still lands in every file a real session writes.
 		return false
 	}
 	return !(typ == TypeLayout && data["op"] == "pane.focus")
