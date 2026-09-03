@@ -87,6 +87,10 @@ type Response struct {
 	// nil when the request declared none (and for a re-send, which repeats a
 	// snapshot rather than a parsed request).
 	Captures []CaptureResult
+	// Frames counts the transcript frames of a WebSocket session (#2422), sent
+	// and received together; 0 for every plain HTTP exchange. The flight-end
+	// telemetry event carries it.
+	Frames int
 	// Request is the request exactly as it went out (#1832); nil for a
 	// response restored from a history file written before the capture
 	// existed, which is what makes re-send unavailable there.

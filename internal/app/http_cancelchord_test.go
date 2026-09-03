@@ -173,10 +173,10 @@ func TestHTTPPaneLearnsCancelChord(t *testing.T) {
 // request itself.
 func TestTelemetryHTTPFlightCarriesTiming(t *testing.T) {
 	m := telemetryModel(t, host.MapConfig{})
-	send := func(ctx context.Context, source, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
+	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 		return nil, nil // never executed: the returned tea.Cmd is not run
 	}
-	if cmd := m.dispatchHTTP("a.http", "GET /x", "GET /x", send); cmd == nil {
+	if cmd := m.dispatchHTTP("a.http", "GET /x", "GET /x", false, send); cmd == nil {
 		t.Fatal("dispatch refused")
 	}
 	tm, _ := m.Update(HTTPResponseMsg{Source: "a.http", Request: "GET /x",
@@ -209,10 +209,10 @@ func TestTelemetryHTTPFlightCarriesTiming(t *testing.T) {
 // suspiciously instant exchange.
 func TestTelemetryHTTPFlightWithoutTiming(t *testing.T) {
 	m := telemetryModel(t, host.MapConfig{})
-	send := func(ctx context.Context, source, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
+	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 		return nil, nil
 	}
-	m.dispatchHTTP("a.http", "GET /x", "GET /x", send)
+	m.dispatchHTTP("a.http", "GET /x", "GET /x", false, send)
 	tm, _ := m.Update(HTTPResponseMsg{Source: "a.http", Request: "GET /x",
 		Resp: &httpclient.Response{Status: "200 OK", StatusCode: 200}})
 	m = tm.(Model)

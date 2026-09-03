@@ -5190,6 +5190,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appendHTTPStream(msg)
 		return m, nextHTTPEvent(msg.events)
 
+	case HTTPWSSessionMsg:
+		// A websocket session opened (#2422): its handle lands on the flight
+		// entry so the pane's input line can send through it.
+		m.storeWSSession(msg)
+		return m, nextHTTPEvent(msg.events)
+
+	case HTTPWSSendErrMsg:
+		// An interactive send failed off-loop (#2422).
+		m.host.Notify(host.Error, "http: sending websocket message failed — "+msg.Err.Error())
+		return m, nil
+
 	case httpTickMsg:
 		// Keep the in-flight indicator moving while dispatches run (#1272) —
 		// the statusline segment reads the flight set directly, the inline
@@ -5430,6 +5441,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+
+	case httppane.WSSendMsg:
+		// enter in the pane's websocket input line (#2422): the pane holds
+		// the text, the host holds the session.
+		return m, m.sendWSMessage(msg.Text)
 
 	case httppane.CancelMsg:
 		// "x" in the response pane (#1272): the pane cannot reach the
