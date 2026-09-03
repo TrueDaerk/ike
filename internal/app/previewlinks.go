@@ -84,6 +84,29 @@ func splitFragment(target string) (path, frag string) {
 	return target, ""
 }
 
+// rerenderPreviewDiagrams drops every open preview's cached diagram
+// renderings and re-renders (#2421, preview.rerenderDiagrams). The cache is
+// keyed by fence content, so it never notices a renderer that was installed
+// since, an edited theme, or a diagram that pulls in a file of its own — this
+// command is the way to say "try again" without closing the pane. With no
+// preview open it is a toast, not a silent no-op.
+func (m Model) rerenderPreviewDiagrams() tea.Cmd {
+	n := 0
+	m.contentInstances(func(_ string, _ int, c *pane.Instance) bool {
+		if c.Kind() == pane.KindMarkdown {
+			c.Preview().ClearDiagrams()
+			n++
+		}
+		return true
+	})
+	if n == 0 {
+		m.host.Notify(host.Info, "no markdown preview is open")
+		return nil
+	}
+	m.host.Notify(host.Info, "re-rendering diagrams")
+	return nil
+}
+
 // previewByKey returns the preview model of the pane that emitted a LinkMsg —
 // a dedicated pane or a content tab (#1778) — or nil when it has since closed.
 func (m Model) previewByKey(key string) *preview.Model {

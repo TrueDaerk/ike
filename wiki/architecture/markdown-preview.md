@@ -1,9 +1,9 @@
 ---
 type: concept
 title: Markdown Preview
-description: "#62 — rendered live preview pane for markdown buffers: glamour-rendered ANSI split beside the editor, debounced re-render off the editor change seam, heading-anchored cursor scroll sync, theme-aware styling, layout persistence; #2180 — followable links and inline Kitty-rendered local images."
+description: "#62 — rendered live preview pane for markdown buffers: glamour-rendered ANSI split beside the editor, debounced re-render off the editor change seam, heading-anchored cursor scroll sync, theme-aware styling, layout persistence; #2180 — followable links and inline Kitty-rendered local images; #2421 — fenced mermaid diagrams rendered by an external renderer, async and cached, as ASCII or as an embedded PNG."
 resource: internal/preview
-tags: [architecture, markdown, preview, pane, glamour, links, kitty]
+tags: [architecture, markdown, preview, pane, glamour, links, kitty, diagrams, mermaid]
 timestamp: 2026-09-03T00:00:00Z
 ---
 
@@ -146,6 +146,56 @@ stays exactly the text glamour rendered. Undecodable and missing targets
 degrade the same way. Image *files* opened from the explorer/editor still
 render in their own pane via the [image preview](./image-preview.md).
 
+## Diagram fences (#2421)
+
+A ```` ```mermaid ```` fence is not code the reader wants to read — it is a
+picture. `internal/preview/diagrams.go` hands the fence body to an external
+renderer and puts its output where the code block was.
+
+`preview.diagrams` picks the mode:
+
+- **`ascii`** (default) pipes the fence body to **`mermaid-ascii`** on stdin
+  (`go install github.com/AlexanderGrooff/mermaid-ascii@latest`) and places its
+  text — flowcharts, sequence and class diagrams, as far as the tool goes.
+- **`image`** renders a PNG with **`mmdc`** (mermaid-cli) at the pane's pixel
+  width and embeds it through the [inline-image](#inline-images-2180) path:
+  the same `imgview.FitGrid` / `PlaceholderGrid` cells, the same
+  `ImageIDs`/`SyncSeqs` reconcile, so a diagram is an inline image as far as
+  the terminal is concerned. Without Kitty graphics the mode *is* `ascii` —
+  the fallback is decided per render, not per session.
+- **`off`** leaves every fence the syntax-highlighted code block it was.
+
+**Async and cached.** A fence is hashed with the mode, the pixel width and the
+palette's dark flag; the renderer runs on its own goroutine and reports back as
+a `preview.DiagramMsg` through the registry-threaded `host.Send`
+(`Registry.SetSender`), which the root model routes to the owning pane by key.
+The result is cached under that hash for the life of the pane, successes and
+failures alike, so **prose edited around a diagram never re-runs the
+renderer** and neither does a resize. Editing the fence itself is a different
+hash and does. `preview.rerenderDiagrams` (palette) drops every open preview's
+cache — the way to pick up a renderer installed mid-session.
+
+**Placement.** Substitution happens on both sides of glamour: before the
+render, a fence whose picture is ready is replaced in the *source* by a
+sentinel paragraph; after it, the sentinel's rendered row is replaced by the
+picture's lines. Going through the source rather than pattern-matching
+glamour's output means the rendering is located exactly, and — like inline
+images — it happens before the scroll anchors are built, so a diagram growing
+from three fence lines to twenty rendered ones leaves heading sync correct.
+
+**Degradation is always the code block.** While a render is in flight, when
+the renderer is not installed, and when it fails, the fence keeps its code
+block. A missing renderer adds the one-line hint *"install mermaid-ascii to
+render diagrams"* under the block and reports itself once — the root model
+raises a single notification per session (`Model.diagramHinted`), never a
+dialog per render. A failed render puts the renderer's own first stderr line
+under the block instead.
+
+`diagramTools` is the seam for the other fence languages: `plantuml` and
+`dot`/graphviz are the same shape — a binary that reads the source and writes
+text or an image — and plug in there without touching the pipeline. Only
+mermaid is wired up.
+
 ## Scroll sync
 
 The editor emitter forwards `EventCursorMove` as `preview.CursorMsg`; the
@@ -166,4 +216,6 @@ re-syncs the view, including after a link selection scrolled it elsewhere.
   control and full palette integration (long-term note in #62).
 - An 'open preview' entry in the context menu (#30) once that lands.
 - Clicking a link with the mouse; today link activation is keyboard-only.
+- PlantUML and Graphviz fences through `diagramTools`; the pipeline is ready,
+  the renderers are not chosen (#2421).
 - Animated GIFs stay first-frame stills, as in the image pane.

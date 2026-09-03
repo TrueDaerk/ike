@@ -96,6 +96,16 @@ type Model struct {
 	placed []*inlineImage
 	gfx    bool
 
+	// Diagram fences (#2421): the content-addressed cache of external
+	// renderings, the mode override (empty follows preview.diagrams), the
+	// async injector a finished render reports through, and whether this pane
+	// already reported a missing renderer. The cache is a map so value copies
+	// of the model share the renderings, like the image cache above.
+	diag     map[string]*diagramState
+	diagMode string
+	send     func(tea.Msg)
+	hinted   bool
+
 	// In-pane search (#2409): the prompt on the last row and the matching
 	// rendered lines. It lives behind a pointer so the value-receiver View
 	// copies share it, like the explorer's speed search; nil means no
@@ -168,6 +178,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case RenderTickMsg:
 		if msg.Key == m.key && msg.Seq == m.seq {
 			m.render()
+		}
+	case DiagramMsg:
+		// A fenced diagram finished rendering (#2421): cache it and re-render
+		// so the code block is replaced by the diagram. The missing-tool
+		// report carries no result — the root model owns that notification.
+		if msg.Key == m.key && !msg.Missing {
+			m.applyDiagram(msg)
 		}
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -371,12 +388,16 @@ func (m *Model) render() {
 	if m.w <= 0 {
 		return
 	}
-	out, err := m.renderMarkdown()
+	// Diagram fences are resolved against the source before glamour sees it
+	// (#2421): a fence with a finished rendering becomes a sentinel the
+	// substitution below replaces, an unrendered one keeps its code block.
+	src, subs := m.prepareDiagrams(m.src)
+	out, err := m.renderMarkdown(src)
 	if err != nil {
 		out = "preview error: " + err.Error()
 	}
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-	lines, blocks := m.placeImages(lines)
+	lines, blocks := m.placeImages(lines, subs)
 	m.lines = lines
 	m.anchors = anchorHeadings(m.src, m.lines)
 	m.links = m.indexLinks(blocks)
@@ -389,7 +410,7 @@ func (m *Model) render() {
 // renderMarkdown renders the source through a fresh width- and theme-bound
 // renderer. Glamour renderers are cheap to build relative to a render, and a
 // fresh one per render keeps width/theme changes trivially correct.
-func (m Model) renderMarkdown() (string, error) {
+func (m Model) renderMarkdown(src string) (string, error) {
 	wrap := max(10, m.w-2)
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStyles(m.styleConfig()),
@@ -398,7 +419,7 @@ func (m Model) renderMarkdown() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out, err := r.Render(m.src)
+	out, err := r.Render(src)
 	if err != nil {
 		return "", err
 	}

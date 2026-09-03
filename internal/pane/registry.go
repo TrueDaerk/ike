@@ -148,6 +148,24 @@ type Registry struct {
 	// the tabs do: a workspace parks and resumes with its registry, while
 	// the model around it is rebuilt on every project switch.
 	loaded []string
+	// send is the program's async injector (host.Send), threaded into every
+	// markdown preview the registry creates (#2421): a diagram render runs off
+	// the UI goroutine and reports back through it. nil (tests) leaves the
+	// diagram pipeline inert — every fence stays a code block.
+	send func(tea.Msg)
+}
+
+// SetSender wires the program's async injector into the registry, so panes
+// created from here can report background work back into the Update loop
+// (#2421: finished diagram renders). Previews already created are re-wired,
+// which is what a registry restored before the program exists needs.
+func (r *Registry) SetSender(send func(tea.Msg)) {
+	r.send = send
+	for _, inst := range r.instances {
+		if inst.kind == KindMarkdown {
+			inst.md.SetSender(send)
+		}
+	}
 }
 
 // NewRegistry returns an empty registry whose new instances are configured
@@ -426,6 +444,7 @@ func (r *Registry) AddMarkdownPreview(path string) string {
 	}
 	inst := &Instance{key: key, kind: KindMarkdown, cfg: r.cfg, pal: r.pal}
 	inst.md = preview.New(key, path, r.pal)
+	inst.md.SetSender(r.send)
 	r.put(inst)
 	return key
 }
@@ -435,6 +454,7 @@ func (r *Registry) AddMarkdownPreview(path string) string {
 func (r *Registry) AddMarkdownKey(key, path string) *Instance {
 	inst := &Instance{key: key, kind: KindMarkdown, cfg: r.cfg, pal: r.pal}
 	inst.md = preview.New(key, path, r.pal)
+	inst.md.SetSender(r.send)
 	r.put(inst)
 	r.advancePastPreview(key)
 	return inst
@@ -1032,6 +1052,7 @@ func (r *Registry) NewContentPane(kind Kind, path, path2, rev, rev2 string) *Ins
 	switch kind {
 	case KindMarkdown:
 		inst.md = preview.New(key, path, r.pal)
+		inst.md.SetSender(r.send)
 	case KindImage:
 		inst.iv = imgview.New(key, path, r.pal)
 	case KindArchive:

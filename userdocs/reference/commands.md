@@ -193,6 +193,7 @@ bring their own.
 | Performance HUD | `perf.hud` | `ctrl+alt+p` | — | everywhere |
 | Copy Performance Snapshot | `perf.snapshot` | — | — | everywhere |
 | Open Playground for This File | `playground.open` | `cmd+shift+j` | — | everywhere |
+| Re-render Preview Diagrams | `preview.rerenderDiagrams` | — | — | everywhere |
 | Problems | `problems.toggle` | `cmd+8` | — | everywhere |
 | Find in All Projects | `project.findInAllProjects` | `cmd+alt+shift+f` | — | everywhere |
 | Show All-Projects Search Results | `project.findInAllProjectsResults` | `cmd+alt+shift+r` | — | everywhere |
