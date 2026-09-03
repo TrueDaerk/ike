@@ -50,6 +50,7 @@ var noCounterpart = map[string]string{
 	"project.switchLast":               "IKE-only concept (#2398): JetBrains only offers the Recent Projects popup, no last-project toggle action",
 	"run.testAtCursor":                 "RunClass is context-sensitive in JetBrains, mapped to run.file",
 	"debug.testAtCursor":               "DebugClass is context-sensitive in JetBrains, mapped to debug.start",
+	"playground.open":                  "IKE-only concept (#2415): JetBrains has no playground, let alone a dialect dispatcher over one",
 	"json.jqPlayground":                "IKE-only concept (#1936): JetBrains has no jq playground",
 	"yaml.yqPlayground":                "IKE-only concept (#2039): JetBrains has no yq playground",
 	"scratch.generate":                 "IKE-only concept (#2134): JetBrains scratch files carry no test-data generator",

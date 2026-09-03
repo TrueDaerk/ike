@@ -103,6 +103,7 @@ func Defaults() []Menu {
 			{Title: "SSH Host…", Command: "terminal.ssh"},
 			{Title: "Browse SSH Host (SFTP)…", Command: "remote.browse"},
 			{Title: "Regex Tester…", Command: "tools.regexTester"},
+			{Title: "Open Playground for This File", Command: "playground.open"},
 			{Title: "jq Playground…", Command: "json.jqPlayground"},
 			{Title: "jq Playground at Cursor Path…", Command: "json.jqPlaygroundAtPath"},
 			{Title: "Saved jq Filters…", Command: "json.jqFilters"},

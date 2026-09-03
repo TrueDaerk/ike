@@ -95,6 +95,50 @@ the environment picker only in `.http` buffers; every other editor keeps the
 global default `cmd+e` → `palette.recentFiles`. Before #1876 the narrowest
 available scope was `editor.cmd+e`, which took the chord in **every** editor.
 
+### One chord, three playgrounds (#2415)
+
+The playgrounds asked the obvious follow-up question: can two commands share
+one chord and be told apart by the buffer language — `editor[json]` →
+`json.jqPlayground`, `editor[yaml]` → `yaml.yqPlayground`, `editor[xml]` →
+`xml.xmqPlayground`? **They can.** Language-scoped contexts sit on the same
+specificity level and are mutually **disjoint** (`Context.MoreSpecific`,
+`Context.Shadows`): at most one of them matches a given focus, so the build
+reports neither a conflict (`TestNoSameContextConflicts` — conflicts are
+same-chord/*same*-context) nor a shadow (siblings never hide each other). A
+user can therefore write exactly that in their keymap:
+
+```toml
+"editor[json].cmd+shift+j" = "json.jqPlayground"
+"editor[yaml].cmd+shift+j" = "yaml.yqPlayground"
+```
+
+The defaults nonetheless do **not** ship those three rows. Three bindings that
+differ only in which dialect they name are three places to edit for every
+later language (jsonc, ansible, html …), and the language→playground mapping
+would then live in the keymap instead of next to the playgrounds. The default
+table ships **one** row instead — the dispatcher command `playground.open`
+(`cmd+shift+j`, `Editor` context, "Open playground for this file") — which
+resolves the dialect from the focused buffer's `LangID` in
+`internal/app/playgroundopen.go`: `json`/`jsonc`/`ndjson` → jq,
+`yaml`/`ansible` → yq, `xml`/`html` → xmq, anything else → the notification
+`no playground for <lang>`.
+
+*Collision check for the chord:* `cmd+shift+j` is unclaimed in the defaults,
+and so is `ctrl+shift+j`, which it folds onto off macOS. `cmd+alt+p` — the
+first proposal — is out: `ctrl+alt+p` is the performance HUD and `cmd+alt+p`
+folds onto it on Linux. Like every Cmd chord the row is fragile, and escapes
+through the palette and the Tools menu (`reachableAlternatives`).
+
+The per-dialect commands stay exactly as they were: `json.jqPlayground`
+(`ctrl+alt+j`) and `yaml.yqPlayground` (`ctrl+alt+y`) keep their own Global
+rows, remain separately rebindable, and count separately in the palette's
+frecency. Rebinding either side is one line:
+
+```toml
+"editor.cmd+shift+j" = "json.jqPlayground"   # the dispatcher's chord, jq only
+"editor[yaml].cmd+shift+y" = "yaml.yqPlayground"
+```
+
 The `palette` context is a special case (#2055): the palette overlay owns the
 keyboard, so a key never reaches the resolver above. The overlay branch of the
 root model's key dispatch therefore looks the chord up in the `palette`
@@ -1232,6 +1276,7 @@ JetBrains is:
 | `pane.splitUp` | `cmd+k up` | fragile | `palette` | live via palette |
 | `pane.switcher` | `ctrl+tab` | fragile | `tab key` | live via tab key |
 | `perf.hud` | `ctrl+alt+p` | fragile | `palette / View menu` | live via palette / View menu |
+| `playground.open` | `cmd+shift+j` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `problems.toggle` | `cmd+8` | fragile | `palette` | live via palette |
 | `project.close` | `cmd+shift+w` | fragile | `palette / File menu` | live via palette / File menu |
 | `project.findInAllProjects` | `cmd+alt+shift+f` | fragile | `palette` | live via palette |

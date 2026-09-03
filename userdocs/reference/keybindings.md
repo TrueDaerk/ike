@@ -193,6 +193,7 @@ Active when an editor pane has focus.
 | New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
 | Next bookmark | `shift+f11` | `shift+f11` | `bookmark.next` |
 | Next diagnostic | `f2` | `f2` | `lsp.nextDiagnostic` |
+| Open playground for this file | `cmd+shift+j` | `ctrl+shift+j` | `playground.open` |
 | Organize imports | `ctrl+alt+o` | `ctrl+alt+o` | `lsp.organizeImports` |
 | Parameter info | `cmd+p` | `ctrl+p` | `lsp.parameterInfo` |
 | Parameter info | `ctrl+p` | `ctrl+p` | `lsp.parameterInfo` |
