@@ -25,12 +25,10 @@ import (
 // underneath; the panel consumes keys ahead of the mode machine (like the
 // substitute confirm prompt).
 type replacePanel struct {
-	find, repl string
-	// findCur/replCur are the rune cursors inside the two fields (#2002):
-	// both are ordinary single-line inputs edited through ui.EditKey, so
-	// each keeps its own position across a tab switch.
-	findCur, replCur int
-	field            int // 0 = Find, 1 = Replace
+	// find/repl are ordinary single-line inputs (#2002, #2459): each keeps
+	// its own cursor across a tab switch.
+	find, repl ui.Field
+	field      int // 0 = Find, 1 = Replace
 	// preselect marks a prefilled Find as selected (#292, mirroring the
 	// find-in-path overlay's #277): the first typed rune replaces it
 	// wholesale, any other key keeps the text and drops the mark.
@@ -43,13 +41,11 @@ type replacePanel struct {
 // are captured so Esc restores them exactly, sharing the search-origin
 // plumbing.
 func (m *Model) beginReplacePanel() {
-	m.replPanel = &replacePanel{find: m.panelFind, repl: m.panelRepl}
+	m.replPanel = &replacePanel{find: ui.NewField(m.panelFind), repl: ui.NewField(m.panelRepl)}
 	if !m.query.Empty() && !m.query.Regex {
-		m.replPanel.find = m.query.Pattern
+		m.replPanel.find.Set(m.query.Pattern)
 	}
-	m.replPanel.findCur = len([]rune(m.replPanel.find))
-	m.replPanel.replCur = len([]rune(m.replPanel.repl))
-	m.replPanel.preselect = m.replPanel.find != ""
+	m.replPanel.preselect = !m.replPanel.find.Empty()
 	m.searchOrigin = m.cursor
 	m.searchOrigTop, m.searchOrigLft = m.view.Top, m.view.Left
 	m.previewPanelFind()
@@ -59,7 +55,7 @@ func (m *Model) beginReplacePanel() {
 // moves to the nearest match from the origin — the same incsearch behavior
 // the "/" line has (#255); no match parks back at the origin.
 func (m *Model) previewPanelFind() {
-	m.preview = search.Compile(m.parseSearchPattern(m.replPanel.find))
+	m.preview = search.Compile(m.parseSearchPattern(m.replPanel.find.Text))
 	if !m.preview.Empty() {
 		if p, ok := m.preview.Next(m.buf, m.searchOrigin, search.Forward, 1); ok {
 			m.cursor = p
@@ -75,7 +71,7 @@ func (m *Model) previewPanelFind() {
 // back at the captured origin (Esc), while a finishing substitute keeps them.
 // The fields are remembered for the next open either way (#292).
 func (m *Model) closeReplacePanel(restore bool) {
-	m.panelFind, m.panelRepl = m.replPanel.find, m.replPanel.repl
+	m.panelFind, m.panelRepl = m.replPanel.find.Text, m.replPanel.repl.Text
 	m.replPanel = nil
 	m.preview = search.Query{}
 	if restore {
@@ -104,7 +100,7 @@ func (m Model) updateReplacePanel(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Code == 'u' && key.Mod == tea.ModCtrl:
 		// Clear the field — the panel's own chord, ahead of ui.EditKey,
 		// which does not bind ctrl+u.
-		*m.panelField(), *m.panelCursor() = "", 0
+		m.panelField().Clear()
 		if p.field == 0 {
 			m.previewPanelFind()
 		}
@@ -116,14 +112,13 @@ func (m Model) updateReplacePanel(key tea.KeyPressMsg) (Model, tea.Cmd) {
 			key.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper|tea.ModMeta) == 0 {
 			// Typing replaces the preselected prefill wholesale (#292); the
 			// shared editor below then inserts into the emptied field.
-			p.find, p.findCur = "", 0
+			p.find.Clear()
 		}
-		f, cur := m.panelField(), m.panelCursor()
-		out, ncur, handled, changed := ui.EditKey(key, *f, *cur)
+		f := m.panelField()
+		handled, changed := f.Key(key)
 		if !handled {
 			break
 		}
-		*f, *cur = out, ncur
 		if changed && p.field == 0 {
 			m.previewPanelFind()
 		}
@@ -132,19 +127,11 @@ func (m Model) updateReplacePanel(key tea.KeyPressMsg) (Model, tea.Cmd) {
 }
 
 // panelField returns the active input field.
-func (m *Model) panelField() *string {
+func (m *Model) panelField() *ui.Field {
 	if m.replPanel.field == 0 {
 		return &m.replPanel.find
 	}
 	return &m.replPanel.repl
-}
-
-// panelCursor returns the active field's rune cursor.
-func (m *Model) panelCursor() *int {
-	if m.replPanel.field == 0 {
-		return &m.replPanel.findCur
-	}
-	return &m.replPanel.replCur
 }
 
 // runPanelSubstitute closes the panel and runs the whole-file substitute with
@@ -152,11 +139,11 @@ func (m *Model) panelCursor() *int {
 // the usual "N substitutions on M lines" / confirm-flow behavior.
 func (m Model) runPanelSubstitute(flags string) (Model, tea.Cmd) {
 	p := m.replPanel
-	if p.find == "" {
+	if p.find.Empty() {
 		m.cmdMsg = "E: empty pattern"
 		return m, nil
 	}
-	line, ok := buildSubLine(p.find, p.repl, flags)
+	line, ok := buildSubLine(p.find.Text, p.repl.Text, flags)
 	if !ok {
 		m.cmdMsg = "E: no usable delimiter for this pattern"
 		return m, nil
@@ -190,15 +177,15 @@ func (m Model) replacePanelRows(width int) []string {
 		return nil
 	}
 	tally := ""
-	if p.find != "" {
+	if !p.find.Empty() {
 		if n := len(m.preview.AllMatches(m.buf)); n > 0 {
 			tally = "  " + strconv.Itoa(n) + " match" + map[bool]string{true: "", false: "es"}[n == 1]
 		} else {
 			tally = "  no matches"
 		}
 	}
-	find := "Find     " + m.panelInput(p.find, p.findCur, p.field == 0) + tally
-	repl := "Replace  " + m.panelInput(p.repl, p.replCur, p.field == 1)
+	find := "Find     " + m.panelInput(p.find.Text, p.find.Cur, p.field == 0) + tally
+	repl := "Replace  " + m.panelInput(p.repl.Text, p.repl.Cur, p.field == 1)
 	hint := "[enter] confirm each · [ctrl+a] replace all · [tab] switch field · [esc] cancel"
 	if m.cmdMsg != "" {
 		// Panel errors ("E: empty pattern") render where the ex line would
