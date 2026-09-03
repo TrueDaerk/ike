@@ -478,3 +478,17 @@ func (m *Model) Wheel(delta int) {
 func (m *Model) Click(x, y int) tea.Cmd {
 	return m.clicks.ClickRow(y, m.top, headerRows, m.bodyHeight(), len(m.rows), m.now(), &m.cursor, m.activate)
 }
+
+// PasteText inserts a pasted block into the open filter row at its cursor
+// (#2460), re-deriving the rows exactly like typing there does. A closed
+// filter row lets the paste fall through.
+func (m *Model) PasteText(text string) bool {
+	if !m.filter.Active() {
+		return false
+	}
+	if !m.filter.Paste(text) {
+		return false
+	}
+	m.Refresh()
+	return true
+}
