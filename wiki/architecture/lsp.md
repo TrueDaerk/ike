@@ -985,7 +985,15 @@ server. The watched-files path closes that gap.
   server's negotiated `positionEncoding`.
 - **Capabilities gate features.** A request is only issued when the server
   advertises support; a missing capability (or a missing binary) is a graceful
-  no-op with a status message, never an error popup.
+  no-op with a status message, never an error popup. The gate itself exists
+  once: the generic `call[R]` in `manager/manager.go` resolves the server and
+  document behind a path, asks a `capable func(client.Capabilities) bool`, and
+  only then runs the request under the shared `requestTimeout` — so the
+  position-based forwarders (`Implementation`, `PrepareTypeHierarchy`,
+  `PrepareCallHierarchy`) and the item-based ones (`Supertypes`, `Subtypes`,
+  `IncomingCalls`, `OutgoingCalls`) cannot each grow their own, skippable
+  check. A skipped gate is not cosmetic: a request a server has no handler for
+  is never answered and blocks the feature until the timeout expires.
 - **Crashes are recoverable.** `restart.go` detects an unexpected exit, respawns
   after an exponential backoff, re-initialises, and re-opens tracked documents;
   after repeated crashes the server is disabled until a manual restart
