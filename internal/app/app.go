@@ -1061,6 +1061,11 @@ type Model struct {
 	// first pick while the second is chosen.
 	diffPick int
 	diffLeft string
+	// diagramHinted marks that the missing-renderer hint for markdown diagram
+	// fences was already raised (#2421). The hint names a tool to install, so
+	// it is worth saying once per session and never again — the fences carry
+	// the same line under themselves for as long as it applies.
+	diagramHinted bool
 	// zoomed is the pane key rendered alone while pane.maximize is active
 	// (#358); "" = normal layout. zoomSig is the tree's leaf signature at zoom
 	// time — layout() drops the zoom when it changes. Not persisted.
@@ -1341,6 +1346,10 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		edKey = panes.AddEditor()
 		panes.SetFocused(pane.ExplorerKey)
 	}
+	// Background work a pane starts by itself reports through the host's
+	// async injector (#2421: a markdown preview's diagram renders). A resumed
+	// workspace's previews are re-wired by the same call.
+	panes.SetSender(h.Send)
 	refs := &refsMode{}
 	actions := &actionsMode{}
 	symbols := &symbolMode{}
@@ -1998,6 +2007,7 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 	// rest restore as deferred tabs that read theirs on first activation, so
 	// a project with a hundred open tabs starts in constant time per pane.
 	panes := pane.NewRegistry(cfg, m.regs)
+	panes.SetSender(m.host.Send)
 	panes.AddExplorer()
 	load := m.deferredLoader(panes)
 	missing := 0 // files gone since the save; reported once, below
@@ -5747,6 +5757,32 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, inst.Update(msg)
 		}
 		return m, nil
+
+	case preview.DiagramMsg:
+		// A fenced diagram finished rendering, failed, or was refused for
+		// want of the renderer (#2421). The missing-tool report is a single
+		// notification per session — the fences keep their code block with
+		// the install hint either way, so repeating it every render would be
+		// noise; everything else routes to the owning preview.
+		if msg.Missing {
+			if !m.diagramHinted {
+				m.diagramHinted = true
+				m.host.Notify(host.Info, "install "+msg.Tool+" to render "+msg.Lang+" diagrams in the preview")
+			}
+			return m, nil
+		}
+		if _, _, inst, ok := m.findContent(func(c *pane.Instance) bool {
+			return c.Kind() == pane.KindMarkdown && c.Preview().Key() == msg.Key
+		}); ok {
+			return m, inst.Update(msg)
+		}
+		return m, nil
+
+	case RerenderDiagramsMsg:
+		// preview.rerenderDiagrams (palette): drop every cached diagram
+		// rendering so a newly installed renderer — or an edited include the
+		// fence hash cannot see — is picked up without reopening the pane.
+		return m, m.rerenderPreviewDiagrams()
 
 	case preview.CursorMsg:
 		// The source editor's cursor moved: scroll every preview of the buffer

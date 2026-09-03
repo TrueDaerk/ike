@@ -145,11 +145,12 @@ func decodeImage(path string) *inlineImage {
 
 // placeImages rewrites the rendered lines so every local image the buffer
 // references shows as pixels (Kitty-capable terminal) or as its glamour text
-// plus a metadata caption (everywhere else). It returns the new line slice
-// and the rows that became image blocks, which carry no selectable link.
-// Rendered image lines pair with source references positionally, the way
+// plus a metadata caption (everywhere else), and so every finished diagram
+// render (#2421) replaces its sentinel row. It returns the new line slice and
+// the rows that became image blocks, which carry no selectable link. Rendered
+// image lines pair with source references positionally, the way
 // anchorHeadings pairs headings, so repeated targets stay in order.
-func (m *Model) placeImages(lines []string) ([]string, map[int]bool) {
+func (m *Model) placeImages(lines []string, subs map[string]*diagramSub) ([]string, map[int]bool) {
 	m.placed = nil
 	rows := make(map[int]*inlineImage)
 	next := 0
@@ -171,15 +172,30 @@ func (m *Model) placeImages(lines []string) ([]string, map[int]bool) {
 			m.placed = append(m.placed, im)
 		}
 	}
+	// Diagram placements join m.placed before the sweep, so an image-mode
+	// diagram reconciles with the terminal exactly like an inline image.
+	diags := m.diagramRows(lines, subs)
 	m.forgetUnplaced()
-	if len(rows) == 0 {
+	if len(rows) == 0 && len(diags) == 0 {
 		return lines, nil
 	}
 	maxCols := max(1, m.w-4) // glamour's body margin on both sides
 	maxRows := max(1, m.h-2)
-	out := make([]string, 0, len(lines)+len(rows)*4)
+	out := make([]string, 0, len(lines)+(len(rows)+len(diags))*4)
 	blocks := map[int]bool{}
 	for i, line := range lines {
+		if sub, ok := diags[i]; ok {
+			// The sentinel row is the whole diagram: its text, its
+			// placeholder cells, or the note under an unrendered fence.
+			sublines, gridRows := m.diagramLines(sub)
+			for j, l := range sublines {
+				if j < gridRows {
+					blocks[len(out)] = true
+				}
+				out = append(out, l)
+			}
+			continue
+		}
 		im, ok := rows[i]
 		if !ok {
 			out = append(out, line)

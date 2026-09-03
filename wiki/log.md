@@ -1,5 +1,26 @@
 # Log
 
+## 2026-09-03 (mermaid diagrams in the markdown preview, #2421)
+
+- **```mermaid fences render as pictures** in the markdown preview instead of
+  being printed as code (`internal/preview/diagrams.go`). `preview.diagrams`
+  picks the mode: `ascii` (default) pipes the fence body to `mermaid-ascii` on
+  stdin, `image` renders a PNG with `mmdc` and embeds it over the inline-image
+  Kitty path — falling back to `ascii` per render on a terminal without
+  graphics — and `off` keeps the code block.
+- **Renders are async and content-addressed.** The fence is hashed with its
+  mode, pixel width and the palette's dark flag; the renderer runs off the UI
+  goroutine and reports back as `preview.DiagramMsg` through the registry's new
+  `SetSender` seam. Prose edited around a diagram never re-runs the renderer,
+  and a failure is cached like a success. `preview.rerenderDiagrams` (palette)
+  drops the cache for a renderer installed mid-session.
+- **Degradation is always the code block**: pending, missing tool (one-line
+  install hint plus a single notification per session) and renderer error (its
+  own stderr line) all keep the fence readable. Substitution runs through a
+  sentinel in the *source*, so the picture is located exactly and the
+  heading-anchored scroll sync is rebuilt against the final line list. See
+  [markdown preview](/architecture/markdown-preview.md).
+
 ## 2026-09-03 (project switch as a timed op event, #2403)
 
 - **`Recorder.OpTimer(id)`** is now the one way an `op` lifecycle is timed:
