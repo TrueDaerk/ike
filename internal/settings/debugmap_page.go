@@ -63,22 +63,16 @@ func (t *DebugMapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if listNav(key.String(), &t.sel, len(t.entries()), t.navPageSize()) {
 		return nil
 	}
-	switch key.String() {
-	case "a":
-		t.openForm(-1)
-	case "enter":
-		if t.sel >= 0 && t.sel < len(t.entries()) {
-			t.openForm(t.sel)
-		}
-	case "d":
-		if t.sel >= 0 && t.sel < len(t.entries()) && t.host != nil {
-			idx := t.sel
+	// Shared add·edit·delete actions (#2466).
+	pageActionKey(key.String(), pageActions{
+		host: t.host, pal: t.pal, sel: t.sel, n: len(t.entries()),
+		open: t.openForm,
+		confirm: func(idx int) string {
 			e := t.entries()[idx]
-			t.host.Push(newConfirm(t.host, "delete the mapping "+e.Server+" → "+e.Local, "Delete", t.pal, func() tea.Cmd {
-				return t.deleteEntry(idx)
-			}))
-		}
-	}
+			return "delete the mapping " + e.Server + " → " + e.Local
+		},
+		remove: t.deleteEntry,
+	})
 	return nil
 }
 
@@ -177,20 +171,7 @@ func (t *DebugMapPage) View(w, h int) string {
 // Click implements the optional PageClicker seam (enter semantics on the
 // selected row).
 func (t *DebugMapPage) Click(_, y int) tea.Cmd {
-	row := y - 1
-	if row < 0 || (t.listH > 0 && row >= t.listH) {
-		return nil
-	}
-	idx := row + t.off
-	if idx >= len(t.entries()) {
-		return nil
-	}
-	if idx == t.sel {
-		t.openForm(idx)
-		return nil
-	}
-	t.sel = idx
-	return nil
+	return pageClick(y, t.off, t.listH, len(t.entries()), &t.sel, t.openForm)
 }
 
 // Wheel implements the optional PageWheeler seam.

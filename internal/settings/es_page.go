@@ -220,20 +220,7 @@ func (t *ESPage) View(w, h int) string {
 // it, a press on the selected row opens the edit form sub-panel (enter
 // semantics).
 func (t *ESPage) Click(_, y int) tea.Cmd {
-	row := y - 1
-	if row < 0 || (t.listH > 0 && row >= t.listH) {
-		return nil
-	}
-	idx := row + t.off
-	if idx >= len(t.entries()) {
-		return nil
-	}
-	if idx == t.sel {
-		t.openForm(idx)
-		return nil
-	}
-	t.sel = idx
-	return nil
+	return pageClick(y, t.off, t.listH, len(t.entries()), &t.sel, t.openForm)
 }
 
 // Wheel implements the optional PageWheeler seam.
