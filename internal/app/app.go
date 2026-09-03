@@ -104,6 +104,7 @@ import (
 	"ike/internal/testresults"
 	"ike/internal/textenc"
 	"ike/internal/theme"
+	"ike/internal/timepanel"
 	"ike/internal/todoindex"
 	"ike/internal/toolcatalog"
 	"ike/internal/tour"
@@ -662,6 +663,16 @@ type Model struct {
 	depsInstallDir     string
 	depsVulnsOpen      bool
 	depsMissingOpen    bool
+	// timeReturnFocus is the same dance for the Time tool window (#2426);
+	// timeReader holds the per-file mtime cache over the usage log,
+	// timeReport the last finished aggregate (shared by the pane and the
+	// opt-in status-line segment), timeToken the current project's hashed
+	// token and timeTickGen drops a superseded segment ticker.
+	timeReturnFocus string
+	timeReader      *telemetry.Reader
+	timeReport      *telemetry.Report
+	timeToken       string
+	timeTickGen     int64
 	// breakpointsReturnFocus is the same dance for the Breakpoints tool
 	// window (#1377).
 	breakpointsReturnFocus string
@@ -1513,6 +1524,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.finder.SetDisplayPath(displayPath)
 	m.probStore = problems.NewStore()
 	m.depsScanner = deps.NewScanner()
+	m.timeReader = newTimeReader()
 	m.rawDiags = map[string][]ilsp.Diagnostic{}
 	m.compileDiagIgnore()   // seed the ignore rules (#1259)
 	m.compileDiagSeverity() // seed the severity remap rules (#1503)
@@ -2122,6 +2134,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			p := panes.Get(panes.AddProblems()).Problems()
 			p.SetDisplayPath(displayPath)
 			p.SetStore(m.probStore)
+			continue
+		}
+		if id := ids[key]; id.Kind == "time" {
+			// The Time panel restores empty in its saved slot (#2426): the
+			// aggregate is re-read from the usage log in the background.
+			panes.Get(panes.AddTime()).Time().SetLoading(true)
 			continue
 		}
 		if id := ids[key]; id.Kind == "deps" {
@@ -3432,6 +3450,7 @@ var terminalGlobalCommands = map[string]bool{
 	"vcs.panel":                        true,
 	"problems.toggle":                  true,
 	"deps.toggle":                      true,
+	"time.toggle":                      true,
 	"tests.toggle":                     true,
 	"issues.toggle":                    true,
 	"structure.toggle":                 true,
@@ -3994,6 +4013,9 @@ func (m Model) Init() tea.Cmd {
 	// The dependencies auto-scan (#2419): one background toolchain scan when
 	// the setting is on and the project root holds any manifest.
 	cmds = append(cmds, m.depsAutoScanCmd())
+	// The project-time status-line segment (#2426): one background read of
+	// the usage log plus its refresh ticker, nil while the segment is off.
+	cmds = append(cmds, m.timeSegmentCmd())
 	// Highlight any files restored from the previous session at startup, before
 	// the user edits them, and announce each to the plugin hooks (#332): the
 	// restore paths (restoreLayout/restoreSession) load editors directly via
@@ -5873,6 +5895,28 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case depspanel.RefreshMsg:
 		// 'r' in the pane (#2419): the deps.refresh flow.
 		return m, m.depsScanCmd(true, true)
+
+	case TimeToggleMsg:
+		// time.toggle (#2426): the tool-window state machine; opening starts
+		// a background read of the usage log.
+		return m, m.toggleTimePanel()
+
+	case TimeRefreshMsg:
+		// time.refresh (#2426), also 'r' in the pane.
+		return m, m.timeReadCmd()
+
+	case timeReportMsg:
+		return m.handleTimeReport(msg)
+
+	case timeTickMsg:
+		return m.handleTimeTick(msg)
+
+	case timepanel.RefreshMsg:
+		return m, m.timeReadCmd()
+
+	case timepanel.ExportMsg:
+		// 'e' in the Time pane (#2426): the current view as a CSV scratch.
+		return m.handleTimeExport(msg)
 
 	case TestsToggleMsg:
 		// tests.toggle (#1911): same state machine for the Test Results pane.
@@ -9567,7 +9611,8 @@ func (m Model) viewerSplitTarget() string {
 		switch inst.Kind() {
 		case pane.KindExplorer, pane.KindVCS, pane.KindDebug, pane.KindProblems,
 			pane.KindStructure, pane.KindUsages, pane.KindHTTP, pane.KindBreakpoints,
-			pane.KindTests, pane.KindIssues, pane.KindDOM, pane.KindDoctor, pane.KindDeps:
+			pane.KindTests, pane.KindIssues, pane.KindDOM, pane.KindDoctor, pane.KindDeps,
+			pane.KindTime:
 			return false
 		}
 		return true
@@ -10998,6 +11043,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Deps().Wheel(lines)
 			}
+		case pane.KindTime:
+			// The wheel scrolls the Time project list (#2426).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Time().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Time().Wheel(lines)
+			}
 		case pane.KindTests:
 			// The wheel scrolls the Test Results tree or detail (#1911).
 			switch msg.Button {
@@ -12181,6 +12234,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// opens the manifest at the dependency's line.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Deps().Click(localX, localY)
+		}
+	case pane.KindTime:
+		// Time-window clicks (#2426): a click selects a project row, a click
+		// on the header's tab bar switches the range.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Time().Click(localX, localY)
 		}
 	case pane.KindTests:
 		// Test-tree clicks (#1911): a click selects (a detail-column click
@@ -13484,6 +13543,8 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 			title = "PROBLEMS"
 		case pane.KindDeps:
 			title = "DEPENDENCIES"
+		case pane.KindTime:
+			title = "TIME"
 		case pane.KindTests:
 			title = "TESTS"
 		case pane.KindIssues:

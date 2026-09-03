@@ -106,6 +106,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Previous tab | `cmd+ctrl+left` | `ctrl+left` | `editor.tab.prev` |
 | Previous tab | `ctrl+alt+left` | `ctrl+alt+left` | `editor.tab.prev` |
 | Problems tool window | `cmd+8` | `ctrl+8` | `problems.toggle` |
+| Project time report | `cmd+alt+0` | `ctrl+alt+0` | `time.toggle` |
 | Promote scratch to file | `cmd+alt+shift+p` | `ctrl+alt+shift+p` | `scratch.promote` |
 | Recent files | `cmd+e` | `ctrl+e` | `palette.recentFiles` |
 | Rename file | `shift+f6` | `shift+f6` | `file.rename` |

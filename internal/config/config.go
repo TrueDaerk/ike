@@ -328,6 +328,7 @@ func (c *Config) Flat() map[string]string {
 	put("forge.poll_interval_seconds", c.Forge.PollIntervalSeconds)
 	put("forge.cache", c.Forge.Cache)
 	put("telemetry.enabled", c.Telemetry.Enabled)
+	put("statusline.project_time", c.StatusLine.ProjectTime)
 	put("ansible.vault_password_file", c.Ansible.VaultPasswordFile)
 
 	// Per-event-type forge notification styles (#2086).

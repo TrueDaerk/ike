@@ -523,6 +523,10 @@ var jetbrainsRows = []row{
 	// taken (Problems, tab jump 8), so the free cmd+0 completes the numeric
 	// tool-window family; the palette is the delivered fallback.
 	{"cmd+0", "deps.toggle", "Dependencies tool window", Global, "Dependencies (#2419)"},
+	// Time tool window (#2426): the numeric tool-window family cmd+0..cmd+9
+	// is full, so the project time report takes the family's free
+	// alt-neighbour rather than shipping palette-only.
+	{"cmd+alt+0", "time.toggle", "Project time report", Global, "Time report (#2426)"},
 	{"f10", "menu.open", "Open menu bar", Global, "Menu (0160)"},
 	{"cmd+,", "settings.open", "Settings", Global, "Menu (0160)"},
 	// Unbound-command audit (#1378): JetBrains chords for palette-only

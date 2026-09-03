@@ -738,6 +738,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("vcs.panel", "Toggle VCS Tool Window", VCSPanelToggleMsg{}),
 			appCommand("problems.toggle", "Problems", ProblemsToggleMsg{}),
 			appCommand("deps.toggle", "Dependencies", DepsToggleMsg{}),
+			appCommand("time.toggle", "Project Time Report", TimeToggleMsg{}),
+			appCommand("time.refresh", "Project Time: Reload Usage Log", TimeRefreshMsg{}),
 			appCommand("deps.refresh", "Dependencies: Refresh Scan", DepsRefreshMsg{}),
 			appCommand("deps.audit", "Dependencies: Audit Vulnerabilities", DepsAuditMsg{}),
 			appCommand("deps.updateLatest", "Update Dependency to Latest", DepsUpdateLatestMsg{}),

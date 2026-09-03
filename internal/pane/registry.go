@@ -32,6 +32,7 @@ import (
 	"ike/internal/terminal"
 	"ike/internal/testresults"
 	"ike/internal/theme"
+	"ike/internal/timepanel"
 	"ike/internal/usages"
 	"ike/internal/vcspanel"
 )
@@ -122,6 +123,9 @@ const LSPDoctorKey = "lspdoctor"
 
 // DepsKey is the stable key of the singleton Dependencies tool window (#2419).
 const DepsKey = "deps"
+
+// TimeKey is the stable key of the singleton Time tool window (#2426).
+const TimeKey = "time"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -857,6 +861,18 @@ func (r *Registry) AddDeps() string {
 	inst.dep = depspanel.New(r.pal)
 	r.put(inst)
 	return DepsKey
+}
+
+// AddTime creates the singleton Time tool window under TimeKey (#2426),
+// returning the existing key when it is already open.
+func (r *Registry) AddTime() string {
+	if _, ok := r.instances[TimeKey]; ok {
+		return TimeKey
+	}
+	inst := &Instance{key: TimeKey, kind: KindTime, cfg: r.cfg, pal: r.pal}
+	inst.tp = timepanel.New(r.pal)
+	r.put(inst)
+	return TimeKey
 }
 
 // AddBreakpoints creates the singleton Breakpoints tool window under

@@ -1327,8 +1327,10 @@ JetBrains is:
 | `terminal.new` | `cmd+alt+shift+t` | fragile | `palette` | live via palette |
 | `terminal.newTab` | `ctrl+t` | delivered | `—` | live |
 | `terminal.popup` | `cmd+alt+t` | fragile | `palette` | live via palette |
+| `terminal.popup.pin` | `cmd+alt+shift+k` | fragile | `palette` | live via palette |
 | `terminal.toggle` | `alt+f12` | fragile | `palette` | live via palette |
 | `tests.toggle` | `cmd+4` | fragile | `palette / View menu` | live via palette / View menu |
+| `time.toggle` | `cmd+alt+0` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `todo.list` | `cmd+6` | fragile | `palette` | live via palette |
 | `vcs.diff` | `cmd+alt+d` | fragile | `palette` | live via palette |
 | `vcs.panel` | `cmd+9` | fragile | `palette` | live via palette |
