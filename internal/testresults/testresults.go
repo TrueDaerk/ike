@@ -366,7 +366,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// target in both columns — the detail text scrolls, it is not marked.
 		return m.copyRow(m.cursor)
 	}
-	if ui.CopyChord(msg.String()) {
+	if ui.CopyKey(msg) {
 		return m.copyRow(m.cursor)
 	}
 	if m.detailFocus {

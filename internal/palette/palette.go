@@ -443,8 +443,11 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 	// caller refreshes the lists via Refresh. cmd+backspace is the delivered
 	// alias (#1418): shift+delete needs a physical forward-delete key many
 	// Mac keyboards lack, cmd+backspace is macOS's native "delete" chord.
+	// The Command key is accepted as super+ and meta+ alike — the same
+	// physical key, spelled differently per terminal protocol (#2459).
+	cmdMod := msg.Mod &^ tea.ModShift
 	if (msg.Code == tea.KeyDelete && msg.Mod == tea.ModShift) ||
-		(msg.Code == tea.KeyBackspace && msg.Mod == tea.ModSuper) {
+		(msg.Code == tea.KeyBackspace && (cmdMod == tea.ModSuper || cmdMod == tea.ModMeta)) {
 		return p.auxCmd()
 	}
 	// Digit fast path (#2023): in a DigitPicker mode — the intention popup —
