@@ -444,8 +444,8 @@ func (m *Model) diagramLines(sub *diagramSub) (out []string, blocks int) {
 	switch {
 	case sub.img != nil:
 		im := sub.img
-		im.cols, im.rows = imgview.FitGrid(im.imgW, im.imgH, max(1, m.w-4), max(1, m.h-2))
-		for _, grid := range imgview.PlaceholderGrid(im.id, im.cols, im.rows) {
+		im.Cols, im.Rows = imgview.FitGrid(im.imgW, im.imgH, max(1, m.w-4), max(1, m.h-2))
+		for _, grid := range imgview.PlaceholderGrid(im.ID, im.Cols, im.Rows) {
 			out = append(out, "  "+grid)
 		}
 		return out, len(out)

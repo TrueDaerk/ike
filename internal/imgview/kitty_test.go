@@ -128,3 +128,52 @@ func TestFitGrid(t *testing.T) {
 		}
 	}
 }
+
+// TestSyncSeqs covers the reconcile diff shared by the notebook viewer and
+// the markdown preview's inline images: transmit on first show, delete +
+// transmit after a resize, nothing once the terminal already matches, and an
+// unplaced entry (Cols == 0) is skipped even if it once was sent.
+func TestSyncSeqs(t *testing.T) {
+	img := testImage(4, 4)
+
+	unplaced := &PlacedImage{ID: 1, Img: img}
+	firstShow := &PlacedImage{ID: 2, Img: img, Cols: 4, Rows: 2}
+	current := &PlacedImage{ID: 3, Img: img, Cols: 4, Rows: 2, SentCols: 4, SentRows: 2}
+	resized := &PlacedImage{ID: 4, Img: img, Cols: 8, Rows: 4, SentCols: 4, SentRows: 2}
+
+	seqs := SyncSeqs([]*PlacedImage{unplaced, firstShow, current, resized})
+
+	var transmits, deletes int
+	for _, s := range seqs {
+		switch {
+		case strings.Contains(s, "a=d") && strings.Contains(s, "i=4"):
+			deletes++
+		case strings.Contains(s, "i=2") || strings.Contains(s, "i=4"):
+			transmits++
+		}
+	}
+	if transmits != 2 {
+		t.Errorf("expected 2 transmits (first show + resize), got %d in %v", transmits, seqs)
+	}
+	if deletes != 1 {
+		t.Errorf("expected 1 delete (the resize), got %d in %v", deletes, seqs)
+	}
+	for _, s := range seqs {
+		if strings.Contains(s, "i=1") || strings.Contains(s, "i=3") {
+			t.Errorf("unplaced or already-current entry must not emit a sequence: %q", s)
+		}
+	}
+
+	// SyncSeqs records the applied state on each entry.
+	if firstShow.SentCols != 4 || firstShow.SentRows != 2 {
+		t.Errorf("firstShow sent state not recorded: %+v", firstShow)
+	}
+	if resized.SentCols != 8 || resized.SentRows != 4 {
+		t.Errorf("resized sent state not recorded: %+v", resized)
+	}
+
+	// A second pass with nothing changed emits nothing.
+	if again := SyncSeqs([]*PlacedImage{firstShow, current, resized}); len(again) != 0 {
+		t.Errorf("expected no sequences once current, got %v", again)
+	}
+}
