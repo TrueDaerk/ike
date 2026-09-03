@@ -73,14 +73,11 @@ type Model struct {
 
 	open  bool
 	focus field
-	// cur is the rune cursor within the focused field (#763); focus changes
-	// and programmatic field replacement reset it to the end.
-	cur int
 
-	query   string
-	replace string // replacement template (replace mode only)
-	include string // comma-separated include globs
-	exclude string // comma-separated exclude globs
+	query   ui.Field
+	replace ui.Field // replacement template (replace mode only)
+	include ui.Field // comma-separated include globs
+	exclude ui.Field // comma-separated exclude globs
 
 	// preselect marks the remembered query as selected on re-open (#277):
 	// the first typed character replaces it wholesale, any other key keeps
@@ -189,9 +186,9 @@ func (m *Model) openWith(root, sel string) {
 		// authoritative for this session.
 		m.hist = m.histStore.All(histories.FindInPath)
 		if st, ok := m.histStore.LoadFindState(); ok {
-			m.query = st.Query
-			m.include = st.Include
-			m.exclude = st.Exclude
+			m.query.Set(st.Query)
+			m.include.Set(st.Include)
+			m.exclude.Set(st.Exclude)
 			m.caseSensitive = st.CaseSensitive
 			m.wholeWord = st.WholeWord
 			m.regex = st.Regex
@@ -204,17 +201,17 @@ func (m *Model) openWith(root, sel string) {
 	if q, ok := prefillQuery(sel, m.regex); ok {
 		// A prefill outranks both the remembered query and the restored
 		// result cursor: the reopened scan is a different search.
-		m.query = q
+		m.query.Set(q)
 		restoreCursor = -1
 	}
 	m.open = true
 	m.replaceMode = false
 	m.root = root
 	m.focus = fieldQuery
-	m.cur = len([]rune(m.query))
+	m.query.Cur = m.query.Len()
 	m.histIdx = -1
 	m.errText = ""
-	m.preselect = m.query != ""
+	m.preselect = !m.query.Empty()
 	m.rescan()
 	m.pendingCursor = restoreCursor
 }
@@ -259,9 +256,9 @@ func (m *Model) Close() {
 	m.prev.SetFocus(false)
 	if m.histStore != nil {
 		m.histStore.SaveFindState(histories.FindState{
-			Query:         m.query,
-			Include:       m.include,
-			Exclude:       m.exclude,
+			Query:         m.query.Text,
+			Include:       m.include.Text,
+			Exclude:       m.exclude.Text,
 			CaseSensitive: m.caseSensitive,
 			WholeWord:     m.wholeWord,
 			Regex:         m.regex,
@@ -281,7 +278,7 @@ func (m *Model) HasResults() bool { return m.list.Total() > 0 }
 func (m *Model) Advance(delta int) (locations.Item, bool) { return m.list.Advance(delta) }
 
 // Query returns the current query text (replace-in-path builds on it, #86).
-func (m *Model) Query() string { return m.query }
+func (m *Model) Query() string { return m.query.Text }
 
 // theme returns the active palette, defaulting when none was threaded in.
 func (m *Model) theme() *theme.Palette {
@@ -346,20 +343,20 @@ func (m *Model) rescan() {
 	m.truncated = false
 	m.errText = ""
 	m.mtimes = map[string]time.Time{}
-	if strings.TrimSpace(m.query) == "" {
+	if strings.TrimSpace(m.query.Text) == "" {
 		m.svc.Cancel()
 		m.scanning = false
 		return
 	}
 	m.scanning = true
 	m.lastQuery = search.Query{
-		Pattern:       m.query,
+		Pattern:       m.query.Text,
 		Root:          m.root,
 		CaseSensitive: m.caseSensitive,
 		WholeWord:     m.wholeWord,
 		Regex:         m.regex,
-		Include:       splitGlobs(m.include),
-		Exclude:       splitGlobs(m.exclude),
+		Include:       splitGlobs(m.include.Text),
+		Exclude:       splitGlobs(m.exclude.Text),
 	}
 	m.gen = m.svc.Scan(m.lastQuery)
 }
@@ -382,17 +379,14 @@ func splitGlobs(s string) []string {
 func (m *Model) Paste(text string) (handled bool) {
 	pre := m.preselect
 	f := m.focused()
-	cur := m.cur
 	if pre && m.focus == fieldQuery {
 		// The remembered query is selected: a paste replaces it, not appends.
-		*f, cur = "", 0
+		f.Clear()
 	}
-	out, ncur, changed := ui.PasteText(*f, cur, text)
-	if !changed {
+	if !f.Paste(text) {
 		return false
 	}
 	m.preselect = false
-	*f, m.cur = out, ncur
 	m.editedField()
 	return true
 }
@@ -525,13 +519,14 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	// Everything else is single-line editing on the focused field (#763):
 	// cursor motions, word ops, insertion. The chords above keep priority.
 	f := m.focused()
-	if out, ncur, handled, changed := ui.EditKey(msg, *f, m.cur); handled {
-		if pre && m.focus == fieldQuery && len(out) > len(*f) {
+	before := f.Len()
+	if handled, changed := f.Key(msg); handled {
+		if pre && m.focus == fieldQuery && f.Len() > before {
 			// The key inserted text: it replaces the selected prefill (#277),
 			// so re-apply it to an empty field.
-			out, ncur, _, _ = ui.EditKey(msg, "", 0)
+			f.Clear()
+			f.Key(msg)
 		}
-		*f, m.cur = out, ncur
 		if changed {
 			m.editedField()
 		}
@@ -542,7 +537,8 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 // setFocus moves the input focus and parks the cursor at the field's end.
 func (m *Model) setFocus(f field) {
 	m.focus = f
-	m.cur = len([]rune(*m.focused()))
+	fld := m.focused()
+	fld.Cur = fld.Len()
 }
 
 // layoutInfo maps content rows (0 = first row inside the border) to click
@@ -708,7 +704,7 @@ func (m *Model) openCurrent() tea.Cmd {
 
 // replaceCmd dispatches an apply request for the given matches.
 func (m *Model) replaceCmd(items []locations.Item) tea.Cmd {
-	req := ReplaceRequestMsg{Items: items, Replacement: m.replace, Query: m.lastQuery, Mtimes: m.mtimes}
+	req := ReplaceRequestMsg{Items: items, Replacement: m.replace.Text, Query: m.lastQuery, Mtimes: m.mtimes}
 	return func() tea.Msg { return req }
 }
 
@@ -724,7 +720,7 @@ func (m *Model) nextField(dir int) field {
 }
 
 // focused returns the field the cursor edits.
-func (m *Model) focused() *string {
+func (m *Model) focused() *ui.Field {
 	switch m.focus {
 	case fieldReplace:
 		return &m.replace
@@ -767,17 +763,16 @@ func (m *Model) history(dir int) {
 	}
 	m.histIdx = next
 	if next == -1 {
-		m.query = ""
+		m.query.Clear()
 	} else {
-		m.query = m.hist[next]
+		m.query.Set(m.hist[next])
 	}
-	m.cur = len([]rune(m.query))
 	m.rescan()
 }
 
 // commitHistory records the current query at the front of the recall list.
 func (m *Model) commitHistory() {
-	q := strings.TrimSpace(m.query)
+	q := strings.TrimSpace(m.query.Text)
 	if q == "" {
 		return
 	}
@@ -818,17 +813,17 @@ func (m *Model) View() string {
 	lay := layoutInfo{replace: -1, listTop: -1}
 	rows := []string{title, ""}
 	lay.query = len(rows)
-	rows = append(rows, m.inputRow("Search ", m.query, fieldQuery, innerW))
+	rows = append(rows, m.inputRow("Search ", m.query.Text, m.query.Cur, fieldQuery, innerW))
 	if m.replaceMode {
 		lay.replace = len(rows)
-		rows = append(rows, m.inputRow("Replace", m.replace, fieldReplace, innerW))
+		rows = append(rows, m.inputRow("Replace", m.replace.Text, m.replace.Cur, fieldReplace, innerW))
 	}
 	lay.toggles = len(rows)
 	rows = append(rows, m.togglesRow(innerW))
 	lay.include = len(rows)
-	rows = append(rows, m.inputRow("Include", m.include, fieldInclude, innerW))
+	rows = append(rows, m.inputRow("Include", m.include.Text, m.include.Cur, fieldInclude, innerW))
 	lay.exclude = len(rows)
-	rows = append(rows, m.inputRow("Exclude", m.exclude, fieldExclude, innerW))
+	rows = append(rows, m.inputRow("Exclude", m.exclude.Text, m.exclude.Cur, fieldExclude, innerW))
 	rows = append(rows, "")
 
 	// In replace mode every row previews its rewrite inline (#2154): the
@@ -836,7 +831,7 @@ func (m *Model) View() string {
 	// live template, so editing the replacement redraws without a rescan.
 	if m.replaceMode {
 		m.list.Rewrite = func(it locations.Item, r locations.Range) (string, bool) {
-			return search.RewriteSegment(it.Text, r.Start, r.End, m.lastQuery, m.replace)
+			return search.RewriteSegment(it.Text, r.Start, r.End, m.lastQuery, m.replace.Text)
 		}
 	} else {
 		m.list.Rewrite = nil
@@ -865,11 +860,11 @@ func (m *Model) View() string {
 
 // inputRow renders one labelled input line with a block cursor on the focused
 // field.
-func (m *Model) inputRow(label, value string, f field, width int) string {
+func (m *Model) inputRow(label, value string, cur int, f field, width int) string {
 	// The remembered query is "selected" (#277): rendered inverted so it
 	// reads as replace-on-type. Hard truncate: lipgloss MaxWidth WRAPS
 	// overlong content (#971) — both handled by ui.InputRow.
-	return ui.InputRow(m.theme(), label, value, f == fieldQuery, m.preselect, m.focus == f, m.cur, width)
+	return ui.InputRow(m.theme(), label, value, f == fieldQuery, m.preselect, m.focus == f, cur, width)
 }
 
 // The toggle row's fixed pieces; toggleSpans derives the click ranges from
@@ -906,7 +901,7 @@ func (m *Model) previewRows(width int) []string {
 	after := it.Text
 	ranges := it.Ranges()
 	for i := len(ranges) - 1; i >= 0; i-- {
-		out, valid := search.RewriteRange(after, ranges[i].Start, ranges[i].End, m.lastQuery, m.replace)
+		out, valid := search.RewriteRange(after, ranges[i].Start, ranges[i].End, m.lastQuery, m.replace.Text)
 		if !valid {
 			return nil
 		}
@@ -936,7 +931,7 @@ func (m *Model) statusRow(width int) string {
 	case m.errText != "":
 		return lipgloss.NewStyle().Foreground(pal.Error).Render(
 			ansi.Truncate("error: "+m.errText, width, "…"))
-	case strings.TrimSpace(m.query) == "":
+	case strings.TrimSpace(m.query.Text) == "":
 		if m.replaceMode {
 			return dim.Render("type to search — enter replaces match, ctrl+f file, ctrl+a all, ctrl+t/g excludes, ctrl+enter opens")
 		}

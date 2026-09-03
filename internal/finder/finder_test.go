@@ -79,12 +79,12 @@ func TestReopenPreselectsQuery(t *testing.T) {
 	m.Update(key("esc"))
 
 	m.Open(t.TempDir())
-	if m.query != "needle" || !m.preselect {
-		t.Fatalf("re-open should preselect the remembered query, query=%q preselect=%v", m.query, m.preselect)
+	if m.query.Text != "needle" || !m.preselect {
+		t.Fatalf("re-open should preselect the remembered query, query=%q preselect=%v", m.query.Text, m.preselect)
 	}
 	typeText(m, "x")
-	if m.query != "x" {
-		t.Fatalf("typing over the preselected query should replace it, got %q", m.query)
+	if m.query.Text != "x" {
+		t.Fatalf("typing over the preselected query should replace it, got %q", m.query.Text)
 	}
 
 	// Backspace instead of typing edits the remembered text and drops the
@@ -93,12 +93,12 @@ func TestReopenPreselectsQuery(t *testing.T) {
 	m.Update(key("esc"))
 	m.Open(t.TempDir())
 	m.Update(key("backspace"))
-	if m.query != "xy" || m.preselect {
-		t.Fatalf("backspace should edit the prefill, got query=%q preselect=%v", m.query, m.preselect)
+	if m.query.Text != "xy" || m.preselect {
+		t.Fatalf("backspace should edit the prefill, got query=%q preselect=%v", m.query.Text, m.preselect)
 	}
 	typeText(m, "z")
-	if m.query != "xyz" {
-		t.Fatalf("after backspace typing appends, got %q", m.query)
+	if m.query.Text != "xyz" {
+		t.Fatalf("after backspace typing appends, got %q", m.query.Text)
 	}
 }
 
@@ -219,12 +219,12 @@ func TestGlobFieldsFeedTheQuery(t *testing.T) {
 	typeText(m, "needle")
 	m.Update(key("tab")) // include field
 	typeText(m, "*.go, *.md")
-	if got := splitGlobs(m.include); len(got) != 2 || got[0] != "*.go" || got[1] != "*.md" {
+	if got := splitGlobs(m.include.Text); len(got) != 2 || got[0] != "*.go" || got[1] != "*.md" {
 		t.Fatalf("include globs parsed wrong: %v", got)
 	}
 	m.Update(key("tab")) // exclude field
 	typeText(m, "vendor/*")
-	if got := splitGlobs(m.exclude); len(got) != 1 || got[0] != "vendor/*" {
+	if got := splitGlobs(m.exclude.Text); len(got) != 1 || got[0] != "vendor/*" {
 		t.Fatalf("exclude globs parsed wrong: %v", got)
 	}
 }
@@ -240,12 +240,12 @@ func TestQueryHistoryRecall(t *testing.T) {
 	for range "first" {
 		m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	}
-	if m.query != "" {
-		t.Fatalf("test setup: query not cleared, got %q", m.query)
+	if m.query.Text != "" {
+		t.Fatalf("test setup: query not cleared, got %q", m.query.Text)
 	}
 	m.Update(key("up")) // list is empty → history recall
-	if m.query != "first" {
-		t.Fatalf("up must recall the last committed query, got %q", m.query)
+	if m.query.Text != "first" {
+		t.Fatalf("up must recall the last committed query, got %q", m.query.Text)
 	}
 }
 
@@ -371,8 +371,8 @@ func TestCtrlUpRecallsHistory(t *testing.T) {
 		m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModCtrl})
-	if m.query != "first" {
-		t.Fatalf("ctrl+up must recall the last committed query, got %q", m.query)
+	if m.query.Text != "first" {
+		t.Fatalf("ctrl+up must recall the last committed query, got %q", m.query.Text)
 	}
 }
 
@@ -449,18 +449,18 @@ func TestClickFocusesInputFields(t *testing.T) {
 	m.View()
 	clickAt(m, 5, 4)
 	typeText(m, "x")
-	if m.include != "x" {
-		t.Fatalf("click on the Include row must focus it, include=%q", m.include)
+	if m.include.Text != "x" {
+		t.Fatalf("click on the Include row must focus it, include=%q", m.include.Text)
 	}
 	clickAt(m, 5, 5)
 	typeText(m, "y")
-	if m.exclude != "y" {
-		t.Fatalf("click on the Exclude row must focus it, exclude=%q", m.exclude)
+	if m.exclude.Text != "y" {
+		t.Fatalf("click on the Exclude row must focus it, exclude=%q", m.exclude.Text)
 	}
 	clickAt(m, 5, 2)
 	typeText(m, "q")
-	if m.query != "q" {
-		t.Fatalf("click on the Search row must focus it, query=%q", m.query)
+	if m.query.Text != "q" {
+		t.Fatalf("click on the Search row must focus it, query=%q", m.query.Text)
 	}
 }
 
@@ -472,8 +472,8 @@ func TestClickReplaceRowFocusesReplaceField(t *testing.T) {
 	// Replace mode shifts the rows: 2 query, 3 replace, 4 toggles, ...
 	clickAt(m, 5, 3)
 	typeText(m, "z")
-	if m.replace != "z" {
-		t.Fatalf("click on the Replace row must focus it, replace=%q", m.replace)
+	if m.replace.Text != "z" {
+		t.Fatalf("click on the Replace row must focus it, replace=%q", m.replace.Text)
 	}
 }
 
@@ -535,19 +535,19 @@ func TestCursorEditing(t *testing.T) {
 	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	typeText(m, "e")
-	if m.query != "needle" {
-		t.Fatalf("insert at cursor: query = %q, want %q", m.query, "needle")
+	if m.query.Text != "needle" {
+		t.Fatalf("insert at cursor: query = %q, want %q", m.query.Text, "needle")
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
 	typeText(m, " haystack")
 	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt})
-	if m.query != "needle " {
-		t.Fatalf("word delete: query = %q, want %q", m.query, "needle ")
+	if m.query.Text != "needle " {
+		t.Fatalf("word delete: query = %q, want %q", m.query.Text, "needle ")
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyHome})
 	m.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
-	if m.query != "eedle " {
-		t.Fatalf("forward delete at home: query = %q, want %q", m.query, "eedle ")
+	if m.query.Text != "eedle " {
+		t.Fatalf("forward delete at home: query = %q, want %q", m.query.Text, "eedle ")
 	}
 }
 
@@ -559,13 +559,13 @@ func TestCursorFollowsFocus(t *testing.T) {
 	m.Update(tea.KeyPressMsg{Code: tea.KeyHome})
 	m.Update(key("tab")) // include field
 	typeText(m, "*.go")
-	if m.include != "*.go" {
-		t.Fatalf("include = %q, want %q", m.include, "*.go")
+	if m.include.Text != "*.go" {
+		t.Fatalf("include = %q, want %q", m.include.Text, "*.go")
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 	typeText(m, "x") // back on query, cursor must be at the end
-	if m.query != "abcx" {
-		t.Fatalf("query after refocus = %q, want %q", m.query, "abcx")
+	if m.query.Text != "abcx" {
+		t.Fatalf("query after refocus = %q, want %q", m.query.Text, "abcx")
 	}
 }
 
@@ -574,12 +574,12 @@ func TestCursorFollowsFocus(t *testing.T) {
 func TestSpaceAndPaste(t *testing.T) {
 	m := opened(t)
 	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
-	if m.query != " " {
-		t.Fatalf("space must insert, query = %q", m.query)
+	if m.query.Text != " " {
+		t.Fatalf("space must insert, query = %q", m.query.Text)
 	}
 	m.Update(tea.KeyPressMsg{Text: "pasted text"})
-	if m.query != " pasted text" {
-		t.Fatalf("paste must insert wholesale, query = %q", m.query)
+	if m.query.Text != " pasted text" {
+		t.Fatalf("paste must insert wholesale, query = %q", m.query.Text)
 	}
 }
 
