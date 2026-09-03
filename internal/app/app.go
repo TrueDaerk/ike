@@ -894,6 +894,7 @@ type Model struct {
 	fileUsage   *palette.Usage       // most-used file ranking in the ranked palettes (#1419)
 	cmdFrec     *frecency.Store      // command-execution frecency boost (#2153)
 	usage       *telemetry.Recorder  // local-only usage telemetry (#2235); session state, rides across project switches
+	projClock   *projectClock        // foreground time in the current project, for project.leave (#2408); per-project, not carried across a switch
 	pendUnbound *unboundKey          // unbound chord awaiting the focused editor's verdict (#2303)
 	fileFrec    *frecency.Store      // file-open frecency ranking in the "@" finder (#2155)
 	projFrec    *frecency.Store      // project-switch frecency, user-scoped: the Recent Projects column (#2399)
@@ -1382,6 +1383,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		fileUsage:       fileUsage,
 		cmdFrec:         cmdFrec,
 		usage:           newUsageRecorder(), // local-only usage telemetry (#2235)
+		projClock:       newProjectClock(),  // foreground time in this project (#2408)
 		fileFrec:        fileFrec,
 		projFrec:        projFrec,
 		recentPick:      pick,
@@ -2635,6 +2637,10 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 			cmd()
 		}
 	}
+	// The project's time budget closes with the session (#2408) — the last
+	// project of a run reports its foreground time here, the earlier ones did
+	// so on their switch.
+	m.recordProjectLeave(telemetryProjectToken(), "quit")
 	// Flush and end the usage log (#2235); blocking here is as fine as the
 	// synchronous quit hooks above.
 	m.usage.Close()
@@ -3030,26 +3036,20 @@ func paletteHideOff(cfg host.Config) bool {
 }
 
 // recordPaletteDismissal turns an esc out of the palette without a pick into
-// a telemetry event (#2399). Only the recent-files dialog reports one: its
-// telemetry showed cmd+e opened in streaks of six to ten — "wrong entry, esc,
-// try again" — and a dismissal is otherwise the single palette outcome that
-// leaves no trace at all, so an export cannot tell whether the streaks shrank.
-// Picks keep going through the ordinary command funnel, so their event count
-// is untouched, and the typed query's *length* travels, never the query.
+// a telemetry event (#2399). Since #2408 *every* mode reports one, as its own
+// "palette.dismiss" event type rather than the recent-files-only pseudo-command
+// v3 used: a dismissal is the single palette outcome that leaves no trace at
+// all, so an export can otherwise neither see the re-open streaks ("wrong
+// entry, esc, try again") nor tell which mode produced them. Picks keep going
+// through the ordinary command funnel, so their event count is untouched, and
+// the typed query's *length* travels, never the query.
 func (m Model) recordPaletteDismissal() {
 	d, ok := m.palette.TakeDismissal()
-	if !ok || d.Prefix != palette.RecentPrefix {
+	if !ok {
 		return
 	}
-	m.usage.CommandDetail(recentDismissEvent, telemetry.SourcePalette,
-		map[string]string{"qlen": strconv.Itoa(d.QueryLen)})
+	m.usage.PaletteDismiss(string(d.Prefix), d.QueryLen, d.Open)
 }
-
-// recentDismissEvent is the telemetry id of a recent-files dialog closed with
-// esc instead of a pick (#2399). It is deliberately not a registered command —
-// nothing dispatches it, it only names the outcome in the event log — and it
-// derives from the command's own id so an export can pair the two.
-const recentDismissEvent = "palette.recentFiles.dismiss"
 
 // recentRankingFrecency reads palette.recent.ranking (#2399): whether the
 // recent-files dialog blends frecency into its two lists or keeps plain MRU
@@ -6433,6 +6433,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// ike:// click should reach (#2396). Best-effort — most terminals
 		// only report focus when the view requests it.
 		m.dlServer.Touch()
+		// The project's time budget resumes (#2408); a terminal that never
+		// reports focus simply never pauses it.
+		m.projClock.focus()
+		return m, nil
+
+	case tea.BlurMsg:
+		// The terminal lost focus: pause the project's time budget (#2408), so
+		// a window left open in a background tab does not read as work time.
+		m.projClock.blur()
 		return m, nil
 
 	case vcs.CloneDoneMsg:
@@ -8911,8 +8920,16 @@ func (m Model) dispatchCommandFrom(id string, c registry.OwnedCommand, source st
 	// frecency boost (#2153), unlike the palette-only #773 counter above,
 	// and for the local usage log (#2235).
 	m.cmdFrec.Record(id)
-	m.usage.Command(id, source)
-	return tea.Batch(c.Run(m.host), m.commandExecuted(id))
+	// The event is written *after* Run so it can carry the dispatch's outcome
+	// (#2408): "ms" is the synchronous part — the work that blocks the update
+	// loop — and it only lands when the dispatch was slow. Run's tea.Cmd may
+	// still do work off-loop afterwards; that latency belongs to the "op"
+	// events, not here. Nested dispatches (a command that runs another
+	// inline) therefore log inner-before-outer.
+	start := time.Now()
+	cmd := c.Run(m.host)
+	m.usage.CommandOutcome(id, source, true, time.Since(start))
+	return tea.Batch(cmd, m.commandExecuted(id))
 }
 
 // RunCommand looks up and runs a registered command by id.
@@ -8925,6 +8942,11 @@ func (m Model) RunCommandFrom(id, source string) tea.Cmd {
 	if c, ok := m.reg.Command(id); ok {
 		return m.dispatchCommandFrom(id, c, source)
 	}
+	// The one failure mode the dispatch funnel has: nothing is registered
+	// under that id, so the invocation silently does nothing. Recorded with
+	// ok=false (#2408) — a keybind or menu entry pointing at a command a
+	// plugin no longer registers is invisible otherwise.
+	m.usage.CommandOutcome(id, source, false, 0)
 	return nil
 }
 
