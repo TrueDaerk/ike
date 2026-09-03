@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
 timestamp: 2026-09-03T00:00:00Z
@@ -285,6 +285,37 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   parked popup's and panels' sessions (`parkedPopupInstances`), and the busy
   guards count popup activity — a running popup process prompts before
   dying unseen.
+- **Pinned mode** (`terminal.popup.pin`, default `cmd+alt+shift+k`, #2406):
+  the popup stops being a modal overlay and becomes a companion of the editor.
+  `popup.pinned` changes three things and nothing else: `popupSize` widens the
+  box to the full terminal width (the persisted height delta still applies, so
+  a resize keeps working), `popupTermRect` anchors it to the bottom edge and
+  ignores the move offset (`popupTermMoveBy` is a no-op while pinned — the
+  offset belongs to the floating box it becomes again), and
+  `togglePopupTerminal` turns the toggle chord into a focus switch: it blurs
+  (#2309) instead of hiding, and refocuses from there. The layer is still an
+  overlay — the panes below keep their geometry, exactly as when it floats.
+  Pinning shows the layer (spawning the first shell like the toggle does) and
+  unpinning hides it via the shared `hidePopupLayer`, so the plain toggle is
+  in charge again. The flag lives in `popupTerm`, hence rides in `wsExtras`:
+  a project switched away from and back to comes back pinned and visible.
+  The chord could not be the issue's `cmd+alt+shift+t` — that is
+  `terminal.new`, and its cmd→ctrl fold makes `ctrl+alt+shift+t` the same
+  binding on Linux — so the pin took the free `k`.
+- **Scope** (`terminal.popup_scope`, #2406): `project` (the default) is the
+  per-project popup above; `global` makes it app state, like a global floating
+  panel (#1793). `performSwitchOpts` decides from the *incoming* config (the
+  scope is user-scoped, so it is read after `config.Load` for the new root):
+  the popup is lifted back out of the parked workspace's `wsExtras` — which
+  therefore never holds it, so eviction and close cannot end the shared
+  shells — and assigned to the fresh model with its palettes re-threaded. A
+  popup the incoming project had parked under an earlier scope is closed
+  first: one popup is the whole promise of the scope. After the size pass,
+  `cdPopupShellsTo` types `cd <new root>` into every carried shell that is
+  idle at its prompt (`terminal.Model.SendLine`, typed rather than pasted);
+  a shell with a foreground job — `Busy()` — keeps it, since its stdin
+  belongs to that job, and picks the new root up on the next switch it is
+  idle for.
 - **Open on switch** (`terminal.popup_on_switch`, #2362): the open/closed
   state restored above is what `restore` — the default — does. `always-open`
   makes every project switch end with the popup terminal open:
@@ -313,7 +344,9 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   after the modal prompts and before the pane-terminal block (a blurred layer
   skips it, #2309). Its reserved set mirrors the
   pane one: the toggle chord (resolved via the live binding table) hides from
-  inside — and refocuses a blurred layer (#2309) — `cmd+t` opens a sibling popup tab, `cmd+d` splits the popup
+  inside — and refocuses a blurred layer (#2309), or moves the keyboard while
+  pinned (#2406) — the pin chord pins/unpins from inside on the same terms,
+  `cmd+t` opens a sibling popup tab, `cmd+d` splits the popup
   (#1427), `cmd+shift+i` toggles input broadcast (#1427), `ctrl+tab` and the
   `editor.tab.next/prev` chords cycle the focused side's tabs, `cmd+w` closes
   the active tab through the busy guard (`termClosePopup` targets the shared

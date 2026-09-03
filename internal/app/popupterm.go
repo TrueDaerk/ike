@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -64,6 +65,14 @@ type popupTerm struct {
 	// toggle chord — refocuses it. open == false implies the flag is
 	// meaningless (hidden is hidden).
 	blurred bool
+	// pinned marks the popup a companion of the editor rather than a modal
+	// overlay (#2406): it stays visible while the keyboard goes back to the
+	// panes, anchored to the bottom edge across the full width at the
+	// persisted height, and the toggle chord then only moves the keyboard
+	// between the editor and the popup instead of hiding it. Unpinning hides
+	// the layer again. The flag rides in wsExtras with the rest of the popup
+	// state, so a project resumed after a switch comes back exactly as left.
+	pinned bool
 	// boxZ is the box's slot in the layer's z-order (#1806): the number of
 	// floating panels (#1793) drawn below it. 0 leaves the box at the bottom,
 	// len(floatTerms) puts it on top — where focusing it moves it, so the box
@@ -104,15 +113,23 @@ func (p popupTerm) instances() []*pane.Instance {
 // an outside press) is refocused instead of hidden: the toggle chord is the
 // way back into the copy-paste round trip, hiding stays a focused-layer act.
 func (m *Model) togglePopupTerminal() {
+	if m.popup.open && m.popup.pinned {
+		// Pinned (#2406): the chord is a focus switch, never a hide — the
+		// popup is a companion of the editor now, and the round trip
+		// editor → popup → editor is the whole point of the mode.
+		if m.popup.blurred {
+			m.focusPopupLayer()
+		} else {
+			m.blurPopupLayer()
+		}
+		return
+	}
 	if m.popup.open && m.popup.blurred {
 		m.focusPopupLayer()
 		return
 	}
 	if m.popup.open {
-		m.popup.open = false
-		for _, inst := range m.popupLayerInstances() {
-			inst.SetFocused(false)
-		}
+		m.hidePopupLayer()
 		return
 	}
 	if m.popup.inst == nil && len(m.floatTerms) == 0 {
@@ -139,6 +156,69 @@ func (m *Model) showPopupLayer() {
 		return
 	}
 	m.setPopupFocus(m.popup.focusRight)
+}
+
+// hidePopupLayer hides the layer and drops every host's focus mark — the
+// toggle's hide half, shared with the unpin (#2406). The instances and their
+// running shells are retained: hiding is a rendering and key-routing act.
+func (m *Model) hidePopupLayer() {
+	m.popup.open = false
+	for _, inst := range m.popupLayerInstances() {
+		inst.SetFocused(false)
+	}
+}
+
+// togglePopupPin flips the pinned mode (#2406, terminal.popup.pin). Pinning
+// shows the layer — spawning the first shell like the plain toggle does — and
+// re-anchors the box to the bottom edge; from there the toggle chord only
+// moves the keyboard, so the popup stays on screen while you edit. Unpinning
+// restores the centered-overlay geometry and hides the layer, the state the
+// toggle chord takes it out of again.
+func (m *Model) togglePopupPin() {
+	if m.popup.pinned {
+		m.popup.pinned = false
+		m.hidePopupLayer()
+		m.applyPopupSize()
+		return
+	}
+	m.popup.pinned = true
+	if m.popup.inst == nil && len(m.floatTerms) == 0 {
+		term := m.newPopupShell()
+		m.popup.inst = pane.NewDetachedTerminalHost("popup", term, m.host.Config(), m.pal())
+	}
+	m.showPopupLayer()
+}
+
+// popupScopeGlobal reports whether terminal.popup_scope asks for one popup
+// terminal for the whole app (#2406) instead of one per project (#1407, the
+// default): a global popup rides across project switches with its shells and
+// scrollback rather than parking with the workspace.
+func (m Model) popupScopeGlobal() bool {
+	v, _ := m.host.Config().Get("terminal.popup_scope")
+	return v == "global"
+}
+
+// cdPopupShellsTo types "cd <root>" into every popup shell sitting idle at its
+// prompt — the follow-along half of the global scope (#2406). A shell with a
+// foreground job (a build, vim, an ssh session) is left alone: its stdin
+// belongs to that job, so the line would land in the wrong reader. Exited and
+// command sessions (0350) are skipped for the same reason.
+func (m *Model) cdPopupShellsTo(root string) {
+	for _, inst := range m.popup.instances() {
+		for i := 0; i < inst.TabCount(); i++ {
+			t := inst.TabTerminal(i)
+			if t == nil || t.Exited() || t.IsCommand() || t.Busy() {
+				continue
+			}
+			t.SendLine("cd " + shellQuote(root))
+		}
+	}
+}
+
+// shellQuote wraps a path in single quotes for the cd line above, escaping
+// embedded single quotes the POSIX way (close, escape, reopen).
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // ensurePopupTerminalOpen opens the popup terminal unconditionally — the
@@ -387,6 +467,15 @@ func (m Model) popupSize() (w, h int) {
 	dw, dh := m.popupTermDelta()
 	w = ui.ClampDelta(w, dw, popupTermMinW, maxW)
 	h = ui.ClampDelta(h, dh, popupTermMinH, maxH)
+	if m.popup.pinned {
+		// Pinned (#2406): a dock strip rather than a floating box — the full
+		// terminal width, at the height the persisted delta resolved to. The
+		// width delta is kept untouched, so unpinning restores the box the
+		// user had sized. No floor here on purpose: the strip is the screen,
+		// so a terminal narrower than popupTermMinW gets a narrow strip
+		// rather than a box hanging off its right edge.
+		w = m.width
+	}
 	return w, h
 }
 
@@ -439,6 +528,12 @@ func (m Model) popupTermPos() (dx, dy int) {
 // continue-from-what-you-see rule). persist=false is the mid-drag step; the
 // drag's release calls popupTermPersistPos.
 func (m *Model) popupTermMoveBy(ddx, ddy int, persist bool) {
+	if m.popup.pinned {
+		// The pinned strip is anchored to the bottom edge (#2406): there is
+		// no free position to drag it to, and the stored offset belongs to
+		// the floating box it becomes again on unpin.
+		return
+	}
 	if !m.winSizes.Has(popupTermPosKey) {
 		dx, dy := m.winSizesAll.Get(popupTermPosKey)
 		m.winSizes.Set(popupTermPosKey, dx, dy)
@@ -493,6 +588,12 @@ func (m *Model) applyPopupSize() {
 // screen.
 func (m Model) popupTermRect() (x, y, w, h int) {
 	w, h = m.popupSize()
+	if m.popup.pinned {
+		// Pinned (#2406): anchored to the bottom edge, ignoring the move
+		// offset — the strip has no free position, and the offset is kept for
+		// the box it becomes again on unpin.
+		return 0, max(m.height-h, 0), w, h
+	}
 	dx, dy := m.popupTermPos()
 	x = ui.ClampDelta((m.width-w)/2, dx, 0, max(m.width-w, 0))
 	y = ui.ClampDelta((m.height-h)/2, dy, 0, max(m.height-h, 0))
@@ -735,6 +836,12 @@ func (m Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 		switch m.popupChordCommand(keys) {
 		case "terminal.popup":
 			m.togglePopupTerminal()
+			return true, m, nil
+		case "terminal.popup.pin":
+			// Pin/unpin from inside the popup (#2406), like the toggle chord
+			// hides from inside: the mode is about this box, so the chord
+			// must reach it while it owns the keyboard.
+			m.togglePopupPin()
 			return true, m, nil
 		case "editor.tab.next":
 			m.cyclePopupTab(1)

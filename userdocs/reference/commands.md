@@ -252,6 +252,7 @@ bring their own.
 | New Terminal | `terminal.new` | `cmd+alt+shift+t` | — | everywhere |
 | New Terminal Tab | `terminal.newTab` | `ctrl+t` | — | everywhere |
 | Popup Terminal | `terminal.popup` | `cmd+alt+t` | — | everywhere |
+| Pin Popup Terminal | `terminal.popup.pin` | `cmd+alt+shift+k` | — | everywhere |
 | SSH Host… | `terminal.ssh` | — | — | everywhere |
 | Toggle Terminal | `terminal.toggle` | `alt+f12` | — | everywhere |
 | Test Results | `tests.toggle` | `cmd+4` | — | everywhere |

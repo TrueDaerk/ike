@@ -493,6 +493,12 @@ type Terminal struct {
 	// unconditionally — resuming the parked instance if one exists, spawning
 	// a fresh shell otherwise.
 	PopupOnSwitch string `toml:"popup_on_switch"`
+	// PopupScope decides who owns the popup terminal (#2406): "project" gives
+	// every project its own popup, parked with its workspace (#1407, the
+	// default), "global" keeps one popup shell for the whole app — it rides
+	// across project switches with its scrollback and running processes and
+	// is asked to `cd` into the new project root whenever its shell is idle.
+	PopupScope string `toml:"popup_scope"`
 	// SSHHosts are extra aliases the SSH host picker (#1938) offers beyond
 	// the ones ~/.ssh/config declares — machines reachable by name that no
 	// ssh config entry mentions.

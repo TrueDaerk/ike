@@ -384,6 +384,12 @@ var jetbrainsRows = []row{
 	// focused pane terminals) the reserved-set handlers intercept it before
 	// raw pass-through.
 	{"cmd+alt+t", "terminal.popup", "Popup terminal", Global, "Terminal (#1398)"},
+	// Pinned popup (#2406): the popup stays visible beside the editor and the
+	// toggle chord above becomes a focus switch. The whole t family is spent —
+	// cmd+alt+shift+t is terminal.new (since #711) and its cmd→ctrl fold makes
+	// ctrl+alt+shift+t the same binding on Linux — so the pin takes the free
+	// k ("keep it on screen"), unclaimed on both platforms.
+	{"cmd+alt+shift+k", "terminal.popup.pin", "Pin popup terminal", Global, "Terminal (#2406)"},
 	// Per-context ctrl+t (#1794), the showcase of one chord doing the
 	// pane-appropriate thing per context: a new terminal tab with a terminal
 	// focused, a new empty editor tab with an editor focused. Disjoint
