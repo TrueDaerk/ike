@@ -95,8 +95,8 @@ func TestSearchJumpsUpward(t *testing.T) {
 	if want < 0 {
 		t.Fatal("setup: no line 37 in the history")
 	}
-	if m.search.cur != want {
-		t.Fatalf("current match = line %d, want %d", m.search.cur, want)
+	if m.search.curLine != want {
+		t.Fatalf("current match = line %d, want %d", m.search.curLine, want)
 	}
 	sb := m.sess.ScrollbackLen()
 	top := sb - m.Scroll()
@@ -136,7 +136,7 @@ func TestSearchStepAndWrap(t *testing.T) {
 	if len(matches) < 3 {
 		t.Fatalf("setup: want several matches, got %d", len(matches))
 	}
-	cur := m.search.cur
+	cur := m.search.curLine
 	idx := -1
 	for i, v := range matches {
 		if v == cur {
@@ -148,23 +148,23 @@ func TestSearchStepAndWrap(t *testing.T) {
 	}
 	m.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	wantPrev := matches[(idx-1+len(matches))%len(matches)]
-	if m.search.cur != wantPrev {
-		t.Fatalf("ctrl+p: cur = %d, want %d", m.search.cur, wantPrev)
+	if m.search.curLine != wantPrev {
+		t.Fatalf("ctrl+p: cur = %d, want %d", m.search.curLine, wantPrev)
 	}
 	m.Update(tea.KeyPressMsg{Code: 'n', Mod: tea.ModCtrl})
-	if m.search.cur != cur {
-		t.Fatalf("ctrl+n must step back down to %d, got %d", cur, m.search.cur)
+	if m.search.curLine != cur {
+		t.Fatalf("ctrl+n must step back down to %d, got %d", cur, m.search.curLine)
 	}
 	// Wrap upward: stepping to older past the first match lands on the last.
-	m.search.cur = matches[0]
+	m.search.curLine = matches[0]
 	m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
-	if m.search.cur != matches[len(matches)-1] {
-		t.Fatalf("up from the oldest match must wrap to the newest, got %d", m.search.cur)
+	if m.search.curLine != matches[len(matches)-1] {
+		t.Fatalf("up from the oldest match must wrap to the newest, got %d", m.search.curLine)
 	}
 	// Wrap downward: newest -> oldest.
 	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	if m.search.cur != matches[0] {
-		t.Fatalf("down from the newest match must wrap to the oldest, got %d", m.search.cur)
+	if m.search.curLine != matches[0] {
+		t.Fatalf("down from the newest match must wrap to the oldest, got %d", m.search.curLine)
 	}
 }
 
@@ -230,8 +230,8 @@ func TestStartSearchIdempotentAndGuarded(t *testing.T) {
 	if !m.StartSearch() {
 		t.Fatal("StartSearch on an open field must stay handled")
 	}
-	if m.search.query != "42" {
-		t.Fatalf("reopen must not reset the query, got %q", m.search.query)
+	if m.search.Text != "42" {
+		t.Fatalf("reopen must not reset the query, got %q", m.search.Text)
 	}
 	press(m, tea.KeyEscape, "")
 
@@ -251,29 +251,29 @@ func TestSearchCursorNavigation(t *testing.T) {
 	m := searchModel(t)
 	press(m, '/', "/")
 	typeQuery(m, "abc")
-	if m.search.pos != 3 {
-		t.Fatalf("pos after typing = %d, want 3", m.search.pos)
+	if m.search.Field.Cur != 3 {
+		t.Fatalf("pos after typing = %d, want 3", m.search.Field.Cur)
 	}
 	press(m, tea.KeyLeft, "")
 	press(m, tea.KeyLeft, "")
-	if m.search.pos != 1 {
-		t.Fatalf("pos after two lefts = %d, want 1", m.search.pos)
+	if m.search.Field.Cur != 1 {
+		t.Fatalf("pos after two lefts = %d, want 1", m.search.Field.Cur)
 	}
 	press(m, 'x', "x")
-	if m.search.query != "axbc" {
-		t.Fatalf("insert at cursor = %q, want axbc", m.search.query)
+	if m.search.Text != "axbc" {
+		t.Fatalf("insert at cursor = %q, want axbc", m.search.Text)
 	}
 	press(m, tea.KeyHome, "")
-	if m.search.pos != 0 {
-		t.Fatalf("home must move to 0, got %d", m.search.pos)
+	if m.search.Field.Cur != 0 {
+		t.Fatalf("home must move to 0, got %d", m.search.Field.Cur)
 	}
 	press(m, tea.KeyEnd, "")
-	if m.search.pos != 4 {
-		t.Fatalf("end must move to len, got %d", m.search.pos)
+	if m.search.Field.Cur != 4 {
+		t.Fatalf("end must move to len, got %d", m.search.Field.Cur)
 	}
 	press(m, tea.KeyBackspace, "")
-	if m.search.query != "axb" {
-		t.Fatalf("backspace at end = %q, want axb", m.search.query)
+	if m.search.Text != "axb" {
+		t.Fatalf("backspace at end = %q, want axb", m.search.Text)
 	}
 }
 
@@ -284,21 +284,21 @@ func TestSearchWordMotionsAndDelete(t *testing.T) {
 	press(m, '/', "/")
 	typeQuery(m, "foo bar")
 	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt})
-	if m.search.pos != 4 {
-		t.Fatalf("alt+left must land at the start of the last word, pos = %d, want 4", m.search.pos)
+	if m.search.Field.Cur != 4 {
+		t.Fatalf("alt+left must land at the start of the last word, pos = %d, want 4", m.search.Field.Cur)
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt})
-	if m.search.pos != 0 {
-		t.Fatalf("alt+left again must land at the start, pos = %d, want 0", m.search.pos)
+	if m.search.Field.Cur != 0 {
+		t.Fatalf("alt+left again must land at the start, pos = %d, want 0", m.search.Field.Cur)
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModAlt})
-	if m.search.pos != 3 {
-		t.Fatalf("alt+right must land after the first word, pos = %d, want 3", m.search.pos)
+	if m.search.Field.Cur != 3 {
+		t.Fatalf("alt+right must land after the first word, pos = %d, want 3", m.search.Field.Cur)
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
 	m.Update(tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl})
-	if m.search.query != "foo " {
-		t.Fatalf("ctrl+w must delete the trailing word, got %q", m.search.query)
+	if m.search.Text != "foo " {
+		t.Fatalf("ctrl+w must delete the trailing word, got %q", m.search.Text)
 	}
 }
 
@@ -312,12 +312,12 @@ func TestSearchPasteGoesToQuery(t *testing.T) {
 	if m.occupied {
 		t.Fatal("paste while the search is open must not reach the shell")
 	}
-	if m.search.query != "37" {
-		t.Fatalf("paste must land in the search query, got %q", m.search.query)
+	if m.search.Text != "37" {
+		t.Fatalf("paste must land in the search query, got %q", m.search.Text)
 	}
 	want := findRow(m.sess, "37")
-	if m.search.cur != want {
-		t.Fatalf("paste must trigger the match jump, cur = %d, want %d", m.search.cur, want)
+	if m.search.curLine != want {
+		t.Fatalf("paste must trigger the match jump, cur = %d, want %d", m.search.curLine, want)
 	}
 }
 
@@ -329,11 +329,11 @@ func TestSearchPasteAtCursor(t *testing.T) {
 	typeQuery(m, "27")
 	press(m, tea.KeyLeft, "")
 	m.PasteText("x")
-	if m.search.query != "2x7" {
-		t.Fatalf("paste at cursor = %q, want 2x7", m.search.query)
+	if m.search.Text != "2x7" {
+		t.Fatalf("paste at cursor = %q, want 2x7", m.search.Text)
 	}
-	if m.search.pos != 2 {
-		t.Fatalf("cursor after paste = %d, want 2", m.search.pos)
+	if m.search.Field.Cur != 2 {
+		t.Fatalf("cursor after paste = %d, want 2", m.search.Field.Cur)
 	}
 }
 

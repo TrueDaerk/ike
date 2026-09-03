@@ -123,7 +123,9 @@ the pane's last row (`internal/diff/search.go`), the shape the explorer speed
 search and the response viewer's prompt already wear: the slash prefix, the
 query with its text cursor, and a `i/n` match counter (or `no matches`). Typing
 re-matches live, `enter` applies and leaves the prompt, `esc` abandons the
-search entirely.
+search entirely. The state and those rules are the shared `ui.LineSearch`
+(#2461, see [Project Search § In-pane search](./search.md)); the file keeps
+only the match rule and the landing.
 
 The match runs over the **diff rows** — a row's raw `Left`/`Right` text —
 rather than the rendered lines, so a query finds the same thing in both

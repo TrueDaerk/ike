@@ -128,14 +128,8 @@ func (m *Model) Paste(text string) (handled bool) {
 		p.selStart, p.selEnd = 0, 0
 		return true
 	}
-	if s := m.search; s != nil {
-		out, ncur, changed := ui.PasteText(s.query, s.pos, text)
-		if !changed {
-			return false
-		}
-		s.query, s.pos = out, ncur
-		m.searchJump()
-		return true
+	if m.search != nil {
+		return m.searchPaste(text)
 	}
 	return false
 }

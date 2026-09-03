@@ -21,6 +21,7 @@ import (
 	"ike/internal/highlight"
 	"ike/internal/textsel"
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // JumpMsg asks the root model to open the diff's right-hand (current) file
@@ -121,7 +122,7 @@ type Model struct {
 	// the pane's last row and n/N walk the matching rows. It lives behind a
 	// pointer so the value-receiver View copies share it, like the explorer's
 	// speed search; nil means no search is open and n/N step hunks.
-	search *diffSearch
+	search *ui.LineSearch
 }
 
 // IgnoreWhitespaceMsg reports that the diff pane Key flipped its
@@ -458,7 +459,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	// The open search prompt owns the keyboard (#2409): every key is query
 	// text until enter applies it or esc abandons the search.
-	if m.search != nil && m.search.input {
+	if m.search != nil && m.search.Open {
 		return m.searchKey(msg)
 	}
 	switch msg.String() {

@@ -66,16 +66,23 @@ copy is capped at 1 MiB raw and says so.
 
 ## Search
 
-`/` opens the search line; the pane implements the shared `Searchable`
-capability (#2409/#2410), so cmd+f opens it and cmd+g / cmd+shift+g step
-matches while it is open (`n`/`N` step after enter closed it). The query is
-parsed by `ParseQuery`: a `0x` prefix reads hex digits (spaces allowed),
-`\xNN` escapes mix bytes into a literal, anything else searches the string's
-UTF-8 bytes. Applying enumerates match offsets by streaming the file in
-overlapping 1 MiB chunks (capped at 100 000 matches, the counter shows
-`N+`), jumps to the first match at or after the cursor, and highlights every
-visible match in both the hex and ASCII columns; only an explicit search
-pays that scan, never the open.
+`/` opens the shared in-pane search line (`ui.LineSearch`, #2461 — see
+[Project Search § In-pane search](./search.md)); the pane implements the
+shared `Searchable` capability (#2409/#2410), so cmd+f opens it and cmd+g /
+cmd+shift+g step matches while it is open and after `enter` closed it
+(`n`/`N` step at rest). The query is parsed by `ParseQuery`: a `0x` prefix
+reads hex digits (spaces allowed), `\xNN` escapes mix bytes into a literal,
+anything else searches the string's UTF-8 bytes — exact bytes, the one
+adopter without the smartcase rule. Matches are enumerated by streaming the
+file in overlapping 1 MiB chunks (capped at 100 000 matches, the counter
+shows `N+`) and highlighted in both the hex and ASCII columns. The line
+narrows **live** up to `liveScanMax` (16 MiB); past it a scan per keystroke
+would stall typing, so the line reads `enter to search` and the enumeration
+waits for `enter` or a match step — only an explicit search pays that scan,
+never the open. `enter` lands on the first match at or after the cursor; a
+query that does not parse shows its complaint in the line and keeps it open.
+`esc` while the line is open drops the search; at rest it drops the applied
+set (after a selection, which `esc` clears first).
 
 ## Open File As… chooser
 

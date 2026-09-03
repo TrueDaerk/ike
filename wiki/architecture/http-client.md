@@ -1422,7 +1422,11 @@ Sec-WebSocket-Protocol: chat
   stays independently copyable while the prompt is open (#2051).
   `n`/`N` step to the next/previous match with
   wrap-around and scroll it into view, `Enter` commits the pattern and closes
-  the prompt, `Esc` clears the search. `cmd+g` / `cmd+shift+g` step the same
+  the prompt, `Esc` clears the search. The prompt's state is the shared
+  `ui.LineSearch` (#2461, see [Project Search § In-pane
+  search](./search.md)): reopening `/` keeps the committed pattern (a
+  selection prefill still wins), and an edit keeps the current match on the
+  nearest surviving row instead of the same index. `cmd+g` / `cmd+shift+g` step the same
   matches **while the prompt is still open** (#2410), where `n` and `N` are
   query text — the query stays editable between steps, and `n`/`N` keep
   working after `Enter` for the vim hands that learned them. Every match renders on the muted

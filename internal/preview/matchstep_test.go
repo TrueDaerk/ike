@@ -17,10 +17,10 @@ func TestPreviewNextMatchKeepsTheInputFocused(t *testing.T) {
 	if m.SearchMatches() < 2 {
 		t.Fatalf("the fixture needs several matches, got %d", m.SearchMatches())
 	}
-	before := m.search.cur
+	before := m.search.Cur
 	st := m.NextMatch()
-	if !st.Handled || m.search.cur == before {
-		t.Fatalf("NextMatch = %+v, cur %d → %d", st, before, m.search.cur)
+	if !st.Handled || m.search.Cur == before {
+		t.Fatalf("NextMatch = %+v, cur %d → %d", st, before, m.search.Cur)
 	}
 	if !m.Searching() || m.SearchQuery() != "text" {
 		t.Fatalf("the prompt must survive the step: searching=%v query=%q",
@@ -32,7 +32,7 @@ func TestPreviewPrevMatchWrapsAndSaysSo(t *testing.T) {
 	m := searchPane()
 	m.OpenSearch()
 	typeQuery(&m, "text")
-	m.search.cur = 0
+	m.search.Cur = 0
 	st := m.PrevMatch()
 	if !st.Wrapped || st.Index != st.Total {
 		t.Fatalf("the backward wrap = %+v", st)

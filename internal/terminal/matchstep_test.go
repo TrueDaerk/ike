@@ -31,14 +31,14 @@ func TestScrollbackSearchMatchStepChord(t *testing.T) {
 	for _, r := range "line1" {
 		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
-	at := m.search.cur
+	at := m.search.curLine
 	m.Update(stepChord(false))
-	if m.search.cur == at {
+	if m.search.curLine == at {
 		t.Fatalf("cmd+g must step the match, cur stayed at %d", at)
 	}
-	if !m.Searching() || m.search.query != "line1" {
+	if !m.Searching() || m.search.Text != "line1" {
 		t.Fatalf("the field must survive the step: open=%v query=%q",
-			m.Searching(), m.search.query)
+			m.Searching(), m.search.Text)
 	}
 }
 

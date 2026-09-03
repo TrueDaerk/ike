@@ -1,5 +1,18 @@
 # Log
 
+## 2026-09-03 (shared in-pane search, #2461)
+
+- **`ui.LineSearch`.** The seven in-pane `/` searches (diff, markdown
+  preview, HTTP response, notebook, hex, terminal scrollback, explorer speed
+  search) hold their state in one type and share its rules: reopen on the
+  last query, live narrowing that keeps the current match on the nearest
+  surviving position, enter keeps the matches for `n`/`N` and cmd+g, esc
+  drops them (anchored panes restore), one prompt row, one smartcase rule
+  (`ui.SmartCaseContains`). The notebook and hex viewers became live with a
+  caret and the shared counter; the hex viewer defers the rescan to enter
+  past 16 MiB. Guard test `internal/ui/searchsweep_test.go`. See
+  [Project Search § In-pane search](/architecture/search.md).
+
 ## 2026-09-03 (shared hierarchy tree, #2465)
 
 - **`internal/hiertree`.** The call-hierarchy and type-hierarchy overlays

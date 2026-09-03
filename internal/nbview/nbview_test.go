@@ -195,11 +195,43 @@ func TestSearchAcrossCellSources(t *testing.T) {
 }
 
 // TestSearchIsCaseInsensitive (#2425).
-func TestSearchIsCaseInsensitive(t *testing.T) {
+// TestSearchIsSmartcase: the in-pane search's one matching rule (#2461) — an
+// all-lowercase query folds case, an uppercase rune makes it exact.
+func TestSearchIsSmartcase(t *testing.T) {
 	m := newModel(t, writeFixture(t))
-	typeQuery(&m, "IMPORT")
+	typeQuery(&m, "import")
 	if len(m.Matches()) != 1 {
 		t.Fatalf("matches = %d, want 1", len(m.Matches()))
+	}
+	m2 := newModel(t, writeFixture(t))
+	typeQuery(&m2, "IMPORT")
+	if len(m2.Matches()) != 0 {
+		t.Fatalf("an uppercase query is exact: matches = %d, want 0", len(m2.Matches()))
+	}
+}
+
+// TestSearchNarrowsLiveWithACaret (#2461): the match set follows every
+// keystroke, the line renders a caret and the shared counter, and esc while
+// the line is open drops the search.
+func TestSearchNarrowsLiveWithACaret(t *testing.T) {
+	m := newModel(t, writeFixture(t))
+	press(&m, "/")
+	for _, r := range "imp" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	if !m.Searching() || len(m.Matches()) != 1 {
+		t.Fatalf("typing must narrow live: open=%v matches=%d", m.Searching(), len(m.Matches()))
+	}
+	if v := m.View(); !strings.Contains(v, "/imp") || !strings.Contains(v, "1/1") {
+		t.Fatalf("the line must show the query and the counter:\n%s", v)
+	}
+	m.Update(tea.KeyPressMsg{Code: 'z', Text: "z"})
+	if len(m.Matches()) != 0 || !strings.Contains(m.View(), "no matches") {
+		t.Fatalf("a miss must show live: matches=%d\n%s", len(m.Matches()), m.View())
+	}
+	press(&m, "esc")
+	if m.Searching() || len(m.Matches()) != 0 {
+		t.Fatal("esc while the line is open must drop the search")
 	}
 }
 

@@ -1098,11 +1098,7 @@ func (m *Model) PasteText(text string) {
 		return
 	}
 	if m.search != nil {
-		out, ncur, changed := ui.PasteText(m.search.query, m.search.pos, text)
-		if changed {
-			m.search.query, m.search.pos = out, ncur
-			m.searchJump()
-		}
+		m.searchPaste(text)
 		return
 	}
 	if m.sess != nil {

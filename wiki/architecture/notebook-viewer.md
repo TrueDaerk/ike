@@ -95,10 +95,15 @@ silently retarget `e` or `y`.
 `▸ 2 outputs folded` marker. A cell with no outputs has nothing to fold.
 
 `/` (and cmd+f through the shared `Searchable` capability, #2409/#2410)
-searches the **cell sources** — what the author wrote, not what a run
-happened to print — case-insensitively. `n`/`N` and cmd+g/cmd+shift+g step
-the matches, moving the cell cursor with them; matching rows highlight and
-`esc` drops the set.
+opens the shared in-pane search (`ui.LineSearch`, #2461 — see [Project
+Search § In-pane search](./search.md)) over the **cell sources** — what the
+author wrote, not what a run happened to print — with the smartcase rule.
+Typing narrows live (the line carries the caret and the `3/17` counter);
+`enter` closes the line and lands on the first match at or after the cursor
+cell; `esc` while the line is open drops the search, and at rest drops the
+applied set. `n`/`N` and cmd+g/cmd+shift+g step the matches — the chord
+keeps working after `enter` — moving the cell cursor with them; matching rows
+highlight.
 
 ## Actions
 

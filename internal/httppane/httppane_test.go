@@ -309,7 +309,7 @@ func TestSearchFindsMatchesAcrossTheView(t *testing.T) {
 	}
 	// The hits really do span header and body rows.
 	kinds := map[rowKind]bool{}
-	for _, s := range m.matches {
+	for _, s := range m.spans {
 		kinds[m.rows[s.Line].kind] = true
 	}
 	if !kinds[kindHeader] || !kinds[kindBody] {
@@ -420,13 +420,13 @@ func TestSearchBackspaceReRuns(t *testing.T) {
 func TestSearchPasteInsertsAtCursor(t *testing.T) {
 	m := searchViewer(t)
 	typeSearch(m, "tokn")
-	m.qcur = 3 // "tok|n"
+	m.search.Field.Cur = 3 // "tok|n"
 	m.PasteText("e")
 	if q, open := m.SearchQuery(); q != "token" || !open {
 		t.Fatalf("query after paste: %q open=%v, want %q open=true", q, open, "token")
 	}
-	if want := 4; m.qcur != want { // cursor lands right after the inserted "e"
-		t.Fatalf("cursor after paste: %d, want %d", m.qcur, want)
+	if want := 4; m.search.Field.Cur != want { // cursor lands right after the inserted "e"
+		t.Fatalf("cursor after paste: %d, want %d", m.search.Field.Cur, want)
 	}
 	if _, total := m.MatchPosition(); total != 4 {
 		t.Errorf("matches after paste: %d, want 4", total)
@@ -495,7 +495,7 @@ func TestSearchScrollsCurrentMatchIntoView(t *testing.T) {
 	if cur != 1 || total != 1 {
 		t.Fatalf("match position: %d/%d", cur, total)
 	}
-	line := m.matches[0].Line
+	line := m.spans[0].Line
 	if line < m.top || line >= m.top+m.bodyHeight() {
 		t.Errorf("match on row %d not in view [%d,%d)", line, m.top, m.top+m.bodyHeight())
 	}
@@ -553,37 +553,37 @@ func TestSearchPromptSwallowsNavigationKeys(t *testing.T) {
 func TestSearchCursorMotion(t *testing.T) {
 	m := searchViewer(t)
 	typeSearch(m, "token abc")
-	if m.qcur != len([]rune("token abc")) {
-		t.Fatalf("cursor after typing: %d, want end", m.qcur)
+	if m.search.Field.Cur != len([]rune("token abc")) {
+		t.Fatalf("cursor after typing: %d, want end", m.search.Field.Cur)
 	}
 	m.handleKey(keyPress("left"))
 	m.handleKey(keyPress("left"))
-	if want := len([]rune("token abc")) - 2; m.qcur != want {
-		t.Fatalf("cursor after two lefts: %d, want %d", m.qcur, want)
+	if want := len([]rune("token abc")) - 2; m.search.Field.Cur != want {
+		t.Fatalf("cursor after two lefts: %d, want %d", m.search.Field.Cur, want)
 	}
 	m.handleKey(keyPress("right"))
-	if want := len([]rune("token abc")) - 1; m.qcur != want {
-		t.Fatalf("cursor after right: %d, want %d", m.qcur, want)
+	if want := len([]rune("token abc")) - 1; m.search.Field.Cur != want {
+		t.Fatalf("cursor after right: %d, want %d", m.search.Field.Cur, want)
 	}
 	m.handleKey(tea.KeyPressMsg{Code: tea.KeyHome})
-	if m.qcur != 0 {
-		t.Fatalf("home must move the cursor to 0, got %d", m.qcur)
+	if m.search.Field.Cur != 0 {
+		t.Fatalf("home must move the cursor to 0, got %d", m.search.Field.Cur)
 	}
 	m.handleKey(tea.KeyPressMsg{Code: tea.KeyEnd})
-	if m.qcur != len([]rune("token abc")) {
-		t.Fatalf("end must move the cursor to the query length, got %d", m.qcur)
+	if m.search.Field.Cur != len([]rune("token abc")) {
+		t.Fatalf("end must move the cursor to the query length, got %d", m.search.Field.Cur)
 	}
 	m.handleKey(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt})
-	if want := len([]rune("token ")); m.qcur != want {
-		t.Fatalf("alt+left must jump to the start of 'abc', got %d want %d", m.qcur, want)
+	if want := len([]rune("token ")); m.search.Field.Cur != want {
+		t.Fatalf("alt+left must jump to the start of 'abc', got %d want %d", m.search.Field.Cur, want)
 	}
 	m.handleKey(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModSuper})
-	if m.qcur != 0 {
-		t.Fatalf("super+left must jump to the query start, got %d", m.qcur)
+	if m.search.Field.Cur != 0 {
+		t.Fatalf("super+left must jump to the query start, got %d", m.search.Field.Cur)
 	}
 	m.handleKey(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModSuper})
-	if m.qcur != len([]rune("token abc")) {
-		t.Fatalf("super+right must jump to the query end, got %d", m.qcur)
+	if m.search.Field.Cur != len([]rune("token abc")) {
+		t.Fatalf("super+right must jump to the query end, got %d", m.search.Field.Cur)
 	}
 }
 
@@ -596,8 +596,8 @@ func TestSearchWordDeletion(t *testing.T) {
 	if q, _ := m.SearchQuery(); q != "token " {
 		t.Fatalf("alt+backspace must delete the last word, got %q", q)
 	}
-	if m.qcur != len([]rune("token ")) {
-		t.Fatalf("cursor after alt+backspace: %d, want %d", m.qcur, len([]rune("token ")))
+	if m.search.Field.Cur != len([]rune("token ")) {
+		t.Fatalf("cursor after alt+backspace: %d, want %d", m.search.Field.Cur, len([]rune("token ")))
 	}
 
 	m.handleKey(tea.KeyPressMsg{Code: tea.KeyHome})
@@ -634,8 +634,8 @@ func TestSearchKillToStart(t *testing.T) {
 	if q, _ := m.SearchQuery(); q != "abc" {
 		t.Fatalf("super+backspace must kill to the line start, got %q", q)
 	}
-	if m.qcur != 0 {
-		t.Fatalf("cursor after kill-to-start: %d, want 0", m.qcur)
+	if m.search.Field.Cur != 0 {
+		t.Fatalf("cursor after kill-to-start: %d, want 0", m.search.Field.Cur)
 	}
 }
 
