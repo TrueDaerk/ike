@@ -117,8 +117,7 @@ type Model struct {
 	editing  bool
 	editRef  int
 	editName string
-	editBuf  []rune
-	editCur  int
+	edit     ui.Field
 	// editWatch marks the open editor as a watch-expression edit (#1914):
 	// editWatchIdx targets the app's list (-1 = the pending add row).
 	editWatch    bool
@@ -178,8 +177,7 @@ func (m Model) Editing() bool { return m.editing }
 func (m *Model) cancelEdit() {
 	wasWatchAdd := m.editing && m.editWatch && m.editWatchIdx < 0
 	m.editing = false
-	m.editBuf = nil
-	m.editCur = 0
+	m.edit.Clear()
 	m.editName = ""
 	m.editRef = 0
 	m.editWatch = false
@@ -423,8 +421,7 @@ func (m *Model) startEdit() {
 	m.editing = true
 	m.editRef = n.parentRef
 	m.editName = n.v.Name
-	m.editBuf = []rune(n.v.Value)
-	m.editCur = len(m.editBuf)
+	m.edit.Set(n.v.Value)
 }
 
 // editKey drives the inline line editor: printable runes insert, the usual
@@ -433,11 +430,11 @@ func (m *Model) editKey(k tea.KeyPressMsg) tea.Cmd {
 	switch k.Code {
 	case tea.KeyEnter:
 		if m.editWatch {
-			idx, expr := m.editWatchIdx, strings.TrimSpace(string(m.editBuf))
+			idx, expr := m.editWatchIdx, strings.TrimSpace(m.edit.Text)
 			m.cancelEdit()
 			return m.commitWatch(idx, expr)
 		}
-		ref, name, val := m.editRef, m.editName, string(m.editBuf)
+		ref, name, val := m.editRef, m.editName, m.edit.Text
 		m.cancelEdit()
 		return func() tea.Msg { return SetVarMsg{Ref: ref, Name: name, Value: val} }
 	case tea.KeyEscape:
@@ -447,9 +444,7 @@ func (m *Model) editKey(k tea.KeyPressMsg) tea.Cmd {
 	// Everything else is shared line editing (#2002): a movable cursor with
 	// word motions, word/line kills, the macOS opt/cmd chords and rune-safe
 	// backspace, plus printable insertion at the cursor.
-	if out, ncur, handled, _ := ui.EditKey(k, string(m.editBuf), m.editCur); handled {
-		m.editBuf, m.editCur = []rune(out), ncur
-	}
+	m.edit.Key(k)
 	return nil
 }
 
@@ -465,12 +460,7 @@ func (m *Model) PasteText(text string) bool {
 	if !m.editing {
 		return false
 	}
-	out, ncur, changed := ui.PasteText(string(m.editBuf), m.editCur, text)
-	if !changed {
-		return false
-	}
-	m.editBuf, m.editCur = []rune(out), ncur
-	return true
+	return m.edit.Paste(text)
 }
 
 // listNav routes a navigation key at the focused column and reports whether
@@ -754,8 +744,8 @@ func (m Model) renderVars(w int) []string {
 				// name/value split to prefix.
 				prefix = " " + strings.Repeat("  ", n.depth) + marker
 			}
-			line := append([]rune(prefix), m.editBuf...)
-			ci := len([]rune(prefix)) + m.editCur
+			line := append([]rune(prefix), m.edit.Runes()...)
+			ci := len([]rune(prefix)) + m.edit.Cur
 			if ci == len(line) {
 				line = append(line, ' ') // the cursor sits past the buffer end
 			}

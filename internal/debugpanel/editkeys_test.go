@@ -33,28 +33,28 @@ func editingPanel(t *testing.T, value string) *Model {
 func TestEditWordAndLineKills(t *testing.T) {
 	m := editingPanel(t, "alpha beta")
 	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt})
-	if string(m.editBuf) != "alpha " {
-		t.Fatalf("alt+backspace: %q", string(m.editBuf))
+	if m.edit.Text != "alpha " {
+		t.Fatalf("alt+backspace: %q", m.edit.Text)
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModSuper})
-	if string(m.editBuf) != "" || m.editCur != 0 {
-		t.Fatalf("super+backspace: %q/%d", string(m.editBuf), m.editCur)
+	if m.edit.Text != "" || m.edit.Cur != 0 {
+		t.Fatalf("super+backspace: %q/%d", m.edit.Text, m.edit.Cur)
 	}
 }
 
 func TestEditWordMotion(t *testing.T) {
 	m := editingPanel(t, "alpha beta")
 	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt})
-	if m.editCur != 6 {
-		t.Fatalf("alt+left: cursor = %d, want 6", m.editCur)
+	if m.edit.Cur != 6 {
+		t.Fatalf("alt+left: cursor = %d, want 6", m.edit.Cur)
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModSuper})
-	if m.editCur != 0 {
-		t.Fatalf("super+left: cursor = %d, want 0", m.editCur)
+	if m.edit.Cur != 0 {
+		t.Fatalf("super+left: cursor = %d, want 0", m.edit.Cur)
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModSuper})
-	if m.editCur != 10 {
-		t.Fatalf("super+right: cursor = %d, want 10", m.editCur)
+	if m.edit.Cur != 10 {
+		t.Fatalf("super+right: cursor = %d, want 10", m.edit.Cur)
 	}
 }
 
@@ -62,8 +62,8 @@ func TestEditDeleteForward(t *testing.T) {
 	m := editingPanel(t, "abc")
 	m.Update(tea.KeyPressMsg{Code: tea.KeyHome})
 	m.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
-	if string(m.editBuf) != "bc" {
-		t.Fatalf("delete: %q", string(m.editBuf))
+	if m.edit.Text != "bc" {
+		t.Fatalf("delete: %q", m.edit.Text)
 	}
 }
 
@@ -73,8 +73,8 @@ func TestEditPasteAtCursor(t *testing.T) {
 	if !m.PasteText("b") {
 		t.Fatal("paste must be consumed by the open editor")
 	}
-	if string(m.editBuf) != "abc" || m.editCur != 2 {
-		t.Fatalf("paste: %q/%d", string(m.editBuf), m.editCur)
+	if m.edit.Text != "abc" || m.edit.Cur != 2 {
+		t.Fatalf("paste: %q/%d", m.edit.Text, m.edit.Cur)
 	}
 }
 
@@ -92,7 +92,7 @@ func TestEditBackspaceIsRuneSafe(t *testing.T) {
 	m := editingPanel(t, "größe")
 	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
-	if string(m.editBuf) != "grö" {
-		t.Fatalf("backspace: %q", string(m.editBuf))
+	if m.edit.Text != "grö" {
+		t.Fatalf("backspace: %q", m.edit.Text)
 	}
 }
