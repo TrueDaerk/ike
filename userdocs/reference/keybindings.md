@@ -298,6 +298,7 @@ Active when the HTTP response pane has focus.
 | Cancel running HTTP request | `cmd+.` | `ctrl+.` | `http.cancel` |
 | Cancel running HTTP request | `ctrl+.` | `ctrl+.` | `http.cancel` |
 | Copy response selection or body | `cmd+c` | `ctrl+c` | `http.copyResponse` |
+| Open playground for this file | `cmd+shift+j` | `ctrl+shift+j` | `playground.open` |
 | Re-send stored HTTP request | `ctrl+r` | `ctrl+r` | `http.resend` |
 | Search in response | `cmd+f` | `ctrl+f` | `http.search` |
 | Search in response | `ctrl+f` | `ctrl+f` | `http.search` |

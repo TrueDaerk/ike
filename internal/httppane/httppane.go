@@ -612,6 +612,12 @@ func contentTag(ct string) string {
 		return "xml"
 	case ct == "text/html" || ct == "application/xhtml":
 		return "html"
+	case strings.HasSuffix(ct, "/yaml") || strings.HasSuffix(ct, "+yaml") ||
+		ct == "application/x-yaml" || ct == "text/x-yaml":
+		// YAML answers are rare next to JSON but not exotic — Kubernetes and
+		// OpenAPI endpoints serve them — and naming the tag buys both the
+		// highlighting and the yq route of playground.open (#2451).
+		return "yaml"
 	case ct == "text/css":
 		return "css"
 	case ct == "application/javascript" || ct == "text/javascript" ||

@@ -553,6 +553,7 @@ highlighted, binary bodies collapsed to a notice.
 | `U` | Copy the request line's full, untruncated URL |
 | `t` | Switch between the pretty-printed and the raw body |
 | `q` | Open the jq playground on this body |
+| ++cmd+shift+j++ / ++ctrl+shift+j++ | Open the playground this body's type speaks — jq, yq or xmq |
 | `m` | Load the next chunk of a large body |
 | `o` | Open the whole body as a file |
 | `x` | Cancel the request that is running |
@@ -643,6 +644,14 @@ in the response pane, with this body as its input — no copying it out first.
 The query line appears at the top of the pane and the body below is replaced
 by the live result until you press ++esc++. For a large, partly spooled
 response the playground still gets the whole body.
+
+++cmd+shift+j++ (++ctrl+shift+j++ off macOS, or **Open Playground for This
+File**) is the same thing for the *other* body types: it looks at the
+response's content type and opens the playground that speaks it — jq for JSON,
+yq for YAML, xmq for XML and HTML — over this body, in this pane. A body no
+playground speaks (plain text, binary, an empty response) is answered with a
+short "no playground …" notice and nothing opens. The chord works the same way
+on the file in an editor, so it is one key for "query what I am looking at".
 
 ### Copying the shown request as curl
 
@@ -793,6 +802,7 @@ missing quietly.
 | Save HTTP Response Body to File… | `http.saveResponse` | — |
 | Toggle Raw / Pretty HTTP Response Body | `http.toggleRawBody` | — |
 | Open jq Playground on HTTP Response | `http.jqPlayground` | — |
+| Open Playground for This File | `playground.open` | ++cmd+shift+j++ / ++ctrl+shift+j++ |
 | Load More of the HTTP Response Body | `http.loadMoreBody` | — |
 | Open Full HTTP Response Body as File | `http.openBodyFile` | — |
 | Browse HTTP Response History | `http.responseHistory` | — |
