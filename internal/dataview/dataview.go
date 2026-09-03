@@ -20,6 +20,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/datasrc"
+	"ike/internal/gridview"
 	"ike/internal/highlight"
 	"ike/internal/theme"
 	"ike/internal/ui"
@@ -30,10 +31,6 @@ const PageSize = 500
 
 // maxColWidth clamps one grid column; longer cells clip with an ellipsis.
 const maxColWidth = 32
-
-// nullCell is how the grid draws SQL NULL — visibly distinct from the empty
-// string, which renders as nothing.
-const nullCell = "∅"
 
 // ShowSchemaMsg asks the root model to show a table's DDL in a read-only
 // buffer. Emitted by the schema key on the selected table.
@@ -596,21 +593,11 @@ func (m *Model) sidebarWidth() int {
 	return w
 }
 
-// renderSidebar draws the table/view list with row counts.
+// renderSidebar draws the table/view list with row counts through the shared
+// list column (#2468).
 func (m *Model) renderSidebar(pal *theme.Palette, height int) string {
-	w := m.sidebarWidth()
-	var b strings.Builder
-	for k := 0; k < height; k++ {
-		line := strings.Repeat(" ", w)
-		if i := m.ttop + k; i < len(m.tables) {
-			line = m.sidebarRow(pal, i, w)
-		}
-		b.WriteString(line)
-		if k < height-1 {
-			b.WriteString("\n")
-		}
-	}
-	return b.String()
+	return gridview.Sidebar(m.ttop, height, len(m.tables), m.sidebarWidth(),
+		func(i, w int) string { return m.sidebarRow(pal, i, w) })
 }
 
 // countText renders a row count for the sidebar and the status line: a
@@ -646,7 +633,7 @@ func (m *Model) sidebarRow(pal *theme.Palette, i, w int) string {
 	if pad >= 1 {
 		line = left + strings.Repeat(" ", pad) + count + " "
 	} else {
-		line = clipTo(left, w)
+		line = gridview.ClipTo(left, w)
 		if d := w - lipgloss.Width(line); d > 0 {
 			line += strings.Repeat(" ", d)
 		}
@@ -674,7 +661,7 @@ func (m *Model) renderGrid(pal *theme.Palette, height int) string {
 	sep := lipgloss.NewStyle().Faint(true).Render("│")
 	var b strings.Builder
 	if m.pageErr != nil {
-		b.WriteString(sep + lipgloss.NewStyle().Foreground(pal.Error).Render(clipTo(" "+m.pageErr.Error(), w)))
+		b.WriteString(sep + lipgloss.NewStyle().Foreground(pal.Error).Render(gridview.ClipTo(" "+m.pageErr.Error(), w)))
 	} else if m.opening {
 		// The open runs in the background (#1795): the pane is here from the
 		// first frame and says what it is waiting for.
@@ -688,8 +675,9 @@ func (m *Model) renderGrid(pal *theme.Palette, height int) string {
 		}
 		return b.String()
 	}
-	widths := m.colWidths(w)
-	b.WriteString(sep + m.headerRow(pal, widths, w))
+	labels := m.headerLabels()
+	widths := m.colWidths(labels)
+	b.WriteString(sep + gridview.HeaderRow(pal, labels, widths, m.colOff, w))
 	rows := height - 1
 	for k := 0; k < rows; k++ {
 		b.WriteString("\n" + sep)
@@ -700,20 +688,29 @@ func (m *Model) renderGrid(pal *theme.Palette, height int) string {
 	return b.String()
 }
 
-// colWidths sizes the visible columns from the header and the loaded page,
-// clamped to maxColWidth.
-func (m *Model) colWidths(w int) []int {
-	widths := make([]int, len(m.page.Columns))
+// headerLabels are the header cells: each column name with its sort marker
+// (#2248) attached, so the arrow rides inside that column's width rather
+// than as an overflow.
+func (m *Model) headerLabels() []string {
+	labels := make([]string, len(m.page.Columns))
 	for i, c := range m.page.Columns {
-		// The sorted column's arrow (#2248) rides inside the header cell, so
-		// it is part of that column's width rather than an overflow.
-		widths[i] = lipgloss.Width(c + m.sortMarker(c))
+		labels[i] = c + m.sortMarker(c)
+	}
+	return labels
+}
+
+// colWidths sizes the visible columns from the header labels and the loaded
+// page, clamped to maxColWidth.
+func (m *Model) colWidths(labels []string) []int {
+	widths := make([]int, len(labels))
+	for i, l := range labels {
+		widths[i] = lipgloss.Width(l)
 	}
 	for _, row := range m.page.Rows {
 		for i, cell := range row {
 			t := cell.Text
 			if cell.Null {
-				t = nullCell
+				t = gridview.NullCell
 			}
 			if n := lipgloss.Width(t); n > widths[i] {
 				widths[i] = n
@@ -731,54 +728,21 @@ func (m *Model) colWidths(w int) []int {
 	return widths
 }
 
-// headerRow draws the column names from colOff on, bold.
-func (m *Model) headerRow(pal *theme.Palette, widths []int, w int) string {
-	var cells []string
-	for i := m.colOff; i < len(m.page.Columns); i++ {
-		cells = append(cells, padTo(m.page.Columns[i]+m.sortMarker(m.page.Columns[i]), widths[i]))
-	}
-	line := " " + strings.Join(cells, "  ")
-	return lipgloss.NewStyle().Bold(true).Foreground(pal.Accent).Render(clipTo(line, w))
+// dataRow draws one page row through the shared grid renderer (#2468); the
+// row cursor highlights only while the grid region has the focus.
+func (m *Model) dataRow(pal *theme.Palette, i int, widths []int, w int) string {
+	selected := i == m.rowCur && m.region == regionGrid
+	return gridview.DataRow(pal, cells(m.page.Rows[i]), widths, m.colOff, w, selected, m.focused)
 }
 
-// dataRow draws one page row from colOff on; NULL cells render as the null
-// glyph, faint, so they never read as empty strings.
-func (m *Model) dataRow(pal *theme.Palette, i int, widths []int, w int) string {
-	row := m.page.Rows[i]
-	base := lipgloss.NewStyle().Foreground(pal.Foreground)
-	nullStyle := lipgloss.NewStyle().Faint(true)
-	selected := i == m.rowCur && m.region == regionGrid
-	if selected {
-		if m.focused {
-			base = base.Background(pal.Selection).Bold(true)
-			nullStyle = nullStyle.Background(pal.Selection)
-		} else {
-			base = base.Background(pal.SelectionMuted)
-			nullStyle = nullStyle.Background(pal.SelectionMuted)
-		}
+// cells converts one backend row to the renderer's cell type, so
+// internal/datasrc stays free of a UI dependency.
+func cells(row []datasrc.Cell) []gridview.Cell {
+	out := make([]gridview.Cell, len(row))
+	for i, c := range row {
+		out[i] = gridview.Cell{Text: c.Text, Null: c.Null}
 	}
-	budget := w
-	var b strings.Builder
-	b.WriteString(base.Render(" "))
-	budget--
-	for c := m.colOff; c < len(row) && budget > 0; c++ {
-		cell := row[c]
-		text, style := cell.Text, base
-		if cell.Null {
-			text, style = nullCell, nullStyle
-		}
-		chunk := padTo(text, widths[c])
-		if c < len(row)-1 {
-			chunk += "  "
-		}
-		chunk = clipTo(chunk, budget)
-		b.WriteString(style.Render(chunk))
-		budget -= lipgloss.Width(chunk)
-	}
-	if selected && budget > 0 {
-		b.WriteString(base.Render(strings.Repeat(" ", budget)))
-	}
-	return b.String()
+	return out
 }
 
 // footer is the status line: cursor position within the table plus the key
@@ -792,7 +756,7 @@ func (m *Model) footer(pal *theme.Palette) string {
 	}
 	if m.fEditing {
 		if m.fErr != nil {
-			return lipgloss.NewStyle().Foreground(pal.Error).Render(clipTo(" "+m.fErr.Error(), m.w))
+			return lipgloss.NewStyle().Foreground(pal.Error).Render(gridview.ClipTo(" "+m.fErr.Error(), m.w))
 		}
 		hint := " enter apply · esc drop the filter · type the condition, it follows the dimmed prefix"
 		if n := len(m.page.Rows); n > 0 {
@@ -800,7 +764,7 @@ func (m *Model) footer(pal *theme.Palette) string {
 			// (#2410), the way every other pane's search line does.
 			hint = " " + ui.MatchCounter(m.rowCur+1, n, m.fWrapped) + " ·" + hint
 		}
-		return lipgloss.NewStyle().Faint(true).Render(clipTo(hint, m.w))
+		return lipgloss.NewStyle().Faint(true).Render(gridview.ClipTo(hint, m.w))
 	}
 	status := ""
 	switch {
@@ -823,7 +787,7 @@ func (m *Model) footer(pal *theme.Palette) string {
 	}
 	if m.prof != nil {
 		return lipgloss.NewStyle().Faint(true).Render(
-			clipTo(" column profile · esc closes · y copies", m.w))
+			gridview.ClipTo(" column profile · esc closes · y copies", m.w))
 	}
 	// The keys are ordered by how hard they are to guess — the line is clipped
 	// to the pane, and pgup/pgdn is the one nobody needs told.
@@ -833,7 +797,7 @@ func (m *Model) footer(pal *theme.Palette) string {
 		line += " · "
 	}
 	line += hints
-	return lipgloss.NewStyle().Faint(true).Render(clipTo(line, m.w))
+	return lipgloss.NewStyle().Faint(true).Render(gridview.ClipTo(line, m.w))
 }
 
 // bodyHeight is the room between the header and footer lines — one row less
@@ -861,67 +825,18 @@ func (m *Model) gridHeight() int {
 	return 1
 }
 
-// clampScroll keeps both cursors valid and inside their visible windows.
+// clampScroll keeps both cursors valid and inside their visible windows
+// through the shared list window (#2462); the column offset is the one clamp
+// of its own, since it scrolls columns rather than a selection.
 func (m *Model) clampScroll() {
-	clamp(&m.tcur, len(m.tables))
-	clamp(&m.rowCur, len(m.page.Rows))
-	scrollTo(&m.ttop, m.tcur, m.bodyHeight())
-	scrollTo(&m.rowTop, m.rowCur, m.gridHeight())
+	ui.ClampWindow(&m.tcur, &m.ttop, len(m.tables), m.bodyHeight())
+	ui.ClampWindow(&m.rowCur, &m.rowTop, len(m.page.Rows), m.gridHeight())
 	if m.colOff < 0 {
 		m.colOff = 0
 	}
 	if n := len(m.page.Columns); m.colOff >= n && n > 0 {
 		m.colOff = n - 1
 	}
-}
-
-// clamp bounds a cursor to [0, n).
-func clamp(c *int, n int) {
-	if *c > n-1 {
-		*c = n - 1
-	}
-	if *c < 0 {
-		*c = 0
-	}
-}
-
-// scrollTo moves a window top so the cursor is inside a window of height h.
-func scrollTo(top *int, cur, h int) {
-	if *top > cur {
-		*top = cur
-	}
-	if cur >= *top+h {
-		*top = cur - h + 1
-	}
-	if *top < 0 {
-		*top = 0
-	}
-}
-
-// padTo right-pads (or ellipsis-clips) s to exactly width cells.
-func padTo(s string, width int) string {
-	if lipgloss.Width(s) > width {
-		return clipTo(s, width)
-	}
-	return s + strings.Repeat(" ", width-lipgloss.Width(s))
-}
-
-// clipTo bounds one rendered chunk to width cells, ellipsis on overflow.
-func clipTo(s string, width int) string {
-	if lipgloss.Width(s) <= width {
-		return s
-	}
-	r := []rune(s)
-	if width < 1 {
-		return ""
-	}
-	// Runes approximate cells closely enough here: grid text is
-	// backend-rendered plain strings.
-	if len(r) > width {
-		r = r[:width-1]
-		return string(r) + "…"
-	}
-	return s
 }
 
 // plural is the object-count suffix.
