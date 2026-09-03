@@ -30,8 +30,8 @@ func TestSpeedSearchMatchStepChord(t *testing.T) {
 	if !m.Searching() {
 		t.Fatal("the speed search must keep the keyboard across a step")
 	}
-	if m.search.query != "note" {
-		t.Fatalf("the query must survive the step, got %q", m.search.query)
+	if m.search.Text != "note" {
+		t.Fatalf("the query must survive the step, got %q", m.search.Text)
 	}
 	m = pressKey(m, prevChord())
 	if m.cursor != first {
@@ -50,7 +50,7 @@ func TestSpeedSearchMatchStepWraps(t *testing.T) {
 	if m.cursor != first {
 		t.Fatalf("the walk must wrap to the first match, cursor = %d", m.cursor)
 	}
-	if !m.search.wrapped {
+	if !m.search.Wrapped {
 		t.Fatal("the wrap must be recorded")
 	}
 	if got := m.searchLine(); !strings.Contains(got, "(wrapped)") {
@@ -89,7 +89,7 @@ func TestSpeedSearchEditDropsTheWrapMarker(t *testing.T) {
 	m = pressKey(m, nextChord())
 	m = pressKey(m, nextChord()) // wraps
 	m = typeText(m, "1")
-	if m.search.wrapped {
+	if m.search.Wrapped {
 		t.Fatal("an edited query must start a fresh walk")
 	}
 }

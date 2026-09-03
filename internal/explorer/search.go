@@ -4,9 +4,10 @@ package explorer
 // "/" with the tree focused opens a one-line search field on the pane's last
 // row (the same region the scan-error banner uses, #1030 — never a modal box),
 // and typing filters incrementally: the cursor jumps to the best visible row
-// whose NAME contains the query, case-insensitively, with prefix matches
-// ranked first. Matching is over the currently visible rows only — the search
-// never auto-expands directories.
+// whose NAME contains the query (the in-pane search's smartcase rule,
+// ui.SmartCaseContains, #2461), with prefix matches ranked first. Matching is
+// over the currently visible rows only — the search never auto-expands
+// directories.
 //
 // While the search is open it owns the keyboard: the root model routes every
 // key straight to the explorer (explorerCapturing, the same capture path the
@@ -18,6 +19,10 @@ package explorer
 // (#2410), which the field answers itself because it holds the keyboard ahead
 // of the keymap layer. Every other key is consumed without effect — no silent
 // passthrough while the field is visible.
+//
+// The field itself is the shared ui.LineSearch (#2461); what is the
+// explorer's own is the prefix-first jump, the restore-on-esc anchor and the
+// match memo.
 
 import (
 	"strings"
@@ -34,17 +39,12 @@ type SearchMsg struct{}
 
 func (SearchMsg) explorerMsg() {}
 
-// searchState is the open speed search: the query typed so far and the cursor
-// row at activation, restored on cancel. It lives behind a pointer so the
-// value-receiver Update/View copies share it, mirroring prompt.
+// searchState is the open speed search: the shared prompt state and the
+// cursor row at activation, restored on cancel. It lives behind a pointer so
+// the value-receiver Update/View copies share it, mirroring prompt.
 type searchState struct {
-	query string
-	pos   int // rune cursor inside query (#2002)
-	prev  int // cursor row when the search opened; esc returns here
-
-	// wrapped marks that the last step came back around the row set (#2410),
-	// so the footer counter can say "1/12 (wrapped)".
-	wrapped bool
+	ui.LineSearch
+	prev int // cursor row when the search opened; esc returns here
 
 	// Match memo (#2187): searchLine runs searchMatches per *frame* to render
 	// its counter, and the scan lowercases every flattened row — tens of
@@ -54,7 +54,6 @@ type searchState struct {
 	memoValid bool
 	memoQuery string
 	memoEpoch int
-	memo      []int
 }
 
 // Searching reports whether the speed search is open, so the root model can
@@ -69,6 +68,7 @@ func (m *Model) startSearch() {
 	m.pendingG = false
 	m.clearSel()
 	m.search = &searchState{prev: m.cursor}
+	m.search.Start()
 }
 
 // OpenSearch implements the pane's Searchable capability (#2409): the shared
@@ -84,7 +84,30 @@ func (m *Model) OpenSearch() bool {
 func (m *Model) handleSearchKey(msg tea.KeyPressMsg) {
 	s := m.search
 	switch {
-	case msg.Code == tea.KeyEscape:
+	case msg.String() == "ctrl+n" || msg.Code == tea.KeyDown:
+		m.searchStep(1)
+		return
+	case msg.String() == "ctrl+p" || msg.Code == tea.KeyUp:
+		m.searchStep(-1)
+		return
+	case ui.PrevMatchChord(msg.String()):
+		// The shared match-step chord (#2410): the same jump ctrl+p makes.
+		// The field captures every key ahead of the keymap layer, so cmd+g /
+		// cmd+shift+g are answered here rather than through the Global
+		// search.nextMatch command.
+		m.searchStep(-1)
+		return
+	case ui.NextMatchChord(msg.String()):
+		m.searchStep(1)
+		return
+	}
+	// Everything else is the shared prompt (#2461): accept, cancel, and the
+	// line editing (#2002) — a movable cursor with word motions, word/line
+	// kills and the macOS opt/cmd chords. ctrl+n / ctrl+p above keep priority
+	// over anything the field binds.
+	_, changed, action := s.Key(msg)
+	switch action {
+	case ui.SearchCancel:
 		// Cancel: the cursor returns to where the search started (clamped —
 		// an async rescan may have shrunk the rows meanwhile).
 		m.search = nil
@@ -92,32 +115,23 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) {
 			m.cursor = clamp(s.prev, 0, len(m.rows)-1)
 			m.followCursor()
 		}
-	case msg.Code == tea.KeyEnter:
+	case ui.SearchAccept:
 		m.search = nil // accept: the cursor stays on the match
-	case msg.String() == "ctrl+n" || msg.Code == tea.KeyDown:
-		m.searchStep(1)
-	case msg.String() == "ctrl+p" || msg.Code == tea.KeyUp:
-		m.searchStep(-1)
-	case ui.PrevMatchChord(msg.String()):
-		// The shared match-step chord (#2410): the same jump ctrl+p makes.
-		// The field captures every key ahead of the keymap layer, so cmd+g /
-		// cmd+shift+g are answered here rather than through the Global
-		// search.nextMatch command.
-		m.searchStep(-1)
-	case ui.NextMatchChord(msg.String()):
-		m.searchStep(1)
 	default:
-		// Everything else is shared line editing (#2002): a movable cursor
-		// with word motions, word/line kills and the macOS opt/cmd chords.
-		// ctrl+n / ctrl+p above keep priority over anything EditKey binds.
-		if out, pos, handled, changed := ui.EditKey(msg, s.query, s.pos); handled {
-			s.query, s.pos = out, pos
-			if changed {
-				s.wrapped = false // an edited query starts a fresh walk (#2410)
-				m.searchJump()
-			}
+		if changed {
+			m.searchJump()
 		}
 	}
+}
+
+// searchPaste routes a pasted block into the open field and re-jumps like a
+// typed edit (#2002). It reports whether the paste changed the query.
+func (m *Model) searchPaste(text string) bool {
+	if !m.search.Paste(text) {
+		return false
+	}
+	m.searchJump()
+	return true
 }
 
 // searchJump re-resolves the cursor after a query edit, always from the
@@ -132,17 +146,16 @@ func (m *Model) searchJump() {
 	if s == nil || len(m.rows) == 0 {
 		return
 	}
-	if s.query == "" {
+	if s.Text == "" {
 		m.cursor = clamp(s.prev, 0, len(m.rows)-1)
 		m.followCursor()
 		return
 	}
-	q := strings.ToLower(s.query)
 	start := clamp(s.prev, 0, len(m.rows)-1)
 	contains := -1
 	for i := 0; i < len(m.rows); i++ {
 		idx := (start + i) % len(m.rows)
-		name := strings.ToLower(m.rows[idx].name)
+		q, name := ui.SmartCaseFold(s.Text, m.rows[idx].name)
 		if strings.HasPrefix(name, q) {
 			m.cursor = idx
 			m.followCursor()
@@ -163,20 +176,17 @@ func (m *Model) searchJump() {
 // footer can show the wrap (#2410).
 func (m *Model) searchStep(dir int) ui.MatchStep {
 	s := m.search
-	matches := m.searchMatches()
-	val, idx, wrapped, ok := ui.StepSorted(matches, m.cursor, dir)
-	if !ok {
-		if s != nil {
-			s.wrapped = false
-		}
-		return ui.NoMatches()
+	if s == nil {
+		return ui.NoStep
+	}
+	m.searchMatches()
+	val, st := s.StepFrom(m.cursor, dir)
+	if st.Total == 0 {
+		return st
 	}
 	m.cursor = val
 	m.followCursor()
-	if s != nil {
-		s.wrapped = wrapped
-	}
-	return ui.Stepped(idx, len(matches), wrapped)
+	return st
 }
 
 // NextMatch implements the pane's match-step capability (#2410): cmd+g steps
@@ -195,69 +205,55 @@ func (m *Model) stepSearch(delta int) ui.MatchStep {
 }
 
 // searchMatches returns the visible-row indices whose names contain the
-// query, case-insensitively, in tree order. Empty without an open search or
-// with an empty query.
+// query (smartcase), in tree order, and keeps the shared state's match list
+// on it. Empty without an open search or with an empty query.
 func (m Model) searchMatches() []int {
 	s := m.search
-	if s == nil || s.query == "" {
+	if s == nil || s.Text == "" {
 		return nil
 	}
-	if s.memoValid && s.memoQuery == s.query && s.memoEpoch == m.rowsEpoch {
-		return s.memo
+	if s.memoValid && s.memoQuery == s.Text && s.memoEpoch == m.rowsEpoch {
+		return s.Matches
 	}
-	q := strings.ToLower(s.query)
 	var out []int
 	for i, n := range m.rows {
-		if strings.Contains(strings.ToLower(n.name), q) {
+		if ui.SmartCaseContains(s.Text, n.name) {
 			out = append(out, i)
 		}
 	}
-	s.memoValid, s.memoQuery, s.memoEpoch, s.memo = true, s.query, m.rowsEpoch, out
+	s.memoValid, s.memoQuery, s.memoEpoch = true, s.Text, m.rowsEpoch
+	s.Matches = out
 	return out
 }
 
-// searchMatchRange returns the byte range of the first case-insensitive
-// occurrence of query in name, for the substring highlight. ok is false when
-// there is no match — or when lowercasing changed the byte length (non-ASCII
-// edge case), where mapped offsets would be unreliable; the row then simply
-// skips the substring styling.
+// searchMatchRange returns the byte range of the first occurrence of query
+// in name under the smartcase rule, for the substring highlight. ok is false
+// when there is no match — or when case folding changed the byte length
+// (non-ASCII edge case), where mapped offsets would be unreliable; the row
+// then simply skips the substring styling.
 func searchMatchRange(name, query string) (start, end int, ok bool) {
-	ln := strings.ToLower(name)
+	q, ln := ui.SmartCaseFold(query, name)
 	if len(ln) != len(name) {
 		return 0, 0, false
 	}
-	idx := strings.Index(ln, strings.ToLower(query))
+	idx := strings.Index(ln, q)
 	if idx < 0 {
 		return 0, 0, false
 	}
-	return idx, idx + len(strings.ToLower(query)), true
+	return idx, idx + len(q), true
 }
 
-// searchLine renders the speed-search input for the pane's last row,
-// mirroring the editor's "/" command line: the slash prefix, the query with a
-// block cursor at the edit position (ui.CursorView), and a dim match counter ("3/17",
-// or "no matches" in the Error colour). Truncated to the pane width like
-// every footer line.
+// searchLine renders the speed-search input for the pane's last row — the
+// shared prompt row (#2461), mirroring the editor's "/" command line: the
+// slash prefix, the query with a block cursor at the edit position, and a dim
+// match counter ("3/17", or "no matches" in the Error colour). The counter
+// follows the cursor: "0/17" when it has wandered off the matches. Truncated
+// to the pane width like every footer line.
 func (m Model) searchLine() string {
 	s := m.search
 	pal := m.theme()
-	counter := ""
-	line := "/" + ui.CursorView(s.query, s.pos)
-	if s.query != "" {
-		matches := m.searchMatches()
-		dim := lipgloss.NewStyle().Foreground(pal.InlayHint)
-		if len(matches) == 0 {
-			counter = lipgloss.NewStyle().Foreground(pal.Error).Render("  no matches")
-		} else {
-			cur := 0
-			for i, idx := range matches {
-				if idx == m.cursor {
-					cur = i + 1
-					break
-				}
-			}
-			counter = dim.Render("  " + ui.MatchCounter(cur, len(matches), s.wrapped))
-		}
-	}
-	return ansi.Truncate(line+counter, maxz(m.width), "…")
+	m.searchMatches()
+	s.Locate(m.cursor)
+	line := s.LineStyled(lipgloss.NewStyle().Foreground(pal.InlayHint), lipgloss.NewStyle().Foreground(pal.Error))
+	return ansi.Truncate(line, maxz(m.width), "…")
 }

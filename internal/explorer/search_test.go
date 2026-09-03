@@ -154,8 +154,8 @@ func TestSearchCapturesFileOpKeys(t *testing.T) {
 	if m.Prompting() {
 		t.Fatal("typing into the search must never open a file-op prompt")
 	}
-	if m.search == nil || m.search.query != "radar" {
-		t.Fatalf("query = %q want %q", m.search.query, "radar")
+	if m.search == nil || m.search.Text != "radar" {
+		t.Fatalf("query = %q want %q", m.search.Text, "radar")
 	}
 	if got := rowName(m, m.cursor); got != "radar.go" {
 		t.Fatalf("cursor must follow the query, got %q", got)

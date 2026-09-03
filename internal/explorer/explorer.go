@@ -2390,8 +2390,8 @@ func (m Model) View() string {
 			// every candidate is visible while stepping. The cursor row keeps
 			// its full Selection highlight — it already reads as the current
 			// match.
-			if m.search != nil && m.search.query != "" && i != m.cursor {
-				if s, e, ok := searchMatchRange(n.name, m.search.query); ok && e <= len(name) {
+			if m.search != nil && m.search.Text != "" && i != m.cursor {
+				if s, e, ok := searchMatchRange(n.name, m.search.Text); ok && e <= len(name) {
 					nameRendered = nameStyle.Render(name[:s]) +
 						nameStyle.Background(ss.pal.SelectionMuted).Render(name[s:e]) +
 						nameStyle.Render(name[e:])
