@@ -37,7 +37,7 @@ func (m *Model) Filter() string { return m.filter }
 func (m *Model) Filtering() bool { return m.fEditing }
 
 // FilterInput returns the text in the open filter line (tests).
-func (m *Model) FilterInput() string { return m.fInput }
+func (m *Model) FilterInput() string { return m.fInput.Text }
 
 // FilterErr returns the engine error of the last rejected clause, nil when
 // the last apply succeeded (tests).
@@ -50,8 +50,7 @@ func (m *Model) startFilter() {
 		return
 	}
 	m.fEditing = true
-	m.fInput = conditionOf(m.filter)
-	m.fCur = len([]rune(m.fInput))
+	m.fInput.Set(conditionOf(m.filter))
 	m.fErr = nil
 	m.clampScroll()
 }
@@ -101,13 +100,13 @@ func (m *Model) filterKey(msg tea.KeyPressMsg) {
 		// Esc is "show me the whole table again": it closes the line *and*
 		// drops the filter, the one gesture that always gets the plain grid
 		// back.
-		m.fEditing, m.fInput, m.fCur, m.fErr = false, "", 0, nil
+		m.fEditing, m.fErr = false, nil
+		m.fInput.Clear()
 		m.clearFilter()
 	case "enter":
 		m.applyFilter()
 	default:
-		if out, ncur, handled, changed := ui.EditKey(msg, m.fInput, m.fCur); handled {
-			m.fInput, m.fCur = out, ncur
+		if handled, changed := m.fInput.Key(msg); handled {
 			if changed {
 				m.fErr = nil       // the error described the text that is now gone
 				m.fWrapped = false // an edited clause starts a fresh walk (#2410)
@@ -124,12 +123,12 @@ func (m *Model) applyFilter() {
 	if m.src == nil || m.sel < 0 {
 		return
 	}
-	if strings.TrimSpace(m.fInput) == "" {
+	if strings.TrimSpace(m.fInput.Text) == "" {
 		m.fEditing, m.fErr = false, nil
 		m.clearFilter()
 		return
 	}
-	clause := clauseOf(m.fInput)
+	clause := clauseOf(m.fInput.Text)
 	page, err := m.src.PageWhere(m.tables[m.sel].Name, clause, m.sort, 0, PageSize)
 	if err != nil {
 		m.fErr = err
@@ -220,7 +219,7 @@ func (m *Model) filterPrefix() string {
 	if m.src != nil && m.sel >= 0 {
 		base = m.src.FilterPrefix(m.tables[m.sel].Name)
 	}
-	if m.fInput == "" || impliedWhere(m.fInput) {
+	if m.fInput.Empty() || impliedWhere(m.fInput.Text) {
 		return base + "WHERE "
 	}
 	return base
@@ -247,15 +246,15 @@ func (m *Model) filterLine(pal *theme.Palette) string {
 // statement, and the grammar only makes sense of the clause with its head
 // attached — and the prefix's columns are then skipped.
 func (m *Model) renderClause(pal *theme.Palette, prefix string, avail int) string {
-	r := []rune(m.fInput)
-	cur := m.fCur
+	r := m.fInput.Runes()
+	cur := m.fInput.Cur
 	if cur < 0 {
 		cur = 0
 	}
 	if cur > len(r) {
 		cur = len(r)
 	}
-	ix := highlight.NewIndex(highlight.HighlightFenced("sql", []string{prefix + m.fInput}))
+	ix := highlight.NewIndex(highlight.HighlightFenced("sql", []string{prefix + m.fInput.Text}))
 	off := len([]rune(prefix))
 	// The cursor stays visible: a clause longer than the line scrolls with it.
 	start := 0
@@ -326,22 +325,18 @@ func (m *Model) PasteText(text string) bool {
 		if m.exp.cancel != nil {
 			return false // the path is settled while its export runs
 		}
-		out, ncur, changed := ui.PasteText(m.exp.input, m.exp.cur, text)
-		if !changed {
+		if !m.exp.input.Paste(text) {
 			return false
 		}
-		m.exp.input, m.exp.cur = out, ncur
 		m.exp.err, m.exp.overwrite = nil, false
 		return true
 	}
 	if !m.fEditing {
 		return false
 	}
-	out, ncur, changed := ui.PasteText(m.fInput, m.fCur, text)
-	if !changed {
+	if !m.fInput.Paste(text) {
 		return false
 	}
-	m.fInput, m.fCur = out, ncur
 	m.fErr = nil
 	return true
 }

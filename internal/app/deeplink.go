@@ -254,7 +254,7 @@ func (m *Model) openDeepLinkChooser(link deeplink.Link, choices []deeplink.Candi
 // ike:// URL by hand when no OS handler delivered it.
 func (m *Model) startOpenLinkPrompt() {
 	m.dlLinkOpen = true
-	m.dlLinkText, m.dlLinkPos = "", 0
+	m.dlLinkText.Clear()
 	m.renderOpenLinkPrompt()
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -269,11 +269,11 @@ func (m *Model) renderOpenLinkPrompt() {
 	if avail < 20 {
 		avail = 20
 	}
-	text, pos := m.dlLinkText, m.dlLinkPos
+	text := m.dlLinkText
 	m.shell.SetContent(ui.ModelContent{
 		Heading: "Open ike:// Link",
 		Body: func() string {
-			return "> URL : " + windowedInput(text, pos, avail) +
+			return "> URL : " + windowedInput(text.Text, text.Cur, avail) +
 				"\n\nenter open · esc cancel"
 		},
 	})
@@ -288,13 +288,12 @@ func (m Model) updateOpenLinkPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.shell.Close()
 		return m, nil
 	case tea.KeyEnter:
-		url := m.dlLinkText
+		url := m.dlLinkText.Text
 		m.dlLinkOpen = false
 		m.shell.Close()
 		return m.handleDeepLink(url)
 	}
-	if out, pos, handled, _ := ui.EditKey(msg, m.dlLinkText, m.dlLinkPos); handled {
-		m.dlLinkText, m.dlLinkPos = out, pos
+	if handled, _ := m.dlLinkText.Key(msg); handled {
 		m.renderOpenLinkPrompt()
 	}
 	return m, nil
@@ -303,11 +302,9 @@ func (m Model) updateOpenLinkPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // pasteOpenLinkPrompt inserts a paste at the cursor — the common way an
 // ike:// URL arrives in this prompt.
 func (m *Model) pasteOpenLinkPrompt(text string) bool {
-	out, pos, changed := ui.PasteText(m.dlLinkText, m.dlLinkPos, text)
-	if !changed {
+	if !m.dlLinkText.Paste(text) {
 		return false
 	}
-	m.dlLinkText, m.dlLinkPos = out, pos
 	m.renderOpenLinkPrompt()
 	return true
 }

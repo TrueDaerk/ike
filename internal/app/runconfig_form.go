@@ -32,10 +32,8 @@ type runFormState struct {
 	editing bool
 	adding  bool
 	field   int
-	key     string
-	keyPos  int
-	val     string
-	valPos  int
+	key     ui.Field
+	val     ui.Field
 	// err is the validation message shown under the rows; cleared by the next
 	// accepted key.
 	err string
@@ -90,11 +88,11 @@ func (m *Model) renderRunConfigForm() {
 	}
 	if s.editing {
 		add("")
-		key, val := s.key, s.val
+		key, val := s.key.Text, s.val.Text
 		if s.field == 0 {
-			key = windowedInput(s.key, s.keyPos, avail)
+			key = windowedInput(s.key.Text, s.key.Cur, avail)
 		} else {
-			val = windowedInput(s.val, s.valPos, avail)
+			val = windowedInput(s.val.Text, s.val.Cur, avail)
 		}
 		verb := "Edit"
 		if s.adding {
@@ -142,14 +140,15 @@ func (m Model) updateRunConfigForm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "a":
 		s.editing, s.adding, s.field = true, true, 0
-		s.key, s.keyPos, s.val, s.valPos = "", 0, "", 0
+		s.key.Clear()
+		s.val.Clear()
 	case "enter":
 		if len(s.rows) == 0 {
 			return m, nil
 		}
 		s.editing, s.adding, s.field = true, false, 0
-		s.key, s.keyPos = s.rows[s.sel].Key, len(s.rows[s.sel].Key)
-		s.val, s.valPos = s.rows[s.sel].Value, len(s.rows[s.sel].Value)
+		s.key.Set(s.rows[s.sel].Key)
+		s.val.Set(s.rows[s.sel].Value)
 	case "d", "delete":
 		m.removeRunConfigRow()
 	default:
@@ -195,16 +194,11 @@ func (m Model) updateRunConfigRow(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.renderRunConfigForm()
 		return m, nil
 	}
-	text, pos := s.key, s.keyPos
+	f := &s.key
 	if s.field == 1 {
-		text, pos = s.val, s.valPos
+		f = &s.val
 	}
-	if out, ncur, handled, _ := ui.EditKey(msg, text, pos); handled {
-		if s.field == 0 {
-			s.key, s.keyPos = out, ncur
-		} else {
-			s.val, s.valPos = out, ncur
-		}
+	if handled, _ := f.Key(msg); handled {
 		s.err = ""
 		m.renderRunConfigForm()
 	}
@@ -216,12 +210,12 @@ func (m Model) updateRunConfigRow(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // reason, so a typo is corrected instead of silently dropped.
 func (m *Model) applyRunConfigRow() {
 	s := m.runForm
-	if err := run.ValidateEnvKey(s.key); err != nil {
+	if err := run.ValidateEnvKey(s.key.Text); err != nil {
 		s.err = err.Error()
 		s.field = 0
 		return
 	}
-	key := strings.TrimSpace(s.key)
+	key := strings.TrimSpace(s.key.Text)
 	for i, r := range s.rows {
 		if r.Key != key {
 			continue
@@ -233,10 +227,10 @@ func (m *Model) applyRunConfigRow() {
 		}
 	}
 	if s.adding {
-		s.rows = append(s.rows, run.EnvRow{Key: key, Value: s.val})
+		s.rows = append(s.rows, run.EnvRow{Key: key, Value: s.val.Text})
 		s.sel = len(s.rows) - 1
 	} else {
-		s.rows[s.sel] = run.EnvRow{Key: key, Value: s.val}
+		s.rows[s.sel] = run.EnvRow{Key: key, Value: s.val.Text}
 	}
 	s.editing, s.adding, s.err = false, false, ""
 }
@@ -276,18 +270,12 @@ func (m *Model) pasteRunConfigForm(text string) bool {
 	if s == nil || !s.editing {
 		return false
 	}
-	if s.field == 0 {
-		out, pos, changed := ui.PasteText(s.key, s.keyPos, text)
-		if !changed {
-			return false
-		}
-		s.key, s.keyPos = out, pos
-	} else {
-		out, pos, changed := ui.PasteText(s.val, s.valPos, text)
-		if !changed {
-			return false
-		}
-		s.val, s.valPos = out, pos
+	f := &s.key
+	if s.field == 1 {
+		f = &s.val
+	}
+	if !f.Paste(text) {
+		return false
 	}
 	m.renderRunConfigForm()
 	return true

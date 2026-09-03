@@ -67,11 +67,10 @@ const (
 type Form struct {
 	open  bool
 	focus field
-	cur   int // rune cursor within the focused text field (#763)
 
-	query   string
-	include string
-	exclude string
+	query   ui.Field
+	include ui.Field
+	exclude ui.Field
 
 	caseSensitive bool
 	wholeWord     bool
@@ -105,21 +104,21 @@ func (f *Form) SetSize(w, h int) { f.width, f.height = w, h }
 // non-empty (single-line) it prefills the query, selected, outranking the
 // remembered one; otherwise the remembered query arrives preselected.
 func (f *Form) Open(st State, projects []Project, sel string) {
-	f.query = st.Query
-	f.include = st.Include
-	f.exclude = st.Exclude
+	f.query.Set(st.Query)
+	f.include.Set(st.Include)
+	f.exclude.Set(st.Exclude)
 	f.caseSensitive = st.CaseSensitive
 	f.wholeWord = st.WholeWord
 	f.regex = st.Regex
 	if q, ok := prefillQuery(sel, f.regex); ok {
-		f.query = q
+		f.query.Set(q)
 	}
 	f.projects = projects
 	f.projCur = 0
 	f.open = true
 	f.focus = fieldQuery
-	f.cur = len([]rune(f.query))
-	f.preselect = f.query != ""
+	f.query.Cur = f.query.Len()
+	f.preselect = !f.query.Empty()
 }
 
 // prefillQuery turns a selection into a query prefill, on the finder's terms
@@ -151,9 +150,9 @@ func (f *Form) State() State {
 		}
 	}
 	return State{
-		Query:         f.query,
-		Include:       f.include,
-		Exclude:       f.exclude,
+		Query:         f.query.Text,
+		Include:       f.include.Text,
+		Exclude:       f.exclude.Text,
 		CaseSensitive: f.caseSensitive,
 		WholeWord:     f.wholeWord,
 		Regex:         f.regex,
@@ -176,7 +175,7 @@ func (f *Form) keptRoots() []Project {
 // confirm dispatches ConfirmMsg and closes. An empty query, or a project list
 // with nothing left to scan, keeps the form open — there is nothing to run.
 func (f *Form) confirm() tea.Cmd {
-	if strings.TrimSpace(f.query) == "" {
+	if strings.TrimSpace(f.query.Text) == "" {
 		return nil
 	}
 	roots := f.keptRoots()
@@ -196,16 +195,13 @@ func (f *Form) Paste(text string) (handled bool) {
 	}
 	pre := f.preselect
 	fld := f.focused()
-	cur := f.cur
 	if pre && f.focus == fieldQuery {
-		*fld, cur = "", 0
+		fld.Clear()
 	}
-	out, ncur, changed := ui.PasteText(*fld, cur, text)
-	if !changed {
+	if !fld.Paste(text) {
 		return false
 	}
 	f.preselect = false
-	*fld, f.cur = out, ncur
 	return true
 }
 
@@ -261,13 +257,13 @@ func (f *Form) Update(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	// Everything else is single-line editing on the focused field (#763).
 	fld := f.focused()
-	if out, ncur, handled, changed := ui.EditKey(msg, *fld, f.cur); handled {
-		if pre && f.focus == fieldQuery && len(out) > len(*fld) {
+	before := fld.Len()
+	if handled, _ := fld.Key(msg); handled {
+		if pre && f.focus == fieldQuery && fld.Len() > before {
 			// The key inserted text: it replaces the selected prefill (#277).
-			out, ncur, _, _ = ui.EditKey(msg, "", 0)
+			fld.Clear()
+			fld.Key(msg)
 		}
-		*fld, f.cur = out, ncur
-		_ = changed
 	}
 	return nil
 }
@@ -285,12 +281,13 @@ func (f *Form) toggleProject(idx int) {
 func (f *Form) setFocus(fld field) {
 	f.focus = fld
 	if fld != fieldProjects {
-		f.cur = len([]rune(*f.focused()))
+		g := f.focused()
+		g.Cur = g.Len()
 	}
 }
 
 // focused returns the text field the cursor edits (never fieldProjects).
-func (f *Form) focused() *string {
+func (f *Form) focused() *ui.Field {
 	switch f.focus {
 	case fieldInclude:
 		return &f.include
@@ -401,13 +398,13 @@ func (f *Form) View() string {
 	lay := formLayout{projTop: -1}
 	rows := []string{title, ""}
 	lay.query = len(rows)
-	rows = append(rows, f.inputRow("Search ", f.query, fieldQuery, innerW))
+	rows = append(rows, f.inputRow("Search ", f.query.Text, f.query.Cur, fieldQuery, innerW))
 	lay.toggles = len(rows)
 	rows = append(rows, f.togglesRow(innerW))
 	lay.include = len(rows)
-	rows = append(rows, f.inputRow("Include", f.include, fieldInclude, innerW))
+	rows = append(rows, f.inputRow("Include", f.include.Text, f.include.Cur, fieldInclude, innerW))
 	lay.exclude = len(rows)
-	rows = append(rows, f.inputRow("Exclude", f.exclude, fieldExclude, innerW))
+	rows = append(rows, f.inputRow("Exclude", f.exclude.Text, f.exclude.Cur, fieldExclude, innerW))
 	rows = append(rows, "")
 	rows = append(rows, f.projectsHeading(innerW))
 	lay.projTop = len(rows)
@@ -435,8 +432,8 @@ func (f *Form) theme() *theme.Palette {
 
 // inputRow renders one labelled input line with a block cursor on the focused
 // field, on the finder's terms.
-func (f *Form) inputRow(label, value string, fld field, width int) string {
-	return ui.InputRow(f.theme(), label, value, fld == fieldQuery, f.preselect, f.focus == fld, f.cur, width)
+func (f *Form) inputRow(label, value string, cur int, fld field, width int) string {
+	return ui.InputRow(f.theme(), label, value, fld == fieldQuery, f.preselect, f.focus == fld, cur, width)
 }
 
 // The toggle row's fixed pieces; toggleSpans derives the click ranges.

@@ -20,8 +20,8 @@ const promptMaxCandidates = 8
 // renderCompletionPrompt (re)fills the shell with heading, the input line with
 // its cursor, the candidates from the last tab press underneath, and hint as
 // the closing key legend.
-func (m *Model) renderCompletionPrompt(input string, pos int, candidates []string, heading, hint string) {
-	line := "> " + ui.CursorView(input, pos)
+func (m *Model) renderCompletionPrompt(input ui.Field, candidates []string, heading, hint string) {
+	line := "> " + input.View()
 	var sug string
 	if n := len(candidates); n > 0 {
 		shown := candidates

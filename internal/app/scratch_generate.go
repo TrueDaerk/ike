@@ -127,8 +127,7 @@ type tdGenState struct {
 	tpls    []testdata.Template
 	tplPick int
 
-	hdr    [tdHdrCount]string
-	hdrPos [tdHdrCount]int
+	hdr [tdHdrCount]ui.Field
 
 	focus int
 
@@ -152,8 +151,7 @@ type tdGenState struct {
 
 	// The save-template name prompt, opened by ctrl+s / [save template].
 	savePrompt bool
-	saveName   string
-	savePos    int
+	saveName   ui.Field
 
 	// hits are the clickable regions of the last render, in body-line
 	// coordinates — rebuilt by every renderGenerateScratch call.
@@ -185,12 +183,9 @@ func (m *Model) startGenerateScratch() tea.Cmd {
 			s.fmtPick = i
 		}
 	}
-	s.hdr[tdHdrRows] = strconv.Itoa(spec.Rows)
-	s.hdr[tdHdrSeed] = strconv.FormatUint(spec.Seed, 10)
-	s.hdr[tdHdrTable] = spec.Table
-	for i := range s.hdr {
-		s.hdrPos[i] = len([]rune(s.hdr[i]))
-	}
+	s.hdr[tdHdrRows].Set(strconv.Itoa(spec.Rows))
+	s.hdr[tdHdrSeed].Set(strconv.FormatUint(spec.Seed, 10))
+	s.hdr[tdHdrTable].Set(spec.Table)
 	s.setText(spec.DSL)
 	s.focus = tdFocEditor
 	m.tdGen = s
@@ -239,13 +234,13 @@ func (s *tdGenState) dirtyPreview() tea.Cmd {
 // seed and a DSL error are refused in one place with one message.
 func (s *tdGenState) compose() (testdata.Spec, error) {
 	spec := testdata.Spec{Format: s.formats[s.fmtPick], DSL: s.text()}
-	rowsText := strings.TrimSpace(s.hdr[tdHdrRows])
+	rowsText := strings.TrimSpace(s.hdr[tdHdrRows].Text)
 	rows, err := strconv.Atoi(rowsText)
 	if err != nil {
 		return spec, fmt.Errorf("row count %q is not a number", rowsText)
 	}
 	spec.Rows = rows
-	seedText := strings.TrimSpace(s.hdr[tdHdrSeed])
+	seedText := strings.TrimSpace(s.hdr[tdHdrSeed].Text)
 	if seedText == "" {
 		seedText = "0"
 	}
@@ -254,7 +249,7 @@ func (s *tdGenState) compose() (testdata.Spec, error) {
 		return spec, fmt.Errorf("seed %q is not a non-negative number", seedText)
 	}
 	spec.Seed = seed
-	spec.Table = strings.TrimSpace(s.hdr[tdHdrTable])
+	spec.Table = strings.TrimSpace(s.hdr[tdHdrTable].Text)
 	if err := spec.Validate(); err != nil {
 		return spec, err
 	}
@@ -398,9 +393,9 @@ func (m *Model) renderGenerateScratch() {
 	addHit(marker(tdFocFormat)+tdPad("Format", 9)+picker(f.Title(), s.focus == tdFocFormat)+"  ."+f.Ext(), tdHitHeader, tdFocFormat)
 	for i, name := range tdHdrNames {
 		foc := tdFocRows + i
-		value := windowedPlain(s.hdr[i], avail)
+		value := windowedPlain(s.hdr[i].Text, avail)
 		if s.focus == foc && !s.savePrompt {
-			value = windowedInput(s.hdr[i], s.hdrPos[i], avail)
+			value = windowedInput(s.hdr[i].Text, s.hdr[i].Cur, avail)
 		}
 		addHit(marker(foc)+tdPad(name, 9)+value, tdHitHeader, foc)
 	}
@@ -452,7 +447,7 @@ func (m *Model) renderGenerateScratch() {
 
 	// The button row, or the save-template name prompt while it is open.
 	if s.savePrompt {
-		add("Template name: " + windowedInput(s.saveName, s.savePos, avail))
+		add("Template name: " + windowedInput(s.saveName.Text, s.saveName.Cur, avail))
 		addButtons([2]any{"save", tdBtnPromptOK}, [2]any{"cancel", tdBtnPromptCancel})
 		add("")
 		add("enter save · esc cancel")
@@ -557,8 +552,7 @@ func (m Model) updateGenerateScratch(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case tea.KeyDown, tea.KeyEnter:
 			s.setFocus(s.focus + 1)
 		default:
-			if out, pos, handled, changed := ui.EditKey(msg, s.hdr[i], s.hdrPos[i]); handled {
-				s.hdr[i], s.hdrPos[i] = out, pos
+			if handled, changed := s.hdr[i].Key(msg); handled {
 				if changed {
 					cmd = s.dirtyPreview()
 				}
@@ -578,7 +572,7 @@ func (s *tdGenState) setFocus(f int) {
 	s.focus = f
 	s.acOpen = false
 	for i := range s.hdr {
-		s.hdrPos[i] = len([]rune(s.hdr[i]))
+		s.hdr[i].Cur = s.hdr[i].Len()
 	}
 }
 
@@ -790,11 +784,10 @@ func (m Model) generateNow() (tea.Model, tea.Cmd) {
 // template's name so re-saving an edited user template is one enter.
 func (s *tdGenState) openSavePrompt() {
 	s.savePrompt = true
-	s.saveName = ""
+	s.saveName.Clear()
 	if t := s.curTemplate(); t != nil && !t.BuiltIn {
-		s.saveName = t.Name
+		s.saveName.Set(t.Name)
 	}
-	s.savePos = len([]rune(s.saveName))
 	s.acOpen = false
 }
 
@@ -805,11 +798,11 @@ func (m Model) updateGenerateSavePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 	case tea.KeyEscape:
 		s.savePrompt = false
 	case tea.KeyEnter:
-		if err := testdata.SaveTemplate(s.saveName, s.text()+"\n"); err != nil {
+		if err := testdata.SaveTemplate(s.saveName.Text, s.text()+"\n"); err != nil {
 			s.err = err.Error()
 			break
 		}
-		name := strings.TrimSpace(s.saveName)
+		name := strings.TrimSpace(s.saveName.Text)
 		s.savePrompt = false
 		s.err = ""
 		s.note = fmt.Sprintf("saved template %q", name)
@@ -821,9 +814,7 @@ func (m Model) updateGenerateSavePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 			}
 		}
 	default:
-		if out, pos, handled, _ := ui.EditKey(msg, s.saveName, s.savePos); handled {
-			s.saveName, s.savePos = out, pos
-		}
+		s.saveName.Key(msg)
 	}
 	m.renderGenerateScratch()
 	return m, nil
@@ -951,22 +942,18 @@ func (m *Model) pasteGenerateScratch(text string) bool {
 		return false
 	}
 	if s.savePrompt {
-		out, np, changed := ui.PasteText(s.saveName, s.savePos, text)
-		if !changed {
+		if !s.saveName.Paste(text) {
 			return false
 		}
-		s.saveName, s.savePos = out, np
 		m.renderGenerateScratch()
 		return true
 	}
 	switch {
 	case s.focus >= tdFocRows && s.focus <= tdFocTable:
 		i := s.focus - tdFocRows
-		out, np, changed := ui.PasteText(s.hdr[i], s.hdrPos[i], text)
-		if !changed {
+		if !s.hdr[i].Paste(text) {
 			return false
 		}
-		s.hdr[i], s.hdrPos[i] = out, np
 	case s.focus == tdFocEditor:
 		ins := strings.ReplaceAll(text, "\r\n", "\n")
 		ins = strings.ReplaceAll(ins, "\r", "\n")

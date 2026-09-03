@@ -18,7 +18,7 @@ func TestViewNeverWrapsRows(t *testing.T) {
 	m := New(search.New(nil))
 	m.Open("")
 	m.SetSize(100, 40)
-	m.query = "architecture/high"
+	m.query.Set("architecture/high")
 	long := "* [Syntax Highlighting](/architecture/highlighting.md) - Tree-sitter lexical layer: per-language grammars parsed off-loop into theme-coloured spans"
 	idx := strings.Index(long, "architecture/high")
 	m.list.Append([]locations.Item{{Path: "wiki/architecture/index.md", Line: 26, Text: long, StartCol: idx, EndCol: idx + 25}})

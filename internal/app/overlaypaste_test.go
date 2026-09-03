@@ -70,13 +70,13 @@ func TestPasteReachesRenamePrompt(t *testing.T) {
 	if !m.renameOpen() {
 		t.Fatal("rename prompt should be open")
 	}
-	before := m.renameInput
+	before := m.renameInput.Text
 
 	tm, _ := m.Update(tea.PasteMsg{Content: "-copy"})
 	m = tm.(Model)
 
-	if m.renameInput != before+"-copy" {
-		t.Fatalf("rename input = %q, want %q", m.renameInput, before+"-copy")
+	if m.renameInput.Text != before+"-copy" {
+		t.Fatalf("rename input = %q, want %q", m.renameInput.Text, before+"-copy")
 	}
 }
 
@@ -95,8 +95,8 @@ func TestPasteReachesSaveAsPrompt(t *testing.T) {
 	tm, _ = m.Update(tea.PasteMsg{Content: "new.txt"})
 	m = tm.(Model)
 
-	if m.saveAsInput != "new.txt" {
-		t.Fatalf("saveAsInput = %q, want the pasted text", m.saveAsInput)
+	if m.saveAsInput.Text != "new.txt" {
+		t.Fatalf("saveAsInput = %q, want the pasted text", m.saveAsInput.Text)
 	}
 }
 
@@ -115,8 +115,8 @@ func TestPasteReachesNewProjectNameStep(t *testing.T) {
 	tm, _ = m.Update(tea.PasteMsg{Content: "pasted-proj"})
 	m = tm.(Model)
 
-	if m.newProj.name != "pasted-proj" {
-		t.Fatalf("newProj.name = %q, want the pasted text", m.newProj.name)
+	if m.newProj.name.Text != "pasted-proj" {
+		t.Fatalf("newProj.name = %q, want the pasted text", m.newProj.name.Text)
 	}
 }
 
@@ -133,8 +133,8 @@ func TestPasteReachesLayoutSavePrompt(t *testing.T) {
 	tm, _ := m.Update(tea.PasteMsg{Content: "dev"})
 	m = tm.(Model)
 
-	if m.layoutSaveInput != "dev" {
-		t.Fatalf("layoutSaveInput = %q, want the pasted text", m.layoutSaveInput)
+	if m.layoutSaveInput.Text != "dev" {
+		t.Fatalf("layoutSaveInput = %q, want the pasted text", m.layoutSaveInput.Text)
 	}
 }
 
@@ -147,13 +147,13 @@ func TestPasteReachesJBImportPrompt(t *testing.T) {
 	if !m.jbImportPromptOpen() {
 		t.Fatal("ImportJetBrainsKeymapMsg must open the import prompt")
 	}
-	before := m.jbImportInput
+	before := m.jbImportInput.Text
 
 	tm, _ = m.Update(tea.PasteMsg{Content: "keymap.xml"})
 	m = tm.(Model)
 
-	if m.jbImportInput != before+"keymap.xml" {
-		t.Fatalf("jbImportInput = %q, want %q", m.jbImportInput, before+"keymap.xml")
+	if m.jbImportInput.Text != before+"keymap.xml" {
+		t.Fatalf("jbImportInput = %q, want %q", m.jbImportInput.Text, before+"keymap.xml")
 	}
 }
 

@@ -246,7 +246,7 @@ func TestHTTPSaveSpooledBodyStreamsTheWholeThing(t *testing.T) {
 		t.Fatal("the save prompt did not open for a spooled body")
 	}
 	dest := filepath.Join(t.TempDir(), "full.json")
-	m.httpSaveInput, m.httpSavePos = "", 0
+	m.httpSaveInput.Text, m.httpSaveInput.Cur = "", 0
 	m = typePath(t, m, dest)
 
 	got, err := os.ReadFile(dest)

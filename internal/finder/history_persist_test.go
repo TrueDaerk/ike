@@ -41,12 +41,12 @@ func TestHistoryPersistsAcrossFinders(t *testing.T) {
 	fresh := openedWith(t, file)
 	// The last search state resumes on the first Open of a fresh session
 	// (#2054), so the query is already there, not just recallable via up.
-	if fresh.query != "needle" {
-		t.Fatalf("fresh finder query = %q, want needle", fresh.query)
+	if fresh.query.Text != "needle" {
+		t.Fatalf("fresh finder query = %q, want needle", fresh.query.Text)
 	}
 	fresh.Update(key("up")) // empty list → history recall
-	if fresh.query != "needle" {
-		t.Fatalf("up in a fresh finder = %q, want needle", fresh.query)
+	if fresh.query.Text != "needle" {
+		t.Fatalf("up in a fresh finder = %q, want needle", fresh.query.Text)
 	}
 }
 
@@ -58,15 +58,16 @@ func TestFindStatePersistsAcrossFinders(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "histories.json")
 	m := openedWith(t, file)
 	typeText(m, "needle")
-	m.include, m.exclude = "*.go", "vendor"
+	m.include.Set("*.go")
+	m.exclude.Set("vendor")
 	m.caseSensitive, m.wholeWord, m.regex = true, true, false
 	feed(m, match("a.go", 1), match("b.go", 2))
 	m.list.SetCursor(1) // select the second match
 	m.Close()
 
 	fresh := openedWith(t, file)
-	if fresh.query != "needle" || fresh.include != "*.go" || fresh.exclude != "vendor" {
-		t.Fatalf("fresh finder state = %q/%q/%q, want needle/*.go/vendor", fresh.query, fresh.include, fresh.exclude)
+	if fresh.query.Text != "needle" || fresh.include.Text != "*.go" || fresh.exclude.Text != "vendor" {
+		t.Fatalf("fresh finder state = %q/%q/%q, want needle/*.go/vendor", fresh.query.Text, fresh.include.Text, fresh.exclude.Text)
 	}
 	if !fresh.caseSensitive || !fresh.wholeWord || fresh.regex {
 		t.Fatalf("fresh finder toggles = %v/%v/%v, want true/true/false", fresh.caseSensitive, fresh.wholeWord, fresh.regex)
@@ -84,7 +85,8 @@ func TestHistoryStoreDedupeAndOrder(t *testing.T) {
 	m := openedWith(t, file)
 	for _, q := range []string{"one", "two", "one"} {
 		m.Open(t.TempDir())
-		m.query, m.cur, m.preselect = "", 0, false // drop the remembered query
+		m.query.Clear()
+		m.preselect = false // drop the remembered query
 		typeText(m, q)
 		feed(m, match("a.go", 1))
 		m.Update(key("enter"))

@@ -197,18 +197,19 @@ func (m *Model) insertPlayCheat(msg InsertCheatMsg) tea.Cmd {
 	if msg.AtCaret {
 		// A function name belongs where the caret is, exactly like accepting
 		// a completion: the program around it is the user's and stays.
-		r := []rune(s.program)
-		if s.pos < 0 || s.pos > len(r) {
-			s.pos = len(r)
+		r := s.program.Runes()
+		cur := s.program.Cur
+		if cur < 0 || cur > len(r) {
+			cur = len(r)
 		}
-		s.program = string(r[:s.pos]) + program + string(r[s.pos:])
-		s.pos += len([]rune(program))
+		s.program.Text = string(r[:cur]) + program + string(r[cur:])
+		s.program.Cur = cur + len([]rune(program))
 		s.status = "inserted " + program
 	} else {
 		// The replaced program goes into the history first, so `↑` brings it
 		// back: looking something up must never cost the work on the line.
-		s.hist.Add(s.program)
-		s.program, s.pos = program, len([]rune(program))
+		s.hist.Add(s.program.Text)
+		s.program.Set(program)
 		s.status = "inserted a cheatsheet example — its field names come from the sample document (↑ restores yours)"
 	}
 	m.sizePlayResult() // an inserted program may change the expanded header's height (#2032)

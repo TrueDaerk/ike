@@ -40,7 +40,7 @@ func playCompLabels(m Model) []string {
 // offers the input's top-level keys, and typing narrows the list in place.
 func TestJQCompletionOpensOnDotAndFilters(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"name":"ike","nation":"x","other":1}`))
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".")
 	if got := playCompLabels(m); strings.Join(got, " ") != "name nation other" {
 		t.Fatalf("`.` offered %v, want the top-level keys", got)
@@ -61,13 +61,13 @@ func TestJQCompletionOpensOnDotAndFilters(t *testing.T) {
 // what enter means only once the popup is gone.
 func TestJQCompletionAccept(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"name":"ike","nation":"x"}`))
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".nam")
 	if m.play.comp == nil {
 		t.Fatal("the popup must be open on a matching partial")
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
-	if got := m.play.program; got != ".name" {
+	if got := m.play.program.Text; got != ".name" {
 		t.Fatalf("accept wrote %q, want the completed path", got)
 	}
 	if m.play.comp != nil {
@@ -85,10 +85,10 @@ func TestJQCompletionAccept(t *testing.T) {
 // with the popup closed does tab move the keyboard into the result buffer.
 func TestJQCompletionTabAccepts(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"name":"ike"}`))
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".na")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
-	if got := m.play.program; got != ".name" {
+	if got := m.play.program.Text; got != ".name" {
 		t.Fatalf("tab accept wrote %q", got)
 	}
 	if m.play.bufFocus {
@@ -104,13 +104,13 @@ func TestJQCompletionTabAccepts(t *testing.T) {
 // program on the query line stand.
 func TestJQCompletionDismiss(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"name":"ike"}`))
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".na")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.play == nil || m.play.comp != nil {
 		t.Fatal("esc must dismiss the popup and leave the mode open")
 	}
-	if got := m.play.program; got != ".na" {
+	if got := m.play.program.Text; got != ".na" {
 		t.Fatalf("dismiss must keep the typed program, got %q", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -124,11 +124,11 @@ func TestJQCompletionDismiss(t *testing.T) {
 func TestJQCompletionNavigation(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"alpha":1,"beta":2}`))
 	m = runJQProgram(m, ".alpha") // a history entry ↑ would otherwise restore
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
-	if got := m.play.program; got != ".beta" {
+	if got := m.play.program.Text; got != ".beta" {
 		t.Fatalf("↓ then accept wrote %q, want the second key", got)
 	}
 	if got := m.play.histIdx; got != -1 {
@@ -136,11 +136,11 @@ func TestJQCompletionNavigation(t *testing.T) {
 	}
 
 	// ↑ from the top wraps to the last entry, ui.StepIndex's rule.
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
-	if got := m.play.program; got != ".beta" {
+	if got := m.play.program.Text; got != ".beta" {
 		t.Errorf("↑ wrap then accept wrote %q, want the last key", got)
 	}
 }
@@ -149,7 +149,7 @@ func TestJQCompletionNavigation(t *testing.T) {
 // the keys of the array's element objects.
 func TestJQCompletionNestedThroughArrays(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"items":[{"id":7},{"id":8,"name":"x"}]}`))
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".items[].")
 	if got := playCompLabels(m); strings.Join(got, " ") != "id name" {
 		t.Fatalf("`.items[].` offered %v, want the element keys", got)
@@ -160,10 +160,10 @@ func TestJQCompletionNestedThroughArrays(t *testing.T) {
 // quoted, and the resulting program evaluates.
 func TestJQCompletionQuotedKeyAccept(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"a b":42}`))
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
-	if got := m.play.program; got != `."a b"` {
+	if got := m.play.program.Text; got != `."a b"` {
 		t.Fatalf("accept wrote %q, want the quoted access", got)
 	}
 	if got := m.play.result.Text(); got != "42" {
@@ -175,7 +175,7 @@ func TestJQCompletionQuotedKeyAccept(t *testing.T) {
 // and the popup renders the selected builtin's doc line.
 func TestJQCompletionBuiltins(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"a":1}`))
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, "sel")
 	labels := playCompLabels(m)
 	if len(labels) == 0 || labels[0] != "select" {
@@ -191,7 +191,7 @@ func TestJQCompletionBuiltins(t *testing.T) {
 		t.Errorf("the popup should render the selected builtin's doc, got:\n%s", v)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
-	if got := m.play.program; got != "select" {
+	if got := m.play.program.Text; got != "select" {
 		t.Fatalf("accept wrote %q", got)
 	}
 }
@@ -200,7 +200,7 @@ func TestJQCompletionBuiltins(t *testing.T) {
 // trigger — the full builtin list on an empty line.
 func TestJQCompletionManualRequest(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"a":1}`))
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	if m.play.comp != nil {
 		t.Fatal("an empty line must not open the popup on its own")
 	}
@@ -214,7 +214,7 @@ func TestJQCompletionManualRequest(t *testing.T) {
 // query line, with the editor completion popup's accept hint.
 func TestJQCompletionRenders(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"name":"ike","nation":"x"}`))
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".na")
 	v := ansi.Strip(m.render())
 	for _, want := range []string{"name string", "nation string", "↹/⏎ accept · esc close"} {
@@ -235,7 +235,7 @@ func TestJQCompletionRenders(t *testing.T) {
 func TestJQCompletionClosesOnFocusAndHistory(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"name":"ike"}`))
 	m = runJQProgram(m, ".name")
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".na")
 
 	// The cursor stepping off the partial closes the popup (the span it
@@ -276,7 +276,7 @@ func TestJQCompletionAnchorsOnTheCaretsRow(t *testing.T) {
 		t.Fatal("typing a builtin's first runes must open the popup")
 	}
 	lines, _, start := m.playQueryWindow(paneW)
-	row, _ := jqplay.RowCol(lines, m.play.pos)
+	row, _ := jqplay.RowCol(lines, m.play.program.Cur)
 	if row == 0 {
 		t.Fatalf("setup: the caret must sit below the first row, rows %+v", lines)
 	}

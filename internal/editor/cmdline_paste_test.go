@@ -71,13 +71,13 @@ func TestPasteTextIntoReplacePanelFields(t *testing.T) {
 		t.Fatal("replace panel should be open")
 	}
 	m.PasteText("alpha")
-	if m.replPanel.find != "alpha" {
-		t.Fatalf("find paste: %q", m.replPanel.find)
+	if m.replPanel.find.Text != "alpha" {
+		t.Fatalf("find paste: %q", m.replPanel.find.Text)
 	}
 	m = send(m, tab())
 	m.PasteText("gamma")
-	if m.replPanel.repl != "gamma" {
-		t.Fatalf("replace paste: %q", m.replPanel.repl)
+	if m.replPanel.repl.Text != "gamma" {
+		t.Fatalf("replace paste: %q", m.replPanel.repl.Text)
 	}
 	if line(m, 0) != "alpha beta" {
 		t.Fatalf("paste leaked into the buffer: %q", line(m, 0))
@@ -95,8 +95,8 @@ func TestPasteTextReplacesPreselectedPanelPrefill(t *testing.T) {
 		t.Fatal("panel should open with a preselected prefill")
 	}
 	m.PasteText("beta")
-	if m.replPanel.find != "beta" {
-		t.Fatalf("paste should replace the preselected prefill: %q", m.replPanel.find)
+	if m.replPanel.find.Text != "beta" {
+		t.Fatalf("paste should replace the preselected prefill: %q", m.replPanel.find.Text)
 	}
 }
 

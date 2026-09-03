@@ -87,8 +87,7 @@ type Model struct {
 	// the f* fields the open filter line. hl styles it as SQL.
 	filter   string
 	fEditing bool
-	fInput   string
-	fCur     int
+	fInput   ui.Field
 	fErr     error
 	// fWrapped marks that the last cmd+g row step came back around the page
 	// (#2410), so the filter footer can say so.
@@ -206,7 +205,8 @@ func (m *Model) loadTable(i int) {
 	}
 	m.sel, m.tcur = i, i
 	m.rowCur, m.rowTop, m.colOff = 0, 0, 0
-	m.filter, m.fInput, m.fCur, m.fErr = "", "", 0, nil
+	m.filter, m.fErr = "", nil
+	m.fInput.Clear()
 	m.clearSort() // a column of the old table cannot order the new one
 	m.fetch(0)
 }

@@ -684,3 +684,17 @@ func absPath(path string) string {
 	}
 	return filepath.Clean(path)
 }
+
+// PasteText inserts a pasted block into the open filter row at its cursor
+// (#2460), re-deriving the list exactly like typing there does. A closed
+// filter row lets the paste fall through.
+func (m *Model) PasteText(text string) bool {
+	if !m.filter.Active() {
+		return false
+	}
+	if !m.filter.Paste(text) {
+		return false
+	}
+	m.rebuildList()
+	return true
+}

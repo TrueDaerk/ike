@@ -58,8 +58,7 @@ type bookmarkPrompt struct {
 	key   string // store key of the target line (project-relative path)
 	disp  string // the same path as shown to the user
 	line  int    // 0-based
-	input string
-	pos   int
+	input ui.Field
 	// back reopens the bookmarks overview (#2251) once the prompt closes:
 	// the overview's edit key routes through this very prompt, so saving or
 	// cancelling must land back in the list it was opened from.
@@ -137,8 +136,7 @@ func (m *Model) startBookmarkPrompt(kind bookmarkPromptKind) {
 	p := &bookmarkPrompt{kind: kind, key: key, disp: disp, line: line}
 	if kind == bmPromptNote {
 		if b, has := m.bmarks.At(key, line); has {
-			p.input = b.Note
-			p.pos = len([]rune(b.Note))
+			p.input.Set(b.Note)
 		}
 	}
 	m.bmPrompt = p
@@ -156,8 +154,7 @@ func (m *Model) startBookmarkNotePrompt(b bookmarks.Bookmark, back bool) {
 		key:   b.Path,
 		disp:  displayPath(bookmarkPath(b.Path)),
 		line:  b.Line,
-		input: b.Note,
-		pos:   len([]rune(b.Note)),
+		input: ui.NewField(b.Note),
 		back:  back,
 	}
 	m.bmPrompt = p
@@ -205,7 +202,7 @@ func (m *Model) renderBookmarkPrompt() {
 			Body:    func() string { return body + "\n\n0-9 jump · esc cancel" },
 		})
 	case bmPromptNote:
-		line := "> " + ui.CursorView(p.input, p.pos)
+		line := "> " + p.input.View()
 		m.shell.SetContent(ui.ModelContent{
 			Heading: "Bookmark note — " + where,
 			Body:    func() string { return line + "\n\nenter save · empty clears the note · esc cancel" },
@@ -245,7 +242,7 @@ func (m Model) updateBookmarkPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if p.kind == bmPromptNote {
 		if msg.Code == tea.KeyEnter {
-			note := strings.TrimSpace(p.input)
+			note := strings.TrimSpace(p.input.Text)
 			key, line, back := p.key, p.line, p.back
 			m.closeBookmarkPrompt()
 			m.bmarks.SetNote(key, line, note)
@@ -260,8 +257,7 @@ func (m Model) updateBookmarkPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if out, pos, handled, _ := ui.EditKey(msg, p.input, p.pos); handled {
-			p.input, p.pos = out, pos
+		if handled, _ := p.input.Key(msg); handled {
 			m.renderBookmarkPrompt()
 		}
 		return m, nil
@@ -303,11 +299,9 @@ func (m *Model) pasteBookmarkPrompt(text string) bool {
 	if p == nil || p.kind != bmPromptNote {
 		return false
 	}
-	out, pos, changed := ui.PasteText(p.input, p.pos, text)
-	if !changed {
+	if !p.input.Paste(text) {
 		return false
 	}
-	p.input, p.pos = out, pos
 	m.renderBookmarkPrompt()
 	return true
 }

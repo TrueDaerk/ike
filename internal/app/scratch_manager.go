@@ -101,8 +101,7 @@ type scratchMgrState struct {
 	search  ui.SpeedSearch
 
 	// The rename step edits the selected scratch's file name.
-	renameInput string
-	renamePos   int
+	renameInput ui.Field
 
 	// The language step picks an extension for the selected scratch.
 	langs      []smLang
@@ -112,8 +111,7 @@ type scratchMgrState struct {
 
 	// The custom-extension step types an extension the language list does not
 	// offer (#2340).
-	customInput string
-	customPos   int
+	customInput ui.Field
 
 	// hits are the clickable regions of the last render, rebuilt by every
 	// renderScratchManager call.
@@ -337,7 +335,7 @@ func (m *Model) renderScratchManager() {
 		e, _ := s.selected()
 		add("Rename " + e.name)
 		add("")
-		add("  " + windowedInput(s.renameInput, s.renamePos, m.tdValueWidth()))
+		add("  " + windowedInput(s.renameInput.Text, s.renameInput.Cur, m.tdValueWidth()))
 		add("")
 		add("The name is a plain file name; its extension decides the language.")
 		add("")
@@ -401,7 +399,7 @@ func (m *Model) renderScratchManager() {
 		e, _ := s.selected()
 		add("Extension of " + e.name)
 		add("")
-		add("  " + windowedInput(s.customInput, s.customPos, m.tdValueWidth()))
+		add("  " + windowedInput(s.customInput.Text, s.customInput.Cur, m.tdValueWidth()))
 		add("")
 		add("Any extension the list does not offer: \"tf\", \".mjs\", \"sql\".")
 		add("")
@@ -486,8 +484,7 @@ func (m Model) updateScratchManagerList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 	case "ctrl+r", "f2":
 		if e, ok := s.selected(); ok {
 			s.step = smStepRename
-			s.renameInput = e.name
-			s.renamePos = len([]rune(e.name))
+			s.renameInput.Set(e.name)
 			s.err, s.note = "", ""
 		}
 	case "ctrl+d", "delete":
@@ -553,13 +550,10 @@ func (m *Model) openScratchLangPicker() {
 func (m Model) updateScratchRename(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.scratchMgr
 	if msg.Code == tea.KeyEnter {
-		return m.applyScratchRename(strings.TrimSpace(s.renameInput))
+		return m.applyScratchRename(strings.TrimSpace(s.renameInput.Text))
 	}
-	if out, pos, handled, changed := ui.EditKey(msg, s.renameInput, s.renamePos); handled {
-		s.renameInput, s.renamePos = out, pos
-		if changed {
-			s.err = ""
-		}
+	if _, changed := s.renameInput.Key(msg); changed {
+		s.err = ""
 	}
 	m.renderScratchManager()
 	return m, nil
@@ -672,8 +666,7 @@ func (m Model) chooseScratchLang(l smLang) (tea.Model, tea.Cmd) {
 	// The current extension seeds the field, so the prompt starts from what
 	// the scratch is rather than from nothing.
 	e, _ := s.selected()
-	s.customInput = strings.ToLower(strings.TrimPrefix(filepath.Ext(e.name), "."))
-	s.customPos = len([]rune(s.customInput))
+	s.customInput.Set(strings.ToLower(strings.TrimPrefix(filepath.Ext(e.name), ".")))
 	s.err, s.note = "", ""
 	m.renderScratchManager()
 	return m, nil
@@ -685,7 +678,7 @@ func (m Model) chooseScratchLang(l smLang) (tea.Model, tea.Cmd) {
 func (m Model) updateScratchCustomLang(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.scratchMgr
 	if msg.Code == tea.KeyEnter {
-		ext, err := normalizeScratchExt(s.customInput)
+		ext, err := normalizeScratchExt(s.customInput.Text)
 		if err != nil {
 			s.err = err.Error()
 			m.renderScratchManager()
@@ -693,11 +686,8 @@ func (m Model) updateScratchCustomLang(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		}
 		return m.applyScratchLang(ext)
 	}
-	if out, pos, handled, changed := ui.EditKey(msg, s.customInput, s.customPos); handled {
-		s.customInput, s.customPos = out, pos
-		if changed {
-			s.err = ""
-		}
+	if _, changed := s.customInput.Key(msg); changed {
+		s.err = ""
 	}
 	m.renderScratchManager()
 	return m, nil
@@ -851,18 +841,12 @@ func (m *Model) pasteScratchManager(text string) bool {
 	if s == nil || (s.step != smStepRename && s.step != smStepCustomExt) {
 		return false
 	}
-	in, pos := s.renameInput, s.renamePos
+	f := &s.renameInput
 	if s.step == smStepCustomExt {
-		in, pos = s.customInput, s.customPos
+		f = &s.customInput
 	}
-	out, pos, changed := ui.PasteText(in, pos, text)
-	if !changed {
+	if !f.Paste(text) {
 		return false
-	}
-	if s.step == smStepCustomExt {
-		s.customInput, s.customPos = out, pos
-	} else {
-		s.renameInput, s.renamePos = out, pos
 	}
 	s.err = ""
 	m.renderScratchManager()

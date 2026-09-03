@@ -425,8 +425,8 @@ func TestCopyModeSearchInputConsumed(t *testing.T) {
 	m.StartCopyMode()
 	press(m, '/', "/")
 	typeQuery(m, "abc")
-	if m.copy.query != "abc" {
-		t.Fatalf("typed query = %q", m.copy.query)
+	if m.copy.query.Text != "abc" {
+		t.Fatalf("typed query = %q", m.copy.query.Text)
 	}
 	press(m, tea.KeyEscape, "")
 	if !m.Copying() || m.copy.input {

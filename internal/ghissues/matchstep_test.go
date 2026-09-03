@@ -30,9 +30,9 @@ func TestIssuesMatchStepWalksTheNarrowedList(t *testing.T) {
 	if !st.Handled || st.Total != 2 {
 		t.Fatalf("NextMatch = %+v, want the two explorer issues", st)
 	}
-	if !m.Filtering() || m.fInput != "explorer" {
+	if !m.Filtering() || m.fInput.Text != "explorer" {
 		t.Fatalf("the input must survive the step: filtering=%v input=%q",
-			m.Filtering(), m.fInput)
+			m.Filtering(), m.fInput.Text)
 	}
 }
 

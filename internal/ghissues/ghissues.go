@@ -257,8 +257,7 @@ type Model struct {
 	// The fuzzy match pattern, edited on the filter overlay's match row
 	// (#2104, filterov.go). It starts on 'f' — the '/' of other tools needs
 	// Shift on a QWERTZ layout (#48) — with '/' kept as an alias.
-	fInput string
-	fCur   int
+	fInput ui.Field
 	// matchStatus is where the cmd+g walk over the narrowed list stands
 	// (#2410), shown on the match row; every edit of fInput drops it.
 	matchStatus string
@@ -368,8 +367,7 @@ type Model struct {
 	rollback map[int]forge.Issue
 
 	// The close/reopen-with-comment prompt's buffer and cursor.
-	cmInput string
-	cmCur   int
+	cmInput ui.Field
 
 	// saved are the configured named filters (#2115, issues.saved_filters).
 	// Which one is "active" is derived from the live filter, not remembered —
@@ -627,7 +625,7 @@ func (m *Model) Top() int {
 func (m *Model) ActiveTab() Tab { return m.tab }
 
 // Filter returns the fuzzy pattern, "" when unfiltered (tests).
-func (m *Model) Filter() string { return m.fInput }
+func (m *Model) Filter() string { return m.fInput.Text }
 
 // Filtering reports whether the filter overlay is open with its match row
 // focused — the mode where typing edits the pattern (tests, paste routing).
@@ -1122,9 +1120,9 @@ func (m *Model) clearFilters() tea.Cmd {
 	switch {
 	case m.mutErr != "":
 		m.mutErr = ""
-	case m.fInput != "":
+	case !m.fInput.Empty():
 		m.filterTouched = true
-		m.fInput, m.fCur = "", 0
+		m.fInput.Clear()
 		m.keepSelection()
 	case len(m.LabelFilter()) > 0:
 		m.filterTouched = true
@@ -1183,7 +1181,7 @@ func (m *Model) Reveal(number int) bool {
 	}
 	m.tab, m.ov = TabIssues, ovNone
 	m.prDetail = false
-	m.fInput, m.fCur = "", 0
+	m.fInput.Clear()
 	m.labelSel = map[string]bool{}
 	m.labelAll = false
 	// The issue is already in the listing, so widening the state gate needs no
@@ -1322,17 +1320,20 @@ func (m *Model) clock() time.Time {
 	return m.now()
 }
 
-// PasteText inserts a pasted block into the filter overlay's match input at
-// its cursor (#2002) and re-narrows the list, exactly like typing there does.
+// PasteText inserts a pasted block into whichever text input is open: the
+// close/reopen comment prompt and the PR merge/close dialog's comment stage
+// (both share m.cmInput), or the filter overlay's match input, which
+// re-narrows the list exactly like typing there does.
 func (m *Model) PasteText(text string) bool {
+	if m.ov == ovComment || (m.ov == ovPRAct && m.prActStage == 0) {
+		return m.cmInput.Paste(text)
+	}
 	if !m.Filtering() {
 		return false
 	}
-	out, ncur, changed := ui.PasteText(m.fInput, m.fCur, text)
-	if !changed {
+	if !m.fInput.Paste(text) {
 		return false
 	}
-	m.fInput, m.fCur = out, ncur
 	m.resetCursors()
 	m.applyFilter()
 	return true
@@ -1368,10 +1369,10 @@ func prMatchText(pr *forge.PR) string {
 // fuzzyGate scores one haystack against the current pattern. Without a
 // pattern everything passes with score 0.
 func (m *Model) fuzzyGate(hay string) (int, bool) {
-	if m.fInput == "" {
+	if m.fInput.Empty() {
 		return 0, true
 	}
-	res, ok := fuzzy.Match(m.fInput, hay)
+	res, ok := fuzzy.Match(m.fInput.Text, hay)
 	if !ok {
 		return 0, false
 	}

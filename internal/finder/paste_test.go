@@ -14,11 +14,11 @@ func TestPasteIntoQuery(t *testing.T) {
 	if !m.Paste("le") {
 		t.Fatal("Paste reported not handled")
 	}
-	if m.query != "needle" {
-		t.Fatalf("query = %q, want %q", m.query, "needle")
+	if m.query.Text != "needle" {
+		t.Fatalf("query = %q, want %q", m.query.Text, "needle")
 	}
-	if m.cur != len([]rune("needle")) {
-		t.Fatalf("cursor = %d, want it after the pasted text", m.cur)
+	if m.query.Cur != len([]rune("needle")) {
+		t.Fatalf("cursor = %d, want it after the pasted text", m.query.Cur)
 	}
 }
 
@@ -32,11 +32,11 @@ func TestPasteIntoReplacement(t *testing.T) {
 	if !m.Paste("thread") {
 		t.Fatal("Paste reported not handled")
 	}
-	if m.replace != "thread" {
-		t.Fatalf("replace = %q, want %q", m.replace, "thread")
+	if m.replace.Text != "thread" {
+		t.Fatalf("replace = %q, want %q", m.replace.Text, "thread")
 	}
-	if m.query != "" {
-		t.Fatalf("query = %q, want the unfocused field untouched", m.query)
+	if m.query.Text != "" {
+		t.Fatalf("query = %q, want the unfocused field untouched", m.query.Text)
 	}
 }
 
@@ -54,8 +54,8 @@ func TestPasteReplacesPreselectedQuery(t *testing.T) {
 	if !m.Paste("haystack") {
 		t.Fatal("Paste reported not handled")
 	}
-	if m.query != "haystack" {
-		t.Fatalf("query = %q, want the prefill replaced", m.query)
+	if m.query.Text != "haystack" {
+		t.Fatalf("query = %q, want the prefill replaced", m.query.Text)
 	}
 	if m.preselect {
 		t.Fatal("the prefill selection should be dropped after a paste")
@@ -68,8 +68,8 @@ func TestPasteFlattensMultiline(t *testing.T) {
 	if !m.Paste("alpha\nbravo\n") {
 		t.Fatal("Paste reported not handled")
 	}
-	if m.query != "alpha bravo" {
-		t.Fatalf("query = %q, want %q", m.query, "alpha bravo")
+	if m.query.Text != "alpha bravo" {
+		t.Fatalf("query = %q, want %q", m.query.Text, "alpha bravo")
 	}
 }
 
@@ -80,7 +80,7 @@ func TestPasteEmptyIsNoOp(t *testing.T) {
 	if m.Paste("  \n\t\n ") {
 		t.Fatal("Paste of a blank block should report not handled")
 	}
-	if m.query != "keep" {
-		t.Fatalf("query = %q, want it unchanged", m.query)
+	if m.query.Text != "keep" {
+		t.Fatalf("query = %q, want it unchanged", m.query.Text)
 	}
 }

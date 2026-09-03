@@ -36,7 +36,7 @@ func startExtract(t *testing.T, m Model, req archview.ExtractMsg) Model {
 // typeExtractPath clears the proposal, types dest and confirms it.
 func typeExtractPath(t *testing.T, m Model, dest string) Model {
 	t.Helper()
-	m.archExtractInput, m.archExtractPos = "", 0
+	m.archExtractInput.Clear()
 	for _, r := range dest {
 		out, _ := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = out.(Model)
@@ -55,8 +55,8 @@ func TestArchiveExtractAllWritesMembers(t *testing.T) {
 	})
 	m = startExtract(t, m, archview.ExtractMsg{Archive: p})
 	// The proposal is a directory next to the archive, named after it.
-	if base := filepath.Base(m.archExtractInput); base != "src" {
-		t.Errorf("prefilled target %q, want a ./src proposal", m.archExtractInput)
+	if base := filepath.Base(m.archExtractInput.Text); base != "src" {
+		t.Errorf("prefilled target %q, want a ./src proposal", m.archExtractInput.Text)
 	}
 
 	dest := filepath.Join(t.TempDir(), "out")

@@ -57,8 +57,7 @@ type copyMode struct {
 	// to last/lastBack, which drive n/N and the highlights.
 	input    bool
 	back     bool
-	query    string
-	qpos     int // rune cursor within query
+	query    ui.Field
 	last     string
 	lastBack bool
 	miss     bool // the last jump found no match
@@ -208,7 +207,8 @@ func (m *Model) copyKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "/":
 		m.openCopySearch()
 	case "?":
-		c.input, c.back, c.query, c.qpos = true, true, "", 0
+		c.input, c.back = true, true
+		c.query.Clear()
 	case "n":
 		m.copySearchStep(false)
 	case "N":
@@ -220,7 +220,8 @@ func (m *Model) copyKey(msg tea.KeyPressMsg) tea.Cmd {
 // openCopySearch puts the cursor in copy mode's forward search prompt.
 func (m *Model) openCopySearch() {
 	c := m.copy
-	c.input, c.back, c.query, c.qpos = true, false, "", 0
+	c.input, c.back = true, false
+	c.query.Clear()
 }
 
 // copyYank extracts the selection, exits copy mode and hands the text to the
@@ -358,20 +359,19 @@ func (m *Model) copySearchKey(msg tea.KeyPressMsg) {
 	c := m.copy
 	switch msg.Code {
 	case tea.KeyEscape:
-		c.input, c.query, c.qpos = false, "", 0
+		c.input = false
+		c.query.Clear()
 		return
 	case tea.KeyEnter:
 		c.input = false
-		if c.query != "" {
-			c.last, c.lastBack = c.query, c.back
+		if !c.query.Empty() {
+			c.last, c.lastBack = c.query.Text, c.back
 			m.copySearchJump(c.back)
 		}
-		c.query, c.qpos = "", 0
+		c.query.Clear()
 		return
 	}
-	if out, ncur, handled, _ := ui.EditKey(msg, c.query, c.qpos); handled {
-		c.query, c.qpos = out, ncur
-	}
+	c.query.Key(msg)
 }
 
 // copyMatches returns the virtual lines containing the accepted query,
@@ -487,7 +487,7 @@ func (m Model) copyHighlightMatches(rows []string, firstVirtual int) {
 	c := m.copy
 	q := c.last
 	if c.input {
-		q = c.query
+		q = c.query.Text
 	}
 	if q == "" {
 		return
@@ -530,7 +530,7 @@ func (m Model) copyStatusLine() string {
 		if c.back {
 			prefix = "?"
 		}
-		tail = "  " + prefix + ui.CursorView(c.query, c.qpos)
+		tail = "  " + prefix + c.query.View()
 	case c.miss:
 		tail = lipgloss.NewStyle().Foreground(errCol).Render("  no matches")
 	case c.last != "" && c.matchCnt > 0:

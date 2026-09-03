@@ -50,7 +50,7 @@ func openFinder(t *testing.T, w, h int) *Model {
 	m := New(search.New(nil))
 	m.SetSize(w, h)
 	m.Open("")
-	m.query = "row"
+	m.query.Set("row")
 	return m
 }
 

@@ -83,8 +83,7 @@ type ShowScratchCustomExtMsg struct{}
 // startScratchCustomExt opens the prompt with an empty input.
 func (m *Model) startScratchCustomExt() {
 	m.scratchExtOpen = true
-	m.scratchExtInput = ""
-	m.scratchExtPos = 0
+	m.scratchExtInput.Clear()
 	m.scratchExtErr = ""
 	m.renderScratchCustomExt()
 	m.shell.SetSize(m.width, m.height)
@@ -97,15 +96,14 @@ func (m Model) scratchCustomExtOpen() bool { return m.scratchExtOpen && m.shell.
 // closeScratchCustomExt clears the prompt state and the shell.
 func (m *Model) closeScratchCustomExt() {
 	m.scratchExtOpen = false
-	m.scratchExtInput = ""
-	m.scratchExtPos = 0
+	m.scratchExtInput.Clear()
 	m.scratchExtErr = ""
 	m.shell.Close()
 }
 
 // renderScratchCustomExt (re)fills the shell for the current input.
 func (m *Model) renderScratchCustomExt() {
-	line := "> " + ui.CursorView(m.scratchExtInput, m.scratchExtPos)
+	line := "> " + m.scratchExtInput.View()
 	errLine := ""
 	if m.scratchExtErr != "" {
 		errLine = "\nE: " + m.scratchExtErr
@@ -130,10 +128,9 @@ func (m Model) updateScratchCustomExt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.closeScratchCustomExt()
 		return m.Update(ShowNewScratchMsg{})
 	case msg.Code == tea.KeyEnter:
-		return m.applyScratchCustomExt(m.scratchExtInput)
+		return m.applyScratchCustomExt(m.scratchExtInput.Text)
 	}
-	if out, pos, handled, changed := ui.EditKey(msg, m.scratchExtInput, m.scratchExtPos); handled {
-		m.scratchExtInput, m.scratchExtPos = out, pos
+	if handled, changed := m.scratchExtInput.Key(msg); handled {
 		if changed {
 			m.scratchExtErr = ""
 		}
@@ -162,11 +159,9 @@ func (m *Model) pasteScratchCustomExt(text string) bool {
 	if !m.scratchExtOpen {
 		return false
 	}
-	out, pos, changed := ui.PasteText(m.scratchExtInput, m.scratchExtPos, text)
-	if !changed {
+	if !m.scratchExtInput.Paste(text) {
 		return false
 	}
-	m.scratchExtInput, m.scratchExtPos = out, pos
 	m.scratchExtErr = ""
 	m.renderScratchCustomExt()
 	return true

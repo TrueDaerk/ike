@@ -83,7 +83,7 @@ func TestUsagesPopupMinHeight(t *testing.T) {
 		t.Fatalf("two-usage popup has %d result rows, want %d", got, ui.MinResultRows)
 	}
 	// Zero results (a filter that matches nothing) keeps the height too.
-	p.query = "zzz"
+	p.query.Set("zzz")
 	p.recompute()
 	if len(p.items) != 0 {
 		t.Fatalf("expected no items, got %d", len(p.items))
@@ -219,8 +219,8 @@ func TestPreviewFocusScrolls(t *testing.T) {
 	if p.selected != sel {
 		t.Fatalf("the selection moved to %d while the preview had focus", p.selected)
 	}
-	if p.query != "" {
-		t.Fatalf("the motion leaked into the query: %q", p.query)
+	if p.query.Text != "" {
+		t.Fatalf("the motion leaked into the query: %q", p.query.Text)
 	}
 	p.Update(tea.KeyPressMsg{Code: 'z', Text: "z"})
 	if again := previewColumn(t, p); again != before {

@@ -206,12 +206,11 @@ func parseStateName(s string) StateFilter {
 // update exactly as if the sections had been used. The returned command is a
 // refetch when a state qualifier needs a listing the pane does not hold.
 func (m *Model) applyMatchQualifiers(final bool) tea.Cmd {
-	rest, quals := extractQualifiers(m.fInput, final)
+	rest, quals := extractQualifiers(m.fInput.Text, final)
 	if len(quals) == 0 {
 		return nil
 	}
-	m.fInput = rest
-	m.fCur = len([]rune(rest))
+	m.fInput.Set(rest)
 	var cmd tea.Cmd
 	for _, q := range quals {
 		switch q.name {
@@ -238,10 +237,10 @@ func (m *Model) applyMatchQualifiers(final bool) tea.Cmd {
 // the input, on the first candidate the typed prefix matches. A completed
 // value ends in the terminating space, so accepting it applies immediately.
 func (m *Model) matchCompletion() string {
-	if m.fCur != len([]rune(m.fInput)) {
+	if m.fInput.Cur != m.fInput.Len() {
 		return ""
 	}
-	toks, trailingSpace := splitTokens(m.fInput)
+	toks, trailingSpace := splitTokens(m.fInput.Text)
 	if trailingSpace || len(toks) == 0 {
 		return ""
 	}
@@ -306,8 +305,7 @@ func (m *Model) acceptCompletion() (tea.Cmd, bool) {
 	if ghost == "" {
 		return nil, false
 	}
-	m.fInput += ghost
-	m.fCur = len([]rune(m.fInput))
+	m.fInput.Set(m.fInput.Text + ghost)
 	cmd := m.applyMatchQualifiers(false)
 	m.resetCursors()
 	m.applyFilter()

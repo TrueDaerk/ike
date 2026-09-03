@@ -55,8 +55,8 @@ func TestLogMessageEditAndEscape(t *testing.T) {
 	m.SetStore(b)
 	m.Update(key("down"))
 	m.Update(key("l"))
-	if string(m.editBuf) != "old" {
-		t.Fatalf("editor must prefill the current value, got %q", string(m.editBuf))
+	if m.edit.Text != "old" {
+		t.Fatalf("editor must prefill the current value, got %q", m.edit.Text)
 	}
 	m.Update(escKey())
 	if m.Editing() {

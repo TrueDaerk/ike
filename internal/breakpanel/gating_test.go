@@ -80,7 +80,7 @@ func TestInvalidHitCountKeepsEditorOpen(t *testing.T) {
 	if m.editErr != "" {
 		t.Fatal("the complaint must clear on the next keystroke")
 	}
-	m.editBuf, m.editCur = []rune("%2"), 2
+	m.edit.Text, m.edit.Cur = "%2", 2
 	msg := run(t, m.Update(key("enter")))
 	got, ok := msg.(SetMetaMsg)
 	if !ok || got.Meta.HitCondition != "%2" {

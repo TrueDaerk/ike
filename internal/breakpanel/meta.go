@@ -4,7 +4,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/debug"
-	"ike/internal/ui"
 )
 
 // meta.go is the breakpoint-refinement editing (#1914): condition, hit count
@@ -141,8 +140,7 @@ func (m *Model) startMetaEdit(f metaField) tea.Cmd {
 	m.editing = true
 	m.editField = f
 	m.editPath, m.editLine = r.path, r.line
-	m.editBuf = []rune(s)
-	m.editCur = len(m.editBuf)
+	m.edit.Set(s)
 	m.editErr = ""
 	return nil
 }
@@ -150,8 +148,7 @@ func (m *Model) startMetaEdit(f metaField) tea.Cmd {
 // cancelEdit closes the editor without committing.
 func (m *Model) cancelEdit() {
 	m.editing = false
-	m.editBuf = nil
-	m.editCur = 0
+	m.edit.Clear()
 	m.editErr = ""
 }
 
@@ -160,7 +157,7 @@ func (m *Model) cancelEdit() {
 func (m *Model) editKey(k tea.KeyPressMsg) tea.Cmd {
 	switch k.Code {
 	case tea.KeyEnter:
-		path, line, field, val := m.editPath, m.editLine, m.editField, string(m.editBuf)
+		path, line, field, val := m.editPath, m.editLine, m.editField, m.edit.Text
 		if err := field.validate(val); err != nil {
 			// A rejected value keeps the editor open with the reason, like
 			// the run-configuration form's row editor (#2245).
@@ -189,8 +186,7 @@ func (m *Model) editKey(k tea.KeyPressMsg) tea.Cmd {
 	// Everything else is shared line editing (#2002): a movable cursor with
 	// word motions, word/line kills, the macOS opt/cmd chords and rune-safe
 	// backspace, plus printable insertion at the cursor.
-	if out, ncur, handled, _ := ui.EditKey(k, string(m.editBuf), m.editCur); handled {
-		m.editBuf, m.editCur = []rune(out), ncur
+	if handled, _ := m.edit.Key(k); handled {
 		m.editErr = "" // the next keystroke retires the complaint
 	}
 	return nil
@@ -216,10 +212,5 @@ func (m *Model) PasteText(text string) bool {
 	if !m.editing {
 		return false
 	}
-	out, ncur, changed := ui.PasteText(string(m.editBuf), m.editCur, text)
-	if !changed {
-		return false
-	}
-	m.editBuf, m.editCur = []rune(out), ncur
-	return true
+	return m.edit.Paste(text)
 }

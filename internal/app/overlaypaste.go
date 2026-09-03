@@ -4,7 +4,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/pane"
-	"ike/internal/ui"
 )
 
 // overlaypaste.go routes a paste into the focused overlay's text input (#1273).
@@ -43,7 +42,11 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		return nil, m.finder.Paste(text)
 	case m.allFind.IsOpen():
 		return nil, m.allFind.Paste(text)
-	case m.allResults.IsOpen(), m.todo.IsOpen(), m.undoTree.IsOpen(),
+	case m.todo.IsOpen():
+		// The TODO index's filter row (#2156, #2460): a paste there re-narrows
+		// the list exactly like typing does.
+		return nil, m.todo.PasteText(text)
+	case m.allResults.IsOpen(), m.undoTree.IsOpen(),
 		m.callhier.IsOpen(), m.typehier.IsOpen():
 		return nil, false // list overlays, no text input
 	case m.palette.IsOpen():
@@ -126,11 +129,9 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 
 // pasteRenamePrompt inserts into the file-rename prompt at its cursor.
 func (m *Model) pasteRenamePrompt(text string) bool {
-	out, ncur, changed := ui.PasteText(m.renameInput, m.renamePos, text)
-	if !changed {
+	if !m.renameInput.Paste(text) {
 		return false
 	}
-	m.renameInput, m.renamePos = out, ncur
 	m.renderRenamePrompt()
 	return true
 }
@@ -141,11 +142,9 @@ func (m *Model) pasteLSPRenamePrompt(text string) bool {
 	if s == nil {
 		return false
 	}
-	out, ncur, changed := ui.PasteText(s.input, s.pos, text)
-	if !changed {
+	if !s.input.Paste(text) {
 		return false
 	}
-	s.input, s.pos = out, ncur
 	m.renderLSPRenamePrompt()
 	return true
 }

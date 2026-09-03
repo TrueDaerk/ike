@@ -96,7 +96,8 @@ func tdClick(t *testing.T, m Model, kind tdHitKind, arg int) Model {
 func tdSetSpec(m Model, dsl, rows, seed string) Model {
 	s := m.tdGen
 	s.setText(dsl)
-	s.hdr[tdHdrRows], s.hdr[tdHdrSeed] = rows, seed
+	s.hdr[tdHdrRows].Set(rows)
+	s.hdr[tdHdrSeed].Set(seed)
 	s.setFocus(tdFocEditor)
 	m.renderGenerateScratch()
 	return m
@@ -420,7 +421,7 @@ func TestGenerateTemplateSaveDelete(t *testing.T) {
 	}
 	// A name shadowing a built-in is refused with the dialog still open.
 	m = tdCtrl(m, 's')
-	m.tdGen.saveName = "Person"
+	m.tdGen.saveName.Set("Person")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !m.tdGen.savePrompt || !strings.Contains(m.tdGen.err, "built-in") {
 		t.Fatalf("shadowing a built-in must be refused, err %q", m.tdGen.err)
@@ -463,7 +464,7 @@ func TestGenerateMouse(t *testing.T) {
 	if m.tdGen.focus != tdFocSeed {
 		t.Fatalf("focus = %d, want the seed row", m.tdGen.focus)
 	}
-	m.tdGen.hdr[tdHdrRows] = "3"
+	m.tdGen.hdr[tdHdrRows].Set("3")
 	// Click into the second editor line: cursor lands there.
 	m = tdClick(t, m, tdHitLine, 1)
 	if m.tdGen.focus != tdFocEditor || m.tdGen.curL != 1 {
@@ -558,8 +559,8 @@ func TestGenerateRemembersLastSpec(t *testing.T) {
 	if s.formats[s.fmtPick] != testdata.FormatYAML {
 		t.Fatalf("format = %v, want the remembered YAML", s.formats[s.fmtPick])
 	}
-	if s.hdr[tdHdrRows] != "3" || s.hdr[tdHdrSeed] != "77" {
-		t.Fatalf("rows/seed = %q/%q, want 3/77", s.hdr[tdHdrRows], s.hdr[tdHdrSeed])
+	if s.hdr[tdHdrRows].Text != "3" || s.hdr[tdHdrSeed].Text != "77" {
+		t.Fatalf("rows/seed = %q/%q, want 3/77", s.hdr[tdHdrRows].Text, s.hdr[tdHdrSeed].Text)
 	}
 	if !strings.Contains(s.text(), "from_list(on, off)") {
 		t.Fatalf("DSL not remembered: %q", s.text())

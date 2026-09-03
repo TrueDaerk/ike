@@ -31,24 +31,24 @@ func editingMeta(t *testing.T, value string) Model {
 func TestMetaEditWordAndLineKills(t *testing.T) {
 	m := editingMeta(t, "alpha beta")
 	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt})
-	if string(m.editBuf) != "alpha " {
-		t.Fatalf("alt+backspace: %q", string(m.editBuf))
+	if m.edit.Text != "alpha " {
+		t.Fatalf("alt+backspace: %q", m.edit.Text)
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModSuper})
-	if string(m.editBuf) != "" || m.editCur != 0 {
-		t.Fatalf("super+backspace: %q/%d", string(m.editBuf), m.editCur)
+	if m.edit.Text != "" || m.edit.Cur != 0 {
+		t.Fatalf("super+backspace: %q/%d", m.edit.Text, m.edit.Cur)
 	}
 }
 
 func TestMetaEditWordMotion(t *testing.T) {
 	m := editingMeta(t, "i > 3")
 	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt})
-	if m.editCur != 4 {
-		t.Fatalf("alt+left: cursor = %d, want 4", m.editCur)
+	if m.edit.Cur != 4 {
+		t.Fatalf("alt+left: cursor = %d, want 4", m.edit.Cur)
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModSuper})
-	if m.editCur != 0 {
-		t.Fatalf("super+left: cursor = %d, want 0", m.editCur)
+	if m.edit.Cur != 0 {
+		t.Fatalf("super+left: cursor = %d, want 0", m.edit.Cur)
 	}
 }
 
@@ -57,8 +57,8 @@ func TestMetaEditPasteAtCursor(t *testing.T) {
 	if !m.PasteText("3") {
 		t.Fatal("paste must be consumed by the open editor")
 	}
-	if string(m.editBuf) != "i > 3" {
-		t.Fatalf("paste: %q", string(m.editBuf))
+	if m.edit.Text != "i > 3" {
+		t.Fatalf("paste: %q", m.edit.Text)
 	}
 	msg := run(t, m.Update(key("enter")))
 	got, ok := msg.(SetMetaMsg)
@@ -79,7 +79,7 @@ func TestMetaEditBackspaceIsRuneSafe(t *testing.T) {
 	m := editingMeta(t, "größe")
 	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
-	if string(m.editBuf) != "grö" {
-		t.Fatalf("backspace: %q", string(m.editBuf))
+	if m.edit.Text != "grö" {
+		t.Fatalf("backspace: %q", m.edit.Text)
 	}
 }

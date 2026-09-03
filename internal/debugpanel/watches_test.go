@@ -112,8 +112,7 @@ func TestWatchEditAndRemove(t *testing.T) {
 	m.SetWatches([]WatchResult{{Expr: "y", Value: "3"}})
 	m.varSel = 1
 	m.Update(key("e"))
-	m.editBuf = nil
-	m.editCur = 0
+	m.edit.Clear()
 	msg = m.Update(key("enter"))()
 	if got, ok := msg.(RemoveWatchMsg); !ok || got.Index != 0 {
 		t.Fatalf("empty-edit commit = %+v", msg)

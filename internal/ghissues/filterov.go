@@ -56,7 +56,7 @@ func (m *Model) snapshotFilters() filterSnapshot {
 	for k, v := range m.labelSel {
 		labels[k] = v
 	}
-	return filterSnapshot{input: m.fInput, cur: m.fCur, labels: labels,
+	return filterSnapshot{input: m.fInput.Text, cur: m.fInput.Cur, labels: labels,
 		labelAll: m.labelAll, state: m.state, sort: m.sort, group: m.group}
 }
 
@@ -143,7 +143,7 @@ func (m *Model) openFilterOverlay(row int) {
 	m.ovSearch.Reset()
 	m.ovCursor = row
 	if row == fovMatch {
-		m.fCur = len([]rune(m.fInput))
+		m.fInput.Cur = m.fInput.Len()
 	}
 	m.clampOverlay()
 }
@@ -291,8 +291,7 @@ func (m *Model) searchingFilterKey(msg tea.KeyPressMsg) tea.Cmd {
 // Each edit also extracts any qualifier the keystroke just terminated (#2110):
 // "is:closed " becomes the state gate, not fuzzy text.
 func (m *Model) matchRowKey(msg tea.KeyPressMsg) tea.Cmd {
-	if out, ncur, handled, changed := ui.EditKey(msg, m.fInput, m.fCur); handled {
-		m.fInput, m.fCur = out, ncur
+	if handled, changed := m.fInput.Key(msg); handled {
 		if changed {
 			m.filterTouched = true
 			m.matchStatus = "" // an edited pattern starts a fresh walk (#2410)
@@ -426,7 +425,7 @@ func (m *Model) labelRowKey(msg tea.KeyPressMsg) tea.Cmd {
 func (m *Model) revertFilters() tea.Cmd {
 	s := m.fSaved
 	m.closeOverlay()
-	m.fInput, m.fCur = s.input, s.cur
+	m.fInput.Text, m.fInput.Cur = s.input, s.cur
 	m.labelSel = s.labels
 	if m.labelSel == nil {
 		m.labelSel = map[string]bool{}
@@ -507,11 +506,11 @@ type filterChip struct {
 // one of three labels can be cleared without touching the other two.
 func (m *Model) filterChips() []filterChip {
 	var chips []filterChip
-	if m.fInput != "" {
-		chips = append(chips, filterChip{text: "match: " + m.fInput,
+	if !m.fInput.Empty() {
+		chips = append(chips, filterChip{text: "match: " + m.fInput.Text,
 			clear: func(m *Model) tea.Cmd {
 				m.filterTouched = true
-				m.fInput, m.fCur = "", 0
+				m.fInput.Clear()
 				m.keepSelection()
 				return nil
 			}})

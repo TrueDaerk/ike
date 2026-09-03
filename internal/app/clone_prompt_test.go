@@ -47,20 +47,20 @@ func TestClonePromptDerivesNameFromURL(t *testing.T) {
 	m := openClone(t, base)
 
 	m = typeInto(m, "https://github.com/TrueDaerk/ike.git")
-	if m.cloneName != "ike" {
-		t.Fatalf("derived name = %q, want %q", m.cloneName, "ike")
+	if m.cloneName.Text != "ike" {
+		t.Fatalf("derived name = %q, want %q", m.cloneName.Text, "ike")
 	}
 
 	// tab moves to the name field; typing there stops the derivation.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	m = typeInto(m, "-fork")
-	if m.cloneName != "ike-fork" {
-		t.Fatalf("edited name = %q, want %q", m.cloneName, "ike-fork")
+	if m.cloneName.Text != "ike-fork" {
+		t.Fatalf("edited name = %q, want %q", m.cloneName.Text, "ike-fork")
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	m = typeInto(m, "x")
-	if m.cloneName != "ike-fork" {
-		t.Fatalf("hand-edited name must not follow the URL again, got %q", m.cloneName)
+	if m.cloneName.Text != "ike-fork" {
+		t.Fatalf("hand-edited name must not follow the URL again, got %q", m.cloneName.Text)
 	}
 }
 
@@ -75,11 +75,11 @@ func TestClonePromptPasteIntoURLField(t *testing.T) {
 	tm, _ := m.Update(tea.PasteMsg{Content: "https://github.com/TrueDaerk/ike.git"})
 	m = tm.(Model)
 
-	if m.cloneURL != "https://github.com/TrueDaerk/ike.git" {
-		t.Fatalf("cloneURL = %q, want the pasted text", m.cloneURL)
+	if m.cloneURL.Text != "https://github.com/TrueDaerk/ike.git" {
+		t.Fatalf("cloneURL = %q, want the pasted text", m.cloneURL.Text)
 	}
-	if m.cloneName != "ike" {
-		t.Fatalf("a paste into the URL field must re-derive the name, got %q", m.cloneName)
+	if m.cloneName.Text != "ike" {
+		t.Fatalf("a paste into the URL field must re-derive the name, got %q", m.cloneName.Text)
 	}
 }
 
@@ -95,8 +95,8 @@ func TestClonePromptPasteIntoNameField(t *testing.T) {
 	tm, _ := m.Update(tea.PasteMsg{Content: "-fork"})
 	m = tm.(Model)
 
-	if m.cloneName != "ike-fork" {
-		t.Fatalf("cloneName = %q, want %q", m.cloneName, "ike-fork")
+	if m.cloneName.Text != "ike-fork" {
+		t.Fatalf("cloneName = %q, want %q", m.cloneName.Text, "ike-fork")
 	}
 	if !m.cloneNameEdited {
 		t.Fatal("a paste into the name field must mark it hand-edited")
@@ -104,8 +104,8 @@ func TestClonePromptPasteIntoNameField(t *testing.T) {
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	m = typeInto(m, "x")
-	if m.cloneName != "ike-fork" {
-		t.Fatalf("a hand-edited name (via paste) must not follow the URL again, got %q", m.cloneName)
+	if m.cloneName.Text != "ike-fork" {
+		t.Fatalf("a hand-edited name (via paste) must not follow the URL again, got %q", m.cloneName.Text)
 	}
 }
 
@@ -124,8 +124,8 @@ func TestClonePromptCmdVPastesFromClipboard(t *testing.T) {
 	tm, _ := m.Update(tea.KeyPressMsg{Code: 'v', Mod: tea.ModSuper})
 	m = tm.(Model)
 
-	if m.cloneURL != "https://example.com/org/repo.git" {
-		t.Fatalf("cmd+v did not paste into the URL field, got %q", m.cloneURL)
+	if m.cloneURL.Text != "https://example.com/org/repo.git" {
+		t.Fatalf("cmd+v did not paste into the URL field, got %q", m.cloneURL.Text)
 	}
 }
 
@@ -139,8 +139,8 @@ func TestCloneNameGhostUntilEdited(t *testing.T) {
 	m := openClone(t, base)
 
 	m = typeInto(m, "https://github.com/TrueDaerk/ike.git")
-	if m.cloneName != "ike" {
-		t.Fatalf("derived name = %q, want %q", m.cloneName, "ike")
+	if m.cloneName.Text != "ike" {
+		t.Fatalf("derived name = %q, want %q", m.cloneName.Text, "ike")
 	}
 	ghost := cloneGhostStyle.Render("ike")
 	if !strings.Contains(m.View().Content, ghost) {

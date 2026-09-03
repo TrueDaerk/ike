@@ -402,29 +402,26 @@ type Model struct {
 	// while the shell shows it; renameInput/renamePos are the typed name and
 	// its cursor. "" when no rename prompt is open.
 	renamePath  string
-	renameInput string
+	renameInput ui.Field
 
 	// saveAsKey is the pane whose untitled buffer the save-as prompt (#730)
 	// names while the shell shows it; saveAsClose carries the ":wq" intent.
 	saveAsKey   string
-	saveAsInput string
-	saveAsPos   int
+	saveAsInput ui.Field
 	saveAsClose bool
 	saveAsErr   string
 
 	// promotePath is the scratch the promote prompt (#2339) is naming a
 	// project path for while the shell shows it; "" when it is closed.
 	promotePath  string
-	promoteInput string
-	promotePos   int
+	promoteInput ui.Field
 	promoteErr   string
 
 	// scratchExtOpen marks the free-extension prompt of the scratch.new
 	// picker (#2340) while the shell shows it; scratchExtInput is the typed
 	// extension with its cursor and scratchExtErr the last refusal.
 	scratchExtOpen  bool
-	scratchExtInput string
-	scratchExtPos   int
+	scratchExtInput ui.Field
 	scratchExtErr   string
 
 	// cloneOpen marks the clone-repository dialog (#1349) while the shell
@@ -434,10 +431,8 @@ type Model struct {
 	// fields while the git subprocess runs, and cloneErr is the validation or
 	// git message shown under the fields.
 	cloneOpen       bool
-	cloneURL        string
-	cloneURLPos     int
-	cloneName       string
-	cloneNamePos    int
+	cloneURL        ui.Field
+	cloneName       ui.Field
 	cloneField      int
 	cloneNameEdited bool
 	cloneRunning    bool
@@ -499,15 +494,13 @@ type Model struct {
 	// jqplay.Cheatsheet per open, so there is nothing to cache either.
 	playCheat *playCheatMode
 
-	renamePos int
 	// layoutSaveOpen marks the window.saveLayout name prompt (#1175) while the
 	// shell shows it; input/pos are the typed name and cursor, err the
 	// overwrite-confirmation hint. layoutsPicker is the palette mode listing
 	// saved layouts, kept on the model so the two entry commands can flip its
 	// apply/set-default action before opening it locked.
 	layoutSaveOpen  bool
-	layoutSaveInput string
-	layoutSavePos   int
+	layoutSaveInput ui.Field
 	layoutSaveErr   string
 	layoutsPicker   *layoutsMode
 	// httpRequests is the palette mode listing the .http requests that have
@@ -564,13 +557,11 @@ type Model struct {
 	// jbImportOpen marks the JetBrains keymap import prompt (#677) while the
 	// shell shows it; jbImportInput/jbImportPos are the typed path and cursor.
 	jbImportOpen  bool
-	jbImportInput string
-	jbImportPos   int
+	jbImportInput ui.Field
 	// oapiImportOpen marks the OpenAPI import prompt (#1939) while the shell
 	// shows it; oapiImportInput/oapiImportPos are the typed path and cursor.
 	oapiImportOpen  bool
-	oapiImportInput string
-	oapiImportPos   int
+	oapiImportInput ui.Field
 	// oapiCheck* hold the URL validation of that prompt (#2009): the
 	// sequence number of the newest check (older answers are stale),
 	// whether one is in flight, the last error message, and the resolved
@@ -583,42 +574,36 @@ type Model struct {
 	// the shell shows it; evalInput/evalPos hold its single line. Only opened
 	// when there is no selection to evaluate.
 	evalOpen  bool
-	evalInput string
-	evalPos   int
+	evalInput ui.Field
 	// runToLineOpen marks the debugger's run-to-line prompt (#2405) while the
 	// shell shows it; runToLineInput/runToLinePos hold its single line.
 	runToLineOpen  bool
-	runToLineInput string
-	runToLinePos   int
+	runToLineInput ui.Field
 	// paneNumOpen marks pane.focusByIndex's prompt (#2407) while the shell
 	// shows it; paneNumInput/paneNumPos hold its single line. paneNumHint is
 	// the which-pane hint of the focus-only mode — up while a pane switch is
 	// being made, taken down again by paneNumberHintMsg; paneNumHintGen tells
 	// the newest timer from the ones a faster switch has already outrun.
 	paneNumOpen    bool
-	paneNumInput   string
-	paneNumPos     int
+	paneNumInput   ui.Field
 	paneNumHint    bool
 	paneNumHintGen int
 	// curlImportOpen marks the curl import prompt (#1994) while the shell
 	// shows it; curlImportInput/curlImportPos are the typed command and
 	// cursor.
 	curlImportOpen  bool
-	curlImportInput string
-	curlImportPos   int
+	curlImportInput ui.Field
 	// httpSaveOpen marks the response-body save prompt (#2059) while the
 	// shell shows it; httpSaveInput/httpSavePos are the typed path and cursor.
 	httpSaveOpen  bool
-	httpSaveInput string
-	httpSavePos   int
+	httpSaveInput ui.Field
 	// archExtractOpen marks the archive extraction target-directory prompt
 	// (#2249) while the shell shows it; archExtractInput/archExtractPos are
 	// the typed path and cursor, and archExtractArchive/archExtractMembers
 	// hold what the pane asked to extract (no members = the whole archive).
 	// archExtractPlan is the pending plan while the overwrite guard is up.
 	archExtractOpen    bool
-	archExtractInput   string
-	archExtractPos     int
+	archExtractInput   ui.Field
 	archExtractArchive string
 	archExtractMembers []string
 	archExtractPlan    *archive.Plan
@@ -890,8 +875,7 @@ type Model struct {
 	dlAfterClone *deeplink.Link
 	// The project.open_link paste prompt (#2396): one URL line.
 	dlLinkOpen bool
-	dlLinkText string
-	dlLinkPos  int
+	dlLinkText ui.Field
 	// undoTree is the undo-tree overlay (#59): the focused editor's change
 	// tree; jumps route back into that editor as HistoryJumpMsg.
 	undoTree *undotree.Model

@@ -40,12 +40,12 @@ func openJQOverFloatingTerminal(t *testing.T) Model {
 // floating terminal panel.
 func TestPasteWithFloatingTerminalFocusedSkipsPlayground(t *testing.T) {
 	m := openJQOverFloatingTerminal(t)
-	program := m.play.program
+	program := m.play.program.Text
 
 	tm, cmd := m.Update(tea.PasteMsg{Content: "LEAK"})
 	m = drainCmd(tm.(Model), cmd)
 
-	if got := m.play.program; got != program {
+	if got := m.play.program.Text; got != program {
 		t.Fatalf("query line = %q, the paste belongs to the focused panel", got)
 	}
 	if got := m.play.result.Text(); got != "1\n2\n3" {
@@ -57,12 +57,12 @@ func TestPasteWithFloatingTerminalFocusedSkipsPlayground(t *testing.T) {
 // layer, and that closing it hands the paste straight back to the playground.
 func TestPasteWithPopupBoxOpenSkipsPlayground(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = openTestPopupWith(t, m)
 
 	tm, cmd := m.Update(tea.PasteMsg{Content: ".foo"})
 	m = drainCmd(tm.(Model), cmd)
-	if got := m.play.program; got != "" {
+	if got := m.play.program.Text; got != "" {
 		t.Fatalf("query line = %q, the paste belongs to the popup shell", got)
 	}
 
@@ -71,7 +71,7 @@ func TestPasteWithPopupBoxOpenSkipsPlayground(t *testing.T) {
 	m = drainCmd(tm.(Model), cmd)
 	tm, cmd = m.Update(tea.PasteMsg{Content: ".foo\n| length"})
 	m = drainCmd(tm.(Model), cmd)
-	if got := m.play.program; got != ".foo | length" {
+	if got := m.play.program.Text; got != ".foo | length" {
 		t.Fatalf("query line = %q, want the flattened pasted program", got)
 	}
 }
@@ -87,7 +87,7 @@ func TestPasteWithOtherPaneFocusedSkipsPlayground(t *testing.T) {
 	m.setFocus(playKey)
 	m = openJQ(t, m)
 	m = setProgram(m, ".foo[]")
-	program := m.play.program
+	program := m.play.program.Text
 
 	m.setFocus(otherKey)
 	m = drainKey(m, tea.KeyPressMsg{Code: 'i', Text: "i"})
@@ -98,7 +98,7 @@ func TestPasteWithOtherPaneFocusedSkipsPlayground(t *testing.T) {
 	if ed == nil || !strings.Contains(ed.Text(), "PASTED") {
 		t.Fatal("the paste must land in the focused editor pane")
 	}
-	if got := m.play.program; got != program {
+	if got := m.play.program.Text; got != program {
 		t.Fatalf("query line = %q, it must not take another pane's paste", got)
 	}
 }
@@ -107,7 +107,7 @@ func TestPasteWithOtherPaneFocusedSkipsPlayground(t *testing.T) {
 // a text input of its own (#2002) — the issues filter.
 func TestPasteWithToolPaneFocusedSkipsPlayground(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
-	program := m.play.program
+	program := m.play.program.Text
 
 	k := m.activeWS().Panes.AddIssues()
 	m = focusPane(t, m, k)
@@ -123,7 +123,7 @@ func TestPasteWithToolPaneFocusedSkipsPlayground(t *testing.T) {
 	if !strings.Contains(gi.View(), "bug") {
 		t.Fatalf("the issues filter did not take the paste:\n%s", gi.View())
 	}
-	if got := m.play.program; got != program {
+	if got := m.play.program.Text; got != program {
 		t.Fatalf("query line = %q, it must not take the tool pane's paste", got)
 	}
 }

@@ -176,11 +176,11 @@ func TestScratchManagerRenameFollowsOpenBuffer(t *testing.T) {
 	if m.scratchMgr.step != smStepRename {
 		t.Fatalf("step = %d, want the rename step", m.scratchMgr.step)
 	}
-	if m.scratchMgr.renameInput != filepath.Base(old) {
-		t.Fatalf("rename prefill = %q, want the current name", m.scratchMgr.renameInput)
+	if m.scratchMgr.renameInput.Text != filepath.Base(old) {
+		t.Fatalf("rename prefill = %q, want the current name", m.scratchMgr.renameInput.Text)
 	}
 	// Replace the prefilled name with notes.sct.
-	for range m.scratchMgr.renameInput {
+	for range m.scratchMgr.renameInput.Text {
 		m = smKey(m, tea.Key{Code: tea.KeyBackspace})
 	}
 	m = smTypeAll(m, "notes.sct")
@@ -214,7 +214,7 @@ func TestScratchManagerRenameCollisionRejected(t *testing.T) {
 	m = openManager(t, m)
 	m = smSelect(t, m, "scratch-1.sct")
 	m = smKey(m, tea.Key{Code: 'r', Mod: tea.ModCtrl})
-	for range m.scratchMgr.renameInput {
+	for range m.scratchMgr.renameInput.Text {
 		m = smKey(m, tea.Key{Code: tea.KeyBackspace})
 	}
 	m = smTypeAll(m, "scratch-1.txt")
@@ -244,7 +244,7 @@ func TestScratchManagerRenameRejectsPathyName(t *testing.T) {
 	smSeed(t, "txt")
 	m = openManager(t, m)
 	m = smKey(m, tea.Key{Code: 'r', Mod: tea.ModCtrl})
-	for range m.scratchMgr.renameInput {
+	for range m.scratchMgr.renameInput.Text {
 		m = smKey(m, tea.Key{Code: tea.KeyBackspace})
 	}
 	m = smTypeAll(m, "../escaped.txt")
