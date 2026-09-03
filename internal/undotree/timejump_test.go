@@ -79,8 +79,8 @@ func TestTimeJumpPromptEditingAndCancel(t *testing.T) {
 	m.Update(key("2"))
 	m.Update(key("backspace"))
 	m.Update(key("5"))
-	if m.ageInput != "15" {
-		t.Fatalf("age input = %q, want \"15\"", m.ageInput)
+	if m.ageInput.Text != "15" {
+		t.Fatalf("age input = %q, want \"15\"", m.ageInput.Text)
 	}
 	if m.cursor != 0 {
 		t.Errorf("the prompt must swallow list keys, cursor = %d", m.cursor)
@@ -88,7 +88,7 @@ func TestTimeJumpPromptEditingAndCancel(t *testing.T) {
 	if cmd := m.Update(key("esc")); cmd != nil {
 		t.Error("esc must cancel the jump, not perform it")
 	}
-	if m.asking || m.ageInput != "" {
+	if m.asking || m.ageInput.Text != "" {
 		t.Error("esc should close the prompt and clear the input")
 	}
 	if !m.IsOpen() {

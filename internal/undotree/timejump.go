@@ -42,31 +42,31 @@ func relAge(at, now time.Time) string {
 // startTimeJump opens the age prompt ("t").
 func (m *Model) startTimeJump() {
 	m.asking = true
-	m.ageInput = ""
+	m.ageInput.Clear()
 }
 
 // updateTimeJump handles one key while the age prompt is open. It returns the
-// jump command, if any; the prompt closes on enter and esc.
+// jump command, if any; the prompt closes on enter and esc. Typing is guarded
+// to digits before it ever reaches ui.Field.Key (#2460): the field itself
+// takes any printable rune, and this prompt's alphabet is only 0-9.
 func (m *Model) updateTimeJump(msg tea.KeyPressMsg) tea.Cmd {
 	switch s := msg.String(); s {
 	case "esc":
 		m.asking = false
-		m.ageInput = ""
+		m.ageInput.Clear()
 	case "enter":
 		m.asking = false
-		minutes, err := strconv.Atoi(m.ageInput)
-		m.ageInput = ""
+		minutes, err := strconv.Atoi(m.ageInput.Text)
+		m.ageInput.Clear()
 		if err != nil || minutes < 0 {
 			return nil
 		}
 		return m.timeJump(minutes)
 	case "backspace":
-		if m.ageInput != "" {
-			m.ageInput = m.ageInput[:len(m.ageInput)-1]
-		}
+		m.ageInput.Key(msg)
 	default:
-		if len(s) == 1 && s[0] >= '0' && s[0] <= '9' && len(m.ageInput) < maxAgeDigits {
-			m.ageInput += s
+		if len(s) == 1 && s[0] >= '0' && s[0] <= '9' && m.ageInput.Len() < maxAgeDigits {
+			m.ageInput.Key(msg)
 		}
 	}
 	return nil

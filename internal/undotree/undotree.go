@@ -58,7 +58,7 @@ type Model struct {
 	// asking/ageInput are the time-jump prompt ("t"): the typed age in
 	// minutes, confirmed with enter.
 	asking   bool
-	ageInput string
+	ageInput ui.Field
 
 	// lay records, during View, where the list rows sit so Click can hit-test.
 	listTop, listRows int
@@ -102,7 +102,8 @@ func (m *Model) Close() {
 	m.cache = nil
 	m.src = nil
 	m.cursor, m.top = 0, 0
-	m.asking, m.ageInput = false, ""
+	m.asking = false
+	m.ageInput.Clear()
 }
 
 // IsOpen reports whether the overlay is shown.
@@ -253,7 +254,7 @@ func (m *Model) View() string {
 	rows = append(rows, m.previewBlock(innerW)...)
 	if m.asking {
 		rows = append(rows, "",
-			"Jump to the state from "+m.ageInput+"▏minutes ago (enter confirms, esc cancels)")
+			"Jump to the state from "+m.ageInput.Text+"▏minutes ago (enter confirms, esc cancels)")
 	} else {
 		rows = append(rows, "",
 			dim.Render(strconv.Itoa(len(m.rows))+" states — j/k move, enter restores, "+
