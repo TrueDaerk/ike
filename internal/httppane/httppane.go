@@ -40,6 +40,11 @@ const (
 	// kindTiming is the phase breakdown line under the status line (#2404):
 	// dns / connect / tls / ttfb / transfer of the shown exchange.
 	kindTiming
+	// kindError is a GraphQL error row (#2423). A GraphQL server answers a
+	// failed operation with HTTP 200 and an `errors` array, so the status line
+	// alone says nothing: the messages are lifted out of the body into a red
+	// block right above it.
+	kindError
 )
 
 // row is one pre-composed display line.
@@ -160,6 +165,12 @@ type Model struct {
 	// ("what did this actually hit?"). Like raw it belongs to the view and
 	// survives history browsing and new responses.
 	reqDetails bool
+
+	// gqlErrors holds the GraphQL errors of the response on show (#2423),
+	// recomputed on every compose. Non-empty means the run failed however
+	// green its status code is: the status row turns red and says how many,
+	// and the messages render as their own block above the body.
+	gqlErrors []httpclient.GraphQLError
 
 	// Streaming (#1776): while a recognized stream is live the viewer shows
 	// status, headers and the body lines received so far — plaintext, no
@@ -371,6 +382,7 @@ func (m *Model) StartStream(request, proto, status string, headers http.Header) 
 	m.hlGen++ // a pass still in flight belongs to rows that are gone now
 	m.hlPending = nil
 	m.folds, m.folded, m.visible = nil, nil, nil
+	m.gqlErrors = nil // the previous response's, and a stream is never GraphQL
 	m.streaming = true
 	m.streamTail = ""
 	m.streamBody = 0
@@ -513,13 +525,22 @@ func (m *Model) recompose(resp *httpclient.Response) {
 	m.hlGen++ // whatever pass is still out belongs to the previous rows
 	m.hlPending = nil
 	m.folds, m.folded, m.visible = nil, nil, nil
+	m.gqlErrors = nil
 	if resp == nil {
 		m.research()
 		return
 	}
 
 	m.status = fmt.Sprintf("%s %s", resp.Proto, resp.Status)
-	m.rows = append(m.rows, row{kind: kindStatus, text: fmt.Sprintf("%s %s   (%s)", resp.Proto, resp.Status, roundDuration(resp.Duration))})
+	m.gqlErrors = resp.GraphQLErrors()
+	status := fmt.Sprintf("%s %s   (%s)", resp.Proto, resp.Status, roundDuration(resp.Duration))
+	if n := len(m.gqlErrors); n > 0 {
+		// The status code of a failed GraphQL operation is 200 (#2423), so the
+		// count goes where the eye already is rather than only into the block
+		// below.
+		status += fmt.Sprintf("   %s %s", gqlErrorGlyph, pluralErrors(n))
+	}
+	m.rows = append(m.rows, row{kind: kindStatus, text: status})
 	if line := resp.Timing.String(); line != "" {
 		// The phase breakdown (#2404) sits directly under the status line, so
 		// "2 s" and "2 s of which 1.9 s waiting for the first byte" are read
@@ -542,6 +563,17 @@ func (m *Model) recompose(resp *httpclient.Response) {
 		m.rows = append(m.rows, row{kind: kindWarn, text: "! " + w})
 	}
 	m.rows = append(m.rows, row{kind: kindBlank})
+	if len(m.gqlErrors) > 0 {
+		// The red block above the body (#2423): the messages the response body
+		// buries inside its JSON, read before the payload rather than found in
+		// it.
+		m.rows = append(m.rows, row{kind: kindError,
+			text: fmt.Sprintf("%s GraphQL: %s", gqlErrorGlyph, pluralErrors(len(m.gqlErrors)))})
+		for _, e := range m.gqlErrors {
+			m.rows = append(m.rows, row{kind: kindError, text: "  " + e.String()})
+		}
+		m.rows = append(m.rows, row{kind: kindBlank})
+	}
 
 	view := formatBody(resp, m.bodyBytes(resp), m.raw)
 	for _, notice := range view.notices {
@@ -1623,8 +1655,17 @@ func (m *Model) baseStyle(pal *theme.Palette, i, from, to int) styleFn {
 	plain := lipgloss.NewStyle()
 	switch r.kind {
 	case kindStatus:
-		st := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
+		// A GraphQL run with errors failed however green its status code is
+		// (#2423), so the status row carries the failure colour.
+		colour := pal.Accent
+		if len(m.gqlErrors) > 0 {
+			colour = pal.Error
+		}
+		st := lipgloss.NewStyle().Foreground(colour).Bold(true)
 		return func(int) (lipgloss.Style, string) { return st, "status" }
+	case kindError:
+		st := lipgloss.NewStyle().Foreground(pal.Error)
+		return func(int) (lipgloss.Style, string) { return st, "error" }
 	case kindWarn:
 		st := lipgloss.NewStyle().Foreground(pal.Warning)
 		return func(int) (lipgloss.Style, string) { return st, "warn" }
@@ -1776,3 +1817,21 @@ func (m *Model) theme() *theme.Palette {
 	}
 	return theme.DefaultPalette()
 }
+
+// gqlErrorGlyph marks a GraphQL failure in the status row and above the body
+// (#2423). It is deliberately not the "!" the warning rows use: a warning is
+// something that went sideways on the way, an error is the answer itself.
+const gqlErrorGlyph = "✗"
+
+// pluralErrors spells the GraphQL error count.
+func pluralErrors(n int) string {
+	if n == 1 {
+		return "1 error"
+	}
+	return fmt.Sprintf("%d errors", n)
+}
+
+// GraphQLErrors returns the GraphQL errors of the response on show (#2423),
+// nil when there are none. The host reads it to decide whether a finished
+// dispatch counts as failed.
+func (m *Model) GraphQLErrors() []httpclient.GraphQLError { return m.gqlErrors }

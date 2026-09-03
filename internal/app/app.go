@@ -5269,6 +5269,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.startHTTPSaveResponse()
 		return m, nil
 
+	case HTTPGraphQLIntrospectMsg:
+		// http.graphqlIntrospect (palette, #2423): ask the GRAPHQL block's
+		// endpoint for its schema and cache it for completion.
+		return m, m.introspectGraphQLSchema()
+
+	case httpGraphQLSchemaMsg:
+		// The introspection dispatch came back (#2423): cache it, or say why
+		// there is nothing to cache.
+		m.storeGraphQLSchema(msg)
+		return m, nil
+
+	case HTTPGraphQLSchemaMsg:
+		// http.graphqlSchema (palette, #2423): the cached schema as SDL in a
+		// scratch file.
+		return m.openGraphQLSchema()
+
 	case HTTPCopyAsCurlMsg:
 		// http.copyAsCurl (palette, #1994): the request under the caret, with
 		// its variables substituted, as a runnable curl command.

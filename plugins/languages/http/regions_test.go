@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"ike/internal/httpfile"
 	"ike/internal/lang"
 )
 
@@ -138,5 +139,28 @@ func TestBodyRegionsSkipExternalBodies(t *testing.T) {
 	}
 	if got := bodyRegions(lines); len(got) != 0 {
 		t.Fatalf("regions = %+v, want none for an external body", got)
+	}
+}
+
+func TestGraphQLRegionsClaimBothSections(t *testing.T) {
+	registerFake(t, "json", "json")
+	registerFake(t, "graphql", "graphql", "gql")
+	lines := strings.Split(graphQLBuffer, "\n")
+	spec := httpfile.Parse(graphQLBuffer).Requests[0].GraphQL
+	regions := graphQLRegions(spec, lines)
+	if len(regions) != 2 {
+		t.Fatalf("regions = %+v, want one per section", regions)
+	}
+	if regions[0].Lang != "graphql" || regions[0].StartLine != 3 || regions[0].EndLine != 7 {
+		t.Errorf("query region = %+v, want graphql on 3..7", regions[0])
+	}
+	if regions[1].Lang != "json" || regions[1].StartLine != 9 || regions[1].EndLine != 11 {
+		t.Errorf("variables region = %+v, want json on 9..11", regions[1])
+	}
+	// The whole-buffer producer routes a GRAPHQL block through them too — the
+	// Content-Type path must not claim the body as well.
+	all := bodyRegions(lines)
+	if len(all) != 2 {
+		t.Errorf("bodyRegions = %+v, want exactly the two GraphQL sections", all)
 	}
 }

@@ -4,7 +4,7 @@ title: Completion Engine
 description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection.
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources, postfix]
-timestamp: 2026-08-27T12:00:00Z
+timestamp: 2026-09-03T12:00:00Z
 ---
 
 # Completion Engine
@@ -83,6 +83,14 @@ keeps the full merged popup; the LSP bridge is not a `Source` and is unaffected.
 The ES console's query buffers (#1927) use the same claim: `esq.CompletionSource`
 owns `*.es.json` outright and offers Query-DSL keys plus the index mapping's
 field names (see [Elasticsearch Console](/architecture/elasticsearch-console.md)).
+
+The exclusive claim is also what lets a `.http` buffer complete from something
+other than its own text: inside a `GRAPHQL` block's query section (#2423) the
+source answers from the schema `http.graphqlIntrospect` cached for that
+endpoint — fields, arguments and types, resolved by a caret walk over the
+unfinished query rather than by a parse of it. Nothing is dispatched while
+typing; the cache is the whole input (see
+[HTTP Client](/architecture/http-client.md)).
 
 ## Buffer identity and language (#2048)
 

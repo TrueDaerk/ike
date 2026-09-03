@@ -91,6 +91,15 @@ func bodyRegions(lines []string) []lang.Region {
 	f := httpfile.Parse(strings.Join(lines, "\n"))
 	var out []lang.Region
 	for _, r := range f.Requests {
+		if r.GraphQL != nil && r.BodyFile == "" {
+			// A GRAPHQL block is two languages, not one (#2423): the query
+			// section and the JSON variables object below it. The block has no
+			// Content-Type of its own to resolve — the envelope's
+			// application/json describes the *wire* body, not what is written
+			// here — so the two sections are claimed directly.
+			out = append(out, graphQLRegions(r.GraphQL, lines)...)
+			continue
+		}
 		if r.BodyStart == 0 || r.BodyFile != "" {
 			// An external body (`< ./payload.json`, #1305) is a directive
 			// line, not payload — the host grammar already styles it.

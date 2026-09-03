@@ -656,6 +656,11 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.copyAsHttpie", "Copy HTTP Request as httpie", HTTPCopyAsHttpieMsg{}),
 			appCommand("http.copyShownAsHttpie", "Copy Shown HTTP Request as httpie", HTTPCopyShownAsHttpieMsg{}),
 			appCommand("http.saveResponse", "Save HTTP Response Body to File…", HTTPSaveResponseMsg{}),
+			// The two GraphQL schema commands (#2423): one asks the endpoint
+			// what it offers, the other shows the answer. Both act on the
+			// GRAPHQL block under the caret, so neither needs a prompt.
+			appCommand("http.graphqlIntrospect", "Introspect GraphQL Schema", HTTPGraphQLIntrospectMsg{}),
+			appCommand("http.graphqlSchema", "Open Cached GraphQL Schema (SDL)", HTTPGraphQLSchemaMsg{}),
 			appCommand("archive.extractEntry", "Extract Selected Archive Entry…", ArchiveExtractEntryMsg{}),
 			appCommand("archive.extractAll", "Extract Whole Archive…", ArchiveExtractAllMsg{}),
 			appCommand("archive.reload", "Reload Archive Listing", ArchiveReloadMsg{}),

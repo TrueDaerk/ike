@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"ike/internal/graphql"
 	"ike/internal/httpfile"
 	"ike/internal/pathcomplete"
 )
@@ -180,7 +181,15 @@ type Options struct {
 // what went out.
 func requestBody(resolved *httpfile.Request, opts Options, vars *httpfile.Vars) ([]byte, error) {
 	if resolved.BodyFile != "" {
-		return loadBodyFile(resolved.BodyFile, resolved.BodyFileSubstitute, opts, vars)
+		data, err := loadBodyFile(resolved.BodyFile, resolved.BodyFileSubstitute, opts, vars)
+		if err != nil || resolved.GraphQL == nil {
+			return data, err
+		}
+		// A GRAPHQL block whose query lives in a file (#2423): the loaded text
+		// is split and enveloped exactly like an inline one — ResolveVars
+		// could not, since the file is only read here.
+		ct, _ := resolved.Header("Content-Type")
+		return graphql.BodyFor(string(data), ct)
 	}
 	if ct, ok := resolved.Header("Content-Type"); ok {
 		if boundary, ok := httpfile.MultipartBoundary(ct); ok {
@@ -250,6 +259,9 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 	}
 
 	var warnings []string
+	if w := graphQLWarning(resolved); w != "" {
+		warnings = append(warnings, w)
+	}
 	cfg := &curlConfig{}
 	if !opts.DisableConfig {
 		path := opts.CurlrcPath
