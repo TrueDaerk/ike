@@ -199,6 +199,7 @@ memory works whichever pane happens to hold the focus:
 | Data viewer | The SQL filter clause |
 | Terminal | The scrollback search — or copy mode's own search while copy mode is on |
 | Settings | The page filter |
+| jq / yq playground | The search over the **result** — from the query line as well |
 
 ++ctrl+f++ does the same in every one of them. In an **editor** both chords
 keep their editor meaning: ++cmd+f++ is Find in File and ++ctrl+f++ stays
@@ -206,6 +207,16 @@ vim's page-forward motion.
 
 A pane with no search of its own says so ("No search in this pane") rather
 than doing nothing.
+
+!!! tip "Looking something up in a playground result"
+
+    In the jq/yq playground ++cmd+f++ works straight from the query line: it
+    opens the search in the **result** below and takes the keyboard there, so
+    you can look up a field name without leaving the program you are writing.
+    ++esc++ closes the search and hands the keyboard **back to the query
+    line**, with your program and cursor exactly where you left them, while
+    the matches stay highlighted until your next query re-runs. ++cmd+g++ /
+    ++cmd+shift+g++ step those matches from either side.
 
 ### Stepping the matches
 

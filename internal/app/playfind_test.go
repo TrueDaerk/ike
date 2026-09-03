@@ -23,6 +23,22 @@ func playFindKey() tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}
 }
 
+// playMatchStepKey is the Global search.nextMatch / search.prevMatch chord as
+// a key event: cmd+g / cmd+shift+g on macOS, f3 / shift+f3 elsewhere, where
+// keymap.NormalizeKey has no cmd to fold.
+func playMatchStepKey(prev bool) tea.KeyPressMsg {
+	if runtime.GOOS == "darwin" {
+		if prev {
+			return tea.KeyPressMsg{Code: 'g', Mod: tea.ModMeta | tea.ModShift}
+		}
+		return tea.KeyPressMsg{Code: 'g', Mod: tea.ModMeta}
+	}
+	if prev {
+		return tea.KeyPressMsg{Code: tea.KeyF3, Mod: tea.ModShift}
+	}
+	return tea.KeyPressMsg{Code: tea.KeyF3}
+}
+
 // playNoOnboarding dismisses the first-start LSP dialog when the environment
 // opened one (a registered language whose server is missing offers an install,
 // #301): it owns the keyboard ahead of the playground, so a scripted chord
@@ -117,14 +133,15 @@ func TestPlayFindNextPrevAfterQueryLineStart(t *testing.T) {
 	}
 }
 
-// TestPlayFindFocusAfterClosingSearch: esc closes the prompt and leaves the
-// keyboard in the result buffer — the same place no matter which focus the
-// search was started from, so the next key means the same thing either way.
+// TestPlayFindFocusAfterClosingSearch: esc closes the search and lands the
+// keyboard where the search was started from (#2411) — back on the query line
+// when the chord came from there, in the result buffer when it did not.
 func TestPlayFindFocusAfterClosingSearch(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		tab  bool
-	}{{"from the query line", false}, {"from the result buffer", true}} {
+		name    string
+		tab     bool
+		wantBuf bool
+	}{{"from the query line", false, false}, {"from the result buffer", true, true}} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha","beta"]}`)))
 			m = setProgram(m, ".foo[]")
@@ -133,8 +150,8 @@ func TestPlayFindFocusAfterClosingSearch(t *testing.T) {
 			}
 			m = playKeys(drainKey(m, playFindKey()), "alp")
 			m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEsc})
-			if !m.play.bufFocus {
-				t.Fatal("closing the search must leave the keyboard in the result buffer")
+			if m.play.bufFocus != tc.wantBuf {
+				t.Fatalf("bufFocus = %v after esc, want %v", m.play.bufFocus, tc.wantBuf)
 			}
 			if !m.playOpen() {
 				t.Fatal("closing the search must not close the playground")
@@ -143,6 +160,122 @@ func TestPlayFindFocusAfterClosingSearch(t *testing.T) {
 				t.Errorf("result buffer mode = %v, want normal", got)
 			}
 		})
+	}
+}
+
+// TestPlayFindEscReturnsToQueryLineWithCursor is the issue's acceptance case
+// (#2411): after a committed search started from the query line, esc gives the
+// keyboard back to the query line with program and caret untouched, and the
+// next esc keeps its old meaning of closing the playground.
+func TestPlayFindEscReturnsToQueryLineWithCursor(t *testing.T) {
+	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha","beta","gamma"]}`)))
+	m = setProgram(m, ".foo[]")
+	m.play.pos = 2 // a caret in the middle of the program, not at its end
+	program, pos := m.play.program, m.play.pos
+
+	m = playSearchFor(drainKey(m, playFindKey()), "gamma")
+	if !m.play.bufFocus {
+		t.Fatal("the find chord must move the keyboard into the result buffer")
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEsc})
+	if m.play.bufFocus {
+		t.Fatal("esc must hand the keyboard back to the query line")
+	}
+	if m.play.program != program || m.play.pos != pos {
+		t.Errorf("query line = %q at %d, want %q at %d", m.play.program, m.play.pos, program, pos)
+	}
+	if !m.playOpen() {
+		t.Fatal("the first esc must not close the playground")
+	}
+	// The highlight survives the return trip: it is what the user came back
+	// to the query line to read.
+	if !m.play.resultEd.HasSearch() {
+		t.Error("the match highlight must stay after returning to the query line")
+	}
+	// A second esc means what it always meant on the query line.
+	m2, _ := m.updatePlayground(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if mm, ok := m2.(Model); !ok || mm.playOpen() {
+		t.Error("a second esc on the query line must close the playground")
+	}
+}
+
+// TestPlayFindEscFromResultOwnSearchStays: a search the user started *in* the
+// result buffer ("/" or the chord after a tab) is unaffected — esc closes it
+// and leaves the keyboard there, as before #2411.
+func TestPlayFindEscFromResultOwnSearchStays(t *testing.T) {
+	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha","beta"]}`)))
+	m = setProgram(m, ".foo[]")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	m = playKeys(playKeys(m, "/"), "alpha") // the prompt still open
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEsc})
+	if !m.playOpen() {
+		t.Fatal("esc must close the prompt, not the playground")
+	}
+	if !m.play.bufFocus {
+		t.Fatal("the result buffer's own search must leave the keyboard there")
+	}
+}
+
+// TestPlayFindTabClearsReturnTrip: tabbing out of the result buffer ends the
+// find round trip, so a later tab back keeps esc's ordinary meaning there.
+func TestPlayFindTabClearsReturnTrip(t *testing.T) {
+	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha","beta"]}`)))
+	m = setProgram(m, ".foo[]")
+	m = playSearchFor(drainKey(m, playFindKey()), "alpha")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab}) // back to the query line by hand
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab}) // and into the result again
+	if !m.play.bufFocus {
+		t.Fatal("tab must have moved the keyboard into the result buffer")
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEsc})
+	if m.playOpen() {
+		t.Error("esc in the result buffer must close the playground once the find trip ended")
+	}
+}
+
+// TestPlayMatchStepChordsStepResultSearch: cmd+g / cmd+shift+g walk the
+// result's matches from the query line, without taking the focus (#2411).
+func TestPlayMatchStepChordsStepResultSearch(t *testing.T) {
+	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["ha","hb","hc"]}`)))
+	m = setProgram(m, ".foo[]")
+	m = playSearchFor(drainKey(m, playFindKey()), "h")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEsc}) // back on the query line
+	if m.play.bufFocus {
+		t.Fatal("esc must return to the query line")
+	}
+	first, _ := m.play.resultEd.Cursor()
+
+	m = drainKey(m, playMatchStepKey(false))
+	second, _ := m.play.resultEd.Cursor()
+	if second == first {
+		t.Fatalf("the next-match chord did not move: still on line %d", first)
+	}
+	if m.play.bufFocus {
+		t.Error("stepping matches must leave the keyboard on the query line")
+	}
+	if m.play.program != ".foo[]" {
+		t.Errorf("program = %q, want it untouched", m.play.program)
+	}
+
+	m = drainKey(m, playMatchStepKey(true))
+	if back, _ := m.play.resultEd.Cursor(); back != first {
+		t.Errorf("the previous-match chord landed on %d, want %d", back, first)
+	}
+}
+
+// TestPlayResultRenderClearsHighlight: the matches stay painted until a new
+// query re-renders the result — and not past it.
+func TestPlayResultRenderClearsHighlight(t *testing.T) {
+	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha","beta"]}`)))
+	m = setProgram(m, ".foo[]")
+	m = playSearchFor(drainKey(m, playFindKey()), "alpha")
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEsc})
+	if !m.play.resultEd.HasSearch() {
+		t.Fatal("the highlight must survive the return to the query line")
+	}
+	m = setProgram(m, ".foo")
+	if m.play.resultEd.HasSearch() {
+		t.Error("a re-rendered result must not keep the previous search's highlight")
 	}
 }
 

@@ -1,5 +1,27 @@
 # Log
 
+## 2026-09-03 (the playground's find returns to the query line, #2411)
+
+- **`esc` hands the keyboard back**: a result search opened with `cmd+f` from
+  the jq/yq playground's query line (#2383) now *ends* there — `esc` closes the
+  find widget and returns the focus to the query line with its program and
+  caret untouched, instead of stranding the user in the result buffer. A search
+  started **in** the result buffer keeps its old `esc` (close the prompt, then
+  close the mode from resting normal mode); `playState.findQuery` marks which
+  of the two it was and every other focus change clears it.
+- **The matches stay lit**: `esc` after a committed search is deliberately not
+  forwarded to the buffer — a normal-mode `esc` is vim's `:noh` — so the
+  highlights are still on screen while the program is edited again. They live
+  until the result they were found in is replaced: `syncPlayResultBuffer` calls
+  the editor's new `ClearSearch` right after `ShowReadOnly`.
+- **`cmd+g` / `cmd+shift+g` step from either focus**: the match-step chords are
+  Global bindings and would otherwise step the *hosting pane's* document, which
+  is the playground's input; `playMatchStepChord` + `stepPlayResultSearch`
+  repeat the result buffer's search instead, without taking the focus. With no
+  search committed they fall through to their ordinary meaning.
+- Dialect-neutral, as the mode is: it is one host, so jq, yq and any later
+  playground get it at once. Both cheatsheet focus tables list the chords live.
+
 ## 2026-09-03 (all-projects results in the find-in-path pane, #2413)
 
 - **No corner popup any more**: Find in All Projects (#2394) shows its
