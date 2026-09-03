@@ -172,8 +172,8 @@ func TestDeepLinkCloneFallbackPrefillsDialog(t *testing.T) {
 	if !m.clonePromptOpen() {
 		t.Fatal("a remote without a local clone must open the clone dialog")
 	}
-	if m.cloneURL != "git@github.com:a/B.git" {
-		t.Fatalf("the dialog must show the linked URL verbatim, got %q", m.cloneURL)
+	if m.cloneURL.Text != "git@github.com:a/B.git" {
+		t.Fatalf("the dialog must show the linked URL verbatim, got %q", m.cloneURL.Text)
 	}
 	if m.dlAfterClone == nil {
 		t.Fatal("the link must wait for the clone")

@@ -164,7 +164,7 @@ func TestPlaygroundCopyChordFromQueryLine(t *testing.T) {
 		t.Error("copying must not move the focus into the result buffer")
 	}
 	// The query line is untouched: the chord was reserved, not typed.
-	if got := m.play.program; got != ".foo[]" {
+	if got := m.play.program.Text; got != ".foo[]" {
 		t.Errorf("query = %q, want %q", got, ".foo[]")
 	}
 }
@@ -181,7 +181,7 @@ func TestPlaygroundCopyChordWithoutSelectionLeavesQueryLine(t *testing.T) {
 	if clip.text != "" {
 		t.Errorf("clipboard = %q, want nothing copied", clip.text)
 	}
-	if got := m.play.program; got != ".foo[]" {
+	if got := m.play.program.Text; got != ".foo[]" {
 		t.Errorf("query = %q, want %q", got, ".foo[]")
 	}
 	if m.play.bufFocus {

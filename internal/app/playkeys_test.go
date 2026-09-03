@@ -114,7 +114,7 @@ func TestPlaygroundCodeActionReportsUnavailable(t *testing.T) {
 	if !m.playCodeActionChord(altEnter()) {
 		t.Fatal("alt+enter must resolve as the lsp.codeAction chord")
 	}
-	before := m.play.program
+	before := m.play.program.Text
 	out, _ := m.Update(altEnter())
 	m = out.(Model)
 	if !m.playOpen() {
@@ -126,7 +126,7 @@ func TestPlaygroundCodeActionReportsUnavailable(t *testing.T) {
 	if !m.play.statusWarn {
 		t.Fatal("a 'not available here' line is not a success message")
 	}
-	if got := m.play.program; got != before {
+	if got := m.play.program.Text; got != before {
 		t.Fatalf("the chord must not type into the query line: %q -> %q", before, got)
 	}
 }

@@ -115,8 +115,7 @@ func (m *Model) startLayoutSavePrompt() {
 		return
 	}
 	m.layoutSaveOpen = true
-	m.layoutSaveInput = ""
-	m.layoutSavePos = 0
+	m.layoutSaveInput.Clear()
 	m.layoutSaveErr = ""
 	m.renderLayoutSavePrompt()
 	m.shell.SetSize(m.width, m.height)
@@ -128,7 +127,7 @@ func (m Model) layoutSavePromptOpen() bool { return m.layoutSaveOpen && m.shell.
 
 // renderLayoutSavePrompt (re)fills the shell for the current input.
 func (m *Model) renderLayoutSavePrompt() {
-	line := "> " + ui.CursorView(m.layoutSaveInput, m.layoutSavePos)
+	line := "> " + m.layoutSaveInput.View()
 	hint := ""
 	if m.layoutSaveErr != "" {
 		hint = "\n" + m.layoutSaveErr
@@ -147,8 +146,7 @@ func (m *Model) renderLayoutSavePrompt() {
 func (m Model) updateLayoutSavePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	closePrompt := func() {
 		m.layoutSaveOpen = false
-		m.layoutSaveInput = ""
-		m.layoutSavePos = 0
+		m.layoutSaveInput.Clear()
 		m.layoutSaveErr = ""
 		m.layoutSaveSel = nil
 		m.shell.Close()
@@ -158,7 +156,7 @@ func (m Model) updateLayoutSavePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		closePrompt()
 		return m, nil
 	case msg.Code == tea.KeyEnter:
-		name := strings.TrimSpace(m.layoutSaveInput)
+		name := strings.TrimSpace(m.layoutSaveInput.Text)
 		if name == "" {
 			return m, nil
 		}
@@ -184,8 +182,7 @@ func (m Model) updateLayoutSavePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.host.Notify(host.Info, "saved layout "+name)
 		return m, nil
 	}
-	if out, pos, handled, changed := ui.EditKey(msg, m.layoutSaveInput, m.layoutSavePos); handled {
-		m.layoutSaveInput, m.layoutSavePos = out, pos
+	if handled, changed := m.layoutSaveInput.Key(msg); handled {
 		if changed {
 			m.layoutSaveErr = "" // a new name re-arms the overwrite guard
 		}
@@ -197,11 +194,9 @@ func (m Model) updateLayoutSavePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 // pasteLayoutSavePrompt inserts a paste into the layout-name input at its
 // cursor (#1873).
 func (m *Model) pasteLayoutSavePrompt(text string) bool {
-	out, pos, changed := ui.PasteText(m.layoutSaveInput, m.layoutSavePos, text)
-	if !changed {
+	if !m.layoutSaveInput.Paste(text) {
 		return false
 	}
-	m.layoutSaveInput, m.layoutSavePos = out, pos
 	m.layoutSaveErr = "" // a new name re-arms the overwrite guard
 	m.renderLayoutSavePrompt()
 	return true

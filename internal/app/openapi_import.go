@@ -58,8 +58,7 @@ type openAPICheckDoneMsg struct {
 // startOpenAPIImport opens the shell prompt asking for the spec's path or URL.
 func (m *Model) startOpenAPIImport() {
 	m.oapiImportOpen = true
-	m.oapiImportInput = "." + string(os.PathSeparator)
-	m.oapiImportPos = len([]rune(m.oapiImportInput))
+	m.oapiImportInput.Set("." + string(os.PathSeparator))
 	m.resetOpenAPICheck()
 	m.renderOpenAPIImportPrompt(nil)
 	m.shell.SetSize(m.width, m.height)
@@ -85,7 +84,7 @@ func (m *Model) resetOpenAPICheck() {
 // current input; completion candidates render underneath, as does the state
 // of the URL check (checking / resolved URL / error).
 func (m *Model) renderOpenAPIImportPrompt(candidates []string) {
-	line := "> " + ui.CursorView(m.oapiImportInput, m.oapiImportPos)
+	line := "> " + m.oapiImportInput.View()
 	const maxLines = 8
 	var sug string
 	if n := len(candidates); n > 0 {
@@ -114,7 +113,7 @@ func (m Model) openAPICheckStatus() (status, hint string) {
 	pal := m.pal()
 	switch {
 	case m.oapiChecking:
-		return "\n\n  checking " + strings.TrimSpace(m.oapiImportInput) + " …",
+		return "\n\n  checking " + strings.TrimSpace(m.oapiImportInput.Text) + " …",
 			"esc cancel"
 	case m.oapiCheckErr != "":
 		bad := lipgloss.NewStyle().Foreground(pal.Error)
@@ -128,7 +127,7 @@ func (m Model) openAPICheckStatus() (status, hint string) {
 			found += fmt.Sprintf("\n  (probed %d well-known path(s) first)", len(d.Probed))
 		}
 		return "\n\n" + ok.Render(found), "enter import · esc cancel"
-	case openapi.IsURL(m.oapiImportInput):
+	case openapi.IsURL(m.oapiImportInput.Text):
 		return "", "enter check URL · esc cancel"
 	}
 	return "", "tab complete · enter import · esc cancel"
@@ -140,8 +139,7 @@ func (m Model) openAPICheckStatus() (status, hint string) {
 func (m Model) updateOpenAPIImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	closePrompt := func() {
 		m.oapiImportOpen = false
-		m.oapiImportInput = ""
-		m.oapiImportPos = 0
+		m.oapiImportInput.Clear()
 		m.resetOpenAPICheck()
 		m.shell.Close()
 	}
@@ -151,7 +149,7 @@ func (m Model) updateOpenAPIImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 		closePrompt()
 		return m, nil
 	case msg.Code == tea.KeyEnter:
-		input := strings.TrimSpace(m.oapiImportInput)
+		input := strings.TrimSpace(m.oapiImportInput.Text)
 		if input == "" {
 			closePrompt()
 			return m, nil
@@ -171,19 +169,17 @@ func (m Model) updateOpenAPIImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 		closePrompt()
 		return m, runOpenAPIImport(expandHome(input))
 	case msg.Code == tea.KeyTab:
-		if openapi.IsURL(m.oapiImportInput) {
+		if openapi.IsURL(m.oapiImportInput.Text) {
 			break // nothing on the filesystem completes a URL
 		}
-		res := pathcomplete.Complete(m.oapiImportInput)
-		m.oapiImportInput = res.Completed
-		m.oapiImportPos = len([]rune(m.oapiImportInput))
+		res := pathcomplete.Complete(m.oapiImportInput.Text)
+		m.oapiImportInput.Set(res.Completed)
 		candidates = res.Candidates
 	default:
-		if out, pos, handled, _ := ui.EditKey(msg, m.oapiImportInput, m.oapiImportPos); handled {
-			if out != m.oapiImportInput {
+		if handled, changed := m.oapiImportInput.Key(msg); handled {
+			if changed {
 				m.resetOpenAPICheck()
 			}
-			m.oapiImportInput, m.oapiImportPos = out, pos
 		}
 	}
 	m.renderOpenAPIImportPrompt(candidates)
@@ -223,11 +219,9 @@ func (m Model) finishOpenAPICheck(msg openAPICheckDoneMsg) (tea.Model, tea.Cmd) 
 // pasteOpenAPIImportPrompt inserts a paste into the path input at its cursor
 // (#1873) — the usual way a spec URL arrives.
 func (m *Model) pasteOpenAPIImportPrompt(text string) bool {
-	out, pos, changed := ui.PasteText(m.oapiImportInput, m.oapiImportPos, text)
-	if !changed {
+	if !m.oapiImportInput.Paste(text) {
 		return false
 	}
-	m.oapiImportInput, m.oapiImportPos = out, pos
 	m.resetOpenAPICheck()
 	m.renderOpenAPIImportPrompt(nil)
 	return true

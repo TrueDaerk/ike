@@ -192,7 +192,7 @@ func TestBookmarkOverviewEditCancelReturns(t *testing.T) {
 
 	m = dispatch(t, m, BookmarkOverviewMsg{})
 	m = dispatch(t, m, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
-	if m.bmPrompt == nil || m.bmPrompt.input != "keep" {
+	if m.bmPrompt == nil || m.bmPrompt.input.Text != "keep" {
 		t.Fatalf("the prompt must prefill the description, got %+v", m.bmPrompt)
 	}
 	m = dispatch(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})

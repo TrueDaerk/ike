@@ -188,8 +188,8 @@ func TestJQFilterInsertPutsProgramOnQueryLine(t *testing.T) {
 
 	tm, cmd := m.Update(InsertFilterMsg{Scope: jqplay.ScopeProject, Name: "big bars"})
 	m = drainCmd(asModel(tm), cmd)
-	if m.play.program != ".foo" {
-		t.Fatalf("the query line is %q, want the saved program", m.play.program)
+	if m.play.program.Text != ".foo" {
+		t.Fatalf("the query line is %q, want the saved program", m.play.program.Text)
 	}
 	if m.play.bufFocus {
 		t.Fatal("an insert belongs to the query line, which must hold the keyboard")
@@ -215,8 +215,8 @@ func TestJQFilterInsertOpensPlaygroundWhenClosed(t *testing.T) {
 	if !m.playOpen() {
 		t.Fatal("picking a filter with no playground up must open one")
 	}
-	if m.play.program != ".foo" {
-		t.Fatalf("the query line is %q, want the saved program", m.play.program)
+	if m.play.program.Text != ".foo" {
+		t.Fatalf("the query line is %q, want the saved program", m.play.program.Text)
 	}
 	if m.play.result.Err != "" || m.play.result.Text() != "1" {
 		t.Fatalf("the filter did not run: err=%q out=%q", m.play.result.Err, m.play.result.Text())
@@ -232,7 +232,7 @@ func TestJQFilterRenameFromPicker(t *testing.T) {
 
 	tm, _ := m.Update(RenameFilterPromptMsg{Scope: jqplay.ScopeProject, Name: "old name"})
 	m = asModel(tm)
-	if !m.playNamePromptOpen() || m.playName.input != "old name" {
+	if !m.playNamePromptOpen() || m.playName.input.Text != "old name" {
 		t.Fatalf("the rename prompt opened as %+v", m.playName)
 	}
 	// Clear the prefilled name and type the new one.

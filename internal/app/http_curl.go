@@ -74,13 +74,12 @@ func (m *Model) startCurlImport() {
 		return
 	}
 	m.curlImportOpen = true
-	m.curlImportInput = ""
+	m.curlImportInput.Clear()
 	if text := clipboardRead(); httpfile.IsCurlCommand(text) {
 		// The overwhelmingly common source is a "Copy as cURL" still sitting
 		// on the clipboard; offering it saves the paste and stays editable.
-		m.curlImportInput = httpfile.FlattenCurlCommand(text)
+		m.curlImportInput.Set(httpfile.FlattenCurlCommand(text))
 	}
-	m.curlImportPos = len([]rune(m.curlImportInput))
 	m.renderCurlImportPrompt()
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -97,7 +96,7 @@ func (m *Model) renderCurlImportPrompt() {
 	if avail < 20 {
 		avail = 20
 	}
-	line := "> " + windowedInput(m.curlImportInput, m.curlImportPos, avail)
+	line := "> " + windowedInput(m.curlImportInput.Text, m.curlImportInput.Cur, avail)
 	m.shell.SetContent(ui.ModelContent{
 		Heading: "Import curl command",
 		Body: func() string {
@@ -111,8 +110,7 @@ func (m *Model) renderCurlImportPrompt() {
 func (m Model) updateCurlImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	closePrompt := func() {
 		m.curlImportOpen = false
-		m.curlImportInput = ""
-		m.curlImportPos = 0
+		m.curlImportInput.Clear()
 		m.shell.Close()
 	}
 	switch {
@@ -120,15 +118,14 @@ func (m Model) updateCurlImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		closePrompt()
 		return m, nil
 	case msg.Code == tea.KeyEnter:
-		cmd := strings.TrimSpace(m.curlImportInput)
+		cmd := strings.TrimSpace(m.curlImportInput.Text)
 		closePrompt()
 		if cmd == "" {
 			return m, nil
 		}
 		return m, m.importCurlCommand(cmd)
 	default:
-		if out, pos, handled, _ := ui.EditKey(msg, m.curlImportInput, m.curlImportPos); handled {
-			m.curlImportInput, m.curlImportPos = out, pos
+		if handled, _ := m.curlImportInput.Key(msg); handled {
 		}
 	}
 	m.renderCurlImportPrompt()
@@ -139,11 +136,9 @@ func (m Model) updateCurlImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 // (#1873). The input is one line, so a wrapped command is flattened the way
 // every other single-field prompt flattens a paste (#1936).
 func (m *Model) pasteCurlImportPrompt(text string) bool {
-	out, pos, changed := ui.PasteText(m.curlImportInput, m.curlImportPos, httpfile.FlattenCurlCommand(text))
-	if !changed {
+	if !m.curlImportInput.Paste(httpfile.FlattenCurlCommand(text)) {
 		return false
 	}
-	m.curlImportInput, m.curlImportPos = out, pos
 	m.renderCurlImportPrompt()
 	return true
 }

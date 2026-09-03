@@ -98,8 +98,8 @@ func TestImportCurlPrefillsFromClipboard(t *testing.T) {
 
 	out, _ := m.Update(ImportCurlMsg{})
 	m = out.(Model)
-	if want := "curl 'https://example.com/x' -H 'a: b'"; m.curlImportInput != want {
-		t.Fatalf("prefill = %q, want %q", m.curlImportInput, want)
+	if want := "curl 'https://example.com/x' -H 'a: b'"; m.curlImportInput.Text != want {
+		t.Fatalf("prefill = %q, want %q", m.curlImportInput.Text, want)
 	}
 	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = out.(Model)

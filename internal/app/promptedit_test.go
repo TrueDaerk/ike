@@ -43,32 +43,32 @@ var (
 func TestLSPRenamePromptSharedEditing(t *testing.T) {
 	m, _ := openRenamePrompt(t, "old name here")
 	m = promptKeys(m, keyAltBack)
-	if m.lspRename.input != "old name " {
-		t.Fatalf("alt+backspace: %q", m.lspRename.input)
+	if m.lspRename.input.Text != "old name " {
+		t.Fatalf("alt+backspace: %q", m.lspRename.input.Text)
 	}
 	m = promptKeys(m, keyAltLeft)
-	if m.lspRename.pos != 4 {
-		t.Fatalf("alt+left: cursor = %d, want 4", m.lspRename.pos)
+	if m.lspRename.input.Cur != 4 {
+		t.Fatalf("alt+left: cursor = %d, want 4", m.lspRename.input.Cur)
 	}
 	m = promptKeys(m, keyAltRight)
-	if m.lspRename.pos != 8 {
-		t.Fatalf("alt+right: cursor = %d, want 8", m.lspRename.pos)
+	if m.lspRename.input.Cur != 8 {
+		t.Fatalf("alt+right: cursor = %d, want 8", m.lspRename.input.Cur)
 	}
 	m = promptKeys(m, keyCmdRight)
-	if m.lspRename.pos != 9 {
-		t.Fatalf("cmd+right: cursor = %d, want 9", m.lspRename.pos)
+	if m.lspRename.input.Cur != 9 {
+		t.Fatalf("cmd+right: cursor = %d, want 9", m.lspRename.input.Cur)
 	}
 	m = promptKeys(m, keyCmdBack)
-	if m.lspRename.input != "" || m.lspRename.pos != 0 {
-		t.Fatalf("cmd+backspace: %q/%d", m.lspRename.input, m.lspRename.pos)
+	if m.lspRename.input.Text != "" || m.lspRename.input.Cur != 0 {
+		t.Fatalf("cmd+backspace: %q/%d", m.lspRename.input.Text, m.lspRename.input.Cur)
 	}
 }
 
 func TestLSPRenamePromptCtrlUStillClears(t *testing.T) {
 	m, _ := openRenamePrompt(t, "Greet")
 	m = promptKeys(m, tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
-	if m.lspRename.input != "" || m.lspRename.pos != 0 {
-		t.Fatalf("ctrl+u: %q/%d", m.lspRename.input, m.lspRename.pos)
+	if m.lspRename.input.Text != "" || m.lspRename.input.Cur != 0 {
+		t.Fatalf("ctrl+u: %q/%d", m.lspRename.input.Text, m.lspRename.input.Cur)
 	}
 }
 
@@ -100,24 +100,24 @@ func openFileRename(t *testing.T) Model {
 func TestRenamePromptSharedEditing(t *testing.T) {
 	m := openFileRename(t) // prefilled "a.txt", cursor at the end
 	m = promptKeys(m, keyAltBack)
-	if m.renameInput != "a." {
-		t.Fatalf("alt+backspace: %q", m.renameInput)
+	if m.renameInput.Text != "a." {
+		t.Fatalf("alt+backspace: %q", m.renameInput.Text)
 	}
 	m = promptType(m, "md")
-	if m.renameInput != "a.md" {
-		t.Fatalf("typing after the kill: %q", m.renameInput)
+	if m.renameInput.Text != "a.md" {
+		t.Fatalf("typing after the kill: %q", m.renameInput.Text)
 	}
 	m = promptKeys(m, keyCmdLeft)
-	if m.renamePos != 0 {
-		t.Fatalf("cmd+left: cursor = %d", m.renamePos)
+	if m.renameInput.Cur != 0 {
+		t.Fatalf("cmd+left: cursor = %d", m.renameInput.Cur)
 	}
 	m = promptType(m, "b")
-	if m.renameInput != "ba.md" {
-		t.Fatalf("insert at line start: %q", m.renameInput)
+	if m.renameInput.Text != "ba.md" {
+		t.Fatalf("insert at line start: %q", m.renameInput.Text)
 	}
 	m = promptKeys(m, keyCmdBack)
-	if m.renameInput != "a.md" {
-		t.Fatalf("cmd+backspace: %q", m.renameInput)
+	if m.renameInput.Text != "a.md" {
+		t.Fatalf("cmd+backspace: %q", m.renameInput.Text)
 	}
 }
 
@@ -127,8 +127,8 @@ func TestRenamePromptPasteStillLandsAtCursor(t *testing.T) {
 	if !m.pasteRenamePrompt("x-") {
 		t.Fatal("paste must be consumed")
 	}
-	if m.renameInput != "x-a.txt" || m.renamePos != 2 {
-		t.Fatalf("paste: %q/%d", m.renameInput, m.renamePos)
+	if m.renameInput.Text != "x-a.txt" || m.renameInput.Cur != 2 {
+		t.Fatalf("paste: %q/%d", m.renameInput.Text, m.renameInput.Cur)
 	}
 }
 
@@ -149,18 +149,18 @@ func TestJBImportPromptSharedEditing(t *testing.T) {
 	m = promptKeys(m, keyCmdBack) // drop the "~/" prefill
 	m = promptType(m, "/tmp/one two")
 	m = promptKeys(m, keyAltBack)
-	if m.jbImportInput != "/tmp/one " {
-		t.Fatalf("alt+backspace: %q", m.jbImportInput)
+	if m.jbImportInput.Text != "/tmp/one " {
+		t.Fatalf("alt+backspace: %q", m.jbImportInput.Text)
 	}
 	m = promptKeys(m, keyCmdBack)
-	if m.jbImportInput != "" {
-		t.Fatalf("cmd+backspace: %q", m.jbImportInput)
+	if m.jbImportInput.Text != "" {
+		t.Fatalf("cmd+backspace: %q", m.jbImportInput.Text)
 	}
 	m = promptType(m, "abc")
 	m = promptKeys(m, keyLeftPlain, keyLeftPlain)
 	m = promptType(m, "X")
-	if m.jbImportInput != "aXbc" {
-		t.Fatalf("mid-line insert: %q", m.jbImportInput)
+	if m.jbImportInput.Text != "aXbc" {
+		t.Fatalf("mid-line insert: %q", m.jbImportInput.Text)
 	}
 }
 
@@ -181,15 +181,15 @@ func TestOpenAPIImportPromptSharedEditing(t *testing.T) {
 	m = promptKeys(m, keyCmdBack) // drop the "~/" prefill
 	m = promptType(m, "/tmp/spec one.yaml")
 	m = promptKeys(m, keyAltLeft)
-	if m.oapiImportPos != 14 {
-		t.Fatalf("alt+left: cursor = %d, want 14", m.oapiImportPos)
+	if m.oapiImportInput.Cur != 14 {
+		t.Fatalf("alt+left: cursor = %d, want 14", m.oapiImportInput.Cur)
 	}
 	m = promptKeys(m, keyAltBack)
-	if m.oapiImportInput != "/tmp/spec yaml" {
-		t.Fatalf("alt+backspace: %q", m.oapiImportInput)
+	if m.oapiImportInput.Text != "/tmp/spec yaml" {
+		t.Fatalf("alt+backspace: %q", m.oapiImportInput.Text)
 	}
 	m = promptKeys(m, keyCmdBack)
-	if m.oapiImportInput != "yaml" {
-		t.Fatalf("cmd+backspace kills to line start: %q", m.oapiImportInput)
+	if m.oapiImportInput.Text != "yaml" {
+		t.Fatalf("cmd+backspace kills to line start: %q", m.oapiImportInput.Text)
 	}
 }

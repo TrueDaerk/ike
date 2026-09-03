@@ -65,7 +65,7 @@ func TestPlayFindFromQueryLineSearchesResult(t *testing.T) {
 	if m.play.bufFocus {
 		t.Fatal("the query line is the playground's default focus")
 	}
-	program := m.play.program
+	program := m.play.program.Text
 	result := m.play.result.Text()
 
 	m = drainKey(m, playFindKey())
@@ -81,8 +81,8 @@ func TestPlayFindFromQueryLineSearchesResult(t *testing.T) {
 		t.Errorf("cursor line = %d, want %d (the \"gamma\" row)", line, want)
 	}
 	// The chord is no query input and leaves the program untouched.
-	if m.play.program != program {
-		t.Errorf("program = %q, want it unchanged (%q)", m.play.program, program)
+	if m.play.program.Text != program {
+		t.Errorf("program = %q, want it unchanged (%q)", m.play.program.Text, program)
 	}
 	if m.play.result.Text() != result {
 		t.Errorf("the search changed the result:\n%s", m.play.result.Text())
@@ -170,8 +170,8 @@ func TestPlayFindFocusAfterClosingSearch(t *testing.T) {
 func TestPlayFindEscReturnsToQueryLineWithCursor(t *testing.T) {
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha","beta","gamma"]}`)))
 	m = setProgram(m, ".foo[]")
-	m.play.pos = 2 // a caret in the middle of the program, not at its end
-	program, pos := m.play.program, m.play.pos
+	m.play.program.Cur = 2 // a caret in the middle of the program, not at its end
+	program, pos := m.play.program.Text, m.play.program.Cur
 
 	m = playSearchFor(drainKey(m, playFindKey()), "gamma")
 	if !m.play.bufFocus {
@@ -181,8 +181,8 @@ func TestPlayFindEscReturnsToQueryLineWithCursor(t *testing.T) {
 	if m.play.bufFocus {
 		t.Fatal("esc must hand the keyboard back to the query line")
 	}
-	if m.play.program != program || m.play.pos != pos {
-		t.Errorf("query line = %q at %d, want %q at %d", m.play.program, m.play.pos, program, pos)
+	if m.play.program.Text != program || m.play.program.Cur != pos {
+		t.Errorf("query line = %q at %d, want %q at %d", m.play.program.Text, m.play.program.Cur, program, pos)
 	}
 	if !m.playOpen() {
 		t.Fatal("the first esc must not close the playground")
@@ -253,8 +253,8 @@ func TestPlayMatchStepChordsStepResultSearch(t *testing.T) {
 	if m.play.bufFocus {
 		t.Error("stepping matches must leave the keyboard on the query line")
 	}
-	if m.play.program != ".foo[]" {
-		t.Errorf("program = %q, want it untouched", m.play.program)
+	if m.play.program.Text != ".foo[]" {
+		t.Errorf("program = %q, want it untouched", m.play.program.Text)
 	}
 
 	m = drainKey(m, playMatchStepKey(true))
@@ -314,7 +314,7 @@ func TestPlayFindLeavesResultReadOnly(t *testing.T) {
 	if got := m.play.resultEd.Text(); got != before {
 		t.Errorf("the result buffer changed:\n%s\nwant:\n%s", got, before)
 	}
-	if strings.Contains(m.play.program, "alpha") {
-		t.Errorf("the search text leaked into the program: %q", m.play.program)
+	if strings.Contains(m.play.program.Text, "alpha") {
+		t.Errorf("the search text leaked into the program: %q", m.play.program.Text)
 	}
 }

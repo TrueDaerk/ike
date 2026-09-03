@@ -36,8 +36,7 @@ func (m *Model) startSaveAsPrompt(closeAfter bool) {
 	}
 	m.saveAsKey = key
 	m.saveAsClose = closeAfter
-	m.saveAsInput = ""
-	m.saveAsPos = 0
+	m.saveAsInput.Clear()
 	m.saveAsErr = ""
 	m.renderSaveAsPrompt()
 	m.shell.SetSize(m.width, m.height)
@@ -50,7 +49,7 @@ func (m Model) saveAsOpen() bool { return m.saveAsKey != "" && m.shell.IsOpen() 
 // renderSaveAsPrompt (re)fills the shell for the current input; called on
 // open and after every accepted key.
 func (m *Model) renderSaveAsPrompt() {
-	line := "> " + ui.CursorView(m.saveAsInput, m.saveAsPos)
+	line := "> " + m.saveAsInput.View()
 	errLine := ""
 	if m.saveAsErr != "" {
 		errLine = "\nE: " + m.saveAsErr
@@ -68,8 +67,7 @@ func (m *Model) renderSaveAsPrompt() {
 func (m Model) updateSaveAsPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	closePrompt := func() {
 		m.saveAsKey = ""
-		m.saveAsInput = ""
-		m.saveAsPos = 0
+		m.saveAsInput.Clear()
 		m.saveAsClose = false
 		m.saveAsErr = ""
 		m.shell.Close()
@@ -79,7 +77,7 @@ func (m Model) updateSaveAsPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		closePrompt()
 		return m, nil
 	case msg.Code == tea.KeyEnter:
-		name := strings.TrimSpace(m.saveAsInput)
+		name := strings.TrimSpace(m.saveAsInput.Text)
 		if name == "" {
 			return m, nil
 		}
@@ -106,8 +104,7 @@ func (m Model) updateSaveAsPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
-	if out, pos, handled, _ := ui.EditKey(msg, m.saveAsInput, m.saveAsPos); handled {
-		m.saveAsInput, m.saveAsPos = out, pos
+	if handled, _ := m.saveAsInput.Key(msg); handled {
 		m.renderSaveAsPrompt()
 	}
 	return m, nil
@@ -115,11 +112,9 @@ func (m Model) updateSaveAsPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // pasteSaveAsPrompt inserts a paste into the path input at its cursor (#1873).
 func (m *Model) pasteSaveAsPrompt(text string) bool {
-	out, pos, changed := ui.PasteText(m.saveAsInput, m.saveAsPos, text)
-	if !changed {
+	if !m.saveAsInput.Paste(text) {
 		return false
 	}
-	m.saveAsInput, m.saveAsPos = out, pos
 	m.renderSaveAsPrompt()
 	return true
 }

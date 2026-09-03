@@ -147,7 +147,7 @@ func TestBookmarkNotePromptAnnotates(t *testing.T) {
 	}
 
 	m = dispatch(t, m, BookmarkNoteMsg{})
-	if m.bmPrompt == nil || m.bmPrompt.input != "why" {
+	if m.bmPrompt == nil || m.bmPrompt.input.Text != "why" {
 		t.Fatalf("prompt must prefill the note, got %+v", m.bmPrompt)
 	}
 	m = dispatch(t, m, tea.KeyPressMsg{Code: tea.KeyBackspace})

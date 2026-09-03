@@ -174,8 +174,7 @@ func (m Model) paneNumPromptOpen() bool { return m.paneNumOpen && m.shell.IsOpen
 // chords do not reach the terminal.
 func (m *Model) startPaneFocusByIndex() tea.Cmd {
 	m.paneNumOpen = true
-	m.paneNumInput = ""
-	m.paneNumPos = 0
+	m.paneNumInput.Clear()
 	m.renderPaneNumPrompt()
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -190,7 +189,7 @@ func (m *Model) renderPaneNumPrompt() {
 	if avail < 20 {
 		avail = 20
 	}
-	line := "pane: " + windowedInput(m.paneNumInput, m.paneNumPos, avail)
+	line := "pane: " + windowedInput(m.paneNumInput.Text, m.paneNumInput.Cur, avail)
 	m.shell.SetContent(ui.ModelContent{
 		Heading: panePromptHeading,
 		Body: func() string {
@@ -204,8 +203,7 @@ func (m *Model) renderPaneNumPrompt() {
 func (m Model) updatePaneNumPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	closePrompt := func() {
 		m.paneNumOpen = false
-		m.paneNumInput = ""
-		m.paneNumPos = 0
+		m.paneNumInput.Clear()
 		m.shell.Close()
 	}
 	switch {
@@ -213,7 +211,7 @@ func (m Model) updatePaneNumPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		closePrompt()
 		return m, nil
 	case msg.Code == tea.KeyEnter:
-		text := m.paneNumInput
+		text := m.paneNumInput.Text
 		closePrompt()
 		n, err := strconv.Atoi(text)
 		if err != nil {
@@ -223,9 +221,7 @@ func (m Model) updatePaneNumPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.focusPaneNumber(n)
 		return m, m.raisePaneNumberHint()
 	default:
-		if out, pos, handled, _ := ui.EditKey(msg, m.paneNumInput, m.paneNumPos); handled {
-			m.paneNumInput, m.paneNumPos = out, pos
-		}
+		m.paneNumInput.Key(msg)
 	}
 	m.renderPaneNumPrompt()
 	return m, nil
@@ -234,11 +230,9 @@ func (m Model) updatePaneNumPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // pastePaneNumPrompt inserts a paste into the pane input at its cursor, like
 // every other single-field prompt (#1936).
 func (m *Model) pastePaneNumPrompt(text string) bool {
-	out, pos, changed := ui.PasteText(m.paneNumInput, m.paneNumPos, flattenExpr(text))
-	if !changed {
+	if !m.paneNumInput.Paste(flattenExpr(text)) {
 		return false
 	}
-	m.paneNumInput, m.paneNumPos = out, pos
 	m.renderPaneNumPrompt()
 	return true
 }

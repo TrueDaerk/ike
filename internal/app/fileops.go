@@ -54,8 +54,7 @@ func (m *Model) startRenameFile() tea.Cmd {
 		return nil
 	}
 	m.renamePath = path
-	m.renameInput = filepath.Base(path)
-	m.renamePos = len([]rune(m.renameInput))
+	m.renameInput.Set(filepath.Base(path))
 	m.renderRenamePrompt()
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -68,7 +67,7 @@ func (m Model) renameOpen() bool { return m.renamePath != "" && m.shell.IsOpen()
 // renderRenamePrompt (re)fills the shell with the prompt for the current
 // input; called on open and after every accepted key.
 func (m *Model) renderRenamePrompt() {
-	line := "> " + ui.CursorView(m.renameInput, m.renamePos)
+	line := "> " + m.renameInput.View()
 	m.shell.SetContent(ui.ModelContent{
 		Heading: "Rename " + displayPath(m.renamePath),
 		Body: func() string {
@@ -85,8 +84,7 @@ func (m *Model) renderRenamePrompt() {
 func (m Model) updateRenamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	closePrompt := func() {
 		m.renamePath = ""
-		m.renameInput = ""
-		m.renamePos = 0
+		m.renameInput.Clear()
 		m.shell.Close()
 	}
 	switch {
@@ -95,7 +93,7 @@ func (m Model) updateRenamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case msg.Code == tea.KeyEnter:
 		path := m.renamePath
-		name := strings.TrimSpace(m.renameInput)
+		name := strings.TrimSpace(m.renameInput.Text)
 		closePrompt()
 		if name == "" || name == filepath.Base(path) {
 			return m, nil
@@ -105,9 +103,7 @@ func (m Model) updateRenamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		*exp, cmd = exp.Update(explorer.RenamePathMsg{Path: path, Name: name})
 		return m, cmd
 	}
-	if out, pos, handled, _ := ui.EditKey(msg, m.renameInput, m.renamePos); handled {
-		m.renameInput, m.renamePos = out, pos
-	}
+	m.renameInput.Key(msg)
 	m.renderRenamePrompt()
 	return m, nil
 }

@@ -82,13 +82,13 @@ func (m *Model) acceptPlayCompletion() tea.Cmd {
 		return nil
 	}
 	it := c.items[ui.ClampIndex(c.sel, len(c.items))]
-	r := []rune(s.program)
-	start, pos := ui.ClampIndex(c.start, len(r)+1), ui.ClampIndex(s.pos, len(r)+1)
+	r := s.program.Runes()
+	start, pos := ui.ClampIndex(c.start, len(r)+1), ui.ClampIndex(s.program.Cur, len(r)+1)
 	if start > pos {
 		start = pos
 	}
-	s.program = string(r[:start]) + it.Insert + string(r[pos:])
-	s.pos = start + len([]rune(it.Insert))
+	s.program.Text = string(r[:start]) + it.Insert + string(r[pos:])
+	s.program.Cur = start + len([]rune(it.Insert))
 	s.histIdx = -1
 	return m.schedulePlayEval()
 }
@@ -104,7 +104,7 @@ func (m *Model) refreshPlayCompletion(typed string, manual bool) {
 	if s.comp == nil && !manual && !playCompletionTrigger(typed) {
 		return
 	}
-	items, start := jqplay.Complete(s.program, s.pos, s.input, manual)
+	items, start := jqplay.Complete(s.program.Text, s.program.Cur, s.input, manual)
 	if len(items) == 0 {
 		s.comp = nil
 		return
@@ -238,8 +238,8 @@ func (m Model) playCompAnchor(paneW int) (col, row int) {
 	lines, rows, start := m.playQueryWindow(paneW)
 	if rows <= 1 {
 		ws := 0
-		if s.pos >= avail {
-			ws = s.pos - avail + 1
+		if s.program.Cur >= avail {
+			ws = s.program.Cur - avail + 1
 		}
 		col = s.comp.start - ws
 		if ws > 0 {
@@ -247,7 +247,7 @@ func (m Model) playCompAnchor(paneW int) (col, row int) {
 		}
 		return max(col, 0), 0
 	}
-	cur, _ := jqplay.RowCol(lines, s.pos)
+	cur, _ := jqplay.RowCol(lines, s.program.Cur)
 	col = s.comp.start - lines[cur].Start
 	if cur == start && start > 0 {
 		col++ // the windowed first row opens on the `…` marker

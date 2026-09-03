@@ -63,8 +63,7 @@ func (m *Model) startDebugEvaluate() {
 		}
 	}
 	m.evalOpen = true
-	m.evalInput = ""
-	m.evalPos = 0
+	m.evalInput.Clear()
 	m.renderEvalPrompt()
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -217,7 +216,7 @@ func (m *Model) renderEvalPrompt() {
 	if avail < 20 {
 		avail = 20
 	}
-	line := "> " + windowedInput(m.evalInput, m.evalPos, avail)
+	line := "> " + windowedInput(m.evalInput.Text, m.evalInput.Cur, avail)
 	m.shell.SetContent(ui.ModelContent{
 		Heading: evalPromptHeading,
 		Body: func() string {
@@ -231,8 +230,7 @@ func (m *Model) renderEvalPrompt() {
 func (m Model) updateEvalPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	closePrompt := func() {
 		m.evalOpen = false
-		m.evalInput = ""
-		m.evalPos = 0
+		m.evalInput.Clear()
 		m.shell.Close()
 	}
 	switch {
@@ -240,7 +238,7 @@ func (m Model) updateEvalPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		closePrompt()
 		return m, nil
 	case msg.Code == tea.KeyEnter:
-		expr := flattenExpr(m.evalInput)
+		expr := flattenExpr(m.evalInput.Text)
 		closePrompt()
 		if expr == "" {
 			return m, nil
@@ -251,8 +249,7 @@ func (m Model) updateEvalPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.evaluateExpr(expr, m.evalContext(false))
 		return m, nil
 	default:
-		if out, pos, handled, _ := ui.EditKey(msg, m.evalInput, m.evalPos); handled {
-			m.evalInput, m.evalPos = out, pos
+		if handled, _ := m.evalInput.Key(msg); handled {
 		}
 	}
 	m.renderEvalPrompt()
@@ -263,11 +260,9 @@ func (m Model) updateEvalPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // the field is one line, so the block flattens like every other single-field
 // prompt (#1936).
 func (m *Model) pasteEvalPrompt(text string) bool {
-	out, pos, changed := ui.PasteText(m.evalInput, m.evalPos, flattenExpr(text))
-	if !changed {
+	if !m.evalInput.Paste(flattenExpr(text)) {
 		return false
 	}
-	m.evalInput, m.evalPos = out, pos
 	m.renderEvalPrompt()
 	return true
 }

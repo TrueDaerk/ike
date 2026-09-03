@@ -167,8 +167,8 @@ func TestBreakpointFormAllFieldsDisabled(t *testing.T) {
 		t.Fatalf("focus = %v, want no editable field", m.bpForm.field)
 	}
 	m = typeInto(m, "xyz")
-	if m.bpForm.vals[bpFieldCondition] != "i > 3" {
-		t.Fatalf("a read-only form accepted input: %q", m.bpForm.vals[bpFieldCondition])
+	if m.bpForm.vals[bpFieldCondition].Text != "i > 3" {
+		t.Fatalf("a read-only form accepted input: %q", m.bpForm.vals[bpFieldCondition].Text)
 	}
 	if !strings.Contains(m.shell.View(), "i > 3") {
 		t.Fatalf("the stored value is not shown:\n%s", m.shell.View())

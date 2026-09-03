@@ -56,8 +56,7 @@ const regexGroupRows = 12
 // ctrl+y uses, gen stamps async evaluations so a stale result is dropped, and
 // status carries the transient confirmation line.
 type regexTesterState struct {
-	pattern string
-	patPos  int
+	pattern ui.Field
 	text    []string
 	line    int
 	col     int
@@ -108,7 +107,7 @@ func (m Model) regexTesterOpen() bool { return m.regexTester != nil && m.shell.I
 // patterns again.
 func (m *Model) closeRegexTester() {
 	if s := m.regexTester; s != nil {
-		s.hist.Add(strings.TrimSpace(s.pattern))
+		s.hist.Add(strings.TrimSpace(s.pattern.Text))
 		m.regexHistory = s.hist
 	}
 	m.regexTester = nil
@@ -132,7 +131,7 @@ func (m *Model) evaluateRegex() tea.Cmd {
 	if s == nil {
 		return nil
 	}
-	pattern, text := s.pattern, s.regexText()
+	pattern, text := s.pattern.Text, s.regexText()
 	if len(text) <= regextest.AsyncThreshold {
 		s.pending = false
 		s.gen++
@@ -212,16 +211,15 @@ func (m *Model) regexPatternKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "down":
 		return m.stepRegexHistory(-1)
 	case "enter":
-		s.hist.Add(strings.TrimSpace(s.pattern))
+		s.hist.Add(strings.TrimSpace(s.pattern.Text))
 		s.histIdx = -1
 		s.focus = regexFocusText
 		return nil
 	}
-	out, pos, handled, changed := ui.EditKey(msg, s.pattern, s.patPos)
+	handled, changed := s.pattern.Key(msg)
 	if !handled {
 		return nil
 	}
-	s.pattern, s.patPos = out, pos
 	if !changed {
 		return nil
 	}
@@ -240,14 +238,16 @@ func (m *Model) stepRegexHistory(delta int) tea.Cmd {
 		return nil
 	}
 	if next == -1 {
-		s.histIdx, s.pattern, s.patPos = -1, "", 0
+		s.histIdx = -1
+		s.pattern.Clear()
 		return m.evaluateRegex()
 	}
 	pattern, ok := s.hist.At(next)
 	if !ok {
 		return nil
 	}
-	s.histIdx, s.pattern, s.patPos = next, pattern, len([]rune(pattern))
+	s.histIdx = next
+	s.pattern.Set(pattern)
 	return m.evaluateRegex()
 }
 
@@ -265,11 +265,11 @@ func (m *Model) stepRegexMatch(delta int) {
 // format (ctrl+o cycles it).
 func (m *Model) copyRegexPattern() {
 	s := m.regexTester
-	if s.pattern == "" {
+	if s.pattern.Empty() {
 		s.status = "nothing to copy — the pattern is empty"
 		return
 	}
-	quoted := regextest.Quote(s.pattern, s.quote)
+	quoted := regextest.Quote(s.pattern.Text, s.quote)
 	m.copyToClipboard(quoted)
 	s.status = "copied " + s.quote.String() + ": " + quoted
 	m.host.Notify(host.Info, "copied regex as "+s.quote.String()+" literal")
@@ -354,11 +354,10 @@ func (m *Model) pasteRegexTester(text string) (tea.Cmd, bool) {
 		return nil, false
 	}
 	if s.focus == regexFocusPattern {
-		out, pos, changed := ui.PasteText(s.pattern, s.patPos, text)
-		if !changed {
+		if !s.pattern.Paste(text) {
 			return nil, false
 		}
-		s.pattern, s.patPos, s.histIdx = out, pos, -1
+		s.histIdx = -1
 		return m.evaluateRegex(), true
 	}
 	s.clampCursor()
@@ -416,9 +415,9 @@ func (m Model) regexPatternRow(width int) string {
 		avail = 10
 	}
 	if s.focus == regexFocusPattern {
-		return "> Pattern: " + windowedInput(s.pattern, s.patPos, avail)
+		return "> Pattern: " + windowedInput(s.pattern.Text, s.pattern.Cur, avail)
 	}
-	return "  Pattern: " + windowedPlain(s.pattern, avail)
+	return "  Pattern: " + windowedPlain(s.pattern.Text, avail)
 }
 
 // regexTextArea renders the visible rows of the test text with every match
@@ -530,7 +529,7 @@ func (m Model) regexSummary() string {
 	}
 	n := len(s.result.Matches)
 	if n == 0 {
-		if s.pattern == "" {
+		if s.pattern.Empty() {
 			return lipgloss.NewStyle().Foreground(pal.Hint).Render("no pattern yet")
 		}
 		return lipgloss.NewStyle().Foreground(pal.Warning).Render("no matches")

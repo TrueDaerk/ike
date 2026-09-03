@@ -20,8 +20,7 @@ import (
 type lspRenameState struct {
 	path  string
 	apply func(string) tea.Cmd
-	input string
-	pos   int
+	input ui.Field
 }
 
 // openLSPRenamePrompt shows the prompt prefilled with the symbol placeholder,
@@ -31,8 +30,7 @@ func (m *Model) openLSPRenamePrompt(msg ilsp.RenamePromptMsg) {
 	m.lspRename = &lspRenameState{
 		path:  msg.Path,
 		apply: msg.Apply,
-		input: msg.Placeholder,
-		pos:   len([]rune(msg.Placeholder)),
+		input: ui.NewField(msg.Placeholder),
 	}
 	m.renderLSPRenamePrompt()
 	m.shell.SetSize(m.width, m.height)
@@ -45,7 +43,7 @@ func (m Model) lspRenameOpen() bool { return m.lspRename != nil && m.shell.IsOpe
 // renderLSPRenamePrompt (re)fills the shell for the current input.
 func (m *Model) renderLSPRenamePrompt() {
 	s := m.lspRename
-	line := "> " + ui.CursorView(s.input, s.pos)
+	line := "> " + s.input.View()
 	m.shell.SetContent(ui.ModelContent{
 		Heading: "Rename symbol",
 		Body: func() string {
@@ -68,7 +66,7 @@ func (m Model) updateLSPRenamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		closePrompt()
 		return m, nil
 	case msg.Code == tea.KeyEnter:
-		name := strings.TrimSpace(s.input)
+		name := strings.TrimSpace(s.input.Text)
 		apply := s.apply
 		closePrompt()
 		if name == "" || apply == nil {
@@ -77,12 +75,10 @@ func (m Model) updateLSPRenamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, apply(name)
 	case msg.Code == 'u' && msg.Mod == tea.ModCtrl:
 		// ctrl+u clears the whole line — the prompt's own chord, kept ahead
-		// of ui.EditKey (which does not bind it).
-		s.input, s.pos = "", 0
+		// of ui.EditKey (caller chords win, #2459).
+		s.input.Clear()
 	default:
-		if out, pos, handled, _ := ui.EditKey(msg, s.input, s.pos); handled {
-			s.input, s.pos = out, pos
-		}
+		s.input.Key(msg)
 	}
 	m.renderLSPRenamePrompt()
 	return m, nil

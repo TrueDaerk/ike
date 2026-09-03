@@ -30,8 +30,8 @@ const (
 func (m *Model) startClonePrompt() {
 	m.cloneOpen = true
 	m.cloneRunning = false
-	m.cloneURL, m.cloneURLPos = "", 0
-	m.cloneName, m.cloneNamePos = "", 0
+	m.cloneURL.Clear()
+	m.cloneName.Clear()
 	m.cloneNameEdited = false
 	m.cloneField = cloneFieldURL
 	m.cloneErr = ""
@@ -46,9 +46,8 @@ func (m *Model) startClonePrompt() {
 // follows the URL like a hand-typed one would.
 func (m *Model) startClonePromptURL(url string) {
 	m.startClonePrompt()
-	m.cloneURL, m.cloneURLPos = url, len([]rune(url))
-	m.cloneName = vcs.CloneName(url)
-	m.cloneNamePos = len([]rune(m.cloneName))
+	m.cloneURL.Set(url)
+	m.cloneName.Set(vcs.CloneName(url))
 	m.renderClonePrompt()
 }
 
@@ -59,8 +58,8 @@ func (m Model) clonePromptOpen() bool { return m.cloneOpen && m.shell.IsOpen() }
 func (m *Model) closeClonePrompt() {
 	m.cloneOpen = false
 	m.cloneRunning = false
-	m.cloneURL, m.cloneURLPos = "", 0
-	m.cloneName, m.cloneNamePos = "", 0
+	m.cloneURL.Clear()
+	m.cloneName.Clear()
 	m.cloneNameEdited = false
 	m.cloneField = cloneFieldURL
 	m.cloneErr = ""
@@ -78,7 +77,7 @@ func (m Model) cloneTargetHint() string {
 	if err != nil {
 		return err.Error()
 	}
-	name := strings.TrimSpace(m.cloneName)
+	name := strings.TrimSpace(m.cloneName.Text)
 	if name == "" {
 		name = "<name>"
 	}
@@ -105,25 +104,24 @@ func (m *Model) renderClonePrompt() {
 	}
 	url := m.cloneURL
 	name := m.cloneName
-	pos, npos := m.cloneURLPos, m.cloneNamePos
 	target := m.cloneTargetHint()
 	running := m.cloneRunning
 	errMsg := m.cloneErr
 	edited := m.cloneNameEdited
 	urlRow := func() string {
 		if m.cloneField == cloneFieldURL && !running {
-			return "> Repository URL : " + windowedInput(url, pos, avail)
+			return "> Repository URL : " + windowedInput(url.Text, url.Cur, avail)
 		}
-		return "  Repository URL : " + windowedInput(url, len([]rune(url)), avail)
+		return "  Repository URL : " + windowedInput(url.Text, url.Len(), avail)
 	}
 	nameRow := func() string {
 		if m.cloneField == cloneFieldName && !running {
-			return "> Directory name : " + windowedInput(name, npos, avail)
+			return "> Directory name : " + windowedInput(name.Text, name.Cur, avail)
 		}
 		if !edited {
-			return "  Directory name : " + cloneGhostStyle.Render(windowedPlain(name, avail))
+			return "  Directory name : " + cloneGhostStyle.Render(windowedPlain(name.Text, avail))
 		}
-		return "  Directory name : " + windowedInput(name, len([]rune(name)), avail)
+		return "  Directory name : " + windowedInput(name.Text, name.Len(), avail)
 	}
 	m.shell.SetContent(ui.ModelContent{
 		Heading: "Clone Repository",
@@ -223,19 +221,16 @@ func (m Model) updateClonePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch m.cloneField {
 	case cloneFieldURL:
-		if out, pos, handled, _ := ui.EditKey(msg, m.cloneURL, m.cloneURLPos); handled {
-			m.cloneURL, m.cloneURLPos = out, pos
+		if handled, _ := m.cloneURL.Key(msg); handled {
 			// The name follows the URL until it is edited by hand, so the
 			// common case is type-URL-and-enter.
 			if !m.cloneNameEdited {
-				m.cloneName = vcs.CloneName(m.cloneURL)
-				m.cloneNamePos = len([]rune(m.cloneName))
+				m.cloneName.Set(vcs.CloneName(m.cloneURL.Text))
 			}
 			m.renderClonePrompt()
 		}
 	case cloneFieldName:
-		if out, pos, handled, _ := ui.EditKey(msg, m.cloneName, m.cloneNamePos); handled {
-			m.cloneName, m.cloneNamePos = out, pos
+		if handled, _ := m.cloneName.Key(msg); handled {
 			m.cloneNameEdited = true
 			m.renderClonePrompt()
 		}
@@ -253,21 +248,16 @@ func (m *Model) pasteClonePrompt(text string) bool {
 	}
 	switch m.cloneField {
 	case cloneFieldURL:
-		out, pos, changed := ui.PasteText(m.cloneURL, m.cloneURLPos, text)
-		if !changed {
+		if !m.cloneURL.Paste(text) {
 			return false
 		}
-		m.cloneURL, m.cloneURLPos = out, pos
 		if !m.cloneNameEdited {
-			m.cloneName = vcs.CloneName(m.cloneURL)
-			m.cloneNamePos = len([]rune(m.cloneName))
+			m.cloneName.Set(vcs.CloneName(m.cloneURL.Text))
 		}
 	case cloneFieldName:
-		out, pos, changed := ui.PasteText(m.cloneName, m.cloneNamePos, text)
-		if !changed {
+		if !m.cloneName.Paste(text) {
 			return false
 		}
-		m.cloneName, m.cloneNamePos = out, pos
 		m.cloneNameEdited = true
 	}
 	m.renderClonePrompt()
@@ -277,14 +267,14 @@ func (m *Model) pasteClonePrompt(text string) bool {
 // startClone validates the two fields and launches the clone. Validation
 // failures keep the dialog open and editable with the reason attached.
 func (m Model) startClone() (tea.Model, tea.Cmd) {
-	url := strings.TrimSpace(m.cloneURL)
+	url := strings.TrimSpace(m.cloneURL.Text)
 	if url == "" {
 		m.cloneErr = "repository URL is empty — enter a URL to clone"
 		m.cloneField = cloneFieldURL
 		m.renderClonePrompt()
 		return m, nil
 	}
-	name := strings.TrimSpace(m.cloneName)
+	name := strings.TrimSpace(m.cloneName.Text)
 	if name == "" {
 		name = vcs.CloneName(url)
 	}

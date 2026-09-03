@@ -61,8 +61,7 @@ func openJQ(t *testing.T, m Model) Model {
 
 // setProgram replaces the query line and evaluates, the way enter does.
 func setProgram(m Model, program string) Model {
-	m.play.program = program
-	m.play.pos = len([]rune(program))
+	m.play.program.Set(program)
 	return drainCmd(m, m.runPlayNow())
 }
 
@@ -95,7 +94,7 @@ func TestJQPlaygroundEvaluatesLive(t *testing.T) {
 // program without an explicit enter.
 func TestJQPlaygroundTypingReEvaluates(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"name":"ike"}`))
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".name")
 	if got := m.play.result.Text(); got != `"ike"` {
 		t.Fatalf("live result = %q, want the field value", got)
@@ -134,7 +133,7 @@ func TestJQPlaygroundAtPathSeedsFromCaret(t *testing.T) {
 	if !m.playOpen() {
 		t.Fatal("json.jqPlaygroundAtPath must open the playground")
 	}
-	if got := m.play.program; got != ".spec.name" {
+	if got := m.play.program.Text; got != ".spec.name" {
 		t.Errorf("seeded program = %q, want the caret's jq path", got)
 	}
 }
@@ -144,7 +143,7 @@ func TestJQPlaygroundAtPathSeedsFromCaret(t *testing.T) {
 // something needs no deleting first.
 func TestJQPlaygroundOpensOnIdentity(t *testing.T) {
 	m := openJQ(t, playCaretApp(t))
-	if got := m.play.program; got != "." {
+	if got := m.play.program.Text; got != "." {
 		t.Errorf("seeded program = %q, want the identity program", got)
 	}
 }
@@ -158,7 +157,7 @@ func TestJQPlaygroundRecallsLastProgramPerFile(t *testing.T) {
 	m = closeJQ(m)
 
 	m = openJQ(t, m)
-	if got := m.play.program; got != ".foo.bar" {
+	if got := m.play.program.Text; got != ".foo.bar" {
 		t.Errorf("reopened on %q, want the file's last valid program", got)
 	}
 	m = closeJQ(m)
@@ -171,7 +170,7 @@ func TestJQPlaygroundRecallsLastProgramPerFile(t *testing.T) {
 	}
 	tm, cmd := m.openPath(pathB, false)
 	m = openJQ(t, drainCmd(tm.(Model), cmd))
-	if got := m.play.program; got != "." {
+	if got := m.play.program.Text; got != "." {
 		t.Errorf("fresh file opened on %q, want the identity program", got)
 	}
 }
@@ -195,7 +194,7 @@ func TestJQPlaygroundDoesNotRecallBrokenProgram(t *testing.T) {
 	m = closeJQ(m)
 
 	m = openJQ(t, m)
-	if got := m.play.program; got != ".foo" {
+	if got := m.play.program.Text; got != ".foo" {
 		t.Errorf("reopened on %q, want the last program that ran", got)
 	}
 }
@@ -389,9 +388,9 @@ func TestJQPlaygroundDropsSupersededEvaluation(t *testing.T) {
 
 	// Two program changes: the first tick is stale by the time it arrives.
 	s.result = jqplay.Result{} // drop the seed program's output
-	s.program, s.pos = ".a", 2
+	s.program.Text, s.program.Cur = ".a", 2
 	stale := m.schedulePlayEval()
-	s.program, s.pos = ".b", 2
+	s.program.Text, s.program.Cur = ".b", 2
 	fresh := m.schedulePlayEval()
 
 	m = drainCmd(m, stale)
@@ -500,15 +499,15 @@ func TestJQPlaygroundHistory(t *testing.T) {
 	// enter left the query line holding the newest entry, so the first ↑
 	// skips it (#1973) — a step that changed nothing would read as a dead key.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.play.program; got != ".a" {
+	if got := m.play.program.Text; got != ".a" {
 		t.Fatalf("first ↑ = %q, want the program before the one on the line", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.play.program; got != ".a" {
+	if got := m.play.program.Text; got != ".a" {
 		t.Fatalf("↑ at the oldest program = %q, want it to stay", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
-	if got := m.play.program; got != ".b" {
+	if got := m.play.program.Text; got != ".b" {
 		t.Fatalf("↓ = %q, want back to the newer program", got)
 	}
 
@@ -518,7 +517,7 @@ func TestJQPlaygroundHistory(t *testing.T) {
 	// first ↑ skips it and offers the entry before it — the history is still
 	// there, and it is still the session-wide one.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.play.program; got != ".a" {
+	if got := m.play.program.Text; got != ".a" {
 		t.Errorf("the history must outlive the dialog, got %q", got)
 	}
 }
@@ -529,19 +528,19 @@ func TestJQPlaygroundHistory(t *testing.T) {
 func TestJQPlaygroundHistoryKeepsDraft(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"a":1,"b":2}`))
 	m = runJQProgram(m, ".a")
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".b")
 	m = dismissJQPopup(m) // ↑ must reach the history, not the popup (#1979)
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.play.program; got != ".a" {
+	if got := m.play.program.Text; got != ".a" {
 		t.Fatalf("↑ = %q, want the recorded program", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
-	if got := m.play.program; got != ".b" {
+	if got := m.play.program.Text; got != ".b" {
 		t.Fatalf("↓ = %q, want the draft back", got)
 	}
-	if got := m.play.pos; got != len(".b") {
+	if got := m.play.program.Cur; got != len(".b") {
 		t.Errorf("the caret should sit at the end of the restored draft, got %d", got)
 	}
 	if got := m.play.result.Text(); got != "2" {
@@ -549,7 +548,7 @@ func TestJQPlaygroundHistoryKeepsDraft(t *testing.T) {
 	}
 	// A ↓ with nothing to come back from leaves the line alone.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
-	if got := m.play.program; got != ".b" {
+	if got := m.play.program.Text; got != ".b" {
 		t.Errorf("↓ at the live slot = %q, want the line untouched", got)
 	}
 }
@@ -560,7 +559,7 @@ func TestJQPlaygroundHistoryKeepsDraft(t *testing.T) {
 func TestJQPlaygroundHistorySkipsSeededProgram(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"a":1,"b":2}`))
 	m = runJQProgram(m, ".a")
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".b")
 	m = dismissJQPopup(m) // the first esc would only dismiss the popup (#1979)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -568,11 +567,11 @@ func TestJQPlaygroundHistorySkipsSeededProgram(t *testing.T) {
 	m = openJQ(t, m)
 	// Reopening seeds the file's last valid program, ".b" (#1982) — which is
 	// exactly the newest history entry the first ↑ has to step over.
-	if got := m.play.program; got != ".b" {
+	if got := m.play.program.Text; got != ".b" {
 		t.Fatalf("reopen seeded %q, want the last program run on the file", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.play.program; got != ".a" {
+	if got := m.play.program.Text; got != ".a" {
 		t.Errorf("↑ over the seeded program = %q, want the entry before it", got)
 	}
 }
@@ -677,10 +676,10 @@ func TestJQPlaygroundGlobalChords(t *testing.T) {
 	// The playground's own keys keep priority: typing still edits the query
 	// line, and esc still closes the mode.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab}) // back to the query line
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, ".name")
-	if m.play.program != ".name" {
-		t.Fatalf("typing must stay with the query line, got %q", m.play.program)
+	if m.play.program.Text != ".name" {
+		t.Fatalf("typing must stay with the query line, got %q", m.play.program.Text)
 	}
 	if m.palette.IsOpen() {
 		t.Fatal("plain typing must not dispatch global bindings")
@@ -817,7 +816,7 @@ func TestJQPlaygroundSurvivesFocusChange(t *testing.T) {
 	m.setFocus(playKey)
 	m = openJQ(t, m)
 	m = setProgram(m, ".foo[]")
-	program := m.play.program
+	program := m.play.program.Text
 
 	// The spatial focus move escapes the playground pane instead of being
 	// swallowed by the modal routing.
@@ -836,7 +835,7 @@ func TestJQPlaygroundSurvivesFocusChange(t *testing.T) {
 	if ed := m.activeWS().Panes.Get(otherKey).Editor(); ed == nil || !strings.Contains(ed.Text(), "hello") {
 		t.Fatal("typing must edit the focused pane while the playground is open elsewhere")
 	}
-	if got := m.play.program; got != program {
+	if got := m.play.program.Text; got != program {
 		t.Fatalf("query line = %q, keys for the other pane must not reach it", got)
 	}
 	if got := m.play.result.Text(); got != "1\n2\n3" {
@@ -857,7 +856,7 @@ func TestJQPlaygroundSurvivesFocusChange(t *testing.T) {
 		t.Fatalf("focus = %q, want back on the playground pane %q", got, playKey)
 	}
 	m = typeInto(m, " ")
-	if got := m.play.program; got != program+" " {
+	if got := m.play.program.Text; got != program+" " {
 		t.Fatalf("query line = %q, refocusing must resume it", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -984,11 +983,11 @@ func TestJQPlaygroundWithoutInput(t *testing.T) {
 // one line — a multi-line program must not smuggle newlines into it.
 func TestJQPlaygroundPasteFlattens(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"a":1}`))
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	tm, cmd := m.Update(tea.PasteMsg{Content: ".a\n| tostring"})
 	m = drainCmd(tm.(Model), cmd)
-	if strings.Contains(m.play.program, "\n") {
-		t.Fatalf("the query line kept a newline: %q", m.play.program)
+	if strings.Contains(m.play.program.Text, "\n") {
+		t.Fatalf("the query line kept a newline: %q", m.play.program.Text)
 	}
 	if m.play.result.Err != "" {
 		t.Errorf("the flattened program should still compile, got %q", m.play.result.Err)
@@ -1000,7 +999,7 @@ func TestJQPlaygroundPasteFlattens(t *testing.T) {
 // (#1979), which owns enter while it shows; it is dismissed first so enter
 // keeps its record-and-run meaning.
 func runJQProgram(m Model, program string) Model {
-	m.play.program, m.play.pos = "", 0
+	m.play.program.Clear()
 	m = typeInto(m, program)
 	m = dismissJQPopup(m)
 	return drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -1024,7 +1023,7 @@ func TestJQPlaygroundHistoryCrossBuffer(t *testing.T) {
 	m = drainCmd(tm.(Model), cmd)
 	m = openJQ(t, m)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.play.program; got != ".a" {
+	if got := m.play.program.Text; got != ".a" {
 		t.Fatalf("↑ over another buffer = %q, want the program run on the first one", got)
 	}
 	m = runJQProgram(m, ".b")
@@ -1041,7 +1040,7 @@ func TestJQPlaygroundHistoryCrossBuffer(t *testing.T) {
 		t.Fatalf("the mode must mount in the response pane, got %q", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.play.program; got != ".b" {
+	if got := m.play.program.Text; got != ".b" {
 		t.Fatalf("↑ over the response pane = %q, want the newest editor program", got)
 	}
 	m = runJQProgram(m, ".items")
@@ -1050,7 +1049,7 @@ func TestJQPlaygroundHistoryCrossBuffer(t *testing.T) {
 	m.setFocus(m.recentEditor)
 	m = openJQ(t, m)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.play.program; got != ".items" {
+	if got := m.play.program.Text; got != ".items" {
 		t.Errorf("↑ back in an editor = %q, want the program run on the response", got)
 	}
 }
@@ -1065,7 +1064,7 @@ func TestJQPlaygroundHistorySurvivesReopen(t *testing.T) {
 
 	m = openJQ(t, m) // reopened without esc: the mode is replaced
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.play.program; got != ".a" {
+	if got := m.play.program.Text; got != ".a" {
 		t.Errorf("↑ after reopening = %q, want the program recorded before it", got)
 	}
 }
@@ -1106,7 +1105,7 @@ func TestJQPlaygroundExpandedQueryShowsWholeProgram(t *testing.T) {
 	if !m.play.expanded {
 		t.Fatal("the json.jqQueryView chord must expand the query view")
 	}
-	if got := m.play.program; got != playLongProgram {
+	if got := m.play.program.Text; got != playLongProgram {
 		t.Fatalf("the view must not touch the program, got %q", got)
 	}
 	got := strings.ReplaceAll(playQueryText(m, width), " ", "")
@@ -1387,7 +1386,7 @@ func playQueryLines(t *testing.T, m Model) []jqplay.Line {
 	if !ok {
 		t.Fatal("the hosting pane must be laid out")
 	}
-	return jqplay.Wrap(m.play.program, w)
+	return jqplay.Wrap(m.play.program.Text, w)
 }
 
 // playMultiLineApp opens the playground over a two-item document with
@@ -1414,17 +1413,17 @@ func playMultiLineApp(t *testing.T) (Model, []jqplay.Line) {
 // history, and the program is never touched by a motion.
 func TestJQPlaygroundMultiLineWalksRows(t *testing.T) {
 	m, lines := playMultiLineApp(t)
-	end := m.play.pos
+	end := m.play.program.Cur
 	row, _ := jqplay.RowCol(lines, end)
 	if row != len(lines)-1 {
 		t.Fatalf("setup: the caret starts on the last row, got %d", row)
 	}
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.play.program; got != playMultiLineProgram {
+	if got := m.play.program.Text; got != playMultiLineProgram {
 		t.Fatalf("↑ must move the caret, not the program: %q", got)
 	}
-	up, col := jqplay.RowCol(lines, m.play.pos)
+	up, col := jqplay.RowCol(lines, m.play.program.Cur)
 	if up != row-1 {
 		t.Fatalf("↑ put the caret on row %d, want %d", up, row-1)
 	}
@@ -1438,19 +1437,19 @@ func TestJQPlaygroundMultiLineWalksRows(t *testing.T) {
 	// The goal column is remembered across the shorter row: ↓ lands back on
 	// the column ↑ left, not on the one the short row clamped it to.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
-	if got := m.play.pos; got != end {
+	if got := m.play.program.Cur; got != end {
 		t.Errorf("↓ back = %d, want the goal column restored to %d", got, end)
 	}
 	// ↓ on the last row has no row to go to, so it hands over to the history —
 	// which is at the live slot with nothing newer, and leaves the line alone.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
-	if got := m.play.program; got != playMultiLineProgram {
+	if got := m.play.program.Text; got != playMultiLineProgram {
 		t.Errorf("↓ at the last row = %q, want the program untouched", got)
 	}
 	// The one-line view keeps the arrows on the history (#1973).
 	m = toggleJQView(m)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.play.pos; got != end {
+	if got := m.play.program.Cur; got != end {
 		t.Errorf("↑ in the one-line view moved the caret to %d", got)
 	}
 }
@@ -1466,11 +1465,11 @@ func TestJQPlaygroundMultiLineEditsAnyRow(t *testing.T) {
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp}) // onto the first row
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyHome})
-	if got := m.play.pos; got != lines[0].Start {
+	if got := m.play.program.Cur; got != lines[0].Start {
 		t.Fatalf("home = %d, want the row's start %d", got, lines[0].Start)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnd})
-	if got := m.play.pos; got != lines[0].End {
+	if got := m.play.program.Cur; got != lines[0].End {
 		t.Fatalf("end = %d, want the row's end %d", got, lines[0].End)
 	}
 
@@ -1478,7 +1477,7 @@ func TestJQPlaygroundMultiLineEditsAnyRow(t *testing.T) {
 	m = typeInto(m, " select(.n > 1) |")
 	m = dismissJQPopup(m)
 	want := playMultiLineProgram[:lines[0].End] + " select(.n > 1) |" + playMultiLineProgram[lines[0].End:]
-	if got := m.play.program; got != want {
+	if got := m.play.program.Text; got != want {
 		t.Fatalf("program = %q, want the stage inserted at the caret: %q", got, want)
 	}
 	if got := m.play.result.Text(); got != "2" {
@@ -1486,11 +1485,11 @@ func TestJQPlaygroundMultiLineEditsAnyRow(t *testing.T) {
 	}
 	// ctrl+home / ctrl+end still reach the ends of the whole program.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyHome, Mod: tea.ModCtrl})
-	if got := m.play.pos; got != 0 {
+	if got := m.play.program.Cur; got != 0 {
 		t.Errorf("ctrl+home = %d, want the program's start", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnd, Mod: tea.ModCtrl})
-	if got := m.play.pos; got != len([]rune(want)) {
+	if got := m.play.program.Cur; got != len([]rune(want)) {
 		t.Errorf("ctrl+end = %d, want the program's end", got)
 	}
 }
@@ -1508,11 +1507,11 @@ func TestJQPlaygroundMultiLineHistoryKeys(t *testing.T) {
 	}
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModAlt})
-	if got := m.play.program; got != ".items" {
+	if got := m.play.program.Text; got != ".items" {
 		t.Fatalf("alt+↑ = %q, want the recorded program", got)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModAlt})
-	if got := m.play.program; got != playMultiLineProgram {
+	if got := m.play.program.Text; got != playMultiLineProgram {
 		t.Fatalf("alt+↓ = %q, want the draft back", got)
 	}
 
@@ -1520,7 +1519,7 @@ func TestJQPlaygroundMultiLineHistoryKeys(t *testing.T) {
 	for i := 0; i < len(playQueryLines(t, m)); i++ {
 		m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
 	}
-	if got := m.play.program; got != ".items" {
+	if got := m.play.program.Text; got != ".items" {
 		t.Errorf("↑ off the first row = %q, want the history entry", got)
 	}
 }
@@ -1543,13 +1542,13 @@ func TestJQPlaygroundMultiLineClickPlacesCaret(t *testing.T) {
 	if m.play.bufFocus {
 		t.Fatal("a click on the query header must return the keyboard to the query line")
 	}
-	if got, want := m.play.pos, lines[1].Start+col; got != want {
+	if got, want := m.play.program.Cur, lines[1].Start+col; got != want {
 		t.Errorf("the click put the caret at %d, want %d", got, want)
 	}
 	// Typing lands where the click put it.
 	m = typeInto(m, "x")
 	m = dismissJQPopup(m)
-	if got := []rune(m.play.program)[lines[1].Start+col]; got != 'x' {
+	if got := []rune(m.play.program.Text)[lines[1].Start+col]; got != 'x' {
 		t.Errorf("the rune at the clicked cell is %q, want the typed one", got)
 	}
 }
@@ -1575,7 +1574,7 @@ func TestJQPlaygroundMultiLineWindowFollowsCaret(t *testing.T) {
 		t.Error("↑ past the top of the window must scroll the rows")
 	}
 	lines, rows, start := m.playQueryWindow(width)
-	if cur := jqplay.LineAt(lines, m.play.pos); cur < start || cur >= start+rows {
+	if cur := jqplay.LineAt(lines, m.play.program.Cur); cur < start || cur >= start+rows {
 		t.Errorf("the caret's row %d is outside the window [%d,%d)", cur, start, start+rows)
 	}
 	if got, want := len(m.playQueryRows(width))+playInfoRows, m.playHeaderRowsFor(key); got != want {
@@ -1593,15 +1592,15 @@ func TestJQPlaygroundMultiLineWindowFollowsCaret(t *testing.T) {
 func TestJQPlaygroundMultiLineKeepsOneLineProgram(t *testing.T) {
 	m, _ := playMultiLineApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	pos := m.play.pos
+	pos := m.play.program.Cur
 
 	m = toggleJQView(m)
-	if m.play.program != playMultiLineProgram || m.play.pos != pos {
-		t.Fatalf("the toggle moved the program or the caret: %q at %d", m.play.program, m.play.pos)
+	if m.play.program.Text != playMultiLineProgram || m.play.program.Cur != pos {
+		t.Fatalf("the toggle moved the program or the caret: %q at %d", m.play.program.Text, m.play.program.Cur)
 	}
 	m = toggleJQView(m)
-	if m.play.program != playMultiLineProgram || m.play.pos != pos {
-		t.Fatalf("the toggle back moved the program or the caret: %q at %d", m.play.program, m.play.pos)
+	if m.play.program.Text != playMultiLineProgram || m.play.program.Cur != pos {
+		t.Fatalf("the toggle back moved the program or the caret: %q at %d", m.play.program.Text, m.play.program.Cur)
 	}
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -1614,7 +1613,7 @@ func TestJQPlaygroundMultiLineKeepsOneLineProgram(t *testing.T) {
 	if !ok || f.Program != playMultiLineProgram {
 		t.Errorf("saved filter = %+v (ok=%v), want the program as one line", f, ok)
 	}
-	if strings.Contains(m.play.program, "\n") {
+	if strings.Contains(m.play.program.Text, "\n") {
 		t.Error("the query line must never hold a line break")
 	}
 }

@@ -31,8 +31,8 @@ func promoteApp(t *testing.T, content string) Model {
 // promoteTo types target into the open prompt (replacing the prefill) and
 // accepts it.
 func promoteTo(m Model, target string) Model {
-	m.promoteInput = target
-	m.promotePos = len([]rune(target))
+	m.promoteInput.Set(target)
+	m.promoteInput.Cur = len([]rune(target))
 	m.renderScratchPromote()
 	return drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 }
@@ -43,8 +43,8 @@ func promoteTo(m Model, target string) Model {
 func TestPromoteScratchWritesFileAndRepointsTab(t *testing.T) {
 	m := promoteApp(t, "keep me\n")
 	src := m.promotePath
-	if filepath.Base(m.promoteInput) != filepath.Base(src) {
-		t.Fatalf("prefill = %q, want the scratch's own name", m.promoteInput)
+	if filepath.Base(m.promoteInput.Text) != filepath.Base(src) {
+		t.Fatalf("prefill = %q, want the scratch's own name", m.promoteInput.Text)
 	}
 	target := filepath.Join(t.TempDir(), "pkg", "kept.sct")
 

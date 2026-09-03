@@ -167,7 +167,7 @@ func TestRegexTesterCopyAndHistory(t *testing.T) {
 	// Reopening offers it again: ↑ recalls the last pattern.
 	m = openTester(t, m)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if got := m.regexTester.pattern; got != `\d+` {
+	if got := m.regexTester.pattern.Text; got != `\d+` {
 		t.Errorf("history recall = %q, want %q", got, `\d+`)
 	}
 }

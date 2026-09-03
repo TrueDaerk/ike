@@ -74,7 +74,7 @@ func TestOpenAPIImportPromptRunsImport(t *testing.T) {
 	}
 
 	// Replace the seeded "./" with the spec's absolute path.
-	m.oapiImportInput, m.oapiImportPos = "", 0
+	m.oapiImportInput.Text, m.oapiImportInput.Cur = "", 0
 	m = typeInto(m, spec)
 	out, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = out.(Model)
@@ -180,12 +180,12 @@ func TestPasteReachesOpenAPIImportPrompt(t *testing.T) {
 	m := httpApp(t)
 	out, _ := m.Update(ImportOpenAPIMsg{})
 	m = out.(Model)
-	before := m.oapiImportInput
+	before := m.oapiImportInput.Text
 
 	out, _ = m.Update(tea.PasteMsg{Content: "openapi.yaml"})
 	m = out.(Model)
-	if m.oapiImportInput != before+"openapi.yaml" {
-		t.Fatalf("oapiImportInput = %q, want %q", m.oapiImportInput, before+"openapi.yaml")
+	if m.oapiImportInput.Text != before+"openapi.yaml" {
+		t.Fatalf("oapiImportInput = %q, want %q", m.oapiImportInput.Text, before+"openapi.yaml")
 	}
 }
 

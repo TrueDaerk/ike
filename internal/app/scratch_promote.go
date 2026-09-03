@@ -40,8 +40,7 @@ import (
 // lands it in the project root under the name it already has.
 func (m *Model) startScratchPromote(path string) {
 	m.promotePath = path
-	m.promoteInput = filepath.Base(path)
-	m.promotePos = len([]rune(m.promoteInput))
+	m.promoteInput.Set(filepath.Base(path))
 	m.promoteErr = ""
 	m.renderScratchPromote()
 	m.shell.SetSize(m.width, m.height)
@@ -54,8 +53,7 @@ func (m Model) promoteScratchOpen() bool { return m.promotePath != "" && m.shell
 // closeScratchPromote clears the prompt state and the shell.
 func (m *Model) closeScratchPromote() {
 	m.promotePath = ""
-	m.promoteInput = ""
-	m.promotePos = 0
+	m.promoteInput.Clear()
 	m.promoteErr = ""
 	m.shell.Close()
 }
@@ -63,7 +61,7 @@ func (m *Model) closeScratchPromote() {
 // renderScratchPromote (re)fills the shell for the current input; called on
 // open and after every accepted key.
 func (m *Model) renderScratchPromote() {
-	line := "> " + ui.CursorView(m.promoteInput, m.promotePos)
+	line := "> " + m.promoteInput.View()
 	errLine := ""
 	if m.promoteErr != "" {
 		errLine = "\nE: " + m.promoteErr
@@ -98,10 +96,9 @@ func (m Model) updateScratchPromote(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.closeScratchPromote()
 		return m, nil
 	case msg.Code == tea.KeyEnter:
-		return m.applyScratchPromote(strings.TrimSpace(m.promoteInput))
+		return m.applyScratchPromote(strings.TrimSpace(m.promoteInput.Text))
 	}
-	if out, pos, handled, changed := ui.EditKey(msg, m.promoteInput, m.promotePos); handled {
-		m.promoteInput, m.promotePos = out, pos
+	if handled, changed := m.promoteInput.Key(msg); handled {
 		if changed {
 			m.promoteErr = ""
 		}
@@ -184,11 +181,9 @@ func (m Model) promoteScratch(msg PromoteScratchMsg) (tea.Model, tea.Cmd) {
 // pasteScratchPromote inserts a paste into the path input at its cursor
 // (#1873), like every other overlay that owns a text field.
 func (m *Model) pasteScratchPromote(text string) bool {
-	out, pos, changed := ui.PasteText(m.promoteInput, m.promotePos, text)
-	if !changed {
+	if !m.promoteInput.Paste(text) {
 		return false
 	}
-	m.promoteInput, m.promotePos = out, pos
 	m.renderScratchPromote()
 	return true
 }
