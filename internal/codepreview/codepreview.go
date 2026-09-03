@@ -81,6 +81,25 @@ type Target struct {
 	Ranges []Range
 }
 
+// TargetFrom builds a Target from a row's path, line and its own range type,
+// via bounds — so a picker's list component (locations.Item's Ranges, or
+// whatever a future one uses) never has to hand codepreview its own Range
+// type. Every range whose bounds is not a proper (End > Start) span is
+// dropped: a picker that recorded an empty or reversed range has nothing to
+// mark, and this is the one place that filter needs writing. Shared by the
+// find-in-path overlay (allfind) and the find-usages popup (finder), whose
+// previewTarget was otherwise byte-for-byte the same function.
+func TargetFrom[T any](path string, line int, ranges []T, bounds func(T) (start, end int)) Target {
+	out := make([]Range, 0, len(ranges))
+	for _, rg := range ranges {
+		start, end := bounds(rg)
+		if end > start {
+			out = append(out, Range{Start: start, End: end})
+		}
+	}
+	return Target{Path: path, Line: line, Ranges: out}
+}
+
 // same reports whether two targets point at the same line of the same file —
 // the test Render uses to decide whether the selection moved, which resets the
 // viewport. Ranges do not participate: they describe one line's content, not
