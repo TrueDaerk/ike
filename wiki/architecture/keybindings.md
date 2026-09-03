@@ -1225,6 +1225,7 @@ JetBrains is:
 | `explorer.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
 | `file.copyPath` | `cmd+c` | fragile | `palette / context menu` | live via palette / context menu |
 | `file.move` | `f6` | delivered | `—` | live |
+| `file.openAs` | `cmd+alt+shift+o` | fragile | `palette / context menu` | live via palette / context menu |
 | `file.openInBrowser` | `alt+f2` | fragile | `palette / context menu` | live via palette / context menu |
 | `file.rename` | `shift+f6` | delivered | `—` | live |
 | `find.openInPanel` | `cmd+enter` | fragile | `ctrl+enter` | live via ctrl+enter |

@@ -230,6 +230,7 @@ func defaults() *Config {
 			// Enough to review a long agent run without unbounded growth
 			// (#2000); past it the oldest rows drop out.
 			ChangeFeedLimit: changefeed.DefaultLimit,
+			BinaryOpen:      "hex",
 			Associations:    map[string]string{},
 		},
 		UI: UI{

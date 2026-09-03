@@ -177,6 +177,8 @@ func contentTabGlyph(k pane.Kind) string {
 		return "❒ "
 	case pane.KindData:
 		return "▤ "
+	case pane.KindHex:
+		return "⬒ "
 	case pane.KindDiff:
 		return "⇄ "
 	case pane.KindHTTP:

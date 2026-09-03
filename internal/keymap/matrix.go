@@ -203,6 +203,7 @@ var reachableAlternatives = map[string]string{
 	// with a menu or context-menu home name it too.
 	"file.copyPath":       "palette / context menu",
 	"file.openInBrowser":  "palette / context menu",
+	"file.openAs":         "palette / context menu",
 	"lsp.organizeImports": "palette / context menu",
 	// #2415: the dispatcher sits on a Cmd chord like its dialect commands and
 	// escapes the same way; the Tools menu names it above them.

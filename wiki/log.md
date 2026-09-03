@@ -60,6 +60,33 @@
 - The privacy line is unchanged: query *lengths* and prefix runes, project
   *hashes*, never text or paths.
 
+## 2026-09-03 (hex viewer pane and "Open file as…" chooser, #2420)
+
+- **Binary files open in a hex viewer** (`internal/hexview`, `KindHex`)
+  instead of a text buffer: the new `hex.view` handler claims any file whose
+  8 KiB head carries a NUL byte and no other viewer's magic. The pane is the
+  classic read-only `offset | hex | ASCII` layout with 8/16/32 bytes per row
+  adapting to the pane width, list navigation (`j/k/h/l`, `g/G`,
+  `ctrl+d/u`, wheel), a byte cursor whose offset shows dec/hex in the footer,
+  and an inspector row decoding u8/i8, u16/u32/u64 LE+BE, f32/f64 and the
+  UTF-8 rune under the cursor. Reads are windowed (256 KiB `ReadAt` window),
+  so a sparse 2 GiB file opens instantly — pinned by a test.
+- **Selection and copy**: `v` anchors a range, `y`/cmd+c opens a two-row menu
+  copying it as a spaced hex string or as raw bytes (1 MiB cap) through the
+  shared clipboard + history. **Search**: `/` or cmd+f, queries as text,
+  `0x…` hex digits or `\xNN` escapes; matches are enumerated by a streaming
+  chunk scan, highlighted in both columns, and stepped with `n/N` and
+  cmd+g/cmd+shift+g via the shared `Searchable` capability.
+- **`files.binary_open` = `hex` / `editor`** (Settings → Files & Session):
+  `editor` restores the old text-buffer open, with code insight forced off
+  for the binary buffer (`editor.MarkInsightOff`: no highlighting, no LSP).
+- **`file.openAs` ("Open File As…", `cmd+alt+shift+o`** — the proposed
+  `cmd+alt+o` folds onto `lsp.organizeImports` off macOS — **palette,
+  explorer and tab context menus)** opens a locked-palette chooser forcing
+  the subject file into any viewer: Text editor (guard bypassed), Hex, Image,
+  Archive, Data, Markdown preview, Gzip. Content-contract targets validate
+  the head first; an invalid pick notifies and leaves the layout untouched.
+
 ## 2026-09-03 (pane numbers in the chrome, focus by number, #2407)
 
 - **Every visible pane wears its number.** The pane title bars carry a lazygit

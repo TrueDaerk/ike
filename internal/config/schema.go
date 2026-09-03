@@ -568,6 +568,10 @@ type History struct {
 // ChangeFeedLimit (#2000) bounds the session's external-change feed: how many
 // externally changed files watch.changeFeed lists, oldest dropped first; 0
 // turns the feed off entirely.
+// BinaryOpen (#2420) decides where a sniffed binary file (a NUL byte in the
+// first 8 KiB, no dedicated viewer) opens: "hex" (the default) uses the hex
+// viewer pane, "editor" keeps the pre-#2420 text-buffer open with code
+// insight off. The explicit "Open file as…" chooser overrides it either way.
 // Associations (#1365) maps file patterns to registered language ids —
 // `"*.mytool" = "toml"`, `"Jenkinsfile" = "groovy"` — a slot map like
 // explorer.colors: keys are single map keys (they contain dots and globs),
@@ -586,6 +590,7 @@ type Files struct {
 	LargeFileFormatKB    int               `toml:"large_file_format_kb"`
 	PersistentUndo       bool              `toml:"persistent_undo"`
 	ChangeFeedLimit      int               `toml:"change_feed_limit"`
+	BinaryOpen           string            `toml:"binary_open"`
 	Associations         map[string]string `toml:"associations"`
 }
 

@@ -517,6 +517,13 @@ func (m Model) statusLine() string {
 				}
 				left += " │ hunk " + hunk + "/" + strconv.Itoa(n)
 			}
+		case inst.Kind() == pane.KindHex:
+			// The byte cursor's offset, dec and hex (#2420) — the pane
+			// footer repeats it, but the status row is where offsets live.
+			hv := inst.Hex()
+			left += "HEX │ " + filepath.Base(hv.Path()) +
+				" │ " + strconv.FormatInt(hv.Cursor(), 10) +
+				" (0x" + strconv.FormatInt(hv.Cursor(), 16) + ")"
 		case inst.Kind() == pane.KindDebug:
 			left += "DEBUG"
 		case inst.Kind() == pane.KindProblems:

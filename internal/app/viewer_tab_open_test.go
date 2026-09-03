@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"ike/internal/explorer"
@@ -35,6 +37,18 @@ var viewerFiles = []struct {
 	{"archive", pane.KindArchive, func(t *testing.T) string {
 		return writeTestArchive(t, "src.tar", map[string]string{"a.txt": "a"})
 	}},
+	{"hex", pane.KindHex, func(t *testing.T) string { return writeTestBinary(t, "blob.bin") }},
+}
+
+// writeTestBinary writes a small sniffed-binary fixture: NUL bytes in the
+// head, no other viewer's magic, so the hex handler claims it (#2420).
+func writeTestBinary(t *testing.T, name string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte("BIN\x00\x01\x02\x03rest"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 // TestPaletteOpenViewerAsTabInFocusedPane (#1825): picking a database (or any
