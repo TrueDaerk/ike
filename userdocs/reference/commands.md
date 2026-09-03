@@ -175,6 +175,7 @@ bring their own.
 | Switch Pane Focus | `pane.switcher` | `ctrl+tab` | — | everywhere |
 | Performance HUD | `perf.hud` | `ctrl+alt+p` | — | everywhere |
 | Copy Performance Snapshot | `perf.snapshot` | — | — | everywhere |
+| Open Playground for This File | `playground.open` | `cmd+shift+j` | — | everywhere |
 | Problems | `problems.toggle` | `cmd+8` | — | everywhere |
 | Find in All Projects | `project.findInAllProjects` | `cmd+alt+shift+f` | — | everywhere |
 | Show All-Projects Search Results | `project.findInAllProjectsResults` | `cmd+alt+shift+r` | — | everywhere |
@@ -308,16 +309,24 @@ bring their own.
 | Redo | `editor.redo` | `cmd+shift+z` | `ctrl+r` | `editor` pane |
 | Redo (Chronological) | `editor.redoChrono` | — | `g+` | `editor` pane |
 | Replace in File | `editor.replace` | `cmd+r` | `:s` | `editor` pane |
+| Reverse Lines | `editor.reverseLines` | — | — | `editor` pane |
 | Select All | `editor.selectAll` | `cmd+a` | `ggVG` | `editor` pane |
 | Select to Line End | `editor.selectLineEnd` | `shift+end` | `v$` | `editor` pane |
 | Select to Line Start | `editor.selectLineStart` | `shift+home` | `v0` | `editor` pane |
 | Extend Selection | `editor.selection.extend` | `alt+up` | — | `editor` pane |
 | Shrink Selection | `editor.selection.shrink` | `alt+down` | — | `editor` pane |
+| Shuffle Lines | `editor.shuffleLines` | — | — | `editor` pane |
+| Sort Lines | `editor.sortLines` | `alt+shift+s` | `:sort` | `editor` pane |
+| Sort Lines by Length | `editor.sortLinesByLength` | — | — | `editor` pane |
+| Sort Lines (Descending) | `editor.sortLinesDescending` | — | `:sort!` | `editor` pane |
+| Sort Lines (Ignore Case) | `editor.sortLinesIgnoreCase` | — | `:sort i` | `editor` pane |
+| Sort Lines (Natural Order) | `editor.sortLinesNatural` | — | — | `editor` pane |
 | Toggle Value Under Caret | `editor.toggleValue` | — | `g!` | `editor` pane |
 | Undo | `editor.undo` | `cmd+z` | `u` | `editor` pane |
 | Undo (Chronological) | `editor.undoChrono` | — | `g-` | `editor` pane |
 | Undo Tree | `editor.undoTree` | — | — | `editor` pane |
 | Unescape Selection | `editor.unescapeSelection` | `cmd+alt+shift+u` | — | `editor` pane |
+| Remove Duplicate Lines | `editor.uniqueLines` | — | — | `editor` pane |
 | Save File | `editor.write` | `cmd+s` | `:w` | `editor` pane |
 | Save and Close | `editor.write_quit` | — | `:wq` | `editor` pane |
 | Encoding: ISO 8859-1 | `file.setEncoding.latin1` | — | — | `editor` pane |

@@ -20,6 +20,49 @@
   raw/pretty toggle (#2157) does. A legacy entry with no snapshot shows no
   request line, same gate as `CanResend`.
 
+## 2026-09-03 (one chord that opens the right playground, #2415)
+
+- **`playground.open`** ("Open Playground for This File", `cmd+shift+j`,
+  Editor context) resolves the playground from the focused buffer's language:
+  `json`/`jsonc`/`ndjson` → jq, `yaml`/`ansible` → yq, `xml`/`html` → xmq,
+  anything else → the notification `no playground for <lang>`. It only routes;
+  every branch ends in the existing `startPlayground`.
+- **The xmq route is wired ahead of its playground** through the
+  `startXMQPlayground` hook (`internal/app/playgroundopen.go`): nil means "not
+  available yet" and is answered as such instead of opening the wrong dialect;
+  a test installs a stub to cover the route today.
+- **The per-dialect commands are untouched**: `json.jqPlayground`
+  (`ctrl+alt+j`) and `yaml.yqPlayground` (`ctrl+alt+y`) keep their chords, stay
+  separately rebindable and keep counting separately in the palette's frecency.
+- **Shared-chord check recorded**: language-scoped contexts *can* share one
+  chord (`editor[json]` vs `editor[yaml]` are disjoint siblings — no conflict,
+  no shadow), so a user may write it; the defaults keep the mapping next to the
+  playgrounds instead. Written up in Keybindings & Shortcuts along with the
+  collision check for `cmd+shift+j` (free, and `cmd+alt+p` is out because it
+  folds onto the perf HUD's `ctrl+alt+p` off macOS).
+
+## 2026-09-03 (the playground's find returns to the query line, #2411)
+
+- **`esc` hands the keyboard back**: a result search opened with `cmd+f` from
+  the jq/yq playground's query line (#2383) now *ends* there — `esc` closes the
+  find widget and returns the focus to the query line with its program and
+  caret untouched, instead of stranding the user in the result buffer. A search
+  started **in** the result buffer keeps its old `esc` (close the prompt, then
+  close the mode from resting normal mode); `playState.findQuery` marks which
+  of the two it was and every other focus change clears it.
+- **The matches stay lit**: `esc` after a committed search is deliberately not
+  forwarded to the buffer — a normal-mode `esc` is vim's `:noh` — so the
+  highlights are still on screen while the program is edited again. They live
+  until the result they were found in is replaced: `syncPlayResultBuffer` calls
+  the editor's new `ClearSearch` right after `ShowReadOnly`.
+- **`cmd+g` / `cmd+shift+g` step from either focus**: the match-step chords are
+  Global bindings and would otherwise step the *hosting pane's* document, which
+  is the playground's input; `playMatchStepChord` + `stepPlayResultSearch`
+  repeat the result buffer's search instead, without taking the focus. With no
+  search committed they fall through to their ordinary meaning.
+- Dialect-neutral, as the mode is: it is one host, so jq, yq and any later
+  playground get it at once. Both cheatsheet focus tables list the chords live.
+
 ## 2026-09-03 (all-projects results in the find-in-path pane, #2413)
 
 - **No corner popup any more**: Find in All Projects (#2394) shows its

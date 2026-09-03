@@ -88,6 +88,18 @@ func (m *Model) searchNextRepeat(reverse bool, count int) {
 // to repeat.
 func (m Model) HasSearch() bool { return !m.query.Empty() }
 
+// ClearSearch drops the committed in-file search together with its highlights,
+// the way a normal-mode esc does (vim's :noh, #255) without being a key press.
+// Hosts that install fresh content into an existing view call it there: the
+// jq/yq playground re-renders its read-only result buffer on every query
+// (#2411), and matches found in the previous output must not stay painted
+// over the new one.
+func (m *Model) ClearSearch() {
+	m.query = search.Query{}
+	m.preview = search.Query{}
+	m.hlActive = false
+}
+
 // RepeatSearch steps the committed in-file search once, like n (reverse=false)
 // or N (reverse=true). It backs search.nextMatch/prevMatch when the in-file
 // search is the most recent one (#376).

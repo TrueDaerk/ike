@@ -193,6 +193,7 @@ Active when an editor pane has focus.
 | New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
 | Next bookmark | `shift+f11` | `shift+f11` | `bookmark.next` |
 | Next diagnostic | `f2` | `f2` | `lsp.nextDiagnostic` |
+| Open playground for this file | `cmd+shift+j` | `ctrl+shift+j` | `playground.open` |
 | Organize imports | `ctrl+alt+o` | `ctrl+alt+o` | `lsp.organizeImports` |
 | Parameter info | `cmd+p` | `ctrl+p` | `lsp.parameterInfo` |
 | Parameter info | `ctrl+p` | `ctrl+p` | `lsp.parameterInfo` |
@@ -220,6 +221,7 @@ Active when an editor pane has focus.
 | Show stored HTTP response | `cmd+shift+enter` | `ctrl+shift+enter` | `http.showResponse` |
 | Show stored HTTP response | `ctrl+shift+f9` | `ctrl+shift+f9` | `http.showResponse` |
 | Shrink selection | `alt+down` | `alt+down` | `editor.selection.shrink` |
+| Sort lines | `alt+shift+s` | `alt+shift+s` | `editor.sortLines` |
 | Split view down | `cmd+alt+shift+down` | `ctrl+alt+shift+down` | `editor.splitViewDown` |
 | Split view right | `cmd+alt+shift+right` | `ctrl+alt+shift+right` | `editor.splitViewRight` |
 | Toggle bookmark | `f11` | `f11` | `bookmark.toggle` |

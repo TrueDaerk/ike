@@ -544,6 +544,15 @@ var jetbrainsRows = []row{
 	// them exactly where they apply (the caret on a JSON/YAML path).
 	{"ctrl+alt+j", "json.jqPlayground", "jq playground", Global, "jq/yq playground (#2305)"},
 	{"ctrl+alt+y", "yaml.yqPlayground", "yq playground", Global, "jq/yq playground (#2305)"},
+	// The dialect dispatcher (#2415) sits in front of those two: one chord
+	// that opens whichever playground speaks the focused buffer — jq, yq or
+	// (once it lands) xmq. Editor-scoped, because "this file" is what it
+	// resolves; the dialect rows above stay Global and independently
+	// rebindable. Collision check: cmd+shift+j is unclaimed in the defaults,
+	// and so is the ctrl+shift+j it folds onto off macOS; cmd+alt+p was the
+	// first idea and is out — ctrl+alt+p is the perf HUD, which cmd+alt+p
+	// folds onto on Linux.
+	{"cmd+shift+j", "playground.open", "Open playground for this file", Editor, "Playground dispatcher (#2415)"},
 	// Test-data wizard (#2134): the scratch family's third chord, one modifier
 	// beyond cmd+shift+n's new scratch file — the wizard writes one too.
 	{"cmd+alt+shift+n", "scratch.generate", "Generate test data", Global, "Scratch files (#2305)"},
@@ -573,6 +582,11 @@ var jetbrainsRows = []row{
 	// Soft wrap is the one view toggle flipped by the hour; the other
 	// view.toggle* commands stay palette/View-menu affairs.
 	{"alt+shift+w", "view.toggleWrap", "Toggle soft wrap", Editor, "Editor (#2305)"},
+	// Sort Lines (#2417) has no JetBrains chord to mirror; cmd+alt+shift+s is
+	// already scratch.newFromSelection (#2339), so the plain sort takes the
+	// free alt+shift+s next to the other editor-scoped alt+shift keys. Its
+	// variants stay palette-only (keybind_audit_test.go).
+	{"alt+shift+s", "editor.sortLines", "Sort lines", Editor, "Editor (#2417)"},
 	// The layout family's third F12 chord: shift+f12 restores the default
 	// layout, cmd+shift+f12 hides all tool windows, alt+shift+f12 opens the
 	// saved-layout picker.

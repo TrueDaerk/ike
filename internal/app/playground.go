@@ -181,6 +181,15 @@ type playState struct {
 
 	comp *playCompState
 
+	// findQuery marks a result search that was opened from the query line
+	// (#2411): the find chord moved the keyboard into the result buffer only
+	// to search it, so esc closes the search and hands the keyboard back to
+	// the query line, where the program and its caret waited untouched —
+	// rather than leaving the user in a buffer they never asked to edit in.
+	// Any other focus change clears it (setBufFocus), so the return trip is
+	// offered exactly for the trip the chord made.
+	findQuery bool
+
 	// folds are the result's foldable nodes by header line (#2029), the
 	// lookup behind the collapsed placeholder's member count; the ranges
 	// themselves live on the result editor.
@@ -202,6 +211,10 @@ type playState struct {
 // typing, and the keyboard just went elsewhere.
 func (s *playState) setBufFocus(v bool) {
 	s.bufFocus = v
+	// A focus move is not the find chord's round trip (#2411): tab, a click
+	// or a paste all end the "esc goes back to the query line" state, and
+	// beginPlayResultSearch re-arms it right after moving the focus itself.
+	s.findQuery = false
 	if v {
 		s.comp = nil
 	}
@@ -944,6 +957,10 @@ func (m *Model) syncPlayResultBuffer() tea.Cmd {
 		return nil
 	}
 	s.resultEd.ShowReadOnly(s.dialect.ResultPath(), s.result.Text())
+	// A search over the *previous* result has nothing to say about this one
+	// (#2411): the matches the query-line round trip leaves highlighted live
+	// exactly until the buffer they were found in is replaced.
+	s.resultEd.ClearSearch()
 	s.setResultFolds(s.dialect.Folds(s.result.Text()))
 	s.resultEd.SetFocused(s.bufFocus)
 	return s.resultEd.Reparse()
@@ -1039,6 +1056,15 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// the searching continues instead of bouncing back after one match.
 	if m.playFindChord(msg) {
 		return m.beginPlayResultSearch()
+	}
+	// The match-step chords (search.nextMatch / search.prevMatch, default
+	// cmd+g / cmd+shift+g) walk the result's own search (#2411) instead of
+	// the hosting pane's, whose document is the playground's *input*. With
+	// nothing committed they fall through to their Global meaning.
+	if delta, ok := m.playMatchStepChord(msg); ok {
+		if out, cmd, handled := m.stepPlayResultSearch(delta); handled {
+			return out, cmd
+		}
 	}
 	// The open completion popup (#1979) owns its keys first: arrows step it,
 	// enter/tab accept, esc dismisses — the query line's own meaning of those
@@ -1181,6 +1207,15 @@ func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.playFindChord(msg) {
 		return m.beginPlayResultSearch()
 	}
+	// The match-step chords (search.nextMatch / search.prevMatch, default
+	// cmd+g / cmd+shift+g) walk the result's own search (#2411) instead of
+	// the hosting pane's, whose document is the playground's *input*. With
+	// nothing committed they fall through to their Global meaning.
+	if delta, ok := m.playMatchStepChord(msg); ok {
+		if out, cmd, handled := m.stepPlayResultSearch(delta); handled {
+			return out, cmd
+		}
+	}
 	switch msg.String() {
 	case "tab":
 		s.setBufFocus(false)
@@ -1196,6 +1231,12 @@ func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.openPlayCheatsheet(s.dialect)
 		return m, nil
 	case "esc":
+		// A search the find chord opened from the query line hands the
+		// keyboard back there (#2411) rather than staying in a buffer the
+		// user only came to look something up in.
+		if s.findQuery {
+			return m.endPlayFindReturnToQuery()
+		}
 		if s.resultEd.ModeName() == editor.Normal {
 			m.leavePlaygroundOnEsc()
 			return m, nil
@@ -1263,10 +1304,79 @@ func (m Model) beginPlayResultSearch() (tea.Model, tea.Cmd) {
 	if s == nil || s.resultEd == nil {
 		return m, nil
 	}
+	fromQuery := !s.bufFocus
 	s.setBufFocus(true)
+	// Remember the trip (#2411) — setBufFocus clears the flag, so it is armed
+	// after it, never before.
+	s.findQuery = fromQuery
 	var cmd tea.Cmd
 	*s.resultEd, cmd = s.resultEd.Update(editor.ActionMsg{Action: "find"})
 	return m, cmd
+}
+
+// endPlayFindReturnToQuery closes a result search opened from the query line
+// and puts the keyboard back where it came from (#2411). An open prompt (or a
+// visual selection made while searching) gets the esc first, so the editor
+// closes it exactly as it would in any buffer; with the search already
+// committed the key is *not* forwarded, because a normal-mode esc is vim's
+// :noh and would drop the very highlights the user came back to read. They
+// stay on screen until the next query re-renders the result.
+func (m Model) endPlayFindReturnToQuery() (tea.Model, tea.Cmd) {
+	s := m.play
+	if s == nil || s.resultEd == nil {
+		return m, nil
+	}
+	var cmd tea.Cmd
+	if s.resultEd.ModeName() != editor.Normal {
+		*s.resultEd, cmd = s.resultEd.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	}
+	s.setBufFocus(false)
+	return m, cmd
+}
+
+// stepPlayResultSearch repeats the result buffer's committed search by delta
+// (#2411): the match-step chords (search.nextMatch / search.prevMatch, default
+// cmd+g / cmd+shift+g) walk the matches from *either* focus, so a search
+// started on the query line is steppable without tabbing into the result. The
+// focus is deliberately not moved — stepping from the query line keeps the
+// program and its caret in hand, which is the whole point of the round trip.
+// handled is false when nothing is committed, leaving the chord its ordinary
+// Global meaning.
+func (m Model) stepPlayResultSearch(delta int) (tea.Model, tea.Cmd, bool) {
+	s := m.play
+	if s == nil || s.resultEd == nil || !s.resultEd.HasSearch() {
+		return m, nil, false
+	}
+	s.resultEd.RepeatSearch(delta < 0)
+	return m, nil, true
+}
+
+// playMatchStepChord reports the direction of the chord bound to
+// search.nextMatch (+1) or search.prevMatch (-1) — cmd+g / cmd+shift+g and
+// f3 / shift+f3 by default. They are Global bindings, so in the playground
+// they would dispatch MatchStepMsg against the *hosting pane*, which shows
+// the queried document rather than the result: recognizing them here is what
+// makes them step the search the user actually has open (#2411).
+func (m Model) playMatchStepChord(msg tea.KeyPressMsg) (int, bool) {
+	if m.bindings == nil || m.bindings.Table() == nil {
+		return 0, false
+	}
+	k, ok := keymap.FromKeyMsg(msg)
+	if !ok {
+		return 0, false
+	}
+	chord := keymap.Chord{Steps: []keymap.Key{k}}
+	b, found := m.bindings.Table().Lookup(chord, keymap.Global)
+	if !found {
+		return 0, false
+	}
+	switch b.Command {
+	case "search.nextMatch":
+		return 1, true
+	case "search.prevMatch":
+		return -1, true
+	}
+	return 0, false
 }
 
 // playEditorChord reports whether msg is the single-step chord bound to

@@ -31,6 +31,11 @@ func Defaults() []Menu {
 			{Title: "Paste", Command: "editor.paste"},
 			{Title: "Paste from History", Command: "editor.pasteFromHistory"},
 			{Title: "Duplicate Line", Command: "editor.duplicateLine"},
+			// The #2417 line-set family; the remaining sort flavours live in
+			// the palette.
+			{Title: "Sort Lines", Command: "editor.sortLines"},
+			{Title: "Remove Duplicate Lines", Command: "editor.uniqueLines"},
+			{Title: "Reverse Lines", Command: "editor.reverseLines"},
 			{Title: "Find in File", Command: "editor.find"},
 		}},
 		{Title: "View", Items: []Item{
@@ -103,6 +108,7 @@ func Defaults() []Menu {
 			{Title: "SSH Host…", Command: "terminal.ssh"},
 			{Title: "Browse SSH Host (SFTP)…", Command: "remote.browse"},
 			{Title: "Regex Tester…", Command: "tools.regexTester"},
+			{Title: "Open Playground for This File", Command: "playground.open"},
 			{Title: "jq Playground…", Command: "json.jqPlayground"},
 			{Title: "jq Playground at Cursor Path…", Command: "json.jqPlaygroundAtPath"},
 			{Title: "Saved jq Filters…", Command: "json.jqFilters"},
