@@ -8,6 +8,7 @@ import (
 
 	"ike/internal/editor/buffer"
 	"ike/internal/lsp"
+	"ike/internal/lsp/client"
 	"ike/internal/lsp/protocol"
 )
 
@@ -18,17 +19,19 @@ import (
 // Implementation requests the implementations of the symbol at an editor
 // position, gated on capability.
 func (m *Manager) Implementation(ctx context.Context, path string, pos buffer.Position) ([]protocol.Location, error) {
-	srv, doc, ok := m.docServer(path)
-	if !ok || !srv.cl.Caps().Implementation {
-		return nil, nil
-	}
-	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
-	return srv.cl.Implementation(cctx, protocol.ImplementationParams{
-		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
-		Position:     protocol.ToLSPPosition(doc.lines, pos, srv.cl.Encoding()),
+	return call(m, ctx, path, capImplementation, func(ctx context.Context, srv *server, doc *document) ([]protocol.Location, error) {
+		return srv.cl.Implementation(ctx, protocol.ImplementationParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+			Position:     protocol.ToLSPPosition(doc.lines, pos, srv.cl.Encoding()),
+		})
 	})
 }
+
+// capImplementation gates textDocument/implementation.
+func capImplementation(c client.Capabilities) bool { return c.Implementation }
+
+// capTypeHierarchy gates the three textDocument/typeHierarchy forwarders.
+func capTypeHierarchy(c client.Capabilities) bool { return c.TypeHierarchy }
 
 // ImplementationSupported reports whether path currently has a ready server
 // advertising the implementation capability (#858-style probe, so the caller
@@ -41,39 +44,27 @@ func (m *Manager) ImplementationSupported(path string) bool {
 // PrepareTypeHierarchy resolves the symbol at an editor position into
 // type-hierarchy items, gated on the server capability.
 func (m *Manager) PrepareTypeHierarchy(ctx context.Context, path string, pos buffer.Position) ([]protocol.TypeHierarchyItem, error) {
-	srv, doc, ok := m.docServer(path)
-	if !ok || !srv.cl.Caps().TypeHierarchy {
-		return nil, nil
-	}
-	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
-	return srv.cl.PrepareTypeHierarchy(cctx, protocol.TypeHierarchyPrepareParams{
-		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
-		Position:     protocol.ToLSPPosition(doc.lines, pos, srv.cl.Encoding()),
+	return call(m, ctx, path, capTypeHierarchy, func(ctx context.Context, srv *server, doc *document) ([]protocol.TypeHierarchyItem, error) {
+		return srv.cl.PrepareTypeHierarchy(ctx, protocol.TypeHierarchyPrepareParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+			Position:     protocol.ToLSPPosition(doc.lines, pos, srv.cl.Encoding()),
+		})
 	})
 }
 
 // Supertypes requests the parents of a prepared item. Path names the document
 // the hierarchy was prepared from and selects the server.
 func (m *Manager) Supertypes(ctx context.Context, path string, item protocol.TypeHierarchyItem) ([]protocol.TypeHierarchyItem, error) {
-	srv, _, ok := m.docServer(path)
-	if !ok || !srv.cl.Caps().TypeHierarchy {
-		return nil, nil
-	}
-	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
-	return srv.cl.Supertypes(cctx, protocol.TypeHierarchyItemParams{Item: item})
+	return call(m, ctx, path, capTypeHierarchy, func(ctx context.Context, srv *server, _ *document) ([]protocol.TypeHierarchyItem, error) {
+		return srv.cl.Supertypes(ctx, protocol.TypeHierarchyItemParams{Item: item})
+	})
 }
 
 // Subtypes requests the children of a prepared item.
 func (m *Manager) Subtypes(ctx context.Context, path string, item protocol.TypeHierarchyItem) ([]protocol.TypeHierarchyItem, error) {
-	srv, _, ok := m.docServer(path)
-	if !ok || !srv.cl.Caps().TypeHierarchy {
-		return nil, nil
-	}
-	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
-	return srv.cl.Subtypes(cctx, protocol.TypeHierarchyItemParams{Item: item})
+	return call(m, ctx, path, capTypeHierarchy, func(ctx context.Context, srv *server, _ *document) ([]protocol.TypeHierarchyItem, error) {
+		return srv.cl.Subtypes(ctx, protocol.TypeHierarchyItemParams{Item: item})
+	})
 }
 
 // TypeHierarchySupported reports whether path currently has a ready server
