@@ -332,8 +332,12 @@ func dispatchWS(ctx context.Context, key, target string, resolved *httpfile.Requ
 		warnings = append(warnings, fmt.Sprintf("websocket session ended (%v)", err))
 	}
 
+	// A late interactive Send that passed the closed check may still be inside
+	// emit; the transcript lock serializes it against the sink close.
+	session.emitMu.Lock()
 	body, spool, total := session.sink.close()
 	warnings = append(warnings, session.sink.warnings()...)
+	session.emitMu.Unlock()
 	return &Response{
 		Status:     handshake.Status,
 		StatusCode: handshake.StatusCode,
