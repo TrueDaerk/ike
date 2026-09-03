@@ -1,10 +1,10 @@
 ---
 type: process
 title: Change Workflow
-description: The lifecycle of every change — issue first, issue branch, version bump, PR, merge, branch cleanup, plus the settings-UI, default-keybind and span-family-ledger obligations.
+description: The lifecycle of every change — issue first, issue branch, version bump, PR, merge, branch cleanup, plus the settings-UI, default-keybind, shared-building-block and span-family-ledger obligations.
 tags: [process, git, release]
 resource: internal/version/version.go
-timestamp: 2026-09-01T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Change Workflow
@@ -64,6 +64,22 @@ After changing the default table, refresh the generated documentation in the sam
 matrix embedded in [Keybindings & Shortcuts](/architecture/keybindings.md). New bindings show
 up in the cheatsheet (`f1`) and the palette's shortcut column automatically — both read the
 live binding table.
+
+## New surfaces reuse the shared building blocks
+
+A pane, prompt, list, search line or tool window is built from the pieces in
+[Shared Building Blocks](/architecture/shared-building-blocks.md) — `ui.Field` for a
+one-line input, `ui.LineSearch` for an in-pane `/` search, `ui.ClampWindow` and the
+list-mouse helpers for a cursor-and-window list, `togglePanel` / `openToolPane` for a tool
+window, and so on. The 0500 sweep (#2458) exists because each of those had been copied a
+dozen times, and each copy drifted: a missing paste path here, a missing caret there, four
+meanings of `esc`.
+
+Three sweep tests in `internal/ui` (`inputsweep_test.go`, `scrollsweep_test.go`,
+`searchsweep_test.go`) fail the build on the shape of a hand-rolled copy outside
+`internal/ui`. A surface the block genuinely does not fit carries an allowlist entry **with a
+reason**; a companion test fails when the entry has gone stale. Adopting a block that changes
+what the user sees is recorded in the pane's concept doc and in `wiki/log.md`.
 
 ## Languages account for every span family
 

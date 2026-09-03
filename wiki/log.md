@@ -1,5 +1,14 @@
 # Log
 
+## 2026-09-03 (shared building blocks catalog, #2479)
+
+- **One catalog for the 0500 sweep.** `wiki/architecture/shared-building-blocks.md`
+  lists every helper the consolidation sweep (Epic #2458) produced — `ui.Field`,
+  `ui.LineSearch`, the list window layer, the `internal/app` tool-window wiring,
+  `hiertree`, `gridview`, the settings page helpers, the LSP `call` forwarder and the
+  leaf packages — with the guard test that enforces each and the concept doc that
+  explains it. `CLAUDE.md` and the change workflow carry the matching working agreement.
+
 ## 2026-09-03 (shared in-pane search, #2461)
 
 - **`ui.LineSearch`.** The seven in-pane `/` searches (diff, markdown

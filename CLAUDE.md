@@ -34,6 +34,14 @@ It supports windowing, tabs, panes and resizing / moving any pane to another loc
   audited stand-in/hint family, either offer it or carry a justified entry in the audit
   ledger `cmd/ike/spanfamily_audit_test.go`, whose test fails otherwise
   (see [wiki/process/change-workflow.md](wiki/process/change-workflow.md)).
+- **Reuse the shared building blocks:** a new pane, prompt, list, search line or tool window is
+  built from the catalog in
+  [wiki/architecture/shared-building-blocks.md](wiki/architecture/shared-building-blocks.md)
+  (`ui.Field`, `ui.LineSearch`, `ui.ClampWindow` + list-mouse helpers, `togglePanel` /
+  `openToolPane`, `hiertree`, `gridview`, …). The sweep guards in `internal/ui`
+  (`inputsweep_test.go`, `scrollsweep_test.go`, `searchsweep_test.go`) fail on a hand-rolled
+  copy; an exemption needs an allowlist entry with a reason
+  (see [wiki/process/change-workflow.md](wiki/process/change-workflow.md)).
 - **Keep the wiki current:** when a change alters behavior the wiki documents, update the matching
   concept doc in the same change (see [wiki/process/wiki-format.md](wiki/process/wiki-format.md)
   for the OKF format rules).
