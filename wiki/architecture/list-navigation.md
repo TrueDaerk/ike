@@ -4,7 +4,7 @@ title: Selection-List Navigation
 description: The shared cursor semantics every selectable list obeys — single steps wrap around, page keys jump one visible page and clamp, home/end go to the extremes, and the scroll window follows the selection.
 resource: internal/ui/listnav.go
 tags: [architecture, ui, lists, navigation, keys, reusable]
-timestamp: 2026-08-28T12:00:00Z
+timestamp: 2026-09-03T12:00:00Z
 ---
 
 # Selection-List Navigation
@@ -103,9 +103,10 @@ knows one way or another:
   the target *render* row, so file-header rows count towards the screenful.
 - Panes with a body area (Problems, Usages, Structure, Breakpoints, the
   debugger columns, the VCS changes list) pass their `bodyHeight()`.
-- Overlays derive it from the terminal height (`undotree`, `callhier`,
-  `typehier`) — known before the first render, so a page key works on a list
-  that has never been drawn.
+- Overlays derive it from the terminal height (`undotree`, and `callhier` /
+  `typehier` passing it into the [shared hierarchy tree](./hiertree.md)) —
+  known before the first render, so a page key works on a list that has
+  never been drawn.
 - Settings pages embed `navRows`, which records the height their `View` was
   asked to render into; `navPage` (10) is the fallback until the first render.
 - Pickers hosted in the floating shell read `ui.Floating.ViewportRows()` via

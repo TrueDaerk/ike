@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-08-30T12:00:00Z
+timestamp: 2026-09-03T12:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -445,7 +445,9 @@ quick mode; the pane is the worklist.
 `H` — lowercase `h` is the notification history) sends
 `textDocument/prepareCallHierarchy` from the cursor and opens the prepared
 items in the call-hierarchy overlay (`internal/callhier`): a centered modal
-rendering callers (default) or callees as a lazily-expanding tree. Expanding a
+rendering callers (default) or callees as a lazily-expanding tree — the
+[shared hierarchy tree](./hiertree.md) (`internal/hiertree`, #2465), the
+overlay keeping only its messages, the direction and the chrome. Expanding a
 node runs the bridge-built `Fetch` continuation (`callHierarchy/incomingCalls`
 / `outgoingCalls`); the reply arrives as a `CallHierarchyCallsMsg` keyed by
 request id, so stale replies (after a direction toggle) fall on the floor.
@@ -489,8 +491,9 @@ toast wording). Three surfaces:
   navigates via `openPathAt`, several open the locked refs picker with a
   direction-specific placeholder; empty toasts in the bridge (#858).
 - `lsp.typeHierarchy` (default `ctrl+h`) — the prepared roots open the
-  type-hierarchy overlay (`internal/typehier`, the callhier pattern verbatim
-  with `tab` toggling supertypes/subtypes); expansion replies arrive as
+  type-hierarchy overlay (`internal/typehier`, the same [shared hierarchy
+  tree](./hiertree.md) as callhier with `tab` toggling supertypes/subtypes);
+  expansion replies arrive as
   `TypeHierarchyItemsMsg` keyed by request id, stale ones fall on the floor.
 - **Gutter marks (#1453)** — the passive decoration: the bridge schedules a
   debounced (750 ms), per-path-coalesced `InheritanceMarks` batch on open and

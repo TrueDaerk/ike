@@ -33,6 +33,7 @@ Component-level concepts for the IKE codebase.
 * [External-Change Feed](/architecture/change-feed.md) - session-scoped list of files changed by other processes (coding agents, git, formatters) with a mini-diff per entry and open / reload / revert actions; own saves suppressed, noise filtered by the watcher's own ignore rules (#2000)
 * [Settings UI & Menu Bar](/architecture/settings-ui.md) - menu bar over the command registry; settings panel with schema-driven forms and config write-back (Roadmap 0160)
 * [Completion Engine](/architecture/completion.md) - multi-source autocomplete: LSP + local index sources as tagged batches, editor-side merge with priority de-dup and stable selection (Roadmap 0410)
+* [Hierarchy Tree](/architecture/hiertree.md) - the lazily-expanding tree the call-hierarchy and type-hierarchy overlays share: node shape, expand/collapse/parent-walk keys, stale-reply bookkeeping, row renderer (#2465)
 * [LSP & Language Intelligence](/architecture/lsp.md) - JSON-RPC client over a server's stdio, manager per (language, root), editor-driven sync, diagnostics/completion/hover/go-to-definition (Roadmap 0100)
 * [Intention Actions](/architecture/intention-actions.md) - alt+enter popup: LSP code actions merged with built-in caret-dependent intentions via a plugin-registered provider seam, anchored at the caret (#2020)
 * [Structure View](/architecture/structure-view.md) - Structure tool pane: the focused buffer's LSP documentSymbol tree, cursor auto-follow, enter/double-click navigates via the open funnel (#1025)
