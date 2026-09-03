@@ -704,16 +704,7 @@ func truncate(s string, max int) string {
 
 // scrollToCursor keeps the selected row inside the visible window.
 func (m *Model) scrollToCursor() {
-	height := m.bodyHeight()
-	if m.cursor < m.top {
-		m.top = m.cursor
-	}
-	if m.cursor >= m.top+height {
-		m.top = m.cursor - height + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	m.top = ui.ScrollToShow(m.top, m.cursor, m.bodyHeight(), len(m.rows))
 }
 
 // bodyHeight is the room below the header and selector lines.

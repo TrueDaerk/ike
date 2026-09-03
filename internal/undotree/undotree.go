@@ -241,16 +241,8 @@ func (m *Model) View() string {
 	rows := []string{title, ""}
 
 	listH := m.listHeight()
-	// Keep the selection in the window.
-	if m.cursor < m.top {
-		m.top = m.cursor
-	}
-	if m.cursor >= m.top+listH {
-		m.top = m.cursor - listH + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	// Keep the selection in the window (#2462).
+	m.top = ui.ScrollToShow(m.top, m.cursor, listH, len(m.rows))
 	m.listTop = len(rows)
 	m.listRows = listH
 	for i := m.top; i < m.top+listH && i < len(m.rows); i++ {
