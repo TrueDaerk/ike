@@ -343,8 +343,10 @@ padding, and title row) before calling the explorer:
   ellipsis (#1035; a VCS status letter takes that cell instead).
 - **Right-click** on a node selects it and opens a floating context menu
   (#1040, the #1020 `menu.Context` shell): New File/Directory, Rename,
-  Delete, Refresh, Expand All, Reveal — entries dispatch the registered
-  explorer commands, availability/shortcuts resolve like the menu bar.
+  Delete, Copy Path(s), Open in Browser, Open File As… (the #2420 viewer
+  chooser, see [hex viewer](./hex-viewer.md)), Refresh, Expand All, Reveal —
+  entries dispatch the registered explorer commands, availability/shortcuts
+  resolve like the menu bar.
 - **Left press** on a scrollbar track jumps that axis proportionally; a press
   on the **vertical thumb grabs it** and dragging follows the pointer
   (#1036, `dragExplScroll`, mirroring the editor scrollbar #1022).

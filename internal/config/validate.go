@@ -74,6 +74,8 @@ var (
 	sortModes   = map[string]bool{"name": true, "type": true, "size": true, "modified": true}
 	logLevels   = map[string]bool{"error": true, "warn": true, "info": true, "debug": true}
 	reloadModes = map[string]bool{"clean": true, "never": true}
+	// binaryOpenModes are the files.binary_open targets (#2420).
+	binaryOpenModes = map[string]bool{"hex": true, "editor": true}
 	saveModes   = map[string]bool{"off": true, "focus": true, "idle": true}
 	severities  = map[string]bool{"info": true, "warn": true, "error": true}
 	// recentRankings are the palette.recent.ranking values (#2399).
@@ -373,6 +375,12 @@ func validate(c *Config) []Diagnostic {
 	if !reloadModes[c.Files.AutoReload] {
 		diags = append(diags, Diagnostic{Field: "files.auto_reload", Message: fmt.Sprintf("unknown mode %q, using \"clean\"", c.Files.AutoReload)})
 		c.Files.AutoReload = "clean"
+	}
+	// files.binary_open (#2420) routes sniffed binaries to the hex viewer or
+	// the text editor.
+	if !binaryOpenModes[c.Files.BinaryOpen] {
+		diags = append(diags, Diagnostic{Field: "files.binary_open", Message: fmt.Sprintf("unknown mode %q, using \"hex\"", c.Files.BinaryOpen)})
+		c.Files.BinaryOpen = "hex"
 	}
 	// run.placement (#1905) names the Run tool's home position — the same
 	// edges [[tools.custom]] placement uses, plus in_pane for a tab in the

@@ -41,6 +41,7 @@ import (
 	"ike/internal/config"
 	"ike/internal/coverage"
 	"ike/internal/dataview"
+	"ike/internal/hexview"
 	"ike/internal/debug"
 	"ike/internal/debugdoctor"
 	"ike/internal/debugpanel"
@@ -239,6 +240,9 @@ type Model struct {
 	// set as a merged timeline (#1996), so re-opening the tab stays quiet.
 	// A map for the same reason largeToasted is one.
 	logsetToasted map[string]bool
+	// openAsPath is the subject the open "Open file as…" chooser acts on
+	// (#2420): remembered when the chooser opens, read when a row activates.
+	openAsPath string
 	host          *host.Host
 	reg           *registry.Registry
 	// toasts is the active notification stack (Roadmap 0130): drained from the
@@ -1940,6 +1944,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below re-listing the archive file (#1762)
 		} else if ids[key].Kind == "data" {
 			continue // restored below re-opening the database file (#1764)
+		} else if ids[key].Kind == "hex" {
+			continue // restored below re-opening the file for windowed reads (#2420)
 		} else if ids[key].Kind == "diff" {
 			continue // restored below re-reading both files (#60; fix #490)
 		} else if ids[key].Kind == "vcs" {
@@ -2221,6 +2227,13 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// A data viewer restores by re-opening the database (#1764); a
 			// vanished file restores as the pane's own error notice.
 			panes.AddDataKey(key, id.Path)
+			continue
+		}
+		if id := ids[key]; id.Kind == "hex" {
+			// A hex viewer restores by re-opening the file for windowed
+			// reads (#2420); a vanished file restores as the pane's own
+			// error notice.
+			panes.AddHexKey(key, id.Path)
 			continue
 		}
 		if id := ids[key]; id.Kind == "es" {
@@ -3014,6 +3027,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	scr := palette.NewScratchMode(scratchEntries)
 	scrNew := scratchNewMode{}
 	bufLang := bufferLangMode{} // "Treat Buffer as …" language picker (#2033)
+	openAs := openAsMode{}      // "Open file as …" viewer chooser (#2420)
 	// Classes are their own search-everywhere category (#1849), ranked right
 	// after the commands: a class is what users most often search for by name,
 	// and its own per-kind cap keeps it out of the workspace-symbol crowd. Both
@@ -3024,7 +3038,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, projPeek, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, ssh, remoteHosts, playFilters, playCheat, bufLang)
+	return palette.New(pcfg, cmd, file, dir, proj, projPeek, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, ssh, remoteHosts, playFilters, playCheat, bufLang, openAs)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -4966,6 +4980,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// #2339): name a project path for a scratch, then move it there.
 		return m.promoteScratch(msg)
 
+	case ShowOpenAsMsg:
+		// file.openAs (chord / palette / context menus, #2420): pick the
+		// viewer the current subject opens with, locked to the chooser mode.
+		m.openFileAsPicker()
+		return m, nil
+
+	case OpenAsMsg:
+		// One picked target for the remembered subject path (#2420).
+		return m.openFileAs(msg)
+
 	case ShowBufferLangMsg:
 		// editor.setBufferLanguage (alt+enter intention / palette, #2033):
 		// pick the language a file-less buffer is treated as, locked to the
@@ -6794,6 +6818,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		model, cmd, _ := m.handleArchviewMsg(msg)
 		return model, cmd
 
+	case OpenHexMsg:
+		// hex.view (#2420): a sniffed binary opens as bytes, never as a raw
+		// text buffer — unless files.binary_open says the editor keeps it.
+		// The explicit "Open file as… → Hex" pick ignores that redirect.
+		if !msg.Forced && m.binaryOpensInEditor() {
+			return m.openPathMode(msg.Path, false, true)
+		}
+		m.openHexPane(msg.Path)
+		return m, nil
+
+	case hexview.CopyMsg:
+		// y / enter in the hex viewer's copy menu (#2420).
+		m.copyToClipboard(msg.Text)
+		m.host.Notify(host.Info, "copied "+msg.What)
+		return m, nil
+
 	case OpenDataMsg:
 		// data.view (#1764): a database file opens as a table browser,
 		// never as a raw text buffer. The database itself opens in the
@@ -8544,6 +8584,14 @@ func (m Model) openPathInEditor(path string) (tea.Model, tea.Cmd) {
 // openPathWith is the shared body of openPath / openPathFocused; the caller
 // has already decided the viewer open target in m.viewerTabHost.
 func (m Model) openPathWith(path string, newPane bool) (tea.Model, tea.Cmd) {
+	return m.openPathMode(path, newPane, false)
+}
+
+// openPathMode is openPathWith with the "Open file as… → Text editor" escape
+// hatch (#2420): forceEditor skips handler resolution entirely, so any file —
+// a database, an image, a sniffed binary — lands in a text buffer, with code
+// insight off when its content is binary.
+func (m Model) openPathMode(path string, newPane, forceEditor bool) (tea.Model, tea.Cmd) {
 	// Every open source spells paths differently (explorer: absolute, palette
 	// modes: root-relative) — canonicalize first so the same file always
 	// lands on its existing tab instead of a duplicate buffer (#272).
@@ -8554,7 +8602,7 @@ func (m Model) openPathWith(path string, newPane bool) (tea.Model, tea.Cmd) {
 		m.recordNavFrom(cur)
 	}
 	var cmds []tea.Cmd
-	if h, ok := m.reg.ResolveHandler(path, readHead(path)); ok {
+	if h, ok := m.reg.ResolveHandler(path, readHead(path)); ok && !forceEditor {
 		cmds = append(cmds, h.Open(m.host, path))
 	} else {
 		m.viewerTabHost = "" // no handler, so no viewer open to honour it (#1825)
@@ -8579,6 +8627,18 @@ func (m Model) openPathWith(path string, newPane bool) (tea.Model, tea.Cmd) {
 			// loader (#2177); the wiring below is that load's wiring, so the
 			// lazy drain must not repeat it.
 			m.forgetLazyLoad(path)
+			if forceEditor && isBinary(readHead(path)) {
+				// The explicit "as text" pick of a binary file keeps this
+				// buffer's insight off (#2420): no highlighting, no LSP —
+				// and its own notice instead of the large-file toast.
+				if ed := m.activeWS().Panes.Get(key).Editor(); ed != nil {
+					ed.MarkInsightOff()
+					if !m.largeToasted[path] {
+						m.largeToasted[path] = true
+						m.host.Notify(host.Info, "binary file opened as text: code insight is off")
+					}
+				}
+			}
 			m.notifyLargeFile(m.activeWS().Panes.Get(key).Editor())
 			// A log file with rotated siblings offers its merged timeline
 			// (#1996) — nothing else says that the file next to this one holds
@@ -9212,7 +9272,9 @@ func readHead(path string) []byte {
 		return nil
 	}
 	defer f.Close()
-	buf := make([]byte, 512)
+	// 8 KiB: enough for every magic sniff and for the hex handler's binary
+	// check — a NUL in the first 8 KiB (#2420) — in one read.
+	buf := make([]byte, 8192)
 	n, _ := f.Read(buf)
 	return buf[:n]
 }
@@ -10886,6 +10948,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Archive().Wheel(lines)
 			}
+		case pane.KindHex:
+			// The wheel scrolls the hex rows (#2420); the byte cursor is
+			// dragged along so it stays inside the visible window.
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Hex().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Hex().Wheel(lines)
+			}
 		case pane.KindRemote:
 			// The wheel scrolls the remote browser's entry list (#2259),
 			// exactly like the archive viewer it borrows its tree shape from.
@@ -12241,6 +12312,7 @@ func tabContextItems(pinned bool) []menu.Item {
 		{Title: "Close Others", Command: "editor.tab.closeOthers"},
 		{Title: pinTitle, Command: "editor.tab.togglePin"},
 		{Title: "Reopen Closed", Command: "editor.tab.reopenClosed"},
+		{Title: "Open File As…", Command: "file.openAs"},
 	}
 }
 
@@ -12268,6 +12340,7 @@ func explorerContextItems() []menu.Item {
 		{Title: "Copy Path", Command: "file.copyPath"},
 		{Title: "Copy Relative Path", Command: "file.copyRelPath"},
 		{Title: "Open in Browser", Command: "file.openInBrowser"},
+		{Title: "Open File As…", Command: "file.openAs"},
 		{Title: "Refresh", Command: "explorer.refresh"},
 		{Title: "Expand All", Command: "explorer.expandAll"},
 		{Title: "Reveal Open File", Command: "explorer.reveal"},
@@ -13294,7 +13367,7 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 			} else {
 				title = m.terminalTitle(inst)
 			}
-		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindES, pane.KindDiff, pane.KindRemote:
+		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindHex, pane.KindES, pane.KindDiff, pane.KindRemote:
 			title = contentPaneTitle(inst)
 		case pane.KindVCS:
 			title = "VCS"
@@ -13415,6 +13488,8 @@ func contentPaneTitle(inst *pane.Instance) string {
 		return "ARCHIVE " + baseName(inst.Archive().Path())
 	case pane.KindData:
 		return "DATA " + baseName(inst.Data().Path())
+	case pane.KindHex:
+		return "HEX " + baseName(inst.Hex().Path())
 	case pane.KindES:
 		return "ES " + inst.ES().Endpoint()
 	case pane.KindRemote:

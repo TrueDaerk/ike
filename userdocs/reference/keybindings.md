@@ -94,6 +94,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Next tab | `cmd+ctrl+right` | `ctrl+right` | `editor.tab.next` |
 | Next tab | `ctrl+alt+right` | `ctrl+alt+right` | `editor.tab.next` |
 | Notification history | `cmd+alt+n` | `ctrl+alt+n` | `notifications.history` |
+| Open file as… | `cmd+alt+shift+o` | `ctrl+alt+shift+o` | `file.openAs` |
 | Open in browser | `alt+f2` | `alt+f2` | `file.openInBrowser` |
 | Open menu bar | `f10` | `f10` | `menu.open` |
 | Performance HUD | `ctrl+alt+p` | `ctrl+alt+p` | `perf.hud` |

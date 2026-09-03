@@ -22,6 +22,7 @@ import (
 	"ike/internal/espane"
 	"ike/internal/explorer"
 	"ike/internal/ghissues"
+	"ike/internal/hexview"
 	"ike/internal/host"
 	"ike/internal/httppane"
 	"ike/internal/imgview"
@@ -132,6 +133,9 @@ const (
 	// bottom-split panel listing the project's declared dependencies per
 	// manifest with latest versions and vulnerabilities, under key "deps".
 	KindDeps
+	// KindHex is a read-only hex viewer pane (#2420); any number may exist,
+	// each bound to one file, rendered offset|hex|ASCII over windowed reads.
+	KindHex
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -159,6 +163,7 @@ const (
 	ctxRemote   = "remote"
 	ctxLSPDoc   = "lspdoctor"
 	ctxDeps     = "deps"
+	ctxHex      = "hex"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -186,6 +191,7 @@ type Instance struct {
 	mg   merge.Model
 	av   archview.Model
 	dv   dataview.Model
+	hv   hexview.Model
 	es   espane.Model
 	tr   testresults.Model
 	gi   ghissues.Model
@@ -331,6 +337,8 @@ func (i *Instance) ContextID() string {
 		return ctxDeps
 	case KindRemote:
 		return ctxRemote
+	case KindHex:
+		return ctxHex
 	}
 	return ctxEditor
 }
@@ -370,6 +378,10 @@ func (i *Instance) Archive() *archview.Model { return &i.av }
 // Data returns the underlying data viewer model (#1764). It is only valid
 // for a data instance; callers gate on Kind first.
 func (i *Instance) Data() *dataview.Model { return &i.dv }
+
+// Hex returns the underlying hex viewer model (#2420). It is only valid for
+// a hex instance; callers gate on Kind first.
+func (i *Instance) Hex() *hexview.Model { return &i.hv }
 
 // ES returns the underlying Elasticsearch console model (#1927). It is only
 // valid for an es instance; callers gate on Kind first.
@@ -729,7 +741,7 @@ func (i *Instance) AddTerminalTab(term terminal.Model) *terminal.Model {
 // treats it as the singleton "http" tool pane.
 func KindTabbable(k Kind) bool {
 	switch k {
-	case KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindES:
+	case KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindES, KindHex:
 		return true
 	}
 	return false
@@ -784,6 +796,8 @@ func (i *Instance) DetachContent() (*Instance, bool) {
 		nested.dv, i.dv = i.dv, dataview.Model{}
 	case KindES:
 		nested.es, i.es = i.es, espane.Model{}
+	case KindHex:
+		nested.hv, i.hv = i.hv, hexview.Model{}
 	default:
 		return nil, false
 	}
@@ -856,6 +870,11 @@ func (i *Instance) ContentTitle() string {
 			return filepath.Base(p)
 		}
 		return "data"
+	case KindHex:
+		if p := i.hv.Path(); p != "" {
+			return filepath.Base(p)
+		}
+		return "hex"
 	case KindES:
 		if ep := i.es.Endpoint(); ep != "" {
 			return ep
@@ -890,6 +909,9 @@ func (i *Instance) releaseContent() {
 		i.dv.Close()
 	case KindES:
 		i.es.Close()
+	case KindHex:
+		// Releases the windowed-read file handle (#2420).
+		i.hv.Close()
 	case KindRemote:
 		// Ends the SFTP session and its ssh subprocess (#1997).
 		i.rm.Close()
@@ -1198,6 +1220,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.av.SetSize(w, h)
 	case KindData:
 		i.dv.SetSize(w, h)
+	case KindHex:
+		i.hv.SetSize(w, h)
 	case KindES:
 		i.es.SetSize(w, h)
 	case KindTests:
@@ -1260,6 +1284,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.av.SetFocused(f)
 	case KindData:
 		i.dv.SetFocused(f)
+	case KindHex:
+		i.hv.SetFocused(f)
 	case KindES:
 		i.es.SetFocused(f)
 	case KindTests:
@@ -1337,6 +1363,8 @@ func (i *Instance) View() string {
 		return i.av.View()
 	case KindData:
 		return i.dv.View()
+	case KindHex:
+		return i.hv.View()
 	case KindES:
 		return i.es.View()
 	case KindTests:
@@ -1407,6 +1435,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.av.Update(msg)
 	case KindData:
 		cmd = i.dv.Update(msg)
+	case KindHex:
+		cmd = i.hv.Update(msg)
 	case KindES:
 		cmd = i.es.Update(msg)
 	case KindTests:
@@ -1596,6 +1626,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.av.SetPalette(p)
 	case KindData:
 		i.dv.SetPalette(p)
+	case KindHex:
+		i.hv.SetPalette(p)
 	case KindES:
 		i.es.SetPalette(p)
 	case KindTests:

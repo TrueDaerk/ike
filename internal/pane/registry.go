@@ -18,6 +18,7 @@ import (
 	"ike/internal/editor/register"
 	"ike/internal/espane"
 	"ike/internal/ghissues"
+	"ike/internal/hexview"
 	"ike/internal/host"
 	"ike/internal/httppane"
 	"ike/internal/imgview"
@@ -63,6 +64,10 @@ const archiveKeyBase = "archive"
 // dataKeyBase is the key of the first data viewer; later ones append ":N"
 // (#1764).
 const dataKeyBase = "data"
+
+// hexKeyBase is the key of the first hex viewer; later ones append ":N"
+// (#2420).
+const hexKeyBase = "hex"
 
 // esKeyBase prefixes Elasticsearch console keys (#1927): one console per
 // configured endpoint, keyed "es:<endpoint>" — the endpoint name is the
@@ -136,6 +141,7 @@ type Registry struct {
 	merges    int      // count of merge views ever allocated, for key minting
 	archives  int      // count of archive viewers ever allocated, for key minting
 	datas     int      // count of data viewers ever allocated, for key minting
+	hexes     int      // count of hex viewers ever allocated, for key minting
 	// loaded collects the files deferred tabs (#2177) read since the last
 	// drain, so the root model can give each the wiring a freshly opened
 	// buffer gets. It lives on the registry rather than the model because
@@ -259,6 +265,8 @@ func (r *Registry) advancePastKey(key string) {
 		advanceCounter(key, archiveKeyBase, &r.archives)
 	case dataKeyBase:
 		advanceCounter(key, dataKeyBase, &r.datas)
+	case hexKeyBase:
+		advanceCounter(key, hexKeyBase, &r.hexes)
 	default:
 		r.advancePast(key)
 	}
@@ -522,6 +530,35 @@ func (r *Registry) AddDataKey(key, path string) *Instance {
 		}
 	} else if r.datas < 1 {
 		r.datas = 1
+	}
+	return inst
+}
+
+// AddHexView creates a hex viewer instance bound to the file at path,
+// returning the new instance's key ("hex", then "hex:N") (#2420). The file
+// opens for windowed reads at construction; a failure surfaces as the pane's
+// own error notice.
+func (r *Registry) AddHexView(path string) string {
+	r.hexes++
+	key := suffixedKey(hexKeyBase, r.hexes)
+	inst := &Instance{key: key, kind: KindHex, cfg: r.cfg, pal: r.pal}
+	inst.hv = hexview.New(key, path, r.pal)
+	r.put(inst)
+	return key
+}
+
+// AddHexKey recreates a hex viewer under an exact key, used by layout
+// restore. The minting counter advances past the key.
+func (r *Registry) AddHexKey(key, path string) *Instance {
+	inst := &Instance{key: key, kind: KindHex, cfg: r.cfg, pal: r.pal}
+	inst.hv = hexview.New(key, path, r.pal)
+	r.put(inst)
+	if len(key) > len(hexKeyBase)+1 && key[:len(hexKeyBase)+1] == hexKeyBase+":" {
+		if v, err := strconv.Atoi(key[len(hexKeyBase)+1:]); err == nil && v > r.hexes {
+			r.hexes = v
+		}
+	} else if r.hexes < 1 {
+		r.hexes = 1
 	}
 	return inst
 }
@@ -964,6 +1001,9 @@ func (r *Registry) mintContentKey(kind Kind) string {
 	case KindData:
 		r.datas++
 		return suffixedKey(dataKeyBase, r.datas)
+	case KindHex:
+		r.hexes++
+		return suffixedKey(hexKeyBase, r.hexes)
 	}
 	return ""
 }
@@ -998,6 +1038,8 @@ func (r *Registry) NewContentPane(kind Kind, path, path2, rev, rev2 string) *Ins
 		inst.av = archview.New(key, path, r.pal)
 	case KindData:
 		inst.dv = dataview.New(key, path, r.pal)
+	case KindHex:
+		inst.hv = hexview.New(key, path, r.pal)
 	case KindDiff:
 		if rev != "" || rev2 != "" {
 			return r.newDiffRevInstance(key, path, path2, rev, rev2)

@@ -105,6 +105,7 @@ bring their own.
 | Copy Relative Path | `file.copyRelPath` | — | — | everywhere |
 | Show Local History | `file.localHistory` | — | — | everywhere |
 | Move File | `file.move` | `f6` | — | everywhere |
+| Open File As… | `file.openAs` | `cmd+alt+shift+o` | — | everywhere |
 | Open in Browser | `file.openInBrowser` | `alt+f2` | — | everywhere |
 | Open File… | `file.openPath` | — | — | everywhere |
 | Rename File | `file.rename` | `shift+f6` | — | everywhere |

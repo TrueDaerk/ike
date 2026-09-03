@@ -634,6 +634,11 @@ var jetbrainsRows = []row{
 	// focused pane, so one row serves the editor and the explorer — exactly the
 	// two places the menu offers the action.
 	{"alt+f2", "file.openInBrowser", "Open in browser", Global, "App (#2365)"},
+	// Open file as… (#2420): the chooser forcing any file into any viewer.
+	// The issue's proposed cmd+alt+o folds to ctrl+alt+o off macOS, which
+	// lsp.organizeImports owns — the shift layer keeps one spelling that is
+	// free on every platform.
+	{"cmd+alt+shift+o", "file.openAs", "Open file as…", Global, "App (#2420)"},
 }
 
 // darwinRows are default bindings that only ship on macOS: chords whose

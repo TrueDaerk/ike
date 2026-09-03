@@ -565,6 +565,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("nav.pinGoto3", "Go to Pinned File 3", PinJumpMsg{Slot: 3}),
 			appCommand("nav.pinGoto4", "Go to Pinned File 4", PinJumpMsg{Slot: 4}),
 			appCommand("file.openPath", "Open File…", OpenFilePathMsg{}),
+			appCommand("file.openAs", "Open File As…", ShowOpenAsMsg{}),
 			appCommand("file.rename", "Rename File", RenameFileMsg{}),
 			appCommand("file.move", "Move File", MoveFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),

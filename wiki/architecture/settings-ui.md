@@ -222,7 +222,8 @@ any entry whose key the typed schema does not expose (no dead keys).
   (#2186), project directory, recent-project
   and background-workspace caps plus the background LSP timeout (#1663),
   `files.watch`, `files.auto_reload` (clean|never, #81),
-  `files.persistent_undo` (undo survives restarts, #148).
+  `files.persistent_undo` (undo survives restarts, #148),
+  `files.binary_open` (hex|editor, #2420: where sniffed binaries open).
 - **Backup** — crash recovery on/off (`backup.enable`; disabling purges existing
   snapshots), snapshot debounce (`backup.debounce_ms`), snapshot max age
   (`backup.max_age_days`) (#167, see [crash recovery](./crash-recovery.md)).

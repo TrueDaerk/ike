@@ -1368,6 +1368,11 @@ func (m Model) DocBytes() int64 { return m.docBytes }
 // status line renders its indicator off this, and parseCmd/emit gate on it.
 func (m Model) InsightOff() bool { return m.largeFile && !largefile.Forced(m.path) }
 
+// MarkInsightOff flags the document as degraded regardless of its size
+// (#2420): the "Open file as… → Text editor" path forces a binary file into
+// the editor with highlighting and LSP off, exactly like a large file.
+func (m *Model) MarkInsightOff() { m.largeFile = true }
+
 // ForceCodeInsight punches through the large-file degradation for this
 // document's path (editor.forceCodeInsight, #149): highlighting and change
 // text resume, and the returned command runs the first full reparse. The app

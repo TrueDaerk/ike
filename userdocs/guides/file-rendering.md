@@ -153,6 +153,25 @@ sets are cut at the [large-file
 limits](../reference/settings.md) — from the *oldest* end, so the lines next to
 the live log always survive, and a toast says what was left out.
 
+## Binary files: the hex viewer
+
+A file with a NUL byte in its first 8 KiB and no dedicated viewer (image,
+archive, database, gzip) opens read-only in a **hex viewer** instead of a text
+buffer: offset, hex bytes and ASCII side by side, 8/16/32 bytes per row
+depending on the pane width. Move with `j/k/h/l`, `g`/`G` and `ctrl+d`/`ctrl+u`;
+the footer shows the cursor's offset in decimal and hex, and the inspector row
+above it decodes the bytes under the cursor (u8/i8, u16/u32/u64 little- and
+big-endian, f32/f64, the UTF-8 rune). `v` selects a range and `y` copies it —
+as a hex string or as raw bytes. `/` (or cmd+f) searches for text, a `0x…` hex
+sequence or `\xNN` escapes; `n`/`N` and cmd+g/cmd+shift+g step the matches.
+
+`files.binary_open` (Settings → Files & Session) switches the default back to
+the text editor, which then opens the binary with code insight off. And **Open
+File As…** (`cmd+alt+shift+o`, also in the explorer and tab context menus)
+forces any file into any viewer — a `.db` as text, a `.png` as bytes — with a
+notification instead of a broken pane when the file does not satisfy the
+chosen viewer.
+
 ## Turning it off
 
 Each layer is one setting, and each has a palette command that flips it for the

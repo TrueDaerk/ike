@@ -50,6 +50,8 @@ const (
 	DOM         Context = "dom"
 	Doctor      Context = "xdoctor"
 	Scratch     Context = "scratch"
+	// Hex scopes bindings to a focused hex viewer pane (#2420).
+	Hex Context = "hex"
 )
 
 // WithLang narrows c to one buffer language (#1876): WithLang(Editor, "http")

@@ -129,7 +129,9 @@ Sections and their default-bearing slots (`schema.go`):
   each with a diagnostic (see [Forge Layer](./forge.md)).
 - `[files]` — `watch`, `auto_reload` (`clean|never`), the large-file
   thresholds `large_file_kb` / `large_file_lines` (#149), `persistent_undo`
-  (#148), plus the `[files.associations]` slot (#1365): a slot map of file
+  (#148), `binary_open` (`hex|editor`, #2420: where a sniffed binary file
+  opens — the [hex viewer](./hex-viewer.md) by default, or a text buffer with
+  insight off), plus the `[files.associations]` slot (#1365): a slot map of file
   patterns to registered language ids (`"*.mytool" = "toml"`,
   `"Jenkinsfile" = "groovy"`), matched against a file's base name. User
   associations outrank the plugins' built-in extension/filename lists and the
