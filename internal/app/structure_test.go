@@ -2,6 +2,7 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -75,7 +76,9 @@ func TestStructureOpenRequestsSymbolsOnce(t *testing.T) {
 	if cmd := m.structureSyncCmd(); cmd != nil {
 		t.Fatal("an unanswered path must not re-request every pass")
 	}
-	// A save forces the immediate re-request of the unchanged path.
+	// A save of a path the cache cannot answer for still re-requests, once
+	// the burst window of the opening dispatch has passed (#2401).
+	m.structLastAt = time.Now().Add(-structBurstWindow)
 	m.structForce = true
 	if cmd := m.structureSyncCmd(); cmd == nil {
 		t.Fatal("a forced refresh must re-request the same path")
@@ -253,7 +256,11 @@ func TestStructureDebounceDropsSupersededTick(t *testing.T) {
 	}
 }
 
-func TestStructureSaveForcesRefresh(t *testing.T) {
+// TestStructureSaveOfUnchangedBufferAsksNothing: a write that changed no
+// content leaves the cached tree valid — the server sees the very document it
+// answered for, so the forced refresh is dropped (#2401). A save of a buffer
+// the cache no longer covers still re-requests.
+func TestStructureSaveOfUnchangedBufferAsksNothing(t *testing.T) {
 	m, files := structureSeed(t)
 	tm, _ := m.Update(StructureToggleMsg{})
 	m = tm.(Model)
@@ -262,14 +269,28 @@ func TestStructureSaveForcesRefresh(t *testing.T) {
 	if m.structForce {
 		t.Fatal("setup: no forced refresh pending")
 	}
+	// Clear the dispatch bookkeeping, so only the cache can explain a silent
+	// pass — never the burst dedup.
+	m.structLastPath, m.structLastAt = "", time.Time{}
+	m.structReqPath, m.structReqVersion = "", 0
 	tm, _ = m.Update(todoSavedMsg{path: files[0]})
 	m = tm.(Model)
-	// The wrapper's sync consumed the force flag and re-issued the request.
 	if m.structForce {
 		t.Fatal("the forced refresh must be consumed by the settled pass")
 	}
+	if m.structReqPath != "" {
+		t.Fatalf("an unchanged save must not re-request, requested %q", m.structReqPath)
+	}
+
+	// Age the cached tree past the buffer (as an edit would): now the save
+	// does re-request.
+	entry := m.docSymbols[files[0]]
+	entry.Version--
+	m.docSymbols[files[0]] = entry
+	tm, _ = m.Update(todoSavedMsg{path: files[0]})
+	m = tm.(Model)
 	if m.structReqPath != files[0] {
-		t.Fatalf("save must re-request %q, requested %q", files[0], m.structReqPath)
+		t.Fatalf("a save past the cached version must re-request %q, requested %q", files[0], m.structReqPath)
 	}
 }
 

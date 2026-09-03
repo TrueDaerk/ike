@@ -720,6 +720,9 @@ type Model struct {
 	// marks a save-triggered refresh that must re-request the unchanged path.
 	// structDeb* track the armed debounce: the pending target and the seq
 	// that lets a newer target invalidate an older timer's tick.
+	// structLast* remember the last dispatch (target and wall clock) for the
+	// burst dedup (#2401): an identical (path, DocVersion) inside
+	// structBurstWindow never reaches RunCommand.
 	structReturnFocus string
 	structReqPath     string
 	structReqVersion  int
@@ -727,12 +730,17 @@ type Model struct {
 	structDebPath     string
 	structDebVersion  int
 	structDebSeq      int
+	structLastPath    string
+	structLastVersion int
+	structLastAt      time.Time
 	// docSymbols caches each file's documentSymbol reply (#1153/#2319): the
 	// hierarchical tree the breadcrumbs bar derives the cursor's enclosing
 	// chain from at render time (the Structure pane keeps its own flattened
 	// rows), stamped with the buffer DocVersion it was requested at so an
 	// unchanged buffer never re-requests. Fed by applyDocumentSymbols,
-	// evicted when the file's last view closes.
+	// evicted when the file's last view closes, and parked with the workspace
+	// across a project switch (#2401) so a resumed project's unchanged buffers
+	// never re-request what they already answered.
 	// crumbSig is the last applied breadcrumb geometry signature; the settled
 	// pass (syncBreadcrumbLayout) re-runs layout() when it changes.
 	docSymbols map[string]docSymEntry
@@ -1613,6 +1621,10 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		// carries them model-to-model.
 		m.popup = extras.popup
 		m.floatTerms = extras.floats
+		// The documentSymbol cache comes back too (#2401): the settled pass
+		// refeeds the Structure panel, breadcrumbs and sticky scopes from it,
+		// and only a buffer edited past its cached version re-requests.
+		m.docSymbols = extras.docSymbols
 		for _, inst := range m.popupLayerInstances() {
 			inst.SetPalette(themePal)
 		}
@@ -1659,6 +1671,11 @@ type wsExtras struct {
 	dbgLaunchGen int
 	popup        popupTerm    // popup terminal (#1398) is per-project state (#1407)
 	floats       []*floatTerm // project-owned floating terminal panels (#1793); global ones never park
+	// docSymbols is the workspace's documentSymbol cache (#2401): it belongs
+	// to this project's buffers, so it parks and resumes with them instead of
+	// dying with the model performSwitch discards — coming back to a project
+	// re-requested every resumed file's tree for nothing.
+	docSymbols map[string]docSymEntry
 }
 
 // SetSender wires the program's Send into the host so background workers (the LSP
