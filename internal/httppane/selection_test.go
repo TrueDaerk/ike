@@ -29,10 +29,36 @@ func selViewer(t *testing.T) *Model {
 	return &m
 }
 
+// selViewerWithRequest is selViewer but with an as-sent request snapshot
+// attached (#1832), so the pane header grows to two rows (#2424) — the
+// mapping every mouse handler must follow (#2450).
+func selViewerWithRequest(t *testing.T) *Model {
+	t.Helper()
+	m := New(nil)
+	m.SetSize(120, 20)
+	resp := &httpclient.Response{
+		Status: "200 OK", StatusCode: 200, Proto: "HTTP/1.1",
+		Headers: http.Header{
+			"Content-Type": {"text/plain"},
+			"X-Token":      {"token-abc"},
+		},
+		Body:     []byte("alpha beta\ngamma delta"),
+		Duration: time.Millisecond,
+		Request: &httpclient.RequestSnapshot{
+			Method: "GET",
+			URL:    "https://example.test/r",
+		},
+	}
+	m.Set("r", resp)
+	return &m
+}
+
 // cell converts a row/column of the composed view into pane-local mouse
-// coordinates: the title bar takes y == 0, every row renders with one leading
-// space.
-func cell(m *Model, row, col int) (x, y int) { return col + 1, m.displayOf(row) - m.top + 1 }
+// coordinates: the fixed header rows take y < headerLineCount(), every row
+// renders with one leading space.
+func cell(m *Model, row, col int) (x, y int) {
+	return col + 1, m.displayOf(row) - m.top + m.headerLineCount()
+}
 
 // clickAt presses (and releases) at a composed position.
 func press(m *Model, row, col int) {
@@ -112,6 +138,71 @@ func TestTripleClickSelectsLine(t *testing.T) {
 	}
 	if got := m.SelectionText(); got != "alpha beta" {
 		t.Errorf("triple click: %q, want the whole line", got)
+	}
+}
+
+// TestMouseDragSelectsAcrossRowsWithRequestLine mirrors
+// TestMouseDragSelectsAcrossRows with the two-row header the request-line
+// grows the pane to (#2424): the mapping from pane-local y to a body row must
+// follow, or the click/drag lands one row below the pointer (#2450).
+func TestMouseDragSelectsAcrossRowsWithRequestLine(t *testing.T) {
+	m := selViewerWithRequest(t)
+	if got, want := m.headerLineCount(), 2; got != want {
+		t.Fatalf("headerLineCount = %d, want %d", got, want)
+	}
+	fixedClock(t)
+	first := bodyRow(m, "alpha beta")
+	press(m, first, 6) // start at "beta"
+	drag(m, first+1, 5)
+	m.MouseRelease()
+	if !m.HasSelection() {
+		t.Fatal("drag must produce a selection")
+	}
+	if got, want := m.SelectionText(), "beta\ngamma"; got != want {
+		t.Errorf("selection text: %q, want %q", got, want)
+	}
+}
+
+// TestDoubleClickSelectsWordWithRequestLine mirrors TestDoubleClickSelectsWord
+// with the two-row header (#2450).
+func TestDoubleClickSelectsWordWithRequestLine(t *testing.T) {
+	m := selViewerWithRequest(t)
+	step := fixedClock(t)
+	r := bodyRow(m, "alpha beta")
+	press(m, r, 7)
+	step(50 * time.Millisecond)
+	press(m, r, 7)
+	if got := m.SelectionText(); got != "beta" {
+		t.Errorf("double click: %q, want beta", got)
+	}
+}
+
+// TestTripleClickSelectsLineWithRequestLine mirrors TestTripleClickSelectsLine
+// with the two-row header (#2450).
+func TestTripleClickSelectsLineWithRequestLine(t *testing.T) {
+	m := selViewerWithRequest(t)
+	step := fixedClock(t)
+	r := bodyRow(m, "alpha beta")
+	for i := 0; i < 3; i++ {
+		press(m, r, 3)
+		step(50 * time.Millisecond)
+	}
+	if got := m.SelectionText(); got != "alpha beta" {
+		t.Errorf("triple click: %q, want the whole line", got)
+	}
+}
+
+// TestPressOnRequestLineDoesNotSelectBodyRow guards the boundary the bug
+// report hinges on: a click on the request-line row itself (still header,
+// with the two-row header) must not be mistaken for the first body row.
+func TestPressOnRequestLineDoesNotSelectBodyRow(t *testing.T) {
+	m := selViewerWithRequest(t)
+	fixedClock(t)
+	first := bodyRow(m, "alpha beta")
+	x, y := cell(m, first, 0)
+	m.MousePress(x, y-1) // one row up: the request-line row, not the body
+	if m.sel.anchor.row == first {
+		t.Errorf("press on the request-line row landed on body row %d", first)
 	}
 }
 

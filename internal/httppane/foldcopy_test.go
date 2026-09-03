@@ -33,6 +33,28 @@ func foldViewer(t *testing.T) *Model {
 	return &m
 }
 
+// foldViewerWithRequest is foldViewer but with an as-sent request snapshot
+// attached (#1832), growing the header to two rows (#2424) — fold hit
+// testing must follow the real header height (#2450).
+func foldViewerWithRequest(t *testing.T) *Model {
+	t.Helper()
+	m := New(nil)
+	m.SetSize(120, 20)
+	m.Set("r", &httpclient.Response{
+		Status: "200 OK", StatusCode: 200, Proto: "HTTP/1.1",
+		Headers:  http.Header{"Content-Type": {"application/json"}},
+		Body:     []byte("{\n  \"mapping\": {\n    \"a\": 1,\n    \"b\": 2\n  },\n  \"tail\": 3\n}"),
+		Duration: time.Millisecond,
+		Request:  &httpclient.RequestSnapshot{Method: "GET", URL: "https://example.test/r"},
+	})
+	start := bodyRow(&m, "{")
+	if start < 0 {
+		t.Fatalf("body not composed: %v", m.rows)
+	}
+	m.setFolds([]highlight.Fold{{HeaderLine: 1, EndLine: 4}}, start)
+	return &m
+}
+
 // mappingRows is the fold's content as SelectionText should return it.
 const mappingRows = "  \"mapping\": {\n    \"a\": 1,\n    \"b\": 2\n  },"
 

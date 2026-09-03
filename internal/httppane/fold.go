@@ -309,10 +309,11 @@ func (m *Model) foldCopyColumn(row int) (int, bool) {
 // cell (x, y). It runs before the selection press so the glyph is the only
 // copy target: the rest of the header keeps toggling the fold (#1787).
 func (m *Model) FoldCopyHit(x, y int) (int, bool) {
-	if y <= 0 || len(m.folded) == 0 {
+	by := m.bodyRowAt(y)
+	if by < 0 || len(m.folded) == 0 {
 		return 0, false
 	}
-	row := m.rowAt(m.top + y - 1)
+	row := m.rowAt(m.top + by)
 	if row < 0 {
 		return 0, false
 	}

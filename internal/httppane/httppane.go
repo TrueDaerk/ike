@@ -1324,6 +1324,15 @@ func (m *Model) headerLineCount() int {
 	return n
 }
 
+// bodyRowAt maps a pane-local mouse row y to a row offset into the scrollable
+// body — negative when the pointer sits in the header. It is the single
+// mapping mouse press/drag (selection.go), gutter fold toggles (fold.go) and
+// the scrollbar (scrollbar.go) all go through, so a header-height change
+// (#2424) cannot desync one of them from the rest the way #2450 did.
+func (m *Model) bodyRowAt(y int) int {
+	return y - m.headerLineCount()
+}
+
 // cancelHintAfter is how long a flight has to run before the pane spells out
 // how to abort it (#2404). Most requests finish inside half a second — a hint
 // on every dispatch would be noise that flashes past — but past a second the
