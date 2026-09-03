@@ -136,7 +136,7 @@ func TestOpenAsEditorForcesTextBuffer(t *testing.T) {
 // two always-available targets, and each row dispatches its OpenAsMsg.
 func TestOpenAsChooserRows(t *testing.T) {
 	items := openAsMode{}.Results("", palette.Context{})
-	want := []string{openAsEditor, openAsHex, openAsImage, openAsArchive, openAsData, openAsMarkdown, openAsGzip}
+	want := []string{openAsEditor, openAsHex, openAsImage, openAsArchive, openAsData, openAsMarkdown, openAsNotebook, openAsGzip}
 	if len(items) != len(want) {
 		t.Fatalf("chooser rows = %d, want %d", len(items), len(want))
 	}

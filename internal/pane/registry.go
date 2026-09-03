@@ -24,6 +24,7 @@ import (
 	"ike/internal/imgview"
 	"ike/internal/lspdoctor"
 	"ike/internal/merge"
+	"ike/internal/nbview"
 	"ike/internal/preview"
 	"ike/internal/problems"
 	"ike/internal/remote"
@@ -68,6 +69,10 @@ const dataKeyBase = "data"
 // hexKeyBase is the key of the first hex viewer; later ones append ":N"
 // (#2420).
 const hexKeyBase = "hex"
+
+// nbKeyBase is the key of the first notebook viewer; later ones append ":N"
+// (#2425).
+const nbKeyBase = "notebook"
 
 // esKeyBase prefixes Elasticsearch console keys (#1927): one console per
 // configured endpoint, keyed "es:<endpoint>" — the endpoint name is the
@@ -142,6 +147,7 @@ type Registry struct {
 	archives  int      // count of archive viewers ever allocated, for key minting
 	datas     int      // count of data viewers ever allocated, for key minting
 	hexes     int      // count of hex viewers ever allocated, for key minting
+	notebooks int      // count of notebook viewers ever allocated, for key minting
 	// loaded collects the files deferred tabs (#2177) read since the last
 	// drain, so the root model can give each the wiring a freshly opened
 	// buffer gets. It lives on the registry rather than the model because
@@ -285,6 +291,8 @@ func (r *Registry) advancePastKey(key string) {
 		advanceCounter(key, dataKeyBase, &r.datas)
 	case hexKeyBase:
 		advanceCounter(key, hexKeyBase, &r.hexes)
+	case nbKeyBase:
+		advanceCounter(key, nbKeyBase, &r.notebooks)
 	default:
 		r.advancePast(key)
 	}
@@ -582,6 +590,40 @@ func (r *Registry) AddHexKey(key, path string) *Instance {
 	}
 	return inst
 }
+
+// AddNotebookView creates a notebook viewer instance bound to the .ipynb file
+// at path, returning the new instance's key ("notebook", then "notebook:N")
+// (#2425). The file is read and parsed at construction; a read or parse
+// failure surfaces as the pane's own error notice.
+func (r *Registry) AddNotebookView(path string) string {
+	r.notebooks++
+	key := suffixedKey(nbKeyBase, r.notebooks)
+	inst := &Instance{key: key, kind: KindNotebook, cfg: r.cfg, pal: r.pal}
+	inst.nv = nbview.New(key, path, r.pal)
+	r.put(inst)
+	return key
+}
+
+// AddNotebookKey recreates a notebook viewer under an exact key, used by
+// layout restore. The minting counter advances past the key.
+func (r *Registry) AddNotebookKey(key, path string) *Instance {
+	inst := &Instance{key: key, kind: KindNotebook, cfg: r.cfg, pal: r.pal}
+	inst.nv = nbview.New(key, path, r.pal)
+	r.put(inst)
+	if len(key) > len(nbKeyBase)+1 && key[:len(nbKeyBase)+1] == nbKeyBase+":" {
+		if v, err := strconv.Atoi(key[len(nbKeyBase)+1:]); err == nil && v > r.notebooks {
+			r.notebooks = v
+		}
+	} else if r.notebooks < 1 {
+		r.notebooks = 1
+	}
+	return inst
+}
+
+// NotebooksMinted reports whether this registry ever created a notebook
+// viewer — the cheap gate the app's Kitty graphics reconcile checks before
+// walking the panes (#2425).
+func (r *Registry) NotebooksMinted() bool { return r != nil && r.notebooks > 0 }
 
 // AddES creates (or returns) the Elasticsearch console instance for the named
 // endpoint, keyed "es:<endpoint>" (#1927) — one console per cluster, so
@@ -1024,6 +1066,9 @@ func (r *Registry) mintContentKey(kind Kind) string {
 	case KindHex:
 		r.hexes++
 		return suffixedKey(hexKeyBase, r.hexes)
+	case KindNotebook:
+		r.notebooks++
+		return suffixedKey(nbKeyBase, r.notebooks)
 	}
 	return ""
 }
@@ -1061,6 +1106,8 @@ func (r *Registry) NewContentPane(kind Kind, path, path2, rev, rev2 string) *Ins
 		inst.dv = dataview.New(key, path, r.pal)
 	case KindHex:
 		inst.hv = hexview.New(key, path, r.pal)
+	case KindNotebook:
+		inst.nv = nbview.New(key, path, r.pal)
 	case KindDiff:
 		if rev != "" || rev2 != "" {
 			return r.newDiffRevInstance(key, path, path2, rev, rev2)

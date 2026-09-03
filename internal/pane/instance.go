@@ -28,6 +28,7 @@ import (
 	"ike/internal/imgview"
 	"ike/internal/lspdoctor"
 	"ike/internal/merge"
+	"ike/internal/nbview"
 	"ike/internal/preview"
 	"ike/internal/problems"
 	"ike/internal/remote"
@@ -136,6 +137,10 @@ const (
 	// KindHex is a read-only hex viewer pane (#2420); any number may exist,
 	// each bound to one file, rendered offset|hex|ASCII over windowed reads.
 	KindHex
+	// KindNotebook is a read-only Jupyter notebook viewer pane (#2425); any
+	// number may exist, each bound to one .ipynb file, rendered as cells with
+	// their outputs rather than as the JSON on disk.
+	KindNotebook
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -164,6 +169,7 @@ const (
 	ctxLSPDoc   = "lspdoctor"
 	ctxDeps     = "deps"
 	ctxHex      = "hex"
+	ctxNotebook = "notebook"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -192,6 +198,7 @@ type Instance struct {
 	av   archview.Model
 	dv   dataview.Model
 	hv   hexview.Model
+	nv   nbview.Model
 	es   espane.Model
 	tr   testresults.Model
 	gi   ghissues.Model
@@ -339,6 +346,8 @@ func (i *Instance) ContextID() string {
 		return ctxRemote
 	case KindHex:
 		return ctxHex
+	case KindNotebook:
+		return ctxNotebook
 	}
 	return ctxEditor
 }
@@ -382,6 +391,10 @@ func (i *Instance) Data() *dataview.Model { return &i.dv }
 // Hex returns the underlying hex viewer model (#2420). It is only valid for
 // a hex instance; callers gate on Kind first.
 func (i *Instance) Hex() *hexview.Model { return &i.hv }
+
+// Notebook returns the underlying notebook viewer model (#2425). It is only
+// valid for a notebook instance; callers gate on Kind first.
+func (i *Instance) Notebook() *nbview.Model { return &i.nv }
 
 // ES returns the underlying Elasticsearch console model (#1927). It is only
 // valid for an es instance; callers gate on Kind first.
@@ -741,7 +754,7 @@ func (i *Instance) AddTerminalTab(term terminal.Model) *terminal.Model {
 // treats it as the singleton "http" tool pane.
 func KindTabbable(k Kind) bool {
 	switch k {
-	case KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindES, KindHex:
+	case KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindES, KindHex, KindNotebook:
 		return true
 	}
 	return false
@@ -798,6 +811,8 @@ func (i *Instance) DetachContent() (*Instance, bool) {
 		nested.es, i.es = i.es, espane.Model{}
 	case KindHex:
 		nested.hv, i.hv = i.hv, hexview.Model{}
+	case KindNotebook:
+		nested.nv, i.nv = i.nv, nbview.Model{}
 	default:
 		return nil, false
 	}
@@ -875,6 +890,11 @@ func (i *Instance) ContentTitle() string {
 			return filepath.Base(p)
 		}
 		return "hex"
+	case KindNotebook:
+		if p := i.nv.Path(); p != "" {
+			return filepath.Base(p)
+		}
+		return "notebook"
 	case KindES:
 		if ep := i.es.Endpoint(); ep != "" {
 			return ep
@@ -912,6 +932,9 @@ func (i *Instance) releaseContent() {
 	case KindHex:
 		// Releases the windowed-read file handle (#2420).
 		i.hv.Close()
+	case KindNotebook:
+		// Releases the decoded pixels of the image outputs (#2425).
+		i.nv.Close()
 	case KindRemote:
 		// Ends the SFTP session and its ssh subprocess (#1997).
 		i.rm.Close()
@@ -1222,6 +1245,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.dv.SetSize(w, h)
 	case KindHex:
 		i.hv.SetSize(w, h)
+	case KindNotebook:
+		i.nv.SetSize(w, h)
 	case KindES:
 		i.es.SetSize(w, h)
 	case KindTests:
@@ -1286,6 +1311,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.dv.SetFocused(f)
 	case KindHex:
 		i.hv.SetFocused(f)
+	case KindNotebook:
+		i.nv.SetFocused(f)
 	case KindES:
 		i.es.SetFocused(f)
 	case KindTests:
@@ -1365,6 +1392,8 @@ func (i *Instance) View() string {
 		return i.dv.View()
 	case KindHex:
 		return i.hv.View()
+	case KindNotebook:
+		return i.nv.View()
 	case KindES:
 		return i.es.View()
 	case KindTests:
@@ -1437,6 +1466,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.dv.Update(msg)
 	case KindHex:
 		cmd = i.hv.Update(msg)
+	case KindNotebook:
+		cmd = i.nv.Update(msg)
 	case KindES:
 		cmd = i.es.Update(msg)
 	case KindTests:
@@ -1628,6 +1659,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.dv.SetPalette(p)
 	case KindHex:
 		i.hv.SetPalette(p)
+	case KindNotebook:
+		i.nv.SetPalette(p)
 	case KindES:
 		i.es.SetPalette(p)
 	case KindTests:

@@ -485,6 +485,8 @@ func groupTitle(label string) string {
 		return "Data"
 	case "hex":
 		return "Hex Viewer"
+	case "notebook":
+		return "Notebook Viewer"
 	default:
 		return label
 	}

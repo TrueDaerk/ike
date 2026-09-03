@@ -181,6 +181,27 @@ sets are cut at the [large-file
 limits](../reference/settings.md) — from the *oldest* end, so the lines next to
 the live log always survive, and a toast says what was left out.
 
+## Jupyter notebooks
+
+A `.ipynb` file opens as the notebook it is, not as the JSON it is stored in:
+each cell with its index, type and execution count in the gutter, markdown
+cells rendered like a markdown preview, code cells highlighted in the
+notebook's own language, and every cell's outputs below it — `stdout` and
+`stderr` streams, `text/plain` results, HTML results degraded to text, PNG and
+JPEG images (as pixels where the terminal supports graphics, as a
+size/format line elsewhere) and errors with their traceback.
+
+`j`/`k` move between cells, `g`/`G` jump to the ends, the arrows and the wheel
+scroll. `enter` folds a cell's outputs away and back. `/` (or cmd+f) searches
+across the cell sources, `n`/`N` step the matches. `e` opens the current
+cell's source as a scratch file in the notebook's language, `y` copies it, and
+`o` saves the cell's image output next to the notebook.
+
+The view is read-only — there is no editing and no kernel. Notebooks re-render
+by themselves when a kernel writes the file, and a notebook IKE cannot parse
+shows the JSON error plus a pointer at **Open File As… → Text editor**, which
+opens the raw document.
+
 ## Binary files: the hex viewer
 
 A file with a NUL byte in its first 8 KiB and no dedicated viewer (image,
