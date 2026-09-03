@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Single-Line Text Input
-description: The shared single-line editing helpers in internal/ui (EditKey, PasteText, CursorView) that every text field in the IDE routes through — plus the convention, the audit of every input site, and the guard test that keeps new fields from re-inventing them.
+description: The shared single-line editing helpers in internal/ui (ui.Field, EditKey, PasteText, CursorView) that every text field in the IDE routes through — plus the chord table, the convention, the audit of every input site, and the guard test that keeps new fields from re-inventing them.
 resource: internal/ui/textinput.go
 tags: [ui, input, keys, paste, conventions]
-timestamp: 2026-08-30T00:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Single-Line Text Input
@@ -18,11 +18,17 @@ search and the debugger's inline value editor.
 
 ## The convention
 
-> **A new single-line text input MUST route its keys through `ui.EditKey`,
-> its pastes through `ui.PasteText`, and render its cursor with
-> `ui.CursorView`.** A field-specific chord (tab completion, ctrl+u, a
-> preselected prefill) is handled *before* the call and the rest is handed
-> over. Do not hand-roll `tea.KeyMsg` cases that mutate a string field.
+> **A new single-line text input MUST hold its state in a `ui.Field` and
+> route its keys through `Field.Key`, its pastes through `Field.Paste`, and
+> its rendering through `Field.View`.** A field-specific chord (tab
+> completion, ctrl+u, a preselected prefill) is handled *before* the call and
+> the rest is handed over. Do not hand-roll `tea.KeyMsg` cases that mutate a
+> string field.
+
+A host that cannot own the string — a filter column whose text every renderer
+and matcher reads, a form keeping one cursor across several strings — still
+calls the free functions `ui.EditKey` / `ui.PasteText` / `ui.CursorView`
+underneath; `Field` is a thin value wrapper over exactly those.
 
 The reason is a decade of one-field-at-a-time bug reports: a broken paste
 (#1273), a missing cursor (#763), a byte-sliced backspace corrupting umlauts
@@ -32,17 +38,27 @@ remainder and added a guard so the pattern cannot come back quietly.
 
 ## The helpers
 
+`internal/ui/field.go`:
+
+- **`ui.Field`** (#2459) — `struct { Text string; Cur int }`, the state every
+  one-line input should hold. `Key(msg) (handled, changed bool)`,
+  `Paste(s) bool`, `View() string`, `ViewSel(selStart, selEnd, style) string`,
+  `Set(s)` (cursor to the end), `Clear()`, `Empty()`, `Runes()`, `Len()`, and
+  the `NewField(text)` constructor. The fields are exported on purpose: a
+  matcher, a renderer or a completion source reads `Text` directly, and a host
+  seeding a caret writes `Cur`. The zero value is an empty field. It removes
+  the four-line "call `EditKey`, store the result if `handled`" dance that was
+  written out at ~60 call sites, each of them a place to forget writing the
+  cursor back.
+
 `internal/ui/textinput.go`:
 
 - **`EditKey(msg, text, cur) (out string, ncur int, handled, changed bool)`** —
-  applies one key to `text` at rune cursor `cur` (clamped first). It handles
-  `left`/`right`, `home`/`end` and their `super+arrow` equivalents,
-  `alt`/`ctrl+arrow` word motions, `backspace`, `delete`, the word kills
-  (`alt+backspace`, `ctrl+w`, `alt+delete`, `alt+d`), the line kill
-  (`super+backspace`), and printable insertion at the cursor. `handled`
-  reports the key was an editing key — an unhandled key is the caller's to
-  interpret; `changed` reports the text actually differs, which is the signal
-  to re-run a live preview, re-filter a list, or refresh completions.
+  applies one key to `text` at rune cursor `cur` (clamped first); the chord
+  table is below. `handled` reports the key was an editing key — an unhandled
+  key is the caller's to interpret; `changed` reports the text actually
+  differs, which is the signal to re-run a live preview, re-filter a list, or
+  refresh completions.
 - **`PasteText(text, cur, paste) (out string, ncur int, changed bool)`** —
   inserts a pasted block at the cursor. A single-line block goes in verbatim
   (a deliberate leading space survives; a path copied with its trailing
@@ -60,17 +76,66 @@ remainder and added a guard so the pattern cannot come back quietly.
   `msg.Text != ""` as a hand-rolled input, which is exactly the drift this
   predicate removes.
 
-`internal/settings` wraps them once more for its own use: `textField`
-(`text`+`cur` with `Handle`/`Paste`/`View`) for inline edits and forms, and
-`filterKey`/`filterPaste`/`filterView` for the filter lines whose text has to
-stay a plain `string` because every renderer and matcher reads it.
+`internal/settings` wraps them once more for its own use: `textField` (a
+`ui.Field` plus the settings-local constructors and the older `Handle` name)
+for inline edits and forms, and `filterKey`/`filterPaste`/`filterView` for the
+filter lines whose text has to stay a plain `string` because every renderer
+and matcher reads it. `internal/filterbar.Model` and `ui.SpeedSearch` hold a
+`ui.Field` too.
+
+## The chord table
+
+`EditKey` matches on **`msg.Code` + `msg.Mod`**, never on `msg.String()`
+(#2459). bubbletea's `String()` prefers the literal text a terminal reported
+over the keystroke form, so under the Kitty protocol's *report associated
+text* flag (or the Windows Console API) `alt+d` arrives as a bare `"d"` and
+`ctrl+w` as `"w"` — the modifier is masked and no string case can ever match
+it (#2064, the same trap `keymap.FromKeyMsg` works around with `Keystroke()`).
+`Code` is the physical key and survives that.
+
+The **Command key** is accepted in all its spellings: bubbletea reports it as
+`super+` under one terminal protocol and `meta+` under another, and the keymap
+layer's canonical name is `cmd+`. All three are the same physical key.
+`shift` is tolerated on the *modified* chords — `shift+cmd+left` is still line
+start, the way the terminal pane's `motionKey` treats it — while plain
+`shift+left`/`shift+right` stay unhandled, so a host can keep them as
+selection keys.
+
+| Chord | Effect |
+| --- | --- |
+| `left` / `right` | move the caret one rune |
+| `home` / `end`, `cmd+left` / `cmd+right` | line start / line end |
+| `alt+left` / `ctrl+left` | word left |
+| `alt+right` / `ctrl+right` | word right |
+| `backspace`, `ctrl+h` | delete the rune before the caret |
+| `delete` | delete the rune under the caret |
+| `alt+backspace`, `ctrl+backspace`, `ctrl+w` | kill the word before the caret |
+| `alt+delete`, `ctrl+delete`, `alt+d` | kill the word after the caret |
+| `cmd+backspace`, `ctrl+u` | kill to line start |
+| `cmd+delete`, `ctrl+k` | kill to line end |
+| printable rune (no chord modifier) | insert at the caret |
+
+Everything else — `enter`, `tab`, `esc`, the vertical keys, `cmd+c`, `cmd+v` —
+comes back `handled=false` and is the caller's.
+
+`ctrl+a`/`ctrl+e`/`ctrl+b`/`ctrl+f`/`ctrl+d`/`ctrl+t` and `alt+f`/`alt+b` are
+deliberately **not** bound, even though readline has them: each is load-bearing
+somewhere a text field is open (list stepping, the editor's own bindings), and
+a field that swallowed them would break the surface around it.
+
+The satellites match the Command key the same way: `ui.CopyKey` (the shared
+copy chord; `ui.CopyChord`, its string form, additionally accepts `meta+c`),
+`ssReserved` in `ui/speedsearch.go`, and the palette's `cmd+backspace` aux
+action.
 
 ## Ordering rules
 
 - **Caller chords win.** Run the field's own bindings first, then call
-  `EditKey` with what is left. The terminal's scrollback search keeps `ctrl+w`
-  as a toggle that way; the find/replace panel keeps `ctrl+u` as "clear the
-  field"; the explorer's speed search keeps `ctrl+n`/`ctrl+p` as match
+  `Field.Key`/`EditKey` with what is left. The terminal's scrollback search
+  keeps `ctrl+w` as a toggle that way; the find/replace panel, the palette and
+  the LSP rename prompt keep `ctrl+u` as "clear the field" ahead of the
+  kill-to-line-start added in #2459; the palette keeps `cmd+backspace` as its
+  aux action; the explorer's speed search keeps `ctrl+n`/`ctrl+p` as match
   stepping.
 - **`changed`, not `handled`, drives side effects.** A cursor motion is
   `handled` but not `changed`; re-running an incremental search on it wastes a
