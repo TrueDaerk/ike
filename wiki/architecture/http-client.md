@@ -586,7 +586,7 @@ and #2059.
 
 `httpclient.Dispatch(ctx, request, options)` resolves placeholders, applies
 local client configuration and executes the request, returning a `Response`
-(status, headers, body, duration, request key, warnings) for the viewer and
+(status, headers, body, duration, timing breakdown, request key, warnings) for the viewer and
 history layers. Unresolved placeholders abort before anything is sent; HTTP
 error statuses are regular responses, only transport failures error.
 
@@ -616,6 +616,47 @@ the TUI. `Options` lets callers (and tests) override the env lookup, pass the
 user-variable chain (`Options.Vars`, #1867 — the caller's value is copied, so
 one `Options` can serve several dispatches), override the config file paths,
 or disable detection entirely.
+
+### Where the time went (`timing.go`, #2404)
+
+A total duration answers *"was it slow?"* but never *"slow where?"* — 2 s
+spent in DNS is a resolver problem, the same 2 s spent waiting for the first
+byte is the server's. Every dispatch therefore hangs a `net/http/httptrace`
+hook set into the request context and returns a `Response.Timing` alongside
+`Response.Duration`:
+
+| field | phase |
+|---|---|
+| `DNS` | name resolution; 0 for an IP literal or a reused connection |
+| `Connect` | TCP (or proxy) connect; 0 on a reused connection |
+| `TLS` | handshake; 0 for plain HTTP and reused connections |
+| `TTFB` | start of the exchange → first response byte, setup included |
+| `Transfer` | first byte → end of the body read |
+| `Reused` | the request went out on an existing keep-alive connection |
+
+Every field is a *duration*, not a timestamp, so the numbers read as a sum and
+`TTFB + Transfer` equals `Duration`. The hooks fire on the transport's own
+goroutines, so the collector is mutex-guarded; a redirect chain or a retried
+connection fires the setup hooks more than once and the phases **accumulate**
+rather than the last one winning — what the user waited for is the sum. A
+reused connection is recorded explicitly (`conn reused` in the rendered line),
+so three zeros read as "did not happen" rather than "not measured". The clock
+is `Options.Now`, the same seam `Duration` uses, so a test drives both alike.
+
+`Timing` is nil when nothing was measured — a response restored from a history
+file written before the capture existed. It travels with the `Response` into
+the [history entry](#response-history-1251) (`timing` in the stored JSON), so
+a browsed entry and `http.showResponse` render the same breakdown the fresh
+answer did: one `kindTiming` row under the status line,
+`dns 2ms · connect 11ms · tls 34ms · ttfb 210ms · transfer 4ms`, only the
+phases that happened.
+
+The `D`/`P` **diff text** deliberately leaves it out, for the same reason
+`Duration` and the volatile headers are already filtered there (#2247): every
+phase differs by a few milliseconds on every run, so a breakdown in the diff
+would report a change on two identical responses and push the header or body
+line that really changed out of sight. The entry keeps the numbers; the
+comparison is about content.
 
 ### Large bodies are spooled to disk (#2157)
 
@@ -1428,14 +1469,33 @@ dispatch's `context.CancelFunc`:
 - **Duplicate guard**: dispatching a request that is already running is
   rejected with a notice naming the cancel action; nothing fires twice in
   parallel behind the user's back.
-- **Cancel**: `http.cancel` (palette) and `x` in the response pane abort
-  through the dispatch context — `ctrl+c` is copy (#1266), so the abort key
-  is its own. The resulting `context.Canceled` is reported as a confirmation
-  ("http: one canceled"), not as a transport error, and no response pane
-  opens for it.
+- **Cancel**: `http.cancel` — bound to `cmd+.` / `ctrl+.` in the editor and in
+  the response pane since #2404 — plus `x` in the response pane abort through
+  the dispatch context. `ctrl+c` is copy (#1266), so the abort key is its own;
+  the period is JetBrains' *Stop*, and the binding covers the `.http` editor
+  too, which is where a slow request is usually watched from. The resulting
+  `context.Canceled` is reported as a confirmation ("http: one canceled"), not
+  as a transport error, and no response pane opens for it.
 
 Statusline indicator, inline marker, pane marker and tick all clear on
 response, error and cancel alike.
+
+### The pane says how to stop it (#2404)
+
+Elapsed time was already in the pane header (`⟳ running one (1.2s)`), moving
+with the same 250 ms tick as the statusline indicator. What was missing is the
+way out: `x` is undiscoverable and the chord is new. Once a flight has been
+out for longer than **one second** (`cancelHintAfter`), the pane adds a hint
+line under the fixed header — `x / ctrl+. cancels`. The threshold is what
+keeps it from being noise: the median flight finishes in about half a second,
+and a hint that flashes past on every dispatch teaches nothing.
+
+The chord is not hard-coded into the pane. `markHTTPPending` resolves it from
+the *live* binding table on every flight state change (`Model.httpCancelChord`
+→ `httppane.Model.SetCancelChord`), preferring a delivered chord over a
+fragile one — the hint exists to be pressed, so naming a chord this terminal
+swallows would be advice that does not work. A rebind shows up on the next
+dispatch; an unbound `http.cancel` leaves the hint at `x` alone.
 
 ### The answer reports itself when nobody is watching (#2364)
 
@@ -1469,8 +1529,9 @@ to report. Severity is `Warn` for a non-2xx and `Info` for a slow success, so
 Every flight also leaves a lifecycle trail in the local usage telemetry
 (#2348): an `op`/`http.flight` `start` event — flushed to disk before the
 exchange departs — and a matching `ok`/`error`/`canceled` end event carrying
-duration, status class and the streaming flag; structural only, never the
-URL, key, headers or body. A start without an end is the "dispatch never came
+duration, status class, the streaming flag and — since #2404 — the phase
+breakdown (`dns_ms`, `connect_ms`, `tls_ms`, `ttfb_ms`, `transfer_ms`,
+`reused`); structural only, never the URL, key, headers or body. A start without an end is the "dispatch never came
 back" marker a freeze investigation looks for (see
 [Usage Telemetry](/architecture/usage-telemetry.md)).
 

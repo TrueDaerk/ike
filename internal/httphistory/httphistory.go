@@ -49,7 +49,12 @@ type Entry struct {
 	BodySize  int           `json:"-"`
 	Truncated bool          `json:"truncated,omitempty"`
 	Duration  time.Duration `json:"duration"`
-	Warnings  []string      `json:"warnings,omitempty"`
+	// Timing is the phase breakdown of the exchange (#2404), stored with the
+	// entry so a browsed history response and a D/P diff show the same
+	// dns/connect/tls/ttfb/transfer line as the fresh one. nil for entries
+	// written before the capture existed.
+	Timing   *httpclient.Timing `json:"-"`
+	Warnings []string           `json:"warnings,omitempty"`
 	// Captured holds the values this response's `# @capture` directives took
 	// out of it (#1993). They are stored with the entry rather than kept in
 	// memory, so a captured value lives exactly as long as the response it
@@ -68,20 +73,21 @@ type Entry struct {
 // encoding/json base64-encodes. Readers accept both, so files written before
 // this split keep loading.
 type wireEntry struct {
-	Time       time.Time         `json:"time"`
-	Status     string            `json:"status"`
-	StatusCode int               `json:"statusCode"`
-	Proto      string            `json:"proto"`
-	Headers    http.Header       `json:"headers,omitempty"`
-	BodyText   *string           `json:"bodyText,omitempty"`
-	Body       []byte            `json:"body,omitempty"`     // base64, binary bodies only
-	BodyFile   string            `json:"bodyFile,omitempty"` // spooled body, relative to the store dir (#2157)
-	BodySize   int               `json:"bodySize,omitempty"` // total body size when spooled (#2157)
-	Truncated  bool              `json:"truncated,omitempty"`
-	Duration   time.Duration     `json:"duration"`
-	Warnings   []string          `json:"warnings,omitempty"`
-	Captured   map[string]string `json:"captured,omitempty"` // capture directives (#1993)
-	Request    *wireRequest      `json:"request,omitempty"`  // as-sent snapshot (#1832)
+	Time       time.Time          `json:"time"`
+	Status     string             `json:"status"`
+	StatusCode int                `json:"statusCode"`
+	Proto      string             `json:"proto"`
+	Headers    http.Header        `json:"headers,omitempty"`
+	BodyText   *string            `json:"bodyText,omitempty"`
+	Body       []byte             `json:"body,omitempty"`     // base64, binary bodies only
+	BodyFile   string             `json:"bodyFile,omitempty"` // spooled body, relative to the store dir (#2157)
+	BodySize   int                `json:"bodySize,omitempty"` // total body size when spooled (#2157)
+	Truncated  bool               `json:"truncated,omitempty"`
+	Duration   time.Duration      `json:"duration"`
+	Timing     *httpclient.Timing `json:"timing,omitempty"` // phase breakdown (#2404)
+	Warnings   []string           `json:"warnings,omitempty"`
+	Captured   map[string]string  `json:"captured,omitempty"` // capture directives (#1993)
+	Request    *wireRequest       `json:"request,omitempty"`  // as-sent snapshot (#1832)
 }
 
 // wireRequest is the on-disk shape of the as-sent request snapshot (#1832).
@@ -140,7 +146,7 @@ func isText(b []byte) bool {
 func (e Entry) MarshalJSON() ([]byte, error) {
 	w := wireEntry{
 		Time: e.Time, Status: e.Status, StatusCode: e.StatusCode, Proto: e.Proto,
-		Headers: e.Headers, Truncated: e.Truncated, Duration: e.Duration,
+		Headers: e.Headers, Truncated: e.Truncated, Duration: e.Duration, Timing: e.Timing,
 		Warnings: e.Warnings, Captured: e.Captured, Request: toWire(e.Request),
 		BodyFile: e.BodyFile, BodySize: e.BodySize,
 	}
@@ -164,7 +170,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	}
 	*e = Entry{
 		Time: w.Time, Status: w.Status, StatusCode: w.StatusCode, Proto: w.Proto,
-		Headers: w.Headers, Truncated: w.Truncated, Duration: w.Duration,
+		Headers: w.Headers, Truncated: w.Truncated, Duration: w.Duration, Timing: w.Timing,
 		Warnings: w.Warnings, Captured: w.Captured, Request: fromWire(w.Request),
 		BodyFile: w.BodyFile, BodySize: w.BodySize,
 	}
@@ -214,6 +220,7 @@ func (e Entry) Response(requestKey string) *httpclient.Response {
 		BodySize:   e.BodySize,
 		Truncated:  e.Truncated,
 		Duration:   e.Duration,
+		Timing:     e.Timing,
 		RequestKey: requestKey,
 		Warnings:   e.Warnings,
 		Request:    e.Request,
@@ -233,6 +240,7 @@ func FromResponse(resp *httpclient.Response, at time.Time) Entry {
 		BodySize:   resp.BodySize,
 		Truncated:  resp.Truncated,
 		Duration:   resp.Duration,
+		Timing:     resp.Timing,
 		Warnings:   resp.Warnings,
 		Captured:   resp.CapturedValues(),
 		Request:    resp.Request,

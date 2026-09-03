@@ -336,9 +336,16 @@ Put the cursor anywhere in a request block and press ++cmd+enter++
 Request** from the Run menu or the palette.
 
 While a request is in flight the status line shows it
-(`⟳ http: GET /_cat/indices (1.2s)`). Running the *same* request again while
-it is still going is refused rather than fired twice — cancel it with `x` in
-the response pane or **Cancel Running HTTP Request** from the palette.
+(`⟳ http: GET /_cat/indices (1.2s)`), and the response pane header counts the
+elapsed time up (`⟳ running one (1.2s)`). Running the *same* request again
+while it is still going is refused rather than fired twice.
+
+To stop one, press ++cmd+period++ (++ctrl+period++ where your terminal will
+not deliver that) — it works both in the `.http` editor and in the response
+pane — or `x` inside the response pane, or run **Cancel Running HTTP
+Request** from the palette. Once a request has been out for more than a
+second the pane spells this out for you with a `x / ctrl+. cancels` line
+under its header.
 
 ### Configuration IKE picks up
 
@@ -414,9 +421,12 @@ requests.
 
 The first response opens a read-only pane split off the editor (below, or to
 the right of a wide landscape pane), and every later
-response reuses it. It shows the status line and duration, the **request
-line actually sent** (method + final URL, right under the status), the
-headers, any warnings, and the body — JSON pretty-printed, JSON/XML/HTML/CSS/JS
+response reuses it. It shows the **request line actually sent** (method +
+final URL, right under the pane title), then the status line and duration,
+the **timing breakdown** of the exchange directly beneath it
+(`dns 2ms · connect 11ms · tls 34ms · ttfb 210ms · transfer 4ms` — only the
+phases that happened, and `conn reused` when the connection was already
+open), the headers, any warnings, and the body — JSON pretty-printed, JSON/XML/HTML/CSS/JS
 highlighted, binary bodies collapsed to a notice.
 
 | Key | What it does |

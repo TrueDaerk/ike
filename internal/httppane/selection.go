@@ -334,7 +334,7 @@ func (m *Model) HeadersText() string {
 	var lines []string
 	for _, r := range m.rows {
 		switch r.kind {
-		case kindStatus, kindHeader:
+		case kindStatus, kindTiming, kindHeader:
 			lines = append(lines, r.text)
 		case kindBody:
 			return strings.Join(lines, "\n")

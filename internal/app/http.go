@@ -1073,6 +1073,21 @@ func (m *Model) recordHTTPFlightEnd(e *httpFlightEntry, msg HTTPResponseMsg) {
 	if msg.Resp != nil && msg.Resp.StatusCode > 0 {
 		d["class"] = fmt.Sprintf("%dxx", msg.Resp.StatusCode/100)
 	}
+	// The phase breakdown (#2404) travels with the ok event: "1.4 s mean" only
+	// becomes actionable once the export says whether the time went into DNS,
+	// the connect, the handshake or the wait for the first byte. Structural
+	// numbers, like everything else here — nothing from the request or the
+	// response itself.
+	if msg.Resp != nil && !msg.Resp.Timing.IsZero() {
+		t := msg.Resp.Timing
+		ms := func(d time.Duration) string { return strconv.FormatInt(d.Milliseconds(), 10) }
+		d["dns_ms"] = ms(t.DNS)
+		d["connect_ms"] = ms(t.Connect)
+		d["tls_ms"] = ms(t.TLS)
+		d["ttfb_ms"] = ms(t.TTFB)
+		d["transfer_ms"] = ms(t.Transfer)
+		d["reused"] = strconv.FormatBool(t.Reused)
+	}
 	m.usage.Op("http.flight", phase, d)
 }
 
@@ -1137,11 +1152,40 @@ func (m *Model) markHTTPPending() {
 	if p == nil {
 		return
 	}
+	// The pane spells out how to abort a slow flight (#2404) and needs the
+	// user's *own* chord for it, not the shipped default: it is resolved from
+	// the live table on every state change rather than cached, so a rebind
+	// shows up on the next dispatch.
+	p.SetCancelChord(m.httpCancelChord())
 	for _, e := range m.httpFlight {
 		p.SetPending(e.request, e.started)
 		return
 	}
 	p.ClearPending()
+}
+
+// httpCancelChord names the chord bound to http.cancel in the live table, for
+// the response pane's in-flight hint (#2404). A delivered chord wins over a
+// fragile one: the hint exists to be pressed, and naming a chord this
+// terminal swallows would be advice that does not work. "" when the command
+// carries no binding at all — the hint then names the pane key alone.
+func (m Model) httpCancelChord() string {
+	if m.bindings == nil || m.bindings.Table() == nil {
+		return ""
+	}
+	best := ""
+	for _, b := range m.bindings.Table().Bindings() {
+		if b.Command != "http.cancel" {
+			continue
+		}
+		if !b.Fragile {
+			return b.Chord.String()
+		}
+		if best == "" {
+			best = b.Chord.String()
+		}
+	}
+	return best
 }
 
 // cancelHTTPRequests aborts every in-flight dispatch (http.cancel, palette,

@@ -106,7 +106,7 @@ bring their own.
 | Open Results in Find Window | `find.openInPanel` | `cmd+enter` | — | everywhere |
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
 | Show Project History Timeline | `history.projectTimeline` | — | — | everywhere |
-| Cancel Running HTTP Request | `http.cancel` | — | — | everywhere |
+| Cancel Running HTTP Request | `http.cancel` | `cmd+.` | — | everywhere |
 | Copy HTTP Request as curl | `http.copyAsCurl` | — | — | everywhere |
 | Copy HTTP Request as httpie | `http.copyAsHttpie` | — | — | everywhere |
 | Copy HTTP Response Body | `http.copyBody` | — | — | everywhere |
