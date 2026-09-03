@@ -661,39 +661,30 @@ func convertInlayHint(lines []string, h protocol.InlayHint, enc string, toHost f
 // PrepareCallHierarchy resolves the symbol at an editor position into
 // call-hierarchy items (#173), gated on the server capability.
 func (m *Manager) PrepareCallHierarchy(ctx context.Context, path string, pos buffer.Position) ([]protocol.CallHierarchyItem, error) {
-	srv, doc, ok := m.docServer(path)
-	if !ok || !srv.cl.Caps().CallHierarchy {
-		return nil, nil
-	}
-	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
-	return srv.cl.PrepareCallHierarchy(cctx, protocol.CallHierarchyPrepareParams{
-		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
-		Position:     protocol.ToLSPPosition(doc.lines, pos, srv.cl.Encoding()),
+	return call(m, ctx, path, capCallHierarchy, func(ctx context.Context, srv *server, doc *document) ([]protocol.CallHierarchyItem, error) {
+		return srv.cl.PrepareCallHierarchy(ctx, protocol.CallHierarchyPrepareParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+			Position:     protocol.ToLSPPosition(doc.lines, pos, srv.cl.Encoding()),
+		})
 	})
 }
+
+// capCallHierarchy gates the four textDocument/callHierarchy forwarders.
+func capCallHierarchy(c client.Capabilities) bool { return c.CallHierarchy }
 
 // IncomingCalls requests the callers of a prepared item (#173). Path names the
 // document the hierarchy was prepared from and selects the server.
 func (m *Manager) IncomingCalls(ctx context.Context, path string, item protocol.CallHierarchyItem) ([]protocol.CallHierarchyIncomingCall, error) {
-	srv, _, ok := m.docServer(path)
-	if !ok || !srv.cl.Caps().CallHierarchy {
-		return nil, nil
-	}
-	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
-	return srv.cl.IncomingCalls(cctx, protocol.CallHierarchyCallsParams{Item: item})
+	return call(m, ctx, path, capCallHierarchy, func(ctx context.Context, srv *server, _ *document) ([]protocol.CallHierarchyIncomingCall, error) {
+		return srv.cl.IncomingCalls(ctx, protocol.CallHierarchyCallsParams{Item: item})
+	})
 }
 
 // OutgoingCalls requests the callees of a prepared item (#173).
 func (m *Manager) OutgoingCalls(ctx context.Context, path string, item protocol.CallHierarchyItem) ([]protocol.CallHierarchyOutgoingCall, error) {
-	srv, _, ok := m.docServer(path)
-	if !ok || !srv.cl.Caps().CallHierarchy {
-		return nil, nil
-	}
-	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
-	return srv.cl.OutgoingCalls(cctx, protocol.CallHierarchyCallsParams{Item: item})
+	return call(m, ctx, path, capCallHierarchy, func(ctx context.Context, srv *server, _ *document) ([]protocol.CallHierarchyOutgoingCall, error) {
+		return srv.cl.OutgoingCalls(ctx, protocol.CallHierarchyCallsParams{Item: item})
+	})
 }
 
 // Format requests whole-document formatting and returns the edits already
@@ -1608,6 +1599,25 @@ func (m *Manager) docServer(path string) (*server, *document, bool) {
 		return nil, nil, false
 	}
 	return srv, doc, true
+}
+
+// call is the shape every capability-gated forwarder shares: resolve the
+// server and document behind path, refuse unless capable reports the server
+// advertises the request, then run do under the shared requestTimeout. A
+// missing document, a missing server or a missing capability is the graceful
+// zero answer (nil slice, no error) — never an error and, decisively, never a
+// request to a server that would leave it unanswered until the timeout.
+// Written as a function rather than a method because Go has no generic
+// methods.
+func call[R any](m *Manager, ctx context.Context, path string, capable func(client.Capabilities) bool, do func(context.Context, *server, *document) (R, error)) (R, error) {
+	var zero R
+	srv, doc, ok := m.docServer(path)
+	if !ok || !capable(srv.cl.Caps()) {
+		return zero, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	return do(cctx, srv, doc)
 }
 
 // startupError folds the decisive stderr line into a bare transport error
