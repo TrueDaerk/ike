@@ -84,11 +84,22 @@ const playMaxQueryRows = 8
 // standing: the playground is still a playground, not a program editor.
 const playMinResultRows = 3
 
-// playQueryPrefixW is the width of the query line's `> jq: ` label.
-// Continuation rows of the expanded view indent by it, so the program stays in
-// one column. Both dialect names are two cells wide, so the window math never
-// depends on which playground is open.
+// playQueryPrefixW is the width of the query line's `> jq: ` label with a
+// two-cell dialect name — the resting value playPrefixW answers when no
+// playground is open. Continuation rows of the expanded view indent by the
+// prefix, so the program stays in one column.
 const playQueryPrefixW = 6
+
+// playPrefixW is the width of the open playground's query label — `> jq: `
+// and `> yq: ` are six cells, `> xmq: ` seven (#2414). Every piece of the
+// window math (row width, click mapping, continuation indent) reads this one
+// number, so the label and the geometry can never disagree.
+func (m Model) playPrefixW() int {
+	if m.play == nil {
+		return playQueryPrefixW
+	}
+	return len(m.play.dialect.Name()) + 4
+}
 
 // playDebounce is how long the query line stays quiet before a program runs. A
 // var, not a const, so tests drive the evaluation without sleeping.
@@ -305,11 +316,12 @@ type playInputSource struct {
 // open, and a JSON one never does either — that pairing is what would answer
 // "yq Playground" with a parse error over somebody else's pane. Selection and
 // whole buffer work there exactly as they do for jq — a YAML block embedded
-// in a Markdown file is queryable by selecting it.
+// in a Markdown file is queryable by selecting it. The xmq playground (#2414)
+// follows yq's rule with its own body types: a focused response typed as XML
+// or HTML, else the editor.
 func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
-	httpOK := d != jqplay.DialectYQ
 	if c := m.focusedContent(); c != nil && c.Kind() == pane.KindHTTP &&
-		(httpOK || c.HTTP().BodyLang() == "yaml") {
+		playHTTPBodyOK(d, c.HTTP().BodyLang()) {
 		// JQInput, not BodyText (#2157): a spooled body is only partly in the
 		// pane, and a program written against its head would answer questions
 		// about a document that never arrived.
@@ -335,7 +347,7 @@ func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
 	// the .http file is the usual focus after a dispatch. It may live as a
 	// content tab of a tab host (#1778); the mode then activates that tab.
 	if hostKey, tabIdx, inst, ok := m.findContent(func(c *pane.Instance) bool {
-		return httpOK && c.Kind() == pane.KindHTTP
+		return d == jqplay.DialectJQ && c.Kind() == pane.KindHTTP
 	}); ok && m.leafVisible(hostKey) {
 		if inst.HTTP().HasBodyText() {
 			if body := inst.HTTP().JQInput(); strings.TrimSpace(body) != "" {
@@ -346,10 +358,27 @@ func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
 	return playInputSource{}, false
 }
 
+// playHTTPBodyOK reports whether a *focused* HTTP response of body language
+// lang is an input the dialect queries: jq claims any focused response (the
+// pane the user is looking at is the one they mean, and JSON is the response
+// default), yq only a YAML-typed one (#2451), xmq only XML or HTML (#2414).
+func playHTTPBodyOK(d jqplay.Dialect, lang string) bool {
+	switch d {
+	case jqplay.DialectYQ:
+		return lang == "yaml"
+	case jqplay.DialectXMQ:
+		return lang == "xml" || lang == "html"
+	}
+	return true
+}
+
 // playNoSourceMessage says what the dialect looked for and did not find.
 func playNoSourceMessage(d jqplay.Dialect) string {
-	if d == jqplay.DialectYQ {
+	switch d {
+	case jqplay.DialectYQ:
 		return "yq: no YAML buffer to query"
+	case jqplay.DialectXMQ:
+		return "xmq: no XML or HTML buffer to query"
 	}
 	return "jq: no JSON buffer or HTTP response to query"
 }
@@ -383,7 +412,17 @@ func playEditorLabel(ed *editor.Model) string {
 func (m Model) playSeedProgram(d jqplay.Dialect, src playInputSource, atPath bool) string {
 	if atPath {
 		if !src.fullFile {
-			return "."
+			return playIdentity(d)
+		}
+		if d == jqplay.DialectXMQ {
+			// The xmq spelling of "the value I was looking at" is an XPath
+			// select over the element under the caret (#2414).
+			if ed := m.activeEditor(); ed != nil {
+				if xp, ok := xmqXPathAtCursor(ed); ok {
+					return "select " + xp
+				}
+			}
+			return playIdentity(d)
 		}
 		kind := editor.DocPathJQ
 		if d == jqplay.DialectYQ {
@@ -394,10 +433,20 @@ func (m Model) playSeedProgram(d jqplay.Dialect, src playInputSource, atPath boo
 				return path
 			}
 		}
-		return "."
+		return playIdentity(d)
 	}
 	if last := m.playLastProgram[src.key]; last != "" {
 		return last
+	}
+	return playIdentity(d)
+}
+
+// playIdentity is the dialect's "just show me the document" program: jq and
+// yq spell it `.`; for xmq it is the empty command line — the CLI without a
+// command pretty-prints the input in its own notation (#2414).
+func playIdentity(d jqplay.Dialect) string {
+	if d == jqplay.DialectXMQ {
+		return ""
 	}
 	return "."
 }
@@ -603,7 +652,7 @@ func (m Model) playQueryRowsFor(width int) int {
 // take. The floor keeps the window math sane on a pane too narrow to render
 // into anyway.
 func (m Model) playQueryWidth(paneWidth int) int {
-	if avail := paneWidth - playQueryPrefixW - 2; avail > 10 {
+	if avail := paneWidth - m.playPrefixW() - 2; avail > 10 {
 		return avail
 	}
 	return 10
@@ -958,12 +1007,16 @@ func (m *Model) syncPlayResultBuffer() tea.Cmd {
 	if s == nil || s.resultEd == nil {
 		return nil
 	}
-	s.resultEd.ShowReadOnly(s.dialect.ResultPath(), s.result.Text())
+	// The result names its own path (#2414): an xmq run's output language is
+	// per command — `to-json` writes JSON, `to-html` HTML — and the display
+	// path's extension is what resolves the highlighting. For jq and yq it
+	// is the dialect's fixed path, unchanged.
+	s.resultEd.ShowReadOnly(s.result.ResultPath(), s.result.Text())
 	// A search over the *previous* result has nothing to say about this one
 	// (#2411): the matches the query-line round trip leaves highlighted live
 	// exactly until the buffer they were found in is replaced.
 	s.resultEd.ClearSearch()
-	s.setResultFolds(s.dialect.Folds(s.result.Text()))
+	s.setResultFolds(s.result.Folds())
 	s.resultEd.SetFocused(s.bufFocus)
 	return s.resultEd.Reparse()
 }
@@ -1549,7 +1602,7 @@ func (m *Model) clickPlayQueryRow(x, y int) {
 	width := paneInterior(r.W, paneChromeW)
 	lines, rows, start := m.playQueryWindow(width)
 	idx := y + rows + playInfoRows // the clicked query row, 0-based
-	col := x - playQueryPrefixW
+	col := x - m.playPrefixW()
 	if idx < 0 || idx >= rows || col < 0 {
 		return
 	}
@@ -1629,7 +1682,7 @@ func (m Model) openPlayResultAsScratch() (tea.Model, tea.Cmd) {
 		s.status = "nothing to open — the result is empty"
 		return m, nil
 	}
-	path, err := scratch.Create(s.dialect.Ext())
+	path, err := scratch.Create(s.result.Ext())
 	if err != nil {
 		s.status = "scratch: " + err.Error()
 		return m, nil
@@ -1875,7 +1928,7 @@ func (m Model) playQueryRows(width int) []string {
 	for i := 0; i < rows; i++ {
 		row := label.Render(prefix)
 		if i > 0 {
-			row = strings.Repeat(" ", playQueryPrefixW)
+			row = strings.Repeat(" ", m.playPrefixW())
 		}
 		idx := start + i
 		if idx >= len(lines) {

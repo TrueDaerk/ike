@@ -27,18 +27,24 @@ package jqplay
 // Dialect names one of the playground's two document languages.
 type Dialect int
 
-// The two dialects. DialectJQ is the zero value — jq is the original mode and
-// the one every hand-built Result belongs to.
+// The three dialects. DialectJQ is the zero value — jq is the original mode
+// and the one every hand-built Result belongs to. DialectXMQ (#2414) is the
+// odd one out: its engine is the external `xmq` binary rather than gojq, but
+// it lives behind the same seam so the host stays dialect-agnostic.
 const (
 	DialectJQ Dialect = iota
 	DialectYQ
+	DialectXMQ
 )
 
 // Name is the dialect's command-line name — the query line's label, the
 // command ids and every message that says which language failed.
 func (d Dialect) Name() string {
-	if d == DialectYQ {
+	switch d {
+	case DialectYQ:
 		return "yq"
+	case DialectXMQ:
+		return "xmq"
 	}
 	return "jq"
 }
@@ -46,18 +52,26 @@ func (d Dialect) Name() string {
 // Format names the document language the dialect reads and writes, for the
 // messages that talk about the *input* rather than about the program.
 func (d Dialect) Format() string {
-	if d == DialectYQ {
+	switch d {
+	case DialectYQ:
 		return "YAML"
+	case DialectXMQ:
+		return "XML/HTML"
 	}
 	return "JSON"
 }
 
 // Ext is the file extension the result is written under: the scratch buffer
 // the open-as-scratch action creates, and the extension in the result
-// buffer's display path that resolves its highlighting.
+// buffer's display path that resolves its highlighting. It is the dialect's
+// *default* — an xmq result names its own extension per command (to-json
+// writes JSON, to-html HTML), which Result.Ext answers.
 func (d Dialect) Ext() string {
-	if d == DialectYQ {
+	switch d {
+	case DialectYQ:
 		return "yaml"
+	case DialectXMQ:
+		return "xmq"
 	}
 	return "json"
 }
@@ -72,8 +86,11 @@ func (d Dialect) ResultPath() string { return d.Name() + " result." + d.Ext() }
 // file. An empty or malformed text is an error the playground shows on its
 // input line; it is never a crash.
 func (d Dialect) Parse(text string) (*Input, error) {
-	if d == DialectYQ {
+	switch d {
+	case DialectYQ:
 		return parseYAML(text)
+	case DialectXMQ:
+		return parseXMQ(text)
 	}
 	return parseJSON(text)
 }
@@ -83,8 +100,15 @@ func (d Dialect) Parse(text string) (*Input, error) {
 // YAML. Both scans read text the dialect's own encoder wrote, so structure is
 // a matter of counting rather than of re-decoding.
 func (d Dialect) Folds(text string) []Fold {
-	if d == DialectYQ {
+	switch d {
+	case DialectYQ:
 		return yamlFolds(text)
+	case DialectXMQ:
+		// The xmq result is the CLI's stdout — xmq text, XML, HTML or JSON per
+		// command — which the structural scans of this package do not read.
+		// The result buffer still folds by grammar where one applies;
+		// Result.Folds answers the JSON case (`to-json`) that the scan can.
+		return nil
 	}
 	return jsonFolds(text)
 }

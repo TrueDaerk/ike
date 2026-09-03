@@ -155,6 +155,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Window layouts | `alt+shift+f12` | `alt+shift+f12` | `window.layouts` |
 | Zen mode | `ctrl+alt+f` | `ctrl+alt+f` | `view.zenMode` |
 | jq playground | `ctrl+alt+j` | `ctrl+alt+j` | `json.jqPlayground` |
+| xmq playground | `ctrl+alt+x` | `ctrl+alt+x` | `xml.xmqPlayground` |
 | yq playground | `ctrl+alt+y` | `ctrl+alt+y` | `yaml.yqPlayground` |
 
 ## Editor

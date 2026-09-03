@@ -587,6 +587,11 @@ var jetbrainsRows = []row{
 	// them exactly where they apply (the caret on a JSON/YAML path).
 	{"ctrl+alt+j", "json.jqPlayground", "jq playground", Global, "jq/yq playground (#2305)"},
 	{"ctrl+alt+y", "yaml.yqPlayground", "yq playground", Global, "jq/yq playground (#2305)"},
+	// The xmq playground (#2414) continues the family on x — delivered as-is
+	// on macOS like its two siblings, so the scheme is one chord shape on
+	// every platform. Collision check: ctrl+alt+x is unclaimed in both the
+	// shared and the darwin tables.
+	{"ctrl+alt+x", "xml.xmqPlayground", "xmq playground", Global, "xmq playground (#2414)"},
 	// The dialect dispatcher (#2415) sits in front of those two: one chord
 	// that opens whichever playground speaks the focused buffer — jq, yq or
 	// (once it lands) xmq. Editor-scoped, because "this file" is what it

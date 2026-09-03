@@ -93,6 +93,9 @@ type Config struct {
 	// Ansible holds Ansible integration settings (#2293): the vault password
 	// file transparent vault editing decrypts with.
 	Ansible Ansible `toml:"ansible"`
+	// Playground holds the playgrounds' settings (#2414): the xmq engine
+	// binary's path.
+	Playground Playground `toml:"playground"`
 	// Preview holds the markdown preview's settings (#2421): how fenced
 	// diagram blocks (mermaid today) are rendered inside the pane.
 	Preview Preview `toml:"preview"`
@@ -118,6 +121,19 @@ type Preview struct {
 // both. Empty and without those variables, vault files open as ciphertext.
 type Ansible struct {
 	VaultPasswordFile string `toml:"vault_password_file"`
+}
+
+// Playground holds the playgrounds' settings (#2414). Today that is one
+// value: where the xmq playground finds its engine binary.
+type Playground struct {
+	XMQ XMQ `toml:"xmq"`
+}
+
+// XMQ configures the xmq playground's external engine. Path names the xmq
+// binary for an install outside PATH; a `~` prefix expands to the home
+// directory. Empty resolves `xmq` on PATH.
+type XMQ struct {
+	Path string `toml:"path"`
 }
 
 // Telemetry holds the local-only usage-telemetry settings (#2235). Enabled

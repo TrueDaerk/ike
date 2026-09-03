@@ -55,6 +55,22 @@ func TestCatalogApplicability(t *testing.T) {
 			wantNot: []string{"json.jqPlaygroundAtPath"},
 		},
 		{
+			// #2414: an element under the caret of a markup buffer gets the
+			// xmq at-XPath entry — the docpath providers say nothing there.
+			name:    "xml element caret offers the xmq playground",
+			cx:      Context{LangID: "xml", XMLElement: true},
+			want:    []string{"xml.xmqPlaygroundAtPath"},
+			wantNot: []string{"json.jqPlaygroundAtPath", "yaml.yqPlaygroundAtPath"},
+		},
+		{
+			// The selection rule (#2026) applies to the markup entry too: the
+			// playground queries the selected fragment, which the caret's
+			// element path does not address.
+			name:    "selection in an xml buffer has no xmq playground at path",
+			cx:      Context{LangID: "xml", XMLElement: true, HasSelection: true},
+			wantNot: []string{"xml.xmqPlaygroundAtPath"},
+		},
+		{
 			// #2026: the playground queries the selection, which the caret's
 			// path does not index — the seeded open would silently be a
 			// plain one.

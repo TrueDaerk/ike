@@ -284,6 +284,11 @@ bring their own.
 | Restore Default Layout | `window.restoreLayout` | `shift+f12` | — | everywhere |
 | Save Window Layout… | `window.saveLayout` | — | — | everywhere |
 | Set Default Window Layout… | `window.setDefaultLayout` | — | — | everywhere |
+| xmq Cheatsheet… | `xml.xmqCheatsheet` | — | — | everywhere |
+| Saved xmq Filters… | `xml.xmqFilters` | — | — | everywhere |
+| xmq Playground… | `xml.xmqPlayground` | `ctrl+alt+x` | — | everywhere |
+| xmq Playground at Element XPath… | `xml.xmqPlaygroundAtPath` | — | — | everywhere |
+| Rename Saved xmq Filter… | `xml.xmqRenameFilter` | — | — | everywhere |
 | yq Cheatsheet… | `yaml.yqCheatsheet` | — | — | everywhere |
 | Saved yq Filters… | `yaml.yqFilters` | — | — | everywhere |
 | yq Playground… | `yaml.yqPlayground` | `ctrl+alt+y` | — | everywhere |

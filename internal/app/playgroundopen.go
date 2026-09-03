@@ -27,15 +27,16 @@ import (
 // too.
 
 // playKind names which playground a buffer language belongs to. It is a level
-// above jqplay.Dialect on purpose: xmq is not (yet) a jqplay dialect, and the
-// mapping table must be able to name it before the playground exists (#2415).
+// above jqplay.Dialect on purpose: the mapping table named xmq before that
+// playground existed (#2415), and it still routes through the hook below —
+// the one open with a binary gate in front of it (#2414).
 type playKind string
 
 const (
 	playKindNone playKind = ""    // no playground speaks this language
 	playKindJQ   playKind = "jq"  // json, jsonc, ndjson/jsonl
 	playKindYQ   playKind = "yq"  // yaml and its ansible flavour
-	playKindXMQ  playKind = "xmq" // xml, html — pending its own playground
+	playKindXMQ  playKind = "xmq" // xml, html
 )
 
 // playKindFor maps a buffer language id to the playground that queries it.
@@ -56,11 +57,11 @@ func playKindFor(langID string) playKind {
 	return playKindNone
 }
 
-// startXMQPlayground is the seam for the xmq playground while it is not
-// implemented yet (#2415): nil means "no such playground", and the dispatcher
-// says so instead of opening the wrong one. The mapping above is already
-// wired, so landing xmq is assigning this hook — and the dispatcher's tests
-// cover the route today by installing a stub.
+// startXMQPlayground is the dispatcher's door to the xmq playground. It grew
+// as a nil-able seam while that playground did not exist (#2415);
+// playground_xmq.go assigns it now (#2414) — the indirection stays because
+// the dispatcher's tests count calls through it, and the nil branch below is
+// the honest answer in a build that somehow lost the assignment.
 var startXMQPlayground func(m *Model) tea.Cmd
 
 // openPlaygroundForBuffer resolves what has focus to a playground and opens

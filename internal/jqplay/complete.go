@@ -68,6 +68,11 @@ type Candidate struct {
 // builtin list open on an empty identifier (the explicit completion request);
 // without it an empty partial stays quiet.
 func Complete(program string, pos int, in *Input, manual bool) (items []Candidate, start int) {
+	if in.Dialect() == DialectXMQ {
+		// The xmq query line holds a CLI command line, not a jq program
+		// (#2414): the offers are the xmq commands, not gojq's builtins.
+		return completeXMQ(program, pos, manual)
+	}
 	r := []rune(program)
 	if pos < 0 {
 		pos = 0

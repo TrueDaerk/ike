@@ -330,6 +330,7 @@ func (c *Config) Flat() map[string]string {
 	put("telemetry.enabled", c.Telemetry.Enabled)
 	put("statusline.project_time", c.StatusLine.ProjectTime)
 	put("ansible.vault_password_file", c.Ansible.VaultPasswordFile)
+	put("playground.xmq.path", c.Playground.XMQ.Path)
 
 	// Per-event-type forge notification styles (#2086).
 	put("forge.notify.issue_opened", c.Forge.Notify.IssueOpened)

@@ -712,6 +712,11 @@ type Model struct {
 	doctorReturnFocus string
 	doctorLog         *debugdoctor.Log
 
+	// xmqMissing marks the missing-binary dialog of the xmq playground
+	// (#2414, playground_xmq.go): the shell shows the install hint and owns
+	// the keyboard until dismissed, like the other prominent dialogs.
+	xmqMissing bool
+
 	// lspDoctorReturnFocus / lspDoctorReport are the same pair for the LSP
 	// Doctor tool window (#2164); the report keeps the last run's results and
 	// failure classes so a re-run can verify fixes.
@@ -6693,11 +6698,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.startRegexTester()
 
 	case OpenPlaygroundMsg:
-		// json.jqPlayground / yaml.yqPlayground (palette / Tools menu, #1936,
-		// #2039): the query line, mounted inline in the buffer or HTTP
-		// response pane at hand (#1970), on `.` or this input's last valid
-		// program (#1982).
-		return m, m.startPlayground(msg.Dialect, false)
+		// json.jqPlayground / yaml.yqPlayground / xml.xmqPlayground (palette
+		// / Tools menu, #1936, #2039, #2414): the query line, mounted inline
+		// in the buffer or HTTP response pane at hand (#1970), on the
+		// identity program or this input's last valid one (#1982).
+		return m, m.openPlaygroundDialect(msg.Dialect, false)
 
 	case OpenPlaygroundForBufferMsg:
 		// playground.open (cmd+shift+j, palette / Tools menu, #2415): the
@@ -6706,10 +6711,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.openPlaygroundForBuffer()
 
 	case OpenPlaygroundAtPathMsg:
-		// json.jqPlaygroundAtPath / yaml.yqPlaygroundAtPath (palette / Tools
-		// menu, #1982): the same mode, prefilled with the caret's document
-		// path in the dialect's own spelling (#1660).
-		return m, m.startPlayground(msg.Dialect, true)
+		// json.jqPlaygroundAtPath / yaml.yqPlaygroundAtPath /
+		// xml.xmqPlaygroundAtPath (palette / Tools menu, #1982, #2414): the
+		// same mode, prefilled with the caret's document path in the
+		// dialect's own spelling (#1660) — a `select <xpath>` for xmq.
+		return m, m.openPlaygroundDialect(msg.Dialect, true)
 
 	case SaveFilterPromptMsg:
 		// json.jqSaveFilter (ctrl+s in the query line, palette / Tools menu,
@@ -8164,6 +8170,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the buffer.
 		if m.forgeEditDialogOpen() {
 			return m.updateForgeEditDialog(msg)
+		}
+		// The xmq missing-binary dialog (#2414) owns the keyboard the same
+		// way: esc/enter/q dismisses.
+		if m.xmqMissingOpen() {
+			return m.updateXMQMissingDialog(msg)
 		}
 		// The post-tour setup dialogs (#713) own the keyboard the same way.
 		if m.themePickOpen() {

@@ -1,15 +1,15 @@
 ---
 type: concept
-title: jq & yq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; two dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers and a focused YAML response), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, and inserting a picked row into the query line — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
+title: jq, yq & xmq Playground
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; three dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers and a focused YAML response, xmq for XML/HTML buffers and a focused XML/HTML response — the one external-engine dialect, shelling out to the xmq CLI with the buffer on stdin, the query line split into shell words, the output language named per command for the result's highlighting and scratch extension, a missing binary answered at open with a centered install-hint dialog and configurable via playground.xmq.path, and the at-path open seeding a select over the caret element's XPath), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, and inserting a picked row into the query line — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
 resource: internal/jqplay/jqplay.go
-tags: [architecture, json, yaml, jq, yq, tools, inline, editor, http, completion, folding]
-timestamp: 2026-09-03T18:00:00Z
+tags: [architecture, json, yaml, xml, html, jq, yq, xmq, tools, inline, editor, http, completion, folding]
+timestamp: 2026-09-03T21:00:00Z
 ---
 
-# jq & yq Playground
+# jq, yq & xmq Playground
 
-#1936, inline since #1970, two dialects since #2039. JSON is everywhere in the
+#1936, inline since #1970, two dialects since #2039, three since #2414. JSON is everywhere in the
 daily workflow — `.http` responses, Elasticsearch hits, parser output,
 fixtures — and until now the only way to run a jq program against one was to
 leave the IDE. The playground is a **query line mounted inline in the pane
@@ -26,8 +26,12 @@ so leaving restores it bit-identically — editability included.
 YAML gets the **same mode** under `yaml.yqPlayground` /
 `yaml.yqPlaygroundAtPath`: same query line, same result buffer, same history,
 same keys — only the decoder, the rendering, the fold scan and the filter
-library differ. See [the yq dialect](#the-yq-dialect); everything else in this
-document describes both.
+library differ. See [the yq dialect](#the-yq-dialect). XML and HTML get it
+under `xml.xmqPlayground` (`ctrl+alt+x`) / `xml.xmqPlaygroundAtPath` — the one
+dialect whose engine is an **external binary**, the
+[xmq](https://github.com/libxmq/xmq) CLI; see
+[the xmq dialect](#the-xmq-dialect-2414). Everything else in this document
+describes all three.
 
 ## Structure
 
@@ -37,6 +41,8 @@ internal/jqplay/
   dialect.go     the jq/yq seam: Dialect — how a buffer is read, a value written, a result folded
   yaml.go        the yq input/output path (#2039): YAML stream → gojq values → YAML
   yamlfold.go    yamlFolds: the YAML result's foldable blocks, by indentation
+  xmq.go         the xmq engine (#2414): the external-CLI runner, ShellWords, the output-language map,
+                 the binary path (SetXMQPath/LookupXMQ), the command completion and the authored sheet
   raw.go         EvaluateRaw: the `jq -r`-shaped single-value form (used by .http captures, #1993)
   fold.go        Fold + jsonFolds: the JSON result's foldable objects/arrays with their member counts (#2029)
   highlight.go   the query line's jq scanner: Tokens/KindAt, single pass, never fails
@@ -50,10 +56,15 @@ internal/app/
   playfilters.go  the filter library's UI: the store paths, the name prompt, the palette picker
   playcheat.go    the language cheatsheet's UI: the locked palette mode, the search, the two insertions (#2382)
   playhelp.go     the mode's key inventory for the cheatsheet: query line, result buffer, keymap chords (#2237)
-  commands.go     json.jqPlayground / …AtPath and yaml.yqPlayground / …AtPath → the two open messages,
-                  json.jqSaveFilter / {json.jq,yaml.yq}Filters / …RenameFilter → the libraries,
-                  {json.jq,yaml.yq}Cheatsheet → the language sheet,
+  playground_xmq.go the xmq glue (#2414): the dispatcher hook, the binary gate with the missing-binary
+                  dialog, the configured path hand-over and the XPath seed of the at-path open
+  commands.go     {json.jq,yaml.yq,xml.xmq}Playground / …AtPath → the two open messages,
+                  json.jqSaveFilter / {json.jq,yaml.yq,xml.xmq}Filters / …RenameFilter → the libraries,
+                  {json.jq,yaml.yq,xml.xmq}Cheatsheet → the language sheet,
                   json.jqQueryView → the multi-line view toggle
+internal/htmldom/
+  xpath.go        the at-path seed's location spelling (#2414): Document.XPath over the HTML tree,
+                  XMLXPathAt/XMLOffset scanning XML source as itself
 ```
 
 The split is the usual one: everything interesting — parsing, running, error
@@ -224,16 +235,18 @@ the program runs over each document, and the outputs come back separated by
 
 ### What differs, concretely
 
-| | jq | yq |
-| --- | --- | --- |
-| Commands | `json.jqPlayground`, `json.jqPlaygroundAtPath` | `yaml.yqPlayground`, `yaml.yqPlaygroundAtPath` |
-| Input | focused HTTP response, else editor selection, else whole buffer | editor selection, else whole buffer |
-| Query-line label | `> jq: ` | `> yq: ` |
-| Result | pretty JSON, outputs joined by a newline | block YAML, documents joined by `---` |
-| `ctrl+o` scratch | `.json` | `.yaml` |
-| Folding | multi-line objects / arrays, `{ ⋯ 3 keys }` | indented blocks and block scalars, `⋯ 3 keys` (YAML closes nothing) |
-| Filter library | `jqfilters.json` / `jqfilters-global.json` | `yqfilters.json` / `yqfilters-global.json` |
-| Seeded path | `.spec.["my-key"]` (`DocPathJQ`) | `.spec."my-key"` (`DocPathYQ`) |
+| | jq | yq | xmq (#2414) |
+| --- | --- | --- | --- |
+| Commands | `json.jqPlayground`, `json.jqPlaygroundAtPath` | `yaml.yqPlayground`, `yaml.yqPlaygroundAtPath` | `xml.xmqPlayground`, `xml.xmqPlaygroundAtPath` |
+| Engine | gojq in process | gojq in process | the external `xmq` CLI |
+| Input | focused HTTP response, else editor selection, else whole buffer | focused YAML-typed response, else editor selection, else whole buffer | focused XML/HTML-typed response, else editor selection, else whole buffer |
+| Query-line label | `> jq: ` | `> yq: ` | `> xmq: ` (three cells — `playPrefixW`) |
+| Result | pretty JSON, outputs joined by a newline | block YAML, documents joined by `---` | the CLI's stdout — xmq notation, or the `to-*` command's language |
+| `ctrl+o` scratch | `.json` | `.yaml` | the result's own extension (`.xmq`, `.json`, …) |
+| Folding | multi-line objects / arrays, `{ ⋯ 3 keys }` | indented blocks and block scalars, `⋯ 3 keys` (YAML closes nothing) | only a `to-json` result folds (the JSON scan) |
+| Filter library | `jqfilters.json` / `jqfilters-global.json` | `yqfilters.json` / `yqfilters-global.json` | `xmqfilters.json` / `xmqfilters-global.json` |
+| Seeded path | `.spec.["my-key"]` (`DocPathJQ`) | `.spec."my-key"` (`DocPathYQ`) | `select /root/item[2]` (XPath) |
+| Identity program | `.` | `.` | the empty command line |
 
 The yq playground deliberately does **not** consider HTTP response bodies. A
 response is JSON in every workflow the [HTTP client](./http-client.md) serves,
@@ -275,6 +288,70 @@ Playground Filter…") writes into whichever playground is open, because the
 program being named is that playground's. A `yaml.yqSaveFilter` would be a
 second name for one behavior.
 
+## The xmq dialect (#2414)
+
+XML and HTML buffers get the same mode as a **third `jqplay.Dialect`** —
+`DialectXMQ` — with one structural difference: there is no Go port of xmq, so
+the engine is the **external `xmq` CLI** (github.com/libxmq/xmq), run per
+evaluation with the snapshot on stdin. The query line holds an xmq *command
+line* — `select //item[@id='3']`, `to-json`, `delete //script to-xml` — split
+into arguments with shell-word rules (`jqplay.ShellWords`: whitespace
+separates, single quotes are literal, double quotes group with backslash
+escapes; an unterminated quote is a query-line error, not a guess). Everything
+around the process boundary is the shared machinery: the same debounce and
+generation stamping, the same `EvalTimeout` (the run context kills the process,
+`WaitDelay` bounds the pipe drain), the same `MaxResultBytes` cap on stdout
+(`Truncated` on the info row), the same history, library
+(`xmqfilters.json` / `xmqfilters-global.json`) and stale-result contract.
+
+Consequences of the boundary, each deliberate:
+
+- **The input is not decoded here.** `parseXMQ` keeps the raw text and rejects
+  only emptiness; a malformed document is the CLI's own stderr (first line) on
+  the info row, phrased by the tool that actually read it.
+- **The output language is per command.** `to-json` writes JSON, `to-html` /
+  `render-html` HTML, `to-xml` XML, `to-text` and friends plain text; without a
+  `to-*` command the CLI prints its own compact notation (`.xmq`). The run
+  records the extension on the `Result` (`Result.Ext`/`ResultPath`), which is
+  what resolves the result buffer's highlighting, its folds (a `to-json` result
+  folds like a jq one) and the `ctrl+o` scratch's extension — where jq and yq
+  always write their own format.
+- **The binary may be absent.** The open is gated: `xml.xmqPlayground` (and the
+  dispatcher's xmq route) first resolves the binary (`jqplay.LookupXMQ`), and a
+  miss answers with a **centered dialog** naming the install hint
+  (`brew install xmq`) and the setting — the prominent shape, because a toast
+  for "the feature you just asked for does not work" is too easy to miss. The
+  **`playground.xmq.path`** setting (Settings UI → Playgrounds, `Path`-typed,
+  validated as an existing file or a PATH-resolvable name, diagnosed at config
+  load) points at an install outside PATH; it is handed to the engine at every
+  open. A binary that vanishes mid-session surfaces as a run error carrying the
+  same hint.
+- **The identity program is the empty line.** `xmq` with no command
+  pretty-prints the input in its own notation, so the ordinary open runs
+  exactly that — where jq and yq open on `.`.
+- **The at-path open seeds an XPath.** `xml.xmqPlaygroundAtPath` (intention
+  menu on an element; palette) prefills `select <xpath>` for the element under
+  the caret: HTML resolves through the DOM inspector's parser
+  (`htmldom.NodeAt` + the new `Document.XPath`, positional predicates exactly
+  where an element shares its tag with a sibling), XML is scanned as itself
+  (`htmldom.XMLXPathAt`, lenient encoding/xml token walk — original tag case
+  kept, half-edited documents answered for the part that scans). The intention
+  entry rides a precomputed `Context.XMLElement`, the markup analogue of
+  `DocPath` (#2026).
+- **Completion and cheatsheet are authored.** The CLI has no machine-readable
+  builtin list, so the popup offers the command vocabulary
+  (`jqplay.XMQCommands`) on the word under the cursor, and
+  `Cheatsheet(DialectXMQ)` is the authored command reference plus example
+  lines — no gojq builtins leak in.
+- **The label is three cells.** `> xmq: ` broke the "both dialect names are two
+  cells" assumption, so the query-window math reads `playPrefixW()` — one
+  number for rendering, click mapping and continuation indent.
+
+Sources resolve like yq's rule with xmq's own types: a **focused** HTTP
+response whose body is typed `xml` or `html` (#2451), else the editor's
+selection, else the whole buffer. An unfocused response never outranks the
+file the user asked about.
+
 ## Opening by file type (#2415)
 
 Three dialects mean three commands to remember, so there is a fourth in front
@@ -291,11 +368,11 @@ focused document's language and opens it —
 
 — in `internal/app/playgroundopen.go`. It only *routes*: every branch ends in
 `startPlayground`, so how a playground mounts stays one implementation. The
-xmq route is wired ahead of the playground itself through the
-`startXMQPlayground` hook; while that hook is nil, an XML or HTML buffer is
-answered with "the xmq playground is not available yet" rather than being
-opened in the wrong dialect, and the route is covered by a test that installs
-a stub.
+xmq route goes through the `startXMQPlayground` hook, which predates the
+playground (#2415) and is assigned by `playground_xmq.go` now (#2414) — the
+xmq open carries a binary gate in front of the mount, and the hook keeps the
+dispatcher ignorant of it; the dispatcher tests still count calls through a
+stub.
 
 ### The response pane is a second source (#2451)
 
