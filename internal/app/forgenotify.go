@@ -330,15 +330,7 @@ func (m *Model) openForgeEvent(e forge.Event) tea.Cmd {
 // showIssuesPanel makes sure the issues tool window exists and is focused,
 // returning the first fetch when it had to be opened.
 func (m *Model) showIssuesPanel() tea.Cmd {
-	if !m.activeWS().Panes.Has(pane.IssuesKey) {
-		m.issuesReturnFocus = m.activeWS().Panes.Focused()
-		return m.openIssuesPanel()
-	}
-	if m.activeWS().Panes.Focused() != pane.IssuesKey {
-		m.issuesReturnFocus = m.activeWS().Panes.Focused()
-		m.setFocus(pane.IssuesKey)
-	}
-	return nil
+	return m.showPanel(pane.IssuesKey, m.openIssuesPanel)
 }
 
 // applyForgeReveal runs a pending reveal after a fetch landed in the pane,

@@ -9,7 +9,6 @@ import (
 
 	"ike/internal/host"
 	"ike/internal/imgview"
-	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -62,29 +61,9 @@ func sniffImage(head []byte) bool {
 // split off the leaf viewerSplitTarget picks, the pane the user last worked in
 // (#1779), which is what an explicit split open still does.
 func (m *Model) openImagePreview(path string) {
-	tabHost := m.takeViewerTabHost()
-	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
+	m.openViewerPane(pane.KindImage, path, func(c *pane.Instance) bool {
 		return c.Kind() == pane.KindImage && c.Image().Path() == path
-	}); ok {
-		m.focusContentAt(hostKey, tabIdx) // may live in a tab (#1778)
-		return
-	}
-	if tabHost != "" {
-		if _, ok := m.openContentTab(tabHost, pane.KindImage, path); ok {
-			return
-		}
-	}
-	target := m.viewerSplitTarget()
-	key := m.activeWS().Panes.AddImagePreview(path)
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneRight)
-	if !ok {
-		m.activeWS().Panes.Close(key)
-		return
-	}
-	m.activeWS().Tree = tree
-	m.layout()
-	m.setFocus(key)
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	}, func() string { return m.activeWS().Panes.AddImagePreview(path) })
 }
 
 // imageSyncCmd reconciles the terminal's Kitty graphics state with the image

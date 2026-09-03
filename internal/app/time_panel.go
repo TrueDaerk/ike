@@ -59,24 +59,7 @@ const timeSegmentInterval = time.Minute
 // toggleDepsPanel: no panel → open at the bottom; unfocused → focus it;
 // focused → return focus to the remembered pane.
 func (m *Model) toggleTimePanel() tea.Cmd {
-	if !m.activeWS().Panes.Has(pane.TimeKey) {
-		m.timeReturnFocus = m.activeWS().Panes.Focused()
-		return m.openTimePanel()
-	}
-	if m.activeWS().Panes.Focused() != pane.TimeKey {
-		m.timeReturnFocus = m.activeWS().Panes.Focused()
-		m.setFocus(pane.TimeKey)
-		return nil
-	}
-	target := m.timeReturnFocus
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = m.activeEditorKey()
-	}
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = pane.ExplorerKey
-	}
-	m.setFocus(target)
-	return nil
+	return m.togglePanel(pane.TimeKey, m.openTimePanel)
 }
 
 // timePanel returns the singleton panel model, or nil when it is not open.
@@ -91,27 +74,16 @@ func (m Model) timePanel() *timepanel.Model {
 // bottom with the singleton panel, seeded from the last report, and starts a
 // fresh read.
 func (m *Model) openTimePanel() tea.Cmd {
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
-	if target == "" || m.activeWS().Tree == nil {
+	if !m.openToolPane(m.activeWS().Panes.AddTime, fixedZone(layout.ZoneBottom), func(key string) {
+		p := m.activeWS().Panes.Get(key).Time()
+		if m.timeReport != nil {
+			p.Set(m.timeReport)
+		} else {
+			p.SetLoading(true)
+		}
+	}) {
 		return nil
 	}
-	key := m.activeWS().Panes.AddTime()
-	if !m.insertToolPane(key, target, layout.ZoneBottom) {
-		m.activeWS().Panes.Close(key)
-		return nil
-	}
-	p := m.activeWS().Panes.Get(key).Time()
-	if m.timeReport != nil {
-		p.Set(m.timeReport)
-	} else {
-		p.SetLoading(true)
-	}
-	m.setFocus(key)
-	m.layout()
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	return m.timeReadCmd()
 }
 

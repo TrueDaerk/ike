@@ -57,24 +57,7 @@ type structDebounceMsg struct{ seq int }
 // toggleVCSPanel: no panel → open at the right; unfocused → focus it;
 // focused → return focus to the remembered pane.
 func (m *Model) toggleStructurePanel() {
-	if !m.activeWS().Panes.Has(pane.StructureKey) {
-		m.structReturnFocus = m.activeWS().Panes.Focused()
-		m.openStructurePanel()
-		return
-	}
-	if m.activeWS().Panes.Focused() != pane.StructureKey {
-		m.structReturnFocus = m.activeWS().Panes.Focused()
-		m.setFocus(pane.StructureKey)
-		return
-	}
-	target := m.structReturnFocus
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = m.activeEditorKey()
-	}
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = pane.ExplorerKey
-	}
-	m.setFocus(target)
+	m.togglePanel(pane.StructureKey, func() tea.Cmd { m.openStructurePanel(); return nil })
 }
 
 // structPanel returns the singleton panel model, or nil when it is not open.
@@ -88,24 +71,11 @@ func (m Model) structPanel() *structpanel.Model {
 // openStructurePanel splits the active editor (fallback: focused leaf) at the
 // right with the singleton panel; the first refresh fills it.
 func (m *Model) openStructurePanel() {
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
-	if target == "" || m.activeWS().Tree == nil {
-		return
-	}
-	key := m.activeWS().Panes.AddStructure()
-	if !m.insertToolPane(key, target, layout.ZoneRight) {
-		m.activeWS().Panes.Close(key)
-		return
-	}
-	// A fresh open always refills — from the cache when the buffer is
-	// unchanged, else via an immediate (undebounced) request.
-	m.structReqPath = ""
-	m.setFocus(key)
-	m.layout()
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	m.openToolPane(m.activeWS().Panes.AddStructure, fixedZone(layout.ZoneRight), func(string) {
+		// A fresh open always refills — from the cache when the buffer is
+		// unchanged, else via an immediate (undebounced) request.
+		m.structReqPath = ""
+	})
 }
 
 // structureSyncCmd runs once per settled Update pass (the Update wrapper):

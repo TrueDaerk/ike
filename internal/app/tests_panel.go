@@ -1,6 +1,8 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/pane"
 	"ike/internal/testresults"
 )
@@ -17,24 +19,7 @@ type TestsToggleMsg struct{}
 // toggleProblemsPanel: no panel → open at the bottom; unfocused → focus it;
 // focused → return focus to the remembered pane.
 func (m *Model) toggleTestsPanel() {
-	if !m.activeWS().Panes.Has(pane.TestsKey) {
-		m.testsReturnFocus = m.activeWS().Panes.Focused()
-		m.openTestsPanel()
-		return
-	}
-	if m.activeWS().Panes.Focused() != pane.TestsKey {
-		m.testsReturnFocus = m.activeWS().Panes.Focused()
-		m.setFocus(pane.TestsKey)
-		return
-	}
-	target := m.testsReturnFocus
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = m.activeEditorKey()
-	}
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = pane.ExplorerKey
-	}
-	m.setFocus(target)
+	m.togglePanel(pane.TestsKey, func() tea.Cmd { m.openTestsPanel(); return nil })
 }
 
 // testsPanel returns the singleton panel model, or nil when it is not open.
@@ -48,19 +33,5 @@ func (m Model) testsPanel() *testresults.Model {
 // openTestsPanel splits the active editor (fallback: focused leaf) at the
 // adaptive placement (auxZone, #1588) with the singleton panel.
 func (m *Model) openTestsPanel() {
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
-	if target == "" || m.activeWS().Tree == nil {
-		return
-	}
-	key := m.activeWS().Panes.AddTests()
-	if !m.insertToolPane(key, target, m.auxZone(target)) {
-		m.activeWS().Panes.Close(key)
-		return
-	}
-	m.setFocus(key)
-	m.layout()
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	m.openToolPane(m.activeWS().Panes.AddTests, m.auxZone, nil)
 }

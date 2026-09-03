@@ -8,7 +8,6 @@ import (
 
 	"ike/internal/bookmarks"
 	"ike/internal/editor"
-	"ike/internal/fuzzy"
 	"ike/internal/marks"
 	"ike/internal/palette"
 	"ike/internal/pane"
@@ -188,24 +187,10 @@ func (b *bookmarksMode) CodePreview() bool { return true }
 // Results implements palette.Mode: the snapshot fuzzy-matched on the row
 // title; an empty query lists all, letters sorted.
 func (b *bookmarksMode) Results(query string, cx palette.Context) []palette.Item {
-	type scored struct {
-		item  palette.Item
-		score int
-	}
-	var out []scored
-	for _, it := range b.items {
-		m, ok := fuzzy.Match(query, it.Title)
-		if !ok {
-			continue
-		}
-		it.Spans = m.Positions
-		out = append(out, scored{item: it, score: m.Score})
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].score > out[j].score })
-	items := make([]palette.Item, len(out))
-	for i, s := range out {
-		items[i] = s.item
-	}
+	items := palette.FuzzyItems(query, b.items,
+		func(it palette.Item) string { return it.Title },
+		func(it palette.Item) palette.Item { return it })
+	palette.SortByScore(items)
 	return items
 }
 

@@ -6,7 +6,6 @@ import (
 	"ike/internal/datasrc"
 	"ike/internal/dataview"
 	"ike/internal/host"
-	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -47,34 +46,9 @@ func init() { registry.Register(dataProvider{}) }
 // and returns the command that opens the database behind it (#1795), so a
 // multi-gigabyte file costs the IDE no frame.
 func (m *Model) openDataPane(path string) tea.Cmd {
-	tabHost := m.takeViewerTabHost()
-	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
+	return m.openViewerPane(pane.KindData, path, func(c *pane.Instance) bool {
 		return c.Kind() == pane.KindData && c.Data().Path() == path
-	}); ok {
-		m.focusContentAt(hostKey, tabIdx) // may live in a tab (#1778)
-		return nil
-	}
-	if tabHost != "" {
-		if nested, ok := m.openContentTab(tabHost, pane.KindData, path); ok {
-			return nested.Init()
-		}
-	}
-	target := m.viewerSplitTarget()
-	key := m.activeWS().Panes.AddDataView(path)
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneRight)
-	if !ok {
-		m.activeWS().Panes.Close(key)
-		return nil
-	}
-	m.activeWS().Tree = tree
-	m.layout()
-	m.setFocus(key)
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
-	inst := m.activeWS().Panes.Get(key)
-	if inst == nil {
-		return nil
-	}
-	return inst.Init()
+	}, func() string { return m.activeWS().Panes.AddDataView(path) })
 }
 
 // dataResult routes one background data-viewer result (#1795) to the pane that
@@ -82,14 +56,9 @@ func (m *Model) openDataPane(path string) tea.Cmd {
 // key. A result whose pane is gone is discarded, which releases the database
 // handle an open carries.
 func (m *Model) dataResult(msg dataview.ResultMsg) tea.Cmd {
-	_, _, inst, ok := m.findContent(func(c *pane.Instance) bool {
+	return m.routeResult(msg, func(c *pane.Instance) bool {
 		return c.Kind() == pane.KindData && c.Data().Key() == msg.Key
-	})
-	if !ok {
-		msg.Discard()
-		return nil
-	}
-	return inst.Update(msg)
+	}, msg.Discard)
 }
 
 // initDataPanes starts the background open of every data viewer that has not

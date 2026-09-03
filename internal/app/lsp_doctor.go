@@ -26,25 +26,9 @@ func (m *Model) handleLSPDoctor(msg ilsp.DoctorMsg) tea.Cmd {
 	if len(msg.Servers) > 0 {
 		m.lspDoctorReport.SetServers(msg.Servers)
 	}
-	if !m.activeWS().Panes.Has(pane.LSPDoctorKey) {
-		m.lspDoctorReturnFocus = m.activeWS().Panes.Focused()
-		m.openLSPDoctorPanel()
-		return m.runLSPDoctor()
-	}
-	if m.activeWS().Panes.Focused() != pane.LSPDoctorKey {
-		m.lspDoctorReturnFocus = m.activeWS().Panes.Focused()
-		m.setFocus(pane.LSPDoctorKey)
-		return m.runLSPDoctor()
-	}
-	target := m.lspDoctorReturnFocus
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = m.activeEditorKey()
-	}
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = pane.ExplorerKey
-	}
-	m.setFocus(target)
-	return nil
+	return m.togglePanelWith(pane.LSPDoctorKey,
+		func() tea.Cmd { m.openLSPDoctorPanel(); return m.runLSPDoctor() },
+		m.runLSPDoctor)
 }
 
 // lspDoctorPanel returns the singleton panel model, or nil when it is not open.
@@ -59,22 +43,9 @@ func (m Model) lspDoctorPanel() *lspdoctor.Model {
 // adaptive placement (auxZone, #1588) with the singleton panel, sharing the
 // app-owned report.
 func (m *Model) openLSPDoctorPanel() {
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
-	if target == "" || m.activeWS().Tree == nil {
-		return
-	}
-	key := m.activeWS().Panes.AddLSPDoctor()
-	if !m.insertToolPane(key, target, m.auxZone(target)) {
-		m.activeWS().Panes.Close(key)
-		return
-	}
-	m.wireLSPDoctorPanel(m.activeWS().Panes.Get(key).LSPDoctor())
-	m.setFocus(key)
-	m.layout()
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	m.openToolPane(m.activeWS().Panes.AddLSPDoctor, m.auxZone, func(key string) {
+		m.wireLSPDoctorPanel(m.activeWS().Panes.Get(key).LSPDoctor())
+	})
 }
 
 // wireLSPDoctorPanel shares the app-owned report with a panel instance;

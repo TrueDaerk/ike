@@ -75,25 +75,9 @@ func (m Model) httpSavePromptOpen() bool { return m.httpSaveOpen && m.shell.IsOp
 // renderHTTPSavePrompt (re)fills the shell for the current input; candidates
 // (from the last tab press) render underneath, as in the other path prompts.
 func (m *Model) renderHTTPSavePrompt(candidates []string) {
-	line := "> " + ui.CursorView(m.httpSaveInput, m.httpSavePos)
-	const maxLines = 8
-	var sug string
-	if n := len(candidates); n > 0 {
-		shown := candidates
-		if n > maxLines {
-			shown = candidates[:maxLines]
-		}
-		sug = "\n\n  " + strings.Join(shown, "\n  ")
-		if n > maxLines {
-			sug += fmt.Sprintf("\n  … +%d more", n-maxLines)
-		}
-	}
-	m.shell.SetContent(ui.ModelContent{
-		Heading: "Save response body to file",
-		Body: func() string {
-			return line + sug + "\n\nrelative to the project root · tab complete · enter save · esc cancel"
-		},
-	})
+	m.renderCompletionPrompt(m.httpSaveInput, m.httpSavePos, candidates,
+		"Save response body to file",
+		"relative to the project root · tab complete · enter save · esc cancel")
 }
 
 // updateHTTPSavePrompt consumes every key while the save prompt is open: tab

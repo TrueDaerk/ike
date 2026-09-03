@@ -78,10 +78,7 @@ func (m *Model) openInFindPanel() {
 		return
 	}
 	m.palette.Close()
-	if m.usagesPanel() == nil {
-		m.usagesReturnFocus = m.activeWS().Panes.Focused()
-		m.openUsagesPanel()
-	}
+	m.ensurePanel(pane.UsagesKey, func() tea.Cmd { m.openUsagesPanel(); return nil })
 	p := m.usagesPanel()
 	if p == nil {
 		return

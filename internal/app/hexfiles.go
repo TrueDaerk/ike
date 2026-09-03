@@ -4,7 +4,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
-	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -52,29 +51,9 @@ func init() { registry.Register(hexProvider{}) }
 // in (#1779). Reads are windowed, so the pane appears at once whatever the
 // file size.
 func (m *Model) openHexPane(path string) {
-	tabHost := m.takeViewerTabHost()
-	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
+	m.openViewerPane(pane.KindHex, path, func(c *pane.Instance) bool {
 		return c.Kind() == pane.KindHex && c.Hex().Path() == path
-	}); ok {
-		m.focusContentAt(hostKey, tabIdx) // may live in a tab (#1778)
-		return
-	}
-	if tabHost != "" {
-		if _, ok := m.openContentTab(tabHost, pane.KindHex, path); ok {
-			return
-		}
-	}
-	target := m.viewerSplitTarget()
-	key := m.activeWS().Panes.AddHexView(path)
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneRight)
-	if !ok {
-		m.activeWS().Panes.Close(key)
-		return
-	}
-	m.activeWS().Tree = tree
-	m.layout()
-	m.setFocus(key)
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	}, func() string { return m.activeWS().Panes.AddHexView(path) })
 }
 
 // binaryOpensInEditor reads files.binary_open (#2420): "editor" sends a

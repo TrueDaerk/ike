@@ -19,9 +19,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"ike/internal/fuzzy"
 	"ike/internal/host"
-	"ike/internal/layout"
 	"ike/internal/palette"
 	"ike/internal/pane"
 	"ike/internal/remote"
@@ -71,21 +69,15 @@ func (r *remoteMode) Placeholder() string {
 
 // Results implements palette.Mode: rows fuzzy-matched over the alias.
 func (r *remoteMode) Results(query string, _ palette.Context) []palette.Item {
-	var items []palette.Item
-	for _, h := range r.entries {
-		res, ok := fuzzy.Match(query, h.Alias)
-		if !ok {
-			continue
-		}
-		items = append(items, palette.Item{
-			Title:  h.Alias,
-			Spans:  res.Positions,
-			Score:  res.Score,
-			Detail: h.Detail(),
-			Msg:    RemoteHostPickedMsg{Host: h.Alias},
+	return palette.FuzzyItems(query, r.entries,
+		func(h sshconf.Host) string { return h.Alias },
+		func(h sshconf.Host) palette.Item {
+			return palette.Item{
+				Title:  h.Alias,
+				Detail: h.Detail(),
+				Msg:    RemoteHostPickedMsg{Host: h.Alias},
+			}
 		})
-	}
-	return items
 }
 
 // openRemotePicker fills and opens the locked host picker (remote.browse).
@@ -108,36 +100,16 @@ func (m *Model) openRemotePane(alias string) tea.Cmd {
 		m.setFocus(inst.Key())
 		return nil
 	}
-	target := m.viewerSplitTarget()
-	key := m.activeWS().Panes.AddRemote(alias)
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneRight)
-	if !ok {
-		m.activeWS().Panes.Close(key)
-		return nil
-	}
-	m.activeWS().Tree = tree
-	m.layout()
-	m.setFocus(key)
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
-	inst := m.activeWS().Panes.Get(key)
-	if inst == nil {
-		return nil
-	}
-	return inst.Init()
+	return m.splitViewerPane(func() string { return m.activeWS().Panes.AddRemote(alias) })
 }
 
 // remoteResult routes one background browser result to the pane that asked
 // for it, matched by the model's own key; an unroutable result is discarded
 // (closing a late-landing connection).
 func (m *Model) remoteResult(msg remote.ResultMsg) tea.Cmd {
-	_, _, inst, ok := m.findContent(func(c *pane.Instance) bool {
+	return m.routeResult(msg, func(c *pane.Instance) bool {
 		return c.Kind() == pane.KindRemote && c.Remote().Key() == msg.Key
-	})
-	if !ok {
-		msg.Discard()
-		return nil
-	}
-	return inst.Update(msg)
+	}, msg.Discard)
 }
 
 // initRemotePanes starts the background dial of every browser that has not

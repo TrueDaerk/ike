@@ -91,6 +91,15 @@ body; otherwise the **default mode** (config `palette.default_mode`, default `:`
 ranks the whole query. Each `Item` carries the `tea.Msg` it activates, so the
 palette dispatches without knowing what any mode does.
 
+A mode whose rows are a plain snapshot needs no loop of its own (#2463):
+`palette.FuzzyItems(query, src, target, build)` matches `target(v)` for every
+element, keeps the survivors, fills each row's `Spans`/`Score` from the match
+and returns them in snapshot order; `palette.SortByScore(items)` then ranks
+them best-first, stably, so an empty query leaves the caller's order intact.
+The ssh/remote host pickers and the bookmarks/paste-history modes are two
+lines each on top of it. Modes that rank by more than the raw score — a
+frecency boost, a per-source band, a secondary key — keep their own loop.
+
 The query is a full single-line editor (`internal/ui.EditKey`, #763): a rune
 cursor over the raw query (prefix included) — arrows/home/end move it,
 `alt+left`/`alt+right` jump words, `alt+backspace`/`alt+delete` delete words,

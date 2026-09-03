@@ -105,20 +105,9 @@ func (m *Model) backupOnSync(fromKey, path string) tea.Cmd {
 // armBackupTick schedules one wake at the earliest pending deadline. A single
 // armed tick suffices: the tick handler re-arms while marks remain.
 func (m *Model) armBackupTick() tea.Cmd {
-	if m.backupTickArmed || m.backupDeb == nil {
-		return nil
-	}
-	next, ok := m.backupDeb.Next()
-	if !ok {
-		return nil
-	}
-	m.backupTickArmed = true
-	d := time.Until(next)
-	if d < 0 {
-		d = 0
-	}
-	gen := m.modelGen
-	return tea.Tick(d, func(time.Time) tea.Msg { return backupTickMsg{gen: gen} })
+	return m.armTick(&m.backupTickArmed, m.backupDeb, func(gen int64) tea.Msg {
+		return backupTickMsg{gen: gen}
+	})
 }
 
 // snapshotDueBackups captures the text of every buffer whose debounce expired

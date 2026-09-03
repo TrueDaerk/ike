@@ -25,27 +25,12 @@ type IssuesToggleMsg struct{}
 // toggleProblemsPanel: no panel → open (returning the first fetch); unfocused
 // → focus it; focused → return focus to the remembered pane.
 func (m *Model) toggleIssuesPanel() tea.Cmd {
-	if !m.activeWS().Panes.Has(pane.IssuesKey) {
-		m.issuesReturnFocus = m.activeWS().Panes.Focused()
-		return m.openIssuesPanel()
-	}
-	if m.activeWS().Panes.Focused() != pane.IssuesKey {
-		m.issuesReturnFocus = m.activeWS().Panes.Focused()
-		m.setFocus(pane.IssuesKey)
+	return m.togglePanelWith(pane.IssuesKey, m.openIssuesPanel, func() tea.Cmd {
 		// Looking at the issues window counts as viewing the pending forge
 		// events (#2086): the unread badge clears.
 		m.clearForgeUnread()
 		return nil
-	}
-	target := m.issuesReturnFocus
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = m.activeEditorKey()
-	}
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = pane.ExplorerKey
-	}
-	m.setFocus(target)
-	return nil
+	})
 }
 
 // issuesPanel returns the singleton panel model, or nil when it is not open.
@@ -60,30 +45,20 @@ func (m Model) issuesPanel() *ghissues.Model {
 // adaptive placement (auxZone, #1588) with the singleton panel and starts the
 // first fetch.
 func (m *Model) openIssuesPanel() tea.Cmd {
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
-	if target == "" || m.activeWS().Tree == nil {
+	var p *ghissues.Model
+	if !m.openToolPane(m.activeWS().Panes.AddIssues, m.auxZone, func(key string) {
+		// Opening the window views the pending forge events (#2086).
+		m.clearForgeUnread()
+		p = m.activeWS().Panes.Get(key).Issues()
+		p.SetRefresh(forge.RefreshFactory("."))
+		p.SetTimeline(forge.TimelineFactory("."))
+		p.SetMutate(forge.MutateFactory("."))
+		p.SetMeta(forge.MetaFactory("."))
+		p.SetPRDetailFetch(forge.PRDetailFactory("."))
+		p.SetPRAction(forge.PRActionFactory("."))
+	}) {
 		return nil
 	}
-	key := m.activeWS().Panes.AddIssues()
-	if !m.insertToolPane(key, target, m.auxZone(target)) {
-		m.activeWS().Panes.Close(key)
-		return nil
-	}
-	// Opening the window views the pending forge events (#2086).
-	m.clearForgeUnread()
-	p := m.activeWS().Panes.Get(key).Issues()
-	p.SetRefresh(forge.RefreshFactory("."))
-	p.SetTimeline(forge.TimelineFactory("."))
-	p.SetMutate(forge.MutateFactory("."))
-	p.SetMeta(forge.MetaFactory("."))
-	p.SetPRDetailFetch(forge.PRDetailFactory("."))
-	p.SetPRAction(forge.PRActionFactory("."))
-	m.setFocus(key)
-	m.layout()
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	if !p.Loaded() {
 		// The persisted snapshot (#2108) renders while the fetch runs: the
 		// seed resolves off the Update loop (it reads a file and the remote
