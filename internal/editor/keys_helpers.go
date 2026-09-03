@@ -102,7 +102,14 @@ func (m *Model) applyLinewiseOperator(op rune, count int) {
 	}
 	target := operator.LineTarget(m.cursor.Line, end)
 	reg := m.pending.Register
+	// guu / gUU / g~~ repeat linewise at the cursor's line, not at the line
+	// they first ran on (#2418).
+	switch op {
+	case 'u', 'U', '~':
+		m.opRedo = func(mm *Model) { mm.replayCaseLinewise(op, count) }
+	}
 	m.runOperator(op, target, reg)
+	m.opRedo = nil
 	if op == 'd' || op == '>' || op == '<' {
 		m.dot = &dotCommand{run: func(mm *Model) { mm.applyLinewiseOperator(op, count) }}
 	}

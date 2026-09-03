@@ -1317,6 +1317,46 @@ Lines* does too.
 - **Multi-caret collapses first:** only the primary selection's line range takes
   part.
 
+## Case conversion (#2418)
+
+Case changing has two halves that meet in the same operator plumbing. The vim
+half — `gu` / `gU` / `g~` with any motion or text object, their linewise
+doubles (`guu`, `gUgU`, `g~~`) and `u` / `U` / `~` on a visual selection — runs
+through `runOperator` → `caseTarget` → `operator.Transform` (#1193). The
+command half (`caseops.go`) adds the four ids JetBrains users reach for:
+
+- **`editor.case.lower` / `.upper` / `.toggle`** map runes: they rewrite the
+  **selection** when there is one, else the **inner word under every caret**.
+  `editor.case.toggle` carries JetBrains' *Toggle Case* chord, cmd+shift+u
+  (ctrl+shift+u as the delivered secondary); the one-directional pair stays
+  chordless because `gu`/`gU` already are the gesture (keybind ledger).
+- **`editor.case.cycle`** (alt+shift+u) rotates the **identifier** under every
+  caret through camelCase → snake_case → kebab-case → PascalCase →
+  SCREAMING_SNAKE → camelCase. cmd+alt+shift+u — the chord that would have sat
+  beside the toggle — is `editor.unescapeSelection`'s (#2338), so the cycle
+  takes the free alt+shift+u next to the other editor-scoped alt+shift keys.
+- **Style detection** lives in `internal/idcase`, deliberately conservative:
+  a token that is not an identifier (a number, `a - b`, `foo.bar`, a sentence)
+  or whose spelling names no single style (`Foo_bar`, mixed `_`/`-`) is left
+  **untouched**, with a notice rather than a guess. Leading/trailing
+  underscores survive a conversion (`__init__` → `__Init__`), acronym runs
+  split as one word (`HTTPServer` → `http_server`), and digits stay with the
+  word they follow (`utf8Name` → `utf8_name`).
+- **Styles that spell the token identically are skipped** while cycling: a
+  one-word name like `count` is its own camel, snake and kebab spelling, so the
+  rotation steps `count` → `Count` → `COUNT` → `count` instead of appearing
+  dead for two presses.
+- **Multi-caret aware:** every caret's span is rewritten through `fanMutate`,
+  so one undo takes the whole fan-out back — the #145 contract.
+- **Rune-wise mapping, never language-aware special casing:** `unicode.ToUpper`
+  leaves `ß` one rune instead of expanding it to `SS`, so the rune count — and
+  with it every caret, mark and selection to its right — is stable across the
+  edit.
+- **`.` repeats the gesture, not the span** (`opRedo`): after `gUw`, a `w.`
+  uppercases the *next* word, and `gUU` then `j.` the *next* line — the key
+  layer arms the re-resolution before the operator runs, since a case
+  operator's dot would otherwise replay the original range.
+
 ## Comment toggling (Roadmap 0120)
 
 `editor.commentLine` (cmd+7, alias `cmd+k cmd+c`) toggles the language's line

@@ -102,6 +102,15 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.increment", "Increment Number", "increment", "ctrl+a"),
 			action("editor.decrement", "Decrement Number", "decrement", "ctrl+x"),
 			action("editor.toggleValue", "Toggle Value Under Caret", "toggle_value", "g!"),
+			// Case conversion (#2418): the command half of the gu/gU/g~
+			// operators — the doc hints name the vim gesture each mirrors —
+			// plus the identifier-style rotation JetBrains has no equivalent
+			// of. All four take the selection, or the token under every
+			// caret when there is none.
+			action("editor.case.lower", "Lower Case", "case_lower", "gu"),
+			action("editor.case.upper", "Upper Case", "case_upper", "gU"),
+			action("editor.case.toggle", "Toggle Case", "case_toggle", "g~"),
+			action("editor.case.cycle", "Cycle Case (camel/snake/kebab)", "case_cycle", ""),
 			// Escape / unescape the selection (#2338): the writing direction
 			// of the #1620 escape decoding — the selection (or the string
 			// literal under the caret) is rewritten in the buffer language's

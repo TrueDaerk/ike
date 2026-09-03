@@ -36,6 +36,10 @@ func Defaults() []Menu {
 			{Title: "Sort Lines", Command: "editor.sortLines"},
 			{Title: "Remove Duplicate Lines", Command: "editor.uniqueLines"},
 			{Title: "Reverse Lines", Command: "editor.reverseLines"},
+			// The #2418 case family, JetBrains' Edit → Convert Case; the
+			// one-directional gu/gU pair stays in the palette.
+			{Title: "Toggle Case", Command: "editor.case.toggle"},
+			{Title: "Cycle Case", Command: "editor.case.cycle"},
 			{Title: "Find in File", Command: "editor.find"},
 		}},
 		{Title: "View", Items: []Item{
