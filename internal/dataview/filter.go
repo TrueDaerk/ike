@@ -24,6 +24,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"ike/internal/gridview"
 	"ike/internal/highlight"
 	"ike/internal/theme"
 	"ike/internal/ui"
@@ -232,7 +233,7 @@ func (m *Model) filterLine(pal *theme.Palette) string {
 	prefix := m.filterPrefix()
 	shown := prefix
 	if half := m.w / 2; lipgloss.Width(shown) > half {
-		shown = clipTo(shown, half)
+		shown = gridview.ClipTo(shown, half)
 	}
 	avail := m.w - lipgloss.Width(shown)
 	if avail < 4 {
@@ -302,7 +303,7 @@ func (m *Model) filterNote(pal *theme.Palette, width int) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	return lipgloss.NewStyle().Foreground(pal.Warning).Render(clipTo("   "+strings.Join(parts, " · "), width))
+	return lipgloss.NewStyle().Foreground(pal.Warning).Render(gridview.ClipTo("   "+strings.Join(parts, " · "), width))
 }
 
 // rebuildTheme re-resolves the capture styles of the filter line from the

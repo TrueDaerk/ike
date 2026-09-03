@@ -35,6 +35,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/datasrc"
+	"ike/internal/gridview"
 	"ike/internal/pathcomplete"
 	"ike/internal/theme"
 	"ike/internal/ui"
@@ -226,7 +227,7 @@ func (m *Model) exportLine(pal *theme.Palette) string {
 		avail = 4
 	}
 	if m.exp.cancel != nil {
-		return shown + lipgloss.NewStyle().Foreground(pal.Foreground).Render(clipTo(m.exp.input+" …", avail))
+		return shown + lipgloss.NewStyle().Foreground(pal.Foreground).Render(gridview.ClipTo(m.exp.input+" …", avail))
 	}
 	return shown + renderInput(pal, m.exp.input, m.exp.cur, avail)
 }
@@ -235,10 +236,10 @@ func (m *Model) exportLine(pal *theme.Palette) string {
 // the last attempt, or the keys and what the export will contain.
 func (m *Model) exportFooter(pal *theme.Palette) string {
 	if m.exp.err != nil {
-		return lipgloss.NewStyle().Foreground(pal.Error).Render(clipTo(" "+m.exp.err.Error(), m.w))
+		return lipgloss.NewStyle().Foreground(pal.Error).Render(gridview.ClipTo(" "+m.exp.err.Error(), m.w))
 	}
 	if m.exp.cancel != nil {
-		return lipgloss.NewStyle().Faint(true).Render(clipTo(" exporting… · esc cancels", m.w))
+		return lipgloss.NewStyle().Faint(true).Render(gridview.ClipTo(" exporting… · esc cancels", m.w))
 	}
 	what := "the whole table"
 	if m.filter != "" {
@@ -248,7 +249,7 @@ func (m *Model) exportFooter(pal *theme.Palette) string {
 		what += ", sorted by " + m.sort.String()
 	}
 	hint := fmt.Sprintf(" enter write · esc cancel · .csv or .json · %s, up to %d rows", what, datasrc.ExportLimit)
-	return lipgloss.NewStyle().Faint(true).Render(clipTo(hint, m.w))
+	return lipgloss.NewStyle().Faint(true).Render(gridview.ClipTo(hint, m.w))
 }
 
 // renderInput draws a one-line text field with a block cursor, scrolled so
