@@ -100,7 +100,8 @@ func (m *Model) imageSyncCmd() tea.Cmd {
 	// image pane cannot have anything to reconcile — the mint counter says so
 	// without touching an instance — and neither can one whose placements are
 	// already released.
-	if !m.activeWS().Panes.ImagesMinted() && !m.activeWS().Panes.PreviewsMinted() && len(m.liveImages) == 0 {
+	if !m.activeWS().Panes.ImagesMinted() && !m.activeWS().Panes.PreviewsMinted() &&
+		!m.activeWS().Panes.NotebooksMinted() && len(m.liveImages) == 0 {
 		return nil
 	}
 	supported := m.kittyGfx != nil && *m.kittyGfx
@@ -145,6 +146,26 @@ func (m *Model) imageSyncCmd() tea.Cmd {
 			if seqs := pv.SyncSeqs(); len(seqs) > 0 {
 				raw = append(raw, seqs...)
 				for _, id := range pv.TransmittedIDs() {
+					m.liveImages[id] = true
+				}
+			}
+		case pane.KindNotebook:
+			// A notebook holds one placement per image output (#2425) —
+			// the markdown preview's reconcile, over cells instead of
+			// inline references.
+			nv := inst.Notebook()
+			nv.SetGraphics(supported)
+			if !nv.HasImages() {
+				return true
+			}
+			hasImages = true
+			if !supported {
+				return true
+			}
+			mark(nv.ImageIDs()...)
+			if seqs := nv.SyncSeqs(); len(seqs) > 0 {
+				raw = append(raw, seqs...)
+				for _, id := range nv.TransmittedIDs() {
 					m.liveImages[id] = true
 				}
 			}
@@ -199,6 +220,15 @@ func (m *Model) releaseWorkspaceImages(w *workspace.Workspace) tea.Cmd {
 				delete(m.liveImages, id)
 			}
 			pv.ResetImages()
+		case pane.KindNotebook:
+			// A notebook's image outputs (#2425) are placements for the
+			// same reason and leak the same way.
+			nv := inst.Notebook()
+			for _, id := range nv.TransmittedIDs() {
+				raw = append(raw, imgview.Delete(id))
+				delete(m.liveImages, id)
+			}
+			nv.ResetImages()
 		}
 		return true
 	})

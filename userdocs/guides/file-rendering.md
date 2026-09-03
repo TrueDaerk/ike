@@ -64,6 +64,34 @@ palette; `editor.markdown_rendering` sets the default.
 In the separate **Markdown preview** pane, `/` — or ++cmd+f++ / ++ctrl+f++ —
 searches the rendered document, and `n` / `N` step through the matches.
 
+### Mermaid diagrams in the preview
+
+The preview draws ```` ```mermaid ```` fences instead of printing them. It
+needs an external renderer, which IKE never installs for you:
+
+```sh
+go install github.com/AlexanderGrooff/mermaid-ascii@latest   # preview.diagrams = ascii
+npm install -g @mermaid-js/mermaid-cli                       # preview.diagrams = image
+```
+
+`preview.diagrams` picks what happens:
+
+| Value | Effect |
+| --- | --- |
+| `ascii` *(default)* | The fence is rendered to text by `mermaid-ascii` and replaces the code block. |
+| `image` | `mmdc` renders a PNG at the pane's width and it is drawn as pixels on a terminal with Kitty graphics; anywhere else this behaves like `ascii`. |
+| `off` | Fences stay syntax-highlighted code blocks. |
+
+Rendering runs in the background and is cached per fence, so typing around a
+diagram never re-runs the renderer — only editing the diagram itself does.
+Until the picture arrives the code block stays put. If the renderer is not
+installed, the block keeps a one-line hint naming what to install (said once
+per session as a notification, not once per keystroke); if the renderer
+rejects the diagram, its error appears under the block.
+
+Installed a renderer while IKE was already running? **Re-render Preview
+Diagrams** from the palette throws away every cached picture and tries again.
+
 ## CSV and TSV
 
 `editor.csv_rendering` turns a delimited file into a table: fields aligned into
@@ -152,6 +180,27 @@ suffix (`.1`, `.2026-08-01`, `.20260801`) with an optional `.gz`. Very large
 sets are cut at the [large-file
 limits](../reference/settings.md) — from the *oldest* end, so the lines next to
 the live log always survive, and a toast says what was left out.
+
+## Jupyter notebooks
+
+A `.ipynb` file opens as the notebook it is, not as the JSON it is stored in:
+each cell with its index, type and execution count in the gutter, markdown
+cells rendered like a markdown preview, code cells highlighted in the
+notebook's own language, and every cell's outputs below it — `stdout` and
+`stderr` streams, `text/plain` results, HTML results degraded to text, PNG and
+JPEG images (as pixels where the terminal supports graphics, as a
+size/format line elsewhere) and errors with their traceback.
+
+`j`/`k` move between cells, `g`/`G` jump to the ends, the arrows and the wheel
+scroll. `enter` folds a cell's outputs away and back. `/` (or cmd+f) searches
+across the cell sources, `n`/`N` step the matches. `e` opens the current
+cell's source as a scratch file in the notebook's language, `y` copies it, and
+`o` saves the cell's image output next to the notebook.
+
+The view is read-only — there is no editing and no kernel. Notebooks re-render
+by themselves when a kernel writes the file, and a notebook IKE cannot parse
+shows the JSON error plus a pointer at **Open File As… → Text editor**, which
+opens the raw document.
 
 ## Binary files: the hex viewer
 

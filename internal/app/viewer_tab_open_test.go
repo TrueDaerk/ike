@@ -38,6 +38,9 @@ var viewerFiles = []struct {
 		return writeTestArchive(t, "src.tar", map[string]string{"a.txt": "a"})
 	}},
 	{"hex", pane.KindHex, func(t *testing.T) string { return writeTestBinary(t, "blob.bin") }},
+	{"notebook", pane.KindNotebook, func(t *testing.T) string {
+		return writeTestNotebook(t, "nb.ipynb", testNotebook)
+	}},
 }
 
 // writeTestBinary writes a small sniffed-binary fixture: NUL bytes in the

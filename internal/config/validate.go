@@ -403,6 +403,15 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "run.placement", Message: fmt.Sprintf("unknown placement %q, using \"bottom\"", c.Run.Placement)})
 		c.Run.Placement = "bottom"
 	}
+	// preview.diagrams (#2421) picks how the markdown preview renders a fenced
+	// diagram block: as renderer-produced text, as an embedded PNG, or not at
+	// all.
+	switch c.Preview.Diagrams {
+	case "ascii", "image", "off":
+	default:
+		diags = append(diags, Diagnostic{Field: "preview.diagrams", Message: fmt.Sprintf("unknown mode %q, using \"ascii\"", c.Preview.Diagrams)})
+		c.Preview.Diagrams = "ascii"
+	}
 	// debug.session_end (#2190) picks the combined debug area's fate when a
 	// session ends: keep it open reviewable, or close it.
 	switch c.Debug.SessionEnd {

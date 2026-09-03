@@ -280,6 +280,12 @@ func defaults() *Config {
 		Diff: Diff{
 			Context: 3, // context lines kept around a change (0340, #494)
 		},
+		Preview: Preview{
+			// Diagram fences render as text by default (#2421): ASCII needs
+			// no terminal capability and degrades to the plain code block
+			// when the external renderer is not installed.
+			Diagrams: "ascii",
+		},
 		Run: Run{
 			Placement:    "bottom", // the Run tool docks at the bottom edge (#1905)
 			VSCodeLaunch: true,     // .vscode/launch.json entries join the picker (#1914)

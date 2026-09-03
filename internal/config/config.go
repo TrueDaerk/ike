@@ -349,6 +349,8 @@ func (c *Config) Flat() map[string]string {
 
 	put("todo.patterns", strings.Join(c.Todo.Patterns, ","))
 
+	put("preview.diagrams", c.Preview.Diagrams)
+
 	put("diff.context", c.Diff.Context)
 	put("diff.ignore_whitespace", c.Diff.IgnoreWhitespace)
 

@@ -253,6 +253,12 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Download size limit | `remote.max_fetch_mb` | integer (1–4096) | `64` | user | Largest remote file the browser downloads into the local cache to preview, in MiB; opening a bigger file is refused with a notice instead of stalling the link |
 
+### Markdown Preview
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Diagram rendering | `preview.diagrams` | enum: `ascii`, `image`, `off` | `ascii` | user | How a fenced diagram block renders in the preview. "ascii" pipes it through the mermaid-ascii renderer and shows its text in place of the code block; "image" renders a PNG with mermaid-cli (mmdc) and embeds it over the Kitty graphics path, falling back to ascii where the terminal cannot show pixels; "off" leaves every fence the syntax-highlighted code block it is. Rendering is asynchronous and cached per fence, so typing around a diagram never re-runs the renderer; a renderer that is not installed leaves the code block with a one-line install hint, and "Re-render Preview Diagrams" retries once it is |
+
 ### Run
 
 | Setting | Key | Type | Default | Scope | Description |

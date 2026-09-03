@@ -301,6 +301,10 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 		// The hex viewer's search line (#2420).
 		inst.Hex().PasteText(text)
 		return m, nil
+	case pane.KindNotebook:
+		// The notebook viewer's search line (#2425).
+		inst.Notebook().PasteText(text)
+		return m, nil
 	case pane.KindDOM:
 		inst.DOM().PasteText(text)
 		return m, nil

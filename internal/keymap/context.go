@@ -52,6 +52,8 @@ const (
 	Scratch     Context = "scratch"
 	// Hex scopes bindings to a focused hex viewer pane (#2420).
 	Hex Context = "hex"
+	// Notebook scopes bindings to a focused notebook viewer pane (#2425).
+	Notebook Context = "notebook"
 )
 
 // WithLang narrows c to one buffer language (#1876): WithLang(Editor, "http")

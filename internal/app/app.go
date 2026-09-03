@@ -41,7 +41,6 @@ import (
 	"ike/internal/config"
 	"ike/internal/coverage"
 	"ike/internal/dataview"
-	"ike/internal/hexview"
 	"ike/internal/debug"
 	"ike/internal/debugdoctor"
 	"ike/internal/debugpanel"
@@ -62,6 +61,7 @@ import (
 	"ike/internal/frecency"
 	"ike/internal/ghissues"
 	"ike/internal/help"
+	"ike/internal/hexview"
 	"ike/internal/highlight"
 	"ike/internal/histories"
 	"ike/internal/host"
@@ -80,6 +80,7 @@ import (
 	"ike/internal/marks"
 	"ike/internal/menu"
 	"ike/internal/nav"
+	"ike/internal/nbview"
 	"ike/internal/numhint"
 	"ike/internal/openapi"
 	"ike/internal/overlay"
@@ -243,8 +244,8 @@ type Model struct {
 	// openAsPath is the subject the open "Open file as…" chooser acts on
 	// (#2420): remembered when the chooser opens, read when a row activates.
 	openAsPath string
-	host          *host.Host
-	reg           *registry.Registry
+	host       *host.Host
+	reg        *registry.Registry
 	// toasts is the active notification stack (Roadmap 0130): drained from the
 	// host after every Update pass, rendered bottom-right above the status line.
 	toasts   []toast
@@ -1060,6 +1061,11 @@ type Model struct {
 	// first pick while the second is chosen.
 	diffPick int
 	diffLeft string
+	// diagramHinted marks that the missing-renderer hint for markdown diagram
+	// fences was already raised (#2421). The hint names a tool to install, so
+	// it is worth saying once per session and never again — the fences carry
+	// the same line under themselves for as long as it applies.
+	diagramHinted bool
 	// zoomed is the pane key rendered alone while pane.maximize is active
 	// (#358); "" = normal layout. zoomSig is the tree's leaf signature at zoom
 	// time — layout() drops the zoom when it changes. Not persisted.
@@ -1340,6 +1346,10 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		edKey = panes.AddEditor()
 		panes.SetFocused(pane.ExplorerKey)
 	}
+	// Background work a pane starts by itself reports through the host's
+	// async injector (#2421: a markdown preview's diagram renders). A resumed
+	// workspace's previews are re-wired by the same call.
+	panes.SetSender(h.Send)
 	refs := &refsMode{}
 	actions := &actionsMode{}
 	symbols := &symbolMode{}
@@ -1946,6 +1956,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below re-opening the database file (#1764)
 		} else if ids[key].Kind == "hex" {
 			continue // restored below re-opening the file for windowed reads (#2420)
+		} else if ids[key].Kind == "notebook" {
+			continue // restored below re-reading the .ipynb file (#2425)
 		} else if ids[key].Kind == "diff" {
 			continue // restored below re-reading both files (#60; fix #490)
 		} else if ids[key].Kind == "vcs" {
@@ -1995,6 +2007,7 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 	// rest restore as deferred tabs that read theirs on first activation, so
 	// a project with a hundred open tabs starts in constant time per pane.
 	panes := pane.NewRegistry(cfg, m.regs)
+	panes.SetSender(m.host.Send)
 	panes.AddExplorer()
 	load := m.deferredLoader(panes)
 	missing := 0 // files gone since the save; reported once, below
@@ -2234,6 +2247,14 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// reads (#2420); a vanished file restores as the pane's own
 			// error notice.
 			panes.AddHexKey(key, id.Path)
+			continue
+		}
+		if id := ids[key]; id.Kind == "notebook" {
+			// A notebook viewer restores by re-reading and re-parsing the
+			// .ipynb file (#2425); a vanished or broken file restores as the
+			// pane's own error notice.
+			panes.AddNotebookKey(key, id.Path)
+			m.trackNotebook(id.Path)
 			continue
 		}
 		if id := ids[key]; id.Kind == "es" {
@@ -5740,6 +5761,32 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case preview.DiagramMsg:
+		// A fenced diagram finished rendering, failed, or was refused for
+		// want of the renderer (#2421). The missing-tool report is a single
+		// notification per session — the fences keep their code block with
+		// the install hint either way, so repeating it every render would be
+		// noise; everything else routes to the owning preview.
+		if msg.Missing {
+			if !m.diagramHinted {
+				m.diagramHinted = true
+				m.host.Notify(host.Info, "install "+msg.Tool+" to render "+msg.Lang+" diagrams in the preview")
+			}
+			return m, nil
+		}
+		if _, _, inst, ok := m.findContent(func(c *pane.Instance) bool {
+			return c.Kind() == pane.KindMarkdown && c.Preview().Key() == msg.Key
+		}); ok {
+			return m, inst.Update(msg)
+		}
+		return m, nil
+
+	case RerenderDiagramsMsg:
+		// preview.rerenderDiagrams (palette): drop every cached diagram
+		// rendering so a newly installed renderer — or an edited include the
+		// fence hash cannot see — is picked up without reopening the pane.
+		return m, m.rerenderPreviewDiagrams()
+
 	case preview.CursorMsg:
 		// The source editor's cursor moved: scroll every preview of the buffer
 		// to follow (#62).
@@ -6841,6 +6888,29 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// y / enter in the hex viewer's copy menu (#2420).
 		m.copyToClipboard(msg.Text)
 		m.host.Notify(host.Info, "copied "+msg.What)
+		return m, nil
+
+	case OpenNotebookMsg:
+		// notebook.view (#2425): an .ipynb opens as its cells, never as the
+		// JSON it is stored in — "Open file as… → Text editor" is the way to
+		// the raw document.
+		m.openNotebookPane(msg.Path)
+		return m, nil
+
+	case nbview.CopyMsg:
+		// y / cmd+c on a notebook cell (#2425).
+		m.copyToClipboard(msg.Text)
+		m.host.Notify(host.Info, "copied "+msg.What)
+		return m, nil
+
+	case nbview.ScratchMsg:
+		// e on a notebook cell (#2425): its source as a scratch file in the
+		// notebook's language.
+		return m.notebookScratch(msg)
+
+	case nbview.SaveImageMsg:
+		// o on a notebook cell with an image output (#2425).
+		m.saveNotebookImage(msg)
 		return m, nil
 
 	case OpenDataMsg:
@@ -10966,6 +11036,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Hex().Wheel(lines)
 			}
+		case pane.KindNotebook:
+			// The wheel scrolls the notebook's rendered rows (#2425); the
+			// cell cursor stays where it is, exactly like a keyboard scroll.
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Notebook().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Notebook().Wheel(lines)
+			}
 		case pane.KindRemote:
 			// The wheel scrolls the remote browser's entry list (#2259),
 			// exactly like the archive viewer it borrows its tree shape from.
@@ -13376,7 +13455,7 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 			} else {
 				title = m.terminalTitle(inst)
 			}
-		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindHex, pane.KindES, pane.KindDiff, pane.KindRemote:
+		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindHex, pane.KindNotebook, pane.KindES, pane.KindDiff, pane.KindRemote:
 			title = contentPaneTitle(inst)
 		case pane.KindVCS:
 			title = "VCS"
@@ -13499,6 +13578,8 @@ func contentPaneTitle(inst *pane.Instance) string {
 		return "DATA " + baseName(inst.Data().Path())
 	case pane.KindHex:
 		return "HEX " + baseName(inst.Hex().Path())
+	case pane.KindNotebook:
+		return "NOTEBOOK " + baseName(inst.Notebook().Path())
 	case pane.KindES:
 		return "ES " + inst.ES().Endpoint()
 	case pane.KindRemote:
