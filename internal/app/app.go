@@ -3450,6 +3450,9 @@ var terminalGlobalCommands = map[string]bool{
 	"view.zenMode": true,
 	// #1398: the popup terminal must open from a focused pane terminal too.
 	"terminal.popup": true,
+	// #2406: pinning it is the same kind of layer act, and the shell never
+	// meaningfully sees the chord.
+	"terminal.popup.pin": true,
 	// #2150: a terminal pane is resized by keyboard like any other, and the
 	// shell never meaningfully sees the mode chord.
 	"pane.resizeMode": true,
@@ -6192,6 +6195,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TerminalPopupMsg:
 		// terminal.popup: show/hide the floating popup terminal (#1398).
 		m.togglePopupTerminal()
+		return m, nil
+
+	case TerminalPopupPinMsg:
+		// terminal.popup.pin: pin the popup beside the editor (#2406) — or
+		// unpin it, which hides it again.
+		m.togglePopupPin()
 		return m, nil
 
 	case TerminalClearMsg:

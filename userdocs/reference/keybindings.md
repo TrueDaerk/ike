@@ -98,6 +98,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Open in browser | `alt+f2` | `alt+f2` | `file.openInBrowser` |
 | Open menu bar | `f10` | `f10` | `menu.open` |
 | Performance HUD | `ctrl+alt+p` | `ctrl+alt+p` | `perf.hud` |
+| Pin popup terminal | `cmd+alt+shift+k` | `ctrl+alt+shift+k` | `terminal.popup.pin` |
 | Pinned files | `cmd+2` | `ctrl+2` | `nav.pins` |
 | Popup terminal | `cmd+alt+t` | `ctrl+alt+t` | `terminal.popup` |
 | Previous search match | `cmd+shift+g` | `ctrl+shift+g` | `search.prevMatch` |

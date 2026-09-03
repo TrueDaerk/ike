@@ -301,6 +301,23 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 
 	cfg, diags := config.Load(config.Discover("."))
 	config.Set(cfg)
+	// With terminal.popup_scope = "global" (#2406) the popup terminal is app
+	// state, not project state: it is lifted back out of the parking payload
+	// here — the incoming project's settings layer decides, so the scope is
+	// read from the config just loaded — and handed to the fresh model below
+	// with its shells, tabs and scrollback intact, the deal global floating
+	// panels (#1793) get. The parked workspace keeps no popup, so eviction and
+	// close can never end the shell the whole app shares.
+	globalPopup, carryPopup := popupTerm{}, cfg.Terminal.PopupScope == "global"
+	if carryPopup {
+		globalPopup = m.popup
+		if w := m.ws.Peek(parkedRoot); w != nil {
+			if extras, ok := w.Aux.(wsExtras); ok {
+				extras.popup = popupTerm{}
+				w.Aux = extras
+			}
+		}
+	}
 	fresh := buildModel(m.reg, host.FromConfig(cfg), m.host, m.ws)
 	// The usage log is session state (#2235): the recorder rides across the
 	// switch — one JSONL file per run, not per project — and the switch
@@ -355,6 +372,20 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 			fresh.popup.blurred = m.popup.blurred
 		}
 	}
+	// A global popup terminal (#2406) rides across on the same terms: the box
+	// the departing model held becomes the fresh model's, with its running
+	// shells and scrollback. A popup the incoming project parked under an
+	// earlier project scope would be a second box for the one global slot, so
+	// its sessions end here — one popup is the whole promise of the scope.
+	if carryPopup {
+		for _, inst := range fresh.popup.instances() {
+			inst.CloseTerminalTabs()
+		}
+		fresh.popup = globalPopup
+		for _, inst := range fresh.popup.instances() {
+			inst.SetPalette(fresh.pal())
+		}
+	}
 	// The incoming project's settings layer just applied (0380): surface its
 	// load diagnostics like any reload (#793).
 	fresh.notifyConfigDiags(diags)
@@ -391,6 +422,15 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 				t.SetParked(false)
 			}
 		}
+	}
+	// A carried global popup follows the project (#2406): every one of its
+	// shells sitting idle at a prompt is asked to cd into the new root, so the
+	// one terminal that spans projects is never left in the project you just
+	// walked away from. A shell with a foreground job keeps it — its stdin
+	// belongs to that job — and picks the new root up on the next switch it is
+	// idle for. After the size pass, so the line is typed into a sized PTY.
+	if carryPopup {
+		sized.cdPopupShellsTo(root)
 	}
 	// With terminal.popup_on_switch = "always-open" (#2362) the incoming
 	// project's popup terminal opens no matter how it was left: the parked

@@ -326,6 +326,12 @@ type TerminalToggleMsg struct{}
 // terminal overlay outside the pane layout. Dispatched by terminal.popup.
 type TerminalPopupMsg struct{}
 
+// TerminalPopupPinMsg toggles the popup terminal's pinned mode (#2406): the
+// popup stays visible while the keyboard goes back to the editor, anchored to
+// the bottom edge, and the popup chord then only moves focus. Dispatched by
+// terminal.popup.pin.
+type TerminalPopupPinMsg struct{}
+
 // TerminalClearMsg clears the focused (else first) terminal's scrollback and
 // repaints its screen (#97). Dispatched by terminal.clear.
 type TerminalClearMsg struct{}
@@ -686,6 +692,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			paneCommand("http.search", "Search in HTTP Response", "http", HTTPSearchMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			appCommand("terminal.popup", "Popup Terminal", TerminalPopupMsg{}),
+			appCommand("terminal.popup.pin", "Pin Popup Terminal", TerminalPopupPinMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
 			appCommand("menu.open", "Open Menu Bar", ToggleMenuMsg{}),
