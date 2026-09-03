@@ -48,6 +48,12 @@ func LoadFrecency(path string) *Frecency { return frecency.Load(path, cmdHalfLif
 // store type on its own file and its own, slower half-life.
 func LoadFileFrecency(path string) *Frecency { return frecency.Load(path, fileHalfLife) }
 
+// LoadProjectFrecency reads the project-switch history at path (#2399),
+// ranking the recent-files dialog's Recent Projects column. It shares the file
+// half-life: which projects one is between turns over about as slowly as which
+// files one is between, and much more slowly than which commands one runs.
+func LoadProjectFrecency(path string) *Frecency { return frecency.Load(path, fileHalfLife) }
+
 // Frecency boost weights. The boost is added to a command's fuzzy score before
 // sorting, scaled by how much the query itself has to say: on an empty query
 // every fuzzy score is 0, so history alone orders the listing; each further

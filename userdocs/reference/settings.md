@@ -166,6 +166,7 @@ secrets — are documented together, with screenshots, in
 | Result rows | `palette.max_results` | integer (1–100) | `12` | user | Result rows shown at once; the list still scrolls past it |
 | Default mode | `palette.default_mode` | enum: `:`, `@` | `:` | user | Prefix assumed when the query starts with no mode rune: ":" ranks it as a command, "@" as a file name |
 | Off-context commands | `palette.off_context` | enum: `rank`, `hide` | `rank` | user | How command mode treats commands scoped to a pane other than the focused one: rank them last, or hide them |
+| Recent files ranking | `palette.recent.ranking` | enum: `frecency`, `recency` | `frecency` | user | How the recent-files dialog (cmd+e) orders its files and projects: "frecency" blends how often and how recently each was opened, "recency" keeps the plain most-recently-used order |
 
 ### Keymap Hints
 

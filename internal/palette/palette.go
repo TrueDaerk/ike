@@ -85,6 +85,10 @@ type Palette struct {
 	accent     string         // config override; "" follows the theme
 	pal        *theme.Palette // active theme (Roadmap 0110); nil = default
 
+	// dismissed holds the esc-without-a-pick the host has not taken yet
+	// (#2399, TakeDismissal). Nil means the palette did not just get dismissed.
+	dismissed *Dismissal
+
 	// prev caches the code-preview window of a PreviewMode open (#2047), so
 	// walking the result list re-reads a file only when the target moves.
 	prev codepreview.Cache
@@ -444,8 +448,7 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	switch {
 	case msg.Code == tea.KeyEscape:
-		p.Close()
-		return nil
+		return p.dismiss()
 	case msg.Code == tea.KeyEnter:
 		return p.activate()
 	case msg.Code == tea.KeyUp, msg.Code == 'p' && msg.Mod == tea.ModCtrl:
@@ -572,16 +575,60 @@ func (p *Palette) activate() tea.Cmd {
 	if p.selected < 0 || p.selected >= len(p.items) {
 		return nil
 	}
-	msg := p.items[p.selected].Msg
+	it := p.items[p.selected]
+	msg := it.Msg
 	if of, ok := msg.(OpenFileMsg); ok && p.fileUsageEligible() {
 		of.CountUsage = true
 		msg = of
 	}
+	p.recordPick(it, false)
 	p.Close()
 	if msg == nil {
 		return nil
 	}
 	return func() tea.Msg { return msg }
+}
+
+// Dismissal describes an esc out of the palette without a pick (#2399): which
+// mode was listing (its prefix rune) and how many runes of query body were
+// typed. The root model reads it after Update and turns a recent-files one
+// into a telemetry event — the re-open streaks the #2399 export shows are
+// invisible otherwise, because a dismissal leaves no trace of any kind. It
+// carries a *length*, never the query itself: telemetry records structure only.
+//
+// It is a record the caller pulls, not a dispatched tea.Msg, so the host sees
+// it in the same Update pass that closed the overlay — the dismissal-sensitive
+// flows already there (diff.files' two-step pick) read a closed palette
+// synchronously and must not be raced by a message that lands a pass later.
+type Dismissal struct {
+	Prefix   rune
+	QueryLen int
+}
+
+// dismiss closes the palette on esc and records the dismissal (#2399). The
+// prefix names the mode that was listing — the locked one, else the mode the
+// query resolved to — so the caller can tell a recent-files dismissal from any
+// other. It returns no command: esc stays a pure close for every existing
+// caller.
+func (p *Palette) dismiss() tea.Cmd {
+	m, body := p.mode()
+	p.Close()
+	if m != nil {
+		p.dismissed = &Dismissal{Prefix: m.Prefix(), QueryLen: len([]rune(body))}
+	}
+	return nil
+}
+
+// TakeDismissal reports and clears a pending esc-without-a-pick (#2399); ok is
+// false when the last Update was not one. Every other way the palette closes —
+// an activation, the host calling Close — leaves nothing to take.
+func (p *Palette) TakeDismissal() (Dismissal, bool) {
+	if p.dismissed == nil {
+		return Dismissal{}, false
+	}
+	d := *p.dismissed
+	p.dismissed = nil
+	return d, true
 }
 
 // altActivate emits the focused row's Alt msg (#2136) and closes the palette.
@@ -626,7 +673,9 @@ func (p *Palette) activateSide() tea.Cmd {
 	if p.sideSel < 0 || p.sideSel >= len(p.sideItems) {
 		return nil
 	}
-	msg := p.sideItems[p.sideSel].Msg
+	it := p.sideItems[p.sideSel]
+	msg := it.Msg
+	p.recordPick(it, true)
 	p.Close()
 	if msg == nil {
 		return nil
@@ -806,6 +855,55 @@ func (p *Palette) recompute() {
 	} else if !p.sideManual {
 		p.sideFocus = p.autoSideFocus(body)
 	}
+	p.applyPreselect(body)
+}
+
+// applyPreselect moves the selection onto the row a PreselectMode names
+// (#2399) — the recent-files dialog's previous pick. It runs after the
+// automatic column placement so a preselected project also takes the focus,
+// and it never overrides an explicit column switch: once the user pressed tab
+// the placement is theirs. A key no listed row carries leaves the default
+// first-row selection alone.
+func (p *Palette) applyPreselect(query string) {
+	pm, ok := p.locked.(PreselectMode)
+	if !ok {
+		return
+	}
+	key, side := pm.Preselect(query)
+	if key == "" {
+		return
+	}
+	list := p.items
+	if side {
+		list = p.sideItems
+	}
+	for i, it := range list {
+		if it.Key != key {
+			continue
+		}
+		if side {
+			p.sideSel = i
+			if !p.sideManual {
+				p.sideFocus = true
+			}
+			p.scrollSideToSelected()
+		} else {
+			p.selected = i
+			if !p.sideManual {
+				p.sideFocus = false
+			}
+			p.scrollToSelected()
+		}
+		return
+	}
+}
+
+// recordPick tells a PickRecorder mode which row was activated (#2399),
+// before Close drops the per-open state.
+func (p *Palette) recordPick(it Item, side bool) {
+	if pr, ok := p.locked.(PickRecorder); ok {
+		pr.RecordPick(it, side)
+	}
 }
 
 // autoSideFocus decides which column holds the focus after a recompute
@@ -934,6 +1032,12 @@ func (p *Palette) View() string {
 	if foot := p.footerLines(inner); len(foot) > 0 {
 		parts = append(parts, sep)
 		parts = append(parts, foot...)
+	}
+	// A HintMode open (#2399) closes the box with one dim line documenting the
+	// affordances the rows themselves cannot show — the recent-files dialog's
+	// column toggle and its "p:" projects-only filter.
+	if hint := p.hintLine(inner); hint != "" {
+		parts = append(parts, dim.Render(hint))
 	}
 	body := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
