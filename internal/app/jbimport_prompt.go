@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -49,25 +48,9 @@ func (m Model) jbImportPromptOpen() bool { return m.jbImportOpen && m.shell.IsOp
 // renderJBImportPrompt (re)fills the shell with the prompt for the current
 // input; candidates (from the last tab press) render underneath.
 func (m *Model) renderJBImportPrompt(candidates []string) {
-	line := "> " + ui.CursorView(m.jbImportInput, m.jbImportPos)
-	const maxLines = 8
-	var sug string
-	if n := len(candidates); n > 0 {
-		shown := candidates
-		if n > maxLines {
-			shown = candidates[:maxLines]
-		}
-		sug = "\n\n  " + strings.Join(shown, "\n  ")
-		if n > maxLines {
-			sug += fmt.Sprintf("\n  … +%d more", n-maxLines)
-		}
-	}
-	m.shell.SetContent(ui.ModelContent{
-		Heading: "Import JetBrains keymap XML",
-		Body: func() string {
-			return line + sug + "\n\ntab complete · enter import · esc cancel"
-		},
-	})
+	m.renderCompletionPrompt(m.jbImportInput, m.jbImportPos, candidates,
+		"Import JetBrains keymap XML",
+		"tab complete · enter import · esc cancel")
 }
 
 // updateJBImportPrompt consumes every key while the import prompt is open:

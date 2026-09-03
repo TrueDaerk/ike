@@ -262,6 +262,17 @@ split beside it (#1851). With no editor pane left, one is spawned to host the
 tab. Only the explorer's explicit **open in split** (`o`, `OpenFileMsg{NewPane:
 true}`) still goes through `viewerSplitTarget`.
 
+All of it is **one** helper (#2463): `openViewerPane(kind, id, matches, add)`
+in `internal/app/panelwiring.go` runs the refocus check, the content-tab nest
+and the split in that order, and returns the fresh pane's `Init` — the command
+the viewers that load in the background (#1795) ride on. Its tail,
+`splitViewerPane(add)`, is the split-focus-persist-Init sequence on its own,
+which the remote browser (#1997) uses because it dedups by connection rather
+than by path. The matching **result routing** shares `routeResult(msg, match,
+discard)`: a background result reaches the pane that asked for it, dedicated or
+tab-nested, and an unroutable one is `Discard()`ed rather than dropped, so the
+database handle or connection it carries is released.
+
 **Where a spawned editor lands (#1989).** `spawnEditor` anchors at the pane
 `fileEditorKey` resolves — never at a pane whose tabs are all tool sessions (a
 **tool-tab host**, `toolTabHost`): that pane is the layout's tools area, not

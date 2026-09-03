@@ -1,6 +1,8 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/host"
 	"ike/internal/pane"
 )
@@ -21,44 +23,14 @@ func (m *Model) toggleVCSPanel() {
 		m.host.Notify(host.Info, "not a git repository")
 		return
 	}
-	if !m.activeWS().Panes.Has(pane.VCSKey) {
-		m.vcsReturnFocus = m.activeWS().Panes.Focused()
-		m.openVCSPanel()
-		return
-	}
-	if m.activeWS().Panes.Focused() != pane.VCSKey {
-		m.vcsReturnFocus = m.activeWS().Panes.Focused()
-		m.setFocus(pane.VCSKey)
-		return
-	}
-	target := m.vcsReturnFocus
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = m.activeEditorKey()
-	}
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = pane.ExplorerKey
-	}
-	m.setFocus(target)
+	m.togglePanel(pane.VCSKey, func() tea.Cmd { m.openVCSPanel(); return nil })
 }
 
 // openVCSPanel splits the active editor (fallback: focused leaf) at the
 // adaptive placement (auxZone, #1588) with the singleton panel, seeded from
 // the current snapshot.
 func (m *Model) openVCSPanel() {
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
-	if target == "" || m.activeWS().Tree == nil {
-		return
-	}
-	key := m.activeWS().Panes.AddVCS()
-	if !m.insertToolPane(key, target, m.auxZone(target)) {
-		m.activeWS().Panes.Close(key)
-		return
-	}
-	m.activeWS().Panes.Get(key).VCS().SetVCS(m.vcs.snap)
-	m.setFocus(key)
-	m.layout()
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	m.openToolPane(m.activeWS().Panes.AddVCS, m.auxZone, func(key string) {
+		m.activeWS().Panes.Get(key).VCS().SetVCS(m.vcs.snap)
+	})
 }

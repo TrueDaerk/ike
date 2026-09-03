@@ -73,24 +73,7 @@ const depsScanTimeout = 3 * time.Minute
 // toggleProblemsPanel: no panel → open at the bottom; unfocused → focus it;
 // focused → return focus to the remembered pane.
 func (m *Model) toggleDepsPanel() tea.Cmd {
-	if !m.activeWS().Panes.Has(pane.DepsKey) {
-		m.depsReturnFocus = m.activeWS().Panes.Focused()
-		return m.openDepsPanel()
-	}
-	if m.activeWS().Panes.Focused() != pane.DepsKey {
-		m.depsReturnFocus = m.activeWS().Panes.Focused()
-		m.setFocus(pane.DepsKey)
-		return nil
-	}
-	target := m.depsReturnFocus
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = m.activeEditorKey()
-	}
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = pane.ExplorerKey
-	}
-	m.setFocus(target)
-	return nil
+	return m.togglePanel(pane.DepsKey, m.openDepsPanel)
 }
 
 // depsPanel returns the singleton panel model, or nil when it is not open.
@@ -105,25 +88,14 @@ func (m Model) depsPanel() *depspanel.Model {
 // bottom with the singleton panel, seeded from the last snapshot; opening
 // with no completed scan yet starts one.
 func (m *Model) openDepsPanel() tea.Cmd {
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
-	if target == "" || m.activeWS().Tree == nil {
+	if !m.openToolPane(m.activeWS().Panes.AddDeps, fixedZone(layout.ZoneBottom), func(key string) {
+		p := m.activeWS().Panes.Get(key).Deps()
+		p.SetDisplayPath(displayPath)
+		p.Set(deps.Snapshot())
+		p.SetScanning(m.depsScanning)
+	}) {
 		return nil
 	}
-	key := m.activeWS().Panes.AddDeps()
-	if !m.insertToolPane(key, target, layout.ZoneBottom) {
-		m.activeWS().Panes.Close(key)
-		return nil
-	}
-	p := m.activeWS().Panes.Get(key).Deps()
-	p.SetDisplayPath(displayPath)
-	p.Set(deps.Snapshot())
-	p.SetScanning(m.depsScanning)
-	m.setFocus(key)
-	m.layout()
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	if len(deps.Snapshot().Manifests) == 0 && !m.depsScanning {
 		return m.depsScanCmd(false, false)
 	}

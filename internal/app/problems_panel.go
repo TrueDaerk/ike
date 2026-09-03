@@ -1,6 +1,8 @@
 package app
 
 import (
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/pane"
 	"ike/internal/problems"
 )
@@ -18,24 +20,7 @@ type ProblemsToggleMsg struct{}
 // toggleVCSPanel: no panel → open at the bottom; unfocused → focus it;
 // focused → return focus to the remembered pane.
 func (m *Model) toggleProblemsPanel() {
-	if !m.activeWS().Panes.Has(pane.ProblemsKey) {
-		m.problemsReturnFocus = m.activeWS().Panes.Focused()
-		m.openProblemsPanel()
-		return
-	}
-	if m.activeWS().Panes.Focused() != pane.ProblemsKey {
-		m.problemsReturnFocus = m.activeWS().Panes.Focused()
-		m.setFocus(pane.ProblemsKey)
-		return
-	}
-	target := m.problemsReturnFocus
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = m.activeEditorKey()
-	}
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = pane.ExplorerKey
-	}
-	m.setFocus(target)
+	m.togglePanel(pane.ProblemsKey, func() tea.Cmd { m.openProblemsPanel(); return nil })
 }
 
 // problemsPanel returns the singleton panel model, or nil when it is not open.
@@ -50,25 +35,12 @@ func (m Model) problemsPanel() *problems.Model {
 // adaptive placement (auxZone, #1588) with the singleton panel, seeded from
 // the live diagnostics store.
 func (m *Model) openProblemsPanel() {
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
-	if target == "" || m.activeWS().Tree == nil {
-		return
-	}
-	key := m.activeWS().Panes.AddProblems()
-	if !m.insertToolPane(key, target, m.auxZone(target)) {
-		m.activeWS().Panes.Close(key)
-		return
-	}
-	p := m.activeWS().Panes.Get(key).Problems()
-	p.SetDisplayPath(displayPath)
-	p.SetStore(m.probStore)
-	m.syncProblemsActive()
-	m.setFocus(key)
-	m.layout()
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	m.openToolPane(m.activeWS().Panes.AddProblems, m.auxZone, func(key string) {
+		p := m.activeWS().Panes.Get(key).Problems()
+		p.SetDisplayPath(displayPath)
+		p.SetStore(m.probStore)
+		m.syncProblemsActive()
+	})
 }
 
 // refreshProblemsPanel re-derives an open panel's rows after a store update;

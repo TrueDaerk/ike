@@ -69,20 +69,9 @@ func (m *Model) autosaveIdleOnSync(fromKey, path string) tea.Cmd {
 // armAutosaveIdleTick schedules one wake at the earliest pending deadline; the
 // tick handler re-arms while marks remain (the backup.go pattern).
 func (m *Model) armAutosaveIdleTick() tea.Cmd {
-	if m.autosaveIdleTickArmed || m.autosaveIdleDeb == nil {
-		return nil
-	}
-	next, ok := m.autosaveIdleDeb.Next()
-	if !ok {
-		return nil
-	}
-	m.autosaveIdleTickArmed = true
-	d := time.Until(next)
-	if d < 0 {
-		d = 0
-	}
-	gen := m.modelGen
-	return tea.Tick(d, func(time.Time) tea.Msg { return autosaveIdleTickMsg{gen: gen} })
+	return m.armTick(&m.autosaveIdleTickArmed, m.autosaveIdleDeb, func(gen int64) tea.Msg {
+		return autosaveIdleTickMsg{gen: gen}
+	})
 }
 
 // saveDueIdleBuffers autosaves every buffer whose idle deadline expired.

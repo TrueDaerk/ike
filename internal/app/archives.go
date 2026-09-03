@@ -14,7 +14,6 @@ import (
 	"ike/internal/gzfile"
 	"ike/internal/host"
 	"ike/internal/largefile"
-	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -93,29 +92,9 @@ func archiveEntryPath(archivePath, entry string) string {
 // split off the leaf viewerSplitTarget picks, the pane the user last worked in
 // (#1779), which is what an explicit split open still does.
 func (m *Model) openArchivePane(path string) {
-	tabHost := m.takeViewerTabHost()
-	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
+	m.openViewerPane(pane.KindArchive, path, func(c *pane.Instance) bool {
 		return c.Kind() == pane.KindArchive && c.Archive().Path() == path
-	}); ok {
-		m.focusContentAt(hostKey, tabIdx) // may live in a tab (#1778)
-		return
-	}
-	if tabHost != "" {
-		if _, ok := m.openContentTab(tabHost, pane.KindArchive, path); ok {
-			return
-		}
-	}
-	target := m.viewerSplitTarget()
-	key := m.activeWS().Panes.AddArchiveView(path)
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneRight)
-	if !ok {
-		m.activeWS().Panes.Close(key)
-		return
-	}
-	m.activeWS().Tree = tree
-	m.layout()
-	m.setFocus(key)
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	}, func() string { return m.activeWS().Panes.AddArchiveView(path) })
 }
 
 // openArchiveEntry extracts one entry into memory and shows it in a read-only

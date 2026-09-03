@@ -115,6 +115,16 @@ SelectClick(y, top, headerRows, height, n int, cursor *int) bool
   `SelectClick` is the same gesture without the double-click clock, for the
   read-only report panes (the two Doctors).
 
+The **centered floating overlays** (the all-projects search form and its
+results, the find-in-path finder, the TODO index, the undo tree) share their
+hit test the same way (#2463): `overlayMouse` in
+`internal/app/overlaymouse.go` closes the overlay on a click outside, routes a
+left press to the overlay's own `Click` in overlay-local coordinates, scrolls
+on the wheel when the overlay has a `Wheel(int)` method (the search form has no
+list, so it ignores the wheel), and swallows everything else — an open overlay
+never leaks a mouse event to the panes below. `handleMouse` chains them in
+render order, topmost first.
+
 Coordinates are **pane-content-local** throughout — `y 0` is the pane's first
 rendered line — and the app translates screen cells into them once, in
 `paneClick`.

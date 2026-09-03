@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/dap"
 	"ike/internal/debugdoctor"
 	"ike/internal/pane"
@@ -24,24 +26,7 @@ type DebugDoctorMsg struct{}
 // toggleBreakpointsPanel: no panel → open at the adaptive placement;
 // unfocused → focus it; focused → return focus to the remembered pane.
 func (m *Model) toggleDoctorPanel() {
-	if !m.activeWS().Panes.Has(pane.DoctorKey) {
-		m.doctorReturnFocus = m.activeWS().Panes.Focused()
-		m.openDoctorPanel()
-		return
-	}
-	if m.activeWS().Panes.Focused() != pane.DoctorKey {
-		m.doctorReturnFocus = m.activeWS().Panes.Focused()
-		m.setFocus(pane.DoctorKey)
-		return
-	}
-	target := m.doctorReturnFocus
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = m.activeEditorKey()
-	}
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = pane.ExplorerKey
-	}
-	m.setFocus(target)
+	m.togglePanel(pane.DoctorKey, func() tea.Cmd { m.openDoctorPanel(); return nil })
 }
 
 // doctorPanel returns the singleton panel model, or nil when it is not open.
@@ -56,22 +41,9 @@ func (m Model) doctorPanel() *debugdoctor.Model {
 // adaptive placement (auxZone, #1588) with the singleton panel, sharing the
 // app-owned log.
 func (m *Model) openDoctorPanel() {
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
-	if target == "" || m.activeWS().Tree == nil {
-		return
-	}
-	key := m.activeWS().Panes.AddDoctor()
-	if !m.insertToolPane(key, target, m.auxZone(target)) {
-		m.activeWS().Panes.Close(key)
-		return
-	}
-	m.wireDoctorPanel(m.activeWS().Panes.Get(key).Doctor())
-	m.setFocus(key)
-	m.layout()
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	m.openToolPane(m.activeWS().Panes.AddDoctor, m.auxZone, func(key string) {
+		m.wireDoctorPanel(m.activeWS().Panes.Get(key).Doctor())
+	})
 }
 
 // wireDoctorPanel shares the app-owned log with a panel instance; layout

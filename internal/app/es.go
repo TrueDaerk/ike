@@ -14,7 +14,6 @@ import (
 	"ike/internal/espane"
 	"ike/internal/esq"
 	"ike/internal/host"
-	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/plugin"
 )
@@ -54,47 +53,17 @@ func esCommands() []plugin.Command {
 // appears at once; connecting to the cluster is the returned background
 // command.
 func (m *Model) openESPane(endpoint string) tea.Cmd {
-	tabHost := m.takeViewerTabHost()
-	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
+	return m.openViewerPane(pane.KindES, endpoint, func(c *pane.Instance) bool {
 		return c.Kind() == pane.KindES && c.ES().Endpoint() == endpoint
-	}); ok {
-		m.focusContentAt(hostKey, tabIdx) // may live in a tab (#1778)
-		return nil
-	}
-	if tabHost != "" {
-		if nested, ok := m.openContentTab(tabHost, pane.KindES, endpoint); ok {
-			return nested.Init()
-		}
-	}
-	target := m.viewerSplitTarget()
-	key := m.activeWS().Panes.AddES(endpoint)
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneRight)
-	if !ok {
-		m.activeWS().Panes.Close(key)
-		return nil
-	}
-	m.activeWS().Tree = tree
-	m.layout()
-	m.setFocus(key)
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
-	inst := m.activeWS().Panes.Get(key)
-	if inst == nil {
-		return nil
-	}
-	return inst.Init()
+	}, func() string { return m.activeWS().Panes.AddES(endpoint) })
 }
 
 // esResult routes one background console result to the pane that asked for it
 // — dedicated or tab-nested (#1778), matched by the model's own key.
 func (m *Model) esResult(msg espane.ResultMsg) tea.Cmd {
-	_, _, inst, ok := m.findContent(func(c *pane.Instance) bool {
+	return m.routeResult(msg, func(c *pane.Instance) bool {
 		return c.Kind() == pane.KindES && c.ES().Key() == msg.Key
-	})
-	if !ok {
-		msg.Discard()
-		return nil
-	}
-	return inst.Update(msg)
+	}, msg.Discard)
 }
 
 // initESPanes starts the background connect of every console that has not
