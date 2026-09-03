@@ -128,8 +128,8 @@ func TestCopyModeMatchStepWithTheQueryLineOpen(t *testing.T) {
 	if m.copy.cur.line == at {
 		t.Fatal("the chord must step the accepted search with the query line open")
 	}
-	if !m.copy.input || m.copy.query != "l" {
-		t.Fatalf("the query line must survive: input=%v query=%q", m.copy.input, m.copy.query)
+	if !m.copy.input || m.copy.query.Text != "l" {
+		t.Fatalf("the query line must survive: input=%v query=%q", m.copy.input, m.copy.query.Text)
 	}
 }
 

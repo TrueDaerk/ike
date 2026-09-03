@@ -14,7 +14,6 @@ import (
 
 	"ike/internal/overlay"
 	"ike/internal/theme"
-	"ike/internal/ui"
 )
 
 // Model is the pane-facing terminal: it owns a Session and adapts pane
@@ -1090,10 +1089,7 @@ func (m *Model) PasteText(text string) {
 	// the mode it is inert — nothing may reach the detached shell.
 	if c := m.copy; c != nil {
 		if c.input {
-			out, ncur, changed := ui.PasteText(c.query, c.qpos, text)
-			if changed {
-				c.query, c.qpos = out, ncur
-			}
+			c.query.Paste(text)
 		}
 		return
 	}
