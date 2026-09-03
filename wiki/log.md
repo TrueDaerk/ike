@@ -1,5 +1,17 @@
 # Log
 
+## 2026-09-03 (shared hierarchy tree, #2465)
+
+- **`internal/hiertree`.** The call-hierarchy and type-hierarchy overlays
+  were forks that never diverged; their node shape, visible walk,
+  expand/collapse/parent-walk keys, stale-reply bookkeeping and row renderer
+  now live once as a generic `Tree[T]` (see
+  [Hierarchy Tree](/architecture/hiertree.md)). `callhier` and `typehier`
+  keep their LSP messages, their direction flag and their `Apply`; the scroll
+  clamp goes through `ui.ClampIndex` / `ui.ScrollToShow`. Rendering is
+  byte-identical — golden tests in both hosts pin it — and the tree
+  mechanics are tested once in the new package.
+
 ## 2026-09-03 (xmq playground for XML and HTML buffers, #2414)
 
 - **The third playground dialect.** `jqplay.DialectXMQ` joins jq and yq behind

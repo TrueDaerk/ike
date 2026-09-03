@@ -6,33 +6,27 @@
 // row navigates through the same DefinitionMsg path go-to-definition uses.
 // Beside the tree it carries the shared code-preview column (#2053), so the
 // selected caller's source is visible before one jumps into it.
+//
+// The tree itself — nodes, keys, request bookkeeping, rendering — is the
+// shared hiertree (#2465); this package keeps the LSP message types, the
+// callers/callees direction and the overlay chrome.
 package callhier
 
 import (
-	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/codepreview"
+	"ike/internal/hiertree"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/protocol"
 	"ike/internal/theme"
-	"ike/internal/ui"
 )
 
-// node is one tree row: an entry plus its lazily-fetched children. loaded
-// marks a completed fetch (an empty children set is then a leaf); loading
-// marks one in flight.
-type node struct {
-	entry    ilsp.CallHierarchyEntry
-	depth    int
-	children []*node
-	expanded bool
-	loaded   bool
-	loading  bool
-}
+// row is the shared tree node carrying a call-hierarchy item.
+type row = hiertree.Row[protocol.CallHierarchyItem]
 
 // Model is the overlay state. The root model routes keys here while open and
 // feeds CallHierarchyCallsMsg through Apply.
@@ -40,18 +34,7 @@ type Model struct {
 	open     bool
 	incoming bool // direction: true = callers, false = callees
 
-	roots []ilsp.CallHierarchyEntry
-	nodes []*node
-	fetch func(reqID int, item protocol.CallHierarchyItem, incoming bool) tea.Cmd
-
-	// pending maps in-flight fetch request ids to the node awaiting children;
-	// a direction toggle rebuilds the tree, so stale replies (their node no
-	// longer in pending) are dropped.
-	pending map[int]*node
-	nextReq int
-
-	cursor int // index into the visible-row sequence
-	top    int // first visible row of the render window
+	tree hiertree.Tree[protocol.CallHierarchyItem]
 
 	width, height int
 	pal           *theme.Palette
@@ -77,101 +60,48 @@ func (m *Model) SetSize(w, h int) { m.width, m.height = w, h }
 // IsOpen reports whether the overlay is shown.
 func (m *Model) IsOpen() bool { return m.open }
 
+// rows converts the bridge's entries into tree rows.
+func rows(entries []ilsp.CallHierarchyEntry) []row {
+	out := make([]row, len(entries))
+	for i, e := range entries {
+		out[i] = row{
+			Entry: hiertree.Entry{Name: e.Name, Detail: e.Detail, Path: e.Path, Line: e.Line, Col: e.Col},
+			Item:  e.Item,
+		}
+	}
+	return out
+}
+
 // Open shows the overlay on the prepared roots, in callers direction, and
-// immediately expands the first root so the first paint is useful.
+// immediately expands the first root so the first paint is useful. The tree's
+// fetch reads the direction at request time, so a toggle needs no rewiring.
 func (m *Model) Open(msg ilsp.CallHierarchyMsg) tea.Cmd {
 	m.open = true
 	m.incoming = true
-	m.roots = msg.Roots
-	m.fetch = msg.Fetch
-	return m.rebuild()
+	var fetch hiertree.Fetch[protocol.CallHierarchyItem]
+	if msg.Fetch != nil {
+		fetch = func(reqID int, item protocol.CallHierarchyItem) tea.Cmd {
+			return msg.Fetch(reqID, item, m.incoming)
+		}
+	}
+	return m.tree.Open(rows(msg.Roots), fetch)
 }
 
 // Close hides the overlay and drops the tree.
 func (m *Model) Close() {
 	m.open = false
-	m.nodes = nil
-	m.pending = nil
+	m.tree.Clear()
 	m.prev.SetFocus(false)
-}
-
-// rebuild resets the tree to fresh root nodes for the current direction and
-// kicks off the first root's expansion. In-flight fetches are orphaned (their
-// pending entries are gone), so late replies fall on the floor.
-func (m *Model) rebuild() tea.Cmd {
-	m.pending = map[int]*node{}
-	m.cursor, m.top = 0, 0
-	m.nodes = make([]*node, len(m.roots))
-	for i, e := range m.roots {
-		m.nodes[i] = &node{entry: e}
-	}
-	if len(m.nodes) == 0 {
-		return nil
-	}
-	return m.expand(m.nodes[0])
-}
-
-// expand fetches (or re-shows) a node's children.
-func (m *Model) expand(n *node) tea.Cmd {
-	if n.loaded {
-		n.expanded = true
-		return nil
-	}
-	if n.loading || m.fetch == nil {
-		return nil
-	}
-	n.loading = true
-	m.nextReq++
-	m.pending[m.nextReq] = n
-	return m.fetch(m.nextReq, n.entry.Item, m.incoming)
 }
 
 // Apply consumes one expansion result, dropping replies whose node is gone
 // (direction toggled or overlay reopened) or whose direction is stale.
 func (m *Model) Apply(msg ilsp.CallHierarchyCallsMsg) {
-	n := m.pending[msg.ReqID]
-	if n == nil {
-		return
-	}
-	delete(m.pending, msg.ReqID)
-	if msg.Incoming != m.incoming {
-		return
-	}
-	n.loading = false
-	n.loaded = true
-	n.expanded = true
-	n.children = make([]*node, len(msg.Calls))
-	for i, e := range msg.Calls {
-		n.children[i] = &node{entry: e, depth: n.depth + 1}
-	}
-}
-
-// visible returns the rows a depth-first walk of the expanded tree shows.
-func (m *Model) visible() []*node {
-	var out []*node
-	var walk func(ns []*node)
-	walk = func(ns []*node) {
-		for _, n := range ns {
-			out = append(out, n)
-			if n.expanded {
-				walk(n.children)
-			}
-		}
-	}
-	walk(m.nodes)
-	return out
-}
-
-// current returns the node under the cursor.
-func (m *Model) current(rows []*node) *node {
-	if m.cursor < 0 || m.cursor >= len(rows) {
-		return nil
-	}
-	return rows[m.cursor]
+	m.tree.Apply(msg.ReqID, msg.Incoming != m.incoming, rows(msg.Calls))
 }
 
 // listHeight is the render window's row count — the pgup/pgdn page size
-// (#1666). It mirrors the height renderRows lays out into.
+// (#1666). It mirrors the height the tree lays its rows out into.
 func (m *Model) listHeight() int {
 	h := m.height/2 - 5
 	if h < 4 {
@@ -182,7 +112,6 @@ func (m *Model) listHeight() int {
 
 // Update handles one key while the overlay is open.
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
-	rows := m.visible()
 	// The excerpt column is a focusable read-only viewport (#2327): while it
 	// holds the focus its motions win over the tree's, and esc hands the
 	// keyboard back to the tree instead of closing the overlay.
@@ -199,52 +128,24 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 	}
-	// Shared list semantics (#1666): steps wrap, page jumps clamp.
-	if ui.ListNav(msg.String(), &m.cursor, len(rows), m.listHeight(), ui.NavFull) {
-		return nil
+	onEnter := func(r row) tea.Cmd {
+		e := r.Entry
+		m.Close()
+		return func() tea.Msg {
+			return ilsp.DefinitionMsg{Path: e.Path, Line: e.Line, Col: e.Col}
+		}
+	}
+	onToggle := func() tea.Cmd {
+		// Toggle callers <-> callees: same roots, fresh tree.
+		m.incoming = !m.incoming
+		return m.tree.Rebuild()
+	}
+	if cmd, ok := m.tree.Key(msg.String(), m.listHeight(), onEnter, onToggle); ok {
+		return cmd
 	}
 	switch msg.String() {
 	case "esc", "q":
 		m.Close()
-		return nil
-	case "enter":
-		if n := m.current(rows); n != nil {
-			e := n.entry
-			m.Close()
-			return func() tea.Msg {
-				return ilsp.DefinitionMsg{Path: e.Path, Line: e.Line, Col: e.Col}
-			}
-		}
-		return nil
-	case "right", "l", "space":
-		if n := m.current(rows); n != nil {
-			if n.expanded {
-				return nil
-			}
-			return m.expand(n)
-		}
-		return nil
-	case "left", "h":
-		n := m.current(rows)
-		if n == nil {
-			return nil
-		}
-		if n.expanded {
-			n.expanded = false
-			return nil
-		}
-		// Collapsed already: land on the parent, JetBrains-tree style.
-		for i := m.cursor - 1; i >= 0; i-- {
-			if rows[i].depth < n.depth {
-				m.cursor = i
-				break
-			}
-		}
-		return nil
-	case "tab":
-		// Toggle callers <-> callees: same roots, fresh tree.
-		m.incoming = !m.incoming
-		return m.rebuild()
 	}
 	return nil
 }
@@ -302,7 +203,8 @@ func (m *Model) View() string {
 func (m *Model) body(innerW int, pal *theme.Palette) string {
 	h := m.listHeight()
 	listW, previewW := m.previewSplit(innerW)
-	return m.prev.Columns(m.renderRows(listW, h, pal), listW, previewW, h, m.target(), pal)
+	tree := m.tree.RenderRows(listW, h, pal, m.displayPath, "no calls")
+	return m.prev.Columns(tree, listW, previewW, h, m.target(), pal)
 }
 
 // previewSplit is the overlay's column geometry: the excerpt column adapts to
@@ -314,72 +216,9 @@ func (m *Model) previewSplit(innerW int) (listW, previewW int) {
 // target is the selected row's source location, the zero Target when the tree
 // is empty — which renders a blank column instead of an excerpt.
 func (m *Model) target() codepreview.Target {
-	n := m.current(m.visible())
-	if n == nil {
+	r := m.tree.Current()
+	if r == nil {
 		return codepreview.Target{}
 	}
-	return codepreview.Target{Path: n.entry.Path, Line: n.entry.Line + 1}
-}
-
-// renderRows lays the visible tree out to width×height, scrolled so the
-// cursor row stays in the window.
-func (m *Model) renderRows(width, height int, pal *theme.Palette) []string {
-	rows := m.visible()
-	if len(rows) == 0 {
-		return []string{lipgloss.NewStyle().Faint(true).Render("no calls")}
-	}
-	if m.cursor >= len(rows) {
-		m.cursor = len(rows) - 1
-	}
-	if m.cursor < m.top {
-		m.top = m.cursor
-	}
-	if m.cursor >= m.top+height {
-		m.top = m.cursor - height + 1
-	}
-	if max := len(rows) - height; m.top > max {
-		m.top = max
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
-
-	sel := lipgloss.NewStyle().Background(pal.SelectionMuted)
-	name := lipgloss.NewStyle().Bold(true)
-	dim := lipgloss.NewStyle().Faint(true)
-	clip := lipgloss.NewStyle().MaxWidth(width)
-
-	displayPath := m.displayPath
-	if displayPath == nil {
-		displayPath = func(p string) string { return p }
-	}
-
-	var out []string
-	for i := m.top; i < len(rows) && i < m.top+height; i++ {
-		n := rows[i]
-		marker := "▸"
-		switch {
-		case n.loading:
-			marker = "…"
-		case n.expanded:
-			marker = "▾"
-		case n.loaded && len(n.children) == 0:
-			marker = "·"
-		}
-		indent := strings.Repeat("  ", n.depth)
-		loc := displayPath(n.entry.Path) + ":" + strconv.Itoa(n.entry.Line+1)
-		detail := ""
-		if n.entry.Detail != "" {
-			detail = " " + n.entry.Detail
-		}
-		if i == m.cursor {
-			row := indent + marker + " " + n.entry.Name + detail + "  " + loc
-			out = append(out, clip.Render(sel.Render(row)))
-			continue
-		}
-		row := dim.Render(indent+marker+" ") + name.Render(n.entry.Name) +
-			dim.Render(detail+"  "+loc)
-		out = append(out, clip.Render(row))
-	}
-	return out
+	return codepreview.Target{Path: r.Entry.Path, Line: r.Entry.Line + 1}
 }
