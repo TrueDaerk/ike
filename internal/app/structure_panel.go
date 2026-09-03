@@ -40,6 +40,15 @@ type docSymEntry struct {
 // so only the buffer the user settles on reaches the language server.
 const structDebounceDelay = 250 * time.Millisecond
 
+// structBurstWindow is the dedup window for identical dispatches (#2401):
+// within it, a second request for the same (path, DocVersion) is dropped
+// before it reaches RunCommand — the first one either is still outstanding or
+// answered a document the server has not seen change since. Focus and
+// tab-switch bursts (the telemetry showed 2–4 dispatches inside one second)
+// therefore cost one request, and nothing else is lost: the settled pass
+// re-arms the debounce for any state that really differs.
+const structBurstWindow = 150 * time.Millisecond
+
 // structDebounceMsg fires a debounced documentSymbol refresh; a stale seq
 // (a newer target was armed since) is dropped.
 type structDebounceMsg struct{ seq int }
@@ -105,8 +114,12 @@ func (m *Model) openStructurePanel() {
 // to a buffer whose cached tree is still valid (docSymbols entry at the
 // current DocVersion, #2319) refeeds the panel from the cache — no server
 // round trip. Only a missing or edited-past tree arms the debounced refresh;
-// a save (structForce) dispatches immediately, as does the first request
-// after the panel opens (structReqPath == ""). The breadcrumbs bar (#1153)
+// a save (structForce) of a buffer the cache no longer covers dispatches
+// immediately, as does the first request after the panel opens
+// (structReqPath == ""). A save that changed nothing the cache did not
+// already answer for asks nothing at all (#2401), and every dispatch passes
+// the burst dedup, so a focus/tab-switch flurry costs at most one request
+// per (path, version) per structBurstWindow. The breadcrumbs bar (#1153)
 // shares the funnel: with the panel closed it still requests when the
 // per-path cache lacks the active buffer's tree; sticky scroll's symbol
 // fallback (#2167) keeps the funnel alive with breadcrumbs off too.
@@ -130,6 +143,14 @@ func (m *Model) structureSyncCmd() tea.Cmd {
 	}
 	entry, cached := m.docSymbols[path]
 	fresh := cached && (entry.NoProvider || entry.Version == version)
+	// A save whose content the cache already covers (the cached tree was
+	// requested at the buffer version that was just written) asks nothing
+	// (#2401): the server sees the very document it answered for, so the
+	// forced round trip could only return the same tree. The flag is consumed
+	// either way, and the cache-hit refeed below takes over.
+	if m.structForce && fresh {
+		m.structForce = false
+	}
 	// Cache hit on a buffer switch: refeed the panel without a request.
 	if sp != nil && sp.Path() != path && fresh && !m.structForce {
 		sp.SetSymbols(path, entry.Symbols, entry.NoProvider)
@@ -160,10 +181,18 @@ func (m *Model) structureSyncCmd() tea.Cmd {
 
 // structureDispatch records the request target (path + DocVersion, the dedup
 // and the version stamp for the async reply) and issues the registry command.
+// A repeat of the same (path, DocVersion) inside structBurstWindow is dropped
+// (#2401): the command never runs, so no LSP request leaves and no internal
+// telemetry event is recorded for it.
 func (m *Model) structureDispatch(path string, version int) tea.Cmd {
 	m.structDebPath = "" // a direct dispatch cancels any armed debounce
+	if m.structLastPath == path && m.structLastVersion == version &&
+		time.Since(m.structLastAt) < structBurstWindow {
+		return nil
+	}
 	m.structReqPath = path
 	m.structReqVersion = version
+	m.structLastPath, m.structLastVersion, m.structLastAt = path, version, time.Now()
 	return m.RunCommand("lsp.documentSymbols")
 }
 
