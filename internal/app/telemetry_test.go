@@ -318,10 +318,10 @@ func TestTelemetrySessionMarker(t *testing.T) {
 // op with duration, status class and streaming flag — no URL, key or label.
 func TestTelemetryHTTPFlightLifecycle(t *testing.T) {
 	m := telemetryModel(t, host.MapConfig{})
-	send := func(ctx context.Context, source, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
+	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 		return nil, nil // never executed: the returned tea.Cmd is not run
 	}
-	if cmd := m.dispatchHTTP("a.http", "GET /x", "GET /x", send); cmd == nil {
+	if cmd := m.dispatchHTTP("a.http", "GET /x", "GET /x", false, send); cmd == nil {
 		t.Fatal("dispatch refused")
 	}
 
@@ -375,19 +375,19 @@ func TestTelemetryHTTPFlightLifecycle(t *testing.T) {
 // transport failure "error" — and a stream marks its flag.
 func TestTelemetryHTTPFlightCancelAndError(t *testing.T) {
 	m := telemetryModel(t, host.MapConfig{})
-	send := func(ctx context.Context, source, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
+	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 		return nil, nil
 	}
-	m.dispatchHTTP("a.http", "k1", "GET /1", send)
+	m.dispatchHTTP("a.http", "k1", "GET /1", false, send)
 	m.httpFlight[httpFlightKey("a.http", "k1")].canceled = true
 	tm, _ := m.Update(HTTPResponseMsg{Source: "a.http", Request: "k1", Err: context.Canceled})
 	m = tm.(Model)
 
-	m.dispatchHTTP("a.http", "k2", "GET /2", send)
+	m.dispatchHTTP("a.http", "k2", "GET /2", false, send)
 	tm, _ = m.Update(HTTPResponseMsg{Source: "a.http", Request: "k2", Err: errors.New("boom")})
 	m = tm.(Model)
 
-	m.dispatchHTTP("a.http", "k3", "GET /3", send)
+	m.dispatchHTTP("a.http", "k3", "GET /3", false, send)
 	m.httpFlight[httpFlightKey("a.http", "k3")].streamed = true
 	tm, _ = m.Update(HTTPResponseMsg{Source: "a.http", Request: "k3",
 		Resp: &httpclient.Response{Status: "200 OK", StatusCode: 200}})

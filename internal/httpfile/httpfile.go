@@ -70,6 +70,11 @@ type Request struct {
 	// method, so `req.GraphQL != nil` is the test for "this is a GraphQL
 	// request". See graphql.go.
 	GraphQL *GraphQLSpec
+	// WebSocket is the split of a `WEBSOCKET <url>` block's body (#2422) — the
+	// initial messages with their wait-for-server flags. nil for every other
+	// method, so `req.WebSocket != nil` is the test for "this is a WebSocket
+	// session". See websocket.go.
+	WebSocket *WebSocketSpec
 	// BodyStart/BodyEnd delimit the body's lines (1-based, inclusive), with
 	// the surrounding blank lines excluded — 0 when the request has no body.
 	// Consumers that need the body *in* the file rather than as a string use
@@ -337,6 +342,13 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 		req.GraphQL = graphQLSpec(req.Body, req.BodyStart, req.BodyEnd)
 	}
 
+	// A WEBSOCKET block's body is its initial messages, separated by `===`
+	// lines (#2422); the split is part of the parse so dispatch and any editor
+	// consumer read the same sections.
+	if strings.EqualFold(req.Method, WebSocketMethod) {
+		req.WebSocket = webSocketSpec(req.Body)
+	}
+
 	req.Captures = captures
 	f.Requests = append(f.Requests, req)
 }
@@ -506,6 +518,11 @@ func (r *Request) ResolveVars(vars *Vars) (*Request, error) {
 		if err := out.applyGraphQL(); err != nil {
 			return nil, fmt.Errorf("request %s: %v", r.Key(), err)
 		}
+	}
+	// A WEBSOCKET block re-splits after substitution (#2422), so the messages
+	// that go out carry the *resolved* text.
+	if out.WebSocket != nil {
+		out.WebSocket = webSocketSpec(out.Body)
 	}
 	return &out, nil
 }

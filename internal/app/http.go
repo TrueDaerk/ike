@@ -276,13 +276,21 @@ func (m *Model) dispatchHTTPRequest(source string, f *httpfile.File, req *httpfi
 		m.host.Notify(host.Error, "http: "+err.Error())
 		return nil
 	}
-	return m.dispatchHTTP(source, req.Key(), requestLabel(req),
-		func(ctx context.Context, source, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
+	return m.dispatchHTTP(source, req.Key(), requestLabel(req), req.WebSocket != nil,
+		func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 			// The .http file's directory anchors relative external-body paths
 			// (#1305): `< ./payload.json` is relative to the request file, not
 			// to wherever IKE was started.
-			resp, err := httpclient.DispatchStream(ctx, req,
-				httpclient.Options{BaseDir: filepath.Dir(source), Vars: vars}, cb)
+			opts := httpclient.Options{BaseDir: filepath.Dir(source), Vars: vars}
+			var resp *httpclient.Response
+			var err error
+			if req.WebSocket != nil {
+				// A WEBSOCKET block (#2422) opens a session instead of an
+				// exchange; frames stream through the same callbacks.
+				resp, err = httpclient.DispatchWS(ctx, req, opts, cb)
+			} else {
+				resp, err = httpclient.DispatchStream(ctx, req, opts, cb.StreamCallbacks)
+			}
 			if err != nil && envHint != "" && strings.Contains(err.Error(), "unresolved placeholders") {
 				// The likely cause is the unmade choice, so name it where the
 				// failure is read instead of leaving the variable a mystery.
@@ -315,9 +323,15 @@ func (m *Model) resendHTTPRequest() tea.Cmd {
 	// A re-send is a re-run too (#2247): what its answer is worth comparing
 	// with is the run before it, so it arms the same auto-diff.
 	m.armHTTPRerunDiff(p.Source(), key)
-	return m.dispatchHTTP(p.Source(), key, snap.Label(),
-		func(ctx context.Context, _, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error) {
-			return httpclient.Resend(ctx, key, snap, httpclient.Options{}, cb)
+	ws := snap.Method == httpfile.WebSocketMethod
+	return m.dispatchHTTP(p.Source(), key, snap.Label(), ws,
+		func(ctx context.Context, _, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
+			if ws {
+				// A stored websocket session (#2422) re-opens and replays its
+				// initial messages instead of repeating one exchange.
+				return httpclient.ResendWS(ctx, key, snap, httpclient.Options{}, cb)
+			}
+			return httpclient.Resend(ctx, key, snap, httpclient.Options{}, cb.StreamCallbacks)
 		})
 }
 
@@ -398,8 +412,8 @@ func (m *Model) takeHTTPRerunDiff(source, key string) bool {
 // stream (#1776) first a start message, then one chunk message per received
 // piece, then the finalizing HTTPResponseMsg. The buffered channel gives
 // natural backpressure — a slow UI slows the read, never drops data.
-func (m *Model) dispatchHTTP(source, key, label string,
-	send func(ctx context.Context, source, key string, cb httpclient.StreamCallbacks) (*httpclient.Response, error)) tea.Cmd {
+func (m *Model) dispatchHTTP(source, key, label string, ws bool,
+	send func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error)) tea.Cmd {
 	flightKey := httpFlightKey(source, key)
 	if _, running := m.httpFlight[flightKey]; running {
 		// Duplicate-dispatch guard (#1272): never fire the same request twice
@@ -420,6 +434,7 @@ func (m *Model) dispatchHTTP(source, key, label string,
 		request: key,
 		started: time.Now(),
 		cancel:  cancel,
+		ws:      ws,
 		endOp:   endOp,
 	})
 	m.usage.FlushSoon()
@@ -432,12 +447,21 @@ func (m *Model) dispatchHTTP(source, key, label string,
 	}}
 	dispatch := func() tea.Msg {
 		go func() {
-			resp, err := send(ctx, source, key, httpclient.StreamCallbacks{
-				OnHeaders: func(status string, _ int, proto string, headers http.Header) {
-					events <- HTTPStreamStartMsg{Source: source, Request: key,
-						Status: status, Proto: proto, Headers: headers, events: events}
+			resp, err := send(ctx, source, key, httpclient.WSCallbacks{
+				StreamCallbacks: httpclient.StreamCallbacks{
+					OnHeaders: func(status string, _ int, proto string, headers http.Header) {
+						events <- HTTPStreamStartMsg{Source: source, Request: key,
+							Status: status, Proto: proto, Headers: headers, events: events}
+					},
+					OnChunk: coal.add,
 				},
-				OnChunk: coal.add,
+				// The open session's handle (#2422) travels the event channel
+				// like every other stream fact, so the update loop stores it
+				// on the flight entry without a cross-goroutine write.
+				OnSession: func(s *httpclient.WSSession) {
+					events <- HTTPWSSessionMsg{Source: source, Request: key,
+						Session: s, events: events}
+				},
 			})
 			cancel()      // release the context regardless of the outcome
 			coal.finish() // the buffered tail lands ahead of the final response
@@ -489,6 +513,11 @@ func (m *Model) notifyHTTPCompletion(e *httpFlightEntry, msg HTTPResponseMsg, vi
 	// array (#2423), so the status code alone would report it as a success.
 	gqlErrors := msg.Resp.GraphQLErrors()
 	failed := msg.Resp.StatusCode < 200 || msg.Resp.StatusCode >= 300 || len(gqlErrors) > 0
+	if msg.Resp.StatusCode == http.StatusSwitchingProtocols {
+		// A finished websocket session (#2422) ends on its 101 handshake
+		// status — a success, not a 1xx failure.
+		failed = false
+	}
 	limit := config.Get().HTTP.NotifySlowMs
 	slow := limit > 0 && msg.Resp.Duration >= time.Duration(limit)*time.Millisecond
 	if !failed && !slow {
@@ -574,7 +603,8 @@ func (m *Model) openHTTPPanel() {
 // grows via appendHTTPStream. A viewer that cannot open is no failure — the
 // finalizing HTTPResponseMsg still lands and reports.
 func (m *Model) beginHTTPStream(msg HTTPStreamStartMsg) {
-	if e, ok := m.httpFlight[httpFlightKey(msg.Source, msg.Request)]; ok {
+	e, flying := m.httpFlight[httpFlightKey(msg.Source, msg.Request)]
+	if flying {
 		e.streamed = true // the flight-end event says streaming happened (#2348)
 	}
 	if m.httpPanel() == nil {
@@ -585,6 +615,12 @@ func (m *Model) beginHTTPStream(msg HTTPStreamStartMsg) {
 		return
 	}
 	p.StartStream(msg.Request, msg.Proto, msg.Status, msg.Headers)
+	// The source is known at stream start (#2422): the websocket input line
+	// resolves its flight — and therefore its session — through it.
+	p.SetSource(msg.Source)
+	if flying && e.ws {
+		p.SetWSLive() // unlock the interactive input line (#2422)
+	}
 	m.layout()
 }
 
@@ -848,7 +884,9 @@ var httpPaneKeys = []struct{ Key, Title string }{
 	{"R", "Re-run this request from its .http file (current environment)"},
 	{"C", "Copy this response's request as a curl command"},
 	{"S", "Save the raw response body to a file"},
-	{"x", "Cancel the running request"},
+	{"x", "Cancel the running request (or close the websocket session)"},
+	{"enter · i (websocket)", "Open the input line of a live websocket session"},
+	{"↑ / ↓ (websocket input)", "Step through sent websocket messages"},
 	{"esc", "Clear search and selection"},
 }
 
@@ -960,6 +998,12 @@ type httpFlightEntry struct {
 	// streamed marks a dispatch whose response was recognized as a stream
 	// (#1776) — the flight-end telemetry event carries it (#2348).
 	streamed bool
+	// ws marks a websocket session (#2422): the flight-end event carries
+	// kind=ws plus the frame count, and the pane unlocks its input line.
+	ws bool
+	// wsSession is the open session's handle (#2422), stored when the
+	// HTTPWSSessionMsg arrives; the pane's input line sends through it.
+	wsSession *httpclient.WSSession
 	// endOp closes the flight's op lifecycle event (#2403): the closer
 	// telemetry.OpTimer handed out when the dispatch left, which stamps the
 	// elapsed ms into the end phase. Nil for a foreign entry.
@@ -1082,6 +1126,14 @@ func (m *Model) recordHTTPFlightEnd(e *httpFlightEntry, msg HTTPResponseMsg) {
 		phase = "error"
 	}
 	d := map[string]string{"stream": strconv.FormatBool(e.streamed)}
+	if e.ws {
+		// A websocket session (#2422): the kind plus the frame count — how
+		// much crossed the wire, nothing of what it said.
+		d["kind"] = "ws"
+		if msg.Resp != nil {
+			d["frames"] = strconv.Itoa(msg.Resp.Frames)
+		}
+	}
 	if msg.Resp != nil && msg.Resp.StatusCode > 0 {
 		d["class"] = fmt.Sprintf("%dxx", msg.Resp.StatusCode/100)
 	}
