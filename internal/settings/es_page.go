@@ -183,7 +183,7 @@ func esScopeLabel(s config.Scope) string {
 func (t *ESPage) View(w, h int) string {
 	t.setRows(h)
 	pal := t.theme()
-	head := " name · url   (Elasticsearch console endpoints, #1927)"
+	head := " name · url   (Elasticsearch console endpoints)"
 	entries := t.entries()
 	var list []string
 	for i, e := range entries {

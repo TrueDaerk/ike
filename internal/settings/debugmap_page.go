@@ -140,7 +140,7 @@ func (t *DebugMapPage) theme() *theme.Palette {
 func (t *DebugMapPage) View(w, h int) string {
 	t.setRows(h)
 	pal := t.theme()
-	head := " server path → local path   (PHP listen-mode docroot mappings, #823)"
+	head := " server path → local path   (PHP listen-mode docroot mappings)"
 	entries := t.entries()
 	var list []string
 	for i, e := range entries {

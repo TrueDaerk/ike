@@ -248,7 +248,7 @@ func (t *ToolsPage) View(w, h int) string {
 		return t.viewSuggestions(w, h)
 	}
 	pal := t.theme()
-	head := " name · command   (custom TUI tool panes, #741)"
+	head := " name · command   (custom TUI tool panes)"
 	entries := t.entries()
 	var list []string
 	for i, e := range entries {

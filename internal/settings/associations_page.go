@@ -142,7 +142,7 @@ func (t *AssocPage) theme() *theme.Palette {
 func (t *AssocPage) View(w, h int) string {
 	t.setRows(h)
 	pal := t.theme()
-	head := " pattern → language   (extra extensions/filenames for registered languages, #1365)"
+	head := " pattern → language   (extra extensions/filenames for registered languages)"
 	entries := t.entries()
 	var list []string
 	for i, e := range entries {
