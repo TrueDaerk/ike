@@ -1,6 +1,8 @@
 package settings
 
 import (
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
@@ -126,6 +128,18 @@ func (m *Model) runHintAction(action string) tea.Cmd {
 		return m.openApply()
 	case "openpage":
 		m.openHitPage()
+	case "toggle":
+		if r, ok := m.current(); ok && m.focus == formColumn && r.kind == rowEntry && r.entry.Type == Bool {
+			return m.writeValue(r.entry, m.value(r.entry.Key) != "true")
+		}
+	default:
+		// A page verb on the bar ("key:a") reaches the page as its key would.
+		if k, ok := strings.CutPrefix(action, "key:"); ok {
+			if page := m.customPage(); page != nil {
+				m.focus = formColumn
+				return page.Update(keyPress(k))
+			}
+		}
 	case "close":
 		cmd := m.CancelPreview()
 		m.Close()

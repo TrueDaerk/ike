@@ -187,7 +187,7 @@ func (m *Model) View() string {
 	title += chipStyle.Render(chip)
 	title += m.renderChangeCount(pal, lipgloss.Width(titleText)+lipgloss.Width(chip))
 	title += m.renderFilter()
-	hint := m.renderHint(pal)
+	hint := m.renderActionBar(pal, innerW)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, title, headers, body, hint)
 	box := lipgloss.NewStyle().
@@ -241,58 +241,6 @@ func (m *Model) renderColumnHeaders(innerW int) string {
 	return out + caption(label, m.focus != catColumn, g.formW)
 }
 
-// renderHint renders the bottom hint row: three context keys, not a permanent
-// nine-key legend (#1295). The full list lives behind "?" — the cheatsheet
-// overlay — so the footer can always say the three things that matter here.
-// The segments stay clickable (#885).
-func (m *Model) renderHint(pal *theme.Palette) string {
-	m.hintHits = nil
-	style := lipgloss.NewStyle().Foreground(pal.Secondary)
-	switch {
-	case m.SubOpen():
-		return style.Render(" esc back · click a button")
-	case m.filtering:
-		return style.Render(" fuzzy: key · label · description — enter keep · esc clear")
-	}
-	var segs []hintSeg
-	switch {
-	case m.filter != "" && m.focus == formColumn:
-		// Search owns the grid (#1297): a value is settable straight from a
-		// result, and tab leaves for the owning page.
-		segs = []hintSeg{{"enter set here", "edit"}, {"tab open page", "openpage"}}
-	case m.focus == catColumn:
-		segs = []hintSeg{{"enter settings", "edit"}, {"/ search", "filter"}}
-	case m.focus == detailColumn:
-		segs = m.editorHint()
-	default:
-		segs = []hintSeg{{"enter edit", "edit"}, {"r reset", "reset"}}
-	}
-	if m.Dirty() {
-		// With edits pending, applying them is what matters most here.
-		segs = append(segs[:1:1], hintSeg{"ctrl+s apply", "apply"})
-	}
-	segs = append(segs, hintSeg{"? all keys", "help"})
-
-	x := 1 // border column 0
-	var out string
-	for i, sg := range segs {
-		if i > 0 {
-			out += " · "
-			x += 3
-		} else {
-			out += " "
-			x++
-		}
-		w := lipgloss.Width(sg.text)
-		if sg.action != "" {
-			m.hintHits = append(m.hintHits, hintAction{start: x, end: x + w, action: sg.action})
-		}
-		out += sg.text
-		x += w
-	}
-	return style.Render(out)
-}
-
 // renderChangeCount renders the staged-apply counter in the header (#1296) and
 // records its clickable span: "● n changed · ctrl+s apply" while edits are
 // pending, nothing at all when there are none — a quiet header means a clean
@@ -337,7 +285,7 @@ func markerBG(selected bool, sel lipgloss.Style) lipgloss.Style {
 	return lipgloss.NewStyle()
 }
 
-// hintSeg is one footer segment: its text and the action a click runs.
+// hintSeg is one "key verb" pair the action bar renders for a focused editor.
 type hintSeg struct{ text, action string }
 
 // editorHint names the two keys that matter for the focused editor.

@@ -161,7 +161,7 @@ func (t *AssocPage) View(w, h int) string {
 	}
 	var footer []string
 	{
-		hint := "   a add · enter edit · d delete — patterns match the file's base name (*.ext or exact name)"
+		hint := "   patterns match the file's base name (*.ext or exact name)"
 		lines := []footerLine{{text: hint, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}
 		if t.note != "" {
 			lines = append([]footerLine{{text: "   " + t.note, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}, lines...)
@@ -187,11 +187,18 @@ func (t *AssocPage) Wheel(delta int) {
 }
 
 // KeyHelp implements KeyHelper (#887).
-func (t *AssocPage) KeyHelp() []string {
-	return []string{
-		"a  add an association · enter  edit · d  delete",
-		"pattern matches the base name: *.mytool, Jenkinsfile",
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (t *AssocPage) Actions() []Action {
+	return []Action{
+		{Key: "a", Verb: "Add", Hint: "an association"},
+		{Key: "enter", Verb: "Edit"},
+		{Key: "d", Verb: "Delete"},
 	}
+}
+
+// KeyHelp adds the note the keys do not carry.
+func (t *AssocPage) KeyHelp() []string {
+	return []string{"a pattern matches the file's base name: *.mytool, Jenkinsfile"}
 }
 
 // --- add/edit form ---

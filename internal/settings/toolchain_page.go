@@ -875,7 +875,9 @@ func (t *ToolchainPage) footer(sec lipgloss.Style, w int) []string {
 	if !ok {
 		return nil
 	}
-	hint := " enter pick interpreter · p probe version · r reset to detection"
+	// The page's own keys live on the panel's action bar; the footer names
+	// only the keys of a mode the bar does not know about.
+	hint := ""
 	switch {
 	case t.custom:
 		hint = " tab complete path · enter apply · esc cancel"
@@ -887,8 +889,6 @@ func (t *ToolchainPage) footer(sec lipgloss.Style, w int) []string {
 		hint = " j/k select · + install · - uninstall · u upgrade · esc close"
 	case t.picking:
 		hint = " ↑↓ choose · enter apply · esc cancel"
-	case l.ID == "python":
-		hint += " · n new env · i packages · u uv install"
 	}
 	status := ""
 	if l.ID == "python" && t.envState != "" {
@@ -1038,11 +1038,21 @@ func fileExists(p string) bool {
 }
 
 // KeyHelp implements KeyHelper (#887).
-func (t *ToolchainPage) KeyHelp() []string {
-	return []string{
-		"enter  pick the interpreter · p  probe version · r  reset to detection",
-		"a  accept every detected toolchain · z  fold/unfold not-installed",
-		"n  new Python environment · i  packages · u  uv-install a Python",
-		"packages view: +  install · -  uninstall · u  upgrade selection",
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (t *ToolchainPage) Actions() []Action {
+	return []Action{
+		{Key: "enter", Verb: "Pick", Hint: "the interpreter"},
+		{Key: "p", Verb: "Probe", Hint: "the version"},
+		{Key: "r", Verb: "Reset", Hint: "to detection"},
+		{Key: "a", Verb: "Accept all", Hint: "every detected toolchain"},
+		{Key: "z", Verb: "Fold", Hint: "the not-installed group"},
+		{Key: "n", Verb: "New env", Hint: "guided Python environment"},
+		{Key: "i", Verb: "Packages", Hint: "of the Python environment"},
+		{Key: "u", Verb: "Install Python", Hint: "through uv"},
 	}
+}
+
+// KeyHelp adds the packages view's own keys.
+func (t *ToolchainPage) KeyHelp() []string {
+	return []string{"packages view: +  install · -  uninstall · u  upgrade selection"}
 }

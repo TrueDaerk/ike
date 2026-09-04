@@ -394,8 +394,7 @@ func (p *LSPPage) View(w, h int) string {
 		_, detail := p.rowStatus(l.ID)
 		footer = wrapFooter([]footerLine{
 			{text: " " + strings.TrimLeft(detail, " "), style: lipgloss.NewStyle().Foreground(pal.Error)},
-			{text: " e enable · c command · a args · o options JSON · i install · R restart · ctrl+r restart all · r reset · ? keys", style: sec},
-		}, w, 3)
+		}, w, 2)
 	}
 	p.listH = h - len(head) - len(footer)
 	return strings.Join(head, "\n") + "\n" + pinFooter(list, footer, p.sel, p.sel, h-len(head), &p.off)
@@ -456,13 +455,21 @@ func (p *LSPPage) renderRow(l lang.Language, selected bool) string {
 }
 
 // KeyHelp implements KeyHelper (#887).
-func (p *LSPPage) KeyHelp() []string {
-	return []string{
-		"e  toggle the selected server · E  master switch",
-		"c  edit command · a  edit args · o  edit options JSON",
-		"i  install the server binary",
-		"R  restart the selected server · ctrl+r  restart all",
-		"r  reset the selected server's overrides",
-		"A  auto-install · I  inlay hints · S  signature popup · C  completion popup",
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (p *LSPPage) Actions() []Action {
+	return []Action{
+		{Key: "e", Verb: "Enable", Hint: "toggle the selected server"},
+		{Key: "c", Verb: "Command", Hint: "override the launch command"},
+		{Key: "a", Verb: "Args", Hint: "override the arguments"},
+		{Key: "o", Verb: "Options", Hint: "override the settings JSON"},
+		{Key: "i", Verb: "Install", Hint: "the server binary"},
+		{Key: "R", Verb: "Restart", Hint: "the selected server"},
+		{Key: "ctrl+r", Verb: "Restart all"},
+		{Key: "r", Verb: "Reset", Hint: "the selected server's overrides"},
+		{Key: "E", Verb: "Master switch", Hint: "lsp.enabled"},
+		{Key: "A", Verb: "Auto-install", Hint: "lsp.auto_install"},
+		{Key: "I", Verb: "Inlay hints", Hint: "lsp.inlay_hints"},
+		{Key: "S", Verb: "Signature popup", Hint: "lsp.signature_auto"},
+		{Key: "C", Verb: "Completion popup", Hint: "lsp.completion_auto"},
 	}
 }

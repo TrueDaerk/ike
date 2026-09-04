@@ -215,8 +215,9 @@ func TestLSPPageMissingBinaryDetail(t *testing.T) {
 	}
 }
 
-// TestLSPFooterPinned guards #537: hints and failure detail render in a
-// two-line footer pinned to the bottom instead of inline under the selection.
+// TestLSPFooterPinned guards #537: the failure detail renders in a footer
+// pinned to the bottom instead of inline under the selection. The key hints
+// left the footer for the panel's action bar.
 func TestLSPFooterPinned(t *testing.T) {
 	p, _, _ := lspPageFixture(t)
 	const h = 12
@@ -224,8 +225,8 @@ func TestLSPFooterPinned(t *testing.T) {
 	if len(lines) != h {
 		t.Fatalf("view height = %d, want %d", len(lines), h)
 	}
-	if !strings.Contains(lines[h-2], "e enable") { // 3-line wrapped footer (#553)
-		t.Fatalf("key hints must be pinned to the last line:\n%s", strings.Join(lines, "\n"))
+	if strings.Contains(strings.Join(lines, "\n"), "e enable") {
+		t.Fatalf("key hints belong on the action bar, not the page footer:\n%s", strings.Join(lines, "\n"))
 	}
 	// The override editor is a sub-panel now (#892).
 	p.Update(key("c"))

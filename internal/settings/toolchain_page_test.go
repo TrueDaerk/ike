@@ -149,8 +149,9 @@ func drainBatch(t *testing.T, p *ToolchainPage, cmd tea.Cmd) {
 	}
 }
 
-// TestToolchainFooterPinned guards #537: the key hints render in a footer
-// pinned to the bottom, and moving the selection does not shift other rows.
+// TestToolchainFooterPinned guards #537: the footer is pinned to the bottom
+// (a constant three lines), and moving the selection does not shift other
+// rows. The key hints themselves left it for the panel's action bar.
 func TestToolchainFooterPinned(t *testing.T) {
 	restoreConfig(t)
 	lang.Register(lang.Language{ID: "tcfoot1", Extensions: []string{"tcfoot1"}, Toolchain: fakeTC{detected: "/bin/a"}})
@@ -163,12 +164,13 @@ func TestToolchainFooterPinned(t *testing.T) {
 	if len(lines) != h {
 		t.Fatalf("view height = %d, want %d", len(lines), h)
 	}
-	if !strings.Contains(lines[h-3], "enter pick interpreter") { // 3-line footer: hint(2, #553) + status
-		t.Fatalf("hint must be pinned above the status line:\n%s", strings.Join(lines, "\n"))
+	if strings.Contains(strings.Join(lines, "\n"), "enter pick interpreter") {
+		t.Fatalf("key hints belong on the action bar, not the page footer:\n%s", strings.Join(lines, "\n"))
 	}
+	body := strings.Join(lines[:h-3], "\n")
 	p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	lines = strings.Split(p.View(120, h), "\n")
-	if len(lines) != h || !strings.Contains(lines[h-3], "enter pick interpreter") {
+	if len(lines) != h || strings.Contains(strings.Join(lines, "\n"), "enter pick interpreter") || body == "" {
 		t.Fatalf("footer must stay pinned after a selection move:\n%s", strings.Join(lines, "\n"))
 	}
 }

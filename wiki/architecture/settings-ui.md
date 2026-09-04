@@ -548,7 +548,48 @@ Schema `Chord`
 entries capture through a shared sub-panel with keymap-page semantics —
 multi-step chords, enter confirms, backspace undoes a step — instead of
 grabbing the next keypress. **?** opens a key-help sub-panel listing the
-shared keys plus the active page's (`KeyHelper` seam).
+active page's actions first, then the shared keys (see
+[Action bar](#action-bar-2026-09)).
+
+## Action bar (2026-09)
+
+The bottom row of the panel is an **action bar**: the verbs the focused
+surface offers, each as a keycap — `[a] Add · [d] Delete · [s] Scope: auto ·
+[ctrl+s] Apply 2 · [?] Keys`. It replaced the three-key hint row of 0460,
+which only ever named the panel's own keys: a custom page's letters were
+discoverable through `?` alone, and staging a change replaced `r reset` with
+`ctrl+s apply` instead of adding it.
+
+- **One source of truth.** A custom page describes its verbs through the
+  `ActionLister` seam (`internal/settings/actions.go`):
+  `Actions() []Action` with `Key`, `Verb` and an optional `Hint`, in bar
+  order — most-used first. The bar, the `?` overlay and the mouse hit map all
+  derive from that list; nothing is written twice. Every custom page
+  implements it. The older `KeyHelper` seam is now for **notes** the keys do
+  not carry ("a pattern matches the base name", "the page edits the config
+  defaults") and renders under the actions in the overlay.
+- **What the bar shows** depends on the focused surface: rail → `Open`,
+  `Search`; schema settings column → `Edit`, `Toggle` (on a bool row),
+  `Reset`; detail column → the editor's own two keys; custom page → the page's
+  first six actions; search → `Set here`, `Open page`, `Clear`. Then the
+  chrome: `[s] Scope: …` (schema pages — the selector only routes schema
+  writes), `[ctrl+s] Apply n` while a batch is pending, and always `[?] Keys`.
+  What does not fit the width is dropped from the right; `[?]` always stays,
+  because the overlay lists everything the bar could not.
+- **Clickable.** Each keycap is a hit span (the `hintHits` mechanism of #885):
+  the panel's own verbs run their action, a page verb is forwarded to the page
+  as the key it names (`keyPress`), so the mouse reaches every action without
+  the letter being known.
+- **The `?` overlay** lists the page's actions first — `key  Verb — hint` per
+  line — then its notes, then the keys every page shares. Before, eleven
+  identical shared lines came first and the keymap page, which has the most
+  private keys, contributed none.
+- **Page footers lost their legends.** The pinned footer under a custom page's
+  list used to restate the keys as wrapped prose (`a add · enter edit · d
+  delete — …`), which cost two list lines and clipped mid-word on narrow
+  panels. Footers now carry only what the bar cannot: notes, failure detail,
+  and the keys of a *mode* the bar does not know about (the toolchain
+  package view and pickers).
 
 ## Shared text input (0420, #888)
 
@@ -670,9 +711,10 @@ a list is possible.
 - **Nothing expands inline any more.** The settings rows map 1:1 to lines, so a
   selection move cannot shift what is under the pointer, and a click hit-test
   is a plain offset.
-- **The footer is three context keys**, not a nine-key legend: what the focused
-  column can do, plus `? all keys`. The full set lives in the `?` cheatsheet
-  overlay, grouped move / edit / global.
+- **The footer is the action bar** (see [Action bar](#action-bar-2026-09)):
+  the verbs the focused surface offers, each behind its keycap, plus
+  `[?] Keys`. The 0460 "three context keys" footer never named a custom
+  page's letters and dropped `r reset` as soon as a change was staged.
 
 ## Staged apply (0460, #1296)
 

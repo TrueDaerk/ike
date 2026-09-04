@@ -625,22 +625,22 @@ func (k *KeymapPage) detailLine(b keymapRow) footerLine {
 	switch {
 	case k.importNote != "":
 		return footerLine{
-			text:  "   " + k.importNote + " — " + b.Command + " · enter rebind · u unbind · r reset · i import",
+			text:  "   " + k.importNote + " — " + b.Command,
 			style: lipgloss.NewStyle().Foreground(pal.Info),
 		}
 	case b.unbound:
 		return footerLine{
-			text:  "   " + b.Command + " — unbound (default " + b.Chord.String() + ") · enter set binding · r reset to preset",
+			text:  "   " + b.Command + " — unbound (default " + b.Chord.String() + ")",
 			style: lipgloss.NewStyle().Foreground(pal.Secondary),
 		}
 	case b.nobind:
 		return footerLine{
-			text:  "   " + b.Command + " — no binding · enter set binding",
+			text:  "   " + b.Command + " — no binding",
 			style: lipgloss.NewStyle().Foreground(pal.Secondary),
 		}
 	default:
 		return footerLine{
-			text:  "   " + b.Command + " — enter rebind · u unbind · r reset to preset · i import JetBrains XML · p keymap doctor",
+			text:  "   " + b.Command,
 			style: lipgloss.NewStyle().Foreground(pal.Secondary),
 		}
 	}
@@ -742,4 +742,17 @@ func separableContexts(a, b keymap.Context) bool {
 		return true
 	}
 	return a.Lang() != "" && b.Lang() != "" && a.Lang() != b.Lang()
+}
+
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (k *KeymapPage) Actions() []Action {
+	return []Action{
+		{Key: "enter", Verb: "Rebind", Hint: "capture a new chord"},
+		{Key: "u", Verb: "Unbind"},
+		{Key: "r", Verb: "Reset", Hint: "to the preset"},
+		{Key: "z", Verb: "Fold", Hint: "a numbered binding run"},
+		{Key: "/", Verb: "Filter"},
+		{Key: "i", Verb: "Import", Hint: "a JetBrains keymap XML"},
+		{Key: "p", Verb: "Doctor", Hint: "probe and audit this terminal's chords"},
+	}
 }

@@ -130,7 +130,7 @@ func TestKeyHelpOverlay(t *testing.T) {
 		t.Fatal("? must open the key help")
 	}
 	v := m.View()
-	if !strings.Contains(v, "write-scope") || !strings.Contains(v, "new Python environment") {
+	if !strings.Contains(v, "Everywhere:") || !strings.Contains(v, "Python environment") {
 		t.Fatalf("key help must list shared + page keys:\n%s", v)
 	}
 	m.Update(key("esc"))
