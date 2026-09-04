@@ -277,6 +277,14 @@ func defaults() *Config {
 			// exist (#2419); it only shells out to the local toolchain.
 			AutoScan: true,
 		},
+		Network: Network{
+			// The network deep-link endpoint (#2519) stays off until the
+			// user opts in; 4530 spells "ike0" on a phone keypad, and the
+			// default bind reaches every interface so other devices can
+			// pair.
+			Port: NetworkDefaultPort,
+			Bind: NetworkDefaultBind,
+		},
 		Diff: Diff{
 			Context: 3, // context lines kept around a change (0340, #494)
 			// A diff opens where the user is looking: as a tab of the

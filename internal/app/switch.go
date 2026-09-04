@@ -370,6 +370,14 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	fresh.dlServer = m.dlServer
 	fresh.dlPending = m.dlPending
 	fresh.dlAfterClone = m.dlAfterClone
+	// The network endpoint (#2519) is session state too: the listener and
+	// its paired-client store serve the whole run — a switch triggered over
+	// the network must not tear down the very connection that asked for it,
+	// nor try to bind the port a second time. A pairing popup that was up
+	// dies with the old shell; the device simply asks again.
+	fresh.nlServer = m.nlServer
+	fresh.nlAddr = m.nlAddr
+	fresh.nlTickGen = m.nlTickGen
 	// Global floating terminals (#1793) are app state too: they ride across
 	// with their live sessions — process, scrollback, CWD — stacked above
 	// whatever popup layer the incoming project restores. A layer that was

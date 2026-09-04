@@ -4,7 +4,7 @@ title: Deep Links (ike:// URL scheme)
 description: The ike:// URL scheme — parse/normalise/resolve in internal/deeplink, per-instance socket hand-off, history→projects-dir→clone resolution, file/tool payload after the switch, OS registration per platform (#2396)
 resource: internal/deeplink
 tags: [deeplink, url-scheme, ipc, project-switching]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-04T00:00:00Z
 ---
 
 # Deep Links (ike:// URL scheme)
@@ -76,7 +76,10 @@ never start the IDE.
    switch and the file/tool payload. `project=` links with no hit just notify
    "project not found".
 
-Only switching to an already known local project runs without a prompt.
+Only switching to an already known local project runs without a prompt. A
+link that resolves to the project that is *already* current and carries no
+payload says so ("already in *name*", #2518) — otherwise a delivered link
+would be indistinguishable from one that never arrived.
 
 ## What the switch does
 
@@ -92,7 +95,21 @@ switch stands.
 `project.open_link` (palette; audit-ledger entry, no default chord) opens a
 one-line paste prompt for entering an `ike://` URL by hand.
 
+## Network variant
+
+The same actions are reachable from other devices over TCP: the
+[Network Links](./network-links.md) endpoint (#2519, `[network]` settings,
+off by default) speaks a line protocol guarded by a one-time pairing code
+shown in a popup, and turns every accepted request into an `ike://` URL that
+runs through this very pipeline.
+
 ## OS registration
+
+The handlers below are installed by `make install-desktop`. An installation
+that predates #2396 has no scheme registration at all — a click then fails
+silently in the browser (macOS: `open ike://…` reports
+`kLSApplicationNotFoundErr`) — so **re-run `make install-desktop`** after
+upgrading (#2518).
 
 - **macOS** — `scripts/install-desktop.sh` compiles an `Ike Link Handler.app`
   applet (osacompile, `on open location`) declaring `CFBundleURLTypes` for

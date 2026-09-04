@@ -99,6 +99,9 @@ type Config struct {
 	// Preview holds the markdown preview's settings (#2421): how fenced
 	// diagram blocks (mermaid today) are rendered inside the pane.
 	Preview Preview `toml:"preview"`
+	// Network holds the network deep-link endpoint (#2519): the TCP port
+	// other devices pair with to trigger ike://-style actions.
+	Network Network `toml:"network"`
 }
 
 // Preview holds the markdown preview pane's settings (#2421). Diagrams picks
@@ -512,6 +515,19 @@ type Todo struct {
 type Marketplace struct {
 	CatalogURL string `toml:"catalog_url"`
 	AutoCheck  bool   `toml:"auto_check"`
+}
+
+// Network holds the network deep-link endpoint's settings (#2519). Enabled
+// starts a TCP listener that speaks the netlink line protocol — the same
+// actions an ike:// link triggers, guarded by a one-time pairing code shown
+// in the IDE. Port is the TCP port (1..65535, default 4530); Bind is the
+// interface address to listen on ("0.0.0.0" — every interface — by default;
+// "127.0.0.1" keeps it on this machine). Off by default: nothing listens
+// until the user opts in.
+type Network struct {
+	Enabled bool   `toml:"enabled"`
+	Port    int    `toml:"port"`
+	Bind    string `toml:"bind"`
 }
 
 // Deps holds Dependencies tool-window settings (#2419). AutoScan runs one

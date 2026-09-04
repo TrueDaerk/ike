@@ -276,6 +276,10 @@ any entry whose key the typed schema does not expose (no dead keys).
   matches (see [TODO index](./todo-index.md)).
 - **Dependencies** (#2419) — `deps.auto_scan`, the background dependency
   scan on project open (see [dependencies](./dependencies.md)).
+- **Network Links** (#2519) — `network.enabled`, `network.port` (1..65535)
+  and `network.bind` (IP literal, refused otherwise via the shared
+  `config.NetworkBindError`): the TCP endpoint other devices pair with; a
+  change restarts the listener live (see [network-links](./network-links.md)).
 - **Marketplace Catalog** (#1663) — `marketplace.catalog_url`, the index the
   Marketplace page installs from, and `marketplace.auto_check` (#2257), the
   daily background update check (see [marketplace](./marketplace.md)).

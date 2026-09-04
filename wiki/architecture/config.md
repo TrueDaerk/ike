@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-09-01T00:00:00Z
+timestamp: 2026-09-04T00:00:00Z
 ---
 
 # Configuration System
@@ -167,6 +167,12 @@ Sections and their default-bearing slots (`schema.go`):
   `ANSIBLE_VAULT_PASSWORD_FILE` environment variables take precedence over
   both. Validation reports a missing file or a directory but keeps the value
   — the file may appear later. See [ansible-vault](./ansible-vault.md).
+- `[network]` — the network deep-link endpoint (#2519): `enabled` (default
+  **false**), `port` (default 4530, 1..65535 — out of range snaps back to
+  4530 with a diagnostic), `bind` (default `"0.0.0.0"`; an IP literal or
+  empty for every interface — anything else, host names included, is reset
+  with a diagnostic; `config.NetworkBindError` is the check the settings form
+  shares). User scope. See [network-links](./network-links.md).
 
 ## Extension hook
 

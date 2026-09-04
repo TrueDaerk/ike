@@ -1,5 +1,26 @@
 # Log
 
+## 2026-09-04 (network links: TCP endpoint with pairing, #2519; ike:// feedback, #2518)
+
+- **Network links**: a new `[network]` endpoint (off by default; port 4530,
+  bind 0.0.0.0) lets other devices trigger the ike:// actions over TCP — a
+  newline-delimited JSON protocol (`hello`, `ping`, `pair`, `auth`, `open`,
+  `unpair`) in the new leaf package `internal/netlink`. A device pairs once:
+  IKE pops up a six-glyph code of card suits ♠♥♣♦ in red/black/blue/green
+  (the challenge ships the alphabet so clients can build a picker), a wrong
+  guess regenerates the code, five misses block the address, the code
+  expires after 90 s behind a countdown bar, `esc` refuses. Pairing yields a
+  256-bit bearer token stored hashed in `netlink-clients.json`; `open`
+  assembles an `ike://` URL, re-parses it with the strict grammar and runs
+  the existing deep-link pipeline. Settings page **Network Links** (live
+  restart on change), command `network.forgetClients` (ledgered, no chord),
+  the listener rides across project switches. New page
+  [Network Links](/architecture/network-links.md).
+- **ike:// links to the current project now say "already in X"** (#2518)
+  instead of doing nothing visible; the deep-links page notes that
+  `make install-desktop` must be re-run after #2396 for the OS handler to
+  exist at all.
+
 ## 2026-09-04 (editor: copy the structural value under the caret, #2499)
 
 - **Getting a value out of a manifest meant surgery.** The JSON string one

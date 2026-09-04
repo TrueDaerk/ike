@@ -222,6 +222,10 @@ func main() {
 	// is removed on orderly exit.
 	m = m.StartDeepLink()
 	defer m.CloseDeepLink()
+	// The network endpoint (#2519) follows the same lifecycle when
+	// [network].enabled is on; a listen failure surfaces as a notification.
+	m = m.StartNetLink()
+	defer m.CloseNetLink()
 	p := tea.NewProgram(m, progOpts...)
 	// Wire the program's Send into the host so background workers (the LSP bridge)
 	// can inject async results, and into the mouse coalescer's flush timer. The
