@@ -792,6 +792,14 @@ re-themes and rebuilds its keymaps once instead of once per changed key
   `old → default`.
 - Custom pages keep writing directly: installing a plugin or creating a
   virtualenv is not "a value in a file" and cannot be staged meaningfully.
+  Since the 2026-09 overhaul the panel **says so**: on a custom page the
+  title row's right chip reads `writes immediately` instead of `scope: …`
+  (no scope to cycle, so it is not a click target), and the `?` overlay
+  carries the same note under the page's actions — the `● n unsaved` counter
+  belongs to the schema pages and never means a custom page's edit is
+  pending. Staging the conceal and colour pages through an in-memory config
+  overlay was weighed and deferred: their immediate write *is* the preview,
+  and the label removes the ambiguity at a fraction of the cost.
 
 ## Live preview while browsing (#2181)
 

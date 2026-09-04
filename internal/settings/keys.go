@@ -224,6 +224,9 @@ func (m *Model) openKeyHelp() {
 				lines = append(lines, "  "+l)
 			}
 		}
+		if p.Custom != nil {
+			lines = append(lines, "  this page writes on every change — nothing here waits for ctrl+s")
+		}
 		if len(lines) > 0 {
 			lines = append(lines, "")
 		}
