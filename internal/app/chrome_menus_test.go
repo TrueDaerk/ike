@@ -152,10 +152,14 @@ func TestClosePaneGuardsDirty(t *testing.T) {
 func closeZoneCell(t *testing.T, m Model, idx int) int {
 	t.Helper()
 	inst := m.activeWS().Panes.FocusedInstance()
-	r := m.lay.Panes[m.activeWS().Panes.Focused()]
+	key := m.activeWS().Panes.Focused()
+	r := m.lay.Panes[key]
 	labels := tabLabels(inst)
-	for x := 0; x < r.W-paneChromeW; x++ {
-		if i, on := tabHit(labels, inst.ActiveTab(), r.W-paneChromeW, x); i == idx && on {
+	// The bar lives in what the pane-number pill leaves of the row (#2496),
+	// so the geometry it is measured against has to leave it too.
+	w := r.W - paneChromeW - barBadgeCells(m, key)
+	for x := 0; x < w; x++ {
+		if i, on := tabHit(labels, inst.ActiveTab(), w, x); i == idx && on {
 			return x
 		}
 	}

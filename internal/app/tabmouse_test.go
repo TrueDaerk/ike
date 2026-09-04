@@ -13,15 +13,25 @@ import (
 // focuses a tab, middle-click closes it, the wheel over the bar cycles, and
 // the title row keeps working as the pane's drag handle.
 
+// barBadgeCells is the width the pane-number pill (#2496) takes off the front
+// of a pane's title row: the bar is rendered — and hit-tested — after it.
+func barBadgeCells(m Model, key string) int {
+	if m.paneNumberBadgeText(key) == "" {
+		return 0
+	}
+	return paneNumberBadgeWidth
+}
+
 // barCell returns the absolute screen cell of the focused pane's tab bar at
 // bar-local offset dx.
 func barCell(t *testing.T, m Model, dx int) (int, int) {
 	t.Helper()
-	r, ok := m.lay.Panes[m.activeWS().Panes.Focused()]
+	key := m.activeWS().Panes.Focused()
+	r, ok := m.lay.Panes[key]
 	if !ok {
 		t.Fatal("focused pane has no rect")
 	}
-	return r.X + paneContentX + dx, r.Y + 1
+	return r.X + paneContentX + barBadgeCells(m, key) + dx, r.Y + 1
 }
 
 func TestTabAtGeometry(t *testing.T) {
