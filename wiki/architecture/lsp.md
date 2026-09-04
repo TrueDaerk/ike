@@ -272,7 +272,14 @@ workspace-diagnostic server (pyright over a populated `.venv`) publishes for
 hundreds of library files, and one `tea.Msg` per file would mean one Update pass
 + re-render per file, starving keystrokes. Publishes accumulate in the bridge
 (latest per path) over a 50ms `diagCoalesce` window and flush as a single
-`DiagnosticsBatchMsg`, so the storm costs one re-render. In the app every
+`DiagnosticsBatchMsg`, so the storm costs one re-render. A publish whose
+converted set equals the last one delivered for the path is dropped before
+any message exists (#2402) — except the first publish after a `didOpen`
+(#2492), which is always delivered: `fileOpened` arms a one-shot
+`deliverDiags` marker before the didOpen goes out, because the model
+listening may have been rebuilt with an empty Problems store (a project
+switch) and the suppression would otherwise starve it — and the switch op's
+warm-up telemetry phase — forever. In the app every
 published set first passes the **diagnostic ignore filter** (#1259,
 `internal/app/diag_ignore.go`): the raw set is cached per path, the
 `lsp.diagnostics_ignore` rules (`internal/lsp/ignore.go` — `source=`/`code=`
@@ -1257,6 +1264,18 @@ route here: launch failures, the repeated-crash disable toast and the
 install-succeeded-but-unresolvable message all append `diagnose: "LSP:
 Doctor"`, and a click on the `lsp` status segment opens the doctor. No
 default chord (#711 policy).
+
+**Copying the report** (#2487): `lsp.doctor.copy` ("LSP Doctor: Copy Report",
+`internal/lspdoctor/copy.go`) puts the *whole* report on the clipboard as
+plain text — the header counts plus every rendered row (server line, checks,
+diagnosis, fix, re-run verdict), unstyled and unclipped, which is what a bug
+report or a chat paste needs. It is pane-scoped to the doctor's context id
+`lspdoctor` and bound to **cmd+c** there (`internal/keymap/defaults.go`); the
+pane's own **c** does the same on every terminal, and the footer advertises
+it. Both routes go through the host's shared pane-copy path
+(`lspdoctor.CopyMsg` → `copyPanelRow`: system clipboard + clipboard history +
+a "copied LSP Doctor report" toast). Before the first finished run the
+command is a no-op with a short notice instead of copying an empty string.
 
 ## Testing
 

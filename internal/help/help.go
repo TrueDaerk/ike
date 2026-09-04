@@ -484,6 +484,8 @@ func groupTitle(label string) string {
 		return "DOM Inspector"
 	case "xdoctor":
 		return "Xdebug Doctor"
+	case "lspdoctor":
+		return "LSP Doctor"
 	case "scratch":
 		return "Scratch Files"
 	case "usages":

@@ -421,6 +421,14 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "run.placement", Message: fmt.Sprintf("unknown placement %q, using \"bottom\"", c.Run.Placement)})
 		c.Run.Placement = "bottom"
 	}
+	// diff.placement (#2507) picks where a diff-open lands: as a tab of the
+	// pane the user works in, or on a fresh split beside it.
+	switch c.Diff.Placement {
+	case "focused", "split":
+	default:
+		diags = append(diags, Diagnostic{Field: "diff.placement", Message: fmt.Sprintf("unknown placement %q, using \"focused\"", c.Diff.Placement)})
+		c.Diff.Placement = "focused"
+	}
 	// preview.diagrams (#2421) picks how the markdown preview renders a fenced
 	// diagram block: as renderer-produced text, as an embedded PNG, or not at
 	// all.

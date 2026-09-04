@@ -112,10 +112,11 @@ func TestLocalHistoryEnterOpensDiffPane(t *testing.T) {
 	if m.localHistoryOpen() {
 		t.Fatal("picker still open after enter")
 	}
-	key := m.activeWS().Panes.Focused()
-	inst := m.activeWS().Panes.Get(key)
+	// The diff opens as a content tab of the file's own pane (#2507), so the
+	// focused body — not the focused pane — is the viewer.
+	inst := m.focusedContent()
 	if inst == nil || inst.Kind() != pane.KindDiff {
-		t.Fatalf("focused pane after enter = %q, want a diff pane", key)
+		t.Fatalf("focused body after enter = %q, want a diff", m.activeWS().Panes.Focused())
 	}
 	if inst.Diff().HunkCount() == 0 {
 		t.Fatal("diff pane shows no hunks for differing contents")

@@ -209,3 +209,71 @@ func TestFileClosedDropsPerPathState(t *testing.T) {
 		t.Errorf("compPath not cleared: %q", b.compPath)
 	}
 }
+
+// TestReopenedPathDeliversUnchangedRepublish (#2492): a didOpen re-arms
+// delivery for the path — after a project switch the fresh model's Problems
+// store is empty while the bridge still remembers the delivered set, so the
+// first republish must reach the app even when nothing changed (it also
+// closes the switch op's warm-up phase). One delivery per open, then the
+// #2402 suppression resumes.
+func TestReopenedPathDeliversUnchangedRepublish(t *testing.T) {
+	var mu sync.Mutex
+	var batches []ilsp.DiagnosticsBatchMsg
+	h := host.New(nil)
+	h.SetSender(func(m tea.Msg) {
+		if v, ok := m.(ilsp.DiagnosticsBatchMsg); ok {
+			mu.Lock()
+			batches = append(batches, v)
+			mu.Unlock()
+		}
+	})
+	b := &bridge{h: h}
+	const p = "/x/a.go"
+	publish := func(diags ...protocol.Diagnostic) {
+		b.onDiagnostics(p, protocol.PublishDiagnosticsParams{Diagnostics: diags}, []string{"x"}, "")
+	}
+	waitBatches := func(want int, what string) {
+		t.Helper()
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			mu.Lock()
+			n := len(batches)
+			mu.Unlock()
+			if n >= want {
+				break
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if len(batches) != want {
+			t.Fatalf("%s: %d batches, want %d", what, len(batches), want)
+		}
+	}
+
+	publish(protocol.Diagnostic{Message: "boom"})
+	waitBatches(1, "first publish")
+
+	// The re-open marker (what fileOpened arms before the didOpen goes out):
+	// the identical republish is delivered exactly once more.
+	b.mu.Lock()
+	b.deliverDiags = map[string]bool{p: true}
+	b.mu.Unlock()
+	publish(protocol.Diagnostic{Message: "boom"})
+	waitBatches(2, "republish after re-open")
+
+	// The marker is consumed: the next identical republish is dropped again.
+	publish(protocol.Diagnostic{Message: "boom"})
+	time.Sleep(3 * diagCoalesce)
+	waitBatches(2, "identical republish after redelivery")
+
+	// A still-empty publish for a never-delivered path is delivered too when
+	// the path was just opened — the listening model must learn "clean file"
+	// to close its warm-up wait.
+	const q = "/x/b.go"
+	b.mu.Lock()
+	b.deliverDiags[q] = true
+	b.mu.Unlock()
+	b.onDiagnostics(q, protocol.PublishDiagnosticsParams{}, []string{"x"}, "")
+	waitBatches(3, "empty publish for just-opened path")
+}

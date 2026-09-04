@@ -73,7 +73,11 @@ so with many panes each unnecessary wake is expensive. The standing rules:
   that path — including "still empty" for a path never delivered. Servers
   that republish their whole workspace view on every watched-file round now
   cost zero passes while nothing changed
-  (`TestNoChangeRepublishDropped`).
+  (`TestNoChangeRepublishDropped`). One exception (#2492): the first publish
+  after a `didOpen` is always delivered — a project switch rebuilds the
+  model with an empty Problems store while the bridge still remembers the
+  delivered set, so without the redelivery the resumed project stayed
+  diagnostics-blind (`TestReopenedPathDeliversUnchangedRepublish`).
 - **The watcher never reports its own consequences** (#1886): IKE's VCS
   refresh runs `git status`, and every status run echoes back through the
   `.git` watch — an atime bump on `index` (kqueue `NOTE_ATTRIB`/Chmod),

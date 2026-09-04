@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Pane Layout & Drag
-description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — plus a sticky keyboard resize mode (#2150) stepping the same dividers with hjkl/arrows, plus numbered pane chrome with focus-by-number chords (#2407), with per-project geometry persisted in a dedicated state store and named user-scoped saved layouts that are the whole truth on apply (#2042), tools and multi-tool tab hosts included; slot templates (#1897) only govern runtime tool opens.
+description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — plus a sticky keyboard resize mode (#2150) stepping the same dividers with hjkl/arrows, plus numbered pane chrome with focus-by-number chords (#2407), with per-project geometry persisted in a dedicated state store and named user-scoped saved layouts that are the whole truth on apply (#2042), tools and multi-tool tab hosts included; slot templates (#1897) only govern runtime tool opens; the flexible region (the editor area) carries a focus MRU that document opens target (#2507).
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, keyboard, focus, numbers, persistence, bubbletea]
-timestamp: 2026-09-03T12:00:00Z
+timestamp: 2026-09-04T12:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -378,6 +378,29 @@ the number is addressable.
   the prompt — raises it and schedules its own expiry message, generation-
   tagged so a faster second switch outruns the older timer. The numbers are
   therefore on screen exactly while panes are being switched.
+
+## The flexible region and its MRU (#2507)
+
+The **flexible region** is the editor area: the part of the layout that is
+neither the explorer, nor a tool window, nor a terminal pane, nor a pure
+tool-tab host (#1989) — the panes a *document* may open into. `flexPane`
+(`internal/app/diff_placement.go`) decides membership by pane kind: the
+tabbable content kinds (editor plus the viewer panes — markdown, diff, image,
+archive, data, hex, notebook) are in, everything else is out. The popup
+terminal and the floating panels are not layout leaves, so they never qualify.
+
+Focus keeps an **MRU of one** over that region: `setFocus` records every
+focused flex pane in `m.recentFlex`, alongside the older `m.recentEditor`
+(editor-kind panes only, the Replace open-target). Both are validated on read
+— the pane must still exist and still be flexible — and `closeKey` drops
+`recentFlex` when its pane goes, so a stale key can never redirect an open.
+
+`diffTabTarget` is the first consumer: "the focused pane when it is flexible,
+else the most recently focused flex pane, else the first one in tree order,
+else none" is how a diff finds the pane the user works in (see
+[Diff Viewer → Pane placement](./diff-viewer.md)). `viewerSplitTarget` and
+`fileEditorKey` answer the same question for viewer and file opens with their
+own, older chains over `recentEditor`.
 
 ## Keyboard resize mode (#2150)
 

@@ -33,11 +33,11 @@ paths.** Two guards enforce it:
 ## Event schema (the analysis interface)
 
 One JSON object per line. `v` is the schema version (`telemetry.SchemaVersion`,
-currently 4); readers must tolerate unknown fields and filter on `v`.
+currently 5); readers must tolerate unknown fields and filter on `v`.
 
 ```json
-{"v":4,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
-{"v":4,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
+{"v":5,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
+{"v":5,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
 ```
 
 ### Version history (what an analysis script must branch on)
@@ -48,6 +48,7 @@ currently 4); readers must tolerate unknown fields and filter on `v`.
 | 2 | #2304 | Internal dispatches move to their own `internal` type; nothing else changes. |
 | 3 | #2348 | The diagnostic types `session`, `heartbeat` and `op` join; no existing field changes meaning. A v3 log ending without heartbeats is evidence of a hard stop, a v2 log ending simply predates them. |
 | 4 | #2408 | Heartbeats slow from 10s to 60s (any per-hour rate must branch on `v`); `command`/`internal` events gain `ok` and `ms` when the dispatch failed or was slow; the types `palette.dismiss` and `project.leave` join; the v3 pseudo-command `palette.recentFiles.dismiss` (#2399, `data.qlen`) is gone — its successor is `palette.dismiss` with `data.query_len`. |
+| 5 | #2492 | The `project.switch` op's warm-up phase becomes total: every `ok` is followed by exactly one `lsp` phase. A phase without a publish measurement carries `skipped` (`no_server_docs`, `quiet`, `superseded`, `quit`); its `ms` still counts from the switch's start. On v4 a missing `lsp` phase was ambiguous (server silence or lost event); on v5 absence is a bug. |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -138,6 +139,20 @@ counts by the version's interval before comparing sessions.
       transaction itself stays unambiguous. Before this the export held only
       the `layout` marker and the session marker, and the seconds between a
       switch and the next key press could not be split into work and thinking.
+      Since v5 (#2492) the phase is **total** — every `ok` is followed by
+      exactly one `lsp` phase, so its absence is a bug, not silence. When no
+      publish measurement exists the phase carries `skipped` naming why, with
+      `ms` still counting from the switch's start: `no_server_docs` (the
+      switched-to model opened no document of a server language — emitted in
+      the same pass as the `ok`), `quiet` (a wait was armed but nothing
+      published within `switchLSPQuietTimeout`, 2 min — no server configured,
+      binary missing, or the server never spoke), `superseded` (the next
+      switch started before the wait resolved) or `quit` (the session ended
+      first). A resumed parked workspace answers fast by design: the manager
+      reuses its live server and the bridge delivers the first
+      re-`didOpen` republish even when unchanged (see
+      [workspace § idle shutdown](workspace.md)), so a warm resume's `lsp`
+      phase lands in well under a second.
     - `project.close` (#2403) — closing the current project
       (`performCloseAndSwitch`, `internal/app/project_close.go`). Its span
       wraps a whole `project.switch` plus the departing workspace's teardown,

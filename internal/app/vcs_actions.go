@@ -158,10 +158,11 @@ func (m Model) diffAgainstHead() (tea.Model, tea.Cmd) {
 	return m, vcs.HeadDiffCmd(snap.Root, path)
 }
 
-// openDiffHeadPane splits the editor area with a diff of the live buffer
-// (unsaved edits included) against the file's HEAD blob (#467). Requests can
-// originate in the VCS tool window (#483) — the diff still belongs beside
-// the editors, not inside the bottom strip (#489).
+// openDiffHeadPane opens a diff of the live buffer (unsaved edits included)
+// against the file's HEAD blob (#467). Requests can originate in the VCS tool
+// window (#483) — the diff still belongs in the editor area, not inside the
+// bottom strip (#489), which openDiffLeaf's flex-pane target guarantees
+// (#2507).
 func (m *Model) openDiffHeadPane(path, head string) {
 	// Re-opening the same diff focuses and refreshes the existing pane
 	// instead of splitting a duplicate (#509).
@@ -192,19 +193,20 @@ func (m *Model) openDiffHeadPane(path, head string) {
 	if ed := m.editorForPath(path); ed != nil {
 		right = ed.Text()
 	}
-	key := m.activeWS().Panes.AddDiffHead(path)
-	if !m.placeDiffLeaf(key) {
+	inst, ok := m.openDiffLeaf(func() string { return m.activeWS().Panes.AddDiffHead(path) })
+	if !ok {
 		return
 	}
-	m.activeWS().Panes.Get(key).Diff().SetContents(head, right)
-	m.setFocus(key)
+	inst.Diff().SetContents(head, right)
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // placeDiffLeaf positions the freshly-created diff pane key beside the active
 // editor — or, when that editor is an empty scratch pane, takes over its slot in
 // place instead of splitting a new pane (#628). It closes key and returns false
-// when there is nowhere to place it.
+// when there is nowhere to place it. Since #2507 this is the fallback of
+// openDiffLeaf — diff.placement = "split", or a layout without a flexible
+// pane — plus the merge view's own placement (#1478).
 func (m *Model) placeDiffLeaf(key string) bool {
 	target := m.activeEditorKey()
 	if target == "" {
