@@ -640,7 +640,7 @@ func (m Model) renderPopupSide(inst *pane.Instance, w, h int, focused bool) stri
 	if focused {
 		border = m.pal().BorderFocus
 	}
-	return paneBox(marker+title, inst.View(), w, h, border)
+	return paneBox("", marker+title, inst.View(), w, h, border)
 }
 
 // popupTabForSession resolves a session key to the popup-layer tab hosting

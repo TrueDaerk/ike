@@ -13442,9 +13442,14 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 	focused := inst != nil && m.activeWS().Panes.Focused() == key
 	// The pane-number badge (#2407) prefixes the title; the tab bar, which
 	// takes the title row over when the pane holds several tabs, is measured
-	// against the width the badge leaves it.
+	// against the width the badge leaves it. The pill is a fixed three cells
+	// (paneNumberBadgeWidth) whenever it is drawn at all, so the measurement
+	// never depends on the colors the badge is rendered in.
 	badgeText := m.paneNumberBadgeText(key)
-	badgeW := lipgloss.Width(badgeText)
+	badgeW := 0
+	if badgeText != "" {
+		badgeW = paneNumberBadgeWidth
+	}
 	var title string
 	if inst == nil {
 		title = strings.ToUpper(key)
@@ -13553,13 +13558,16 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 		}
 	}
 	// The number goes leftmost, ahead of the drag markers: it names the pane,
-	// the markers describe what is being done to it. It takes the border's own
-	// color — dim when the pane is not focused — so it never contradicts the
-	// frame around it (an unfocused pane's badge stays dim: its border is).
-	title = paneNumberBadge(badgeText, border) + title
+	// the markers describe what is being done to it. It is an inverted pill in
+	// the badge slots rather than the border color (#2496): the badge answers
+	// "which ctrl+N is this pane", a question the frame's own color — dim on
+	// every unfocused pane — was hiding the answer to. It reaches paneBox
+	// beside the title rather than glued to it, so its own reset does not
+	// unbold the title behind it.
+	badge := paneNumberBadge(badgeText, focused, m.pal())
 
 	if inst == nil {
-		return paneBox(title, "", r.W, r.H, border)
+		return paneBox(badge, title, "", r.W, r.H, border)
 	}
 	// Cache the composed box keyed by a hash of the freshly-rendered content plus
 	// the chrome (#612). The content is always recomputed, so the cache is never
@@ -13584,12 +13592,15 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 	br, bg, bb, ba := border.RGBA()
 	sig := pane.BoxSig{
 		ContentHash: hashString(content),
-		Title:       title,
-		W:           r.W,
-		H:           r.H,
-		Border:      [4]uint32{br, bg, bb, ba},
+		// The badge is part of the chrome the cached box was composed from —
+		// its number and its focus colours both change without the title
+		// moving — so it goes into the signature with it.
+		Title:  badge + title,
+		W:      r.W,
+		H:      r.H,
+		Border: [4]uint32{br, bg, bb, ba},
 	}
-	return inst.CachedBox(sig, func() string { return paneBox(title, content, r.W, r.H, border) })
+	return inst.CachedBox(sig, func() string { return paneBox(badge, title, content, r.W, r.H, border) })
 }
 
 // contentPaneTitle is the title-band label of a viewer instance — the same
@@ -13723,10 +13734,14 @@ func (m Model) activeEditor() *editor.Model {
 // interior so it never wraps, and MaxWidth/MaxHeight cap the rendered box so a
 // narrow pane can never overflow its rectangle and push the whole tiling off
 // screen (the layout assigns each leaf an exact rect; the renderer must honour it).
-func paneBox(title, content string, width, height int, borderColor color.Color) string {
+// The badge, when there is one, is already styled (the pane-number pill,
+// #2496) and is prepended *after* the title is bolded: its own style ends in a
+// full reset, so bolding across it would drop the bold from the title behind
+// it.
+func paneBox(badge, title, content string, width, height int, borderColor color.Color) string {
 	// Interior text width = outer width minus the two border columns and the two
 	// padding columns. Truncate the title to it so it stays on one row.
-	if inner := width - 4; inner >= 1 {
+	if inner := width - 4 - lipgloss.Width(badge); inner >= 1 {
 		title = ansi.Truncate(title, inner, "…")
 	}
 	// lipgloss v2 makes Width/Height border-inclusive totals, so the box must be
@@ -13743,7 +13758,7 @@ func paneBox(title, content string, width, height int, borderColor color.Color) 
 		Padding(0, 1).
 		BorderForeground(borderColor)
 	titleStyle := lipgloss.NewStyle().Bold(true)
-	return style.Render(lipgloss.JoinVertical(lipgloss.Left, titleStyle.Render(title), content))
+	return style.Render(lipgloss.JoinVertical(lipgloss.Left, badge+titleStyle.Render(title), content))
 }
 
 func baseName(path string) string { return filepath.Base(path) }

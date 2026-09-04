@@ -334,13 +334,20 @@ the number is addressable.
   on the next frame, a zoomed pane (#358) is the only numbered one, and a tool
   window counts exactly while it is on screen. The popup terminal and the
   floating panels are not layout leaves and never take a number.
-- **The badge is chrome.** `renderPaneBox` prefixes the title row with
-  `paneNumberBadge` — lazygit's `[1] EDITOR` — in the focus border colour for
-  the focused pane and the dim border colour for the rest. When the pane holds
-  several tabs the tab bar takes the title row over; it is measured against
-  the width the badge leaves, so the box still fills its rect exactly. Only
-  the first nine panes carry a badge: those are the ones a chord can address,
-  and a number nobody can press would be a lie.
+- **The badge is an inverted pill (#2496).** `renderPaneBox` prefixes the title
+  row with `paneNumberBadge`: the digit padded to ` 1 ` on a filled background
+  with a bold, contrasting digit — the theme's accent (`PaneBadge` /
+  `PaneBadgeText`) on the focused pane, a muted but plainly filled tone
+  (`PaneBadgeMuted` / `PaneBadgeMutedText`) on every other one, so all the
+  numbers are readable at once when picking a `ctrl+N` target. The first cut
+  drew `[1]` in the pane's own *border* colour, which is exactly the dim tone
+  the digit then vanished into; the badge is the whole point of the feature,
+  so it no longer inherits the frame's colour. The pill is a fixed
+  `paneNumberBadgeWidth` (3) cells whenever it is drawn, and when the pane
+  holds several tabs the tab bar takes the title row over measured against
+  that width, so the box still fills its rect exactly. Only the first nine
+  panes carry a badge: those are the ones a chord can address, and a number
+  nobody can press would be a lie.
 - **Commands.** `pane.focus1`…`pane.focus9` (`PaneFocusIndexMsg`) focus the
   pane carrying that number; out of range is a no-op **with a notification**,
   never a silent dead chord (#275). `pane.focusByIndex` ("Focus Pane by

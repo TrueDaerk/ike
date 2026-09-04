@@ -1,11 +1,14 @@
 package app
 
 import (
+	"image/color"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/host"
 	"ike/internal/layout"
@@ -103,13 +106,19 @@ func TestPaneNumbersFollowLayoutChanges(t *testing.T) {
 }
 
 // TestPaneNumberBadgeInChrome: every visible pane draws its number in the
-// title bar, and the badge disappears with layout.pane_numbers = off.
+// title bar as the inverted pill (#2496) matching its focus state, and the
+// badge disappears with layout.pane_numbers = off.
 func TestPaneNumberBadgeInChrome(t *testing.T) {
 	m := splitOrderApp(t)
 	for i, key := range m.paneNumberOrder() {
 		box := m.renderPane(key, m.lay.Panes[key])
-		if !strings.Contains(box, "["+string(rune('0'+i+1))+"]") {
-			t.Errorf("pane %s chrome has no [%d] badge:\n%s", key, i+1, box)
+		focused := m.activeWS().Panes.Focused() == key
+		want := paneNumberBadge(" "+string(rune('0'+i+1))+" ", focused, m.pal())
+		if !strings.Contains(box, want) {
+			t.Errorf("pane %s chrome has no %d pill (focused=%v):\n%s", key, i+1, focused, box)
+		}
+		if got := lipgloss.Width(m.paneNumberBadgeText(key)); got != paneNumberBadgeWidth {
+			t.Errorf("badge width for %s = %d, want %d", key, got, paneNumberBadgeWidth)
 		}
 	}
 
@@ -117,10 +126,42 @@ func TestPaneNumberBadgeInChrome(t *testing.T) {
 	off.SplitFocused(layout.ZoneRight)
 	off.layout()
 	for _, key := range off.paneNumberOrder() {
-		if box := off.renderPane(key, off.lay.Panes[key]); strings.Contains(box, "[1]") || strings.Contains(box, "[2]") {
-			t.Errorf("pane_numbers = off still drew a badge for %s:\n%s", key, box)
+		if off.paneNumberBadgeText(key) != "" {
+			t.Errorf("pane_numbers = off still drew a badge for %s", key)
+		}
+		box := off.renderPane(key, off.lay.Panes[key])
+		for _, n := range []string{" 1 ", " 2 "} {
+			for _, focused := range []bool{true, false} {
+				if strings.Contains(box, paneNumberBadge(n, focused, off.pal())) {
+					t.Errorf("pane_numbers = off still drew a pill for %s:\n%s", key, box)
+				}
+			}
 		}
 	}
+}
+
+// TestPaneNumberBadgeIsInverted: the focused pane's pill uses the accent
+// slots, the others the muted pair, and both differ from the border colour the
+// badge used to borrow — the dim digit was the bug (#2496).
+func TestPaneNumberBadgeIsInverted(t *testing.T) {
+	m := splitOrderApp(t)
+	pal := m.pal()
+	if got := paneNumberBadge(" 1 ", true, pal); !strings.Contains(got, ansiOf(pal.PaneBadge)) {
+		t.Errorf("focused pill %q does not paint the accent badge background", got)
+	}
+	if got := paneNumberBadge(" 2 ", false, pal); !strings.Contains(got, ansiOf(pal.PaneBadgeMuted)) {
+		t.Errorf("unfocused pill %q does not paint the muted badge background", got)
+	}
+	if paneNumberBadge("", true, pal) != "" {
+		t.Error("an empty badge must render nothing at all")
+	}
+}
+
+// ansiOf renders c as the ANSI parameters lipgloss writes for it, so a test can
+// assert which palette slot a styled string was painted with.
+func ansiOf(c color.Color) string {
+	r, g, b, _ := c.RGBA()
+	return strconv.Itoa(int(r>>8)) + ";" + strconv.Itoa(int(g>>8)) + ";" + strconv.Itoa(int(b>>8))
 }
 
 // TestPaneNumbersFocusOnlyFollowsTheHint: in focus-only mode the badges are
@@ -215,5 +256,32 @@ func TestPaneFocusByIndexPrompt(t *testing.T) {
 	}
 	if got := m.activeWS().Panes.Focused(); got != order[2] {
 		t.Errorf("prompt focused %s, want pane 3 (%s)", got, order[2])
+	}
+}
+
+// TestTabBarHitStartsAfterTheBadge: the tab bar is rendered into what the
+// pane-number pill leaves of the title row, so a click must be resolved
+// against the same origin — a cell inside the pill is not tab 0 (#2496).
+func TestTabBarHitStartsAfterTheBadge(t *testing.T) {
+	dir := t.TempDir()
+	m := openApp(t, writeTemp(t, dir, "a.txt", "a\n"), writeTemp(t, dir, "b.txt", "b\n"))
+	m.layout()
+	key := m.activeWS().Panes.Focused()
+	r, ok := m.lay.Panes[key]
+	if !ok {
+		t.Fatal("focused pane has no rect")
+	}
+	if m.paneNumberBadgeText(key) == "" {
+		t.Fatal("precondition: the focused pane should carry a badge")
+	}
+	y := r.Y + 1
+	for dx := 0; dx < paneNumberBadgeWidth; dx++ {
+		if _, _, _, hit := m.tabBarHit(r.X+paneContentX+dx, y); hit {
+			t.Errorf("cell %d of the pill must not resolve to a tab", dx)
+		}
+	}
+	gotKey, idx, _, hit := m.tabBarHit(r.X+paneContentX+paneNumberBadgeWidth+1, y)
+	if !hit || gotKey != key || idx != 0 {
+		t.Errorf("the first bar cell after the pill = (%q, %d, hit=%v), want (%q, 0, true)", gotKey, idx, hit, key)
 	}
 }

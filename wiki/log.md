@@ -32,6 +32,30 @@
   Forge): `false` restores the pre-#2488 behaviour. The slow cadence has no
   setting — it only ever stretches.
 
+## 2026-09-04 (pane-number badges are inverted pills, #2496)
+
+- **The badge was the least visible thing on the row it exists for.** Pane
+  numbers (#2407) drew `[1] EDITOR` in the pane's own border colour — the focus
+  colour on one pane, the dim border tone on all the others — so finding the
+  right `ctrl+N` meant scanning every title row for a faint bracketed digit.
+  `paneNumberBadge` now renders an inverted pill instead: the digit padded to
+  ` 1 `, bold, on a filled background. Focused takes the theme's accent,
+  unfocused a muted-but-plainly-filled tone, so every number reads at once
+  while a target is being chosen.
+- **Four new theme slots, all derived.** `PaneBadge`/`PaneBadgeText` and
+  `PaneBadgeMuted`/`PaneBadgeMutedText` (`internal/theme`) let a theme restyle
+  the pill; left empty — as all built-ins do — the focused pill is `Accent`,
+  the muted one `Foreground` mixed over `Surface`, and each digit is the first
+  of the theme's own extremes clearing 4.5:1 on its pill, black or white
+  otherwise. They are therefore the only ui slots `TestBuiltinsComplete`
+  exempts, with `panebadge_test` auditing the contrast in their place.
+- **The width is a constant now.** The pill is always three cells when drawn
+  (`paneNumberBadgeWidth`), which is what `renderPaneBox` measures the tab bar
+  against, so the box keeps filling its rect exactly without asking the
+  renderer how wide a coloured string came out. `layout.pane_numbers =
+  focus-only` is untouched: the pill appears exactly while the which-pane hint
+  is up.
+
 ## 2026-09-04 (cheatsheet opens while writing a query, and explains how to apply rows, #2482)
 
 - **The chord was reachable; the *hint* was not.** `ctrl+g` on the playground's

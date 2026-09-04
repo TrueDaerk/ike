@@ -19,44 +19,48 @@ import (
 // Resolve. A slot left empty falls back to the default palette's value when
 // the theme is resolved into a Palette.
 type UI struct {
-	Background      string // app-wide background: dividers, gaps
-	Foreground      string // default text
-	Surface         string // pane body background
-	Panel           string // raised surfaces: status bar, popups, hover rows
-	Border          string // blurred pane borders, dividers, scrollbar track
-	BorderFocus     string // focused pane border
-	Selection       string // selected-row background
-	SelectionText   string // text on Selection
-	SelectionMuted  string // low-emphasis selection (editor visual range)
-	OccurrenceRead  string // symbol-occurrence mark, read access (LSP document highlight)
-	OccurrenceWrite string // symbol-occurrence mark, write access
-	InlayHint       string // inline LSP inlay-hint text (dimmed parameter/type hints, #171)
-	Whitespace      string // visible whitespace glyphs (· / →, #64)
-	IndentGuide     string // vertical indent-guide lines (#64)
-	Ruler           string // column-ruler background tint (#64)
-	Accent          string // emphasis foreground (explorer active entry)
-	Primary         string // primary action background (completion selected row)
-	Secondary       string // secondary emphasis foreground (help shortcut keys)
-	Success         string
-	Warning         string // diagnostic warning
-	Error           string // diagnostic error
-	Info            string // diagnostic info
-	Hint            string // diagnostic hint
-	MoveSource      string // pane-move source border
-	DropTarget      string // pane-move drop-target border
-	Ghost           string // pane-move ghost preview
-	ScrollbarTrack  string
-	ScrollbarThumb  string
-	DiffAdded       string // diff viewer: added-line background (#60)
-	DiffRemoved     string // diff viewer: removed-line background
-	DiffChanged     string // diff viewer: intra-line changed-range background
-	DiffAddedEmph   string // diff viewer: intra-line changed range inside an added line (#2170)
-	DiffRemovedEmph string // diff viewer: intra-line changed range inside a removed line (#2170)
-	VCSModified     string // vcs status foreground: modified/renamed files (Roadmap 0320)
-	VCSAdded        string // vcs status foreground: added files
-	VCSUntracked    string // vcs status foreground: untracked files
-	VCSDeleted      string // vcs status foreground: deleted files
-	VCSConflicted   string // vcs status foreground: merge-conflicted files
+	Background         string // app-wide background: dividers, gaps
+	Foreground         string // default text
+	Surface            string // pane body background
+	Panel              string // raised surfaces: status bar, popups, hover rows
+	Border             string // blurred pane borders, dividers, scrollbar track
+	BorderFocus        string // focused pane border
+	Selection          string // selected-row background
+	SelectionText      string // text on Selection
+	SelectionMuted     string // low-emphasis selection (editor visual range)
+	OccurrenceRead     string // symbol-occurrence mark, read access (LSP document highlight)
+	OccurrenceWrite    string // symbol-occurrence mark, write access
+	InlayHint          string // inline LSP inlay-hint text (dimmed parameter/type hints, #171)
+	Whitespace         string // visible whitespace glyphs (· / →, #64)
+	IndentGuide        string // vertical indent-guide lines (#64)
+	Ruler              string // column-ruler background tint (#64)
+	Accent             string // emphasis foreground (explorer active entry)
+	Primary            string // primary action background (completion selected row)
+	Secondary          string // secondary emphasis foreground (help shortcut keys)
+	Success            string
+	Warning            string // diagnostic warning
+	Error              string // diagnostic error
+	Info               string // diagnostic info
+	Hint               string // diagnostic hint
+	PaneBadge          string // pane-number badge: focused pane's pill background (#2496)
+	PaneBadgeText      string // digit on PaneBadge
+	PaneBadgeMuted     string // pane-number badge: unfocused pane's pill background
+	PaneBadgeMutedText string // digit on PaneBadgeMuted
+	MoveSource         string // pane-move source border
+	DropTarget         string // pane-move drop-target border
+	Ghost              string // pane-move ghost preview
+	ScrollbarTrack     string
+	ScrollbarThumb     string
+	DiffAdded          string // diff viewer: added-line background (#60)
+	DiffRemoved        string // diff viewer: removed-line background
+	DiffChanged        string // diff viewer: intra-line changed-range background
+	DiffAddedEmph      string // diff viewer: intra-line changed range inside an added line (#2170)
+	DiffRemovedEmph    string // diff viewer: intra-line changed range inside a removed line (#2170)
+	VCSModified        string // vcs status foreground: modified/renamed files (Roadmap 0320)
+	VCSAdded           string // vcs status foreground: added files
+	VCSUntracked       string // vcs status foreground: untracked files
+	VCSDeleted         string // vcs status foreground: deleted files
+	VCSConflicted      string // vcs status foreground: merge-conflicted files
 }
 
 // Theme is one named color scheme: ui chrome slots plus the default sources
@@ -84,44 +88,48 @@ type Palette struct {
 	Captures map[string]string
 	Files    map[string]string
 
-	Background      color.Color
-	Foreground      color.Color
-	Surface         color.Color
-	Panel           color.Color
-	Border          color.Color
-	BorderFocus     color.Color
-	Selection       color.Color
-	SelectionText   color.Color
-	SelectionMuted  color.Color
-	OccurrenceRead  color.Color
-	OccurrenceWrite color.Color
-	InlayHint       color.Color
-	Whitespace      color.Color
-	IndentGuide     color.Color
-	Ruler           color.Color
-	Accent          color.Color
-	Primary         color.Color
-	Secondary       color.Color
-	Success         color.Color
-	Warning         color.Color
-	Error           color.Color
-	Info            color.Color
-	Hint            color.Color
-	MoveSource      color.Color
-	DropTarget      color.Color
-	Ghost           color.Color
-	ScrollbarTrack  color.Color
-	ScrollbarThumb  color.Color
-	DiffAdded       color.Color
-	DiffRemoved     color.Color
-	DiffChanged     color.Color
-	DiffAddedEmph   color.Color
-	DiffRemovedEmph color.Color
-	VCSModified     color.Color
-	VCSAdded        color.Color
-	VCSUntracked    color.Color
-	VCSDeleted      color.Color
-	VCSConflicted   color.Color
+	Background         color.Color
+	Foreground         color.Color
+	Surface            color.Color
+	Panel              color.Color
+	Border             color.Color
+	BorderFocus        color.Color
+	Selection          color.Color
+	SelectionText      color.Color
+	SelectionMuted     color.Color
+	OccurrenceRead     color.Color
+	OccurrenceWrite    color.Color
+	InlayHint          color.Color
+	Whitespace         color.Color
+	IndentGuide        color.Color
+	Ruler              color.Color
+	Accent             color.Color
+	Primary            color.Color
+	Secondary          color.Color
+	Success            color.Color
+	Warning            color.Color
+	Error              color.Color
+	Info               color.Color
+	Hint               color.Color
+	PaneBadge          color.Color
+	PaneBadgeText      color.Color
+	PaneBadgeMuted     color.Color
+	PaneBadgeMutedText color.Color
+	MoveSource         color.Color
+	DropTarget         color.Color
+	Ghost              color.Color
+	ScrollbarTrack     color.Color
+	ScrollbarThumb     color.Color
+	DiffAdded          color.Color
+	DiffRemoved        color.Color
+	DiffChanged        color.Color
+	DiffAddedEmph      color.Color
+	DiffRemovedEmph    color.Color
+	VCSModified        color.Color
+	VCSAdded           color.Color
+	VCSUntracked       color.Color
+	VCSDeleted         color.Color
+	VCSConflicted      color.Color
 
 	// ANSI is the resolved 16-color terminal palette; TerminalFg/TerminalBg
 	// are the terminal's default foreground/background (#1363). Indexed
@@ -224,6 +232,18 @@ func NewPalette(t Theme) *Palette {
 	// backgrounds resolved just above, so the pair always agrees.
 	p.DiffAddedEmph = emphSlot(t.UI.DiffAddedEmph, p.Success, p.DiffAdded, p.Surface)
 	p.DiffRemovedEmph = emphSlot(t.UI.DiffRemovedEmph, p.Error, p.DiffRemoved, p.Surface)
+	// The pane-number badge (#2496) is an inverted pill, so it needs a
+	// background of its own on both sides of the focus split: the accent for
+	// the focused pane, and for the rest a tone mixed from the theme's own
+	// foreground over its surface — muted, but a filled chip rather than the
+	// dim border colour the digits used to disappear into. The two
+	// foregrounds are picked for contrast against the pill they sit on
+	// (paneBadgeFg), never hard-coded, so light and dark palettes both land
+	// on a legible digit without declaring a slot.
+	p.PaneBadge = slot(t.UI.PaneBadge, firstNonEmpty(t.UI.Accent, def.UI.Accent))
+	p.PaneBadgeMuted = slotOrMix(t.UI.PaneBadgeMuted, p.Foreground, p.Surface, paneBadgeMutedMix)
+	p.PaneBadgeText = paneBadgeFg(t.UI.PaneBadgeText, p.PaneBadge, p)
+	p.PaneBadgeMutedText = paneBadgeFg(t.UI.PaneBadgeMutedText, p.PaneBadgeMuted, p)
 	// VCS status foregrounds (Roadmap 0320) follow the git workflow (#1868):
 	// modified→info blue, added→success green, conflicted→error red. The two
 	// remaining roles have no semantic slot of their own, so sparse themes
@@ -276,6 +296,34 @@ func emphSlot(token string, hue, base, surface color.Color) color.Color {
 		}
 	}
 	return base
+}
+
+const (
+	// paneBadgeMutedMix is how far the unfocused pane-number pill moves from
+	// the pane surface toward the theme's foreground. Far enough that the
+	// chip is unmistakably filled at a glance (that is the whole point of
+	// the badge), near enough that eight quiet panes do not shout.
+	paneBadgeMutedMix = 0.42
+	// paneBadgeMinContrast is the contrast a pill's own palette foreground
+	// must clear before paneBadgeFg settles for black or white.
+	paneBadgeMinContrast = 4.5
+)
+
+// paneBadgeFg picks the digit colour for a pane-number pill: the explicit
+// token, else the first of the theme's own extremes that reads well enough on
+// the pill, else whichever of black/white does. Any background has one of
+// those two at >= 4.58:1, so even a sparse third-party theme cannot end up
+// with an unreadable badge.
+func paneBadgeFg(token string, bg color.Color, p *Palette) color.Color {
+	if token != "" {
+		return Resolve(token)
+	}
+	for _, c := range []color.Color{p.Background, p.Surface, p.Foreground} {
+		if ContrastRatio(c, bg) >= paneBadgeMinContrast {
+			return c
+		}
+	}
+	return Readable(bg, color.RGBA{A: 0xff}, color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff})
 }
 
 // slotOrMix resolves a slot token, falling back to fg mixed over bg by frac
