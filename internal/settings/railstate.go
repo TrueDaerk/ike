@@ -59,11 +59,16 @@ type railRow struct {
 // under the chrome. It is the rail's pgup/pgdn page size (#1666).
 func (m *Model) railHeight() int { return max(1, m.height-chromeRows) }
 
-// railRows interleaves section headers (#890) with the page rows.
+// railRows interleaves section headers (#890) with the page rows. A header
+// opens when a page names a section other than the one the rail is in — two
+// consecutive pages naming the same section share one header rather than
+// repeating it.
 func (m *Model) railRows() []railRow {
 	var out []railRow
+	section := ""
 	for i, p := range m.pages {
-		if p.Section != "" {
+		if p.Section != "" && p.Section != section {
+			section = p.Section
 			out = append(out, railRow{header: p.Section, page: -1})
 		}
 		out = append(out, railRow{page: i})

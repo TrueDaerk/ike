@@ -202,7 +202,7 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 	swatch := themePreviewFn(extraThemes)
 	rowColors := themeRowColorsFn(extraThemes)
 	return []Page{
-		{Section: "CORE", Title: "Editor", Description: "How text is edited: indentation, saving, wrapping and the gutter. Language-specific overrides come from .editorconfig when it is enabled.", Entries: []Entry{
+		{Title: "Editor", Description: "How text is edited: indentation, saving, wrapping and the gutter. Language-specific overrides come from .editorconfig when it is enabled.", Entries: []Entry{
 			{Key: "editor.tab_width", Type: Int, Title: "Tab width", Description: "Columns per indentation step", Scope: config.UserScope, Min: 1, Max: 16},
 			{Key: "editor.use_spaces", Type: Bool, Title: "Use spaces", Description: "Indent with spaces instead of tab characters", Scope: config.UserScope},
 			{Key: "editor.auto_indent", Type: Bool, Title: "Auto indent", Description: "Carry the current line's indentation into new lines", Scope: config.UserScope},
@@ -239,7 +239,7 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "editor.tabs.always_show", Type: Bool, Title: "Always show tab bar", Description: "Render the pane's tab bar even with a single tab", Scope: config.UserScope},
 			{Key: "editor.tabs.limit", Type: Int, Title: "Tab limit", Description: "Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables)", Scope: config.UserScope},
 		}},
-		{Section: "CORE", Title: "Conceal & Hints", Description: "The conceal and inline-hint families: what the editor draws in place of — or after — the raw bytes. These are the config defaults; a per-view toggle from the editor (Toggle Timestamp Decoding, …) overrides them for that buffer only. The file rules below gate every family by path.", Entries: []Entry{
+		{Title: "Conceal & Hints", Description: "The conceal and inline-hint families: what the editor draws in place of — or after — the raw bytes. These are the config defaults; a per-view toggle from the editor (Toggle Timestamp Decoding, …) overrides them for that buffer only. The file rules below gate every family by path.", Entries: []Entry{
 			// Rendering layers: whole-file readable renderings.
 			{Key: "editor.markdown_rendering", Type: Bool, Title: "Markdown rendering", Description: "Render Markdown inline styles, conceal markers (revealed while the caret is inside the span) and draw pipe tables with box characters, only the caret's cell showing raw source; toggle per view via Toggle Markdown Rendering", Scope: config.UserScope},
 			{Key: "editor.csv_rendering", Type: Bool, Title: "CSV table rendering", Description: "Render csv/tsv files table-like: rainbow columns, aligned fields, a pinned header row, and separators concealed except under the caret", Scope: config.UserScope},
