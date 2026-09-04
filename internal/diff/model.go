@@ -59,12 +59,13 @@ type Model struct {
 	ignoreWS bool
 
 	res Result
-	// cur is the current hunk index (#2494): every vertical scroll re-syncs
-	// it to the hunk at/nearest the anchor row (a third down the view), so
-	// F7 after scrolling steps from what is on screen, never from hunk 1.
-	// -1 only while the diff is empty or unrendered. curStepped marks a cur
-	// placed by an explicit hunk step; it makes repeated F7 walk the list
-	// sequentially even when the viewport is clamped at the document end.
+	// cur is the current hunk index (#2494): every vertical scroll that
+	// actually moves the view re-syncs it to the hunk at/nearest the anchor
+	// row (a third down the view), so F7 after scrolling steps from what is
+	// on screen, never from hunk 1. -1 before the first step or scroll (a
+	// fresh diff has no current hunk yet). curStepped marks a cur placed by
+	// an explicit hunk step; it makes repeated F7 walk the list sequentially
+	// even when the viewport is clamped at the document end.
 	cur        int
 	curStepped bool
 	top        int // first visible visual row
@@ -771,9 +772,11 @@ func (m *Model) stepHunk(delta int) {
 	}
 	target := m.cur + delta
 	if !m.curStepped && len(m.rowStarts) > 0 {
+		// No hunk in the step's direction relative to the anchor (a diff
+		// fully above/below it) keeps the plain cur±delta fallback, so a
+		// fresh fully-visible diff still walks its hunks from the first.
 		anchor := m.anchorLine()
 		if delta > 0 {
-			target = len(m.res.Hunks) - 1
 			for i, h := range m.res.Hunks {
 				if m.rowStarts[h.Start] > anchor {
 					target = i
@@ -781,7 +784,6 @@ func (m *Model) stepHunk(delta int) {
 				}
 			}
 		} else {
-			target = 0
 			for i := len(m.res.Hunks) - 1; i >= 0; i-- {
 				if m.rowStarts[m.res.Hunks[i].Start] < anchor {
 					target = i
@@ -915,9 +917,16 @@ func (m *Model) scrollX(off int) {
 }
 
 // scrollTo clamps and applies a new top row, re-syncing the current hunk to
-// the viewport (#2494) — every vertical scroll path funnels through here.
+// the viewport (#2494) — every vertical scroll path funnels through here. A
+// no-move call (render's re-clamp, a scroll at the boundary) leaves cur
+// alone, so a fresh diff stays "before the first hunk" and a reload keeps
+// the reader's current hunk.
 func (m *Model) scrollTo(top int) {
-	m.top = clamp(top, 0, max(0, len(m.lines)-m.viewHeight()))
+	top = clamp(top, 0, max(0, len(m.lines)-m.viewHeight()))
+	if top == m.top {
+		return
+	}
+	m.top = top
 	m.syncCurrentHunk()
 }
 
@@ -1049,8 +1058,12 @@ func (m Model) headerLine(st styles) string {
 // separators used to carry.
 func (m Model) footerLine(st styles) string {
 	part := "no changes"
-	if n := len(m.res.Hunks); n > 0 && m.cur >= 0 {
-		part = fmt.Sprintf("hunk %d/%d", m.cur+1, n)
+	if n := len(m.res.Hunks); n > 0 {
+		cur := "–" // no current hunk before the first step or scroll
+		if m.cur >= 0 {
+			cur = fmt.Sprintf("%d", m.cur+1)
+		}
+		part = fmt.Sprintf("hunk %s/%d", cur, n)
 	}
 	part = fmt.Sprintf(" %s · %d%%", part, m.Progress())
 	if m.Collapsed() && len(m.sepLines) > 0 {

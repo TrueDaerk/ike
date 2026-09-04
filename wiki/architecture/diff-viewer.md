@@ -138,16 +138,20 @@ is ignored, the sides being the side labels below) and the pane's title band
 
 Hunk stepping is anchored to the **viewport**, not to a private counter. The
 anchor row is the visual line a third down the view — the same place a step
-scrolls its target hunk to. Every vertical scroll (keys, wheel, `g`/`G`,
-search jumps — everything funnels through `scrollTo`) re-syncs the current
-hunk (`syncCurrentHunk`) to the hunk covering or nearest the anchor, so after
-scrolling anywhere, `F7`/`n` steps to the **first hunk starting below the
-anchor** and `shift+F7`/`N` to the **last one starting above it** — never
-back to hunk 1. Only while the current hunk was itself placed by a step (no
-scroll in between, `curStepped`) does a step walk the plain `cur±1` sequence,
-which keeps repeated `F7` progressing when the viewport is clamped at the
-document end. `CurrentHunk` is therefore always the on-screen hunk (−1 only
-for an empty diff), and the pane paints it with a `▎` **gutter marker** on
+scrolls its target hunk to. Every vertical scroll that actually moves the
+view (keys, wheel, `g`/`G`, search jumps — everything funnels through
+`scrollTo`) re-syncs the current hunk (`syncCurrentHunk`) to the hunk
+covering or nearest the anchor, so after scrolling anywhere, `F7`/`n` steps
+to the **first hunk starting below the anchor** and `shift+F7`/`N` to the
+**last one starting above it** — never back to hunk 1. With no hunk in the
+step's direction (a short diff fully visible) the step falls back to the
+plain `cur±1` walk from wherever it stands (−1 on a fresh diff, so the first
+`F7` still lands on hunk 1). Only while the current hunk was itself placed
+by a step (no scroll in between, `curStepped`) does a step always walk the
+`cur±1` sequence, which keeps repeated `F7` progressing when the viewport is
+clamped at the document end. `CurrentHunk` is therefore the on-screen hunk
+(−1 before the first step or scroll), and the pane paints it with a `▎`
+**gutter marker** on
 every row of the hunk, both sides, in the `DiffMarker` theme slot (falls back
 to the theme's `Accent`). The marker is a View-time overlay like the
 selection (#2495): the cached lines never carry it, so a scroll costs a

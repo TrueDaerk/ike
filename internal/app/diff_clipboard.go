@@ -56,7 +56,7 @@ func (m *Model) openClipboardDiffPane(rightTitle, rightPath, clip, right string,
 	if inst, hostKey, tabIdx, ok := m.diffSlot(); ok {
 		inst.StopDiffEdit()
 		inst.Diff().Retarget(leftTitle, rightTitle, "", rightPath, "", "", editable)
-		inst.Diff().SetSideLabels("clipboard", rightLabel)
+		inst.Diff().SetSideLabels("Clipboard", rightLabel)
 		inst.Diff().SetContents(clip, right)
 		m.focusContentAt(hostKey, tabIdx)
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
@@ -71,7 +71,7 @@ func (m *Model) openClipboardDiffPane(rightTitle, rightPath, clip, right string,
 	if editable {
 		inst.Diff().SetEditable(true)
 	}
-	inst.Diff().SetSideLabels("clipboard", rightLabel)
+	inst.Diff().SetSideLabels("Clipboard", rightLabel)
 	inst.Diff().SetContents(clip, right)
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }

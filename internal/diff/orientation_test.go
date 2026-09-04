@@ -92,12 +92,13 @@ func TestCurrentHunkMarkerFollowsStep(t *testing.T) {
 		}
 		return strings.Join(out, "\n")
 	}
-	if !strings.Contains(marked(), "old-0") {
-		t.Fatalf("fresh view must mark hunk 0:\n%s", ansi.Strip(m.View()))
+	if marked() != "" {
+		t.Fatalf("a fresh view has no current hunk to mark:\n%s", ansi.Strip(m.View()))
 	}
-	// Hunk 0 starts below the fresh anchor, so the first step targets it;
-	// the second walks on to hunk 1 — the marker follows.
 	m.stepHunk(1)
+	if !strings.Contains(marked(), "old-0") {
+		t.Fatalf("the first step must mark hunk 0:\n%s", ansi.Strip(m.View()))
+	}
 	m.stepHunk(1)
 	got := marked()
 	if !strings.Contains(got, "old-1") || strings.Contains(got, "old-0") {
@@ -117,8 +118,8 @@ func TestFooterShowsHunkAndProgress(t *testing.T) {
 		lines := strings.Split(ansi.Strip(m.View()), "\n")
 		return lines[len(lines)-1]
 	}
-	if f := foot(); !strings.Contains(f, "hunk 1/5") || !strings.Contains(f, "0%") {
-		t.Fatalf("fresh footer must show hunk 1/5 and 0%%: %q", f)
+	if f := foot(); !strings.Contains(f, "hunk –/5") || !strings.Contains(f, "0%") {
+		t.Fatalf("fresh footer must show hunk –/5 and 0%%: %q", f)
 	}
 	// The first step targets hunk 0 (it starts just below the anchor); the
 	// second walks on to hunk 1.
