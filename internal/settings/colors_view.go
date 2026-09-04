@@ -94,10 +94,8 @@ func (c *ColorsPage) renderList(w, h int) string {
 		list = append(list, clip.Render(sec.Render(" no matching captures")))
 	}
 
-	foot := wrapFooter([]footerLine{{
-		text:  "   enter pick · e type a token · r theme default",
-		style: sec,
-	}}, w, 2)
+	// The keys live on the panel's action bar; nothing is pinned under the list.
+	var foot []string
 	c.listH = h - 1 - len(foot)
 	return clip.Render(sec.Render(head)) + "\n" + pinFooter(list, foot, c.sel, c.sel, h-1, &c.off)
 }

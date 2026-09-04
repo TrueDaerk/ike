@@ -229,7 +229,7 @@ func (p *PluginsPage) View(width, height int) string {
 	}
 	head := dim.Render(" plugin · state · contributes")
 	footer := wrapFooter([]footerLine{{
-		text:  " e toggle · enter inspect · a disabled language plugin takes its LSP server with it",
+		text:  " a disabled language plugin takes its LSP server with it",
 		style: dim,
 	}}, width, 2)
 	p.listH = height - 1 - len(footer)
@@ -302,6 +302,10 @@ func padCol(s string, width int) string {
 }
 
 // KeyHelp implements KeyHelper (#887).
-func (p *PluginsPage) KeyHelp() []string {
-	return []string{"e / space  toggle the plugin", "enter  inspect capabilities"}
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (p *PluginsPage) Actions() []Action {
+	return []Action{
+		{Key: "space", Verb: "Toggle", Hint: "enable or disable the plugin (e too)"},
+		{Key: "enter", Verb: "Inspect", Hint: "its capabilities"},
+	}
 }

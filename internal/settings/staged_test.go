@@ -70,7 +70,7 @@ func TestEditingBackToTheOriginalDropsTheChange(t *testing.T) {
 // marks the pages carrying edits.
 func TestHeaderAndRailShowTheCount(t *testing.T) {
 	m := stagedModel(t)
-	if strings.Contains(m.View(), "changes") || strings.Contains(m.View(), "1 change") {
+	if strings.Contains(m.View(), "unsaved") {
 		t.Fatal("a clean panel must not show a change counter")
 	}
 	m.Update(key("enter")) // Interface page
@@ -78,7 +78,7 @@ func TestHeaderAndRailShowTheCount(t *testing.T) {
 	m.Update(key("right")) // stepper on the same page
 
 	v := m.View()
-	if !strings.Contains(v, "2 changes") {
+	if !strings.Contains(v, "● 2 unsaved") {
 		t.Fatalf("header must count the staged edits:\n%s", v)
 	}
 	if !strings.Contains(v, "Interface ●2") {

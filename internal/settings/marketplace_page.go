@@ -404,10 +404,8 @@ func (p *MarketplacePage) View(width, height int) string {
 	for _, d := range p.diags {
 		list = append(list, clip.Render(warn.Render(" "+d)))
 	}
-	footer := wrapFooter([]footerLine{{
-		text:  " enter details · i install/update (from details) · u update all · x remove · g refresh catalog · ? keys",
-		style: dim,
-	}}, width, 2)
+	// The keys live on the panel's action bar; nothing is pinned under the list.
+	var footer []string
 	hl := p.headLines()
 	p.listH = height - hl - len(footer)
 	// The list scrolls (#885): before, a MaxHeight clip made rows past the
@@ -499,11 +497,13 @@ func (p *MarketplacePage) inspectEntry(e market.Entry) []string {
 }
 
 // KeyHelp implements KeyHelper (#887).
-func (p *MarketplacePage) KeyHelp() []string {
-	return []string{
-		"enter  details (capability review) · i  install/update",
-		"u  update all (plugins asking for new capabilities are held back)",
-		"x  remove the installed plugin",
-		"g  refresh the catalog",
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (p *MarketplacePage) Actions() []Action {
+	return []Action{
+		{Key: "enter", Verb: "Details", Hint: "capability review; install lives there"},
+		{Key: "i", Verb: "Install", Hint: "or update, from the opened details"},
+		{Key: "u", Verb: "Update all", Hint: "plugins asking for new capabilities are held back"},
+		{Key: "x", Verb: "Remove", Hint: "the installed plugin"},
+		{Key: "g", Verb: "Refresh", Hint: "the catalog"},
 	}
 }

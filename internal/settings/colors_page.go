@@ -340,9 +340,12 @@ func (c *ColorsPage) SearchItems() []SearchItem {
 }
 
 // KeyHelp implements KeyHelper (#887).
-func (c *ColorsPage) KeyHelp() []string {
-	return []string{
-		"enter  pick a colour · e  type a token (#rrggbb or 0-255)",
-		"r  back to the theme's own colour · /  filter captures",
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (c *ColorsPage) Actions() []Action {
+	return []Action{
+		{Key: "enter", Verb: "Pick", Hint: "a colour from the palette"},
+		{Key: "e", Verb: "Type", Hint: "a token: #rrggbb or 0-255"},
+		{Key: "r", Verb: "Reset", Hint: "back to the theme's own colour"},
+		{Key: "/", Verb: "Filter", Hint: "the captures"},
 	}
 }

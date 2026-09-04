@@ -170,24 +170,8 @@ func (m *Model) View() string {
 		}
 	}
 
-	titleText := " SETTINGS "
-	if m.cat >= 0 && m.cat < len(m.pages) {
-		// The current page lives in the header (#890): position at a glance.
-		titleText = " SETTINGS › " + m.pages[m.cat].Title + " "
-	}
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.BorderFocus).Render(titleText)
-	// The write scope (0380, #794) is always-visible, clickable chrome (#885):
-	// a press cycles auto → user → project like "s".
-	chipStyle := lipgloss.NewStyle().Foreground(pal.Secondary)
-	if m.writeScope != scopeAuto {
-		chipStyle = lipgloss.NewStyle().Foreground(pal.Info).Bold(true)
-	}
-	chip := "[scope: " + m.scopeLabel() + "] "
-	m.chipSpan = span{start: 1 + lipgloss.Width(titleText), end: 1 + lipgloss.Width(titleText) + lipgloss.Width(chip)}
-	title += chipStyle.Render(chip)
-	title += m.renderChangeCount(pal, lipgloss.Width(titleText)+lipgloss.Width(chip))
-	title += m.renderFilter()
-	hint := m.renderHint(pal)
+	title := m.renderTitleRow(pal, innerW)
+	hint := m.renderActionBar(pal, innerW)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, title, headers, body, hint)
 	box := lipgloss.NewStyle().
@@ -241,70 +225,54 @@ func (m *Model) renderColumnHeaders(innerW int) string {
 	return out + caption(label, m.focus != catColumn, g.formW)
 }
 
-// renderHint renders the bottom hint row: three context keys, not a permanent
-// nine-key legend (#1295). The full list lives behind "?" — the cheatsheet
-// overlay — so the footer can always say the three things that matter here.
-// The segments stay clickable (#885).
-func (m *Model) renderHint(pal *theme.Palette) string {
-	m.hintHits = nil
-	style := lipgloss.NewStyle().Foreground(pal.Secondary)
-	switch {
-	case m.SubOpen():
-		return style.Render(" esc back · click a button")
-	case m.filtering:
-		return style.Render(" fuzzy: key · label · description — enter keep · esc clear")
+// renderTitleRow renders the top row: the breadcrumb (and the search line
+// while a query is live) on the left, the status chips on the right — the
+// write scope and the staged-change count. Before, everything ran together
+// left to right: "SETTINGS › Editor [scope: auto] ● 1 change · ctrl+s apply
+// ⌕ auto · 167 hits · 34 pages". The apply key now lives on the action bar,
+// so the counter only has to say that something is pending.
+func (m *Model) renderTitleRow(pal *theme.Palette, innerW int) string {
+	titleText := " SETTINGS"
+	if m.cat >= 0 && m.cat < len(m.pages) {
+		// The current page lives in the header (#890): position at a glance.
+		titleText = " SETTINGS › " + m.pages[m.cat].Title
 	}
-	var segs []hintSeg
-	switch {
-	case m.filter != "" && m.focus == formColumn:
-		// Search owns the grid (#1297): a value is settable straight from a
-		// result, and tab leaves for the owning page.
-		segs = []hintSeg{{"enter set here", "edit"}, {"tab open page", "openpage"}}
-	case m.focus == catColumn:
-		segs = []hintSeg{{"enter settings", "edit"}, {"/ search", "filter"}}
-	case m.focus == detailColumn:
-		segs = m.editorHint()
-	default:
-		segs = []hintSeg{{"enter edit", "edit"}, {"r reset", "reset"}}
+	left := lipgloss.NewStyle().Bold(true).Foreground(pal.BorderFocus).Render(titleText)
+	left += m.renderFilter()
+
+	// The write scope (0380, #794) is always-visible, clickable chrome (#885):
+	// a press cycles auto → user → project like "s". Auto is the quiet state.
+	chipStyle := lipgloss.NewStyle().Foreground(pal.Secondary)
+	if m.writeScope != scopeAuto {
+		chipStyle = lipgloss.NewStyle().Foreground(pal.Info).Bold(true)
 	}
+	chip := "scope: " + m.scopeLabel()
+	count := ""
 	if m.Dirty() {
-		// With edits pending, applying them is what matters most here.
-		segs = append(segs[:1:1], hintSeg{"ctrl+s apply", "apply"})
+		// The counter is the mouse's apply button (#1296).
+		count = "● " + strconv.Itoa(len(m.changes)) + " unsaved"
 	}
-	segs = append(segs, hintSeg{"? all keys", "help"})
-
-	x := 1 // border column 0
-	var out string
-	for i, sg := range segs {
-		if i > 0 {
-			out += " · "
-			x += 3
-		} else {
-			out += " "
-			x++
-		}
-		w := lipgloss.Width(sg.text)
-		if sg.action != "" {
-			m.hintHits = append(m.hintHits, hintAction{start: x, end: x + w, action: sg.action})
-		}
-		out += sg.text
-		x += w
+	rightW := lipgloss.Width(chip) + 1
+	if count != "" {
+		rightW += lipgloss.Width(count) + 3
 	}
-	return style.Render(out)
-}
-
-// renderChangeCount renders the staged-apply counter in the header (#1296) and
-// records its clickable span: "● n changed · ctrl+s apply" while edits are
-// pending, nothing at all when there are none — a quiet header means a clean
-// panel.
-func (m *Model) renderChangeCount(pal *theme.Palette, x int) string {
+	// Right-align the chips; on a row too narrow for both halves they follow
+	// the breadcrumb instead, so nothing is clipped.
+	x := 1 + innerW - rightW
+	if leftW := lipgloss.Width(left); x < 1+leftW+2 {
+		x = 1 + leftW + 2
+	}
+	gap := strings.Repeat(" ", maxInt(x-1-lipgloss.Width(left), 0))
+	right := ""
 	m.countSpan = span{}
-	if !m.Dirty() {
-		return ""
+	if count != "" {
+		m.countSpan = span{start: x, end: x + lipgloss.Width(count)}
+		right += lipgloss.NewStyle().Foreground(pal.Warning).Bold(true).Render(count) + " · "
+		x += lipgloss.Width(count) + 3
 	}
-	text := "● " + plural(len(m.changes), "change") + " · ctrl+s apply "
-	m.countSpan = span{start: 1 + x, end: 1 + x + lipgloss.Width(text)}
-	return lipgloss.NewStyle().Foreground(pal.Warning).Bold(true).Render(text)
+	m.chipSpan = span{start: x, end: x + lipgloss.Width(chip)}
+	right += chipStyle.Render(chip)
+	return lipgloss.NewStyle().MaxWidth(innerW).Render(left + gap + right)
 }
 
 // markerWidth is the selection marker's width in cells: the glyph plus the
@@ -337,7 +305,7 @@ func markerBG(selected bool, sel lipgloss.Style) lipgloss.Style {
 	return lipgloss.NewStyle()
 }
 
-// hintSeg is one footer segment: its text and the action a click runs.
+// hintSeg is one "key verb" pair the action bar renders for a focused editor.
 type hintSeg struct{ text, action string }
 
 // editorHint names the two keys that matter for the focused editor.
@@ -605,17 +573,44 @@ func (m *Model) renderForm(w, h int) string {
 		return strings.Join(padTo([]string{empty}, h), "\n")
 	}
 	lines := make([]string, 0, len(rows)+1)
-	for i, r := range rows {
-		lines = append(lines, clip.Render(m.renderEntry(r, i == m.sel, i == m.hoverRow, w)))
-	}
+	m.formLines = nil
+	selLine := m.sel
 	if m.filter != "" {
+		// Search results group under a header naming their page, so the rows
+		// need no "Page › " prefix — which wrapped most of them onto two
+		// lines. Headers are lines without a row: formLines keeps the
+		// line → row map the click, hover and follow paths use.
+		hdr := lipgloss.NewStyle().Foreground(pal.Secondary)
+		avail := maxInt(w-markerWidth, 1)
+		lastPage := -1
+		for i, r := range rows {
+			if r.page != lastPage {
+				lastPage = r.page
+				text := "─ " + m.pages[r.page].Title + " "
+				if pad := avail - lipgloss.Width(text); pad > 0 {
+					text += strings.Repeat("─", pad)
+				}
+				lines = append(lines, clip.Render(strings.Repeat(" ", markerWidth)+hdr.Render(text)))
+				m.formLines = append(m.formLines, -1)
+			}
+			if i == m.sel {
+				selLine = len(lines)
+			}
+			lines = append(lines, clip.Render(m.renderEntry(r, i == m.sel, i == m.hoverRow, w)))
+			m.formLines = append(m.formLines, i)
+		}
 		if note := m.customPagesNote(); note != "" {
 			lines = append(lines, clip.Render(
 				lipgloss.NewStyle().Foreground(pal.Secondary).Faint(true).Render(note)))
+			m.formLines = append(m.formLines, -1)
+		}
+	} else {
+		for i, r := range rows {
+			lines = append(lines, clip.Render(m.renderEntry(r, i == m.sel, i == m.hoverRow, w)))
 		}
 	}
 	if m.followForm {
-		m.formOff = follow(m.formOff, m.sel, m.sel, len(lines), h)
+		m.formOff = follow(m.formOff, selLine, selLine, len(lines), h)
 		m.followForm = false
 	}
 	m.formOff = clamp(m.formOff, 0, maxOff(len(lines), h))
@@ -761,22 +756,28 @@ func (m *Model) renderPageDetail(w, h int, wrap func(string, lipgloss.Style) []s
 	return out
 }
 
-// affordanceValue renders a value with its type's marker (#1295): the suffix
-// says what enter will open — ▸ a list, ‹› a stepper, ◉ a toggle, ⌨ a capture,
-// ≡ a multi-value list, ✎ free text — so beginners do not have to guess and
-// power users read it peripherally.
+// affordanceValue renders a row's value the way a reader would say it: a
+// toggle is "on" or "off", a chord sits in a keycap, an empty list or text
+// is "—", and an enum carries the ▾ that says there are options behind it.
 func affordanceValue(e Entry, val string) string {
-	if e.Type == List || e.Type == IntList {
-		val = strings.Trim(val, "[]")
-		val = strings.Join(splitList(val), ", ")
-		if val == "" {
-			val = "(empty)"
+	switch e.Type {
+	case Bool:
+		if val == "true" {
+			val = "on"
+		} else {
+			val = "off"
+		}
+	case List, IntList:
+		val = strings.Join(splitList(strings.Trim(val, "[]")), ", ")
+	case Chord:
+		if val != "" {
+			val = "[" + val + "]"
 		}
 	}
-	if e.Type == Chord && val == "" {
-		val = "(unbound)"
+	if val == "" {
+		val = "—"
 	}
-	return val + " " + marker(e.Type)
+	return val + marker(e.Type)
 }
 
 // customPagesNote names the custom pages the filter cannot search (the ones
@@ -877,8 +878,8 @@ func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 	title := e.Title
 	if m.filter != "" {
 		// Search mode marks what matched (#1297), so a hit list is readable
-		// without re-reading the query.
-		title = m.pages[r.page].Title + " › " + highlightMatch(e.Title, m.filter, pal)
+		// without re-reading the query; the page is the group header above.
+		title = highlightMatch(e.Title, m.filter, pal)
 	}
 	right := affordanceValue(e, m.value(e.Key)) + " "
 	// The value yields before the title does: a long list still shows its
@@ -909,6 +910,26 @@ func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 	}
 	mark := rowMarker(pal, selected, m.focus != catColumn, markerBG(selected, selBG))
 	return mark + style.Render(line)
+}
+
+// rowAtLine maps a settings-column line index to its row: identity outside
+// search mode, the formLines map inside it (-1 for a header line).
+func (m *Model) rowAtLine(line int) int {
+	if m.filter == "" || m.formLines == nil {
+		return line
+	}
+	if line < 0 || line >= len(m.formLines) {
+		return -1
+	}
+	return m.formLines[line]
+}
+
+// formLineCount is the settings column's rendered line count.
+func (m *Model) formLineCount() int {
+	if m.filter != "" && m.formLines != nil {
+		return len(m.formLines)
+	}
+	return len(m.rows())
 }
 
 func maxInt(a, b int) int {

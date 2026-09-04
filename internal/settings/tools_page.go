@@ -133,11 +133,19 @@ func (t *ToolsPage) openSuggestions() tea.Cmd {
 }
 
 // KeyHelp implements KeyHelper (#887).
-func (t *ToolsPage) KeyHelp() []string {
-	return []string{
-		"a  add a tool · enter  edit the selected tool (or open the action row)",
-		"d  delete · s  curated suggestions",
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (t *ToolsPage) Actions() []Action {
+	return []Action{
+		{Key: "a", Verb: "Add", Hint: "a new tool pane"},
+		{Key: "enter", Verb: "Edit", Hint: "the selected tool, or open the action row"},
+		{Key: "d", Verb: "Delete"},
+		{Key: "s", Verb: "Suggestions", Hint: "curated tools to add in one step"},
 	}
+}
+
+// KeyHelp adds the note the keys do not carry.
+func (t *ToolsPage) KeyHelp() []string {
+	return []string{"each tool is a tool.<name> palette command"}
 }
 
 // updateSuggest handles keys while the suggestion picker is open: j/k move,
@@ -248,7 +256,7 @@ func (t *ToolsPage) View(w, h int) string {
 		return t.viewSuggestions(w, h)
 	}
 	pal := t.theme()
-	head := " name · command   (custom TUI tool panes, #741)"
+	head := " name · command   (custom TUI tool panes)"
 	entries := t.entries()
 	var list []string
 	for i, e := range entries {
@@ -278,7 +286,7 @@ func (t *ToolsPage) View(w, h int) string {
 		}
 		list = append(list, style.Render(label))
 	}
-	hint := "   a add · enter edit · d delete · s suggestions — each tool is a tool.<name> palette command"
+	hint := "   each tool is a tool.<name> palette command"
 	lines2 := []footerLine{{text: hint, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}
 	if t.note != "" {
 		lines2 = append([]footerLine{{text: "   " + t.note, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}, lines2...)

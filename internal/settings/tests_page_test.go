@@ -58,7 +58,7 @@ func TestTestsResultsWindowRoundTrip(t *testing.T) {
 	if got := m.value("tests.results_window"); got != "false" {
 		t.Fatalf("panel value = %q, want false", got)
 	}
-	if v := m.View(); !strings.Contains(v, "false") {
+	if v := m.View(); !strings.Contains(v, " off") {
 		t.Fatalf("the entry row must render the value:\n%s", v)
 	}
 }

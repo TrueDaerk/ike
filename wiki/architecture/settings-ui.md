@@ -548,7 +548,48 @@ Schema `Chord`
 entries capture through a shared sub-panel with keymap-page semantics —
 multi-step chords, enter confirms, backspace undoes a step — instead of
 grabbing the next keypress. **?** opens a key-help sub-panel listing the
-shared keys plus the active page's (`KeyHelper` seam).
+active page's actions first, then the shared keys (see
+[Action bar](#action-bar-2026-09)).
+
+## Action bar (2026-09)
+
+The bottom row of the panel is an **action bar**: the verbs the focused
+surface offers, each as a keycap — `[a] Add · [d] Delete · [s] Scope: auto ·
+[ctrl+s] Apply 2 · [?] Keys`. It replaced the three-key hint row of 0460,
+which only ever named the panel's own keys: a custom page's letters were
+discoverable through `?` alone, and staging a change replaced `r reset` with
+`ctrl+s apply` instead of adding it.
+
+- **One source of truth.** A custom page describes its verbs through the
+  `ActionLister` seam (`internal/settings/actions.go`):
+  `Actions() []Action` with `Key`, `Verb` and an optional `Hint`, in bar
+  order — most-used first. The bar, the `?` overlay and the mouse hit map all
+  derive from that list; nothing is written twice. Every custom page
+  implements it. The older `KeyHelper` seam is now for **notes** the keys do
+  not carry ("a pattern matches the base name", "the page edits the config
+  defaults") and renders under the actions in the overlay.
+- **What the bar shows** depends on the focused surface: rail → `Open`,
+  `Search`; schema settings column → `Edit`, `Toggle` (on a bool row),
+  `Reset`; detail column → the editor's own two keys; custom page → the page's
+  first six actions; search → `Set here`, `Open page`, `Clear`. Then the
+  chrome: `[s] Scope: …` (schema pages — the selector only routes schema
+  writes), `[ctrl+s] Apply n` while a batch is pending, and always `[?] Keys`.
+  What does not fit the width is dropped from the right; `[?]` always stays,
+  because the overlay lists everything the bar could not.
+- **Clickable.** Each keycap is a hit span (the `hintHits` mechanism of #885):
+  the panel's own verbs run their action, a page verb is forwarded to the page
+  as the key it names (`keyPress`), so the mouse reaches every action without
+  the letter being known.
+- **The `?` overlay** lists the page's actions first — `key  Verb — hint` per
+  line — then its notes, then the keys every page shares. Before, eleven
+  identical shared lines came first and the keymap page, which has the most
+  private keys, contributed none.
+- **Page footers lost their legends.** The pinned footer under a custom page's
+  list used to restate the keys as wrapped prose (`a add · enter edit · d
+  delete — …`), which cost two list lines and clipped mid-word on narrow
+  panels. Footers now carry only what the bar cannot: notes, failure detail,
+  and the keys of a *mode* the bar does not know about (the toolchain
+  package view and pickers).
 
 ## Shared text input (0420, #888)
 
@@ -572,23 +613,36 @@ panel accepts typing. See [Single-Line Text Input](/architecture/text-input.md).
 
 ## Widget affordances (0420, #889)
 
-Every schema row announces how it edits before enter is pressed. The glyphs
-were unified into the wireframes' **value markers** in 0460 (#1295): `◉`
-toggle · `‹›` stepper · `▸` list · `⌨` capture · `≡` multi-value list · `✎`
-free text. The row still carries `←/→` cycling for enums (← on other rows
+Every schema row shows its value the way a reader would say it. The 0460
+type glyphs (`◉ ‹› ▸ ⌨ ≡ ✎`, #1295) were retired in the 2026-09 settings
+overhaul: they encoded the *type* of a row but read as state — `true ◉` and
+`false ◉` looked alike, and `▸` doubled as the focus caret. A bool renders
+`on` / `off`, a chord as a keycap `[cmd+k]`, an empty list or text as `—`, and
+only an enum keeps a glyph, the `▾` that says there are options behind it. The
+detail column's typed editor still announces how a value edits. The row still carries `←/→` cycling for enums (← on other rows
 returns to the rail, #533) and `+/−/←/→` stepping for ints, range-clamped.
 Range clamps are never silent: stepping or typing past Min/Max shows an
 `ℹ clamped to N` notice in the detail column.
 
 ## Rail & chrome (0420, #890)
 
-The category rail groups into **sections** (`Page.Section` starts one: CORE /
-TOOLS / PLUGINS today), rendered as dim non-clickable headers. **First-letter
+The category rail groups into **sections**, rendered as dim non-clickable
+headers. Since the 2026-09 overhaul every page belongs to one of eight groups
+(`internal/settings/groups.go`: Editing · Interface · Keymap · Files &
+Projects · Languages · Build, Run & Debug · Tools & Integrations · Plugins);
+`settings.Regroup` orders the assembled pages by that table and sets
+`Page.Section` on each group's first page, and a guard test fails on a page
+the table does not know — so a new page is placed deliberately. The rail opens
+a header only when the section changes. The docgen reference renders the same
+grouping. **First-letter
 jump** hops to the next page starting with the pressed letter (menu parity).
 The panel **remembers its page**: reopening lands where you left, and the
 choice persists per project in `.ike/settings-last.json`
-(IKE_CONFIG_DIR-redirectable). The title row reads `SETTINGS › <Page>`, and
-overflowing rail/form windows show `▲ more` / `▼ more` scroll indicators.
+(IKE_CONFIG_DIR-redirectable). The title row reads `SETTINGS › <Page>` on the left — followed by the
+search line while a query is live — with the status chips right-aligned:
+`● n unsaved` while a batch is pending and `scope: auto|user|project` (quiet
+when auto, accent when forced); overflowing rail/form windows show `▲ more` /
+`▼ more` scroll indicators.
 
 ## Feedback & safety (0420, #891)
 
@@ -667,9 +721,10 @@ a list is possible.
 - **Nothing expands inline any more.** The settings rows map 1:1 to lines, so a
   selection move cannot shift what is under the pointer, and a click hit-test
   is a plain offset.
-- **The footer is three context keys**, not a nine-key legend: what the focused
-  column can do, plus `? all keys`. The full set lives in the `?` cheatsheet
-  overlay, grouped move / edit / global.
+- **The footer is the action bar** (see [Action bar](#action-bar-2026-09)):
+  the verbs the focused surface offers, each behind its keycap, plus
+  `[?] Keys`. The 0460 "three context keys" footer never named a custom
+  page's letters and dropped `r reset` as soon as a change was staged.
 
 ## Staged apply (0460, #1296)
 
@@ -682,8 +737,9 @@ re-themes and rebuilds its keymaps once instead of once per changed key
 - **Reads** go through `m.value(key)`: the staged value when one exists,
   otherwise the live config. Nothing else in the panel had to learn about
   staging.
-- **Counting.** The header carries `● n changes · ctrl+s apply` (clickable),
-  the rail marks each page with `●n`, and the detail column shows the selected
+- **Counting.** The title row's right edge carries `● n unsaved` (clickable —
+  it opens the apply diff; the `ctrl+s` key is named on the action bar), the
+  rail marks each page with `●n`, and the detail column shows the selected
   row's `● old → new`. A value edited back to where it started drops out of the
   buffer, so the counter cannot lie.
 - **Applying** is `ctrl+s`, not enter — enter is the editor key on every row.
@@ -747,8 +803,13 @@ takes over the grid instead, keeping all three columns doing their job:
   with its count. Moving there jumps the match list to that page's first hit;
   moving in the match list walks the rail back (`syncHitSel`), so the two
   always agree on "where am I".
-- **Column 2** lists every match as `Page › Title`, with the matched substring
-  marked and the value marker intact.
+- **Column 2** lists the matches grouped under a dim header naming their
+  page (`─ Editor ────`); the rows carry only the title, with the matched
+  substring marked. Until the 2026-09 overhaul every row was prefixed
+  `Page › `, which wrapped most results onto two lines. The headers are
+  render-time lines, not rows: `formLines` in `view.go` keeps the line → row
+  map the click, hover and follow paths read, so `rows()` and the selection
+  index are unchanged.
 - **Column 3** stays the editor for the highlighted match, so `enter` **sets
   the value right there** — the search is not a navigation detour.
 - `tab` leaves for the match's own page, positioned on that row; `esc` clears

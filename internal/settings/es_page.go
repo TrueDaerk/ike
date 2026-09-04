@@ -95,10 +95,13 @@ func (t *ESPage) Update(key tea.KeyPressMsg) tea.Cmd {
 }
 
 // KeyHelp implements KeyHelper (#887).
-func (t *ESPage) KeyHelp() []string {
-	return []string{
-		"a  add an endpoint · enter  edit the selected endpoint",
-		"d  delete · s  scope: " + esScopeLabel(t.scope),
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (t *ESPage) Actions() []Action {
+	return []Action{
+		{Key: "a", Verb: "Add", Hint: "an endpoint"},
+		{Key: "enter", Verb: "Edit"},
+		{Key: "d", Verb: "Delete"},
+		{Key: "s", Verb: "Scope: " + esScopeLabel(t.scope), Hint: "the layer endpoints are written to"},
 	}
 }
 
@@ -183,7 +186,7 @@ func esScopeLabel(s config.Scope) string {
 func (t *ESPage) View(w, h int) string {
 	t.setRows(h)
 	pal := t.theme()
-	head := " name · url   (Elasticsearch console endpoints, #1927)"
+	head := " name · url   (Elasticsearch console endpoints)"
 	entries := t.entries()
 	var list []string
 	for i, e := range entries {
@@ -200,8 +203,7 @@ func (t *ESPage) View(w, h int) string {
 	if len(entries) == 0 {
 		list = append(list, "no endpoints configured — press a to add one")
 	}
-	hint := "   a add · enter edit · d delete · s scope: " + esScopeLabel(t.scope) +
-		" — each endpoint is an es.console.<name> palette command"
+	hint := "   writes to the " + esScopeLabel(t.scope) + " layer — each endpoint is an es.console.<name> palette command"
 	lines := []footerLine{{text: hint, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}
 	if t.note != "" {
 		lines = append([]footerLine{{text: "   " + t.note, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}, lines...)

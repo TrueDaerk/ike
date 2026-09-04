@@ -136,7 +136,7 @@ func (m *Model) searchRows(query string) []row {
 					if !ok {
 						continue
 					}
-					add(row{page: pi, kind: rowItem, label: p.Title + " › " + it.Label, activate: it.Activate}, s)
+					add(row{page: pi, kind: rowItem, label: it.Label, activate: it.Activate}, s)
 				}
 			}
 		}

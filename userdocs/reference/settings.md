@@ -22,7 +22,7 @@ byte sizes, escapes, cron and chmod readings, certificate summaries, masked
 secrets — are documented together, with screenshots, in
 [Conceal and decoded values](../guides/conceal.md).
 
-## Core
+## Editing
 
 ### Editor
 
@@ -64,6 +64,13 @@ secrets — are documented together, with screenshots, in
 | Always show tab bar | `editor.tabs.always_show` | boolean | `false` | user | Render the pane's tab bar even with a single tab |
 | Tab limit | `editor.tabs.limit` | integer | `5` | user | Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables) |
 
+### Typing Assistance
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Space after punctuation | `editor.typing.space_after_punctuation` | boolean | `true` | user | Insert the conventional space after punctuation the language declares — ":" in JSON, so "key": is completed as you type. Suppressed inside strings and comments |
+| Postfix completion | `editor.postfix_completion` | boolean | `true` | user | Offer the JetBrains-style postfix templates in the completion popup after a dot: "err.nil" completes to "if err == nil { … }", "foo(bar).if" wraps the whole call, "xs.range" writes a range loop. Accepting one replaces the whole expr.template span and places the caret inside. The templates are the language's (Go and Python ship one set each); languages without any are unaffected, and the items always rank below the language server's members on the same dot |
+
 ### Conceal & Hints
 
 | Setting | Key | Type | Default | Scope | Description |
@@ -95,13 +102,6 @@ secrets — are documented together, with screenshots, in
 | Identifier colors | `editor.id_colors` | boolean | `true` | user | Color UUIDs and long hex hashes (git SHAs, request/trace IDs) by hashing the identifier into the rainbow palette, so every occurrence of the same identifier shares one color; active in logs, JSON and .http files and response bodies, toggle per view via Toggle Identifier Colors |
 | Identifier color minimum length | `editor.id_color_min_length` | integer (6–64) | `7` | user | Shortest bare hex run that counts as an identifier (7 = abbreviated git SHA) |
 
-### Typing Assistance
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Space after punctuation | `editor.typing.space_after_punctuation` | boolean | `true` | user | Insert the conventional space after punctuation the language declares — ":" in JSON, so "key": is completed as you type. Suppressed inside strings and comments |
-| Postfix completion | `editor.postfix_completion` | boolean | `true` | user | Offer the JetBrains-style postfix templates in the completion popup after a dot: "err.nil" completes to "if err == nil { … }", "foo(bar).if" wraps the whole call, "xs.range" writes a range loop. Accepting one replaces the whole expr.template span and places the caret inside. The templates are the language's (Go and Python ship one set each); languages without any are unaffected, and the items always rank below the language server's members on the same dot |
-
 ### Diagnostics
 
 | Setting | Key | Type | Default | Scope | Description |
@@ -118,33 +118,21 @@ secrets — are documented together, with screenshots, in
 | Ignored diagnostics | `lsp.diagnostics_ignore` | list | `source=intelephense code=P1006 msg=*Found 'null'*,source=intelephense code=P1006 msg=*Found 'unset'*` | project | Suppression rules dropped everywhere (editor and Problems window): each rule combines source=<glob> code=<glob> and a trailing msg=<glob>; a bare token means code=. The editor's Ignore Diagnostic Under Caret command appends here |
 | Diagnostic severity overrides | `lsp.diagnostics_severity` | list | *(empty)* | project | Remap rules applied everywhere (editor and Problems window): the ignore-rule conditions plus a trailing error/warning/info/hint/off — e.g. 'reportArgumentType warning'. First match wins, off drops the diagnostic; syntax errors (codeless diagnostics) always stay errors. The 'partial' keyword restricts a rule to union-partial type mismatches ('str | None' passed where 'str' is expected) — combine with source=, the parsed phrasing is server-specific. Exact-code rules also pass through to servers with native overrides (pyright) |
 
-### Explorer
+### Diff Viewer
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
-| Show hidden files | `explorer.show_hidden` | boolean | `false` | user | List dot files and dot directories in the tree; entries matched by the exclude patterns below stay hidden either way |
-| Git status colors | `explorer.git_status` | boolean | `true` | user | Tint tree entries by their git status (added, modified, ignored) and roll a directory's status up from its children |
-| File type icons | `explorer.icons` | boolean | `false` | user | Draw a one-cell file-type marker glyph before each name (plain unicode, no nerd font needed) |
-| Autoscroll from source | `explorer.auto_reveal` | boolean | `false` | user | Reveal the focused editor's file in the tree on every focus/tab switch — expand its ancestors, select it and scroll it into view (JetBrains' "autoscroll from source") |
-| Sort order | `explorer.sort` | enum: `name`, `type`, `size`, `modified` | `name` | user | How entries are ordered inside a directory; directories always come before files |
-| Tree indent | `explorer.tree_indent` | integer (0–8) | `2` | user | Columns of indentation per nesting level in the tree |
-| Excluded entries | `explorer.exclude` | list | `.git,.idea,.DS_Store` | user | Comma-separated base-name glob patterns (.git, *.pyc, node_modules) hidden from the file tree at every depth, even with hidden files shown; explorer-only — go-to-file and find-in-path still see them |
+| Context lines | `diff.context` | integer (-1–100) | `3` | user | Unchanged lines kept visible on each side of a change before the rest folds into a "··· N unchanged lines ···" separator; o expands the nearest fold and c shows the file in full. -1 never folds |
+| Diff placement | `diff.placement` | enum: `focused`, `split` | `focused` | user | Where a diff-open (diff.files, the VCS panel's HEAD and commit diffs, local history, compare-with-clipboard, the HTTP response diff) puts its viewer. "focused" opens it as a tab of the pane you are working in — the focused editor pane, or the most recently focused one when a tool window has the keyboard — so the layout keeps its shape and the diff appears where the eye already is; the pane's file tabs stay, an empty scratch pane is taken over in place, and a second diff from that pane reuses its diff tab. "split" restores the older behaviour: every diff carves off a new pane to the right of the active editor |
+| Ignore whitespace | `diff.ignore_whitespace` | boolean | `false` | user | Compare lines with every whitespace rune removed, the way "git diff -w" does: a re-indented or re-wrapped line counts as unchanged and drops out of the hunk list, and inside a line that really changed the emphasis marks only the non-whitespace ranges. Each column still shows its own raw text. w toggles it on the open diff and stores the choice here, so a reformat-heavy branch stays readable across panes |
 
-### Language Support
+### Markdown Preview
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
-| Language servers | `lsp.enabled` | boolean | `true` | user | Run language servers at all; off disables completion, diagnostics, navigation and every other LSP-backed feature |
-| Auto-install servers | `lsp.auto_install` | boolean | `true` | user | Install a missing language server automatically when a file of its language opens, instead of only offering it |
-| Completion while typing | `lsp.completion_auto` | boolean | `true` | user | Open the completion popup on identifier characters; server trigger characters (".") and the manual ctrl+space request work either way |
-| Signature help while typing | `lsp.signature_auto` | boolean | `true` | user | Open the signature-help popup on the server's trigger characters ("(", ","); the manual Parameter Info command works either way |
-| Inlay hints | `lsp.inlay_hints` | boolean | `false` | user | Show inline parameter-name and type hints from the server; off by default — parameter info is available on demand instead |
-| Code lenses | `lsp.code_lens` | boolean | `true` | user | Show server code lenses ("run test", reference counts) as annotations on the anchored line; the LSP: Run Code Lens command executes them |
-| Server folding ranges | `lsp.folding` | boolean | `true` | user | Fold along the server's folding ranges (import blocks, comments, regions) where available; Tree-sitter folding remains the fallback either way |
-| Semantic highlighting | `lsp.semantic_tokens` | boolean | `true` | user | Refine Tree-sitter syntax colors with server semantic tokens (parameters vs locals, constants vs mutable variables) |
-| Server selection ranges | `lsp.selection_range` | boolean | `true` | user | Base Extend/Shrink Selection on the server's syntactic ranges; Tree-sitter ranges are used when off or unsupported |
-| Refactor on file rename | `lsp.will_rename` | boolean | `true` | user | Ask language servers for refactoring edits (updated import paths) before a rename or move in the explorer and apply them |
-| Server log level | `lsp.log_level` | enum: `error`, `warn`, `info`, `debug` | `warn` | user | Verbosity of the language-server log the LSP: Show Server Log command opens |
+| Diagram rendering | `preview.diagrams` | enum: `ascii`, `image`, `off` | `ascii` | user | How a fenced diagram block renders in the preview. "ascii" pipes it through the mermaid-ascii renderer and shows its text in place of the code block; "image" renders a PNG with mermaid-cli (mmdc) and embeds it over the Kitty graphics path, falling back to ascii where the terminal cannot show pixels; "off" leaves every fence the syntax-highlighted code block it is. Rendering is asynchronous and cached per fence, so typing around a diagram never re-runs the renderer; a renderer that is not installed leaves the code block with a one-line install hint, and "Re-render Preview Diagrams" retries once it is |
+
+## Interface
 
 ### Appearance
 
@@ -159,6 +147,13 @@ secrets — are documented together, with screenshots, in
 | Pane numbers | `layout.pane_numbers` | enum: `on`, `off`, `focus-only` | `on` | user | Draw each visible pane's layout-order number in its title bar ("[1] EDITOR"), the number the pane-focus chords (ctrl+1…ctrl+9 on macOS) and Focus Pane by Number address: "on" always, "off" never, "focus-only" only for a moment after a pane switch, when the numbers are actually being used |
 | Popup max width | `ui.popup_max_width` | integer | `110` | user | Cap centered popups (palette, dialogs, settings) at this width in columns; 0 disables |
 | Command palette key | `palette.toggle_key` | key chord | *(empty)* | user | Chord that opens the command palette |
+
+### Notifications
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Notification timeout | `notifications.timeout_seconds` | integer (1–300) | `4` | user | Seconds before info/warn toasts expire |
+| Notification severity floor | `notifications.min_severity` | enum: `info`, `warn`, `error` | `info` | user | Below this severity notifications go to the history only |
 
 ### Command Palette
 
@@ -175,6 +170,31 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Which-key hints | `keymap.which_key` | boolean | `true` | user | Show the continuation popup while a chord prefix is pending (cmd+k …); off leaves multi-step sequences unannounced |
 | Which-key delay | `keymap.which_key_delay_ms` | integer (0–5000) | `300` | user | Milliseconds a chord prefix must stay pending before the popup opens; a sequence finished faster never flashes one. 0 shows it immediately |
+
+### Tool Layout
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Slot template rows | `tools.layout.template` | list | *(empty)* | user | Grid rows, one entry per row ("XEEH, XEEH, TTZZ"): every cell names a slot by a single letter, E is the editor region, each slot's cells must form a solid rectangle, and row/column counts set the proportions. Empty disables slot placement; a template that cannot be split into straight cuts is rejected with a config diagnostic |
+| Slot assignments | `tools.layout.assign` | list | *(empty)* | user | SLOT=tool entries pinning tools to template slots ("X=explorer, T=lazygit"): the tool is a custom tool's name or a built-in id (explorer, vcs, debug, problems, structure, usages, http, breakpoints, run, tests, issues, dom, terminal). "terminal" pins fresh terminal panes (not the popup overlay); run and debug place independently. Several tools may share a slot — the first open materializes the pane, later ones join it as tabs; each tool takes at most one slot. While typing, the valid slot letters and tool ids are listed under the input |
+
+### Performance HUD
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| HUD refresh interval | `perf.hud_interval_ms` | integer (100–10000) | `1000` | user | Milliseconds between HUD samples. This is also the wake rate the open HUD costs the program, so a very short interval shows up in the numbers it reports; the HUD counts its own tick either way |
+| HUD history span | `perf.hud_history_seconds` | integer (5–600) | `60` | user | Seconds of rolling history behind the HUD's sparklines and the min/avg/max block the snapshot copies, so a spike stays readable after it passed |
+| Stall watchdog threshold | `perf.watchdog_seconds` | integer (0–600) | `15` | user | Seconds a single Update/View pass may stay in flight before the stall watchdog dumps every goroutine's stack to the state directory (.ike, or IKE_CONFIG_DIR) and notes it in debug.log, so a frozen session leaves evidence of what it was stuck on. 0 disables the watchdog |
+| Update-loop trace log | `perf.trace_log` | boolean | `false` | user | While on, every message the update loop processes appends one line — the message type and the number of open HTTP requests, never any content — to trace.log in the state directory (.ike, or IKE_CONFIG_DIR), answering "what is the IDE doing right now" when chasing a freeze or a stall. Off (the default) it costs nothing; leave it off outside a diagnosis, the file grows with every keystroke |
+
+### Usage Telemetry
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Local usage telemetry | `telemetry.enabled` | boolean | `true` | user | Record command, keybinding and layout usage events into per-session JSONL files under ~/.ike/telemetry; off writes nothing. The data stays on this machine |
+| Project time in the status line | `statusline.project_time` | enum: `off`, `on` | `off` | user | Show today's active time in the current project as a status-line segment, aggregated from the same local usage log the Time tool window reports on (time.toggle). Needs telemetry.enabled to have anything to read; the segment refreshes about once a minute and clicking it opens the Time window |
+
+## Files & Projects
 
 ### Files & Session
 
@@ -194,14 +214,26 @@ secrets — are documented together, with screenshots, in
 | Auto reload | `files.auto_reload` | enum: `clean`, `never` | `clean` | user | Reload clean buffers when their file changes on disk |
 | Persistent undo | `files.persistent_undo` | boolean | `true` | user | Keep undo history across restarts while the file is unchanged |
 | Open binary files as | `files.binary_open` | enum: `hex`, `editor` | `hex` | user | Where a sniffed binary file (NUL byte in the first 8 KiB, no dedicated viewer) opens: the hex viewer pane, or a text buffer with code insight off. The Open File As… chooser overrides it per open |
-| Large file threshold (KB) | `files.large_file_kb` | integer | `1024` | user | Above this size, highlighting and language features are disabled for the file (#149); 0 disables the size guard. Applies to subsequently opened or reloaded files |
+| Large file threshold (KB) | `files.large_file_kb` | integer | `1024` | user | Above this size, highlighting and language features are disabled for the file; 0 disables the size guard. Applies to subsequently opened or reloaded files |
 | External-change feed size | `files.change_feed_limit` | integer (0–5000) | `200` | user | How many externally changed files the change feed (watch.changeFeed) keeps for the session, oldest dropped first; 0 turns the feed off. It records writes by other processes — a coding agent, a git checkout, a formatter in a tool pane — never IKE's own saves |
-| Large file threshold (lines) | `files.large_file_lines` | integer | `100000` | user | Above this line count, highlighting and language features are disabled for the file (#149); 0 disables the line guard. Applies to subsequently opened or reloaded files |
+| Large file threshold (lines) | `files.large_file_lines` | integer | `100000` | user | Above this line count, highlighting and language features are disabled for the file; 0 disables the line guard. Applies to subsequently opened or reloaded files |
 | Highlighting off above (KB) | `files.large_file_highlight_kb` | integer | `0` | user | Switch syntax highlighting (and its lint/Unicode scan) off once the file exceeds this size, before the base large-file cliff; 0 follows the base thresholds. The status line badges the degradation |
 | LSP sync off above (KB) | `files.large_file_lsp_kb` | integer | `0` | user | Stop syncing the document to language servers (didOpen/didChange) once the file exceeds this size; 0 follows the base thresholds. The status line badges the degradation |
 | VCS gutter off above (KB) | `files.large_file_vcs_kb` | integer | `0` | user | Skip the gutter diff-marker recompute (git show + whole-file diff per refresh) once the file exceeds this size; 0 follows the base thresholds. The status line badges the degradation |
 | Search counter off above (KB) | `files.large_file_search_kb` | integer | `0` | user | Hide the search match counter (a bounded buffer scan per edit while highlights are armed) once the file exceeds this size; 0 follows the base thresholds. Match highlighting in the viewport stays |
 | Format on save off above (KB) | `files.large_file_format_kb` | integer | `0` | user | Skip the on-save LSP chain (organize imports, format) once the file exceeds this size; 0 follows the base thresholds. The save itself is unaffected |
+
+### Explorer
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Show hidden files | `explorer.show_hidden` | boolean | `false` | user | List dot files and dot directories in the tree; entries matched by the exclude patterns below stay hidden either way |
+| Git status colors | `explorer.git_status` | boolean | `true` | user | Tint tree entries by their git status (added, modified, ignored) and roll a directory's status up from its children |
+| File type icons | `explorer.icons` | boolean | `false` | user | Draw a one-cell file-type marker glyph before each name (plain unicode, no nerd font needed) |
+| Autoscroll from source | `explorer.auto_reveal` | boolean | `false` | user | Reveal the focused editor's file in the tree on every focus/tab switch — expand its ancestors, select it and scroll it into view (JetBrains' "autoscroll from source") |
+| Sort order | `explorer.sort` | enum: `name`, `type`, `size`, `modified` | `name` | user | How entries are ordered inside a directory; directories always come before files |
+| Tree indent | `explorer.tree_indent` | integer (0–8) | `2` | user | Columns of indentation per nesting level in the tree |
+| Excluded entries | `explorer.exclude` | list | `.git,.idea,.DS_Store` | user | Comma-separated base-name glob patterns (.git, *.pyc, node_modules) hidden from the file tree at every depth, even with hidden files shown; explorer-only — go-to-file and find-in-path still see them |
 
 ### Backup
 
@@ -211,100 +243,11 @@ secrets — are documented together, with screenshots, in
 | Snapshot debounce | `backup.debounce_ms` | integer (100–60000) | `2000` | user | Milliseconds a dirty buffer must stay quiet before it is snapshotted |
 | Snapshot max age | `backup.max_age_days` | integer (1–365) | `7` | user | Days before leftover snapshots are pruned at startup (after the restore prompt) |
 
-### Usage Telemetry
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Local usage telemetry | `telemetry.enabled` | boolean | `true` | user | Record command, keybinding and layout usage events into per-session JSONL files under ~/.ike/telemetry; off writes nothing. The data stays on this machine |
-| Project time in the status line | `statusline.project_time` | enum: `off`, `on` | `off` | user | Show today's active time in the current project as a status-line segment, aggregated from the same local usage log the Time tool window reports on (time.toggle). Needs telemetry.enabled to have anything to read; the segment refreshes about once a minute and clicking it opens the Time window |
-
 ### Timeline
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Timeline source filter | `history.timeline_source` | enum: `both`, `local`, `git` | `both` | user | Which histories the Timeline shows when it opens: both local-history snapshots and git commits, snapshots only, or commits only. The view's f key cycles the filter for the open list without changing this default |
-
-### Terminal
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Shell | `terminal.shell` | path | *(empty)* | user | Program new terminal sessions spawn; empty follows $SHELL. Applies to sessions started after the change |
-| Command auto-suggest | `terminal.autosuggest` | boolean | `true` | user | Popup with command/path/make-target completions while typing at the shell prompt; ctrl+space opens it on demand either way |
-| Extra SSH hosts | `terminal.ssh_hosts` | list | *(empty)* | user | Additional host aliases the SSH Host picker (terminal.ssh) offers, for machines no ~/.ssh/config entry declares. Each entry is passed to ssh verbatim ("build01", "ops@10.0.0.5"); the aliases parsed from ~/.ssh/config and its Include files are listed either way |
-| Scrollback lines | `terminal.scrollback_lines` | integer (100–1000000) | `10000` | user | Lines of scrollback each terminal session keeps (#1545); the main memory cost per terminal pane. Applies to new sessions and, on lowering, trims live ones forward — already-trimmed history is not restored by raising it |
-| Popup terminal directory | `terminal.popup_cwd` | enum: `project`, `file` | `project` | user | Directory new popup-terminal shells start in: the project root, or the focused file's directory (project root when no file is open). Applies when a shell is spawned — the retained popup session keeps its own working directory across hide/show |
-| Popup terminal on project switch | `terminal.popup_on_switch` | enum: `restore`, `always-open` | `restore` | user | What the popup terminal does after a project switch: "restore" brings the incoming project's popup back exactly as it was left, "always-open" opens it every time — resuming the parked instance if one exists, spawning a fresh shell otherwise |
-| Popup terminal scope | `terminal.popup_scope` | enum: `project`, `global` | `project` | user | Who owns the popup terminal: "project" gives every project its own popup, parked with the project and back exactly as left; "global" keeps one popup shell for the whole app — it follows you across project switches with its scrollback and running processes, and is asked to cd into the new project root whenever its shell sits idle at a prompt |
-
-### Screenshots
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Screenshot directory | `screenshot.directory` | path | *(empty)* | user | Directory the exported PNGs are written to, created on the first capture; "~" expands and a relative path resolves against the project directory. Empty means the built-in default, ~/.ike/screenshots |
-
-### Ansible Vault
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Vault password file | `ansible.vault_password_file` | path | *(empty)* | user | File whose first line is the Ansible Vault password; "~" expands. The user-scope value is the global default and a project-scope value overrides it; the ANSIBLE_VAULT_PASSWORD and ANSIBLE_VAULT_PASSWORD_FILE environment variables beat both. Empty (and no variable set) leaves vault files opening as ciphertext |
-
-### Playgrounds
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| xmq binary | `playground.xmq.path` | path | *(empty)* | user | The xmq executable the XML/HTML playground runs; "~" expands, and a bare name resolves on PATH. Empty resolves "xmq" on PATH. With no resolvable binary the playground answers its open with an install-hint dialog (brew install xmq) instead of opening |
-
-### Remote Browsing
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Download size limit | `remote.max_fetch_mb` | integer (1–4096) | `64` | user | Largest remote file the browser downloads into the local cache to preview, in MiB; opening a bigger file is refused with a notice instead of stalling the link |
-
-### Markdown Preview
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Diagram rendering | `preview.diagrams` | enum: `ascii`, `image`, `off` | `ascii` | user | How a fenced diagram block renders in the preview. "ascii" pipes it through the mermaid-ascii renderer and shows its text in place of the code block; "image" renders a PNG with mermaid-cli (mmdc) and embeds it over the Kitty graphics path, falling back to ascii where the terminal cannot show pixels; "off" leaves every fence the syntax-highlighted code block it is. Rendering is asynchronous and cached per fence, so typing around a diagram never re-runs the renderer; a renderer that is not installed leaves the code block with a one-line install hint, and "Re-render Preview Diagrams" retries once it is |
-
-### Run
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Run placement | `run.placement` | enum: `bottom`, `left`, `right`, `top`, `in_pane` | `bottom` | user | Home position of the Run tool pane: docked at the bottom, left, right or top workspace edge, or in_pane for a terminal tab in the focused editor pane. A [tools.layout] slot assigned to "run" overrides it; the legacy value new_terminal reads as bottom |
-| Import launch.json | `run.vscode_launch` | boolean | `true` | user | Merge compatible .vscode/launch.json launch configurations into the run-configuration picker (run.select); the .ike/runconfigs.json store wins name collisions and nothing is written back |
-
-### Tests
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Structured test results | `tests.results_window` | boolean | `true` | user | Parse test runs into the Test Results tool window (result tree, re-run failed, jump to failure) when the language declares an output parser; off keeps every test run in the raw Run tool terminal |
-| Open on test run | `tests.auto_open` | boolean | `true` | user | Open the Test Results tool window when a captured test run starts; off only updates an already open pane |
-| Coverage in status line | `tests.coverage_status` | boolean | `false` | user | Show the focused file's line-coverage percentage in the editor status line after a run with coverage ("cov 82.4%", marked "stale" once the buffer changed since the run); off keeps the figure to the Test Results window, whose detail column lists every covered file under c |
-
-### Forge
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Background poll interval | `forge.poll_interval_seconds` | integer (0–3600) | `20` | user | Seconds between background re-fetches of the repository's issues and pull requests, so new issues, closed issues and PR state changes surface without pressing r. The fetch runs off the UI loop and a tick arriving while the previous one is still running is skipped, so a slow forge never stalls IKE; consecutive failures back off exponentially (up to 5 minutes) and an unavailable forge — no CLI, no matching remote or login — stops polling until a manual refresh succeeds. 0 turns polling off entirely; the lowest interval is 10 seconds |
-| Pause polling when unfocused | `forge.poll_pause_on_blur` | boolean | `true` | user | Stop arming poll deadlines while the terminal window has no focus (#2488): an IKE sitting in a background tab re-read the forge three times a minute for a listing nobody could see, which is API quota and CPU spent on nothing. Regaining focus fetches immediately when the pause outlasted one interval and resumes the normal chain. Independently of this, the poll slows to five times the interval (at least a minute) while no Issues tool window is open, so the unread badge keeps moving. Terminals that never report focus never pause; off polls regardless, the way it worked before |
-| Persistent listing cache | `forge.cache` | boolean | `true` | user | Keep the last successful issue/PR listing in the project's .ike/forgecache.json (#2108): a freshly started IKE shows it instantly, marked "cached · updating…" until the real fetch lands, and background polls only ask the forge for issues updated since the snapshot instead of re-listing everything. Manual r always performs a full resync; a repository or backend switch invalidates the snapshot; off never reads or writes the file |
-
-### Diff Viewer
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Context lines | `diff.context` | integer (-1–100) | `3` | user | Unchanged lines kept visible on each side of a change before the rest folds into a "··· N unchanged lines ···" separator; o expands the nearest fold and c shows the file in full. -1 never folds |
-| Diff placement | `diff.placement` | enum: `focused`, `split` | `focused` | user | Where a diff-open (diff.files, the VCS panel's HEAD and commit diffs, local history, compare-with-clipboard, the HTTP response diff) puts its viewer. "focused" opens it as a tab of the pane you are working in — the focused editor pane, or the most recently focused one when a tool window has the keyboard — so the layout keeps its shape and the diff appears where the eye already is; the pane's file tabs stay, an empty scratch pane is taken over in place, and a second diff from that pane reuses its diff tab. "split" restores the older behaviour: every diff carves off a new pane to the right of the active editor |
-| Ignore whitespace | `diff.ignore_whitespace` | boolean | `false` | user | Compare lines with every whitespace rune removed, the way "git diff -w" does: a re-indented or re-wrapped line counts as unchanged and drops out of the hunk list, and inside a line that really changed the emphasis marks only the non-whitespace ranges. Each column still shows its own raw text. w toggles it on the open diff and stores the choice here, so a reformat-heavy branch stays readable across panes |
-
-### HTTP Client
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Diff after re-run | `http.diff_after_rerun` | boolean | `true` | user | Open the previous-vs-new response diff automatically once a re-run (R in the response pane, http.rerun) or a re-send (ctrl+r, http.resend) has landed in the history — the point of re-running a request is usually the comparison, so it needs no second key. A first-ever run has nothing to compare with and opens nothing; off keeps the pane on the new response, where P ("Diff HTTP Response Against Previous Run") still opens the same diff on demand |
-| Volatile diff headers | `http.diff_ignore_headers` | list | `date,age,expires,keep-alive,server-timing,x-runtime,x-request-id,request-id,x-correlation-id,x-trace-id,traceparent,cf-ray,x-amzn-requestid,x-amzn-trace-id,x-served-by,x-timer` | user | Response headers left out of every response diff: two runs of one request differ in Date, a freshly stamped request id and a handful of timing headers every single time, and those lines hide the one header that really changed. Each entry is a header name matched case-insensitively, optionally with a trailing * for a whole family ("x-amz-*"); a bare "*" is ignored, since an empty diff answers nothing. The notice above the diff says how many headers were filtered. Empty compares every header |
-| Highlight limit | `http.highlight_limit_kb` | integer (1–65536) | `2048` | user | Largest response body the viewer syntax-highlights, in KiB after pretty-printing. The pass runs off the update loop either way — the body always shows immediately and colours in when the parse lands — but a multi-megabyte search dump still costs CPU for colours nobody reads, so past this limit the body stays plain and a notice row in the pane says why |
-| Slow response notice | `http.notify_slow_ms` | integer (0–600000) | `3000` | user | Milliseconds a dispatch may take before its completion is announced as a notification while the response pane is not on screen. Dispatches are asynchronous and the answer usually lands after the focus has moved on, so a slow request would otherwise report itself only to whoever happens to look at the pane. The notice names method, status and duration and is recorded in the notification history like any other. 0 turns the slow branch off; a non-2xx status always notifies, threshold or not |
 
 ### Scratch Files
 
@@ -314,57 +257,11 @@ secrets — are documented together, with screenshots, in
 | Scratches section height | `scratch.section_height` | integer (1–30) | `5` | user | Rows the Scratches section shows when expanded (it never grows past its content). Dragging the divider resizes it afterwards, and that height persists with the explorer's session state |
 | Scratches sort order | `scratch.sort` | enum: `name`, `modified` | `name` | user | How the Scratches section orders its rows: by name like the file tree, or by modification time newest first |
 
-### Issues Window
+### Screenshots
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
-| Default view | `issues.default_tab` | enum: `issues`, `prs` | `issues` | user | Which of the pane's two views the issues window opens on: the issue list, or the pull-request list. tab and shift+tab (and a click on the tab bar) switch between them either way |
-| Default sort order | `issues.default_sort` | enum: `relevance`, `newest`, `oldest`, `updated`, `number` | `relevance` | user | Order both lists open in: "relevance" ranks by fuzzy score while a filter pattern is typed and falls back to newest without one, "newest"/"oldest" order by creation time, "updated" by last activity, "number" by issue number ascending. The a key cycles the order for the open pane without changing this default |
-| Default filter | `issues.default_filter` | string | *(empty)* | user | Narrowing a freshly opened issues pane starts with, written in the same qualifier syntax the filter overlay's match input accepts, so an expression can be typed in the pane and pasted here unchanged: "is:open" (alias state:, also closed and all), "label:bug" repeated once per label (a name with spaces is double-quoted), "sort:oldest", and anything else as the fuzzy pattern — a bare word means "match this". A sort: qualifier overrides the default sort order. Every filter change in the pane wins for the rest of the session, so a live config reload never re-narrows a list you are working in. Empty opens the pane unfiltered |
-| Saved filters | `issues.saved_filters` | list | *(empty)* | user | Named filters the filter overlay's "saved" row cycles through, each written "name=expression" in the default filter's qualifier syntax ("triage=is:open label:bug", "stale=is:all flaky"). Picking one replaces the pane's state, labels and match text at once; picking "(none)" clears them again. Names must be unique, and neither name nor expression may contain a comma — the comma separates the entries of this list |
-
-### Tool Layout
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Slot template rows | `tools.layout.template` | list | *(empty)* | user | Grid rows, one entry per row ("XEEH, XEEH, TTZZ"): every cell names a slot by a single letter, E is the editor region, each slot's cells must form a solid rectangle, and row/column counts set the proportions. Empty disables slot placement; a template that cannot be split into straight cuts is rejected with a config diagnostic |
-| Slot assignments | `tools.layout.assign` | list | *(empty)* | user | SLOT=tool entries pinning tools to template slots ("X=explorer, T=lazygit"): the tool is a custom tool's name or a built-in id (explorer, vcs, debug, problems, structure, usages, http, breakpoints, run, tests, issues, dom, terminal). "terminal" pins fresh terminal panes (not the popup overlay); run and debug place independently. Several tools may share a slot — the first open materializes the pane, later ones join it as tabs; each tool takes at most one slot. While typing, the valid slot letters and tool ids are listed under the input |
-
-### Debug
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Inline variable values | `debug.inline_values` | boolean | `true` | user | While the debugger is stopped, show the paused frame's local variable values at the end of the lines that mention them; they disappear on resume |
-| When a session ends | `debug.session_end` | enum: `keep`, `close` | `keep` | user | What happens to the combined debug area (variables + console) when the session ends: keep leaves it open with the output reviewable until the next launch reuses it, close removes it from the layout |
-| PHP listen port | `debug.php.port` | integer (1–65535) | `9003` | user | DBGp port debug.listen binds for incoming Xdebug connections (Xdebug's default is 9003) |
-| PHP hostname filter | `debug.php.hostname` | string | *(empty)* | project | Only accept listen-mode debug sessions whose request HTTP_HOST matches (port suffix ignored); empty accepts all — per project |
-
-### Performance HUD
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| HUD refresh interval | `perf.hud_interval_ms` | integer (100–10000) | `1000` | user | Milliseconds between HUD samples. This is also the wake rate the open HUD costs the program, so a very short interval shows up in the numbers it reports; the HUD counts its own tick either way |
-| HUD history span | `perf.hud_history_seconds` | integer (5–600) | `60` | user | Seconds of rolling history behind the HUD's sparklines and the min/avg/max block the snapshot copies, so a spike stays readable after it passed |
-| Stall watchdog threshold | `perf.watchdog_seconds` | integer (0–600) | `15` | user | Seconds a single Update/View pass may stay in flight before the stall watchdog dumps every goroutine's stack to the state directory (.ike, or IKE_CONFIG_DIR) and notes it in debug.log, so a frozen session leaves evidence of what it was stuck on. 0 disables the watchdog |
-| Update-loop trace log | `perf.trace_log` | boolean | `false` | user | While on, every message the update loop processes appends one line — the message type and the number of open HTTP requests, never any content — to trace.log in the state directory (.ike, or IKE_CONFIG_DIR), answering "what is the IDE doing right now" when chasing a freeze or a stall. Off (the default) it costs nothing; leave it off outside a diagnosis, the file grows with every keystroke |
-
-### Notifications
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Notification timeout | `notifications.timeout_seconds` | integer (1–300) | `4` | user | Seconds before info/warn toasts expire |
-| Notification severity floor | `notifications.min_severity` | enum: `info`, `warn`, `error` | `info` | user | Below this severity notifications go to the history only |
-
-### Forge Notifications
-
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| New issue | `forge.notify.issue_opened` | enum: `off`, `toast`, `badge`, `dialog` | `dialog` | user | Notification style when an issue appears on the forge |
-| Issue closed | `forge.notify.issue_closed` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when an issue disappears from the open listing |
-| New pull request | `forge.notify.pr_opened` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is opened |
-| Pull request merged | `forge.notify.pr_merged` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is merged |
-| Pull request closed | `forge.notify.pr_closed` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is closed without merging |
-| Checks failing | `forge.notify.pr_checks_failing` | enum: `off`, `toast`, `badge`, `dialog` | `badge` | user | Notification style when an open pull request's CI rollup turns failing |
+| Screenshot directory | `screenshot.directory` | path | *(empty)* | user | Directory the exported PNGs are written to, created on the first capture; "~" expands and a relative path resolves against the project directory. Empty means the built-in default, ~/.ike/screenshots |
 
 ### TODO Index
 
@@ -372,47 +269,28 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Tag words | `todo.patterns` | list | `TODO,FIXME,HACK,XXX` | user | Comment tag words the project scan matches as whole words, case-insensitively (TODO, FIXME, HACK, XXX); entries are literals, not regexes |
 
-### Dependencies
+## Languages
+
+### Language Support
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
-| Scan dependencies on project open | `deps.auto_scan` | boolean | `true` | user | Run one background toolchain scan (outdated versions and vulnerability audit) when a project with dependency manifests opens (#2419); off leaves scans to the deps.refresh and deps.audit commands |
+| Language servers | `lsp.enabled` | boolean | `true` | user | Run language servers at all; off disables completion, diagnostics, navigation and every other LSP-backed feature |
+| Auto-install servers | `lsp.auto_install` | boolean | `true` | user | Install a missing language server automatically when a file of its language opens, instead of only offering it |
+| Completion while typing | `lsp.completion_auto` | boolean | `true` | user | Open the completion popup on identifier characters; server trigger characters (".") and the manual ctrl+space request work either way |
+| Signature help while typing | `lsp.signature_auto` | boolean | `true` | user | Open the signature-help popup on the server's trigger characters ("(", ","); the manual Parameter Info command works either way |
+| Inlay hints | `lsp.inlay_hints` | boolean | `false` | user | Show inline parameter-name and type hints from the server; off by default — parameter info is available on demand instead |
+| Code lenses | `lsp.code_lens` | boolean | `true` | user | Show server code lenses ("run test", reference counts) as annotations on the anchored line; the LSP: Run Code Lens command executes them |
+| Server folding ranges | `lsp.folding` | boolean | `true` | user | Fold along the server's folding ranges (import blocks, comments, regions) where available; Tree-sitter folding remains the fallback either way |
+| Semantic highlighting | `lsp.semantic_tokens` | boolean | `true` | user | Refine Tree-sitter syntax colors with server semantic tokens (parameters vs locals, constants vs mutable variables) |
+| Server selection ranges | `lsp.selection_range` | boolean | `true` | user | Base Extend/Shrink Selection on the server's syntactic ranges; Tree-sitter ranges are used when off or unsupported |
+| Refactor on file rename | `lsp.will_rename` | boolean | `true` | user | Ask language servers for refactoring edits (updated import paths) before a rename or move in the explorer and apply them |
+| Server log level | `lsp.log_level` | enum: `error`, `warn`, `info`, `debug` | `warn` | user | Verbosity of the language-server log the LSP: Show Server Log command opens |
 
-### Marketplace Catalog
+### Language Servers
 
-| Setting | Key | Type | Default | Scope | Description |
-|---|---|---|---|---|---|
-| Catalog URL | `marketplace.catalog_url` | string | *(empty)* | user | HTTPS location of the marketplace index.json; empty falls back to the built-in default, which may itself be empty — then the marketplace stays disabled |
-| Check for plugin updates | `marketplace.auto_check` | boolean | `true` | user | Compare installed plugins against the catalog on IDE start and announce how many updates are available (#2257). The check runs in the background at most once a day and stays silent when the catalog cannot be reached; opening the Marketplace page always checks regardless |
-
-### Elasticsearch
-
-The **Elasticsearch** page manages the ES console's cluster endpoints
-(#1927), persisted as the `[[elasticsearch.endpoints]]` table array:
-
-| Key | Action |
-| --- | --- |
-| `a` | add an endpoint: `name`, `url`, optional `username`/`password` (basic auth) or `api key` |
-| `enter` | edit the selected endpoint |
-| `d` | delete the selected endpoint (confirms) |
-| `s` | the layer writes land in: user ↔ project |
-
-The form rejects a URL without an http(s) scheme and host, duplicate names,
-and mixing basic auth with an API key. Each configured endpoint appears in
-the command palette as `ES Console: <name>`, opening a read-only console —
-index sidebar, paged hit grid, per-index Query-DSL buffers with
-mapping-aware completion. The same entries can be written by hand:
-
-```toml
-[[elasticsearch.endpoints]]
-name = "prod"
-url = "https://es.example.com:9200"
-api_key = "..."        # or username/password for basic auth
-```
-
-Like every TOML list the endpoint list replaces across layers: a
-project-scope `[[elasticsearch.endpoints]]` table hides the user-scope one.
-
+This page is an interactive editor in the settings panel rather than a
+list of keys.
 
 ### Formatters
 
@@ -477,8 +355,142 @@ through to the next source.
 Every other language reformats through its language server when the server
 advertises formatting.
 
-### Language Servers
+### Dependencies
 
-This page is an interactive editor in the settings panel rather than a
-list of keys.
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Scan dependencies on project open | `deps.auto_scan` | boolean | `true` | user | Run one background toolchain scan (outdated versions and vulnerability audit) when a project with dependency manifests opens; off leaves scans to the deps.refresh and deps.audit commands |
+
+### Ansible Vault
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Vault password file | `ansible.vault_password_file` | path | *(empty)* | user | File whose first line is the Ansible Vault password; "~" expands. The user-scope value is the global default and a project-scope value overrides it; the ANSIBLE_VAULT_PASSWORD and ANSIBLE_VAULT_PASSWORD_FILE environment variables beat both. Empty (and no variable set) leaves vault files opening as ciphertext |
+
+### Playgrounds
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| xmq binary | `playground.xmq.path` | path | *(empty)* | user | The xmq executable the XML/HTML playground runs; "~" expands, and a bare name resolves on PATH. Empty resolves "xmq" on PATH. With no resolvable binary the playground answers its open with an install-hint dialog (brew install xmq) instead of opening |
+
+## Build, Run & Debug
+
+### Run
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Run placement | `run.placement` | enum: `bottom`, `left`, `right`, `top`, `in_pane` | `bottom` | user | Home position of the Run tool pane: docked at the bottom, left, right or top workspace edge, or in_pane for a terminal tab in the focused editor pane. A [tools.layout] slot assigned to "run" overrides it; the legacy value new_terminal reads as bottom |
+| Import launch.json | `run.vscode_launch` | boolean | `true` | user | Merge compatible .vscode/launch.json launch configurations into the run-configuration picker (run.select); the .ike/runconfigs.json store wins name collisions and nothing is written back |
+
+### Tests
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Structured test results | `tests.results_window` | boolean | `true` | user | Parse test runs into the Test Results tool window (result tree, re-run failed, jump to failure) when the language declares an output parser; off keeps every test run in the raw Run tool terminal |
+| Open on test run | `tests.auto_open` | boolean | `true` | user | Open the Test Results tool window when a captured test run starts; off only updates an already open pane |
+| Coverage in status line | `tests.coverage_status` | boolean | `false` | user | Show the focused file's line-coverage percentage in the editor status line after a run with coverage ("cov 82.4%", marked "stale" once the buffer changed since the run); off keeps the figure to the Test Results window, whose detail column lists every covered file under c |
+
+### Debug
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Inline variable values | `debug.inline_values` | boolean | `true` | user | While the debugger is stopped, show the paused frame's local variable values at the end of the lines that mention them; they disappear on resume |
+| When a session ends | `debug.session_end` | enum: `keep`, `close` | `keep` | user | What happens to the combined debug area (variables + console) when the session ends: keep leaves it open with the output reviewable until the next launch reuses it, close removes it from the layout |
+| PHP listen port | `debug.php.port` | integer (1–65535) | `9003` | user | DBGp port debug.listen binds for incoming Xdebug connections (Xdebug's default is 9003) |
+| PHP hostname filter | `debug.php.hostname` | string | *(empty)* | project | Only accept listen-mode debug sessions whose request HTTP_HOST matches (port suffix ignored); empty accepts all — per project |
+
+## Tools & Integrations
+
+### Terminal
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Shell | `terminal.shell` | path | *(empty)* | user | Program new terminal sessions spawn; empty follows $SHELL. Applies to sessions started after the change |
+| Command auto-suggest | `terminal.autosuggest` | boolean | `true` | user | Popup with command/path/make-target completions while typing at the shell prompt; ctrl+space opens it on demand either way |
+| Extra SSH hosts | `terminal.ssh_hosts` | list | *(empty)* | user | Additional host aliases the SSH Host picker (terminal.ssh) offers, for machines no ~/.ssh/config entry declares. Each entry is passed to ssh verbatim ("build01", "ops@10.0.0.5"); the aliases parsed from ~/.ssh/config and its Include files are listed either way |
+| Scrollback lines | `terminal.scrollback_lines` | integer (100–1000000) | `10000` | user | Lines of scrollback each terminal session keeps; the main memory cost per terminal pane. Applies to new sessions and, on lowering, trims live ones forward — already-trimmed history is not restored by raising it |
+| Popup terminal directory | `terminal.popup_cwd` | enum: `project`, `file` | `project` | user | Directory new popup-terminal shells start in: the project root, or the focused file's directory (project root when no file is open). Applies when a shell is spawned — the retained popup session keeps its own working directory across hide/show |
+| Popup terminal on project switch | `terminal.popup_on_switch` | enum: `restore`, `always-open` | `restore` | user | What the popup terminal does after a project switch: "restore" brings the incoming project's popup back exactly as it was left, "always-open" opens it every time — resuming the parked instance if one exists, spawning a fresh shell otherwise |
+| Popup terminal scope | `terminal.popup_scope` | enum: `project`, `global` | `project` | user | Who owns the popup terminal: "project" gives every project its own popup, parked with the project and back exactly as left; "global" keeps one popup shell for the whole app — it follows you across project switches with its scrollback and running processes, and is asked to cd into the new project root whenever its shell sits idle at a prompt |
+
+### HTTP Client
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Diff after re-run | `http.diff_after_rerun` | boolean | `true` | user | Open the previous-vs-new response diff automatically once a re-run (R in the response pane, http.rerun) or a re-send (ctrl+r, http.resend) has landed in the history — the point of re-running a request is usually the comparison, so it needs no second key. A first-ever run has nothing to compare with and opens nothing; off keeps the pane on the new response, where P ("Diff HTTP Response Against Previous Run") still opens the same diff on demand |
+| Volatile diff headers | `http.diff_ignore_headers` | list | `date,age,expires,keep-alive,server-timing,x-runtime,x-request-id,request-id,x-correlation-id,x-trace-id,traceparent,cf-ray,x-amzn-requestid,x-amzn-trace-id,x-served-by,x-timer` | user | Response headers left out of every response diff: two runs of one request differ in Date, a freshly stamped request id and a handful of timing headers every single time, and those lines hide the one header that really changed. Each entry is a header name matched case-insensitively, optionally with a trailing * for a whole family ("x-amz-*"); a bare "*" is ignored, since an empty diff answers nothing. The notice above the diff says how many headers were filtered. Empty compares every header |
+| Highlight limit | `http.highlight_limit_kb` | integer (1–65536) | `2048` | user | Largest response body the viewer syntax-highlights, in KiB after pretty-printing. The pass runs off the update loop either way — the body always shows immediately and colours in when the parse lands — but a multi-megabyte search dump still costs CPU for colours nobody reads, so past this limit the body stays plain and a notice row in the pane says why |
+| Slow response notice | `http.notify_slow_ms` | integer (0–600000) | `3000` | user | Milliseconds a dispatch may take before its completion is announced as a notification while the response pane is not on screen. Dispatches are asynchronous and the answer usually lands after the focus has moved on, so a slow request would otherwise report itself only to whoever happens to look at the pane. The notice names method, status and duration and is recorded in the notification history like any other. 0 turns the slow branch off; a non-2xx status always notifies, threshold or not |
+
+### Remote Browsing
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Download size limit | `remote.max_fetch_mb` | integer (1–4096) | `64` | user | Largest remote file the browser downloads into the local cache to preview, in MiB; opening a bigger file is refused with a notice instead of stalling the link |
+
+### Elasticsearch
+
+The **Elasticsearch** page manages the ES console's cluster endpoints
+(#1927), persisted as the `[[elasticsearch.endpoints]]` table array:
+
+| Key | Action |
+| --- | --- |
+| `a` | add an endpoint: `name`, `url`, optional `username`/`password` (basic auth) or `api key` |
+| `enter` | edit the selected endpoint |
+| `d` | delete the selected endpoint (confirms) |
+| `s` | the layer writes land in: user ↔ project |
+
+The form rejects a URL without an http(s) scheme and host, duplicate names,
+and mixing basic auth with an API key. Each configured endpoint appears in
+the command palette as `ES Console: <name>`, opening a read-only console —
+index sidebar, paged hit grid, per-index Query-DSL buffers with
+mapping-aware completion. The same entries can be written by hand:
+
+```toml
+[[elasticsearch.endpoints]]
+name = "prod"
+url = "https://es.example.com:9200"
+api_key = "..."        # or username/password for basic auth
+```
+
+Like every TOML list the endpoint list replaces across layers: a
+project-scope `[[elasticsearch.endpoints]]` table hides the user-scope one.
+
+
+### Forge
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Background poll interval | `forge.poll_interval_seconds` | integer (0–3600) | `20` | user | Seconds between background re-fetches of the repository's issues and pull requests, so new issues, closed issues and PR state changes surface without pressing r. The fetch runs off the UI loop and a tick arriving while the previous one is still running is skipped, so a slow forge never stalls IKE; consecutive failures back off exponentially (up to 5 minutes) and an unavailable forge — no CLI, no matching remote or login — stops polling until a manual refresh succeeds. 0 turns polling off entirely; the lowest interval is 10 seconds |
+| Pause polling when unfocused | `forge.poll_pause_on_blur` | boolean | `true` | user | Stop arming poll deadlines while the terminal window has no focus: an IKE sitting in a background tab re-read the forge three times a minute for a listing nobody could see, which is API quota and CPU spent on nothing. Regaining focus fetches immediately when the pause outlasted one interval and resumes the normal chain. Independently of this, the poll slows to five times the interval (at least a minute) while no Issues tool window is open, so the unread badge keeps moving. Terminals that never report focus never pause; off polls regardless, the way it worked before |
+| Persistent listing cache | `forge.cache` | boolean | `true` | user | Keep the last successful issue/PR listing in the project's .ike/forgecache.json: a freshly started IKE shows it instantly, marked "cached · updating…" until the real fetch lands, and background polls only ask the forge for issues updated since the snapshot instead of re-listing everything. Manual r always performs a full resync; a repository or backend switch invalidates the snapshot; off never reads or writes the file |
+
+### Forge Notifications
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| New issue | `forge.notify.issue_opened` | enum: `off`, `toast`, `badge`, `dialog` | `dialog` | user | Notification style when an issue appears on the forge |
+| Issue closed | `forge.notify.issue_closed` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when an issue disappears from the open listing |
+| New pull request | `forge.notify.pr_opened` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is opened |
+| Pull request merged | `forge.notify.pr_merged` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is merged |
+| Pull request closed | `forge.notify.pr_closed` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is closed without merging |
+| Checks failing | `forge.notify.pr_checks_failing` | enum: `off`, `toast`, `badge`, `dialog` | `badge` | user | Notification style when an open pull request's CI rollup turns failing |
+
+### Issues Window
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Default view | `issues.default_tab` | enum: `issues`, `prs` | `issues` | user | Which of the pane's two views the issues window opens on: the issue list, or the pull-request list. tab and shift+tab (and a click on the tab bar) switch between them either way |
+| Default sort order | `issues.default_sort` | enum: `relevance`, `newest`, `oldest`, `updated`, `number` | `relevance` | user | Order both lists open in: "relevance" ranks by fuzzy score while a filter pattern is typed and falls back to newest without one, "newest"/"oldest" order by creation time, "updated" by last activity, "number" by issue number ascending. The a key cycles the order for the open pane without changing this default |
+| Default filter | `issues.default_filter` | string | *(empty)* | user | Narrowing a freshly opened issues pane starts with, written in the same qualifier syntax the filter overlay's match input accepts, so an expression can be typed in the pane and pasted here unchanged: "is:open" (alias state:, also closed and all), "label:bug" repeated once per label (a name with spaces is double-quoted), "sort:oldest", and anything else as the fuzzy pattern — a bare word means "match this". A sort: qualifier overrides the default sort order. Every filter change in the pane wins for the rest of the session, so a live config reload never re-narrows a list you are working in. Empty opens the pane unfiltered |
+| Saved filters | `issues.saved_filters` | list | *(empty)* | user | Named filters the filter overlay's "saved" row cycles through, each written "name=expression" in the default filter's qualifier syntax ("triage=is:open label:bug", "stale=is:all flaky"). Picking one replaces the pane's state, labels and match text at once; picking "(none)" clears them again. Names must be unique, and neither name nor expression may contain a comma — the comma separates the entries of this list |
+
+## Plugins
+
+### Marketplace Catalog
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Catalog URL | `marketplace.catalog_url` | string | *(empty)* | user | HTTPS location of the marketplace index.json; empty falls back to the built-in default, which may itself be empty — then the marketplace stays disabled |
+| Check for plugin updates | `marketplace.auto_check` | boolean | `true` | user | Compare installed plugins against the catalog on IDE start and announce how many updates are available. The check runs in the background at most once a day and stays silent when the catalog cannot be reached; opening the Marketplace page always checks regardless |
 

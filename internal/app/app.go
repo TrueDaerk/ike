@@ -1582,7 +1582,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	keymapPage.SetDeadBindingsLaunch(func() tea.Cmd {
 		return func() tea.Msg { return KeymapDeadBindingsMsg{} }
 	})
-	pages = append(pages, settings.Page{Section: "TOOLS", Title: "Keymap", Custom: keymapPage})
+	pages = append(pages, settings.Page{Title: "Keymap", Custom: keymapPage})
 	// The [[tools.custom]] list editor (#755): custom TUI tool panes (#741).
 	pages = append(pages, settings.Page{Title: "Tools", Custom: settings.NewToolsPage(m.cfgOpts)})
 	// The [[debug.php.path_mappings]] list editor (#832): the PHP listen
@@ -1595,7 +1595,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		}
 		return nil
 	})})
-	pages = append(pages, settings.Page{Section: "PLUGINS", Title: "Plugins", Custom: settings.NewPluginsPage(m.cfgOpts,
+	pages = append(pages, settings.Page{Title: "Plugins", Custom: settings.NewPluginsPage(m.cfgOpts,
 		func() []settings.PluginInfo {
 			descs := reg.Describe()
 			out := make([]settings.PluginInfo, len(descs))
@@ -1629,7 +1629,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.marketFetch = marketClient.FetchIndex
 	m.marketPage = settings.NewMarketplacePage(m.marketEngine, m.marketFetch)
 	pages = append(pages, settings.Page{Title: "Marketplace", Custom: m.marketPage})
-	m.settings = settings.New(append(pages, reg.SettingsPages()...), m.cfgOpts)
+	m.settings = settings.New(settings.Regroup(append(pages, reg.SettingsPages()...)), m.cfgOpts)
 	perfhud.RecordStartupPhase("settings-ui", time.Since(phase))
 	// Thread the startup palette through every chrome component; without this
 	// the settings panel, command palette, shell, help, and menu render with

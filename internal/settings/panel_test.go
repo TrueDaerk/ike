@@ -167,7 +167,7 @@ func TestSchemaRendersValuesAndLayer(t *testing.T) {
 	v := m.View()
 	// The value marker replaced the [x] affordance and the @-column (#1295):
 	// provenance moved into the detail column.
-	for _, want := range []string{"Interface", "Appearance", "Menu bar", "true ◉", "4 ‹›", "SETTINGS"} {
+	for _, want := range []string{"Interface", "Appearance", "Menu bar", " on", "SETTINGS"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("view missing %q:\n%s", want, v)
 		}
@@ -604,8 +604,10 @@ func TestFilterSpansAllPages(t *testing.T) {
 	if len(rows) != 1 || rows[0].entry.Key != "theme.name" {
 		t.Fatalf("filter 'theme' should match exactly theme.name, got %+v", rows)
 	}
-	if !strings.Contains(stripANSI(m.View()), "Appearance › Theme") {
-		t.Fatalf("filtered rows must show their page:\n%s", m.View())
+	// The result sits under a header naming its page (no "Page › " prefix
+	// on the row, which used to wrap most results).
+	if v := stripANSI(m.View()); !strings.Contains(v, "─ Appearance ─") || strings.Contains(v, "Appearance › Theme") {
+		t.Fatalf("filtered rows must group under their page header:\n%s", m.View())
 	}
 	// Esc clears the filter, second esc closes the panel.
 	m.Update(key("esc"))

@@ -7,21 +7,24 @@ import (
 	"ike/internal/config"
 )
 
-// TestAffordanceGlyphs guards #889/#1295: each type announces its editor with
-// the wireframes' value marker.
+// TestAffordanceGlyphs: values read as words, only an enum carries a glyph
+// (the ▾ that says there are options behind it); empty values are "—".
 func TestAffordanceGlyphs(t *testing.T) {
 	for _, tc := range []struct {
 		e    Entry
 		val  string
 		want string
 	}{
-		{Entry{Type: Bool}, "true", "true ◉"},
-		{Entry{Type: Bool}, "false", "false ◉"},
-		{Entry{Type: Enum}, "dark", "dark ▸"},
-		{Entry{Type: Int}, "4", "4 ‹›"},
-		{Entry{Type: String}, "abc", "abc ✎"},
-		{Entry{Type: Chord}, "", "(unbound) ⌨"},
-		{Entry{Type: List}, "[80 120]", "80, 120 ≡"},
+		{Entry{Type: Bool}, "true", "on"},
+		{Entry{Type: Bool}, "false", "off"},
+		{Entry{Type: Enum}, "dark", "dark ▾"},
+		{Entry{Type: Int}, "4", "4"},
+		{Entry{Type: String}, "abc", "abc"},
+		{Entry{Type: String}, "", "—"},
+		{Entry{Type: Chord}, "", "—"},
+		{Entry{Type: Chord}, "cmd+k", "[cmd+k]"},
+		{Entry{Type: List}, "[80 120]", "80, 120"},
+		{Entry{Type: List}, "[]", "—"},
 	} {
 		if got := affordanceValue(tc.e, tc.val); got != tc.want {
 			t.Errorf("affordance(%v, %q) = %q, want %q", tc.e.Type, tc.val, got, tc.want)

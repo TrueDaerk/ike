@@ -130,8 +130,10 @@ func (c *chordCapture) View(w, h int) string {
 
 // --- key help sub-panel ---
 
-// KeyHelper is an optional PageModel extension (#887): pages list their
-// effective keys for the "?" overlay.
+// KeyHelper is an optional PageModel extension (#887): notes the "?" overlay
+// shows under the page's actions — what the keys do *not* say, such as which
+// layer a page writes or what a pattern matches. The keys themselves come
+// from ActionLister.
 type KeyHelper interface {
 	KeyHelp() []string
 }
@@ -197,32 +199,56 @@ func (k *keyHelp) View(w, h int) string {
 	return strings.Join(out, "\n")
 }
 
-// openKeyHelp pushes the "?" overlay for the active page.
+// openKeyHelp pushes the "?" overlay for the active page: the page's own
+// verbs first — one per line, key then verb then hint — its notes, then the
+// keys every page shares. The page part comes first because that is what the
+// bar could not fit; the shared part reads the same on every page.
 func (m *Model) openKeyHelp() {
-	// The footer only shows three keys now (#1295); this overlay is where the
-	// full set lives, grouped the way the wireframes' cheatsheet does.
-	lines := []string{
-		"move:   ↑↓ jk row · ↔ tab column (nav → settings → detail)",
-		"        home/end pgup/pgdn top / bottom / page",
-		"edit:   enter open editor · confirm · space toggle a boolean",
-		"        ‹ › stepper (numbers) · cycle (enums) · d remove a list value",
-		"        r reset to default",
-		"apply:  ctrl+s review and write the staged changes",
-		"        esc with changes pending opens the same review",
-		"search: / fuzzy over key, label, description · rail = hit pages",
-		"        enter sets here · tab opens the page · esc clears, then exits",
-		"global: s write-scope: auto → user → project",
-		"        ? this overlay · esc back / close",
-	}
+	var lines []string
 	title := "Settings"
 	if m.cat >= 0 && m.cat < len(m.pages) {
-		title = m.pages[m.cat].Title
-		if kh, ok := m.pages[m.cat].Custom.(KeyHelper); ok {
-			lines = append(lines, "", title+":")
+		p := m.pages[m.cat]
+		title = p.Title
+		if l, ok := p.Custom.(ActionLister); ok {
+			lines = append(lines, title+":")
+			for _, a := range l.Actions() {
+				line := "  " + padRight(a.Key, 8) + a.Verb
+				if a.Hint != "" {
+					line += " — " + a.Hint
+				}
+				lines = append(lines, line)
+			}
+		}
+		if kh, ok := p.Custom.(KeyHelper); ok {
 			for _, l := range kh.KeyHelp() {
 				lines = append(lines, "  "+l)
 			}
 		}
+		if len(lines) > 0 {
+			lines = append(lines, "")
+		}
 	}
+	lines = append(lines,
+		"Everywhere:",
+		"  ↑↓ jk   move · tab / ←→  switch column (pages → settings → detail)",
+		"  pgup/pgdn home/end  page · top · bottom",
+		"  enter   open the editor · confirm",
+		"  space   toggle a boolean",
+		"  ‹ ›     step a number · cycle an option straight on the row",
+		"  r       reset to default",
+		"  s       write scope: auto → user → project",
+		"  ctrl+s  review and write the staged changes",
+		"  /       search every setting (fuzzy over key, title, description)",
+		"  esc     back · clear the search · close (a pending batch is reviewed first)",
+		"  ?       this overlay",
+	)
 	m.Push(&keyHelp{host: m, title: title, lines: lines, pal: m.pal})
+}
+
+// padRight pads s with blanks to at least w cells.
+func padRight(s string, w int) string {
+	if n := lipgloss.Width(s); n < w {
+		return s + strings.Repeat(" ", w-n)
+	}
+	return s + " "
 }
