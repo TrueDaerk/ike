@@ -92,7 +92,7 @@ func (m Model) openRevertHistory() (tea.Model, tea.Cmd) {
 	m.vcs.revertsPath = ed.Path()
 	m.vcs.reverts = snaps
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, revertsPrefix)
+	m.palette.OpenLocked(m.paletteContext(), revertsPrefix)
 	return m, nil
 }
 

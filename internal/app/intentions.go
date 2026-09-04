@@ -13,7 +13,6 @@ import (
 	"ike/internal/intention"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
-	"ike/internal/palette"
 	"ike/internal/scratch"
 	"ike/internal/vcs"
 )
@@ -193,7 +192,7 @@ func (m *Model) openIntentions(msg ilsp.CodeActionsMsg) tea.Cmd {
 		return nil
 	}
 	m.palette.SetSize(m.width, m.height)
-	cx := palette.Context{ContextID: m.focusContext(), Root: "."}
+	cx := m.paletteContext()
 	if x, y, w, ok := m.caretPopupAnchor(m.actions.Len()); ok {
 		m.palette.OpenAnchoredWith(cx, actionsPrefix, "", x, y, w)
 		return m.palette.SelectionKick()

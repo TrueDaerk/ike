@@ -82,7 +82,7 @@ func (m *Model) openTaskPicker(promote bool) {
 	m.tasks.entries = tasks
 	m.tasks.promote = promote
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, tasksPrefix)
+	m.palette.OpenLocked(m.paletteContext(), tasksPrefix)
 }
 
 // runPickedTask handles one picked task row. Promote stores the task as a

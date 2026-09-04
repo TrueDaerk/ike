@@ -70,25 +70,71 @@ func EssentialIDs() []string {
 	return ids
 }
 
+// GlobalEssentialsLabel is the group label of the curated Global section the
+// context view shows (#2483); groupTitle renders it "Global (essentials)".
+const GlobalEssentialsLabel = "global-essentials"
+
+// globalEssentialIDs is the hand-curated Global section of the context view
+// (#2483): the global commands a user objectively needs from anywhere —
+// navigate, save, find, switch panes, open the palette / help / settings —
+// small enough (≤ 20 rows) that the focused context's own section plus this
+// one fit a 40-line screen together. Like Essentials, curation is deliberate:
+// no metadata ranks the ~290 global commands by importance. A drift test in
+// internal/app asserts every ID resolves against the real registry, and a
+// budget test holds the one-screen promise.
+var globalEssentialIDs = []string{
+	"palette.searchEverywhere",
+	"project.goToFile",
+	"palette.recentFiles",
+	"project.findInPath",
+	"search.open",
+	"editor.saveAll",
+	"nav.back",
+	"pane.switcher",
+	"explorer.toggle",
+	"terminal.toggle",
+	"pane.maximize",
+	"palette.keymapHelp",
+	"menu.open",
+	"settings.open",
+}
+
+// GlobalEssentialIDs returns the curated global IDs, for the drift test.
+func GlobalEssentialIDs() []string { return append([]string(nil), globalEssentialIDs...) }
+
+// GlobalEssentials builds the curated Global group of the context view (#2483)
+// from the live registry, in curated (not sorted) order — the list is short
+// enough that hand-ordering beats alphabet. Unregistered IDs drop silently,
+// like Essentials.
+func GlobalEssentials(src CommandSource, res BindingResolver) Group {
+	byID := commandIndex(src, res)
+	g := Group{Label: GlobalEssentialsLabel}
+	for _, id := range globalEssentialIDs {
+		if e, ok := byID[id]; ok {
+			g.Entries = append(g.Entries, e)
+		}
+	}
+	return g
+}
+
+// commandIndex joins every registered command with its shortcut, keyed by ID —
+// the lookup the curated views (Essentials, the context view's Global section)
+// resolve their hand-picked IDs against.
+func commandIndex(src CommandSource, res BindingResolver) map[string]Entry {
+	byID := map[string]Entry{}
+	for _, c := range src.Commands() {
+		byID[c.ID] = entryFor(c, res)
+	}
+	return byID
+}
+
 // EssentialsSnapshot builds the curated groups from the live registry,
 // joining each curated ID with its command title and resolved shortcut the
 // same way the full Snapshot does. Unregistered IDs are dropped; groups left
 // empty drop out. Essentials ignores the focus context on purpose — the
 // starter set is the same everywhere.
 func EssentialsSnapshot(src CommandSource, res BindingResolver) []Group {
-	byID := map[string]Entry{}
-	for _, c := range src.Commands() {
-		e := Entry{ID: c.ID, Title: c.Title}
-		if res != nil {
-			if s, ok := res.Binding(c.ID); ok {
-				e.Shortcut = s
-			}
-		}
-		if e.Shortcut == "" {
-			e.Shortcut = c.Shortcut
-		}
-		byID[c.ID] = e
-	}
+	byID := commandIndex(src, res)
 	var groups []Group
 	for _, cg := range essentialGroups {
 		g := Group{Label: cg.label}

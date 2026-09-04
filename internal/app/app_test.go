@@ -927,7 +927,7 @@ func TestCheatsheetLiveAndBlocked(t *testing.T) {
 	defer keymap.StubBlockedForTest("vcs.revertFile", "unit-test dependency")()
 	m := sized(t, 120, 40)
 	m.openHelp()
-	m.help.Snapshot("")
+	m.help.Snapshot("", "")
 	view := m.help.Render(200)
 	plain := stripForTest(view)
 	if !strings.Contains(plain, "blocked (dependency not landed)") {

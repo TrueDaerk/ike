@@ -37,7 +37,7 @@ internal/palette/
   file_mode.go             "@" mode — fuzzy file finder over the project tree (cached walk)
   recent_mode.go           locked recent-files mode — injected MRU list, active file excluded
   search_mode.go           locked search-everywhere mode — composes command + class + file + symbol modes, per-kind cap
-  context.go               Context captured at open (focused pane context id + project root + active file)
+  context.go               Context captured at open (focused pane context id + project root + active file + buffer language, #2483)
 internal/app/              root model hosts the palette, toggles it, forwards keys, renders on top
   symbols.go               "$" live workspace-symbol mode — cache, kind badges, project/exact ranking tiers
   classes.go               "/" class category — kind-filtered views (symbolView) onto that one cache (#1849)
@@ -126,6 +126,13 @@ finds `example.hello`), and ranks **context-first**:
 2. **global** — `Scope.Global`,
 3. **off-context** — scoped to a different context (ranked last, or hidden when
    `palette.off_context = "hide"`).
+
+A **file-type-gated** command (`plugin.Command.Languages`, #2483 — the
+jq/yq/xmq playground families, the markdown preview, …) ranks off-context
+unless the focused buffer's language (`Context.Lang`, supplied by the root
+model's `focusLang()`: the focused HTTP pane's body type, else the focused
+editor's buffer language) is listed in its gate — the same applicability the
+[help overlay](./help-overlay.md) shows.
 
 Within a tier, the sort key is the fuzzy score **plus a frecency boost**
 (#2153), then **most-used** (#773), then title.

@@ -105,7 +105,7 @@ func (m *Model) openLayoutPicker(setDefault bool) {
 	}
 	m.layoutsPicker.setDefault = setDefault
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, layoutsPrefix)
+	m.palette.OpenLocked(m.paletteContext(), layoutsPrefix)
 }
 
 // startLayoutSavePrompt opens the shell prompt naming the snapshot of the

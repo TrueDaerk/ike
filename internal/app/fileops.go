@@ -8,7 +8,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/explorer"
-	"ike/internal/palette"
 	"ike/internal/pane"
 	"ike/internal/ui"
 )
@@ -116,7 +115,7 @@ func (m *Model) startMoveFile() {
 	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindExplorer {
 		if marked := m.explorer().MarkedPaths(); len(marked) > 0 {
 			m.moveMany = marked
-			m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: m.explorer().Root()}, '>')
+			m.palette.OpenLocked(m.paletteContextAt(m.explorer().Root()), '>')
 			return
 		}
 	}
@@ -125,7 +124,7 @@ func (m *Model) startMoveFile() {
 		return
 	}
 	m.movePending = path
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: m.explorer().Root()}, '>')
+	m.palette.OpenLocked(m.paletteContextAt(m.explorer().Root()), '>')
 }
 
 // finishMoveFile handles the picked target directory: the pending source

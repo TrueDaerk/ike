@@ -5,7 +5,6 @@ import (
 
 	"ike/internal/host"
 	ilsp "ike/internal/lsp"
-	"ike/internal/palette"
 	"ike/internal/pane"
 )
 
@@ -66,7 +65,7 @@ func (m *Model) openProblemQuickFixes(msg ilsp.CodeActionsMsg) tea.Cmd {
 		return nil
 	}
 	m.palette.SetSize(m.width, m.height)
-	cx := palette.Context{ContextID: m.focusContext(), Root: "."}
+	cx := m.paletteContext()
 	if x, y, w, ok := m.problemsPopupAnchor(m.actions.Len()); ok {
 		m.palette.OpenAnchoredWith(cx, actionsPrefix, "", x, y, w)
 		return m.palette.SelectionKick()

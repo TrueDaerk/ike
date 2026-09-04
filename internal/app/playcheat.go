@@ -250,7 +250,7 @@ func (m *Model) openPlayCheatsheet(d jqplay.Dialect, query string) {
 	m.playCheat.dialect = d
 	m.playCheat.Refresh()
 	m.palette.SetSize(m.width, m.height)
-	cx := palette.Context{ContextID: m.focusContext(), Root: "."}
+	cx := m.paletteContext()
 	m.palette.OpenLockedWith(cx, playCheatPrefix, query)
 }
 

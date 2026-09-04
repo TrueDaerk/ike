@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Help Overlay
-description: Read-only command & shortcut cheat sheet — snapshots the plugin registry, leads with the focused pane's own bindings (or a keyboard-owning mode's, via a Focused extra group), joins bindings, packs entries into width-responsive columns with right-aligned shortcuts, hosted in the reusable floating shell.
+description: Read-only command & shortcut cheat sheet — snapshots the plugin registry, shows only the focused pane's own bindings (or a keyboard-owning mode's, via a Focused extra group) plus a curated Global section and the file-type-gated commands matching the buffer, packs entries into width-responsive columns with right-aligned shortcuts, hosted in the reusable floating shell.
 resource: internal/help/help.go
 tags: [architecture, help, overlay, responsive, bubbletea]
 timestamp: 2026-08-27T00:00:00Z
@@ -17,10 +17,11 @@ a pure **consumer** — it owns no command or binding store, and (since roadmap
 registry (roadmap 0020) on open
 and joins each command with its shortcut from a binding resolver
 (the roadmap 0080 keymap resolver, consumed through a narrow interface so help
-builds before 08 lands). The snapshot is **led by the focused pane** (#2182):
-the focused context's own bindings come first in their own titled section,
-then the global ones, then the remaining contexts below; `tab` switches to the
-classic flat sheet (global commands plus the focused context's own) and to the
+builds before 08 lands). The default view **shows only the focused pane**
+(#2182, #2483): the focused context's own bindings in their own titled
+section, the file-type-gated commands matching the focused buffer, and a
+hand-curated `Global (essentials)` section — the other contexts are not
+listed; `tab` switches to the complete flat reference (every scope) and to the
 curated Essentials set — see [Views](#views-656-2182). Commands handled outside
 the keymap layer (the editor's
 vim ex-commands `:w`/`:q`/`:wq` and modal keys `u`/`ctrl+r`) carry a
@@ -49,22 +50,51 @@ the title and footer always name the view and the one `tab` leads to next.
 
 | View | Shows | Opens when |
 | --- | --- | --- |
-| **Context** | the focused pane's context first (heading `Explorer — focused pane`), then `Global`, then every other context below | a context is focused and it owns commands |
+| **Context** | only the focused pane's context (heading `Explorer — focused pane`), the file-type-gated commands matching the buffer (`This file (json)`), and the curated `Global (essentials)` section | a context is focused and it owns commands |
 | **Essentials** | the curated starter set, focus-independent | no focused context (the degradation path) |
-| **Flat** | the classic sheet: global commands plus the focused context's own, global first | neither of the above resolved |
+| **Flat** | the complete reference: every registered scope, global first | neither of the above resolved |
 
-### Context view (#2182)
+### Context view (#2182, reduced by #2483)
 
-`ContextSnapshot(src, res, contextID)` takes the every-scope snapshot and pulls
-the focused context's group to the front, flagging it `Focused` so its heading
-renders as `<Context> — focused pane`; `Global` follows, then the remaining
-contexts in the usual alphabetical order. Nothing is hidden — the other
-contexts sit *below* rather than being filtered out, so the sheet stays a
-complete reference while answering "what do these keys do *here*" first. An
-empty context id, `global`, or a context with no registered commands yields the
-plain `Snapshot` ordering — there is nothing to lead with — and the view is
-skipped in the `tab` cycle. The cycle is context → flat → essentials → context;
-the responsive two-column layout is identical in every view.
+`ContextSnapshot(src, res, contextID, langID)` builds the short sheet: the
+focused context's own group, flagged `Focused` so its heading renders as
+`<Context> — focused pane`, then the global file-type-gated commands matching
+the focused buffer's language (see below), then the hand-curated
+`Global (essentials)` section — and nothing else. The other contexts are
+deliberately *gone*, not reordered (#2483): showing every scope made the sheet
+a scroll-wall nobody read, and the complete reference stays one `tab` away in
+the flat view. The curated global spec lives next to the Essentials spec in
+`essentials.go` (`globalEssentialIDs`, ≤ 20 rows so a typical context section
+plus the global one fit a 40-line screen); a drift test in `internal/app`
+asserts every ID resolves and a budget test renders the editor, explorer and
+playground contexts at 100×40. An empty context id or `global` yields the
+plain full `Snapshot` — there is nothing to narrow to — and the view is
+skipped in the `tab` cycle; a focused context owning no registered commands
+yields just the curated global section, over which a keyboard-owning mode's
+extra groups (#2237, below) can still lead. The cycle is context → flat →
+essentials → context; the responsive two-column layout is identical in every
+view.
+
+#### File-type-gated commands (#2483)
+
+A command can declare the buffer languages it applies to
+(`plugin.Command.Languages`; `AppliesToLang` is the predicate). The playground
+families are the founding users — jq (`json`/`jsonc`/`ndjson`), yq
+(`yaml`/`ansible`), xmq (`xml`/`html`) and their cheatsheet/filter siblings,
+declared once in `internal/app/commands.go` from the same language lists
+`playKindFor` routes on (`playgroundopen.go`), alongside `markdown.preview`,
+`csv.columnProfile` and `log.openRotatedSet`. The root model passes the
+focused buffer's language to `help.Snapshot(contextID, langID)` —
+`focusLang()`: the focused HTTP pane's shown body type, else the focused
+editor tab's buffer language. In the context view, matching gated global
+commands surface in their own `This file (<lang>)` section (context-scoped
+gated ones stay inside their context's group), non-matching ones are dropped,
+and every gated row carries a bracketed accent-coloured badge with the
+family's canonical name (`[json]`) so it reads as conditional on the current
+file. The flat view — the complete reference — keeps every gated command,
+badged. The [command palette](./command-palette.md) consumes the same
+declaration: command mode ranks a non-matching gated command off-context
+(`Context.Lang`), so help and palette agree.
 
 #### Contexts without a registry scope (#2237)
 
@@ -105,24 +135,25 @@ appended to the context and flat views, never to Essentials.
 
 A **non-empty filter always searches the full set** (typing means hunting for
 something specific, so the curated subset would only hide the answer — and the
-"full set" is the every-scope context snapshot, so a filter typed in one
-context still finds another context's commands); the footer switches to `N of M matches · searching all commands` and `tab` is a
+"full set" is the flat view's every-scope dump, so a filter typed in one
+context still finds another context's commands and the file-type-gated ones,
+badged); the footer switches to `N of M matches · searching all commands` and `tab` is a
 no-op until the filter clears, which restores the prior view.
 
 ## Structure
 
 ```
 internal/help/
-  source.go      snapshot registry Commands, join 08 resolver bindings, group by scope, deterministic sort; ContextSnapshot = focused scope first (#2182)
-  essentials.go  hand-curated Essentials spec + EssentialsSnapshot join (#656)
+  source.go      snapshot registry Commands, join 08 resolver bindings, group by scope, deterministic sort; ContextSnapshot = focused scope + file-type + curated global only (#2182, #2483)
+  essentials.go  hand-curated Essentials spec + EssentialsSnapshot join (#656); curated Global spec for the context view (#2483)
   layout.go      column count + width for a budget (ColumnLayout); widest/typical column width; column-major balanced packing; single-column fallback
   help.go        ui.Content: Snapshot(ctxID) refresh; Title(); Render(width) -> column-packed body (max two columns);
                  withExtraLeading = Focused extra groups lead the context view (#2237)
 ```
 
 The root model (`internal/app`) holds a single `*ui.Floating`. Its `openHelp`
-calls `help.Snapshot(focusContext)` — which builds both the context-first and
-the flat orderings — sets the `*help.Help` as the shell's content, and opens
+calls `help.Snapshot(helpContext, focusLang)` — which builds both the reduced
+context view and the flat reference — sets the `*help.Help` as the shell's content, and opens
 the shell; while open the shell swallows all input and the root composites it
 centered via `overlay.Center`. It is reached three ways: the registered
 `palette.keymapHelp` command (default `f1`, also
@@ -132,12 +163,14 @@ in the shell, not in help.
 
 ## Source of truth
 
-`Snapshot(src, res, contextID)` is the join:
+`Snapshot(src, res, contextID, langID)` is the join:
 
 - **Commands** come from `registry.Commands()`, narrowed to the scopes that
   apply to the focused pane: the `global` group plus the group whose label
-  matches `contextID` (empty `contextID` keeps every scope). No parallel
-  command list.
+  matches `contextID`, minus the file-type-gated commands whose gate does not
+  list `langID` (#2483). An empty `contextID` keeps every scope and every
+  gated command — the flat view's complete reference. No parallel command
+  list.
 - **Shortcuts** come from a `BindingResolver` (`Binding(id) (string, ok)`). The
   root now passes the `*registry.Registry` itself: it resolves a command's key by
   matching the command id against keymaps that declare a `CommandID`
@@ -187,7 +220,7 @@ on overflow.
 ### Sizing columns for the typical entry, not the longest (#2215)
 
 Columns aim at `TypicalColumnWidth` (+ slack), not at the widest cell. The
-context view (#2182) shows **every** scope at once, so the widest cell is drawn
+flat view shows **every** scope at once, so the widest cell is drawn
 from hundreds of commands: one verbose title used to push the column width past
 half the terminal, `ColumnLayout` then had room for a single column, and the
 overlay degraded to one endlessly tall column in every section. Sizing to the

@@ -84,7 +84,7 @@ func (c *CommandMode) Results(query string, cx Context) []Item {
 	qlen := len([]rune(query))
 	ranked := make([]rankedCommand, 0, len(cmds))
 	for _, cmd := range cmds {
-		tier := c.tier(cmd, cx.ContextID)
+		tier := c.tier(cmd, cx)
 		if tier == tierOff && c.hideOff {
 			continue
 		}
@@ -130,10 +130,17 @@ func (c *CommandMode) Results(query string, cx Context) []Item {
 	return out
 }
 
-// tier classifies a command's scope against the focused context id.
-func (c *CommandMode) tier(cmd registry.OwnedCommand, ctxID string) int {
+// tier classifies a command's scope against the focused context id and buffer
+// language. A file-type-gated command (#2483) whose gate does not list the
+// focused buffer's language ranks off-context — the same applicability the
+// help overlay shows — so a jq command sinks (or, with hideOff, drops) while a
+// Go file is focused, and surfaces over JSON.
+func (c *CommandMode) tier(cmd registry.OwnedCommand, cx Context) int {
+	if !cmd.AppliesToLang(cx.Lang) {
+		return tierOff
+	}
 	switch {
-	case cmd.Scope.ContextID != "" && cmd.Scope.ContextID == ctxID:
+	case cmd.Scope.ContextID != "" && cmd.Scope.ContextID == cx.ContextID:
 		return tierContext
 	case cmd.Scope.Global:
 		return tierGlobal

@@ -228,7 +228,7 @@ func (m *Model) openPlayFilterPicker(d jqplay.Dialect, rename bool) {
 		return
 	}
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, playFiltersPrefix)
+	m.palette.OpenLocked(m.paletteContext(), playFiltersPrefix)
 }
 
 // insertPlayFilter puts the saved program on the query line and evaluates it.

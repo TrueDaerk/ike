@@ -114,6 +114,34 @@ func TestCommandHideOffContext(t *testing.T) {
 	}
 }
 
+// TestCommandLanguageGateRanksOffContext (#2483): a file-type-gated command
+// (plugin.Command.Languages) ranks off-context unless the focused buffer's
+// language matches its gate — the same applicability the help overlay shows.
+func TestCommandLanguageGateRanksOffContext(t *testing.T) {
+	jq := owned("json.jqPlayground", "jq Playground", plugin.GlobalScope())
+	jq.Languages = []string{"json", "jsonc"}
+	src := fakeSource{cmds: []registry.OwnedCommand{
+		jq,
+		owned("g.global", "Global Thing", plugin.GlobalScope()),
+	}}
+	cmd := NewCommandMode(src, nil, false)
+
+	// Over a Go buffer the gated command sinks below the plain global one…
+	items := cmd.Results("", Context{ContextID: "editor", Lang: "go"})
+	if len(items) != 2 || items[0].Title != "Global Thing" {
+		t.Fatalf("gated command should rank last over go: %+v", items)
+	}
+	// …and over a JSON buffer it ranks as the global command it is: both sit
+	// in the global tier, ordered by title.
+	items = cmd.Results("", Context{ContextID: "editor", Lang: "json"})
+	if len(items) != 2 || items[0].Title != "Global Thing" || items[1].Title != "jq Playground" {
+		t.Fatalf("want both commands in the global tier over json: %+v", items)
+	}
+	if hidden := NewCommandMode(src, nil, true).Results("", Context{ContextID: "editor", Lang: "go"}); len(hidden) != 1 {
+		t.Fatalf("hideOff must drop the non-matching gated command: %+v", hidden)
+	}
+}
+
 func TestCommandActivateDispatch(t *testing.T) {
 	src := fakeSource{cmds: []registry.OwnedCommand{
 		owned("example.hello", "Say Hello", plugin.GlobalScope()),
