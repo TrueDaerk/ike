@@ -11,7 +11,7 @@ import (
 // shadow diagnostic naming both commands and a resolution hint.
 func TestUserBindingShadowsGlobalDefault(t *testing.T) {
 	overrides := map[string]string{"editor.cmd+e": "http.selectEnvironment"}
-	table := BuildTable(Defaults(PresetJetBrains), overrides, "darwin")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "darwin"), overrides, "darwin")
 
 	var hit *Shadow
 	for i, s := range table.Shadows() {
@@ -115,12 +115,12 @@ func TestUnbindResolvesShadow(t *testing.T) {
 	overrides := map[string]string{
 		"editor.cmd+e": "http.selectEnvironment",
 	}
-	table := BuildTable(Defaults(PresetJetBrains), overrides, "darwin")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "darwin"), overrides, "darwin")
 	if len(table.Shadows()) == 0 {
 		t.Fatal("precondition: shadow expected")
 	}
 	overrides["editor.cmd+e"] = ""
-	table = BuildTable(Defaults(PresetJetBrains), overrides, "darwin")
+	table = BuildTable(DefaultsFor(PresetJetBrains, "darwin"), overrides, "darwin")
 	for _, s := range table.Shadows() {
 		if s.Winner.Command == "http.selectEnvironment" {
 			t.Errorf("shadow survived the unbind: %+v", s)

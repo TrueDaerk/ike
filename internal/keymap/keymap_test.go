@@ -148,7 +148,7 @@ func TestOverrideRebindAndUnbind(t *testing.T) {
 		"ctrl+alt+u": "custom.thing", // brand-new binding
 		"focus_left": "ctrl+left",    // stopgap non-chord key, ignored
 	}
-	table := BuildTable(Defaults(PresetJetBrains), overrides, "linux")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "linux"), overrides, "linux")
 	dup := NormalizeChord(MustParseChord("cmd+d"), "linux")
 	if b, ok := table.Lookup(dup, Editor); !ok || b.Command != "editor.somethingElse" || b.Layer != LayerUser {
 		t.Errorf("rebind cmd+d = %+v ok=%v", b, ok)
@@ -413,7 +413,7 @@ func TestMouseNavButtonsBindAndRebind(t *testing.T) {
 		t.Fatalf("mouse-forward = %+v ok=%v, want nav.forward (global)", b, ok)
 	}
 	// An override moves the button to another command.
-	table = BuildTable(Defaults(PresetJetBrains), map[string]string{"mouse-forward": "explorer.toggle"}, "darwin")
+	table = BuildTable(DefaultsFor(PresetJetBrains, "darwin"), map[string]string{"mouse-forward": "explorer.toggle"}, "darwin")
 	if b, ok := table.Lookup(MustParseChord("mouse-forward"), Editor); !ok || b.Command != "explorer.toggle" {
 		t.Fatalf("rebound mouse-forward = %+v ok=%v, want explorer.toggle", b, ok)
 	}

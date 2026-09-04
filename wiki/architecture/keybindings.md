@@ -202,6 +202,13 @@ the right spelling is `editor[http].cmd+e`, which shadows the default only in
 the terminal can forward Cmd as Meta, so `Meta` is kept; everywhere else `Cmd → Ctrl`.
 Normalisation is idempotent, so the resolver only ever compares concrete keys.
 
+The default *row set* is platform-dependent too: `darwinRows` ships only on macOS,
+because those chords would fold onto chords another default already owns elsewhere
+(#2361, #2407). `Defaults(preset)` resolves that against the host `GOOS`, so anything
+building a table for an explicit `goos` — tests, doc generators — must pair it with
+`DefaultsFor(preset, goos)` instead; pairing host `Defaults()` with a foreign `goos`
+judges macOS-only chords under the Cmd→Ctrl fold and fails on Macs only (#2371).
+
 ## Table & conflicts
 
 `BuildTable(defaults, overrides, goos)` (`table.go`) starts from the normalised
