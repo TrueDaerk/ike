@@ -826,6 +826,12 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		return m, m.copyDocPath(DocPathJQ)
 	case "copy_doc_path_yq":
 		return m, m.copyDocPath(DocPathYQ)
+	// Structural value at the caret (#2499): gy copies the decoded inner
+	// value, gY the raw pair / element around it.
+	case "yank_value":
+		return m, m.yankStructuralValue(false)
+	case "yank_value_outer":
+		return m, m.yankStructuralValue(true)
 	case "comment_line":
 		cmd := m.commentLine()
 		m.scroll()

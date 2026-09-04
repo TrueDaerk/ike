@@ -829,6 +829,16 @@ func (m Model) resolveAfterG(s string, r rune, hasRune bool) (Model, tea.Cmd) {
 		}
 		m.pending.Reset()
 		m.startLabelJump()
+	case "y", "Y":
+		// gy / gY: copy the structural value under the caret (#2499) — the
+		// decoded inner value, or the raw construct around it. Both are
+		// copies, not motions, so a pending operator cancels.
+		if m.pending.HasOperator() {
+			m.pending.Reset()
+			return m, nil
+		}
+		m.pending.Reset()
+		return m, m.yankStructuralValue(s == "Y")
 	case "o", "t", "b", "m":
 		// Merge-conflict resolution on the block at the caret (#2258): go
 		// ours, gt theirs, gb both (ours then theirs), gm keep the manual

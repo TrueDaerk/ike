@@ -1,5 +1,32 @@
 # Log
 
+## 2026-09-04 (editor: copy the structural value under the caret, #2499)
+
+- **Getting a value out of a manifest meant surgery.** The JSON string one
+  actually wants — an embedded document, a `\n`-joined script — sits in the
+  buffer quoted and escaped, a YAML block scalar sits behind its `|` header,
+  an HTML element's payload behind its tags. Copying any of them was a
+  hand-made visual selection plus a round of unescaping afterwards.
+- **`gy` copies the decoded value, `gY` the raw construct.** Two normal-mode
+  chords in the editor's own `g` layer (`editor.yankValue` /
+  `editor.yankValueOuter`, palette-visible, ledgered as vim-native keys):
+  `gy` takes the decoded inner value, `gY` the whole `key: value` pair, the
+  element with its tags, the literal with its quotes.
+- **One parse, meaning in a leaf package.** `highlight.SyntaxChainAt` — the
+  sibling of the #1912 selection ladder — returns the ancestor chain at the
+  caret with each node's direct children and field names; `internal/structval`
+  (pure Go, no CGo, no registry, like `internal/docpath`) turns that into the
+  value. JSON/TOML take the enclosing pair or array element, YAML decodes
+  scalars through the YAML parser and dedents nested block nodes back into a
+  standalone document, HTML/XML take the markup between an element's tags (or
+  an attribute's entity-decoded value), and every other language the innermost
+  string literal. Nothing is resolved beyond that: an anchor or an alias is
+  copied as written.
+- **The copy is an ordinary yank.** It goes through `regs.Yank('+')`, so it
+  reaches the system clipboard, the clipboard history and the #1255 failure
+  toast; the success toast leads with the copied text's first line and closes
+  with a size hint. Off in large-file mode, parsed on demand, never per frame.
+
 ## 2026-09-04 (diff two files: live reload, #2506)
 
 - **A file diff was a snapshot.** `diff.files` read both sides once and kept

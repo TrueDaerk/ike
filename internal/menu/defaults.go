@@ -30,6 +30,10 @@ func Defaults() []Menu {
 			{Title: "Cut", Command: "editor.cut"},
 			{Title: "Paste", Command: "editor.paste"},
 			{Title: "Paste from History", Command: "editor.pasteFromHistory"},
+			// The #2499 structural copies: the value under the caret decoded,
+			// and the pair / element around it as written.
+			{Title: "Copy Value Under Caret", Command: "editor.yankValue"},
+			{Title: "Copy Key and Value Under Caret", Command: "editor.yankValueOuter"},
 			{Title: "Duplicate Line", Command: "editor.duplicateLine"},
 			// The #2417 line-set family; the remaining sort flavours live in
 			// the palette.

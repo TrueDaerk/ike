@@ -8,6 +8,7 @@ import (
 	ts "github.com/tree-sitter/go-tree-sitter"
 
 	"ike/internal/lang"
+	"ike/internal/structval"
 )
 
 // parse runs the grammar's Tree-sitter language + query over the joined lines and
@@ -293,3 +294,84 @@ func ExpressionEndingAt(path string, lines []string, line, col int, kinds []stri
 	return best, found
 }
 
+// SyntaxChainAt returns the syntax-node chain at (line, col) — both editor
+// rune coordinates — for the structural-value copies gy / gY (#2499): the
+// smallest named node containing the position and every ancestor up to the
+// root, innermost first, each one carrying its direct children with the field
+// names its grammar gives them.
+//
+// It is the sibling of SelectionRangesAt: same fresh parse from a line
+// snapshot, same closing of parser and tree before returning, but the caller
+// needs *shape* rather than extents — which child is the "value" half of a
+// pair, where an element's tags end — so the snapshot keeps kinds and fields
+// instead of rune ranges. Byte offsets are into strings.Join(lines, "\n"),
+// which is the source internal/structval slices; children are one level deep,
+// because no extraction rule looks further and a copy command must not
+// snapshot a whole document.
+//
+// nil when the path has no grammar or the position is outside the parsed text.
+func SyntaxChainAt(path string, lines []string, line, col int) []structval.Node {
+	l, ok := lang.ByPath(path)
+	if !ok || l.Grammar == nil {
+		return nil
+	}
+	gi, ok := l.Grammar.(*grammarImpl)
+	if !ok {
+		return nil
+	}
+	if line < 0 || line >= len(lines) {
+		return nil
+	}
+
+	src := []byte(strings.Join(lines, "\n"))
+	parser := ts.NewParser()
+	defer parser.Close()
+	if err := parser.SetLanguage(gi.lang); err != nil {
+		return nil
+	}
+	tree := parser.Parse(src, nil)
+	if tree == nil {
+		return nil
+	}
+	defer tree.Close()
+
+	conv := newColMapper(lines)
+	pt := ts.Point{Row: uint(line), Column: uint(conv.byteCol(line, col))}
+
+	var out []structval.Node
+	for node := tree.RootNode().NamedDescendantForPointRange(pt, pt); node != nil; node = node.Parent() {
+		out = append(out, snapshotNode(node))
+	}
+	return out
+}
+
+// snapshotNode copies one node plus its direct children into the pure-Go
+// snapshot internal/structval reads. Anonymous children are kept: an element's
+// `>` and a pair's `:` mark where the interesting text begins and ends.
+func snapshotNode(n *ts.Node) structval.Node {
+	out := structval.Node{
+		Kind:  n.Kind(),
+		Named: n.IsNamed(),
+		Start: int(n.StartByte()),
+		End:   int(n.EndByte()),
+	}
+	count := n.ChildCount()
+	if count == 0 {
+		return out
+	}
+	out.Children = make([]structval.Node, 0, count)
+	for i := uint(0); i < count; i++ {
+		c := n.Child(i)
+		if c == nil {
+			continue
+		}
+		out.Children = append(out.Children, structval.Node{
+			Kind:  c.Kind(),
+			Field: n.FieldNameForChild(uint32(i)),
+			Named: c.IsNamed(),
+			Start: int(c.StartByte()),
+			End:   int(c.EndByte()),
+		})
+	}
+	return out
+}

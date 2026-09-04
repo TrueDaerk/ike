@@ -372,6 +372,8 @@ bring their own.
 | Remove Duplicate Lines | `editor.uniqueLines` | — | — | `editor` pane |
 | Save File | `editor.write` | `cmd+s` | `:w` | `editor` pane |
 | Save and Close | `editor.write_quit` | — | `:wq` | `editor` pane |
+| Copy Value Under Caret | `editor.yankValue` | — | `gy` | `editor` pane |
+| Copy Key and Value Under Caret | `editor.yankValueOuter` | — | `gY` | `editor` pane |
 | Encoding: ISO 8859-1 | `file.setEncoding.latin1` | — | — | `editor` pane |
 | Encoding: UTF-16 BE | `file.setEncoding.utf16be` | — | — | `editor` pane |
 | Encoding: UTF-16 LE | `file.setEncoding.utf16le` | — | — | `editor` pane |

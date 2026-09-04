@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-09-04T12:00:00Z
+timestamp: 2026-09-04T13:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -946,6 +946,25 @@ The #2305 pass turned these palette-only commands into defaults:
 All thirteen are Cmd/Alt-modified and therefore fragile; each records its palette (or menu)
 escape route in `reachableAlternatives`, and each shows up in the cheatsheet and the
 palette's shortcut column automatically.
+
+### `gy` / `gY` stay vim keys (#2499)
+
+The structural-value copies ([Editor](./editor.md#structural-value-copies--gy--gy-2499)) are a
+counter-example worth recording: they ship **with** chords, just not from this table.
+
+| command | chord | where the chord lives |
+|---|---|---|
+| `editor.yankValue` | `gy` | `internal/editor/keys_normal.go` (`resolveAfterG`) |
+| `editor.yankValueOuter` | `gY` | same |
+
+Both are modifier-free `g` sequences, so they belong to the editor's own normal-mode table the
+way `gu`, `gv`, `gs` and `g!` do — putting them in `Defaults()` would give the keymap layer a
+chord it cannot honour outside the editor and a second name for a gesture users already have.
+The audit is satisfied the same way those are: a ledger entry with the *vim-native key* reason,
+naming the chord in a trailing comment. The commands stay registered
+(`internal/editor/commands.go`), so the palette lists them with `gy` / `gY` in its shortcut
+column via the `action(…, shortcut)` doc hint, and both are copies rather than motions — a
+pending operator (`dgy`) cancels instead of deleting.
 
 ## Open in Browser earns its chord (#2365)
 
