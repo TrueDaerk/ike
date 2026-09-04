@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/host"
 	"ike/internal/layout"
@@ -137,6 +138,29 @@ func TestPaneNumberBadgeInChrome(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestPaneNumberBadgeGap: one plain cell separates the pill from a plain
+// title, and a tab bar — whose segments open with their own padding space —
+// gets no extra one, so both kinds of title sit the same distance from the
+// badge.
+func TestPaneNumberBadgeGap(t *testing.T) {
+	m := splitOrderApp(t)
+	pal := m.pal()
+	badge := paneNumberBadge(" 1 ", true, pal)
+	plain := ansi.Strip(paneBox(badge, "⚙ CLAUDE", "", 30, 3, pal.Border))
+	if !strings.Contains(plain, " 1  ⚙ CLAUDE") {
+		t.Errorf("plain title is glued to the badge:\n%s", plain)
+	}
+	bar := renderTabBar([]string{"⚙ lazygit", "b.go"}, 0, 20, pal)
+	tabs := ansi.Strip(paneBox(badge, bar, "", 30, 3, pal.Border))
+	if !strings.Contains(tabs, " 1  ⚙ lazygit ") || strings.Contains(tabs, " 1   ⚙") {
+		t.Errorf("tab bar is not exactly one cell from the badge:\n%s", tabs)
+	}
+	none := ansi.Strip(paneBox("", "⚙ CLAUDE", "", 30, 3, pal.Border))
+	if !strings.Contains(none, "│ ⚙ CLAUDE") {
+		t.Errorf("a badge-less title grew a separator:\n%s", none)
 	}
 }
 

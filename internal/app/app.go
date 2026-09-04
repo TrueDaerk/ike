@@ -13900,11 +13900,17 @@ func (m Model) activeEditor() *editor.Model {
 // The badge, when there is one, is already styled (the pane-number pill,
 // #2496) and is prepended *after* the title is bolded: its own style ends in a
 // full reset, so bolding across it would drop the bold from the title behind
-// it.
+// it. One plain cell separates the pill from the title unless the title
+// already opens with a space — the tab bar pads its segments itself — so a
+// plain title and a tab bar sit the same distance from the badge.
 func paneBox(badge, title, content string, width, height int, borderColor color.Color) string {
+	sep := ""
+	if badge != "" && !strings.HasPrefix(ansi.Strip(title), " ") {
+		sep = " "
+	}
 	// Interior text width = outer width minus the two border columns and the two
 	// padding columns. Truncate the title to it so it stays on one row.
-	if inner := width - 4 - lipgloss.Width(badge); inner >= 1 {
+	if inner := width - 4 - lipgloss.Width(badge) - len(sep); inner >= 1 {
 		title = ansi.Truncate(title, inner, "…")
 	}
 	// lipgloss v2 makes Width/Height border-inclusive totals, so the box must be
@@ -13921,7 +13927,7 @@ func paneBox(badge, title, content string, width, height int, borderColor color.
 		Padding(0, 1).
 		BorderForeground(borderColor)
 	titleStyle := lipgloss.NewStyle().Bold(true)
-	return style.Render(lipgloss.JoinVertical(lipgloss.Left, badge+titleStyle.Render(title), content))
+	return style.Render(lipgloss.JoinVertical(lipgloss.Left, badge+sep+titleStyle.Render(title), content))
 }
 
 func baseName(path string) string { return filepath.Base(path) }
