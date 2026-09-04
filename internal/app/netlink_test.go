@@ -253,20 +253,6 @@ func TestNetworkForgetClients(t *testing.T) {
 	}
 }
 
-// TestDeepLinkAlreadyHereNotifies (#2518): a payload-less link to the
-// current project says so instead of doing nothing visible.
-func TestDeepLinkAlreadyHereNotifies(t *testing.T) {
-	cur, _, _ := deepLinkFixture(t)
-	m := switchModel(t)
-	m.host.DrainNotifications()
-	out, _ := m.Update(deepLinkResolvedMsg{link: deeplink.Link{Project: "cur"},
-		res: deeplink.Resolution{Kind: deeplink.KindSwitch, Path: cur}})
-	m = out.(Model)
-	if !notified(m, "already in cur") {
-		t.Fatal("a no-op link must be acknowledged")
-	}
-}
-
 // TestNetListenAddr: IPv6 binds are bracketed, empty binds every interface.
 func TestNetListenAddr(t *testing.T) {
 	for bind, want := range map[string]string{"": ":4530", "0.0.0.0": "0.0.0.0:4530", "::1": "[::1]:4530", "[::]": "[::]:4530"} {

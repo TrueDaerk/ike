@@ -77,9 +77,9 @@ never start the IDE.
    "project not found".
 
 Only switching to an already known local project runs without a prompt. A
-link that resolves to the project that is *already* current and carries no
-payload says so ("already in *name*", #2518) — otherwise a delivered link
-would be indistinguishable from one that never arrived.
+link that resolves to the **already current** project with no file/tool
+payload notifies "already in project X" instead of doing nothing (#2518) —
+otherwise the user cannot tell whether the click arrived at all.
 
 ## What the switch does
 
@@ -105,11 +105,11 @@ runs through this very pipeline.
 
 ## OS registration
 
-The handlers below are installed by `make install-desktop`. An installation
-that predates #2396 has no scheme registration at all — a click then fails
-silently in the browser (macOS: `open ike://…` reports
-`kLSApplicationNotFoundErr`) — so **re-run `make install-desktop`** after
-upgrading (#2518).
+Registration lives in the *installed* launcher artifacts, so
+`make install-desktop` must be **re-run after updating** to a version that
+added or changed the scheme handling; without it a click fails silently
+(macOS: `open 'ike://…'` errors with `kLSApplicationNotFoundErr`, a browser
+click goes nowhere) (#2518).
 
 - **macOS** — `scripts/install-desktop.sh` compiles an `Ike Link Handler.app`
   applet (osacompile, `on open location`) declaring `CFBundleURLTypes` for

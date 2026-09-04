@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -185,6 +186,27 @@ func TestDeepLinkCloneFallbackPrefillsDialog(t *testing.T) {
 	m = out.(Model)
 	if m.clonePromptOpen() || m.dlAfterClone != nil {
 		t.Fatal("cancelling the dialog must drop the parked link")
+	}
+	if !sameDir(t, cwd(t), cur) {
+		t.Fatalf("nothing may have switched, cwd = %s", cwd(t))
+	}
+}
+
+// TestDeepLinkSameProjectNoPayloadNotifies guards #2518: a bare link to the
+// project that is already current must say so — before, it applied an empty
+// payload and the user could not tell whether the click arrived at all.
+func TestDeepLinkSameProjectNoPayloadNotifies(t *testing.T) {
+	cur, _, _ := deepLinkFixture(t)
+	m := switchModel(t)
+	link := deeplink.Link{Project: "cur"}
+	out, _ := m.Update(deepLinkResolvedMsg{link: link,
+		res: deeplink.Resolution{Kind: deeplink.KindSwitch, Path: cur}})
+	m = out.(Model)
+	// One more pass drains the host's notification queue into the toasts.
+	out, _ = m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
+	m = out.(Model)
+	if len(m.toasts) != 1 || !strings.Contains(m.toasts[0].text, "already in project cur") {
+		t.Fatalf("a bare same-project link must notify, toasts = %+v", m.toasts)
 	}
 	if !sameDir(t, cwd(t), cur) {
 		t.Fatalf("nothing may have switched, cwd = %s", cwd(t))
