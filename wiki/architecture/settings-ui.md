@@ -626,13 +626,23 @@ Range clamps are never silent: stepping or typing past Min/Max shows an
 
 ## Rail & chrome (0420, #890)
 
-The category rail groups into **sections** (`Page.Section` starts one: CORE /
-TOOLS / PLUGINS today), rendered as dim non-clickable headers. **First-letter
+The category rail groups into **sections**, rendered as dim non-clickable
+headers. Since the 2026-09 overhaul every page belongs to one of eight groups
+(`internal/settings/groups.go`: Editing · Interface · Keymap · Files &
+Projects · Languages · Build, Run & Debug · Tools & Integrations · Plugins);
+`settings.Regroup` orders the assembled pages by that table and sets
+`Page.Section` on each group's first page, and a guard test fails on a page
+the table does not know — so a new page is placed deliberately. The rail opens
+a header only when the section changes. The docgen reference renders the same
+grouping. **First-letter
 jump** hops to the next page starting with the pressed letter (menu parity).
 The panel **remembers its page**: reopening lands where you left, and the
 choice persists per project in `.ike/settings-last.json`
-(IKE_CONFIG_DIR-redirectable). The title row reads `SETTINGS › <Page>`, and
-overflowing rail/form windows show `▲ more` / `▼ more` scroll indicators.
+(IKE_CONFIG_DIR-redirectable). The title row reads `SETTINGS › <Page>` on the left — followed by the
+search line while a query is live — with the status chips right-aligned:
+`● n unsaved` while a batch is pending and `scope: auto|user|project` (quiet
+when auto, accent when forced); overflowing rail/form windows show `▲ more` /
+`▼ more` scroll indicators.
 
 ## Feedback & safety (0420, #891)
 
@@ -727,8 +737,9 @@ re-themes and rebuilds its keymaps once instead of once per changed key
 - **Reads** go through `m.value(key)`: the staged value when one exists,
   otherwise the live config. Nothing else in the panel had to learn about
   staging.
-- **Counting.** The header carries `● n changes · ctrl+s apply` (clickable),
-  the rail marks each page with `●n`, and the detail column shows the selected
+- **Counting.** The title row's right edge carries `● n unsaved` (clickable —
+  it opens the apply diff; the `ctrl+s` key is named on the action bar), the
+  rail marks each page with `●n`, and the detail column shows the selected
   row's `● old → new`. A value edited back to where it started drops out of the
   buffer, so the counter cannot lie.
 - **Applying** is `ctrl+s`, not enter — enter is the editor key on every row.
@@ -792,8 +803,13 @@ takes over the grid instead, keeping all three columns doing their job:
   with its count. Moving there jumps the match list to that page's first hit;
   moving in the match list walks the rail back (`syncHitSel`), so the two
   always agree on "where am I".
-- **Column 2** lists every match as `Page › Title`, with the matched substring
-  marked and the value marker intact.
+- **Column 2** lists the matches grouped under a dim header naming their
+  page (`─ Editor ────`); the rows carry only the title, with the matched
+  substring marked. Until the 2026-09 overhaul every row was prefixed
+  `Page › `, which wrapped most results onto two lines. The headers are
+  render-time lines, not rows: `formLines` in `view.go` keeps the line → row
+  map the click, hover and follow paths read, so `rows()` and the selection
+  index are unchanged.
 - **Column 3** stays the editor for the highlighted match, so `enter` **sets
   the value right there** — the search is not a navigation detour.
 - `tab` leaves for the match's own page, positioned on that row; `esc` clears

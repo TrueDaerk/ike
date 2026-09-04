@@ -57,7 +57,7 @@ func (m *Model) Hover(x, y int) {
 	if g.side && x >= m.detailX() {
 		return // the detail column has its own cursor, not a hover row
 	}
-	if idx := row + m.formOff; idx < len(m.rows()) {
+	if idx := m.rowAtLine(row + m.formOff); idx >= 0 && idx < len(m.rows()) {
 		m.hoverRow = idx
 	}
 }

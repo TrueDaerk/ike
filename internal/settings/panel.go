@@ -127,6 +127,10 @@ type Model struct {
 	detailBodyTop int
 	followCat     bool
 	followForm    bool
+	// formLines maps the settings column's rendered lines to rows while a
+	// search groups the results under page headers: an entry is the row
+	// index, a header line is -1. Empty outside search mode (lines = rows).
+	formLines []int
 
 	// search memoizes the filter's result rows (#2179); see searchCache.
 	search searchCache
@@ -395,8 +399,9 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	if row >= g.listH {
 		return nil
 	}
-	// Rows map 1:1 to lines now that nothing expands inline (#1295).
-	if idx := row + m.formOff; idx < len(m.rows()) {
+	// Rows map 1:1 to lines now that nothing expands inline (#1295); in search
+	// mode the group headers are lines without a row and are not targets.
+	if idx := m.rowAtLine(row + m.formOff); idx >= 0 && idx < len(m.rows()) {
 		if idx == m.sel && m.focus == formColumn {
 			return m.activate()
 		}
@@ -471,7 +476,7 @@ func (m *Model) Wheel(x, y, delta int) tea.Cmd {
 		return nil
 	}
 	// Schema form: viewport scroll, decoupled from the selection (#885).
-	m.formOff = clamp(m.formOff+delta, 0, maxOff(len(m.rows()), g.listH))
+	m.formOff = clamp(m.formOff+delta, 0, maxOff(m.formLineCount(), g.listH))
 	return nil
 }
 
