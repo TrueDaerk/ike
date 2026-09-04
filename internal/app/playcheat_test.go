@@ -42,8 +42,8 @@ func TestPlayCheatsheetOpensThroughTheWholeKeyPath(t *testing.T) {
 		t.Fatal("ctrl+g must reach the playground and open the cheatsheet")
 	}
 	m.palette.Close()
-	if m.play.program != ".users" {
-		t.Fatalf("the query line is %q", m.play.program)
+	if m.play.program.Text != ".users" {
+		t.Fatalf("the query line is %q", m.play.program.Text)
 	}
 }
 
@@ -88,7 +88,7 @@ func TestPlayCheatsheetOpensWhileWritingAQuery(t *testing.T) {
 	if m.play.comp == nil {
 		t.Fatal("the completion popup must be open for this test to mean anything")
 	}
-	pos := m.play.pos
+	pos := m.play.program.Cur
 
 	tm, cmd := m.updatePlayground(ctrlG)
 	m = drainCmd(asModel(tm), cmd)
@@ -99,8 +99,8 @@ func TestPlayCheatsheetOpensWhileWritingAQuery(t *testing.T) {
 		t.Fatal("the completion popup must not stay drawn on top of the sheet")
 	}
 	m.palette.Close()
-	if m.play.program != ".us" || m.play.pos != pos {
-		t.Fatalf("the query line is %q at %d, want %q at %d", m.play.program, m.play.pos, ".us", pos)
+	if m.play.program.Text != ".us" || m.play.program.Cur != pos {
+		t.Fatalf("the query line is %q at %d, want %q at %d", m.play.program.Text, m.play.program.Cur, ".us", pos)
 	}
 }
 
@@ -111,7 +111,7 @@ func TestPlayCheatsheetOpensWhileWritingAQuery(t *testing.T) {
 func TestPlayCheatsheetOpensFromThePaletteWhileFocused(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"users":[{"name":"ada"}]}`))
 	m = setProgram(m, ".users | ")
-	m.play.pos = len(".users | ")
+	m.play.program.Cur = len(".users | ")
 	if !m.playFocused() {
 		t.Fatal("the playground must hold the focus for this test to mean anything")
 	}
@@ -125,8 +125,8 @@ func TestPlayCheatsheetOpensFromThePaletteWhileFocused(t *testing.T) {
 		t.Fatal("the playground must stay mounted under the sheet")
 	}
 	m.palette.Close()
-	if m.play.program != ".users | " || m.play.pos != len(".users | ") {
-		t.Fatalf("the query line is %q at %d", m.play.program, m.play.pos)
+	if m.play.program.Text != ".users | " || m.play.program.Cur != len(".users | ") {
+		t.Fatalf("the query line is %q at %d", m.play.program.Text, m.play.program.Cur)
 	}
 }
 
