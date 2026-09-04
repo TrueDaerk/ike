@@ -26,6 +26,10 @@ func kinds(evs []Event) []EventKind {
 	return out
 }
 
+// fire delivers the poller's own pending (or, when nothing is armed, current)
+// deadline, so a test drives the chain without waiting one out.
+func fire(p *Poller) bool { return p.Tick(PollTickMsg{Root: p.root, Seq: p.seq}) }
+
 func sameKinds(got []EventKind, want ...EventKind) bool {
 	if len(got) != len(want) {
 		return false
@@ -156,13 +160,13 @@ func TestPollerSeedsThePRHalfSilentlyAfterAFailedFirstPRListing(t *testing.T) {
 
 func TestPollerSkipsTickWhileFetchInFlight(t *testing.T) {
 	p := NewPoller("/repo", 20*time.Second)
-	if !p.Tick() {
+	if !fire(p) {
 		t.Fatal("first tick should dispatch a fetch")
 	}
 	if !p.InFlight() {
 		t.Fatal("poller should be in flight")
 	}
-	if p.Tick() {
+	if fire(p) {
 		t.Fatal("a tick while a fetch is in flight must be dropped")
 	}
 	if cmd := p.Arm(); cmd != nil {
@@ -189,7 +193,7 @@ func TestPollerArmIsIdempotent(t *testing.T) {
 		t.Fatal("a second Arm must not schedule a second deadline")
 	}
 	// Tick clears the pending flag, so the chain can be re-armed afterwards.
-	p.Tick()
+	fire(p)
 	p.Apply(IssuesMsg{Issues: []Issue{issue(1, "one")}})
 	if p.Arm() == nil {
 		t.Fatal("the chain should re-arm after a completed round")
@@ -207,7 +211,7 @@ func TestPollerIntervalFloorAndOff(t *testing.T) {
 	if off.Arm() != nil {
 		t.Error("a disabled poller must not schedule")
 	}
-	if off.Tick() {
+	if fire(off) {
 		t.Error("a disabled poller must not fetch")
 	}
 	off.SetInterval(30 * time.Second)
@@ -280,7 +284,7 @@ func TestPollerStopsOnSetupProblem(t *testing.T) {
 	if p.Enabled() {
 		t.Fatal("a setup problem must switch polling off")
 	}
-	if p.Arm() != nil || p.Tick() {
+	if p.Arm() != nil || fire(p) {
 		t.Fatal("a stopped poller must neither schedule nor fetch")
 	}
 	if p.Failures() != 0 {
@@ -294,7 +298,7 @@ func TestPollerStopsOnSetupProblem(t *testing.T) {
 
 func TestPollerNilIsSafe(t *testing.T) {
 	var p *Poller
-	if p.Enabled() || p.Armed() || p.InFlight() || p.Tick() {
+	if p.Enabled() || p.Armed() || p.InFlight() || p.Tick(PollTickMsg{}) {
 		t.Error("a nil poller must report itself as doing nothing")
 	}
 	if p.Arm() != nil || p.Root() != "" || p.Interval() != 0 || p.Snapshot() != nil {

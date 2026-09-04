@@ -351,6 +351,11 @@ var jetbrainsRows = []row{
 	// rebindable, unlike the mode's hard-wired ctrl+s/ctrl+l. ctrl+alt+e joins
 	// the ctrl+alt view-toggle family above; e for expand.
 	{"ctrl+alt+e", "json.jqQueryView", "Full query view", Global, "jq/yq playground (#2032)"},
+	// Go to Line:Column (#2486): JetBrains' cmd+l. The Cmd→Ctrl fold puts it
+	// on ctrl+l off macOS, which no other default claims. JetBrains' Linux
+	// chord (ctrl+g) is *not* bound: editor.caret.addNext already owns it in
+	// the Editor context (#145), and one everyday command per chord wins.
+	{"cmd+l", "editor.goToLine", "Go to line", Editor, "Editor (#2486)"},
 	{"cmd+shift+v", "editor.pasteFromHistory", "Paste from history", Editor, "Paste history (#57)"},
 	// Multi-caret (#145): JetBrains' ctrl+g occurrence walk plus a deliverable
 	// select-all-occurrences chord (the JetBrains original needs alt).

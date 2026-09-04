@@ -579,6 +579,10 @@ type Model struct {
 	// shell shows it; runToLineInput/runToLinePos hold its single line.
 	runToLineOpen  bool
 	runToLineInput ui.Field
+	// goToLineOpen marks editor.goToLine's prompt (#2486) while the shell
+	// shows it; goToLineInput holds its single line[:column] target.
+	goToLineOpen  bool
+	goToLineInput ui.Field
 	// paneNumOpen marks pane.focusByIndex's prompt (#2407) while the shell
 	// shows it; paneNumInput/paneNumPos hold its single line. paneNumHint is
 	// the which-pane hint of the focus-only mode — up while a pane switch is
@@ -1369,6 +1373,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// process just chdir'd into: a switch rebuilds the model, and with it a
 	// poller that seeds the new project's snapshot silently.
 	forgeSt := &forgePollState{poller: forge.NewPoller(root, forgePollInterval(cfg))}
+	forgeSt.poller.SetPauseOnBlur(forgePausePollOnBlur(cfg))
 	// The persistent listing cache's toggle (#2108) is pushed into the forge
 	// package here and on every config reload (reconfigureForgePoll).
 	forge.SetCacheEnabled(forgeCacheEnabled(cfg))
@@ -5585,6 +5590,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.startRunToLine()
 		return m, nil
 
+	case GoToLineMsg:
+		// editor.goToLine (cmd+l, #2486): the line[:column] prompt, then a
+		// framed caret jump inside the current buffer.
+		m.startGoToLine()
+		return m, nil
+
 	case debugEventMsg:
 		// Raw adapter events (initialized, stopped, output, terminated, …),
 		// routed by owning session (#1523): a parked workspace's events never
@@ -6629,12 +6640,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The project's time budget resumes (#2408); a terminal that never
 		// reports focus simply never pauses it.
 		m.projClock.focus()
-		return m, nil
+		// The forge poll resumes too (#2488), fetching at once when the pause
+		// outlasted one interval.
+		return m, m.forgeFocus()
 
 	case tea.BlurMsg:
 		// The terminal lost focus: pause the project's time budget (#2408), so
 		// a window left open in a background tab does not read as work time.
 		m.projClock.blur()
+		// The forge poll pauses with it (#2488): nobody can see the listing,
+		// so re-reading it three times a minute only burns API quota.
+		m.forgeBlur()
 		return m, nil
 
 	case vcs.CloneDoneMsg:
@@ -8493,6 +8509,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// enter/esc.
 		if m.runToLinePromptOpen() {
 			return m.updateRunToLinePrompt(msg)
+		}
+		// editor.goToLine's prompt (#2486) likewise.
+		if m.goToLinePromptOpen() {
+			return m.updateGoToLinePrompt(msg)
 		}
 		// pane.focusByIndex's prompt (#2407) likewise.
 		if m.paneNumPromptOpen() {

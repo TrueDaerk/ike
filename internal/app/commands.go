@@ -252,6 +252,10 @@ type (
 	DebugRunToLineMsg   struct{}
 )
 
+// GoToLineMsg opens editor.goToLine's prompt (#2486): a `line[:column]` target
+// — absolute or relative — that moves the caret inside the current buffer.
+type GoToLineMsg struct{}
+
 // DebugEvaluateMsg evaluates the editor's selection — or an expression the
 // prompt asks for — in the paused frame and shows the result in the evaluate
 // popup (#2174).
@@ -576,6 +580,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("search.nextMatch", "Next Search Match", MatchStepMsg{Delta: 1}),
 			appCommand("search.prevMatch", "Previous Search Match", MatchStepMsg{Delta: -1}),
 			appCommand("editor.saveAll", "Save All", SaveAllMsg{}),
+			appCommand("editor.goToLine", "Go to Line…", GoToLineMsg{}),
 			appCommand("nav.back", "Navigate Back", NavBackMsg{}),
 			appCommand("nav.forward", "Navigate Forward", NavForwardMsg{}),
 			appCommand("nav.pins", "Pinned Files", PinPickerMsg{}),

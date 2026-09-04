@@ -382,6 +382,11 @@ func defaults() *Config {
 			// cheap: one issue and one PR listing per poll, skipped whenever
 			// the previous fetch is still running.
 			PollIntervalSeconds: 20,
+			// Nobody reads a listing they cannot see (#2488), so the pause
+			// defaults on: the cost of getting it wrong is one immediate
+			// fetch when the window comes back, against three fetches a
+			// minute for however long it stayed away.
+			PollPauseOnBlur: true,
 			// The persistent listing cache (#2108) is pure convenience —
 			// instant issues window after a restart, cheaper polls — so it
 			// defaults on; the file lives in the project's .ike directory.

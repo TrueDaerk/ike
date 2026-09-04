@@ -251,7 +251,7 @@ func TestPollDiffFiresOnMergedSnapshots(t *testing.T) {
 	// one, so the IssueClosed/IssueOpened events still fire.
 	p := NewPoller(".", DefaultPollInterval)
 	base := []Issue{openIssue(1, "one"), openIssue(2, "two")}
-	p.Tick()
+	fire(p)
 	if res := p.Apply(IssuesMsg{State: IssuesOpen, Issues: base, Poll: true}); !res.Seeded {
 		t.Fatal("first poll seeds silently")
 	}
@@ -259,7 +259,7 @@ func TestPollDiffFiresOnMergedSnapshots(t *testing.T) {
 		{Number: 1, State: "CLOSED"},
 		openIssue(3, "three"),
 	})
-	p.Tick()
+	fire(p)
 	res := p.Apply(IssuesMsg{State: IssuesOpen, Issues: merged, Poll: true})
 	if len(res.Events) != 2 {
 		t.Fatalf("events = %+v, want opened #3 and closed #1", res.Events)

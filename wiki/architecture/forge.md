@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Forge Layer
-description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, the capability model (triage vs push, plus the authenticated login) both bindings probe, the issue mutations (labels, assignees, state, comments), the editable-text layer with its stale-base check, the PR detail/action layer (full PR fetch with per-check CI, merge/close with a comment, post-merge branch cleanup), and the background poll service that diffs snapshots into typed events, plus the persistent listing cache with incremental updated-since refresh, and the tea binding's two transports (direct REST for a token login, `tea api` for an OAuth one) (#2083, #2088, #2087, #2089, #2085, #2108, #2118).
+description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, the capability model (triage vs push, plus the authenticated login) both bindings probe, the issue mutations (labels, assignees, state, comments), the editable-text layer with its stale-base check, the PR detail/action layer (full PR fetch with per-check CI, merge/close with a comment, post-merge branch cleanup), and the background poll service that diffs snapshots into typed events, pausing while the terminal is blurred and slowing down while the Issues pane is closed, plus the persistent listing cache with incremental updated-since refresh, and the tea binding's two transports (direct REST for a token login, `tea api` for an OAuth one) (#2083, #2088, #2087, #2089, #2085, #2108, #2118, #2488).
 resource: internal/forge/backend.go
 tags: [architecture, vcs, forge, github, gitea, forgejo, issues, oauth]
-timestamp: 2026-08-25T18:00:00Z
+timestamp: 2026-09-04T12:00:00Z
 ---
 
 # Forge Layer (#1934, #2083, #2088, #2087, #2085)
@@ -291,11 +291,13 @@ notification surface reads to decide between dialog, badge, toast and off — se
 [Notifications](/architecture/notifications.md). The types are producer- and
 consumer-agnostic: nothing in this file talks to a forge.
 
-## Background polling (`poll.go`, `internal/app/forgepoll.go`, #2085)
+## Background polling (`poll.go`, `internal/app/forgepoll.go`, #2085, #2488)
 
 Forge data used to refresh only on `r` or on pane open. The poll service
 closes that gap: IKE notices a new issue within the configured interval
-without ever blocking the UI, and without the pane having to be open at all.
+without ever blocking the UI, and without the pane having to be open at all —
+while spending nothing on a window nobody is looking at (the visibility gates
+below).
 
 **The tick chain.** One `Poller` per workspace root lives on the app model
 (`forgePollState`, the `vcsState` pattern). `Arm()` hands back a `tea.Tick`;
@@ -304,11 +306,14 @@ Update loop never waits on the network — that is the whole design. A tick
 carrying a different `Root` is a leftover from the project switched away from
 and is dropped.
 
-The chain is **self-sustaining and opened in exactly three places**:
-`Model.StartForgePoll()`, each finished fetch, and a successful manual refresh
-that resumed a stopped poller. Update's settled pass only reopens it on the
-one edge those cannot cover — a config reload that turned polling back on,
-since `reloadConfig` has no command to return — behind a one-shot flag.
+The chain is **self-sustaining and opened in exactly four places**:
+`Model.StartForgePoll()`, each finished fetch, a successful manual refresh
+that resumed a stopped poller, and `tea.FocusMsg` lifting the blur pause
+(#2488). Update's settled pass only reopens it on the two edges those cannot
+cover — a config reload that turned polling back on, since `reloadConfig` has
+no command to return (behind a one-shot flag), and the Issues tool window
+appearing, which supersedes the slow-cadence deadline. Both are edges, so an
+ordinary pass still adds no pending command.
 
 `StartForgePoll` rides the **`StartWatcher` lifecycle** (`cmd/ike/main.go` at
 startup, `switch.go` per project switch) and waits out the first deadline on
@@ -332,6 +337,51 @@ refuses to schedule during one; `Apply()` re-arms when the result lands. A
 forge slower than the interval therefore costs one outstanding subprocess,
 never a growing queue.
 
+**Visibility gates (#2488).** Polling for data nobody can look at is pure
+cost — telemetry over three days found `forge.IssuesMsg` in 241 of 524
+one-minute heartbeats, three fetches a minute for an idle IKE in a background
+tab. Two gates sit *inside* `Arm`/`Delay`/`Tick`, so there is still exactly one
+chain:
+
+| Gate | Fed by | Effect |
+| --- | --- | --- |
+| **Blur pause** | `tea.BlurMsg` / `tea.FocusMsg` (`forgeBlur` / `forgeFocus`) | while blurred no deadline is armed and a deadline that still lands is dropped; focus lifts the pause and re-arms |
+| **Pane cadence** | `SetPaneOpen`, read on the settled pass from `Panes.Has(pane.IssuesKey)` | with no Issues tool window open the wait stretches to `SlowPollFactor` × the interval, at least `MinSlowPollInterval` (5×, ≥ 60 s) |
+
+Both **default to "visible"**, so a caller that never reports either — a
+terminal without focus reporting, a bare test poller — polls exactly as it did
+before #2488. That is the compatibility promise: no blur ever arrives, no
+pause ever happens.
+
+**Coming back is immediate.** `Focus()` and `SetPaneOpen(true)` ask `stale()`
+whether the last fetch is older than the *configured* interval (not the
+stretched cadence — the user just said they are looking) and, if so, set a
+`due` flag that makes the next `Delay()` zero. The chain then re-arms as
+usual; the immediate deadline dispatches, clears `due`, and the ordinary
+cadence resumes. `Refreshed()` records a listing fetched outside the chain —
+the pane's own `r` and its on-open load — so opening the window does not
+dispatch the same listing twice.
+
+**Superseded deadlines.** Opening the pane has to replace a deadline armed at
+the slow cadence, but the timer behind it keeps running. `Rearm()` forgets the
+pending arm and schedules afresh; each `Arm()` stamps `PollTickMsg.Seq` with an
+incrementing generation, and `Tick` drops a message whose `Seq` is no longer
+current — without that, the stale tick would open a second chain running
+alongside the fast one. `Tick` also drops a message for another `Root`, which
+is how a project switch's leftovers are discarded.
+
+That superseding deadline **must not leave the settled pass as a returned
+command** (`sendForgeRearm` hands it to the host's `Send` on a goroutine, the
+way `StartForgePoll` does). The app test helpers drain Update's commands
+synchronously and the poll chain is self-sustaining, so a drainer that enters
+it never comes back out: it waits out a deadline, dispatches the fetch, waits
+out the next one, forever. `tea.FocusMsg` is a real terminal event rather than
+something a helper synthesizes, so `forgeFocus` returns its command normally.
+
+The pause is `forge.poll_pause_on_blur` (Settings → Forge, default on);
+`false` restores the pre-#2488 behaviour. The slow cadence has no setting —
+it only stretches, never shortens, so there is nothing to get wrong.
+
 **The interval** is `forge.poll_interval_seconds` (Settings → Forge): default
 20s, floor 10s, ceiling one hour, **`0` disables polling entirely**. The
 valid set has a hole between 0 and the floor, so the config validator snaps a
@@ -340,7 +390,8 @@ while the settings form is strict — it refuses the typed value and names the
 rule, and its steppers jump the hole (0 ↔ 10). Edits apply on the live config
 reload. This is the one deliberately repeating tick in the app's
 [idle rules](/architecture/performance.md); the HUD's armed-ticker count
-shows it as a standing 1 while polling is on.
+shows it as a standing 1 while polling is on — and 0 while the blur pause
+holds, since a paused poller arms nothing.
 
 **Robustness.** A `Setup` result (no CLI, no matching remote or login) is not
 transient, so polling **stops** rather than retrying on a timer — a
