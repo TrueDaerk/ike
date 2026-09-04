@@ -84,7 +84,7 @@ func (r *remoteMode) Results(query string, _ palette.Context) []palette.Item {
 func (m *Model) openRemotePicker() {
 	m.remote.entries = m.sshHosts()
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, remotePrefix)
+	m.palette.OpenLocked(m.paletteContext(), remotePrefix)
 }
 
 // openRemotePane opens (or refocuses) the browser for the picked host, split

@@ -124,7 +124,7 @@ func (m *Model) openRunConfigs(edit bool) {
 		}
 		m.runConfigs.entries, m.runConfigs.edit = entries, true
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, runConfigsPrefix)
+		m.palette.OpenLocked(m.paletteContext(), runConfigsPrefix)
 		return
 	}
 	if m.vscodeLaunchEnabled() {
@@ -141,7 +141,7 @@ func (m *Model) openRunConfigs(edit bool) {
 	}
 	m.runConfigs.entries, m.runConfigs.edit = entries, false
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, runConfigsPrefix)
+	m.palette.OpenLocked(m.paletteContext(), runConfigsPrefix)
 }
 
 // runPickedConfig launches one picker row: debug-kind configurations start a

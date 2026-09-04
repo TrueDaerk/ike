@@ -51,7 +51,7 @@ func TestEssentialsSnapshotJoinsAndDrops(t *testing.T) {
 
 func TestHelpOpensOnEssentialsAndTabToggles(t *testing.T) {
 	h := New(essentialsRegistry(), nil, 0)
-	h.Snapshot("")
+	h.Snapshot("", "")
 
 	// The title carries the version (#1214), so assert on the parts that
 	// identify the view rather than on the whole string.
@@ -95,7 +95,7 @@ func TestHelpOpensOnEssentialsAndTabToggles(t *testing.T) {
 
 func TestFilterSearchesFullSetAndDisablesTab(t *testing.T) {
 	h := New(essentialsRegistry(), nil, 0)
-	h.Snapshot("")
+	h.Snapshot("", "")
 
 	// A filter matches commands outside the curated set.
 	h.SetFilter("obscure")
@@ -124,9 +124,9 @@ func TestFilterSearchesFullSetAndDisablesTab(t *testing.T) {
 
 func TestSnapshotResetsToEssentials(t *testing.T) {
 	h := New(essentialsRegistry(), nil, 0)
-	h.Snapshot("")
+	h.Snapshot("", "")
 	h.HandleKey("tab") // full view
-	h.Snapshot("")     // re-open
+	h.Snapshot("", "")     // re-open
 	if h.view != viewEssentials {
 		t.Fatal("re-snapshot (open) must reset to the essentials view")
 	}
@@ -136,7 +136,7 @@ func TestEssentialsDegradesToFullViewOnStubRegistry(t *testing.T) {
 	// A registry with no curated command at all (the existing test stub) must
 	// fall back to the full view rather than rendering an empty pane.
 	h := New(testRegistry(), nil, 0)
-	h.Snapshot("")
+	h.Snapshot("", "")
 	if h.view != viewFlat {
 		t.Fatal("no resolved essentials should degrade to the full view")
 	}

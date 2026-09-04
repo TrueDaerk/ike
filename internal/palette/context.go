@@ -10,8 +10,12 @@ package palette
 // Root is the project root file search walks for the "@" file mode.
 // ActivePath is the focused editor's file (may be empty); the recent-files
 // mode excludes it so its first result is the previously used file.
+// Lang is the focused buffer's language id (#2483); command mode ranks
+// file-type-gated commands (plugin.Command.Languages) that do not apply to it
+// as off-context, the same applicability the help overlay uses.
 type Context struct {
 	ContextID  string
 	Root       string
 	ActivePath string
+	Lang       string
 }

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
@@ -39,19 +41,40 @@ const (
 	playKindXMQ  playKind = "xmq" // xml, html
 )
 
+// The per-playground language families: the ids are the ones the language
+// plugins register (plugins/languages) — "json"/"jsonc"/"ndjson" for the JSON
+// family, "yaml" plus the "ansible" flavour sharing YAML's syntax, and
+// "xml"/"html" for the markup family. Each list leads with the family's
+// canonical name, which the help sheet shows as the badge on the gated
+// commands (#2483). playKindFor and the Languages gates on the playground
+// commands (commands.go) both read these lists, so the routing table and the
+// applicability declaration can never drift apart.
+var (
+	jqLangs  = []string{"json", "jsonc", "ndjson"}
+	yqLangs  = []string{"yaml", "ansible"}
+	xmqLangs = []string{"xml", "html"}
+)
+
+// playgroundLangs is every language some playground speaks — the gate for the
+// commands that act on whichever playground is at hand (playground.open, the
+// save prompt, the query-view toggle).
+func playgroundLangs() []string {
+	out := make([]string, 0, len(jqLangs)+len(yqLangs)+len(xmqLangs))
+	out = append(out, jqLangs...)
+	out = append(out, yqLangs...)
+	return append(out, xmqLangs...)
+}
+
 // playKindFor maps a buffer language id to the playground that queries it.
-// The ids are the ones the language plugins register (plugins/languages):
-// "json"/"jsonc"/"ndjson" for the JSON family, "yaml" plus the "ansible"
-// flavour sharing YAML's syntax, and "xml"/"html" for the markup family.
-// Anything else has no playground, which the caller reports rather than
-// silently opening jq on it.
+// Anything outside the families above has no playground, which the caller
+// reports rather than silently opening jq on it.
 func playKindFor(langID string) playKind {
-	switch langID {
-	case "json", "jsonc", "ndjson":
+	switch {
+	case slices.Contains(jqLangs, langID):
 		return playKindJQ
-	case "yaml", "ansible":
+	case slices.Contains(yqLangs, langID):
 		return playKindYQ
-	case "xml", "html":
+	case slices.Contains(xmqLangs, langID):
 		return playKindXMQ
 	}
 	return playKindNone

@@ -7,6 +7,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/plugin"
+	"ike/internal/registry"
 	"ike/internal/version"
 )
 
@@ -19,51 +21,132 @@ func labels(groups []Group) []string {
 	return out
 }
 
-// TestContextSnapshotLeadsWithFocusedContext (#2182): the focused context's
-// own group comes first — flagged as focused — then global, then the remaining
-// contexts in the usual alphabetical order. Nothing is dropped.
-func TestContextSnapshotLeadsWithFocusedContext(t *testing.T) {
-	groups := ContextSnapshot(testRegistry(), nil, "explorer")
-	if got, want := strings.Join(labels(groups), ","), "explorer,global,editor"; got != want {
+// contextRegistry is the stub for the reduced context view (#2483): two
+// curated global commands, one non-curated global, two pane scopes, and two
+// file-type-gated commands (one global, one editor-scoped).
+func contextRegistry() *registry.Registry {
+	r := registry.New()
+	r.Add(stubPlugin{id: "core", cmd: []plugin.Command{
+		{ID: "core.quit", Title: "Quit", Scope: plugin.GlobalScope()},
+		{ID: "settings.open", Title: "Settings", Scope: plugin.GlobalScope()},
+		{ID: "palette.searchEverywhere", Title: "Search Everywhere", Scope: plugin.GlobalScope()},
+		{ID: "editor.save", Title: "Save", Scope: plugin.PaneScope("editor")},
+		{ID: "explorer.new", Title: "New File", Scope: plugin.PaneScope("explorer")},
+		{ID: "json.jqPlayground", Title: "jq Playground…", Scope: plugin.GlobalScope(), Languages: []string{"json", "jsonc", "ndjson"}},
+		{ID: "csv.columnProfile", Title: "CSV: Column Profile", Scope: plugin.PaneScope("editor"), Languages: []string{"csv", "tsv", "psv"}},
+	}})
+	return r
+}
+
+// TestContextSnapshotShowsFocusedContextAndCuratedGlobalOnly (#2483): the
+// context view is the focused context's own group — flagged as focused — plus
+// the hand-curated Global essentials. No other context is listed, and the
+// global section carries only the curated commands, not the full global dump.
+func TestContextSnapshotShowsFocusedContextAndCuratedGlobalOnly(t *testing.T) {
+	groups := ContextSnapshot(contextRegistry(), nil, "explorer", "")
+	if got, want := strings.Join(labels(groups), ","), "explorer,"+GlobalEssentialsLabel; got != want {
 		t.Fatalf("context groups = %q, want %q", got, want)
 	}
 	if !groups[0].Focused {
 		t.Fatal("the leading group must be flagged as the focused context")
 	}
-	for _, g := range groups[1:] {
-		if g.Focused {
-			t.Fatalf("only the focused context may carry the flag, %q does too", g.Label)
-		}
+	if groups[1].Focused {
+		t.Fatal("the global section must not carry the focused flag")
+	}
+	var ids []string
+	for _, e := range groups[1].Entries {
+		ids = append(ids, e.ID)
+	}
+	if got, want := strings.Join(ids, ","), "palette.searchEverywhere,settings.open"; got != want {
+		t.Fatalf("curated global = %q, want %q (curated order, no core.quit, no gated commands)", got, want)
 	}
 
-	// Focus the editor instead and the order follows the focus.
-	if got, want := strings.Join(labels(ContextSnapshot(testRegistry(), nil, "editor")), ","), "editor,global,explorer"; got != want {
+	// Focus the editor instead and its own group leads; the language-gated
+	// csv command is dropped over an unclassified buffer.
+	groups = ContextSnapshot(contextRegistry(), nil, "editor", "")
+	if got, want := strings.Join(labels(groups), ","), "editor,"+GlobalEssentialsLabel; got != want {
 		t.Fatalf("editor-focused groups = %q, want %q", got, want)
+	}
+	for _, e := range groups[0].Entries {
+		if e.ID == "csv.columnProfile" {
+			t.Fatal("a file-type-gated command must not show over an unclassified buffer")
+		}
 	}
 }
 
-// TestContextSnapshotDegradesWithoutFocus verifies the plain ordering is kept
-// when there is no focused context, or when the focused one owns no commands.
+// TestContextSnapshotDegradesWithoutFocus: an empty or "global" context id
+// yields the plain full Snapshot ordering; a focused context owning no
+// commands yields just the curated global section, over which a
+// keyboard-owning mode's extra groups (#2237) can still lead.
 func TestContextSnapshotDegradesWithoutFocus(t *testing.T) {
-	for _, ctx := range []string{"", "global", "terminal"} {
-		groups := ContextSnapshot(testRegistry(), nil, ctx)
+	for _, ctx := range []string{"", "global"} {
+		groups := ContextSnapshot(contextRegistry(), nil, ctx, "")
 		if got, want := strings.Join(labels(groups), ","), "global,editor,explorer"; got != want {
 			t.Fatalf("context %q groups = %q, want %q", ctx, got, want)
 		}
-		for _, g := range groups {
-			if g.Focused {
-				t.Fatalf("context %q must not flag a focused group", ctx)
-			}
+	}
+	groups := ContextSnapshot(contextRegistry(), nil, "terminal", "")
+	if got, want := strings.Join(labels(groups), ","), GlobalEssentialsLabel; got != want {
+		t.Fatalf("commandless context groups = %q, want just %q", got, want)
+	}
+	for _, g := range groups {
+		if g.Focused {
+			t.Fatalf("a commandless context must not flag a focused group, %q does", g.Label)
 		}
 	}
 }
 
-// TestHelpOpensOnContextView (#2182): opening help with a pane focused shows
-// that pane's bindings first, under a heading naming the context, followed by
-// the global ones.
+// TestContextSnapshotGatesFileTypeCommands (#2483): commands gated on a
+// language show only while the buffer's language matches — the global ones in
+// their own "This file" section, the context-scoped ones inside their context
+// group — and every gated row carries the family badge.
+func TestContextSnapshotGatesFileTypeCommands(t *testing.T) {
+	// A JSON buffer surfaces the jq playground, badged with its family name.
+	groups := ContextSnapshot(contextRegistry(), nil, "editor", "json")
+	if got, want := strings.Join(labels(groups), ","), "editor,This file (json),"+GlobalEssentialsLabel; got != want {
+		t.Fatalf("json groups = %q, want %q", got, want)
+	}
+	ft := groups[1]
+	if len(ft.Entries) != 1 || ft.Entries[0].ID != "json.jqPlayground" {
+		t.Fatalf("file-type section = %+v, want exactly json.jqPlayground", ft.Entries)
+	}
+	if ft.Entries[0].Lang != "json" {
+		t.Fatalf("gated entry badge = %q, want the family name json", ft.Entries[0].Lang)
+	}
+
+	// A Go buffer matches no gate: no file-type section, no gated command
+	// anywhere.
+	for _, g := range ContextSnapshot(contextRegistry(), nil, "editor", "go") {
+		for _, e := range g.Entries {
+			if e.ID == "json.jqPlayground" || e.ID == "csv.columnProfile" {
+				t.Fatalf("gated command %s must not show over a go buffer", e.ID)
+			}
+		}
+	}
+
+	// A CSV buffer keeps the editor-scoped gated command inside the editor
+	// group — badged — and repeats nothing in a file-type section.
+	groups = ContextSnapshot(contextRegistry(), nil, "editor", "csv")
+	if got, want := strings.Join(labels(groups), ","), "editor,"+GlobalEssentialsLabel; got != want {
+		t.Fatalf("csv groups = %q, want %q", got, want)
+	}
+	var csv *Entry
+	for i, e := range groups[0].Entries {
+		if e.ID == "csv.columnProfile" {
+			csv = &groups[0].Entries[i]
+		}
+	}
+	if csv == nil || csv.Lang != "csv" {
+		t.Fatalf("csv.columnProfile must sit badged in the editor group, got %+v", csv)
+	}
+}
+
+// TestHelpOpensOnContextView (#2182, #2483): opening help with a pane focused
+// shows that pane's bindings plus the curated global section — and nothing
+// else; the other contexts are gone, not merely reordered.
 func TestHelpOpensOnContextView(t *testing.T) {
-	h := New(testRegistry(), nil, 0)
-	h.Snapshot("explorer")
+	h := New(contextRegistry(), nil, 0)
+	h.Snapshot("explorer", "")
 
 	if h.view != viewContext {
 		t.Fatalf("view = %v, want the context view", h.view)
@@ -75,36 +158,52 @@ func TestHelpOpensOnContextView(t *testing.T) {
 	if !strings.Contains(body, "Explorer — focused pane") {
 		t.Fatalf("focused section heading missing:\n%s", body)
 	}
-	explorer := strings.Index(body, "Explorer — focused pane")
-	global := strings.Index(body, "Global")
-	editor := strings.Index(body, "Editor")
-	if explorer < 0 || global < 0 || editor < 0 {
-		t.Fatalf("expected all three sections:\n%s", body)
+	if !strings.Contains(body, "Global (essentials)") {
+		t.Fatalf("curated global heading missing:\n%s", body)
 	}
-	if !(explorer < global && global < editor) {
-		t.Fatalf("want explorer, then global, then the other contexts:\n%s", body)
+	if strings.Index(body, "Explorer — focused pane") > strings.Index(body, "Global (essentials)") {
+		t.Fatalf("focused section must precede the global one:\n%s", body)
+	}
+	if strings.Contains(body, "Save") || strings.Contains(body, "Quit") {
+		t.Fatalf("other contexts and non-curated globals must be gone:\n%s", body)
 	}
 	if !strings.Contains(body, "press tab for the full list") {
 		t.Fatalf("context footer must advertise the toggle:\n%s", body)
 	}
 
 	// The same overlay focused on the editor leads with the editor instead.
-	h.Snapshot("editor")
+	h.Snapshot("editor", "")
 	body = ansi.Strip(h.Render(80))
 	if !strings.Contains(body, "Editor — focused pane") {
 		t.Fatalf("editor focus should lead with the editor section:\n%s", body)
 	}
-	if strings.Index(body, "Editor — focused pane") > strings.Index(body, "Global") {
-		t.Fatalf("editor section must precede global:\n%s", body)
+	if strings.Contains(body, "New File") {
+		t.Fatalf("the explorer's commands must not show while the editor is focused:\n%s", body)
 	}
 }
 
-// TestContextViewTogglesToFullList (#2182): tab cycles context -> full flat
-// list -> essentials -> context, and the flat list keeps the classic ordering
-// (global first, focused context after) without a focused-pane heading.
+// TestHelpContextViewRendersLanguageBadge (#2483): a gated command matching
+// the focused buffer renders with its bracketed family badge, so the row reads
+// as conditional on the file type.
+func TestHelpContextViewRendersLanguageBadge(t *testing.T) {
+	h := New(contextRegistry(), nil, 0)
+	h.Snapshot("editor", "json")
+	body := ansi.Strip(h.Render(100))
+	if !strings.Contains(body, "jq Playground… [json]") {
+		t.Fatalf("gated row must carry the [json] badge:\n%s", body)
+	}
+	h.Snapshot("editor", "go")
+	if body := ansi.Strip(h.Render(100)); strings.Contains(body, "jq Playground") {
+		t.Fatalf("gated row must vanish over a go buffer:\n%s", body)
+	}
+}
+
+// TestContextViewTogglesToFullList (#2182, #2483): tab cycles context -> flat
+// -> essentials -> context, and the flat list is the complete reference —
+// every scope, global first, including the commands the context view hides.
 func TestContextViewTogglesToFullList(t *testing.T) {
-	h := New(essentialsRegistry(), nil, 0)
-	h.Snapshot("editor")
+	h := New(contextRegistry(), nil, 0)
+	h.Snapshot("editor", "")
 	if h.view != viewContext {
 		t.Fatalf("expected the context view on open, got %v", h.view)
 	}
@@ -121,6 +220,11 @@ func TestContextViewTogglesToFullList(t *testing.T) {
 	}
 	if strings.Contains(body, "— focused pane") {
 		t.Fatalf("the flat list keeps the classic headings:\n%s", body)
+	}
+	for _, want := range []string{"Quit", "New File", "jq Playground"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("the flat list is the complete reference, missing %q:\n%s", want, body)
+		}
 	}
 	if strings.Index(body, "Global") > strings.Index(body, "Editor") {
 		t.Fatalf("flat list is global-first:\n%s", body)
@@ -140,7 +244,7 @@ func TestContextViewTogglesToFullList(t *testing.T) {
 // pre-#2182 two-view toggle when no context is focused.
 func TestContextViewSkippedWithoutFocus(t *testing.T) {
 	h := New(essentialsRegistry(), nil, 0)
-	h.Snapshot("")
+	h.Snapshot("", "")
 	if h.view != viewEssentials {
 		t.Fatalf("no focus should open on essentials, got %v", h.view)
 	}
@@ -158,7 +262,7 @@ func TestContextViewSkippedWithoutFocus(t *testing.T) {
 // column packing apply to the context view exactly as to the flat one.
 func TestContextViewLayoutStaysResponsive(t *testing.T) {
 	h := New(testRegistry(), nil, 0)
-	h.Snapshot("explorer")
+	h.Snapshot("explorer", "")
 	colW := MinColumnWidth(h.allCells(h.ctxGroups), 0) + colSlack
 	wide := ansi.Strip(h.Render(400))
 	// The footer legend is a free-running line; the packed sections are what
@@ -179,10 +283,10 @@ func TestContextViewLayoutStaysResponsive(t *testing.T) {
 
 // TestFilterSearchesEveryContextFromContextView (#2182): a filter typed in the
 // context view searches all scopes, including contexts other than the focused
-// one.
+// one and the commands the reduced view hides.
 func TestFilterSearchesEveryContextFromContextView(t *testing.T) {
 	h := New(testRegistry(), nil, 0)
-	h.Snapshot("explorer")
+	h.Snapshot("explorer", "")
 	h.SetFilter("save") // an editor command while the explorer is focused
 	if body := ansi.Strip(h.Render(80)); !strings.Contains(body, "Save") {
 		t.Fatalf("filter must reach other contexts:\n%s", body)
@@ -200,7 +304,7 @@ func TestFocusedExtraGroupLeadsContextView(t *testing.T) {
 		Group{Label: "blocked (dependency not landed)", Entries: []Entry{{ID: "x", Title: "Blocked Thing"}}},
 		Group{Label: "jq playground — query line", Focused: true, Entries: []Entry{{ID: "p", Title: "Close and open the palette", Shortcut: "esc esc"}}},
 	)
-	h.Snapshot("playground")
+	h.Snapshot("playground", "")
 
 	if h.view != viewContext {
 		t.Fatalf("a Focused extra group makes a context view, got %v", h.view)

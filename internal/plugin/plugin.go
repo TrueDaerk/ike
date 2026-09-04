@@ -7,6 +7,8 @@
 package plugin
 
 import (
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
@@ -82,8 +84,22 @@ type Command struct {
 	// like ":w" or modal keys handled outside the keymap layer). A real Keymap
 	// binding, when present, takes precedence over this hint.
 	Shortcut string
+	// Languages optionally narrows the command to buffers of the listed
+	// language ids (#2483): a jq playground command only means something over
+	// a JSON buffer. Consumers (the help overlay, the palette's ranking) treat
+	// a gated command as applicable only when the focused buffer's language is
+	// listed; an empty list applies everywhere. The first entry is the family's
+	// canonical name, shown as the badge in the help sheet.
+	Languages []string
 	// Run produces the tea.Cmd to execute when the command is invoked.
 	Run func(h host.API) tea.Cmd
+}
+
+// AppliesToLang reports whether the command applies over a buffer of the given
+// language id (#2483). Commands without a Languages gate apply everywhere,
+// including over unclassified buffers (empty langID).
+func (c Command) AppliesToLang(langID string) bool {
+	return len(c.Languages) == 0 || slices.Contains(c.Languages, langID)
 }
 
 // Keymap binds a key sequence to an action. Bindings are layered: a plugin

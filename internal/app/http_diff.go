@@ -139,7 +139,7 @@ func (m *Model) openHTTPResponseDiff() {
 	m.httpEntries.shown = shown
 	m.httpEntries.entries = storedHTTPEntries(entries, shown)
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, httpEntriesPrefix)
+	m.palette.OpenLocked(m.paletteContext(), httpEntriesPrefix)
 }
 
 // openHTTPPreviousRunDiff diffs the shown response directly against the run

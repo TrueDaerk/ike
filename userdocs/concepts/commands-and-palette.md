@@ -115,9 +115,12 @@ specific binding wins.
 
 Three ways to find something you cannot remember:
 
-- **++f1++** — the cheatsheet, showing the live bindings for your build. It
-  opens on a curated **Essentials** view of the couple of dozen commands worth
-  knowing first; ++tab++ switches to the complete list.
+- **++f1++** — the cheatsheet, showing the live bindings for your build. With
+  a pane focused it opens on that pane's own commands plus a short curated
+  **Global** section — commands tied to the current file's type (the jq
+  playground over JSON, say) appear with a `[json]`-style badge only when they
+  apply; ++tab++ switches to the complete list and to the curated
+  **Essentials** starter view.
 
     ![The F1 cheatsheet on its Essentials view, grouped by topic](../screenshots/features/cheatsheet.png)
 

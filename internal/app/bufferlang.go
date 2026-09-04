@@ -134,7 +134,7 @@ func (m *Model) openBufferLangPicker() {
 		return
 	}
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, bufferLangPrefix)
+	m.palette.OpenLocked(m.paletteContext(), bufferLangPrefix)
 }
 
 // setBufferLang installs the picked language on the focused file-less buffer

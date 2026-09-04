@@ -120,7 +120,7 @@ func (m *Model) openTabPicker() {
 	}
 	m.tabPicker.entries = entries
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, tabPickerPrefix)
+	m.palette.OpenLocked(m.paletteContext(), tabPickerPrefix)
 }
 
 // activatePickedTab activates one picked row's tab (#2151): the pane is

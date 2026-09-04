@@ -154,22 +154,19 @@ func sectionRows(body, heading string) int {
 // command title must not collapse the whole sheet into one endless column.
 func TestSectionsRenderMultiColumnWhenWide(t *testing.T) {
 	h := New(verboseRegistry(), nil, 0)
-	h.Snapshot("editor")
+	h.Snapshot("editor", "")
 
 	wide := ansi.Strip(h.Render(120))
 	// Six editor commands in two columns are three rows, not six.
 	if got := sectionRows(wide, "Editor — focused pane"); got != 3 {
 		t.Fatalf("focused section rows = %d, want 3 (two columns):\n%s", got, wide)
 	}
-	// The global section (11 entries) likewise halves to six rows.
-	if got := sectionRows(wide, "Global"); got != 6 {
-		t.Fatalf("global section rows = %d, want 6 (two columns):\n%s", got, wide)
-	}
 	// The body uses the width it was given instead of one narrow column.
 	if w := lipgloss.Width(wide); w < 100 || w > 120 {
 		t.Fatalf("body width = %d, want it to fill most of the 120-cell budget", w)
 	}
-	// The flat sheet gets the same treatment.
+	// The flat sheet gets the same treatment: the global section (11 entries)
+	// halves to six rows.
 	h.HandleKey("tab")
 	if h.view != viewFlat {
 		t.Fatalf("expected the flat view after tab, got %v", h.view)
@@ -185,7 +182,7 @@ func TestSectionsRenderMultiColumnWhenWide(t *testing.T) {
 // budget.
 func TestSectionsCollapseToOneColumnWhenNarrow(t *testing.T) {
 	h := New(verboseRegistry(), nil, 0)
-	h.Snapshot("editor")
+	h.Snapshot("editor", "")
 
 	narrow := ansi.Strip(h.Render(50))
 	if got := sectionRows(narrow, "Editor — focused pane"); got != 6 {
@@ -199,10 +196,12 @@ func TestSectionsCollapseToOneColumnWhenNarrow(t *testing.T) {
 			t.Fatalf("line width %d exceeds the 50-cell budget: %q", w, line)
 		}
 	}
-	// Every section is still there, focused one first.
-	for _, want := range []string{"Editor — focused pane", "Global", "Explorer", "Terminal"} {
-		if !strings.Contains(narrow, want) {
-			t.Fatalf("narrow render dropped the %q section:\n%s", want, narrow)
+	// The flat view still renders every section, single column, in budget.
+	h.HandleKey("tab")
+	flat := ansi.Strip(h.Render(50))
+	for _, want := range []string{"Global", "Editor", "Explorer", "Terminal"} {
+		if !strings.Contains(flat, want) {
+			t.Fatalf("narrow flat render dropped the %q section:\n%s", want, flat)
 		}
 	}
 }

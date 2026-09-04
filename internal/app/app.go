@@ -5024,10 +5024,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// first, locked to the picker mode; the chosen row runs the matching
 		// scratch.new.<id> command.
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{
-			ContextID: m.focusContext(),
-			Root:      ".",
-		}, scratchNewPrefix)
+		m.palette.OpenLocked(m.paletteContext(), scratchNewPrefix)
 		return m, nil
 
 	case ShowScratchCustomExtMsg:
@@ -5754,7 +5751,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffLeft = ""
 		m.host.Notify(host.Info, "diff: pick the left (old) file")
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, '@')
+		m.palette.OpenLocked(m.paletteContext(), '@')
 		return m, nil
 
 	case CompareClipboardMsg:
@@ -6328,14 +6325,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// project.goToFile (cmd+shift+o / palette): the centered fuzzy file
 		// finder, locked to the "@" mode, from any context.
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, '@')
+		m.palette.OpenLocked(m.paletteContext(), '@')
 		return m, nil
 
 	case OpenFilePathMsg:
 		// file.openPath (palette / File menu, #999): the filesystem path
 		// picker for files outside the workspace, locked to its mode.
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, palette.OpenPathPrefix)
+		m.palette.OpenLocked(m.paletteContext(), palette.OpenPathPrefix)
 		return m, nil
 
 	case palette.OpenPathDescendMsg:
@@ -6351,7 +6348,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (#1775): re-derive the anchor from the still-focused pane.
 		anchored := m.palette.Anchored()
 		m.palette.SetSize(m.width, m.height)
-		cx := palette.Context{ContextID: m.focusContext(), Root: "."}
+		cx := m.paletteContext()
 		if x, y, w, ok := m.paneAnchor(); anchored && ok {
 			m.palette.OpenAnchoredWith(cx, prefix, msg.Query, x, y, w)
 			return m, nil
@@ -6364,11 +6361,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// locked to its mode. The active file is excluded so opening the
 		// palette and pressing enter jumps to the previously used file.
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{
-			ContextID:  m.focusContext(),
-			Root:       ".",
-			ActivePath: m.activeFilePath(),
-		}, palette.RecentPrefix)
+		m.palette.OpenLocked(m.paletteContextWithActive(), palette.RecentPrefix)
 		return m, nil
 
 	case palette.RemoveRecentFileMsg:
@@ -6401,7 +6394,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.pasteHist.Set(hist)
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, pasteHistPrefix)
+		m.palette.OpenLocked(m.paletteContext(), pasteHistPrefix)
 		return m, nil
 
 	case PasteHistoryEntryMsg:
@@ -6423,7 +6416,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, bookmarksPrefix)
+		m.palette.OpenLocked(m.paletteContext(), bookmarksPrefix)
 		return m, nil
 
 	case BookmarkToggleMsg:
@@ -6539,10 +6532,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// scratch.list (palette / File menu): the scratch store newest-first,
 		// locked to its mode (#352); enter opens through the standard funnel.
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{
-			ContextID: m.focusContext(),
-			Root:      ".",
-		}, palette.ScratchPrefix)
+		m.palette.OpenLocked(m.paletteContext(), palette.ScratchPrefix)
 		return m, nil
 
 	case ShowSearchEverywhereMsg:
@@ -6563,18 +6553,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{
-			ContextID:  m.focusContext(),
-			Root:       ".",
-			ActivePath: m.activeFilePath(),
-		}, palette.SearchAllPrefix)
+		m.palette.OpenLocked(m.paletteContextWithActive(), palette.SearchAllPrefix)
 		return m, prime
 
 	case project.OpenPickerMsg:
 		// project.switch (alt+shift+p / palette / menu): the recent-projects
 		// picker, locked to its mode; the selection lands as project.PickedMsg.
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, project.PickerPrefix)
+		m.palette.OpenLocked(m.paletteContext(), project.PickerPrefix)
 		// The list is complete already; branch + dirty marker per row (#2178)
 		// arrive afterwards, one GitInfoMsg at a time.
 		return m, project.EnrichCmd(project.History(config.Get()))
@@ -6583,7 +6569,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// project.peek (#2136): the same recent-projects list, locked to the
 		// peek flavour — plain activation peeks, alt+enter switches for real.
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, project.PeekPickerPrefix)
+		m.palette.OpenLocked(m.paletteContext(), project.PeekPickerPrefix)
 		return m, project.EnrichCmd(project.History(config.Get()))
 
 	case project.GitInfoMsg:
@@ -7122,7 +7108,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.diffPick = 2
 			m.host.Notify(host.Info, "diff: pick the right (new) file")
 			m.palette.SetSize(m.width, m.height)
-			m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, '@')
+			m.palette.OpenLocked(m.paletteContext(), '@')
 			return m, nil
 		case 2:
 			// Second pick: both sides known, open the diff pane.
@@ -7414,7 +7400,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.actions.Set(msg)
 		m.actions.SetPalette(m.pal())
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, actionsPrefix)
+		m.palette.OpenLocked(m.paletteContext(), actionsPrefix)
 		return m, m.palette.SelectionKick()
 
 	case ilsp.ActionPreviewMsg:
@@ -7459,7 +7445,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, symbolsPrefix)
+		m.palette.OpenLocked(m.paletteContext(), symbolsPrefix)
 		return m, nil
 
 	case ilsp.SymbolResultsMsg:
@@ -7574,7 +7560,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.refs.Set(msg.Refs)
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, refsPrefix)
+		m.palette.OpenLocked(m.paletteContext(), refsPrefix)
 		return m, nil
 	case ilsp.UsagesMsg:
 		// lsp.referencesPanel (#1155): the persistent counterpart to the
@@ -7619,7 +7605,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.refs.SetPlaceholder("Definitions — pick a target…")
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, refsPrefix)
+		m.palette.OpenLocked(m.paletteContext(), refsPrefix)
 		return m, nil
 	case ilsp.ImplementationsMsg:
 		// lsp.implementations / lsp.goToSuper (#1452): one target navigates
@@ -7639,7 +7625,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.refs.SetPlaceholder("Implementations — pick a target…")
 		}
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, refsPrefix)
+		m.palette.OpenLocked(m.paletteContext(), refsPrefix)
 		return m, nil
 	case ilsp.ServerStatusMsg:
 		// Persistent server state stays on the status line; transient events
@@ -9242,7 +9228,7 @@ func (m *Model) openHelp() {
 	extra = append(extra, m.playgroundHelpGroups()...)
 	m.help.SetExtra(extra...)
 	m.help.SetFilter("") // each open starts unfiltered (#271)
-	m.help.Snapshot(m.helpContext())
+	m.help.Snapshot(m.helpContext(), m.focusLang())
 	m.shell.SetContent(m.help)
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -9275,7 +9261,7 @@ func (m Model) blockedHelpGroup() help.Group {
 // rooted at the working directory for file search.
 func (m *Model) openPalette() {
 	m.palette.SetSize(m.width, m.height)
-	m.palette.Open(palette.Context{ContextID: m.focusContext(), Root: "."})
+	m.palette.Open(m.paletteContext())
 }
 
 // openFilePaletteAnchored opens the slimmed file-only palette floated over the
@@ -9288,7 +9274,7 @@ func (m *Model) openFilePaletteAnchored() {
 		m.openPalette()
 		return
 	}
-	cx := palette.Context{ContextID: m.focusContext(), Root: "."}
+	cx := m.paletteContext()
 	m.palette.OpenAnchored(cx, '@', x, y, w)
 }
 
@@ -9341,6 +9327,48 @@ func (m Model) helpContext() string {
 		return ctxPlayground
 	}
 	return m.focusContext()
+}
+
+// focusLang is the focused buffer's language id (#2483): the focused HTTP
+// pane's shown body type — the response is the document on screen there — else
+// the focused editor tab's buffer language; empty when neither classifies.
+// The help snapshot and the palette's command ranking read it to decide which
+// file-type-gated commands (plugin.Command.Languages) apply right now.
+func (m Model) focusLang() string {
+	if c := m.focusedContent(); c != nil && c.Kind() == pane.KindHTTP {
+		if p := c.HTTP(); p != nil {
+			return p.BodyLang()
+		}
+		return ""
+	}
+	if ed := m.focusedEditor(); ed != nil {
+		return ed.LangID()
+	}
+	return ""
+}
+
+// paletteContext is the environment a palette session ranks against: the
+// focused pane's context, the project root, and the focused buffer's language
+// (#2483) so command mode ranks file-type-gated commands with the same
+// applicability the help overlay shows.
+func (m Model) paletteContext() palette.Context {
+	return palette.Context{ContextID: m.focusContext(), Root: ".", Lang: m.focusLang()}
+}
+
+// paletteContextWithActive is paletteContext plus the focused editor's file,
+// for the modes that exclude it (recent files, search everywhere).
+func (m Model) paletteContextWithActive() palette.Context {
+	cx := m.paletteContext()
+	cx.ActivePath = m.activeFilePath()
+	return cx
+}
+
+// paletteContextAt is paletteContext rooted somewhere other than the project
+// root (the explorer's root for the move picker).
+func (m Model) paletteContextAt(root string) palette.Context {
+	cx := m.paletteContext()
+	cx.Root = root
+	return cx
 }
 
 // keyContext is focusContext for the keymap layer (#1876): the focused pane's

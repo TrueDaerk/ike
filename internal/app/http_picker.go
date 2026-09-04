@@ -154,5 +154,5 @@ func (m *Model) openHTTPRequestPicker() {
 	m.httpRequests.source = source
 	m.httpRequests.entries = entries
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, httpRequestsPrefix)
+	m.palette.OpenLocked(m.paletteContext(), httpRequestsPrefix)
 }

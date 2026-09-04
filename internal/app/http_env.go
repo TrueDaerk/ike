@@ -230,7 +230,7 @@ func (m *Model) openHTTPEnvPicker() {
 	m.httpEnvs.names = envs.Names()
 	m.httpEnvs.selected = m.httpEnvName(dir, envs)
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, httpEnvPrefix)
+	m.palette.OpenLocked(m.paletteContext(), httpEnvPrefix)
 }
 
 // selectHTTPEnv persists a picked environment (#1867). It takes effect on the

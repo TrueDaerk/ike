@@ -35,10 +35,15 @@ func (m MapResolver) Binding(id string) (string, bool) {
 }
 
 // Entry is one command row in the overlay: its title and (optional) shortcut.
+// Lang carries the language badge for file-type-gated commands (#2483): the
+// gated family's canonical name (json / yaml / xml), rendered as a marker so
+// the row reads as conditional on the current buffer's file type. Empty for
+// ungated commands.
 type Entry struct {
 	ID       string
 	Title    string
 	Shortcut string // empty when the command has no binding
+	Lang     string // language badge for file-type-gated commands (#2483)
 }
 
 // Group is a titled cluster of entries sharing a scope label (e.g. "global",
@@ -61,28 +66,26 @@ type CommandSource interface {
 // Snapshot pulls every registered command from src, joins each with its shortcut
 // from res, groups them by scope label, and returns the groups in deterministic
 // order. contextID narrows the sheet to what applies to the focused pane —
-// global commands plus that context's own; an empty contextID lists every scope.
+// global commands plus that context's own; an empty contextID lists every scope
+// (the complete reference the flat view shows). langID is the focused buffer's
+// language: a non-empty contextID additionally drops file-type-gated commands
+// (plugin.Command.Languages, #2483) whose gate does not list langID, and badges
+// the matching ones with their family name. The empty-contextID dump keeps the
+// gated commands — badged — since it is the complete reference.
 // A command with no resolver binding falls back to its documentation-only
 // Shortcut hint (plugin.Command.Shortcut); a nil res leaves resolver lookups out
 // but the doc hints still apply.
-func Snapshot(src CommandSource, res BindingResolver, contextID string) []Group {
+func Snapshot(src CommandSource, res BindingResolver, contextID, langID string) []Group {
 	byLabel := map[string][]Entry{}
 	for _, c := range src.Commands() {
 		label := groupLabel(c.Scope)
 		if contextID != "" && label != "global" && label != contextID {
 			continue
 		}
-		e := Entry{ID: c.ID, Title: c.Title}
-		if res != nil {
-			if s, ok := res.Binding(c.ID); ok {
-				e.Shortcut = s
-			}
+		if contextID != "" && !c.AppliesToLang(langID) {
+			continue
 		}
-		// Fall back to the command's own documentation hint when no live binding
-		// resolved (vim ex-commands and modal keys live outside the keymap layer).
-		if e.Shortcut == "" {
-			e.Shortcut = c.Shortcut
-		}
+		e := entryFor(c, res)
 		byLabel[label] = append(byLabel[label], e)
 	}
 
@@ -93,6 +96,27 @@ func Snapshot(src CommandSource, res BindingResolver, contextID string) []Group 
 	}
 	sort.SliceStable(groups, func(i, j int) bool { return groupOrder(groups[i].Label) < groupOrder(groups[j].Label) })
 	return groups
+}
+
+// entryFor joins one command with its shortcut and language badge: the live
+// resolver binding first, then the command's own documentation hint (vim
+// ex-commands and modal keys live outside the keymap layer). A file-type-gated
+// command (#2483) carries its family's canonical name — the gate's first
+// language id — as the badge.
+func entryFor(c registry.OwnedCommand, res BindingResolver) Entry {
+	e := Entry{ID: c.ID, Title: c.Title}
+	if res != nil {
+		if s, ok := res.Binding(c.ID); ok {
+			e.Shortcut = s
+		}
+	}
+	if e.Shortcut == "" {
+		e.Shortcut = c.Shortcut
+	}
+	if len(c.Languages) > 0 {
+		e.Lang = c.Languages[0]
+	}
+	return e
 }
 
 // groupLabel names the scope a command groups under.
@@ -116,30 +140,60 @@ func groupOrder(label string) string {
 	return label
 }
 
-// ContextSnapshot builds the context-first ordering (#2182): every registered
-// scope is kept, but the focused context's own group leads (flagged Focused so
-// its heading can say so), followed by the global bindings, followed by the
-// remaining contexts in the usual alphabetical order. An empty contextID — or
-// one with no registered commands — yields the plain Snapshot ordering, since
-// there is nothing to pull to the front.
-func ContextSnapshot(src CommandSource, res BindingResolver, contextID string) []Group {
-	all := Snapshot(src, res, "")
+// ContextSnapshot builds the focused-context view (#2182, reduced by #2483):
+// the focused context's own group (flagged Focused so its heading can say so),
+// then the global file-type-gated commands matching the focused buffer's
+// language, then the hand-curated Global essentials — and nothing else. The
+// other contexts are deliberately *gone*, not reordered: the full registry
+// stays one tab away in the flat view, and showing every scope here made the
+// sheet a scroll-wall nobody read. File-type-gated commands (#2483) are
+// narrowed by langID the way Snapshot narrows them. An empty contextID or "global" yields
+// the plain full Snapshot — there is no focused context to show; a contextID
+// owning no registered commands yields just the curated global section, over
+// which a keyboard-owning mode's Focused extra groups (#2237) can still lead.
+func ContextSnapshot(src CommandSource, res BindingResolver, contextID, langID string) []Group {
 	if contextID == "" || contextID == "global" {
-		return all
+		return Snapshot(src, res, "", langID)
 	}
-	var focused *Group
-	rest := make([]Group, 0, len(all))
-	for i := range all {
-		if all[i].Label == contextID {
-			g := all[i]
+	var out []Group
+	for _, g := range Snapshot(src, res, contextID, langID) {
+		if g.Label == contextID {
 			g.Focused = true
-			focused = &g
+			out = append(out, g)
+			break
+		}
+	}
+	// The global file-type-gated commands that apply to this buffer (#2483):
+	// the jq playground family over a JSON buffer, the markdown preview over
+	// markdown. They are global-scope, so the focused group does not carry
+	// them, and they are deliberately not curated — they surface here, badged,
+	// only while a matching buffer is focused.
+	if ft := fileTypeGroup(src, res, langID); len(ft.Entries) > 0 {
+		out = append(out, ft)
+	}
+	// Stub registries without any curated command leave the global section
+	// empty; drop it rather than render a bare heading.
+	if global := GlobalEssentials(src, res); len(global.Entries) > 0 {
+		out = append(out, global)
+	}
+	return out
+}
+
+// fileTypeGroup collects the global-scope commands gated to the focused
+// buffer's language (#2483), in deterministic id order. Context-scoped gated
+// commands are not repeated here — they already sit (or are dropped) in their
+// own context's group. Empty when the buffer is unclassified.
+func fileTypeGroup(src CommandSource, res BindingResolver, langID string) Group {
+	g := Group{Label: "This file (" + langID + ")"}
+	if langID == "" {
+		return g
+	}
+	for _, c := range src.Commands() {
+		if !c.Scope.Global || len(c.Languages) == 0 || !c.AppliesToLang(langID) {
 			continue
 		}
-		rest = append(rest, all[i])
+		g.Entries = append(g.Entries, entryFor(c, res))
 	}
-	if focused == nil {
-		return all
-	}
-	return append([]Group{*focused}, rest...)
+	sort.SliceStable(g.Entries, func(i, j int) bool { return g.Entries[i].ID < g.Entries[j].ID })
+	return g
 }

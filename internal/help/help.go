@@ -40,8 +40,8 @@ type Help struct {
 	pal    *theme.Palette // active theme (Roadmap 0110); nil = default
 
 	ctxID      string  // focused pane context the snapshot was taken for
-	ctxGroups  []Group // context-first ordering (#2182): focused scope, global, rest
-	flatGroups []Group // the classic flat sheet: global first, then alphabetical
+	ctxGroups  []Group // the short view (#2182, #2483): focused scope + curated global only
+	flatGroups []Group // the complete reference: every scope, global first, then alphabetical
 	essentials []Group
 	extra      []Group
 	filter     string // live typed filter (#271); "" shows everything
@@ -55,12 +55,13 @@ const (
 	// viewEssentials is the curated starter set (#656) — the opening view when
 	// no pane context is focused.
 	viewEssentials view = iota
-	// viewContext is the focused pane's bindings first, then global, then the
-	// remaining contexts below (#2182) — the opening view when a context is
-	// focused.
+	// viewContext is the focused pane's own bindings plus the curated Global
+	// essentials — and nothing else (#2182, reduced by #2483) — the opening
+	// view when a context is focused.
 	viewContext
-	// viewFlat is the classic flat sheet: the focused context's commands plus
-	// the global ones, global first (the behaviour before #2182).
+	// viewFlat is the complete reference: every registered scope, global
+	// first — the whole registry, one tab away from the short context view
+	// (#2483).
 	viewFlat
 )
 
@@ -90,14 +91,17 @@ func New(src CommandSource, res BindingResolver, minCol int) *Help {
 	return &Help{src: src, res: res, minCol: minCol}
 }
 
-// Snapshot re-reads the registered commands that apply to contextID (global
-// ones plus that context's own; empty lists every scope). It is idempotent:
-// re-snapshotting picks up newly registered commands. Call it each time the
-// shell is opened so the cheat sheet reflects the current registry and focus.
-func (h *Help) Snapshot(contextID string) {
+// Snapshot re-reads the registered commands for the focused pane context and
+// buffer language: the context view narrows to contextID's own commands plus
+// the curated Global essentials, with file-type-gated commands (#2483) kept
+// only when langID matches their gate; the flat view is the complete registry
+// dump. It is idempotent: re-snapshotting picks up newly registered commands.
+// Call it each time the shell is opened so the cheat sheet reflects the
+// current registry and focus.
+func (h *Help) Snapshot(contextID, langID string) {
 	h.ctxID = contextID
-	h.ctxGroups = h.withExtraLeading(ContextSnapshot(h.src, h.res, contextID))
-	h.flatGroups = h.withExtra(Snapshot(h.src, h.res, contextID))
+	h.ctxGroups = h.withExtraLeading(ContextSnapshot(h.src, h.res, contextID, langID))
+	h.flatGroups = h.withExtra(Snapshot(h.src, h.res, "", langID))
 	h.essentials = EssentialsSnapshot(h.src, h.res)
 	// With a pane focused the sheet opens on its own bindings (#2182); the
 	// curated Essentials set (#656) and the flat dump stay a tab away. Without
@@ -273,7 +277,7 @@ func (h *Help) footer(visible []Group) string {
 	}
 	head := strconv.Itoa(countEntries(visible)) + " of " + strconv.Itoa(total) + " commands"
 	if h.view == viewContext {
-		head = groupTitle(h.ctxID) + " bindings first · " + strconv.Itoa(countEntries(visible)) + " commands"
+		head = groupTitle(h.ctxID) + " context · " + head
 	}
 	return head + " — press tab for " + viewName(next, h.ctxID)
 }
@@ -330,12 +334,10 @@ func (h *Help) visibleGroups() []Group {
 	return out
 }
 
-// searchGroups is the widest set the sheet knows about — the context view keeps
-// every scope, so a filter typed in any view searches all of them.
+// searchGroups is the widest set the sheet knows about — since #2483 that is
+// the flat view: the complete registry dump (every scope, gated commands
+// badged) plus the extras, so a filter typed in any view searches all of them.
 func (h *Help) searchGroups() []Group {
-	if len(h.ctxGroups) >= len(h.flatGroups) {
-		return h.ctxGroups
-	}
 	return h.flatGroups
 }
 
@@ -399,12 +401,25 @@ const minKeyGap = 2
 // commands render title-only.
 func (h *Help) renderEntry(e Entry, colW int) string {
 	title := e.Title
+	// The language badge of a file-type-gated command (#2483): appended after
+	// the title in the accent colour, bracketed so it reads as a marker — the
+	// row applies only over a matching buffer — even on monochrome terminals.
+	badge := ""
+	if e.Lang != "" {
+		badge = "[" + e.Lang + "]"
+	}
 	if colW > 0 {
 		room := colW
 		if e.Shortcut != "" {
 			room -= lipgloss.Width(e.Shortcut) + minKeyGap
 		}
+		if badge != "" {
+			room -= lipgloss.Width(badge) + 1
+		}
 		title = truncateTitle(title, room)
+	}
+	if badge != "" {
+		title += " " + lipgloss.NewStyle().Foreground(h.theme().Accent).Render(badge)
 	}
 	if e.Shortcut == "" {
 		return title
@@ -443,6 +458,8 @@ func groupTitle(label string) string {
 	switch label {
 	case "global":
 		return "Global"
+	case GlobalEssentialsLabel:
+		return "Global (essentials)"
 	case "editor":
 		return "Editor"
 	case "explorer":

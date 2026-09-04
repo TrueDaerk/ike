@@ -104,7 +104,7 @@ func (m *Model) openFileAsPicker() {
 	}
 	m.openAsPath = canonicalPath(path)
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, openAsPrefix)
+	m.palette.OpenLocked(m.paletteContext(), openAsPrefix)
 }
 
 // openFileAs opens the remembered subject with the picked target. Targets

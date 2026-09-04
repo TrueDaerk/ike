@@ -510,6 +510,17 @@ func paneCommand(id, title, ctxID string, msg tea.Msg) plugin.Command {
 	return c
 }
 
+// langCommand narrows a command to buffers of the given languages (#2483):
+// the help overlay lists it — badged with the family's canonical name — only
+// while the focused buffer (editor tab or HTTP response body) speaks one of
+// them, and the palette ranks it off-context elsewhere. The playground
+// families reuse the routing lists from playgroundopen.go, so the gate and
+// playKindFor never disagree.
+func langCommand(c plugin.Command, langs []string) plugin.Command {
+	c.Languages = langs
+	return c
+}
+
 func (appCommands) Capabilities() plugin.Capabilities {
 	cmds := []plugin.Command{
 		appCommand("editor.closeTab", "Close Tab", CloseTabMsg{}),
@@ -580,7 +591,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("file.rename", "Rename File", RenameFileMsg{}),
 			appCommand("file.move", "Move File", MoveFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
-			appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}),
+			langCommand(appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}), []string{"markdown"}),
 			appCommand("preview.rerenderDiagrams", "Re-render Preview Diagrams", RerenderDiagramsMsg{}),
 			appCommand("editor.setBufferLanguage", "Treat Buffer as…", ShowBufferLangMsg{}),
 			appCommand("editor.materializeBuffer", "Materialize Buffer to File", MaterializeBufferMsg{}),
@@ -600,38 +611,40 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// per-dialect ones, resolving jq/yq/xmq from the buffer's
 			// language. The dialect commands stay separate entries — bindable
 			// and frecency-counted on their own (#2153).
-			appCommand("playground.open", "Open Playground for This File", OpenPlaygroundForBufferMsg{}),
-			appCommand("json.jqPlayground", "jq Playground…", OpenPlaygroundMsg{}),
-			appCommand("json.jqPlaygroundAtPath", "jq Playground at Cursor Path…", OpenPlaygroundAtPathMsg{}),
-			appCommand("json.jqFilters", "Saved jq Filters…", ShowFiltersMsg{}),
-			appCommand("json.jqRenameFilter", "Rename Saved jq Filter…", ShowFiltersMsg{Rename: true}),
+			langCommand(appCommand("playground.open", "Open Playground for This File", OpenPlaygroundForBufferMsg{}), playgroundLangs()),
+			langCommand(appCommand("json.jqPlayground", "jq Playground…", OpenPlaygroundMsg{}), jqLangs),
+			langCommand(appCommand("json.jqPlaygroundAtPath", "jq Playground at Cursor Path…", OpenPlaygroundAtPathMsg{}), jqLangs),
+			langCommand(appCommand("json.jqFilters", "Saved jq Filters…", ShowFiltersMsg{}), jqLangs),
+			langCommand(appCommand("json.jqRenameFilter", "Rename Saved jq Filter…", ShowFiltersMsg{Rename: true}), jqLangs),
 			// The yq playground (#2039) is the same mode over YAML, so it is
 			// the same five commands under the yaml namespace. The save
 			// prompt and the query-view toggle are not among them: both act
 			// on whichever playground is open and would only be a second name
 			// for one behavior.
-			appCommand("yaml.yqPlayground", "yq Playground…", OpenPlaygroundMsg{Dialect: jqplay.DialectYQ}),
-			appCommand("yaml.yqPlaygroundAtPath", "yq Playground at Cursor Path…", OpenPlaygroundAtPathMsg{Dialect: jqplay.DialectYQ}),
-			appCommand("yaml.yqFilters", "Saved yq Filters…", ShowFiltersMsg{Dialect: jqplay.DialectYQ}),
-			appCommand("yaml.yqRenameFilter", "Rename Saved yq Filter…", ShowFiltersMsg{Dialect: jqplay.DialectYQ, Rename: true}),
+			langCommand(appCommand("yaml.yqPlayground", "yq Playground…", OpenPlaygroundMsg{Dialect: jqplay.DialectYQ}), yqLangs),
+			langCommand(appCommand("yaml.yqPlaygroundAtPath", "yq Playground at Cursor Path…", OpenPlaygroundAtPathMsg{Dialect: jqplay.DialectYQ}), yqLangs),
+			langCommand(appCommand("yaml.yqFilters", "Saved yq Filters…", ShowFiltersMsg{Dialect: jqplay.DialectYQ}), yqLangs),
+			langCommand(appCommand("yaml.yqRenameFilter", "Rename Saved yq Filter…", ShowFiltersMsg{Dialect: jqplay.DialectYQ, Rename: true}), yqLangs),
 			// The xmq playground (#2414) — same mode over XML/HTML, engine
 			// the external xmq CLI — under the xml namespace: the same five
 			// commands as its siblings, with the at-path flavour seeding a
 			// `select <xpath>` over the caret's element.
-			appCommand("xml.xmqPlayground", "xmq Playground…", OpenPlaygroundMsg{Dialect: jqplay.DialectXMQ}),
-			appCommand("xml.xmqPlaygroundAtPath", "xmq Playground at Element XPath…", OpenPlaygroundAtPathMsg{Dialect: jqplay.DialectXMQ}),
-			appCommand("xml.xmqFilters", "Saved xmq Filters…", ShowFiltersMsg{Dialect: jqplay.DialectXMQ}),
-			appCommand("xml.xmqRenameFilter", "Rename Saved xmq Filter…", ShowFiltersMsg{Dialect: jqplay.DialectXMQ, Rename: true}),
+			langCommand(appCommand("xml.xmqPlayground", "xmq Playground…", OpenPlaygroundMsg{Dialect: jqplay.DialectXMQ}), xmqLangs),
+			langCommand(appCommand("xml.xmqPlaygroundAtPath", "xmq Playground at Element XPath…", OpenPlaygroundAtPathMsg{Dialect: jqplay.DialectXMQ}), xmqLangs),
+			langCommand(appCommand("xml.xmqFilters", "Saved xmq Filters…", ShowFiltersMsg{Dialect: jqplay.DialectXMQ}), xmqLangs),
+			langCommand(appCommand("xml.xmqRenameFilter", "Rename Saved xmq Filter…", ShowFiltersMsg{Dialect: jqplay.DialectXMQ, Rename: true}), xmqLangs),
 			// The language cheatsheet (#2382), one command per dialect: the
 			// sheet's document-language rows and its wording differ, so
 			// "jq cheatsheet" and "yq cheatsheet" are two different sheets
 			// rather than one with a toggle.
-			appCommand("json.jqCheatsheet", "jq Cheatsheet…", ShowCheatsheetMsg{}),
-			appCommand("yaml.yqCheatsheet", "yq Cheatsheet…", ShowCheatsheetMsg{Dialect: jqplay.DialectYQ}),
-			appCommand("xml.xmqCheatsheet", "xmq Cheatsheet…", ShowCheatsheetMsg{Dialect: jqplay.DialectXMQ}),
-			appCommand("json.jqSaveFilter", "Save Playground Filter…", SaveFilterPromptMsg{}),
-			appCommand("json.jqQueryView", "Toggle Full Query View", TogglePlaygroundQueryViewMsg{}),
-			appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}),
+			langCommand(appCommand("json.jqCheatsheet", "jq Cheatsheet…", ShowCheatsheetMsg{}), jqLangs),
+			langCommand(appCommand("yaml.yqCheatsheet", "yq Cheatsheet…", ShowCheatsheetMsg{Dialect: jqplay.DialectYQ}), yqLangs),
+			langCommand(appCommand("xml.xmqCheatsheet", "xmq Cheatsheet…", ShowCheatsheetMsg{Dialect: jqplay.DialectXMQ}), xmqLangs),
+			// The save prompt and the query-view toggle act on whichever
+			// playground is open, so their gate is the union of the families.
+			langCommand(appCommand("json.jqSaveFilter", "Save Playground Filter…", SaveFilterPromptMsg{}), playgroundLangs()),
+			langCommand(appCommand("json.jqQueryView", "Toggle Full Query View", TogglePlaygroundQueryViewMsg{}), playgroundLangs()),
+			langCommand(appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}), []string{"log"}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),
 			appCommand("terminal.ssh", "SSH Host…", SSHPickerMsg{}),
@@ -674,7 +687,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("archive.extractAll", "Extract Whole Archive…", ArchiveExtractAllMsg{}),
 			appCommand("archive.reload", "Reload Archive Listing", ArchiveReloadMsg{}),
 			appCommand("http.toggleRawBody", "Toggle Raw / Pretty HTTP Response Body", HTTPToggleRawBodyMsg{}),
-			appCommand("http.jqPlayground", "Open jq Playground on HTTP Response", HTTPJQPlaygroundMsg{}),
+			langCommand(appCommand("http.jqPlayground", "Open jq Playground on HTTP Response", HTTPJQPlaygroundMsg{}), jqLangs),
 			appCommand("http.loadMoreBody", "Load More of the HTTP Response Body", HTTPLoadMoreBodyMsg{}),
 			appCommand("http.openBodyFile", "Open Full HTTP Response Body as File", HTTPOpenBodyFileMsg{}),
 			appCommand("http.insertCurlAsRequest", "Insert curl as HTTP Request", InsertCurlAsRequestMsg{}),
@@ -762,7 +775,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			paneCommand("data.columnProfile", "Data: Column Profile", "data", DataColumnProfileMsg{}),
 			paneCommand("data.sortColumn", "Data: Sort Column", "data", DataSortColumnMsg{}),
 			paneCommand("data.export", "Data: Export Rows…", "data", DataExportMsg{}),
-			paneCommand("csv.columnProfile", "CSV: Column Profile", "editor", CSVColumnProfileMsg{}),
+			langCommand(paneCommand("csv.columnProfile", "CSV: Column Profile", "editor", CSVColumnProfileMsg{}), []string{"csv", "tsv", "psv"}),
 			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
 			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),
 		), append(append(append(append(scratchCommands(), toolCommands()...), memoryCommands()...), perfCommands()...), esCommands()...)...),

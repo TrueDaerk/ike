@@ -111,7 +111,7 @@ func (m *Model) configuredSSHHosts() []string {
 func (m *Model) openSSHPicker() {
 	m.ssh.entries = m.sshHosts()
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, sshPrefix)
+	m.palette.OpenLocked(m.paletteContext(), sshPrefix)
 }
 
 // openSSHTerminal opens a terminal connected to host: a tab of the active
