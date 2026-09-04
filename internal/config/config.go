@@ -349,6 +349,9 @@ func (c *Config) Flat() map[string]string {
 	put("marketplace.catalog_url", c.Marketplace.CatalogURL)
 	put("marketplace.auto_check", c.Marketplace.AutoCheck)
 	put("deps.auto_scan", c.Deps.AutoScan)
+	put("network.enabled", c.Network.Enabled)
+	put("network.port", c.Network.Port)
+	put("network.bind", c.Network.Bind)
 
 	put("todo.patterns", strings.Join(c.Todo.Patterns, ","))
 

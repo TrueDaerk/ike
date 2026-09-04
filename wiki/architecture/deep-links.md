@@ -76,7 +76,10 @@ never start the IDE.
    switch and the file/tool payload. `project=` links with no hit just notify
    "project not found".
 
-Only switching to an already known local project runs without a prompt.
+Only switching to an already known local project runs without a prompt. A
+link that resolves to the **already current** project with no file/tool
+payload notifies "already in project X" instead of doing nothing (#2518) —
+otherwise the user cannot tell whether the click arrived at all.
 
 ## What the switch does
 
@@ -92,9 +95,13 @@ switch stands.
 `project.open_link` (palette; audit-ledger entry, no default chord) opens a
 one-line paste prompt for entering an `ike://` URL by hand.
 
-A link that resolves to the **already current** project with no file/tool
-payload notifies "already in project X" instead of doing nothing (#2518) —
-otherwise the user cannot tell whether the click arrived at all.
+## Network variant
+
+The same actions are reachable from other devices over TCP: the
+[Network Links](./network-links.md) endpoint (#2519, `[network]` settings,
+off by default) speaks a line protocol guarded by a one-time pairing code
+shown in a popup, and turns every accepted request into an `ike://` URL that
+runs through this very pipeline.
 
 ## OS registration
 

@@ -226,6 +226,9 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// on the next deadline, 0 stops the chain, and re-enabling it is picked
 	// up by the arm call on Update's settled pass.
 	m.reconfigureForgePoll(hcfg)
+	// [network] edits apply live too (#2519): enabling starts the endpoint,
+	// disabling stops it, a new port or bind address restarts it.
+	m.reconfigureNetwork(cfg)
 	// Rebuild the key resolver so keymap.bindings.* edits (the settings keymap
 	// page, #93) re-resolve live, like every other config change.
 	m.keys = buildKeymap(hcfg, m.bindings)

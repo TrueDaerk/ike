@@ -46,8 +46,8 @@ var pageGroups = []pageGroup{
 	}},
 	{"Build, Run & Debug", []string{"Run", "Tests", "Debug", "PHP Debug Mappings"}},
 	{"Tools & Integrations", []string{
-		"Terminal", "Tools", "HTTP Client", "Remote Browsing", "Elasticsearch",
-		"Forge", "Forge Notifications", "Issues Window",
+		"Terminal", "Tools", "HTTP Client", "Remote Browsing", "Network Links",
+		"Elasticsearch", "Forge", "Forge Notifications", "Issues Window",
 	}},
 	{"Plugins", []string{"Plugins", "Marketplace", "Marketplace Catalog"}},
 }

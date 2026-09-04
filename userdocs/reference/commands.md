@@ -172,6 +172,7 @@ bring their own.
 | Pin File to Slot 3 | `nav.pinSlot3` | — | — | everywhere |
 | Pin File to Slot 4 | `nav.pinSlot4` | — | — | everywhere |
 | Pinned Files | `nav.pins` | `cmd+2` | — | everywhere |
+| Forget Paired Network Clients | `network.forgetClients` | — | — | everywhere |
 | Notification History | `notifications.history` | `cmd+alt+n` | — | everywhere |
 | Keymap Cheatsheet | `palette.keymapHelp` | `f1` | — | everywhere |
 | Recent Files | `palette.recentFiles` | `cmd+e` | — | everywhere |

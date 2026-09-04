@@ -81,6 +81,7 @@ import (
 	"ike/internal/menu"
 	"ike/internal/nav"
 	"ike/internal/nbview"
+	"ike/internal/netlink"
 	"ike/internal/numhint"
 	"ike/internal/openapi"
 	"ike/internal/overlay"
@@ -891,6 +892,14 @@ type Model struct {
 	// The project.open_link paste prompt (#2396): one URL line.
 	dlLinkOpen bool
 	dlLinkText ui.Field
+	// Network deep-link endpoint (#2519). nlServer is the TCP listener (nil
+	// while disabled), nlAddr the address it was started for (the
+	// reconfigure compare key), nlPair the open pairing popup and nlTickGen
+	// the countdown's generation counter.
+	nlServer  *netlink.Server
+	nlAddr    string
+	nlPair    *netPairing
+	nlTickGen int
 	// undoTree is the undo-tree overlay (#59): the focused editor's change
 	// tree; jumps route back into that editor as HistoryJumpMsg.
 	undoTree *undotree.Model
@@ -6711,6 +6720,25 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case deepLinkResolvedMsg:
 		return m.handleDeepLinkResolved(msg)
 
+	case netChallengeMsg:
+		// A network device asked to pair (#2519): show the code.
+		return m.handleNetChallenge(msg.c)
+
+	case netChallengeClearedMsg:
+		m.closeNetPair()
+		return m, nil
+
+	case netPairedMsg:
+		m.closeNetPair()
+		m.host.Notify(host.Info, "network links: paired with "+msg.c.Name+" ("+msg.c.Addr+")")
+		return m, nil
+
+	case netPairTickMsg:
+		return m.handleNetPairTick(msg)
+
+	case NetworkForgetClientsMsg:
+		return m.handleNetworkForgetClients()
+
 	case tea.FocusMsg:
 		// The terminal gained focus: stamp this instance as the one an OS
 		// ike:// click should reach (#2396). Best-effort — most terminals
@@ -8218,6 +8246,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// The crash-recovery prompt (Roadmap 0210, #166) owns the keyboard at
 		// startup: r / d / s decide the highlighted file, j / k move, esc skips.
+		// The network pairing popup (#2519) is content-checked, so it goes
+		// ahead of the flag-checked shell prompts: esc refuses, nothing to
+		// type.
+		if m.netPairOpen() {
+			return m.updateNetPair(msg)
+		}
 		if m.recoveryOpen() {
 			return m.updateRecovery(msg)
 		}

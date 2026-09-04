@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -16,6 +17,29 @@ import (
 	"ike/internal/matcher"
 	"ike/internal/theme"
 )
+
+// NetworkDefaultPort and NetworkDefaultBind are the [network] defaults
+// (#2519), shared with the validator's fallbacks and the settings form.
+const (
+	NetworkDefaultPort = 4530
+	NetworkDefaultBind = "0.0.0.0"
+)
+
+// NetworkBindError explains why raw cannot serve as the network endpoint's
+// bind address, or returns "" when it can: empty (every interface) or a
+// literal IPv4/IPv6 address. Host names are refused — a listener must not
+// depend on a resolver at startup. Shared by the lenient config validator
+// and the strict settings form.
+func NetworkBindError(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if net.ParseIP(strings.Trim(raw, "[]")) == nil {
+		return "bind must be an IP address such as 0.0.0.0 or 127.0.0.1 (empty = every interface)"
+	}
+	return ""
+}
 
 // ESURLError explains why raw cannot serve as an Elasticsearch endpoint base
 // URL, or returns "" when it can. It is shared between the lenient config
@@ -78,8 +102,8 @@ var (
 	reloadModes = map[string]bool{"clean": true, "never": true}
 	// binaryOpenModes are the files.binary_open targets (#2420).
 	binaryOpenModes = map[string]bool{"hex": true, "editor": true}
-	saveModes   = map[string]bool{"off": true, "focus": true, "idle": true}
-	severities  = map[string]bool{"info": true, "warn": true, "error": true}
+	saveModes       = map[string]bool{"off": true, "focus": true, "idle": true}
+	severities      = map[string]bool{"info": true, "warn": true, "error": true}
 	// recentRankings are the palette.recent.ranking values (#2399).
 	recentRankings = map[string]bool{"frecency": true, "recency": true}
 	// whitespaceModes are the editor.show_whitespace values (#64).
@@ -153,6 +177,17 @@ func validate(c *Config) []Diagnostic {
 			diags = append(diags, Diagnostic{Field: "editor.rulers", Message: fmt.Sprintf("ruler column %d below minimum 1, using 1", r)})
 			c.Editor.Rulers[i] = 1
 		}
+	}
+
+	// [network] (#2519): a port outside the TCP range or an unparseable bind
+	// address falls back to the default so an enabled endpoint still starts.
+	if p := c.Network.Port; p < 1 || p > 65535 {
+		diags = append(diags, Diagnostic{Field: "network.port", Message: fmt.Sprintf("port %d out of range 1-65535, using %d", p, NetworkDefaultPort)})
+		c.Network.Port = NetworkDefaultPort
+	}
+	if msg := NetworkBindError(c.Network.Bind); msg != "" {
+		diags = append(diags, Diagnostic{Field: "network.bind", Message: fmt.Sprintf("%s (got %q, using %q)", msg, c.Network.Bind, NetworkDefaultBind)})
+		c.Network.Bind = NetworkDefaultBind
 	}
 
 	// Vault password file (#2293): a missing file would silently leave vault

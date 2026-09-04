@@ -575,6 +575,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("pane.switcher", "Switch Pane Focus", CyclePaneFocusMsg{}),
 			appCommand("pane.focusByIndex", "Focus Pane by Number…", PaneFocusByIndexMsg{}),
 			appCommand("project.goToFile", "Go to File", GoToFileMsg{}),
+			// Revoke every paired network device (#2519). No default chord:
+			// a rare, deliberate act — the palette is its doorway.
+			appCommand("network.forgetClients", "Forget Paired Network Clients", NetworkForgetClientsMsg{}),
 			appCommand("palette.recentFiles", "Recent Files", ShowRecentFilesMsg{}),
 			appCommand("palette.searchEverywhere", "Search Everywhere", ShowSearchEverywhereMsg{}),
 			appCommand("project.findInPath", "Find in Path", OpenFindInPathMsg{}),

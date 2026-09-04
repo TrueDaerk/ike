@@ -384,6 +384,11 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 		{Title: "Remote Browsing", Description: "The SFTP remote file browser: an SSH host from ~/.ssh/config browsed as a pane, remote files downloaded into a local cache and opened read-only.", Entries: []Entry{
 			{Key: "remote.max_fetch_mb", Type: Int, Title: "Download size limit", Description: "Largest remote file the browser downloads into the local cache to preview, in MiB; opening a bigger file is refused with a notice instead of stalling the link", Scope: config.UserScope, Min: 1, Max: 4096},
 		}},
+		{Title: "Network Links", Description: "The network counterpart of ike:// deep links: a TCP endpoint other devices pair with once (a six-glyph code of coloured card suits shown in a popup) and then drive over a line protocol — switch project, open a file at a line, show a tool window. Off until enabled; a change restarts the listener.", Entries: []Entry{
+			{Key: "network.enabled", Type: Bool, Title: "Listen for network clients", Description: "Start the TCP endpoint. Every client must pair first: IKE shows a one-time code (six card suits in four colours) with a countdown, and a wrong or expired code is replaced by a fresh one. Paired devices keep a token stored hashed in the user state dir; \"Forget Paired Network Clients\" revokes them all", Scope: config.UserScope},
+			{Key: "network.port", Type: Int, Title: "Port", Description: "TCP port the endpoint listens on (default 4530)", Scope: config.UserScope, Min: 1, Max: 65535},
+			{Key: "network.bind", Type: String, Title: "Bind address", Description: "Interface address to listen on: 0.0.0.0 (the default) or empty reaches every interface so phones and laptops on the LAN can connect; 127.0.0.1 keeps the endpoint on this machine. Host names are refused — an IP literal only", Scope: config.UserScope, ValidateString: networkBindValidate},
+		}},
 		{Title: "Markdown Preview", Description: "The rendered markdown preview pane: how the diagram fences inside a document — ```mermaid blocks in READMEs and design docs — are drawn.", Entries: []Entry{
 			{Key: "preview.diagrams", Type: Enum, Title: "Diagram rendering", Description: "How a fenced diagram block renders in the preview. \"ascii\" pipes it through the mermaid-ascii renderer and shows its text in place of the code block; \"image\" renders a PNG with mermaid-cli (mmdc) and embeds it over the Kitty graphics path, falling back to ascii where the terminal cannot show pixels; \"off\" leaves every fence the syntax-highlighted code block it is. Rendering is asynchronous and cached per fence, so typing around a diagram never re-runs the renderer; a renderer that is not installed leaves the code block with a one-line install hint, and \"Re-render Preview Diagrams\" retries once it is", Scope: config.UserScope, Options: []string{"ascii", "image", "off"}},
 		}},
@@ -525,6 +530,11 @@ func httpIgnoreHeaderValidate(_ func(key string) string, text string) string {
 	}
 	return ""
 }
+
+// networkBindValidate refuses a bind address the listener could not use
+// (#2519), with the shared validator's message. Empty means every interface
+// and is fine.
+func networkBindValidate(v string) string { return config.NetworkBindError(v) }
 
 // forgePollValidate is the strict form check for forge.poll_interval_seconds
 // (#2085): the config validator has to be lenient with a file on disk and

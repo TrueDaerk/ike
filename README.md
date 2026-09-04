@@ -81,6 +81,13 @@ make install          # the ike binary first
 make install-desktop  # Ike.app (macOS) or ike.desktop + icons (Linux)
 ```
 
+`make install-desktop` also registers the **`ike://` URL scheme** (a small
+link-handler applet on macOS, `x-scheme-handler/ike` on Linux) — re-run it
+after upgrading, or links clicked in a browser go nowhere. Other devices can
+drive the same actions over TCP once `[network].enabled` is on: see
+[Network Links](wiki/architecture/network-links.md) for the protocol and the
+pairing flow.
+
 Clicking the **Ike** icon opens a dedicated Ghostty window with IKE-specific
 settings (`~/.config/ghostty/ike.conf`, loaded exclusively — your normal
 Ghostty config is untouched and vice versa), running `ike` as the sole

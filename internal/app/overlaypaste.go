@@ -62,8 +62,8 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 	case m.openLinkPromptOpen():
 		// The ike:// paste prompt (#2396) — pasting is its whole point.
 		return nil, m.pasteOpenLinkPrompt(text)
-	case m.deepLinkChooserOpen():
-		return nil, false // decision prompt, no text input
+	case m.deepLinkChooserOpen(), m.netPairOpen():
+		return nil, false // decision prompts, no text input
 	case m.regexTesterOpen():
 		// The only prompt whose paste keeps its line breaks: the test-text
 		// area is exactly where a multi-line log excerpt belongs.
