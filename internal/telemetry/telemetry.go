@@ -65,7 +65,12 @@ import (
 // switch started first) or "quit" (the session ended first). A v4 log's
 // missing "lsp" phase is ambiguous — server silence or lost event — a v5
 // reader can treat absence as a bug.
-const SchemaVersion = 5
+// v6 (#2490): "palette.dismiss" events gain "results" — how many rows the
+// palette was listing when esc was pressed. It separates "typed a name that
+// does not exist" (query_len > 0, results 0) from "found it, changed my mind",
+// which query_len alone cannot. The field is additive: every v5 field keeps
+// its meaning, and its absence on a v5 log means "not recorded", not zero.
+const SchemaVersion = 6
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
@@ -273,16 +278,23 @@ func (r *Recorder) CommandOutcome(id, source string, ok bool, d time.Duration) {
 
 // PaletteDismiss records a palette mode closed without a pick (#2408): mode is
 // the mode's prefix rune as a string (":", "%", "@"), queryLen the number of
-// runes typed — never the query itself — and d how long the box was open. A
-// dismissal is the one palette outcome that otherwise leaves no trace at all,
-// so re-open streaks ("wrong entry, esc, try again") stay invisible without it.
-func (r *Recorder) PaletteDismiss(mode string, queryLen int, d time.Duration) {
+// runes typed — never the query itself — results how many rows the list was
+// showing at that moment, and d how long the box was open. A dismissal is the
+// one palette outcome that otherwise leaves no trace at all, so re-open
+// streaks ("wrong entry, esc, try again") stay invisible without it; since
+// #2490 the row count tells a fruitless search (results 0 on a typed query)
+// from a deliberate change of mind. A negative count is clamped to zero.
+func (r *Recorder) PaletteDismiss(mode string, queryLen, results int, d time.Duration) {
 	if d < 0 {
 		d = 0
+	}
+	if results < 0 {
+		results = 0
 	}
 	r.record(TypePaletteDismiss, map[string]string{
 		"mode":      mode,
 		"query_len": strconv.Itoa(queryLen),
+		"results":   strconv.Itoa(results),
 		"ms":        strconv.FormatInt(d.Milliseconds(), 10),
 	})
 }

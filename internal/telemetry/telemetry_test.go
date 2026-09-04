@@ -125,7 +125,7 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 	r.Op("http.flight", "ok", map[string]string{"ms": "120", "class": "2xx", "stream": "false"})
 	r.Op("project.switch", "lsp", map[string]string{"ms": "0", "skipped": "no_server_docs"})
 	r.CommandOutcome("editor.save", SourceKeybind, false, 0)
-	r.PaletteDismiss("%", 4, 900*time.Millisecond)
+	r.PaletteDismiss("%", 4, 7, 900*time.Millisecond)
 	r.ProjectLeave("ab12cd34ef56", "switch", time.Minute)
 	r.Close()
 
@@ -140,6 +140,7 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 		"ok":        true, // command outcome (#2408)
 		"mode":      true, // palette.dismiss (#2408) — a prefix rune, never the query
 		"query_len": true, // palette.dismiss (#2408) — the length, never the text
+		"results":   true, // palette.dismiss (#2490) — a row count, never content
 		"reason":    true, // project.leave (#2408)
 		"skipped":   true, // project.switch lsp phase (#2492) — a reason token, never content
 	}
@@ -600,12 +601,12 @@ func TestCommandOutcomeShapes(t *testing.T) {
 	}
 }
 
-// A dismissal is its own event type carrying the mode, the query *length* and
-// how long the box stood open (#2408).
+// A dismissal is its own event type carrying the mode, the query *length*, the
+// number of rows listed (#2490) and how long the box stood open (#2408).
 func TestPaletteDismissEvent(t *testing.T) {
 	dir := t.TempDir()
 	r := New(dir, nil)
-	r.PaletteDismiss("%", 4, 1500*time.Millisecond)
+	r.PaletteDismiss("%", 4, 0, 1500*time.Millisecond)
 	r.Close()
 
 	evs := readSession(t, dir)
@@ -613,8 +614,29 @@ func TestPaletteDismissEvent(t *testing.T) {
 		t.Fatalf("want one %s event, got %v", TypePaletteDismiss, evs)
 	}
 	d := evs[0].Data
-	if d["mode"] != "%" || d["query_len"] != "4" || d["ms"] != "1500" {
-		t.Fatalf("payload = %v, want mode %%, query_len 4, ms 1500", d)
+	if d["mode"] != "%" || d["query_len"] != "4" || d["ms"] != "1500" || d["results"] != "0" {
+		t.Fatalf("payload = %v, want mode %%, query_len 4, results 0, ms 1500", d)
+	}
+}
+
+// A dismissal off a matching query records the match count, so an export can
+// tell it from the fruitless search above (#2490); a negative count clamps.
+func TestPaletteDismissResults(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.PaletteDismiss(":", 3, 12, time.Second)
+	r.PaletteDismiss("@", 0, -1, time.Second)
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != 2 {
+		t.Fatalf("want two events, got %v", evs)
+	}
+	if got := evs[0].Data["results"]; got != "12" {
+		t.Errorf("results = %q, want 12", got)
+	}
+	if got := evs[1].Data["results"]; got != "0" {
+		t.Errorf("negative results = %q, want 0", got)
 	}
 }
 
@@ -646,16 +668,16 @@ func TestProjectLeaveEvent(t *testing.T) {
 	}
 }
 
-// The version analysis scripts branch on (#2492).
-func TestSchemaVersionIsFive(t *testing.T) {
-	if SchemaVersion != 5 {
-		t.Fatalf("SchemaVersion = %d, want 5", SchemaVersion)
+// The version analysis scripts branch on (#2490).
+func TestSchemaVersionIsSix(t *testing.T) {
+	if SchemaVersion != 6 {
+		t.Fatalf("SchemaVersion = %d, want 6", SchemaVersion)
 	}
 	dir := t.TempDir()
 	r := New(dir, nil)
 	r.Command("editor.save", SourceKeybind)
 	r.Close()
-	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 5 {
-		t.Fatalf("events must be stamped v5, got %v", evs)
+	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 6 {
+		t.Fatalf("events must be stamped v6, got %v", evs)
 	}
 }

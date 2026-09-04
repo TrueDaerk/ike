@@ -632,3 +632,48 @@ func TestTelemetryProjectLeaveEvents(t *testing.T) {
 		}
 	}
 }
+
+// TestPaletteDismissRecordsResultCount is the #2490 acceptance criterion: the
+// dismissal event carries how many rows the palette was listing, so an export
+// can tell "typed a command name that does not exist" (a typed query with zero
+// results) from "found it, changed my mind".
+func TestPaletteDismissRecordsResultCount(t *testing.T) {
+	// A query nothing matches: the event reports zero rows on a typed query.
+	m := telemetryModel(t, host.MapConfig{})
+	m.palette.SetSize(100, 40)
+	m.palette.Open(palette.Context{})
+	for _, r := range "zzqqxnope" {
+		tm, _ := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		m = tm.(Model)
+	}
+	tm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = tm.(Model)
+
+	got := eventsOf(usageEvents(t, m), telemetry.TypePaletteDismiss)
+	if len(got) != 1 {
+		t.Fatalf("want one %s event, got %v", telemetry.TypePaletteDismiss, got)
+	}
+	if got[0].Data["query_len"] == "0" {
+		t.Fatalf("the fixture must type a query: %v", got[0])
+	}
+	if got[0].Data["results"] != "0" {
+		t.Fatalf("results = %q, want \"0\" for a query that matches nothing", got[0].Data["results"])
+	}
+
+	// An empty query lists the whole command set: the count is what the
+	// palette was showing, so it must be positive.
+	m = telemetryModel(t, host.MapConfig{})
+	m.palette.SetSize(100, 40)
+	m.palette.Open(palette.Context{})
+	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = tm.(Model)
+
+	got = eventsOf(usageEvents(t, m), telemetry.TypePaletteDismiss)
+	if len(got) != 1 {
+		t.Fatalf("want one %s event, got %v", telemetry.TypePaletteDismiss, got)
+	}
+	n, err := strconv.Atoi(got[0].Data["results"])
+	if err != nil || n <= 0 {
+		t.Fatalf("results = %q, want the positive row count the palette showed", got[0].Data["results"])
+	}
+}

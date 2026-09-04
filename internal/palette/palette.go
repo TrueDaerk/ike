@@ -607,9 +607,14 @@ func (p *Palette) activate() tea.Cmd {
 // tell a glance-and-esc from a minute of fruitless searching. A mode that
 // re-opens itself with a seeded query (the directory descend) starts a new
 // open and therefore a new duration — each box is timed on its own.
+// Since #2490 it also carries how many rows the list was showing at that
+// moment: a dismissal with a typed query and zero results is a search that
+// found nothing ("typed a command name that does not exist"), which the query
+// length alone cannot tell apart from "found it, changed my mind".
 type Dismissal struct {
 	Prefix   rune
 	QueryLen int
+	Results  int
 	Open     time.Duration
 }
 
@@ -621,9 +626,10 @@ type Dismissal struct {
 func (p *Palette) dismiss() tea.Cmd {
 	m, body := p.mode()
 	opened := p.openedAt
+	results := len(p.items) // read before Close drops the list (#2490)
 	p.Close()
 	if m != nil {
-		d := &Dismissal{Prefix: m.Prefix(), QueryLen: len([]rune(body))}
+		d := &Dismissal{Prefix: m.Prefix(), QueryLen: len([]rune(body)), Results: results}
 		if !opened.IsZero() {
 			d.Open = p.clock().Sub(opened)
 		}

@@ -3132,13 +3132,15 @@ func paletteHideOff(cfg host.Config) bool {
 // all, so an export can otherwise neither see the re-open streaks ("wrong
 // entry, esc, try again") nor tell which mode produced them. Picks keep going
 // through the ordinary command funnel, so their event count is untouched, and
-// the typed query's *length* travels, never the query.
+// the typed query's *length* travels, never the query. Since #2490 the number
+// of rows the palette was listing travels with it, so an export can tell a
+// query that matched nothing from one that matched and was abandoned.
 func (m Model) recordPaletteDismissal() {
 	d, ok := m.palette.TakeDismissal()
 	if !ok {
 		return
 	}
-	m.usage.PaletteDismiss(string(d.Prefix), d.QueryLen, d.Open)
+	m.usage.PaletteDismiss(string(d.Prefix), d.QueryLen, d.Results, d.Open)
 }
 
 // recentRankingFrecency reads palette.recent.ranking (#2399): whether the
