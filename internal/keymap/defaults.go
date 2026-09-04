@@ -36,6 +36,24 @@ var jetbrainsRows = []row{
 	// (recent files), the palette detour it replaces.
 	{"cmd+shift+e", "project.switchLast", "Switch to last project", Global, "Project (#2398)"},
 	{"ctrl+shift+e", "project.switchLast", "Switch to last project", Global, "Project (#2398)"},
+	// Direct MRU project switching (#2489): switchLast generalized to the
+	// nine most recent projects, numbered the way the picker and the Recent
+	// Projects column show it. ctrl+alt+digit is the only free digit family
+	// on *both* platforms — cmd+digit is the tool windows, alt+digit the
+	// editor tabs, ctrl+digit the macOS-only pane numbers (#2407, and off
+	// macOS the Cmd→Ctrl fold puts the tool windows there), and cmd+alt+0 is
+	// the time report — so the family is spelled with a literal Ctrl and
+	// ships identically everywhere. Only cmd+alt+0 folds into it off macOS,
+	// and 0 is not one of the nine.
+	{"ctrl+alt+1", "project.switchMRU1", "Switch to recent project 1", Global, "Project (#2489)"},
+	{"ctrl+alt+2", "project.switchMRU2", "Switch to recent project 2", Global, "Project (#2489)"},
+	{"ctrl+alt+3", "project.switchMRU3", "Switch to recent project 3", Global, "Project (#2489)"},
+	{"ctrl+alt+4", "project.switchMRU4", "Switch to recent project 4", Global, "Project (#2489)"},
+	{"ctrl+alt+5", "project.switchMRU5", "Switch to recent project 5", Global, "Project (#2489)"},
+	{"ctrl+alt+6", "project.switchMRU6", "Switch to recent project 6", Global, "Project (#2489)"},
+	{"ctrl+alt+7", "project.switchMRU7", "Switch to recent project 7", Global, "Project (#2489)"},
+	{"ctrl+alt+8", "project.switchMRU8", "Switch to recent project 8", Global, "Project (#2489)"},
+	{"ctrl+alt+9", "project.switchMRU9", "Switch to recent project 9", Global, "Project (#2489)"},
 	// Close Project (#1355/#1358): cmd+shift+w with the delivered ctrl
 	// secondary, same pattern as project.switch above.
 	{"cmd+shift+w", "project.close", "Close project", Global, "Project (#1355)"},

@@ -109,6 +109,12 @@ type PaneFocusIndexMsg struct{ Index int }
 // for terminals that swallow the chords. Dispatched by pane.focusByIndex.
 type PaneFocusByIndexMsg struct{}
 
+// SwitchProjectMRUMsg asks the root model to switch to the Index-th (1-based)
+// most recently used other project (#2489): the numbering the project picker
+// and the Recent Projects column render as their row hints. Dispatched by
+// project.switchMRU1…project.switchMRU9.
+type SwitchProjectMRUMsg struct{ Index int }
+
 // OpenFilePathMsg asks the root model to open the palette locked to the
 // open-path picker (#999): a filesystem browser for absolute/~ paths, so
 // files outside the workspace open without switching projects.
@@ -540,6 +546,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 		// The pane twins of the tab jumps (#2407): the number is the one the
 		// pane's title bar shows.
 		cmds = append(cmds, appCommand("pane.focus"+n, "Focus Pane "+n, PaneFocusIndexMsg{Index: i}))
+		// The project twins (#2489): the number is the MRU rank the picker
+		// and the Recent Projects column show in front of the row.
+		cmds = append(cmds, appCommand("project.switchMRU"+n, "Switch to Recent Project "+n, SwitchProjectMRUMsg{Index: i}))
 	}
 	return plugin.Capabilities{
 		// The [[elasticsearch.endpoints]] list editor (#1927): registered as a

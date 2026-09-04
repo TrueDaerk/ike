@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-04T00:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -165,6 +165,49 @@ palette (`cmd+e`) instead of the picker. One chord removes the detour.
 - **No background workspace**: nothing changes and a `no previous project`
   notification says why.
 
+## Direct MRU switching by digit (#2489)
+
+Three days of telemetry counted 183 project switches, 115 of them through the
+recent-files palette; 28 of 61 recorded stays were shorter than 30 seconds.
+`project.switchLast` removed the dialog for *one* target — these chords remove
+it for the nine most recent ones.
+
+- **`project.switchMRU1` … `project.switchMRU9`** ("Switch to Recent Project
+  N", global scope, registered in `internal/app/commands.go` next to the
+  `pane.focusN` family) dispatch `SwitchProjectMRUMsg{Index}`. Default chords
+  are `ctrl+alt+1` … `ctrl+alt+9`: the only digit family free on **both**
+  platforms — `cmd+digit` is the tool windows, `alt+digit` the editor tabs,
+  `ctrl+digit` the macOS-only pane numbers (#2407, and off macOS the Cmd→Ctrl
+  fold puts the tool windows there), `cmd+alt+0` the time report. The chords
+  are spelled with a literal Ctrl, so they ship identically everywhere, and
+  they are on the #805 terminal allowlist like the other project entry points:
+  the hop is usually made while looking at a shell.
+- **One numbering, three renderings** (`internal/project/mru.go`):
+  `MRUTargets(history, current)` is the recent-projects history in MRU order
+  with the project one is standing in dropped, and `MRUHint(i)` labels its
+  first `MaxMRU` (9) entries "1"…"9". The handler resolves against that list,
+  and both project lists render the same digit as the row's `Item.Hint` — the
+  picker's rows (`picker.go`) and the Recent Projects column of the
+  recent-files dialog (`app.go`'s injected items). The digit is the entry's
+  rank in the *unfiltered* history, not its row number, so neither a typed
+  query nor the column's frecency ranking (#2399) ever renumbers a project:
+  `ctrl+alt+4` always means the same one.
+- **Number one is `project.switchLast`'s target**: the history's newest entry
+  after the current project is dropped is the project one came from, which is
+  also the MRU parked workspace. The digits simply generalize that toggle.
+  (They part company only after `project.close`, which leaves the closed
+  project in the history but not in the workspace set — the list is
+  deliberately "recent", not "still open".)
+- **The switch is the ordinary transaction**: `handleSwitchMRUProject`
+  (`internal/app/project_mru.go`) hands the root to `project.SwitchTo`, so it
+  is validated off the Update loop — a history entry whose directory has since
+  vanished reports the usual switch failure — and then runs through
+  `handleSwitchProject`/`performSwitch` like a palette pick: the auto-save gate
+  (#2186), the history record, and a still-parked workspace resuming with its
+  tabs and terminals (#777).
+- **A digit past the end of the list** changes nothing and notifies
+  `no recent project N`: the chord family is fixed at nine, the list is not.
+
 ## Close Project (#1355)
 
 The inverse of a quick visit: instead of switching back and closing the
@@ -292,10 +335,12 @@ one action that also unloads it.
   removal) closes the workspace; unloaded entries' aux action instead
   **removes the entry from the history** (`RemoveFromHistoryMsg` → off-loop
   `RemoveFromHistory` write-back at user scope → config reload → the
-  still-open palette re-lists). The Recent Projects column of the Recent
-  Files dialog (#778) carries the same time column and removal action, and
-  the Recent Files rows themselves gained the matching layout and prune
-  action in #1113. `cmd+shift+p` is also in the JetBrains chord table
+  still-open palette re-lists). Since #2489 each of the first nine rows also
+  carries its **MRU digit** as a leading hint — the `ctrl+alt+N` chord that
+  switches there without the picker. The Recent Projects column of the Recent
+  Files dialog (#778) carries the same time column, removal action and digit
+  hints, and the Recent Files rows themselves gained the matching layout and
+  prune action in #1113. `cmd+shift+p` is also in the JetBrains chord table
   (`internal/keymap/defaults.go`): the chord layer resolves modified chords
   even in a capturing editor, which the registry keymap layer does not.
 - **Branch + dirty marker per row (#2178)**: each git project's row carries

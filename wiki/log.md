@@ -1,5 +1,31 @@
 # Log
 
+## 2026-09-04 (direct MRU project switching by digit, #2489)
+
+- **Project hopping lost its dialog.** Telemetry counted 183 switches in three
+  days, 115 of them through the recent-files palette, and most stays shorter
+  than a minute. `project.switchMRU1` … `project.switchMRU9` (`ctrl+alt+1` …
+  `ctrl+alt+9`, Global, on the #805 terminal allowlist) now switch straight to
+  the N-th most recently used *other* project; number one is the target
+  `project.switchLast` (#2398) already had.
+- **One numbering, three renderings.** `internal/project/mru.go` owns it:
+  `MRUTargets` is the recent-projects history minus the current project,
+  `MRUHint` labels its first nine entries. The handler resolves against that
+  list and both project lists — the `project.switch` picker and the Recent
+  Projects column of the `%` dialog — render the same digit as the row's
+  `Item.Hint`, so the chords are learned from the lists one already opens. The
+  digit is the entry's history rank, not its row number, so a typed query or
+  the column's frecency ranking never renumbers a project.
+- **The switch is the ordinary transaction.** `handleSwitchMRUProject` hands
+  the root to `project.SwitchTo`: validated off the Update loop, then the
+  regular seamless switch (auto-save gate, history record, parked workspace
+  resumed). A digit past the end of the list is a no-op with a notice.
+- **`ctrl+alt+digit` was the only free digit family on both platforms** —
+  `cmd+digit` is the tool windows, `alt+digit` the editor tabs, `ctrl+digit`
+  the macOS-only pane numbers, and the sole `cmd+alt+digit` default folds onto
+  `ctrl+alt+0`. The palette's side column learned to render `Item.Hint`, which
+  it had ignored since #2023.
+
 ## 2026-09-04 (pane-number badges are inverted pills, #2496)
 
 - **The badge was the least visible thing on the row it exists for.** Pane

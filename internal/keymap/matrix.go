@@ -139,6 +139,15 @@ var reachableAlternatives = map[string]string{
 	"project.goToClass":                "palette",
 	"project.switch":                   "palette",
 	"project.switchLast":               "palette",
+	"project.switchMRU1":               "palette (or the cmd+e recent-projects column)",
+	"project.switchMRU2":               "palette (or the cmd+e recent-projects column)",
+	"project.switchMRU3":               "palette (or the cmd+e recent-projects column)",
+	"project.switchMRU4":               "palette (or the cmd+e recent-projects column)",
+	"project.switchMRU5":               "palette (or the cmd+e recent-projects column)",
+	"project.switchMRU6":               "palette (or the cmd+e recent-projects column)",
+	"project.switchMRU7":               "palette (or the cmd+e recent-projects column)",
+	"project.switchMRU8":               "palette (or the cmd+e recent-projects column)",
+	"project.switchMRU9":               "palette (or the cmd+e recent-projects column)",
 	"project.close":                    "palette / File menu",
 	"project.peek.return":              "palette",
 	"project.findInPath":               "palette",
@@ -193,7 +202,7 @@ var reachableAlternatives = map[string]string{
 	// #2405: run-to-cursor joins that family — alt+f9 is the JetBrains chord
 	// and cmd+f9 the darwin primary, and both are fragile in a terminal.
 	"debug.runToCursor": "palette / Run menu",
-	"run.rerun":                  "palette / Run menu",
+	"run.rerun":         "palette / Run menu",
 	// #2081: coverage runs and the mark toggle are palette-only — the run
 	// family's chord budget is spent and coverage is an occasional action.
 	"run.testsWithCoverage": "palette",
@@ -222,9 +231,9 @@ var reachableAlternatives = map[string]string{
 	// #2405: the prompt flavour of run-to-cursor has no chord of its own —
 	// the cursor flavour carries alt+f9/cmd+f9 — so the palette is its door.
 	"debug.runToLine": "palette / Run menu",
-	"pane.close":         "palette / pane context menu",
-	"view.toggleWrap":    "palette",
-	"window.layouts":     "palette",
+	"pane.close":      "palette / pane context menu",
+	"view.toggleWrap": "palette",
+	"window.layouts":  "palette",
 	// #2315: the response viewer's copy also has its pane-local keys — "y"
 	// for the body, and ctrl+c once a selection exists (#2062) — either of
 	// which delivers on every terminal.
