@@ -73,6 +73,7 @@ bring their own.
 | DOM Inspector | `dom.toggle` | — | — | everywhere |
 | Close Tab | `editor.closeTab` | `cmd+w` | — | everywhere |
 | Force Code Insight (Large File) | `editor.forceCodeInsight` | — | — | everywhere |
+| Go to Line… | `editor.goToLine` | `cmd+l` | — | everywhere |
 | Large File Details | `editor.largeFileDetails` | — | — | everywhere |
 | Materialize Buffer to File | `editor.materializeBuffer` | — | — | everywhere |
 | Paste from History | `editor.pasteFromHistory` | `cmd+shift+v` | — | everywhere |

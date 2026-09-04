@@ -147,6 +147,7 @@ var actionMap = map[string]string{
 	"SearchEverywhere":     "palette.searchEverywhere",
 	"GotoAction":           "palette.searchEverywhere",
 	"GotoFile":             "project.goToFile",
+	"GotoLine":             "editor.goToLine",
 	"GotoClass":            "project.goToClass",
 	"GotoSymbol":           "project.goToClass",
 	"RecentFiles":          "palette.recentFiles",

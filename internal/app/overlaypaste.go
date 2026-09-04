@@ -109,6 +109,8 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		return nil, m.pasteEvalPrompt(text)
 	case m.runToLinePromptOpen():
 		return nil, m.pasteRunToLinePrompt(text)
+	case m.goToLinePromptOpen():
+		return nil, m.pasteGoToLinePrompt(text)
 	case m.paneNumPromptOpen():
 		return nil, m.pastePaneNumPrompt(text)
 	case m.httpSavePromptOpen():
