@@ -1,5 +1,33 @@
 # Log
 
+## 2026-09-04 (diffs open in the focused editor pane, #2507)
+
+- **A diff no longer carves off a split.** Every diff-open — `diff.files`, the
+  VCS panel's HEAD and commit diffs, local history and the Timeline,
+  `diff.compareWithClipboard`, the HTTP response diff — went through
+  `placeDiffLeaf`, which split the active editor to the right. Working in a
+  full editor layout meant every diff shrank everything and landed away from
+  where the eye was. The new shared helper `openDiffLeaf`
+  (`internal/app/diff_placement.go`) opens it as a focused **content tab**
+  (#1778) of the pane the user works in instead; the pane's file tabs stay.
+- **Target: the flexible region's focused pane, else its MRU.** `flexPane`
+  defines the region (tabbable content kinds — editor and the viewer panes —
+  never the explorer, a tool window, a terminal pane or a pure tool-tab host),
+  and `setFocus` now records `m.recentFlex` beside the older `m.recentEditor`.
+  A diff requested while the VCS panel or Issues has the keyboard therefore
+  lands in the editor pane the user came from. An empty scratch pane is still
+  taken over in place (#628); a layout with no flexible pane at all falls back
+  to `placeDiffLeaf`, which also stays the merge view's placement.
+- **Single-diff reuse became per pane.** `diffSlot` (#513) now looks for a
+  diff **in the target pane** — the pane itself, or its first diff content tab
+  — so a second diff retargets that tab and a diff parked in another pane is
+  left alone. `diff.windows = "multi"` adds another tab. The
+  re-open-same-pair shortcut (#509) is unchanged: an identical diff is focused
+  wherever it lives.
+- **`diff.placement`** (`focused` default, `split`) is in Settings → Diff
+  Viewer, validated in `internal/config/validate.go`. `split` restores the
+  pre-#2507 behaviour exactly, workspace-wide single slot included.
+
 ## 2026-09-04 (diff viewer: mouse selection lag while dragging, #2495)
 
 - **The drag was re-rendering the whole diff.** Mouse text selection (#2070)
