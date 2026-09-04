@@ -1,5 +1,25 @@
 # Log
 
+## 2026-09-04 (focus-by-number chords work from tool windows, #2493)
+
+- **`ctrl+1`…`ctrl+9` no longer die in a terminal.** A pane's number badge
+  promises the chord goes there from wherever the keyboard is, and with a
+  focused terminal it did nothing at all — not even the out-of-range
+  notification #275 requires, because the key was forwarded to the shell
+  before the keymap layer ever saw it. `pane.focus1`…`9` join the
+  `terminalGlobalCommands` allowlist: `ctrl+digit` is not a sequence shells or
+  common TUI children rely on, so there is no opt-out setting. The other tool
+  windows (VCS, Problems, Structure, Issues, HTTP, the doctors, Time) always
+  resolved the chords through the keymap layer and were never affected.
+- **From the popup terminal the chord blurs the layer.** Focusing a pane below
+  a layer that owns the keyboard would otherwise be invisible — every
+  following key would still go to the popup. `focusPaneNumber` therefore does
+  what a click into a pane below does (#2309): the box stays on screen,
+  keyboard-less.
+- **A table-driven regression test** in `internal/app` focuses every registered
+  tool-window kind in turn and presses the chord, with a coverage guard that
+  fails when a new `isToolKind` pane is not in the table.
+
 ## 2026-09-04 (direct MRU project switching by digit, #2489)
 
 - **Project hopping lost its dialog.** Telemetry counted 183 switches in three
