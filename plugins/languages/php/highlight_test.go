@@ -19,7 +19,7 @@ func TestPHPAllInterpolationForms(t *testing.T) {
 	defer highlight.SetRainbow(true)
 	lines := []string{
 		`<?php`,
-		`$key = "{$uid}|$type|${dt}";`,
+		`$fmt = "{$uid}|$type|${dt}";`,
 	}
 	spans := highlight.Highlight("main.php", lines)
 	if len(spans) == 0 {

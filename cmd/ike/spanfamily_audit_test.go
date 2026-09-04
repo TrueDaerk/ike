@@ -58,31 +58,54 @@ const (
 var spanFamilies = []spanFamily{
 	// \uXXXX works inside a double-quoted literal in every dialect the
 	// scanner knows (internal/escapes.UnicodeDialect), so three key/value
-	// shapes cover code, JSON and YAML/TOML alike.
-	{famUnicode, []string{"escape.unicode"}, [][]string{{
-		`x = "caf\u00e9"`,
-		`"key": "caf\u00e9",`,
-		`a: "caf\u00e9"`,
-	}}},
+	// shapes cover code, JSON and YAML/TOML alike. The prefix-less CSS
+	// dialect and shell's ANSI-C quoting (#2345) need probes of their own.
+	{famUnicode, []string{"escape.unicode"}, [][]string{
+		{
+			`x = "caf\u00e9"`,
+			`"key": "caf\u00e9",`,
+			`a: "caf\u00e9"`,
+		},
+		{`content: "\00e9";`},
+		{`echo $'caf\u00e9'`},
+	}},
 	// &amp; and &#65; decode in both the HTML and the XML entity set.
 	{famEntity, []string{"escape.entity"}, [][]string{{
 		`<i>&amp; &#65;</i>`,
 	}}},
-	// The one context where base64 is the convention today: the data: block
-	// of a Kubernetes Secret document ("c2VjcmV0dmFsdWU=" is "secretvalue").
-	{famBase64, []string{"escape.base64"}, [][]string{{
-		`kind: Secret`,
-		`data:`,
-		`  password: c2VjcmV0dmFsdWU=`,
-	}}},
-	// A secret-suspect key in every masking producer's shape: dotenv
-	// assignment, Python assignment, JSON member.
-	{famSecret, []string{"secret.value"}, [][]string{{
-		`DB_PASSWORD=hunter2secret`,
-		`DB_PASSWORD = "hunter2secret"`,
-		`"db_password": "hunter2secret",`,
-		`db_password: hunter2secret`,
-	}}},
+	// The contexts where base64 is the convention: the data: block of a
+	// Kubernetes Secret document ("c2VjcmV0dmFsdWU=" is "secretvalue") — in
+	// YAML and, since #2345, as a JSON manifest — and the Basic credential of
+	// an Authorization header ("dXNlcjpwYXNz" is "user:pass").
+	{famBase64, []string{"escape.base64"}, [][]string{
+		{
+			`kind: Secret`,
+			`data:`,
+			`  password: c2VjcmV0dmFsdWU=`,
+		},
+		{`{"kind": "Secret", "data": {"password": "c2VjcmV0dmFsdWU="}}`},
+		{
+			`GET https://example.com/api HTTP/1.1`,
+			`Authorization: Basic dXNlcjpwYXNz`,
+		},
+	}},
+	// A secret-suspect key in every masking producer's shape: dotenv/shell/
+	// crontab assignment, code assignment, JSON member, YAML/ini pair — plus
+	// the Dockerfile ENV operand and a request's credential header (#2345),
+	// whose producers key on their own carrying line.
+	{famSecret, []string{"secret.value"}, [][]string{
+		{
+			`DB_PASSWORD=hunter2secret`,
+			`DB_PASSWORD = "hunter2secret"`,
+			`"db_password": "hunter2secret",`,
+			`db_password: hunter2secret`,
+		},
+		{`ENV DB_PASSWORD=hunter2secret`},
+		{
+			`GET https://example.com/api HTTP/1.1`,
+			`Authorization: Bearer hunter2secret`,
+		},
+	}},
 	// A CIDR prefix quoted (the source-code producers scan string literals
 	// only) and bare (the config-format producers scan whole lines).
 	{famNet, []string{"net."}, [][]string{{
@@ -145,10 +168,11 @@ const (
 	// An injection helper grammar (markdown_inline): no buffer is ever of
 	// this language, so its Spans seam has nothing to decode.
 	reasonInjection = "injection helper grammar; no buffer is ever of this language"
-	// A real gap surfaced by filling in this ledger — the wiring is tracked
-	// in #2345, not excused. When a gap closes, its cell moves to
-	// offeredSpanFamilies.
-	reasonGap = "genuine gap, wiring tracked in #2345"
+	// A real gap surfaced by filling in this ledger — tracked in an issue,
+	// not excused. When a gap closes, its cell moves to offeredSpanFamilies.
+	// The initial set (#2345) is closed; the reason stays for the next gap a
+	// new family or language surfaces.
+	reasonGap = "genuine gap, wiring tracked in an open issue"
 )
 
 // offeredSpanFamilies lists, per language, the families its Spans hook
@@ -156,24 +180,26 @@ const (
 // probe stays silent fails, so a removed wiring (or a rotted probe) cannot
 // hide here.
 var offeredSpanFamilies = map[string][]string{
-	"ansible":    {famBase64, famCron, famNet, famNumber, famPerm, famUnicode},
-	"crontab":    {famCron},
-	"dockerfile": {famPerm},
+	"ansible":    {famBase64, famCron, famNet, famNumber, famPerm, famSecret, famUnicode},
+	"crontab":    {famCron, famSecret},
+	"css":        {famUnicode},
+	"dockerfile": {famPerm, famSecret},
 	"dotenv":     {famNet, famNumber, famSecret},
-	"go":         {famNet, famNumber, famPerm, famUnicode},
+	"go":         {famCron, famNet, famNumber, famPerm, famSecret, famUnicode},
 	"html":       {famEntity},
-	"http":       {famNet, famNumber},
-	"ini":        {famNet, famNumber},
-	"json":       {famCron, famNet, famNumber, famSecret, famUnicode},
+	"http":       {famBase64, famNet, famNumber, famSecret},
+	"ini":        {famNet, famNumber, famSecret},
+	"json":       {famBase64, famCron, famNet, famNumber, famSecret, famUnicode},
 	"log":        {famNumber},
-	"ndjson":     {famCron, famNet, famNumber, famSecret, famUnicode},
-	"php":        {famNumber, famUnicode},
-	"python":     {famNet, famNumber, famPerm, famSecret, famUnicode},
-	"shell":      {famPerm},
-	"toml":       {famCron, famNet, famNumber, famUnicode},
-	"typescript": {famNet, famUnicode},
+	"markdown":   {famEntity},
+	"ndjson":     {famBase64, famCron, famNet, famNumber, famSecret, famUnicode},
+	"php":        {famCron, famEntity, famNet, famNumber, famPerm, famSecret, famUnicode},
+	"python":     {famCron, famNet, famNumber, famPerm, famSecret, famUnicode},
+	"shell":      {famPerm, famSecret, famUnicode},
+	"toml":       {famCron, famNet, famNumber, famSecret, famUnicode},
+	"typescript": {famCron, famEntity, famNet, famNumber, famPerm, famSecret, famUnicode},
 	"xml":        {famEntity},
-	"yaml":       {famBase64, famCron, famNet, famNumber, famPerm, famUnicode},
+	"yaml":       {famBase64, famCron, famNet, famNumber, famPerm, famSecret, famUnicode},
 }
 
 // notOfferedSpanFamilies records why a language does not offer a family. A
@@ -183,25 +209,19 @@ var offeredSpanFamilies = map[string][]string{
 // fires means the family has since been wired, and the entry must go.
 var notOfferedSpanFamilies = []struct{ lang, family, reason string }{
 	{"ansible", famEntity, reasonNoSyntax},
-	{"ansible", famSecret, reasonGap}, // password:/stringData: values
 	{"crontab", famUnicode, reasonNoSyntax},
 	{"crontab", famEntity, reasonNoSyntax},
-	{"crontab", famSecret, reasonGap}, // env assignment lines (MAILTO=…)
 	{"crontab", "*", reasonNoConvention},
-	{"css", famUnicode, reasonGap}, // CSS \00e9 / content: "\f00c" escapes
 	{"css", "*", reasonNoConvention},
 	{"csv", "*", reasonForeignData},
 	{"diff", "*", reasonForeignData},
 	{"dockerfile", famUnicode, reasonNoSyntax},
 	{"dockerfile", famEntity, reasonNoSyntax},
-	{"dockerfile", famSecret, reasonGap}, // ENV DB_PASSWORD=…
 	{"dockerfile", "*", reasonNoConvention},
 	{"dotenv", famUnicode, reasonNoSyntax}, // dotenv values process no escapes
 	{"dotenv", famEntity, reasonNoSyntax},
 	{"dotenv", "*", reasonNoConvention},
 	{"go", famEntity, reasonNoSyntax},
-	{"go", famSecret, reasonGap}, // suspect-named assignments, as in Python
-	{"go", famCron, reasonGap},   // cron strings in scheduler calls
 	{"go", famBase64, reasonNoConvention},
 	{"go.mod", "*", reasonNoConvention},
 	{"go.sum", "*", reasonForeignData}, // checksum lines
@@ -210,58 +230,37 @@ var notOfferedSpanFamilies = []struct{ lang, family, reason string }{
 	{"html", "*", reasonNoConvention},
 	{"http", famUnicode, reasonNoSyntax}, // percent-encoding is its own family
 	{"http", famEntity, reasonNoSyntax},
-	{"http", famBase64, reasonGap}, // Authorization: Basic <b64>
-	{"http", famSecret, reasonGap}, // credential-carrying headers
 	{"http", "*", reasonNoConvention},
 	{"ini", famUnicode, reasonNoSyntax},
 	{"ini", famEntity, reasonNoSyntax},
-	{"ini", famSecret, reasonGap}, // password = … values
 	{"ini", "*", reasonNoConvention},
 	{"json", famEntity, reasonNoSyntax},
-	{"json", famBase64, reasonGap}, // k8s Secret manifests written as JSON
 	{"json", famPerm, reasonNoConvention},
 	{"log", "*", reasonForeignData},
 	{"make", famUnicode, reasonNoSyntax},
 	{"make", famEntity, reasonNoSyntax},
 	{"make", "*", reasonNoConvention},
-	{"markdown", famEntity, reasonGap}, // CommonMark decodes HTML entities
 	{"markdown", "*", reasonNoConvention},
 	{"markdown_inline", "*", reasonInjection},
 	{"ndjson", famEntity, reasonNoSyntax},
-	{"ndjson", famBase64, reasonGap}, // as json
 	{"ndjson", famPerm, reasonNoConvention},
-	{"php", famEntity, reasonGap}, // embedded HTML markup
-	{"php", famSecret, reasonGap}, // suspect-named assignments
-	{"php", famNet, reasonGap},    // QuotedSpans, as in Go/Python/JS
-	{"php", famPerm, reasonGap},   // chmod(…) calls
-	{"php", famCron, reasonGap},   // cron strings in scheduler calls
 	{"php", famBase64, reasonNoConvention},
 	{"psv", "*", reasonForeignData},
 	{"python", famEntity, reasonNoSyntax},
-	{"python", famCron, reasonGap}, // cron strings in scheduler calls
 	{"python", famBase64, reasonNoConvention},
-	{"shell", famUnicode, reasonGap}, // $'…' ANSI-C quoting
 	{"shell", famEntity, reasonNoSyntax},
-	{"shell", famSecret, reasonGap}, // export DB_PASSWORD=…
 	{"shell", "*", reasonNoConvention},
 	{"sql", famUnicode, reasonNoSyntax}, // standard SQL; dialect U&'…' is niche
 	{"sql", famEntity, reasonNoSyntax},
 	{"sql", "*", reasonNoConvention},
 	{"toml", famEntity, reasonNoSyntax},
-	{"toml", famSecret, reasonGap}, // password = … values
 	{"toml", famBase64, reasonNoConvention},
 	{"toml", famPerm, reasonNoConvention},
 	{"tsv", "*", reasonForeignData},
-	{"typescript", famEntity, reasonGap}, // entities in JSX text
-	{"typescript", famSecret, reasonGap}, // suspect-named assignments
-	{"typescript", famPerm, reasonGap},   // fs.chmod / mode: options
-	{"typescript", famCron, reasonGap},   // cron strings in scheduler calls
-	{"typescript", famNumber, reasonGap}, // const MAX_BYTES = …, as in Go
 	{"typescript", famBase64, reasonNoConvention},
 	{"xml", famUnicode, reasonNoSyntax},
 	{"xml", "*", reasonNoConvention},
 	{"yaml", famEntity, reasonNoSyntax},
-	{"yaml", famSecret, reasonGap}, // password:/stringData: values
 }
 
 // offersByProbe reports whether l's Spans hook produces a span of family f on

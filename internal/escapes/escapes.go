@@ -597,7 +597,7 @@ func appendDataEntry(out []lang.Span, li int, line string) []lang.Span {
 	if q := val[0]; (q == '"' || q == '\'') && len(val) > 1 && val[len(val)-1] == q {
 		val = val[1 : len(val)-1]
 	}
-	text, ok := decodeBase64(val)
+	text, ok := DecodeBase64(val)
 	if !ok {
 		return out
 	}
@@ -607,10 +607,13 @@ func appendDataEntry(out []lang.Span, li int, line string) []lang.Span {
 	})
 }
 
-// decodeBase64 decodes a standard-alphabet, padded base64 scalar whose
+// DecodeBase64 decodes a standard-alphabet, padded base64 scalar whose
 // payload is printable single-line UTF-8 text. One trailing newline is
-// forgiven — `echo secret | base64` puts it there.
-func decodeBase64(s string) (string, bool) {
+// forgiven — `echo secret | base64` puts it there. Exported for the producers
+// whose carrying context lives in a language plugin (#2345): the `.http`
+// plugin's `Authorization: Basic` decoding cannot be expressed here without
+// parsing requests twice.
+func DecodeBase64(s string) (string, bool) {
 	if len(s) < 4 || len(s)%4 != 0 {
 		return "", false
 	}

@@ -25,9 +25,13 @@ package langweb
 import (
 	_ "embed"
 
+	"ike/internal/consthint"
+	"ike/internal/cronhint"
 	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/internal/nethint"
+	"ike/internal/permhint"
+	"ike/internal/secret"
 	"ike/plugins/languages/register"
 )
 
@@ -144,14 +148,34 @@ func init() {
 		// Sticky scopes + folding: rule headers pin, blocks fold.
 		ScopeNodes: []string{"rule_set", "media_statement", "keyframes_statement", "supports_statement"},
 		FoldNodes:  []string{"rule_set", "media_statement", "keyframes_statement", "supports_statement", "block", "comment"},
+		// Unicode-escape decoding (#2345): CSS's `\e9` / `\00e9` character
+		// escapes conceal as the character they name.
+		Spans: cssSpans,
 	})
 }
 
 // scriptSpans is the JavaScript/TypeScript lang.Language.Spans hook: the
-// unicode-escape stand-ins (#1620) — including the ES6 \u{X…} form and \xNN,
-// and inside `…` templates (#2334) — plus the network-literal hints (#1653),
-// the latter restricted to string literals — a bare `10.0.0.0/8` in source is
-// arithmetic, not a prefix.
+// secret masks on suspect assignments (#2345), the unicode-escape stand-ins
+// (#1620) — including the ES6 \u{X…} form and \xNN, and inside `…` templates
+// (#2334) — the network-literal hints (#1653) and cron hints (#2345)
+// restricted to string literals (a bare `10.0.0.0/8` in source is
+// arithmetic, not a prefix), the permission hints on the fs mode APIs
+// (#2345), the constant conceals on CONST_CASE assignments (#2345) and the
+// entity decoding in JSX text (#2345). The masks come first: overlapping
+// spans resolve first-covering-wins, so the mask must precede any decode
+// that would render a piece of the credential.
 func scriptSpans(lines []string) []lang.Span {
-	return append(escapes.UnicodeSpansIn(lines, escapes.UnicodeScript), nethint.QuotedSpans(lines)...)
+	out := append(secret.AssignSpans(lines), escapes.UnicodeSpansIn(lines, escapes.UnicodeScript)...)
+	out = append(out, nethint.QuotedSpans(lines)...)
+	out = append(out, permhint.ScriptSpans(lines)...)
+	out = append(out, cronhint.QuotedSpans(lines)...)
+	out = append(out, consthint.ScriptSpans(lines)...)
+	return append(out, jsxEntitySpans(lines)...)
+}
+
+// cssSpans is the CSS lang.Language.Spans hook (#2345): character escapes —
+// `\e9`, `content: "\f00c"` — conceal as the character they name, CSS's own
+// no-prefix hex dialect.
+func cssSpans(lines []string) []lang.Span {
+	return escapes.UnicodeCSSSpans(lines)
 }

@@ -15,6 +15,7 @@ import (
 	"ike/internal/lang"
 	"ike/internal/nethint"
 	"ike/internal/numhint"
+	"ike/internal/secret"
 	"ike/plugins/languages/register"
 )
 
@@ -57,7 +58,10 @@ func tomlSpans(lines []string) []lang.Span {
 	// producer: two stand-ins over one literal would fight for the same cells.
 	// A key that names the unit wins the other way round (#1685).
 	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.Value))
-	out := append(cronhint.QuotedSpans(lines), escapes.UnicodeSpansIn(lines, escapes.UnicodeTOML)...)
+	// The secret masks (#2345) come first: overlapping spans resolve
+	// first-covering-wins, so the mask must precede any decode of the value.
+	out := append(secret.PairSpans(lines, "="), cronhint.QuotedSpans(lines)...)
+	out = append(out, escapes.UnicodeSpansIn(lines, escapes.UnicodeTOML)...)
 	out = append(out, stamps...)
 	out = append(out, hints...)
 	return append(out, nethint.Spans(lines)...)

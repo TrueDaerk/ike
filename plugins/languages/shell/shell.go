@@ -11,10 +11,21 @@ package langshell
 import (
 	_ "embed"
 
+	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/internal/permhint"
 	"ike/plugins/languages/register"
 )
+
+// shellSpans is the lang.Language.Spans hook: the secret masks (#2345) come
+// first — overlapping spans resolve first-covering-wins, so the mask must
+// precede anything that would render a piece of the credential — then the
+// permission hints (#1656) and the unicode escapes of ANSI-C quoting
+// ($'café', #2345).
+func shellSpans(lines []string) []lang.Span {
+	out := append(maskSpans(lines), permhint.ShellSpans(lines)...)
+	return append(out, escapes.UnicodeANSICSpans(lines)...)
+}
 
 //go:embed queries/highlights.scm
 var query string
@@ -43,8 +54,9 @@ func init() {
 			},
 		},
 		// Permission hints (#1656): `chmod`'s mode operand and the `-m` value
-		// of `install`/`mkdir` draw their symbolic rwx form.
-		Spans:       permhint.ShellSpans,
+		// of `install`/`mkdir` draw their symbolic rwx form. Secret masking
+		// and ANSI-C unicode decoding joined in #2345.
+		Spans:       shellSpans,
 		LineComment: "#",
 		IndentAfter: []string{"then", "do", "{"},
 		// Sticky scopes + folding (#168, #144).

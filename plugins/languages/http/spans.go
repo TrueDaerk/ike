@@ -43,10 +43,17 @@ import (
 // querySpans is the lang.Language.Spans hook (#1585).
 func querySpans(lines []string) []lang.Span {
 	f := httpfile.Parse(strings.Join(lines, "\n"))
-	// Placeholders (#1880) are claimed first, so they win over everything
+	// The secret masks (#2345) are claimed first of all: overlapping spans
+	// resolve first-covering-wins, so a masked credential must precede every
+	// decode — including basicAuthSpans below, which would otherwise render
+	// the decoded credential of an `Authorization: Basic` header.
+	out := maskSpans(f, lines)
+	// Placeholders (#1880) are claimed next, so they win over everything
 	// else this producer computes for the same cells — a "{{host}}" sitting
 	// inside a variable definition's value, say.
-	out := placeholderSpans(lines)
+	out = append(out, placeholderSpans(lines)...)
+	// The Basic-credential base64 decode (#2345), behind the masks.
+	out = append(out, basicAuthSpans(f, lines)...)
 	// Capture directives (#1993) are claimed right after: the line is a
 	// comment to the grammar, and its parts must read as the structure they
 	// are (capture.go).

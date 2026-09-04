@@ -9,6 +9,7 @@ import (
 	_ "embed"
 
 	"ike/internal/consthint"
+	"ike/internal/cronhint"
 	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/internal/nethint"
@@ -101,5 +102,9 @@ func pythonSpans(lines []string) []lang.Span {
 	out := append(maskSpans(lines), escapes.UnicodeSpansIn(lines, escapes.UnicodePython)...)
 	out = append(out, nethint.QuotedSpans(lines)...)
 	out = append(out, permhint.PythonSpans(lines)...)
+	// Cron hints (#2345): a quoted schedule in a scheduler call (APScheduler,
+	// celery beat) carries its English reading — shape-guarded, so a plain
+	// list of numbers in a string never turns into one.
+	out = append(out, cronhint.QuotedSpans(lines)...)
 	return append(out, consthint.PythonSpans(lines)...)
 }

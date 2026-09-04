@@ -6,8 +6,12 @@ import (
 	_ "embed"
 
 	"ike/internal/consthint"
+	"ike/internal/cronhint"
 	"ike/internal/escapes"
 	"ike/internal/lang"
+	"ike/internal/nethint"
+	"ike/internal/permhint"
+	"ike/internal/secret"
 	"ike/plugins/languages/register"
 )
 
@@ -66,9 +70,20 @@ func init() {
 	})
 }
 
-// phpSpans is the lang.Language.Spans hook: the constant conceals (#1701) and
-// the unicode-escape stand-ins (#1620, #2334). Only double-quoted strings
-// decode — PHP's '…' passes a backslash through unchanged.
+// phpSpans is the lang.Language.Spans hook: the secret masks on suspect
+// assignments (#2345), the constant conceals (#1701), the unicode-escape
+// stand-ins (#1620, #2334 — only double-quoted strings decode, PHP's '…'
+// passes a backslash through unchanged), the network-literal hints (#1653)
+// and cron hints (#2345) in string literals, the permission hints on
+// chmod()/mkdir() calls (#2345), and the entity decoding in the buffer's
+// HTML portions (#2345). The masks come first: overlapping spans resolve
+// first-covering-wins, so the mask must precede any decode that would render
+// a piece of the credential.
 func phpSpans(lines []string) []lang.Span {
-	return append(consthint.PHPSpans(lines), escapes.UnicodeSpansIn(lines, escapes.UnicodePHP)...)
+	out := append(secret.AssignSpans(lines), consthint.PHPSpans(lines)...)
+	out = append(out, escapes.UnicodeSpansIn(lines, escapes.UnicodePHP)...)
+	out = append(out, nethint.QuotedSpans(lines)...)
+	out = append(out, permhint.PHPSpans(lines)...)
+	out = append(out, cronhint.QuotedSpans(lines)...)
+	return append(out, entitySpans(lines)...)
 }

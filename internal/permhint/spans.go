@@ -219,12 +219,34 @@ var pythonCalls = map[string]bool{
 	"mkdir": true, "makedirs": true, "mknod": true, "mkfifo": true,
 }
 
+// phpCalls are the PHP equivalents (#2345). `umask` is deliberately absent:
+// its argument is a mask of removed bits, and reading it as the resulting
+// mode would state the opposite of the truth.
+var phpCalls = map[string]bool{
+	"chmod": true, "mkdir": true,
+}
+
+// scriptCalls are the Node fs API equivalents (#2345), sync variants
+// included; the `mode:` member of an options object (`fs.mkdir(p, { mode:
+// 0o755 })`) sits inside the call's argument region and is found by the same
+// octal-literal scan.
+var scriptCalls = map[string]bool{
+	"chmod": true, "chmodsync": true, "fchmod": true, "fchmodsync": true,
+	"lchmod": true, "lchmodsync": true, "mkdir": true, "mkdirsync": true,
+}
+
 // GoSpans produces the hints for a Go buffer: the octal literals inside a call
 // to a mode API.
 func GoSpans(lines []string) []lang.Span { return codeSpans(lines, goCalls) }
 
 // PythonSpans produces the hints for a Python buffer, the same way.
 func PythonSpans(lines []string) []lang.Span { return codeSpans(lines, pythonCalls) }
+
+// PHPSpans produces the hints for a PHP buffer, the same way (#2345).
+func PHPSpans(lines []string) []lang.Span { return codeSpans(lines, phpCalls) }
+
+// ScriptSpans produces the hints for a JS/TS buffer, the same way (#2345).
+func ScriptSpans(lines []string) []lang.Span { return codeSpans(lines, scriptCalls) }
 
 // codeSpans annotates the octal literals in the argument list of every call
 // whose name is in names. The whole argument region is scanned rather than a

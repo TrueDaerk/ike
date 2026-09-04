@@ -10,6 +10,7 @@ import (
 	"ike/internal/lang"
 	"ike/internal/nethint"
 	"ike/internal/numhint"
+	"ike/internal/secret"
 )
 
 // spanAt returns the first span covering (line, col), like the editor's
@@ -329,12 +330,30 @@ func TestQuerySpansJWTSignature(t *testing.T) {
 	}
 	spans := querySpans(lines)
 	for _, li := range []int{0, 2} {
+		// The token sits in a credential position (@auth, Authorization), so
+		// the secret mask covers it first (#2345); the JWT signature dimming
+		// must still be produced beneath it, for when masking is toggled off.
 		sigCol := strings.LastIndex(lines[li], ".s1gn4tur3") + 1
-		if got := captureAt(spans, li, sigCol); got != jwt.Capture {
-			t.Errorf("line %d signature capture = %q, want %q", li, got, jwt.Capture)
+		if got := captureAt(spans, li, sigCol); got != secret.Capture {
+			t.Errorf("line %d first covering capture = %q, want the mask", li, got)
 		}
+		var sig, payloadDimmed bool
 		payloadCol := strings.Index(lines[li], tok) + 5
-		if got := captureAt(spans, li, payloadCol); got == jwt.Capture {
+		for _, s := range spans {
+			if s.Line != li || s.Capture != jwt.Capture {
+				continue
+			}
+			if s.StartCol <= sigCol && sigCol < s.EndCol {
+				sig = true
+			}
+			if s.StartCol <= payloadCol && payloadCol < s.EndCol {
+				payloadDimmed = true
+			}
+		}
+		if !sig {
+			t.Errorf("line %d: the signature segment must still carry %q", li, jwt.Capture)
+		}
+		if payloadDimmed {
 			t.Errorf("line %d: the header segment must not be dimmed", li)
 		}
 	}
@@ -494,7 +513,9 @@ func TestFieldUnitPrecedence(t *testing.T) {
 // value gets its own capture, distinct from the name the grammar already
 // styles as @variable.
 func TestVariableDefinitionValueSpan(t *testing.T) {
-	lines := []string{"@token = abc123", "@empty =", "not.a.def = x"}
+	// "@stage", not "@token": a secret-suspect name would mask first (#2345),
+	// which TestHTTPMaskHeaders covers.
+	lines := []string{"@stage = abc123", "@empty =", "not.a.def = x"}
 	spans := querySpans(lines)
 	if got := captureAt(spans, 0, strings.Index(lines[0], "abc123")); got != "string" {
 		t.Errorf("definition value = %q, want string", got)

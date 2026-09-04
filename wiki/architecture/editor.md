@@ -2447,6 +2447,8 @@ family has its own capture, conceal channel and toggle:
   | `php` | `"` | `'` | yes | yes (PHP 7) | no (a raw byte) |
   | `yaml` (and `ansible`) | `"` | `'` | yes | no | yes |
   | `toml` | `"` | `'` | yes | no | no |
+  | `shell` (#2345) | `$'…'` only | `'`, `"` | yes | no | yes |
+  | `css` (#2345) | — (everywhere) | — | its own `\hhhhhh` form | no | no |
 
   A raw literal is skipped whole rather than merely ignored, so a `"` inside
   PHP's `'say "ü"'` cannot open a phantom escape-processing literal. `\xNN`
@@ -2454,8 +2456,17 @@ family has its own capture, conceal channel and toggle:
   so `"\xc3\xbc"` is one `ü` written as two escapes and decoding each alone
   would render `Ã¼`. Python's `\N{NAME}` stays raw — resolving it needs the
   Unicode character-name table, which the Go standard library does not carry.
-  Languages without `\u` escapes in their string literals (shell, INI, CSV,
-  Dockerfile, Make, SQL) have no producer.
+
+  Two dialects do not fit the quote-state scanner and get scanners of their
+  own (`internal/escapes/regions.go`, #2345): **CSS** writes an escape as a
+  backslash and one to six hex digits with no `u` prefix at all (`\e9`,
+  `content: "\f00c"`), valid in identifiers as well as strings, with an
+  optional single trailing whitespace that terminates the digit run and
+  belongs to the escape; identity escapes (`\:`) stay raw. **Shell** decodes
+  `\uXXXX`/`\UXXXXXXXX`/`\xNN` only inside ANSI-C quoting (`$'café'`) —
+  plain `'…'` is raw and `"…"` processes no unicode forms, so the scan keys
+  on the `$'` opener. Languages without any escape syntax in their literals
+  (INI, CSV, Dockerfile, Make, SQL) have no producer.
 - **HTML/XML entities** (`escape.entity`, `editor.entity_decoding` /
   `view.toggleEntityDecoding`): `&name;`, `&#123;`, `&#x1F600;`. The `html`
   producer decodes by the full HTML named-entity table (stdlib
@@ -2463,14 +2474,26 @@ family has its own capture, conceal channel and toggle:
   `xml` producer decodes only the five predefined entities plus numeric
   references — other names are document-defined in XML, guessing the HTML
   table would lie. Non-graphic code points (ZWJ, controls) stay raw: an
-  invisible stand-in would hide that the reference exists.
+  invisible stand-in would hide that the reference exists. Three more
+  producers joined in #2345, each scoped to where its language really
+  resolves entities: **markdown** decodes in prose (CommonMark's rule),
+  skipping fenced and indented code blocks and inline code spans; **php**
+  decodes in the buffer's HTML portions only, tracking `<?php`/`?>` across
+  lines so an `&amp;` inside code stays literal; **typescript** decodes in
+  JSX text — the stretch between a `>` and the next `<` outside string
+  literals, with `{…}` expression islands cut out.
 - **Base64 values** (`escape.base64`, `editor.base64_decoding` /
   `view.toggleBase64Decoding`): decoded inline only where base64 is the
   *convention*, not on every base64-looking string — the `data:` block of a
-  YAML document declaring `kind: Secret` (per `---`-separated document), and
-  only when the payload decodes to printable single-line UTF-8 (one trailing
-  newline forgiven — `echo secret | base64` leaves it). Binary secrets stay
-  raw; `stringData:` holds plaintext and is never touched.
+  document declaring `kind: Secret`, in YAML (per `---`-separated document)
+  and, since #2345, as a JSON manifest (per top-level object, so an ndjson
+  stream decodes per line) — and only when the payload decodes to printable
+  single-line UTF-8 (one trailing newline forgiven — `echo secret | base64`
+  leaves it). Binary secrets stay raw; `stringData:` holds plaintext and is
+  never decoded (it masks instead, see *Secret masking*). The `.http`
+  producer (#2345) decodes the payload of `Authorization: Basic …` headers
+  the same way — with the secret masks emitted first, so with masking on the
+  credential renders masked, never decoded.
 
 `concealSplit` routes all decode-family stand-ins (these three plus #1618's
 `timestamp`) into a per-capture channel map (`decodes`), and
@@ -2562,10 +2585,13 @@ detection live in `internal/cronhint`:
 - **Contexts**: crontab lines (the leading five fields of a line that is
   neither a comment nor a `NAME=value` assignment, plus the `@` shorthands),
   CI YAML `cron:`/`schedule:` values (GitHub Actions, GitLab CI — the key
-  names the value a schedule, so quoted and plain scalars both count), and
-  quoted scalars in YAML, JSON and TOML. The quoted-scalar path additionally
-  requires a cron-specific character or a field name, so a quoted list of
-  numbers (`"1 2 3 4 5"`) is never mistaken for a schedule.
+  names the value a schedule, so quoted and plain scalars both count),
+  quoted scalars in YAML, JSON and TOML, and — since #2345 — quoted string
+  literals in Go, Python, PHP and JS/TS source, where scheduler libraries
+  (robfig/cron, APScheduler, node-cron) take their expressions. The
+  quoted path additionally requires a cron-specific character or a field
+  name, so a quoted list of numbers (`"1 2 3 4 5"`) is never mistaken for a
+  schedule.
 
 ## Number-readability hints (#1627)
 
@@ -2695,8 +2721,8 @@ channel and `decodeOn` gates it, exactly like the decode families (#1620).
 ## Constant conceals in code (#1701)
 
 The number families extend into source code: a **constant assignment** in a
-Python, Go or PHP buffer reads by its name exactly like a config value reads
-by its key — `MAX_BYTES = 10 * 1024 * 1024` draws as `10 MiB`,
+Python, Go, PHP or — since #2345 — JS/TS buffer reads by its name exactly
+like a config value reads by its key — `MAX_BYTES = 10 * 1024 * 1024` draws as `10 MiB`,
 `TIMEOUT_MS = 30 * 1000` as `30s` — with a pure literal-arithmetic right-hand
 side **evaluated first**. No new captures, toggles or settings: the spans
 carry the numhint/epochtime captures, so they ride the existing conceal
@@ -2819,8 +2845,8 @@ a different colour, not a family of its own.
 - **Contexts** split the way the other hint families split. Whole lines are
   scanned where every line is data — YAML, JSON/ndjson, TOML, ini/conf,
   dotenv and `.http` buffers; only **string literals** are scanned in source
-  files (Go, JavaScript/TypeScript, Python), because a bare `10.0.0.0/8` in
-  code is arithmetic, not a prefix.
+  files (Go, JavaScript/TypeScript, Python and — since #2345 — PHP), because
+  a bare `10.0.0.0/8` in code is arithmetic, not a prefix.
 - **Guards** are positional. An address run must not start right after a `/`,
   so a URL or filesystem path segment (`https://host/10.0.0.0/8`) is never
   read as a prefix; the prefix length must end the literal, a trailing `.`
@@ -2865,7 +2891,9 @@ selection across it) drops the hint and the raw digits are what is edited.
   plus the shell scan over `RUN` lines in Dockerfiles; the octal literals in
   the argument list of a mode API in Go and Python (`os.Chmod`,
   `os.WriteFile`, `os.MkdirAll`, `os.FileMode(…)`, `os.chmod`,
-  `os.makedirs(…, mode=0o755)`, `Path(…).chmod(…)`); and the
+  `os.makedirs(…, mode=0o755)`, `Path(…).chmod(…)`), in PHP (`chmod(…)`,
+  `mkdir(…)`) and in JS/TS (`fs.chmod`/`fs.mkdir` and their sync variants,
+  the `mode:` member of an options object included — all #2345); and the
   `mode:`/`defaultMode:`/`directory_mode:` keys in YAML and Ansible.
 - **Guards.** Shell modes are octal by definition, so a bare `755` decodes
   there. The code and YAML contexts additionally require the literal to be
@@ -3033,8 +3061,11 @@ over the standard library); the editor half is `pemsummary.go`.
 
 Values whose key names a credential render as `••••`
 (`secret.value`, `editor.secret_masking` / `view.toggleSecretMasking`) — in a
-`.env` file, in a Python assignment (#1811) and in a JSON member (#1813). The
-key alone decides — `internal/secret.Suspect` matches `*_SECRET`, `PASSWORD`,
+`.env` file, in a Python assignment (#1811), in a JSON member (#1813) and,
+since the #2345 audit sweep, in every other place a key names its value: a
+YAML/Ansible pair, a TOML/ini pair, a crontab environment line, a shell
+`export`, a Dockerfile `ENV`/`ARG`, a Go/PHP/JS-TS assignment and a `.http`
+credential header. The key alone decides — `internal/secret.Suspect` matches `*_SECRET`, `PASSWORD`,
 `*_TOKEN`, `*_KEY`, `CREDENTIALS`, `DSN` and friends, and clears keys that
 only look like one (`PUBLIC_KEY`, `API_KEY_ID`, `TOKEN_URL`, `AUTHOR`) — so
 the value is never inspected to decide whether to hide it. The mask is fixed
@@ -3125,8 +3156,33 @@ grammar query, so it also holds while the buffer does not parse — which is
 exactly the moment a freshly pasted credential is on screen. The masks are
 emitted ahead of the buffer's other stand-ins (epoch, escape, hint spans), so
 first-covering-wins cannot let a decode render a piece of the secret. ndjson
-shares the producer. Other languages are follow-up work; the shared core in
-`internal/secret` is what they will dock onto.
+shares the producer.
+
+The remaining producers landed with the capability-audit sweep (#2345), all
+docked onto the same `internal/secret` core. Two shared recognisers cover
+most of them: `secret.PairSpans` reads the `key = value` / `key: value`
+lines of TOML, ini and crontab (a key holding whitespace is no key, which is
+what keeps a crontab *job* line, whose command may contain an `=`, from
+reading as an assignment; quoted values mask their content, bare values mask
+to the line end — cutting at a would-be comment could leak the tail of the
+very value being hidden), and `secret.AssignSpans` ports the Python
+producer's stance to the C-family surface syntax of Go
+(`password := "…"`, `var … string = "…"`), PHP (`$this->password = "…"`) and
+JS/TS (`const apiKey = "…"`), string literals only, name-shaped
+suspect literals exempted, `==`/`=>`/compound assignments never matched.
+YAML (shared by ansible) masks suspect-keyed mapping values plus every value
+of a Secret manifest's `stringData:` block — that block exists to hold
+plaintext credentials, whatever its keys say. Shell masks `NAME=value`
+assignments bare and behind `export`/`declare`/`local`/`readonly`;
+Dockerfile masks the `ENV`/`ARG` operands in both spellings. The `.http`
+producer keys on header names — `Authorization`, `X-Api-Key`, `Cookie` and
+friends by its own table, since `secret.Suspect("Authorization")` is
+deliberately false (AUTHOR is a public marker), other header names by the
+shared tables — keeps the scheme word (`Bearer`, `Basic`) readable, masks
+suspect `@name = value` definitions, and skips values holding a `{{…}}`
+placeholder: indirection is not the credential. Everywhere the masks are
+emitted first in the hook, so no decode or hint can render a piece of a
+masked value.
 
 Duplicate keys in the same file are marked in the gutter and underlined
 inline: the dotenv language registers a `lang.Lint` (see
