@@ -123,6 +123,11 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.copyDocPath", "Copy JSON/YAML Path", "copy_doc_path", ""),
 			action("editor.copyDocPathJQ", "Copy JSON/YAML Path as jq Expression", "copy_doc_path_jq", ""),
 			action("editor.copyDocPathYQ", "Copy JSON/YAML Path as yq Expression", "copy_doc_path_yq", ""),
+			// Structural value at the caret (#2499): the decoded value a
+			// JSON/YAML/TOML pair or an HTML element holds, and the raw
+			// construct around it.
+			action("editor.yankValue", "Copy Value Under Caret", "yank_value", "gy"),
+			action("editor.yankValueOuter", "Copy Key and Value Under Caret", "yank_value_outer", "gY"),
 			action("editor.commentLine", "Toggle Line Comment", "comment_line", ""),
 			action("editor.commentBlock", "Toggle Block Comment", "comment_block", ""),
 			// View options (#64): per-view display toggles. They flip the

@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-09-04T13:00:00Z
 ---
 
 # Editor
@@ -566,6 +566,7 @@ for linewise, e.g. `guu`/`gugu`), `gv` (reselect the last visual selection),
 `gi` (insert at the last insert position), `gJ` (join without a space),
 `ge`/`gE`, `gf` (open the file under the cursor via `OpenPathMsg`, resolved
 app-side), `g?` (explain the concealed or masked value at the caret, #1998),
+`gy`/`gY` (copy the structural value under the caret, decoded or raw, #2499),
 and the display-line motions `g0 g$ gj gk` (visual rows under soft
 wrap, plain line motions otherwise) — plus `zz zt zb` (scroll the cursor line
 to centre/top/bottom next to the `z` fold keys; a count first moves the cursor
@@ -2132,6 +2133,73 @@ caches and renders it.
   shared across the value copies like `svTable`, reset per view on a document
   share) and the whole feature is off in large-file mode (`InsightOff`), like
   every other whole-buffer analysis.
+
+## Structural value copies — `gy` / `gY` (#2499)
+
+The breadcrumb above answers "where am I"; this answers "give me *this value*
+as text". Editing a manifest, a fixture or a lockfile, what one wants on the
+clipboard is almost never the buffer text — it is the JSON string without its
+quotes and with its escapes resolved (an embedded document, a `\n`-joined
+script), the YAML block scalar folded per its header, the inner markup of an
+HTML element. Before #2499 that was a hand-made visual selection plus a round
+of escape surgery.
+
+Two normal-mode chords, both in the editor's own `g` layer (`resolveAfterG`),
+both also registered as commands (`editor.yankValue` / `editor.yankValueOuter`,
+palette-visible, ledgered as vim-native keys):
+
+- **`gy`** copies the **decoded inner** value.
+- **`gY`** copies the **outer** construct raw, exactly as the buffer holds it —
+  the whole `key: value` pair, the element including its tags, the literal
+  including its quotes.
+
+The parse is `highlight.SyntaxChainAt` (`parse_cgo.go`), the sibling of the
+#1912 selection ladder: one fresh Tree-sitter parse, the ancestor chain at the
+caret innermost-first, each node snapshotted with its **direct children and
+their field names** — which is what tells the value half of a pair from the key
+half, and where an element's tags end. The snapshot type is
+`internal/structval.Node`, so the meaning lives in a leaf package (pure Go, no
+CGo, no registry) that is tested against every language without a parser in the
+loop; the `!cgo` build returns no chain and both chords decline.
+
+`structval.Extract` picks the rule from the buffer's language id:
+
+- **JSON/TOML** — the innermost `key = value` pair yields its value; inside an
+  array, the element itself does. A caret on the *key* copies that key's value,
+  so "what is this set to" costs no motion. Strings are decoded (JSON through
+  `encoding/json`, TOML through the TOML parser, which knows all four of its
+  string forms); anything else — a number, an object, an inline table — is
+  copied as written, so a pretty-printed subtree stays pretty-printed.
+- **YAML** — the innermost mapping pair or sequence item. The decoded form
+  comes from the YAML parser rather than from a hand-rolled unquote, because
+  `|`, `>`, `>-`, quotes, tags and anchors all change what a scalar *means*;
+  the text is newline-terminated first, since a literal block scalar's final
+  line break is part of its value and a node sliced out of the buffer stops at
+  its last character. A nested block node is **dedented** back into a document
+  that parses on its own: the node starts at its first key, so only line one
+  loses its indentation when it is sliced out.
+- **HTML/XML** — the innermost element yields the markup **between** its tags
+  (`<p>Hello <b>x</b></p>` → `Hello <b>x</b>`), entities left alone because the
+  payload is markup. An attribute yields its value with entities resolved,
+  since that one is plain text. A void or self-closing element has no inside:
+  `gY` still copies the tag, `gy` says there is nothing to take.
+- **Everything else** — the innermost string literal, decoded. Which node that
+  is comes from the kind name (`…string…`, `…char…`, minus the
+  `_content`/`_start`/`_end` pieces grammars split literals into), and the
+  decode is `strconv.Unquote` with a hand-rolled fallback for the forms Go's
+  syntax does not cover (Python's `'…'`, `r"…"`, triple quotes). This is also
+  the fallback the four families fall through to.
+
+Nothing is resolved beyond that: an anchor, an alias or a `$ref` is copied as
+written, the same honesty rule the breadcrumb applies.
+
+The copy goes through `regs.Yank('+')`, so it reaches the system clipboard, the
+clipboard history and the #1255 failure toast like every other yank; a trailing
+newline marks the entry linewise, matching the app-wide history rule. The
+success toast leads with the copied text's first line (40 cells, ellipsis) and
+closes with a size hint — `copied "…" (3 lines, 42 chars)`. Like every
+whole-buffer analysis the feature is off in large-file mode (`InsightOff`), and
+it parses **on demand**, once per keypress, never per frame.
 
 ## Log-file rendering (#1621)
 

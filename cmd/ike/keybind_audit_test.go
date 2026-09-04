@@ -148,6 +148,8 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"editor.toggleValue", reasonVimKey},          // g!
 	{"editor.explainConceal", reasonVimKey},       // g?
 	{"editor.labelJump", reasonVimKey},            // gs
+	{"editor.yankValue", reasonVimKey},            // gy
+	{"editor.yankValueOuter", reasonVimKey},       // gY
 	{"editor.quit", reasonVimKey},                 // :q
 	{"editor.write_quit", reasonVimKey},           // :wq
 	{"editor.tab.closeOthers", reasonMenu},        // the tab context menu
