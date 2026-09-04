@@ -1,5 +1,37 @@
 # Log
 
+## 2026-09-04 (forge poll pauses while blurred, slows while the Issues pane is closed, #2488)
+
+- **An idle IKE stopped paying for data nobody sees.** Telemetry over
+  2026-09-02..04 found `forge.IssuesMsg` in 241 of 524 one-minute heartbeats —
+  three fetches a minute, forever, whether or not the window had focus or the
+  Issues pane existed. Two gates now sit inside `Poller.Arm`/`Delay`/`Tick`,
+  which keeps the design at exactly one self-sustaining chain.
+- **Blur pauses, focus catches up.** `tea.BlurMsg` sets the pause: no new
+  deadline is armed, and one that still lands (its timer kept running) is
+  dropped. `tea.FocusMsg` lifts it and re-arms — immediately when the last
+  fetch is older than the configured interval, so coming back to the window
+  shows current data rather than data one interval from now. A terminal that
+  never reports focus never blurs, so nothing changes for it.
+- **A closed Issues pane costs a fifth as much.** With no Issues tool window
+  open in the project the wait stretches to `SlowPollFactor` × the interval,
+  floored at `MinSlowPollInterval` (5×, ≥ 60 s): the status-line unread badge
+  still moves, and nothing else was reading the listing. Opening the pane
+  restores the configured interval and refetches at once when the stretch let
+  the listing go stale — the pane's own on-open fetch counts, so the same
+  listing is never asked for twice.
+- **Deadlines can now be superseded.** `PollTickMsg` carries a `Seq` stamped
+  by each `Arm`, `Rearm()` schedules afresh, and `Tick` drops a message from a
+  superseded arm. Without it the slow deadline replaced on pane-open would
+  still fire and open a second chain alongside the fast one. `Tick` owns the
+  foreign-`Root` drop too. The superseding deadline leaves through the host's
+  `Send` on a goroutine, not as a command returned from the settled pass —
+  the app test helpers drain commands synchronously, and a drainer that enters
+  a self-sustaining chain never comes back out.
+- **New setting `forge.poll_pause_on_blur`** (bool, default on, Settings →
+  Forge): `false` restores the pre-#2488 behaviour. The slow cadence has no
+  setting — it only ever stretches.
+
 ## 2026-09-04 (cheatsheet opens while writing a query, and explains how to apply rows, #2482)
 
 - **The chord was reachable; the *hint* was not.** `ctrl+g` on the playground's

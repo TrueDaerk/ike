@@ -326,6 +326,7 @@ func (c *Config) Flat() map[string]string {
 	put("remote.max_fetch_mb", c.Remote.MaxFetchMB)
 	put("screenshot.directory", c.Screenshot.Directory)
 	put("forge.poll_interval_seconds", c.Forge.PollIntervalSeconds)
+	put("forge.poll_pause_on_blur", c.Forge.PollPauseOnBlur)
 	put("forge.cache", c.Forge.Cache)
 	put("telemetry.enabled", c.Telemetry.Enabled)
 	put("statusline.project_time", c.StatusLine.ProjectTime)

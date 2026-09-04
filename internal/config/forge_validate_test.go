@@ -13,6 +13,13 @@ func TestForgePollIntervalDefaultAndBounds(t *testing.T) {
 		t.Errorf("default poll_interval_seconds should be 20, got %d", c.Forge.PollIntervalSeconds)
 	}
 
+	if !c.Forge.PollPauseOnBlur {
+		t.Error("forge.poll_pause_on_blur should default on (#2488)")
+	}
+	if got := c.Flat()["forge.poll_pause_on_blur"]; got != "true" {
+		t.Errorf("flat default = %q, want \"true\"", got)
+	}
+
 	proj := writeProject(t, "[forge]\npoll_interval_seconds = 0\n")
 	c, diags := Load(Options{ProjectRoot: proj})
 	if c.Forge.PollIntervalSeconds != 0 {
@@ -47,6 +54,15 @@ func TestForgePollIntervalDefaultAndBounds(t *testing.T) {
 	}
 	if len(diags) != 1 {
 		t.Errorf("expected one ceiling diagnostic, got %v", diags)
+	}
+
+	proj = writeProject(t, "[forge]\npoll_pause_on_blur = false\n")
+	c, _ = Load(Options{ProjectRoot: proj})
+	if c.Forge.PollPauseOnBlur {
+		t.Error("poll_pause_on_blur = false should switch the pause off")
+	}
+	if got := c.Flat()["forge.poll_pause_on_blur"]; got != "false" {
+		t.Errorf("flat = %q, want \"false\"", got)
 	}
 
 	proj = writeProject(t, "[forge]\npoll_interval_seconds = 45\n")

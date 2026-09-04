@@ -120,6 +120,54 @@ func TestForgeCacheToggleCommits(t *testing.T) {
 	}
 }
 
+func TestForgePageExposesThePauseOnBlurToggle(t *testing.T) {
+	// The blur pause (#2488) ships with its Settings UI switch in the same
+	// change (project rule): a Bool on the Forge page.
+	pages := forgePages()
+	if len(pages) != 1 {
+		t.Fatal("the settings schema has no Forge page")
+	}
+	var e *Entry
+	for i := range pages[0].Entries {
+		if pages[0].Entries[i].Key == "forge.poll_pause_on_blur" {
+			e = &pages[0].Entries[i]
+		}
+	}
+	if e == nil {
+		t.Fatal("the Forge page has no forge.poll_pause_on_blur entry")
+	}
+	if e.Type != Bool {
+		t.Errorf("type = %v, want Bool", e.Type)
+	}
+	if e.Scope != config.UserScope {
+		t.Errorf("scope = %v, want user", e.Scope)
+	}
+	if !strings.Contains(e.Description, "focus") {
+		t.Errorf("the description must say what focus has to do with it: %q", e.Description)
+	}
+}
+
+func TestForgePauseOnBlurToggleCommits(t *testing.T) {
+	restoreConfig(t)
+	m := New(forgePages(), testOpts(t))
+	m.SetSize(90, 20)
+	m.Open()
+	m.focus = formColumn
+	for i, r := range m.rows() {
+		if r.kind == rowEntry && r.entry.Key == "forge.poll_pause_on_blur" {
+			m.sel = i
+		}
+	}
+	if !config.Get().Forge.PollPauseOnBlur {
+		t.Fatal("forge.poll_pause_on_blur must default on")
+	}
+	m.Update(key("enter")) // a Bool flips in place and stages the change
+	commit(t, m)
+	if config.Get().Forge.PollPauseOnBlur {
+		t.Fatal("committed = on, want the toggle flipped off and persisted")
+	}
+}
+
 func TestForgeIntervalCommits(t *testing.T) {
 	m := forgePanel(t)
 	m.editor.(*intEditor).tf.Set("45")
