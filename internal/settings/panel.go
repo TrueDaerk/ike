@@ -367,7 +367,9 @@ func (m *Model) Click(x, y int) tea.Cmd {
 			return nil
 		}
 		rows := m.railRows()
-		if idx := row + m.catOff; idx >= 0 && idx < len(rows) && rows[idx].header == "" {
+		if idx := row + m.catOff; idx >= 0 && idx < len(rows) {
+			// A page row selects the page; a group header opens the group on
+			// its first page (the accordion's click target).
 			m.cat, m.sel, m.focus = rows[idx].page, 0, catColumn
 			m.followCat, m.followForm = true, true
 		}

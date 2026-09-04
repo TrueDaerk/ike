@@ -650,15 +650,23 @@ Range clamps are never silent: stepping or typing past Min/Max shows an
 
 ## Rail & chrome (0420, #890)
 
-The category rail groups into **sections**, rendered as dim non-clickable
-headers. Since the 2026-09 overhaul every page belongs to one of eight groups
+The category rail is an **accordion** over **sections**. Since the 2026-09
+overhaul every page belongs to one of eight groups
 (`internal/settings/groups.go`: Editing · Interface · Keymap · Files &
 Projects · Languages · Build, Run & Debug · Tools & Integrations · Plugins);
 `settings.Regroup` orders the assembled pages by that table and sets
 `Page.Section` on each group's first page, and a guard test fails on a page
-the table does not know — so a new page is placed deliberately. The rail opens
-a header only when the section changes. The docgen reference renders the same
-grouping. **First-letter
+the table does not know — so a new page is placed deliberately. The docgen
+reference renders the same grouping. In the rail (`railRows`,
+`railstate.go`) only the section holding the current page is **open** —
+`▾ Editing` in accent, its pages listed under it — and every other section is
+one folded row, `▸ Files & Projects   7`, dim with its page count; a section
+with a single page named like the section (Keymap) renders as that page
+alone. Moving the selection across a section boundary folds the old section
+and opens the new one, so the rail always shows the eight groups plus the
+pages that matter right now instead of some forty rows. Headers are click
+targets: a press opens the group on its first page. (Until the overhaul every
+page was always listed under dim, inert dividers.) **First-letter
 jump** hops to the next page starting with the pressed letter (menu parity).
 The panel **remembers its page**: reopening lands where you left, and the
 choice persists per project in `.ike/settings-last.json`
