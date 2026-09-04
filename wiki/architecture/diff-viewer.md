@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Diff Viewer
-description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), a hard 2 MiB/side input budget with a bounded Myers core (#2505), diff.files palette command, opens as a content tab of the focused editor pane (diff.placement, #2507), layout persistence."
+description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), a hard 2 MiB/side input budget with a bounded Myers core (#2505), live reload of file-vs-file diffs off the 0140 watcher with a removed-file footer notice (#2506), diff.files palette command, opens as a content tab of the focused editor pane (diff.placement, #2507), layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
 timestamp: 2026-09-04T00:00:00Z
@@ -262,6 +262,45 @@ picks (left/old first, right/new second, with toasts prompting each step),
 then places the diff pane and focuses it. Dismissing the picker mid-flow
 disarms the state so a later `@` open is a plain file open. Unreadable files
 diff as empty text.
+
+## Live reload (#2506)
+
+A file-vs-file diff **follows its two files on disk**. When the 0140 watcher
+reports a change for either `leftPath` or `rightPath` — the user saving that
+side in another pane, a build regenerating an output file, a `git checkout`,
+an `echo x >> file` from a terminal — `routeWatchEvent` hands the event to
+`reloadDiffsForPath` (`internal/app/diffwatch.go`), which re-reads *both*
+sides and calls `Model.ReloadContents`. That is a re-diff in place, the same
+move the ignore-whitespace toggle makes: the scroll offset is retained
+(clamped to the new document), the current hunk is clamped to the new hunk
+list, and the gaps the reader expanded stay expanded — matched by the left
+line number their first hidden row carries, so an edit above them does not
+fold them again. Identical bytes are a no-op. Always on, no setting: a stale
+diff is never what the reader wants.
+
+A **removed** side is not an error. `fixRemovedWatchKind` already reclassifies
+a replace-in-place (write temp + rename) as a change; a file genuinely gone
+diffs as the empty side and the pane's last row carries a one-line notice —
+`left file removed` / `right file removed` / `left and right file removed`
+(`Model.SetNotice`, rendered by `footerLine`, which the search prompt outranks
+while it is open). Writing the file again clears the notice and brings the
+content back.
+
+Only file-backed diffs reload. A HEAD/commit diff carries a revision
+(`Revs()`) and a clipboard or local-history diff has no path on its left side;
+both are snapshots by definition and keep their snapshot semantics. A diff in
+edit mode (#496) is skipped too — its right column *is* a live editor buffer,
+which reloads through the editor's own external-change path.
+
+**Watching both sides.** The watcher only walks the project root, so a diff
+between `/tmp/a.json` and a project file would never hear about the outside
+side. `syncDiffWatches` reconciles, once per settled `Update` pass, the set of
+paths the open file diffs need against `watch.Service.WatchPath` /
+`UnwatchPath` (see [Foundation](./foundation.md)) — one reconcile against the
+panes that are actually open, rather than a hook on every open, close,
+retarget and restore site. Closing or retargeting a diff therefore releases
+its registrations on the next pass; `watcher.WatchedPaths()` is the exported
+state that proves it.
 
 ## diff.compareWithClipboard command
 

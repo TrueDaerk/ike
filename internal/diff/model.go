@@ -121,6 +121,13 @@ type Model struct {
 	selRight bool
 	vrows    []vrow
 
+	// notice is the one-line footer message a live-reloading file diff shows
+	// when a side is gone from disk (#2506): "left file removed" instead of
+	// an error dialog over a diff that is still perfectly readable. It shares
+	// the pane's last row with the search prompt, which outranks it while
+	// open.
+	notice string
+
 	// In-pane search (#2409): "/" and the shared find chord open a prompt on
 	// the pane's last row and n/N walk the matching rows. It lives behind a
 	// pointer so the value-receiver View copies share it, like the explorer's
@@ -292,6 +299,76 @@ func (m *Model) SetContents(left, right string) {
 	m.render()
 }
 
+// ReloadContents replaces both sides after an on-disk change (#2506) and
+// re-diffs in place, the way the ignore-whitespace toggle does: the scroll
+// offset, the current hunk (clamped to the new hunk list) and the expanded
+// gaps survive as far as the new content allows, so a diff that follows its
+// files does not throw the reader back to the top on every save. Identical
+// content is a no-op — a watcher event for a file whose bytes did not change
+// (a touch, a rewrite with the same result) costs nothing and disturbs
+// nothing.
+func (m *Model) ReloadContents(left, right string) {
+	if left == m.leftText && right == m.rightText {
+		return
+	}
+	expanded := m.expandedGapKeys()
+	m.leftText, m.rightText = left, right
+	m.rediff()
+	m.restoreExpandedGaps(expanded)
+	m.rehighlight(true, true)
+	// render() ends in scrollTo(m.top), which clamps the retained offset to
+	// the new document — a shorter file scrolls up, it never resets to 0.
+	m.render()
+	if m.search != nil {
+		// The rows the matches index changed under the search (#2409).
+		m.recomputeMatches()
+	}
+}
+
+// expandedGapKeys names the currently expanded gaps by the left line number
+// their first hidden row carries — a handle that survives a re-diff far
+// better than the row index does, since an edit anywhere above shifts every
+// index below it. A gap starting on a line that is gone stays folded.
+func (m Model) expandedGapKeys() map[int]bool {
+	var keys map[int]bool
+	for _, g := range m.gaps {
+		if !g.expanded || g.start >= len(m.res.Rows) {
+			continue
+		}
+		if keys == nil {
+			keys = map[int]bool{}
+		}
+		keys[m.res.Rows[g.start].LeftNo] = true
+	}
+	return keys
+}
+
+// restoreExpandedGaps re-expands the gaps whose first hidden row still starts
+// on one of the recorded left line numbers.
+func (m *Model) restoreExpandedGaps(keys map[int]bool) {
+	if len(keys) == 0 {
+		return
+	}
+	for i := range m.gaps {
+		if g := m.gaps[i]; g.start < len(m.res.Rows) && keys[m.res.Rows[g.start].LeftNo] {
+			m.gaps[i].expanded = true
+		}
+	}
+}
+
+// SetNotice sets (or clears, with "") the footer notice line (#2506).
+func (m *Model) SetNotice(s string) {
+	if m.notice == s {
+		return
+	}
+	m.notice = s
+	// The notice claims a row from the body, so the visible window moves.
+	m.render()
+}
+
+// Notice returns the current footer notice ("" when none).
+func (m Model) Notice() string { return m.notice }
+
 // Retarget points the pane at a different comparison (#513): titles, paths,
 // per-side revisions, and editability swap; layout, context, and collapse
 // preferences stay. The caller feeds the new texts via SetContents and must
@@ -305,6 +382,7 @@ func (m *Model) Retarget(leftTitle, rightTitle, leftPath, rightPath, leftRev, ri
 	// The path (and thus the language) may change; the following SetContents
 	// re-parses both sides against the new one.
 	m.leftIx, m.rightIx = highlight.Index{}, highlight.Index{}
+	m.notice = "" // the removed-file notice belonged to the old pair (#2506)
 }
 
 // SetRevs records which revision backs each side ("" = a working-tree file),
@@ -713,10 +791,10 @@ func (m *Model) scrollTo(top int) {
 	m.top = clamp(top, 0, max(0, len(m.lines)-m.viewHeight()))
 }
 
-// viewHeight is the room the diff rows get: the whole pane, minus the search
-// prompt row while a search is open (#2409).
+// viewHeight is the room the diff rows get: the whole pane, minus the footer
+// row while a search is open (#2409) or a notice is set (#2506).
 func (m Model) viewHeight() int {
-	if m.search == nil {
+	if m.search == nil && m.notice == "" {
 		return m.h
 	}
 	if m.h <= 1 {
@@ -762,7 +840,7 @@ func (m Model) View() string {
 	}
 	if body < m.h {
 		b.WriteByte('\n')
-		b.WriteString(ansi.Truncate(m.searchLine(), m.w, "…"))
+		b.WriteString(ansi.Truncate(m.footerLine(), m.w, "…"))
 	}
 	return b.String()
 }
