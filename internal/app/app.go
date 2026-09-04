@@ -3456,6 +3456,21 @@ var terminalGlobalCommands = map[string]bool{
 	// #2150: a terminal pane is resized by keyboard like any other, and the
 	// shell never meaningfully sees the mode chord.
 	"pane.resizeMode": true,
+	// pane.focus1…9 join it in the init below.
+}
+
+// The focus-by-number chords (#2493) are global for a reason: the badge in a
+// pane's title bar promises that ctrl+N goes there from wherever the keyboard
+// currently is. A focused terminal used to forward them to the shell, so the
+// chord died silently — no focus change and not even the out-of-range
+// notification, which #275 forbids. ctrl+digit is not a sequence shells or
+// common TUI children rely on, so the IDE takes it here like the other
+// navigation chords. Registered in a loop so the allowlist cannot drift from
+// the commands panenumbers.go mints.
+func init() {
+	for i := 1; i <= paneNumberMax; i++ {
+		terminalGlobalCommands["pane.focus"+strconv.Itoa(i)] = true
+	}
 }
 
 // terminalShellChords are chords that stay with the shell even when they

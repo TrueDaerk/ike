@@ -352,7 +352,7 @@ the number is addressable.
   pane carrying that number; out of range is a no-op **with a notification**,
   never a silent dead chord (#275). `pane.focusByIndex` ("Focus Pane by
   Number…") is the typed flavour in a shell prompt, for the panes past nine
-  and for terminals the digit chords do not reach.
+  and for the platforms the digit chords do not ship on (everything but macOS).
 - **`ctrl+1`…`ctrl+9`, macOS only.** The chords are delivered — plain ctrl
   chords, free of macOS system shortcuts — and deliberately *not* `cmd+digit`,
   which is the JetBrains tool-window numbering (`cmd+1` toggles the project
@@ -360,6 +360,18 @@ the number is addressable.
   `explorer.toggle`, `nav.pins` and `vcs.panel` on exactly these chords, so
   there `pane.focusByIndex` is the doorway, recorded in the keybind audit
   ledger.
+- **They fire from every focused pane, tool windows included (#2493).** A
+  badge that promises `ctrl+N` has to keep that promise wherever the keyboard
+  currently is. The tool windows (VCS, Problems, Structure, Issues, HTTP, the
+  doctors, Time, …) route keys through the keymap layer before their own
+  `Update`, so they take the chords for free; the **terminal** does not — it
+  hands every key to the shell except an allowlist (`terminalGlobalCommands`,
+  #805), and `pane.focus1`…`9` sit on that list since #2493. `ctrl+digit` is
+  not a sequence shells or common TUI children rely on, so no opt-out setting
+  exists; a genuine conflict would be documented here. From the **popup
+  terminal** the chord additionally blurs the layer (#2309), the same thing a
+  click into a pane below does — otherwise the popup would keep the keyboard
+  and the focus move would be invisible.
 - **`layout.pane_numbers`** (Settings → Appearance) is `on` (default), `off`,
   or `focus-only`. `focus-only` draws the badges only while the *which-pane
   hint* is up: a keyboard pane switch — the switcher, a focus-by-number chord,

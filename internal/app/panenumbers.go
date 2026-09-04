@@ -173,6 +173,13 @@ func (m *Model) focusPaneNumber(n int) {
 		m.host.Notify(host.Info, "focus pane "+strconv.Itoa(n)+": only "+strconv.Itoa(len(order))+" panes are open")
 		return
 	}
+	// From inside the popup terminal layer (#2493) the chord means the same
+	// thing as clicking into a pane below it (#2309): the layer stays on
+	// screen but hands the keyboard down, or the focus move would be
+	// invisible — the popup would keep every following key.
+	if m.popupLayerFocused() {
+		m.blurPopupLayer()
+	}
 	m.setFocus(order[n-1])
 }
 
