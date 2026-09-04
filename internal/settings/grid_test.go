@@ -95,14 +95,20 @@ func TestEditorDispatchPerType(t *testing.T) {
 	}
 }
 
-// TestValueMarkersRender: every row announces its editor with a marker.
+// TestValueMarkersRender: values render as words; the enum row carries ▾ and
+// no row carries the retired type glyphs.
 func TestValueMarkersRender(t *testing.T) {
 	restoreConfig(t)
 	m := New(gridPages(), testOpts(t))
 	m.SetSize(140, 24)
 	m.Open()
 	v := m.View()
-	for _, want := range []string{"◉", "‹›", "▸", "⌨", "≡", "✎"} {
+	for _, gone := range []string{"◉", "‹›", "⌨", "≡", "✎"} {
+		if strings.Contains(v, gone) {
+			t.Fatalf("view still carries the %q marker:\n%s", gone, v)
+		}
+	}
+	for _, want := range []string{"▾", " on", "—"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("view missing the %q marker:\n%s", want, v)
 		}

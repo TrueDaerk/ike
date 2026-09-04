@@ -22,16 +22,6 @@ import (
 // project config via write-back), and restart servers asynchronously (#123
 // rules: the work happens inside the returned tea.Cmd, never on Update).
 
-// lspEditField names the override the inline input edits.
-type lspEditField int
-
-const (
-	lspEditNone lspEditField = iota
-	lspEditCommand
-	lspEditArgs
-	lspEditSettings
-)
-
 // lspStatus is the last language-tagged status update, cached per language.
 type lspStatus struct {
 	text string
@@ -208,28 +198,16 @@ func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	switch key.String() {
-	case "E":
-		// Master switch: flips the whole subsystem, its conventional layer.
-		v := !masterEnabled()
-		return config.WriteAndReload(p.opts, config.DefaultScope("lsp.enabled"), "lsp.enabled", v)
-	case "e":
+	case "space":
+		// Toggle the selected server — space is the panel-wide toggle.
 		if hasRow {
 			return p.write(l.ID, "enabled", !serverOn(l.ID))
 		}
-	case "c":
+	case "enter":
+		// The row's primary action: one form for command, args and options
+		// (they were three letters, c/a/o, opening three forms).
 		if hasRow && p.host != nil {
-			cmd, _ := effective(l)
-			p.host.Push(newLSPOverrideForm(p, p.host, l.ID, lspEditCommand, cmd))
-		}
-	case "a":
-		if hasRow && p.host != nil {
-			_, args := effective(l)
-			p.host.Push(newLSPOverrideForm(p, p.host, l.ID, lspEditArgs, strings.Join(args, " ")))
-		}
-	case "o":
-		// Server options JSON ("s" is reserved for the write scope, #887).
-		if hasRow && p.host != nil {
-			p.host.Push(newLSPOverrideForm(p, p.host, l.ID, lspEditSettings, settingsJSON(l.ID)))
+			p.host.Push(newLSPOverrideForm(p, p.host, l.ID))
 		}
 	case "R":
 		// Restart the selected server ("r" means reset everywhere, #887).
@@ -240,36 +218,6 @@ func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		if hasRow && p.install != nil {
 			return p.install(l.ID)
 		}
-	case "A":
-		// Auto-install opt-out (#131), the subsystem's conventional layer.
-		v := "true"
-		if c := config.Get(); c != nil && c.LSP.AutoInstall {
-			v = "false"
-		}
-		return config.WriteAndReload(p.opts, config.DefaultScope("lsp.auto_install"), "lsp.auto_install", v == "true")
-	case "I":
-		// Inline parameter-name/type hints (#171), off by default (#523).
-		v := true
-		if c := config.Get(); c != nil && c.LSP.InlayHints {
-			v = false
-		}
-		return config.WriteAndReload(p.opts, config.DefaultScope("lsp.inlay_hints"), "lsp.inlay_hints", v)
-	case "S":
-		// Automatic signature popup on trigger characters (#523); the manual
-		// parameter-info command works regardless.
-		v := false
-		if c := config.Get(); c != nil && !c.LSP.SignatureAuto {
-			v = true
-		}
-		return config.WriteAndReload(p.opts, config.DefaultScope("lsp.signature_auto"), "lsp.signature_auto", v)
-	case "C":
-		// As-you-type completion popup on identifier characters (#527);
-		// server trigger characters and ctrl+space work regardless.
-		v := false
-		if c := config.Get(); c != nil && !c.LSP.CompletionAuto {
-			v = true
-		}
-		return config.WriteAndReload(p.opts, config.DefaultScope("lsp.completion_auto"), "lsp.completion_auto", v)
 	case "ctrl+r":
 		if p.restartAll != nil {
 			return p.restartAll()
@@ -308,37 +256,6 @@ func settingsJSON(id string) string {
 }
 
 // commitInput writes the edited override through write-back (project scope).
-// commitOverride writes one override for lang (#892); an empty raw resets it.
-func (p *LSPPage) commitOverride(lang string, field lspEditField, rawInput string) tea.Cmd {
-	raw := strings.TrimSpace(rawInput)
-	var key string
-	var value any
-	switch field {
-	case lspEditCommand:
-		key, value = "command", raw
-	case lspEditArgs:
-		key = "args"
-		if raw != "" {
-			value = strings.Fields(raw)
-		}
-	case lspEditSettings:
-		key = "settings"
-		if raw != "" {
-			m := map[string]any{}
-			if err := json.Unmarshal([]byte(raw), &m); err != nil {
-				p.invalid = "not a JSON object"
-				return nil
-			}
-			value = m
-		}
-	}
-	p.invalid = ""
-	if raw == "" {
-		return config.RemoveAndReload(p.opts, config.ProjectScope, "lsp.servers."+lang+"."+key)
-	}
-	return p.write(lang, key, value)
-}
-
 // write persists one [lsp.servers.<id>] override to the project config.
 func (p *LSPPage) write(id, key string, value any) tea.Cmd {
 	return config.WriteAndReload(p.opts, config.ProjectScope, "lsp.servers."+id+"."+key, value)
@@ -377,9 +294,11 @@ func (p *LSPPage) View(w, h int) string {
 			compAuto = "off"
 		}
 	}
+	// The subsystem switches are schema rows on the Language Support page;
+	// this header only reports them so a disabled master is not a mystery.
 	head := []string{
-		sec.Render(" LSP master switch: " + master + "  (E toggles) · auto-install: " + auto + "  (A toggles)"),
-		sec.Render(" inlay hints: " + inlay + "  (I toggles) · signature auto-popup: " + sigAuto + "  (S toggles) · completion as-you-type: " + compAuto + "  (C toggles)"),
+		sec.Render(" LSP master switch: " + master + " · auto-install: " + auto + " · inlay hints: " + inlay),
+		sec.Render(" signature auto-popup: " + sigAuto + " · completion as-you-type: " + compAuto + "  — set on the Language Support page"),
 		sec.Render(" language · status · command · source"),
 	}
 	var list []string
@@ -394,8 +313,7 @@ func (p *LSPPage) View(w, h int) string {
 		_, detail := p.rowStatus(l.ID)
 		footer = wrapFooter([]footerLine{
 			{text: " " + strings.TrimLeft(detail, " "), style: lipgloss.NewStyle().Foreground(pal.Error)},
-			{text: " e enable · c command · a args · o options JSON · i install · R restart · ctrl+r restart all · r reset · ? keys", style: sec},
-		}, w, 3)
+		}, w, 2)
 	}
 	p.listH = h - len(head) - len(footer)
 	return strings.Join(head, "\n") + "\n" + pinFooter(list, footer, p.sel, p.sel, h-len(head), &p.off)
@@ -456,13 +374,26 @@ func (p *LSPPage) renderRow(l lang.Language, selected bool) string {
 }
 
 // KeyHelp implements KeyHelper (#887).
-func (p *LSPPage) KeyHelp() []string {
-	return []string{
-		"e  toggle the selected server · E  master switch",
-		"c  edit command · a  edit args · o  edit options JSON",
-		"i  install the server binary",
-		"R  restart the selected server · ctrl+r  restart all",
-		"r  reset the selected server's overrides",
-		"A  auto-install · I  inlay hints · S  signature popup · C  completion popup",
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (p *LSPPage) Actions() []Action {
+	_, hasRow := p.current()
+	row := func() bool { return hasRow }
+	return []Action{
+		{Key: "enter", Verb: "Edit", Hint: "command, args and options overrides", Enabled: row},
+		{Key: "space", Verb: "Toggle", Hint: "enable or disable the selected server", Enabled: row},
+		{Key: "i", Verb: "Install", Hint: "the server binary", Enabled: row},
+		{Key: "R", Verb: "Restart", Hint: "the selected server", Enabled: row},
+		{Key: "ctrl+r", Verb: "Restart all"},
+		{Key: "r", Verb: "Reset", Hint: "the selected server's overrides", Enabled: row},
 	}
+}
+
+// langByID resolves a server's language.
+func (p *LSPPage) langByID(id string) (lang.Language, bool) {
+	for _, l := range p.servers() {
+		if l.ID == id {
+			return l, true
+		}
+	}
+	return lang.Language{}, false
 }

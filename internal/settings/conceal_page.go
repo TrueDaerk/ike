@@ -489,11 +489,18 @@ func (c *ConcealPage) Wheel(delta int) {
 }
 
 // KeyHelp implements KeyHelper (#887).
-func (c *ConcealPage) KeyHelp() []string {
-	return []string{
-		"enter  toggle a family / open a list editor · ←→  adjust a number · r  reset to default",
-		"the page edits the config defaults; a per-view toggle (Toggle Timestamp Decoding, …) wins in that buffer",
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (c *ConcealPage) Actions() []Action {
+	return []Action{
+		{Key: "enter", Verb: "Toggle", Hint: "a family, or open a list editor"},
+		{Key: "←→", Verb: "Adjust", Hint: "a number"},
+		{Key: "r", Verb: "Reset", Hint: "to the built-in default"},
 	}
+}
+
+// KeyHelp adds the note the keys do not carry.
+func (c *ConcealPage) KeyHelp() []string {
+	return []string{"the page edits the config defaults; a per-view toggle (Toggle Timestamp Decoding, …) wins in that buffer"}
 }
 
 // SearchItems implements Searchable (#886): every family and list is reachable

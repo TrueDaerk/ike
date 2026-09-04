@@ -62,7 +62,7 @@ func TestMarketplaceUpdateAll(t *testing.T) {
 	if got := len(p.Updates()); got != 2 {
 		t.Fatalf("updates = %d", got)
 	}
-	cmd := p.Update(mktKey("u"))
+	cmd := p.Update(mktKey("U"))
 	if cmd == nil {
 		t.Fatal("update-all produced no command")
 	}
@@ -91,7 +91,7 @@ func TestMarketplaceUpdateAllHoldsCapabilityGrowth(t *testing.T) {
 			Capabilities: []string{"commands"}}, // the catalog entry adds "notify"
 	}}
 	p := loadedPage(t, eng)
-	if cmd := p.Update(mktKey("u")); cmd != nil {
+	if cmd := p.Update(mktKey("U")); cmd != nil {
 		t.Fatal("update-all applied a capability change")
 	}
 	if len(eng.installs) != 0 {

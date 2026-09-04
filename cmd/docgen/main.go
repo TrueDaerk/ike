@@ -386,13 +386,13 @@ secrets — are documented together, with screenshots, in
 			light = append(light, t.Name)
 		}
 	}
-	pages := append(settings.BasePages(names, light, dark), reg.SettingsPages()...)
+	pages := settings.Regroup(append(settings.BasePages(names, light, dark), reg.SettingsPages()...))
 
 	section := ""
 	for _, p := range pages {
 		if p.Section != "" && p.Section != section {
 			section = p.Section
-			fmt.Fprintf(&b, "## %s\n\n", strings.ToUpper(section[:1])+strings.ToLower(section[1:]))
+			fmt.Fprintf(&b, "## %s\n\n", section)
 		}
 		fmt.Fprintf(&b, "### %s\n\n", p.Title)
 		if len(p.Entries) == 0 {

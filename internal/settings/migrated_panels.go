@@ -1,7 +1,6 @@
 package settings
 
 import (
-	"encoding/json"
 	"strconv"
 	"strings"
 
@@ -368,88 +367,6 @@ func (i *keymapImport) View(w, h int) string {
 	}
 	for _, s := range i.suggest.lines() {
 		lines = append(lines, clip.Render(sec.Render(s)))
-	}
-	return strings.Join(lines, "\n")
-}
-
-// --- LSP override editor ---
-
-// lspOverrideForm edits one server override (command / args / options JSON)
-// in a dialog; empty input resets the override.
-type lspOverrideForm struct {
-	page  *LSPPage
-	host  SubPanelHost
-	lang  string
-	kind  lspEditField
-	input textField
-	note  string
-}
-
-func newLSPOverrideForm(page *LSPPage, host SubPanelHost, lang string, kind lspEditField, initial string) *lspOverrideForm {
-	return &lspOverrideForm{page: page, host: host, lang: lang, kind: kind, input: newTextField(initial)}
-}
-
-func (f *lspOverrideForm) Title() string {
-	switch f.kind {
-	case lspEditCommand:
-		return "Edit Command"
-	case lspEditArgs:
-		return "Edit Args"
-	default:
-		return "Edit Options JSON"
-	}
-}
-
-func (f *lspOverrideForm) Capturing() bool { return true }
-
-func (f *lspOverrideForm) Buttons() []Button {
-	return []Button{
-		{Label: "Save", Do: f.commit},
-		{Label: "Cancel", Do: func() tea.Cmd { f.host.Pop(); return nil }},
-	}
-}
-
-func (f *lspOverrideForm) Update(key tea.KeyPressMsg) tea.Cmd {
-	switch key.Code {
-	case tea.KeyEscape:
-		f.host.Pop()
-		return nil
-	case tea.KeyEnter:
-		return f.commit()
-	}
-	f.input.Handle(key)
-	return nil
-}
-
-// Paste inserts into the override input at its cursor (#2002).
-func (f *lspOverrideForm) Paste(text string) bool { return f.input.Paste(text) }
-
-func (f *lspOverrideForm) commit() tea.Cmd {
-	if f.kind == lspEditSettings {
-		if t := strings.TrimSpace(f.input.Text); t != "" && !json.Valid([]byte(t)) {
-			f.note = "not valid JSON"
-			return nil
-		}
-	}
-	f.host.Pop()
-	return f.page.commitOverride(f.lang, f.kind, f.input.Text)
-}
-
-func (f *lspOverrideForm) View(w, h int) string {
-	pal := f.page.theme()
-	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
-	clip := lipgloss.NewStyle().MaxWidth(w)
-	prompt := map[lspEditField]string{
-		lspEditCommand:  "command",
-		lspEditArgs:     "args (space-separated)",
-		lspEditSettings: "settings (JSON object)",
-	}[f.kind]
-	lines := []string{
-		clip.Render(sec.Render(" " + f.lang + " · " + prompt + "  (empty = reset)")),
-		clip.Render(" " + f.input.View()),
-	}
-	if f.note != "" {
-		lines = append(lines, clip.Render(lipgloss.NewStyle().Foreground(pal.Error).Render(" ✗ "+f.note)))
 	}
 	return strings.Join(lines, "\n")
 }

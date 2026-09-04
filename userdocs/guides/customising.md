@@ -7,12 +7,13 @@ write it by hand.
 ## Settings
 
 ++cmd+comma++ opens the settings panel. It is a **three-column grid**:
-categories on the left, the settings of the selected page in the middle with a
-marker showing how each one edits, and a detail column on the right that
+categories on the left (grouped, with only the current group unfolded), the
+settings of the selected page in the middle with their current values, and a
+detail column on the right that
 explains the selected setting *and* holds its editor.
 
 ```
-categories │ settings           ◉ ‹› ▸ ⌨ ≡ ✎ │ description + editor
+categories │ settings           on · 4 · focus ▾ │ description + editor
 ```
 
 ![The settings panel with the Editor page selected: the category rail on the left, the page's keys with their value markers in the middle, the description and editor on the right](../screenshots/features/settings-panel.png)
@@ -24,10 +25,10 @@ Appearance page.
 ++enter++ activates. On a narrow terminal the detail column becomes a band
 under the list rather than disappearing. `?` opens the full key list.
 
-The value marker tells you what kind of editor you get before you press
-anything: `◉` a toggle, `‹›` a stepper, `▸` a list of options, `⌨` a chord
-capture, `≡` a multi-value list, `✎` free text. Enums and integers can also be
-changed straight on the row with ++left++/++right++.
+Values read as words: a toggle shows `on` or `off`, a chord sits in a keycap
+like `[cmd+k]`, an empty value is `—`, and a `▾` after a value means there is
+a list of options behind it. Enums and integers can also be changed straight
+on the row with ++left++/++right++.
 
 The detail column is never empty: with the categories focused it describes the
 page, with a setting selected it shows the description, `key · type · default`,

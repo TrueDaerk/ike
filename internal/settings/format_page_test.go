@@ -139,7 +139,7 @@ func TestFormatPageShowsBuiltinLanguages(t *testing.T) {
 // of the selected language into the project layer.
 func TestFormatPageTogglesEnabledAndBuiltin(t *testing.T) {
 	p, opts := formatPageFixture(t)
-	drainFormat(t, p.Update(key("e")))
+	drainFormat(t, p.Update(key("space")))
 	if got := config.Get().Format["fmtlang"]["enabled"]; got != false {
 		t.Fatalf("enabled = %v, want false", got)
 	}
@@ -149,7 +149,7 @@ func TestFormatPageTogglesEnabledAndBuiltin(t *testing.T) {
 	if out := p.View(120, 20); !strings.Contains(out, "disabled") {
 		t.Fatalf("a disabled language must render as disabled:\n%s", out)
 	}
-	drainFormat(t, p.Update(key("e")))
+	drainFormat(t, p.Update(key("space")))
 	if got := config.Get().Format["fmtlang"]["enabled"]; got != true {
 		t.Fatalf("enabled = %v, want true after the second toggle", got)
 	}
@@ -244,7 +244,7 @@ func TestFormatFormValidates(t *testing.T) {
 // language, in both layers.
 func TestFormatPageResetRemovesOverride(t *testing.T) {
 	p, opts := formatPageFixture(t)
-	drainFormat(t, p.Update(key("e"))) // project layer: enabled = false
+	drainFormat(t, p.Update(key("space"))) // project layer: enabled = false
 	p.scope = config.UserScope
 	f := openFormatForm(t, p)
 	setField(t, f, "command", "sh")
@@ -279,7 +279,7 @@ func TestFormatPageWriteScopeSelector(t *testing.T) {
 	if !strings.Contains(p.View(120, 20), "write layer: user") {
 		t.Fatal("s must cycle to the user layer")
 	}
-	drainFormat(t, p.Update(key("e")))
+	drainFormat(t, p.Update(key("space")))
 	if got := config.Origin(opts, "format.fmtlang.enabled"); got != "user" {
 		t.Fatalf("write layer = %q, want user", got)
 	}

@@ -232,7 +232,7 @@ func TestESPageScopeToggle(t *testing.T) {
 	if p.scope != config.ProjectScope {
 		t.Fatalf("s must toggle to project, got %v", p.scope)
 	}
-	if view := p.View(100, 12); !strings.Contains(view, "s scope: project") {
+	if view := p.View(100, 12); !strings.Contains(view, "writes to the project layer") {
 		t.Fatalf("footer must show the write target, view=%q", view)
 	}
 
@@ -297,7 +297,7 @@ func TestESPageViewListsEntriesAndHints(t *testing.T) {
 	if !strings.Contains(v, "no endpoints configured") {
 		t.Fatalf("empty view = %q", v)
 	}
-	if !strings.Contains(v, "s scope: user") {
+	if !strings.Contains(v, "writes to the user layer") {
 		t.Fatalf("view must show the default write target, view=%q", v)
 	}
 	addEndpoint(t, p, h, "prod", "https://es.example.com")

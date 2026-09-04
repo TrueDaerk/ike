@@ -159,10 +159,10 @@ func TestPkgViewKeyFlow(t *testing.T) {
 	interp := "/fake/bin/python"
 	p, calls := pkgTestPage(t, interp)
 
-	// `i` opens the view and fires the listing + outdated fetches.
-	cmd := p.Update(key("i"))
+	// `m` opens the view and fires the listing + outdated fetches.
+	cmd := p.Update(key("m"))
 	if !p.pkgViewing || cmd == nil {
-		t.Fatal("i must open the package view with fetch commands")
+		t.Fatal("m must open the package view with fetch commands")
 	}
 	p.Receive(PackagesMsg{Path: interp, Pkgs: []pkgInfo{{Name: "alpha", Version: "1.0"}, {Name: "bravo", Version: "2.0"}}})
 	p.Receive(OutdatedMsg{Path: interp, Latest: map[string]string{"alpha": "1.5"}})
@@ -217,11 +217,11 @@ func TestPkgViewKeyFlow(t *testing.T) {
 		t.Fatalf("pip uninstall call missing:\n%s", strings.Join(*calls, "\n"))
 	}
 
-	// `u` upgrades the selection.
+	// `U` upgrades the selection.
 	p.pkgBusy = ""
-	cmd = p.Update(key("u"))
+	cmd = p.Update(key("U"))
 	if cmd == nil {
-		t.Fatal("u must launch the upgrade")
+		t.Fatal("U must launch the upgrade")
 	}
 	_ = cmd()
 	if !strings.Contains(strings.Join(*calls, "\n"), "! /fake/bin/python -m pip install --upgrade alpha") {
@@ -235,7 +235,7 @@ func TestPkgActionFailureShowsDecisiveLine(t *testing.T) {
 	p.runErr = func(_ context.Context, _ string, _ ...string) (string, error) {
 		return "Collecting nope\nERROR: No matching distribution found for nope\n", os.ErrNotExist
 	}
-	p.Update(key("i"))
+	p.Update(key("m"))
 	p.Receive(PackagesMsg{Path: interp, Pkgs: []pkgInfo{{Name: "alpha", Version: "1.0"}}})
 	p.Update(key("+"))
 	for _, r := range "nope" {

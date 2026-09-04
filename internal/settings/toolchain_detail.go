@@ -222,11 +222,9 @@ func (t *ToolchainPage) onboardingDetail(w int, clip, title, dim lipgloss.Style)
 		names = append(names, l.ID)
 	}
 	out = append(out, wrapDetail(w, dim, clip, "detected, not configured: "+strings.Join(names, ", "))...)
-	out = append(out,
-		"",
-		clip.Render(lipgloss.NewStyle().Foreground(t.theme().Info).Render(
-			" a · accept all "+strconv.Itoa(len(pending))+" recommendations")),
-	)
+	out = append(out, "")
+	out = append(out, wrapDetail(w, lipgloss.NewStyle().Foreground(t.theme().Info), clip,
+		"“Accept all detected interpreters” at the top of the list takes all "+strconv.Itoa(len(pending))+" in one step.")...)
 	out = append(out, wrapDetail(w, dim, clip, "You do not have to type anything here.")...)
 	return out
 }

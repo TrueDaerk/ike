@@ -228,7 +228,8 @@ func (p *FormatPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	switch key.String() {
-	case "e":
+	case "space":
+		// Toggle external formatting — space is the panel-wide toggle.
 		if hasRow {
 			return p.write(row.lang, "enabled", !row.enabled)
 		}
@@ -357,24 +358,25 @@ func (p *FormatPage) View(width, height int) string {
 	if len(list) == 0 {
 		list = append(list, dim.Render(" no formatters registered — configure one via [format.<language>]"))
 	}
-	head := sec.Render(" language · binary · effective command · write layer: " + p.scopeLabel() + "  (s cycles)")
-	hint := " enter edit · e external on/off · b built-in on/off · r reset to the plugin default · ? keys"
-	lines := []footerLine{{text: hint, style: sec}}
+	head := sec.Render(" language · binary · effective command · write layer: " + p.scopeLabel())
+	// The keys live on the panel's action bar; the footer carries a notice only.
+	var footer []string
 	if p.notice != "" {
-		lines = append([]footerLine{{text: " " + p.notice, style: lipgloss.NewStyle().Foreground(pal.Error)}}, lines...)
+		footer = wrapFooter([]footerLine{{text: " " + p.notice, style: lipgloss.NewStyle().Foreground(pal.Error)}}, width, 2)
 	}
-	footer := wrapFooter(lines, width, 2)
 	p.listH = height - formatHeadLines - len(footer)
 	return head + "\n" + pinFooter(list, footer, selStart, selEnd, height-formatHeadLines, &p.off)
 }
 
 // KeyHelp implements KeyHelper (#887).
-func (p *FormatPage) KeyHelp() []string {
-	return []string{
-		"enter  edit the language's [format.*] override",
-		"e  external formatting on/off · b  built-in formatter on/off",
-		"r  reset the language back to the plugin default",
-		"s  write layer: project ↔ user",
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (p *FormatPage) Actions() []Action {
+	return []Action{
+		{Key: "enter", Verb: "Edit", Hint: "the language's [format.*] override"},
+		{Key: "space", Verb: "Toggle", Hint: "external formatting on/off"},
+		{Key: "b", Verb: "Built-in", Hint: "built-in formatter on/off"},
+		{Key: "r", Verb: "Reset", Hint: "back to the plugin default"},
+		{Key: "s", Verb: "Scope: " + p.scopeLabel(), Hint: "write layer: project ↔ user"},
 	}
 }
 

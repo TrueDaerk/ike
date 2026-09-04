@@ -260,7 +260,7 @@ func (p *MarketplacePage) Update(key tea.KeyPressMsg) tea.Cmd {
 				return p.startInstall(row)
 			}
 		}
-	case "u":
+	case "U":
 		// Update all (#2257): every pending update whose capability list did
 		// not grow, in one batch. A grown list is a re-review and stays on
 		// the per-plugin `i` path.
@@ -373,7 +373,7 @@ func (p *MarketplacePage) View(width, height int) string {
 		head.WriteString(dim.Render(" plugin · status · description"))
 	}
 	if n := len(p.updates); n > 0 {
-		head.WriteString("\n" + dim.Render(" "+plural(n, "plugin update")+" available — press u to update all"))
+		head.WriteString("\n" + dim.Render(" "+plural(n, "plugin update")+" available — press U to update all"))
 	}
 	if p.restart {
 		head.WriteString("\n" + warn.Render(" restart IKE to load installed/updated plugins"))
@@ -404,10 +404,8 @@ func (p *MarketplacePage) View(width, height int) string {
 	for _, d := range p.diags {
 		list = append(list, clip.Render(warn.Render(" "+d)))
 	}
-	footer := wrapFooter([]footerLine{{
-		text:  " enter details · i install/update (from details) · u update all · x remove · g refresh catalog · ? keys",
-		style: dim,
-	}}, width, 2)
+	// The keys live on the panel's action bar; nothing is pinned under the list.
+	var footer []string
 	hl := p.headLines()
 	p.listH = height - hl - len(footer)
 	// The list scrolls (#885): before, a MaxHeight clip made rows past the
@@ -499,11 +497,18 @@ func (p *MarketplacePage) inspectEntry(e market.Entry) []string {
 }
 
 // KeyHelp implements KeyHelper (#887).
-func (p *MarketplacePage) KeyHelp() []string {
-	return []string{
-		"enter  details (capability review) · i  install/update",
-		"u  update all (plugins asking for new capabilities are held back)",
-		"x  remove the installed plugin",
-		"g  refresh the catalog",
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (p *MarketplacePage) Actions() []Action {
+	row, hasRow := p.current()
+	installed := false
+	if hasRow {
+		_, installed = p.installed[row.Name]
+	}
+	return []Action{
+		{Key: "enter", Verb: "Details", Hint: "capability review; install lives there", Enabled: func() bool { return hasRow }},
+		{Key: "i", Verb: "Install", Hint: "or update, from the opened details", Enabled: func() bool { return hasRow && p.expanded[row.Name] && p.action(row) != "" }},
+		{Key: "U", Verb: "Update all", Hint: "plugins asking for new capabilities are held back", Enabled: func() bool { return len(p.updates) > 0 }},
+		{Key: "x", Verb: "Remove", Hint: "the installed plugin", Enabled: func() bool { return installed }},
+		{Key: "g", Verb: "Refresh", Hint: "the catalog"},
 	}
 }

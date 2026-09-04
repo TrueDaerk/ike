@@ -13,26 +13,36 @@ func sectionPages() []Page {
 	}
 }
 
-// TestRailSectionsRender guards #890: section headers appear in the rail and
-// are not click targets.
+// TestRailSectionsRender guards #890 and the accordion rail: the section
+// holding the current page is open and lists its pages, every other section
+// is one folded header with its page count, and a header click opens it.
 func TestRailSectionsRender(t *testing.T) {
 	restoreConfig(t)
 	m := New(sectionPages(), testOpts(t))
 	m.SetSize(90, 20)
 	m.Open()
-	v := m.View()
-	for _, want := range []string{"CORE", "TOOLS", "Editor", "Toolchain"} {
+	m.cat = 0
+	v := stripANSI(m.View())
+	for _, want := range []string{"▾ CORE", "Editor", "Appearance", "▸ TOOLS"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("rail missing %q:\n%s", want, v)
 		}
 	}
-	// Clicking the CORE header row (body row 0) selects nothing new.
-	before := m.cat
-	m.Click(2, bodyTop)
-	if m.cat != before {
-		t.Fatalf("header click must not select, cat=%d", m.cat)
+	if strings.Contains(v, "Toolchain") {
+		t.Fatalf("a folded section must not list its pages:\n%s", v)
 	}
-	// Clicking the Editor row (body row 1) selects page 0.
+	// Body row 0 is the CORE header, row 1 Editor, row 2 Appearance, row 3
+	// the folded TOOLS header. Clicking the folded header opens the group on
+	// its first page.
+	m.Click(2, bodyTop+3)
+	if m.cat != 2 {
+		t.Fatalf("header click must open the group on its first page, cat=%d", m.cat)
+	}
+	if v := stripANSI(m.View()); !strings.Contains(v, "▾ TOOLS") || !strings.Contains(v, "Toolchain") || strings.Contains(v, "Appearance") {
+		t.Fatalf("opening TOOLS must fold CORE:\n%s", v)
+	}
+	// Clicking a page row under an open header selects it (row 1 = Editor
+	// once CORE is open again).
 	m.cat = 1
 	m.Click(2, bodyTop+1)
 	if m.cat != 0 {
@@ -100,6 +110,7 @@ func TestRailScrollIndicators(t *testing.T) {
 	m := New(pages, testOpts(t))
 	m.SetSize(90, 10)
 	m.Open()
+	m.cat = 2 // the TOOLS group: Toolchain plus the eight extra pages, open
 	if v := m.View(); !strings.Contains(v, "▼ more") {
 		t.Fatalf("overflowing rail must show the down indicator:\n%s", v)
 	}

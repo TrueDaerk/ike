@@ -140,7 +140,7 @@ func (t *DebugMapPage) theme() *theme.Palette {
 func (t *DebugMapPage) View(w, h int) string {
 	t.setRows(h)
 	pal := t.theme()
-	head := " server path → local path   (PHP listen-mode docroot mappings, #823)"
+	head := " server path → local path   (PHP listen-mode docroot mappings)"
 	entries := t.entries()
 	var list []string
 	for i, e := range entries {
@@ -156,7 +156,7 @@ func (t *DebugMapPage) View(w, h int) string {
 	}
 	var footer []string
 	{
-		hint := "   a add · enter edit · d delete — local may be project-relative; applies on the next debug.listen start"
+		hint := "   local may be project-relative; applies on the next debug.listen start"
 		lines := []footerLine{{text: hint, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}
 		if t.note != "" {
 			lines = append([]footerLine{{text: "   " + t.note, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}, lines...)
@@ -179,4 +179,18 @@ func (t *DebugMapPage) Wheel(delta int) {
 	if n := len(t.entries()); n > 0 {
 		t.sel = clamp(t.sel+delta, 0, n-1)
 	}
+}
+
+// Actions lists the page's verbs for the action bar and the "?" overlay.
+func (t *DebugMapPage) Actions() []Action {
+	return []Action{
+		{Key: "a", Verb: "Add", Hint: "a path mapping"},
+		{Key: "enter", Verb: "Edit"},
+		{Key: "d", Verb: "Delete"},
+	}
+}
+
+// KeyHelp adds the note the keys do not carry.
+func (t *DebugMapPage) KeyHelp() []string {
+	return []string{"the local path may be project-relative"}
 }
