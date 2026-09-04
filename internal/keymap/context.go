@@ -49,7 +49,10 @@ const (
 	Issues      Context = "issues"
 	DOM         Context = "dom"
 	Doctor      Context = "xdoctor"
-	Scratch     Context = "scratch"
+	// LSPDoctor scopes bindings to a focused LSP Doctor tool window
+	// (#2487); the pane advertises the context id "lspdoctor".
+	LSPDoctor Context = "lspdoctor"
+	Scratch   Context = "scratch"
 	// Hex scopes bindings to a focused hex viewer pane (#2420).
 	Hex Context = "hex"
 	// Notebook scopes bindings to a focused notebook viewer pane (#2425).

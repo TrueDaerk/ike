@@ -122,7 +122,17 @@ per-path state under that root plus the manager's documents and servers via
 timers armed, since they belong to the active workspace. Respawn needs no
 machinery: on resume, `Init` re-announces every open file
 (`EventFileOpened`), and the first document event restarts the server
-lazily.
+lazily. A resume *inside* the timeout reuses the live server — the manager
+keys servers by (language, root) and `ensureServer` returns the running one
+— so the LSP side of a switch back is the cost of a re-`didOpen`, not a
+restart (#2492). That re-open also re-arms diagnostics delivery in the
+bridge: the first republish per path reaches the app even when the set never
+changed, because the fresh model's Problems store starts empty and the
+#2402 no-change suppression would otherwise starve it (and the switch op's
+warm-up telemetry phase) forever. A genuinely cold start reports itself:
+`ensureServer` emits a "`<lang>` language server starting" state before the
+spawn, so the status line's server segment (#380) is not blank through the
+initialize + first-index window.
 
 ## Cap & eviction (#780)
 

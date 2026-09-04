@@ -1,5 +1,65 @@
 # Log
 
+## 2026-09-04 (diff two files: live reload, #2506)
+
+- **A file diff was a snapshot.** `diff.files` read both sides once and kept
+  showing them: editing one side in another IKE pane, a build regenerating an
+  output file or a `git checkout` left the diff stale until it was re-opened,
+  and nobody thinks of re-opening as "reload".
+- **The 0140 watcher now drives it.** `routeWatchEvent` routes a `FileChanged`
+  / `FileCreated` / `FileRemoved` for either `leftPath` or `rightPath` into
+  `reloadDiffsForPath` (`internal/app/diffwatch.go`), which re-reads both
+  sides and calls the new `diff.Model.ReloadContents` — a re-diff **in place**
+  like the ignore-whitespace toggle: retained scroll offset (clamped to the
+  new document), current hunk clamped to the new hunk list, and expanded gaps
+  kept, matched by the left line number their first hidden row carries.
+  Identical bytes are a no-op. Always on, no setting.
+- **A removed side is a footer line, not a dialog.** `Model.SetNotice` puts
+  `left file removed` (or the right/both variants) on the pane's last row —
+  the row the search prompt uses, which outranks it while open — over an
+  empty side; writing the file again clears it and brings the content back.
+- **Both sides are actually watched.** `watch.Service` grew a per-path watch
+  API (`WatchPath` / `UnwatchPath` / `WatchedPaths`, `internal/watch/extra.go`)
+  for files outside the recursive root: reference-counted, following the
+  **file** rather than its directory (kqueue opens one descriptor per entry of
+  a watched directory, so watching `/tmp` for one file would cost thousands),
+  falling back to the parent directory only while the file is missing and
+  filtering that fallback's events down to the registered paths. The app
+  reconciles the set once per settled `Update` pass (`syncDiffWatches`), so a
+  closed or retargeted diff releases its registrations with no per-site hook.
+- **Scope kept narrow.** HEAD/commit diffs (`Revs()`), clipboard and
+  local-history diffs keep their snapshot semantics, and a diff in edit mode
+  (#496) is skipped — its right column is a live editor buffer that reloads
+  through the editor's own external-change path.
+
+## 2026-09-04 (diffs open in the focused editor pane, #2507)
+
+- **A diff no longer carves off a split.** Every diff-open — `diff.files`, the
+  VCS panel's HEAD and commit diffs, local history and the Timeline,
+  `diff.compareWithClipboard`, the HTTP response diff — went through
+  `placeDiffLeaf`, which split the active editor to the right. Working in a
+  full editor layout meant every diff shrank everything and landed away from
+  where the eye was. The new shared helper `openDiffLeaf`
+  (`internal/app/diff_placement.go`) opens it as a focused **content tab**
+  (#1778) of the pane the user works in instead; the pane's file tabs stay.
+- **Target: the flexible region's focused pane, else its MRU.** `flexPane`
+  defines the region (tabbable content kinds — editor and the viewer panes —
+  never the explorer, a tool window, a terminal pane or a pure tool-tab host),
+  and `setFocus` now records `m.recentFlex` beside the older `m.recentEditor`.
+  A diff requested while the VCS panel or Issues has the keyboard therefore
+  lands in the editor pane the user came from. An empty scratch pane is still
+  taken over in place (#628); a layout with no flexible pane at all falls back
+  to `placeDiffLeaf`, which also stays the merge view's placement.
+- **Single-diff reuse became per pane.** `diffSlot` (#513) now looks for a
+  diff **in the target pane** — the pane itself, or its first diff content tab
+  — so a second diff retargets that tab and a diff parked in another pane is
+  left alone. `diff.windows = "multi"` adds another tab. The
+  re-open-same-pair shortcut (#509) is unchanged: an identical diff is focused
+  wherever it lives.
+- **`diff.placement`** (`focused` default, `split`) is in Settings → Diff
+  Viewer, validated in `internal/config/validate.go`. `split` restores the
+  pre-#2507 behaviour exactly, workspace-wide single slot included.
+
 ## 2026-09-04 (diff viewer: mouse selection lag while dragging, #2495)
 
 - **The drag was re-rendering the whole diff.** Mouse text selection (#2070)

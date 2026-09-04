@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Diff Viewer
-description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, scroll-aware hunk navigation with a current-hunk gutter marker, side-label headers and a hunk/progress footer (#2494), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), clickable collapsed-context separators, diff.files palette command, layout persistence."
+description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, scroll-aware hunk navigation with a current-hunk gutter marker, side-label headers and a hunk/progress footer (#2494), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), a hard 2 MiB/side input budget with a bounded Myers core (#2505), live reload of file-vs-file diffs off the 0140 watcher with a removed-file footer notice (#2506), clickable collapsed-context separators, diff.files palette command, opens as a content tab of the focused editor pane (diff.placement, #2507), layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
 timestamp: 2026-09-04T00:00:00Z
@@ -37,6 +37,23 @@ a `RowSame` row (each side keeping its own **raw** text — the option changes
 what is compared, never what is shown), and intra-line refinement trims each
 span to its non-whitespace core, dropping the ones left empty. A hunk whose
 lines only moved sideways therefore disappears from the hunk list entirely.
+
+**Size budget** (#2505): the engine refuses oversized input instead of diffing
+it. A side over `MaxDiffBytes` (2 MiB, a constant — deliberately not a
+setting) makes `ComputeWith` return `Result{TooLarge: true}` with no rows;
+`TooLarge(left, right)` exposes the same check so openers
+(`openDiffTexts` in `internal/app`) can toast the refusal with the limit
+instead of opening an empty pane. Below the budget the Myers core itself is
+bounded: each D-round snapshots only its reachable diagonal band (`-d..d`,
+`bandSnapshot`) rather than the full diagonal array — the full-width copies
+made backtrack memory O(D·(N+M)), which turned two ~600 KiB divergent
+responses into ~25 GiB of allocation and an OOM kill — and rounds past
+`maxMyersRounds` (1024) abandon the optimal alignment for a plain
+delete-all/insert-all script over the trimmed middle, which `buildRows` still
+pairs positionally into changed rows. Intra-line refinement additionally skips
+line pairs over 4 KiB (`maxRefineBytes`) *before* the `[]rune` conversion, so
+a multi-megabyte single line (minified JSON) never allocates a rune per byte
+just to learn it is over the 400-rune cap anyway.
 
 ## Pane model (`model.go`)
 
@@ -144,7 +161,8 @@ current hunk, the scroll progress (`Progress()`: 0 at the top, 100 when the
 end is visible), and the collapsed-gap hint while separators are on screen
 (`no changes` replaces the hunk part on an empty diff). The in-pane search
 prompt (#2409) takes over the footer row while a search lives instead of
-costing the body an extra line. Panes under three rows shed the header,
+costing the body an extra line, and the live-reload notice (#2506) does the
+same below it in precedence. Panes under three rows shed the header,
 under two also the footer.
 
 ### Side labels (#2494)
@@ -301,6 +319,45 @@ then places the diff pane and focuses it. Dismissing the picker mid-flow
 disarms the state so a later `@` open is a plain file open. Unreadable files
 diff as empty text.
 
+## Live reload (#2506)
+
+A file-vs-file diff **follows its two files on disk**. When the 0140 watcher
+reports a change for either `leftPath` or `rightPath` — the user saving that
+side in another pane, a build regenerating an output file, a `git checkout`,
+an `echo x >> file` from a terminal — `routeWatchEvent` hands the event to
+`reloadDiffsForPath` (`internal/app/diffwatch.go`), which re-reads *both*
+sides and calls `Model.ReloadContents`. That is a re-diff in place, the same
+move the ignore-whitespace toggle makes: the scroll offset is retained
+(clamped to the new document), the current hunk is clamped to the new hunk
+list, and the gaps the reader expanded stay expanded — matched by the left
+line number their first hidden row carries, so an edit above them does not
+fold them again. Identical bytes are a no-op. Always on, no setting: a stale
+diff is never what the reader wants.
+
+A **removed** side is not an error. `fixRemovedWatchKind` already reclassifies
+a replace-in-place (write temp + rename) as a change; a file genuinely gone
+diffs as the empty side and the pane's footer row carries a one-line notice —
+`left file removed` / `right file removed` / `left and right file removed`
+(`Model.SetNotice`, painted over the hunk/progress footer (#2494); the search
+prompt outranks both while it is open). Writing the file again clears the
+notice and brings the content back.
+
+Only file-backed diffs reload. A HEAD/commit diff carries a revision
+(`Revs()`) and a clipboard or local-history diff has no path on its left side;
+both are snapshots by definition and keep their snapshot semantics. A diff in
+edit mode (#496) is skipped too — its right column *is* a live editor buffer,
+which reloads through the editor's own external-change path.
+
+**Watching both sides.** The watcher only walks the project root, so a diff
+between `/tmp/a.json` and a project file would never hear about the outside
+side. `syncDiffWatches` reconciles, once per settled `Update` pass, the set of
+paths the open file diffs need against `watch.Service.WatchPath` /
+`UnwatchPath` (see [Foundation](./foundation.md)) — one reconcile against the
+panes that are actually open, rather than a hook on every open, close,
+retarget and restore site. Closing or retargeting a diff therefore releases
+its registrations on the next pass; `watcher.WatchedPaths()` is the exported
+state that proves it.
+
 ## diff.compareWithClipboard command
 
 `diff.compareWithClipboard` (palette, #1477) compares the active buffer
@@ -380,14 +437,50 @@ editor pane.
 
 ## Pane placement
 
-Every diff-open (HEAD diff, commit diff, `diff.files`) routes its freshly
-created pane through `placeDiffLeaf`: if the active editor is an **empty
-scratch pane** (`Instance.IsEmptyEditor` — a single tab, no file, no text), the
-diff takes over that pane's slot in place via `layout.Replace` (renaming the
-leaf) and the empty editor is dropped; otherwise it splits the target leaf right
-with `layout.SplitLeaf`. This avoids leaving a blank editor stranded beside a
-new diff (#628). A file-backed or dirty-scratch editor is never reused — its
-content is preserved and the diff splits beside it.
+**A diff opens where the user is looking (#2507).** Every diff-open — HEAD and
+commit diffs from the VCS panel, `diff.files`, the local-history and Timeline
+diffs, `diff.compareWithClipboard`, the HTTP response diff — routes its freshly
+created viewer through the one helper `openDiffLeaf`
+(`internal/app/diff_placement.go`). Before #2507 each open split the editor
+area to the right, so working in a full layout carved off yet another column
+and the diff landed away from the eye.
+
+- **Target pane.** `diffTabTarget` picks the pane in the layout's **flexible
+  region** (the editor area of [Pane Layout](./pane-layout.md)) the user works
+  in: the focused pane when it lies in that region, else `recentFlex` — the
+  most recently focused flex pane, tracked in `setFocus` — else the first flex
+  pane in tree order. `flexPane` defines the region: a tabbable content kind
+  (editor, and the viewer panes — markdown, diff, image, archive, data, hex,
+  notebook), never the explorer, a tool window, a terminal pane or a pure
+  tool-tab host (#1989). The popup terminal and the floating panels are no
+  layout leaves, so they never qualify. A diff requested from the VCS panel or
+  the Issues window therefore lands in the editor pane the user came from, not
+  in the bottom strip (#489).
+- **Open means a content tab.** `nestDiffTab` moves the new viewer into that
+  pane as a focused **content tab** (#1778): the pane converts into a tab host
+  if it was a viewer pane, the diff instance detaches from its own pane
+  (`DetachContent`) and joins the tab list, and the emptied pane closes. The
+  pane's existing file tabs stay open beside it — no split, no resize.
+- **An empty scratch pane is still taken over in place (#628).** When the
+  target `Instance.IsEmptyEditor` (a single tab, no file, no text), the diff
+  becomes that leaf via `layout.Replace` and the blank editor is dropped,
+  rather than becoming the sole tab of an otherwise empty pane. A file-backed
+  or dirty-scratch editor is never reused — its content is preserved and the
+  diff joins it as a tab.
+- **Reuse is per pane.** The single-diff-window rule (#513) now asks
+  `diffSlot` for a diff **in the target pane** — the pane itself when it is a
+  dedicated diff, else its first diff content tab. A second diff from that
+  pane retargets that tab; a diff someone parked in another pane is left
+  alone. `diff.windows = "multi"` skips the reuse and adds another tab. The
+  re-open-same-pair shortcut (#509, `findDiffPane`) is untouched: an already
+  open identical diff is focused wherever in the workspace it lives.
+- **`diff.placement`** selects the mode: `focused` (default) is the above,
+  `split` restores the pre-#2507 behaviour exactly — `placeDiffLeaf` beside
+  the active editor with the workspace-wide single slot. The key is editable
+  on the settings panel's *Diff Viewer* page. `placeDiffLeaf` is also the
+  fallback whenever the layout has **no flexible pane at all** (a workspace of
+  explorer plus tool windows), and stays the merge view's own placement
+  (#1478).
 
 ## Persistence
 

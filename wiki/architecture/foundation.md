@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-04T00:00:00Z
 ---
 
 # Foundation Slice
@@ -89,6 +89,10 @@ costs the app one Update pass instead of one per path; the root model routes
 each event's file kind to the editor leaf owning the path
 (`editorKeyForPath`) and `DirChanged` to the explorer (consumers land in
 #81–#83). A bare `EventMsg` is still routed identically (tests, replays).
+Beyond the editors, the routing feeds the gz previews (#1763), the notebook
+viewer (#2425), the merged-rotation followers (#1996), the jq playground
+(#2356) and the [diff viewer](./diff-viewer.md), whose open file-vs-file
+diffs re-read the side that changed (#2506).
 
 - **Self-event suppression:** the editor emits `EventSave` after every disk
   write; the app's emitter adapter stamps `watcher.MarkSaved(path)`, and
@@ -108,6 +112,18 @@ each event's file kind to the editor leaf owning the path
   `Untrack` (paths still open elsewhere stay tracked) — the last-view-close
   untrack (#1541) never fires for panes torn down whole, so both maps would
   otherwise grow for the session's lifetime.
+- **Per-path watches (#2506):** `WatchPath(path)` / `UnwatchPath(path)` add a
+  reference-counted watch for a *single* file the recursive walk does not
+  cover — the [diff viewer](./diff-viewer.md) following a `/tmp/a.json` side
+  of a "diff two files" pane. The registration follows the **file**, not its
+  directory: on kqueue adding a directory opens one descriptor per entry, so
+  watching `/tmp` to hear about one file would cost thousands. The parent
+  directory is only watched *while the file is missing* (a gone file carries
+  no watch and its re-creation is a directory event), and events from such a
+  fallback are filtered down to the registered paths, so a shared `/tmp` never
+  reports its neighbours' churn. The registrations survive a `Start` (project
+  switch) by re-arming on the fresh watcher, and `WatchedPaths()` exports the
+  set so a consumer's test can prove it leaks none.
 - **Ignore rule, exported:** `watch.Ignored(root, path)` is the same rule the
   recursive walk prunes with (`skipWatchDir`), judged on the segments below the
   root. Consumers that build lists out of watcher events — the

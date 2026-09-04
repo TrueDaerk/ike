@@ -356,6 +356,7 @@ func (c *Config) Flat() map[string]string {
 
 	put("diff.context", c.Diff.Context)
 	put("diff.ignore_whitespace", c.Diff.IgnoreWhitespace)
+	put("diff.placement", c.Diff.Placement)
 
 	for id, kv := range c.Lang {
 		for k, v := range kv {

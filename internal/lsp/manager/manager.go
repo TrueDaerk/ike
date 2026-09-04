@@ -1312,6 +1312,13 @@ func (m *Manager) ensureServer(lang, root string, spec lsp.ServerSpec) (*server,
 		Notify:  func(method string, params json.RawMessage) { m.onNotify(lang, method, params) },
 		Request: func(id jsonrpc.ID, method string, params json.RawMessage) { m.onRequest(k, id, method, params) },
 	}
+	// The cold start is visible while it runs (#2492): the status line's
+	// server segment (#380) shows "starting" through the spawn + initialize
+	// window instead of staying blank, and the spawn line in the server log
+	// tells a warm-up investigation whether a project switch reused a live
+	// server (no spawn logged) or paid a cold start.
+	m.status(lang, lang+" language server starting", lsp.ServerState)
+	appendLog(lang, "spawning "+spec.Command+" for root "+root)
 	cl, stop, stderr, err := m.connect(spec, root, handler)
 	if err != nil {
 		return nil, err

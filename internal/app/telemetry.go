@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/config"
 	"ike/internal/diag"
 	"ike/internal/keymap"
@@ -216,6 +218,49 @@ func (m *Model) noteSwitchLSPReady() {
 	m.usage.Op(telemetry.OpProjectSwitch, "lsp", map[string]string{
 		"ms": strconv.FormatInt(ms.Milliseconds(), 10),
 	})
+}
+
+// noteSwitchLSPSkipped closes an armed warm-up wait without a publish (#2492):
+// the phase still lands — every `project.switch ok` is followed by an "lsp"
+// phase, so the export never has to guess — but carries `skipped` naming why
+// no publish measurement exists: "no_server_docs" (the model came up with no
+// open document of a server language), "quiet" (armed, but no publish within
+// switchLSPQuietTimeout — no server configured/running, or nothing to say),
+// "superseded" (the next switch started first) or "quit" (the session ended
+// first). ms still counts from the switch's start, so even a skipped phase
+// prices how long the model sat publish-less.
+func (m *Model) noteSwitchLSPSkipped(reason string) {
+	if m.switchLSPWait == nil {
+		return
+	}
+	ms := time.Since(m.switchLSPWait.start)
+	m.switchLSPWait = nil
+	if ms < 0 {
+		ms = 0
+	}
+	m.usage.Op(telemetry.OpProjectSwitch, "lsp", map[string]string{
+		"ms":      strconv.FormatInt(ms.Milliseconds(), 10),
+		"skipped": reason,
+	})
+}
+
+// switchLSPQuietTimeout bounds the post-switch warm-up wait (#2492): a switch
+// whose servers never publish (none configured, binary missing, or simply
+// nothing to say) would otherwise leave the op without its "lsp" phase and the
+// export unable to tell a lost event from a warm-up still in flight. Generous
+// on purpose — a real cold start on a large project publishes only after full
+// indexing (a 67 s outlier is on record), and a quiet marker must not preempt
+// that measurement.
+const switchLSPQuietTimeout = 2 * time.Minute
+
+// switchLSPQuietMsg fires when the quiet timeout for one armed wait elapses.
+// It carries the wait's identity, not a generation counter: a newer switch
+// armed a different pointer, so a stale timer compares unequal and is ignored.
+type switchLSPQuietMsg struct{ wait *switchLSPWait }
+
+// armSwitchLSPQuiet schedules the quiet fallback for the wait just armed.
+func armSwitchLSPQuiet(wait *switchLSPWait) tea.Cmd {
+	return tea.Tick(switchLSPQuietTimeout, func(time.Time) tea.Msg { return switchLSPQuietMsg{wait: wait} })
 }
 
 // telemetryProjectToken names the current project structurally: a short hash

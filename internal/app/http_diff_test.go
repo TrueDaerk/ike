@@ -3,12 +3,15 @@ package app
 import (
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/diff"
+	"ike/internal/explorer"
 	"ike/internal/httpclient"
 	"ike/internal/httphistory"
 	"ike/internal/httppane"
@@ -325,6 +328,50 @@ func TestHTTPDiffPreviousRunWithoutPaneExplains(t *testing.T) {
 	m = out.(Model)
 	if _, _, _, ok := m.diffSlot(); ok {
 		t.Error("no response pane must not open a diff pane")
+	}
+}
+
+// TestHTTPDiffPreviousRunFromNonHTTPPane: the palette command resolves the
+// visible response pane even while another pane holds the focus (#2505) — the
+// OOM session dispatched cmd+shift+d from a markdown editor. It must open the
+// diff (or notify), never loop or crash.
+func TestHTTPDiffPreviousRunFromNonHTTPPane(t *testing.T) {
+	m := httpApp(t)
+	path := httpPickerFile(t)
+	seedHTTPBodies(t, path, "first", `{"n":1}`, `{"n":2}`)
+	m = showStored(t, m, path, "first")
+
+	md := filepath.Join(t.TempDir(), "notes.md")
+	if err := os.WriteFile(md, []byte("# notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := m.Update(explorer.OpenFileMsg{Path: md})
+	m = out.(Model)
+	if focused := m.activeWS().Panes.Focused(); focused == pane.HTTPKey {
+		t.Fatal("the markdown editor must hold the focus for this repro")
+	}
+
+	out, _ = m.Update(HTTPDiffPreviousRunMsg{})
+	m = out.(Model)
+	if _, _, _, ok := m.diffSlot(); !ok {
+		t.Fatal("a previous run exists — the diff must open even from a non-HTTP pane")
+	}
+}
+
+// TestHTTPDiffOversizedBodyRefused: a stored body past the engine's size
+// budget refuses with a notice instead of opening a pane (#2505) — before the
+// guard, the comparison allocated memory until the OS killed the IDE.
+func TestHTTPDiffOversizedBodyRefused(t *testing.T) {
+	m := httpApp(t)
+	path := httpPickerFile(t)
+	huge := strings.Repeat("a", diff.MaxDiffBytes+1)
+	seedHTTPBodies(t, path, "first", huge, huge+"b")
+	m = showStored(t, m, path, "first")
+
+	out, _ := m.Update(httppane.DiffPreviousRunMsg{})
+	m = out.(Model)
+	if _, _, _, ok := m.diffSlot(); ok {
+		t.Error("an oversized body must not open a diff pane")
 	}
 }
 

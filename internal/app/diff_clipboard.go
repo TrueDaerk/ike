@@ -43,8 +43,8 @@ func (m *Model) compareWithClipboard() {
 
 // openClipboardDiffPane shows the clipboard (left) against text (right) in
 // the reusable diff pane, following the openLocalHistoryDiffPane shape:
-// reuse the single diff slot when one exists, otherwise split a titled pane
-// beside the editor.
+// reuse the single diff slot when one exists, otherwise open a titled viewer
+// through openDiffLeaf (#2507).
 func (m *Model) openClipboardDiffPane(rightTitle, rightPath, clip, right string, editable bool) {
 	const leftTitle = "Clipboard"
 	// Side labels (#2494): the clipboard against the buffer it is compared
@@ -62,15 +62,16 @@ func (m *Model) openClipboardDiffPane(rightTitle, rightPath, clip, right string,
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 		return
 	}
-	key := m.activeWS().Panes.AddDiffTitled(leftTitle, rightTitle, rightPath)
-	if !m.placeDiffLeaf(key) {
+	inst, ok := m.openDiffLeaf(func() string {
+		return m.activeWS().Panes.AddDiffTitled(leftTitle, rightTitle, rightPath)
+	})
+	if !ok {
 		return
 	}
 	if editable {
-		m.activeWS().Panes.Get(key).Diff().SetEditable(true)
+		inst.Diff().SetEditable(true)
 	}
-	m.activeWS().Panes.Get(key).Diff().SetSideLabels("clipboard", rightLabel)
-	m.activeWS().Panes.Get(key).Diff().SetContents(clip, right)
-	m.setFocus(key)
+	inst.Diff().SetSideLabels("clipboard", rightLabel)
+	inst.Diff().SetContents(clip, right)
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }

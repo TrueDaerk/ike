@@ -59,6 +59,11 @@ func (m *Model) routeWatchEvent(msg watch.EventMsg) tea.Cmd {
 		}
 		return vcsCmd
 	}
+	// A file-vs-file diff follows its two files on disk (#2506): whichever
+	// side changed — or vanished — is re-read and re-diffed in place. Before
+	// the removal handling below, which may close an editor pane and return
+	// early; the diff is a viewer of its own and never rides on one.
+	m.reloadDiffsForPath(msg.Path)
 	// Announce the file event to hook subscribers (#1144): the LSP bridge
 	// forwards it to the servers as workspace/didChangeWatchedFiles, so
 	// Intelephense re-indexes externally created/changed/deleted files.

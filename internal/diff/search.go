@@ -170,4 +170,6 @@ func (m *Model) recomputeMatches() {
 
 // searchLine renders the prompt row — the shared shape (#2461): the slash
 // prefix, the query with its text cursor while typing, and the match counter.
+// It takes over the footer row while a search lives (#2494); the precedence
+// over the notice and the hunk/progress readout lives in View.
 func (m Model) searchLine() string { return m.search.Line() }

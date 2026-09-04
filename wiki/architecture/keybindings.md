@@ -1296,6 +1296,7 @@ JetBrains is:
 | `lsp.codeAction` | `alt+enter` | fragile | `palette` | live via palette |
 | `lsp.definition` | `f4` | delivered | `—` | live |
 | `lsp.diagnosticInfo` | `cmd+f1` | fragile | `palette` | live via palette |
+| `lsp.doctor.copy` | `cmd+c` | fragile | `LSP Doctor pane "c" / palette` | live via LSP Doctor pane "c" / palette |
 | `lsp.documentSymbols` | `cmd+f12` | fragile | `palette (or the cmd+3 Structure panel)` | live via palette (or the cmd+3 Structure panel) |
 | `lsp.format` | `cmd+alt+l` | fragile | `palette` | live via palette |
 | `lsp.goToSuper` | `cmd+u` | fragile | `palette / Navigate menu / context menu` | live via palette / Navigate menu / context menu |
