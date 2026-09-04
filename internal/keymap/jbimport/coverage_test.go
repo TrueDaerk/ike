@@ -29,6 +29,7 @@ var noCounterpart = map[string]string{
 	"http.cancel":                      "IKE-only concept (#2404): JetBrains stops a request from the run tool's button, no keymap action",
 	"debug.copy":                       "IKE-only concept (#2400): JetBrains' debugger copies from its own context menu, no keymap action",
 	"issues.copy":                      "IKE-only concept (#2400): the issues window has no JetBrains counterpart",
+	"lsp.doctor.copy":                  "IKE-only concept (#2487): the LSP Doctor tool window has no JetBrains counterpart",
 	"issues.selectPrev":                "IKE-only concept (#2400): the issues window has no JetBrains counterpart",
 	"issues.selectNext":                "IKE-only concept (#2400): the issues window has no JetBrains counterpart",
 	"editor.copyDocPath":               "JetBrains copies file references, not a path inside a JSON/YAML document",

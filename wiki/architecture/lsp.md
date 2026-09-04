@@ -1258,6 +1258,18 @@ install-succeeded-but-unresolvable message all append `diagnose: "LSP:
 Doctor"`, and a click on the `lsp` status segment opens the doctor. No
 default chord (#711 policy).
 
+**Copying the report** (#2487): `lsp.doctor.copy` ("LSP Doctor: Copy Report",
+`internal/lspdoctor/copy.go`) puts the *whole* report on the clipboard as
+plain text — the header counts plus every rendered row (server line, checks,
+diagnosis, fix, re-run verdict), unstyled and unclipped, which is what a bug
+report or a chat paste needs. It is pane-scoped to the doctor's context id
+`lspdoctor` and bound to **cmd+c** there (`internal/keymap/defaults.go`); the
+pane's own **c** does the same on every terminal, and the footer advertises
+it. Both routes go through the host's shared pane-copy path
+(`lspdoctor.CopyMsg` → `copyPanelRow`: system clipboard + clipboard history +
+a "copied LSP Doctor report" toast). Before the first finished run the
+command is a no-op with a short notice instead of copying an empty string.
+
 ## Testing
 
 Pure-Go fakes throughout: an in-memory `io.ReadWriteCloser` speaking JSON-RPC
