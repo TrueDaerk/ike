@@ -1910,7 +1910,11 @@ the store, resolves the run right after the shown one in the newest-first list
 to `diffHTTPEntries`, skipping the picker entirely. No pane, no stored
 response or no earlier run to compare against each notify instead of opening
 something wrong; the footer advertises `P diff prev` once an earlier entry
-exists below the one on show.
+exists below the one on show. A rendered side over the diff engine's 2 MiB
+budget (`diff.MaxDiffBytes`, #2505) is refused with a toast naming the limit
+instead of opening the pane — the guard `openDiffTexts` runs for every
+text-pair diff, added after a previous-run diff of two divergent responses
+allocated memory until the OS killed the IDE.
 
 **Re-running a request from its history** (#2247): `ctrl+r` above repeats the
 stored *bytes*, which is the right answer to "did that exact exchange change"

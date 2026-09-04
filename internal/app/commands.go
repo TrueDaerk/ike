@@ -270,6 +270,11 @@ type DebugCopyMsg struct{}
 // selection when there is one, else the selected issue's URL.
 type IssuesCopyMsg struct{}
 
+// LSPDoctorCopyMsg runs lsp.doctor.copy (cmd+c in the LSP Doctor, #2487):
+// the whole report — header counts and every server row with its checks,
+// diagnosis and fix — goes to the clipboard as plain text.
+type LSPDoctorCopyMsg struct{}
+
 // IssuesStepMsg runs issues.selectPrev / issues.selectNext (ctrl+up /
 // ctrl+down, #2400): walk the issues window's selection.
 type IssuesStepMsg struct{ Delta int }
@@ -730,6 +735,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			paneCommand("issues.copy", "Issues: Copy Issue Reference", "issues", IssuesCopyMsg{}),
 			paneCommand("issues.selectNext", "Issues: Next Issue", "issues", IssuesStepMsg{Delta: 1}),
 			paneCommand("issues.selectPrev", "Issues: Previous Issue", "issues", IssuesStepMsg{Delta: -1}),
+			paneCommand("lsp.doctor.copy", "LSP Doctor: Copy Report", "lspdoctor", LSPDoctorCopyMsg{}),
 			paneCommand("http.search", "Search in HTTP Response", "http", HTTPSearchMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			appCommand("terminal.popup", "Popup Terminal", TerminalPopupMsg{}),

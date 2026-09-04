@@ -23,14 +23,22 @@ func writeTempFile(t *testing.T, name, content string) string {
 	return path
 }
 
-// diffKeyOf returns the key of the first diff pane, or "".
+// diffKeyOf returns the key of the pane hosting the first open diff, or "".
+// Since #2507 that pane is usually an editor pane holding the diff as a
+// content tab (#1778), so the walk covers both shapes.
 func diffKeyOf(m Model) string {
-	for _, key := range m.activeWS().Panes.Keys() {
-		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindDiff {
-			return key
-		}
+	key, _, _, ok := m.findContent(func(c *pane.Instance) bool { return c.Kind() == pane.KindDiff })
+	if !ok {
+		return ""
 	}
-	return ""
+	return key
+}
+
+// diffViewerOf returns the first open diff instance itself — the dedicated
+// pane, or the nested content tab — or nil.
+func diffViewerOf(m Model) *pane.Instance {
+	_, _, inst, _ := m.findContent(func(c *pane.Instance) bool { return c.Kind() == pane.KindDiff })
+	return inst
 }
 
 // TestDiffFilesPickFlow guards diff.files (#60): the command arms the

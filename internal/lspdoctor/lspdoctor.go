@@ -286,6 +286,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if m.report != nil && !m.report.Running() && len(m.report.Servers()) > 0 {
 			return func() tea.Msg { return RerunMsg{} }
 		}
+	case "c":
+		// The pane-local twin of lsp.doctor.copy (#2487); nil while
+		// there is no finished run to copy.
+		return m.CopyKeyCmd()
 	}
 	m.clampScroll()
 	return nil
@@ -303,19 +307,7 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 	title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" LSP Doctor")
 	counts := ""
 	if m.report != nil && m.report.Ran() {
-		n, failing := len(m.report.Results()), 0
-		for _, r := range m.report.Results() {
-			if r.Failed() {
-				failing++
-			}
-		}
-		counts = strconv.Itoa(n) + " server"
-		if n != 1 {
-			counts += "s"
-		}
-		if failing > 0 {
-			counts += " · " + strconv.Itoa(failing) + " failing"
-		}
+		counts = m.summary()
 	}
 	return title + lipgloss.NewStyle().Faint(true).Render("   "+counts)
 }
@@ -404,7 +396,7 @@ func (m *Model) renderRow(pal *theme.Palette, r row, i int) string {
 
 // footer shows the key hints.
 func (m *Model) footer(pal *theme.Palette) string {
-	return lipgloss.NewStyle().Faint(true).Render(m.clip(" r re-run checks & verify fixes"))
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(" r re-run checks & verify fixes · c copy report"))
 }
 
 // bodyHeight is the room between the two header lines and the footer.

@@ -488,9 +488,12 @@ type Issues struct {
 // unchanged and intra-line refinement reports only the non-whitespace
 // ranges, which is what makes a reformat-heavy diff readable. The pane's
 // toggle writes the key back, so the last choice is the next diff's default.
+// Placement decides where a diff-open lands (#2507): "focused" opens it as a
+// tab of the pane the user works in, "split" carves off a new pane beside it.
 type Diff struct {
-	Context          int  `toml:"context"`
-	IgnoreWhitespace bool `toml:"ignore_whitespace"`
+	Context          int    `toml:"context"`
+	IgnoreWhitespace bool   `toml:"ignore_whitespace"`
+	Placement        string `toml:"placement"`
 }
 
 // Todo holds the comment-tag index settings (#61). Patterns is the list of tag

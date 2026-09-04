@@ -90,7 +90,10 @@ func TestDiffSingleWindowRetargets(t *testing.T) {
 	}
 }
 
-func TestDiffMultiWindowConfigSplits(t *testing.T) {
+// TestDiffMultiWindowConfigOpensSecondViewer guards diff.windows = "multi"
+// under the focused placement (#2507): the second diff opens a second viewer
+// — a tab beside the first — instead of retargeting the one slot.
+func TestDiffMultiWindowConfigOpensSecondViewer(t *testing.T) {
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.txt")
@@ -103,11 +106,47 @@ func TestDiffMultiWindowConfigSplits(t *testing.T) {
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = out.(Model)
 	m.openDiffPane(a, b)
+	m.openDiffPane(a, c)
+	if n := countDiffViewers(m); n != 2 {
+		t.Fatalf("multi mode must open a second viewer (diffs=%d)", n)
+	}
+	if inst := m.focusedContent(); inst == nil || inst.Diff().RightPath() != c {
+		t.Fatal("the second diff must be the focused one")
+	}
+}
+
+// TestDiffMultiWindowSplitPlacementSplits: with diff.placement = "split" the
+// multi mode carves off a second pane, exactly as before #2507.
+func TestDiffMultiWindowSplitPlacementSplits(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.txt")
+	b := filepath.Join(dir, "b.txt")
+	c := filepath.Join(dir, "c.txt")
+	for _, p := range []string{a, b, c} {
+		os.WriteFile(p, []byte(p+"\n"), 0o644)
+	}
+	m := NewWith(registry.New(), host.MapConfig{"diff.windows": "multi", "diff.placement": "split"})
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = out.(Model)
+	m.openDiffPane(a, b)
 	count := len(m.activeWS().Panes.Keys())
 	m.openDiffPane(a, c)
 	if len(m.activeWS().Panes.Keys()) != count+1 {
 		t.Fatalf("multi mode must split (panes=%d)", len(m.activeWS().Panes.Keys()))
 	}
+}
+
+// countDiffViewers counts every open diff — dedicated pane or content tab.
+func countDiffViewers(m Model) int {
+	n := 0
+	m.contentInstances(func(_ string, _ int, c *pane.Instance) bool {
+		if c.Kind() == pane.KindDiff {
+			n++
+		}
+		return true
+	})
+	return n
 }
 
 // TestDiffF7StepsHunks guards #495: F7 / shift+F7 drive the focused diff
@@ -213,8 +252,9 @@ func TestDiffReusesEmptyEditor(t *testing.T) {
 	}
 }
 
-// TestDiffDoesNotClobberNonEmptyEditor: a file-backed editor is preserved — the
-// diff splits a new pane rather than replacing it.
+// TestDiffDoesNotClobberNonEmptyEditor: a file-backed editor is preserved —
+// the diff joins it as a content tab (#2507) rather than replacing it, and no
+// new leaf appears.
 func TestDiffDoesNotClobberNonEmptyEditor(t *testing.T) {
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	dir := t.TempDir()
@@ -235,10 +275,55 @@ func TestDiffDoesNotClobberNonEmptyEditor(t *testing.T) {
 
 	m.openDiffPane(left, right)
 
-	if got := len(layout.Leaves(m.activeWS().Tree)); got != before+1 {
-		t.Fatalf("diff should split beside a file-backed editor: leaves %d -> %d", before, got)
+	if got := len(layout.Leaves(m.activeWS().Tree)); got != before {
+		t.Fatalf("diff must not split beside a file-backed editor: leaves %d -> %d", before, got)
 	}
 	if !m.activeWS().Panes.Has(editorKey) {
 		t.Fatal("the file-backed editor pane must be preserved")
+	}
+	if got := m.activeWS().Panes.Focused(); got != editorKey {
+		t.Fatalf("focused pane = %q, want the editor %q", got, editorKey)
+	}
+	inst := m.activeWS().Panes.Get(editorKey)
+	if inst.TabCount() != 2 {
+		t.Fatalf("the editor's file tab must survive beside the diff tab (tabs=%d)", inst.TabCount())
+	}
+	if c := inst.ActiveContent(); c == nil || c.Kind() != pane.KindDiff {
+		t.Fatal("the diff tab must be the active one")
+	}
+	if inst.TabPath(0) != f {
+		t.Fatalf("tab 0 = %q, want the open file %q", inst.TabPath(0), f)
+	}
+}
+
+// TestDiffSplitPlacementSplits guards diff.placement = "split" (#2507): the
+// pre-#2507 behaviour, a fresh pane to the right of the file-backed editor.
+func TestDiffSplitPlacementSplits(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	dir := t.TempDir()
+	f := filepath.Join(dir, "open.txt")
+	left := filepath.Join(dir, "l.txt")
+	right := filepath.Join(dir, "r.txt")
+	os.WriteFile(f, []byte("content\n"), 0o644)
+	os.WriteFile(left, []byte("a\n"), 0o644)
+	os.WriteFile(right, []byte("b\n"), 0o644)
+
+	m := NewWith(registry.New(), host.MapConfig{"diff.placement": "split"})
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = out.(Model)
+	m.openPath(f, false)
+	editorKey := m.activeEditorKey()
+	before := len(layout.Leaves(m.activeWS().Tree))
+
+	m.openDiffPane(left, right)
+
+	if got := len(layout.Leaves(m.activeWS().Tree)); got != before+1 {
+		t.Fatalf("split placement must split: leaves %d -> %d", before, got)
+	}
+	if !m.activeWS().Panes.Has(editorKey) {
+		t.Fatal("the file-backed editor pane must be preserved")
+	}
+	if inst := m.activeWS().Panes.FocusedInstance(); inst == nil || inst.Kind() != pane.KindDiff {
+		t.Fatal("the split diff pane must take focus")
 	}
 }

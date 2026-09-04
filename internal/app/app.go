@@ -192,6 +192,12 @@ type Model struct {
 	// recentEditor is the key of the most-recently-focused editor, used as the
 	// Replace open-target when the explorer (not an editor) holds focus.
 	recentEditor string
+	// recentFlex is the key of the most-recently-focused pane in the layout's
+	// flexible region (#2507): editor panes and viewer panes alike, never a
+	// tool window or the explorer. It is the diff-placement target while a
+	// tool window holds the keyboard, so a diff opened from the VCS panel
+	// lands where the user was last working instead of in the tool strip.
+	recentFlex string
 	// viewerTabHost names the pane a handler-dispatched viewer open should land
 	// in as a content tab (#1825) instead of splitting off viewerSplitTarget
 	// (#1779). Set by the palette (focused pane) and the explorer's default
@@ -2427,6 +2433,7 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 	panes.SetFocused(pane.ExplorerKey)
 	m.activeWS().Panes = panes
 	m.recentEditor = firstEditorKey(leaves)
+	m.recentFlex = ""
 	m.activeWS().Tree = tree
 	if missing > 0 {
 		// One summary notice for the whole restore (#2177), not one per file:
@@ -3860,9 +3867,11 @@ func (m *Model) openMarkdownPreview() {
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
-// openDiffPane splits the focused leaf with a read-only diff viewer comparing
-// the files at leftPath and rightPath (#60). The new pane takes focus so n/N
-// and enter work immediately; an unreadable file diffs as empty text.
+// openDiffPane opens a read-only diff viewer comparing the files at leftPath
+// and rightPath (#60) through the shared placement helper (#2507): a tab of
+// the focused editor pane by default, a split leaf under diff.placement =
+// "split". The viewer takes focus so n/N and enter work immediately; an
+// unreadable file diffs as empty text.
 func (m *Model) openDiffPane(leftPath, rightPath string) {
 	// The same file pair re-opens by focusing the existing pane with fresh
 	// contents (#509).
@@ -3881,22 +3890,29 @@ func (m *Model) openDiffPane(leftPath, rightPath string) {
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 		return
 	}
-	key := m.activeWS().Panes.AddDiff(leftPath, rightPath)
-	if !m.placeDiffLeaf(key) {
+	inst, ok := m.openDiffLeaf(func() string { return m.activeWS().Panes.AddDiff(leftPath, rightPath) })
+	if !ok {
 		return
 	}
-	m.activeWS().Panes.Get(key).Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
-	m.setFocus(key)
+	inst.Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
-// diffSlot returns the diff viewer to reuse in single-window mode (#513):
-// the first open diff — dedicated pane or content tab (#1778) — unless
-// config diff.windows = "multi" restores the split-per-open behavior. The
-// host key and tab index (-1 for a pane) locate it for focusContentAt.
+// diffSlot returns the diff viewer to reuse in single-window mode (#513),
+// unless config diff.windows = "multi" restores the open-per-diff behavior.
+// With the focused placement (#2507) the single window is per target pane:
+// only a diff already living in the pane the next diff would open into is
+// retargeted, so a diff tab someone parked in another pane stays put. The
+// split placement keeps the workspace-wide slot: the first open diff —
+// dedicated pane or content tab (#1778). The host key and tab index (-1 for
+// a pane) locate the hit for focusContentAt.
 func (m Model) diffSlot() (*pane.Instance, string, int, bool) {
 	if v, ok := m.host.Config().Get("diff.windows"); ok && v == "multi" {
 		return nil, "", -1, false
+	}
+	if target, ok := m.diffTabTarget(); ok {
+		inst, tabIdx, hit := m.diffInPane(target)
+		return inst, target, tabIdx, hit
 	}
 	hostKey, tabIdx, inst, ok := m.findContent(func(c *pane.Instance) bool {
 		return c.Kind() == pane.KindDiff
@@ -6124,6 +6140,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 'r' in the LSP Doctor pane (#2164): re-run the checks; Finish
 		// verifies fixes against the previous run's failure classes.
 		return m, m.runLSPDoctor()
+
+	case LSPDoctorCopyMsg:
+		// lsp.doctor.copy (cmd+c in the LSP Doctor, #2487): the whole
+		// report as plain text, with a short notice while there is
+		// nothing to copy yet.
+		return m, m.copyLSPDoctorReport()
+
+	case lspdoctor.CopyMsg:
+		// The pane's own 'c' (#2487) — the host owns the clipboard seam
+		// and the confirmation toast, like every other pane copy.
+		return m.copyPanelRow(msg.Text, msg.What)
 
 	case lspdoctor.ResultsMsg:
 		// A finished check run (#2164): store it and compute the
@@ -9732,6 +9759,12 @@ func (m *Model) setFocus(key string) {
 	}
 	m.autosaveOnBlur(key)
 	m.activeWS().Panes.SetFocused(key)
+	// The flexible region's MRU (#2507) tracks every content pane, not just
+	// the editor kinds, so a diff opened from a tool window returns to the
+	// viewer the user came from.
+	if flexPane(m.activeWS().Panes.Get(key)) {
+		m.recentFlex = key
+	}
 	if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
 		m.recentEditor = key
 		// The explorer's accent always tracks the focused editor's file, so
@@ -9984,6 +10017,9 @@ func (m *Model) closeKey(key string) bool {
 	}
 	if m.recentEditor == key {
 		m.recentEditor = firstEditorKey(layout.Leaves(m.activeWS().Tree))
+	}
+	if m.recentFlex == key {
+		m.recentFlex = "" // diffTabTarget falls back to tree order (#2507)
 	}
 	return true
 }
