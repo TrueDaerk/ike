@@ -505,10 +505,16 @@ per-project state file rather than `settings.toml`:
   can tell it from a real editor slot; older files with the pre-#1989
   `editor`+`tools` shape restore identically (tolerant reader), and the next
   save migrates them.
-- **Tolerant restore** (`internal/app`): the explorer must be present exactly
-  once and every other leaf must be a well-formed editor key, else the default
+- **Tolerant restore** (`internal/app`): the explorer must be present at most
+  once (zero is a valid save — the tree was hidden via `explorer.toggle`) and
+  every other leaf must be a well-formed editor key, else the default
   layout is rebuilt. A saved editor whose **file no longer exists** restores as an
   *empty* editor at that leaf — the split is preserved, never dropped.
+- **Restore focus** (`restoredFocus`, #2491): the finished restore focuses the
+  explorer when its leaf is in the tree; a hidden-explorer layout focuses the
+  first editor leaf instead (first leaf of any kind as last resort), so the
+  keyboard never lands in a pane the tree does not render. A saved session's
+  active file may then re-focus its own editor (`restoreSession`).
 - Save is **debounced to op/drag commit** (split, close, move, resize,
   open-in-new-pane), never written per motion frame.
 

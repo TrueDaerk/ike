@@ -2435,7 +2435,13 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			inst.ActivateTab(active)
 		}
 	}
-	panes.SetFocused(pane.ExplorerKey)
+	// A layout saved with the explorer hidden (#268) has no explorer leaf, so
+	// focusing the tree pane would park the keyboard in a pane nothing
+	// renders — keys vanish into the invisible explorer and splits target a
+	// leaf outside the layout (#2491). Focus the first visible editor leaf
+	// instead (any leaf as last resort); a saved session's active file
+	// re-focuses its editor right after (restoreSession).
+	panes.SetFocused(restoredFocus(tree, panes))
 	m.activeWS().Panes = panes
 	m.recentEditor = firstEditorKey(leaves)
 	m.recentFlex = ""
@@ -2498,6 +2504,29 @@ func loadedEditorForPath(reg *pane.Registry, path string) *editor.Model {
 		}
 	}
 	return nil
+}
+
+// restoredFocus picks the pane a finished layout restore focuses (#2491): the
+// explorer when its leaf is in the tree (the pre-#2491 behavior), otherwise
+// the first editor-kind leaf, otherwise the first leaf of any kind — never a
+// pane the tree does not render.
+func restoredFocus(tree layout.Node, panes *pane.Registry) string {
+	leaves := layout.Leaves(tree)
+	first := ""
+	for _, key := range leaves {
+		if key == pane.ExplorerKey {
+			return pane.ExplorerKey
+		}
+		if first == "" {
+			first = key
+		}
+	}
+	for _, key := range leaves {
+		if inst := panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
+			return key
+		}
+	}
+	return first
 }
 
 // firstEditorKey returns the first editor leaf key in walk order, or "".
