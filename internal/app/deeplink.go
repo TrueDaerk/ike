@@ -127,6 +127,12 @@ func (m Model) handleDeepLinkResolved(msg deepLinkResolvedMsg) (tea.Model, tea.C
 // SwitchedMsg handler.
 func (m Model) deepLinkSwitch(link deeplink.Link, root string) (tea.Model, tea.Cmd) {
 	if cwd, err := os.Getwd(); err == nil && cwd == root {
+		if link.File == "" && link.Tool == "" {
+			// A bare link to the current project is a no-op; without this the
+			// user cannot tell whether the click arrived at all (#2518).
+			m.host.Notify(host.Info, "ike link: already in project "+filepath.Base(root))
+			return m, nil
+		}
 		return m.finishDeepLink(*pendingFor(link, root))
 	}
 	m.dlPending = pendingFor(link, root)

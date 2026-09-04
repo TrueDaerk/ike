@@ -91,6 +91,12 @@ setup. Known macOS limitation: the *running* window shows the Ghostty Dock
 icon — the Ike icon applies to the launcher tile. If you don't want the
 desktop integration, the manual setup below works as before.
 
+`make install-desktop` also registers the `ike://` URL scheme (deep links,
+see the wiki). The registration lives in the installed launcher, so it must
+be **re-run after updating** to a version that added or changed the scheme
+handling — otherwise a click on an `ike://` link fails silently (on macOS
+with `kLSApplicationNotFoundErr`, in a browser with no visible effect).
+
 ### Platform notes
 
 > [!IMPORTANT]

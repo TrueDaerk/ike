@@ -4,7 +4,7 @@ title: Deep Links (ike:// URL scheme)
 description: The ike:// URL scheme — parse/normalise/resolve in internal/deeplink, per-instance socket hand-off, history→projects-dir→clone resolution, file/tool payload after the switch, OS registration per platform (#2396)
 resource: internal/deeplink
 tags: [deeplink, url-scheme, ipc, project-switching]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-04T00:00:00Z
 ---
 
 # Deep Links (ike:// URL scheme)
@@ -92,7 +92,17 @@ switch stands.
 `project.open_link` (palette; audit-ledger entry, no default chord) opens a
 one-line paste prompt for entering an `ike://` URL by hand.
 
+A link that resolves to the **already current** project with no file/tool
+payload notifies "already in project X" instead of doing nothing (#2518) —
+otherwise the user cannot tell whether the click arrived at all.
+
 ## OS registration
+
+Registration lives in the *installed* launcher artifacts, so
+`make install-desktop` must be **re-run after updating** to a version that
+added or changed the scheme handling; without it a click fails silently
+(macOS: `open 'ike://…'` errors with `kLSApplicationNotFoundErr`, a browser
+click goes nowhere) (#2518).
 
 - **macOS** — `scripts/install-desktop.sh` compiles an `Ike Link Handler.app`
   applet (osacompile, `on open location`) declaring `CFBundleURLTypes` for
