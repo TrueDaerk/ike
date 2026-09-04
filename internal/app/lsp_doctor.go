@@ -3,6 +3,7 @@ package app
 import (
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/host"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lspdoctor"
 	"ike/internal/pane"
@@ -52,6 +53,19 @@ func (m *Model) openLSPDoctorPanel() {
 // layout restore uses it too.
 func (m *Model) wireLSPDoctorPanel(p *lspdoctor.Model) {
 	p.SetReport(m.lspDoctorReport)
+}
+
+// copyLSPDoctorReport runs lsp.doctor.copy (#2487): the panel's plain-text
+// report goes through the shared pane-copy path (clipboard + history +
+// toast). Without a finished run there is nothing to copy, so the command
+// says so instead of putting an empty string on the clipboard.
+func (m Model) copyLSPDoctorReport() tea.Cmd {
+	p := m.lspDoctorPanel()
+	if p == nil || p.PlainText() == "" {
+		m.host.Notify(host.Info, "no LSP Doctor report yet — press r to run the checks")
+		return nil
+	}
+	return p.CopyKeyCmd()
 }
 
 // runLSPDoctor starts one check run over the stored server set, off the

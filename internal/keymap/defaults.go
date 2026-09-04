@@ -117,6 +117,11 @@ var jetbrainsRows = []row{
 	// the reason above — it stays the global quit chord on macOS.
 	{"cmd+c", "debug.copy", "Copy selected value", Debug, "Debugger (#2400)"},
 	{"cmd+c", "issues.copy", "Copy issue reference", Issues, "GitHub issues (#2400)"},
+	// The same again for the LSP Doctor (#2487): cmd+c was recorded unbound
+	// there, and the report is exactly what a user wants to paste into a bug
+	// report. The pane keeps its own 'c' for the same action; no ctrl+c
+	// secondary, for the reason above.
+	{"cmd+c", "lsp.doctor.copy", "Copy LSP Doctor report", LSPDoctor, "LSP Doctor (#2487)"},
 	// JetBrains' Copy Reference chord, applied to the position *inside* a
 	// JSON/YAML document rather than to the file (#1660). The jq and yq
 	// flavours stay palette-only — one chord for the everyday form.

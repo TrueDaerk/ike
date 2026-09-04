@@ -279,6 +279,9 @@ func defaults() *Config {
 		},
 		Diff: Diff{
 			Context: 3, // context lines kept around a change (0340, #494)
+			// A diff opens where the user is looking: as a tab of the
+			// focused editor pane instead of yet another split (#2507).
+			Placement: "focused",
 		},
 		Preview: Preview{
 			// Diagram fences render as text by default (#2421): ASCII needs

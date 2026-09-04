@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Diff Viewer
-description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), a hard 2 MiB/side input budget with a bounded Myers core (#2505), diff.files palette command, layout persistence."
+description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), a hard 2 MiB/side input budget with a bounded Myers core (#2505), diff.files palette command, opens as a content tab of the focused editor pane (diff.placement, #2507), layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
 timestamp: 2026-09-04T00:00:00Z
@@ -342,14 +342,50 @@ editor pane.
 
 ## Pane placement
 
-Every diff-open (HEAD diff, commit diff, `diff.files`) routes its freshly
-created pane through `placeDiffLeaf`: if the active editor is an **empty
-scratch pane** (`Instance.IsEmptyEditor` — a single tab, no file, no text), the
-diff takes over that pane's slot in place via `layout.Replace` (renaming the
-leaf) and the empty editor is dropped; otherwise it splits the target leaf right
-with `layout.SplitLeaf`. This avoids leaving a blank editor stranded beside a
-new diff (#628). A file-backed or dirty-scratch editor is never reused — its
-content is preserved and the diff splits beside it.
+**A diff opens where the user is looking (#2507).** Every diff-open — HEAD and
+commit diffs from the VCS panel, `diff.files`, the local-history and Timeline
+diffs, `diff.compareWithClipboard`, the HTTP response diff — routes its freshly
+created viewer through the one helper `openDiffLeaf`
+(`internal/app/diff_placement.go`). Before #2507 each open split the editor
+area to the right, so working in a full layout carved off yet another column
+and the diff landed away from the eye.
+
+- **Target pane.** `diffTabTarget` picks the pane in the layout's **flexible
+  region** (the editor area of [Pane Layout](./pane-layout.md)) the user works
+  in: the focused pane when it lies in that region, else `recentFlex` — the
+  most recently focused flex pane, tracked in `setFocus` — else the first flex
+  pane in tree order. `flexPane` defines the region: a tabbable content kind
+  (editor, and the viewer panes — markdown, diff, image, archive, data, hex,
+  notebook), never the explorer, a tool window, a terminal pane or a pure
+  tool-tab host (#1989). The popup terminal and the floating panels are no
+  layout leaves, so they never qualify. A diff requested from the VCS panel or
+  the Issues window therefore lands in the editor pane the user came from, not
+  in the bottom strip (#489).
+- **Open means a content tab.** `nestDiffTab` moves the new viewer into that
+  pane as a focused **content tab** (#1778): the pane converts into a tab host
+  if it was a viewer pane, the diff instance detaches from its own pane
+  (`DetachContent`) and joins the tab list, and the emptied pane closes. The
+  pane's existing file tabs stay open beside it — no split, no resize.
+- **An empty scratch pane is still taken over in place (#628).** When the
+  target `Instance.IsEmptyEditor` (a single tab, no file, no text), the diff
+  becomes that leaf via `layout.Replace` and the blank editor is dropped,
+  rather than becoming the sole tab of an otherwise empty pane. A file-backed
+  or dirty-scratch editor is never reused — its content is preserved and the
+  diff joins it as a tab.
+- **Reuse is per pane.** The single-diff-window rule (#513) now asks
+  `diffSlot` for a diff **in the target pane** — the pane itself when it is a
+  dedicated diff, else its first diff content tab. A second diff from that
+  pane retargets that tab; a diff someone parked in another pane is left
+  alone. `diff.windows = "multi"` skips the reuse and adds another tab. The
+  re-open-same-pair shortcut (#509, `findDiffPane`) is untouched: an already
+  open identical diff is focused wherever in the workspace it lives.
+- **`diff.placement`** selects the mode: `focused` (default) is the above,
+  `split` restores the pre-#2507 behaviour exactly — `placeDiffLeaf` beside
+  the active editor with the workspace-wide single slot. The key is editable
+  on the settings panel's *Diff Viewer* page. `placeDiffLeaf` is also the
+  fallback whenever the layout has **no flexible pane at all** (a workspace of
+  explorer plus tool windows), and stays the merge view's own placement
+  (#1478).
 
 ## Persistence
 

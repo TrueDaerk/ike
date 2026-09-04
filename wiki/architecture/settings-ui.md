@@ -241,13 +241,15 @@ any entry whose key the typed schema does not expose (no dead keys).
   stops arming deadlines while the terminal window has no focus, and `false`
   restores the always-polling behaviour. See
   [Forge Layer](./forge.md).
-- **Diff Viewer** (#2170) — `diff.context`, the unchanged lines kept around a
-  change before the rest folds into a separator (`-1` never folds), and
-  `diff.ignore_whitespace`, whether lines that differ only in whitespace count
-  as unchanged. Both are starting points the pane's own keys (`c`/`o`, `w`)
-  override live — and `w` writes its new state straight back into this key, so
-  the setting and the open panes never disagree. See
-  [diff viewer](./diff-viewer.md).
+- **Diff Viewer** (#2170, #2507) — `diff.placement`, where a diff-open lands:
+  `focused` (default) opens it as a tab of the pane the user works in, `split`
+  carves off a new pane the pre-#2507 way. Plus `diff.context`, the unchanged
+  lines kept around a change before the rest folds into a separator (`-1`
+  never folds), and `diff.ignore_whitespace`, whether lines that differ only
+  in whitespace count as unchanged. The latter two are starting points the
+  pane's own keys (`c`/`o`, `w`) override live — and `w` writes its new state
+  straight back into this key, so the setting and the open panes never
+  disagree. See [diff viewer](./diff-viewer.md).
 - **HTTP Client** (#2247) — `http.diff_after_rerun`, whether re-running (or
   re-sending) a stored request opens the previous-vs-new response diff by
   itself, and `http.diff_ignore_headers`, the volatile response headers every

@@ -43,6 +43,7 @@ var contextNames = map[string]Context{
 	"issues":      Issues,
 	"dom":         DOM,
 	"xdoctor":     Doctor,
+	"lspdoctor":   LSPDoctor,
 	"scratch":     Scratch,
 	"hex":         Hex,
 	"notebook":    Notebook,
@@ -56,7 +57,7 @@ func ContextNames() []string {
 	return []string{
 		"global", "editor", "explorer", "palette", "diff",
 		"archive", "breakpoints", "data", "debug", "dom", "es", "hex", "http", "issues",
-		"notebook", "preview", "problems", "scratch", "structure", "terminal", "tests",
+		"lspdoctor", "notebook", "preview", "problems", "scratch", "structure", "terminal", "tests",
 		"usages", "vcs", "xdoctor",
 	}
 }

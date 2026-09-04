@@ -387,9 +387,9 @@ func (m *Model) openLocalHistoryDiffPane(path string, at time.Time, snapshot str
 
 // openDiffTexts shows two already-resolved texts in the reusable diff pane,
 // following the openDiffHeadPane shape: reuse the single diff slot when one
-// exists, otherwise split a titled pane beside the editor. path backs the
-// right column (language for highlighting, and the write target while the
-// right side is the working tree — editable).
+// exists, otherwise open a titled viewer through openDiffLeaf (#2507). path
+// backs the right column (language for highlighting, and the write target
+// while the right side is the working tree — editable).
 func (m *Model) openDiffTexts(path, leftTitle, rightTitle, left, right string, editable bool) {
 	if diff.TooLarge(left, right) {
 		// The engine refuses oversized input outright (#2505) — say so with
@@ -406,14 +406,12 @@ func (m *Model) openDiffTexts(path, leftTitle, rightTitle, left, right string, e
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 		return
 	}
-	key := m.activeWS().Panes.AddDiffTitled(leftTitle, rightTitle, path)
-	if !m.placeDiffLeaf(key) {
+	inst, ok := m.openDiffLeaf(func() string { return m.activeWS().Panes.AddDiffTitled(leftTitle, rightTitle, path) })
+	if !ok {
 		return
 	}
-	inst := m.activeWS().Panes.Get(key)
 	inst.Diff().SetEditable(editable)
 	inst.Diff().SetContents(left, right)
-	m.setFocus(key)
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
