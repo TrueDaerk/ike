@@ -35,6 +35,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/datasrc"
+	"ike/internal/gridview"
 	"ike/internal/pathcomplete"
 	"ike/internal/theme"
 	"ike/internal/ui"
@@ -57,8 +58,7 @@ type ExportMsg struct{}
 // exportState is the open export line: the path being typed, the running
 // job, and the error of the last attempt.
 type exportState struct {
-	input string
-	cur   int
+	input ui.Field
 	err   error
 	seq   int
 	// cancel stops a running export; nil while the line is only being typed.
@@ -83,7 +83,7 @@ func (m *Model) ExportInput() string {
 	if m.exp == nil {
 		return ""
 	}
-	return m.exp.input
+	return m.exp.input.Text
 }
 
 // ExportErr returns the error of the last rejected or failed export (tests).
@@ -103,8 +103,7 @@ func (m *Model) startExport() {
 	if m.src == nil || m.sel < 0 {
 		return
 	}
-	m.exp = &exportState{input: m.defaultExportPath()}
-	m.exp.cur = len([]rune(m.exp.input))
+	m.exp = &exportState{input: ui.NewField(m.defaultExportPath())}
 	m.clampScroll()
 }
 
@@ -142,12 +141,9 @@ func (m *Model) exportKey(msg tea.KeyPressMsg) tea.Cmd {
 		if m.exp.cancel != nil {
 			return nil // the path is settled while its export runs
 		}
-		if out, ncur, handled, changed := ui.EditKey(msg, m.exp.input, m.exp.cur); handled {
-			m.exp.input, m.exp.cur = out, ncur
-			if changed {
-				// The warnings described the path that is now gone.
-				m.exp.err, m.exp.overwrite = nil, false
-			}
+		if _, changed := m.exp.input.Key(msg); changed {
+			// The warnings described the path that is now gone.
+			m.exp.err, m.exp.overwrite = nil, false
 		}
 	}
 	return nil
@@ -161,7 +157,7 @@ func (m *Model) runExport() tea.Cmd {
 	if m.src == nil || m.sel < 0 || m.exp == nil || m.exp.cancel != nil {
 		return nil
 	}
-	path := strings.TrimSpace(m.exp.input)
+	path := strings.TrimSpace(m.exp.input.Text)
 	if path == "" {
 		m.exp.err = fmt.Errorf("type a path ending in .csv or .json")
 		return nil
@@ -226,19 +222,19 @@ func (m *Model) exportLine(pal *theme.Palette) string {
 		avail = 4
 	}
 	if m.exp.cancel != nil {
-		return shown + lipgloss.NewStyle().Foreground(pal.Foreground).Render(clipTo(m.exp.input+" …", avail))
+		return shown + lipgloss.NewStyle().Foreground(pal.Foreground).Render(gridview.ClipTo(m.exp.input.Text+" …", avail))
 	}
-	return shown + renderInput(pal, m.exp.input, m.exp.cur, avail)
+	return shown + renderInput(pal, m.exp.input.Text, m.exp.input.Cur, avail)
 }
 
 // exportFooter is the status line while the export line is open: the error of
 // the last attempt, or the keys and what the export will contain.
 func (m *Model) exportFooter(pal *theme.Palette) string {
 	if m.exp.err != nil {
-		return lipgloss.NewStyle().Foreground(pal.Error).Render(clipTo(" "+m.exp.err.Error(), m.w))
+		return lipgloss.NewStyle().Foreground(pal.Error).Render(gridview.ClipTo(" "+m.exp.err.Error(), m.w))
 	}
 	if m.exp.cancel != nil {
-		return lipgloss.NewStyle().Faint(true).Render(clipTo(" exporting… · esc cancels", m.w))
+		return lipgloss.NewStyle().Faint(true).Render(gridview.ClipTo(" exporting… · esc cancels", m.w))
 	}
 	what := "the whole table"
 	if m.filter != "" {
@@ -248,7 +244,7 @@ func (m *Model) exportFooter(pal *theme.Palette) string {
 		what += ", sorted by " + m.sort.String()
 	}
 	hint := fmt.Sprintf(" enter write · esc cancel · .csv or .json · %s, up to %d rows", what, datasrc.ExportLimit)
-	return lipgloss.NewStyle().Faint(true).Render(clipTo(hint, m.w))
+	return lipgloss.NewStyle().Faint(true).Render(gridview.ClipTo(hint, m.w))
 }
 
 // renderInput draws a one-line text field with a block cursor, scrolled so

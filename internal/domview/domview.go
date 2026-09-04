@@ -69,8 +69,7 @@ type Model struct {
 	current   int // node enclosing the editor cursor (-1 none)
 
 	selEditing   bool
-	selector     string
-	selCursor    int
+	selector     ui.Field
 	selErr       string
 	matches      []*html.Node
 	matchSet     map[*html.Node]bool
@@ -127,7 +126,7 @@ func (m *Model) Cursor() int { return m.cursor }
 func (m *Model) Current() int { return m.current }
 
 // Selector reports the committed selector text (tests).
-func (m *Model) Selector() string { return m.selector }
+func (m *Model) Selector() string { return m.selector.Text }
 
 // Editing reports whether the selector input owns the keys (tests).
 func (m *Model) Editing() bool { return m.selEditing }
@@ -226,10 +225,10 @@ func (m *Model) clearMatches() {
 func (m *Model) recomputeMatches() {
 	m.matchesRev++
 	m.clearMatches()
-	if m.doc == nil || strings.TrimSpace(m.selector) == "" {
+	if m.doc == nil || m.selector.Empty() {
 		return
 	}
-	sel, err := htmldom.Compile(m.selector)
+	sel, err := htmldom.Compile(m.selector.Text)
 	if err != nil {
 		m.selErr = err.Error()
 		return
@@ -353,11 +352,10 @@ func (m *Model) selectorKey(key tea.KeyPressMsg) tea.Cmd {
 		m.selEditing = false
 		return nil
 	}
-	text, cur, handled, changed := ui.EditKey(key, m.selector, m.selCursor)
+	handled, changed := m.selector.Key(key)
 	if !handled {
 		return nil
 	}
-	m.selector, m.selCursor = text, cur
 	if changed {
 		m.recomputeMatches()
 	}
@@ -428,7 +426,7 @@ func (m *Model) PrevMatch() ui.MatchStep { return m.stepSelector(-1) }
 // stepSelector owns the chord whenever a selector exists at all — the open
 // input or the applied one the footer still counts.
 func (m *Model) stepSelector(delta int) ui.MatchStep {
-	if !m.selEditing && m.selector == "" {
+	if !m.selEditing && m.selector.Empty() {
 		return ui.NoStep
 	}
 	return m.stepMatchStat(delta)
@@ -584,32 +582,24 @@ func (m *Model) View() string {
 
 // header names the file the tree belongs to plus the node count.
 func (m *Model) header(pal *theme.Palette) string {
-	name := "(no file)"
-	if m.path != "" {
-		name = baseName(m.path)
-	}
-	s := lipgloss.NewStyle().Foreground(pal.Secondary)
-	if m.focused {
-		s = lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
-	}
-	return " " + s.Render(name) + " " + lipgloss.NewStyle().Faint(true).Render("("+strconv.Itoa(len(m.rows))+")")
+	return ui.FileHeader(pal, m.path, len(m.rows), m.focused)
 }
 
 // selectorLine renders the selector input with its match count or error.
 func (m *Model) selectorLine(pal *theme.Palette) string {
 	label := lipgloss.NewStyle().Faint(true).Render("sel ")
-	body := m.selector
+	body := m.selector.Text
 	switch {
 	case m.selEditing:
-		body = ui.CursorView(m.selector, m.selCursor)
-	case m.selector == "":
+		body = m.selector.View()
+	case m.selector.Empty():
 		return " " + label + lipgloss.NewStyle().Faint(true).Render("/ to test a selector")
 	}
 	note := ""
 	switch {
 	case m.selErr != "":
 		note = " " + lipgloss.NewStyle().Foreground(pal.Error).Render("✗ "+clip(m.selErr, maxInt(8, m.width-lipgloss.Width(body)-8)))
-	case m.selector != "":
+	case !m.selector.Empty():
 		cur := ""
 		if m.matchIdx >= 0 {
 			cur = strconv.Itoa(m.matchIdx+1) + "/"
@@ -712,16 +702,7 @@ func truncate(s string, max int) string {
 
 // scrollToCursor keeps the selected row inside the visible window.
 func (m *Model) scrollToCursor() {
-	height := m.bodyHeight()
-	if m.cursor < m.top {
-		m.top = m.cursor
-	}
-	if m.cursor >= m.top+height {
-		m.top = m.cursor - height + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	m.top = ui.ScrollToShow(m.top, m.cursor, m.bodyHeight(), len(m.rows))
 }
 
 // bodyHeight is the room below the header and selector lines.
@@ -788,11 +769,9 @@ func (m *Model) PasteText(text string) bool {
 	if !m.selEditing {
 		return false
 	}
-	out, ncur, changed := ui.PasteText(m.selector, m.selCursor, text)
-	if !changed {
+	if !m.selector.Paste(text) {
 		return false
 	}
-	m.selector, m.selCursor = out, ncur
 	m.recomputeMatches()
 	return true
 }

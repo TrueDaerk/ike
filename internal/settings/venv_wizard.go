@@ -114,7 +114,7 @@ func (w *venvWizard) Paste(text string) bool {
 	if w.step != wStepPath || !w.path.Paste(text) {
 		return false
 	}
-	w.suggest.refresh(w.path.text)
+	w.suggest.refresh(w.path.Text)
 	w.refreshPathNote()
 	return true
 }
@@ -258,7 +258,7 @@ func (w *venvWizard) tick() tea.Cmd {
 
 // create starts the run step.
 func (w *venvWizard) create() tea.Cmd {
-	target := strings.TrimSpace(w.path.text)
+	target := strings.TrimSpace(w.path.Text)
 	if target == "" {
 		target = ".venv"
 	}
@@ -327,12 +327,12 @@ func (w *venvWizard) updatePath(key tea.KeyPressMsg) tea.Cmd {
 	case tea.KeyEnter:
 		return w.create()
 	case tea.KeyTab:
-		w.path.Set(w.suggest.complete(w.path.text))
+		w.path.Set(w.suggest.complete(w.path.Text))
 		w.refreshPathNote()
 	default:
 		// Shared cursor input (#888).
 		if _, changed := w.path.Handle(key); changed {
-			w.suggest.refresh(w.path.text)
+			w.suggest.refresh(w.path.Text)
 			w.refreshPathNote()
 		}
 	}
@@ -341,7 +341,7 @@ func (w *venvWizard) updatePath(key tea.KeyPressMsg) tea.Cmd {
 
 // refreshPathNote updates the live target validation line.
 func (w *venvWizard) refreshPathNote() {
-	target := strings.TrimSpace(w.path.text)
+	target := strings.TrimSpace(w.path.Text)
 	if target == "" {
 		target = ".venv"
 	}
@@ -381,7 +381,7 @@ func (w *venvWizard) Click(_, y int) tea.Cmd {
 			lines := w.suggest.lines()
 			if idx < len(w.suggest.candidates) {
 				w.path.Set(w.suggest.candidates[idx])
-				w.suggest.refresh(w.path.text)
+				w.suggest.refresh(w.path.Text)
 				w.refreshPathNote()
 			}
 			_ = lines

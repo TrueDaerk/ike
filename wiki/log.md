@@ -32,6 +32,40 @@
   `Cheatsheet(d)` is memoized per dialect like `Builtins()`. The xmq sheet's
   outputs are authored — its engine is a binary that may not be installed.
 
+## 2026-09-03 (shared building blocks catalog, #2479)
+
+- **One catalog for the 0500 sweep.** `wiki/architecture/shared-building-blocks.md`
+  lists every helper the consolidation sweep (Epic #2458) produced — `ui.Field`,
+  `ui.LineSearch`, the list window layer, the `internal/app` tool-window wiring,
+  `hiertree`, `gridview`, the settings page helpers, the LSP `call` forwarder and the
+  leaf packages — with the guard test that enforces each and the concept doc that
+  explains it. `CLAUDE.md` and the change workflow carry the matching working agreement.
+
+## 2026-09-03 (shared in-pane search, #2461)
+
+- **`ui.LineSearch`.** The seven in-pane `/` searches (diff, markdown
+  preview, HTTP response, notebook, hex, terminal scrollback, explorer speed
+  search) hold their state in one type and share its rules: reopen on the
+  last query, live narrowing that keeps the current match on the nearest
+  surviving position, enter keeps the matches for `n`/`N` and cmd+g, esc
+  drops them (anchored panes restore), one prompt row, one smartcase rule
+  (`ui.SmartCaseContains`). The notebook and hex viewers became live with a
+  caret and the shared counter; the hex viewer defers the rescan to enter
+  past 16 MiB. Guard test `internal/ui/searchsweep_test.go`. See
+  [Project Search § In-pane search](/architecture/search.md).
+
+## 2026-09-03 (shared hierarchy tree, #2465)
+
+- **`internal/hiertree`.** The call-hierarchy and type-hierarchy overlays
+  were forks that never diverged; their node shape, visible walk,
+  expand/collapse/parent-walk keys, stale-reply bookkeeping and row renderer
+  now live once as a generic `Tree[T]` (see
+  [Hierarchy Tree](/architecture/hiertree.md)). `callhier` and `typehier`
+  keep their LSP messages, their direction flag and their `Apply`; the scroll
+  clamp goes through `ui.ClampIndex` / `ui.ScrollToShow`. Rendering is
+  byte-identical — golden tests in both hosts pin it — and the tree
+  mechanics are tested once in the new package.
+
 ## 2026-09-03 (xmq playground for XML and HTML buffers, #2414)
 
 - **The third playground dialect.** `jqplay.DialectXMQ` joins jq and yq behind

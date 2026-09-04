@@ -163,7 +163,7 @@ func TestXMQPlaygroundAtPathSeedsXPath(t *testing.T) {
 	if !m.playOpen() {
 		t.Fatal("the at-path open must mount the playground")
 	}
-	if got := m.play.program; got != "select /root/item[2]" {
+	if got := m.play.program.Text; got != "select /root/item[2]" {
 		t.Fatalf("seed = %q, want select /root/item[2]", got)
 	}
 }
@@ -177,7 +177,7 @@ func TestXMQPlaygroundAtPathHTML(t *testing.T) {
 	m.activeEditor().SetCursor(0, strings.Index(src, "two"))
 	tm, cmd := m.Update(OpenPlaygroundAtPathMsg{Dialect: jqplay.DialectXMQ})
 	m = drainCmd(tm.(Model), cmd)
-	if got := m.play.program; got != "select /html/body/div[2]" {
+	if got := m.play.program.Text; got != "select /html/body/div[2]" {
 		t.Fatalf("seed = %q, want select /html/body/div[2]", got)
 	}
 }

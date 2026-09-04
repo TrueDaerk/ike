@@ -22,6 +22,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/esq"
+	"ike/internal/gridview"
 	"ike/internal/theme"
 	"ike/internal/ui"
 )
@@ -33,10 +34,6 @@ const PageSize = 100
 
 // maxColWidth clamps one grid column; longer cells clip with an ellipsis.
 const maxColWidth = 32
-
-// nullCell is how the grid draws a field a document does not carry — visibly
-// distinct from an empty string, like the data viewer's SQL NULL.
-const nullCell = "∅"
 
 // ShowJSONMsg asks the root model to show a JSON document read-only: an index
 // mapping, one hit, or a result's aggregations. Name becomes part of the
@@ -564,7 +561,7 @@ func (m *Model) queryNote(pal *theme.Palette, room int) string {
 	if name == "" || strings.TrimSpace(m.queries[name]) == "" || room < 4 {
 		return ""
 	}
-	return lipgloss.NewStyle().Foreground(pal.Warning).Render(clipTo("   query: "+name, room))
+	return lipgloss.NewStyle().Foreground(pal.Warning).Render(gridview.ClipTo("   query: "+name, room))
 }
 
 // body joins the sidebar and the grid side by side.
@@ -590,21 +587,11 @@ func (m *Model) sidebarWidth() int {
 // SidebarWidth is the index list's width in cells (tests).
 func (m *Model) SidebarWidth() int { return m.sidebarWidth() }
 
-// renderSidebar draws the index/alias list with doc counts.
+// renderSidebar draws the index/alias list with doc counts through the shared
+// list column (#2468).
 func (m *Model) renderSidebar(pal *theme.Palette, height int) string {
-	w := m.sidebarWidth()
-	var b strings.Builder
-	for k := 0; k < height; k++ {
-		line := strings.Repeat(" ", w)
-		if i := m.itop + k; i < len(m.indices) {
-			line = m.sidebarRow(pal, i, w)
-		}
-		b.WriteString(line)
-		if k < height-1 {
-			b.WriteString("\n")
-		}
-	}
-	return b.String()
+	return gridview.Sidebar(m.itop, height, len(m.indices), m.sidebarWidth(),
+		func(i, w int) string { return m.sidebarRow(pal, i, w) })
 }
 
 // sidebarRow draws one index: marker, name, and right-aligned doc count ("?"
@@ -628,7 +615,7 @@ func (m *Model) sidebarRow(pal *theme.Palette, i, w int) string {
 	if pad >= 1 {
 		line = left + strings.Repeat(" ", pad) + count + " "
 	} else {
-		line = clipTo(left, w)
+		line = gridview.ClipTo(left, w)
 		if d := w - lipgloss.Width(line); d > 0 {
 			line += strings.Repeat(" ", d)
 		}
@@ -658,7 +645,7 @@ func (m *Model) renderGrid(pal *theme.Palette, height int) string {
 	empty := m.res == nil || len(m.res.Columns) == 0
 	switch {
 	case m.pageErr != nil:
-		b.WriteString(sep + lipgloss.NewStyle().Foreground(pal.Error).Render(clipTo(" "+m.pageErr.Error(), w)))
+		b.WriteString(sep + lipgloss.NewStyle().Foreground(pal.Error).Render(gridview.ClipTo(" "+m.pageErr.Error(), w)))
 	case m.opening:
 		b.WriteString(sep + lipgloss.NewStyle().Faint(true).Render(" connecting to "+m.endpoint+"…"))
 	case m.loading && empty:
@@ -674,8 +661,8 @@ func (m *Model) renderGrid(pal *theme.Palette, height int) string {
 		}
 		return b.String()
 	}
-	widths := m.colWidths(w)
-	b.WriteString(sep + m.headerRow(pal, widths, w))
+	widths := m.colWidths()
+	b.WriteString(sep + gridview.HeaderRow(pal, m.res.Columns, widths, m.colOff, w))
 	rows := height - 1
 	for k := 0; k < rows; k++ {
 		b.WriteString("\n" + sep)
@@ -688,7 +675,7 @@ func (m *Model) renderGrid(pal *theme.Palette, height int) string {
 
 // colWidths sizes the visible columns from the header and the loaded page,
 // clamped to maxColWidth.
-func (m *Model) colWidths(w int) []int {
+func (m *Model) colWidths() []int {
 	widths := make([]int, len(m.res.Columns))
 	for i, c := range m.res.Columns {
 		widths[i] = lipgloss.Width(c)
@@ -697,7 +684,7 @@ func (m *Model) colWidths(w int) []int {
 		for i, cell := range row {
 			t := cell.Text
 			if cell.Null {
-				t = nullCell
+				t = gridview.NullCell
 			}
 			if n := lipgloss.Width(t); n > widths[i] {
 				widths[i] = n
@@ -715,54 +702,21 @@ func (m *Model) colWidths(w int) []int {
 	return widths
 }
 
-// headerRow draws the column names from colOff on, bold.
-func (m *Model) headerRow(pal *theme.Palette, widths []int, w int) string {
-	var cells []string
-	for i := m.colOff; i < len(m.res.Columns); i++ {
-		cells = append(cells, padTo(m.res.Columns[i], widths[i]))
-	}
-	line := " " + strings.Join(cells, "  ")
-	return lipgloss.NewStyle().Bold(true).Foreground(pal.Accent).Render(clipTo(line, w))
+// dataRow draws one hit row through the shared grid renderer (#2468); the
+// row cursor highlights only while the grid region has the focus.
+func (m *Model) dataRow(pal *theme.Palette, i int, widths []int, w int) string {
+	selected := i == m.rowCur && m.region == regionGrid
+	return gridview.DataRow(pal, cells(m.res.Rows[i]), widths, m.colOff, w, selected, m.focused)
 }
 
-// dataRow draws one hit row from colOff on; absent fields render as the null
-// glyph, faint, so they never read as empty strings.
-func (m *Model) dataRow(pal *theme.Palette, i int, widths []int, w int) string {
-	row := m.res.Rows[i]
-	base := lipgloss.NewStyle().Foreground(pal.Foreground)
-	nullStyle := lipgloss.NewStyle().Faint(true)
-	selected := i == m.rowCur && m.region == regionGrid
-	if selected {
-		if m.focused {
-			base = base.Background(pal.Selection).Bold(true)
-			nullStyle = nullStyle.Background(pal.Selection)
-		} else {
-			base = base.Background(pal.SelectionMuted)
-			nullStyle = nullStyle.Background(pal.SelectionMuted)
-		}
+// cells converts one hit row to the renderer's cell type, so internal/esq
+// stays free of a UI dependency.
+func cells(row []esq.Cell) []gridview.Cell {
+	out := make([]gridview.Cell, len(row))
+	for i, c := range row {
+		out[i] = gridview.Cell{Text: c.Text, Null: c.Null}
 	}
-	budget := w
-	var b strings.Builder
-	b.WriteString(base.Render(" "))
-	budget--
-	for c := m.colOff; c < len(row) && budget > 0; c++ {
-		cell := row[c]
-		text, style := cell.Text, base
-		if cell.Null {
-			text, style = nullCell, nullStyle
-		}
-		chunk := padTo(text, widths[c])
-		if c < len(row)-1 {
-			chunk += "  "
-		}
-		chunk = clipTo(chunk, budget)
-		b.WriteString(style.Render(chunk))
-		budget -= lipgloss.Width(chunk)
-	}
-	if selected && budget > 0 {
-		b.WriteString(base.Render(strings.Repeat(" ", budget)))
-	}
-	return b.String()
+	return out
 }
 
 // footer is the status line: hit window and total, the fetch in flight, an
@@ -798,7 +752,7 @@ func (m *Model) footer(pal *theme.Palette) string {
 		line += " · "
 	}
 	line += hints
-	return lipgloss.NewStyle().Faint(true).Render(clipTo(line, m.w))
+	return lipgloss.NewStyle().Faint(true).Render(gridview.ClipTo(line, m.w))
 }
 
 // bodyHeight is the room between the header and footer lines.
@@ -818,72 +772,23 @@ func (m *Model) gridHeight() int {
 	return 1
 }
 
-// clampScroll keeps both cursors valid and inside their visible windows.
+// clampScroll keeps both cursors valid and inside their visible windows
+// through the shared list window (#2462); the column offset is the one clamp
+// of its own, since it scrolls columns rather than a selection.
 func (m *Model) clampScroll() {
 	rows := 0
 	cols := 0
 	if m.res != nil {
 		rows, cols = len(m.res.Rows), len(m.res.Columns)
 	}
-	clamp(&m.icur, len(m.indices))
-	clamp(&m.rowCur, rows)
-	scrollTo(&m.itop, m.icur, m.bodyHeight())
-	scrollTo(&m.rowTop, m.rowCur, m.gridHeight())
+	ui.ClampWindow(&m.icur, &m.itop, len(m.indices), m.bodyHeight())
+	ui.ClampWindow(&m.rowCur, &m.rowTop, rows, m.gridHeight())
 	if m.colOff < 0 {
 		m.colOff = 0
 	}
 	if cols > 0 && m.colOff >= cols {
 		m.colOff = cols - 1
 	}
-}
-
-// clamp bounds a cursor to [0, n).
-func clamp(c *int, n int) {
-	if *c > n-1 {
-		*c = n - 1
-	}
-	if *c < 0 {
-		*c = 0
-	}
-}
-
-// scrollTo moves a window top so the cursor is inside a window of height h.
-func scrollTo(top *int, cur, h int) {
-	if *top > cur {
-		*top = cur
-	}
-	if cur >= *top+h {
-		*top = cur - h + 1
-	}
-	if *top < 0 {
-		*top = 0
-	}
-}
-
-// padTo right-pads (or ellipsis-clips) s to exactly width cells.
-func padTo(s string, width int) string {
-	if lipgloss.Width(s) > width {
-		return clipTo(s, width)
-	}
-	return s + strings.Repeat(" ", width-lipgloss.Width(s))
-}
-
-// clipTo bounds one rendered chunk to width cells, ellipsis on overflow.
-func clipTo(s string, width int) string {
-	if lipgloss.Width(s) <= width {
-		return s
-	}
-	r := []rune(s)
-	if width < 1 {
-		return ""
-	}
-	// Runes approximate cells closely enough here: grid text is
-	// backend-rendered plain strings.
-	if len(r) > width {
-		r = r[:width-1]
-		return string(r) + "…"
-	}
-	return s
 }
 
 // pluralIndex is the index-count suffix ("1 index", "2 indices").

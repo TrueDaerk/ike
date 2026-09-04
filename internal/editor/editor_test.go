@@ -1967,7 +1967,7 @@ func TestReplaceActionOpensPanel(t *testing.T) {
 	m = send(m, special(tea.KeyEnter))
 	m = typeKeys(m, "gg") // back to the top so the preview jump is visible
 	m, _ = m.runAction("replace")
-	if m.replPanel == nil || m.replPanel.find != "foo" {
+	if m.replPanel == nil || m.replPanel.find.Text != "foo" {
 		t.Fatalf("panel = %+v, want open with Find seeded", m.replPanel)
 	}
 	if m.cursor.Line != 1 {
@@ -1997,19 +1997,19 @@ func TestReplacePanelRemembersFields(t *testing.T) {
 
 	m, _ = m.runAction("replace")
 	p := m.replPanel
-	if p == nil || p.find != "one" || p.repl != "X" || !p.preselect {
+	if p == nil || p.find.Text != "one" || p.repl.Text != "X" || !p.preselect {
 		t.Fatalf("re-open should restore fields preselected, got %+v", p)
 	}
 	m = typeKeys(m, "z") // typing replaces the preselected prefill
-	if m.replPanel.find != "z" {
-		t.Fatalf("typing over the prefill should replace it, got %q", m.replPanel.find)
+	if m.replPanel.find.Text != "z" {
+		t.Fatalf("typing over the prefill should replace it, got %q", m.replPanel.find.Text)
 	}
 
 	m = send(m, special(tea.KeyEscape))
 	m, _ = m.runAction("replace")
 	m = send(m, special(tea.KeyBackspace)) // backspace edits, keeps the rest
-	if m.replPanel.find != "" || m.replPanel.preselect {
-		t.Fatalf("backspace should edit the one-rune prefill, got %q preselect=%v", m.replPanel.find, m.replPanel.preselect)
+	if m.replPanel.find.Text != "" || m.replPanel.preselect {
+		t.Fatalf("backspace should edit the one-rune prefill, got %q preselect=%v", m.replPanel.find.Text, m.replPanel.preselect)
 	}
 }
 
@@ -2090,7 +2090,9 @@ func TestReplacePanelSlashesPickAnotherDelimiter(t *testing.T) {
 
 // searchCompileForTest builds a query via the search package (kept here so the
 // test reads at the editor level).
-func searchCompileForTest(pat string, regex bool) search.Query { return search.Compile(pat, regex, search.CaseSmart) }
+func searchCompileForTest(pat string, regex bool) search.Query {
+	return search.Compile(pat, regex, search.CaseSmart)
+}
 
 func TestJumpToFramesTargetNearTop(t *testing.T) {
 	m, _ := loaded(t, strings.Repeat("line\n", 200))

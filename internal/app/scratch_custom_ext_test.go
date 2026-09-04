@@ -225,7 +225,7 @@ func TestScratchManagerCustomExtRenames(t *testing.T) {
 	}
 
 	// The field is seeded with the current extension; replace it.
-	for range m.scratchMgr.customInput {
+	for range m.scratchMgr.customInput.Text {
 		m = smKey(m, tea.Key{Code: tea.KeyBackspace})
 	}
 	m = smTypeAll(m, ".tf")
@@ -265,7 +265,7 @@ func TestScratchManagerCustomExtRejects(t *testing.T) {
 		t.Fatalf("step = %d, want the extension prompt", m.scratchMgr.step)
 	}
 
-	for range m.scratchMgr.customInput {
+	for range m.scratchMgr.customInput.Text {
 		m = smKey(m, tea.Key{Code: tea.KeyBackspace})
 	}
 	m = smTypeAll(m, "a/b")

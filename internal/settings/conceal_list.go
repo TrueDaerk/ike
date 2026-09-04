@@ -372,7 +372,7 @@ func (f *concealEntryForm) Update(key tea.KeyPressMsg) tea.Cmd {
 	default:
 		tf := newTextFieldAt(f.vals[f.field], f.cur)
 		if handled, _ := tf.Handle(key); handled {
-			f.vals[f.field], f.cur = tf.text, tf.cur
+			f.vals[f.field], f.cur = tf.Text, tf.Cur
 		}
 	}
 	return nil
@@ -490,6 +490,6 @@ func (f *concealEntryForm) Paste(text string) bool {
 	if !tf.Paste(text) {
 		return false
 	}
-	f.vals[f.field], f.cur = tf.text, tf.cur
+	f.vals[f.field], f.cur = tf.Text, tf.Cur
 	return true
 }

@@ -127,6 +127,37 @@ func matchGlob(p, s string) bool {
 	return matchGlob(p[1:], s[1:])
 }
 
+// StarMatch reports whether s matches pattern, where `*` stands for any run of
+// characters (including none) and every other character matches itself. It is
+// deliberately not Match: there is no `**`, `?`, `[...]` or `{a,b}` here, and
+// no path-segment awareness — `/` and `\` are ordinary characters, matched
+// like any other, because the strings compared (a field name, a secret-scan
+// key) may hold either and neither has any business acting as a separator in
+// this position. Shared by the number-hint unit overrides (numhint) and the
+// secret-pattern key matcher (secret).
+func StarMatch(pattern, s string) bool {
+	parts := strings.Split(pattern, "*")
+	if len(parts) == 1 {
+		return pattern == s
+	}
+	if !strings.HasPrefix(s, parts[0]) {
+		return false
+	}
+	s = s[len(parts[0]):]
+	last := parts[len(parts)-1]
+	for _, p := range parts[1 : len(parts)-1] {
+		i := strings.Index(s, p)
+		if i < 0 {
+			return false
+		}
+		s = s[i+len(p):]
+	}
+	if len(last) > len(s) {
+		return false
+	}
+	return strings.HasSuffix(s, last)
+}
+
 // classMatch evaluates one [...] body (without brackets) against a byte.
 func classMatch(class string, c byte) bool {
 	if class == "" {

@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-03T12:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -1002,3 +1002,30 @@ through the staged-apply buffer (#1296), for the reason every custom page does:
 a conceal setting is judged by looking at it, so the write is the preview. The
 ordinary `ConfigReloadedMsg` path re-installs the mapping globals and re-parses
 the open editors, so nothing here needs a restart.
+
+## Page & form helpers (0500, #2466)
+
+The add·edit·delete pages — associations, PHP debug mappings, Elasticsearch
+endpoints, tools — and their sub-panel forms had each written the same three
+shapes by hand. `internal/settings/pagehelp.go` holds them once.
+
+- **`fieldNav`** is the focused-field cursor every form declared as its own
+  `field`/`cur` pair plus a copy of the same tab/shift-tab/↑/↓ modulo
+  arithmetic. Forms **embed** it, so the promoted members read exactly as
+  before and the renderers are untouched; `Update(key) bool` consumes the field
+  motions and leaves everything else to the form's text handling. Moving onto a
+  field parks the caret at the **end of its text**, counted in runes — the
+  motion and a click on a field row (`Focus`) now agree on that by
+  construction. `esc` and `enter` stay per form: what a form saves, and what it
+  validates first, is not shared behaviour.
+- **`pageClick`** replaces four private copies of the row hit-test with the
+  shared `ui.RowAt` of the [mouse layer](./mouse.md): a press on a row selects
+  it, a press on the already selected row opens it (enter semantics), and the
+  head line, the footer and the blank rows a short list leaves inside the
+  window do nothing. The hand-rolled guards read an unrendered page
+  (`listH == 0`) as an *unbounded* list and would select a row from a window
+  that had never been on screen; `ui.RowAt` reports no row there.
+- **`pageActionKey`** runs the `a` add · `enter` edit · `d` delete switch, with
+  the confirm sentence ("delete the mapping *server* → *local*") supplied by
+  the page as a callback. Delete still goes through the shared confirm
+  sub-panel (#891), so nothing destructive happens on one keypress.

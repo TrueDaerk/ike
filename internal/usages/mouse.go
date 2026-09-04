@@ -25,16 +25,5 @@ func (m *Model) Wheel(delta int) {
 // a second click on the selected row within the double-click window activates
 // it.
 func (m *Model) Click(x, y int) tea.Cmd {
-	i, ok := ui.RowAt(y, m.top, headerRows, m.bodyHeight(), len(m.rows))
-	if !ok {
-		m.clicks.Reset()
-		return nil
-	}
-	double := m.clicks.Double(i, m.now())
-	m.cursor = i
-	if double {
-		m.clicks.Reset()
-		return m.activate(i)
-	}
-	return nil
+	return m.clicks.ClickRow(y, m.top, headerRows, m.bodyHeight(), len(m.rows), m.now(), &m.cursor, m.activate)
 }

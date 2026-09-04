@@ -272,21 +272,21 @@ func labelModeRadio(all bool) string {
 func (m *Model) matchRow(sel, plain lipgloss.Style) string {
 	faint := lipgloss.NewStyle().Faint(true)
 	if m.ovCursor != fovMatch {
-		if m.fInput == "" {
+		if m.fInput.Empty() {
 			return plain.Render("match: ") + faint.Render("(type on this row)")
 		}
-		return plain.Render("match: " + m.fInput)
+		return plain.Render("match: " + m.fInput.Text)
 	}
 	line := sel.Render("match: ")
 	if ghost := m.matchCompletion(); ghost != "" {
 		// The inline completion (#2110): the cursor sits on the ghost's first
 		// rune, tab accepts the rest.
 		g := []rune(ghost)
-		return line + m.fInput + lipgloss.NewStyle().Reverse(true).Faint(true).Render(string(g[0])) +
+		return line + m.fInput.Text + lipgloss.NewStyle().Reverse(true).Faint(true).Render(string(g[0])) +
 			faint.Render(string(g[1:]))
 	}
-	line += ui.CursorView(m.fInput, m.fCur)
-	if note := qualNote(m.fInput); note != "" {
+	line += m.fInput.View()
+	if note := qualNote(m.fInput.Text); note != "" {
 		line += faint.Render("  (" + note + ")")
 	}
 	if m.matchStatus != "" {
@@ -314,23 +314,14 @@ func stateRadio(s StateFilter) string {
 
 // renderRows draws the filtered issue list scrolled around the cursor.
 func (m *Model) renderRows(pal *theme.Palette, height int) string {
-	if len(m.rows) == 0 {
-		return lipgloss.NewStyle().Faint(true).Render(" "+m.emptyText()) + strings.Repeat("\n", height)
-	}
 	m.clampScroll()
-	var b strings.Builder
-	for k := 0; k < height; k++ {
-		i := m.top + k
-		if i < len(m.rows) {
-			if h := m.rows[i].header; h != "" {
-				b.WriteString(m.renderGroupHeader(pal, h))
-			} else {
-				b.WriteString(m.renderRow(pal, i))
-			}
+	empty := lipgloss.NewStyle().Faint(true).Render(" " + m.emptyText())
+	return ui.RenderWindow(m.top, height, len(m.rows), empty, func(i int) string {
+		if h := m.rows[i].header; h != "" {
+			return m.renderGroupHeader(pal, h)
 		}
-		b.WriteString("\n")
-	}
-	return b.String()
+		return m.renderRow(pal, i)
+	})
 }
 
 // renderGroupHeader draws one "group by label" divider row.
@@ -1088,7 +1079,7 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 	case ovComment:
 		verb := m.stateVerb()
 		lines = append(lines,
-			plain.Render("comment: ")+ui.CursorView(m.cmInput, m.cmCur),
+			plain.Render("comment: ")+m.cmInput.View(),
 			lipgloss.NewStyle().Faint(true).Render("enter posts it and "+verb+"s · esc cancels"))
 		return capitalize(verb) + " #" + strconv.Itoa(m.editFor) + " with a comment", lines
 	case ovActions:
@@ -1125,7 +1116,7 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 		n := "#" + strconv.Itoa(m.prActFor)
 		if m.prActStage == 0 {
 			lines = append(lines,
-				plain.Render("comment: ")+ui.CursorView(m.cmInput, m.cmCur),
+				plain.Render("comment: ")+m.cmInput.View(),
 				lipgloss.NewStyle().Faint(true).Render("optional — posted before the "+m.prActKind+" · enter continues"))
 			return verb + " " + n + " with a comment", lines
 		}
@@ -1148,8 +1139,8 @@ func (m *Model) overlayContent(pal *theme.Palette) (string, []string) {
 		}
 		lines = append(lines, plain.Render(what))
 		comment := "no comment"
-		if strings.TrimSpace(m.cmInput) != "" {
-			comment = "comment: " + truncate(strings.TrimSpace(m.cmInput), 40)
+		if !m.cmInput.Empty() {
+			comment = "comment: " + truncate(strings.TrimSpace(m.cmInput.Text), 40)
 		}
 		lines = append(lines,
 			lipgloss.NewStyle().Faint(true).Render(comment),

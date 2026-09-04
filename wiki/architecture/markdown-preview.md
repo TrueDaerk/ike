@@ -38,9 +38,11 @@ than breaking the layout).
 
 `/` — and the shared find chord `cmd+f` / `ctrl+f` — opens a one-line prompt on
 the pane's last row (`internal/preview/search.go`): the slash prefix, the query
-with its text cursor, and a `i/n` match counter (or `no matches`). `enter`
-applies, `esc` abandons the search, and `n`/`N` walk the matches, wrapping at
-both ends.
+with its text cursor, and a `i/n` match counter (or `no matches`). Typing
+re-matches live, `enter` applies, `esc` abandons the search, and `n`/`N` walk
+the matches, wrapping at both ends. The state and those rules are the shared
+`ui.LineSearch` (#2461, see [Project Search § In-pane search](./search.md));
+the file keeps only the match rule and the landing.
 
 The match runs over the **plain text** of each rendered line — the styling
 glamour wrapped around it is stripped first (`ansi.Strip`), so a word split by

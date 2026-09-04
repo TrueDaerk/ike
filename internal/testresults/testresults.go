@@ -366,7 +366,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// target in both columns — the detail text scrolls, it is not marked.
 		return m.copyRow(m.cursor)
 	}
-	if ui.CopyChord(msg.String()) {
+	if ui.CopyKey(msg) {
 		return m.copyRow(m.cursor)
 	}
 	if m.detailFocus {
@@ -785,21 +785,7 @@ func (m *Model) bodyHeight() int {
 
 // clampScroll keeps the cursor valid and inside the visible window.
 func (m *Model) clampScroll() {
-	if m.cursor > len(m.rows)-1 {
-		m.cursor = len(m.rows) - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.top > m.cursor {
-		m.top = m.cursor
-	}
-	if h := m.bodyHeight(); m.cursor >= m.top+h {
-		m.top = m.cursor - h + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	ui.ClampWindow(&m.cursor, &m.top, len(m.rows), m.bodyHeight())
 }
 
 // clampDetail keeps the detail scroll inside its content.

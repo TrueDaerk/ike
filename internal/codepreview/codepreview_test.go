@@ -51,6 +51,35 @@ func at(c *Cache, path string, line, width, height int) []string {
 
 // TestRenderCentersTarget checks the excerpt is centered on the target line
 // and always fills exactly the requested height (#2047).
+// span is a stand-in for a picker's own range type (e.g. locations.Range).
+type span struct{ start, end int }
+
+// TestTargetFrom covers the shared previewTarget helper (allfind, finder):
+// bounds converts the picker's own range type, and a reversed or empty range
+// is dropped.
+func TestTargetFrom(t *testing.T) {
+	ranges := []span{{2, 5}, {7, 7}, {9, 3}, {0, 1}}
+	got := TargetFrom("f.go", 3, ranges, func(s span) (int, int) { return s.start, s.end })
+	want := Target{Path: "f.go", Line: 3, Ranges: []Range{{Start: 2, End: 5}, {Start: 0, End: 1}}}
+	if got.Path != want.Path || got.Line != want.Line || len(got.Ranges) != len(want.Ranges) {
+		t.Fatalf("TargetFrom = %+v, want %+v", got, want)
+	}
+	for i := range want.Ranges {
+		if got.Ranges[i] != want.Ranges[i] {
+			t.Errorf("Ranges[%d] = %+v, want %+v", i, got.Ranges[i], want.Ranges[i])
+		}
+	}
+}
+
+// TestTargetFromEmpty covers the no-ranges case, which must yield an empty
+// (not nil-vs-empty ambiguous) slice.
+func TestTargetFromEmpty(t *testing.T) {
+	got := TargetFrom[span]("f.go", 1, nil, func(s span) (int, int) { return s.start, s.end })
+	if got.Path != "f.go" || got.Line != 1 || len(got.Ranges) != 0 {
+		t.Errorf("TargetFrom(empty) = %+v", got)
+	}
+}
+
 func TestRenderCentersTarget(t *testing.T) {
 	path := writeLines(t, 100)
 	var c Cache

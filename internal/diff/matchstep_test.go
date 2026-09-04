@@ -18,12 +18,12 @@ func TestNextMatchStepsWithTheInputStillFocused(t *testing.T) {
 	if !m.Searching() {
 		t.Fatal("the prompt must still own the keyboard")
 	}
-	first := m.search.cur
+	first := m.search.Cur
 	st := m.NextMatch()
 	if !st.Handled || st.Total != m.SearchMatches() {
 		t.Fatalf("NextMatch = %+v, matches = %d", st, m.SearchMatches())
 	}
-	if m.search.cur == first {
+	if m.search.Cur == first {
 		t.Fatal("NextMatch did not move the current match")
 	}
 	if !m.Searching() {
@@ -41,7 +41,7 @@ func TestPrevMatchWrapsAndSaysSo(t *testing.T) {
 	m := testModel(t, doc, doc)
 	m.OpenSearch()
 	typeQuery(m, "line")
-	m.search.cur = 0
+	m.search.Cur = 0
 	st := m.PrevMatch()
 	if !st.Wrapped {
 		t.Fatalf("stepping back off the first match must wrap, got %+v", st)
@@ -82,10 +82,10 @@ func TestEditingTheQueryDropsTheWrapMarker(t *testing.T) {
 	m := testModel(t, doc, doc)
 	m.OpenSearch()
 	typeQuery(m, "line")
-	m.search.cur = 0
+	m.search.Cur = 0
 	m.PrevMatch()
 	typeQuery(m, "1")
-	if m.search.wrapped {
+	if m.search.Wrapped {
 		t.Fatal("an edited query must start a fresh walk")
 	}
 }

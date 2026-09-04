@@ -31,14 +31,14 @@ func TestScrollbackSearchMatchStepChord(t *testing.T) {
 	for _, r := range "line1" {
 		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
-	at := m.search.cur
+	at := m.search.curLine
 	m.Update(stepChord(false))
-	if m.search.cur == at {
+	if m.search.curLine == at {
 		t.Fatalf("cmd+g must step the match, cur stayed at %d", at)
 	}
-	if !m.Searching() || m.search.query != "line1" {
+	if !m.Searching() || m.search.Text != "line1" {
 		t.Fatalf("the field must survive the step: open=%v query=%q",
-			m.Searching(), m.search.query)
+			m.Searching(), m.search.Text)
 	}
 }
 
@@ -128,8 +128,8 @@ func TestCopyModeMatchStepWithTheQueryLineOpen(t *testing.T) {
 	if m.copy.cur.line == at {
 		t.Fatal("the chord must step the accepted search with the query line open")
 	}
-	if !m.copy.input || m.copy.query != "l" {
-		t.Fatalf("the query line must survive: input=%v query=%q", m.copy.input, m.copy.query)
+	if !m.copy.input || m.copy.query.Text != "l" {
+		t.Fatalf("the query line must survive: input=%v query=%q", m.copy.input, m.copy.query.Text)
 	}
 }
 

@@ -118,18 +118,12 @@ type Model struct {
 	longest int
 
 	// In-pane search (#1265) over the whole composed view — status line,
-	// headers and formatted body alike. searching marks the open "/" prompt,
-	// query is the live pattern, matches every hit in row order and cur the
-	// selected one (n/N step through them). qcur is the rune cursor within
-	// query while the prompt is open (#1845), edited via ui.EditKey.
-	searching bool
-	query     string
-	qcur      int
-	matches   []search.Span
-	cur       int
-	// wrapped marks that the last step came back around an end (#2410), so
-	// the footer counter can say "1/12 (wrapped)".
-	wrapped bool
+	// headers and formatted body alike. search is the shared prompt state
+	// (#2461): the open flag, the query with its caret, the matched rows in
+	// order and the current one (n/N step through them). spans carries each
+	// match's column range, aligned index for index with search.Matches.
+	search ui.LineSearch
+	spans  []search.Span
 
 	// pendingZ marks a typed "z" waiting for its fold command (#1330).
 	pendingZ bool
@@ -188,8 +182,7 @@ type Model struct {
 	// line) and wsDraft stashes that fresh line while browsing.
 	ws        bool
 	wsInput   bool
-	wsText    string
-	wsCur     int
+	wsText    ui.Field
 	wsSent    []string
 	wsSentIdx int
 	wsDraft   string
@@ -477,16 +470,20 @@ func (m *Model) appendVisible(from int) {
 // the streaming tail extension of research: earlier rows cannot change while
 // a stream appends, so only the new rows are searched.
 func (m *Model) researchFrom(from int) {
-	if m.query == "" || from >= len(m.rows) {
+	if m.search.Text == "" || from >= len(m.rows) {
 		return
 	}
 	lines := make([]string, 0, len(m.rows)-from)
 	for _, r := range m.rows[from:] {
 		lines = append(lines, r.text)
 	}
-	for _, sp := range search.Compile(m.query, false, search.CaseSmart).AllMatches(buffer.New(lines)) {
+	for _, sp := range search.Compile(m.search.Text, false, search.CaseSmart).AllMatches(buffer.New(lines)) {
 		sp.Line += from
-		m.matches = append(m.matches, sp)
+		m.spans = append(m.spans, sp)
+		m.search.Matches = append(m.search.Matches, sp.Line)
+	}
+	if _, ok := m.search.Current(); !ok && len(m.spans) > 0 {
+		m.search.Cur = 0 // the first hit of a stream that matched nothing yet
 	}
 }
 
@@ -672,7 +669,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
-	if m.searching {
+	if m.search.Open {
 		if cmd := m.searchCopyKey(msg); cmd != nil {
 			return cmd
 		}
@@ -861,25 +858,26 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // SearchQuery reports the active pattern and whether the prompt is open
 // (tests).
-func (m *Model) SearchQuery() (string, bool) { return m.query, m.searching }
+func (m *Model) SearchQuery() (string, bool) { return m.search.Text, m.search.Open }
 
 // MatchPosition reports the 1-based current match and the total (tests);
 // 0/0 when nothing matches.
 func (m *Model) MatchPosition() (int, int) {
-	if len(m.matches) == 0 {
+	if len(m.spans) == 0 {
 		return 0, 0
 	}
-	return m.cur + 1, len(m.matches)
+	return m.search.Cur + 1, len(m.spans)
 }
 
 // research recomputes the matches of the current query over the composed
 // rows. It runs after every compose too, so browsing history or a new
-// response keeps the search live instead of pointing at stale lines.
+// response keeps the search live instead of pointing at stale lines. The
+// current match stays on the nearest surviving row (ui.LineSearch.SetMatches,
+// #2461), so an edit does not throw the view around.
 func (m *Model) research() {
-	m.matches = nil
-	m.wrapped = false // an edited query starts a fresh walk (#2410)
-	if m.query == "" {
-		m.cur = 0
+	m.spans = nil
+	if m.search.Text == "" {
+		m.search.SetMatches(nil)
 		return
 	}
 	lines := make([]string, len(m.rows))
@@ -888,10 +886,12 @@ func (m *Model) research() {
 	}
 	// Smartcase like the editor's "/" (#257): an all-lowercase pattern folds
 	// case, any uppercase rune makes it exact.
-	m.matches = search.Compile(m.query, false, search.CaseSmart).AllMatches(buffer.New(lines))
-	if m.cur >= len(m.matches) {
-		m.cur = 0
+	m.spans = search.Compile(m.search.Text, false, search.CaseSmart).AllMatches(buffer.New(lines))
+	rows := make([]int, len(m.spans))
+	for i, sp := range m.spans {
+		rows[i] = sp.Line
 	}
+	m.search.SetMatches(rows)
 }
 
 // OpenSearch implements the pane's Searchable capability (#2409): the shared
@@ -955,29 +955,27 @@ func (m *Model) CopyKeyCmd() tea.Cmd { return m.copyKeyCmd() }
 // response viewer ten times over two sessions and logged unbound every time —
 // the pane handled the key, the keymap table did not know about it.
 func (m *Model) BeginSearch() {
-	m.searching = true
-	m.query = m.selectionSearchPrefill()
-	m.qcur = len([]rune(m.query))
-	m.cur = 0
+	// The prompt reopens on the last query (#2461); a live selection outranks
+	// it — the selected text is what the reader wants found.
+	m.search.Start()
+	if pre := m.selectionSearchPrefill(); pre != "" {
+		m.search.Set(pre)
+	}
 	m.research()
 }
 
-// searchKey handles one key while the "/" prompt is open. esc/enter are
-// consumed here first; everything else — cursor motion, word ops, deletion,
-// insertion — delegates to ui.EditKey (#763/#1845), matching the terminal
-// scrollback search field.
+// searchKey handles one key while the "/" prompt is open, through the shared
+// prompt (#2461): esc drops the search, enter blurs the prompt keeping the
+// pattern, and every edit — cursor motion, word ops, deletion, insertion —
+// re-runs the search and rescrolls to the current match.
 func (m *Model) searchKey(msg tea.KeyPressMsg) {
-	switch msg.String() {
-	case "esc":
+	_, changed, action := m.search.Key(msg)
+	switch action {
+	case ui.SearchCancel:
 		m.clearSearch()
-		return
-	case "enter":
-		m.searching = false
+	case ui.SearchAccept:
 		m.scrollToMatch()
-		return
-	}
-	if q, cur, handled, changed := ui.EditKey(msg, m.query, m.qcur); handled {
-		m.query, m.qcur = q, cur
+	default:
 		if changed {
 			m.research()
 			m.scrollToMatch()
@@ -995,43 +993,30 @@ func (m *Model) PasteText(text string) {
 	// The open websocket input line takes a paste like the search prompt does
 	// (#2422) — multi-line blocks flatten into the single-line field.
 	if m.wsInput {
-		if t, cur, changed := ui.PasteText(m.wsText, m.wsCur, text); changed {
-			m.wsText, m.wsCur = t, cur
+		if m.wsText.Paste(text) {
 			m.wsSentIdx = -1
 		}
 		return
 	}
-	if !m.searching {
+	if !m.search.Open || !m.search.Paste(text) {
 		return
 	}
-	q, cur, changed := ui.PasteText(m.query, m.qcur, text)
-	if !changed {
-		return
-	}
-	m.query, m.qcur = q, cur
 	m.research()
 	m.scrollToMatch()
 }
 
 // clearSearch drops the prompt, the pattern and every match (Esc).
 func (m *Model) clearSearch() {
-	m.searching = false
-	m.query = ""
-	m.qcur = 0
-	m.matches = nil
-	m.cur = 0
+	m.search.Reset()
+	m.spans = nil
 }
 
 // step moves to the next (delta 1) or previous (-1) match, wrapping around,
 // and reports where it landed for the shared match-step chord (#2410).
 func (m *Model) step(delta int) ui.MatchStep {
-	if len(m.matches) == 0 {
-		m.wrapped = false
-		return ui.NoMatches()
-	}
-	m.cur, m.wrapped = ui.StepWrap(m.cur, len(m.matches), delta)
+	st := m.search.Step(delta)
 	m.scrollToMatch()
-	return ui.Stepped(m.cur, len(m.matches), m.wrapped)
+	return st
 }
 
 // NextMatch implements the pane's match-step capability (#2410): cmd+g steps
@@ -1046,7 +1031,7 @@ func (m *Model) PrevMatch() ui.MatchStep { return m.stepSearch(-1) }
 // stepSearch owns the chord whenever a search exists at all — the open prompt
 // or the applied pattern the footer still shows.
 func (m *Model) stepSearch(delta int) ui.MatchStep {
-	if !m.searching && m.query == "" {
+	if !m.search.Active() {
 		return ui.NoStep
 	}
 	return m.step(delta)
@@ -1055,10 +1040,10 @@ func (m *Model) stepSearch(delta int) ui.MatchStep {
 // scrollToMatch brings the current match into view, keeping the viewport
 // where it is when the match is already visible.
 func (m *Model) scrollToMatch() {
-	if len(m.matches) == 0 {
+	if m.search.Cur < 0 || m.search.Cur >= len(m.spans) {
 		return
 	}
-	sp := m.matches[m.cur]
+	sp := m.spans[m.search.Cur]
 	// A match inside a collapsed fold opens it (#1330): hiding a hit would be
 	// indistinguishable from having no hit at all.
 	m.reveal(sp.Line)
@@ -1087,15 +1072,15 @@ func (m *Model) scrollToMatch() {
 // paintRow then asks per rune cell without rescanning every match of every
 // row each time.
 func (m *Model) rowMatchFn(rowIx, from, to int) func(col int) int {
-	lo := sort.Search(len(m.matches), func(i int) bool { return m.matches[i].Line >= rowIx })
+	lo := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].Line >= rowIx })
 	type winMatch struct {
 		span search.Span
 		cur  bool
 	}
 	var win []winMatch
-	for i := lo; i < len(m.matches) && m.matches[i].Line == rowIx; i++ {
-		if s := m.matches[i]; s.End > from && s.Start < to {
-			win = append(win, winMatch{span: s, cur: i == m.cur})
+	for i := lo; i < len(m.spans) && m.spans[i].Line == rowIx; i++ {
+		if s := m.spans[i]; s.End > from && s.Start < to {
+			win = append(win, winMatch{span: s, cur: i == m.search.Cur})
 		}
 	}
 	if len(win) == 0 {
@@ -1557,19 +1542,15 @@ func formatHistoryTime(at, now time.Time) string {
 func (m *Model) footerText() string {
 	// The open "/" prompt owns the footer line: the pattern being typed plus
 	// the live match count (#1265).
-	if m.searching {
-		s := " /" + ui.CursorView(m.query, m.qcur)
-		if m.query != "" {
-			s += "  " + m.matchCount()
-		}
-		return s
+	if m.search.Open {
+		return " " + m.search.Line()
 	}
 	// The open websocket input line owns the footer the same way (#2422).
 	if m.wsInput {
 		return m.wsFooter()
 	}
-	if m.query != "" {
-		return " /" + m.query + "  " + m.matchCount() + " · n/N next/prev · esc clear"
+	if m.search.Text != "" {
+		return " " + m.search.Line() + " · n/N next/prev · esc clear"
 	}
 	// The history hint is permanent while a response is shown (#1267) and
 	// leads the line (#1471): the tail is what a narrow pane clips first,
@@ -1669,12 +1650,6 @@ func runningFor(since time.Time) string {
 		return fmt.Sprintf("%dms", d.Milliseconds())
 	}
 	return fmt.Sprintf("%.1fs", d.Seconds())
-}
-
-// matchCount renders the match position, "no matches" when the pattern hits
-// nothing (#1265).
-func (m *Model) matchCount() string {
-	return ui.MatchCounter(m.cur+1, len(m.matches), m.wrapped)
 }
 
 func (m *Model) emptyText() string {

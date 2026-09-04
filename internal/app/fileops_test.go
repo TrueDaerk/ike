@@ -77,8 +77,8 @@ func TestRenamePromptRenamesAndEditorFollows(t *testing.T) {
 	if !m.renameOpen() {
 		t.Fatal("file.rename with an editor focused must open the rename prompt")
 	}
-	if m.renameInput != "a.txt" {
-		t.Fatalf("prompt must prefill the name, got %q", m.renameInput)
+	if m.renameInput.Text != "a.txt" {
+		t.Fatalf("prompt must prefill the name, got %q", m.renameInput.Text)
 	}
 	for range len("a.txt") {
 		tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})

@@ -13,6 +13,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"ike/internal/datasrc"
+	"ike/internal/gridview"
 	"ike/internal/theme"
 )
 
@@ -287,8 +288,8 @@ func TestNullRendersDistinctly(t *testing.T) {
 	feed(t, &m, key("j"))
 	feed(t, &m, key("enter"))
 	view := stripANSI(m.View())
-	if !strings.Contains(view, nullCell) {
-		t.Fatalf("the NULL note column must render %q, view:\n%s", nullCell, view)
+	if !strings.Contains(view, gridview.NullCell) {
+		t.Fatalf("the NULL note column must render %q, view:\n%s", gridview.NullCell, view)
 	}
 }
 

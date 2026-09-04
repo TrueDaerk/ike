@@ -56,3 +56,40 @@ func TestMatch(t *testing.T) {
 		}
 	}
 }
+
+// TestStarMatch covers the star-only matcher shared by the number-hint unit
+// overrides (numhint) and the secret-pattern key matcher (secret): unlike
+// Match, `/` and `\` are ordinary characters here and there is no `**`, `?`,
+// `[...]` or `{a,b}`.
+func TestStarMatch(t *testing.T) {
+	cases := []struct {
+		pattern, s string
+		want       bool
+	}{
+		{"", "", true},
+		{"", "x", false},
+		{"exact", "exact", true},
+		{"exact", "exacter", false},
+		{"*", "anything", true},
+		{"db_pass*", "db_password", true},
+		{"db_pass*", "db_user", false},
+		{"*_KEY", "API_KEY", true},
+		{"*_KEY", "API_KEYS", false},
+		{"*_v*_final", "release_v2_final", true},
+		{"*_v*_final", "release_v2", false},
+		// `/` and `\` are ordinary characters, unlike in Match.
+		{"path/*/file", "path/to/file", true},
+		{"path/*/file", "path/file", false},
+		{"a\\*b", "a\\xb", true},
+		// `?`, `[...]` and `{a,b}` have no special meaning here.
+		{"a?c", "a?c", true},
+		{"a?c", "abc", false},
+		{"[a-c]", "[a-c]", true},
+		{"[a-c]", "b", false},
+	}
+	for _, c := range cases {
+		if got := StarMatch(c.pattern, c.s); got != c.want {
+			t.Errorf("StarMatch(%q, %q) = %v, want %v", c.pattern, c.s, got, c.want)
+		}
+	}
+}

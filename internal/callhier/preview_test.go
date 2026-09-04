@@ -148,8 +148,8 @@ func TestCallHierarchyPreviewScrolls(t *testing.T) {
 	if scrolled == before {
 		t.Fatalf("j did not scroll the excerpt:\n%s", scrolled)
 	}
-	if m.cursor != 0 {
-		t.Fatalf("the tree cursor moved to %d while the preview had focus", m.cursor)
+	if m.tree.Cursor() != 0 {
+		t.Fatalf("the tree cursor moved to %d while the preview had focus", m.tree.Cursor())
 	}
 	m.Update(key("z"))
 	if again := previewColumn(t, m); again != before {

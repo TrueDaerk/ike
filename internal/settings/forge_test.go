@@ -164,16 +164,16 @@ func TestForgeIntervalStepperJumpsTheHole(t *testing.T) {
 	ed := m.editor.(*intEditor)
 	ed.tf.Set("0")
 	m.Update(key("right"))
-	if got := ed.tf.text; got != "10" {
+	if got := ed.tf.Text; got != "10" {
 		t.Fatalf("stepping up from 0 landed on %q, want the 10s floor", got)
 	}
 	m.Update(key("left"))
-	if got := ed.tf.text; got != "0" {
+	if got := ed.tf.Text; got != "0" {
 		t.Fatalf("stepping down from 10 landed on %q, want 0 (off)", got)
 	}
 	ed.tf.Set("10")
 	m.Update(key("right"))
-	if got := ed.tf.text; got != "11" {
+	if got := ed.tf.Text; got != "11" {
 		t.Fatalf("stepping above the floor landed on %q, want 11", got)
 	}
 }

@@ -266,11 +266,11 @@ func (m *Model) appendImage(ci, oi int, o Output, width int, placed map[imgKey]b
 	placed[key] = true
 	m.label(ci, width, m.palette().Ghost, im.meta(o.MIME))
 	if !m.gfx {
-		im.cols, im.rows = 0, 0
+		im.Cols, im.Rows = 0, 0
 		return
 	}
-	im.cols, im.rows = imgview.FitGrid(im.imgW, im.imgH, max(1, width), max(1, m.bodyRows()-2))
-	for _, grid := range imgview.PlaceholderGrid(im.id, im.cols, im.rows) {
+	im.Cols, im.Rows = imgview.FitGrid(im.imgW, im.imgH, max(1, width), max(1, m.bodyRows()-2))
+	for _, grid := range imgview.PlaceholderGrid(im.ID, im.Cols, im.Rows) {
 		m.rows = append(m.rows, row{text: grid, plain: "", kind: rowImage, cell: ci, src: -1})
 	}
 }

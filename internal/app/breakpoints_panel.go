@@ -27,24 +27,7 @@ type BreakpointsToggleMsg struct{}
 // toggleProblemsPanel: no panel → open at the bottom; unfocused → focus it;
 // focused → return focus to the remembered pane.
 func (m *Model) toggleBreakpointsPanel() {
-	if !m.activeWS().Panes.Has(pane.BreakpointsKey) {
-		m.breakpointsReturnFocus = m.activeWS().Panes.Focused()
-		m.openBreakpointsPanel()
-		return
-	}
-	if m.activeWS().Panes.Focused() != pane.BreakpointsKey {
-		m.breakpointsReturnFocus = m.activeWS().Panes.Focused()
-		m.setFocus(pane.BreakpointsKey)
-		return
-	}
-	target := m.breakpointsReturnFocus
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = m.activeEditorKey()
-	}
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = pane.ExplorerKey
-	}
-	m.setFocus(target)
+	m.togglePanel(pane.BreakpointsKey, func() tea.Cmd { m.openBreakpointsPanel(); return nil })
 }
 
 // breakpointsPanel returns the singleton panel model, or nil when it is not open.
@@ -66,15 +49,9 @@ func (m *Model) openBreakpointsPanel() {
 	if target == "" || m.activeWS().Tree == nil {
 		return
 	}
-	key := m.activeWS().Panes.AddBreakpoints()
-	if !m.insertToolPane(key, target, m.auxZone(target)) {
-		m.activeWS().Panes.Close(key)
-		return
-	}
-	m.wireBreakpointsPanel(m.activeWS().Panes.Get(key).Breakpoints())
-	m.setFocus(key)
-	m.layout()
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	m.openToolPane(m.activeWS().Panes.AddBreakpoints, m.auxZone, func(key string) {
+		m.wireBreakpointsPanel(m.activeWS().Panes.Get(key).Breakpoints())
+	})
 }
 
 // wireBreakpointsPanel seeds a panel instance from the live store; layout

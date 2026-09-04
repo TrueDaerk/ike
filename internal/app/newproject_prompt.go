@@ -57,8 +57,7 @@ type newProjState struct {
 	typePick int
 	opts     []lang.ProjectOption
 	optPick  int
-	name     string
-	namePos  int
+	name     ui.Field
 	// running freezes the wizard while the scaffold subprocesses run; err is
 	// the validation or scaffold message shown under the current step.
 	running bool
@@ -110,7 +109,7 @@ func (m Model) newProjTargetHint() string {
 	if err != nil {
 		return err.Error()
 	}
-	name := strings.TrimSpace(m.newProj.name)
+	name := strings.TrimSpace(m.newProj.name.Text)
 	if name == "" {
 		name = "<name>"
 	}
@@ -159,7 +158,7 @@ func (m *Model) renderNewProjectPrompt() {
 		add("")
 		add("↑↓ select · enter next · esc back")
 	case newProjStepName:
-		add("Directory name: " + windowedInput(s.name, s.namePos, avail))
+		add("Directory name: " + windowedInput(s.name.Text, s.name.Cur, avail))
 		add("")
 		add("Creates " + m.newProjTargetHint())
 		add("")
@@ -223,8 +222,7 @@ func (m Model) updateNewProjectPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		if msg.Code == tea.KeyEnter {
 			return m.startNewProjectCreate()
 		}
-		if out, pos, handled, _ := ui.EditKey(msg, s.name, s.namePos); handled {
-			s.name, s.namePos = out, pos
+		if handled, _ := s.name.Key(msg); handled {
 			m.renderNewProjectPrompt()
 		}
 	}
@@ -238,11 +236,9 @@ func (m *Model) pasteNewProjectPrompt(text string) bool {
 	if s == nil || s.step != newProjStepName || s.running {
 		return false
 	}
-	out, pos, changed := ui.PasteText(s.name, s.namePos, text)
-	if !changed {
+	if !s.name.Paste(text) {
 		return false
 	}
-	s.name, s.namePos = out, pos
 	m.renderNewProjectPrompt()
 	return true
 }
@@ -291,7 +287,7 @@ func (m Model) advanceNewProject() (tea.Model, tea.Cmd) {
 // Validation failures keep the wizard open and editable with the reason.
 func (m Model) startNewProjectCreate() (tea.Model, tea.Cmd) {
 	s := m.newProj
-	dest, err := project.Target(s.name)
+	dest, err := project.Target(s.name.Text)
 	if err != nil {
 		s.err = err.Error()
 		m.renderNewProjectPrompt()

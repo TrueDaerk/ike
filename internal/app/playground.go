@@ -157,8 +157,7 @@ type playState struct {
 	// win, whichever of the two finishes first.
 	pgen int
 
-	program string
-	pos     int
+	program ui.Field
 
 	// qgoal is the column a run of vertical motions through the expanded
 	// view's rows aims for (#2038), -1 when none is in flight. It is what
@@ -254,8 +253,7 @@ func (m *Model) startPlayground(d jqplay.Dialect, atPath bool) tea.Cmd {
 		return nil
 	}
 	m.closePlayground()
-	s := &playState{dialect: d, paneKey: src.paneKey, source: src.label, srcKey: src.key, srcPath: src.path, srcEd: src.ed, srcInst: src.inst, histIdx: -1, qgoal: -1, hist: m.playHist(), program: m.playSeedProgram(d, src, atPath)}
-	s.pos = len([]rune(s.program))
+	s := &playState{dialect: d, paneKey: src.paneKey, source: src.label, srcKey: src.key, srcPath: src.path, srcEd: src.ed, srcInst: src.inst, histIdx: -1, qgoal: -1, hist: m.playHist(), program: ui.NewField(m.playSeedProgram(d, src, atPath))}
 	ed := editor.New()
 	ed.SetRegisters(m.regs) // app-wide registers (#1540): yanks in the result reach every buffer
 	ed.SetPalette(m.themePal)
@@ -631,7 +629,7 @@ func (m Model) playQueryRowsFor(width int) int {
 	if s == nil || !s.expanded {
 		return 1
 	}
-	rows := len(jqplay.Wrap(s.program, m.playQueryWidth(width)))
+	rows := len(jqplay.Wrap(s.program.Text, m.playQueryWidth(width)))
 	limit := playMaxQueryRows
 	if r, ok := m.lay.Panes[s.paneKey]; ok {
 		if fits := paneInterior(r.H, paneChromeH) - playInfoRows - m.playStaleRows() - playMinResultRows; fits < limit {
@@ -688,8 +686,8 @@ func (m *Model) movePlayQueryRow(delta, goal int) bool {
 	if !ok {
 		return false
 	}
-	lines := jqplay.Wrap(s.program, width)
-	row, col := jqplay.RowCol(lines, s.pos)
+	lines := jqplay.Wrap(s.program.Text, width)
+	row, col := jqplay.RowCol(lines, s.program.Cur)
 	next := row + delta
 	if next < 0 || next >= len(lines) {
 		return false
@@ -697,7 +695,7 @@ func (m *Model) movePlayQueryRow(delta, goal int) bool {
 	if goal > col {
 		col = goal // an unset goal is -1 and never wins over a real column
 	}
-	s.pos, s.qgoal = jqplay.PosAt(lines, next, col), col
+	s.program.Cur, s.qgoal = jqplay.PosAt(lines, next, col), col
 	s.comp = nil // the popup completes the span the cursor just left
 	return true
 }
@@ -714,15 +712,15 @@ func (m *Model) movePlayQueryEdge(toEnd bool) bool {
 	if !ok {
 		return false
 	}
-	lines := jqplay.Wrap(s.program, width)
+	lines := jqplay.Wrap(s.program.Text, width)
 	if len(lines) < 2 {
 		return false
 	}
-	row, _ := jqplay.RowCol(lines, s.pos)
+	row, _ := jqplay.RowCol(lines, s.program.Cur)
 	l := lines[row]
-	s.pos, s.comp = l.Start, nil
+	s.program.Cur, s.comp = l.Start, nil
 	if toEnd {
-		s.pos = l.End
+		s.program.Cur = l.End
 	}
 	return true
 }
@@ -765,7 +763,7 @@ func (m *Model) sizePlayResult() {
 func (m *Model) closePlayground() {
 	if s := m.play; s != nil {
 		s.cancelRun()
-		s.hist.Add(s.program)
+		s.hist.Add(s.program.Text)
 	}
 	m.play = nil
 }
@@ -931,7 +929,7 @@ func (m *Model) runPlay() tea.Cmd {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), jqplay.EvalTimeout)
 	s.cancel = cancel
-	program, in, gen := s.program, s.input, s.gen
+	program, in, gen := s.program.Text, s.input, s.gen
 	return func() tea.Msg {
 		defer cancel()
 		return playEvalDoneMsg{st: s, gen: gen, res: jqplay.Run(ctx, program, in)}
@@ -960,7 +958,7 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 	}
 	s.runErr = ""
 	s.result, s.haveResult = msg.res, true
-	m.rememberPlayProgram(s.srcKey, s.program)
+	m.rememberPlayProgram(s.srcKey, s.program.Text)
 	m.sizePlayResult()
 	return m.syncPlayResultBuffer()
 }
@@ -1143,7 +1141,7 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.refreshPlayCompletion("", true)
 		return m, nil
 	case "enter":
-		s.hist.Add(s.program)
+		s.hist.Add(s.program.Text)
 		s.histIdx = -1
 		return m, m.runPlayNow()
 	case "up":
@@ -1171,10 +1169,10 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case "ctrl+home":
-		s.pos, s.comp = 0, nil
+		s.program.Cur, s.comp = 0, nil
 		return m, nil
 	case "ctrl+end":
-		s.pos, s.comp = len([]rune(s.program)), nil
+		s.program.Cur, s.comp = s.program.Len(), nil
 		return m, nil
 	case "pgup", "pgdown":
 		// Paging works from the query line without moving the focus.
@@ -1203,7 +1201,7 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.openPlayCheatsheet(s.dialect, "")
 		return m, nil
 	}
-	out, pos, handled, changed := ui.EditKey(msg, s.program, s.pos)
+	handled, changed := s.program.Key(msg)
 	if !handled {
 		// The code-action chord (alt+enter) is answered before the Global
 		// lookup can drop it (#2237): it is bound in the editor context, so
@@ -1224,7 +1222,6 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	s.program, s.pos = out, pos
 	if !changed {
 		// A cursor motion under the popup moves away from the span it would
 		// replace; it closes rather than accepting at a stale position.
@@ -1504,11 +1501,10 @@ func (m *Model) pastePlayground(text string) tea.Cmd {
 	if s == nil || text == "" {
 		return nil
 	}
-	out, pos, changed := ui.PasteText(s.program, s.pos, text)
-	if !changed {
+	if !s.program.Paste(text) {
 		return nil
 	}
-	s.program, s.pos, s.histIdx = out, pos, -1
+	s.histIdx = -1
 	s.comp = nil         // a paste is not typing: no popup over it (the editor's rule)
 	s.setBufFocus(false) // pasting a program is query-line work
 	m.sizePlayResult()   // a longer program is a taller expanded header (#2032)
@@ -1531,8 +1527,8 @@ func (m *Model) stepPlayHistory(delta int) tea.Cmd {
 	s := m.play
 	next := s.histIdx + delta
 	if s.histIdx == -1 && delta > 0 {
-		s.draft, s.draftPos = s.program, s.pos
-		if p, ok := s.hist.At(next); ok && p == strings.TrimSpace(s.program) {
+		s.draft, s.draftPos = s.program.Text, s.program.Cur
+		if p, ok := s.hist.At(next); ok && p == strings.TrimSpace(s.program.Text) {
 			next++
 		}
 	}
@@ -1546,14 +1542,16 @@ func (m *Model) stepPlayHistory(delta int) tea.Cmd {
 		return nil
 	}
 	if next == -1 {
-		s.histIdx, s.program, s.pos = -1, s.draft, s.draftPos
+		s.histIdx = -1
+		s.program.Text, s.program.Cur = s.draft, s.draftPos
 		return m.runPlayNow()
 	}
 	program, ok := s.hist.At(next)
 	if !ok {
 		return nil
 	}
-	s.histIdx, s.program, s.pos = next, program, len([]rune(program))
+	s.histIdx = next
+	s.program.Set(program)
 	return m.runPlayNow()
 }
 
@@ -1608,17 +1606,17 @@ func (m *Model) clickPlayQueryRow(x, y int) {
 	}
 	s.comp = nil
 	if rows <= 1 {
-		s.pos = playOneLinePos(s.program, s.pos, m.playQueryWidth(width), col)
+		s.program.Cur = playOneLinePos(s.program.Text, s.program.Cur, m.playQueryWidth(width), col)
 		return
 	}
 	if idx == 0 && start > 0 {
 		col-- // the row's leading `…` marker is not program text
 	}
 	if line := start + idx; line < len(lines) {
-		s.pos = jqplay.PosAt(lines, line, col)
+		s.program.Cur = jqplay.PosAt(lines, line, col)
 		return
 	}
-	s.pos = lines[len(lines)-1].End // a blank row below a short program
+	s.program.Cur = lines[len(lines)-1].End // a blank row below a short program
 }
 
 // playOneLinePos maps a column of the one-line query row back onto a rune
@@ -1832,9 +1830,9 @@ func (m Model) playQueryCut(width int) bool {
 	s := m.play
 	avail := m.playQueryWidth(width)
 	if !s.expanded {
-		return len([]rune(s.program)) > avail
+		return len([]rune(s.program.Text)) > avail
 	}
-	return len(jqplay.Wrap(s.program, avail)) > m.playQueryRowsFor(width)
+	return len(jqplay.Wrap(s.program.Text, avail)) > m.playQueryRowsFor(width)
 }
 
 // playErrorLine is the message shown on the info row: a bad input beats a bad
@@ -1889,14 +1887,14 @@ func (m Model) playInputSegment() string {
 // math never changes with focus.
 func (m Model) playQueryRow(width int) string {
 	s := m.play
-	pos := s.pos
+	pos := s.program.Cur
 	prefix := "> " + s.dialect.Name() + ": "
 	if s.bufFocus || !m.playFocused() {
 		pos = -1
 		prefix = "  " + s.dialect.Name() + ": "
 	}
 	label := lipgloss.NewStyle().Foreground(m.pal().Secondary).Render(prefix)
-	return label + m.playHighlighted(s.program, pos, m.playQueryWidth(width))
+	return label + m.playHighlighted(s.program.Text, pos, m.playQueryWidth(width))
 }
 
 // playQueryRows is the query half of the header: the one windowed row by
@@ -1919,7 +1917,7 @@ func (m Model) playQueryRows(width int) []string {
 	}
 	pal := m.pal()
 	label := lipgloss.NewStyle().Foreground(pal.Secondary)
-	prefix, pos := "> "+s.dialect.Name()+": ", s.pos
+	prefix, pos := "> "+s.dialect.Name()+": ", s.program.Cur
 	if s.bufFocus || !m.playFocused() {
 		prefix, pos = "  "+s.dialect.Name()+": ", -1
 	}
@@ -1927,8 +1925,8 @@ func (m Model) playQueryRows(width int) []string {
 	if pos >= 0 {
 		curRow, _ = jqplay.RowCol(lines, pos)
 	}
-	r := []rune(s.program)
-	tokens := jqplay.Tokens(s.program)
+	r := []rune(s.program.Text)
+	tokens := jqplay.Tokens(s.program.Text)
 	styles := m.playKindStyles()
 	cursor := lipgloss.NewStyle().Reverse(true)
 	out := make([]string, 0, rows)
@@ -1982,9 +1980,9 @@ func (m Model) playQueryRows(width int) []string {
 // under it.
 func (m Model) playQueryWindow(width int) (lines []jqplay.Line, rows, start int) {
 	s := m.play
-	lines = jqplay.Wrap(s.program, m.playQueryWidth(width))
+	lines = jqplay.Wrap(s.program.Text, m.playQueryWidth(width))
 	rows = m.playQueryRowsFor(width)
-	if cur, _ := jqplay.RowCol(lines, s.pos); cur >= rows {
+	if cur, _ := jqplay.RowCol(lines, s.program.Cur); cur >= rows {
 		start = cur - rows + 1
 	}
 	return lines, rows, start
@@ -2068,7 +2066,7 @@ func (m Model) playResultSegment() string {
 	switch {
 	case s.parsing:
 		return "" // the input segment already says so
-	case strings.TrimSpace(s.program) == "":
+	case strings.TrimSpace(s.program.Text) == "":
 		return hint.Render("Result — no program yet")
 	}
 	n := len(s.result.Outputs)

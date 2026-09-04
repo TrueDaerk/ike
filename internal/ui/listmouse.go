@@ -20,7 +20,11 @@ package ui
 // draws: y 0 is its first rendered line, so a pane whose body starts below a
 // header passes that line count as headerRows.
 
-import "time"
+import (
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+)
 
 // DoubleClickWindow is the maximum delay between two clicks on the same row
 // for the second to activate it. One value for every surface — the explorer,
@@ -93,6 +97,40 @@ func (t *ClickTracker) Double(row int, now time.Time) bool {
 // would activate a second time — and wherever a click lands somewhere that is
 // not a row at all.
 func (t *ClickTracker) Reset() { *t = ClickTracker{} }
+
+// ClickRow is the whole left-click gesture of a list pane in one call
+// (#2462): it hit-tests content-local row y, moves cursor onto the row it
+// found and, when the same row was already clicked inside DoubleClickWindow,
+// activates it and returns the command that does so. A click that is not on a
+// row clears the pending click, so the next one counts as a first click.
+//
+// activate may be nil for a list whose rows have no enter action; such a pane
+// only ever selects.
+func (t *ClickTracker) ClickRow(y, top, headerRows, height, n int, now time.Time, cursor *int, activate func(int) tea.Cmd) tea.Cmd {
+	i, ok := RowAt(y, top, headerRows, height, n)
+	if !ok {
+		t.Reset()
+		return nil
+	}
+	double := t.Double(i, now)
+	*cursor = i
+	if double && activate != nil {
+		t.Reset()
+		return activate(i)
+	}
+	return nil
+}
+
+// SelectClick moves cursor onto the row under content-local y and reports
+// whether it hit one. It is ClickRow without the double-click clock, for the
+// read-only report panes whose rows have no action behind them.
+func SelectClick(y, top, headerRows, height, n int, cursor *int) bool {
+	i, ok := RowAt(y, top, headerRows, height, n)
+	if ok {
+		*cursor = i
+	}
+	return ok
+}
 
 // clampTo confines v to [lo, hi]; hi below lo collapses onto lo.
 func clampTo(v, lo, hi int) int {

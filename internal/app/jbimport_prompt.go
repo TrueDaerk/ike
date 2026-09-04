@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -12,7 +11,6 @@ import (
 	"ike/internal/keymap"
 	"ike/internal/keymap/jbimport"
 	"ike/internal/pathcomplete"
-	"ike/internal/ui"
 )
 
 // jbimport_prompt.go drives the JetBrains keymap import (#677): the
@@ -36,8 +34,7 @@ type jbImportDoneMsg struct {
 // startJBImport opens the shell prompt asking for the export's path.
 func (m *Model) startJBImport() {
 	m.jbImportOpen = true
-	m.jbImportInput = "~" + string(os.PathSeparator)
-	m.jbImportPos = len([]rune(m.jbImportInput))
+	m.jbImportInput.Set("~" + string(os.PathSeparator))
 	m.renderJBImportPrompt(nil)
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -49,25 +46,9 @@ func (m Model) jbImportPromptOpen() bool { return m.jbImportOpen && m.shell.IsOp
 // renderJBImportPrompt (re)fills the shell with the prompt for the current
 // input; candidates (from the last tab press) render underneath.
 func (m *Model) renderJBImportPrompt(candidates []string) {
-	line := "> " + ui.CursorView(m.jbImportInput, m.jbImportPos)
-	const maxLines = 8
-	var sug string
-	if n := len(candidates); n > 0 {
-		shown := candidates
-		if n > maxLines {
-			shown = candidates[:maxLines]
-		}
-		sug = "\n\n  " + strings.Join(shown, "\n  ")
-		if n > maxLines {
-			sug += fmt.Sprintf("\n  … +%d more", n-maxLines)
-		}
-	}
-	m.shell.SetContent(ui.ModelContent{
-		Heading: "Import JetBrains keymap XML",
-		Body: func() string {
-			return line + sug + "\n\ntab complete · enter import · esc cancel"
-		},
-	})
+	m.renderCompletionPrompt(m.jbImportInput, candidates,
+		"Import JetBrains keymap XML",
+		"tab complete · enter import · esc cancel")
 }
 
 // updateJBImportPrompt consumes every key while the import prompt is open:
@@ -76,8 +57,7 @@ func (m *Model) renderJBImportPrompt(candidates []string) {
 func (m Model) updateJBImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	closePrompt := func() {
 		m.jbImportOpen = false
-		m.jbImportInput = ""
-		m.jbImportPos = 0
+		m.jbImportInput.Clear()
 		m.shell.Close()
 	}
 	var candidates []string
@@ -86,21 +66,18 @@ func (m Model) updateJBImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		closePrompt()
 		return m, nil
 	case msg.Code == tea.KeyEnter:
-		path := strings.TrimSpace(m.jbImportInput)
+		path := strings.TrimSpace(m.jbImportInput.Text)
 		closePrompt()
 		if path == "" {
 			return m, nil
 		}
 		return m, m.runJBImport(expandHome(path))
 	case msg.Code == tea.KeyTab:
-		res := pathcomplete.Complete(m.jbImportInput)
-		m.jbImportInput = res.Completed
-		m.jbImportPos = len([]rune(m.jbImportInput))
+		res := pathcomplete.Complete(m.jbImportInput.Text)
+		m.jbImportInput.Set(res.Completed)
 		candidates = res.Candidates
 	default:
-		if out, pos, handled, _ := ui.EditKey(msg, m.jbImportInput, m.jbImportPos); handled {
-			m.jbImportInput, m.jbImportPos = out, pos
-		}
+		m.jbImportInput.Key(msg)
 	}
 	m.renderJBImportPrompt(candidates)
 	return m, nil
@@ -109,11 +86,9 @@ func (m Model) updateJBImportPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // pasteJBImportPrompt inserts a paste into the path input at its cursor
 // (#1873).
 func (m *Model) pasteJBImportPrompt(text string) bool {
-	out, pos, changed := ui.PasteText(m.jbImportInput, m.jbImportPos, text)
-	if !changed {
+	if !m.jbImportInput.Paste(text) {
 		return false
 	}
-	m.jbImportInput, m.jbImportPos = out, pos
 	m.renderJBImportPrompt(nil)
 	return true
 }

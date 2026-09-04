@@ -210,8 +210,8 @@ func TestRunToLinePromptRunsToTypedLine(t *testing.T) {
 		tm, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = tm.(Model)
 	}
-	if m.runToLineInput != "4" {
-		t.Fatalf("input = %q", m.runToLineInput)
+	if m.runToLineInput.Text != "4" {
+		t.Fatalf("input = %q", m.runToLineInput.Text)
 	}
 	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = tm.(Model)

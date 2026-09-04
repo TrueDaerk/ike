@@ -56,20 +56,9 @@ func (m *Model) httpVarsOnSync(path string) tea.Cmd {
 // armHTTPVarsTick schedules one wake at the earliest pending deadline; the
 // tick handler re-arms while marks remain (the backup.go pattern).
 func (m *Model) armHTTPVarsTick() tea.Cmd {
-	if m.httpVarsTickArmed || m.httpVarsDeb == nil {
-		return nil
-	}
-	next, ok := m.httpVarsDeb.Next()
-	if !ok {
-		return nil
-	}
-	m.httpVarsTickArmed = true
-	d := time.Until(next)
-	if d < 0 {
-		d = 0
-	}
-	gen := m.modelGen
-	return tea.Tick(d, func(time.Time) tea.Msg { return httpVarsTickMsg{gen: gen} })
+	return m.armTick(&m.httpVarsTickArmed, m.httpVarsDeb, func(gen int64) tea.Msg {
+		return httpVarsTickMsg{gen: gen}
+	})
 }
 
 // lintDueHTTPVars lints every buffer whose quiet period expired and re-arms

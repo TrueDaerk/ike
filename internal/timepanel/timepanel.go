@@ -371,19 +371,9 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 
 // renderRows draws the project list scrolled around the cursor.
 func (m *Model) renderRows(pal *theme.Palette, height int) string {
-	if len(m.rows) == 0 {
-		return lipgloss.NewStyle().Faint(true).Render(" "+m.emptyText()) + strings.Repeat("\n", height)
-	}
 	m.clampScroll()
-	var b strings.Builder
-	for k := 0; k < height; k++ {
-		i := m.top + k
-		if i < len(m.rows) {
-			b.WriteString(m.renderRow(pal, i))
-		}
-		b.WriteString("\n")
-	}
-	return b.String()
+	empty := lipgloss.NewStyle().Faint(true).Render(" " + m.emptyText())
+	return ui.RenderWindow(m.top, height, len(m.rows), empty, func(i int) string { return m.renderRow(pal, i) })
 }
 
 // emptyText explains an empty list per load state and filter.
@@ -535,21 +525,7 @@ func (m *Model) bodyHeight() int {
 
 // clampScroll keeps the cursor valid and inside the visible window.
 func (m *Model) clampScroll() {
-	if m.cursor > len(m.rows)-1 {
-		m.cursor = len(m.rows) - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.top > m.cursor {
-		m.top = m.cursor
-	}
-	if h := m.bodyHeight(); m.cursor >= m.top+h {
-		m.top = m.cursor - h + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	ui.ClampWindow(&m.cursor, &m.top, len(m.rows), m.bodyHeight())
 }
 
 // clip bounds one rendered line to the panel width.
@@ -631,4 +607,18 @@ func (m *Model) clickTab(x int) {
 		}
 		start = end + 1
 	}
+}
+
+// PasteText inserts a pasted block into the open filter row at its cursor
+// (#2460), re-deriving the rows exactly like typing there does. A closed
+// filter row lets the paste fall through.
+func (m *Model) PasteText(text string) bool {
+	if !m.filter.Active() {
+		return false
+	}
+	if !m.filter.Paste(text) {
+		return false
+	}
+	m.Refresh()
+	return true
 }

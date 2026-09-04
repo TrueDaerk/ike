@@ -1,11 +1,9 @@
 package app
 
 import (
-	"sort"
 	"strings"
 
 	"ike/internal/editor/register"
-	"ike/internal/fuzzy"
 	"ike/internal/palette"
 )
 
@@ -75,23 +73,9 @@ func (p *pasteHistMode) Placeholder() string { return "Paste from history…" }
 // Results implements palette.Mode: the snapshot fuzzy-matched on the preview
 // text; an empty query lists all, newest first.
 func (p *pasteHistMode) Results(query string, cx palette.Context) []palette.Item {
-	type scored struct {
-		item  palette.Item
-		score int
-	}
-	var out []scored
-	for _, it := range p.items {
-		m, ok := fuzzy.Match(query, it.Title)
-		if !ok {
-			continue
-		}
-		it.Spans = m.Positions
-		out = append(out, scored{item: it, score: m.Score})
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].score > out[j].score })
-	items := make([]palette.Item, len(out))
-	for i, s := range out {
-		items[i] = s.item
-	}
+	items := palette.FuzzyItems(query, p.items,
+		func(it palette.Item) string { return it.Title },
+		func(it palette.Item) palette.Item { return it })
+	palette.SortByScore(items)
 	return items
 }

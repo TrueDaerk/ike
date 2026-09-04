@@ -67,8 +67,7 @@ func (m *Model) startArchiveExtract(msg archview.ExtractMsg) {
 	m.archExtractArchive = msg.Archive
 	m.archExtractMembers = append([]string(nil), msg.Members...)
 	m.archExtractOpen = true
-	m.archExtractInput = displayPath(defaultExtractDir(msg.Archive))
-	m.archExtractPos = len([]rune(m.archExtractInput))
+	m.archExtractInput.Set(displayPath(defaultExtractDir(msg.Archive)))
 	m.renderArchiveExtractPrompt(nil)
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -110,7 +109,7 @@ func (m Model) archiveExtractGuardOpen() bool { return m.archExtractPlan != nil 
 // renderArchiveExtractPrompt (re)fills the shell for the current input; tab
 // candidates render underneath, as in the other path prompts.
 func (m *Model) renderArchiveExtractPrompt(candidates []string) {
-	line := "> " + ui.CursorView(m.archExtractInput, m.archExtractPos)
+	line := "> " + m.archExtractInput.View()
 	const maxLines = 8
 	var sug string
 	if n := len(candidates); n > 0 {
@@ -152,7 +151,7 @@ func (m Model) updateArchiveExtractPrompt(msg tea.KeyPressMsg) (tea.Model, tea.C
 		m.closeArchiveExtractPrompt()
 		return m, nil
 	case msg.Code == tea.KeyEnter:
-		target := strings.TrimSpace(m.archExtractInput)
+		target := strings.TrimSpace(m.archExtractInput.Text)
 		archivePath, members := m.archExtractArchive, m.archExtractMembers
 		m.closeArchiveExtractPrompt()
 		if target == "" {
@@ -161,14 +160,11 @@ func (m Model) updateArchiveExtractPrompt(msg tea.KeyPressMsg) (tea.Model, tea.C
 		m.planArchiveExtract(archivePath, members, target)
 		return m, nil
 	case msg.Code == tea.KeyTab:
-		res := pathcomplete.Complete(m.archExtractInput)
-		m.archExtractInput = res.Completed
-		m.archExtractPos = len([]rune(m.archExtractInput))
+		res := pathcomplete.Complete(m.archExtractInput.Text)
+		m.archExtractInput.Set(res.Completed)
 		candidates = res.Candidates
 	default:
-		if out, pos, handled, _ := ui.EditKey(msg, m.archExtractInput, m.archExtractPos); handled {
-			m.archExtractInput, m.archExtractPos = out, pos
-		}
+		m.archExtractInput.Key(msg)
 	}
 	m.renderArchiveExtractPrompt(candidates)
 	return m, nil
@@ -177,19 +173,16 @@ func (m Model) updateArchiveExtractPrompt(msg tea.KeyPressMsg) (tea.Model, tea.C
 // closeArchiveExtractPrompt drops the prompt state and the shell.
 func (m *Model) closeArchiveExtractPrompt() {
 	m.archExtractOpen = false
-	m.archExtractInput = ""
-	m.archExtractPos = 0
+	m.archExtractInput.Clear()
 	m.shell.Close()
 }
 
 // pasteArchiveExtractPrompt inserts a paste into the path input at its cursor
 // (#1873), like every other single-field prompt.
 func (m *Model) pasteArchiveExtractPrompt(text string) bool {
-	out, pos, changed := ui.PasteText(m.archExtractInput, m.archExtractPos, strings.TrimSpace(text))
-	if !changed {
+	if !m.archExtractInput.Paste(strings.TrimSpace(text)) {
 		return false
 	}
-	m.archExtractInput, m.archExtractPos = out, pos
 	m.renderArchiveExtractPrompt(nil)
 	return true
 }

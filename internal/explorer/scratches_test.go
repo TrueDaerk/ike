@@ -237,7 +237,7 @@ func TestScratchRenameFlow(t *testing.T) {
 	m = press(m, "k") // a.txt
 	mm, _ := m.Update(RenameMsg{})
 	m = mm
-	if !m.Prompting() || m.prompt.kind != promptInput || m.prompt.input != "a.txt" {
+	if !m.Prompting() || m.prompt.kind != promptInput || m.prompt.input.Text != "a.txt" {
 		t.Fatalf("prompt = %+v", m.prompt)
 	}
 	if m.prompt.selStart != 0 || m.prompt.selEnd != 1 {

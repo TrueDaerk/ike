@@ -402,29 +402,26 @@ type Model struct {
 	// while the shell shows it; renameInput/renamePos are the typed name and
 	// its cursor. "" when no rename prompt is open.
 	renamePath  string
-	renameInput string
+	renameInput ui.Field
 
 	// saveAsKey is the pane whose untitled buffer the save-as prompt (#730)
 	// names while the shell shows it; saveAsClose carries the ":wq" intent.
 	saveAsKey   string
-	saveAsInput string
-	saveAsPos   int
+	saveAsInput ui.Field
 	saveAsClose bool
 	saveAsErr   string
 
 	// promotePath is the scratch the promote prompt (#2339) is naming a
 	// project path for while the shell shows it; "" when it is closed.
 	promotePath  string
-	promoteInput string
-	promotePos   int
+	promoteInput ui.Field
 	promoteErr   string
 
 	// scratchExtOpen marks the free-extension prompt of the scratch.new
 	// picker (#2340) while the shell shows it; scratchExtInput is the typed
 	// extension with its cursor and scratchExtErr the last refusal.
 	scratchExtOpen  bool
-	scratchExtInput string
-	scratchExtPos   int
+	scratchExtInput ui.Field
 	scratchExtErr   string
 
 	// cloneOpen marks the clone-repository dialog (#1349) while the shell
@@ -434,10 +431,8 @@ type Model struct {
 	// fields while the git subprocess runs, and cloneErr is the validation or
 	// git message shown under the fields.
 	cloneOpen       bool
-	cloneURL        string
-	cloneURLPos     int
-	cloneName       string
-	cloneNamePos    int
+	cloneURL        ui.Field
+	cloneName       ui.Field
 	cloneField      int
 	cloneNameEdited bool
 	cloneRunning    bool
@@ -499,15 +494,13 @@ type Model struct {
 	// jqplay.Cheatsheet per open, so there is nothing to cache either.
 	playCheat *playCheatMode
 
-	renamePos int
 	// layoutSaveOpen marks the window.saveLayout name prompt (#1175) while the
 	// shell shows it; input/pos are the typed name and cursor, err the
 	// overwrite-confirmation hint. layoutsPicker is the palette mode listing
 	// saved layouts, kept on the model so the two entry commands can flip its
 	// apply/set-default action before opening it locked.
 	layoutSaveOpen  bool
-	layoutSaveInput string
-	layoutSavePos   int
+	layoutSaveInput ui.Field
 	layoutSaveErr   string
 	layoutsPicker   *layoutsMode
 	// httpRequests is the palette mode listing the .http requests that have
@@ -564,13 +557,11 @@ type Model struct {
 	// jbImportOpen marks the JetBrains keymap import prompt (#677) while the
 	// shell shows it; jbImportInput/jbImportPos are the typed path and cursor.
 	jbImportOpen  bool
-	jbImportInput string
-	jbImportPos   int
+	jbImportInput ui.Field
 	// oapiImportOpen marks the OpenAPI import prompt (#1939) while the shell
 	// shows it; oapiImportInput/oapiImportPos are the typed path and cursor.
 	oapiImportOpen  bool
-	oapiImportInput string
-	oapiImportPos   int
+	oapiImportInput ui.Field
 	// oapiCheck* hold the URL validation of that prompt (#2009): the
 	// sequence number of the newest check (older answers are stale),
 	// whether one is in flight, the last error message, and the resolved
@@ -583,42 +574,36 @@ type Model struct {
 	// the shell shows it; evalInput/evalPos hold its single line. Only opened
 	// when there is no selection to evaluate.
 	evalOpen  bool
-	evalInput string
-	evalPos   int
+	evalInput ui.Field
 	// runToLineOpen marks the debugger's run-to-line prompt (#2405) while the
 	// shell shows it; runToLineInput/runToLinePos hold its single line.
 	runToLineOpen  bool
-	runToLineInput string
-	runToLinePos   int
+	runToLineInput ui.Field
 	// paneNumOpen marks pane.focusByIndex's prompt (#2407) while the shell
 	// shows it; paneNumInput/paneNumPos hold its single line. paneNumHint is
 	// the which-pane hint of the focus-only mode — up while a pane switch is
 	// being made, taken down again by paneNumberHintMsg; paneNumHintGen tells
 	// the newest timer from the ones a faster switch has already outrun.
 	paneNumOpen    bool
-	paneNumInput   string
-	paneNumPos     int
+	paneNumInput   ui.Field
 	paneNumHint    bool
 	paneNumHintGen int
 	// curlImportOpen marks the curl import prompt (#1994) while the shell
 	// shows it; curlImportInput/curlImportPos are the typed command and
 	// cursor.
 	curlImportOpen  bool
-	curlImportInput string
-	curlImportPos   int
+	curlImportInput ui.Field
 	// httpSaveOpen marks the response-body save prompt (#2059) while the
 	// shell shows it; httpSaveInput/httpSavePos are the typed path and cursor.
 	httpSaveOpen  bool
-	httpSaveInput string
-	httpSavePos   int
+	httpSaveInput ui.Field
 	// archExtractOpen marks the archive extraction target-directory prompt
 	// (#2249) while the shell shows it; archExtractInput/archExtractPos are
 	// the typed path and cursor, and archExtractArchive/archExtractMembers
 	// hold what the pane asked to extract (no members = the whole archive).
 	// archExtractPlan is the pending plan while the overwrite guard is up.
 	archExtractOpen    bool
-	archExtractInput   string
-	archExtractPos     int
+	archExtractInput   ui.Field
 	archExtractArchive string
 	archExtractMembers []string
 	archExtractPlan    *archive.Plan
@@ -644,45 +629,39 @@ type Model struct {
 	symbolPriming bool
 	// The terminal return-focus (#97) moved into the workspace (#776):
 	// m.activeWS().ReturnFocus.
-	// vcsReturnFocus is the same dance for the VCS tool window (0330, #482).
-	vcsReturnFocus string
-	// problemsReturnFocus is the same dance for the Problems tool window
-	// (#1024); probStore is its session-wide per-file diagnostics store, fed
-	// from every publish — files without an open editor included.
-	problemsReturnFocus string
-	probStore           *problems.Store
-	// depsReturnFocus is the same dance for the Dependencies tool window
-	// (#2419); depsScanner holds the per-manifest mtime scan cache,
-	// depsScanning flags an in-flight background scan for the status-line
-	// segment, and the remaining fields carry the open centered dialogs
-	// (install confirmation, vulnerability details, missing tools).
-	depsReturnFocus    string
+	// panelReturnFocus is the same dance for every singleton tool window
+	// (VCS #482, Problems #1024, Dependencies #2419, Time #2426, Breakpoints
+	// #1377, Test Results #1911, Issues #1934, Xdebug Doctor #1991, LSP
+	// Doctor #2164, DOM #1929, Structure #1025, Usages #1155), keyed by the
+	// window's pane key: the pane a toggle-on took focus from, which its
+	// toggle-off hands focus back to (#2463, panelwiring.go).
+	panelReturnFocus map[string]string
+	// probStore is the Problems window's session-wide per-file diagnostics
+	// store, fed from every publish — files without an open editor included.
+	probStore *problems.Store
+	// The Dependencies tool window's state (#2419): depsScanner holds the
+	// per-manifest mtime scan cache, depsScanning flags an in-flight
+	// background scan for the status-line segment, and the remaining fields
+	// carry the open centered dialogs (install confirmation, vulnerability
+	// details, missing tools).
 	depsScanner        *deps.Scanner
 	depsScanning       bool
 	depsInstallPending []string
 	depsInstallDir     string
 	depsVulnsOpen      bool
 	depsMissingOpen    bool
-	// timeReturnFocus is the same dance for the Time tool window (#2426);
-	// timeReader holds the per-file mtime cache over the usage log,
-	// timeReport the last finished aggregate (shared by the pane and the
-	// opt-in status-line segment), timeToken the current project's hashed
-	// token and timeTickGen drops a superseded segment ticker.
-	timeReturnFocus string
-	timeReader      *telemetry.Reader
-	timeReport      *telemetry.Report
-	timeToken       string
-	timeTickGen     int64
-	// breakpointsReturnFocus is the same dance for the Breakpoints tool
-	// window (#1377).
-	breakpointsReturnFocus string
-	// testsReturnFocus is the same dance for the Test Results tool window
-	// (#1911); lastTestRun remembers the last captured test run for the
-	// re-run actions and testRunSeq drops a stale run's completion.
-	testsReturnFocus string
-	// issuesReturnFocus is the same dance for the GitHub Issues tool window
-	// (#1934).
-	issuesReturnFocus string
+	// The Time tool window's state (#2426): timeReader holds the per-file
+	// mtime cache over the usage log, timeReport the last finished aggregate
+	// (shared by the pane and the opt-in status-line segment), timeToken the
+	// current project's hashed token and timeTickGen drops a superseded
+	// segment ticker.
+	timeReader  *telemetry.Reader
+	timeReport  *telemetry.Report
+	timeToken   string
+	timeTickGen int64
+	// The Test Results window (#1911) keeps lastTestRun, the last captured
+	// test run for the re-run actions, and testRunSeq, which drops a stale
+	// run's completion.
 	// The prominent forge event surface (#2086, forgenotify.go): forgeQueue
 	// are the events the single open dialog shows (forgeCursor selects one),
 	// forgeUnread are the events behind the status line's persistent badge —
@@ -705,34 +684,30 @@ type Model struct {
 	forgeDialog       bool
 	forgeReveal       int
 	lastInputAt       time.Time
-	// doctorReturnFocus is the same dance for the Xdebug Doctor tool window
-	// (#1991); doctorLog is its app-owned listener/connection trace, fed from
-	// the bridge's ike.listenState / ike.debugConn events and surviving the
-	// panel being closed.
-	doctorReturnFocus string
-	doctorLog         *debugdoctor.Log
+	// doctorLog is the Xdebug Doctor window's app-owned listener/connection
+	// trace (#1991), fed from the bridge's ike.listenState / ike.debugConn
+	// events and surviving the panel being closed.
+	doctorLog *debugdoctor.Log
 
 	// xmqMissing marks the missing-binary dialog of the xmq playground
 	// (#2414, playground_xmq.go): the shell shows the install hint and owns
 	// the keyboard until dismissed, like the other prominent dialogs.
 	xmqMissing bool
 
-	// lspDoctorReturnFocus / lspDoctorReport are the same pair for the LSP
-	// Doctor tool window (#2164); the report keeps the last run's results and
-	// failure classes so a re-run can verify fixes.
-	lspDoctorReturnFocus string
-	lspDoctorReport      *lspdoctor.Report
-	// domReturnFocus is the same dance for the DOM inspector tool window
-	// (#1929). domReqPath/domReqVersion dedup the async buffer parses;
-	// domHLPath/domHLRev remember which file's editors carry the selector
-	// match highlights and at which pane match revision.
-	domReturnFocus string
-	domReqPath     string
-	domReqVersion  int
-	domHLPath      string
-	domHLRev       int
-	lastTestRun    *testRunState
-	testRunSeq     int
+	// lspDoctorReport is the LSP Doctor tool window's report (#2164): it
+	// keeps the last run's results and failure classes so a re-run can verify
+	// fixes.
+	lspDoctorReport *lspdoctor.Report
+	// The DOM inspector tool window's state (#1929): domReqPath/domReqVersion
+	// dedup the async buffer parses; domHLPath/domHLRev remember which file's
+	// editors carry the selector match highlights and at which pane match
+	// revision.
+	domReqPath    string
+	domReqVersion int
+	domHLPath     string
+	domHLRev      int
+	lastTestRun   *testRunState
+	testRunSeq    int
 	// testWatch drives watch mode of the Test Results pane (#2172,
 	// testwatch.go): the debounce generation, the scope the pending timer
 	// will run and the single re-run queued behind an in-flight one. The
@@ -758,8 +733,8 @@ type Model struct {
 	// remap rules (#1503), applied after the ignore filter on the same path.
 	diagSeverity    ilsp.SeverityRules
 	diagSeverityRaw []string
-	// structReturnFocus is the same dance for the Structure tool window
-	// (#1025); structReqPath/structReqVersion are the path and buffer
+	// The Structure tool window's request state (#1025):
+	// structReqPath/structReqVersion are the path and buffer
 	// DocVersion the last documentSymbol refresh was issued for (the request
 	// dedup and the cache stamp for the async reply, #2319), and structForce
 	// marks a save-triggered refresh that must re-request the unchanged path.
@@ -768,7 +743,6 @@ type Model struct {
 	// structLast* remember the last dispatch (target and wall clock) for the
 	// burst dedup (#2401): an identical (path, DocVersion) inside
 	// structBurstWindow never reaches RunCommand.
-	structReturnFocus string
 	structReqPath     string
 	structReqVersion  int
 	structForce       bool
@@ -790,8 +764,6 @@ type Model struct {
 	// pass (syncBreadcrumbLayout) re-runs layout() when it changes.
 	docSymbols map[string]docSymEntry
 	crumbSig   string
-	// usagesReturnFocus is the same dance for the Usages tool window (#1155).
-	usagesReturnFocus string
 	// switchPending is the validated project root awaiting the unsaved-changes
 	// answer (Roadmap 0090, #3) while the shell shows the save-all / discard /
 	// cancel prompt; "" when no switch is gated.
@@ -903,8 +875,7 @@ type Model struct {
 	dlAfterClone *deeplink.Link
 	// The project.open_link paste prompt (#2396): one URL line.
 	dlLinkOpen bool
-	dlLinkText string
-	dlLinkPos  int
+	dlLinkText ui.Field
 	// undoTree is the undo-tree overlay (#59): the focused editor's change
 	// tree; jumps route back into that editor as HistoryJumpMsg.
 	undoTree *undotree.Model
@@ -4831,18 +4802,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SaveAllMsg:
 		// editor.saveAll (cmd+shift+s / palette): write every dirty editor,
 		// background tabs included.
-		var cmds []tea.Cmd
-		for _, key := range m.activeWS().Panes.Keys() {
-			inst := m.activeWS().Panes.Get(key)
-			if inst == nil || inst.Kind() != pane.KindEditor {
-				continue
-			}
-			for i := 0; i < inst.TabCount(); i++ {
-				if ed := inst.TabEditor(i); ed != nil && ed.Dirty() {
-					cmds = append(cmds, inst.UpdateTab(i, editor.ActionMsg{Action: "write"}))
-				}
-			}
-		}
+		cmds := m.writeDirtyTabs("write")
 		switch n := len(cmds); {
 		case n == 0:
 			// A silent no-op is indistinguishable from a dead chord (#275).
@@ -10654,95 +10614,26 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		}
 		return m, func() tea.Msg { return ForceCodeInsightMsg{} }
 	}
-	if m.allFind.IsOpen() {
-		// The all-projects search form hit-tests like the finder (#2394).
-		if clickOutside(msg, m.allFind.View(), m.width, m.height) {
-			m.allFind.Close()
-			return m, nil
-		}
-		if msg.action == mousePress && msg.Button == tea.MouseLeft {
-			v := m.allFind.View()
-			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
-			return m, m.allFind.Click(msg.X-bx, msg.Y-by)
-		}
-		return m, nil
-	}
 	// Floating overlays (#116): a click outside an open overlay dismisses it,
-	// a click inside stays with the overlay (never leaks to the panes below).
-	// The finder renders above every other overlay, so it hit-tests first (#424).
-	if m.finder.IsOpen() {
-		if clickOutside(msg, m.finder.View(), m.width, m.height) {
-			m.finder.Close()
-			return m, nil
-		}
-		switch {
-		case msg.action == mousePress && msg.Button == tea.MouseLeft:
-			v := m.finder.View()
-			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
-			return m, m.finder.Click(msg.X-bx, msg.Y-by)
-		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
-			m.finder.Wheel(-wheelLines * msg.ticks())
-		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
-			m.finder.Wheel(wheelLines * msg.ticks())
-		}
-		return m, nil
+	// a click inside stays with the overlay (never leaks to the panes below),
+	// and the wheel scrolls the ones that scroll (overlayMouse). They are
+	// hit-tested in render order, topmost first: the all-projects search form
+	// (#2394), the finder (#424), the all-projects results (#2413), the TODO
+	// index (#61) and the undo tree (#59).
+	if cmd, handled := m.overlayMouse(msg, m.allFind); handled {
+		return m, cmd
 	}
-	// The all-projects results overlay hit-tests the same way (#2413): a
-	// click outside closes it, a press on a row selects it, a second press
-	// opens it, the wheel scrolls. It sits below the finder and the form in
-	// the render order, so it is tested after them.
-	if m.allResults.IsOpen() {
-		if clickOutside(msg, m.allResults.View(), m.width, m.height) {
-			m.allResults.Close()
-			return m, nil
-		}
-		switch {
-		case msg.action == mousePress && msg.Button == tea.MouseLeft:
-			v := m.allResults.View()
-			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
-			return m, m.allResults.Click(msg.X-bx, msg.Y-by)
-		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
-			m.allResults.Wheel(-wheelLines * msg.ticks())
-		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
-			m.allResults.Wheel(wheelLines * msg.ticks())
-		}
-		return m, nil
+	if cmd, handled := m.overlayMouse(msg, m.finder); handled {
+		return m, cmd
 	}
-	if m.todo.IsOpen() {
-		// The TODO index overlay hit-tests like the finder above (#61).
-		if clickOutside(msg, m.todo.View(), m.width, m.height) {
-			m.todo.Close()
-			return m, nil
-		}
-		switch {
-		case msg.action == mousePress && msg.Button == tea.MouseLeft:
-			v := m.todo.View()
-			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
-			return m, m.todo.Click(msg.X-bx, msg.Y-by)
-		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
-			m.todo.Wheel(-wheelLines * msg.ticks())
-		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
-			m.todo.Wheel(wheelLines * msg.ticks())
-		}
-		return m, nil
+	if cmd, handled := m.overlayMouse(msg, m.allResults); handled {
+		return m, cmd
 	}
-	if m.undoTree.IsOpen() {
-		// The undo-tree overlay hit-tests like the TODO index above (#59).
-		if clickOutside(msg, m.undoTree.View(), m.width, m.height) {
-			m.undoTree.Close()
-			return m, nil
-		}
-		switch {
-		case msg.action == mousePress && msg.Button == tea.MouseLeft:
-			v := m.undoTree.View()
-			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
-			return m, m.undoTree.Click(msg.X-bx, msg.Y-by)
-		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
-			m.undoTree.Wheel(-wheelLines * msg.ticks())
-		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
-			m.undoTree.Wheel(wheelLines * msg.ticks())
-		}
-		return m, nil
+	if cmd, handled := m.overlayMouse(msg, m.todo); handled {
+		return m, cmd
+	}
+	if cmd, handled := m.overlayMouse(msg, m.undoTree); handled {
+		return m, cmd
 	}
 	if m.settings.IsOpen() {
 		// The panel's geometry comes from Size(), never from measuring View()

@@ -46,8 +46,7 @@ type Palette struct {
 	def      Mode
 
 	open     bool
-	query    string
-	cur      int // rune cursor within query, including the prefix rune (#763)
+	query    ui.Field // Cur is the rune cursor within query, including the prefix rune (#763)
 	items    []Item
 	selected int
 	top      int // first visible row (scroll window into items)
@@ -204,7 +203,7 @@ func (p *Palette) OpenLockedWith(cx Context, prefix rune, body string) {
 	if p.locked == nil {
 		return
 	}
-	p.query = body
+	p.query.Text = body
 	p.recompute()
 }
 
@@ -217,7 +216,7 @@ func (p *Palette) OpenAnchoredWith(cx Context, prefix rune, body string, x, y, w
 	if p.locked == nil {
 		return
 	}
-	p.query = body
+	p.query.Text = body
 	p.recompute()
 }
 
@@ -231,8 +230,7 @@ func (p *Palette) reset(cx Context) {
 	}
 	p.open = true
 	p.openedAt = p.clock()
-	p.query = ""
-	p.cur = 0
+	p.query.Clear()
 	p.selected = 0
 	p.top = 0
 	p.cx = cx
@@ -259,7 +257,7 @@ func (p *Palette) AnchorPos() (int, int) { return p.anchorX, p.anchorY }
 
 // Query is the current raw query, prefix rune included — what the user typed
 // or a re-open seeded. Read-only introspection.
-func (p *Palette) Query() string { return p.query }
+func (p *Palette) Query() string { return p.query.Text }
 
 // Close hides the palette without side effects.
 func (p *Palette) Close() {
@@ -346,11 +344,9 @@ func (p *Palette) previewing() bool {
 // search-everywhere or any other mode. handled is false when the block
 // flattened to nothing, so the caller can fall through.
 func (p *Palette) Paste(text string) (cmd tea.Cmd, handled bool) {
-	out, ncur, changed := ui.PasteText(p.query, p.cur, text)
-	if !changed {
+	if !p.query.Paste(text) {
 		return nil, false
 	}
-	p.query, p.cur = out, ncur
 	p.sideManual = false
 	p.recompute()
 	return p.queryKick(), true
@@ -410,11 +406,11 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 			p.sideFocus = !p.sideFocus
 			p.sideManual = true
 			return nil
-		case msg.Code == tea.KeyLeft && msg.Mod == 0 && p.query == "":
+		case msg.Code == tea.KeyLeft && msg.Mod == 0 && p.query.Empty():
 			p.sideFocus = true
 			p.sideManual = true
 			return nil
-		case msg.Code == tea.KeyRight && msg.Mod == 0 && p.query == "":
+		case msg.Code == tea.KeyRight && msg.Mod == 0 && p.query.Empty():
 			p.sideFocus = false
 			p.sideManual = true
 			return nil
@@ -443,8 +439,11 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 	// caller refreshes the lists via Refresh. cmd+backspace is the delivered
 	// alias (#1418): shift+delete needs a physical forward-delete key many
 	// Mac keyboards lack, cmd+backspace is macOS's native "delete" chord.
+	// The Command key is accepted as super+ and meta+ alike — the same
+	// physical key, spelled differently per terminal protocol (#2459).
+	cmdMod := msg.Mod &^ tea.ModShift
 	if (msg.Code == tea.KeyDelete && msg.Mod == tea.ModShift) ||
-		(msg.Code == tea.KeyBackspace && msg.Mod == tea.ModSuper) {
+		(msg.Code == tea.KeyBackspace && (cmdMod == tea.ModSuper || cmdMod == tea.ModMeta)) {
 		return p.auxCmd()
 	}
 	// Digit fast path (#2023): in a DigitPicker mode — the intention popup —
@@ -475,24 +474,21 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		// completion from the selected row, #1775).
 		m, body := p.mode()
 		if out, ok := p.completeBody(m, body); ok {
-			p.query = p.query[:len(p.query)-len(body)] + out
-			p.cur = len([]rune(p.query))
+			p.query.Set(p.query.Text[:len(p.query.Text)-len(body)] + out)
 			p.sideManual = false
 			p.recompute()
 			return p.queryKick()
 		}
 		return nil
 	case msg.Code == 'u' && msg.Mod == tea.ModCtrl:
-		p.query = ""
-		p.cur = 0
+		p.query.Clear()
 		p.sideManual = false
 		p.recompute()
 		return p.queryKick()
 	}
 	// Everything else is single-line editing on the query (#763): cursor
 	// motions, word ops, backspace/delete, printable insertion.
-	if out, ncur, handled, changed := ui.EditKey(msg, p.query, p.cur); handled {
-		p.query, p.cur = out, ncur
+	if handled, changed := p.query.Key(msg); handled {
 		if changed {
 			p.sideManual = false
 			p.recompute()
@@ -509,7 +505,7 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 // digit past the end of the list is swallowed rather than typed, so the hints
 // and the accepted keys stay in sync.
 func (p *Palette) quickPick(msg tea.KeyPressMsg) (cmd tea.Cmd, handled bool) {
-	if p.query != "" || p.sideFocus || msg.Mod != 0 {
+	if !p.query.Empty() || p.sideFocus || msg.Mod != 0 {
 		return nil, false
 	}
 	d, ok := p.locked.(DigitPicker)
@@ -848,15 +844,15 @@ func sideWidth(inner int) int {
 // the whole query.
 func (p *Palette) mode() (Mode, string) {
 	if p.locked != nil {
-		return p.locked, p.query // pinned mode: the whole query is the body
+		return p.locked, p.query.Text // pinned mode: the whole query is the body
 	}
-	if p.query != "" {
-		r := []rune(p.query)
+	if !p.query.Empty() {
+		r := p.query.Runes()
 		if m, ok := p.byPrefix[r[0]]; ok {
 			return m, string(r[1:])
 		}
 	}
-	return p.def, p.query
+	return p.def, p.query.Text
 }
 
 // recompute re-ranks results for the current query and resets the selection.
@@ -1081,8 +1077,8 @@ func (p *Palette) promptGlyph() string {
 	if p.locked != nil {
 		return string(p.locked.Prefix())
 	}
-	if p.query != "" {
-		r := []rune(p.query)
+	if !p.query.Empty() {
+		r := p.query.Runes()
 		if _, ok := p.byPrefix[r[0]]; ok {
 			return string(r[0])
 		}
@@ -1101,8 +1097,8 @@ func (p *Palette) queryView(width int) string {
 		}
 		return lipgloss.NewStyle().Foreground(p.theme().Border).Render(ph)
 	}
-	pl := len([]rune(p.query)) - len([]rune(body))
-	return ansi.Truncate(ui.CursorView(body, p.cur-pl), width, "…")
+	pl := p.query.Len() - len([]rune(body))
+	return ansi.Truncate(ui.CursorView(body, p.query.Cur-pl), width, "…")
 }
 
 // list renders the visible result rows with selection and match highlighting, or

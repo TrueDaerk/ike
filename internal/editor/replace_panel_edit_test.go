@@ -29,11 +29,11 @@ func TestPanelCursorInsertsMidField(t *testing.T) {
 	m = send(m, tea.KeyPressMsg{Code: tea.KeyLeft})
 	m = send(m, tea.KeyPressMsg{Code: tea.KeyLeft})
 	m = typeKeys(m, "l")
-	if m.replPanel.find != "alpha" {
-		t.Fatalf("find = %q, want %q", m.replPanel.find, "alpha")
+	if m.replPanel.find.Text != "alpha" {
+		t.Fatalf("find = %q, want %q", m.replPanel.find.Text, "alpha")
 	}
-	if m.replPanel.findCur != 2 {
-		t.Fatalf("cursor = %d, want 2", m.replPanel.findCur)
+	if m.replPanel.find.Cur != 2 {
+		t.Fatalf("cursor = %d, want 2", m.replPanel.find.Cur)
 	}
 }
 
@@ -41,12 +41,12 @@ func TestPanelWordAndLineKills(t *testing.T) {
 	m := openPanel(t, "alpha beta\n")
 	m = typeKeys(m, "alpha beta")
 	m = send(m, tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt})
-	if m.replPanel.find != "alpha " {
-		t.Fatalf("alt+backspace: find = %q", m.replPanel.find)
+	if m.replPanel.find.Text != "alpha " {
+		t.Fatalf("alt+backspace: find = %q", m.replPanel.find.Text)
 	}
 	m = send(m, tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModSuper})
-	if m.replPanel.find != "" || m.replPanel.findCur != 0 {
-		t.Fatalf("super+backspace: find = %q cur = %d", m.replPanel.find, m.replPanel.findCur)
+	if m.replPanel.find.Text != "" || m.replPanel.find.Cur != 0 {
+		t.Fatalf("super+backspace: find = %q cur = %d", m.replPanel.find.Text, m.replPanel.find.Cur)
 	}
 }
 
@@ -54,16 +54,16 @@ func TestPanelWordMotionAndHomeEnd(t *testing.T) {
 	m := openPanel(t, "alpha beta\n")
 	m = typeKeys(m, "alpha beta")
 	m = send(m, tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt})
-	if m.replPanel.findCur != 6 {
-		t.Fatalf("alt+left: cur = %d, want 6", m.replPanel.findCur)
+	if m.replPanel.find.Cur != 6 {
+		t.Fatalf("alt+left: cur = %d, want 6", m.replPanel.find.Cur)
 	}
 	m = send(m, tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModSuper})
-	if m.replPanel.findCur != 0 {
-		t.Fatalf("super+left: cur = %d, want 0", m.replPanel.findCur)
+	if m.replPanel.find.Cur != 0 {
+		t.Fatalf("super+left: cur = %d, want 0", m.replPanel.find.Cur)
 	}
 	m = send(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModSuper})
-	if m.replPanel.findCur != 10 {
-		t.Fatalf("super+right: cur = %d, want 10", m.replPanel.findCur)
+	if m.replPanel.find.Cur != 10 {
+		t.Fatalf("super+right: cur = %d, want 10", m.replPanel.find.Cur)
 	}
 }
 
@@ -74,16 +74,16 @@ func TestPanelCursorsArePerField(t *testing.T) {
 	m = send(m, tea.KeyPressMsg{Code: tea.KeyHome})
 	m = send(m, tab())
 	m = typeKeys(m, "xyz")
-	if m.replPanel.replCur != 3 {
-		t.Fatalf("replace cursor = %d, want 3", m.replPanel.replCur)
+	if m.replPanel.repl.Cur != 3 {
+		t.Fatalf("replace cursor = %d, want 3", m.replPanel.repl.Cur)
 	}
 	m = send(m, tab())
-	if m.replPanel.findCur != 0 {
-		t.Fatalf("find cursor = %d, want 0 (kept across the tab)", m.replPanel.findCur)
+	if m.replPanel.find.Cur != 0 {
+		t.Fatalf("find cursor = %d, want 0 (kept across the tab)", m.replPanel.find.Cur)
 	}
 	m = typeKeys(m, "Z")
-	if m.replPanel.find != "Zabc" {
-		t.Fatalf("find = %q, want %q", m.replPanel.find, "Zabc")
+	if m.replPanel.find.Text != "Zabc" {
+		t.Fatalf("find = %q, want %q", m.replPanel.find.Text, "Zabc")
 	}
 }
 
@@ -94,8 +94,8 @@ func TestPanelMidFieldEditRefreshesPreview(t *testing.T) {
 	m = send(m, tea.KeyPressMsg{Code: tea.KeyLeft})
 	m = send(m, tea.KeyPressMsg{Code: tea.KeyLeft})
 	m = typeKeys(m, "e")
-	if m.replPanel.find != "beta" {
-		t.Fatalf("find = %q", m.replPanel.find)
+	if m.replPanel.find.Text != "beta" {
+		t.Fatalf("find = %q", m.replPanel.find.Text)
 	}
 	if m.preview.Empty() {
 		t.Fatal("preview must recompile after a mid-field edit")
@@ -110,8 +110,8 @@ func TestPanelCtrlUClears(t *testing.T) {
 	m := openPanel(t, "alpha beta\n")
 	m = typeKeys(m, "alpha")
 	m = send(m, tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
-	if m.replPanel.find != "" || m.replPanel.findCur != 0 {
-		t.Fatalf("ctrl+u: find = %q cur = %d", m.replPanel.find, m.replPanel.findCur)
+	if m.replPanel.find.Text != "" || m.replPanel.find.Cur != 0 {
+		t.Fatalf("ctrl+u: find = %q cur = %d", m.replPanel.find.Text, m.replPanel.find.Cur)
 	}
 }
 
@@ -126,8 +126,8 @@ func TestPanelTypingReplacesPreselect(t *testing.T) {
 		t.Fatal("panel should open with a preselected prefill")
 	}
 	m = typeKeys(m, "b")
-	if m.replPanel.find != "b" || m.replPanel.findCur != 1 {
-		t.Fatalf("find = %q cur = %d, want %q/1", m.replPanel.find, m.replPanel.findCur, "b")
+	if m.replPanel.find.Text != "b" || m.replPanel.find.Cur != 1 {
+		t.Fatalf("find = %q cur = %d, want %q/1", m.replPanel.find.Text, m.replPanel.find.Cur, "b")
 	}
 }
 
@@ -137,11 +137,11 @@ func TestPanelPasteAtCursor(t *testing.T) {
 	m = typeKeys(m, "ala")
 	m = send(m, tea.KeyPressMsg{Code: tea.KeyLeft})
 	m.PasteText("ph")
-	if m.replPanel.find != "alpha" {
-		t.Fatalf("find = %q, want %q", m.replPanel.find, "alpha")
+	if m.replPanel.find.Text != "alpha" {
+		t.Fatalf("find = %q, want %q", m.replPanel.find.Text, "alpha")
 	}
-	if m.replPanel.findCur != 4 {
-		t.Fatalf("cursor = %d, want 4", m.replPanel.findCur)
+	if m.replPanel.find.Cur != 4 {
+		t.Fatalf("cursor = %d, want 4", m.replPanel.find.Cur)
 	}
 }
 

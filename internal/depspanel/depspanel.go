@@ -12,7 +12,6 @@ package depspanel
 import (
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -232,13 +231,8 @@ func (m *Model) NextMatch() ui.MatchStep { return m.stepFiltered(1) }
 func (m *Model) PrevMatch() ui.MatchStep { return m.stepFiltered(-1) }
 
 func (m *Model) stepFiltered(delta int) ui.MatchStep {
-	if !m.filter.Active() {
-		return ui.NoStep
-	}
-	next, st := ui.StepOver(m.cursor, len(m.rows), delta, func(i int) bool { return !m.rows[i].header })
-	m.cursor = next
-	m.clampScroll()
-	return m.filter.ShowStep(st)
+	return ui.StepFiltered(&m.filter, &m.cursor, &m.top, len(m.rows), m.bodyHeight(), delta,
+		func(i int) bool { return !m.rows[i].header })
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -280,17 +274,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 // targetRow resolves row i to the dependency an action acts on: a header
 // stands for its first dependency, everything else for itself.
 func (m *Model) targetRow(i int) (row, bool) {
-	if i < 0 || i >= len(m.rows) {
-		return row{}, false
-	}
-	r := m.rows[i]
-	if r.header {
-		if i+1 >= len(m.rows) || m.rows[i+1].header {
-			return row{}, false
-		}
-		r = m.rows[i+1]
-	}
-	return r, true
+	return ui.TargetRow(m.rows, i, func(r row) bool { return r.header })
 }
 
 // activate opens the manifest at the marked dependency's line; a header
@@ -342,14 +326,7 @@ func (m *Model) Selected() (deps.ManifestDeps, deps.Dep, bool) {
 // key-hint footer.
 func (m *Model) View() string {
 	pal := m.theme()
-	var b strings.Builder
-	b.WriteString(m.headerLine(pal))
-	b.WriteString("\n")
-	b.WriteString(m.filter.View(m.width, pal))
-	b.WriteString("\n")
-	b.WriteString(m.renderRows(pal, m.bodyHeight()))
-	b.WriteString(m.footer(pal))
-	return b.String()
+	return ui.ListPaneView(m.headerLine(pal), m.filter.View(m.width, pal), m.renderRows(pal, m.bodyHeight()), m.footer(pal))
 }
 
 // headerLine names the pane and totals the outdated/vulnerable counts.
@@ -365,19 +342,9 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 
 // renderRows draws the flattened list scrolled around the cursor.
 func (m *Model) renderRows(pal *theme.Palette, height int) string {
-	if len(m.rows) == 0 {
-		return lipgloss.NewStyle().Faint(true).Render(" "+m.emptyText()) + strings.Repeat("\n", height)
-	}
 	m.clampScroll()
-	var b strings.Builder
-	for k := 0; k < height; k++ {
-		i := m.top + k
-		if i < len(m.rows) {
-			b.WriteString(m.renderRow(pal, i))
-		}
-		b.WriteString("\n")
-	}
-	return b.String()
+	empty := lipgloss.NewStyle().Faint(true).Render(" " + m.emptyText())
+	return ui.RenderWindow(m.top, height, len(m.rows), empty, func(i int) string { return m.renderRow(pal, i) })
 }
 
 // emptyText explains an empty list per scan state and filter.
@@ -478,21 +445,7 @@ func (m *Model) bodyHeight() int {
 
 // clampScroll keeps the cursor valid and inside the visible window.
 func (m *Model) clampScroll() {
-	if m.cursor > len(m.rows)-1 {
-		m.cursor = len(m.rows) - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.top > m.cursor {
-		m.top = m.cursor
-	}
-	if h := m.bodyHeight(); m.cursor >= m.top+h {
-		m.top = m.cursor - h + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	ui.ClampWindow(&m.cursor, &m.top, len(m.rows), m.bodyHeight())
 }
 
 // clip bounds one rendered line to the panel width.
@@ -523,16 +476,19 @@ func (m *Model) Wheel(delta int) {
 // Click selects a row; a second click within the double-click window
 // activates it.
 func (m *Model) Click(x, y int) tea.Cmd {
-	i, ok := ui.RowAt(y, m.top, headerRows, m.bodyHeight(), len(m.rows))
-	if !ok {
-		m.clicks.Reset()
-		return nil
+	return m.clicks.ClickRow(y, m.top, headerRows, m.bodyHeight(), len(m.rows), m.now(), &m.cursor, m.activate)
+}
+
+// PasteText inserts a pasted block into the open filter row at its cursor
+// (#2460), re-deriving the rows exactly like typing there does. A closed
+// filter row lets the paste fall through.
+func (m *Model) PasteText(text string) bool {
+	if !m.filter.Active() {
+		return false
 	}
-	double := m.clicks.Double(i, m.now())
-	m.cursor = i
-	if double {
-		m.clicks.Reset()
-		return m.activate(i)
+	if !m.filter.Paste(text) {
+		return false
 	}
-	return nil
+	m.Refresh()
+	return true
 }

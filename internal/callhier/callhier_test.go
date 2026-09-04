@@ -117,7 +117,9 @@ func TestApplyFillsChildrenAndEnterNavigates(t *testing.T) {
 	}
 }
 
-func TestExpandChildFetchesLazily(t *testing.T) {
+// TestExpandChildFetchesInDirection: the tree's fetch carries the overlay's
+// current direction (the tree mechanics themselves are hiertree's tests).
+func TestExpandChildFetchesInDirection(t *testing.T) {
 	m, rec := openModel(t)
 	m.Apply(ilsp.CallHierarchyCallsMsg{
 		ReqID:    rec.reqs[0].reqID,
@@ -126,13 +128,8 @@ func TestExpandChildFetchesLazily(t *testing.T) {
 	})
 	m.Update(key("down"))
 	m.Update(key("right"))
-	if len(rec.reqs) != 2 || rec.reqs[1].name != "main" {
+	if len(rec.reqs) != 2 || rec.reqs[1].name != "main" || !rec.reqs[1].incoming {
 		t.Fatalf("expanding the child should fetch its callers, got %+v", rec.reqs)
-	}
-	// A second expand while loading must not refetch.
-	m.Update(key("right"))
-	if len(rec.reqs) != 2 {
-		t.Fatalf("in-flight node refetched: %+v", rec.reqs)
 	}
 }
 
@@ -154,36 +151,6 @@ func TestTabTogglesDirectionAndDropsStaleReplies(t *testing.T) {
 	})
 	if strings.Contains(plain(m.View()), "stale") {
 		t.Error("stale reply should be dropped after a direction toggle")
-	}
-}
-
-func TestCollapseAndParentJump(t *testing.T) {
-	m, rec := openModel(t)
-	m.Apply(ilsp.CallHierarchyCallsMsg{
-		ReqID:    rec.reqs[0].reqID,
-		Incoming: true,
-		Calls: []ilsp.CallHierarchyEntry{
-			entry("main", "/proj/main.go", 8),
-			entry("other", "/proj/other.go", 2),
-		},
-	})
-	m.Update(key("down"))
-	m.Update(key("down")) // on "other"
-	m.Update(key("left")) // collapsed leaf: jump to parent (the root)
-	if m.cursor != 0 {
-		t.Fatalf("left on a collapsed node should land on the parent, cursor = %d", m.cursor)
-	}
-	m.Update(key("left")) // collapse the root
-	if strings.Contains(plain(m.View()), "main") {
-		t.Error("collapsing the root should hide its children")
-	}
-	// Re-expanding a loaded node must not refetch.
-	m.Update(key("right"))
-	if len(rec.reqs) != 1 {
-		t.Fatalf("re-expanding a loaded node refetched: %+v", rec.reqs)
-	}
-	if !strings.Contains(plain(m.View()), "main") {
-		t.Error("re-expand should show the cached children")
 	}
 }
 

@@ -196,7 +196,7 @@ func TestBulkMoveIntoDirectory(t *testing.T) {
 	m, cmd = m.Update(key("enter"))
 	m, _ = pumpScans(m, cmd)
 	if m.Prompting() {
-		t.Fatalf("the move must not leave a dialog open: %q", m.prompt.input)
+		t.Fatalf("the move must not leave a dialog open: %q", m.prompt.input.Text)
 	}
 	for _, f := range []string{"a.txt", "b.txt"} {
 		if _, err := os.Stat(filepath.Join(root, "sub", f)); err != nil {
@@ -304,7 +304,7 @@ func TestBulkMovePartialFailureReports(t *testing.T) {
 	if m.prompt == nil || m.prompt.kind != promptNotice {
 		t.Fatal("a partial failure must open the error dialog")
 	}
-	report := m.prompt.input
+	report := m.prompt.input.Text
 	for _, want := range []string{"moved 1 of 2", "a.txt", "already exists"} {
 		if !strings.Contains(report, want) {
 			t.Fatalf("partial-failure report %q must mention %q", report, want)
@@ -339,7 +339,7 @@ func TestBulkDeletePartialFailureReports(t *testing.T) {
 	if m.prompt == nil || m.prompt.kind != promptNotice {
 		t.Fatal("a partial failure must open the error dialog")
 	}
-	if got := m.prompt.input; !strings.Contains(got, "deleted 1 of 2") {
+	if got := m.prompt.input.Text; !strings.Contains(got, "deleted 1 of 2") {
 		t.Fatalf("report = %q, want the partial count", got)
 	}
 	if _, err := os.Stat(filepath.Join(root, "b.txt")); !os.IsNotExist(err) {
@@ -359,7 +359,7 @@ func TestBulkCopyPartialFailureReports(t *testing.T) {
 	if m.prompt == nil || m.prompt.kind != promptNotice {
 		t.Fatal("a partial failure must open the error dialog")
 	}
-	if got := m.prompt.input; !strings.Contains(got, "copied 1 of 2") {
+	if got := m.prompt.input.Text; !strings.Contains(got, "copied 1 of 2") {
 		t.Fatalf("report = %q, want the partial count", got)
 	}
 	if _, err := os.Stat(filepath.Join(root, "sub", "b.txt")); err != nil {
@@ -403,7 +403,7 @@ func TestMoveSelectionRejectsNonDirectory(t *testing.T) {
 	if m.prompt == nil || m.prompt.kind != promptNotice {
 		t.Fatal("a non-directory target must open the error dialog")
 	}
-	if got := m.prompt.input; !strings.Contains(got, "not a directory") {
+	if got := m.prompt.input.Text; !strings.Contains(got, "not a directory") {
 		t.Fatalf("error = %q, want the not-a-directory message", got)
 	}
 	if _, err := os.Stat(filepath.Join(root, "a.txt")); err != nil {

@@ -252,7 +252,7 @@ func (m *Model) insertPlayFilter(msg InsertFilterMsg) tea.Cmd {
 		}
 	}
 	s := m.play
-	s.program, s.pos = f.Program, len([]rune(f.Program))
+	s.program.Set(f.Program)
 	s.histIdx, s.comp = -1, nil
 	s.setBufFocus(false)
 	s.status = "inserted filter " + f.Name
@@ -282,8 +282,7 @@ func (m *Model) deletePlayFilter(msg DeleteFilterMsg) {
 type playNamePrompt struct {
 	open    bool
 	rename  bool
-	input   string
-	pos     int
+	input   ui.Field
 	err     string
 	dialect jqplay.Dialect // which pair of libraries the name lands in (#2039)
 	scope   jqplay.Scope
@@ -304,7 +303,7 @@ func (m *Model) startPlaySavePrompt() {
 		m.host.Notify(host.Info, "filters: open the jq or yq playground first")
 		return
 	}
-	program := strings.TrimSpace(m.play.program)
+	program := strings.TrimSpace(m.play.program.Text)
 	if program == "" || program == "." {
 		// The identity program is the playground's default, not a filter.
 		m.play.status = "nothing to save — write a program first"
@@ -321,8 +320,7 @@ func (m *Model) startPlayRenamePrompt(msg RenameFilterPromptMsg) {
 		m.host.Notify(host.Warn, msg.Dialect.Name()+" filter "+msg.Name+" is gone")
 		return
 	}
-	m.playName = playNamePrompt{open: true, rename: true, dialect: msg.Dialect, scope: msg.Scope, from: msg.Name, input: msg.Name}
-	m.playName.pos = len([]rune(m.playName.input))
+	m.playName = playNamePrompt{open: true, rename: true, dialect: msg.Dialect, scope: msg.Scope, from: msg.Name, input: ui.NewField(msg.Name)}
 	m.openPlayNamePrompt()
 }
 
@@ -339,7 +337,7 @@ func (m *Model) openPlayNamePrompt() {
 // stores is a save under the other scope.
 func (m *Model) renderPlayNamePrompt() {
 	p := m.playName
-	line := "> " + ui.CursorView(p.input, p.pos)
+	line := "> " + p.input.View()
 	body := line
 	if p.rename {
 		body += "\n\nrenaming the " + p.scope.String() + " filter " + p.from
@@ -386,8 +384,7 @@ func (m Model) updatePlayNamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if out, pos, handled, changed := ui.EditKey(msg, m.playName.input, m.playName.pos); handled {
-		m.playName.input, m.playName.pos = out, pos
+	if handled, changed := m.playName.input.Key(msg); handled {
 		if changed {
 			m.playName.err = "" // a new name re-arms the overwrite guard
 		}
@@ -401,7 +398,7 @@ func (m Model) updatePlayNamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // overwrite, a store that would not write).
 func (m *Model) commitPlayNamePrompt() bool {
 	p := &m.playName
-	name := strings.TrimSpace(p.input)
+	name := strings.TrimSpace(p.input.Text)
 	if name == "" {
 		p.err = "a saved filter needs a name"
 		return false
@@ -452,11 +449,9 @@ func (m *Model) closePlayNamePrompt() {
 // pastePlayNamePrompt inserts a bracketed paste into the name input at its
 // cursor (#1873), flattened like every other single-field prompt.
 func (m *Model) pastePlayNamePrompt(text string) bool {
-	out, pos, changed := ui.PasteText(m.playName.input, m.playName.pos, text)
-	if !changed {
+	if !m.playName.input.Paste(text) {
 		return false
 	}
-	m.playName.input, m.playName.pos = out, pos
 	m.playName.err = "" // a new name re-arms the overwrite guard
 	m.renderPlayNamePrompt()
 	return true

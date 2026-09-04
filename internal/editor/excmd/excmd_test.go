@@ -127,3 +127,30 @@ func TestResolveMissingSelection(t *testing.T) {
 		t.Fatal("expected error for missing visual selection")
 	}
 }
+
+// TestScanDelim covers the shared delimiter scanner used both by address
+// pattern parsing here and by ":s" pattern/replacement parsing in the editor
+// package (internal/editor/substitute.go).
+func TestScanDelim(t *testing.T) {
+	cases := []struct {
+		name     string
+		in       string
+		delim    byte
+		wantHead string
+		wantTail string
+	}{
+		{"empty", "", '/', "", ""},
+		{"no delim consumes all", "abc", '/', "abc", ""},
+		{"stops at delim", "abc/def", '/', "abc", "def"},
+		{"escaped delim becomes literal", `a\/b/rest`, '/', "a/b", "rest"},
+		{"other backslash kept verbatim", `a\nb/rest`, '/', `a\nb`, "rest"},
+		{"trailing backslash kept", `ab\`, '/', `ab\`, ""},
+	}
+	for _, c := range cases {
+		head, tail := ScanDelim(c.in, c.delim)
+		if head != c.wantHead || tail != c.wantTail {
+			t.Errorf("%s: ScanDelim(%q, %q) = (%q, %q), want (%q, %q)",
+				c.name, c.in, c.delim, head, tail, c.wantHead, c.wantTail)
+		}
+	}
+}

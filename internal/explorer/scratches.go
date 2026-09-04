@@ -445,8 +445,7 @@ func (m *Model) promptScratchRename() {
 	m.prompt = &prompt{
 		kind:   promptInput,
 		title:  fmt.Sprintf("Rename scratch %q to:", name),
-		input:  name,
-		pos:    sel,
+		input:  ui.Field{Text: name, Cur: sel},
 		selEnd: sel,
 		anchor: path,
 		accept: func(mm *Model, newName string) tea.Cmd {

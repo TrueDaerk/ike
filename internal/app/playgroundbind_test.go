@@ -82,7 +82,7 @@ func TestPlaygroundReturnsWithSourceTab(t *testing.T) {
 	if !m.playInlineActive(key) {
 		t.Fatal("returning to the source document must show the playground again")
 	}
-	if got := m.play.program; got != ".foo[1]" {
+	if got := m.play.program.Text; got != ".foo[1]" {
 		t.Errorf("program = %q, want the query it was left with", got)
 	}
 	if got := m.play.result.Text(); got != want {

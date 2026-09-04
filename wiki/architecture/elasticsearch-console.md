@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Elasticsearch Console
-description: "#1927 — a read-only console per configured cluster: index sidebar with doc counts, paged hit grid over from/size, per-index Query-DSL buffers as real files with mapping-aware completion; every cluster request asynchronous"
+description: "#1927/#2468 — a read-only console per configured cluster: index sidebar with doc counts, paged hit grid over from/size, per-index Query-DSL buffers as real files with mapping-aware completion; every cluster request asynchronous; sidebar and grid rows drawn by the shared internal/gridview renderer"
 resource: internal/espane
 tags: [architecture, elasticsearch, pane, read-only, grid, completion, async]
-timestamp: 2026-08-28T12:00:00Z
+timestamp: 2026-09-03T00:00:00Z
 ---
 
 # Elasticsearch Console (#1927)
@@ -25,6 +25,9 @@ client can only form `_cat`, `_mapping`, `_search` requests.
 - **`internal/espane`** is the pane model: regions, cursors, paging, render —
   the data viewer's layout and keys (see [Data Viewer](/architecture/data-viewer.md)),
   bound to one configured endpoint by name.
+- **`internal/gridview`** draws the sidebar column and the grid rows for both
+  panes (#2468) — see the data viewer's
+  [shared renderer](/architecture/data-viewer.md#the-shared-renderer-2468).
 - **`internal/app/es.go`** wires it in: per-endpoint palette commands, result
   routing by pane key, the read-only JSON views, and `es.run`.
 
@@ -41,6 +44,17 @@ fetch is stamped with a sequence number; a result superseded by a newer fetch
 (or a switched index) is dropped on landing. One page fetch is in flight at a
 time — holding `n` down must not fan out a request per keypress — while an
 index switch or a query run supersedes the flight rather than waiting.
+
+What the two panes *do* share is the drawing (#2468): the console's
+`renderSidebar` and `dataRow` are thin calls into `gridview.Sidebar`,
+`gridview.HeaderRow` and `gridview.DataRow` — the same width budget, `∅` for
+an absent field, the same selection styling — with the console's own
+`sidebarRow` (alias tag, `?` count) plugged in as the row callback, and one
+hit row converted from `esq.Cell` to `gridview.Cell` as it is drawn. Both
+cursors keep their windows through `ui.ClampWindow` (#2462), which pulls a
+window parked past the end back up when a shorter page lands under it. The
+rendering is pinned byte-for-byte by the golden views in
+`internal/espane/testdata`.
 
 ## Connections
 

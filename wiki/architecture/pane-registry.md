@@ -4,7 +4,7 @@ title: Pane Registry & Multiple Editors
 description: The registry mapping layout-leaf instance keys to live pane components — the explorer singleton plus N editors — with focus as the focused leaf and open-in-new-pane intent.
 resource: internal/pane/registry.go
 tags: [architecture, panes, registry, editors, focus, open-target, persistence]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-03T12:00:00Z
 ---
 
 # Pane Registry & Multiple Editors
@@ -115,6 +115,42 @@ fields with a `*pane.Registry` plus a `recentEditor` key:
   `AddEditor` + `layout.SplitLeaf` then loads into the fresh instance. A claiming
   `FileHandler` still gets first refusal regardless of target, and
   `EventFileOpened` hooks fire either way.
+
+## Shared tool-window wiring (#2463)
+
+Every singleton tool window (VCS, Problems, Dependencies, Time, Breakpoints,
+Test Results, Issues, Xdebug Doctor, LSP Doctor, DOM, Structure, Usages) wears
+the same three-branch toggle, so it lives once in
+`internal/app/panelwiring.go` instead of twelve times:
+
+- `togglePanel(key, open)` — **no pane** → remember the focused pane and run
+  `open`; **open but unfocused** → remember and focus it; **focused** → hand
+  focus back. `togglePanelWith(key, open, onFocus)` adds the hook the two
+  windows that do something on a mere refocus need: the Issues window clears
+  the forge unread badge (#2086), the LSP Doctor starts a fresh check run
+  (#2164).
+- `panelReturnTarget(key)` is the toggle-off fallback chain: the remembered
+  pane while it is still part of the layout, else `activeEditorKey`, else the
+  explorer. The remembered pane per window lives in one
+  `Model.panelReturnFocus` map keyed by pane key (the twelve `xReturnFocus`
+  fields folded into one), written through `setPanelReturn`, which creates the
+  map on demand.
+- `ensurePanel(key, open)` opens a window that is not part of the layout and
+  leaves an open one alone, focus included — what the *result-driven* opens
+  need (a find-usages result, the auto-open of the Test Results pane), because
+  they decide focus for themselves afterwards. `showPanel(key, open)` is
+  `ensurePanel` plus the focus branch, for the notification paths that reveal
+  a window rather than toggle it.
+- `openToolPane(add, zone, after)` is the placement half every `openXPanel`
+  shares: split the active editor (fallback: the focused leaf), mint the pane,
+  `insertToolPane` at `zone` (the adaptive `auxZone`, or a `fixedZone`
+  constant), seed it via `after`, focus, re-layout and persist. A failed split
+  closes the pane again and reports `false`, which is how the openers that
+  return a seeding command bail out.
+
+The **terminal** and the custom tool panes keep their own state machine on the
+workspace's `ReturnFocus` (see [Workspace](./workspace.md)), because it is
+per-workspace rather than per pane key.
 
 ## Terminal & tool sessions
 

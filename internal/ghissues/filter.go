@@ -178,7 +178,7 @@ func (m *Model) prLess(scores map[int]int) func(a, b int) bool {
 // order. Every comparator is stable, so entries the order cannot separate
 // (missing timestamps, equal scores) keep the listing order.
 func (m *Model) effectiveSort() SortOrder {
-	if m.sort == SortRelevance && m.fInput == "" {
+	if m.sort == SortRelevance && m.fInput.Empty() {
 		return SortNewest
 	}
 	return m.sort

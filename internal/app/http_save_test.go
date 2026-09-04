@@ -52,13 +52,13 @@ func TestHTTPSaveResponseWritesRawBody(t *testing.T) {
 	if !m.httpSavePromptOpen() {
 		t.Fatal("http.saveResponse must open the path prompt")
 	}
-	if !strings.HasSuffix(m.httpSaveInput, ".json") {
-		t.Errorf("prefilled name %q, want a .json proposal", m.httpSaveInput)
+	if !strings.HasSuffix(m.httpSaveInput.Text, ".json") {
+		t.Errorf("prefilled name %q, want a .json proposal", m.httpSaveInput.Text)
 	}
 
 	// Replace the proposal with an absolute path in a temp dir.
 	dest := filepath.Join(t.TempDir(), "body.json")
-	m.httpSaveInput, m.httpSavePos = "", 0
+	m.httpSaveInput.Text, m.httpSaveInput.Cur = "", 0
 	m = typePath(t, m, dest)
 
 	if m.httpSavePromptOpen() {
@@ -98,12 +98,12 @@ func TestHTTPSaveResponseWritesBinaryBody(t *testing.T) {
 	if !m.httpSavePromptOpen() {
 		t.Fatal("S must open the path prompt")
 	}
-	if m.httpSaveInput != "logo.png" {
-		t.Errorf("prefilled name %q, want logo.png", m.httpSaveInput)
+	if m.httpSaveInput.Text != "logo.png" {
+		t.Errorf("prefilled name %q, want logo.png", m.httpSaveInput.Text)
 	}
 
 	dest := filepath.Join(t.TempDir(), "out.png")
-	m.httpSaveInput, m.httpSavePos = "", 0
+	m.httpSaveInput.Text, m.httpSaveInput.Cur = "", 0
 	m = typePath(t, m, dest)
 
 	got, err := os.ReadFile(dest)
@@ -125,7 +125,7 @@ func TestHTTPSaveResponseIntoDirectory(t *testing.T) {
 	dir := t.TempDir()
 	out, _ = m.Update(HTTPSaveResponseMsg{})
 	m = out.(Model)
-	m.httpSaveInput, m.httpSavePos = "", 0
+	m.httpSaveInput.Text, m.httpSaveInput.Cur = "", 0
 	m = typePath(t, m, dir)
 
 	if _, err := os.Stat(filepath.Join(dir, "42.json")); err != nil {
@@ -162,7 +162,7 @@ func TestHTTPSavePromptEscapeKeepsFile(t *testing.T) {
 	m = out.(Model)
 
 	dest := filepath.Join(t.TempDir(), "nope.json")
-	m.httpSaveInput, m.httpSavePos = dest, len(dest)
+	m.httpSaveInput.Text, m.httpSaveInput.Cur = dest, len(dest)
 	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = out.(Model)
 

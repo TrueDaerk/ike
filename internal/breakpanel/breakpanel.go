@@ -91,8 +91,7 @@ type Model struct {
 	editField metaField
 	editPath  string
 	editLine  int
-	editBuf   []rune
-	editCur   int
+	edit      ui.Field
 	// editErr holds the validation complaint of the last rejected commit
 	// (#2245); it renders under the editor and clears on the next keystroke.
 	editErr string
@@ -426,8 +425,8 @@ func rowGlyph(k debug.Kind, enabled bool) string {
 // rejected commit (#2245) appends the validation complaint below it.
 func (m *Model) renderEditRow(pal *theme.Palette, r row) string {
 	prefix := "   " + strconv.Itoa(r.line+1) + " " + m.editField.label() + ": "
-	line := append([]rune(prefix), m.editBuf...)
-	ci := len([]rune(prefix)) + m.editCur
+	line := append([]rune(prefix), m.edit.Runes()...)
+	ci := len([]rune(prefix)) + m.edit.Cur
 	if m.editErr != "" {
 		// The complaint rides the same row — the list is one row per index,
 		// so a second line would shift every row below it (#2245).
@@ -481,21 +480,7 @@ func (m *Model) bodyHeight() int {
 
 // clampScroll keeps the cursor valid and inside the visible window.
 func (m *Model) clampScroll() {
-	if m.cursor > len(m.rows)-1 {
-		m.cursor = len(m.rows) - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.top > m.cursor {
-		m.top = m.cursor
-	}
-	if h := m.bodyHeight(); m.cursor >= m.top+h {
-		m.top = m.cursor - h + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	ui.ClampWindow(&m.cursor, &m.top, len(m.rows), m.bodyHeight())
 }
 
 // clip bounds one rendered line to the panel width.

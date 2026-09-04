@@ -178,8 +178,8 @@ func TestAnchoredRenamePromptStaysClickable(t *testing.T) {
 	m, _ = pumpScans(m, cmd)
 	bx, by, _, _, _ := m.promptBoxOrigin()
 	m.PromptMouseClick(bx+2+len(promptInputPrefix)+2, by+2)
-	if m.prompt.pos != 2 {
-		t.Fatalf("pos after click at col 2 = %d want 2", m.prompt.pos)
+	if m.prompt.input.Cur != 2 {
+		t.Fatalf("pos after click at col 2 = %d want 2", m.prompt.input.Cur)
 	}
 }
 

@@ -49,8 +49,7 @@ func (f bpField) label() string {
 type bpFormState struct {
 	path string // store key (project-relative), the store's own key
 	line int    // 0-based buffer line
-	vals [bpFieldCount]string
-	curs [bpFieldCount]int
+	vals [bpFieldCount]ui.Field
 	// field is the focused row; it never rests on a field the adapter cannot
 	// honour.
 	field bpField
@@ -114,12 +113,9 @@ func (m *Model) openBreakpointForm(path string, line int) {
 	}
 	meta := m.bpts.MetaAt(path, line)
 	s := &bpFormState{path: path, line: line, caps: m.breakpointCaps()}
-	s.vals[bpFieldCondition] = meta.Condition
-	s.vals[bpFieldHit] = meta.HitCondition
-	s.vals[bpFieldLog] = meta.LogMessage
-	for f := bpField(0); f < bpFieldCount; f++ {
-		s.curs[f] = len([]rune(s.vals[f]))
-	}
+	s.vals[bpFieldCondition] = ui.NewField(meta.Condition)
+	s.vals[bpFieldHit] = ui.NewField(meta.HitCondition)
+	s.vals[bpFieldLog] = ui.NewField(meta.LogMessage)
 	// Focus the first field the adapter can honour; all-disabled leaves the
 	// form open read-only, so the stored values are still visible.
 	s.field = bpFieldCount
@@ -218,15 +214,15 @@ func (m *Model) renderBreakpointForm() {
 			// Disabled: the stored value stays visible (it survives in the
 			// store and reaches an adapter that does support it), marked as
 			// ignored by this session.
-			val := s.vals[f]
+			val := s.vals[f].Text
 			if val == "" {
 				val = "—"
 			}
 			add("  " + f.label() + windowedPlain(val, avail) + "   (unsupported by adapter)")
 		case f == s.field:
-			add(marker + f.label() + windowedInput(s.vals[f], s.curs[f], avail))
+			add(marker + f.label() + windowedInput(s.vals[f].Text, s.vals[f].Cur, avail))
 		default:
-			add(marker + f.label() + windowedPlain(s.vals[f], avail))
+			add(marker + f.label() + windowedPlain(s.vals[f].Text, avail))
 		}
 	}
 	add("")
@@ -272,8 +268,7 @@ func (m Model) updateBreakpointForm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if s.field >= bpFieldCount {
 		return m, nil // every field disabled: read-only
 	}
-	if out, ncur, handled, _ := ui.EditKey(msg, s.vals[s.field], s.curs[s.field]); handled {
-		s.vals[s.field], s.curs[s.field] = out, ncur
+	if handled, _ := s.vals[s.field].Key(msg); handled {
 		s.err = ""
 		m.renderBreakpointForm()
 	}
@@ -305,9 +300,9 @@ func (m *Model) moveBreakpointFormField(delta int) {
 func (m Model) saveBreakpointForm() (tea.Model, tea.Cmd) {
 	s := m.bpForm
 	meta := debug.Meta{
-		Condition:    s.vals[bpFieldCondition],
-		HitCondition: s.vals[bpFieldHit],
-		LogMessage:   s.vals[bpFieldLog],
+		Condition:    s.vals[bpFieldCondition].Text,
+		HitCondition: s.vals[bpFieldHit].Text,
+		LogMessage:   s.vals[bpFieldLog].Text,
 	}
 	// The fields are checked in render order, so the first complaint is the
 	// topmost one — the focus lands where the eye already is.
@@ -362,11 +357,9 @@ func (m *Model) pasteBreakpointForm(text string) bool {
 	if s == nil || s.field >= bpFieldCount {
 		return false
 	}
-	out, pos, changed := ui.PasteText(s.vals[s.field], s.curs[s.field], text)
-	if !changed {
+	if !s.vals[s.field].Paste(text) {
 		return false
 	}
-	s.vals[s.field], s.curs[s.field] = out, pos
 	s.err = ""
 	m.renderBreakpointForm()
 	return true

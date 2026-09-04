@@ -1,9 +1,9 @@
 ---
 type: concept
 title: Project Search (Find in Path)
-description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results.
+description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results — and the shared in-pane "/" search (ui.LineSearch) every viewer pane jumps through its matches with.
 resource: internal/search
-tags: [architecture, search, find-in-path]
+tags: [architecture, search, find-in-path, in-pane-search, ui]
 timestamp: 2026-09-03T00:00:00Z
 ---
 
@@ -53,6 +53,90 @@ The fallback's `.gitignore` matcher is deliberately small: directory rules
 prefixes, scoped per declaring directory as the walker descends. Negation
 (`!pattern`) is unsupported — when the fallback and rg disagree on an exotic
 pattern, rg is right.
+
+## In-pane search (#2461)
+
+Seven panes carry an incremental `/` search that jumps *within the pane* —
+the diff viewer, the markdown preview, the HTTP response pane, the notebook
+and hex viewers, the terminal's scrollback search and the explorer's speed
+search. Before #2461 each hand-wrote its own query/caret/open/matches/cur/
+wrapped tuple, and they had drifted: two were not live, two had no caret, one
+rendered its counter by hand, three matched case-insensitively while the rest
+matched smartcase. `internal/ui/linesearch.go` (`ui.LineSearch`) is now the
+one state and behaviour; the guard test `internal/ui/searchsweep_test.go`
+fails when a file outside `internal/ui` declares a hand-rolled search line
+(the state fields or a `searchKey`/`stepMatch`/`recomputeMatches` walker that
+does not go through the shared type) unless it is allowlisted with a reason.
+
+### The shared type
+
+```go
+// internal/ui/linesearch.go
+type LineSearch struct {
+    Field           // the query and its caret (#2459)
+    Open    bool    // the prompt holds the keyboard
+    Matches []int   // positions the query hits, ascending — rows, lines, cells, offsets
+    Cur     int     // index into Matches, -1 with none
+    Wrapped bool    // the last step came back around (#2410)
+}
+
+Start() / Close() / Reset()            // open on the last query · leave, keep · drop everything
+Key(msg) (handled, changed bool, action SearchAction)   // SearchAccept (enter) · SearchCancel (esc) · edits
+Paste(text) bool
+SetMatches([]int) / Recompute(n, hit)  // nearest surviving match, fresh walk
+Apply(pos) bool                        // enter's landing: first match at or after pos, else the first
+Step(delta) MatchStep                  // wrap at both ends
+StepFrom(pos, delta) / Locate(pos)     // for the panes whose cursor moves on its own
+Line() / LineStyled(dim, miss)         // "/query▏  3/17" · "1/12 (wrapped)" · "no matches"
+SmartCaseContains(pattern, text) / SmartCaseFold(pattern, text)
+```
+
+The pane keeps what differs: **how a match is found** (`SmartCaseContains`
+for most, the editor's compiled pattern for the HTTP pane, a byte sequence
+for the hex viewer), **how the view moves** to `Current()`, and whether esc
+**restores a saved anchor**. A pane whose matches carry more than a position
+(the HTTP pane's column spans, the notebook's cell/line pairs) keeps that
+detail in a slice aligned with `Matches`.
+
+### Unified semantics
+
+- **`/` and the find chord open the prompt on the last query**, caret at its
+  end — refining is an edit, not a retype. A live selection prefill (HTTP
+  pane) outranks the remembered query.
+- **Typing narrows live**: the match set and the counter follow every
+  keystroke (paste included), and the current match stays on the nearest
+  surviving position at or after the one it was on, so the view is not
+  thrown around. An edit drops the `(wrapped)` marker — it describes one
+  step, not the search (#2410).
+- **enter closes the prompt and keeps the matches** for `n`/`N` and
+  `cmd+g`/`cmd+shift+g` (`NextMatch`/`PrevMatch` answer whenever a search is
+  *active* — prompt open or query applied). The landing is the first match
+  at or after the view/cursor, wrapping to the first.
+- **esc while the prompt is open closes it and drops the search**; the panes
+  with a saved anchor restore it. esc at rest drops an applied search where
+  the pane keeps one.
+- **The prompt row reads the same everywhere**: slash prefix, the query with
+  its block caret (plain once applied), then the counter two cells on —
+  `3/17`, `1/12 (wrapped)` or `no matches` — in the pane's dim/error colours.
+- **One matching rule**: smartcase substring (an all-lowercase query folds
+  case, an uppercase rune makes it exact), the editor's `/` rule (#257).
+
+### Adopters and deviations
+
+| Pane | Match position | Jumps while typing | esc (prompt open) | Deviations |
+| --- | --- | --- | --- | --- |
+| Diff viewer (`internal/diff/search.go`) | diff row | no — enter lands at/after the view top | drops | — |
+| Markdown preview (`internal/preview/search.go`) | rendered line | no — enter lands at/after the view top | drops | — |
+| HTTP response (`internal/httppane/httppane.go`) | composed row (+ column span) | yes | drops | matcher is `internal/editor/search` (smartcase, spans); a live stream appends matches at the tail |
+| Notebook viewer (`internal/nbview/nbview.go`) | cell (+ source line) | no — enter lands at/after the cursor cell | drops | — |
+| Hex viewer (`internal/hexview/hexview.go`) | byte offset | no — enter lands at/after the cursor | drops | exact bytes via `ParseQuery`, never smartcase; a query that does not parse shows its error and keeps the line open on enter; past **16 MiB** (`liveScanMax`) the rescan waits for enter or a match step (`enter to search`); a capped enumeration renders `N+` |
+| Terminal scrollback (`internal/terminal/search.go`) | virtual line | yes — nearest match at or *above* the anchor | **restores** the scroll offset | enter *closes* the search entirely (the terminal keeps no applied state; reopen starts empty); `ctrl+n`/`ctrl+p`/arrows step; counter follows the current line under a growing scrollback |
+| Explorer speed search (`internal/explorer/search.go`) | visible row | yes — prefix match first, then contains, from the anchor | **restores** the cursor row | enter closes the search entirely (reopen starts empty); `ctrl+n`/`ctrl+p`/arrows step; counter follows the cursor (`0/17` when it wandered off) |
+
+Not adopters, by design (allowlisted in the guard test): the editor's own vim
+`/` (regex, history, direction), the terminal copy mode's `/` and `?`
+(directional accept-then-repeat), the settings and TODO-index *filters* and
+the DOM inspector's CSS-selector matches.
 
 ## Find-in-path overlay (#85)
 

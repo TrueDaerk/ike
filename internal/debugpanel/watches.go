@@ -113,8 +113,7 @@ func (m *Model) startWatchAdd() {
 	m.editing = true
 	m.editWatch = true
 	m.editWatchIdx = -1
-	m.editBuf = nil
-	m.editCur = 0
+	m.edit.Clear()
 }
 
 // startWatchEdit opens the inline editor on watch row n's expression.
@@ -122,8 +121,7 @@ func (m *Model) startWatchEdit(n *varNode) {
 	m.editing = true
 	m.editWatch = true
 	m.editWatchIdx = n.watchIdx
-	m.editBuf = []rune(n.v.Name)
-	m.editCur = len(m.editBuf)
+	m.edit.Set(n.v.Name)
 }
 
 // commitWatch turns the closed editor's text into the watch mutation message:

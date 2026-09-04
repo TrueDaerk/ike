@@ -106,21 +106,21 @@ func TestWSInputHistory(t *testing.T) {
 	}
 	typeText(m, "dra")
 	wsKey(m, "up")
-	if m.wsText != "two" {
-		t.Fatalf("first up: %q", m.wsText)
+	if m.wsText.Text != "two" {
+		t.Fatalf("first up: %q", m.wsText.Text)
 	}
 	wsKey(m, "up")
-	if m.wsText != "one" {
-		t.Fatalf("second up: %q", m.wsText)
+	if m.wsText.Text != "one" {
+		t.Fatalf("second up: %q", m.wsText.Text)
 	}
 	wsKey(m, "up") // past the oldest: stays
-	if m.wsText != "one" {
-		t.Fatalf("past oldest: %q", m.wsText)
+	if m.wsText.Text != "one" {
+		t.Fatalf("past oldest: %q", m.wsText.Text)
 	}
 	wsKey(m, "down")
 	wsKey(m, "down")
-	if m.wsText != "dra" {
-		t.Fatalf("draft not restored: %q", m.wsText)
+	if m.wsText.Text != "dra" {
+		t.Fatalf("draft not restored: %q", m.wsText.Text)
 	}
 }
 

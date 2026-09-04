@@ -30,12 +30,12 @@ func TestPromptWordAndLineKills(t *testing.T) {
 	// Drop the preselection first: an arrow keeps the text (#1047).
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt})
-	if m.prompt.input != "a." {
-		t.Fatalf("alt+backspace: %q", m.prompt.input)
+	if m.prompt.input.Text != "a." {
+		t.Fatalf("alt+backspace: %q", m.prompt.input.Text)
 	}
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModSuper})
-	if m.prompt.input != "" || m.prompt.pos != 0 {
-		t.Fatalf("super+backspace: %q/%d", m.prompt.input, m.prompt.pos)
+	if m.prompt.input.Text != "" || m.prompt.input.Cur != 0 {
+		t.Fatalf("super+backspace: %q/%d", m.prompt.input.Text, m.prompt.input.Cur)
 	}
 }
 
@@ -43,16 +43,16 @@ func TestPromptWordMotion(t *testing.T) {
 	m := renamePrompt(t)
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnd}) // "a.txt", cursor 5
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt})
-	if m.prompt.pos != 2 {
-		t.Fatalf("alt+left: cursor = %d, want 2", m.prompt.pos)
+	if m.prompt.input.Cur != 2 {
+		t.Fatalf("alt+left: cursor = %d, want 2", m.prompt.input.Cur)
 	}
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModSuper})
-	if m.prompt.pos != 0 {
-		t.Fatalf("super+left: cursor = %d, want 0", m.prompt.pos)
+	if m.prompt.input.Cur != 0 {
+		t.Fatalf("super+left: cursor = %d, want 0", m.prompt.input.Cur)
 	}
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModSuper})
-	if m.prompt.pos != 5 {
-		t.Fatalf("super+right: cursor = %d, want 5", m.prompt.pos)
+	if m.prompt.input.Cur != 5 {
+		t.Fatalf("super+right: cursor = %d, want 5", m.prompt.input.Cur)
 	}
 }
 
@@ -64,8 +64,8 @@ func TestPromptPreselectStillReplacedOnType(t *testing.T) {
 		t.Fatalf("selection = [%d,%d), want the stem", m.prompt.selStart, m.prompt.selEnd)
 	}
 	m, _ = send(m, key("zz"))
-	if m.prompt.input != "zz.txt" || m.prompt.pos != 2 {
-		t.Fatalf("typing over the stem: %q/%d", m.prompt.input, m.prompt.pos)
+	if m.prompt.input.Text != "zz.txt" || m.prompt.input.Cur != 2 {
+		t.Fatalf("typing over the stem: %q/%d", m.prompt.input.Text, m.prompt.input.Cur)
 	}
 }
 
@@ -77,7 +77,7 @@ func TestPromptWordKillWithPreselection(t *testing.T) {
 	if m.prompt.selStart != m.prompt.selEnd {
 		t.Fatalf("selection must be dropped, got [%d,%d)", m.prompt.selStart, m.prompt.selEnd)
 	}
-	if m.prompt.input != ".txt" {
-		t.Fatalf("alt+backspace over the stem: %q", m.prompt.input)
+	if m.prompt.input.Text != ".txt" {
+		t.Fatalf("alt+backspace over the stem: %q", m.prompt.input.Text)
 	}
 }

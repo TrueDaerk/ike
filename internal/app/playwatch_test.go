@@ -53,18 +53,18 @@ func TestJQPlaygroundFollowsExternalChange(t *testing.T) {
 	if got := m.play.result.Text(); got != "1" {
 		t.Fatalf("result = %q, want the original value", got)
 	}
-	pos, histIdx := m.play.pos, m.play.histIdx
+	pos, histIdx := m.play.program.Cur, m.play.histIdx
 
 	m = playExternalWrite(t, m, path, `{"foo":42}`)
 
 	if got := m.play.result.Text(); got != "42" {
 		t.Fatalf("result = %q, want the value from the changed file", got)
 	}
-	if m.play.program != ".foo" {
-		t.Errorf("program = %q, the query must survive the refresh", m.play.program)
+	if m.play.program.Text != ".foo" {
+		t.Errorf("program = %q, the query must survive the refresh", m.play.program.Text)
 	}
-	if m.play.pos != pos || m.play.histIdx != histIdx {
-		t.Errorf("caret/history moved: pos %d→%d, histIdx %d→%d", pos, m.play.pos, histIdx, m.play.histIdx)
+	if m.play.program.Cur != pos || m.play.histIdx != histIdx {
+		t.Errorf("caret/history moved: pos %d→%d, histIdx %d→%d", pos, m.play.program.Cur, histIdx, m.play.histIdx)
 	}
 	if !strings.Contains(m.play.resultEd.Text(), "42") {
 		t.Errorf("result buffer = %q, want the refreshed result", m.play.resultEd.Text())

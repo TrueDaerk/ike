@@ -15,7 +15,6 @@ import (
 	"ike/internal/host"
 	"ike/internal/httpclient"
 	"ike/internal/pathcomplete"
-	"ike/internal/ui"
 )
 
 // http_save.go writes the shown response's body to a file (#2059).
@@ -40,8 +39,7 @@ func (m *Model) startHTTPSaveResponse() {
 		return
 	}
 	m.httpSaveOpen = true
-	m.httpSaveInput = httpResponseFileName(resp)
-	m.httpSavePos = len([]rune(m.httpSaveInput))
+	m.httpSaveInput.Set(httpResponseFileName(resp))
 	m.renderHTTPSavePrompt(nil)
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -75,25 +73,9 @@ func (m Model) httpSavePromptOpen() bool { return m.httpSaveOpen && m.shell.IsOp
 // renderHTTPSavePrompt (re)fills the shell for the current input; candidates
 // (from the last tab press) render underneath, as in the other path prompts.
 func (m *Model) renderHTTPSavePrompt(candidates []string) {
-	line := "> " + ui.CursorView(m.httpSaveInput, m.httpSavePos)
-	const maxLines = 8
-	var sug string
-	if n := len(candidates); n > 0 {
-		shown := candidates
-		if n > maxLines {
-			shown = candidates[:maxLines]
-		}
-		sug = "\n\n  " + strings.Join(shown, "\n  ")
-		if n > maxLines {
-			sug += fmt.Sprintf("\n  … +%d more", n-maxLines)
-		}
-	}
-	m.shell.SetContent(ui.ModelContent{
-		Heading: "Save response body to file",
-		Body: func() string {
-			return line + sug + "\n\nrelative to the project root · tab complete · enter save · esc cancel"
-		},
-	})
+	m.renderCompletionPrompt(m.httpSaveInput, candidates,
+		"Save response body to file",
+		"relative to the project root · tab complete · enter save · esc cancel")
 }
 
 // updateHTTPSavePrompt consumes every key while the save prompt is open: tab
@@ -101,8 +83,7 @@ func (m *Model) renderHTTPSavePrompt(candidates []string) {
 func (m Model) updateHTTPSavePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	closePrompt := func() {
 		m.httpSaveOpen = false
-		m.httpSaveInput = ""
-		m.httpSavePos = 0
+		m.httpSaveInput.Clear()
 		m.shell.Close()
 	}
 	var candidates []string
@@ -111,7 +92,7 @@ func (m Model) updateHTTPSavePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		closePrompt()
 		return m, nil
 	case msg.Code == tea.KeyEnter:
-		target := strings.TrimSpace(m.httpSaveInput)
+		target := strings.TrimSpace(m.httpSaveInput.Text)
 		closePrompt()
 		if target == "" {
 			return m, nil
@@ -119,14 +100,11 @@ func (m Model) updateHTTPSavePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.saveHTTPResponseBody(target)
 		return m, nil
 	case msg.Code == tea.KeyTab:
-		res := pathcomplete.Complete(m.httpSaveInput)
-		m.httpSaveInput = res.Completed
-		m.httpSavePos = len([]rune(m.httpSaveInput))
+		res := pathcomplete.Complete(m.httpSaveInput.Text)
+		m.httpSaveInput.Set(res.Completed)
 		candidates = res.Candidates
 	default:
-		if out, pos, handled, _ := ui.EditKey(msg, m.httpSaveInput, m.httpSavePos); handled {
-			m.httpSaveInput, m.httpSavePos = out, pos
-		}
+		m.httpSaveInput.Key(msg)
 	}
 	m.renderHTTPSavePrompt(candidates)
 	return m, nil
@@ -135,11 +113,9 @@ func (m Model) updateHTTPSavePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // pasteHTTPSavePrompt inserts a paste into the path input at its cursor
 // (#1873), like every other single-field prompt.
 func (m *Model) pasteHTTPSavePrompt(text string) bool {
-	out, pos, changed := ui.PasteText(m.httpSaveInput, m.httpSavePos, strings.TrimSpace(text))
-	if !changed {
+	if !m.httpSaveInput.Paste(strings.TrimSpace(text)) {
 		return false
 	}
-	m.httpSaveInput, m.httpSavePos = out, pos
 	m.renderHTTPSavePrompt(nil)
 	return true
 }

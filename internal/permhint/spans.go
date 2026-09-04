@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"ike/internal/lang"
+	"ike/internal/linescan"
 )
 
 // spans.go is the context half of the permission hint (#1656): where in a
@@ -70,7 +71,7 @@ const (
 func shellLineSpans(li int, runes []rune) []lang.Span {
 	var out []lang.Span
 	cmd, wantValue := shellNone, false
-	for _, w := range words(runes, 0) {
+	for _, w := range linescan.Words(runes, 0) {
 		tok := string(runes[w[0]:w[1]])
 		if strings.HasPrefix(tok, "#") {
 			break // the rest of the line is a comment
@@ -176,7 +177,7 @@ func DockerfileSpans(lines []string) []lang.Span {
 	var out []lang.Span
 	for li, line := range lines {
 		runes := []rune(line)
-		ws := words(runes, 0)
+		ws := linescan.Words(runes, 0)
 		if len(ws) == 0 {
 			continue
 		}
@@ -350,9 +351,9 @@ func YAMLSpans(lines []string) []lang.Span {
 // ("- mode: 0644") and a surrounding quote is trimmed off the value, so the
 // span covers the literal itself and not the scalar's chrome.
 func yamlKeySpan(li int, runes []rune) (lang.Span, bool) {
-	i := skipSpace(runes, 0)
-	for i < len(runes) && runes[i] == '-' && i+1 < len(runes) && isSpace(runes[i+1]) {
-		i = skipSpace(runes, i+1)
+	i := linescan.SkipSpace(runes, 0)
+	for i < len(runes) && runes[i] == '-' && i+1 < len(runes) && linescan.IsSpace(runes[i+1]) {
+		i = linescan.SkipSpace(runes, i+1)
 	}
 	if i >= len(runes) || runes[i] == '#' {
 		return lang.Span{}, false
@@ -371,8 +372,8 @@ func yamlKeySpan(li int, runes []rune) (lang.Span, bool) {
 	if !modeKeys[strings.ToLower(key)] {
 		return lang.Span{}, false
 	}
-	start := skipSpace(runes, colon+1)
-	end := trimEnd(runes, start, commentStart(runes, start))
+	start := linescan.SkipSpace(runes, colon+1)
+	end := trimEnd(runes, start, linescan.CommentStart(runes, start))
 	if start >= end {
 		return lang.Span{}, false
 	}
@@ -388,62 +389,14 @@ func yamlKeySpan(li int, runes []rune) (lang.Span, bool) {
 	return lang.Span{}, false
 }
 
-// commentStart returns the column of a trailing " #" comment on a YAML line, or
-// the line end. Quoted regions are respected so a "#" inside a scalar does not
-// truncate the value.
-func commentStart(runes []rune, from int) int {
-	var quote rune
-	for i := from; i < len(runes); i++ {
-		switch {
-		case quote != 0:
-			if runes[i] == quote {
-				quote = 0
-			}
-		case runes[i] == '"' || runes[i] == '\'':
-			quote = runes[i]
-		case runes[i] == '#' && i > from && isSpace(runes[i-1]):
-			return i
-		}
-	}
-	return len(runes)
-}
-
 // --- shared scanning helpers -----------------------------------------------
 
-// words returns the [start, end) rune-column ranges of the whitespace-separated
-// words of runes from index i on.
-func words(runes []rune, i int) [][2]int {
-	var out [][2]int
-	for i < len(runes) {
-		i = skipSpace(runes, i)
-		if i >= len(runes) {
-			break
-		}
-		j := i
-		for j < len(runes) && !isSpace(runes[j]) {
-			j++
-		}
-		out = append(out, [2]int{i, j})
-		i = j
-	}
-	return out
-}
-
-func skipSpace(runes []rune, i int) int {
-	for i < len(runes) && isSpace(runes[i]) {
-		i++
-	}
-	return i
-}
-
 func trimEnd(runes []rune, start, end int) int {
-	for end > start && isSpace(runes[end-1]) {
+	for end > start && linescan.IsSpace(runes[end-1]) {
 		end--
 	}
 	return end
 }
-
-func isSpace(r rune) bool { return r == ' ' || r == '\t' }
 
 func isDigit(r rune) bool { return r >= '0' && r <= '9' }
 

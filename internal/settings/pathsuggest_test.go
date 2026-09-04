@@ -58,8 +58,8 @@ func TestToolchainCustomPathTabCompletes(t *testing.T) {
 	// Disambiguate and tab: the input extends to the full directory.
 	typeString(p, "ev")
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if want := filepath.Join(root, "Development") + string(filepath.Separator); p.inputField.text != want {
-		t.Fatalf("input after tab = %q, want %q", p.inputField.text, want)
+	if want := filepath.Join(root, "Development") + string(filepath.Separator); p.inputField.Text != want {
+		t.Fatalf("input after tab = %q, want %q", p.inputField.Text, want)
 	}
 
 	// esc clears the suggestions with the input.
@@ -84,8 +84,8 @@ func TestToolchainCustomPathTabCompletesFile(t *testing.T) {
 	p.custom = true
 	typeString(p, filepath.Join(root, "py"))
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if want := filepath.Join(root, "python3"); p.inputField.text != want {
-		t.Fatalf("input after tab = %q, want %q", p.inputField.text, want)
+	if want := filepath.Join(root, "python3"); p.inputField.Text != want {
+		t.Fatalf("input after tab = %q, want %q", p.inputField.Text, want)
 	}
 }
 
@@ -114,8 +114,8 @@ func TestPanelPathEntryTabCompletes(t *testing.T) {
 		t.Fatalf("view must show the suggestion:\n%s", v)
 	}
 	m.Update(key("tab"))
-	if want := filepath.Join(root, "Development") + string(filepath.Separator); ed.tf.text != want {
-		t.Fatalf("input after tab = %q, want %q", ed.tf.text, want)
+	if want := filepath.Join(root, "Development") + string(filepath.Separator); ed.tf.Text != want {
+		t.Fatalf("input after tab = %q, want %q", ed.tf.Text, want)
 	}
 	m.Update(key("esc"))
 	if ed.suggest.candidates != nil {
@@ -162,8 +162,8 @@ func TestPathEntryDirsOnlyCompletes(t *testing.T) {
 		m.Update(tea.KeyPressMsg{Text: string(r), Code: r})
 	}
 	m.Update(key("tab"))
-	if want := filepath.Join(root, "Development") + string(filepath.Separator); ed.tf.text != want {
-		t.Fatalf("input after tab = %q, want %q", ed.tf.text, want)
+	if want := filepath.Join(root, "Development") + string(filepath.Separator); ed.tf.Text != want {
+		t.Fatalf("input after tab = %q, want %q", ed.tf.Text, want)
 	}
 }
 

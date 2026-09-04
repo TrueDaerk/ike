@@ -14,15 +14,15 @@ func TestPrefillSelectsSelectionText(t *testing.T) {
 	m.SetSize(100, 30)
 	m.OpenPrefilled(t.TempDir(), "needle")
 
-	if m.query != "needle" || !m.preselect {
-		t.Fatalf("prefill should seed and select the query, query=%q preselect=%v", m.query, m.preselect)
+	if m.query.Text != "needle" || !m.preselect {
+		t.Fatalf("prefill should seed and select the query, query=%q preselect=%v", m.query.Text, m.preselect)
 	}
 	if !m.scanning {
 		t.Fatal("a prefilled query must start its scan immediately")
 	}
 	typeText(m, "x")
-	if m.query != "x" {
-		t.Fatalf("typing over the prefill should replace it, got %q", m.query)
+	if m.query.Text != "x" {
+		t.Fatalf("typing over the prefill should replace it, got %q", m.query.Text)
 	}
 }
 
@@ -34,8 +34,8 @@ func TestPrefillOverridesRememberedQuery(t *testing.T) {
 	m.Update(key("esc"))
 
 	m.OpenPrefilled(t.TempDir(), "fresh")
-	if m.query != "fresh" || !m.preselect {
-		t.Fatalf("prefill must override the remembered query, query=%q preselect=%v", m.query, m.preselect)
+	if m.query.Text != "fresh" || !m.preselect {
+		t.Fatalf("prefill must override the remembered query, query=%q preselect=%v", m.query.Text, m.preselect)
 	}
 }
 
@@ -50,8 +50,8 @@ func TestPrefillRejectsMultiLine(t *testing.T) {
 		m.Update(key("esc"))
 
 		m.OpenPrefilled(t.TempDir(), sel)
-		if m.query != "remembered" {
-			t.Fatalf("multi-line selection %q must not prefill, query=%q", sel, m.query)
+		if m.query.Text != "remembered" {
+			t.Fatalf("multi-line selection %q must not prefill, query=%q", sel, m.query.Text)
 		}
 	}
 
@@ -59,8 +59,8 @@ func TestPrefillRejectsMultiLine(t *testing.T) {
 		m := New(search.New(nil))
 		m.SetSize(100, 30)
 		m.OpenPrefilled(t.TempDir(), sel)
-		if m.query != "one line" {
-			t.Fatalf("linewise one-line selection %q should prefill %q, got %q", sel, "one line", m.query)
+		if m.query.Text != "one line" {
+			t.Fatalf("linewise one-line selection %q should prefill %q, got %q", sel, "one line", m.query.Text)
 		}
 	}
 }
@@ -73,8 +73,8 @@ func TestPrefillRegexModeEscapesMetacharacters(t *testing.T) {
 	m.Update(key("esc"))
 
 	m.OpenPrefilled(t.TempDir(), "foo(bar).*")
-	if want := `foo\(bar\)\.\*`; m.query != want {
-		t.Fatalf("regex-mode prefill should be escaped to %q, got %q", want, m.query)
+	if want := `foo\(bar\)\.\*`; m.query.Text != want {
+		t.Fatalf("regex-mode prefill should be escaped to %q, got %q", want, m.query.Text)
 	}
 	if m.lastQuery.Pattern != `foo\(bar\)\.\*` || !m.lastQuery.Regex {
 		t.Fatalf("scan should run the escaped pattern in regex mode, got %+v", m.lastQuery)
@@ -84,8 +84,8 @@ func TestPrefillRegexModeEscapesMetacharacters(t *testing.T) {
 	m.Update(key("esc"))
 	m.regex = false
 	m.OpenPrefilled(t.TempDir(), "foo(bar).*")
-	if m.query != "foo(bar).*" {
-		t.Fatalf("literal-mode prefill should be verbatim, got %q", m.query)
+	if m.query.Text != "foo(bar).*" {
+		t.Fatalf("literal-mode prefill should be verbatim, got %q", m.query.Text)
 	}
 }
 
@@ -98,8 +98,8 @@ func TestPrefillEmptySelectionKeepsBehavior(t *testing.T) {
 		m.Update(key("esc"))
 
 		m.OpenPrefilled(t.TempDir(), sel)
-		if m.query != "remembered" {
-			t.Fatalf("selection %q should not prefill, query=%q", sel, m.query)
+		if m.query.Text != "remembered" {
+			t.Fatalf("selection %q should not prefill, query=%q", sel, m.query.Text)
 		}
 	}
 }
@@ -110,7 +110,7 @@ func TestOpenReplacePrefilled(t *testing.T) {
 	m := New(search.New(nil))
 	m.SetSize(100, 30)
 	m.OpenReplacePrefilled(t.TempDir(), "needle")
-	if m.query != "needle" || !m.replaceMode || !m.preselect {
-		t.Fatalf("replace prefill: query=%q replaceMode=%v preselect=%v", m.query, m.replaceMode, m.preselect)
+	if m.query.Text != "needle" || !m.replaceMode || !m.preselect {
+		t.Fatalf("replace prefill: query=%q replaceMode=%v preselect=%v", m.query.Text, m.replaceMode, m.preselect)
 	}
 }

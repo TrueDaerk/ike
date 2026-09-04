@@ -212,7 +212,7 @@ func (c *keymapCapture) leaveLangMode() {
 // clear message: the id must have the qualifier shape and name a registered
 // language, or the binding could never match a buffer.
 func (c *keymapCapture) commitLang() tea.Cmd {
-	id := strings.TrimSpace(c.langField.text)
+	id := strings.TrimSpace(c.langField.Text)
 	if !keymap.ValidLangQualifier(id) {
 		c.langErr = "language id: lowercase letters, digits and -_+# only"
 		return nil
@@ -325,11 +325,11 @@ func (i *keymapImport) Update(key tea.KeyPressMsg) tea.Cmd {
 	case tea.KeyEnter:
 		return i.commit()
 	case tea.KeyTab:
-		i.path.Set(i.suggest.complete(i.path.text))
+		i.path.Set(i.suggest.complete(i.path.Text))
 		return nil
 	}
 	if _, changed := i.path.Handle(key); changed {
-		i.suggest.refresh(i.path.text)
+		i.suggest.refresh(i.path.Text)
 	}
 	return nil
 }
@@ -340,20 +340,20 @@ func (i *keymapImport) Paste(text string) bool {
 	if !i.path.Paste(text) {
 		return false
 	}
-	i.suggest.refresh(i.path.text)
+	i.suggest.refresh(i.path.Text)
 	return true
 }
 
 func (i *keymapImport) commit() tea.Cmd {
 	i.host.Pop()
-	return i.page.commitImportPath(i.path.text)
+	return i.page.commitImportPath(i.path.Text)
 }
 
 // Click takes a completion suggestion (line 2 onward).
 func (i *keymapImport) Click(_, y int) tea.Cmd {
 	if idx := y - 2; idx >= 0 && idx < len(i.suggest.candidates) && idx < maxSuggestLines {
 		i.path.Set(i.suggest.candidates[idx])
-		i.suggest.refresh(i.path.text)
+		i.suggest.refresh(i.path.Text)
 	}
 	return nil
 }
@@ -426,13 +426,13 @@ func (f *lspOverrideForm) Paste(text string) bool { return f.input.Paste(text) }
 
 func (f *lspOverrideForm) commit() tea.Cmd {
 	if f.kind == lspEditSettings {
-		if t := strings.TrimSpace(f.input.text); t != "" && !json.Valid([]byte(t)) {
+		if t := strings.TrimSpace(f.input.Text); t != "" && !json.Valid([]byte(t)) {
 			f.note = "not valid JSON"
 			return nil
 		}
 	}
 	f.host.Pop()
-	return f.page.commitOverride(f.lang, f.kind, f.input.text)
+	return f.page.commitOverride(f.lang, f.kind, f.input.Text)
 }
 
 func (f *lspOverrideForm) View(w, h int) string {
@@ -541,14 +541,14 @@ type debugMapForm struct {
 	host SubPanelHost
 	idx  int
 
-	field int
-	cur   int
-	form  [mapFieldCount]string
-	note  string
+	fieldNav // focused field + cursor within it (#888, #2466)
+	form     [mapFieldCount]string
+	note     string
 }
 
 func newDebugMapForm(page *DebugMapPage, host SubPanelHost, idx int) *debugMapForm {
 	f := &debugMapForm{page: page, host: host, idx: idx}
+	f.fieldNav = newFieldNav(mapFieldCount, func(i int) string { return f.form[i] })
 	if idx >= 0 {
 		e := page.entries()[idx]
 		f.form = [mapFieldCount]string{e.Server, e.Local}
@@ -578,16 +578,11 @@ func (f *debugMapForm) Update(key tea.KeyPressMsg) tea.Cmd {
 		f.host.Pop()
 	case key.Code == tea.KeyEnter:
 		return f.save()
-	case key.Code == tea.KeyTab && key.Mod&tea.ModShift != 0, key.Code == tea.KeyUp:
-		f.field = (f.field + mapFieldCount - 1) % mapFieldCount
-		f.cur = len([]rune(f.form[f.field]))
-	case key.Code == tea.KeyTab, key.Code == tea.KeyDown:
-		f.field = (f.field + 1) % mapFieldCount
-		f.cur = len([]rune(f.form[f.field]))
+	case f.fieldNav.Update(key): // shared field motion (#2466)
 	default:
 		tf := newTextFieldAt(f.form[f.field], f.cur)
 		if handled, _ := tf.Handle(key); handled {
-			f.form[f.field], f.cur = tf.text, tf.cur
+			f.form[f.field], f.cur = tf.Text, tf.Cur
 		}
 	}
 	return nil
@@ -595,10 +590,7 @@ func (f *debugMapForm) Update(key tea.KeyPressMsg) tea.Cmd {
 
 // Click focuses a field row.
 func (f *debugMapForm) Click(_, y int) tea.Cmd {
-	if y >= 0 && y < mapFieldCount {
-		f.field = y
-		f.cur = len([]rune(f.form[f.field]))
-	}
+	f.fieldNav.Focus(y)
 	return nil
 }
 
@@ -624,7 +616,7 @@ func (f *debugMapForm) Paste(text string) bool {
 	if !tf.Paste(text) {
 		return false
 	}
-	f.form[f.field], f.cur = tf.text, tf.cur
+	f.form[f.field], f.cur = tf.Text, tf.Cur
 	return true
 }
 

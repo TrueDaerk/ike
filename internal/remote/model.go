@@ -544,14 +544,7 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 // renderRows draws the flattened tree scrolled around the cursor.
 func (m *Model) renderRows(pal *theme.Palette, height int) string {
 	m.clampScroll()
-	var b strings.Builder
-	for k := 0; k < height; k++ {
-		if i := m.top + k; i < len(m.rows) {
-			b.WriteString(m.renderRow(pal, i))
-		}
-		b.WriteString("\n")
-	}
-	return b.String()
+	return ui.RenderWindow(m.top, height, len(m.rows), "", func(i int) string { return m.renderRow(pal, i) })
 }
 
 // renderRow draws one entry: caret and name on the left, size and mtime
@@ -602,21 +595,7 @@ func (m *Model) metaColumns(r row) string {
 	if !r.entry.ModTime.IsZero() {
 		stamp = r.entry.ModTime.Local().Format("2006-01-02 15:04")
 	}
-	return fmt.Sprintf("%10s  %s", humanSize(r.entry.Size), stamp)
-}
-
-// humanSize formats a byte count for the size column.
-func humanSize(n int64) string {
-	switch {
-	case n >= 1<<30:
-		return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
-	case n >= 1<<20:
-		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
-	default:
-		return fmt.Sprintf("%d B", n)
-	}
+	return fmt.Sprintf("%10s  %s", ui.HumanSize(r.entry.Size), stamp)
 }
 
 // footer shows the key hints — or the last scan error, which outranks them
@@ -639,21 +618,7 @@ func (m *Model) bodyHeight() int {
 
 // clampScroll keeps the cursor valid and inside the visible window.
 func (m *Model) clampScroll() {
-	if m.cursor > len(m.rows)-1 {
-		m.cursor = len(m.rows) - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.top > m.cursor {
-		m.top = m.cursor
-	}
-	if h := m.bodyHeight(); m.cursor >= m.top+h {
-		m.top = m.cursor - h + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	ui.ClampWindow(&m.cursor, &m.top, len(m.rows), m.bodyHeight())
 }
 
 // clip bounds one rendered line to the pane width.

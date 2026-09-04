@@ -31,6 +31,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/datasrc"
+	"ike/internal/gridview"
 	"ike/internal/overlay"
 	"ike/internal/theme"
 )
@@ -216,9 +217,9 @@ func (m *Model) profileBox(pal *theme.Palette) string {
 	}
 	body := make([]string, 0, len(shown)+2)
 	for _, l := range shown {
-		body = append(body, clipTo(l, width))
+		body = append(body, gridview.ClipTo(l, width))
 	}
-	body = append(body, "", lipgloss.NewStyle().Faint(true).Render(clipTo(hint, width)))
+	body = append(body, "", lipgloss.NewStyle().Faint(true).Render(gridview.ClipTo(hint, width)))
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(pal.Accent).

@@ -468,14 +468,7 @@ func plural(n int) string {
 // renderRows draws the flattened tree scrolled around the cursor.
 func (m *Model) renderRows(pal *theme.Palette, height int) string {
 	m.clampScroll()
-	var b strings.Builder
-	for k := 0; k < height; k++ {
-		if i := m.top + k; i < len(m.rows) {
-			b.WriteString(m.renderRow(pal, i))
-		}
-		b.WriteString("\n")
-	}
-	return b.String()
+	return ui.RenderWindow(m.top, height, len(m.rows), "", func(i int) string { return m.renderRow(pal, i) })
 }
 
 // renderRow draws one entry: the tree glyph and name on the left, the meta
@@ -536,19 +529,9 @@ func stamp(t time.Time) string {
 	return t.Local().Format("2006-01-02 15:04")
 }
 
-// HumanSize formats a byte count for the size column.
-func HumanSize(n int64) string {
-	switch {
-	case n >= 1<<30:
-		return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
-	case n >= 1<<20:
-		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
-	default:
-		return fmt.Sprintf("%d B", n)
-	}
-}
+// HumanSize formats a byte count for the size column. It delegates to
+// ui.HumanSize; kept as a thin alias because internal/app calls it directly.
+func HumanSize(n int64) string { return ui.HumanSize(n) }
 
 // footer shows the key hints.
 func (m *Model) footer(pal *theme.Palette) string {
@@ -567,21 +550,7 @@ func (m *Model) bodyHeight() int {
 
 // clampScroll keeps the cursor valid and inside the visible window.
 func (m *Model) clampScroll() {
-	if m.cursor > len(m.rows)-1 {
-		m.cursor = len(m.rows) - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.top > m.cursor {
-		m.top = m.cursor
-	}
-	if h := m.bodyHeight(); m.cursor >= m.top+h {
-		m.top = m.cursor - h + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	ui.ClampWindow(&m.cursor, &m.top, len(m.rows), m.bodyHeight())
 }
 
 // clip bounds one rendered line to the pane width.
@@ -601,4 +570,18 @@ func (m *Model) theme() *theme.Palette {
 		return m.pal
 	}
 	return theme.DefaultPalette()
+}
+
+// PasteText inserts a pasted block into the open filter row at its cursor
+// (#2460), re-deriving the tree exactly like typing there does. A closed
+// filter row lets the paste fall through.
+func (m *Model) PasteText(text string) bool {
+	if !m.filter.Active() {
+		return false
+	}
+	if !m.filter.Paste(text) {
+		return false
+	}
+	m.flatten()
+	return true
 }

@@ -188,8 +188,8 @@ func TestYQPlaygroundHistoryIsShared(t *testing.T) {
 
 	m = openYQ(t, m)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
-	if m.play.program != ".a" {
-		t.Fatalf("↑ restored %q, want the recorded program", m.play.program)
+	if m.play.program.Text != ".a" {
+		t.Fatalf("↑ restored %q, want the recorded program", m.play.program.Text)
 	}
 	if m.playHist() != m.play.hist {
 		t.Error("the playground must share the model's one history list")
@@ -251,8 +251,8 @@ func TestYQFilterInsertOpensItsOwnPlayground(t *testing.T) {
 	if !m.playOpen() || m.play.dialect != jqplay.DialectYQ {
 		t.Fatal("inserting a yq filter must open the yq playground")
 	}
-	if m.play.program != ".spec.replicas" {
-		t.Fatalf("query line = %q, want the filter's program", m.play.program)
+	if m.play.program.Text != ".spec.replicas" {
+		t.Fatalf("query line = %q, want the filter's program", m.play.program.Text)
 	}
 	if got := m.play.result.Text(); got != "3" {
 		t.Errorf("the filter must have run: result = %q", got)
@@ -295,7 +295,7 @@ func TestYQPlaygroundAtPathSeedsTheYQPath(t *testing.T) {
 	if !m.playOpen() {
 		t.Fatal("yaml.yqPlaygroundAtPath must open the playground")
 	}
-	if got := m.play.program; got != `.spec."my-key"` {
+	if got := m.play.program.Text; got != `.spec."my-key"` {
 		t.Fatalf("seed program = %q, want the yq spelling of the caret's path", got)
 	}
 	if got := m.play.result.Text(); got != "ike" {

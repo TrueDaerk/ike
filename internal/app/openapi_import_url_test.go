@@ -47,7 +47,7 @@ func openURLPrompt(t *testing.T, url string) Model {
 	m := httpApp(t)
 	out, _ := m.Update(ImportOpenAPIMsg{})
 	m = out.(Model)
-	m.oapiImportInput, m.oapiImportPos = "", 0
+	m.oapiImportInput.Text, m.oapiImportInput.Cur = "", 0
 	return typeInto(m, url)
 }
 
@@ -227,8 +227,8 @@ func TestOpenAPIImportURLTabDoesNotComplete(t *testing.T) {
 	m := openURLPrompt(t, "https://api.example.com/v3")
 	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = out.(Model)
-	if m.oapiImportInput != "https://api.example.com/v3" {
-		t.Errorf("tab rewrote the URL to %q", m.oapiImportInput)
+	if m.oapiImportInput.Text != "https://api.example.com/v3" {
+		t.Errorf("tab rewrote the URL to %q", m.oapiImportInput.Text)
 	}
 }
 

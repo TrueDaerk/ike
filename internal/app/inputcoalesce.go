@@ -317,6 +317,23 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 	case pane.KindBreakpoints:
 		inst.Breakpoints().PasteText(text)
 		return m, nil
+	case pane.KindUsages:
+		inst.Usages().PasteText(text)
+		return m, nil
+	case pane.KindProblems:
+		inst.Problems().PasteText(text)
+		return m, nil
+	case pane.KindDeps:
+		inst.Deps().PasteText(text)
+		return m, nil
+	case pane.KindTime:
+		inst.Time().PasteText(text)
+		return m, nil
+	case pane.KindArchive:
+		// The archive viewer's filter row (#2409, #2460): archview.PasteText,
+		// not archive.go's own extract-target prompt.
+		inst.Archive().PasteText(text)
+		return m, nil
 	}
 	if inst.Kind() != pane.KindEditor {
 		return m, nil

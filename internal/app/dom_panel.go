@@ -37,24 +37,7 @@ type domParsedMsg struct {
 // toggleStructurePanel: no panel → open at the right; unfocused → focus it;
 // focused → return focus to the remembered pane.
 func (m *Model) toggleDOMPanel() {
-	if !m.activeWS().Panes.Has(pane.DOMKey) {
-		m.domReturnFocus = m.activeWS().Panes.Focused()
-		m.openDOMPanel()
-		return
-	}
-	if m.activeWS().Panes.Focused() != pane.DOMKey {
-		m.domReturnFocus = m.activeWS().Panes.Focused()
-		m.setFocus(pane.DOMKey)
-		return
-	}
-	target := m.domReturnFocus
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = m.activeEditorKey()
-	}
-	if target == "" || !m.activeWS().Panes.Has(target) {
-		target = pane.ExplorerKey
-	}
-	m.setFocus(target)
+	m.togglePanel(pane.DOMKey, func() tea.Cmd { m.openDOMPanel(); return nil })
 }
 
 // domPanel returns the singleton panel model, or nil when it is not open.
@@ -68,22 +51,9 @@ func (m Model) domPanel() *domview.Model {
 // openDOMPanel splits the active editor (fallback: focused leaf) at the right
 // with the singleton panel; the first sync pass parses the buffer.
 func (m *Model) openDOMPanel() {
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
-	if target == "" || m.activeWS().Tree == nil {
-		return
-	}
-	key := m.activeWS().Panes.AddDOM()
-	if !m.insertToolPane(key, target, layout.ZoneRight) {
-		m.activeWS().Panes.Close(key)
-		return
-	}
-	m.domReqPath = "" // a fresh open always parses
-	m.setFocus(key)
-	m.layout()
-	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	m.openToolPane(m.activeWS().Panes.AddDOM, fixedZone(layout.ZoneRight), func(string) {
+		m.domReqPath = "" // a fresh open always parses
+	})
 }
 
 // isHTMLPath reports whether the file is one the DOM inspector parses,

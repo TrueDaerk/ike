@@ -197,8 +197,7 @@ func (m *Model) startRunToLine() {
 		return
 	}
 	m.runToLineOpen = true
-	m.runToLineInput = ""
-	m.runToLinePos = 0
+	m.runToLineInput.Clear()
 	m.renderRunToLinePrompt()
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -210,7 +209,7 @@ func (m *Model) renderRunToLinePrompt() {
 	if avail < 20 {
 		avail = 20
 	}
-	line := "line: " + windowedInput(m.runToLineInput, m.runToLinePos, avail)
+	line := "line: " + windowedInput(m.runToLineInput.Text, m.runToLineInput.Cur, avail)
 	m.shell.SetContent(ui.ModelContent{
 		Heading: runToLinePromptHeading,
 		Body: func() string {
@@ -224,8 +223,7 @@ func (m *Model) renderRunToLinePrompt() {
 func (m Model) updateRunToLinePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	closePrompt := func() {
 		m.runToLineOpen = false
-		m.runToLineInput = ""
-		m.runToLinePos = 0
+		m.runToLineInput.Clear()
 		m.shell.Close()
 	}
 	switch {
@@ -233,7 +231,7 @@ func (m Model) updateRunToLinePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		closePrompt()
 		return m, nil
 	case msg.Code == tea.KeyEnter:
-		text := m.runToLineInput
+		text := m.runToLineInput.Text
 		closePrompt()
 		ed := m.activeEditor()
 		if ed == nil || !ed.HasFile() {
@@ -248,9 +246,7 @@ func (m Model) updateRunToLinePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.runToBufferLine(ed.Path(), n-1)
 		return m, nil
 	default:
-		if out, pos, handled, _ := ui.EditKey(msg, m.runToLineInput, m.runToLinePos); handled {
-			m.runToLineInput, m.runToLinePos = out, pos
-		}
+		m.runToLineInput.Key(msg)
 	}
 	m.renderRunToLinePrompt()
 	return m, nil
@@ -259,11 +255,9 @@ func (m Model) updateRunToLinePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // pasteRunToLinePrompt inserts a paste into the line input at its cursor,
 // like every other single-field prompt (#1936).
 func (m *Model) pasteRunToLinePrompt(text string) bool {
-	out, pos, changed := ui.PasteText(m.runToLineInput, m.runToLinePos, flattenExpr(text))
-	if !changed {
+	if !m.runToLineInput.Paste(flattenExpr(text)) {
 		return false
 	}
-	m.runToLineInput, m.runToLinePos = out, pos
 	m.renderRunToLinePrompt()
 	return true
 }

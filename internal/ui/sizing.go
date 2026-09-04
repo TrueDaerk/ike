@@ -1,5 +1,7 @@
 package ui
 
+import "fmt"
+
 // Box chrome and default bounds for the floating shell.
 const (
 	borderH = 2 // left + right border columns
@@ -49,4 +51,20 @@ func budget(termW, termH, margin int, maxWFrac, maxHFrac float64) (w, h int) {
 		h = 1
 	}
 	return w, h
+}
+
+// HumanSize formats a byte count for a size column or caption — e.g. the file
+// browser's size column (archview, remote) and an image preview's metadata
+// line, whose inline captions in the markdown preview (#2180) share it too.
+func HumanSize(n int64) string {
+	switch {
+	case n >= 1<<30:
+		return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
 }

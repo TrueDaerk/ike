@@ -65,7 +65,7 @@ func TestPlayCheatsheetOpensAndLeavesThePlaygroundIntact(t *testing.T) {
 		t.Fatal("the playground must stay mounted under the cheatsheet")
 	}
 	m.palette.Close()
-	if got := m.play.program; got != ".foo[] | select(.bar > 3)" {
+	if got := m.play.program.Text; got != ".foo[] | select(.bar > 3)" {
 		t.Fatalf("the query line changed to %q", got)
 	}
 	if len(m.play.result.Outputs) != wantOutputs {
@@ -386,11 +386,11 @@ func TestPlayCheatsheetInsertReplacesAndKeepsTheOldProgram(t *testing.T) {
 
 	tm, cmd := m.Update(InsertCheatMsg{Program: ".users | map(.name)"})
 	m = drainCmd(asModel(tm), cmd)
-	if m.play.program != ".users | map(.name)" {
-		t.Fatalf("the query line is %q", m.play.program)
+	if m.play.program.Text != ".users | map(.name)" {
+		t.Fatalf("the query line is %q", m.play.program.Text)
 	}
-	if m.play.pos != len(".users | map(.name)") {
-		t.Fatalf("the caret is at %d", m.play.pos)
+	if m.play.program.Cur != len(".users | map(.name)") {
+		t.Fatalf("the caret is at %d", m.play.program.Cur)
 	}
 	if got, ok := m.play.hist.At(0); !ok || got != ".users" {
 		t.Fatalf("the replaced program is not in the history: %q (ok=%v)", got, ok)
@@ -408,15 +408,15 @@ func TestPlayCheatsheetInsertReplacesAndKeepsTheOldProgram(t *testing.T) {
 func TestPlayCheatsheetInsertsABuiltinAtTheCaret(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"users":[{"name":"ada"}]}`))
 	m = setProgram(m, ".users | ")
-	m.play.pos = len(".users | ")
+	m.play.program.Cur = len(".users | ")
 
 	tm, cmd := m.Update(InsertCheatMsg{Program: "length", AtCaret: true})
 	m = drainCmd(asModel(tm), cmd)
-	if m.play.program != ".users | length" {
-		t.Fatalf("the query line is %q", m.play.program)
+	if m.play.program.Text != ".users | length" {
+		t.Fatalf("the query line is %q", m.play.program.Text)
 	}
-	if m.play.pos != len(".users | length") {
-		t.Fatalf("the caret is at %d", m.play.pos)
+	if m.play.program.Cur != len(".users | length") {
+		t.Fatalf("the caret is at %d", m.play.program.Cur)
 	}
 }
 
@@ -439,8 +439,8 @@ func TestPlayCheatsheetInsertRefusesTheOtherDialect(t *testing.T) {
 	m = setProgram(m, ".a")
 	tm, cmd := m.Update(InsertCheatMsg{Dialect: jqplay.DialectYQ, Program: ".users[]"})
 	m = drainCmd(asModel(tm), cmd)
-	if m.play.program != ".a" {
-		t.Fatalf("the jq query line was rewritten to %q", m.play.program)
+	if m.play.program.Text != ".a" {
+		t.Fatalf("the jq query line was rewritten to %q", m.play.program.Text)
 	}
 }
 

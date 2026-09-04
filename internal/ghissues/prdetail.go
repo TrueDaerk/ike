@@ -238,7 +238,7 @@ func (m *Model) openPRActionDialog(kind string) tea.Cmd {
 	m.ov = ovPRAct
 	m.prActKind, m.prActStage, m.prActFor = kind, 0, pr.Number
 	m.prActHead, m.prActBase = pr.HeadRef, m.prBaseRef(pr.Number)
-	m.cmInput, m.cmCur = "", 0
+	m.cmInput.Clear()
 	if kind == forge.PRMerge && (m.prd == nil || m.prd.Number != pr.Number) {
 		return m.fetchPRDetail(pr.Number)
 	}
@@ -272,7 +272,7 @@ func (m *Model) prActionDialogKey(msg tea.KeyPressMsg) tea.Cmd {
 	key := msg.String()
 	if key == "esc" {
 		m.closeOverlay()
-		m.cmInput, m.cmCur = "", 0
+		m.cmInput.Clear()
 		return nil
 	}
 	if m.prActStage == 0 {
@@ -280,9 +280,7 @@ func (m *Model) prActionDialogKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.prActStage = 1
 			return nil
 		}
-		if out, ncur, handled, _ := ui.EditKey(msg, m.cmInput, m.cmCur); handled {
-			m.cmInput, m.cmCur = out, ncur
-		}
+		m.cmInput.Key(msg)
 		return nil
 	}
 	switch key {
@@ -300,13 +298,13 @@ func (m *Model) runPRAction() tea.Cmd {
 	act := forge.PRAction{
 		PR:      m.prActFor,
 		Kind:    m.prActKind,
-		Comment: strings.TrimSpace(m.cmInput),
+		Comment: strings.TrimSpace(m.cmInput.Text),
 	}
 	if act.Kind == forge.PRMerge {
 		act.Method = m.prMergeMethod(m.prActFor)
 	}
 	m.closeOverlay()
-	m.cmInput, m.cmCur = "", 0
+	m.cmInput.Clear()
 	if m.prAction == nil {
 		return nil
 	}

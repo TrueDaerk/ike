@@ -210,13 +210,8 @@ func (m *Model) NextMatch() ui.MatchStep { return m.stepFiltered(1) }
 func (m *Model) PrevMatch() ui.MatchStep { return m.stepFiltered(-1) }
 
 func (m *Model) stepFiltered(delta int) ui.MatchStep {
-	if !m.filter.Active() {
-		return ui.NoStep
-	}
-	next, st := ui.StepOver(m.cursor, len(m.rows), delta, func(i int) bool { return !m.rows[i].header })
-	m.cursor = next
-	m.clampScroll()
-	return m.filter.ShowStep(st)
+	return ui.StepFiltered(&m.filter, &m.cursor, &m.top, len(m.rows), m.bodyHeight(), delta,
+		func(i int) bool { return !m.rows[i].header })
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -315,14 +310,7 @@ func (m *Model) activate(i int) tea.Cmd {
 // View renders the title header, the scrolled rows, and the key-hint footer.
 func (m *Model) View() string {
 	pal := m.theme()
-	var b strings.Builder
-	b.WriteString(m.headerLine(pal))
-	b.WriteString("\n")
-	b.WriteString(m.filter.View(m.width, pal))
-	b.WriteString("\n")
-	b.WriteString(m.renderRows(pal, m.bodyHeight()))
-	b.WriteString(m.footer(pal))
-	return b.String()
+	return ui.ListPaneView(m.headerLine(pal), m.filter.View(m.width, pal), m.renderRows(pal, m.bodyHeight()), m.footer(pal))
 }
 
 // heading is the pane's name without the totals: the "Usages" default plus
@@ -449,21 +437,7 @@ func (m *Model) bodyHeight() int {
 
 // clampScroll keeps the cursor valid and inside the visible window.
 func (m *Model) clampScroll() {
-	if m.cursor > len(m.rows)-1 {
-		m.cursor = len(m.rows) - 1
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.top > m.cursor {
-		m.top = m.cursor
-	}
-	if h := m.bodyHeight(); m.cursor >= m.top+h {
-		m.top = m.cursor - h + 1
-	}
-	if m.top < 0 {
-		m.top = 0
-	}
+	ui.ClampWindow(&m.cursor, &m.top, len(m.rows), m.bodyHeight())
 }
 
 // clip bounds one rendered line to the pane width.
@@ -480,4 +454,18 @@ func (m *Model) theme() *theme.Palette {
 		return m.pal
 	}
 	return theme.DefaultPalette()
+}
+
+// PasteText inserts a pasted block into the open filter row at its cursor
+// (#2460), re-deriving the rows exactly like typing there does. A closed
+// filter row lets the paste fall through.
+func (m *Model) PasteText(text string) bool {
+	if !m.filter.Active() {
+		return false
+	}
+	if !m.filter.Paste(text) {
+		return false
+	}
+	m.rebuild()
+	return true
 }

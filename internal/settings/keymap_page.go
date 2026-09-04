@@ -39,18 +39,18 @@ type KeymapPage struct {
 	commands   func() []CommandEntry
 	pal        *theme.Palette
 
-	sel       int
-	host      SubPanelHost
+	sel  int
+	host SubPanelHost
 	// doctorLaunch dispatches keymap.doctor in the app (#2080); the doctor
 	// sub-panel's Run Probe button is hidden while it is nil.
 	doctorLaunch func() tea.Cmd
 	// deadLaunch dispatches keymap.deadBindings in the app (#2161); the
 	// sub-panel's Dead Bindings button is hidden while it is nil.
 	deadLaunch func() tea.Cmd
-	off       int // list scroll offset (#537)
-	filter    string
-	filterCur int  // rune cursor inside filter (#2002)
-	filtering bool // "/" opened the filter input; every key is filter text
+	off        int // list scroll offset (#537)
+	filter     string
+	filterCur  int  // rune cursor inside filter (#2002)
+	filtering  bool // "/" opened the filter input; every key is filter text
 
 	conflict string // colliding command id awaiting confirmation
 	warn     string // fragile-chord honesty warning
@@ -283,10 +283,11 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			return config.RemoveAndReload(k.opts, config.UserScope, k.overrideKeyFor(b))
 		}
 	case "backspace":
-		// List mode: backspace shortens the filter from the end. The typed
-		// filter itself is edited in filter mode ("/"), through ui.EditKey.
-		if r := []rune(k.filter); len(r) > 0 {
-			k.filter, k.filterCur = string(r[:len(r)-1]), len(r)-1
+		// List mode: backspace shortens the filter from the end, through the
+		// same shared field the "/" filter mode edits (#2460) rather than a
+		// hand-rolled rune slice.
+		k.filterCur = len([]rune(k.filter))
+		if _, changed := filterKey(tea.KeyPressMsg{Code: tea.KeyBackspace}, &k.filter, &k.filterCur); changed {
 			k.sel = 0
 		}
 	case "/", "ctrl+f", "cmd+f", "super+f":
@@ -308,9 +309,9 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		if k.host != nil {
 			k.host.Push(newKeymapImport(k, k.host))
 		}
-		k.importField.text = "~" + string(filepath.Separator)
+		k.importField.Text = "~" + string(filepath.Separator)
 		k.importNote = ""
-		k.importSug.refresh(k.importField.text)
+		k.importSug.refresh(k.importField.Text)
 	}
 	return nil
 }

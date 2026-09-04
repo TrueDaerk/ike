@@ -12,6 +12,7 @@ import (
 	"ike/internal/coverage"
 	"ike/internal/host"
 	"ike/internal/lang"
+	"ike/internal/pane"
 	"ike/internal/run"
 	"ike/internal/terminal"
 	"ike/internal/testresults"
@@ -139,12 +140,11 @@ func (m *Model) startCapturedRun(cfg *run.Config, argv []string, dir string) tea
 	m.testRunSeq++
 	seq := m.testRunSeq
 	if m.testsPanel() == nil && config.Get().Tests.AutoOpen {
-		m.testsReturnFocus = m.activeWS().Panes.Focused()
-		m.openTestsPanel()
+		m.ensurePanel(pane.TestsKey, func() tea.Cmd { m.openTestsPanel(); return nil })
 		// A run started from the editor keeps the editor focused — the pane
 		// is a progress display until the user reaches for it.
-		if m.testsReturnFocus != "" && m.activeWS().Panes.Has(m.testsReturnFocus) {
-			m.setFocus(m.testsReturnFocus)
+		if back := m.panelReturnFocus[pane.TestsKey]; back != "" && m.activeWS().Panes.Has(back) {
+			m.setFocus(back)
 		}
 	}
 	if p := m.testsPanel(); p != nil {

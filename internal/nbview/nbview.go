@@ -103,15 +103,12 @@ type Model struct {
 	// copies of the model share it, like the preview's image cache.
 	folded map[int]bool
 
-	// search line state, the shape the other viewer panes share.
-	sEditing bool
-	sInput   string
-	sCur     int
-	sErr     string
-	query    string  // applied query, "" while no search applies
-	matches  []match // matching cell/source-line positions in reading order
-	mIdx     int     // index of the current match, -1 for none
-	wrapped  bool
+	// search is the shared in-pane search (#2461): the open line, the query
+	// with its caret, the matched cell indices in reading order and the
+	// current one. hits carries each match's source line, aligned index for
+	// index with search.Matches.
+	search ui.LineSearch
+	hits   []match
 
 	// images holds the decoded image outputs keyed by cell/output index, and
 	// the terminal's Kitty graphics capability as pushed by the app.
@@ -134,7 +131,7 @@ type match struct {
 // New reads and parses the notebook at path. Read and parse errors are kept
 // for View — the pane opens either way and explains itself.
 func New(key, path string, pal *theme.Palette) Model {
-	m := Model{key: key, path: path, pal: pal, mIdx: -1,
+	m := Model{key: key, path: path, pal: pal,
 		folded: map[int]bool{}, images: map[imgKey]*cellImage{}}
 	m.load()
 	return m
@@ -160,7 +157,7 @@ func (m *Model) load() {
 	if m.cur >= len(m.nb.Cells) {
 		m.cur = max(0, len(m.nb.Cells)-1)
 	}
-	m.applySearchSet()
+	m.recomputeMatches()
 	m.render()
 }
 
@@ -190,10 +187,10 @@ func (m *Model) Lang() string { return m.nb.Lang }
 func (m *Model) Folded(cell int) bool { return m.folded[cell] }
 
 // Matches returns the search matches in reading order (tests).
-func (m *Model) Matches() []match { return m.matches }
+func (m *Model) Matches() []match { return m.hits }
 
 // Searching reports whether the search line is open (tests).
-func (m *Model) Searching() bool { return m.sEditing }
+func (m *Model) Searching() bool { return m.search.Open }
 
 // Rows returns the rendered row texts (tests): the pane body without the
 // scroll window or the footer.
@@ -252,7 +249,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if m.err != nil {
 		return nil
 	}
-	if m.sEditing {
+	if m.search.Open {
 		return m.searchKey(key)
 	}
 	page := m.bodyRows()
@@ -280,9 +277,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case "enter", " ":
 		m.toggleFold()
 	case "esc":
-		if m.query != "" {
-			m.query, m.matches, m.mIdx, m.wrapped = "", nil, -1, false
-		}
+		m.clearSearch()
 	case "/":
 		m.startSearch()
 	case "n":
@@ -299,16 +294,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// PasteText inserts a paste into the open search line (#2002); with the line
-// closed the text is dropped rather than leaking into navigation keys.
+// PasteText inserts a paste into the open search line (#2002), re-matching
+// like a typed edit; with the line closed the text is dropped rather than
+// leaking into navigation keys.
 func (m *Model) PasteText(text string) {
-	if !m.sEditing || text == "" {
-		return
+	if m.search.Open && m.search.Paste(text) {
+		m.recomputeMatches()
 	}
-	r := []rune(m.sInput)
-	m.sInput = string(r[:m.sCur]) + text + string(r[m.sCur:])
-	m.sCur += len([]rune(text))
-	m.sErr = ""
 }
 
 // Wheel scrolls the document by delta rows.
@@ -449,136 +441,105 @@ func (m *Model) saveImageCmd() tea.Cmd {
 	return nil
 }
 
-// startSearch opens the search line, seeded with the applied query.
+// startSearch opens the search line, seeded with the last query.
 func (m *Model) startSearch() {
 	if m.err != nil || len(m.nb.Cells) == 0 {
 		return
 	}
-	m.sEditing = true
-	m.sCur = len([]rune(m.sInput))
-	m.sErr = ""
+	m.search.Start()
 }
 
 // OpenSearch implements the pane's Searchable capability (#2409): cmd+f opens
 // the same line "/" does.
 func (m *Model) OpenSearch() bool {
 	m.startSearch()
-	return m.sEditing
+	return m.search.Open
 }
 
-// NextMatch implements the pane's match-step capability (#2410).
+// NextMatch implements the pane's match-step capability (#2410): cmd+g steps
+// the matches while the search line is open, where n and N are query text,
+// and keeps stepping the applied query once enter closed it.
 func (m *Model) NextMatch() ui.MatchStep { return m.searchStep(1) }
 
 // PrevMatch steps backwards; see NextMatch.
 func (m *Model) PrevMatch() ui.MatchStep { return m.searchStep(-1) }
 
-// searchStep serves cmd+g / cmd+shift+g while the search line is open: it
-// applies the typed query if it changed and steps the current match.
 func (m *Model) searchStep(delta int) ui.MatchStep {
-	if !m.sEditing {
+	if !m.search.Active() {
 		return ui.NoStep
 	}
-	if !m.applySearch() || len(m.matches) == 0 {
-		return ui.NoMatches()
-	}
-	m.stepMatch(delta)
-	return ui.Stepped(m.mIdx, len(m.matches), m.wrapped)
+	return m.stepMatch(delta)
 }
 
-// searchKey feeds one key to the open search line, which owns the keyboard.
+// searchKey feeds one key to the open search line, which owns the keyboard,
+// through the shared prompt (#2461): typing re-matches live, enter applies
+// the query and jumps to the first match at or after the cursor cell, esc
+// drops the search.
 func (m *Model) searchKey(key tea.KeyPressMsg) tea.Cmd {
-	switch key.String() {
-	case "esc":
-		m.sEditing, m.sErr = false, ""
-	case "enter":
-		if m.applySearch() {
-			m.sEditing = false
-		}
+	_, changed, action := m.search.Key(key)
+	switch action {
+	case ui.SearchCancel:
+		m.hits = nil
+	case ui.SearchAccept:
+		m.applySearch()
 	default:
-		if out, ncur, handled, changed := ui.EditKey(key, m.sInput, m.sCur); handled {
-			m.sInput, m.sCur = out, ncur
-			if changed {
-				m.sErr, m.wrapped = "", false
-			}
+		if changed {
+			m.recomputeMatches()
 		}
 	}
 	return nil
 }
 
-// applySearch runs the typed query over the cell sources and jumps to the
-// first match at or after the cursor cell. It reports false on an empty
-// query — the one input that is not a search.
-func (m *Model) applySearch() bool {
-	q := strings.TrimSpace(m.sInput)
-	if q == "" {
-		m.sErr = "empty search"
-		return false
-	}
-	if q != m.query {
-		m.query, m.mIdx, m.wrapped = q, -1, false
-		m.applySearchSet()
-	}
-	if len(m.matches) == 0 {
-		m.sErr = "no matches"
-		return true
-	}
-	m.sErr = ""
-	if m.mIdx < 0 {
-		m.mIdx = 0
-		for i, mt := range m.matches {
-			if mt.cell >= m.cur {
-				m.mIdx = i
-				break
-			}
-		}
+// clearSearch drops the applied query and its matches (esc at rest).
+func (m *Model) clearSearch() {
+	m.search.Reset()
+	m.hits = nil
+}
+
+// applySearch jumps to the first match at or after the cursor cell, wrapping
+// to the first match when the cursor sits past the last.
+func (m *Model) applySearch() {
+	if m.search.Apply(m.cur) {
 		m.jumpToMatch()
 	}
-	return true
 }
 
-// applySearchSet recomputes the match set for the applied query. The search
+// recomputeMatches rebuilds the match set for the current query. The search
 // is over cell *sources* (#2425) — what the author wrote, not what an output
-// happened to print — and is case-insensitive, like the other panes' filters.
-func (m *Model) applySearchSet() {
-	m.matches = nil
-	if m.query == "" {
-		return
-	}
-	needle := strings.ToLower(m.query)
-	for ci, c := range m.nb.Cells {
-		for li, line := range strings.Split(c.Source, "\n") {
-			if strings.Contains(strings.ToLower(line), needle) {
-				m.matches = append(m.matches, match{cell: ci, line: li})
+// happened to print — with the in-pane search's smartcase rule
+// (ui.SmartCaseContains, #2461). The cell index is the match position the
+// shared state steps and lands on; the source line rides along in hits.
+func (m *Model) recomputeMatches() {
+	m.hits = nil
+	var cells []int
+	if q := m.search.Text; q != "" {
+		for ci, c := range m.nb.Cells {
+			for li, line := range strings.Split(c.Source, "\n") {
+				if ui.SmartCaseContains(q, line) {
+					m.hits = append(m.hits, match{cell: ci, line: li})
+					cells = append(cells, ci)
+				}
 			}
 		}
 	}
-	if m.mIdx >= len(m.matches) {
-		m.mIdx = len(m.matches) - 1
-	}
+	m.search.SetMatches(cells)
 }
 
-// stepMatch moves the current match by delta, wrapping, and scrolls to it.
-func (m *Model) stepMatch(delta int) {
-	if len(m.matches) == 0 {
-		return
-	}
-	if m.mIdx < 0 {
-		m.mIdx = 0
-	} else {
-		next := m.mIdx + delta
-		m.wrapped = next < 0 || next >= len(m.matches)
-		m.mIdx = (next%len(m.matches) + len(m.matches)) % len(m.matches)
-	}
+// stepMatch moves the current match by delta, wrapping, scrolls to it and
+// reports where it landed for the match-step chord (#2410).
+func (m *Model) stepMatch(delta int) ui.MatchStep {
+	st := m.search.Step(delta)
 	m.jumpToMatch()
+	return st
 }
 
 // jumpToMatch puts the cell cursor on the current match and scrolls its row
 // into view.
 func (m *Model) jumpToMatch() {
-	if m.mIdx < 0 || m.mIdx >= len(m.matches) {
+	if m.search.Cur < 0 || m.search.Cur >= len(m.hits) {
 		return
 	}
-	mt := m.matches[m.mIdx]
+	mt := m.hits[m.search.Cur]
 	m.cur = min(mt.cell, max(0, len(m.nb.Cells)-1))
 	if r := m.matchRow(mt); r >= 0 {
 		if r < m.top || r >= m.top+m.bodyRows() {
@@ -604,10 +565,10 @@ func (m *Model) matchRow(mt match) int {
 
 // isMatchRow reports whether a rendered row is one of the search matches.
 func (m *Model) isMatchRow(r row) bool {
-	if len(m.matches) == 0 || r.kind != rowSource {
+	if len(m.hits) == 0 || r.kind != rowSource {
 		return false
 	}
-	for _, mt := range m.matches {
+	for _, mt := range m.hits {
 		if mt.cell != r.cell {
 			continue
 		}
@@ -622,10 +583,10 @@ func (m *Model) isMatchRow(r row) bool {
 
 // currentMatchRow returns the row of the current match, -1 when none.
 func (m *Model) currentMatchRow() int {
-	if m.mIdx < 0 || m.mIdx >= len(m.matches) {
+	if m.search.Cur < 0 || m.search.Cur >= len(m.hits) {
 		return -1
 	}
-	return m.matchRow(m.matches[m.mIdx])
+	return m.matchRow(m.hits[m.search.Cur])
 }
 
 // View renders the pane interior: the visible rows plus the footer.
@@ -740,16 +701,10 @@ func (m *Model) gutterWidth() int {
 // footer renders the bottom line: the open search line, or the position and
 // the key hints.
 func (m *Model) footer() string {
-	pal := m.palette()
-	if m.sEditing {
-		if m.sErr != "" {
-			return lipgloss.NewStyle().Foreground(pal.Error).Render(clipTo(" /"+m.sInput+" — "+m.sErr, m.w))
-		}
-		hint := " enter search · esc close · matches cell sources"
-		if len(m.matches) > 0 {
-			hint = fmt.Sprintf(" %d/%d ·%s", m.mIdx+1, len(m.matches), hint)
-		}
-		return lipgloss.NewStyle().Faint(true).Render(clipTo(" /"+m.sInput+" ·"+hint, m.w))
+	if m.search.Open {
+		// The shared prompt row (#2461): the slash, the query with its caret
+		// and the live counter.
+		return clipTo(" "+m.search.Line(), m.w)
 	}
 	status := fmt.Sprintf(" cell %d/%d", m.cur+1, len(m.nb.Cells))
 	if m.nb.Lang != "" {
@@ -758,8 +713,8 @@ func (m *Model) footer() string {
 	if m.nb.Format != "" {
 		status += " · nbformat " + m.nb.Format
 	}
-	if len(m.matches) > 0 {
-		status += fmt.Sprintf(" · match %d/%d", m.mIdx+1, len(m.matches))
+	if len(m.hits) > 0 {
+		status += fmt.Sprintf(" · match %d/%d", m.search.Cur+1, len(m.hits))
 	}
 	hints := "j/k cell · enter fold outputs · / search · e scratch · y copy · o save image · g/G ends"
 	return lipgloss.NewStyle().Faint(true).Render(clipTo(status+" · "+hints, m.w))

@@ -87,12 +87,7 @@ func (m *Model) renderChangeRows(pal *theme.Palette, height int) string {
 	if len(m.chRows) == 0 {
 		return lipgloss.NewStyle().Faint(true).Render(" (working tree clean)") + strings.Repeat("\n", height)
 	}
-	if m.chCursor < m.chTop {
-		m.chTop = m.chCursor
-	}
-	if m.chCursor >= m.chTop+height {
-		m.chTop = m.chCursor - height + 1
-	}
+	m.chTop = ui.ScrollToShow(m.chTop, m.chCursor, height, len(m.chRows))
 	base := lipgloss.NewStyle().Foreground(pal.Foreground) // built once (#1100)
 	var b strings.Builder
 	for k := 0; k < height; k++ {

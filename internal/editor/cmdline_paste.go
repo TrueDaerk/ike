@@ -57,17 +57,15 @@ func (m *Model) pasteCmdline(text string) {
 // matching the replace-on-type behavior (#292).
 func (m *Model) pasteReplacePanel(text string) {
 	p := m.replPanel
-	f, cur := m.panelField(), m.panelCursor()
+	f := m.panelField()
 	if p.preselect && p.field == 0 {
-		*f, *cur = "", 0
+		f.Clear()
 	}
 	p.preselect = false
-	out, ncur, changed := ui.PasteText(*f, *cur, text)
-	if !changed {
+	if !f.Paste(text) {
 		return
 	}
 	m.bumpRender()
-	*f, *cur = out, ncur
 	if p.field == 0 {
 		m.previewPanelFind()
 	}
