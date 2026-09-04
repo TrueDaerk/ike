@@ -114,31 +114,29 @@ func TestReloadContentsKeepsExpandedGaps(t *testing.T) {
 	}
 }
 
-// TestNoticeClaimsFooterRow guards the removed-file report (#2506): the
-// notice takes the pane's last row — the row the search prompt uses — and
-// clearing it gives the row back to the diff body.
-func TestNoticeClaimsFooterRow(t *testing.T) {
+// TestNoticeTakesOverFooterRow guards the removed-file report (#2506): the
+// notice paints over the pane's always-present footer row (#2494) — the row
+// the search prompt and the hunk/progress readout use — and clearing it
+// gives the footer back.
+func TestNoticeTakesOverFooterRow(t *testing.T) {
 	m := NewFiles("d1", "/tmp/l.txt", "/tmp/r.txt", nil)
 	m.SetContext(-1)
 	m.SetSize(40, 6)
 	m.SetContents("a\nb\nc\nd\ne\nf\ng\n", "a\nb\nc\nd\ne\nf\ng\n")
-	if m.viewHeight() != 6 {
-		t.Fatalf("without a notice the body is the whole pane, got %d", m.viewHeight())
+	if m.viewHeight() != 5 {
+		t.Fatalf("the body is the pane minus the footer row, got %d", m.viewHeight())
 	}
 	m.SetNotice("left file removed")
 	if m.Notice() != "left file removed" {
 		t.Fatalf("Notice = %q", m.Notice())
 	}
 	if m.viewHeight() != 5 {
-		t.Fatalf("the notice must claim one row, body = %d", m.viewHeight())
+		t.Fatalf("the notice shares the footer row, body = %d", m.viewHeight())
 	}
 	if got := m.View(); !strings.Contains(got, "left file removed") {
 		t.Fatalf("the notice is not rendered:\n%s", got)
 	}
 	m.SetNotice("")
-	if m.viewHeight() != 6 {
-		t.Fatalf("clearing the notice must give the row back, body = %d", m.viewHeight())
-	}
 	if got := m.View(); strings.Contains(got, "left file removed") {
 		t.Fatalf("the cleared notice still renders:\n%s", got)
 	}

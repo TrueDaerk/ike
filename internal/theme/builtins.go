@@ -101,6 +101,7 @@ func defaultTheme() Theme {
 			DiffChanged:     "#2e2e0e",
 			DiffAddedEmph:   "#203720", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#4e2626",
+			DiffMarker:      "#d7af87", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#aac4e3", // vcs status foregrounds (Roadmap 0320)
 			VCSAdded:        "#71c57c",
 			VCSUntracked:    "#c880d5",
@@ -190,6 +191,7 @@ func tokyoNight() Theme {
 			DiffChanged:     "#383130",
 			DiffAddedEmph:   "#313b32", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#4e303e",
+			DiffMarker:      "#7fa1de", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#95b6dc",
 			VCSAdded:        "#72c67e",
 			VCSUntracked:    "#c476d2",
@@ -279,6 +281,7 @@ func nord() Theme {
 			DiffChanged:     "#464749",
 			DiffAddedEmph:   "#434e4d", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#514a55",
+			DiffMarker:      "#8fbcbb", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#9bb3ce",
 			VCSAdded:        "#8cbe93",
 			VCSUntracked:    "#d59edf",
@@ -368,6 +371,7 @@ func gruvbox() Theme {
 			DiffChanged:     "#443c29",
 			DiffAddedEmph:   "#424326", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#593b37",
+			DiffMarker:      "#fe8019", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#8ea7c5",
 			VCSAdded:        "#53b961",
 			VCSUntracked:    "#ce8dd9",
@@ -437,6 +441,7 @@ func gruvboxLight() Theme {
 			DiffChanged:     "#e0d1a1",
 			DiffAddedEmph:   "#d3cc95", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#ebc19f",
+			DiffMarker:      "#9f450a", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#364e6a",
 			VCSAdded:        "#225328",
 			VCSUntracked:    "#61246b",
@@ -557,6 +562,7 @@ func rosePine() Theme {
 			DiffChanged:     "#372e2f",
 			DiffAddedEmph:   "#303744", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#4c2c3f",
+			DiffMarker:      "#ebbcba", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#6393c9",
 			VCSAdded:        "#9dd7a5",
 			VCSUntracked:    "#d092db",
@@ -646,6 +652,7 @@ func rosePineDawn() Theme {
 			DiffChanged:     "#e4d3bc",
 			DiffAddedEmph:   "#c7cfcc", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#e1c7c9",
+			DiffMarker:      "#b83f39", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#2b5380",
 			VCSAdded:        "#3f7346",
 			VCSUntracked:    "#6e297a",
@@ -735,6 +742,7 @@ func catppuccinMocha() Theme {
 			DiffChanged:     "#37343d",
 			DiffAddedEmph:   "#333d40", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#4a3447",
+			DiffMarker:      "#f5c2e7", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#97b8dc",
 			VCSAdded:        "#a8dcaf",
 			VCSUntracked:    "#e3beea",
@@ -828,6 +836,7 @@ func kanagawa() Theme {
 			DiffChanged:     "#42332b",
 			DiffAddedEmph:   "#353c33", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#592e36",
+			DiffMarker:      "#e6c384", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#7fa2ca",
 			VCSAdded:        "#6cbb77",
 			VCSUntracked:    "#c477d2",
@@ -920,6 +929,7 @@ func oneDark() Theme {
 			DiffChanged:     "#41403d",
 			DiffAddedEmph:   "#3c4740", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#554047",
+			DiffMarker:      "#61afef", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#7da5d3",
 			VCSAdded:        "#79c383",
 			VCSUntracked:    "#cc89d8",
@@ -1014,6 +1024,7 @@ func solarizedDark() Theme {
 			DiffChanged:     "#28412f",
 			DiffAddedEmph:   "#234826", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#403f46",
+			DiffMarker:      "#c49500", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#729ed0",
 			VCSAdded:        "#48af55",
 			VCSUntracked:    "#c881d5",
@@ -1086,6 +1097,7 @@ func solarizedLight() Theme {
 			DiffChanged:     "#e2d6b1",
 			DiffAddedEmph:   "#d4d3a5", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#efc6b7",
+			DiffMarker:      "#b64314", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#315e92",
 			VCSAdded:        "#204e26",
 			VCSUntracked:    "#592163",
@@ -1215,6 +1227,7 @@ func dracula() Theme {
 			DiffChanged:     "#3c3f3f",
 			DiffAddedEmph:   "#2d4a40", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#64353e",
+			DiffMarker:      "#ff79c6", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#a9c4e3",
 			VCSAdded:        "#7fcb89",
 			VCSUntracked:    "#d8a5e1",
@@ -1304,6 +1317,7 @@ func catppuccinLatte() Theme {
 			DiffChanged:     "#d8d1c7",
 			DiffAddedEmph:   "#bbcfbb", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#e0c0ca",
+			DiffMarker:      "#a1197d", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#214064",
 			VCSAdded:        "#255a2c",
 			VCSUntracked:    "#5e2369",
@@ -1397,6 +1411,7 @@ func darcula() Theme {
 			DiffChanged:     "#2b4155", // diff changed #385570 pulled toward Surface (overlay cap)
 			DiffAddedEmph:   "#2f4a39", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#484343",
+			DiffMarker:      "#ffc66d", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#94afce", // VCS modified blue #6897bb lightened for AA on Panel
 			VCSAdded:        "#82b989", // VCS added green #629755 lightened for AA on Panel
 			VCSUntracked:    "#d298dd",
@@ -1490,6 +1505,7 @@ func intellijLight() Theme {
 			DiffChanged:     "#f0ecd7",
 			DiffAddedEmph:   "#c8e7ca", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#f5cece",
+			DiffMarker:      "#0033b3", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#284d78", // VCS modified blue
 			VCSAdded:        "#265d2d",
 			VCSUntracked:    "#5e2368", // metadata gold darkened for AA on Panel
@@ -1583,6 +1599,7 @@ func everforestDark() Theme {
 			DiffChanged:     "#354a55", // bg_blue, pulled toward Surface from #3a515d (overlay cap)
 			DiffAddedEmph:   "#424f45", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#58454a",
+			DiffMarker:      "#dbbc7f", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#95adc8",
 			VCSAdded:        "#80c089",
 			VCSUntracked:    "#d195dc",
@@ -1676,6 +1693,7 @@ func everforestLight() Theme {
 			DiffChanged:     "#faedcd", // bg_yellow
 			DiffAddedEmph:   "#e1e5c9", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#f8d8cc",
+			DiffMarker:      "#896300", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#315e92", // darkened for contrast from #3a94c5
 			VCSAdded:        "#215027", // darkened for contrast from #8da101
 			VCSUntracked:    "#5c2267", // darkened for contrast from #dfa000
@@ -1769,6 +1787,7 @@ func ayuDark() Theme {
 			DiffChanged:     "#1f1c10",
 			DiffAddedEmph:   "#18281b", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#32191c",
+			DiffMarker:      "#e6b450", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#96b7dc",
 			VCSAdded:        "#75c67f",
 			VCSUntracked:    "#be69cd",
@@ -1862,6 +1881,7 @@ func ayuMirage() Theme {
 			DiffChanged:     "#35322a",
 			DiffAddedEmph:   "#2a3c30", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#472e34",
+			DiffMarker:      "#ffcc66", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#a0bddf",
 			VCSAdded:        "#7cc986",
 			VCSUntracked:    "#cd8cd9",
@@ -1955,6 +1975,7 @@ func ayuLight() Theme {
 			DiffChanged:     "#faeed6",
 			DiffAddedEmph:   "#d6e6cb", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#f7d5d5",
+			DiffMarker:      "#9d5c00", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#386ba7", // darkened for contrast from #478acc
 			VCSAdded:        "#2e7237", // darkened for contrast from #6cbf43
 			VCSUntracked:    "#6d297a", // darkened for contrast from #f2ae49
@@ -2048,6 +2069,7 @@ func githubDark() Theme {
 			DiffChanged:     "#221d10",
 			DiffAddedEmph:   "#142a1b", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#361b1f",
+			DiffMarker:      "#58a6ff", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#82a9d5",
 			VCSAdded:        "#48b056",
 			VCSUntracked:    "#ba61ca",
@@ -2141,6 +2163,7 @@ func githubLight() Theme {
 			DiffChanged:     "#fff3c2",
 			DiffAddedEmph:   "#cdead3", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#facdcc",
+			DiffMarker:      "#0969da", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#396eaa",
 			VCSAdded:        "#2c6d35",
 			VCSUntracked:    "#682773",
@@ -2236,6 +2259,7 @@ func oxocarbon() Theme {
 			DiffChanged:     "#252031",
 			DiffAddedEmph:   "#193020", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#3a1e2b",
+			DiffMarker:      "#3ddbd9", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#9ab9dd",
 			VCSAdded:        "#4bb559",
 			VCSUntracked:    "#d59edf", // no yellow in the palette
@@ -2329,6 +2353,7 @@ func monokaiPro() Theme {
 			DiffChanged:     "#403a2b",
 			DiffAddedEmph:   "#3d4534", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#4f303a",
+			DiffMarker:      "#ffd866", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#89add8",
 			VCSAdded:        "#85cd8f",
 			VCSUntracked:    "#cd8cd9",
@@ -2423,6 +2448,7 @@ func zenburn() Theme {
 			DiffChanged:     "#4f4f3f",
 			DiffAddedEmph:   "#485448", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#514646",
+			DiffMarker:      "#e3b89c", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#adc7e4", // lightened for contrast from #94bff3
 			VCSAdded:        "#a9ccad", // green+2, lightened for contrast from #9fc59f
 			VCSUntracked:    "#e0b8e7",
@@ -2525,6 +2551,7 @@ func highContrastDark() Theme {
 			DiffChanged:     "#1a1a00",
 			DiffAddedEmph:   "#08230d", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#270b0b",
+			DiffMarker:      "#ffab40", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#a7c3e2",
 			VCSAdded:        "#8acf93",
 			VCSUntracked:    "#ca84d6",
@@ -2618,6 +2645,7 @@ func highContrastLight() Theme {
 			DiffChanged:     "#fffbd6",
 			DiffAddedEmph:   "#dcf3de", // intra-line emphasis (#2170)
 			DiffRemovedEmph: "#f7e0e1",
+			DiffMarker:      "#7a3600", // current-hunk marker / targeted gap (#2494)
 			VCSModified:     "#274b75",
 			VCSAdded:        "#1a3f1f",
 			VCSUntracked:    "#481b50",

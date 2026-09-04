@@ -66,16 +66,17 @@ func TestCachedLinesCarryNoSelection(t *testing.T) {
 	fixedClock(t)
 	window := func() string { return strings.Join(m.lines[m.top:m.top+m.viewHeight()], "\n") }
 	plain := window()
+	frame := m.View()
 	uniPress(m, 1, 0)
 	uniDrag(m, 2, 4)
 	if window() != plain {
 		t.Error("the cached lines must stay selection-free while a selection lives")
 	}
-	if m.View() == plain {
+	if m.View() == frame {
 		t.Error("View must paint the selection over the cached lines")
 	}
 	m.ClearSelection()
-	if m.View() != plain {
+	if m.View() != frame {
 		t.Error("clearing must give back the plain frame")
 	}
 }

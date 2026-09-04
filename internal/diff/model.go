@@ -58,11 +58,19 @@ type Model struct {
 	// changes that carry meaning.
 	ignoreWS bool
 
-	res       Result
-	cur       int // current hunk index, -1 before the first n/N
-	top       int // first visible visual row
-	lines     []string
-	rowStarts []int // visual row each Row starts on, for hunk navigation
+	res Result
+	// cur is the current hunk index (#2494): every vertical scroll that
+	// actually moves the view re-syncs it to the hunk at/nearest the anchor
+	// row (a third down the view), so F7 after scrolling steps from what is
+	// on screen, never from hunk 1. -1 before the first step or scroll (a
+	// fresh diff has no current hunk yet). curStepped marks a cur placed by
+	// an explicit hunk step; it makes repeated F7 walk the list sequentially
+	// even when the viewport is clamped at the document end.
+	cur        int
+	curStepped bool
+	top        int // first visible visual row
+	lines      []string
+	rowStarts  []int // visual row each Row starts on, for hunk navigation
 	// gutL/gutR cache the two line-number gutter widths for the current rows;
 	// 0 means "not measured yet", see gutterWidths.
 	gutL, gutR int
@@ -121,11 +129,18 @@ type Model struct {
 	selRight bool
 	vrows    []vrow
 
+	// Side labels (#2494): what each side *is* — "HEAD", "working copy", a
+	// short rev, "clipboard" — set by the caller opening the diff, who is the
+	// one that knows. They head the columns (side-by-side), form the
+	// "left → right" header (unified), and label the pane chrome; empty
+	// labels fall back to the column titles.
+	sideL, sideR string
+
 	// notice is the one-line footer message a live-reloading file diff shows
 	// when a side is gone from disk (#2506): "left file removed" instead of
-	// an error dialog over a diff that is still perfectly readable. It shares
-	// the pane's last row with the search prompt, which outranks it while
-	// open.
+	// an error dialog over a diff that is still perfectly readable. It takes
+	// the footer row from the hunk/progress readout (#2494); the search
+	// prompt outranks both while open.
 	notice string
 
 	// In-pane search (#2409): "/" and the shared find chord open a prompt on
@@ -173,10 +188,15 @@ func New(key, leftTitle, rightTitle, rightPath string, pal *theme.Palette) Model
 }
 
 // NewFiles returns a diff view over two file paths, labelled by their base
-// names; enter jumps to the right file.
+// names; enter jumps to the right file. Two same-named files (a/x.go vs
+// b/x.go) take the full paths as side labels, so the header still tells the
+// sides apart (#2494).
 func NewFiles(key, leftPath, rightPath string, pal *theme.Palette) Model {
 	m := New(key, filepath.Base(leftPath), filepath.Base(rightPath), rightPath, pal)
 	m.leftPath = leftPath
+	if filepath.Base(leftPath) == filepath.Base(rightPath) {
+		m.sideL, m.sideR = leftPath, rightPath
+	}
 	return m
 }
 
@@ -185,6 +205,25 @@ func (m Model) Key() string { return m.key }
 
 // Titles returns the column labels, for pane chrome and the status line.
 func (m Model) Titles() (left, right string) { return m.leftTitle, m.rightTitle }
+
+// SetSideLabels names the two sides (#2494) — "HEAD" / "working copy", two
+// short revs, "clipboard" / a buffer name. The labels head the columns and
+// replace the generic sides in the pane chrome; empty strings fall back to
+// the column titles.
+func (m *Model) SetSideLabels(left, right string) { m.sideL, m.sideR = left, right }
+
+// SideLabels returns the two side labels, falling back to the column titles
+// where none were set.
+func (m Model) SideLabels() (left, right string) {
+	left, right = m.sideL, m.sideR
+	if left == "" {
+		left = m.leftTitle
+	}
+	if right == "" {
+		right = m.rightTitle
+	}
+	return left, right
+}
 
 // LeftPath returns the file the left column is backed by ("" when none),
 // for persistence.
@@ -217,7 +256,9 @@ func (m Model) diffOpts() Options { return Options{IgnoreWhitespace: m.ignoreWS}
 // HunkCount returns how many hunks the diff holds.
 func (m Model) HunkCount() int { return len(m.res.Hunks) }
 
-// CurrentHunk returns the hunk index n/N last landed on, -1 before the first.
+// CurrentHunk returns the current hunk index — the one a step landed on or
+// the one at/nearest the viewport anchor after a scroll (#2494); -1 while the
+// diff is empty or unrendered.
 func (m Model) CurrentHunk() int { return m.cur }
 
 // SetFocused marks the view focused; the focused view consumes its keys.
@@ -296,6 +337,11 @@ func (m *Model) SetContents(left, right string) {
 	m.gaps = computeGaps(m.res, m.ctx)
 	m.buildRightRow()
 	m.rehighlight(true, true)
+	if m.search != nil {
+		// The match rows index the old row list (#2494); rebuild them so a
+		// surviving query never jumps against stale positions.
+		m.recomputeMatches()
+	}
 	m.render()
 }
 
@@ -318,11 +364,8 @@ func (m *Model) ReloadContents(left, right string) {
 	m.rehighlight(true, true)
 	// render() ends in scrollTo(m.top), which clamps the retained offset to
 	// the new document — a shorter file scrolls up, it never resets to 0.
+	// rediff() already rebuilt a surviving search's match rows (#2494).
 	m.render()
-	if m.search != nil {
-		// The rows the matches index changed under the search (#2409).
-		m.recomputeMatches()
-	}
 }
 
 // expandedGapKeys names the currently expanded gaps by the left line number
@@ -362,7 +405,8 @@ func (m *Model) SetNotice(s string) {
 		return
 	}
 	m.notice = s
-	// The notice claims a row from the body, so the visible window moves.
+	// The notice paints over the always-present footer row (#2494); the
+	// render only re-clamps the scroll.
 	m.render()
 }
 
@@ -375,6 +419,7 @@ func (m Model) Notice() string { return m.notice }
 // dismount any edit-mode editor first.
 func (m *Model) Retarget(leftTitle, rightTitle, leftPath, rightPath, leftRev, rightRev string, editable bool) {
 	m.leftTitle, m.rightTitle = leftTitle, rightTitle
+	m.sideL, m.sideR = "", "" // labels name the old comparison; the caller re-labels
 	m.leftPath, m.rightPath = leftPath, rightPath
 	m.leftRev, m.rightRev = leftRev, rightRev
 	m.editable = editable
@@ -449,6 +494,10 @@ func (m *Model) rediff() {
 	}
 	m.gaps = computeGaps(m.res, m.ctx)
 	m.buildRightRow()
+	if m.search != nil {
+		// The row list changed under the match cache (#2494).
+		m.recomputeMatches()
+	}
 }
 
 // recompute re-diffs under changed options (#2170) and re-renders, keeping the
@@ -516,15 +565,31 @@ func computeGaps(res Result, ctx int) []gap {
 	return gaps
 }
 
-// SetUnified switches between unified and side-by-side layout.
+// SetUnified switches between unified and side-by-side layout, keeping the
+// row at the top of the view in place (#2494) — the layouts disagree on
+// visual lines per row, never on the rows themselves.
 func (m *Model) SetUnified(u bool) {
 	if m.unified == u {
 		return
 	}
+	top := m.topRow()
 	m.unified = u
 	m.clearSelection() // positions are layout-specific
 	m.render()
-	m.scrollToHunk(m.cur)
+	m.scrollTo(m.rowStart(top))
+}
+
+// topRow is the res.Rows index rendered at (or folded onto) the view's top
+// line — recorded before a layout change so the view can stay put across it.
+func (m *Model) topRow() int {
+	top := 0
+	for r := range m.rowStarts {
+		if m.rowStarts[r] > m.top {
+			break
+		}
+		top = r
+	}
+	return top
 }
 
 // Update handles the view's keys when focused.
@@ -597,11 +662,13 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		key, on := m.key, m.ignoreWS
 		return func() tea.Msg { return IgnoreWhitespaceMsg{Key: key, On: on} }
 	case "c":
-		// Toggle collapsed context (#494); the current hunk stays in view.
+		// Toggle collapsed context (#494); the row at the top of the view
+		// stays put (#2494), so the toggle never throws the reader.
+		top := m.topRow()
 		m.collapsed = !m.collapsed
 		m.clearSelection()
 		m.render()
-		m.scrollToHunk(m.cur)
+		m.scrollTo(m.rowStart(top))
 	case "o":
 		m.expandNearestGap()
 	case "y", "ctrl+c", "cmd+c", "super+c":
@@ -629,7 +696,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 // (read-only) column including its gutter, and the right editor width.
 func (m Model) EditSplitWidths() (left, right int) {
 	lw, _ := m.gutterWidths()
-	avail := m.w - (lw + 1) - 3 // left gutter + " │ "
+	avail := m.w - (lw + 2) - 3 // left marker+gutter column + " │ "
 	left = max(1, avail/2)
 	right = max(1, avail-avail/2)
 	return left, right
@@ -652,12 +719,12 @@ func (m *Model) RenderEditSplit(edLines []string, topLine, height int) string {
 			b.WriteByte('\n')
 		}
 		bufLine := topLine + v + 1 // 1-based right line number
-		left := strings.Repeat(" ", lw+1+colL)
+		left := strings.Repeat(" ", lw+2+colL)
 		if ri, ok := m.rightRow[bufLine]; ok {
 			row := m.res.Rows[ri]
 			runes := expand(row.Left)
 			gap := row.Kind == RowAdded
-			left = m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, st) +
+			left = m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, false, st) +
 				m.stampHScroll(renderSegment(runes, gap, m.hoff, colL,
 					st.base(row.Kind, false), st.emph(row.Kind, false), expandSpans(row.Left, row.LeftSpans),
 					sideCaps(m.leftIx, row.LeftNo, row.Left), hl, 0, 0, st.sel), runes, gap, colL)
@@ -671,27 +738,18 @@ func (m *Model) RenderEditSplit(edLines []string, topLine, height int) string {
 	return b.String()
 }
 
-// expandNearestGap expands the separator closest to the viewport center; a
-// view without visible separators is a no-op.
-func (m *Model) expandNearestGap() {
-	if len(m.sepLines) == 0 {
+// expandNearestGap expands the separator closest to the viewport center —
+// the one the ▸ highlight marks (#2494); a view without visible separators
+// is a no-op.
+func (m *Model) expandNearestGap() { m.expandGap(m.targetGap()) }
+
+// expandGap expands one collapsed gap by index and re-renders; out-of-range
+// indices are a no-op.
+func (m *Model) expandGap(gi int) {
+	if gi < 0 || gi >= len(m.gaps) || m.gaps[gi].expanded {
 		return
 	}
-	center := m.top + m.h/2
-	best, bestDist := -1, 1<<30
-	for line, gi := range m.sepLines {
-		d := line - center
-		if d < 0 {
-			d = -d
-		}
-		if d < bestDist {
-			best, bestDist = gi, d
-		}
-	}
-	if best < 0 {
-		return
-	}
-	m.gaps[best].expanded = true
+	m.gaps[gi].expanded = true
 	m.clearSelection() // the visual-line map shifts under the selection
 	m.render()
 }
@@ -701,17 +759,89 @@ func (m *Model) expandNearestGap() {
 // the key handler.
 func (m *Model) StepHunk(delta int) { m.stepHunk(delta) }
 
-// stepHunk moves the current hunk by delta, clamped, and scrolls to it.
+// stepHunk steps to the next/previous change relative to what is on screen
+// (#2494): forward to the first hunk starting below the viewport anchor,
+// backward to the last hunk starting above it — so a step after scrolling
+// (by any means) continues from the view, never from hunk 1. While cur was
+// itself placed by a step (no scroll in between), the step is a plain
+// cur±1 walk, which keeps repeated F7 progressing even when the viewport is
+// clamped at the document end and hunks pile up below the anchor.
 func (m *Model) stepHunk(delta int) {
 	if len(m.res.Hunks) == 0 {
 		return
 	}
-	next := m.cur + delta
-	if m.cur < 0 && delta < 0 {
-		next = len(m.res.Hunks) - 1 // N before any n: start from the last hunk
+	target := m.cur + delta
+	if !m.curStepped && len(m.rowStarts) > 0 {
+		// No hunk in the step's direction relative to the anchor (a diff
+		// fully above/below it) keeps the plain cur±delta fallback, so a
+		// fresh fully-visible diff still walks its hunks from the first.
+		anchor := m.anchorLine()
+		if delta > 0 {
+			for i, h := range m.res.Hunks {
+				if m.rowStarts[h.Start] > anchor {
+					target = i
+					break
+				}
+			}
+		} else {
+			for i := len(m.res.Hunks) - 1; i >= 0; i-- {
+				if m.rowStarts[m.res.Hunks[i].Start] < anchor {
+					target = i
+					break
+				}
+			}
+		}
 	}
-	m.cur = clamp(next, 0, len(m.res.Hunks)-1)
-	m.scrollToHunk(m.cur)
+	target = clamp(target, 0, len(m.res.Hunks)-1)
+	m.scrollToHunk(target)
+	// scrollToHunk's scroll re-synced cur against the anchor; the explicit
+	// step outranks that (the two only differ when the scroll clamped).
+	m.cur = target
+	m.curStepped = true
+}
+
+// anchorLine is the visual row one third down the viewport — where the hunk
+// steps and search jumps land their target, and what scrolling re-syncs the
+// current hunk against (#2494).
+func (m Model) anchorLine() int { return m.top + m.viewHeight()/3 }
+
+// syncCurrentHunk re-points cur at the hunk covering the anchor row, or the
+// nearest one (#2494). Every vertical scroll runs it, so the current-hunk
+// marker and the F7 starting point always describe what is on screen.
+func (m *Model) syncCurrentHunk() {
+	m.curStepped = false
+	if len(m.res.Hunks) == 0 || len(m.rowStarts) == 0 {
+		m.cur = clamp(m.cur, -1, len(m.res.Hunks)-1)
+		return
+	}
+	anchor := m.anchorLine()
+	best, bestDist := 0, int(^uint(0)>>1)
+	for i := range m.res.Hunks {
+		s, e := m.hunkSpan(i)
+		d := 0
+		switch {
+		case anchor < s:
+			d = s - anchor
+		case anchor > e:
+			d = anchor - e
+		}
+		if d < bestDist {
+			best, bestDist = i, d
+		}
+	}
+	m.cur = best
+}
+
+// hunkSpan returns hunk i's first and last visual line under the current
+// layout (collapsed rows fold onto their separator).
+func (m Model) hunkSpan(i int) (start, end int) {
+	h := m.res.Hunks[i]
+	start = m.rowStarts[h.Start]
+	end = len(m.lines) - 1
+	if h.End < len(m.rowStarts) {
+		end = m.rowStarts[h.End] - 1
+	}
+	return start, max(start, end)
 }
 
 // scrollToHunk scrolls hunk i's first visual row a third down the viewport.
@@ -719,7 +849,7 @@ func (m *Model) scrollToHunk(i int) {
 	if i < 0 || i >= len(m.res.Hunks) || len(m.rowStarts) == 0 {
 		return
 	}
-	m.scrollTo(m.rowStarts[m.res.Hunks[i].Start] - m.h/3)
+	m.scrollTo(m.rowStarts[m.res.Hunks[i].Start] - m.viewHeight()/3)
 }
 
 // jump returns the command dispatching a JumpMsg for the current hunk (the
@@ -756,7 +886,7 @@ func (m *Model) jump() tea.Cmd {
 }
 
 // pageStep is one page-scroll increment: just under a viewport of lines.
-func (m Model) pageStep() int { return max(1, m.h-1) }
+func (m Model) pageStep() int { return max(1, m.viewHeight()-1) }
 
 // ScrollBy scrolls the view by delta visual rows (mouse wheel).
 func (m *Model) ScrollBy(delta int) { m.scrollTo(m.top + delta) }
@@ -786,21 +916,40 @@ func (m *Model) scrollX(off int) {
 	m.render()
 }
 
-// scrollTo clamps and applies a new top row.
+// scrollTo clamps and applies a new top row, re-syncing the current hunk to
+// the viewport (#2494) — every vertical scroll path funnels through here. A
+// no-move call (render's re-clamp, a scroll at the boundary) leaves cur
+// alone, so a fresh diff stays "before the first hunk" and a reload keeps
+// the reader's current hunk.
 func (m *Model) scrollTo(top int) {
-	m.top = clamp(top, 0, max(0, len(m.lines)-m.viewHeight()))
+	top = clamp(top, 0, max(0, len(m.lines)-m.viewHeight()))
+	if top == m.top {
+		return
+	}
+	m.top = top
+	m.syncCurrentHunk()
 }
 
-// viewHeight is the room the diff rows get: the whole pane, minus the footer
-// row while a search is open (#2409) or a notice is set (#2506).
+// chromeRows is the pane rows the view spends on its own chrome (#2494): the
+// side-label header on top and the footer (progress + hints; the search
+// prompt and the live-reload notice share its row, #2409/#2506) at the
+// bottom. Tiny panes shed the chrome — footer below two rows, header below
+// three — so a one-row view is still all diff.
+func (m Model) chromeRows() (header, footer int) {
+	if m.h >= 2 {
+		footer = 1
+	}
+	if (m.sideL != "" || m.sideR != "") && m.h >= 3 {
+		header = 1
+	}
+	return header, footer
+}
+
+// viewHeight is the room the diff rows get: the pane interior minus the
+// header and footer rows.
 func (m Model) viewHeight() int {
-	if m.search == nil && m.notice == "" {
-		return m.h
-	}
-	if m.h <= 1 {
-		return m.h
-	}
-	return m.h - 1
+	header, footer := m.chromeRows()
+	return max(0, m.h-header-footer)
 }
 
 // View renders the visible window, hard-clamped to the pane interior.
@@ -815,34 +964,144 @@ func (m Model) View() string {
 		return ""
 	}
 	selLo, selHi, hasSel := m.selectedLines()
+	// The current-hunk marker (#2494) is painted here, never baked into the
+	// cached lines: cur moves on every scroll, and re-rendering the document
+	// per scroll is what #2495 removed. Same for the targeted-gap highlight,
+	// which follows the viewport center.
+	curLo, curHi := -1, -1
+	if m.cur >= 0 && m.cur < len(m.res.Hunks) && len(m.rowStarts) > 0 {
+		curLo, curHi = m.hunkSpan(m.cur)
+	}
+	target := m.targetGap()
 	var st styles
 	var hl *highlight.Theme
+	ensure := func() {
+		if hl == nil {
+			// Built once per frame, and only when an overlay needs it: a view
+			// with nothing marked or selected pays nothing.
+			st, hl = m.styles(), m.hlTheme()
+		}
+	}
 	var b strings.Builder
-	body := m.viewHeight()
+	header, footer := m.chromeRows()
+	body := m.h - header - footer
+	if header == 1 {
+		ensure()
+		b.WriteString(ansi.Truncate(m.headerLine(st), m.w, "…"))
+		b.WriteByte('\n')
+	}
 	for row := 0; row < body; row++ {
 		if row > 0 {
 			b.WriteByte('\n')
 		}
 		i := m.top + row
-		if i < 0 || i >= len(m.lines) {
+		if i < 0 || i >= len(m.lines) || i >= len(m.vrows) {
 			continue
 		}
 		line := m.lines[i]
-		if hasSel && i >= selLo && i <= selHi && i < len(m.vrows) {
-			if hl == nil {
-				// Built once per frame, and only when something is selected:
-				// an unselected view pays nothing for the overlay.
-				st, hl = m.styles(), m.hlTheme()
-			}
-			line = m.renderVLine(i, st, hl)
+		sel := hasSel && i >= selLo && i <= selHi
+		marked := i >= curLo && i <= curHi
+		switch {
+		case m.vrows[i].row < 0:
+			// Separators always repaint: the o-target highlight and a
+			// covering selection both live outside the cache.
+			ensure()
+			line = m.renderSeparator(i, m.vrows[i].gi, m.vrows[i].gi == target, st)
+		case sel || marked:
+			ensure()
+			line = m.renderVLine(i, marked, st, hl)
 		}
 		b.WriteString(ansi.Truncate(line, m.w, "…"))
 	}
-	if body < m.h {
+	if footer == 1 {
 		b.WriteByte('\n')
-		b.WriteString(ansi.Truncate(m.footerLine(), m.w, "…"))
+		foot := ""
+		switch {
+		case m.search != nil:
+			// The prompt holds the keyboard, so it outranks everything.
+			foot = m.searchLine()
+		case m.notice != "":
+			// The live-reload notice (#2506), dimmed like the separators.
+			ensure()
+			foot = st.gutter.Render(m.notice)
+		default:
+			ensure()
+			foot = m.footerLine(st)
+		}
+		b.WriteString(ansi.Truncate(foot, m.w, "…"))
 	}
 	return b.String()
+}
+
+// headerLine renders the side-label row (#2494): the two labels over their
+// columns in side-by-side layout, "left → right" in unified.
+func (m Model) headerLine(st styles) string {
+	l, r := m.SideLabels()
+	if m.unified {
+		return st.header.Render(ansi.Truncate(" "+l+" → "+r, m.w, "…"))
+	}
+	lw, rw := m.gutterWidths()
+	colL, colR := m.columnWidths()
+	cell := func(label string, width int) string {
+		label = ansi.Truncate(label, width, "…")
+		if pad := width - lipgloss.Width(label); pad > 0 {
+			label += strings.Repeat(" ", pad)
+		}
+		return st.header.Render(label)
+	}
+	return strings.Repeat(" ", lw+2) + cell(l, colL) + st.colSep +
+		strings.Repeat(" ", rw+2) + cell(r, colR)
+}
+
+// footerLine renders the pane footer (#2494): the current hunk, the scroll
+// progress, and — while collapsed separators are on screen — the gap hint the
+// separators used to carry.
+func (m Model) footerLine(st styles) string {
+	part := "no changes"
+	if n := len(m.res.Hunks); n > 0 {
+		cur := "–" // no current hunk before the first step or scroll
+		if m.cur >= 0 {
+			cur = fmt.Sprintf("%d", m.cur+1)
+		}
+		part = fmt.Sprintf("hunk %s/%d", cur, n)
+	}
+	part = fmt.Sprintf(" %s · %d%%", part, m.Progress())
+	if m.Collapsed() && len(m.sepLines) > 0 {
+		part += " · o expands ▸ marked gap · c shows all"
+	}
+	return st.gutter.Render(part)
+}
+
+// Progress returns how far down the diff the viewport sits, in percent: 0 at
+// the top, 100 when the last line is visible (or the whole diff fits).
+func (m Model) Progress() int {
+	maxTop := len(m.lines) - m.viewHeight()
+	if maxTop <= 0 {
+		return 100
+	}
+	return clamp(m.top*100/maxTop, 0, 100)
+}
+
+// targetGap returns the gap index the o key would expand — the separator
+// nearest the viewport center — or -1 without visible separators.
+func (m Model) targetGap() int {
+	if len(m.sepLines) == 0 {
+		return -1
+	}
+	center := m.top + m.viewHeight()/2
+	best, bestDist, bestLine := -1, 1<<30, 1<<30
+	for line, gi := range m.sepLines {
+		d := line - center
+		if d < 0 {
+			d = -d
+		}
+		// Ties break toward the earlier separator, deterministically — map
+		// order must never pick the o target.
+		if d < bestDist || (d == bestDist && line < bestLine) {
+			best, bestDist, bestLine = gi, d, line
+		}
+	}
+	return best
 }
 
 // displayItem is one render unit: a row index, or a separator for gap gi.
@@ -897,24 +1156,26 @@ func (m *Model) render() {
 	st, hl := m.styles(), m.hlTheme()
 	m.lines = make([]string, len(m.vrows))
 	for line := range m.vrows {
-		m.lines[line] = m.renderVLine(line, st, hl)
+		m.lines[line] = m.renderVLine(line, false, st, hl)
 	}
 	m.scrollTo(m.top)
 }
 
 // renderVLine paints one visual line — the unit both the cached full render
-// and View's per-frame selection overlay go through, so a re-styled line is
-// byte-identical to the one render would have produced (#2495). It reads the
-// model and mutates nothing: View holds a copy sharing these slices.
-func (m *Model) renderVLine(line int, st styles, hl *highlight.Theme) string {
+// and View's per-frame overlays go through, so a re-styled line is
+// byte-identical to the one render would have produced (#2495). marked adds
+// the current-hunk gutter marker (#2494); the cache always renders unmarked
+// (cur moves per scroll) and View overlays it. It reads the model and mutates
+// nothing: View holds a copy sharing these slices.
+func (m *Model) renderVLine(line int, marked bool, st styles, hl *highlight.Theme) string {
 	vr := m.vrows[line]
 	switch {
 	case vr.row < 0:
-		return m.renderSeparator(line, vr.gi, st)
+		return m.renderSeparator(line, vr.gi, false, st)
 	case m.unified:
-		return m.renderUnifiedLine(line, vr, st, hl)
+		return m.renderUnifiedLine(line, vr, marked, st, hl)
 	default:
-		return m.renderSideLine(line, vr.row, st, hl)
+		return m.renderSideLine(line, vr.row, marked, st, hl)
 	}
 }
 
@@ -924,7 +1185,7 @@ func (m *Model) renderVLine(line int, st styles, hl *highlight.Theme) string {
 func (m *Model) measure(items []displayItem) {
 	if m.unified {
 		lw, rw := m.gutterWidths()
-		m.hcol = max(1, m.w-(lw+1)-(rw+1))
+		m.hcol = max(1, m.w-(lw+2)-(rw+2))
 	} else {
 		colL, _ := m.columnWidths()
 		m.hcol = colL
@@ -941,35 +1202,67 @@ func (m *Model) measure(items []displayItem) {
 }
 
 // columnWidths returns the side-by-side text budget of the left and right
-// column (gutters and separator already subtracted).
+// column (marker columns, gutters and separator already subtracted).
 func (m Model) columnWidths() (colL, colR int) {
 	lw, rw := m.gutterWidths()
-	avail := m.w - (lw + 1) - (rw + 1) - 3 // two gutters + " │ "
+	avail := m.w - (lw + 2) - (rw + 2) - 3 // two marker+gutter columns + " │ "
 	return max(1, avail/2), max(1, avail-avail/2)
 }
 
-// renderSeparator renders one collapsed-gap row. A selection covering part of
-// the label highlights it — and copies the gap's hidden rows in full (#2070).
-func (m *Model) renderSeparator(line, gi int, st styles) string {
+// sepButtonWidth is the click target of a separator's expand button (#2494):
+// the ▸ glyph and the space after it, at the row's left edge.
+const sepButtonWidth = 2
+
+// renderSeparator renders one collapsed-gap row: the ▸ expand button on the
+// left edge (always in the marker colour — it is the affordance), then the
+// centered count. target marks the gap o would expand: its whole row takes
+// the marker colour so the key's target is visible before pressing it
+// (#2494). A selection covering part of the row highlights it — and copies
+// the gap's hidden rows in full (#2070).
+func (m *Model) renderSeparator(line, gi int, target bool, st styles) string {
 	label := m.sepLabel(gi)
 	runes := []rune(label)
-	if a, b := m.sel.LineRange(line, len(runes)); m.sel.Active() && a < b {
-		a = clamp(a, 0, len(runes))
-		return st.gutter.Render(string(runes[:a])) + st.sel.Render(string(runes[a:b])) +
-			st.gutter.Render(string(runes[b:]))
+	base := st.gutter
+	if target {
+		base = st.marker
 	}
-	return st.gutter.Render(label)
+	a, b := m.sel.LineRange(line, len(runes))
+	if !(m.sel.Active() && a < b) {
+		a, b = 0, 0
+	}
+	var out strings.Builder
+	emit := func(lo, hi int, sty lipgloss.Style) {
+		if lo >= hi {
+			return
+		}
+		s0, s1 := clamp(a, lo, hi), clamp(b, lo, hi)
+		if s0 > lo {
+			out.WriteString(sty.Render(string(runes[lo:s0])))
+		}
+		if s1 > s0 {
+			out.WriteString(st.sel.Render(string(runes[s0:s1])))
+		}
+		if hi > s1 {
+			out.WriteString(sty.Render(string(runes[s1:hi])))
+		}
+	}
+	bw := min(sepButtonWidth, len(runes))
+	emit(0, bw, st.marker)
+	emit(bw, len(runes), base)
+	return out.String()
 }
 
-// sepLabel is the placeholder text of one collapsed gap, centering padding
-// included — selection column math and the render agree on the same runes.
+// sepLabel is the plain text of one collapsed gap's row — the ▸ expand
+// button on the left edge, then the centered count — with all padding
+// included, so selection column math and the render agree on the same runes.
 func (m *Model) sepLabel(gi int) string {
 	g := m.gaps[gi]
-	label := fmt.Sprintf("··· %d unchanged lines (o expands, c shows all) ···", g.end-g.start)
-	if pad := (m.w - len([]rune(label))) / 2; pad > 0 {
+	label := fmt.Sprintf("··· %d unchanged lines ···", g.end-g.start)
+	button := "▸ "
+	if pad := (m.w-len([]rune(label)))/2 - len([]rune(button)); pad > 0 {
 		label = strings.Repeat(" ", pad) + label
 	}
-	return label
+	return button + label
 }
 
 // styles bundles the resolved lipgloss styles one render pass reuses.
@@ -981,6 +1274,11 @@ type styles struct {
 	addedEmph   lipgloss.Style
 	removedEmph lipgloss.Style
 	sel         lipgloss.Style
+	// marker styles the current-hunk gutter marker, the separators' expand
+	// button and the o-target separator (theme slot DiffMarker, #2494);
+	// header styles the side-label row.
+	marker lipgloss.Style
+	header lipgloss.Style
 	// colSep is the pre-rendered side-by-side column separator: styling it
 	// once per pass beats once per line (#2495).
 	colSep string
@@ -1010,6 +1308,8 @@ func (m Model) styles() styles {
 		addedEmph:   emph(pal.DiffAddedEmph),
 		removedEmph: emph(pal.DiffRemovedEmph),
 		sel:         lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText),
+		marker:      lipgloss.NewStyle().Foreground(pal.DiffMarker),
+		header:      lipgloss.NewStyle().Bold(true).Faint(true),
 		colSep:      gutter.Render(" │ "),
 	}
 }
@@ -1045,7 +1345,7 @@ func (st styles) emph(kind Kind, right bool) lipgloss.Style {
 // "NNN old │ NNN new". Neither side wraps (#1700): every row is exactly one
 // visual line, both sides clipped to their column budget from the shared
 // horizontal offset, so corresponding rows and columns stay aligned.
-func (m *Model) renderSideLine(line, ri int, st styles, hl *highlight.Theme) string {
+func (m *Model) renderSideLine(line, ri int, marked bool, st styles, hl *highlight.Theme) string {
 	row := m.res.Rows[ri]
 	lw, rw := m.gutterWidths()
 	colL, colR := m.columnWidths()
@@ -1056,12 +1356,12 @@ func (m *Model) renderSideLine(line, ri int, st styles, hl *highlight.Theme) str
 	selL0, selL1 := m.selColsLen(line, false, len(runesL))
 	selR0, selR1 := m.selColsLen(line, true, len(runesR))
 	var b strings.Builder
-	b.WriteString(m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, st))
+	b.WriteString(m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, marked, st))
 	b.WriteString(m.stampHScroll(renderSegment(runesL, gapL, m.hoff, colL,
 		st.base(row.Kind, false), st.emph(row.Kind, false), expandSpans(row.Left, row.LeftSpans), capsL, hl,
 		selL0, selL1, st.sel), runesL, gapL, colL))
 	b.WriteString(st.colSep)
-	b.WriteString(m.gutterCell(row.RightNo, rw, row.Kind != RowRemoved, st))
+	b.WriteString(m.gutterCell(row.RightNo, rw, row.Kind != RowRemoved, marked, st))
 	b.WriteString(m.stampHScroll(renderSegment(runesR, gapR, m.hoff, colR,
 		st.base(row.Kind, true), st.emph(row.Kind, true), expandSpans(row.Right, row.RightSpans), capsR, hl,
 		selR0, selR1, st.sel), runesR, gapR, colR))
@@ -1072,7 +1372,7 @@ func (m *Model) renderSideLine(line, ri int, st styles, hl *highlight.Theme) str
 // dual line-number gutter; a changed pair renders as its removed line followed
 // by its added line, so vr.right names which of the two this line is. Lines
 // never wrap — they clip at the column edge and scroll horizontally (#1700).
-func (m *Model) renderUnifiedLine(line int, vr vrow, st styles, hl *highlight.Theme) string {
+func (m *Model) renderUnifiedLine(line int, vr vrow, marked bool, st styles, hl *highlight.Theme) string {
 	row := m.res.Rows[vr.row]
 	text, leftNo, rightNo := row.Left, row.LeftNo, 0
 	base, emph := st.removed, st.removedEmph
@@ -1089,12 +1389,12 @@ func (m *Model) renderUnifiedLine(line int, vr vrow, st styles, hl *highlight.Th
 		caps = sideCaps(m.rightIx, row.RightNo, row.Right)
 	}
 	lw, rw := m.gutterWidths()
-	col := max(1, m.w-(lw+1)-(rw+1))
+	col := max(1, m.w-(lw+2)-(rw+2))
 	runes := expand(text)
 	sel0, sel1 := m.selColsLen(line, false, len(runes))
 	var b strings.Builder
-	b.WriteString(m.gutterCell(leftNo, lw, true, st))
-	b.WriteString(m.gutterCell(rightNo, rw, true, st))
+	b.WriteString(m.gutterCell(leftNo, lw, true, marked, st))
+	b.WriteString(m.gutterCell(rightNo, rw, true, false, st))
 	b.WriteString(m.stampHScroll(renderSegment(runes, false, m.hoff, col, base, emph,
 		expandSpans(text, spans), caps, hl, sel0, sel1, st.sel), runes, false, col))
 	return b.String()
@@ -1124,13 +1424,19 @@ func computeGutterWidths(rows []Row) (lw, rw int) {
 	return max(3, digits(maxL)), max(3, digits(maxR))
 }
 
-// gutterCell renders one line-number cell: the line number, blank on the gap
-// side. Rows are one visual line each (#1700), so there are no continuations.
-func (m Model) gutterCell(no, width int, present bool, st styles) string {
-	if !present || no == 0 {
-		return strings.Repeat(" ", width+1)
+// gutterCell renders one line-number cell: a one-cell marker column (the
+// current-hunk ▎ when marked, blank otherwise, #2494), then the line number,
+// blank on the gap side. Rows are one visual line each (#1700), so there are
+// no continuations.
+func (m Model) gutterCell(no, width int, present, marked bool, st styles) string {
+	mark := " "
+	if marked {
+		mark = st.marker.Render("▎")
 	}
-	return st.gutter.Render(fmt.Sprintf("%*d ", width, no))
+	if !present || no == 0 {
+		return mark + strings.Repeat(" ", width+1)
+	}
+	return mark + st.gutter.Render(fmt.Sprintf("%*d ", width, no))
 }
 
 // renderSegment paints one row's visible window — display columns [hoff,

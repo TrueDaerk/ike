@@ -121,13 +121,32 @@ func (m *Model) stepSearch(delta int) ui.MatchStep {
 }
 
 // scrollToMatch brings the current match a third down the viewport, like the
-// hunk steps do.
+// hunk steps do. A match hidden inside a collapsed gap expands that gap
+// first (#2494): the jump must land on the match row itself, never on the
+// separator standing in for it — and the expansion rebuilds the visual-row
+// map before the row's position is read, so the landing is computed against
+// the layout actually on screen.
 func (m *Model) scrollToMatch() {
 	row, ok := m.search.Current()
 	if !ok {
 		return
 	}
-	m.scrollTo(m.rowStart(row) - m.h/3)
+	m.revealRow(row)
+	m.scrollTo(m.rowStart(row) - m.viewHeight()/3)
+}
+
+// revealRow expands the collapsed gap hiding row, if any; visible rows are a
+// no-op.
+func (m *Model) revealRow(row int) {
+	if !m.Collapsed() {
+		return
+	}
+	for gi, g := range m.gaps {
+		if !g.expanded && row >= g.start && row < g.end {
+			m.expandGap(gi)
+			return
+		}
+	}
 }
 
 // rowStart is a row's first visual line, 0 before the first render.
@@ -151,14 +170,6 @@ func (m *Model) recomputeMatches() {
 
 // searchLine renders the prompt row — the shared shape (#2461): the slash
 // prefix, the query with its text cursor while typing, and the match counter.
+// It takes over the footer row while a search lives (#2494); the precedence
+// over the notice and the hunk/progress readout lives in View.
 func (m Model) searchLine() string { return m.search.Line() }
-
-// footerLine renders the pane's last row: the search prompt while one is open
-// — it holds the keyboard, so it outranks everything — else the live-reload
-// notice (#2506), dimmed like the collapsed-context separators.
-func (m Model) footerLine() string {
-	if m.search != nil {
-		return m.searchLine()
-	}
-	return m.styles().gutter.Render(m.notice)
-}

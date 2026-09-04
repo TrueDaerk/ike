@@ -90,16 +90,14 @@ func TestHunkNavigation(t *testing.T) {
 	if m.HunkCount() != 2 {
 		t.Fatalf("want 2 hunks, got %d", m.HunkCount())
 	}
+	// A fresh view has no current hunk yet (#2494): the first step or real
+	// scroll sets it.
 	if m.CurrentHunk() != -1 {
 		t.Fatalf("current hunk should start at -1, got %d", m.CurrentHunk())
 	}
 	m.Update(key("n"))
-	if m.CurrentHunk() != 0 {
-		t.Fatalf("n should land on hunk 0, got %d", m.CurrentHunk())
-	}
-	m.Update(key("n"))
 	if m.CurrentHunk() != 1 {
-		t.Fatalf("second n should land on hunk 1, got %d", m.CurrentHunk())
+		t.Fatalf("n should step to hunk 1, got %d", m.CurrentHunk())
 	}
 	if !strings.Contains(plainView(m), "y2") {
 		t.Fatalf("view should have scrolled to the second hunk:\n%s", plainView(m))

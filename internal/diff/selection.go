@@ -92,6 +92,13 @@ func (m *Model) MousePress(x, y int) {
 	if m.editModeOn || len(m.vrows) == 0 {
 		return
 	}
+	// A press on a separator's ▸ expand button expands that gap (#2494)
+	// instead of starting a selection; the rest of the separator row stays
+	// selectable (it copies the hidden rows, #1741).
+	if line := m.lineAt(y); x < sepButtonWidth && line >= 0 && m.vrows[line].row < 0 {
+		m.expandGap(m.vrows[line].gi)
+		return
+	}
 	p, right := m.posAt(x, y)
 	if !m.unified && right != m.selRight {
 		// Switching sides restarts the gesture: the click streak and any old
@@ -139,16 +146,30 @@ func (m *Model) posAt(x, y int) (p textsel.Pos, right bool) {
 		colL, _ := m.columnWidths()
 		// The separator's middle splits the pane: presses left of it select in
 		// the left column, right of it in the right column.
-		right = x >= lw+1+colL+2
+		right = x >= lw+2+colL+2
 	}
 	return m.posAtSide(x, y, right), right
 }
 
+// lineAt maps a pane-local row onto its visual line, skipping the side-label
+// header (#2494); -1 when the cell is chrome or past the content.
+func (m *Model) lineAt(y int) int {
+	header, _ := m.chromeRows()
+	line := m.top + y - header
+	if y < header || line < 0 || line >= len(m.vrows) {
+		return -1
+	}
+	return line
+}
+
 // posAtSide maps a cell onto a position within one side's content column,
 // clamping the column into that side's text — a drag past the other column
-// lands on the line end instead of crossing over.
+// lands on the line end instead of crossing over. The gutters carry a
+// one-cell marker column (#2494), so content starts one cell further right
+// than the bare gutter width.
 func (m *Model) posAtSide(x, y int, right bool) textsel.Pos {
-	line := clamp(m.top+y, 0, len(m.vrows)-1)
+	header, _ := m.chromeRows()
+	line := clamp(m.top+y-header, 0, len(m.vrows)-1)
 	var col int
 	if m.vrows[line].row < 0 {
 		// A separator renders from the pane's left edge and never h-scrolls,
@@ -156,14 +177,14 @@ func (m *Model) posAtSide(x, y int, right bool) textsel.Pos {
 		col = x
 	} else if m.unified {
 		lw, rw := m.gutterWidths()
-		col = x - (lw + 1 + rw + 1) + m.hoff
+		col = x - (lw + 2 + rw + 2) + m.hoff
 	} else if right {
 		lw, rw := m.gutterWidths()
 		colL, _ := m.columnWidths()
-		col = x - (lw + 1 + colL + 3 + rw + 1) + m.hoff
+		col = x - (lw + 2 + colL + 3 + rw + 2) + m.hoff
 	} else {
 		lw, _ := m.gutterWidths()
-		col = x - (lw + 1) + m.hoff
+		col = x - (lw + 2) + m.hoff
 	}
 	return textsel.Pos{Line: line, Col: clamp(col, 0, len(m.selRunes(line)))}
 }

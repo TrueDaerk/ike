@@ -184,6 +184,7 @@ func (m *Model) openDiffHeadPane(path, head string) {
 		name := filepath.Base(path)
 		inst.StopDiffEdit()
 		inst.Diff().Retarget(name+" @ HEAD", name, "", path, "HEAD", "", true)
+		inst.Diff().SetSideLabels(name+" @ HEAD", "working copy") // #2494
 		inst.Diff().SetContents(head, right)
 		m.focusContentAt(hostKey, tabIdx)
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)

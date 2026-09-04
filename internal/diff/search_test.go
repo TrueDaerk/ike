@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // search_test.go covers #2409: the diff viewer's own in-pane search — "/" and
@@ -117,7 +118,9 @@ func TestSearchStepsMatchesWithNAndN(t *testing.T) {
 // TestNoSearchKeepsHunkStepping: without a query n/N still navigate changes,
 // the diff pane's whole point.
 func TestNoSearchKeepsHunkStepping(t *testing.T) {
-	m := testModel(t, "a\nb\nc\n", "a\nB\nc\n")
+	left := "x1\n" + strings.Repeat("same\n", 20) + "x2\n"
+	right := "y1\n" + strings.Repeat("same\n", 20) + "y2\n"
+	m := testModel(t, left, right)
 	before := m.cur
 	m.Update(key("n"))
 	if m.cur == before {
@@ -141,20 +144,30 @@ func TestEscClosesTheSearch(t *testing.T) {
 	}
 }
 
-// TestSearchPromptCostsOneRow: the prompt takes a line from the diff body
-// while it is open, and gives it back when it closes.
-func TestSearchPromptCostsOneRow(t *testing.T) {
+// TestSearchPromptSharesTheFooterRow: the prompt takes over the footer row
+// (#2494) rather than costing the diff body a line, and the footer returns
+// when the search closes.
+func TestSearchPromptSharesTheFooterRow(t *testing.T) {
 	doc := numbered("line", 40)
 	m := testModel(t, doc, doc)
 	full := m.viewHeight()
 	m.OpenSearch()
-	if got := m.viewHeight(); got != full-1 {
-		t.Fatalf("viewHeight with the prompt open = %d, want %d", got, full-1)
+	if got := m.viewHeight(); got != full {
+		t.Fatalf("viewHeight with the prompt open = %d, want %d", got, full)
+	}
+	if v := ansi.Strip(m.View()); !strings.Contains(lastLine(v), "/") {
+		t.Fatalf("the footer row must show the prompt:\n%s", v)
 	}
 	m.closeSearch()
-	if got := m.viewHeight(); got != full {
-		t.Fatalf("viewHeight after closing = %d, want %d", got, full)
+	if v := ansi.Strip(m.View()); !strings.Contains(lastLine(v), "%") {
+		t.Fatalf("closing must give the footer back:\n%s", v)
 	}
+}
+
+// lastLine returns the final line of a rendered frame.
+func lastLine(v string) string {
+	lines := strings.Split(v, "\n")
+	return lines[len(lines)-1]
 }
 
 // TestSearchIsSmartcase: an all-lowercase query folds case, an uppercase rune

@@ -911,7 +911,8 @@ func (r *Registry) AddDiffHead(rightPath string) string {
 	}
 	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
 	inst.df = diff.New(key, filepath.Base(rightPath)+" @ HEAD", filepath.Base(rightPath), rightPath, r.pal)
-	inst.df.SetEditable(true) // the right side is the working tree (#496)
+	inst.df.SetSideLabels(filepath.Base(rightPath)+" @ HEAD", "working copy") // #2494
+	inst.df.SetEditable(true)                                                 // the right side is the working tree (#496)
 	inst.df.SetRevs("HEAD", "")
 	r.applyDiffConfig(inst)
 	r.put(inst)
@@ -958,6 +959,11 @@ func (r *Registry) newDiffRevInstance(key, leftPath, rightPath, leftRev, rightRe
 	}
 	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
 	inst.df = diff.New(key, leftTitle, rightTitle, rightPath, r.pal)
+	rightLabel := rightTitle
+	if rightRev == "" {
+		rightLabel = "working copy" // the unversioned side is the live file (#2494)
+	}
+	inst.df.SetSideLabels(leftTitle, rightLabel)
 	inst.df.SetRevs(leftRev, rightRev)
 	inst.df.SetEditable(rightRev == "")
 	r.applyDiffConfig(inst)
