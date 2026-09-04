@@ -63,6 +63,9 @@ type Model struct {
 	top       int // first visible visual row
 	lines     []string
 	rowStarts []int // visual row each Row starts on, for hunk navigation
+	// gutL/gutR cache the two line-number gutter widths for the current rows;
+	// 0 means "not measured yet", see gutterWidths.
+	gutL, gutR int
 
 	// Horizontal scrolling (#1700): the diff never soft-wraps — every row is
 	// exactly one visual line, clipped at its column edge. hoff is the shared
@@ -723,19 +726,39 @@ func (m Model) viewHeight() int {
 }
 
 // View renders the visible window, hard-clamped to the pane interior.
+//
+// The cached lines carry no selection highlight (#2495): a drag emits one
+// motion event per pointer cell, and restyling the whole document per event
+// is what made the highlight trail the pointer. The selection is painted here
+// instead, over the at-most-h visible lines it actually covers, so a motion
+// event costs a viewport and not a document.
 func (m Model) View() string {
 	if m.w <= 0 || m.h <= 0 {
 		return ""
 	}
+	selLo, selHi, hasSel := m.selectedLines()
+	var st styles
+	var hl *highlight.Theme
 	var b strings.Builder
 	body := m.viewHeight()
 	for row := 0; row < body; row++ {
 		if row > 0 {
 			b.WriteByte('\n')
 		}
-		if i := m.top + row; i >= 0 && i < len(m.lines) {
-			b.WriteString(ansi.Truncate(m.lines[i], m.w, "…"))
+		i := m.top + row
+		if i < 0 || i >= len(m.lines) {
+			continue
 		}
+		line := m.lines[i]
+		if hasSel && i >= selLo && i <= selHi && i < len(m.vrows) {
+			if hl == nil {
+				// Built once per frame, and only when something is selected:
+				// an unselected view pays nothing for the overlay.
+				st, hl = m.styles(), m.hlTheme()
+			}
+			line = m.renderVLine(i, st, hl)
+		}
+		b.WriteString(ansi.Truncate(line, m.w, "…"))
 	}
 	if body < m.h {
 		b.WriteByte('\n')
@@ -786,18 +809,35 @@ func (m *Model) render() {
 	m.lines = nil
 	m.rowStarts = make([]int, len(m.res.Rows))
 	m.sepLines = map[int]int{}
+	m.gutL, m.gutR = computeGutterWidths(m.res.Rows)
 	if m.w <= 0 {
 		return
 	}
 	items := m.displayItems()
 	m.buildVRows(items)
 	m.measure(items)
-	if m.unified {
-		m.renderUnified(items)
-	} else {
-		m.renderSideBySide(items)
+	st, hl := m.styles(), m.hlTheme()
+	m.lines = make([]string, len(m.vrows))
+	for line := range m.vrows {
+		m.lines[line] = m.renderVLine(line, st, hl)
 	}
 	m.scrollTo(m.top)
+}
+
+// renderVLine paints one visual line — the unit both the cached full render
+// and View's per-frame selection overlay go through, so a re-styled line is
+// byte-identical to the one render would have produced (#2495). It reads the
+// model and mutates nothing: View holds a copy sharing these slices.
+func (m *Model) renderVLine(line int, st styles, hl *highlight.Theme) string {
+	vr := m.vrows[line]
+	switch {
+	case vr.row < 0:
+		return m.renderSeparator(line, vr.gi, st)
+	case m.unified:
+		return m.renderUnifiedLine(line, vr, st, hl)
+	default:
+		return m.renderSideLine(line, vr.row, st, hl)
+	}
 }
 
 // measure records the widest displayed line (hmax) and the visible column
@@ -830,25 +870,17 @@ func (m Model) columnWidths() (colL, colR int) {
 	return max(1, avail/2), max(1, avail-avail/2)
 }
 
-// emitSeparator renders one collapsed-gap row and stamps the hidden rows'
-// rowStarts onto it. A selection covering part of the label highlights it —
-// and copies the gap's hidden rows in full (#2070).
-func (m *Model) emitSeparator(gi int, st styles) {
-	g := m.gaps[gi]
-	line := len(m.lines)
-	m.sepLines[line] = gi
-	for r := g.start; r < g.end; r++ {
-		m.rowStarts[r] = line
-	}
+// renderSeparator renders one collapsed-gap row. A selection covering part of
+// the label highlights it — and copies the gap's hidden rows in full (#2070).
+func (m *Model) renderSeparator(line, gi int, st styles) string {
 	label := m.sepLabel(gi)
-	rendered := st.gutter.Render(label)
 	runes := []rune(label)
 	if a, b := m.sel.LineRange(line, len(runes)); m.sel.Active() && a < b {
 		a = clamp(a, 0, len(runes))
-		rendered = st.gutter.Render(string(runes[:a])) + st.sel.Render(string(runes[a:b])) +
+		return st.gutter.Render(string(runes[:a])) + st.sel.Render(string(runes[a:b])) +
 			st.gutter.Render(string(runes[b:]))
 	}
-	m.lines = append(m.lines, rendered)
+	return st.gutter.Render(label)
 }
 
 // sepLabel is the placeholder text of one collapsed gap, centering padding
@@ -871,6 +903,9 @@ type styles struct {
 	addedEmph   lipgloss.Style
 	removedEmph lipgloss.Style
 	sel         lipgloss.Style
+	// colSep is the pre-rendered side-by-side column separator: styling it
+	// once per pass beats once per line (#2495).
+	colSep string
 }
 
 func (m Model) styles() styles {
@@ -888,14 +923,16 @@ func (m Model) styles() styles {
 	emph := func(bg color.Color) lipgloss.Style {
 		return lipgloss.NewStyle().Background(bg).Bold(true)
 	}
+	gutter := lipgloss.NewStyle().Faint(true)
 	return styles{
-		gutter:      lipgloss.NewStyle().Faint(true),
+		gutter:      gutter,
 		same:        lipgloss.NewStyle(),
 		added:       lipgloss.NewStyle().Background(pal.DiffAdded),
 		removed:     lipgloss.NewStyle().Background(pal.DiffRemoved),
 		addedEmph:   emph(pal.DiffAddedEmph),
 		removedEmph: emph(pal.DiffRemovedEmph),
 		sel:         lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText),
+		colSep:      gutter.Render(" │ "),
 	}
 }
 
@@ -926,89 +963,79 @@ func (st styles) emph(kind Kind, right bool) lipgloss.Style {
 	return st.removedEmph
 }
 
-// renderSideBySide paints two aligned columns with a dual gutter:
+// renderSideLine paints one row as two aligned columns with a dual gutter:
 // "NNN old │ NNN new". Neither side wraps (#1700): every row is exactly one
 // visual line, both sides clipped to their column budget from the shared
 // horizontal offset, so corresponding rows and columns stay aligned.
-func (m *Model) renderSideBySide(items []displayItem) {
-	st := m.styles()
-	hl := m.hlTheme()
+func (m *Model) renderSideLine(line, ri int, st styles, hl *highlight.Theme) string {
+	row := m.res.Rows[ri]
 	lw, rw := m.gutterWidths()
 	colL, colR := m.columnWidths()
-	sep := st.gutter.Render(" │ ")
-	for _, it := range items {
-		if it.row < 0 {
-			m.emitSeparator(it.gi, st)
-			continue
-		}
-		ri := it.row
-		row := m.res.Rows[ri]
-		line := len(m.lines)
-		m.rowStarts[ri] = line
-		capsL := sideCaps(m.leftIx, row.LeftNo, row.Left)
-		capsR := sideCaps(m.rightIx, row.RightNo, row.Right)
-		selL0, selL1 := m.selCols(line, false)
-		selR0, selR1 := m.selCols(line, true)
-		var b strings.Builder
-		runesL, gapL := expand(row.Left), row.Kind == RowAdded
-		runesR, gapR := expand(row.Right), row.Kind == RowRemoved
-		b.WriteString(m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, st))
-		b.WriteString(m.stampHScroll(renderSegment(runesL, gapL, m.hoff, colL,
-			st.base(row.Kind, false), st.emph(row.Kind, false), expandSpans(row.Left, row.LeftSpans), capsL, hl,
-			selL0, selL1, st.sel), runesL, gapL, colL))
-		b.WriteString(sep)
-		b.WriteString(m.gutterCell(row.RightNo, rw, row.Kind != RowRemoved, st))
-		b.WriteString(m.stampHScroll(renderSegment(runesR, gapR, m.hoff, colR,
-			st.base(row.Kind, true), st.emph(row.Kind, true), expandSpans(row.Right, row.RightSpans), capsR, hl,
-			selR0, selR1, st.sel), runesR, gapR, colR))
-		m.lines = append(m.lines, b.String())
-	}
+	capsL := sideCaps(m.leftIx, row.LeftNo, row.Left)
+	capsR := sideCaps(m.rightIx, row.RightNo, row.Right)
+	runesL, gapL := expand(row.Left), row.Kind == RowAdded
+	runesR, gapR := expand(row.Right), row.Kind == RowRemoved
+	selL0, selL1 := m.selColsLen(line, false, len(runesL))
+	selR0, selR1 := m.selColsLen(line, true, len(runesR))
+	var b strings.Builder
+	b.WriteString(m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, st))
+	b.WriteString(m.stampHScroll(renderSegment(runesL, gapL, m.hoff, colL,
+		st.base(row.Kind, false), st.emph(row.Kind, false), expandSpans(row.Left, row.LeftSpans), capsL, hl,
+		selL0, selL1, st.sel), runesL, gapL, colL))
+	b.WriteString(st.colSep)
+	b.WriteString(m.gutterCell(row.RightNo, rw, row.Kind != RowRemoved, st))
+	b.WriteString(m.stampHScroll(renderSegment(runesR, gapR, m.hoff, colR,
+		st.base(row.Kind, true), st.emph(row.Kind, true), expandSpans(row.Right, row.RightSpans), capsR, hl,
+		selR0, selR1, st.sel), runesR, gapR, colR))
+	return b.String()
 }
 
-// renderUnified paints a single column with a dual line-number gutter; a
-// changed pair renders as its removed line followed by its added line. Lines
+// renderUnifiedLine paints one visual line of the single-column layout, with a
+// dual line-number gutter; a changed pair renders as its removed line followed
+// by its added line, so vr.right names which of the two this line is. Lines
 // never wrap — they clip at the column edge and scroll horizontally (#1700).
-func (m *Model) renderUnified(items []displayItem) {
-	st := m.styles()
-	hl := m.hlTheme()
+func (m *Model) renderUnifiedLine(line int, vr vrow, st styles, hl *highlight.Theme) string {
+	row := m.res.Rows[vr.row]
+	text, leftNo, rightNo := row.Left, row.LeftNo, 0
+	base, emph := st.removed, st.removedEmph
+	spans := row.LeftSpans
+	caps := sideCaps(m.leftIx, row.LeftNo, row.Left)
+	switch {
+	case row.Kind == RowSame:
+		rightNo = row.RightNo
+		base, emph, spans = st.same, st.same, nil
+		caps = sideCaps(m.rightIx, row.RightNo, row.Right)
+	case vr.right: // the added half of a changed pair, or an added row
+		text, leftNo, rightNo = row.Right, 0, row.RightNo
+		base, emph, spans = st.added, st.addedEmph, row.RightSpans
+		caps = sideCaps(m.rightIx, row.RightNo, row.Right)
+	}
 	lw, rw := m.gutterWidths()
 	col := max(1, m.w-(lw+1)-(rw+1))
-	emit := func(text string, leftNo, rightNo int, base, emph lipgloss.Style, spans []Span, caps []string) {
-		sel0, sel1 := m.selCols(len(m.lines), false)
-		var b strings.Builder
-		b.WriteString(m.gutterCell(leftNo, lw, true, st))
-		b.WriteString(m.gutterCell(rightNo, rw, true, st))
-		runes := expand(text)
-		b.WriteString(m.stampHScroll(renderSegment(runes, false, m.hoff, col, base, emph, expandSpans(text, spans), caps, hl,
-			sel0, sel1, st.sel), runes, false, col))
-		m.lines = append(m.lines, b.String())
-	}
-	for _, it := range items {
-		if it.row < 0 {
-			m.emitSeparator(it.gi, st)
-			continue
-		}
-		ri := it.row
-		row := m.res.Rows[ri]
-		m.rowStarts[ri] = len(m.lines)
-		switch row.Kind {
-		case RowSame:
-			emit(row.Left, row.LeftNo, row.RightNo, st.same, st.same, nil, sideCaps(m.rightIx, row.RightNo, row.Right))
-		case RowChanged:
-			emit(row.Left, row.LeftNo, 0, st.removed, st.removedEmph, row.LeftSpans, sideCaps(m.leftIx, row.LeftNo, row.Left))
-			emit(row.Right, 0, row.RightNo, st.added, st.addedEmph, row.RightSpans, sideCaps(m.rightIx, row.RightNo, row.Right))
-		case RowRemoved:
-			emit(row.Left, row.LeftNo, 0, st.removed, st.removedEmph, row.LeftSpans, sideCaps(m.leftIx, row.LeftNo, row.Left))
-		case RowAdded:
-			emit(row.Right, 0, row.RightNo, st.added, st.addedEmph, row.RightSpans, sideCaps(m.rightIx, row.RightNo, row.Right))
-		}
-	}
+	runes := expand(text)
+	sel0, sel1 := m.selColsLen(line, false, len(runes))
+	var b strings.Builder
+	b.WriteString(m.gutterCell(leftNo, lw, true, st))
+	b.WriteString(m.gutterCell(rightNo, rw, true, st))
+	b.WriteString(m.stampHScroll(renderSegment(runes, false, m.hoff, col, base, emph,
+		expandSpans(text, spans), caps, hl, sel0, sel1, st.sel), runes, false, col))
+	return b.String()
 }
 
-// gutterWidths returns the digit widths of the two line-number columns.
+// gutterWidths returns the digit widths of the two line-number columns. The
+// widths scan every row, so they are cached per render pass (#2495): the
+// per-line renderers and every mouse-cell mapping ask for them.
 func (m Model) gutterWidths() (lw, rw int) {
+	if m.gutL > 0 {
+		return m.gutL, m.gutR
+	}
+	return computeGutterWidths(m.res.Rows)
+}
+
+// computeGutterWidths derives the two gutter widths from the row list.
+func computeGutterWidths(rows []Row) (lw, rw int) {
 	maxL, maxR := 1, 1
-	for _, r := range m.res.Rows {
+	for _, r := range rows {
 		if r.LeftNo > maxL {
 			maxL = r.LeftNo
 		}
