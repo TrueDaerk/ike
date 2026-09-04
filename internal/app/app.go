@@ -2705,6 +2705,10 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 	// project of a run reports its foreground time here, the earlier ones did
 	// so on their switch.
 	m.recordProjectLeave(telemetryProjectToken(), "quit")
+	// A post-switch warm-up wait still armed can never resolve — close its
+	// "lsp" phase as skipped=quit (#2492) so the last switch of a session
+	// stays phase-complete in the export.
+	m.noteSwitchLSPSkipped("quit")
 	// Flush and end the usage log (#2235); blocking here is as fine as the
 	// synchronous quit hooks above.
 	m.usage.Close()
@@ -7742,6 +7746,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A parked workspace may have sat past the background LSP timeout
 		// (#1521): stop its servers if it is in fact still parked and idle.
 		return m.handleWorkspaceIdle(msg)
+
+	case switchLSPQuietMsg:
+		// The post-switch warm-up wait timed out without a publish (#2492):
+		// close the op's "lsp" phase as skipped=quiet so the export can tell
+		// "no server ever spoke" from a lost event. Pointer identity guards
+		// against a stale timer outliving its switch — a newer switch armed a
+		// different wait.
+		if m.switchLSPWait == msg.wait {
+			m.noteSwitchLSPSkipped("quiet")
+		}
+		return m, nil
 
 	case vcs.SnapshotMsg:
 		return m, m.applyVCSSnapshot(msg)

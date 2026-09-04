@@ -11,6 +11,7 @@ import (
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/host"
+	"ike/internal/lang"
 	"ike/internal/pane"
 	"ike/internal/project"
 	"ike/internal/telemetry"
@@ -206,6 +207,11 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// The op pair brackets exactly the transaction below; a failed chdir ends
 	// it as "error", the ready model as "ok".
 	switchStart := time.Now()
+	// A previous switch's warm-up wait still armed can never resolve once this
+	// switch discards the model holding it — close it as "superseded" (#2492)
+	// before the new op starts, so its phase lands on the right side of the
+	// next "start" in the export.
+	m.noteSwitchLSPSkipped("superseded")
 	endOp := m.usage.OpTimer(telemetry.OpProjectSwitch)
 	// Whether the target is a workspace coming back from the background is
 	// known before the rebuild consumes it, and it is the first thing that
@@ -503,13 +509,22 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// language servers are not part of this span: their first publish for the
 	// new root arrives asynchronously long after the model is ready, so lsp is
 	// -1 here and the armed wait reports the real number as its own "lsp"
-	// phase on the same op id (telemetry.go).
+	// phase on the same op id (telemetry.go). Every ok is followed by exactly
+	// one such phase (#2492): a model with no server-language document open
+	// reports skipped=no_server_docs on the spot, an armed wait that never
+	// sees a publish is closed by the quiet fallback timer.
 	sized.switchLSPWait = &switchLSPWait{start: switchStart}
 	endOp("ok", map[string]string{
 		"parked": strconv.FormatBool(parked),
 		"panes":  strconv.Itoa(len(sized.activeWS().Panes.Keys())),
 		"lsp":    "-1",
 	})
+	var lspQuietCmd tea.Cmd
+	if sized.switchHasServerDocs() {
+		lspQuietCmd = armSwitchLSPQuiet(sized.switchLSPWait)
+	} else {
+		sized.noteSwitchLSPSkipped("no_server_docs")
+	}
 	return sized, tea.Batch(
 		fresh.Init(),
 		sizeCmd,
@@ -518,9 +533,33 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 		reconcile,
 		resync,
 		idleCmd,
+		lspQuietCmd,
 		recordCmd,
 		func() tea.Msg { return project.SwitchedMsg{Root: root} },
 	)
+}
+
+// switchHasServerDocs reports whether any open editor document of the freshly
+// built model belongs to a language with a server (#2492) — the same walk
+// Init's EventFileOpened announcement does. When none does, no didOpen will
+// ever fire and no publish can close the warm-up wait, so the switch reports
+// the "lsp" phase as skipped instead of arming it.
+func (m *Model) switchHasServerDocs() bool {
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, ed := range inst.Editors() {
+			if !ed.HasFile() {
+				continue
+			}
+			if l, ok := lang.ByPath(ed.Path()); ok && l.HasServer() {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // reconcileEditors sends every editor tab a ReconcileMsg (#1515): the

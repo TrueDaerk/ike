@@ -123,6 +123,7 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 	r.Layout("tab.switch", nil)
 	r.Session("0.1.0", "darwin", "ab12cd34ef56")
 	r.Op("http.flight", "ok", map[string]string{"ms": "120", "class": "2xx", "stream": "false"})
+	r.Op("project.switch", "lsp", map[string]string{"ms": "0", "skipped": "no_server_docs"})
 	r.CommandOutcome("editor.save", SourceKeybind, false, 0)
 	r.PaletteDismiss("%", 4, 900*time.Millisecond)
 	r.ProjectLeave("ab12cd34ef56", "switch", time.Minute)
@@ -140,6 +141,7 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 		"mode":      true, // palette.dismiss (#2408) — a prefix rune, never the query
 		"query_len": true, // palette.dismiss (#2408) — the length, never the text
 		"reason":    true, // project.leave (#2408)
+		"skipped":   true, // project.switch lsp phase (#2492) — a reason token, never content
 	}
 	for _, ev := range readSession(t, dir) {
 		for k := range ev.Data {
@@ -644,16 +646,16 @@ func TestProjectLeaveEvent(t *testing.T) {
 	}
 }
 
-// The version analysis scripts branch on (#2408).
-func TestSchemaVersionIsFour(t *testing.T) {
-	if SchemaVersion != 4 {
-		t.Fatalf("SchemaVersion = %d, want 4", SchemaVersion)
+// The version analysis scripts branch on (#2492).
+func TestSchemaVersionIsFive(t *testing.T) {
+	if SchemaVersion != 5 {
+		t.Fatalf("SchemaVersion = %d, want 5", SchemaVersion)
 	}
 	dir := t.TempDir()
 	r := New(dir, nil)
 	r.Command("editor.save", SourceKeybind)
 	r.Close()
-	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 4 {
-		t.Fatalf("events must be stamped v4, got %v", evs)
+	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 5 {
+		t.Fatalf("events must be stamped v5, got %v", evs)
 	}
 }
